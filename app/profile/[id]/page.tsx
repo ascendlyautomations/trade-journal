@@ -27,7 +27,7 @@ export default function ProfilePage() {
   const [followingModalUsers, setFollowingModalUsers] = useState<any[]>([])
 
   const fetchTrades = async (forProfileId: string) => {
-    console.log("Fetching trades for:", forProfileId)
+    console.log("ProfileId being used:", forProfileId)
 
     const { data, error } = await supabase
       .from("trades")
@@ -35,12 +35,12 @@ export default function ProfilePage() {
       .eq("user_id", forProfileId)
       .order("created_at", { ascending: false })
 
+    console.log("Trades returned:", data)
+
     if (error) {
-      console.error("Trade fetch error:", error)
+      console.error("Trade fetch error FULL:", JSON.stringify(error, null, 2))
       return
     }
-
-    console.log("Trades found:", data)
 
     setTrades(data || [])
   }
