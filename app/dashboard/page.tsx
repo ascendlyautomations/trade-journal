@@ -3,6 +3,7 @@
 import Navbar from "../components/Navbar"
 import { useEffect, useState, useMemo } from "react"
 import { supabase } from "../../lib/supabaseClient"
+import { loadStripe } from "@stripe/stripe-js"
 import {
   LineChart,
   Line,
@@ -19,6 +20,11 @@ export default function Dashboard() {
   const [user, setUser] = useState<any>(null)
   const [profile, setProfile] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [subscribing, setSubscribing] = useState(false)
+
+  const stripePromise = loadStripe(
+    process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!
+  )
 
   // 🔥 SAFE DATA FETCH (FIXES YOUR ERROR)
   useEffect(() => {
@@ -202,6 +208,29 @@ export default function Dashboard() {
 
   const insights = ["You're on track. Keep executing."]
 
+  async function handleSubscribe(userId: string) {
+    setSubscribing(true)
+    try {
+      const res = await fetch("/api/create-checkout-session", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ userId }),
+      })
+
+      const data = await res.json()
+
+      if (data.url) {
+        window.location.href = data.url
+      } else {
+        alert("Checkout failed")
+      }
+    } finally {
+      setSubscribing(false)
+    }
+  }
+
   // 🔥 LOADING STATE (FIXES GLITCH)
   if (loading) {
     return (
@@ -224,6 +253,7 @@ export default function Dashboard() {
           Dashboard
         </h1>
 
+       
 
 
         <div className="flex justify-center mb-8">

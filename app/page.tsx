@@ -1,9 +1,14 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { supabase } from "../lib/supabaseClient"
 import { useRouter } from "next/navigation"
 import Navbar from "./components/Navbar"
+import { loadStripe } from "@stripe/stripe-js"
+import { supabase } from "../lib/supabaseClient"
+
+const stripePromise = loadStripe(
+  process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!
+)
 
 export default function LandingPage() {
   const router = useRouter()
@@ -18,6 +23,35 @@ export default function LandingPage() {
       data: { user }
     } = await supabase.auth.getUser()
     setUser(user)
+  }
+
+  async function handleSubscribe() {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      alert("Please log in first")
+      return
+    }
+
+    const res = await fetch("/api/create-checkout-session", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        userId: user.id,
+      }),
+    })
+
+    const data = await res.json()
+
+    if (data.url) {
+      window.location.href = data.url
+    } else {
+      alert("Something went wrong")
+    }
   }
 
   return (
@@ -59,10 +93,10 @@ style={{ objectPosition: "15% center" }}
           <div className="flex gap-4 z-10">
 
             <button
-              onClick={() => router.push("/login")}
-              className="bg-emerald-500 hover:bg-emerald-600 px-6 py-3 rounded-lg font-semibold transition"
+              onClick={handleSubscribe}
+              className="bg-emerald-500 hover:bg-emerald-600 px-6 py-3 rounded-xl font-semibold text-white"
             >
-              Click For 7 Days Free!
+              Start 14-Day Free Trial
             </button>
 
             <button
