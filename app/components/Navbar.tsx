@@ -86,7 +86,7 @@ export default function Navbar() {
       <div className="flex gap-6 items-center">
 
         <Link href="/" className="font-bold text-xl bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
-          TradersTrax
+          TradeTrackas
         </Link>
 
         {!isHome && user && (

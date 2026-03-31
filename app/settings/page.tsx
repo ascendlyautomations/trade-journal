@@ -19,6 +19,8 @@ export default function SettingsPage() {
 
   const [tradingStyle, setTradingStyle] = useState("")
   const [experience, setExperience] = useState("")
+  const [startedTrading, setStartedTrading] = useState<string>("")
+  const [tradingModel, setTradingModel] = useState<string>("")
 
   useEffect(() => {
     init()
@@ -45,8 +47,10 @@ export default function SettingsPage() {
       setBio(data.bio || "")
       setIsPrivate(data.is_private || false)
       setAvatarPreview(data.avatar_url || null)
-      setTradingStyle(data.trading_style || "")
+      setTradingStyle(data.trading_style || data.trading_model || "")
       setExperience(data.experience || "")
+      setStartedTrading(data.started_trading || "")
+      setTradingModel(data.trading_model || "")
     }
 
     setLoading(false)
@@ -101,7 +105,9 @@ export default function SettingsPage() {
         is_private: isPrivate,
         avatar_url: avatarUrl,
         trading_style: tradingStyle,
-        experience
+        experience,
+        started_trading: startedTrading || null,
+        trading_model: tradingModel || tradingStyle || null
       })
       .eq("id", user.id)
 
@@ -188,18 +194,24 @@ export default function SettingsPage() {
             <h2 className="text-blue-400">Trading Profile</h2>
 
             <input
-              value={tradingStyle}
-              onChange={(e) => setTradingStyle(e.target.value)}
+              value={tradingModel}
+              onChange={(e) => {
+                setTradingModel(e.target.value)
+                setTradingStyle(e.target.value)
+              }}
               placeholder="Trading Model"
               className="w-full p-3 bg-black border border-white/10 rounded"
             />
 
-            <input
-              value={experience}
-              onChange={(e) => setExperience(e.target.value)}
-              placeholder="Experience"
-              className="w-full p-3 bg-black border border-white/10 rounded"
-            />
+            <div>
+              <label className="text-sm text-gray-400">Started Trading</label>
+              <input
+                type="date"
+                value={startedTrading || ""}
+                onChange={(e) => setStartedTrading(e.target.value)}
+                className="w-full p-3 rounded bg-[#0f172a] border border-white/10"
+              />
+            </div>
 
           </div>
 

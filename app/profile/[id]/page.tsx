@@ -4,6 +4,14 @@ import Navbar from "../../components/Navbar"
 import { useEffect, useState } from "react"
 import { supabase } from "../../../lib/supabaseClient"
 import { useParams, useRouter } from "next/navigation"
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts"
 
 export default function ProfilePage() {
   const params = useParams()
@@ -315,8 +323,52 @@ export default function ProfilePage() {
         totalTrades
       : 0
 
+  const biggestWin = trades.length
+    ? Math.max(...trades.map((t) => t.pnl || 0))
+    : 0
+
+  const biggestLoss = trades.length
+    ? Math.min(...trades.map((t) => t.pnl || 0))
+    : 0
+
+  const longTrades = trades.filter((t) => t.direction === "Long").length
+  const shortTrades = trades.filter((t) => t.direction === "Short").length
+
+  const equityData = trades
+    .slice()
+    .reverse()
+    .reduce(
+      (acc: { index: number; equity: number }[], trade, i) => {
+        const prev = acc[i - 1]?.equity || 0
+        acc.push({
+          index: i,
+          equity: prev + (trade.pnl || 0),
+        })
+        return acc
+      },
+      [] as { index: number; equity: number }[]
+    )
+
   function formatCurrency(value: number) {
     return `${value < 0 ? "-" : ""}$${Math.abs(value).toLocaleString()}`
+  }
+
+  function getTradingDuration(startDate: any) {
+    if (!startDate) return "N/A"
+
+    const start = new Date(startDate)
+    const now = new Date()
+
+    let years = now.getFullYear() - start.getFullYear()
+    let months = now.getMonth() - start.getMonth()
+
+    if (months < 0) {
+      years--
+      months += 12
+    }
+
+    if (years <= 0) return `${months} months`
+    return `${years}y ${months}m`
   }
 
   if (!profileId) {
@@ -439,12 +491,28 @@ export default function ProfilePage() {
                   No bio yet
                 </p>
               )}
+
+              <div className="mt-2 space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-400 text-sm">Strategy:</span>
+                  <span className="text-emerald-400 text-sm font-semibold">
+                    {profile?.trading_model || "N/A"}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-400 text-sm">Experience:</span>
+                  <span className="text-blue-400 text-sm font-semibold">
+                    {getTradingDuration(profile?.started_trading)}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
 
           {canViewTrades ? (
             <>
-              <div className="mb-10 grid grid-cols-2 gap-6 md:grid-cols-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                 <Stat title="Trades" value={totalTrades} />
 
                 <Stat title="Win %" value={`${winRate.toFixed(1)}%`} />
@@ -458,40 +526,89 @@ export default function ProfilePage() {
                 <Stat title="Avg RR" value={avgRR.toFixed(2)} />
               </div>
 
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 mb-8">
+                  <div className="bg-white/5 p-4 rounded-xl border border-white/10">
+                    <p className="text-sm text-gray-400">Biggest Win</p>
+                    <p className="text-green-400 font-semibold">
+                      ${biggestWin.toFixed(2)}
+                    </p>
+                  </div>
+
+                  <div className="bg-white/5 p-4 rounded-xl border border-white/10">
+                    <p className="text-sm text-gray-400">Biggest Loss</p>
+                    <p className="text-red-400 font-semibold">
+                      ${biggestLoss.toFixed(2)}
+                    </p>
+                  </div>
+
+                  <div className="bg-white/5 p-4 rounded-xl border border-white/10">
+                    <p className="text-sm text-gray-400">Long Trades</p>
+                    <p className="font-semibold">{longTrades}</p>
+                  </div>
+
+                  <div className="bg-white/5 p-4 rounded-xl border border-white/10">
+                    <p className="text-sm text-gray-400">Short Trades</p>
+                    <p className="font-semibold">{shortTrades}</p>
+                  </div>
+                </div>
+
+              <div className="mb-10">
+                <div className="bg-white/5 p-6 rounded-xl border border-white/10">
+                  <h2 className="text-lg font-semibold mb-4">Equity Curve</h2>
+
+                  <div className="h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={equityData}>
+                        <XAxis dataKey="index" hide />
+                        <YAxis />
+                        <Tooltip />
+                        <Line
+                          type="monotone"
+                          dataKey="equity"
+                          stroke="#10b981"
+                          strokeWidth={2}
+                          dot={false}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
+
               <div>
                 <h2 className="mb-4 text-xl font-semibold">Trades</h2>
 
                 {trades.length === 0 ? (
                   <p className="text-gray-400">No trades yet</p>
                 ) : (
-                  <div className="grid grid-cols-1 gap-6 md:grid-cols-2 md:gap-10">
-                    {trades.map((trade) => (
+                  <div className="space-y-4">
+                    {trades.slice(0, 5).map((trade) => (
                       <div
                         key={trade.id}
-                        className="rounded-xl border border-white/10 bg-white/5 p-6"
+                        className="bg-white/5 p-4 rounded-xl border border-white/10 flex gap-4 items-center"
                       >
-                        <p className="font-semibold">
-                          {trade.ticker} • {trade.direction}
-                        </p>
+                        {trade.image_url && (
+                          <img
+                            src={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/screenshots/${trade.image_url}`}
+                            className="w-20 h-20 object-cover rounded-lg border border-white/10"
+                            alt=""
+                          />
+                        )}
 
+                        <div className="flex-1">
+                          <p className="font-semibold">
+                            {trade.ticker} ({trade.direction})
+                          </p>
+                          <p className="text-sm text-gray-400">
+                            {trade.session}
+                          </p>
+                        </div>
                         <p
                           className={
                             trade.pnl >= 0 ? "text-green-400" : "text-red-400"
                           }
                         >
-                          {formatCurrency(trade.pnl)}
-                        </p>
-
-                        {trade.image_url && (
-                          <img
-                            src={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/screenshots/${trade.image_url}`}
-                            className="mt-3 rounded-lg"
-                            alt=""
-                          />
-                        )}
-
-                        <p className="mt-2 text-xs text-gray-400">
-                          {new Date(trade.created_at).toLocaleDateString()}
+                          ${trade.pnl}
                         </p>
                       </div>
                     ))}
