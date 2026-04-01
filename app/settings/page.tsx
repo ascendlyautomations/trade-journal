@@ -10,6 +10,8 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false)
   const [profile, setProfile] = useState<any>(null)
   const [managingSub, setManagingSub] = useState(false)
+  const [affiliateData, setAffiliateData] = useState<any>(null)
+  const [referralCount, setReferralCount] = useState(0)
 
   const [name, setName] = useState("")
   const [username, setUsername] = useState("")
@@ -52,8 +54,28 @@ export default function SettingsPage() {
       setAvatarPreview(data.avatar_url || null)
       setTradingStyle(data.trading_style || data.trading_model || "")
       setExperience(data.experience || "")
-      setStartedTrading(data.started_trading || "")
+      setStartedTrading(data.startedTrading || "")
       setTradingModel(data.trading_model || "")
+
+      try {
+        const { data: affiliate } = await supabase
+          .from("affiliates")
+          .select("*")
+          .eq("user_id", data.id)
+          .single()
+
+        if (affiliate) {
+          const { data: referrals } = await supabase
+            .from("referrals")
+            .select("*")
+            .eq("affiliate_id", affiliate.id)
+
+          setAffiliateData(affiliate)
+          setReferralCount(referrals?.length || 0)
+        }
+      } catch (e) {
+        console.error("Affiliate stats fetch failed:", e)
+      }
     }
 
     setLoading(false)
@@ -109,7 +131,7 @@ export default function SettingsPage() {
         avatar_url: avatarUrl,
         trading_style: tradingStyle,
         experience,
-        started_trading: startedTrading || null,
+        started_trading: startedTrading,
         trading_model: tradingModel || tradingStyle || null
       })
       .eq("id", user.id)
@@ -159,129 +181,178 @@ export default function SettingsPage() {
 
   if (loading) return <div className="text-white text-center mt-20">Loading...</div>
 
+  const referralLink =
+    affiliateData && typeof window !== "undefined"
+      ? `${window.location.origin}?ref=${affiliateData.code}`
+      : ""
+
   return (
     <>
       <Navbar />
 
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white p-6">
 
-        <div className="max-w-2xl mx-auto space-y-8">
+        <div className="max-w-6xl mx-auto space-y-8">
 
           <h1 className="text-2xl font-semibold">Settings</h1>
 
-          {/* PROFILE */}
-          <div className="bg-white/5 p-6 rounded-xl space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-10 items-start">
 
-            <h2 className="text-emerald-400">Profile</h2>
+            <div className="space-y-8">
+              {/* PROFILE */}
+              <div className="bg-white/5 p-8 rounded-xl space-y-5 min-h-[300px]">
 
-            {/* AVATAR */}
-            <div className="flex items-center gap-4">
+                <h2 className="text-emerald-400">Profile</h2>
 
-              <div className="w-16 h-16 rounded-full bg-gray-700 overflow-hidden">
-                {avatarPreview && (
-                  <img
-                    src={avatarPreview}
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      e.currentTarget.src = "/default-avatar.png"
+                {/* AVATAR */}
+                <div className="flex items-center gap-4">
+
+                  <div className="w-16 h-16 rounded-full bg-gray-700 overflow-hidden">
+                    {avatarPreview && (
+                      <img
+                        src={avatarPreview}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          e.currentTarget.src = "/default-avatar.png"
+                        }}
+                      />
+                    )}
+                  </div>
+
+                  <input
+                    type="file"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (!file) return
+                      setAvatarFile(file)
+                      setAvatarPreview(URL.createObjectURL(file))
                     }}
                   />
-                )}
-              </div>
 
-              <input
-                type="file"
-                onChange={(e) => {
-                  const file = e.target.files?.[0]
-                  if (!file) return
-                  setAvatarFile(file)
-                  setAvatarPreview(URL.createObjectURL(file))
-                }}
-              />
-
-            </div>
-
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Display Name"
-              className="w-full p-3 bg-black border border-white/10 rounded"
-            />
-
-            <input
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="Username"
-              className="w-full p-3 bg-black border border-white/10 rounded"
-            />
-
-            <textarea
-              value={bio}
-              onChange={(e) => setBio(e.target.value)}
-              placeholder="Bio"
-              className="w-full p-3 bg-black border border-white/10 rounded"
-            />
-
-            {profile?.referral_code && (
-              <div className="mt-4 space-y-1">
-                <p className="text-sm text-gray-400">Your referral link:</p>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs break-all bg-black/40 px-2 py-1 rounded border border-white/10">
-                    {`${process.env.NEXT_PUBLIC_BASE_URL || "https://tradetraxs.com"}?ref=${profile.referral_code}`}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const link = `${process.env.NEXT_PUBLIC_BASE_URL || "https://tradetraxs.com"}?ref=${profile.referral_code}`
-                      navigator.clipboard
-                        .writeText(link)
-                        .then(() => alert("Referral link copied"))
-                        .catch(() => alert("Failed to copy link"))
-                    }}
-                    className="text-xs bg-emerald-500 hover:bg-emerald-600 px-2 py-1 rounded font-semibold"
-                  >
-                    Copy
-                  </button>
                 </div>
+
+                <input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Display Name"
+                  className="w-full p-3 bg-black border border-white/10 rounded"
+                />
+
+                <input
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="Username"
+                  className="w-full p-3 bg-black border border-white/10 rounded"
+                />
+
+                <textarea
+                  value={bio}
+                  onChange={(e) => setBio(e.target.value)}
+                  placeholder="Bio"
+                  className="w-full p-3 bg-black border border-white/10 rounded"
+                />
+
               </div>
-            )}
 
-          </div>
+              {/* TRADING */}
+              <div className="bg-white/5 p-8 rounded-xl space-y-5 min-h-[300px]">
 
-          {/* TRADING */}
-          <div className="bg-white/5 p-6 rounded-xl space-y-4">
+                <h2 className="text-blue-400">Trading Profile</h2>
 
-            <h2 className="text-blue-400">Trading Profile</h2>
+                <input
+                  value={tradingModel}
+                  onChange={(e) => {
+                    setTradingModel(e.target.value)
+                    setTradingStyle(e.target.value)
+                  }}
+                  placeholder="Trading Model"
+                  className="w-full p-3 bg-black border border-white/10 rounded"
+                />
 
-            <input
-              value={tradingModel}
-              onChange={(e) => {
-                setTradingModel(e.target.value)
-                setTradingStyle(e.target.value)
-              }}
-              placeholder="Trading Model"
-              className="w-full p-3 bg-black border border-white/10 rounded"
-            />
+                <div>
+                  <label className="text-sm text-gray-400">Started Trading</label>
+                  <input
+                    type="date"
+                    value={startedTrading || ""}
+                    onChange={(e) => setStartedTrading(e.target.value)}
+                    className="w-full p-3 rounded bg-[#0f172a] border border-white/10"
+                  />
+                </div>
 
-            <div>
-              <label className="text-sm text-gray-400">Started Trading</label>
-              <input
-                type="date"
-                value={startedTrading || ""}
-                onChange={(e) => setStartedTrading(e.target.value)}
-                className="w-full p-3 rounded bg-[#0f172a] border border-white/10"
-              />
+                {profile?.is_pro && (
+                  <button
+                    onClick={handleManageSubscription}
+                    disabled={managingSub}
+                    className="w-full bg-emerald-500 hover:bg-emerald-600 px-4 py-2 rounded font-semibold mt-2 disabled:opacity-50"
+                  >
+                    {managingSub ? "Opening Billing Portal..." : "Manage Subscription"}
+                  </button>
+                )}
+
+              </div>
             </div>
 
-            {profile?.is_pro && (
+            <div className="space-y-6">
+              {affiliateData && (
+                <div className="p-8 rounded-xl bg-white/5 border border-white/10 space-y-4 min-h-[300px]">
+
+                  <h2 className="text-xl font-semibold mb-4">
+                    Affiliate Dashboard
+                  </h2>
+
+                  <p className="text-sm text-gray-400 mb-2">
+                    Your Code:
+                    <span className="text-white ml-2">
+                      {affiliateData.code}
+                    </span>
+                  </p>
+
+                  <p className="text-sm text-gray-400 mb-4">
+                    Total Referrals:
+                    <span className="text-white ml-2">
+                      {referralCount}
+                    </span>
+                  </p>
+
+                  <p className="text-sm text-gray-400 mb-2">
+                    Your referral link:
+                  </p>
+
+                  <div className="flex gap-2">
+                    <input
+                      value={referralLink}
+                      readOnly
+                      className="flex-1 p-3 rounded bg-black border border-white/10 text-sm"
+                    />
+
+                    <button
+                      onClick={async () => {
+                        if (!referralLink) return
+                        try {
+                          await navigator.clipboard.writeText(referralLink)
+                          alert("Copied!")
+                        } catch (err) {
+                          console.error("Copy failed", err)
+                          alert("Failed to copy")
+                        }
+                      }}
+                      className="bg-emerald-500 px-5 py-2 rounded text-white text-sm hover:bg-emerald-600"
+                    >
+                      Copy
+                    </button>
+                  </div>
+
+                </div>
+              )}
+
               <button
-                onClick={handleManageSubscription}
-                disabled={managingSub}
-                className="w-full bg-emerald-500 hover:bg-emerald-600 px-4 py-2 rounded font-semibold mt-2 disabled:opacity-50"
+                onClick={saveSettings}
+                disabled={saving}
+                className="w-full bg-gradient-to-r from-blue-500 to-emerald-500 p-3 rounded-lg mt-6"
               >
-                {managingSub ? "Opening Billing Portal..." : "Manage Subscription"}
+                {saving ? "Saving..." : "Save Changes"}
               </button>
-            )}
+            </div>
 
           </div>
 
@@ -306,14 +377,6 @@ export default function SettingsPage() {
 
           </div>
 
-          <button
-            onClick={saveSettings}
-            disabled={saving}
-            className="w-full bg-gradient-to-r from-blue-500 to-emerald-500 p-3 rounded"
-          >
-            {saving ? "Saving..." : "Save Changes"}
-          </button>
-              
         </div>
 
       </div>

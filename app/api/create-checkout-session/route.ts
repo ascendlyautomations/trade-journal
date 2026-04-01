@@ -12,75 +12,56 @@ const supabase = createClient(
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json()
+    const { userId, referralCode } = await req.json()
 
-    const userId = body?.userId
-    const promoCode = body?.promoCode
-
-    if (!userId) {
+    if (!userId && !referralCode) {
       return Response.json(
-        { error: "Missing userId" },
+        { error: "Missing userId or referralCode" },
         { status: 400 }
       )
     }
 
-    console.log("Referral code received:", promoCode)
-
-    if (promoCode) {
-      const { data: affiliate } = await supabase
-        .from("affiliates")
-        .select("*")
-        .eq("code", promoCode)
-        .single()
-
-      console.log("Affiliate found:", affiliate)
-
-      if (affiliate) {
-        await supabase.from("referrals").insert({
-          referred_user_id: userId,
-          affiliate_id: affiliate.id,
-          code: promoCode
-        })
-      }
-    }
-
-    // 🔥 BUILD DISCOUNTS PROPERLY
-    let discounts = []
-
-    if (promoCode) {
-      discounts = [
-        {
-          promotion_code: promoCode,
-        },
-      ]
-    }
-
     const PRICE_ID = "price_1TGugNQlLqJe3Tfgwg2q1ApV"
 
-    const session = await stripe.checkout.sessions.create({
+    const sessionConfig: Stripe.Checkout.SessionCreateParams = {
       mode: "subscription",
-
-      allow_promotion_codes: true, // ✅ Stripe input box
-
-
       payment_method_types: ["card"],
-
       line_items: [
         {
           price: PRICE_ID,
           quantity: 1,
         },
       ],
-
       success_url: "http://localhost:3000/dashboard",
       cancel_url: "http://localhost:3000",
-
       customer_email: "test@example.com",
-
       metadata: {
-        userId,
+        userId: userId || "",
+        referralCode: referralCode || "",
       },
-    })
+    }
+
+    if (referralCode) {
+      const { data: affiliate } = await supabase
+        .from("affiliates")
+        .select("*")
+        .eq("code", referralCode)
+        .single()
+
+      if (affiliate?.stripe_promo_code_id) {
+        sessionConfig.discounts = [
+          {
+            promotion_code: affiliate.stripe_promo_code_id,
+          },
+        ]
+      } else {
+        sessionConfig.allow_promotion_codes = true
+      }
+    } else {
+      sessionConfig.allow_promotion_codes = true
+    }
+
+    const session = await stripe.checkout.sessions.create(sessionConfig)
 
     return Response.json({ url: session.url })
   } catch (err: any) {

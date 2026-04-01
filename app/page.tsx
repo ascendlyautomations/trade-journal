@@ -11,25 +11,58 @@ const stripePromise = loadStripe(
 )
 
 export default function LandingPage() {
-  
-  
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
-  const [promoCode, setPromoCode] = useState("")
 
   useEffect(() => {
     checkUser()
-    try {
-      if (typeof window !== "undefined") {
-        const params = new URLSearchParams(window.location.search)
-        const ref = params.get("ref")
-        if (ref) {
-          window.localStorage.setItem("referral_code", ref)
-        }
+
+    if (typeof window === "undefined") return
+
+    const runReferralCheckout = async () => {
+      const params = new URLSearchParams(window.location.search)
+      const ref = params.get("ref")
+
+      if (!ref) return
+
+      console.log("🔥 Referral detected:", ref)
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user) {
+        console.log("❌ No user for referral checkout")
+        return
       }
-    } catch (e) {
-      console.error("Failed to capture referral code:", e)
+
+      console.log("🔥 REF CHECKOUT:", {
+        userId: user.id,
+        referralCode: ref,
+      })
+
+      fetch("/api/create-checkout-session", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userId: user.id,
+          referralCode: ref,
+        }),
+      })
+        .then(res => res.json())
+        .then(data => {
+          if (data.url) {
+            window.location.href = data.url
+          }
+        })
+        .catch(err => {
+          console.error("Referral checkout error:", err)
+        })
     }
+
+    runReferralCheckout()
   }, [])
 
   async function checkUser() {
@@ -39,26 +72,16 @@ export default function LandingPage() {
     setUser(user)
   }
 
-  async function handleSubscribe() {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const handleSubscribe = async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
 
-  if (!user) {
-    alert("Please log in first")
-    return
-  }
+    if (!user) {
+      alert("Please log in first")
+      return
+    }
 
-  const storedRef =
-    typeof window !== "undefined"
-      ? localStorage.getItem("referral_code")
-      : null
-
-  const finalCode = promoCode || storedRef || null
-
-  console.log("💰 USING CODE:", finalCode)
-
-  try {
     const res = await fetch("/api/create-checkout-session", {
       method: "POST",
       headers: {
@@ -66,7 +89,6 @@ export default function LandingPage() {
       },
       body: JSON.stringify({
         userId: user.id,
-        promoCode: finalCode,
       }),
     })
 
@@ -74,13 +96,8 @@ export default function LandingPage() {
 
     if (data.url) {
       window.location.href = data.url
-    } else {
-      alert("Something went wrong")
     }
-  } catch (err) {
-    console.error("Checkout error:", err)
   }
-}
 
   return (
     <>
@@ -118,9 +135,6 @@ style={{ objectPosition: "15% center" }}
             Built for serious traders.
           </p>
 
-          <input
-
-/>
           <div className="flex gap-4 z-10">
 
             <button
