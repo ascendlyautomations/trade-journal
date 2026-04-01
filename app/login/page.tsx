@@ -14,6 +14,10 @@ export default function LoginPage() {
 
   const router = useRouter()
 
+  function generateReferralCode() {
+    return Math.random().toString(36).substring(2, 8)
+  }
+
   const handleAuth = async () => {
     setLoading(true)
 
@@ -30,10 +34,34 @@ export default function LoginPage() {
       }
 
       if (data.user) {
+        let referredBy: string | null = null
+
+        try {
+          const storedCode = typeof window !== "undefined"
+            ? window.localStorage.getItem("referral_code")
+            : null
+
+          if (storedCode) {
+            const { data: ref } = await supabase
+              .from("profiles")
+              .select("id")
+              .eq("referral_code", storedCode)
+              .single()
+
+            if (ref?.id) {
+              referredBy = ref.id
+            }
+          }
+        } catch (e) {
+          console.error("Referral lookup failed:", e)
+        }
+
         await supabase.from("profiles").insert({
           id: data.user.id,
           name,
           username,
+          referral_code: generateReferralCode(),
+          referred_by: referredBy,
         })
       }
 

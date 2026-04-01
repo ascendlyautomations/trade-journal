@@ -4,6 +4,7 @@ import Navbar from "../components/Navbar"
 import { useEffect, useState, useMemo } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { loadStripe } from "@stripe/stripe-js"
+import ProGate from "../components/ProGate"
 import {
   LineChart,
   Line,
@@ -253,8 +254,11 @@ export default function Dashboard() {
           Dashboard
         </h1>
 
-       
-
+        {profile && !profile.is_pro && (
+          <div className="mb-4 rounded-lg bg-amber-500/10 border border-amber-400/40 text-amber-100 px-4 py-3 text-center text-sm">
+            Upgrade to Pro to unlock full features 🚀
+          </div>
+        )}
 
         <div className="flex justify-center mb-8">
           <select
@@ -269,63 +273,65 @@ export default function Dashboard() {
           </select>
         </div>
 
-        <div className="grid lg:grid-cols-3 gap-8">
+        <ProGate isPro={profile?.is_pro}>
+          <div className="grid lg:grid-cols-3 gap-8">
 
-          <div className="space-y-6">
-            <div className="grid grid-cols-2 gap-4">
-              <Stat title="Trades" value={formatNumber(totalTrades)} />
-              <Stat title="Win %" value={`${winRate.toFixed(1)}%`} />
-              <Stat title="P&L" value={formatCurrency(totalPnL)} positive={totalPnL >= 0} />
-              <Stat title="Avg RR" value={avgRR.toFixed(2)} />
-              <Stat title="Big Loss" value={formatCurrency(biggestLoss)} positive={false} />
-              <Stat title="Streak" value={maxStreak} />
+            <div className="space-y-6">
+              <div className="grid grid-cols-2 gap-4">
+                <Stat title="Trades" value={formatNumber(totalTrades)} />
+                <Stat title="Win %" value={`${winRate.toFixed(1)}%`} />
+                <Stat title="P&L" value={formatCurrency(totalPnL)} positive={totalPnL >= 0} />
+                <Stat title="Avg RR" value={avgRR.toFixed(2)} />
+                <Stat title="Big Loss" value={formatCurrency(biggestLoss)} positive={false} />
+                <Stat title="Streak" value={maxStreak} />
+              </div>
+
+              {Object.keys(sessionStats).map((session) => {
+                const s = sessionStats[session]
+                const wr = s.trades ? (s.wins / s.trades) * 100 : 0
+
+                return (
+                  <div key={session} className="bg-white/5 border border-white/10 p-4 rounded-xl">
+                    <h3 className="font-semibold text-blue-300">{session}</h3>
+                    <p>P&L: {formatCurrency(s.pnl)}</p>
+                    <p>Trades: {formatNumber(s.trades)}</p>
+                    <p>Win: {wr.toFixed(1)}%</p>
+                  </div>
+                )
+              })}
             </div>
 
-            {Object.keys(sessionStats).map((session) => {
-              const s = sessionStats[session]
-              const wr = s.trades ? (s.wins / s.trades) * 100 : 0
+            <div className="lg:col-span-2 space-y-6">
+              <div className="bg-white/5 border border-white/10 p-6 rounded-xl">
+                <h2 className="text-lg font-semibold mb-4 text-blue-300">
+                  Equity Curve
+                </h2>
 
-              return (
-                <div key={session} className="bg-white/5 border border-white/10 p-4 rounded-xl">
-                  <h3 className="font-semibold text-blue-300">{session}</h3>
-                  <p>P&L: {formatCurrency(s.pnl)}</p>
-                  <p>Trades: {formatNumber(s.trades)}</p>
-                  <p>Win: {wr.toFixed(1)}%</p>
-                </div>
-              )
-            })}
+                <ResponsiveContainer width="100%" height={350}>
+                  <LineChart data={equityData}>
+                    <CartesianGrid stroke="#334155" />
+                    <XAxis dataKey="date" stroke="#94a3b8" />
+                    <YAxis stroke="#94a3b8" />
+                    <Tooltip formatter={(value: any) => `$${value.toLocaleString()}`} />
+                    <Line type="monotone" dataKey="equity" stroke="#22c55e" strokeWidth={3} dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div className="bg-gradient-to-r from-blue-500/10 to-emerald-500/10 border border-white/10 p-5 rounded-xl">
+                <h3 className="text-blue-300 font-semibold mb-3">
+                  Smart Insights
+                </h3>
+                <ul className="text-gray-300 text-sm space-y-2">
+                  {insights.map((i, index) => (
+                    <li key={index}>{i}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+
           </div>
-
-          <div className="lg:col-span-2 space-y-6">
-            <div className="bg-white/5 border border-white/10 p-6 rounded-xl">
-              <h2 className="text-lg font-semibold mb-4 text-blue-300">
-                Equity Curve
-              </h2>
-
-              <ResponsiveContainer width="100%" height={350}>
-                <LineChart data={equityData}>
-                  <CartesianGrid stroke="#334155" />
-                  <XAxis dataKey="date" stroke="#94a3b8" />
-                  <YAxis stroke="#94a3b8" />
-                  <Tooltip formatter={(value: any) => `$${value.toLocaleString()}`} />
-                  <Line type="monotone" dataKey="equity" stroke="#22c55e" strokeWidth={3} dot={false} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-
-            <div className="bg-gradient-to-r from-blue-500/10 to-emerald-500/10 border border-white/10 p-5 rounded-xl">
-              <h3 className="text-blue-300 font-semibold mb-3">
-                Smart Insights
-              </h3>
-              <ul className="text-gray-300 text-sm space-y-2">
-                {insights.map((i, index) => (
-                  <li key={index}>{i}</li>
-                ))}
-              </ul>
-            </div>
-          </div>
-
-        </div>
+        </ProGate>
       </div>
     </>
   )

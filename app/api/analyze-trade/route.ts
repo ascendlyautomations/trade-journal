@@ -14,6 +14,23 @@ const supabase = createClient(
 export async function POST(req: Request) {
   const { trade, messages } = await req.json()
 
+  // Determine which profile to check for Pro access
+  const profileId = trade?.user_id
+
+  if (profileId) {
+    const { data: profile, error } = await supabase
+      .from("profiles")
+      .select("is_pro")
+      .eq("id", profileId)
+      .single()
+
+    if (error) {
+      console.error("Pro gate profile fetch error:", error)
+    } else if (!profile?.is_pro) {
+      return Response.json({ error: "Pro required" }, { status: 403 })
+    }
+  }
+
   const imageUrl = trade.image_url
     ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/screenshots/${trade.image_url}`
     : null

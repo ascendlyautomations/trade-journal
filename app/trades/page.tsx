@@ -37,12 +37,40 @@ export default function TradesPage() {
       .eq("id", user.id)
 
     if (!existingProfile || existingProfile.length === 0) {
+      let referredBy: string | null = null
+
+      try {
+        const storedCode = typeof window !== "undefined"
+          ? window.localStorage.getItem("referral_code")
+          : null
+
+        if (storedCode) {
+          const { data: ref } = await supabase
+            .from("profiles")
+            .select("id")
+            .eq("referral_code", storedCode)
+            .single()
+
+          if (ref?.id) {
+            referredBy = ref.id
+          }
+        }
+      } catch (e) {
+        console.error("Referral lookup failed:", e)
+      }
+
+      function generateReferralCode() {
+        return Math.random().toString(36).substring(2, 8)
+      }
+
       await supabase.from("profiles").insert({
         id: user.id,
         name: user.user_metadata?.full_name || "User",
         username:
           user.user_metadata?.email?.split("@")[0] ||
           `user_${Math.floor(Math.random() * 10000)}`,
+        referral_code: generateReferralCode(),
+        referred_by: referredBy,
       })
     }
 

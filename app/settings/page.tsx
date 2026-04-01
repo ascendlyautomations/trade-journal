@@ -8,6 +8,8 @@ export default function SettingsPage() {
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [profile, setProfile] = useState<any>(null)
+  const [managingSub, setManagingSub] = useState(false)
 
   const [name, setName] = useState("")
   const [username, setUsername] = useState("")
@@ -42,6 +44,7 @@ export default function SettingsPage() {
       .single()
 
     if (data) {
+      setProfile(data)
       setName(data.name || "")
       setUsername(data.username || "")
       setBio(data.bio || "")
@@ -121,6 +124,39 @@ export default function SettingsPage() {
     setSaving(false)
   }
 
+  async function handleManageSubscription() {
+    if (!user) return
+
+    setManagingSub(true)
+    try {
+      if (!profile?.stripe_customer_id) {
+        alert("No active subscription found")
+        return
+      }
+
+      const res = await fetch("/api/create-portal-session", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ userId: user.id })
+      })
+
+      const data = await res.json()
+
+      if (data.url) {
+        window.location.href = data.url
+      } else {
+        alert("Unable to open billing portal")
+      }
+    } catch (err) {
+      console.error("Manage subscription error:", err)
+      alert("Something went wrong")
+    } finally {
+      setManagingSub(false)
+    }
+  }
+
   if (loading) return <div className="text-white text-center mt-20">Loading...</div>
 
   return (
@@ -186,6 +222,30 @@ export default function SettingsPage() {
               className="w-full p-3 bg-black border border-white/10 rounded"
             />
 
+            {profile?.referral_code && (
+              <div className="mt-4 space-y-1">
+                <p className="text-sm text-gray-400">Your referral link:</p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs break-all bg-black/40 px-2 py-1 rounded border border-white/10">
+                    {`${process.env.NEXT_PUBLIC_BASE_URL || "https://tradetraxs.com"}?ref=${profile.referral_code}`}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const link = `${process.env.NEXT_PUBLIC_BASE_URL || "https://tradetraxs.com"}?ref=${profile.referral_code}`
+                      navigator.clipboard
+                        .writeText(link)
+                        .then(() => alert("Referral link copied"))
+                        .catch(() => alert("Failed to copy link"))
+                    }}
+                    className="text-xs bg-emerald-500 hover:bg-emerald-600 px-2 py-1 rounded font-semibold"
+                  >
+                    Copy
+                  </button>
+                </div>
+              </div>
+            )}
+
           </div>
 
           {/* TRADING */}
@@ -212,6 +272,16 @@ export default function SettingsPage() {
                 className="w-full p-3 rounded bg-[#0f172a] border border-white/10"
               />
             </div>
+
+            {profile?.is_pro && (
+              <button
+                onClick={handleManageSubscription}
+                disabled={managingSub}
+                className="w-full bg-emerald-500 hover:bg-emerald-600 px-4 py-2 rounded font-semibold mt-2 disabled:opacity-50"
+              >
+                {managingSub ? "Opening Billing Portal..." : "Manage Subscription"}
+              </button>
+            )}
 
           </div>
 

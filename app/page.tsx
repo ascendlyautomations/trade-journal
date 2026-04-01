@@ -11,11 +11,25 @@ const stripePromise = loadStripe(
 )
 
 export default function LandingPage() {
+  
+  
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
+  const [promoCode, setPromoCode] = useState("")
 
   useEffect(() => {
     checkUser()
+    try {
+      if (typeof window !== "undefined") {
+        const params = new URLSearchParams(window.location.search)
+        const ref = params.get("ref")
+        if (ref) {
+          window.localStorage.setItem("referral_code", ref)
+        }
+      }
+    } catch (e) {
+      console.error("Failed to capture referral code:", e)
+    }
   }, [])
 
   async function checkUser() {
@@ -26,15 +40,25 @@ export default function LandingPage() {
   }
 
   async function handleSubscribe() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
-    if (!user) {
-      alert("Please log in first")
-      return
-    }
+  if (!user) {
+    alert("Please log in first")
+    return
+  }
 
+  const storedRef =
+    typeof window !== "undefined"
+      ? localStorage.getItem("referral_code")
+      : null
+
+  const finalCode = promoCode || storedRef || null
+
+  console.log("💰 USING CODE:", finalCode)
+
+  try {
     const res = await fetch("/api/create-checkout-session", {
       method: "POST",
       headers: {
@@ -42,6 +66,7 @@ export default function LandingPage() {
       },
       body: JSON.stringify({
         userId: user.id,
+        promoCode: finalCode,
       }),
     })
 
@@ -52,7 +77,10 @@ export default function LandingPage() {
     } else {
       alert("Something went wrong")
     }
+  } catch (err) {
+    console.error("Checkout error:", err)
   }
+}
 
   return (
     <>
@@ -90,6 +118,9 @@ style={{ objectPosition: "15% center" }}
             Built for serious traders.
           </p>
 
+          <input
+
+/>
           <div className="flex gap-4 z-10">
 
             <button
