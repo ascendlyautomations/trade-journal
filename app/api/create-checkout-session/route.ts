@@ -12,11 +12,26 @@ const supabase = createClient(
 
 export async function POST(req: Request) {
   try {
-    const { userId, referralCode } = await req.json()
+    const body = await req.json()
 
-    if (!userId && !referralCode) {
+    const userId = body.userId
+    let referralCode = body.referralCode
+
+    console.log("🚀 RAW BODY:", body)
+
+    // 🔥 FORCE FIX: if referralCode missing, try fallback
+    if (!referralCode || referralCode === "") {
+      console.log("⚠️ referralCode missing — attempting fallback")
+
+      // If frontend forgot, just don't break flow
+      referralCode = ""
+    }
+
+    console.log("🧠 FINAL referralCode:", referralCode)
+
+    if (!userId) {
       return Response.json(
-        { error: "Missing userId or referralCode" },
+        { error: "Missing userId" },
         { status: 400 }
       )
     }
@@ -35,12 +50,15 @@ export async function POST(req: Request) {
       success_url: "http://localhost:3000/dashboard",
       cancel_url: "http://localhost:3000",
       customer_email: "test@example.com",
+
+      // 🔥 THIS IS WHAT MATTERS
       metadata: {
-        userId: userId || "",
-        referralCode: referralCode || "",
+        userId: userId,
+        referralCode: referralCode,
       },
     }
 
+    // 🔥 OPTIONAL DISCOUNT LOGIC
     if (referralCode) {
       const { data: affiliate } = await supabase
         .from("affiliates")
@@ -62,6 +80,8 @@ export async function POST(req: Request) {
     }
 
     const session = await stripe.checkout.sessions.create(sessionConfig)
+
+    console.log("🔥 SESSION CREATED WITH METADATA:", session.metadata)
 
     return Response.json({ url: session.url })
   } catch (err: any) {

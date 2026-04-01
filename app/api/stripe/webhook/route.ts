@@ -60,7 +60,9 @@ export async function POST(req: Request) {
           return new Response("OK", { status: 200 })
         }
 
+        // ==================================================
         // ✅ STEP 1: UPGRADE USER
+        // ==================================================
         const { error: upgradeError } = await supabase
           .from("profiles")
           .update({
@@ -90,53 +92,73 @@ export async function POST(req: Request) {
           if (affiliateError || !affiliate) {
             console.log("❌ Affiliate not found", affiliateError)
           } else {
-            // CHECK IF ALREADY EXISTS
             const { data: existing } = await supabase
               .from("referrals")
               .select("*")
               .eq("referred_user_id", userId)
 
-            if (existing && existing.length > 0) {
-              console.log("⏭ Referral already exists")
-            } else {
-              const amount = (session.amount_total || 0) / 100
+            const amount = Number((session.amount_total || 0) / 100)
 
-              // INSERT REFERRAL
+            console.log("💰 CALCULATED AMOUNT:", amount)
+
+            if (existing && existing.length > 0) {
+              // 🔁 UPDATE EXISTING REFERRAL
+              const referral = existing[0]
+
+              const newRevenue = Number(referral.revenue || 0) + amount
+
+              await supabase
+                .from("referrals")
+                .update({
+                  revenue: newRevenue,
+                })
+                .eq("id", referral.id)
+
+              console.log("🔥 Updated referral revenue:", newRevenue)
+
+            } else {
+              // 🆕 INSERT NEW REFERRAL
               await supabase.from("referrals").insert({
                 referred_user_id: userId,
                 affiliate_id: affiliate.id,
                 revenue: amount,
               })
 
-              console.log("🔥 Referral inserted")
+              console.log("🔥 Inserted new referral with revenue:", amount)
+            }
 
-              // UPDATE AFFILIATE STATS
-              const { data: affiliateProfile } = await supabase
+            // ==================================================
+            // 🔥 UPDATE AFFILIATE PROFILE STATS
+            // ==================================================
+            const { data: affiliateProfile } = await supabase
+              .from("profiles")
+              .select("*")
+              .eq("id", affiliate.user_id)
+              .single()
+
+            if (affiliateProfile) {
+              const newRevenue =
+                Number(affiliateProfile.referral_revenue || 0) + amount
+
+              const newCount =
+                Number(affiliateProfile.referral_count || 0) + 1
+
+              await supabase
                 .from("profiles")
-                .select("*")
+                .update({
+                  referral_revenue: newRevenue,
+                  referral_count: newCount,
+                })
                 .eq("id", affiliate.user_id)
-                .single()
 
-              if (affiliateProfile) {
-                const newRevenue =
-                  (affiliateProfile.referral_revenue || 0) + amount
-
-                await supabase
-                  .from("profiles")
-                  .update({
-                    referral_revenue: newRevenue,
-                    referral_count:
-                      (affiliateProfile.referral_count || 0) + 1,
-                  })
-                  .eq("id", affiliate.user_id)
-
-                console.log("💰 Affiliate updated:", newRevenue)
-              }
+              console.log("💰 Affiliate updated:", newRevenue)
+              console.log("👥 Referral count:", newCount)
             }
           }
         } else {
           console.log("⏭ No referral code")
         }
+
       } catch (err) {
         console.error("❌ checkout.session.completed crash:", err)
       }
@@ -159,6 +181,7 @@ export async function POST(req: Request) {
             subscription_status: "canceled",
           })
           .eq("stripe_customer_id", customerId)
+
       } catch (err) {
         console.error("❌ cancel crash:", err)
       }
@@ -172,6 +195,7 @@ export async function POST(req: Request) {
     }
 
     return new Response("OK", { status: 200 })
+
   } catch (err) {
     console.error("🔥 WEBHOOK CRASH:", err)
     return new Response("OK", { status: 200 })
