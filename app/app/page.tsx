@@ -10,6 +10,21 @@ export default function Home() {
   const [pnlFocused, setPnlFocused] = useState(false)
   const [reviewCount, setReviewCount] = useState(0)
   const [confidence, setConfidence] = useState("")
+  const [psychologyNotes, setPsychologyNotes] = useState("")
+  const [tradeType, setTradeType] = useState("")
+  const [showSettings, setShowSettings] = useState(false)
+
+const [inputSettings, setInputSettings] = useState({
+  showRR: true,
+  showPoints: true,
+  showContracts: true,
+  showEntryExit: true,
+  showPsychology: true,
+  showMistakes: true,
+  showContext: true,
+  showNotes: true,
+})
+
 const [emotion, setEmotion] = useState("")
 const [followedPlan, setFollowedPlan] = useState(false)
 const [mistakeType, setMistakeType] = useState("")
@@ -146,6 +161,8 @@ const [timeframe, setTimeframe] = useState("")
     exit_price: parsedExit,
     entry_time: entryTime,
     exit_time: exitTime,
+    psychology_notes: psychologyNotes,
+    trade_type: tradeType,
 
     // 🔥 ADD THIS BLOCK
     confidence: confidence ? Number(confidence) : null,
@@ -155,7 +172,9 @@ const [timeframe, setTimeframe] = useState("")
     market_condition: marketCondition || null,
     news_event: newsEvent,
     timeframe: timeframe || null,
-        
+    psychology_notes: psychologyNotes || null,
+    trade_type: tradeType || null,
+
       }
     ])
     
@@ -274,360 +293,335 @@ async function fetchReviewCount() {
 
   setReviewCount(count || 0)
 }
-  return (
-    <>
-      <Navbar />
+return (
+  <>
+    <Navbar />
 
-      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100">
-        <div className="p-12 max-w-7xl mx-auto">
+    <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100">
+      <div className="p-10 max-w-7xl mx-auto">
 
-          <h1 className="text-3xl font-semibold mb-6 text-center bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
-            Input Trade
-            
-          </h1>
-          <div className="flex justify-center mb-6 gap-4">
+        <h1 className="text-3xl font-semibold mb-6 text-center bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
+          Input Trade
+        </h1>
 
-  
-  
+        {/* Toggle */}
+        <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
 
+  {/* LEFT SIDE */}
+  <div className="w-full flex items-center mb-6">
 
-</div>
-          <div className="flex justify-center mb-6">
-            <button
-              onClick={() => setAdvanced(!advanced)}
-              className="bg-emerald-500 hover:bg-emerald-600 px-4 py-2 rounded font-semibold"
-            >
-              {advanced ? "Advanced Mode: ON" : "Advanced Mode: OFF"}
-            </button>
-          </div>
+  {/* LEFT GROUP */}
+  <div className="flex gap-2">
+    <button
+      onClick={() => csvInputRef.current?.click()}
+      className="bg-blue-500 px-4 py-2 rounded"
+    >
+      Upload CSV
+    </button>
 
-          <div className="flex gap-2 mb-4">
-
-  {/* Upload CSV */}
-  <button
-    onClick={() => csvInputRef.current?.click()}
-    className="bg-blue-500 hover:bg-blue-600 px-4 py-2 rounded font-semibold"
-  >
-    Upload CSV
-  </button>
-
-  {/* Review CSV Inputs */}
-  <button
-  onClick={() => window.location.href = "/review"}
-  className="relative bg-emerald-500 hover:bg-emerald-600 px-4 py-2 rounded font-semibold"
->
-  Review CSV Inputs
-
-  {reviewCount > 0 && (
-    <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+    <button
+      onClick={() => window.location.href = "/review"}
+      className="relative bg-emerald-500 px-4 py-2 rounded"
+    >
+      Review CSV Inputs
+      {reviewCount > 0 && (
+    <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
       {reviewCount > 99 ? "99+" : reviewCount}
     </span>
   )}
-</button>
+    </button>
+
+    <button
+      onClick={() => setAdvanced(!advanced)}
+      className="bg-emerald-500 px-4 py-2 rounded"
+    >
+      {advanced ? "Advanced Mode: ON" : "Advanced Mode: OFF"}
+    </button>
+  </div>
+
+  {/* RIGHT BUTTON */}
+  <button
+    onClick={() => setShowSettings(true)}
+    className="ml-auto bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded"
+  >
+    ⚙️ Settings
+  </button>
+
 
 </div>
 
-  <input
-    ref={csvInputRef}
-    type="file"
-    accept=".csv"
-    className="hidden"
-    onChange={handleCSVUpload}
-  />
+</div>
+
+        <input
+          ref={csvInputRef}
+          type="file"
+          accept=".csv"
+          className="hidden"
+          onChange={handleCSVUpload}
+        />
+
+        {/* GRID */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+          {/* LEFT */}
+          <div className="bg-white/5 p-4 rounded-xl border border-white/10 space-y-2">
+
+            <input
+              ref={dateRef}
+              type="date"
+              
+              value={tradeDate}
           
+              onChange={(e) => setTradeDate(e.target.value)}
+              className="w-full p-2 rounded bg-[#0f172a] border border-white/10 text-white [color-scheme:dark]"
+            />
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <select value={firm} onChange={(e) => setFirm(e.target.value)} className="w-full p-2 rounded bg-[#0f172a] border border-white/10">
+              <option value="">Account Type</option>
+              {firmOptions.map(f => <option key={f}>{f}</option>)}
+            </select>
 
-            {/* LEFT */}
-            <div className="bg-white/5 p-4 rounded-xl border border-white/10 space-y-4">
+            <select value={accountSize} onChange={(e) => setAccountSize(e.target.value)} className="w-full p-2 rounded bg-[#0f172a] border border-white/10">
+              <option value="">Account Size</option>
+              {(accountSizes[firm] || []).map(size => <option key={size}>{size}</option>)}
+            </select>
 
-              <div onClick={() => dateRef.current?.showPicker()}>
-                <input
-                  ref={dateRef}
-                  type="date"
-                  value={tradeDate}
-                  onChange={(e) => setTradeDate(e.target.value)}
-                  className="w-full p-2 rounded bg-[#0f172a] border border-white/10 text-white cursor-pointer [color-scheme:dark]"
-                />
-              </div>
+            <input
+              placeholder="Account Number"
+              value={accountNumber}
+              onChange={(e) => setAccountNumber(e.target.value)}
+              className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
+            />
 
-              <select value={firm} onChange={(e) => setFirm(e.target.value)} className="w-full p-2 rounded bg-[#0f172a] border border-white/10">
-                <option value="">Account Type</option>
-                {firmOptions.map(f => <option key={f}>{f}</option>)}
-              </select>
+            <select value={ticker} onChange={(e) => setTicker(e.target.value)} className="w-full p-2 rounded bg-[#0f172a] border border-white/10">
+              <option value="">Select Symbol</option>
+              {symbols.map(s => <option key={s}>{s}</option>)}
+            </select>
+            <p className="text-sm text-gray-400 mt-2">Account Traded</p>
 
-              <select value={accountSize} onChange={(e) => setAccountSize(e.target.value)} className="w-full p-2 rounded bg-[#0f172a] border border-white/10">
-                <option value="">Account Size</option>
-                {(accountSizes[firm] || []).map(size => <option key={size}>{size}</option>)}
-              </select>
-
-              <input
-                placeholder="Account Number"
-                value={accountNumber}
-                onChange={(e) => setAccountNumber(e.target.value)}
-                className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
-              />
-
-              <select value={ticker} onChange={(e) => setTicker(e.target.value)} className="w-full p-2 rounded bg-[#0f172a] border border-white/10">
-                <option value="">Select Symbol</option>
-                {symbols.map(s => <option key={s}>{s}</option>)}
-              </select>
-
-              {advanced && (
-                <>
-                  <div className="relative">
-  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
-    $
-  </span>
-  <input
-    type="text"
-    placeholder="Entry Price"
-    value={formatWithCommas(entryPrice)}
-    onChange={(e) => {
-      const raw = e.target.value.replace(/,/g, "")
-      const val = handleNumberInput(raw)
-      if (val !== null) setEntryPrice(val)
-    }}
-    className="w-full p-2 pl-8 rounded bg-[#0f172a] border border-white/10"
-  />
+<div className="flex gap-2">
+  {["Eval", "Funded", "Live"].map((type) => (
+    <button
+      key={type}
+      onClick={() => setTradeType(type)}
+      className={`px-3 py-1 rounded text-sm font-medium border transition ${
+        tradeType === type
+          ? "bg-emerald-500 border-emerald-400 text-white"
+          : "bg-[#0f172a] border-white/10 text-gray-300 hover:border-emerald-400"
+      }`}
+    >
+      {type}
+    </button>
+  ))}
 </div>
 
-                  <div className="relative">
-  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
-    $
-  </span>
-  <input
-    type="text"
-    placeholder="Exit Price"
-    value={formatWithCommas(exitPrice)}
-    onChange={(e) => {
-      const raw = e.target.value.replace(/,/g, "")
-      const val = handleNumberInput(raw)
-      if (val !== null) setExitPrice(val)
-    }}
-    className="w-full p-2 pl-8 rounded bg-[#0f172a] border border-white/10"
-  />
-</div>
-
-                  <div onClick={() => entryTimeRef.current?.showPicker()}>
-                    <p className="text-sm text-gray-400">Entry Time</p>
-                    <input
-                      ref={entryTimeRef}
-                      type="time"
-                      value={entryTime}
-                      onChange={(e) => setEntryTime(e.target.value)}
-                      className="w-full p-2 rounded bg-[#0f172a] border border-white/10 cursor-pointer [color-scheme:dark]"
-                    />
-                  </div>
-
-                  <div onClick={() => exitTimeRef.current?.showPicker()}>
-                    <p className="text-sm text-gray-400">Exit Time</p>
-                    <input
-                      ref={exitTimeRef}
-                      type="time"
-                      value={exitTime}
-                      onChange={(e) => setExitTime(e.target.value)}
-                      className="w-full p-2 rounded bg-[#0f172a] border border-white/10 cursor-pointer [color-scheme:dark]"
-                    />
-                  </div>
-                </>
-              )}
-
-              <div
-                onClick={handleClickUpload}
-                onDrop={handleDrop}
-                onDragOver={(e) => e.preventDefault()}
-                className="border-2 border-dashed border-white/20 p-4 rounded text-center cursor-pointer hover:border-blue-400"
-              >
-                {image ? <p>{image.name}</p> : <p>Upload Screenshot</p>}
-                <input ref={fileInputRef} type="file" className="hidden" onChange={(e) => setImage(e.target.files?.[0] || null)} />
-              </div>
-              
+            <div
+              onClick={handleClickUpload}
+              onDrop={handleDrop}
+              onDragOver={(e) => e.preventDefault()}
+              className="border-2 border-dashed border-white/20 p-4 rounded text-center cursor-pointer"
+            >
+              {image ? <p>{image.name}</p> : <p>Upload Screenshot</p>}
+              <input ref={fileInputRef} type="file" className="hidden" />
             </div>
-              
-            {/* RIGHT */}
-            <div className="bg-white/5 p-4 rounded-xl border border-white/10 space-y-4">
 
-              <select value={direction} onChange={(e) => setDirection(e.target.value)} className="w-full p-2 rounded bg-[#0f172a] border border-white/10">
-                <option>Long</option>
-                <option>Short</option>
-              </select>
+          </div>
 
-              <div className="relative">
-  {pnl.startsWith("-") && (
-    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
-      -
-    </span>
+          {/* MIDDLE */}
+          {/* MIDDLE */}
+<div className="bg-white/5 p-4 rounded-xl border border-white/10 space-y-2">
+
+  <select value={direction} onChange={(e) => setDirection(e.target.value)} className="w-full p-2 rounded bg-[#0f172a] border border-white/10">
+    <option>Long</option>
+    <option>Short</option>
+  </select>
+
+  <input
+    placeholder="P&L"
+    value={pnl}
+    onChange={(e) => setPnl(e.target.value)}
+    className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
+  />
+
+  {inputSettings.showRR && (
+    <input
+      placeholder="Risk Reward"
+      value={rr}
+      onChange={(e) => setRR(e.target.value)}
+      className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
+    />
   )}
 
-  <span className="absolute left-6 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
-    $
-  </span>
-
-  <input
-    type="text"
-    placeholder="P&L"
-    value={
-      pnlFocused
-        ? pnl.startsWith("-") ? pnl.slice(1) : pnl
-        : formatWithCommas(
-            pnl.startsWith("-") ? pnl.slice(1) : pnl
-          )
-    }
-    onFocus={() => setPnlFocused(true)}
-    onBlur={() => setPnlFocused(false)}
-    onChange={(e) => {
-      let raw = e.target.value.replace(/,/g, "")
-
-      if (pnl.startsWith("-")) raw = "-" + raw
-
-      const cleaned = handleNumberInput(raw)
-      if (cleaned !== null) setPnl(cleaned)
-    }}
-    className="w-full p-2 pl-10 rounded bg-[#0f172a] border border-white/10"
-  />
-</div>
-
-              <input
-                type="text"
-                placeholder="Risk Reward"
-                value={rr}
-                onChange={(e) => {
-                  const val = handleNumberInput(e.target.value)
-                  if (val !== null) setRR(val)
-                }}
-                className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
-              />
-
-              <input
-                type="text"
-                placeholder="Points"
-                value={points}
-                onChange={(e) => {
-                  const val = handleNumberInput(e.target.value)
-                  if (val !== null) setPoints(val)
-                }}
-                className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
-              />
-
-              <input
-                type="text"
-                placeholder="Contracts"
-                value={contracts}
-                onChange={(e) => {
-                  const cleaned = e.target.value.replace(/[^0-9]/g, "")
-                  setContracts(cleaned)
-                }}
-                className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
-              />
-
-              <select value={session} onChange={(e) => setSession(e.target.value)} className="w-full p-2 rounded bg-[#0f172a] border border-white/10">
-                <option>NY</option>
-                <option>London</option>
-                <option>Asia</option>
-              </select>
-
-              <textarea placeholder="Notes" value={notes} onChange={(e) => setNotes(e.target.value)} className="w-full p-2 h-24 rounded bg-[#0f172a] border border-white/10" />
-              <div className="space-y-3">
-
-  <p className="text-sm text-gray-400">Psychology</p>
-
-  <select
-    value={confidence}
-    onChange={(e) => setConfidence(e.target.value)}
-    className="w-full p-2 bg-[#0f172a] border border-white/10 rounded"
-  >
-    <option value="">Confidence (1-5)</option>
-    <option value="1">1 - Very Low</option>
-    <option value="2">2</option>
-    <option value="3">3</option>
-    <option value="4">4</option>
-    <option value="5">5 - Very High</option>
-  </select>
-
-  <select
-    value={emotion}
-    onChange={(e) => setEmotion(e.target.value)}
-    className="w-full p-2 bg-[#0f172a] border border-white/10 rounded"
-  >
-    <option value="">Emotion</option>
-    <option>Calm</option>
-    <option>FOMO</option>
-    <option>Revenge</option>
-    <option>Fear</option>
-    <option>Confident</option>
-  </select>
-
-  <select
-    value={mistakeType}
-    onChange={(e) => setMistakeType(e.target.value)}
-    className="w-full p-2 bg-[#0f172a] border border-white/10 rounded"
-  >
-    <option value="">Mistake Type</option>
-    <option>None</option>
-    <option>Overtrading</option>
-    <option>Early Entry</option>
-    <option>Late Exit</option>
-    <option>No Stop Loss</option>
-  </select>
-
-  <label className="flex items-center gap-2 text-sm">
+  {inputSettings.showPoints && (
     <input
-      type="checkbox"
-      checked={followedPlan}
-      onChange={(e) => setFollowedPlan(e.target.checked)}
+      placeholder="Points"
+      value={points}
+      onChange={(e) => setPoints(e.target.value)}
+      className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
     />
-    Followed Rules?
-  </label>
+  )}
 
-</div>
-<div className="space-y-3 mt-4">
-
-  <p className="text-sm text-gray-400">Context</p>
-
-  <select
-    value={marketCondition}
-    onChange={(e) => setMarketCondition(e.target.value)}
-    className="w-full p-2 bg-[#0f172a] border border-white/10 rounded"
-  >
-    <option value="">Market Condition</option>
-    <option>Trending</option>
-    <option>Ranging</option>
-    <option>Choppy</option>
-  </select>
-
-  <select
-    value={timeframe}
-    onChange={(e) => setTimeframe(e.target.value)}
-    className="w-full p-2 bg-[#0f172a] border border-white/10 rounded"
-  >
-    <option value="">Timeframe</option>
-    <option>1m</option>
-    <option>5m</option>
-    <option>15m</option>
-    <option>1h</option>
-  </select>
-
-  <label className="flex items-center gap-2 text-sm">
+  {inputSettings.showContracts && (
     <input
-      type="checkbox"
-      checked={newsEvent}
-      onChange={(e) => setNewsEvent(e.target.checked)}
+      placeholder="Contracts"
+      value={contracts}
+      onChange={(e) => setContracts(e.target.value)}
+      className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
     />
-    News Event?
-  </label>
+  )}
+
+  {/* ADVANCED */}
+  {inputSettings.showEntryExit && advanced && (
+    <>
+      <input
+        placeholder="Entry Price"
+        value={entryPrice}
+        onChange={(e) => setEntryPrice(e.target.value)}
+        className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
+      />
+
+      <input
+        placeholder="Exit Price"
+        value={exitPrice}
+        onChange={(e) => setExitPrice(e.target.value)}
+        className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
+      />
+
+      <input
+        type="time"
+        value={entryTime}
+        onChange={(e) => setEntryTime(e.target.value)}
+        className="w-full p-2 rounded bg-[#0f172a] border border-white/10 [color-scheme:dark]"
+      />
+
+      <input
+        type="time"
+        value={exitTime}
+        onChange={(e) => setExitTime(e.target.value)}
+        className="w-full p-2 rounded bg-[#0f172a] border border-white/10 [color-scheme:dark]"
+      />
+    </>
+  )}
+
+  {inputSettings.showNotes && (
+    <textarea
+      placeholder="Notes"
+      value={notes}
+      onChange={(e) => setNotes(e.target.value)}
+      className="w-full p-2 h-20 rounded bg-[#0f172a] border border-white/10"
+    />
+  )}
+
+  <button
+    onClick={handleSubmit}
+    className="w-full bg-blue-500 hover:bg-blue-600 p-2 rounded font-semibold"
+  >
+    Add Trade
+  </button>
 
 </div>
-              <button onClick={handleSubmit} disabled={loading} className="w-full mt-4 bg-blue-500 hover:bg-blue-600 p-2 rounded font-semibold">
-                {loading ? "Saving..." : "Add Trade"}
-              </button>
 
-            </div>
+          {/* RIGHT */}
+          <div className="bg-white/5 p-4 rounded-xl border border-white/10 space-y-3">
+
+            <p className="text-sm text-gray-400">Psychology</p>
+
+            <select value={confidence} onChange={(e) => setConfidence(e.target.value)} className="w-full p-2 bg-[#0f172a] border border-white/10 rounded">
+              <option value="">Confidence (bad to great)</option>
+              <option>1</option><option>2</option><option>3</option><option>4</option><option>5</option>
+            </select>
+
+            <select value={emotion} onChange={(e) => setEmotion(e.target.value)} className="w-full p-2 bg-[#0f172a] border border-white/10 rounded">
+              <option value="">Emotion</option>
+              <option>Calm</option>
+              <option>FOMO</option>
+              <option>Revenge</option>
+            </select>
+
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={followedPlan} onChange={(e) => setFollowedPlan(e.target.checked)} />
+              Followed Plan?
+            </label>
+
+            <p className="text-sm text-gray-400 mt-4">Context</p>
+
+            <select value={marketCondition} onChange={(e) => setMarketCondition(e.target.value)} className="w-full p-2 bg-[#0f172a] border border-white/10 rounded">
+              <option value="">Market</option>
+              <option>Trending</option>
+              <option>Ranging</option>
+            </select>
+
+            <select value={timeframe} onChange={(e) => setTimeframe(e.target.value)} className="w-full p-2 bg-[#0f172a] border border-white/10 rounded">
+              <option value="">Timeframe</option>
+              <option>1m</option>
+              <option>5m</option>
+              <option>15m</option>
+            </select>
+
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={newsEvent} onChange={(e) => setNewsEvent(e.target.checked)} />
+              News Event?
+            </label>
+            <p className="text-sm text-gray-400 mt-4">Psychology Notes</p>
+
+<textarea
+  placeholder="What were you thinking in the moment?"
+  value={psychologyNotes}
+  onChange={(e) => setPsychologyNotes(e.target.value)}
+  className="w-full p-2 h-24 rounded bg-[#0f172a] border border-white/10 text-white"
+/>
 
           </div>
 
         </div>
+
       </div>
-    </>
-  )
+    </div>
+    {showSettings && (
+  <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+
+    <div className="bg-[#0f172a] border border-white/10 rounded-xl p-6 w-[400px] space-y-4">
+
+      <h2 className="text-lg font-semibold text-white">Input Settings</h2>
+
+      {Object.entries(inputSettings).map(([key, value]) => (
+        <div key={key} className="flex items-center justify-between">
+
+          <span className="text-sm text-gray-300 capitalize">
+            {key.replace("show", "")}
+          </span>
+
+          <button
+            onClick={() =>
+              setInputSettings((prev) => ({
+                ...prev,
+                [key]: !prev[key],
+              }))
+            }
+            className={`w-12 h-6 flex items-center rounded-full p-1 transition ${
+              value ? "bg-emerald-500" : "bg-red-500"
+            }`}
+          >
+            <div
+              className={`bg-white w-4 h-4 rounded-full shadow-md transform transition ${
+                value ? "translate-x-6" : "translate-x-0"
+              }`}
+            />
+          </button>
+
+        </div>
+      ))}
+
+      <button
+        onClick={() => setShowSettings(false)}
+        className="w-full bg-blue-500 hover:bg-blue-600 py-2 rounded font-semibold mt-4"
+      >
+        Done
+      </button>
+
+    </div>
+  </div>
+)}
+  </>
+)
 }
