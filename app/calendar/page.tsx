@@ -8,7 +8,6 @@ export default function CalendarPage() {
   const [accountFilter, setAccountFilter] = useState("all")
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDay, setSelectedDay] = useState<number | null>(null)
-  const [selectedImage, setSelectedImage] = useState<string | null>(null)
 
   useEffect(() => {
     fetchTrades()
@@ -19,10 +18,7 @@ export default function CalendarPage() {
       data: { user },
     } = await supabase.auth.getUser()
 
-    if (!user) {
-      setTrades([])
-      return
-    }
+    if (!user) return
 
     const { data } = await supabase
       .from("trades")
@@ -59,14 +55,9 @@ export default function CalendarPage() {
 
   filteredTrades.forEach((trade) => {
     const d = new Date(trade.created_at)
-
     if (d.getMonth() === month && d.getFullYear() === year) {
       const day = d.getDate()
-
-      if (!dailyData[day]) {
-        dailyData[day] = { pnl: 0, trades: [] }
-      }
-
+      if (!dailyData[day]) dailyData[day] = { pnl: 0, trades: [] }
       dailyData[day].pnl += trade.pnl || 0
       dailyData[day].trades.push(trade)
     }
@@ -79,10 +70,8 @@ export default function CalendarPage() {
   const winRate = totalTrades ? (wins.length / totalTrades) * 100 : 0
   const totalPnL = monthTrades.reduce((sum: number, t: any) => sum + (t.pnl || 0), 0)
 
-  const totalCells = 42
   const calendarDays = []
-
-  for (let i = 0; i < totalCells; i++) {
+  for (let i = 0; i < 42; i++) {
     const dayNumber = i - firstDayOfMonth + 1
     calendarDays.push(dayNumber > 0 && dayNumber <= daysInMonth ? dayNumber : null)
   }
@@ -91,61 +80,47 @@ export default function CalendarPage() {
     const newDate = new Date(currentDate)
     newDate.setMonth(newDate.getMonth() + offset)
     setCurrentDate(newDate)
-    setSelectedDay(null)
   }
 
   return (
     <>
       <Navbar />
 
-      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#312e81] text-white p-10">
+      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white p-6">
 
-        {/* HEADER */}
-        <div className="grid grid-cols-3 mb-8 items-center">
+        <div className="max-w-7xl mx-auto flex gap-8 items-start">
 
-          {/* LEFT = EMPTY */}
-          <div></div>
+          {/* LEFT SIDE (CALENDAR) */}
+          <div className="flex-1">
 
-          {/* CENTERED OVER CALENDAR */}
-          <div className="flex justify-center items-center gap-4 text-xl font-semibold col-span-1">
-            <button onClick={() => changeMonth(-1)}>&lt;</button>
+            {/* HEADER — NOW CENTERED OVER CALENDAR ONLY */}
+            <div className="flex justify-center items-center gap-6 mb-6">
+              <button onClick={() => changeMonth(-1)} className="text-xl hover:text-blue-400">&lt;</button>
 
-            <span className="text-blue-300">
-              {currentDate.toLocaleString("default", { month: "long" })} {year}
-            </span>
+              <h2 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
+                {currentDate.toLocaleString("default", { month: "long" })} {year}
+              </h2>
 
-            <button onClick={() => changeMonth(1)}>&gt;</button>
-          </div>
-
-          {/* RIGHT DROPDOWN */}
-          <div className="flex justify-center">
-            <select
-              value={accountFilter}
-              onChange={(e) => setAccountFilter(e.target.value)}
-              className="bg-white text-black px-3 py-2 rounded"
-            >
-              <option value="all">All Accounts</option>
-              {accounts.map((acc) => (
-                <option key={acc}>{acc}</option>
-              ))}
-            </select>
-          </div>
-
-        </div>
-
-        <div className="grid lg:grid-cols-3 gap-8">
-
-          {/* CALENDAR */}
-          <div className="lg:col-span-2">
-
-            <div className="grid grid-cols-7 gap-4 mb-4 text-center text-blue-300">
-              {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map(d => <div key={d}>{d}</div>)}
+              <button onClick={() => changeMonth(1)} className="text-xl hover:text-blue-400">&gt;</button>
             </div>
 
-            <div className="grid grid-cols-7 gap-4">
+            {/* DAYS HEADER */}
+            <div className="grid grid-cols-7 gap-3 mb-2 text-center text-gray-400 text-sm">
+              {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map(d => (
+                <div key={d}>{d}</div>
+              ))}
+            </div>
+
+            {/* CALENDAR GRID */}
+            <div className="grid grid-cols-7 gap-3">
               {calendarDays.map((day, index) => {
                 if (!day) {
-                  return <div key={index} className="h-28 bg-white/5 rounded-xl" />
+                  return (
+                    <div
+                      key={index}
+                      className="aspect-square bg-white/5 rounded-xl border border-white/10"
+                    />
+                  )
                 }
 
                 const data = dailyData[day]
@@ -153,24 +128,29 @@ export default function CalendarPage() {
                 return (
                   <div
                     key={index}
-                    onClick={() => setSelectedDay(day)}
                     className={`
-                      h-28 rounded-xl border border-white/10 backdrop-blur-md 
-                      cursor-pointer hover:scale-105 transition
-                      flex flex-col justify-between p-3
-                      ${data?.pnl > 0 ? "bg-green-300/15" : ""}
-                      ${data?.pnl < 0 ? "bg-red-300/15" : ""}
+                      aspect-square rounded-xl border border-white/10 p-2
+                      flex flex-col justify-between cursor-pointer
+                      transition hover:scale-[1.03]
+
+                      ${data?.pnl > 0 ? "bg-emerald-500/25 border-emerald-400/40" : ""}
+                      ${data?.pnl < 0 ? "bg-red-500/25 border-red-400/40" : ""}
                       ${!data ? "bg-white/5" : ""}
                     `}
                   >
-                    {/* DATE TOP LEFT */}
-                    <div className="text-sm text-blue-300">{day}</div>
+                    <div className="text-xs text-gray-300">{day}</div>
 
-                    {/* CENTERED PNL */}
                     {data && (
-                      <div className="flex flex-col items-center justify-center text-xs">
-                        <div>{formatPNL(data.pnl)}</div>
-                        <div>{data.trades.length} trades</div>
+                      <div className="text-center text-xs">
+                        <div className={`font-semibold ${
+                          data.pnl > 0 ? "text-emerald-400" :
+                          data.pnl < 0 ? "text-red-400" : ""
+                        }`}>
+                          {formatPNL(data.pnl)}
+                        </div>
+                        <div className="text-gray-400 text-[10px]">
+                          {data.trades.length} trades
+                        </div>
                       </div>
                     )}
                   </div>
@@ -180,80 +160,37 @@ export default function CalendarPage() {
 
           </div>
 
-          {/* RIGHT PANEL */}
-          <div className="space-y-6">
+          {/* RIGHT SIDE PANEL — NOW ALIGNED TO TOP */}
+          <div className="w-[300px] space-y-4 mt-[52px]">
 
-            {/* MONTH STATS (LEFT ALIGNED) */}
-            <div className="bg-white/5 border border-white/10 p-5 rounded-xl">
-              <h3 className="text-blue-300 font-semibold mb-3">Monthly Stats</h3>
+            {/* FILTER */}
+            <select
+              value={accountFilter}
+              onChange={(e) => setAccountFilter(e.target.value)}
+              className="w-full bg-[#0f172a] border border-white/10 px-3 py-2 rounded text-white"
+            >
+              <option value="all">All Accounts</option>
+              {accounts.map((acc) => (
+                <option key={acc}>{acc}</option>
+              ))}
+            </select>
 
-              <div className="space-y-2 text-sm text-left">
+            {/* STATS */}
+            <div className="bg-white/5 p-5 rounded-xl border border-white/10">
+              <h3 className="text-blue-400 font-semibold mb-3">Monthly Stats</h3>
+
+              <div className="space-y-2 text-sm">
                 <p>Total Trades: {totalTrades}</p>
                 <p>Win Rate: {winRate.toFixed(1)}%</p>
-                <p>Total P&L: {formatPNL(totalPnL)}</p>
+                <p className={totalPnL > 0 ? "text-emerald-400" : totalPnL < 0 ? "text-red-400" : ""}>
+                  Total P&L: {formatPNL(totalPnL)}
+                </p>
               </div>
             </div>
-
-            {/* TRADES */}
-            {selectedDay && dailyData[selectedDay] && (
-              <div className="bg-white/5 border border-white/10 p-5 rounded-xl">
-
-                <h3 className="text-blue-300 font-semibold mb-3">
-                  Trades on {currentDate.toLocaleString("default", { month: "long" })} {selectedDay}, {year}
-                </h3>
-
-                {dailyData[selectedDay].trades.map((trade: any) => (
-                  <div
-                    key={trade.id}
-                    onClick={() => {
-                      if (trade.image_url) {
-                        setSelectedImage(
-                          `https://fobudrkniacatvilbofw.supabase.co/storage/v1/object/public/screenshots/${trade.image_url}`
-                        )
-                      }
-                    }}
-                    className="border border-white/10 p-3 rounded mb-3 cursor-pointer hover:bg-white/5"
-                  >
-                    <p className="text-sm">
-                      <b>{trade.ticker}</b> | {trade.direction}
-                    </p>
-
-                    <p className={`text-sm ${
-                      trade.pnl > 0 ? "text-green-300" :
-                      trade.pnl < 0 ? "text-red-300" : ""
-                    }`}>
-                      P&L: {formatPNL(trade.pnl)} | RR: {trade.rr}
-                      {trade.contracts != null
-                        ? ` | Contracts: ${trade.contracts}`
-                        : ""}
-                    </p>
-
-                    <p className="text-xs text-gray-400">
-                      {trade.session}
-                    </p>
-
-                    <p className="text-xs mt-1">
-                      {trade.notes}
-                    </p>
-                  </div>
-                ))}
-
-              </div>
-            )}
 
           </div>
 
         </div>
-
-        {/* IMAGE MODAL */}
-        {selectedImage && (
-          <div
-            className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center"
-            onClick={() => setSelectedImage(null)}
-          >
-            <img src={selectedImage} className="max-w-[90%] max-h-[90%] rounded-lg" />
-          </div>
-        )}
 
       </div>
     </>

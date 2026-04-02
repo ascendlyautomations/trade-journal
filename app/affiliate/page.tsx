@@ -22,7 +22,6 @@ export default function AffiliateDashboard() {
   async function fetchData() {
     setLoadingData(true)
 
-    // 🔥 GET AFFILIATE CODE (REAL SOURCE)
     const { data: affiliate } = await supabase
       .from("affiliates")
       .select("*")
@@ -33,7 +32,6 @@ export default function AffiliateDashboard() {
       setAffiliateCode(affiliate.code)
     }
 
-    // 🔥 GET REFERRALS
     const { data: refs } = await supabase
       .from("referrals")
       .select("*")
@@ -62,94 +60,122 @@ export default function AffiliateDashboard() {
     <>
       <Navbar />
 
-      <div className="min-h-screen bg-[#0f172a] text-white p-6">
+      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white">
 
-        <h1 className="text-2xl font-bold mb-6">💰 Affiliate Dashboard</h1>
+        <div className="max-w-6xl mx-auto p-10">
 
-        {/* STATS */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          {/* HEADER */}
+          <h1 className="text-3xl font-bold mb-8 bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
+            Affiliate Dashboard
+          </h1>
 
-          <div className="bg-[#1e293b] p-6 rounded">
-            <p className="text-gray-400">Affiliate Earnings (18%)</p>
+          {/* STATS */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
 
-            <h2 className="text-2xl font-bold text-emerald-400">
-              ${earnings.toFixed(2)}
-            </h2>
+            <div className="bg-white/5 backdrop-blur-md border border-white/10 p-6 rounded-xl">
+              <p className="text-gray-400 text-sm">Affiliate Earnings</p>
 
-            <p className="text-gray-400 text-xs mt-1">
-              From ${totalRevenue.toFixed(2)} total
-            </p>
-          </div>
+              <h2 className="text-3xl font-bold text-emerald-400 mt-1">
+                ${earnings.toFixed(2)}
+              </h2>
 
-          <div className="bg-[#1e293b] p-6 rounded">
-            <p className="text-gray-400">Total Referrals</p>
-
-            <h2 className="text-2xl font-bold">
-              {profile.referral_count || 0}
-            </h2>
-          </div>
-
-          <div className="bg-[#1e293b] p-6 rounded">
-            <p className="text-gray-400">Your Code</p>
-
-            <h2 className="text-2xl font-bold text-blue-400">
-              {affiliateCode || "No Code"}
-            </h2>
-          </div>
-
-        </div>
-
-        {/* REFERRAL LINK */}
-        {affiliateCode && (
-          <div className="bg-[#1e293b] p-6 rounded mb-8">
-
-            <p className="text-gray-400 mb-2">Your Referral Link</p>
-
-            <div className="flex gap-2">
-
-              <input
-                value={referralLink}
-                readOnly
-                className="flex-1 bg-black px-3 py-2 rounded text-sm"
-              />
-
-              <button
-                onClick={() => copyLink(referralLink)}
-                className="bg-emerald-500 px-4 py-2 rounded"
-              >
-                Copy
-              </button>
-
+              <p className="text-gray-400 text-xs mt-2">
+                From ${totalRevenue.toFixed(2)} total revenue
+              </p>
             </div>
+
+            <div className="bg-white/5 backdrop-blur-md border border-white/10 p-6 rounded-xl">
+              <p className="text-gray-400 text-sm">Total Referrals</p>
+
+              <h2 className="text-3xl font-bold mt-1">
+                {profile.referral_count || 0}
+              </h2>
+            </div>
+
+            <div className="bg-white/5 backdrop-blur-md border border-white/10 p-6 rounded-xl">
+              <p className="text-gray-400 text-sm">Your Code</p>
+
+              <h2 className="text-2xl font-bold text-blue-400 mt-1">
+                {affiliateCode || "No Code"}
+              </h2>
+            </div>
+
           </div>
-        )}
 
-        {/* TABLE */}
-        <div className="bg-[#1e293b] p-6 rounded">
+          {/* REFERRAL LINK */}
+          {affiliateCode && (
+            <div className="bg-white/5 backdrop-blur-md border border-white/10 p-6 rounded-xl mb-8">
 
-          <h2 className="text-lg font-semibold mb-4">Your Referrals</h2>
+              <p className="text-gray-400 mb-3">Your Referral Link</p>
 
-          {loadingData ? (
-            <p>Loading...</p>
-          ) : referrals.length === 0 ? (
-            <p className="text-gray-400">No referrals yet</p>
-          ) : (
-            <table className="w-full text-sm">
-              <tbody>
-                {referrals.map((ref, i) => (
-                  <tr key={i} className="border-b border-white/10">
-                    <td className="py-2">{ref.referred_user_id}</td>
-                    <td className="py-2 text-emerald-400">
-                      ${(ref.revenue * 0.18).toFixed(2)}
-                    </td>
-                    <td className="py-2">
-                      {new Date(ref.created_at).toLocaleDateString()}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+              <div className="flex gap-2">
+
+                <input
+                  value={referralLink}
+                  readOnly
+                  className="flex-1 bg-[#0f172a] border border-white/10 px-3 py-2 rounded text-sm text-white"
+                />
+
+                <button
+                  onClick={() => copyLink(referralLink)}
+                  className="bg-emerald-500 hover:bg-emerald-600 px-4 py-2 rounded font-semibold transition"
+                >
+                  Copy
+                </button>
+
+              </div>
+            </div>
           )}
+
+          {/* REFERRALS TABLE */}
+          <div className="bg-white/5 backdrop-blur-md border border-white/10 p-6 rounded-xl">
+
+            <h2 className="text-lg font-semibold mb-4 text-blue-400">
+              Your Referrals
+            </h2>
+
+            {loadingData ? (
+              <p className="text-gray-400">Loading...</p>
+            ) : referrals.length === 0 ? (
+              <p className="text-gray-400">No referrals yet</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+
+                  <thead>
+                    <tr className="text-gray-400 text-left border-b border-white/10">
+                      <th className="py-2">User</th>
+                      <th className="py-2">Earnings</th>
+                      <th className="py-2">Date</th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {referrals.map((ref, i) => (
+                      <tr
+                        key={i}
+                        className="border-b border-white/10 hover:bg-white/5 transition"
+                      >
+                        <td className="py-3 truncate max-w-[150px]">
+                          {ref.referred_user_id}
+                        </td>
+
+                        <td className="py-3 text-emerald-400 font-semibold">
+                          ${(ref.revenue * 0.18).toFixed(2)}
+                        </td>
+
+                        <td className="py-3 text-gray-400">
+                          {new Date(ref.created_at).toLocaleDateString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+
+                </table>
+              </div>
+            )}
+
+          </div>
 
         </div>
 
