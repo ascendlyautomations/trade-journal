@@ -311,7 +311,7 @@ export default function TradesPage() {
                 </select>
 
                 {/* Timeframe */}
-                {["all", "daily", "weekly", "monthly"].map((t) => (
+                {["All", "Daily", "Weekly", "Monthly"].map((t) => (
                   <button
                     key={t}
                     onClick={() => setTimeframe(t)}
@@ -321,7 +321,7 @@ export default function TradesPage() {
                         : "bg-white/10 hover:bg-white/20"
                     }`}
                   >
-                    {t.toUpperCase()}
+                    {t}
                   </button>
                 ))}
 

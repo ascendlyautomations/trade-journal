@@ -166,6 +166,12 @@ if (image) {
       finalDate = new Date(`${tradeDate}T16:00:00`)
     }
 
+    const sessionToSave = (session && String(session).trim()) || "NY"
+    const tradeTypeToSave =
+      tradeType != null && String(tradeType).trim() !== ""
+        ? String(tradeType).trim()
+        : null
+
     await supabase.from("trades").insert([
   {
     ticker,
@@ -174,7 +180,7 @@ if (image) {
     rr: parsedRR,
     points: parsedPoints,
     contracts: parsedContracts,
-    session,
+    session: sessionToSave,
     notes,
     image_url: screenshotUrl,
     account_type: firm,
@@ -186,10 +192,9 @@ if (image) {
     exit_price: parsedExit,
     entry_time: entryTime,
     exit_time: exitTime,
-    psychology_notes: psychologyNotes,
-    trade_type: tradeType,
+    psychology_notes: psychologyNotes != null && String(psychologyNotes).trim() !== "" ? String(psychologyNotes).trim() : null,
+    trade_type: tradeTypeToSave,
 
-    // 🔥 ADD THIS BLOCK
     confidence: confidence ? Number(confidence) : null,
     emotion: emotion || null,
     followed_plan: followedPlan,
@@ -197,8 +202,6 @@ if (image) {
     market_condition: marketCondition || null,
     news_event: newsEvent,
     timeframe: timeframe || null,
-    psychology_notes: psychologyNotes || null,
-    trade_type: tradeType || null,
 
       }
     ])
