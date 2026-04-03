@@ -184,9 +184,9 @@ export default function Leaderboard() {
     <>
       <Navbar />
 
-      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#065f46] text-gray-100 p-10">
+      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100 p-10">
 
-        <h1 className="text-3xl font-semibold text-center mb-6">
+        <h1 className="text-3xl font-semibold text-center mb-6 bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
           Performance Leaderboard
         </h1>
 

@@ -106,7 +106,7 @@ const [timeframe, setTimeframe] = useState("")
   const [contracts, setContracts] = useState("")
   const [entryTime, setEntryTime] = useState("")
   const [exitTime, setExitTime] = useState("")
-
+  const [screenshot, setScreenshot] = useState<File | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const csvInputRef = useRef<HTMLInputElement>(null)
   const dateRef = useRef<HTMLInputElement>(null)
@@ -118,21 +118,26 @@ const [timeframe, setTimeframe] = useState("")
   async function handleSubmit() {
     if (loading) return
     setLoading(true)
-
+    
     const {
       data: { user }
     } = await supabase.auth.getUser()
 
-    let imagePath = null
+    let screenshotUrl = null
 
-    if (image) {
-      const fileName = `${Date.now()}-${image.name}`
-      const { error } = await supabase.storage
-        .from("screenshots")
-        .upload(fileName, image)
+if (image) {
+  const fileName = `${user.id}/${Date.now()}-${image.name}`
 
-      if (!error) imagePath = fileName
-    }
+  const { error } = await supabase.storage
+    .from("screenshots")
+    .upload(fileName, image)
+
+  if (error) {
+    console.error("Upload error:", error)
+  } else {
+    screenshotUrl = fileName // ✅ THIS IS THE FIX
+  }
+}
 
     const parsedPnl = parseFloat(pnl) || 0
     const parsedRR = parseFloat(rr) || 0
@@ -140,6 +145,26 @@ const [timeframe, setTimeframe] = useState("")
     const parsedEntry = advanced ? parseFloat(entryPrice) || 0 : null
     const parsedExit = advanced ? parseFloat(exitPrice) || 0 : null
     const parsedContracts = parseInt(contracts, 10) || 0
+
+    const now = new Date()
+
+    // Check if selected date is today
+    const selectedDateObj = new Date(tradeDate + "T00:00:00")
+    const isToday =
+      selectedDateObj.toDateString() === now.toDateString()
+
+    let finalDate: Date
+
+    if (entryTime) {
+      // Use selected date + entry time
+      finalDate = new Date(`${tradeDate}T${entryTime}:00`)
+    } else if (isToday) {
+      // Use current time if today and no entry time
+      finalDate = now
+    } else {
+      // Default fallback → 4:00 PM
+      finalDate = new Date(`${tradeDate}T16:00:00`)
+    }
 
     await supabase.from("trades").insert([
   {
@@ -151,12 +176,12 @@ const [timeframe, setTimeframe] = useState("")
     contracts: parsedContracts,
     session,
     notes,
-    image_url: imagePath,
+    image_url: screenshotUrl,
     account_type: firm,
     account_size: accountSize,
     account_id: accountNumber,
     user_id: user?.id,
-    created_at: new Date(tradeDate + "T12:00:00"),
+    created_at: finalDate.toISOString(),
     entry_price: parsedEntry,
     exit_price: parsedExit,
     entry_time: entryTime,
@@ -280,6 +305,7 @@ setTimeframe("")
     },
   })
 }
+
 async function fetchReviewCount() {
   const {
     data: { user }
@@ -422,7 +448,15 @@ return (
               className="border-2 border-dashed border-white/20 p-4 rounded text-center cursor-pointer"
             >
               {image ? <p>{image.name}</p> : <p>Upload Screenshot</p>}
-              <input ref={fileInputRef} type="file" className="hidden" />
+              <input
+  ref={fileInputRef}
+  type="file"
+  className="hidden"
+  onChange={(e) => {
+    const file = e.target.files?.[0]
+    if (file) setImage(file)
+  }}
+/>
             </div>
 
           </div>
@@ -437,17 +471,26 @@ return (
   </select>
 
   <input
-    placeholder="P&L"
-    value={pnl}
-    onChange={(e) => setPnl(e.target.value)}
-    className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
-  />
+  placeholder="P&L"
+  value={pnlFocused ? pnl : formatWithCommas(pnl)}
+  onFocus={() => setPnlFocused(true)}
+  onBlur={() => setPnlFocused(false)}
+  onChange={(e) => {
+    const raw = e.target.value.replace(/,/g, "")
+    const val = handleNumberInput(raw)
+    if (val !== null) setPnl(val)
+  }}
+  className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
+/>
 
   {inputSettings.showRR && (
     <input
       placeholder="Risk Reward"
       value={rr}
-      onChange={(e) => setRR(e.target.value)}
+      onChange={(e) => {
+  const val = handleNumberInput(e.target.value)
+  if (val !== null) setRR(val)
+}}
       className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
     />
   )}
@@ -456,7 +499,10 @@ return (
     <input
       placeholder="Points"
       value={points}
-      onChange={(e) => setPoints(e.target.value)}
+      onChange={(e) => {
+  const val = handleNumberInput(e.target.value)
+  if (val !== null) setPoints(val)
+}}
       className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
     />
   )}
@@ -476,14 +522,20 @@ return (
       <input
         placeholder="Entry Price"
         value={entryPrice}
-        onChange={(e) => setEntryPrice(e.target.value)}
+        onChange={(e) => {
+  const val = handleNumberInput(e.target.value)
+  if (val !== null) setEntryPrice(val)
+}}
         className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
       />
 
       <input
         placeholder="Exit Price"
         value={exitPrice}
-        onChange={(e) => setExitPrice(e.target.value)}
+        onChange={(e) => {
+  const val = handleNumberInput(e.target.value)
+  if (val !== null) setExitPrice(val)
+}}
         className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
       />
 
