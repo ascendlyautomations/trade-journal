@@ -20,10 +20,12 @@ export default function FeedPage() {
   const [posts, setPosts] = useState<any[]>([])
   const [user, setUser] = useState<any>(null)
   const [mode, setMode] = useState<"global" | "following">("global")
+  const [openComments, setOpenComments] = useState<Record<string, boolean>>({})
   const [likesByPost, setLikesByPost] = useState<Record<string, LikeMeta>>({})
   const [commentsByPost, setCommentsByPost] = useState<Record<string, any[]>>({})
   const [commentDraft, setCommentDraft] = useState<Record<string, string>>({})
   const [commentSubmitting, setCommentSubmitting] = useState<Record<string, boolean>>({})
+  const [selectedPost, setSelectedPost] = useState<any>(null)
 
   useEffect(() => {
     fetchUser()
@@ -33,13 +35,22 @@ export default function FeedPage() {
     if (user) fetchPosts()
   }, [user, mode])
 
+  useEffect(() => {
+    if (selectedPost) {
+      document.body.style.overflow = "hidden"
+      return () => {
+        document.body.style.overflow = ""
+      }
+    }
+  }, [selectedPost])
+
   async function fetchUser() {
     const { data } = await supabase.auth.getSession()
     setUser(data.session?.user)
   }
 
   const loadEngagementForPosts = useCallback(async (postList: any[], currentUser: any) => {
-    if (!currentUser || !postList.length) {
+    if (!postList.length) {
       setLikesByPost({})
       setCommentsByPost({})
       return
@@ -47,36 +58,58 @@ export default function FeedPage() {
 
     const ids = postList.map((p) => p.id)
 
-    const [{ data: likesRows }, { data: commentsRows }] = await Promise.all([
+    const [
+      { data: likesRows },
+      { data: commentsRows },
+      { count: likesExactCount },
+    ] = await Promise.all([
       supabase.from("likes").select("post_id, user_id").in("post_id", ids),
       supabase
         .from("comments")
         .select("*, profiles(username)")
         .in("post_id", ids)
         .order("created_at", { ascending: true }),
+      supabase
+        .from("likes")
+        .select("*", { count: "exact", head: true })
+        .in("post_id", ids),
     ])
+    void likesExactCount
 
     const likesMap: Record<string, LikeMeta> = {}
     for (const id of ids) {
-      likesMap[id] = { count: 0, liked: false }
+      const key = String(id)
+      likesMap[key] = { count: 0, liked: false }
     }
     for (const row of likesRows || []) {
-      const pid = row.post_id as string
+      const pid = String(row.post_id)
       if (!likesMap[pid]) likesMap[pid] = { count: 0, liked: false }
       likesMap[pid].count++
-      if (row.user_id === currentUser.id) likesMap[pid].liked = true
+      if (currentUser && row.user_id === currentUser.id) likesMap[pid].liked = true
     }
 
     const commentsMap: Record<string, any[]> = {}
-    for (const id of ids) commentsMap[id] = []
+    for (const id of ids) {
+      commentsMap[String(id)] = []
+    }
     for (const c of commentsRows || []) {
-      const pid = c.post_id as string
+      const pid = String(c.post_id)
       if (!commentsMap[pid]) commentsMap[pid] = []
       commentsMap[pid].push(c)
     }
 
     setLikesByPost(likesMap)
     setCommentsByPost(commentsMap)
+
+    const enriched = postList.map((p) => {
+      const key = String(p.id)
+      return {
+        ...p,
+        likesCount: likesMap[key]?.count ?? 0,
+        comments: commentsMap[key] ?? [],
+      }
+    })
+    setPosts(enriched)
   }, [])
 
   async function fetchPosts() {
@@ -140,10 +173,19 @@ export default function FeedPage() {
         return
       }
 
+      const newCount = Math.max(0, meta.count - 1)
       setLikesByPost((prev) => ({
         ...prev,
-        [pid]: { count: Math.max(0, meta.count - 1), liked: false },
+        [pid]: { count: newCount, liked: false },
       }))
+      setPosts((prev) =>
+        prev.map((p) =>
+          String(p.id) === pid ? { ...p, likesCount: newCount } : p
+        )
+      )
+      setSelectedPost((prev: any) =>
+        prev && String(prev.id) === pid ? { ...prev, likesCount: newCount } : prev
+      )
     } else {
       const { error } = await supabase.from("likes").insert({
         post_id: pid,
@@ -155,10 +197,19 @@ export default function FeedPage() {
         return
       }
 
+      const newCount = meta.count + 1
       setLikesByPost((prev) => ({
         ...prev,
-        [pid]: { count: meta.count + 1, liked: true },
+        [pid]: { count: newCount, liked: true },
       }))
+      setPosts((prev) =>
+        prev.map((p) =>
+          String(p.id) === pid ? { ...p, likesCount: newCount } : p
+        )
+      )
+      setSelectedPost((prev: any) =>
+        prev && String(prev.id) === pid ? { ...prev, likesCount: newCount } : prev
+      )
 
       if (post.user_id && post.user_id !== user.id) {
         const { error: nErr } = await supabase.from("notifications").insert({
@@ -198,10 +249,20 @@ export default function FeedPage() {
       return
     }
 
-    setCommentsByPost((prev) => ({
-      ...prev,
-      [pid]: [...(prev[pid] || []), newRow],
-    }))
+    setCommentsByPost((prev) => {
+      const next = [...(prev[pid] || []), newRow]
+      setPosts((postsPrev) =>
+        postsPrev.map((p) =>
+          String(p.id) === pid ? { ...p, comments: next } : p
+        )
+      )
+      setSelectedPost((prevSel: any) =>
+        prevSel && String(prevSel.id) === pid
+          ? { ...prevSel, comments: next }
+          : prevSel
+      )
+      return { ...prev, [pid]: next }
+    })
     setCommentDraft((d) => ({ ...d, [pid]: "" }))
 
     if (post.user_id && post.user_id !== user.id) {
@@ -214,6 +275,14 @@ export default function FeedPage() {
       if (nErr) console.error("Notification (comment) error:", nErr)
     }
   }
+
+  const modalPid = selectedPost ? String(selectedPost.id) : null
+  const modalLikesCount = modalPid
+    ? likesByPost[modalPid]?.count ?? selectedPost?.likesCount ?? 0
+    : 0
+  const modalComments = modalPid
+    ? commentsByPost[modalPid] ?? selectedPost?.comments ?? []
+    : []
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white">
@@ -258,11 +327,21 @@ export default function FeedPage() {
             return (
               <article
                 key={post.id}
-                className="bg-white/5 border border-white/10 rounded-xl overflow-hidden shadow-lg shadow-black/20"
+                role="button"
+                tabIndex={0}
+                onClick={() => setSelectedPost(post)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault()
+                    setSelectedPost(post)
+                  }
+                }}
+                className="bg-white/5 border border-white/10 rounded-xl overflow-hidden shadow-lg shadow-black/20 cursor-pointer transition-all duration-200 hover:border-white/20 hover:shadow-xl hover:bg-white/[0.07]"
               >
                 {/* HEADER */}
                 <Link
                   href={`/profile/${post.user_id}`}
+                  onClick={(e) => e.stopPropagation()}
                   className="flex items-center gap-3 p-4 border-b border-white/5 hover:bg-white/5 transition-colors"
                 >
                   {post.profiles?.avatar_url ? (
@@ -315,83 +394,167 @@ export default function FeedPage() {
                   ) : null}
 
                   {/* LIKE + COMMENT ACTIONS */}
-                  <div className="flex items-center gap-4 pt-1 border-t border-white/5">
-                    <button
-                      type="button"
-                      onClick={() => toggleLike(post)}
-                      disabled={!user}
-                      className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-200 disabled:opacity-50"
-                      aria-label={likeMeta.liked ? "Unlike" : "Like"}
-                    >
-                      <span className="text-lg leading-none" aria-hidden>
-                        {likeMeta.liked ? "❤️" : "🤍"}
-                      </span>
-                      <span className="tabular-nums">{likeMeta.count}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        document.getElementById(`comment-input-${pid}`)?.focus()
-                      }
-                      className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-200"
-                      aria-label="Comment"
-                    >
-                      <span className="text-lg leading-none" aria-hidden>
-                        💬
-                      </span>
-                      <span className="tabular-nums">{comments.length}</span>
-                    </button>
-                  </div>
-
-                  {/* COMMENTS */}
-                  {comments.length > 0 ? (
-                    <ul className="space-y-2 text-xs text-gray-400">
-                      {comments.map((c: any) => (
-                        <li key={c.id} className="leading-relaxed">
-                          <span className="font-medium text-gray-300">
-                            {c.profiles?.username || "User"}
-                          </span>{" "}
-                          <span className="break-words">{c.content}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
-
-                  {user ? (
-                    <div className="flex flex-col sm:flex-row gap-2">
-                      <input
-                        id={`comment-input-${pid}`}
-                        type="text"
-                        placeholder="Add a comment…"
-                        value={commentDraft[pid] || ""}
-                        onChange={(e) =>
-                          setCommentDraft((d) => ({ ...d, [pid]: e.target.value }))
-                        }
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && !e.shiftKey) {
-                            e.preventDefault()
-                            submitComment(post)
-                          }
-                        }}
-                        className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-[#0f172a]/80 border border-white/10 text-sm text-white placeholder:text-gray-500"
-                      />
+                  <div
+                    className="flex flex-col gap-2 pt-1 border-t border-white/5"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="flex items-center gap-4">
                       <button
                         type="button"
-                        disabled={commentSubmitting[pid] || !(commentDraft[pid] || "").trim()}
-                        onClick={() => submitComment(post)}
-                        className="px-4 py-2 rounded-lg text-sm font-medium bg-blue-500/90 hover:bg-blue-500 text-white disabled:opacity-40 shrink-0"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          toggleLike(post)
+                        }}
+                        disabled={!user}
+                        className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-200 disabled:opacity-50"
+                        aria-label={likeMeta.liked ? "Unlike" : "Like"}
                       >
-                        {commentSubmitting[pid] ? "…" : "Post"}
+                        <span className="text-lg leading-none" aria-hidden>
+                          {likeMeta.liked ? "❤️" : "🤍"}
+                        </span>
+                        <span className="tabular-nums">{likeMeta.count}</span>
                       </button>
                     </div>
-                  ) : null}
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setOpenComments((prev) => ({
+                          ...prev,
+                          [post.id]: !prev[post.id],
+                        }))
+                      }}
+                      className="text-left text-sm text-gray-400 hover:text-gray-200"
+                    >
+                      {openComments[post.id]
+                        ? "Hide comments"
+                        : `View comments (${comments.length})`}
+                    </button>
+
+                    {openComments[post.id] ? (
+                      <div className="space-y-3 pt-1">
+                        <ul className="max-h-40 overflow-y-auto space-y-2 text-xs text-gray-400 pr-1">
+                          {comments.map((c: any) => (
+                            <li key={c.id} className="leading-relaxed">
+                              <span className="font-medium text-gray-300">
+                                {c.profiles?.username || "User"}
+                              </span>{" "}
+                              <span className="break-words">{c.content}</span>
+                            </li>
+                          ))}
+                        </ul>
+
+                        {user ? (
+                          <div className="flex flex-col sm:flex-row gap-2">
+                            <input
+                              id={`comment-input-${pid}`}
+                              type="text"
+                              placeholder="Add a comment…"
+                              value={commentDraft[pid] || ""}
+                              onChange={(e) =>
+                                setCommentDraft((d) => ({ ...d, [pid]: e.target.value }))
+                              }
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" && !e.shiftKey) {
+                                  e.preventDefault()
+                                  submitComment(post)
+                                }
+                              }}
+                              className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-[#0f172a]/80 border border-white/10 text-sm text-white placeholder:text-gray-500"
+                            />
+                            <button
+                              type="button"
+                              disabled={
+                                commentSubmitting[pid] || !(commentDraft[pid] || "").trim()
+                              }
+                              onClick={() => submitComment(post)}
+                              className="px-4 py-2 rounded-lg text-sm font-medium bg-blue-500/90 hover:bg-blue-500 text-white disabled:opacity-40 shrink-0"
+                            >
+                              {commentSubmitting[pid] ? "…" : "Post"}
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
               </article>
             )
           })}
         </div>
       </div>
+
+      {selectedPost && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setSelectedPost(null)}
+        >
+          <div
+            className="relative w-full max-w-2xl rounded-xl bg-[#0f172a] p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setSelectedPost(null)}
+              className="absolute right-2 top-2 text-xl text-white"
+              aria-label="Close"
+            >
+              ✕
+            </button>
+
+            {selectedPost.image_url ? (
+              <img
+                src={
+                  String(selectedPost.image_url).startsWith("http")
+                    ? selectedPost.image_url
+                    : `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/screenshots/${selectedPost.image_url}`
+                }
+                alt=""
+                className="w-full max-h-[400px] rounded-lg object-cover"
+              />
+            ) : null}
+
+            <div className="mt-3 space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span
+                  className={
+                    Number(selectedPost.pnl) >= 0
+                      ? "text-green-400"
+                      : "text-red-400"
+                  }
+                >
+                  ${selectedPost.pnl}
+                </span>
+                <span>RR {selectedPost.rr}</span>
+              </div>
+
+              <div className="flex justify-between text-gray-300">
+                <span>Points: {selectedPost.points || "-"}</span>
+                <span>Account: {selectedPost.account_type || "-"}</span>
+              </div>
+            </div>
+
+            <div className="mt-3 text-sm text-gray-300">
+              ❤️ {modalLikesCount || selectedPost.likesCount || 0} likes
+            </div>
+
+            <div className="mt-2 max-h-40 space-y-1 overflow-y-auto">
+              {(modalComments.length
+                ? modalComments
+                : selectedPost.comments || []
+              ).map((c: any) => (
+                <div key={c.id} className="text-sm">
+                  <span className="font-semibold">
+                    {c.profiles?.username || "User"}
+                  </span>{" "}
+                  {c.content}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

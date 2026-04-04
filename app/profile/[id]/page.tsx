@@ -13,6 +13,15 @@ import {
   ResponsiveContainer,
 } from "recharts"
 
+function postImageSrc(imageUrl: string | null | undefined): string | null {
+  const raw = imageUrl != null ? String(imageUrl).trim() : ""
+  if (!raw) return null
+  if (raw.startsWith("http")) return raw
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL
+  if (!base) return null
+  return `${base}/storage/v1/object/public/screenshots/${raw}`
+}
+
 export default function ProfilePage() {
   const params = useParams()
   const router = useRouter()
@@ -33,6 +42,9 @@ export default function ProfilePage() {
   const [showFollowing, setShowFollowing] = useState(false)
   const [followersModalUsers, setFollowersModalUsers] = useState<any[]>([])
   const [followingModalUsers, setFollowingModalUsers] = useState<any[]>([])
+  const [posts, setPosts] = useState<any[]>([])
+  const [activeTab, setActiveTab] = useState<"public" | "stats">("public")
+  const [selectedPost, setSelectedPost] = useState<any>(null)
 
   const fetchTrades = async (forProfileId: string) => {
     console.log("ProfileId being used:", forProfileId)
@@ -65,6 +77,8 @@ export default function ProfilePage() {
 
     setProfile(null)
     setTrades([])
+    setPosts([])
+    setSelectedPost(null)
     setLoading(true)
 
     fetchProfile(profileId)
@@ -73,6 +87,86 @@ export default function ProfilePage() {
   useEffect(() => {
     console.log("Trades:", trades)
   }, [trades])
+
+  async function fetchPosts(forProfileId: string) {
+    const { data } = await supabase
+      .from("posts")
+      .select("*")
+      .eq("user_id", forProfileId)
+      .order("created_at", { ascending: false })
+
+    const list = data || []
+    if (!list.length) {
+      setPosts([])
+      return
+    }
+
+    const ids = list.map((p) => p.id)
+
+    const [
+      { data: likesRows },
+      { data: commentsRows },
+      { count: likesExactCount },
+    ] = await Promise.all([
+      supabase.from("likes").select("post_id, user_id").in("post_id", ids),
+      supabase
+        .from("comments")
+        .select("*, profiles(username)")
+        .in("post_id", ids)
+        .order("created_at", { ascending: true }),
+      supabase
+        .from("likes")
+        .select("*", { count: "exact", head: true })
+        .in("post_id", ids),
+    ])
+    void likesExactCount
+
+    const likesCountByPost: Record<string, number> = {}
+    for (const id of ids) {
+      likesCountByPost[String(id)] = 0
+    }
+    for (const row of likesRows || []) {
+      const pid = String(row.post_id)
+      likesCountByPost[pid] = (likesCountByPost[pid] || 0) + 1
+    }
+
+    const commentsMap: Record<string, any[]> = {}
+    for (const id of ids) {
+      commentsMap[String(id)] = []
+    }
+    for (const c of commentsRows || []) {
+      const pid = String(c.post_id)
+      if (!commentsMap[pid]) commentsMap[pid] = []
+      commentsMap[pid].push(c)
+    }
+
+    const enriched = list.map((p) => {
+      const key = String(p.id)
+      return {
+        ...p,
+        likesCount: likesCountByPost[key] ?? 0,
+        comments: commentsMap[key] ?? [],
+      }
+    })
+    setPosts(enriched)
+  }
+
+  useEffect(() => {
+    if (profile?.id) {
+      fetchPosts(profile.id)
+    } else {
+      setPosts([])
+    }
+  }, [profile?.id])
+
+  useEffect(() => {
+    if (selectedPost) {
+      document.body.style.overflow = "hidden"
+      return () => {
+        document.body.style.overflow = ""
+      }
+    }
+  }, [selectedPost])
 
   async function fetchProfile(forProfileId: string) {
     const { data: sessionData } = await supabase.auth.getSession()
@@ -88,6 +182,7 @@ export default function ProfilePage() {
     if (!prof || error) {
       setProfile(null)
       setTrades([])
+      setPosts([])
       setFollowersCount(0)
       setFollowingCount(0)
       setIsFollowing(false)
@@ -510,125 +605,239 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          {canViewTrades ? (
-            <>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                <Stat title="Trades" value={totalTrades} />
+          <div className="mt-6 flex justify-center gap-4">
+            {(["public", "stats"] as const).map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => setActiveTab(tab)}
+                className={`px-4 py-2 rounded ${
+                  activeTab === tab
+                    ? "bg-blue-500 text-white"
+                    : "bg-white/10 hover:bg-white/20"
+                }`}
+              >
+                {tab === "public"
+                  ? "Public Trades"
+                  : tab.charAt(0).toUpperCase() + tab.slice(1)}
+              </button>
+            ))}
+          </div>
 
-                <Stat title="Win %" value={`${winRate.toFixed(1)}%`} />
-
-                <Stat
-                  title="Total P&L"
-                  value={formatCurrency(totalPnL)}
-                  positive={totalPnL >= 0}
-                />
-
-                <Stat title="Avg RR" value={avgRR.toFixed(2)} />
-              </div>
-
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 mb-8">
-                  <div className="bg-white/5 p-4 rounded-xl border border-white/10">
-                    <p className="text-sm text-gray-400">Biggest Win</p>
-                    <p className="text-green-400 font-semibold">
-                      ${biggestWin.toFixed(2)}
-                    </p>
-                  </div>
-
-                  <div className="bg-white/5 p-4 rounded-xl border border-white/10">
-                    <p className="text-sm text-gray-400">Biggest Loss</p>
-                    <p className="text-red-400 font-semibold">
-                      ${biggestLoss.toFixed(2)}
-                    </p>
-                  </div>
-
-                  <div className="bg-white/5 p-4 rounded-xl border border-white/10">
-                    <p className="text-sm text-gray-400">Long Trades</p>
-                    <p className="font-semibold">{longTrades}</p>
-                  </div>
-
-                  <div className="bg-white/5 p-4 rounded-xl border border-white/10">
-                    <p className="text-sm text-gray-400">Short Trades</p>
-                    <p className="font-semibold">{shortTrades}</p>
-                  </div>
-                </div>
-
-              <div className="mb-10">
-                <div className="bg-white/5 p-6 rounded-xl border border-white/10">
-                  <h2 className="text-lg font-semibold mb-4">Equity Curve</h2>
-
-                  <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={equityData}>
-                        <XAxis dataKey="index" hide />
-                        <YAxis />
-                        <Tooltip />
-                        <Line
-                          type="monotone"
-                          dataKey="equity"
-                          stroke="#10b981"
-                          strokeWidth={2}
-                          dot={false}
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <h2 className="mb-4 text-xl font-semibold">Trades</h2>
-
-                {trades.length === 0 ? (
-                  <p className="text-gray-400">No trades yet</p>
+          <div className="mx-auto mt-6 max-w-3xl space-y-6 px-0 sm:px-2">
+            {activeTab === "public" && (
+              <div className="space-y-4">
+                <h2 className="text-xl font-semibold text-white">
+                  Public Trades
+                </h2>
+                {posts.length === 0 ? (
+                  <p className="text-sm text-gray-400">No public trades yet</p>
                 ) : (
-                  <div className="space-y-4">
-                    {trades.slice(0, 5).map((trade) => (
-                      <div
-                        key={trade.id}
-                        className="bg-white/5 p-4 rounded-xl border border-white/10 flex gap-4 items-center"
-                      >
-                        {trade.image_url && (
-                          <img
-                            src={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/screenshots/${trade.image_url}`}
-                            className="w-20 h-20 object-cover rounded-lg border border-white/10"
-                            alt=""
-                          />
-                        )}
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    {posts.map((post) => {
+                      const imageSrc = postImageSrc(post.image_url)
+                      const pnl = Number(post.pnl)
+                      const pnlPositive = !Number.isNaN(pnl) && pnl >= 0
 
-                        <div className="flex-1">
-                          <p className="font-semibold">
-                            {trade.ticker} ({trade.direction})
-                          </p>
-                          <p className="text-sm text-gray-400">
-                            {trade.session}
-                          </p>
-                        </div>
-                        <p
-                          className={
-                            trade.pnl >= 0 ? "text-green-400" : "text-red-400"
-                          }
+                      return (
+                        <div
+                          key={post.id}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => setSelectedPost(post)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault()
+                              setSelectedPost(post)
+                            }
+                          }}
+                          className="cursor-pointer overflow-hidden rounded-xl border border-white/10 bg-white/5 shadow-lg shadow-black/20 transition-all duration-200 hover:border-white/20 hover:bg-white/[0.07]"
                         >
-                          ${trade.pnl}
-                        </p>
-                      </div>
-                    ))}
+                          {imageSrc ? (
+                            <div className="w-full bg-black/30">
+                              <img
+                                src={imageSrc}
+                                alt=""
+                                className="max-h-[240px] w-full object-cover md:max-h-[280px]"
+                              />
+                            </div>
+                          ) : null}
+                          <div className="flex items-center justify-between gap-4 p-4 text-sm">
+                            <span
+                              className={`font-semibold tabular-nums ${
+                                pnlPositive
+                                  ? "text-emerald-400"
+                                  : "text-red-400"
+                              }`}
+                            >
+                              {Number.isNaN(pnl)
+                                ? "—"
+                                : `${pnlPositive ? "+" : ""}$${pnl}`}
+                            </span>
+                            <span className="shrink-0 text-gray-300 tabular-nums">
+                              RR{" "}
+                              {post.rr != null && post.rr !== ""
+                                ? post.rr
+                                : "—"}
+                            </span>
+                          </div>
+                        </div>
+                      )
+                    })}
                   </div>
                 )}
               </div>
-            </>
-          ) : (
-            <div className="rounded-xl border border-white/10 bg-white/5 p-6 py-16 text-center">
-              <p className="text-lg text-gray-100">Private Profile</p>
-              <p className="mt-2 text-sm text-gray-400">
-                Follow this user to see their trades and stats.
-              </p>
-            </div>
-          )}
+            )}
+
+            {activeTab === "stats" && (
+              <div className="space-y-6">
+                {!canViewTrades ? (
+                  <div className="rounded-xl border border-white/10 bg-white/5 p-6 py-16 text-center">
+                    <p className="text-lg text-gray-100">Private Profile</p>
+                    <p className="mt-2 text-sm text-gray-400">
+                      Follow this user to see their trades and stats.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                      <Stat title="Trades" value={totalTrades} />
+
+                      <Stat title="Win %" value={`${winRate.toFixed(1)}%`} />
+
+                      <Stat
+                        title="Total P&L"
+                        value={formatCurrency(totalPnL)}
+                        positive={totalPnL >= 0}
+                      />
+
+                      <Stat title="Avg RR" value={avgRR.toFixed(2)} />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                      <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                        <p className="text-sm text-gray-400">Biggest Win</p>
+                        <p className="font-semibold text-green-400">
+                          ${biggestWin.toFixed(2)}
+                        </p>
+                      </div>
+
+                      <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                        <p className="text-sm text-gray-400">Biggest Loss</p>
+                        <p className="font-semibold text-red-400">
+                          ${biggestLoss.toFixed(2)}
+                        </p>
+                      </div>
+
+                      <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                        <p className="text-sm text-gray-400">Long Trades</p>
+                        <p className="font-semibold">{longTrades}</p>
+                      </div>
+
+                      <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                        <p className="text-sm text-gray-400">Short Trades</p>
+                        <p className="font-semibold">{shortTrades}</p>
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-white/10 bg-white/5 p-6">
+                      <h2 className="mb-4 text-lg font-semibold">Equity Curve</h2>
+
+                      <div className="h-64">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={equityData}>
+                            <XAxis dataKey="index" hide />
+                            <YAxis />
+                            <Tooltip />
+                            <Line
+                              type="monotone"
+                              dataKey="equity"
+                              stroke="#10b981"
+                              strokeWidth={2}
+                              dot={false}
+                            />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
 
         </div>
         </div>
 
       </div>
+
+      {selectedPost && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setSelectedPost(null)}
+        >
+          <div
+            className="relative w-full max-w-2xl rounded-xl bg-[#0f172a] p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setSelectedPost(null)}
+              className="absolute right-2 top-2 text-xl text-white"
+              aria-label="Close"
+            >
+              ✕
+            </button>
+
+            {selectedPost.image_url ? (
+              <img
+                src={
+                  String(selectedPost.image_url).startsWith("http")
+                    ? selectedPost.image_url
+                    : `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/screenshots/${selectedPost.image_url}`
+                }
+                alt=""
+                className="w-full max-h-[400px] rounded-lg object-cover"
+              />
+            ) : null}
+
+            <div className="mt-3 space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span
+                  className={
+                    Number(selectedPost.pnl) >= 0
+                      ? "text-green-400"
+                      : "text-red-400"
+                  }
+                >
+                  ${selectedPost.pnl}
+                </span>
+                <span>RR {selectedPost.rr}</span>
+              </div>
+
+              <div className="flex justify-between text-gray-300">
+                <span>Points: {selectedPost.points || "-"}</span>
+                <span>Account: {selectedPost.account_type || "-"}</span>
+              </div>
+            </div>
+
+            <div className="mt-3 text-sm text-gray-300">
+              ❤️ {selectedPost.likesCount || 0} likes
+            </div>
+
+            <div className="mt-2 max-h-40 space-y-1 overflow-y-auto">
+              {selectedPost.comments?.map((c: any) => (
+                <div key={c.id} className="text-sm">
+                  <span className="font-semibold">
+                    {c.profiles?.username || "User"}
+                  </span>{" "}
+                  {c.content}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {showFollowers && (
         <div
