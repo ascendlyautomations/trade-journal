@@ -12,7 +12,10 @@ import {
   YAxis,
   Tooltip,
   CartesianGrid,
-  ResponsiveContainer
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell
 } from "recharts"
 
 function normalizeSessionBucket(sessionRaw: string | null | undefined): "London" | "NY" | "Asia" | null {
@@ -116,7 +119,9 @@ export default function Dashboard() {
     symbolStats,
     symbolPerformanceRows,
     sessionBuckets,
-    bestSetup
+    bestSetup,
+    weekdayData,
+    sessionPieData
   } = useMemo(() => {
 
     const accounts = Array.from(
@@ -252,6 +257,35 @@ const biggestLoss = losses.length > 0
       if (t.pnl > 0) sessionBuckets[b].wins += 1
     })
 
+    const sessionPieData = [
+      { name: "London", value: sessionBuckets.London.totalTrades },
+      { name: "NY", value: sessionBuckets.NY.totalTrades },
+      { name: "Asia", value: sessionBuckets.Asia.totalTrades }
+    ]
+
+    const weekdayMap: Record<"Mon" | "Tue" | "Wed" | "Thu" | "Fri", number> = {
+      Mon: 0,
+      Tue: 0,
+      Wed: 0,
+      Thu: 0,
+      Fri: 0
+    }
+
+    const shortDayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const
+
+    timeFilteredTrades.forEach((t) => {
+      const d = new Date(t.created_at)
+      const short = shortDayNames[d.getDay()] as string
+      if (short in weekdayMap) {
+        weekdayMap[short as keyof typeof weekdayMap] += t.pnl || 0
+      }
+    })
+
+    const weekdayData = (["Mon", "Tue", "Wed", "Thu", "Fri"] as const).map((day) => ({
+      day,
+      pnl: weekdayMap[day]
+    }))
+
     const setupAgg: Record<string, { trades: number; wins: number; totalPnL: number }> = {}
     timeFilteredTrades.forEach((t) => {
       const ty = (t.trade_type && String(t.trade_type).trim()) || ""
@@ -361,7 +395,9 @@ const worstDay = dailyPnLs.length > 0
       symbolStats,
       symbolPerformanceRows,
       sessionBuckets,
-      bestSetup
+      bestSetup,
+      weekdayData,
+      sessionPieData
     }
 
   }, [trades, accountFilter, timeFilter])
@@ -467,21 +503,67 @@ const worstDay = dailyPnLs.length > 0
       <Stat title="Worst Day" value={formatCurrency(worstDay)} positive={false} />
     </div>
 
-    {/* RIGHT: CHART */}
-    <div className="lg:col-span-2 bg-white/5 border border-white/10 p-6 rounded-xl">
-      <h2 className="text-lg font-semibold mb-4 text-blue-300">
-        Equity Curve
-      </h2>
+    {/* RIGHT: CHARTS */}
+    <div className="lg:col-span-2 space-y-6">
+      <div className="bg-white/5 border border-white/10 p-6 rounded-xl">
+        <h2 className="text-lg font-semibold mb-4 text-blue-300">
+          Equity Curve
+        </h2>
 
-      <ResponsiveContainer width="100%" height={350}>
-        <LineChart data={equityData}>
-          <CartesianGrid stroke="#334155" />
-          <XAxis dataKey="date" stroke="#94a3b8" />
-          <YAxis stroke="#94a3b8" />
-          <Tooltip formatter={(value: any) => `$${value.toLocaleString()}`} />
-          <Line type="monotone" dataKey="equity" stroke="#22c55e" strokeWidth={3} dot={false} />
-        </LineChart>
-      </ResponsiveContainer>
+        <ResponsiveContainer width="100%" height={350}>
+          <LineChart data={equityData}>
+            <CartesianGrid stroke="#334155" />
+            <XAxis dataKey="date" stroke="#94a3b8" />
+            <YAxis stroke="#94a3b8" />
+            <Tooltip formatter={(value: any) => `$${value.toLocaleString()}`} />
+            <Line type="monotone" dataKey="equity" stroke="#22c55e" strokeWidth={3} dot={false} />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-white/5 border border-white/10 p-6 rounded-xl min-h-[320px]">
+          <h2 className="text-lg font-semibold mb-4 text-blue-300">
+            P&amp;L by Weekday
+          </h2>
+          <ResponsiveContainer width="100%" height={280}>
+            <LineChart data={weekdayData}>
+              <CartesianGrid stroke="#334155" />
+              <XAxis dataKey="day" stroke="#94a3b8" />
+              <YAxis stroke="#94a3b8" />
+              <Tooltip formatter={(value: any) => formatCurrency(Number(value))} />
+              <Line type="monotone" dataKey="pnl" stroke="#38bdf8" strokeWidth={2} dot={{ r: 4, fill: "#38bdf8" }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="bg-white/5 border border-white/10 p-6 rounded-xl min-h-[320px]">
+          <h2 className="text-lg font-semibold mb-4 text-blue-300">
+            Trades by Session
+          </h2>
+          <ResponsiveContainer width="100%" height={280}>
+            <PieChart>
+              <Pie
+                data={sessionPieData}
+                dataKey="value"
+                nameKey="name"
+                cx="50%"
+                cy="50%"
+                outerRadius={90}
+                label={({ name, value }) => `${name}: ${value}`}
+              >
+                {sessionPieData.map((entry, index) => (
+                  <Cell
+                    key={`cell-${entry.name}`}
+                    fill={["#60a5fa", "#34d399", "#c084fc"][index % 3]}
+                  />
+                ))}
+              </Pie>
+              <Tooltip />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
     </div>
 
   </div>

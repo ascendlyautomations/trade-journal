@@ -94,7 +94,7 @@ export default function Navbar() {
                 label: "Community",
                 items: [
                   { label: "My Profile", action: () => router.push(`/profile/${profile?.id}`) },
-                   { label: "Feed", action: () => router.push(`/feed/${profile?.id}`) },
+                   { label: "Feed", action: () => router.push("/feed") },
                   {
                     label: "Messages",
                     action: () => router.push("/messages"),

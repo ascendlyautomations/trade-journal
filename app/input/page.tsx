@@ -8,6 +8,7 @@ export default function InputPage() {
   const [ticker, setTicker] = useState("")
   const [pnl, setPnl] = useState("")
   const [direction, setDirection] = useState("Long")
+  const [session, setSession] = useState("NY")
   const [notes, setNotes] = useState("")
   const [loading, setLoading] = useState(false)
 
@@ -20,12 +21,15 @@ export default function InputPage() {
       data: { user }
     } = await supabase.auth.getUser()
 
+    const sessionToSave = (session && String(session).trim()) || "NY"
+
     const { error } = await supabase.from("trades").insert([
       {
         user_id: user?.id,
         ticker,
         pnl: Number(pnl),
         direction,
+        session: sessionToSave,
         notes,
         reviewed: false,
         created_at: new Date().toISOString()
@@ -39,6 +43,7 @@ export default function InputPage() {
       alert("Trade saved 🚀")
       setTicker("")
       setPnl("")
+      setSession("NY")
       setNotes("")
     }
 
@@ -73,6 +78,16 @@ export default function InputPage() {
           >
             <option>Long</option>
             <option>Short</option>
+          </select>
+
+          <select
+            value={session}
+            onChange={(e) => setSession(e.target.value)}
+            className="w-full p-3 bg-[#0f172a] border border-white/10 rounded"
+          >
+            <option value="NY">NY</option>
+            <option value="London">London</option>
+            <option value="Asia">Asia</option>
           </select>
 
           <input

@@ -76,7 +76,7 @@ const [timeframe, setTimeframe] = useState("")
   const [points, setPoints] = useState("")
   const [session, setSession] = useState("NY")
   const [notes, setNotes] = useState("")
-  
+  const [postToFeed, setPostToFeed] = useState(false)
   const [image, setImage] = useState<File | null>(null)
 
   const [firm, setFirm] = useState("")
@@ -172,40 +172,69 @@ if (image) {
         ? String(tradeType).trim()
         : null
 
-    await supabase.from("trades").insert([
-  {
-    ticker,
-    direction,
-    pnl: parsedPnl,
-    rr: parsedRR,
-    points: parsedPoints,
-    contracts: parsedContracts,
-    session: sessionToSave,
-    notes,
-    image_url: screenshotUrl,
-    account_type: firm,
-    account_size: accountSize,
-    account_id: accountNumber,
-    user_id: user?.id,
-    created_at: finalDate.toISOString(),
-    entry_price: parsedEntry,
-    exit_price: parsedExit,
-    entry_time: entryTime,
-    exit_time: exitTime,
-    psychology_notes: psychologyNotes != null && String(psychologyNotes).trim() !== "" ? String(psychologyNotes).trim() : null,
-    trade_type: tradeTypeToSave,
+    const { data: newTradeData, error } = await supabase
+      .from("trades")
+      .insert([
+        {
+          ticker,
+          direction,
+          pnl: parsedPnl,
+          rr: parsedRR,
+          points: parsedPoints,
+          contracts: parsedContracts,
+          session: sessionToSave,
+          notes,
+          image_url: screenshotUrl,
+          account_type: firm,
+          account_size: accountSize,
+          account_id: accountNumber,
+          user_id: user?.id,
+          created_at: finalDate.toISOString(),
+          entry_price: parsedEntry,
+          exit_price: parsedExit,
+          entry_time: entryTime,
+          exit_time: exitTime,
+          psychology_notes:
+            psychologyNotes != null && String(psychologyNotes).trim() !== ""
+              ? String(psychologyNotes).trim()
+              : null,
+          trade_type: tradeTypeToSave,
 
-    confidence: confidence ? Number(confidence) : null,
-    emotion: emotion || null,
-    followed_plan: followedPlan,
-    mistake_type: mistakeType || null,
-    market_condition: marketCondition || null,
-    news_event: newsEvent,
-    timeframe: timeframe || null,
+          confidence: confidence ? Number(confidence) : null,
+          emotion: emotion || null,
+          followed_plan: followedPlan,
+          mistake_type: mistakeType || null,
+          market_condition: marketCondition || null,
+          news_event: newsEvent,
+          timeframe: timeframe || null
+        }
+      ])
+      .select()
+      .single()
 
+    if (error) {
+      console.error("Trade insert error:", error)
+      alert("Failed to save trade. Please try again.")
+      setLoading(false)
+      return
+    }
+
+    if (postToFeed && newTradeData) {
+      const { error: postError } = await supabase.from("posts").insert([
+        {
+          user_id: user?.id,
+          trade_id: newTradeData.id,
+          image_url: screenshotUrl,
+          pnl: parsedPnl,
+          rr: parsedRR,
+          caption: notes
+        }
+      ])
+
+      if (postError) {
+        console.error("Post insert error:", postError)
       }
-    ])
-    
+    }
 
     setTicker("")
     setDirection("Long")
@@ -230,6 +259,7 @@ setMistakeType("")
 setMarketCondition("")
 setNewsEvent(false)
 setTimeframe("")
+    setPostToFeed(false)
     alert("Trade saved!")
     setLoading(false)
   }
@@ -473,6 +503,16 @@ return (
     <option>Short</option>
   </select>
 
+  <select
+    value={session}
+    onChange={(e) => setSession(e.target.value)}
+    className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
+  >
+    <option value="NY">NY</option>
+    <option value="London">London</option>
+    <option value="Asia">Asia</option>
+  </select>
+
   <input
   placeholder="P&L"
   value={pnlFocused ? pnl : formatWithCommas(pnl)}
@@ -566,6 +606,15 @@ return (
       className="w-full p-2 h-20 rounded bg-[#0f172a] border border-white/10"
     />
   )}
+
+  <label className="flex items-center gap-2">
+    <input
+      type="checkbox"
+      checked={postToFeed}
+      onChange={(e) => setPostToFeed(e.target.checked)}
+    />
+    Share to Feed
+  </label>
 
   <button
     onClick={handleSubmit}
