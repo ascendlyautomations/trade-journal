@@ -211,7 +211,7 @@ export default function TradesPage() {
 
         <div className="p-12 max-w-7xl mx-auto">
 
-          <h1 className="text-3xl font-semibold mb-8 text-center bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
+          <h1 className="text-3xl font-semibold mb-5 text-center bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
             Trade History
           </h1>
 
@@ -226,7 +226,7 @@ export default function TradesPage() {
               
               {/* ---- KEEP YOUR ORIGINAL UI CODE HERE ---- */}
               {/* 🔥 TOP CONTROLS */}
-              <div className="flex flex-nowrap overflow-x-auto gap-2 mb-6 items-center">
+              <div className="flex flex-nowrap overflow-x-auto gap-2 mb-5 items-center">
 
                 {/* Win/Loss */}
                 {/* 🔥 RESULT FILTER */}
@@ -419,6 +419,14 @@ export default function TradesPage() {
                               ? `${trade.account_type} (${trade.account_id})`
                               : "-"}
                           </p>
+
+                          {trade.public_description ? (
+                            <div className="mt-2 px-1">
+                              <p className="text-gray-300 text-sm line-clamp-2">
+                                {trade.public_description}
+                              </p>
+                            </div>
+                          ) : null}
 
                           <p className="text-sm">
                             <span className="text-gray-400">Notes:</span> {trade.notes || "-"}

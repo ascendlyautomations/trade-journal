@@ -30,6 +30,7 @@ export default function Dashboard() {
   const [trades, setTrades] = useState<any[]>([])
   const [accountFilter, setAccountFilter] = useState("all")
   const [timeFilter, setTimeFilter] = useState("all")
+  const [showPublicOnly, setShowPublicOnly] = useState(false)
   const [user, setUser] = useState<any>(null)
   const [profile, setProfile] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -465,6 +466,18 @@ const worstDay = dailyPnLs.length > 0
             ))}
           </select>
 
+          <button
+            type="button"
+            onClick={() => setShowPublicOnly(!showPublicOnly)}
+            className={`px-3 py-2 rounded-lg text-sm ${
+              showPublicOnly
+                ? "bg-blue-500 text-white"
+                : "bg-[#1e293b] text-gray-300"
+            }`}
+          >
+            Public Trades
+          </button>
+
           <div className="flex gap-2">
             {["all", "daily", "weekly", "monthly"].map((t) => (
               <button
@@ -603,14 +616,72 @@ const worstDay = dailyPnLs.length > 0
     <div className="bg-white/5 border border-white/10 p-4 rounded-xl">
       <h3 className="text-blue-300 font-semibold mb-2">Recent Trades</h3>
 
-      {timeFilteredTrades.slice(-5).reverse().map((t) => (
-        <div key={t.id} className="flex justify-between py-1 border-b border-white/10 text-sm">
-          <span>{t.ticker}</span>
-          <span className={t.pnl >= 0 ? "text-green-400" : "text-red-400"}>
-            {formatCurrency(t.pnl)}
-          </span>
-        </div>
-      ))}
+      <div className="space-y-3 max-h-[28rem] overflow-y-auto pr-1">
+        {(timeFilteredTrades || [])
+          .slice()
+          .sort(
+            (a, b) =>
+              new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          )
+          .filter((trade) =>
+            showPublicOnly
+              ? trade.public_description &&
+                trade.public_description.length > 0
+              : true
+          )
+          .slice(0, showPublicOnly ? 200 : 5)
+          .map((trade) => (
+            <div
+              key={trade.id}
+              className="rounded-lg border border-white/10 bg-black/20 p-3 text-sm"
+            >
+              <div className="flex justify-between items-start gap-2">
+                <div className="min-w-0 space-y-1">
+                  <p className="font-semibold text-white truncate">
+                    {trade.ticker}
+                    {trade.direction ? (
+                      <span className="text-gray-400 font-normal">
+                        {" "}
+                        • {trade.direction}
+                      </span>
+                    ) : null}
+                  </p>
+                  <p
+                    className={`font-medium tabular-nums ${
+                      (Number(trade.pnl) || 0) >= 0
+                        ? "text-green-400"
+                        : "text-red-400"
+                    }`}
+                  >
+                    {formatCurrency(Number(trade.pnl) || 0)}
+                  </p>
+                  <p className="text-gray-400 text-xs">
+                    RR{" "}
+                    {trade.rr != null && trade.rr !== ""
+                      ? trade.rr
+                      : "—"}
+                  </p>
+                </div>
+                <div className="shrink-0 flex flex-col items-end gap-1">
+                  {trade.public_description ? (
+                    <span className="text-xs bg-green-500/20 text-green-400 px-2 py-1 rounded-md">
+                      Posted
+                    </span>
+                  ) : (
+                    <span className="text-xs bg-gray-500/20 text-gray-400 px-2 py-1 rounded-md">
+                      Private
+                    </span>
+                  )}
+                </div>
+              </div>
+              {trade.public_description ? (
+                <p className="text-gray-300 text-sm mt-2 line-clamp-2">
+                  {trade.public_description}
+                </p>
+              ) : null}
+            </div>
+          ))}
+      </div>
     </div>
 
   </div>

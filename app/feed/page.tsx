@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useCallback, useEffect, useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import Navbar from "../components/Navbar"
+import TradeSocialLayer from "../components/TradeSocialLayer"
 
 function postImageSrc(imageUrl: string | null | undefined): string | null {
   const raw = imageUrl != null ? String(imageUrl).trim() : ""
@@ -12,6 +13,25 @@ function postImageSrc(imageUrl: string | null | undefined): string | null {
   const base = process.env.NEXT_PUBLIC_SUPABASE_URL
   if (!base) return null
   return `${base}/storage/v1/object/public/screenshots/${raw}`
+}
+
+function postPublicDescription(post: any): string | null {
+  const t = post?.trades
+  if (!t) return null
+  const row = Array.isArray(t) ? t[0] : t
+  const raw = row?.public_description
+  if (raw == null) return null
+  const s = String(raw).trim()
+  return s !== "" ? s : null
+}
+
+/** Trade owner for notifications (not always same as post author). */
+function postTradeOwnerUserId(post: any): string | null | undefined {
+  const t = post?.trades
+  const row = t ? (Array.isArray(t) ? t[0] : t) : null
+  const fromTrade = row?.user_id
+  if (fromTrade != null && String(fromTrade).trim() !== "") return String(fromTrade)
+  return post?.user_id ?? null
 }
 
 type LikeMeta = { count: number; liked: boolean }
@@ -120,7 +140,7 @@ export default function FeedPage() {
     if (mode === "global") {
       const { data } = await supabase
         .from("posts")
-        .select("*, profiles(username, avatar_url)")
+        .select("*, profiles(username, avatar_url), trades(public_description, user_id)")
         .order("created_at", { ascending: false })
 
       list = data || []
@@ -144,7 +164,7 @@ export default function FeedPage() {
 
       const { data } = await supabase
         .from("posts")
-        .select("*, profiles(username, avatar_url)")
+        .select("*, profiles(username, avatar_url), trades(public_description, user_id)")
         .in("user_id", ids)
         .order("created_at", { ascending: false })
 
@@ -218,7 +238,12 @@ export default function FeedPage() {
           type: "like",
           post_id: pid,
         })
-        if (nErr) console.error("Notification (like) error:", nErr)
+        if (nErr) {
+          console.error("Notification error:", nErr?.message ?? nErr, nErr)
+        } else {
+          window.dispatchEvent(new CustomEvent("notification-update"))
+          window.dispatchEvent(new CustomEvent("tj-unread-notifications-refresh"))
+        }
       }
     }
   }
@@ -272,7 +297,12 @@ export default function FeedPage() {
         type: "comment",
         post_id: pid,
       })
-      if (nErr) console.error("Notification (comment) error:", nErr)
+      if (nErr) {
+        console.error("Notification error:", nErr?.message ?? nErr, nErr)
+      } else {
+        window.dispatchEvent(new CustomEvent("notification-update"))
+        window.dispatchEvent(new CustomEvent("tj-unread-notifications-refresh"))
+      }
     }
   }
 
@@ -283,6 +313,9 @@ export default function FeedPage() {
   const modalComments = modalPid
     ? commentsByPost[modalPid] ?? selectedPost?.comments ?? []
     : []
+  const modalPublicDesc = selectedPost
+    ? postPublicDescription(selectedPost)
+    : null
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white">
@@ -323,6 +356,7 @@ export default function FeedPage() {
             const pid = String(post.id)
             const likeMeta = likesByPost[pid] || { count: 0, liked: false }
             const comments = commentsByPost[pid] || []
+            const publicDesc = postPublicDescription(post)
 
             return (
               <article
@@ -372,7 +406,7 @@ export default function FeedPage() {
                   </div>
                 ) : null}
 
-                {/* STATS + CAPTION */}
+                {/* STATS + public description (notes never shown on feed) */}
                 <div className="p-4 space-y-3">
                   <div className="flex justify-between items-center text-sm gap-4">
                     <span
@@ -387,10 +421,22 @@ export default function FeedPage() {
                     </span>
                   </div>
 
-                  {post.caption ? (
-                    <p className="text-xs text-gray-400 leading-relaxed whitespace-pre-wrap break-words">
-                      {post.caption}
-                    </p>
+                  {publicDesc && (
+                    <div className="mt-2 px-1">
+                      <p className="text-white text-sm leading-relaxed">
+                        {publicDesc}
+                      </p>
+                    </div>
+                  )}
+
+                  {post.trade_id ? (
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <TradeSocialLayer
+                        tradeId={post.trade_id}
+                        currentUserId={user?.id}
+                        tradeOwnerUserId={postTradeOwnerUserId(post)}
+                      />
+                    </div>
                   ) : null}
 
                   {/* LIKE + COMMENT ACTIONS */}
@@ -534,6 +580,24 @@ export default function FeedPage() {
                 <span>Account: {selectedPost.account_type || "-"}</span>
               </div>
             </div>
+
+            {modalPublicDesc && (
+              <div className="mt-2 px-1">
+                <p className="text-white text-sm leading-relaxed">
+                  {modalPublicDesc}
+                </p>
+              </div>
+            )}
+
+            {selectedPost.trade_id ? (
+              <div className="mt-3">
+                <TradeSocialLayer
+                  tradeId={selectedPost.trade_id}
+                  currentUserId={user?.id}
+                  tradeOwnerUserId={postTradeOwnerUserId(selectedPost)}
+                />
+              </div>
+            ) : null}
 
             <div className="mt-3 text-sm text-gray-300">
               ❤️ {modalLikesCount || selectedPost.likesCount || 0} likes

@@ -1,9 +1,17 @@
 "use client"
 
 import Navbar from "../components/Navbar"
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { useRouter } from "next/navigation"
+
+function sortConversationsDesc(list: any[]) {
+  return [...list].sort(
+    (a, b) =>
+      new Date(b.last_message_at || 0).getTime() -
+      new Date(a.last_message_at || 0).getTime()
+  )
+}
 
 export default function MessagesPage() {
   const [conversations, setConversations] = useState<any[]>([])
@@ -21,14 +29,6 @@ export default function MessagesPage() {
   const [openConvoMenuId, setOpenConvoMenuId] = useState<string | null>(null)
 
   const router = useRouter()
-
-  function sortConversationsDesc(list: any[]) {
-    return [...list].sort(
-      (a, b) =>
-        new Date(b.last_message_at || 0).getTime() -
-        new Date(a.last_message_at || 0).getTime()
-    )
-  }
 
   function mergeNewConversation(prev: any[], newConversation: any) {
     if (prev.some((c) => c.id === newConversation.id)) return prev
@@ -89,7 +89,7 @@ export default function MessagesPage() {
     setLoading(false)
   }
 
-  async function fetchConversations(userId: string) {
+  const fetchConversations = useCallback(async (userId: string) => {
     const { data: rows } = await supabase
       .from("conversation_participants")
       .select(`
@@ -111,6 +111,21 @@ export default function MessagesPage() {
     }
 
     const convoIds = rows.map((p: any) => p.conversation_id)
+
+    const { data: msgRows } = await supabase
+      .from("messages")
+      .select("conversation_id, seen_by, sender_id")
+      .in("conversation_id", convoIds)
+
+    const unreadByConvo: Record<string, number> = {}
+    for (const cid of convoIds) unreadByConvo[cid] = 0
+    for (const m of msgRows || []) {
+      const cid = m.conversation_id as string
+      if (!m.sender_id || m.sender_id === userId) continue
+      const seen = Array.isArray(m.seen_by) ? m.seen_by : []
+      if (seen.includes(userId)) continue
+      unreadByConvo[cid] = (unreadByConvo[cid] || 0) + 1
+    }
 
     const convoData = await Promise.all(
       convoIds.map(async (convoId) => {
@@ -157,12 +172,47 @@ export default function MessagesPage() {
             convoMeta?.last_message || messages?.[0]?.content || "No messages yet",
           last_message_at:
             convoMeta?.last_message_at || messages?.[0]?.created_at || null,
+          unreadCount: unreadByConvo[convoId] ?? 0,
         }
       })
     )
 
     setConversations(sortConversationsDesc(convoData || []))
-  }
+  }, [])
+
+  useEffect(() => {
+    if (!user?.id) return
+
+    const channel = supabase
+      .channel(`messages-list-${user.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "messages",
+        },
+        () => {
+          void fetchConversations(user.id)
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "messages",
+        },
+        () => {
+          void fetchConversations(user.id)
+        }
+      )
+      .subscribe()
+
+    return () => {
+      void supabase.removeChannel(channel)
+    }
+  }, [user?.id, fetchConversations])
 
   async function fetchAllUsers(currentUserId: string) {
     const { data } = await supabase
@@ -218,6 +268,7 @@ export default function MessagesPage() {
       participants: [],
       lastMessage: "No messages yet",
       last_message_at: now,
+      unreadCount: 0,
     }
 
     setConversations((prev) => mergeNewConversation(prev, newConversation))
@@ -305,6 +356,7 @@ export default function MessagesPage() {
       participants: [],
       lastMessage: "No messages yet",
       last_message_at: now,
+      unreadCount: 0,
     }
 
     setConversations((prev) => mergeNewConversation(prev, newConversation))
@@ -432,6 +484,12 @@ export default function MessagesPage() {
                         {c.lastMessage}
                       </p>
                     </div>
+
+                    {c.unreadCount > 0 ? (
+                      <span className="ml-auto shrink-0 bg-red-500 text-white text-xs px-2 py-1 rounded-full tabular-nums">
+                        {c.unreadCount > 9 ? "9+" : c.unreadCount}
+                      </span>
+                    ) : null}
 
                   </div>
                 </div>

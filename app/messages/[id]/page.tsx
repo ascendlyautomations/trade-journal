@@ -1,7 +1,14 @@
 "use client"
 
 import Navbar from "../../components/Navbar"
-import { useEffect, useState, useRef, type ChangeEvent } from "react"
+import TradeSocialLayer from "../../components/TradeSocialLayer"
+import {
+  useEffect,
+  useState,
+  useRef,
+  Fragment,
+  type ChangeEvent,
+} from "react"
 import { supabase } from "../../../lib/supabaseClient"
 import { useParams, useRouter } from "next/navigation"
 
@@ -89,9 +96,11 @@ function TradeMessageBubble({
     )
   }
 
+  const isMine = message.sender_id === userId
+
   return (
     <div className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
-      <div className="relative max-w-sm w-full">
+      <div className="relative max-w-sm w-full overflow-visible">
         <button
           type="button"
           onClick={(e) => {
@@ -104,7 +113,11 @@ function TradeMessageBubble({
         </button>
 
         {activeMenuId === message.id ? (
-          <div className="absolute top-6 right-0 z-20 w-40 rounded-lg border border-white/10 bg-[#0f172a]">
+          <div
+            className={`absolute top-6 mt-1 z-50 w-40 rounded-lg border border-gray-600 bg-[#1e293b] shadow-lg ${
+              isMine ? "right-2" : "left-2"
+            }`}
+          >
             <button
               type="button"
               onClick={(e) => {
@@ -166,6 +179,12 @@ function TradeMessageBubble({
             <span>Points: {trade.points ?? "—"}</span>
           </div>
 
+          {trade.public_description && (
+            <p className="text-gray-300 text-sm mt-2">
+              {trade.public_description}
+            </p>
+          )}
+
           {imgSrc ? (
             <img
               src={imgSrc}
@@ -191,6 +210,17 @@ function TradeMessageBubble({
 
             <span className="text-gray-500">Shared Trade</span>
           </div>
+        </div>
+
+        <div
+          className="mt-3 w-full"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <TradeSocialLayer
+            tradeId={trade.id}
+            currentUserId={userId}
+            tradeOwnerUserId={trade.user_id}
+          />
         </div>
       </div>
     </div>
@@ -226,6 +256,11 @@ export default function DMPage() {
   const [tradeModalTrade, setTradeModalTrade] = useState<any>(null)
 
   const scrollRef = useRef<HTMLDivElement>(null)
+  const userIdRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    userIdRef.current = user?.id ?? null
+  }, [user?.id])
 
   function openTradeModal(trade: any) {
     setTradeModalTrade(trade)
@@ -252,21 +287,53 @@ export default function DMPage() {
         console.log("Realtime event:", payload)
 
         if (payload.eventType === "INSERT") {
-          setMessages((prev) => {
-            const updated = [...prev, payload.new]
+          const raw = payload.new as { id?: string; sender_id?: string }
+          void (async () => {
+            let row: any = raw
+            if (raw.id) {
+              const { data } = await supabase
+                .from("messages")
+                .select(
+                  `
+                  *,
+                  profiles!sender_id (
+                    username,
+                    avatar_url
+                  )
+                `
+                )
+                .eq("id", raw.id)
+                .maybeSingle()
+              if (data) row = data
+            }
+            setMessages((prev) => {
+              const without = prev.filter((x) => x.id !== raw.id)
+              const updated = [...without, row]
+              return updated.sort(
+                (a, b) =>
+                  new Date(a.created_at).getTime() -
+                  new Date(b.created_at).getTime()
+              )
+            })
 
-            return updated.sort(
-              (a, b) =>
-                new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-            )
-          })
+            const uid = userIdRef.current
+            const senderId = raw.sender_id
+            if (uid && senderId && senderId !== uid) {
+              void markMessagesSeen(uid)
+            }
+          })()
         }
 
         if (payload.eventType === "UPDATE") {
           setMessages((prev) =>
-            prev.map((msg) =>
-              msg.id === payload.new.id ? payload.new : msg
-            )
+            prev.map((msg) => {
+              if (msg.id !== (payload.new as { id: string }).id) return msg
+              const next = payload.new as any
+              return {
+                ...next,
+                profiles: next.profiles ?? msg.profiles,
+              }
+            })
           )
         }
       }
@@ -340,7 +407,6 @@ export default function DMPage() {
     if (user) {
       await fetchConversationDetails(user.id)
       await loadMessages(user.id)
-      await markMessagesSeen(user.id)
     }
   }
 
@@ -379,7 +445,15 @@ export default function DMPage() {
   async function loadMessages(currentUserId: string) {
     const { data: fetched } = await supabase
       .from("messages")
-      .select("*")
+      .select(
+        `
+        *,
+        profiles!sender_id (
+          username,
+          avatar_url
+        )
+      `
+      )
       .eq("conversation_id", id)
       .order("created_at", { ascending: true })
 
@@ -418,6 +492,11 @@ export default function DMPage() {
         .eq("id", msg.id)
     }
   }
+
+  useEffect(() => {
+    if (!user?.id || !id) return
+    void markMessagesSeen(user.id)
+  }, [id, user?.id])
 
   function removeImage() {
     setSelectedFile(null)
@@ -792,58 +871,99 @@ export default function DMPage() {
           </div>
 
           {/* MESSAGES */}
-          <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto p-4 space-y-3">
-            {messages.map((m) => {
-              if (m.is_system) {
+          <div
+            ref={scrollRef}
+            className="min-h-0 flex-1 overflow-y-auto overflow-x-visible p-4 space-y-3"
+          >
+            {messages.map((message) => {
+              console.log("Message:", message)
+
+              if (message.is_system) {
                 return (
                   <div
-                    key={m.id}
+                    key={message.id}
                     className="text-center text-gray-400 text-sm my-2"
                   >
-                    {m.content}
+                    {message.content}
                   </div>
                 )
               }
 
-              if (m.type === "trade") {
+              const profileRow = Array.isArray(message.profiles)
+                ? message.profiles[0]
+                : message.profiles
+              const profileUsername = profileRow?.username
+
+              const groupSenderLabel =
+                conversation?.is_group &&
+                message.sender_id != null &&
+                message.sender_id !== user?.id &&
+                profileUsername ? (
+                  <p className="text-xs text-gray-400 mb-1 ml-1">
+                    {profileUsername}
+                  </p>
+                ) : null
+
+              if (message.type === "trade") {
                 return (
-                  <TradeMessageBubble
-                    key={m.id}
-                    message={m}
-                    isMe={m.sender_id === user?.id}
-                    userId={user?.id}
-                    activeMenuId={activeMenuId}
-                    setActiveMenuId={setActiveMenuId}
-                    deleteForMe={deleteForMe}
-                    deleteForEveryone={deleteForEveryone}
-                    onOpenTrade={openTradeModal}
-                  />
+                  <Fragment key={message.id}>
+                    {groupSenderLabel}
+                    <TradeMessageBubble
+                      message={message}
+                      isMe={message.sender_id === user?.id}
+                      userId={user?.id}
+                      activeMenuId={activeMenuId}
+                      setActiveMenuId={setActiveMenuId}
+                      deleteForMe={deleteForMe}
+                      deleteForEveryone={deleteForEveryone}
+                      onOpenTrade={openTradeModal}
+                    />
+                  </Fragment>
                 )
               }
 
-              const isMe = m.sender_id === user?.id
+              const isMe = message.sender_id === user?.id
 
               return (
-                <div key={m.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
-                  <div className={`p-3 rounded-xl max-w-[70%] relative ${isMe ? "bg-blue-500" : "bg-gray-700"}`}>
+                <Fragment key={message.id}>
+                  {groupSenderLabel}
+                  <div
+                    className={`flex overflow-visible ${
+                      isMe ? "justify-end" : "justify-start"
+                    }`}
+                  >
+                    <div
+                      className={`p-3 rounded-xl max-w-[70%] relative overflow-visible ${
+                        isMe ? "bg-blue-500" : "bg-gray-700"
+                      }`}
+                    >
                     <button
-                      onClick={() => setActiveMenuId(activeMenuId === m.id ? null : m.id)}
+                      type="button"
+                      onClick={() =>
+                        setActiveMenuId(
+                          activeMenuId === message.id ? null : message.id
+                        )
+                      }
                       className="absolute -top-2 -right-2 px-2 py-1 rounded bg-black/40 hover:bg-black/60 text-xs"
                     >
                       ⋯
                     </button>
 
-                    {activeMenuId === m.id && (
-                      <div className="absolute top-6 right-0 bg-[#0f172a] border border-white/10 rounded-lg w-40 z-20">
+                    {activeMenuId === message.id && (
+                      <div
+                        className={`absolute top-6 mt-1 z-50 w-40 rounded-lg border border-gray-600 bg-[#1e293b] shadow-lg ${
+                          isMe ? "right-2" : "left-2"
+                        }`}
+                      >
                         <button
-                          onClick={() => deleteForMe(m)}
+                          onClick={() => deleteForMe(message)}
                           className="w-full text-left px-3 py-2 text-sm hover:bg-white/10"
                         >
                           Delete for me
                         </button>
-                        {m.sender_id === user?.id && (
+                        {message.sender_id === user?.id && (
                           <button
-                            onClick={() => deleteForEveryone(m)}
+                            onClick={() => deleteForEveryone(message)}
                             className="w-full text-left px-3 py-2 text-sm hover:bg-white/10"
                           >
                             Delete for everyone
@@ -852,18 +972,23 @@ export default function DMPage() {
                       </div>
                     )}
 
-                    {m.deleted_for_everyone ? (
+                    {message.deleted_for_everyone ? (
                       <p className="text-gray-400 italic">Message deleted</p>
                     ) : (
                       <>
-                        {m.content && <p>{m.content}</p>}
-                        {m.image_url && (
-                          <img src={m.image_url} className="mt-2 rounded-lg max-h-64" />
+                        {message.content && <p>{message.content}</p>}
+                        {message.image_url && (
+                          <img
+                            src={message.image_url}
+                            className="mt-2 rounded-lg max-h-64"
+                            alt=""
+                          />
                         )}
                       </>
                     )}
                   </div>
-                </div>
+                  </div>
+                </Fragment>
               )
             })}
             {typingText ? (

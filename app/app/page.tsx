@@ -76,6 +76,7 @@ const [timeframe, setTimeframe] = useState("")
   const [points, setPoints] = useState("")
   const [session, setSession] = useState("NY")
   const [notes, setNotes] = useState("")
+  const [publicDescription, setPublicDescription] = useState("")
   const [postToFeed, setPostToFeed] = useState(false)
   const [image, setImage] = useState<File | null>(null)
 
@@ -184,6 +185,7 @@ if (image) {
           contracts: parsedContracts,
           session: sessionToSave,
           notes,
+          public_description: publicDescription,
           image_url: screenshotUrl,
           account_type: firm,
           account_size: accountSize,
@@ -243,6 +245,7 @@ if (image) {
     setPoints("")
     setSession("NY")
     setNotes("")
+    setPublicDescription("")
     setImage(null)
     setEntryPrice("")
     setExitPrice("")
@@ -300,6 +303,7 @@ setTimeframe("")
           contracts: Number(row.Contracts || 0),
           session: row.Session || "NY",
           notes: "",
+          public_description: "",
           image_url: null,
           account_type: "Imported",
           account_size: "",
@@ -357,14 +361,14 @@ return (
     <Navbar />
 
     <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100">
-      <div className="p-10 max-w-7xl mx-auto">
+      <div className="p-8 max-w-7xl mx-auto">
 
-        <h1 className="text-3xl font-semibold mb-6 text-center bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
+        <h1 className="text-3xl font-semibold mb-4 text-center bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
           Input Trade
         </h1>
 
         {/* Toggle */}
-        <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
+        <div className="flex items-center justify-between mb- flex-wrap gap-4">
 
   {/* LEFT SIDE */}
   <div className="w-full flex items-center mb-6">
@@ -598,6 +602,25 @@ return (
     </>
   )}
 
+  <div className="mt-1">
+    <label className="text-gray-400 text-sm mb-1 block">
+      Public Description
+    </label>
+
+    <textarea
+      value={publicDescription}
+      onChange={(e) => setPublicDescription(e.target.value)}
+      placeholder="Insert public thoughts..."
+      className="w-full p-2 rounded-lg bg-[#0f172a] text-white border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[80px]"
+    />
+
+    
+  </div>
+  
+  <label className="text-gray-400 text-sm mb-1 block">
+      Personal Thoughts
+    </label>
+    
   {inputSettings.showNotes && (
     <textarea
       placeholder="Notes"
