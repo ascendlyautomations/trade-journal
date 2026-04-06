@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation"
 
 export default function ChatPage() {
   const [messages, setMessages] = useState<any[]>([])
+  const [globalMessages, setGlobalMessages] = useState<any[]>([])
   const [input, setInput] = useState("")
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [user, setUser] = useState<any>(null)
@@ -18,6 +19,7 @@ export default function ChatPage() {
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  const channelStateRef = useRef<"random" | "trades">("random")
   const router = useRouter()
 
   useEffect(() => {
@@ -27,6 +29,43 @@ export default function ChatPage() {
   useEffect(() => {
     fetchMessages()
   }, [channel])
+
+  useEffect(() => {
+    channelStateRef.current = channel
+  }, [channel])
+
+  useEffect(() => {
+    const channel = supabase.channel("global-chat")
+
+    channel.on(
+      "postgres_changes",
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "messages"
+      },
+      (payload) => {
+        console.log("Realtime event:", payload)
+        setGlobalMessages((prev) => {
+          const updated = [...prev, payload.new]
+
+          const sorted = updated.sort(
+            (a, b) =>
+              new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+          )
+
+          setMessages(sorted.filter((m: any) => m.channel === channelStateRef.current))
+          return sorted
+        })
+      }
+    )
+
+    channel.subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [])
 
   async function init() {
     const {
@@ -48,39 +87,7 @@ export default function ChatPage() {
 
     setProfile(prof)
 
-    setupRealtime()
-  }
-
-  function setupRealtime() {
-    const channelSub = supabase
-      .channel("chat-global")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "messages" },
-        async (payload) => {
-          const msg = payload.new
-          if (msg.channel !== channel) return
-
-          const { data: prof } = await supabase
-            .from("profiles")
-            .select("id, username")
-            .eq("id", msg.user_id)
-            .single()
-
-          setMessages((prev) => {
-            if (prev.some((m) => m.id === msg.id)) return prev
-
-            if (!isAtBottom) {
-              setNewMessages((c) => c + 1)
-            }
-
-            return [...prev, { ...msg, profiles: prof }]
-          })
-        }
-      )
-      .subscribe()
-
-    return () => supabase.removeChannel(channelSub)
+    // realtime handled in useEffect
   }
 
   async function fetchMessages() {
@@ -94,7 +101,11 @@ export default function ChatPage() {
       .eq("channel", channel)
       .order("created_at", { ascending: true })
 
-    setMessages(data || [])
+    const sortedMessages = (data || []).sort(
+      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    )
+
+    setMessages(sortedMessages)
 
     // 🔥 scroll to bottom on load
     setTimeout(() => {
@@ -184,6 +195,11 @@ export default function ChatPage() {
       minute: "2-digit"
     })
   }
+
+  useEffect(() => {
+    const el = document.getElementById("chat-bottom")
+    el?.scrollIntoView({ behavior: "smooth" })
+  }, [messages])
 
   return (
     <>
@@ -283,6 +299,7 @@ export default function ChatPage() {
 
               </div>
             ))}
+            <div id="chat-bottom" />
           </div>
 
           {/* INPUT */}

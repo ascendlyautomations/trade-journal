@@ -10,11 +10,66 @@ export default function MessagesPage() {
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
+  const [showGroupModal, setShowGroupModal] = useState(false)
+  const [showDMModal, setShowDMModal] = useState(false)
+  const [allUsers, setAllUsers] = useState<any[]>([])
+  const [selectedUsers, setSelectedUsers] = useState<string[]>([])
+  const [dmSelectedUserId, setDmSelectedUserId] = useState<string | null>(null)
+  const [groupName, setGroupName] = useState("")
+  const [creatingGroup, setCreatingGroup] = useState(false)
+  const [creatingDM, setCreatingDM] = useState(false)
+  const [openConvoMenuId, setOpenConvoMenuId] = useState<string | null>(null)
 
   const router = useRouter()
 
+  function sortConversationsDesc(list: any[]) {
+    return [...list].sort(
+      (a, b) =>
+        new Date(b.last_message_at || 0).getTime() -
+        new Date(a.last_message_at || 0).getTime()
+    )
+  }
+
+  function mergeNewConversation(prev: any[], newConversation: any) {
+    if (prev.some((c) => c.id === newConversation.id)) return prev
+    const updated = [newConversation, ...prev]
+    return sortConversationsDesc(updated)
+  }
+
+  function openDMModal() {
+    setDmSelectedUserId(null)
+    setShowDMModal(true)
+  }
+
   useEffect(() => {
     init()
+  }, [])
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const ce = e as CustomEvent<{
+        conversationId?: string
+        last_message?: string
+        last_message_at?: string
+      }>
+      const { conversationId, last_message, last_message_at } = ce.detail || {}
+      if (!conversationId) return
+      setConversations((prev) => {
+        if (!prev.some((c) => c.id === conversationId)) return prev
+        const updated = prev.map((c) =>
+          c.id === conversationId
+            ? {
+                ...c,
+                lastMessage: last_message ?? c.lastMessage,
+                last_message_at: last_message_at ?? c.last_message_at
+              }
+            : c
+        )
+        return sortConversationsDesc(updated)
+      })
+    }
+    window.addEventListener("tj-conversation-updated", handler)
+    return () => window.removeEventListener("tj-conversation-updated", handler)
   }, [])
 
   async function init() {
@@ -30,73 +85,282 @@ export default function MessagesPage() {
     setUser(user)
 
     await fetchConversations(user.id)
+    await fetchAllUsers(user.id)
     setLoading(false)
   }
 
   async function fetchConversations(userId: string) {
-    const { data: parts } = await supabase
+    const { data: rows } = await supabase
       .from("conversation_participants")
-      .select("conversation_id")
+      .select(`
+        conversation_id,
+        conversations (
+          id,
+          is_group,
+          name,
+          avatar_url,
+          last_message,
+          last_message_at
+        )
+      `)
       .eq("user_id", userId)
 
-    if (!parts || parts.length === 0) {
+    if (!rows || rows.length === 0) {
       setConversations([])
       return
     }
 
-    const convoIds = parts.map((p) => p.conversation_id)
+    const convoIds = rows.map((p: any) => p.conversation_id)
 
     const convoData = await Promise.all(
       convoIds.map(async (convoId) => {
+        const convoRow = rows.find((r: any) => r.conversation_id === convoId)
+        const convoMeta = Array.isArray(convoRow?.conversations)
+          ? convoRow?.conversations?.[0]
+          : convoRow?.conversations
 
-        // 🔥 FIXED: include avatar_url
-        const { data: users } = await supabase
+        const { data: participants } = await supabase
           .from("conversation_participants")
           .select(`
             user_id,
-            profiles (username, avatar_url)
+            profiles (id, username, avatar_url, name)
           `)
           .eq("conversation_id", convoId)
 
-        const otherUser = users?.find((u: any) => u.user_id !== userId)
+        const otherUser = participants?.find((u: any) => u.user_id !== userId)
         const rawProfile = otherUser?.profiles
         const profile = Array.isArray(rawProfile) ? rawProfile[0] : rawProfile
 
         const { data: messages } = await supabase
-          .from("direct_messages")
-          .select("content")
+          .from("messages")
+          .select("content, created_at")
           .eq("conversation_id", convoId)
           .order("created_at", { ascending: false })
           .limit(1)
 
-        // 🔥 FIXED: return avatar_url
+        const isGroup = convoMeta?.is_group === true
+        const displayName = isGroup
+          ? convoMeta?.name || "Group Chat"
+          : profile?.username || "user"
+
         return {
           id: convoId,
+          is_group: isGroup,
+          name: convoMeta?.name || null,
+          displayName,
           username: profile?.username || "user",
-          avatar_url: profile?.avatar_url ?? null,
-          lastMessage: messages?.[0]?.content || "No messages yet"
+          avatar_url: isGroup
+            ? convoMeta?.avatar_url ?? null
+            : profile?.avatar_url ?? null,
+          participants: participants || [],
+          lastMessage:
+            convoMeta?.last_message || messages?.[0]?.content || "No messages yet",
+          last_message_at:
+            convoMeta?.last_message_at || messages?.[0]?.created_at || null,
         }
       })
     )
 
-    setConversations(convoData)
+    setConversations(sortConversationsDesc(convoData || []))
+  }
+
+  async function fetchAllUsers(currentUserId: string) {
+    const { data } = await supabase
+      .from("profiles")
+      .select("id, username, avatar_url")
+      .neq("id", currentUserId)
+      .order("username", { ascending: true })
+      .limit(100)
+
+    setAllUsers(data || [])
+  }
+
+  async function createGroupChat() {
+    if (!user || selectedUsers.length === 0 || !groupName.trim()) return
+
+    setCreatingGroup(true)
+    const { data: convo } = await supabase
+      .from("conversations")
+      .insert({
+        is_group: true,
+        name: groupName.trim()
+      })
+      .select()
+      .single()
+
+    if (!convo?.id) {
+      setCreatingGroup(false)
+      return
+    }
+
+    const participants = selectedUsers.map((userId) => ({
+      conversation_id: convo.id,
+      user_id: userId
+    }))
+
+    participants.push({
+      conversation_id: convo.id,
+      user_id: user.id
+    })
+
+    await supabase
+      .from("conversation_participants")
+      .insert(participants)
+
+    const now = new Date().toISOString()
+    const newConversation = {
+      id: convo.id,
+      is_group: true,
+      name: groupName.trim(),
+      displayName: groupName.trim(),
+      username: "user",
+      avatar_url: null as string | null,
+      participants: [],
+      lastMessage: "No messages yet",
+      last_message_at: now,
+    }
+
+    setConversations((prev) => mergeNewConversation(prev, newConversation))
+
+    setShowGroupModal(false)
+    setSelectedUsers([])
+    setGroupName("")
+    setCreatingGroup(false)
+    router.push(`/messages/${convo.id}`)
+  }
+
+  async function findExistingDM(currentUserId: string, otherUserId: string) {
+    const { data: myRows } = await supabase
+      .from("conversation_participants")
+      .select("conversation_id")
+      .eq("user_id", currentUserId)
+
+    const ids = [...new Set(myRows?.map((r) => r.conversation_id) || [])]
+    for (const convoId of ids) {
+      const { data: meta } = await supabase
+        .from("conversations")
+        .select("id, is_group")
+        .eq("id", convoId)
+        .maybeSingle()
+
+      if (!meta || meta.is_group) continue
+
+      const { data: parts } = await supabase
+        .from("conversation_participants")
+        .select("user_id")
+        .eq("conversation_id", convoId)
+
+      const uidSet = new Set(parts?.map((p) => p.user_id))
+      if (
+        uidSet.size === 2 &&
+        uidSet.has(currentUserId) &&
+        uidSet.has(otherUserId)
+      ) {
+        return convoId as string
+      }
+    }
+    return null
+  }
+
+  async function startDMChat() {
+    if (!user || !dmSelectedUserId) return
+
+    setCreatingDM(true)
+    const existingId = await findExistingDM(user.id, dmSelectedUserId)
+
+    if (existingId) {
+      setShowDMModal(false)
+      setDmSelectedUserId(null)
+      setCreatingDM(false)
+      router.push(`/messages/${existingId}`)
+      return
+    }
+
+    const { data: convo, error } = await supabase
+      .from("conversations")
+      .insert({ is_group: false })
+      .select()
+      .single()
+
+    if (error || !convo?.id) {
+      console.error("DM conversation create error:", error)
+      setCreatingDM(false)
+      return
+    }
+
+    await supabase.from("conversation_participants").insert([
+      { conversation_id: convo.id, user_id: user.id },
+      { conversation_id: convo.id, user_id: dmSelectedUserId },
+    ])
+
+    const other = allUsers.find((u) => u.id === dmSelectedUserId)
+    const now = new Date().toISOString()
+    const newConversation = {
+      id: convo.id,
+      is_group: false,
+      name: null as string | null,
+      displayName: other?.username || "user",
+      username: other?.username || "user",
+      avatar_url: other?.avatar_url ?? null,
+      participants: [],
+      lastMessage: "No messages yet",
+      last_message_at: now,
+    }
+
+    setConversations((prev) => mergeNewConversation(prev, newConversation))
+
+    setShowDMModal(false)
+    setDmSelectedUserId(null)
+    setCreatingDM(false)
+    router.push(`/messages/${convo.id}`)
   }
 
   const filteredConversations = conversations.filter((c) =>
-    c.username.toLowerCase().includes(search.toLowerCase())
+    (c.displayName || c.username).toLowerCase().includes(search.toLowerCase())
   )
+
+  async function handleDeleteChat(conversationId: string) {
+    if (!confirm("Delete this chat?")) return
+    if (!user) return
+
+    await supabase
+      .from("conversation_participants")
+      .delete()
+      .eq("conversation_id", conversationId)
+      .eq("user_id", user.id)
+
+    setConversations((prev) => prev.filter((c) => c.id !== conversationId))
+    setOpenConvoMenuId(null)
+  }
 
   return (
     <>
       <Navbar />
 
-      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white p-6">
+      <div className="min-h-screen bg-[#0f172a] bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white px-6 pb-6 pt-4">
 
         <div className="max-w-3xl mx-auto">
 
           <h1 className="text-2xl font-semibold mb-4">
             Messages
           </h1>
+
+          <div className="mb-4 flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => setShowGroupModal(true)}
+              className="rounded-lg bg-blue-500 px-4 py-2 text-white hover:bg-blue-600"
+            >
+              New Group
+            </button>
+            <button
+              type="button"
+              onClick={openDMModal}
+              className="rounded-lg bg-[#1e293b] px-4 py-2 text-white hover:bg-[#334155]"
+            >
+              New Chat
+            </button>
+          </div>
 
           <input
             value={search}
@@ -116,22 +380,52 @@ export default function MessagesPage() {
                 <div
                   key={c.id}
                   onClick={() => router.push(`/messages/${c.id}`)}
-                  className="bg-white/5 border border-white/10 p-4 rounded-xl cursor-pointer hover:bg-white/10 transition"
+                  className="relative bg-white/5 border border-white/10 p-4 rounded-xl cursor-pointer hover:bg-white/10 transition"
                 >
-                  <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    aria-label="Conversation options"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setOpenConvoMenuId(
+                        openConvoMenuId === c.id ? null : c.id
+                      )
+                    }}
+                    className="absolute right-3 top-3 z-10 px-2 py-1 rounded bg-black/40 hover:bg-black/60 text-sm text-white cursor-pointer"
+                  >
+                    ⋯
+                  </button>
+                  {openConvoMenuId === c.id ? (
+                    <div
+                      className="absolute right-3 top-10 z-20 w-40 rounded-lg border border-white/10 bg-[#0f172a] py-1 shadow-lg"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleDeleteChat(c.id)
+                        }}
+                        className="w-full px-3 py-2 text-left text-sm text-white hover:bg-white/10 cursor-pointer"
+                      >
+                        Delete Chat
+                      </button>
+                    </div>
+                  ) : null}
+                  <div className="flex items-center gap-3 pr-10">
 
                     {c.avatar_url ? (
                       <img
                         src={c.avatar_url}
-                        className="w-10 h-10 rounded-full object-cover"
+                        className="w-10 h-10 rounded-full object-cover hover:scale-105 transition"
                       />
                     ) : (
                       <div className="w-10 h-10 rounded-full bg-gray-600" />
                     )}
 
-                    <div>
+                    <div className="min-w-0 flex-1">
                       <p className="text-emerald-400 font-semibold">
-                        @{c.username}
+                        {c.is_group ? c.name || c.displayName : `@${c.username}`}
                       </p>
 
                       <p className="text-sm text-gray-400 truncate">
@@ -149,6 +443,157 @@ export default function MessagesPage() {
         </div>
 
       </div>
+
+      {showGroupModal && (
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 text-white"
+          onClick={() => setShowGroupModal(false)}
+        >
+          <div
+            className="bg-[#0f172a] border border-gray-600 rounded-2xl p-6 w-full max-w-lg shadow-2xl text-white"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-white text-xl font-semibold mb-4">
+              Create Group Chat
+            </h2>
+
+            <input
+              value={groupName}
+              onChange={(e) => setGroupName(e.target.value)}
+              placeholder="Group name"
+              className="w-full mb-3 p-3 rounded-lg bg-[#1e293b] text-white border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+
+            <div className="max-h-64 overflow-y-auto space-y-2 mb-4">
+              {allUsers.map((u) => {
+                const selected = selectedUsers.includes(u.id)
+                return (
+                  <button
+                    key={u.id}
+                    type="button"
+                    onClick={() =>
+                      setSelectedUsers((prev) =>
+                        selected
+                          ? prev.filter((id) => id !== u.id)
+                          : [...prev, u.id]
+                      )
+                    }
+                    className={`flex w-full items-center gap-3 rounded-lg p-3 cursor-pointer transition ${
+                      selected
+                        ? "bg-blue-500/20 ring-1 ring-blue-400/40"
+                        : "hover:bg-[#1e293b]"
+                    }`}
+                  >
+                    <img
+                      src={u.avatar_url || "/default-avatar.png"}
+                      alt=""
+                      className="h-8 w-8 shrink-0 rounded-full object-cover hover:scale-105 transition"
+                    />
+                    <span
+                      className={`text-left text-sm ${
+                        selected
+                          ? "rounded-full bg-blue-500/20 px-3 py-1 text-blue-400"
+                          : "text-white"
+                      }`}
+                    >
+                      @{u.username}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+
+            <div className="mt-4 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowGroupModal(false)}
+                className="rounded-lg bg-gray-700 px-4 py-2 text-white hover:bg-gray-600"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={createGroupChat}
+                disabled={creatingGroup}
+                className="rounded-lg bg-blue-500 px-4 py-2 text-white hover:bg-blue-600 disabled:opacity-50"
+              >
+                {creatingGroup ? "Creating..." : "Create"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDMModal && (
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 text-white"
+          onClick={() => setShowDMModal(false)}
+        >
+          <div
+            className="bg-[#0f172a] border border-gray-600 rounded-2xl p-6 w-full max-w-lg shadow-2xl text-white"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-white text-xl font-semibold mb-4">
+              New Chat
+            </h2>
+
+            <div className="max-h-64 overflow-y-auto space-y-2 mb-4">
+              {allUsers.map((u) => {
+                const selected = dmSelectedUserId === u.id
+                return (
+                  <button
+                    key={u.id}
+                    type="button"
+                    onClick={() =>
+                      setDmSelectedUserId((prev) =>
+                        prev === u.id ? null : u.id
+                      )
+                    }
+                    className={`flex w-full items-center gap-3 rounded-lg p-3 cursor-pointer transition ${
+                      selected
+                        ? "bg-blue-500/20 ring-1 ring-blue-400/40"
+                        : "hover:bg-[#1e293b]"
+                    }`}
+                  >
+                    <img
+                      src={u.avatar_url || "/default-avatar.png"}
+                      alt=""
+                      className="h-8 w-8 shrink-0 rounded-full object-cover hover:scale-105 transition"
+                    />
+                    <span
+                      className={`text-left text-sm ${
+                        selected
+                          ? "rounded-full bg-blue-500/20 px-3 py-1 text-blue-400"
+                          : "text-white"
+                      }`}
+                    >
+                      @{u.username}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+
+            <div className="mt-4 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowDMModal(false)}
+                className="rounded-lg bg-gray-700 px-4 py-2 text-white hover:bg-gray-600"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={startDMChat}
+                disabled={creatingDM || !dmSelectedUserId}
+                className="rounded-lg bg-blue-500 px-4 py-2 text-white hover:bg-blue-600 disabled:opacity-50"
+              >
+                {creatingDM ? "Opening..." : "Start chat"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }

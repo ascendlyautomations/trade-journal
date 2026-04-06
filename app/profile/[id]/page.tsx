@@ -504,7 +504,7 @@ export default function ProfilePage() {
       <Navbar />
 
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100">
-        <div className="mx-auto max-w-7xl space-y-4 p-10">
+        <div className="mx-auto max-w-7xl space-y-4 p-5">
         <div className="mx-auto max-w-5xl">
 
           <div className="mb-10 flex items-start gap-4">
@@ -624,7 +624,7 @@ export default function ProfilePage() {
             ))}
           </div>
 
-          <div className="mx-auto mt-6 max-w-3xl space-y-6 px-0 sm:px-2">
+          <div className="mx-auto mt-2 max-w-3xl space-y-6 px-0 sm:px-2">
             {activeTab === "public" && (
               <div className="space-y-4">
                 <h2 className="text-xl font-semibold text-white">

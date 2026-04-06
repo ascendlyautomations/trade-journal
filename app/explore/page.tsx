@@ -9,12 +9,37 @@ export default function ExplorePage() {
   const [users, setUsers] = useState<any[]>([])
   const [topUsers, setTopUsers] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState("")
+  const [results, setResults] = useState<any[]>([])
+  const [loadingSearch, setLoadingSearch] = useState(false)
 
   const router = useRouter()
 
   useEffect(() => {
     init()
   }, [])
+
+  useEffect(() => {
+    if (!search) {
+      setResults([])
+      return
+    }
+
+    const delayDebounce = setTimeout(async () => {
+      setLoadingSearch(true)
+
+      const { data } = await supabase
+        .from("profiles")
+        .select("id, username, name, avatar_url")
+        .or(`username.ilike.%${search}%,name.ilike.%${search}%`)
+        .limit(6)
+
+      setResults(data || [])
+      setLoadingSearch(false)
+    }, 300)
+
+    return () => clearTimeout(delayDebounce)
+  }, [search])
 
   async function init() {
     await fetchRandomUsers()
@@ -83,6 +108,40 @@ export default function ExplorePage() {
           <h1 className="text-2xl font-semibold mb-6">
             Explore
           </h1>
+
+          <div className="relative mb-6">
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search users..."
+              className="w-full p-3 rounded-xl bg-[#0f172a] text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+
+            {loadingSearch && (
+              <p className="mt-2 text-sm text-gray-400">Searching...</p>
+            )}
+
+            {results.length > 0 && (
+              <div className="absolute mt-2 w-full bg-[#1e293b] border border-gray-700 rounded-xl shadow-lg z-50">
+                {results.map((user) => (
+                  <div
+                    key={user.id}
+                    onClick={() => router.push(`/profile/${user.id}`)}
+                    className="flex items-center gap-3 p-3 hover:bg-gray-700 cursor-pointer transition"
+                  >
+                    <img
+                      src={user.avatar_url || "/default-avatar.png"}
+                      className="w-8 h-8 rounded-full object-cover"
+                    />
+                    <div>
+                      <p className="text-white font-medium">@{user.username}</p>
+                      <p className="text-gray-400 text-sm">{user.name}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
           {loading ? (
             <p className="text-gray-400">Loading...</p>
