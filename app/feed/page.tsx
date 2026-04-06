@@ -231,15 +231,17 @@ export default function FeedPage() {
         prev && String(prev.id) === pid ? { ...prev, likesCount: newCount } : prev
       )
 
-      if (post.user_id && post.user_id !== user.id) {
+      const notifyUserId = postTradeOwnerUserId(post)
+      const tradeId = post.trade_id
+      if (tradeId && notifyUserId && notifyUserId !== user.id) {
         const { error: nErr } = await supabase.from("notifications").insert({
-          user_id: post.user_id,
+          user_id: notifyUserId,
           sender_id: user.id,
           type: "like",
-          post_id: pid,
+          trade_id: tradeId,
         })
         if (nErr) {
-          console.error("Notification error:", nErr?.message ?? nErr, nErr)
+          console.error("Notification error:", nErr?.message, nErr)
         } else {
           window.dispatchEvent(new CustomEvent("notification-update"))
           window.dispatchEvent(new CustomEvent("tj-unread-notifications-refresh"))
@@ -290,15 +292,17 @@ export default function FeedPage() {
     })
     setCommentDraft((d) => ({ ...d, [pid]: "" }))
 
-    if (post.user_id && post.user_id !== user.id) {
+    const notifyUserId = postTradeOwnerUserId(post)
+    const tradeId = post.trade_id
+    if (tradeId && notifyUserId && notifyUserId !== user.id) {
       const { error: nErr } = await supabase.from("notifications").insert({
-        user_id: post.user_id,
+        user_id: notifyUserId,
         sender_id: user.id,
         type: "comment",
-        post_id: pid,
+        trade_id: tradeId,
       })
       if (nErr) {
-        console.error("Notification error:", nErr?.message ?? nErr, nErr)
+        console.error("Notification error:", nErr?.message, nErr)
       } else {
         window.dispatchEvent(new CustomEvent("notification-update"))
         window.dispatchEvent(new CustomEvent("tj-unread-notifications-refresh"))
@@ -430,7 +434,10 @@ export default function FeedPage() {
                   )}
 
                   {post.trade_id ? (
-                    <div onClick={(e) => e.stopPropagation()}>
+                    <div
+                      onClick={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => e.stopPropagation()}
+                    >
                       <TradeSocialLayer
                         tradeId={post.trade_id}
                         currentUserId={user?.id}
@@ -443,6 +450,7 @@ export default function FeedPage() {
                   <div
                     className="flex flex-col gap-2 pt-1 border-t border-white/5"
                     onClick={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => e.stopPropagation()}
                   >
                     <div className="flex items-center gap-4">
                       <button
@@ -492,7 +500,11 @@ export default function FeedPage() {
                         </ul>
 
                         {user ? (
-                          <div className="flex flex-col sm:flex-row gap-2">
+                          <div
+                            className="flex flex-col sm:flex-row gap-2"
+                            onClick={(e) => e.stopPropagation()}
+                            onKeyDown={(e) => e.stopPropagation()}
+                          >
                             <input
                               id={`comment-input-${pid}`}
                               type="text"
@@ -501,7 +513,10 @@ export default function FeedPage() {
                               onChange={(e) =>
                                 setCommentDraft((d) => ({ ...d, [pid]: e.target.value }))
                               }
+                              onClick={(e) => e.stopPropagation()}
+                              onFocus={(e) => e.stopPropagation()}
                               onKeyDown={(e) => {
+                                e.stopPropagation()
                                 if (e.key === "Enter" && !e.shiftKey) {
                                   e.preventDefault()
                                   submitComment(post)
@@ -514,7 +529,10 @@ export default function FeedPage() {
                               disabled={
                                 commentSubmitting[pid] || !(commentDraft[pid] || "").trim()
                               }
-                              onClick={() => submitComment(post)}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                submitComment(post)
+                              }}
                               className="px-4 py-2 rounded-lg text-sm font-medium bg-blue-500/90 hover:bg-blue-500 text-white disabled:opacity-40 shrink-0"
                             >
                               {commentSubmitting[pid] ? "…" : "Post"}

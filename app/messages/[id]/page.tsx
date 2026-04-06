@@ -2,13 +2,7 @@
 
 import Navbar from "../../components/Navbar"
 import TradeSocialLayer from "../../components/TradeSocialLayer"
-import {
-  useEffect,
-  useState,
-  useRef,
-  Fragment,
-  type ChangeEvent,
-} from "react"
+import { useEffect, useState, useRef, type ChangeEvent } from "react"
 import { supabase } from "../../../lib/supabaseClient"
 import { useParams, useRouter } from "next/navigation"
 
@@ -98,24 +92,29 @@ function TradeMessageBubble({
 
   const isMine = message.sender_id === userId
 
+  const menuOpen = activeMenuId === message.id
+
   return (
     <div className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
-      <div className="relative max-w-sm w-full overflow-visible">
+      <div className="relative group inline-block max-w-[75%] overflow-visible">
         <button
           type="button"
           onClick={(e) => {
             e.stopPropagation()
-            setActiveMenuId(activeMenuId === message.id ? null : message.id)
+            setActiveMenuId(menuOpen ? null : message.id)
           }}
-          className="absolute -top-2 -right-2 z-10 px-2 py-1 rounded bg-black/40 hover:bg-black/60 text-xs"
+          className={`absolute top-1 right-1 z-10 rounded px-1.5 py-0.5 text-xs text-gray-400 transition-opacity duration-200 hover:text-gray-200 ${
+            menuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+          }`}
+          aria-label="Message actions"
         >
           ⋯
         </button>
 
-        {activeMenuId === message.id ? (
+        {menuOpen ? (
           <div
-            className={`absolute top-6 mt-1 z-50 w-40 rounded-lg border border-gray-600 bg-[#1e293b] shadow-lg ${
-              isMine ? "right-2" : "left-2"
+            className={`absolute top-7 z-50 w-40 rounded-lg border border-gray-600 bg-[#1e293b] shadow-lg ${
+              isMine ? "right-1" : "left-1"
             }`}
           >
             <button
@@ -212,10 +211,7 @@ function TradeMessageBubble({
           </div>
         </div>
 
-        <div
-          className="mt-3 w-full"
-          onClick={(e) => e.stopPropagation()}
-        >
+        <div className="mt-3 max-w-full" onClick={(e) => e.stopPropagation()}>
           <TradeSocialLayer
             tradeId={trade.id}
             currentUserId={userId}
@@ -873,11 +869,9 @@ export default function DMPage() {
           {/* MESSAGES */}
           <div
             ref={scrollRef}
-            className="min-h-0 flex-1 overflow-y-auto overflow-x-visible p-4 space-y-3"
+            className="min-h-0 flex-1 overflow-y-auto overflow-x-visible p-4"
           >
-            {messages.map((message) => {
-              console.log("Message:", message)
-
+            {messages.map((message, i) => {
               if (message.is_system) {
                 return (
                   <div
@@ -889,28 +883,37 @@ export default function DMPage() {
                 )
               }
 
+              const prevMessage = messages[i - 1]
+              const isMe = message.sender_id === user?.id
+              const isGroup = Boolean(conversation?.is_group)
+              const showName =
+                isGroup &&
+                !isMe &&
+                (!prevMessage ||
+                  prevMessage.sender_id !== message.sender_id)
+
+              const isNewSender =
+                !prevMessage || prevMessage.sender_id !== message.sender_id
+
+              const rowClass = `flex flex-col ${isNewSender ? "mt-3" : "mt-1"}`
+
               const profileRow = Array.isArray(message.profiles)
                 ? message.profiles[0]
                 : message.profiles
-              const profileUsername = profileRow?.username
-
-              const groupSenderLabel =
-                conversation?.is_group &&
-                message.sender_id != null &&
-                message.sender_id !== user?.id &&
-                profileUsername ? (
-                  <p className="text-xs text-gray-400 mb-1 ml-1">
-                    {profileUsername}
-                  </p>
-                ) : null
+              const profileUsername =
+                profileRow?.username ?? message.profiles?.username
 
               if (message.type === "trade") {
                 return (
-                  <Fragment key={message.id}>
-                    {groupSenderLabel}
+                  <div key={message.id} className={rowClass}>
+                    {showName && profileUsername ? (
+                      <p className="text-xs text-gray-400 mb-1 ml-1">
+                        {profileUsername}
+                      </p>
+                    ) : null}
                     <TradeMessageBubble
                       message={message}
-                      isMe={message.sender_id === user?.id}
+                      isMe={isMe}
                       userId={user?.id}
                       activeMenuId={activeMenuId}
                       setActiveMenuId={setActiveMenuId}
@@ -918,77 +921,90 @@ export default function DMPage() {
                       deleteForEveryone={deleteForEveryone}
                       onOpenTrade={openTradeModal}
                     />
-                  </Fragment>
+                  </div>
                 )
               }
 
-              const isMe = message.sender_id === user?.id
+              const menuOpen = activeMenuId === message.id
 
               return (
-                <Fragment key={message.id}>
-                  {groupSenderLabel}
+                <div key={message.id} className={rowClass}>
+                  {showName && profileUsername ? (
+                    <p className="text-xs text-gray-400 mb-1 ml-1">
+                      {profileUsername}
+                    </p>
+                  ) : null}
                   <div
                     className={`flex overflow-visible ${
                       isMe ? "justify-end" : "justify-start"
                     }`}
                   >
-                    <div
-                      className={`p-3 rounded-xl max-w-[70%] relative overflow-visible ${
-                        isMe ? "bg-blue-500" : "bg-gray-700"
-                      }`}
-                    >
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setActiveMenuId(
-                          activeMenuId === message.id ? null : message.id
-                        )
-                      }
-                      className="absolute -top-2 -right-2 px-2 py-1 rounded bg-black/40 hover:bg-black/60 text-xs"
-                    >
-                      ⋯
-                    </button>
-
-                    {activeMenuId === message.id && (
-                      <div
-                        className={`absolute top-6 mt-1 z-50 w-40 rounded-lg border border-gray-600 bg-[#1e293b] shadow-lg ${
-                          isMe ? "right-2" : "left-2"
+                    <div className="relative group inline-block max-w-[75%] overflow-visible">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setActiveMenuId(menuOpen ? null : message.id)
+                        }
+                        className={`absolute top-1 right-1 z-10 rounded px-1.5 py-0.5 text-xs text-gray-400 transition-opacity duration-200 hover:text-gray-200 ${
+                          menuOpen
+                            ? "opacity-100"
+                            : "opacity-0 group-hover:opacity-100"
                         }`}
+                        aria-label="Message actions"
                       >
-                        <button
-                          onClick={() => deleteForMe(message)}
-                          className="w-full text-left px-3 py-2 text-sm hover:bg-white/10"
+                        ⋯
+                      </button>
+
+                      {menuOpen ? (
+                        <div
+                          className={`absolute top-7 z-50 w-40 rounded-lg border border-gray-600 bg-[#1e293b] shadow-lg ${
+                            isMe ? "right-1" : "left-1"
+                          }`}
                         >
-                          Delete for me
-                        </button>
-                        {message.sender_id === user?.id && (
                           <button
-                            onClick={() => deleteForEveryone(message)}
+                            type="button"
+                            onClick={() => deleteForMe(message)}
                             className="w-full text-left px-3 py-2 text-sm hover:bg-white/10"
                           >
-                            Delete for everyone
+                            Delete for me
                           </button>
+                          {message.sender_id === user?.id ? (
+                            <button
+                              type="button"
+                              onClick={() => deleteForEveryone(message)}
+                              className="w-full text-left px-3 py-2 text-sm hover:bg-white/10"
+                            >
+                              Delete for everyone
+                            </button>
+                          ) : null}
+                        </div>
+                      ) : null}
+
+                      <div
+                        className={`p-3 rounded-xl overflow-visible ${
+                          isMe ? "bg-blue-500" : "bg-gray-700"
+                        }`}
+                      >
+                        {message.deleted_for_everyone ? (
+                          <p className="text-gray-400 italic">
+                            Message deleted
+                          </p>
+                        ) : (
+                          <>
+                            {message.content ? <p>{message.content}</p> : null}
+                            {message.image_url ? (
+                              <img
+                                src={message.image_url}
+                                className="mt-2 rounded-lg max-h-64"
+                                alt=""
+                              />
+                            ) : null}
+                          </>
                         )}
                       </div>
-                    )}
-
-                    {message.deleted_for_everyone ? (
-                      <p className="text-gray-400 italic">Message deleted</p>
-                    ) : (
-                      <>
-                        {message.content && <p>{message.content}</p>}
-                        {message.image_url && (
-                          <img
-                            src={message.image_url}
-                            className="mt-2 rounded-lg max-h-64"
-                            alt=""
-                          />
-                        )}
-                      </>
-                    )}
+                    </div>
                   </div>
-                  </div>
-                </Fragment>
+                </div>
               )
             })}
             {typingText ? (

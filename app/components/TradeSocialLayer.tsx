@@ -10,16 +10,6 @@ type TradeSocialLayerProps = {
   tradeOwnerUserId?: string | null | undefined
 }
 
-async function fetchSenderUsername(userId: string): Promise<string> {
-  const { data } = await supabase
-    .from("profiles")
-    .select("username")
-    .eq("id", userId)
-    .maybeSingle()
-  const u = data?.username != null ? String(data.username).trim() : ""
-  return u !== "" ? u : "Someone"
-}
-
 export default function TradeSocialLayer({
   tradeId,
   currentUserId,
@@ -150,7 +140,14 @@ export default function TradeSocialLayer({
   const handleLike = async () => {
     if (!tradeId || !currentUserId) return
 
-    if (liked) {
+    const { data: existing } = await supabase
+      .from("trade_likes")
+      .select("id")
+      .eq("trade_id", tradeId)
+      .eq("user_id", currentUserId)
+      .maybeSingle()
+
+    if (existing) {
       const { error } = await supabase
         .from("trade_likes")
         .delete()
@@ -162,8 +159,8 @@ export default function TradeSocialLayer({
         return
       }
 
-      setLikes((prev) => Math.max(0, prev - 1))
       setLiked(false)
+      setLikes((prev) => Math.max(0, prev - 1))
     } else {
       const { error } = await supabase.from("trade_likes").insert({
         trade_id: tradeId,
@@ -175,30 +172,22 @@ export default function TradeSocialLayer({
         return
       }
 
-      setLikes((prev) => prev + 1)
       setLiked(true)
+      setLikes((prev) => prev + 1)
 
       const receiverId =
         tradeOwnerUserId != null ? String(tradeOwnerUserId).trim() : ""
-      console.log("Trade owner:", receiverId || tradeOwnerUserId)
-      console.log("Current user:", currentUserId)
       if (!receiverId || receiverId === currentUserId) return
 
-      const username = await fetchSenderUsername(currentUserId)
       const { error: nErr } = await supabase.from("notifications").insert({
         user_id: receiverId,
         sender_id: currentUserId,
         type: "like",
-        content: `${username} liked your trade`,
         trade_id: tradeId,
       })
 
       if (nErr) {
-        console.error(
-          "Notification error:",
-          (nErr as { message?: string })?.message,
-          nErr
-        )
+        console.error("Notification error:", nErr?.message, nErr)
         return
       }
 
@@ -236,25 +225,17 @@ export default function TradeSocialLayer({
 
       const receiverId =
         tradeOwnerUserId != null ? String(tradeOwnerUserId).trim() : ""
-      console.log("Trade owner:", receiverId || tradeOwnerUserId)
-      console.log("Current user:", currentUserId)
       if (!receiverId || receiverId === currentUserId) return
 
-      const username = await fetchSenderUsername(currentUserId)
       const { error: nErr } = await supabase.from("notifications").insert({
         user_id: receiverId,
         sender_id: currentUserId,
         type: "comment",
-        content: `${username} commented on your trade`,
         trade_id: tradeId,
       })
 
       if (nErr) {
-        console.error(
-          "Notification error:",
-          (nErr as { message?: string })?.message,
-          nErr
-        )
+        console.error("Notification error:", nErr?.message, nErr)
         return
       }
 
@@ -266,7 +247,7 @@ export default function TradeSocialLayer({
   if (!tradeId) return null
 
   return (
-    <div>
+    <div onKeyDown={(e) => e.stopPropagation()}>
       <div className="mt-3 flex items-center gap-4 text-sm">
         <button
           type="button"
@@ -299,6 +280,7 @@ export default function TradeSocialLayer({
         <div
           className="mt-3 space-y-2"
           onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
         >
           {comments.map((c) => {
             const av = c.profiles?.avatar_url
@@ -329,12 +311,19 @@ export default function TradeSocialLayer({
           })}
 
           {currentUserId ? (
-            <div className="flex gap-2 mt-2">
+            <div
+              className="flex gap-2 mt-2"
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
+            >
               <input
                 type="text"
                 value={newComment}
                 onChange={(e) => setNewComment(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                onFocus={(e) => e.stopPropagation()}
                 onKeyDown={(e) => {
+                  e.stopPropagation()
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault()
                     handleComment()
@@ -347,7 +336,10 @@ export default function TradeSocialLayer({
               <button
                 type="button"
                 disabled={!newComment.trim()}
-                onClick={() => handleComment()}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleComment()
+                }}
                 className="bg-blue-500 px-3 rounded-lg text-white text-sm font-medium disabled:opacity-40 shrink-0"
               >
                 Post
