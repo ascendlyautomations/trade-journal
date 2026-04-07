@@ -140,6 +140,15 @@ export default function Navbar() {
           TradeTraxs
         </Link>
 
+        {!user ? (
+          <Link
+            href="/faq"
+            className="text-sm text-gray-200 hover:text-blue-400 transition"
+          >
+            FAQ
+          </Link>
+        ) : null}
+
         {!isHome && user && (
           <div className="flex items-center gap-6 text-sm">
 
