@@ -23,7 +23,9 @@ export default function InputPage() {
 
     const sessionToSave = (session && String(session).trim()) || "NY"
 
-    const { error } = await supabase.from("trades").insert([
+    console.log("🚨 INSERT FUNCTION HIT 🚨", "app/input/page.tsx handleSubmit")
+
+    const tradesToInsert = [
       {
         user_id: user?.id,
         ticker,
@@ -32,9 +34,17 @@ export default function InputPage() {
         session: sessionToSave,
         notes,
         reviewed: false,
-        created_at: new Date().toISOString()
-      }
-    ])
+        created_at: new Date().toISOString(),
+      },
+    ]
+
+    console.log("🚨 PARSED DATA:", JSON.stringify(tradesToInsert, null, 2))
+    console.log(
+      "🚨 INSERT PAYLOAD:",
+      JSON.stringify(tradesToInsert, null, 2)
+    )
+
+    const { error } = await supabase.from("trades").insert(tradesToInsert)
 
     if (error) {
       console.error(error)

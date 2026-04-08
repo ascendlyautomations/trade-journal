@@ -173,44 +173,54 @@ if (image) {
         ? String(tradeType).trim()
         : null
 
+    console.log("🚨 INSERT FUNCTION HIT 🚨", "app/app/page.tsx save trade")
+
+    const tradesToInsert = [
+      {
+        ticker,
+        direction,
+        pnl: parsedPnl,
+        rr: parsedRR,
+        points: parsedPoints,
+        contracts: parsedContracts,
+        session: sessionToSave,
+        notes,
+        public_description: publicDescription,
+        image_url: screenshotUrl,
+        account_type: firm,
+        account_size: accountSize,
+        account_id: accountNumber,
+        user_id: user?.id,
+        created_at: finalDate.toISOString(),
+        entry_price: parsedEntry,
+        exit_price: parsedExit,
+        entry_time: entryTime,
+        exit_time: exitTime,
+        psychology_notes:
+          psychologyNotes != null && String(psychologyNotes).trim() !== ""
+            ? String(psychologyNotes).trim()
+            : null,
+        trade_type: tradeTypeToSave,
+
+        confidence: confidence ? Number(confidence) : null,
+        emotion: emotion || null,
+        followed_plan: followedPlan,
+        mistake_type: mistakeType || null,
+        market_condition: marketCondition || null,
+        news_event: newsEvent,
+        timeframe: timeframe || null,
+      },
+    ]
+
+    console.log("🚨 PARSED DATA:", JSON.stringify(tradesToInsert, null, 2))
+    console.log(
+      "🚨 INSERT PAYLOAD:",
+      JSON.stringify(tradesToInsert, null, 2)
+    )
+
     const { data: newTradeData, error } = await supabase
       .from("trades")
-      .insert([
-        {
-          ticker,
-          direction,
-          pnl: parsedPnl,
-          rr: parsedRR,
-          points: parsedPoints,
-          contracts: parsedContracts,
-          session: sessionToSave,
-          notes,
-          public_description: publicDescription,
-          image_url: screenshotUrl,
-          account_type: firm,
-          account_size: accountSize,
-          account_id: accountNumber,
-          user_id: user?.id,
-          created_at: finalDate.toISOString(),
-          entry_price: parsedEntry,
-          exit_price: parsedExit,
-          entry_time: entryTime,
-          exit_time: exitTime,
-          psychology_notes:
-            psychologyNotes != null && String(psychologyNotes).trim() !== ""
-              ? String(psychologyNotes).trim()
-              : null,
-          trade_type: tradeTypeToSave,
-
-          confidence: confidence ? Number(confidence) : null,
-          emotion: emotion || null,
-          followed_plan: followedPlan,
-          mistake_type: mistakeType || null,
-          market_condition: marketCondition || null,
-          news_event: newsEvent,
-          timeframe: timeframe || null
-        }
-      ])
+      .insert(tradesToInsert)
       .select()
       .single()
 
@@ -293,31 +303,52 @@ setTimeframe("")
       try {
         const rows = results.data
 
-        const formattedTrades = rows.map((row: any) => ({
-          user_id: user?.id,
-          ticker: row.Symbol || row.symbol || "",
-          pnl: Number(row.PnL || row.pnl || 0),
-          direction: row.Side || row.side || "Long",
-          rr: Number(row.RR || row.rr || 0),
-          points: Number(row.Points || row.points || 0),
-          contracts: Number(row.Contracts || 0),
-          session: row.Session || "NY",
-          notes: "",
-          public_description: "",
-          image_url: null,
-          account_type: "Imported",
-          account_size: "",
-          account_id: "",
-          reviewed: false,
-          created_at: row.Date
-            ? new Date(row.Date).toISOString()
-            : new Date().toISOString()
-        }))
+        const tradesToInsert = rows.map((row: any) => {
+          const entry = Number(row["Entry Price"])
+          const exit = Number(row["Exit Price"])
+          const date = new Date(row["Date"])
+
+          return {
+            user_id: user?.id,
+
+            ticker: row["Symbol"],
+
+            entry_price: entry,
+            exit_price: exit,
+
+            entry_time: date.toISOString(),
+            exit_time: date.toISOString(),
+
+            direction: row["Direction"],
+
+            pnl: Number(row["PnL"]),
+            contracts: Number(row["Contracts"]) || 1,
+
+            rr: 0,
+            points: 0,
+
+            date: date.toISOString(),
+            created_at: date.toISOString(),
+
+            session: "NY",
+            account_type: "Imported",
+
+            notes: "",
+            public_description: "",
+            image_url: null,
+
+            account_size: "",
+            account_id: "",
+            reviewed: false,
+          }
+        })
+
+        console.log("✅ FINAL INSERT PAYLOAD:", tradesToInsert)
 
         const chunkSize = 100
 
-        for (let i = 0; i < formattedTrades.length; i += chunkSize) {
-          const chunk = formattedTrades.slice(i, i + chunkSize)
+        for (let i = 0; i < tradesToInsert.length; i += chunkSize) {
+          const chunk = tradesToInsert.slice(i, i + chunkSize)
 
           const { error } = await supabase
             .from("trades")
@@ -331,7 +362,7 @@ setTimeframe("")
           }
         }
 
-        alert(`Uploaded ${formattedTrades.length} trades 🚀`)
+        alert(`Uploaded ${tradesToInsert.length} trades 🚀`)
         fetchReviewCount()
       } catch (err) {
         console.error(err)

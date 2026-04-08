@@ -85,6 +85,8 @@ export default function TradesPage() {
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
 
+    console.log("FETCHED TRADES:", data)
+
     setTrades(data || [])
     setLoading(false)
   }
@@ -374,7 +376,13 @@ export default function TradesPage() {
               {/* GRID */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-                {filteredTrades.map((trade) => (
+                {filteredTrades.map((trade) => {
+                  const entry = trade.entry_price ?? trade.entry ?? null
+                  const exit = trade.exit_price ?? trade.exit ?? null
+
+                  console.log("TRADE BEING RENDERED:", trade)
+
+                  return (
                   <div
                     key={trade.id}
                     className="relative bg-white/5 border border-white/10 backdrop-blur-md p-7 rounded-xl shadow hover:scale-[1.01] transition"
@@ -392,9 +400,16 @@ export default function TradesPage() {
                       <div className="flex-1">
                         <div className="space-y-1 text-base text-gray-200">
 
-                          <p className="text-lg font-semibold">
-                            {trade.ticker} • {trade.direction}
-                          </p>
+                          <h2 className="text-lg font-semibold">
+                            {trade.ticker} •{" "}
+                            {trade.direction || (
+                              trade.exit_price && trade.entry_price
+                                ? trade.exit_price > trade.entry_price
+                                  ? "Long"
+                                  : "Short"
+                                : "Unknown"
+                            )}
+                          </h2>
 
                           <p className={`text-lg font-semibold ${trade.pnl >= 0 ? "text-green-400" : "text-red-400"}`}>
                             {formatCurrency(trade.pnl)}
@@ -435,10 +450,12 @@ export default function TradesPage() {
                           {showAdvanced && (
                             <div className="mt-3 text-sm text-gray-300 space-y-1 border-t border-white/10 pt-3">
                               <p className="text-sm">
-                                <span className="text-gray-400">Entry:</span> {formatCurrency(trade.entry_price)}
+                                <span className="text-gray-400">Entry:</span>{" "}
+                                {entry ? Number(entry).toFixed(2) : "-"}
                               </p>
                               <p className="text-sm">
-                                <span className="text-gray-400">Exit:</span> {formatCurrency(trade.exit_price)}
+                                <span className="text-gray-400">Exit:</span>{" "}
+                                {exit ? Number(exit).toFixed(2) : "-"}
                               </p>
                               <p className="text-sm">
                                 <span className="text-gray-400">Entry Time:</span> {trade.entry_time || "-"}
@@ -541,7 +558,8 @@ export default function TradesPage() {
                     </p>
 
                   </div>
-                ))}
+                  );
+                })}
 
               </div>
             </>
