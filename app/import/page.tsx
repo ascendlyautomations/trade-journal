@@ -3,9 +3,12 @@
 import { useState } from "react"
 import Papa from "papaparse"
 import { supabase } from "@/lib/supabaseClient"
+import {
+  type CsvRow,
+  buildTradesFromParsedCsv,
+  isTradovateCsvRow,
+} from "@/lib/csvTradeParsers"
 import Navbar from "../components/Navbar"
-
-type CsvRow = Record<string, string>
 
 export default function ImportPage() {
   const [parsed, setParsed] = useState<CsvRow[]>([])
@@ -39,56 +42,16 @@ export default function ImportPage() {
       return
     }
 
-    const tradesToInsert = parsed.map((row) => {
-      console.log("🚨 RAW ROW FOR INSERT:", row)
-
-      const entry = Number(row["Entry Price"])
-      const exit = Number(row["Exit Price"])
-      const date = new Date(row["Date"])
-
-      const trade = {
-        user_id: user.id,
-
-        ticker: row["Symbol"],
-
-        entry_price: entry,
-        exit_price: exit,
-
-        entry_time: date.toISOString(),
-        exit_time: date.toISOString(),
-
-        direction: row["Direction"],
-
-        pnl: Number(row["PnL"]),
-        contracts: Number(row["Contracts"]) || 1,
-
-        rr: 0,
-        points: 0,
-
-        date: date.toISOString(),
-
-        session: "NY",
-        account_type: "Imported",
-
-        notes: "",
-        public_description: "",
-        image_url: null,
-
-        account_size: "",
-        account_id: "",
-        reviewed: false,
-      }
-
-      console.log("🚨 FINAL TRADE OBJECT:", trade)
-
-      return trade
-    })
-
-    console.log("🚨 FINAL INSERT PAYLOAD:", tradesToInsert)
+    const { isTradovate, parsedTrades } = buildTradesFromParsedCsv(
+      parsed,
+      user.id
+    )
+    console.log("TRADOVATE DETECTED:", isTradovate)
+    console.log("PARSED TRADES:", parsedTrades)
 
     const { data, error } = await supabase
       .from("trades")
-      .insert(tradesToInsert)
+      .insert(parsedTrades)
       .select()
 
     console.log("🚨 INSERT RESULT:", data)
@@ -104,6 +67,9 @@ export default function ImportPage() {
 
     setLoading(false)
   }
+
+  const isTradovateFormat =
+    parsed.length > 0 && isTradovateCsvRow(parsed[0])
 
   return (
     <>
@@ -125,11 +91,12 @@ export default function ImportPage() {
           {parsed.length > 0 ? (
             <p className="mb-3 text-xs text-gray-400">
               Parsed {parsed.length} rows from CSV
+              {isTradovateFormat ? " (Tradovate)" : ""}
             </p>
           ) : null}
           <p className="text-sm text-gray-400 mb-2">
-            Format: header row with Date, Symbol, Direction, Entry Price, Exit
-            Price, PnL, Contracts
+            Supported: Tradovate raw export (buyPrice / sellPrice) or clean CSV
+            (Date, Symbol, Direction, Entry Price, Exit Price, PnL, Contracts).
           </p>
 
           {parsed.length > 0 && (
@@ -150,10 +117,26 @@ export default function ImportPage() {
                   <tbody>
                     {parsed.slice(0, 10).map((t, i) => (
                       <tr key={i} className="border-t border-white/10">
-                        <td className="p-2">{t["Date"] || "-"}</td>
-                        <td className="p-2">{t["Symbol"] || "-"}</td>
-                        <td className="p-2">{t["Direction"] || "-"}</td>
-                        <td className="p-2">{t["PnL"] ?? "-"}</td>
+                        <td className="p-2">
+                          {isTradovateFormat
+                            ? t["boughtTimestamp"] || "-"
+                            : t["Date"] || "-"}
+                        </td>
+                        <td className="p-2">
+                          {isTradovateFormat
+                            ? t["symbol"] || "-"
+                            : t["Symbol"] || "-"}
+                        </td>
+                        <td className="p-2">
+                          {isTradovateFormat
+                            ? Number(t["sellPrice"]) > Number(t["buyPrice"])
+                              ? "Long"
+                              : "Short"
+                            : t["Direction"] || "-"}
+                        </td>
+                        <td className="p-2">
+                          {isTradovateFormat ? (t["pnl"] ?? "-") : (t["PnL"] ?? "-")}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

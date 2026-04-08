@@ -1,9 +1,35 @@
 "use client"
 
 import Navbar from "../components/Navbar"
+import InputTradeForm from "../components/InputTradeForm"
 import { useEffect, useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { useRouter } from "next/navigation"
+
+function formatMoney(value: unknown): string {
+  if (value === null || value === undefined) return "-"
+  const number = Number(value)
+  if (Number.isNaN(number)) return "-"
+  return number < 0
+    ? `-$${Math.abs(number).toLocaleString(undefined, {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })}`
+    : `$${number.toLocaleString(undefined, {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })}`
+}
+
+function formatNumber(value: unknown): string {
+  if (value === null || value === undefined) return "-"
+  const number = Number(value)
+  if (Number.isNaN(number)) return "-"
+  return number.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+}
 
 export default function TradesPage() {
   const [trades, setTrades] = useState<any[]>([])
@@ -14,6 +40,7 @@ export default function TradesPage() {
   const [timeframe, setTimeframe] = useState("all")
   const [loading, setLoading] = useState(true)
   const [selectedDate, setSelectedDate] = useState("")
+  const [editingTrade, setEditingTrade] = useState<any | null>(null)
 
   const router = useRouter()
 
@@ -97,17 +124,11 @@ export default function TradesPage() {
     setTrades(prev => prev.filter(t => t.id !== id))
   }
 
-  function formatCurrency(value: number) {
-    if (value === null || value === undefined) return "-"
-    return `${value < 0 ? "-" : ""}$${Math.abs(value).toLocaleString(undefined, {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    })}`
-  }
-
-  function formatNumber(value: number) {
-    if (value === null || value === undefined) return "-"
-    return value.toLocaleString()
+  async function handleTradeFormSaved() {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (user) await fetchTrades(user.id)
   }
 
   function filterByTime(trade: any) {
@@ -221,155 +242,167 @@ export default function TradesPage() {
             <p className="text-center text-gray-400">Loading...</p>
           ) : (
             <>
-              {/* 🔥 CONTROLS + UI SAME AS YOUR ORIGINAL */}
-              {/* (left untouched to preserve your layout perfectly) */}
-
-              {/* You can keep everything below EXACTLY as you had it */}
-              
-              {/* ---- KEEP YOUR ORIGINAL UI CODE HERE ---- */}
-              {/* 🔥 TOP CONTROLS */}
-              <div className="flex flex-nowrap overflow-x-auto gap-2 mb-5 items-center">
-
-                {/* Win/Loss */}
-                {/* 🔥 RESULT FILTER */}
-<div className="flex items-center gap-2 shrink-0">
-
-  {/* ALL BUTTON */}
-  <button
-    onClick={() => setResultFilter("all")}
-    className={`px-3 py-1.5 text-sm rounded whitespace-nowrap ${
-      resultFilter === "all"
-        ? "bg-emerald-500"
-        : "bg-white/10 hover:bg-white/20"
-    }`}
-  >
-    All
-  </button>
-
-  {/* TOGGLE */}
-  <div className="flex items-center gap-2">
-
-  <span
-    className={`text-sm font-semibold ${
-      resultFilter === "wins"
-        ? "text-green-400"
-        : "text-gray-400"
-    }`}
-  >
-    W
-  </span>
-
-  <div
-    onClick={() => {
-      if (resultFilter === "all") {
-        setResultFilter("wins")
-      } else {
-        setResultFilter(resultFilter === "wins" ? "losses" : "wins")
-      }
-    }}
-    className={`relative w-28 h-8 flex items-center rounded-full px-2 cursor-pointer transition
-      ${resultFilter === "wins" ? "bg-emerald-500" : ""}
-      ${resultFilter === "losses" ? "bg-red-500" : ""}
-      ${resultFilter === "all" ? "bg-white/10" : ""}
-    `}
-  >
-
-    <div
-      className={`bg-white w-6 h-6 rounded-full shadow-md transform transition ${
-        resultFilter === "wins"
-          ? "translate-x-0"
-          : resultFilter === "losses"
-          ? "translate-x-[4.5rem]"
-          : "translate-x-9"
-      }`}
-    />
-
-  </div>
-
-  <span
-    className={`text-sm font-semibold ${
-      resultFilter === "losses"
-        ? "text-red-400"
-        : "text-gray-400"
-    }`}
-  >
-    L
-  </span>
-
-</div>
-
-</div>
-
-                {/* Account */}
-                <select
-                  value={accountFilter}
-                  onChange={(e) => setAccountFilter(e.target.value)}
-                  className="bg-white text-black px-2 py-1.5 text-sm rounded shrink-0"
-                >
-                  <option value="all">All Accounts</option>
-                  {accounts.map((acc) => (
-                    <option key={acc}>{acc}</option>
-                  ))}
-                </select>
-
-                {/* Timeframe */}
-                {["All", "Daily", "Weekly", "Monthly"].map((t) => (
-                  <button
-                    key={t}
-                    onClick={() => setTimeframe(t)}
-                    className={`px-3 py-1.5 text-sm rounded whitespace-nowrap shrink-0 ${
-                      timeframe === t
-                        ? "bg-emerald-500"
-                        : "bg-white/10 hover:bg-white/20"
-                    }`}
-                  >
-                    {t}
-                  </button>
-                ))}
-
-                <div className="relative shrink-0">
-                  <input
-                    type="date"
-                    value={selectedDate}
-                    onChange={(e) => setSelectedDate(e.target.value)}
-                    className="bg-white text-black px-3 py-1.5 pr-8 text-sm rounded"
-                  />
-
-                  {selectedDate && (
+              <div className="w-full flex justify-center mb-5">
+                <div className="flex flex-wrap items-center justify-center gap-3 bg-white/5 backdrop-blur-md border border-white/10 rounded-xl px-4 py-3 max-w-full">
+                  <div className="flex items-center gap-2 shrink-0">
                     <button
                       type="button"
-                      onClick={() => setSelectedDate("")}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-700 hover:text-red-500 transition"
-                      aria-label="Clear date"
+                      onClick={() => setResultFilter("all")}
+                      className={`text-white px-3 py-1 rounded-md text-sm whitespace-nowrap ${
+                        resultFilter === "all"
+                          ? "bg-emerald-500 hover:bg-emerald-600"
+                          : "bg-white/10 hover:bg-white/20"
+                      }`}
                     >
-                      🗑
+                      All
                     </button>
-                  )}
+
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`text-sm font-semibold ${
+                          resultFilter === "wins"
+                            ? "text-green-400"
+                            : "text-gray-400"
+                        }`}
+                      >
+                        W
+                      </span>
+
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault()
+                            if (resultFilter === "all") {
+                              setResultFilter("wins")
+                            } else {
+                              setResultFilter(
+                                resultFilter === "wins" ? "losses" : "wins"
+                              )
+                            }
+                          }
+                        }}
+                        onClick={() => {
+                          if (resultFilter === "all") {
+                            setResultFilter("wins")
+                          } else {
+                            setResultFilter(
+                              resultFilter === "wins" ? "losses" : "wins"
+                            )
+                          }
+                        }}
+                        className={`relative w-28 h-8 flex items-center rounded-full px-2 cursor-pointer transition
+                          ${resultFilter === "wins" ? "bg-emerald-500" : ""}
+                          ${resultFilter === "losses" ? "bg-red-500" : ""}
+                          ${resultFilter === "all" ? "bg-white/10" : ""}
+                        `}
+                      >
+                        <div
+                          className={`bg-white w-6 h-6 rounded-full shadow-md transform transition ${
+                            resultFilter === "wins"
+                              ? "translate-x-0"
+                              : resultFilter === "losses"
+                                ? "translate-x-[4.5rem]"
+                                : "translate-x-9"
+                          }`}
+                        />
+                      </div>
+
+                      <span
+                        className={`text-sm font-semibold ${
+                          resultFilter === "losses"
+                            ? "text-red-400"
+                            : "text-gray-400"
+                        }`}
+                      >
+                        L
+                      </span>
+                    </div>
+                  </div>
+
+                  <select
+                    value={accountFilter}
+                    onChange={(e) => setAccountFilter(e.target.value)}
+                    className="bg-[#0f172a] hover:bg-[#1e293b] text-white border border-white/10 rounded-md px-3 py-1 text-sm shrink-0 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="all">All Accounts</option>
+                    {accounts.map((acc) => (
+                      <option key={acc}>{acc}</option>
+                    ))}
+                  </select>
+
+                  {(
+                    [
+                      { label: "All", value: "all" },
+                      { label: "Daily", value: "daily" },
+                      { label: "Weekly", value: "weekly" },
+                      { label: "Monthly", value: "monthly" },
+                    ] as const
+                  ).map(({ label, value }) => (
+                    <button
+                      type="button"
+                      key={value}
+                      onClick={() => setTimeframe(value)}
+                      className={`text-sm whitespace-nowrap shrink-0 px-3 py-1 rounded-md ${
+                        timeframe === value
+                          ? "bg-emerald-500 hover:bg-emerald-600 text-white"
+                          : "bg-white/10 hover:bg-white/20 text-white"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+
+                  <div className="relative shrink-0">
+                    <input
+                      type="date"
+                      value={selectedDate}
+                      onChange={(e) => setSelectedDate(e.target.value)}
+                      className="bg-[#0f172a] text-white border border-white/10 rounded-md px-3 py-1 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 [color-scheme:dark]"
+                      style={{ colorScheme: "dark" }}
+                    />
+
+                    {selectedDate && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedDate("")}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-300 hover:text-red-400 transition"
+                        aria-label="Clear date"
+                      >
+                        🗑
+                      </button>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowAdvanced(!showAdvanced)}
+                    className="bg-white/10 hover:bg-white/20 text-white px-3 py-1 rounded-md text-sm whitespace-nowrap shrink-0"
+                  >
+                    {showAdvanced ? "Hide Advanced" : "Show Advanced"}
+                  </button>
                 </div>
-
-                {/* Advanced */}
-                <button
-                  onClick={() => setShowAdvanced(!showAdvanced)}
-                  className="px-3 py-1.5 text-sm rounded whitespace-nowrap shrink-0 bg-blue-500 hover:bg-blue-600"
-                >
-                  {showAdvanced ? "Hide Advanced" : "Show Advanced"}
-                </button>
-
               </div>
 
               {/* 🔥 STATS BAR */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
 
-                <Stat title="Trades" value={formatNumber(totalTrades)} />
+                <Stat
+                  title="Trades"
+                  value={totalTrades.toLocaleString(undefined, {
+                    maximumFractionDigits: 0,
+                  })}
+                />
                 <Stat title="Win %" value={`${winRate.toFixed(1)}%`} />
 
                 <Stat
                   title="P&L"
-                  value={formatCurrency(totalPnL)}
+                  value={formatMoney(totalPnL)}
                   positive={totalPnL >= 0}
                 />
 
-                <Stat title="Avg RR" value={avgRR.toFixed(2)} />
+                <Stat title="Avg RR" value={formatNumber(avgRR)} />
 
               </div>
 
@@ -388,13 +421,23 @@ export default function TradesPage() {
                     className="relative bg-white/5 border border-white/10 backdrop-blur-md p-7 rounded-xl shadow hover:scale-[1.01] transition"
                   >
 
-                    <button
-                      onClick={() => deleteTrade(trade.id)}
-                      className="absolute top-3 right-3 text-white hover:text-red-400 text-xl transition"
-                      type="button"
-                    >
-                      🗑
-                    </button>
+                    <div className="absolute top-3 right-3 flex items-center gap-2">
+                      <button
+                        onClick={() => setEditingTrade({ ...trade })}
+                        className="text-sm px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-white transition"
+                        type="button"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => deleteTrade(trade.id)}
+                        className="text-white hover:text-red-400 text-xl transition leading-none"
+                        type="button"
+                        aria-label="Delete trade"
+                      >
+                        🗑
+                      </button>
+                    </div>
 
                     <div className="flex flex-col md:flex-row gap-6">
                       <div className="flex-1">
@@ -412,7 +455,7 @@ export default function TradesPage() {
                           </h2>
 
                           <p className={`text-lg font-semibold ${trade.pnl >= 0 ? "text-green-400" : "text-red-400"}`}>
-                            {formatCurrency(trade.pnl)}
+                            {formatMoney(trade.pnl)}
                           </p>
 
                           <p className="text-sm">
@@ -422,7 +465,10 @@ export default function TradesPage() {
                             <span className="text-gray-400">Points:</span> {formatNumber(trade.points)}
                           </p>
                           <p className="text-sm">
-                            <span className="text-gray-400">Contracts:</span> {trade.contracts != null ? formatNumber(Number(trade.contracts)) : "-"}
+                            <span className="text-gray-400">Contracts:</span>{" "}
+                            {trade.contracts != null
+                              ? Number(trade.contracts).toLocaleString()
+                              : "-"}
                           </p>
                           <p className="text-sm">
                             <span className="text-gray-400">Session:</span> {trade.session}
@@ -436,10 +482,11 @@ export default function TradesPage() {
                           </p>
 
                           {trade.public_description ? (
-                            <div className="mt-2 px-1">
-                              <p className="text-gray-300 text-sm line-clamp-2">
-                                {trade.public_description}
-                              </p>
+                            <div className="mt-2 px-0">
+                              <p className="text-sm text-gray-300">
+  <span className="text-gray-400">Public Description:</span>{" "}
+  {trade.public_description}
+</p>
                             </div>
                           ) : null}
 
@@ -451,11 +498,11 @@ export default function TradesPage() {
                             <div className="mt-3 text-sm text-gray-300 space-y-1 border-t border-white/10 pt-3">
                               <p className="text-sm">
                                 <span className="text-gray-400">Entry:</span>{" "}
-                                {entry ? Number(entry).toFixed(2) : "-"}
+                                {formatNumber(entry)}
                               </p>
                               <p className="text-sm">
                                 <span className="text-gray-400">Exit:</span>{" "}
-                                {exit ? Number(exit).toFixed(2) : "-"}
+                                {formatNumber(exit)}
                               </p>
                               <p className="text-sm">
                                 <span className="text-gray-400">Entry Time:</span> {trade.entry_time || "-"}
@@ -572,6 +619,14 @@ export default function TradesPage() {
             >
               <img src={selectedImage} className="max-w-[90%] max-h-[90%] rounded-lg" />
             </div>
+          )}
+
+          {editingTrade && (
+            <InputTradeForm
+              existingTrade={editingTrade}
+              onClose={() => setEditingTrade(null)}
+              onSave={() => void handleTradeFormSaved()}
+            />
           )}
 
         </div>
