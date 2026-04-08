@@ -181,7 +181,15 @@ export default function Navbar() {
                 key: "community",
                 label: "Community",
                 items: [
-                  { label: "My Profile", action: () => router.push(`/profile/${profile?.id}`) },
+                  {
+                    label: "My Profile",
+                    action: () => router.push(`/profile/${profile?.id}`),
+                    className: `${
+                      pathname.includes("/profile")
+                        ? "text-blue-400"
+                        : "text-gray-300"
+                    } hover:text-blue-300 font-medium`,
+                  },
                    { label: "Feed", action: () => router.push("/feed") },
                   {
                     label: "Messages",
@@ -228,7 +236,9 @@ export default function Navbar() {
                         ) : item.action ? (
                           <button
                             onClick={item.action}
-                            className="flex justify-between w-full px-4 py-2 hover:bg-white/10 text-left"
+                            className={`flex justify-between w-full px-4 py-2 hover:bg-white/10 text-left ${
+                              item.className || ""
+                            }`}
                           >
                             {item.label}
                             {item.badge > 0 && (

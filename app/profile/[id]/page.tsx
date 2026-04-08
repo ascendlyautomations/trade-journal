@@ -1,7 +1,7 @@
 "use client"
 
 import Navbar from "../../components/Navbar"
-import { useEffect, useState, type ChangeEvent } from "react"
+import { useEffect, useMemo, useState, type ChangeEvent } from "react"
 import { supabase } from "../../../lib/supabaseClient"
 import { useParams, useRouter } from "next/navigation"
 import {
@@ -12,6 +12,9 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts"
+import TradeSocialLayer from "../../components/TradeSocialLayer"
+import InputTradeForm from "../../components/InputTradeForm"
+import Calendar from "../../components/Calendar"
 
 function postImageSrc(imageUrl: string | null | undefined): string | null {
   const raw = imageUrl != null ? String(imageUrl).trim() : ""
@@ -20,6 +23,24 @@ function postImageSrc(imageUrl: string | null | undefined): string | null {
   const base = process.env.NEXT_PUBLIC_SUPABASE_URL
   if (!base) return null
   return `${base}/storage/v1/object/public/screenshots/${raw}`
+}
+
+function profileWallImageSrc(imageUrl: string | null | undefined): string | null {
+  const raw = imageUrl != null ? String(imageUrl).trim() : ""
+  if (!raw) return null
+  if (raw.startsWith("http")) return raw
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL
+  if (!base) return null
+  return `${base}/storage/v1/object/public/profile_posts/${raw}`
+}
+
+function storyImageSrc(imageUrl: string | null | undefined): string | null {
+  const raw = imageUrl != null ? String(imageUrl).trim() : ""
+  if (!raw) return null
+  if (raw.startsWith("http")) return raw
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL
+  if (!base) return null
+  return `${base}/storage/v1/object/public/stories/${raw}`
 }
 
 function getExperience(startDate: string | null | undefined) {
@@ -49,7 +70,399 @@ function sliceDateInput(raw: unknown): string {
   return d.toISOString().slice(0, 10)
 }
 
+function formatMoney(v: number) {
+  return v < 0
+    ? `-$${Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+    : `$${v.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+}
+
+function TradeCard({
+  trade,
+  profile,
+  canManageTrade,
+  menuOpen,
+  onMenuToggle,
+  onStartEditTrade,
+  onTogglePinTrade,
+  onSaveTrade,
+  onDeleteTrade,
+  showInteractions,
+}: {
+  trade: any
+  profile: any
+  canManageTrade?: boolean
+  menuOpen?: boolean
+  onMenuToggle?: () => void
+  onStartEditTrade?: () => void
+  onTogglePinTrade?: () => void
+  onSaveTrade?: () => void
+  onDeleteTrade?: () => void
+  showInteractions?: boolean
+}) {
+  const imageSrc = postImageSrc(trade.image_url)
+  const pnlRaw = Number(trade.pnl)
+  const pnl = Number.isFinite(pnlRaw) ? pnlRaw : NaN
+  const direction = trade.direction ?? "—"
+  const ticker = trade.ticker ?? "—"
+  const rr =
+    trade.rr != null && trade.rr !== "" ? trade.rr : "—"
+  const desc = trade.public_description
+    ? String(trade.public_description).trim()
+    : ""
+
+  return (
+    <article className="mx-auto mb-6 max-w-xl overflow-hidden rounded-xl border border-white/10 bg-[#020617]">
+      <div className="flex items-center justify-between px-4 py-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <img
+            src={profile.avatar_url || "/default-avatar.png"}
+            alt=""
+            className="h-8 w-8 shrink-0 rounded-full object-cover"
+            onError={(e) => {
+              e.currentTarget.src = "/default-avatar.png"
+            }}
+          />
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium text-white">
+              {profile.username || "User"}
+            </p>
+            <p className="text-xs font-medium text-amber-400/90">
+              Trade {trade.is_pinned ? <span className="ml-2 text-yellow-400">📌</span> : null}
+            </p>
+          </div>
+        </div>
+        {canManageTrade ? (
+          <div className="relative">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                onMenuToggle?.()
+              }}
+              className="px-1 text-gray-400 hover:text-white"
+            >
+              •••
+            </button>
+            {menuOpen ? (
+              <div
+                className="absolute right-0 z-50 mt-2 w-40 rounded-lg border border-white/10 bg-[#020617] shadow-lg"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onStartEditTrade?.()
+                  }}
+                  className="block w-full px-4 py-2 text-left text-sm hover:bg-white/10"
+                >
+                  Edit Trade
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onTogglePinTrade?.()
+                  }}
+                  className="block w-full px-4 py-2 text-left text-sm hover:bg-white/10"
+                >
+                  {trade.is_pinned ? "Unpin Trade" : "Pin Trade"}
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onSaveTrade?.()
+                  }}
+                  className="block w-full px-4 py-2 text-left text-sm hover:bg-white/10"
+                >
+                  Save Trade
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onDeleteTrade?.()
+                  }}
+                  className="block w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-white/10"
+                >
+                  Delete Trade
+                </button>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+
+      {imageSrc ? (
+        <div className="relative w-full bg-black/40">
+          <img
+            src={imageSrc}
+            alt=""
+            className="max-h-[400px] w-full object-cover"
+          />
+        </div>
+      ) : (
+        <div className="flex min-h-[80px] items-center justify-center bg-gradient-to-br from-white/5 to-white/[0.02] text-xs text-gray-500">
+          No screenshot
+        </div>
+      )}
+
+      {showInteractions ? (
+        <div className="border-t border-white/10 px-4 py-3">
+          <TradeSocialLayer
+            tradeId={trade.id}
+            currentUserId={trade.currentUserId}
+            tradeOwnerUserId={trade.user_id}
+          />
+        </div>
+      ) : null}
+
+      <div className="space-y-1 px-4 py-3">
+        <p className="text-sm text-gray-100">
+          <span className="font-medium text-white">{ticker}</span>
+          {" · "}
+          <span>{direction}</span>
+          {" · "}
+          <span
+            className={
+              Number.isFinite(pnl)
+                ? pnl >= 0
+                  ? "text-emerald-400"
+                  : "text-red-400"
+                : "text-gray-400"
+            }
+          >
+            {Number.isFinite(pnl) ? formatMoney(pnl) : "—"}
+          </span>
+          {" · RR "}
+          {rr}
+        </p>
+        {desc ? (
+          <p className="text-sm leading-relaxed text-gray-300">{desc}</p>
+        ) : null}
+        <p className="text-xs text-gray-500">
+          {new Date(trade.created_at).toLocaleString()}
+        </p>
+      </div>
+    </article>
+  )
+}
+
+function PostCard({
+  post,
+  profile,
+  canManagePost,
+  menuOpen,
+  onMenuToggle,
+  onStartEditPost,
+  onTogglePinPost,
+  onSavePost,
+  onDeletePost,
+  showInteractions,
+  onLike,
+  onToggleComments,
+  commentsOpen,
+  likeMeta,
+  comments,
+  commentText,
+  onCommentChange,
+  onCommentSubmit,
+  commentSubmitting,
+}: {
+  post: any
+  profile: any
+  canManagePost?: boolean
+  menuOpen?: boolean
+  onMenuToggle?: () => void
+  onStartEditPost?: () => void
+  onTogglePinPost?: () => void
+  onSavePost?: () => void
+  onDeletePost?: () => void
+  showInteractions?: boolean
+  onLike?: () => void
+  onToggleComments?: () => void
+  commentsOpen?: boolean
+  likeMeta?: { count: number; liked: boolean }
+  comments?: any[]
+  commentText?: string
+  onCommentChange?: (value: string) => void
+  onCommentSubmit?: () => void
+  commentSubmitting?: boolean
+}) {
+  const imgSrc = profileWallImageSrc(post.image_url)
+
+  return (
+    <div className="mx-auto max-w-xl rounded-xl border border-white/10 bg-[#020617] p-4">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <img
+            src={profile.avatar_url || "/default-avatar.png"}
+            alt=""
+            className="h-8 w-8 rounded-full object-cover"
+            onError={(e) => {
+              e.currentTarget.src = "/default-avatar.png"
+            }}
+          />
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium text-white">
+              {profile.username || "User"}
+            </p>
+            <p className="text-xs font-medium text-sky-400/90">
+              Post {post.is_pinned ? <span className="ml-2 text-yellow-400">📌</span> : null}
+            </p>
+          </div>
+        </div>
+        {canManagePost ? (
+          <div className="relative">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                onMenuToggle?.()
+              }}
+              className="px-1 text-gray-400 hover:text-white"
+            >
+              •••
+            </button>
+            {menuOpen ? (
+              <div
+                className="absolute right-0 z-50 mt-2 w-40 rounded-lg border border-white/10 bg-[#020617] shadow-lg"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onStartEditPost?.()
+                  }}
+                  className="block w-full px-4 py-2 text-left text-sm hover:bg-white/10"
+                >
+                  Edit Post
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onTogglePinPost?.()
+                  }}
+                  className="block w-full px-4 py-2 text-left text-sm hover:bg-white/10"
+                >
+                  {post.is_pinned ? "Unpin Post" : "Pin Post"}
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onSavePost?.()
+                  }}
+                  className="block w-full px-4 py-2 text-left text-sm hover:bg-white/10"
+                >
+                  Save Post
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onDeletePost?.()
+                  }}
+                  className="block w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-white/10"
+                >
+                  Delete Post
+                </button>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+
+      {post.content ? (
+        <p className="mb-3 text-sm leading-relaxed text-gray-200">
+          {post.content}
+        </p>
+      ) : null}
+
+      {imgSrc ? (
+        <img
+          src={imgSrc}
+          alt=""
+          className="max-h-[420px] w-full rounded-lg object-cover"
+          onError={(e) => {
+            e.currentTarget.style.display = "none"
+          }}
+        />
+      ) : null}
+
+      <p className="mt-2 text-xs text-gray-500">
+        {new Date(post.created_at).toLocaleString()}
+      </p>
+      {showInteractions ? (
+        <div className="mt-3 border-t border-white/10 pt-3">
+          <div className="flex items-center gap-4 px-1 text-sm">
+            <button
+              type="button"
+              onClick={onLike}
+              className="flex items-center gap-1 text-gray-300 hover:text-white"
+            >
+              <span>{likeMeta?.liked ? "❤️" : "🤍"}</span>
+              <span className="tabular-nums">{likeMeta?.count ?? 0}</span>
+            </button>
+            <button
+              type="button"
+              onClick={onToggleComments}
+              className="text-gray-300 hover:text-white"
+            >
+              💬 {comments?.length ?? 0}
+            </button>
+          </div>
+          <p className="px-1 pt-2 text-sm font-medium text-white">
+            {(likeMeta?.count ?? 0).toLocaleString()} likes
+          </p>
+          {commentsOpen ? (
+            <div className="mt-3 space-y-3">
+              <div className="max-h-36 space-y-1 overflow-y-auto text-sm text-gray-300">
+                {(comments || []).map((c: any) => (
+                  <p key={c.id}>
+                    <span className="font-medium text-white">
+                      {c.profiles?.username || "User"}
+                    </span>{" "}
+                    {c.content}
+                  </p>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <input
+                  value={commentText || ""}
+                  onChange={(e) => onCommentChange?.(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault()
+                      onCommentSubmit?.()
+                    }
+                  }}
+                  placeholder="Add a comment..."
+                  className="flex-1 rounded-lg border border-white/10 bg-[#0f172a] px-3 py-2 text-sm text-white placeholder:text-gray-500"
+                />
+                <button
+                  type="button"
+                  onClick={onCommentSubmit}
+                  disabled={commentSubmitting || !(commentText || "").trim()}
+                  className="rounded-lg bg-blue-500 px-3 py-2 text-sm text-white disabled:opacity-40"
+                >
+                  Post
+                </button>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 export default function ProfilePage() {
+  const PAGE_SIZE = 5
+
   const params = useParams()
   const router = useRouter()
   const rawId = params.id
@@ -58,6 +471,9 @@ export default function ProfilePage() {
 
   const [profile, setProfile] = useState<any>(null)
   const [trades, setTrades] = useState<any[]>([])
+  const [allTrades, setAllTrades] = useState<any[]>([])
+  const [page, setPage] = useState(0)
+  const [hasMore, setHasMore] = useState(true)
   const [loading, setLoading] = useState(true)
   const [followersCount, setFollowersCount] = useState(0)
   const [followingCount, setFollowingCount] = useState(0)
@@ -69,9 +485,16 @@ export default function ProfilePage() {
   const [showFollowing, setShowFollowing] = useState(false)
   const [followersModalUsers, setFollowersModalUsers] = useState<any[]>([])
   const [followingModalUsers, setFollowingModalUsers] = useState<any[]>([])
-  const [posts, setPosts] = useState<any[]>([])
-  const [activeTab, setActiveTab] = useState<"public" | "stats">("public")
-  const [selectedPost, setSelectedPost] = useState<any>(null)
+  const [wallPosts, setWallPosts] = useState<any[]>([])
+  const [activeTab, setActiveTab] = useState<
+    "trades" | "posts" | "calendar" | "stats"
+  >(
+    "trades"
+  )
+  const [showCreatePost, setShowCreatePost] = useState(false)
+  const [postContent, setPostContent] = useState("")
+  const [postImage, setPostImage] = useState<File | null>(null)
+  const [creatingPost, setCreatingPost] = useState(false)
   const [showProfileSettings, setShowProfileSettings] = useState(false)
   const [profileForm, setProfileForm] = useState({
     bio: "",
@@ -80,30 +503,66 @@ export default function ProfilePage() {
     avatar: "",
   })
   const [savingProfile, setSavingProfile] = useState(false)
+  const [stories, setStories] = useState<any[]>([])
+  const [showCreateStory, setShowCreateStory] = useState(false)
+  const [storyFile, setStoryFile] = useState<File | null>(null)
+  const [activeStory, setActiveStory] = useState<any | null>(null)
+  const [creatingStory, setCreatingStory] = useState(false)
+  const [openCommentsState, setOpenComments] = useState<
+    Record<string, boolean>
+  >({})
+  const [likesByPost, setLikesByPost] = useState<
+    Record<string, { count: number; liked: boolean }>
+  >({})
+  const [commentsByPost, setCommentsByPost] = useState<Record<string, any[]>>({})
+  const [commentDraft, setCommentDraft] = useState<Record<string, string>>({})
+  const [commentSubmitting, setCommentSubmitting] = useState<
+    Record<string, boolean>
+  >({})
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null)
+  const [openTradeMenuId, setOpenTradeMenuId] = useState<string | null>(null)
+  const [editingPost, setEditingPost] = useState<any | null>(null)
+  const [editContent, setEditContent] = useState("")
+  const [editingTrade, setEditingTrade] = useState<any | null>(null)
+  const [calendarTrades, setCalendarTrades] = useState<any[]>([])
+  const [accountFilter, setAccountFilter] = useState("All")
 
-  const fetchTrades = async (forProfileId: string) => {
-    console.log("ProfileId being used:", forProfileId)
+  const fetchTrades = async (forProfileId: string, reset = false) => {
+    const from = reset ? 0 : page * PAGE_SIZE
+    const to = from + PAGE_SIZE - 1
 
     const { data, error } = await supabase
       .from("trades")
       .select("*")
       .eq("user_id", forProfileId)
       .order("created_at", { ascending: false })
-
-    console.log("Trades returned:", data)
+      .range(from, to)
 
     if (error) {
       console.error("Trade fetch error FULL:", JSON.stringify(error, null, 2))
       return
     }
 
-    setTrades(data || [])
+    if (reset) {
+      setTrades(data || [])
+      setPage(1)
+      setHasMore((data || []).length >= PAGE_SIZE)
+      return
+    }
+
+    setTrades((prev) => [...prev, ...(data || [])])
+    setPage((prev) => prev + 1)
+    if (!data || data.length < PAGE_SIZE) {
+      setHasMore(false)
+    }
   }
 
   useEffect(() => {
     if (!profileId) {
       setProfile(null)
       setTrades([])
+      setPage(0)
+      setHasMore(true)
       setLoading(false)
       return
     }
@@ -112,8 +571,9 @@ export default function ProfilePage() {
 
     setProfile(null)
     setTrades([])
-    setPosts([])
-    setSelectedPost(null)
+    setPage(0)
+    setHasMore(true)
+    setWallPosts([])
     setLoading(true)
 
     fetchProfile(profileId)
@@ -123,79 +583,124 @@ export default function ProfilePage() {
     console.log("Trades:", trades)
   }, [trades])
 
-  async function fetchPosts(forProfileId: string) {
-    const { data } = await supabase
-      .from("posts")
-      .select("*")
-      .eq("user_id", forProfileId)
-      .order("created_at", { ascending: false })
-
-    const list = data || []
-    if (!list.length) {
-      setPosts([])
+  useEffect(() => {
+    if (!profile?.id) {
+      setWallPosts([])
       return
     }
 
-    const ids = list.map((p) => p.id)
+    let cancelled = false
 
-    const [
-      { data: likesRows },
-      { data: commentsRows },
-      { count: likesExactCount },
-    ] = await Promise.all([
-      supabase.from("likes").select("post_id, user_id").in("post_id", ids),
-      supabase
-        .from("comments")
-        .select("*, profiles(username)")
-        .in("post_id", ids)
-        .order("created_at", { ascending: true }),
-      supabase
-        .from("likes")
-        .select("*", { count: "exact", head: true })
-        .in("post_id", ids),
-    ])
-    void likesExactCount
+    async function fetchWallPosts() {
+      const { data, error } = await supabase
+        .from("profile_posts")
+        .select("*")
+        .eq("user_id", profile.id)
+        .order("created_at", { ascending: false })
 
-    const likesCountByPost: Record<string, number> = {}
-    for (const id of ids) {
-      likesCountByPost[String(id)] = 0
-    }
-    for (const row of likesRows || []) {
-      const pid = String(row.post_id)
-      likesCountByPost[pid] = (likesCountByPost[pid] || 0) + 1
-    }
-
-    const commentsMap: Record<string, any[]> = {}
-    for (const id of ids) {
-      commentsMap[String(id)] = []
-    }
-    for (const c of commentsRows || []) {
-      const pid = String(c.post_id)
-      if (!commentsMap[pid]) commentsMap[pid] = []
-      commentsMap[pid].push(c)
-    }
-
-    const enriched = list.map((p) => {
-      const key = String(p.id)
-      return {
-        ...p,
-        likesCount: likesCountByPost[key] ?? 0,
-        comments: commentsMap[key] ?? [],
+      if (cancelled) return
+      if (error) {
+        console.error("profile_posts fetch:", error)
+        setWallPosts([])
+        return
       }
-    })
-    setPosts(enriched)
-  }
+      setWallPosts(data || [])
+    }
 
-  useEffect(() => {
-    if (profile?.id) {
-      fetchPosts(profile.id)
-    } else {
-      setPosts([])
+    void fetchWallPosts()
+
+    return () => {
+      cancelled = true
     }
   }, [profile?.id])
 
   useEffect(() => {
-    if (selectedPost || showProfileSettings) {
+    if (!profile?.id) {
+      setAllTrades([])
+      return
+    }
+
+    let cancelled = false
+    async function fetchAllTrades() {
+      const { data, error } = await supabase
+        .from("trades")
+        .select("*")
+        .eq("user_id", profile.id)
+
+      if (cancelled) return
+      if (error) {
+        console.error("all trades fetch:", error)
+        setAllTrades([])
+        return
+      }
+      setAllTrades(data || [])
+    }
+
+    void fetchAllTrades()
+    return () => {
+      cancelled = true
+    }
+  }, [profile?.id])
+
+  useEffect(() => {
+    if (!profile?.id) {
+      setCalendarTrades([])
+      return
+    }
+
+    let cancelled = false
+    async function fetchCalendarTrades() {
+      const { data, error } = await supabase
+        .from("trades")
+        .select("id, created_at, pnl, ticker, direction")
+        .eq("user_id", profile.id)
+
+      if (cancelled) return
+      if (error) {
+        console.error("calendar trades fetch:", error)
+        setCalendarTrades([])
+        return
+      }
+
+      setCalendarTrades(data || [])
+    }
+
+    void fetchCalendarTrades()
+    return () => {
+      cancelled = true
+    }
+  }, [profile?.id])
+
+  async function fetchStories() {
+    const since = new Date()
+    since.setHours(since.getHours() - 24)
+
+    const { data, error } = await supabase
+      .from("stories")
+      .select("*, profiles(username, avatar_url)")
+      .gte("created_at", since.toISOString())
+      .order("created_at", { ascending: false })
+
+    if (error) {
+      console.error("stories fetch:", error)
+      setStories([])
+      return
+    }
+    setStories(data || [])
+  }
+
+  useEffect(() => {
+    void fetchStories()
+  }, [])
+
+  useEffect(() => {
+    if (
+      showProfileSettings ||
+      showCreatePost ||
+      showCreateStory ||
+      activeStory ||
+      editingPost
+    ) {
       document.body.style.overflow = "hidden"
       return () => {
         document.body.style.overflow = ""
@@ -203,16 +708,29 @@ export default function ProfilePage() {
     }
     document.body.style.overflow = ""
     return undefined
-  }, [selectedPost, showProfileSettings])
+  }, [showProfileSettings, showCreatePost, showCreateStory, activeStory, editingPost])
 
   useEffect(() => {
-    if (!showProfileSettings) return
+    if (
+      !showProfileSettings &&
+      !showCreatePost &&
+      !showCreateStory &&
+      !activeStory &&
+      !editingPost
+    )
+      return
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setShowProfileSettings(false)
+      if (e.key === "Escape") {
+        setShowProfileSettings(false)
+        setShowCreatePost(false)
+        setShowCreateStory(false)
+        setActiveStory(null)
+        setEditingPost(null)
+      }
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [showProfileSettings])
+  }, [showProfileSettings, showCreatePost, showCreateStory, activeStory, editingPost])
 
   useEffect(() => {
     if (!profile || !currentUserId || currentUserId !== profile.id) return
@@ -239,7 +757,8 @@ export default function ProfilePage() {
     if (!prof || error) {
       setProfile(null)
       setTrades([])
-      setPosts([])
+      setPage(0)
+      setHasMore(false)
       setFollowersCount(0)
       setFollowingCount(0)
       setIsFollowing(false)
@@ -280,9 +799,11 @@ export default function ProfilePage() {
       !isPrivateProfile || uid === forProfileId || following
 
     if (canLoadTrades) {
-      await fetchTrades(forProfileId)
+      await fetchTrades(forProfileId, true)
     } else {
       setTrades([])
+      setPage(0)
+      setHasMore(false)
     }
 
     setLoading(false)
@@ -304,6 +825,8 @@ export default function ProfilePage() {
       setIsFollowing(false)
       if (profile.is_private === true) {
         setTrades([])
+        setPage(0)
+        setHasMore(false)
       }
     } else {
       await supabase.from("followers").insert({
@@ -313,7 +836,9 @@ export default function ProfilePage() {
 
       setIsFollowing(true)
       if (profile.is_private === true && profileId) {
-        await fetchTrades(profileId)
+        setPage(0)
+        setHasMore(true)
+        await fetchTrades(profileId, true)
       }
     }
 
@@ -507,37 +1032,407 @@ export default function ProfilePage() {
     }
   }
 
+  async function handleCreatePost() {
+    if (!currentUserId || !profile || currentUserId !== profile.id) return
+
+    const text = postContent.trim()
+    if (!text && !postImage) {
+      alert("Add some text or an image.")
+      return
+    }
+
+    setCreatingPost(true)
+    let imageUrl: string | null = null
+
+    if (postImage) {
+      const fileExt = postImage.name.split(".").pop() || "jpg"
+      const fileName = `${currentUserId}/${Date.now()}.${fileExt}`
+
+      const { error: upErr } = await supabase.storage
+        .from("profile_posts")
+        .upload(fileName, postImage, { upsert: true })
+
+      if (upErr) {
+        console.error(upErr)
+        alert(upErr.message)
+        setCreatingPost(false)
+        return
+      }
+
+      const base = process.env.NEXT_PUBLIC_SUPABASE_URL
+      imageUrl = base
+        ? `${base}/storage/v1/object/public/profile_posts/${fileName}`
+        : null
+    }
+
+    const { error } = await supabase.from("profile_posts").insert({
+      user_id: currentUserId,
+      content: text || null,
+      image_url: imageUrl,
+    })
+
+    setCreatingPost(false)
+
+    if (error) {
+      console.error(error)
+      alert(error.message)
+      return
+    }
+
+    setShowCreatePost(false)
+    setPostContent("")
+    setPostImage(null)
+
+    const { data } = await supabase
+      .from("profile_posts")
+      .select("*")
+      .eq("user_id", profile.id)
+      .order("created_at", { ascending: false })
+
+    setWallPosts(data || [])
+  }
+
+  async function handleCreateStory() {
+    if (!currentUserId || !storyFile) return
+
+    setCreatingStory(true)
+    const fileExt = storyFile.name.split(".").pop() || "jpg"
+    const fileName = `${currentUserId}/${Date.now()}.${fileExt}`
+
+    const { error: uploadError } = await supabase.storage
+      .from("stories")
+      .upload(fileName, storyFile, { upsert: true })
+
+    if (uploadError) {
+      console.error(uploadError)
+      alert(uploadError.message)
+      setCreatingStory(false)
+      return
+    }
+
+    const base = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const publicUrl = base
+      ? `${base}/storage/v1/object/public/stories/${fileName}`
+      : null
+
+    if (!publicUrl) {
+      setCreatingStory(false)
+      alert("Missing NEXT_PUBLIC_SUPABASE_URL")
+      return
+    }
+
+    const { error: insertError } = await supabase.from("stories").insert({
+      user_id: currentUserId,
+      image_url: publicUrl,
+    })
+
+    setCreatingStory(false)
+
+    if (insertError) {
+      console.error(insertError)
+      alert(insertError.message)
+      return
+    }
+
+    setShowCreateStory(false)
+    setStoryFile(null)
+    await fetchStories()
+  }
+
+  const posts = wallPosts
+  const sortedPosts = [...posts].sort((a, b) => {
+    if (a.is_pinned && !b.is_pinned) return -1
+    if (!a.is_pinned && b.is_pinned) return 1
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  })
+
+  async function loadPostEngagement(postList: any[]) {
+    if (!postList.length) {
+      setLikesByPost({})
+      setCommentsByPost({})
+      return
+    }
+    const ids = postList.map((p) => p.id)
+    const [{ data: likesRows }, { data: commentsRows }] = await Promise.all([
+      supabase.from("likes").select("post_id, user_id").in("post_id", ids),
+      supabase
+        .from("comments")
+        .select("*, profiles(username)")
+        .in("post_id", ids)
+        .order("created_at", { ascending: true }),
+    ])
+
+    const likesMap: Record<string, { count: number; liked: boolean }> = {}
+    for (const id of ids) {
+      likesMap[String(id)] = { count: 0, liked: false }
+    }
+    for (const row of likesRows || []) {
+      const key = String(row.post_id)
+      if (!likesMap[key]) likesMap[key] = { count: 0, liked: false }
+      likesMap[key].count += 1
+      if (currentUserId && row.user_id === currentUserId) likesMap[key].liked = true
+    }
+
+    const commentsMap: Record<string, any[]> = {}
+    for (const id of ids) commentsMap[String(id)] = []
+    for (const row of commentsRows || []) {
+      const key = String(row.post_id)
+      if (!commentsMap[key]) commentsMap[key] = []
+      commentsMap[key].push(row)
+    }
+
+    setLikesByPost(likesMap)
+    setCommentsByPost(commentsMap)
+  }
+
+  useEffect(() => {
+    void loadPostEngagement(posts)
+  }, [currentUserId, posts.length])
+
+  useEffect(() => {
+    const handleClick = () => {
+      setOpenMenuId(null)
+      setOpenTradeMenuId(null)
+    }
+    window.addEventListener("click", handleClick)
+    return () => window.removeEventListener("click", handleClick)
+  }, [])
+
+  async function handleLike(id: string, type: "post" | "trade") {
+    if (!currentUserId || type !== "post") return
+    const key = String(id)
+    const meta = likesByPost[key] || { count: 0, liked: false }
+    if (meta.liked) {
+      const { error } = await supabase
+        .from("likes")
+        .delete()
+        .eq("post_id", key)
+        .eq("user_id", currentUserId)
+      if (error) return console.error(error)
+      setLikesByPost((prev) => ({
+        ...prev,
+        [key]: { count: Math.max(0, meta.count - 1), liked: false },
+      }))
+      return
+    }
+    const { error } = await supabase
+      .from("likes")
+      .insert({ post_id: key, user_id: currentUserId })
+    if (error) return console.error(error)
+    setLikesByPost((prev) => ({
+      ...prev,
+      [key]: { count: meta.count + 1, liked: true },
+    }))
+  }
+
+  const openComments = (id: string, type: "post" | "trade") => {
+    const key = `${type}:${id}`
+    setOpenComments((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }))
+  }
+
+  async function submitComment(id: string, type: "post" | "trade") {
+    if (!currentUserId || type !== "post") return
+    const key = String(id)
+    const text = (commentDraft[key] || "").trim()
+    if (!text) return
+    setCommentSubmitting((s) => ({ ...s, [key]: true }))
+    const { data, error } = await supabase
+      .from("comments")
+      .insert({
+        post_id: key,
+        user_id: currentUserId,
+        content: text,
+      })
+      .select("*, profiles(username)")
+      .single()
+    setCommentSubmitting((s) => ({ ...s, [key]: false }))
+    if (error) return console.error(error)
+    setCommentsByPost((prev) => ({ ...prev, [key]: [...(prev[key] || []), data] }))
+    setCommentDraft((prev) => ({ ...prev, [key]: "" }))
+  }
+
+  async function handleDeletePost(postId: string) {
+    const confirmDelete = window.confirm("Delete this post?")
+    if (!confirmDelete) return
+
+    const { error } = await supabase
+      .from("profile_posts")
+      .delete()
+      .eq("id", postId)
+
+    if (error) {
+      console.error(error)
+      return
+    }
+
+    setWallPosts((prev) => prev.filter((p) => String(p.id) !== String(postId)))
+    setOpenMenuId(null)
+  }
+
+  async function handleUpdatePost() {
+    if (!editingPost) return
+    const { error } = await supabase
+      .from("profile_posts")
+      .update({ content: editContent })
+      .eq("id", editingPost.id)
+
+    if (error) {
+      console.error(error)
+      return
+    }
+
+    setWallPosts((prev) =>
+      prev.map((p) =>
+        String(p.id) === String(editingPost.id) ? { ...p, content: editContent } : p
+      )
+    )
+    setEditingPost(null)
+  }
+
+  async function handlePinPost(post: any) {
+    const { error } = await supabase
+      .from("profile_posts")
+      .update({ is_pinned: !post.is_pinned })
+      .eq("id", post.id)
+
+    if (error) {
+      console.error(error)
+      return
+    }
+
+    setWallPosts((prev) =>
+      prev.map((p) =>
+        String(p.id) === String(post.id) ? { ...p, is_pinned: !p.is_pinned } : p
+      )
+    )
+    setOpenMenuId(null)
+  }
+
+  async function handleSavePost(postId: string) {
+    if (!currentUserId) return
+    const { error } = await supabase.from("saved_posts").insert({
+      user_id: currentUserId,
+      post_id: postId,
+    })
+    if (error) console.error(error)
+    setOpenMenuId(null)
+  }
+
+  function openEditTradeModal(trade: any) {
+    setEditingTrade({ ...trade })
+  }
+
+  async function handlePinTrade(trade: any) {
+    const { error } = await supabase
+      .from("trades")
+      .update({ is_pinned: !trade.is_pinned })
+      .eq("id", trade.id)
+
+    if (error) {
+      console.error(error)
+      return
+    }
+
+    setTrades((prev) =>
+      prev.map((t) =>
+        String(t.id) === String(trade.id) ? { ...t, is_pinned: !t.is_pinned } : t
+      )
+    )
+    setOpenTradeMenuId(null)
+  }
+
+  async function handleSaveTrade(tradeId: string) {
+    if (!currentUserId) return
+    const { error } = await supabase.from("saved_trades").insert({
+      user_id: currentUserId,
+      trade_id: tradeId,
+    })
+    if (error) console.error(error)
+    setOpenTradeMenuId(null)
+  }
+
+  async function handleDeleteTrade(tradeId: string) {
+    const confirmDelete = window.confirm("Delete this trade?")
+    if (!confirmDelete) return
+    const { error } = await supabase.from("trades").delete().eq("id", tradeId)
+    if (error) {
+      console.error(error)
+      return
+    }
+    setTrades((prev) => prev.filter((t) => String(t.id) !== String(tradeId)))
+    setOpenTradeMenuId(null)
+  }
+
   const canViewTrades =
     !!profile &&
     (profile.is_private !== true ||
       currentUserId === profile.id ||
       isFollowing)
 
-  const totalTrades = canViewTrades ? trades.length : 0
-  const wins = canViewTrades ? trades.filter((t) => t.pnl > 0).length : 0
+  const storyRings = useMemo(() => {
+    const byUser = new Map<string, any>()
+    for (const s of stories) {
+      const uid = s.user_id != null ? String(s.user_id) : ""
+      if (!uid) continue
+      const prev = byUser.get(uid)
+      if (
+        !prev ||
+        new Date(s.created_at).getTime() > new Date(prev.created_at).getTime()
+      ) {
+        byUser.set(uid, s)
+      }
+    }
+    return [...byUser.values()].sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    )
+  }, [stories])
+
+  const sortedTrades = [...trades].sort((a, b) => {
+    if (a.is_pinned && !b.is_pinned) return -1
+    if (!a.is_pinned && b.is_pinned) return 1
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  })
+
+  const filteredTrades =
+    accountFilter === "All"
+      ? allTrades
+      : allTrades.filter(
+          (t) =>
+            t.account_type &&
+            String(t.account_type).toLowerCase() === accountFilter.toLowerCase()
+        )
+
+  const statsVisible = canViewTrades
+
+  const totalTrades = canViewTrades ? filteredTrades.length : 0
+  const wins = canViewTrades ? filteredTrades.filter((t) => t.pnl > 0).length : 0
   const totalPnL = canViewTrades
-    ? trades.reduce((sum, t) => sum + (t.pnl || 0), 0)
+    ? filteredTrades.reduce((sum, t) => sum + (t.pnl || 0), 0)
     : 0
   const winRate =
     canViewTrades && totalTrades ? (wins / totalTrades) * 100 : 0
   const avgRR =
     canViewTrades && totalTrades
-      ? trades.reduce((sum, t) => sum + (Number(t.rr) || 0), 0) /
+      ? filteredTrades.reduce((sum, t) => sum + (Number(t.rr) || 0), 0) /
         totalTrades
       : 0
 
-  const biggestWin = trades.length
-    ? Math.max(...trades.map((t) => t.pnl || 0))
+  const biggestWin = filteredTrades.length
+    ? Math.max(...filteredTrades.map((t) => t.pnl || 0))
     : 0
 
-  const biggestLoss = trades.length
-    ? Math.min(...trades.map((t) => t.pnl || 0))
+  const biggestLoss = filteredTrades.length
+    ? Math.min(...filteredTrades.map((t) => t.pnl || 0))
     : 0
 
-  const longTrades = trades.filter((t) => t.direction === "Long").length
-  const shortTrades = trades.filter((t) => t.direction === "Short").length
+  const longTrades = filteredTrades.filter((t) => t.direction === "Long").length
+  const shortTrades = filteredTrades.filter((t) => t.direction === "Short").length
 
-  const equityData = trades
+  const equityData = filteredTrades
     .slice()
     .reverse()
     .reduce(
@@ -594,198 +1489,377 @@ export default function ProfilePage() {
       <Navbar />
 
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100">
-        <div className="mx-auto max-w-7xl space-y-4 p-5">
-        <div className="mx-auto max-w-5xl">
+        <div className="mx-auto max-w-5xl space-y-4 px-4 py-6 sm:px-6 lg:px-8">
+          <div className="bg-white/5 border border-white/10 rounded-xl p-6 backdrop-blur-md">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex min-w-0 flex-1 flex-col items-center gap-6 sm:flex-row sm:items-center sm:gap-6">
+                <img
+                  src={profile.avatar_url || "/default-avatar.png"}
+                  alt=""
+                  onError={(e) => {
+                    e.currentTarget.src = "/default-avatar.png"
+                  }}
+                  className="h-20 w-20 shrink-0 rounded-full border border-white/10 object-cover"
+                />
 
-          <div className="mb-10 flex items-start gap-4">
-            <img
-              src={profile.avatar_url || "/default-avatar.png"}
-              alt=""
-              onError={(e) => {
-                e.currentTarget.src = "/default-avatar.png"
-              }}
-              className="w-16 h-16 shrink-0 rounded-full object-cover"
-            />
+                <div className="min-w-0 flex-1 text-center sm:text-left">
+                  <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start sm:gap-3">
+                    <h2 className="text-xl font-semibold text-white">
+                      {profile.username || "User"}
+                    </h2>
 
-            <div className="min-w-0 flex-1">
-              <div className="flex w-full flex-col">
-                <div className="flex flex-wrap items-center gap-3">
-                  <h1 className="text-xl font-semibold leading-tight">
-                    {profile.name || "User"}
-                  </h1>
+                    {currentUserId === profile.id && (
+                      <button
+                        type="button"
+                        onClick={() => setShowProfileSettings(true)}
+                        className="rounded-md bg-white/10 px-3 py-1 text-sm text-gray-100 hover:bg-white/20"
+                      >
+                        Edit Profile
+                      </button>
+                    )}
 
-                  {currentUserId === profile.id && (
-                    <button
-                      type="button"
-                      onClick={() => setShowProfileSettings(true)}
-                      className="bg-white/10 hover:bg-white/20 px-3 py-1 rounded-md text-sm text-gray-100"
+                    {currentUserId && currentUserId !== profile.id && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={handleFollowToggle}
+                          disabled={followBusy}
+                          className={`rounded-md px-3 py-1 text-sm font-medium text-white disabled:opacity-50 ${
+                            isFollowing
+                              ? "bg-red-500 hover:bg-red-600"
+                              : "bg-blue-500 hover:bg-blue-600"
+                          }`}
+                        >
+                          {isFollowing ? "Unfollow" : "Follow"}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={handleMessage}
+                          disabled={messageBusy}
+                          className="rounded-md border border-white/10 bg-white/10 px-3 py-1 text-sm text-gray-100 hover:bg-white/20 disabled:opacity-50"
+                        >
+                          Message
+                        </button>
+                      </>
+                    )}
+                  </div>
+
+                  {profile.name && profile.name !== profile.username ? (
+                    <p className="mt-1 text-sm text-gray-400">{profile.name}</p>
+                  ) : null}
+
+                  <p className="mt-1 text-sm text-gray-400">
+                    {profile.trading_style ||
+                      profile.trading_model ||
+                      "—"}{" "}
+                    • {getExperience(profile.started_trading) || "N/A"}
+                  </p>
+
+                  <div className="mt-2 flex flex-wrap items-center justify-center gap-4 text-sm text-gray-400 sm:justify-start">
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      onClick={openFollowersModal}
+                      onKeyDown={(e) =>
+                        e.key === "Enter" && openFollowersModal()
+                      }
+                      className="cursor-pointer tabular-nums hover:text-white"
                     >
-                      Edit Profile
-                    </button>
-                  )}
+                      <span className="font-semibold text-gray-200">
+                        {followersCount}
+                      </span>{" "}
+                      Followers
+                    </span>
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      onClick={openFollowingModal}
+                      onKeyDown={(e) =>
+                        e.key === "Enter" && openFollowingModal()
+                      }
+                      className="cursor-pointer tabular-nums hover:text-white"
+                    >
+                      <span className="font-semibold text-gray-200">
+                        {followingCount}
+                      </span>{" "}
+                      Following
+                    </span>
+                  </div>
 
-                  {currentUserId && currentUserId !== profile.id && (
-                    <div className="ml-2 flex gap-2">
-                      <button
-                        type="button"
-                        onClick={handleFollowToggle}
-                        disabled={followBusy}
-                        className={`rounded px-3 py-1 text-sm font-semibold text-gray-100 disabled:opacity-50 ${
-                          isFollowing ? "bg-red-500 hover:bg-red-600" : "bg-blue-500 hover:bg-blue-600"
-                        }`}
-                      >
-                        {isFollowing ? "Unfollow" : "Follow"}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={handleMessage}
-                        disabled={messageBusy}
-                        className="rounded border border-white/10 bg-white/10 px-3 py-1 text-sm text-gray-100 hover:bg-white/15 disabled:opacity-50"
-                      >
-                        Message
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                <p className="text-sm text-gray-400">@{profile.username}</p>
-
-                <div className="mt-1 flex gap-4 text-sm text-gray-400">
-                  <span
-                    role="button"
-                    tabIndex={0}
-                    onClick={openFollowersModal}
-                    onKeyDown={(e) =>
-                      e.key === "Enter" && openFollowersModal()
-                    }
-                    className="cursor-pointer hover:text-white"
-                  >
-                    {followersCount} Followers
-                  </span>
-                  <span
-                    role="button"
-                    tabIndex={0}
-                    onClick={openFollowingModal}
-                    onKeyDown={(e) =>
-                      e.key === "Enter" && openFollowingModal()
-                    }
-                    className="cursor-pointer hover:text-white"
-                  >
-                    {followingCount} Following
-                  </span>
+                  <p className="mt-2 text-sm leading-relaxed text-gray-300">
+                    {profile.bio || "No bio yet"}
+                  </p>
                 </div>
               </div>
 
-              {profile.bio ? (
-                <p className="mt-2 max-w-md text-sm text-gray-400">
-                  {profile.bio}
-                </p>
-              ) : (
-                <p className="mt-2 max-w-md text-sm italic text-gray-400">
-                  No bio yet
-                </p>
+              {currentUserId === profile.id && (
+                <div className="flex shrink-0 justify-center gap-2 sm:justify-end sm:pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateStory(true)}
+                    className="rounded-md bg-gradient-to-tr from-pink-500 to-yellow-500 px-3 py-1.5 text-xs font-medium text-white shadow-sm"
+                  >
+                    + Story
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowCreatePost(true)}
+                    className="rounded-md bg-blue-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-600"
+                  >
+                    + Post
+                  </button>
+                </div>
               )}
-
-              <div className="mt-2 space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-gray-400 text-sm">Strategy:</span>
-                  <span className="text-emerald-400 text-sm font-semibold">
-                    {profile?.trading_model || "N/A"}
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <span className="text-gray-400 text-sm">Experience:</span>
-                  <span className="text-blue-400 text-sm font-semibold">
-                    {getExperience(profile?.started_trading) || "N/A"}
-                  </span>
-                </div>
-              </div>
             </div>
           </div>
 
-          <div className="mt-6 flex justify-center gap-4">
-            {(["public", "stats"] as const).map((tab) => (
-              <button
-                key={tab}
-                type="button"
-                onClick={() => setActiveTab(tab)}
-                className={`px-4 py-2 rounded ${
-                  activeTab === tab
-                    ? "bg-blue-500 text-white"
-                    : "bg-white/10 hover:bg-white/20"
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
+            <div className="rounded-lg border border-white/10 bg-white/5 p-3 text-center">
+              <p className="text-lg font-semibold tabular-nums text-white">
+                {statsVisible ? totalTrades : "—"}
+              </p>
+              <p className="text-xs text-gray-400">Trades</p>
+            </div>
+
+            <div className="rounded-lg border border-white/10 bg-white/5 p-3 text-center">
+              <p className="text-lg font-semibold tabular-nums text-white">
+                {statsVisible ? `${winRate.toFixed(0)}%` : "—"}
+              </p>
+              <p className="text-xs text-gray-400">Win %</p>
+            </div>
+
+            <div className="rounded-lg border border-white/10 bg-white/5 p-3 text-center">
+              <p
+                className={`text-lg font-semibold tabular-nums ${
+                  !statsVisible
+                    ? "text-white"
+                    : totalPnL >= 0
+                    ? "text-emerald-400"
+                    : "text-red-400"
                 }`}
               >
-                {tab === "public"
-                  ? "Public Trades"
-                  : tab.charAt(0).toUpperCase() + tab.slice(1)}
-              </button>
-            ))}
+                {statsVisible ? formatMoney(totalPnL) : "—"}
+              </p>
+              <p className="text-xs text-gray-400">P&amp;L</p>
+            </div>
+
+            <div className="rounded-lg border border-white/10 bg-white/5 p-3 text-center">
+              <p className="text-lg font-semibold tabular-nums text-white">
+                {statsVisible ? avgRR.toFixed(2) : "—"}
+              </p>
+              <p className="text-xs text-gray-400">Avg RR</p>
+            </div>
           </div>
 
-          <div className="mx-auto mt-2 max-w-3xl space-y-6 px-0 sm:px-2">
-            {activeTab === "public" && (
-              <div className="space-y-4">
-                <h2 className="text-xl font-semibold text-white">
-                  Public Trades
-                </h2>
-                {posts.length === 0 ? (
-                  <p className="text-sm text-gray-400">No public trades yet</p>
-                ) : (
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                    {posts.map((post) => {
-                      const imageSrc = postImageSrc(post.image_url)
-                      const pnl = Number(post.pnl)
-                      const pnlPositive = !Number.isNaN(pnl) && pnl >= 0
+          {!statsVisible && profile.is_private === true ? (
+            <p className="text-center text-xs text-gray-500">
+              Follow to unlock trading stats in this row.
+            </p>
+          ) : null}
 
-                      return (
-                        <div
-                          key={post.id}
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => setSelectedPost(post)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              e.preventDefault()
-                              setSelectedPost(post)
-                            }
-                          }}
-                          className="cursor-pointer overflow-hidden rounded-xl border border-white/10 bg-white/5 shadow-lg shadow-black/20 transition-all duration-200 hover:border-white/20 hover:bg-white/[0.07]"
-                        >
-                          {imageSrc ? (
-                            <div className="w-full bg-black/30">
-                              <img
-                                src={imageSrc}
-                                alt=""
-                                className="max-h-[240px] w-full object-cover md:max-h-[280px]"
-                              />
-                            </div>
-                          ) : null}
-                          <div className="flex items-center justify-between gap-4 p-4 text-sm">
-                            <span
-                              className={`font-semibold tabular-nums ${
-                                pnlPositive
-                                  ? "text-emerald-400"
-                                  : "text-red-400"
-                              }`}
-                            >
-                              {Number.isNaN(pnl)
-                                ? "—"
-                                : `${pnlPositive ? "+" : ""}$${pnl}`}
-                            </span>
-                            <span className="shrink-0 text-gray-300 tabular-nums">
-                              RR{" "}
-                              {post.rr != null && post.rr !== ""
-                                ? post.rr
-                                : "—"}
-                            </span>
-                          </div>
+          <div className="mt-6 flex gap-6 border-b border-white/10 pb-2">
+            <button
+              type="button"
+              className={`text-sm ${
+                activeTab === "trades"
+                  ? "text-white border-b-2 border-blue-500 pb-1"
+                  : "text-gray-400"
+              }`}
+              onClick={() => setActiveTab("trades")}
+            >
+              Trades
+            </button>
+
+            <button
+              type="button"
+              className={`text-sm ${
+                activeTab === "posts"
+                  ? "text-white border-b-2 border-blue-500 pb-1"
+                  : "text-gray-400"
+              }`}
+              onClick={() => setActiveTab("posts")}
+            >
+              Posts
+            </button>
+
+            <button
+              type="button"
+              className={`text-sm ${
+                activeTab === "stats"
+                  ? "text-white border-b-2 border-blue-500 pb-1"
+                  : "text-gray-400"
+              }`}
+              onClick={() => setActiveTab("stats")}
+            >
+              Stats
+            </button>
+
+            <button
+              type="button"
+              className={`text-sm ${
+                activeTab === "calendar"
+                  ? "text-white border-b-2 border-blue-500 pb-1"
+                  : "text-gray-400"
+              }`}
+              onClick={() => setActiveTab("calendar")}
+            >
+              Calendar
+            </button>
+          </div>
+
+          <div className="mt-4 space-y-6">
+            {activeTab === "trades" && (
+              <div className="mx-auto mt-4 w-full max-w-xl space-y-6 pb-8">
+                <div className="-mx-4 flex gap-4 overflow-x-auto border-b border-white/10 px-4 py-3 sm:mx-0 sm:rounded-xl sm:border sm:border-white/10 sm:bg-white/[0.03]">
+                  {currentUserId ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowCreateStory(true)}
+                      className="flex shrink-0 cursor-pointer flex-col items-center border-0 bg-transparent p-0 text-gray-100"
+                    >
+                      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-blue-500 text-xl text-white">
+                        +
+                      </div>
+                      <p className="mt-1 max-w-[72px] truncate text-center text-xs text-gray-300">
+                        Your Story
+                      </p>
+                    </button>
+                  ) : null}
+
+                  {storyRings.map((story) => {
+                    const av =
+                      story.profiles?.avatar_url || "/default-avatar.png"
+                    return (
+                      <button
+                        key={story.user_id}
+                        type="button"
+                        onClick={() => setActiveStory(story)}
+                        className="flex shrink-0 flex-col items-center border-0 bg-transparent p-0 text-gray-100"
+                      >
+                        <div className="rounded-full bg-gradient-to-tr from-pink-500 to-yellow-500 p-[2px]">
+                          <img
+                            src={av}
+                            alt=""
+                            className="h-[52px] w-[52px] rounded-full border-2 border-[#0f172a] object-cover"
+                            onError={(e) => {
+                              e.currentTarget.src = "/default-avatar.png"
+                            }}
+                          />
                         </div>
-                      )
-                    })}
-                  </div>
+                        <p className="mt-1 max-w-[60px] truncate text-center text-xs text-gray-300">
+                          {story.profiles?.username || "User"}
+                        </p>
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {sortedTrades.length === 0 ? (
+                  <p className="text-center text-sm text-gray-400">
+                    {currentUserId === profile.id
+                      ? "No trades yet."
+                      : "No trades yet."}
+                  </p>
+                ) : (
+                  sortedTrades.map((trade) => (
+                    <TradeCard
+                      key={trade.id}
+                      trade={{ ...trade, currentUserId }}
+                      profile={profile}
+                      canManageTrade={currentUserId === profile.id}
+                      menuOpen={openTradeMenuId === String(trade.id)}
+                      onMenuToggle={() =>
+                        setOpenTradeMenuId((prev) =>
+                          prev === String(trade.id) ? null : String(trade.id)
+                        )
+                      }
+                      onStartEditTrade={() => {
+                        openEditTradeModal(trade)
+                        setOpenTradeMenuId(null)
+                      }}
+                      onTogglePinTrade={() => void handlePinTrade(trade)}
+                      onSaveTrade={() => void handleSaveTrade(String(trade.id))}
+                      onDeleteTrade={() => void handleDeleteTrade(String(trade.id))}
+                      showInteractions={true}
+                    />
+                  ))
                 )}
+                {hasMore && canViewTrades ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (profile?.id) void fetchTrades(profile.id)
+                    }}
+                    className="mt-4 w-full rounded bg-white/10 py-2 hover:bg-white/20"
+                  >
+                    Load More
+                  </button>
+                ) : null}
+              </div>
+            )}
+
+            {activeTab === "posts" && (
+              <div className="mx-auto mt-4 w-full max-w-xl space-y-6 pb-8">
+                <button
+                  type="button"
+                  onClick={() => setShowCreatePost(true)}
+                  className="w-full rounded bg-blue-500 px-4 py-2 text-sm font-medium hover:bg-blue-600"
+                >
+                  + Create Post
+                </button>
+
+                {sortedPosts.length === 0 ? (
+                  <p className="text-center text-sm text-gray-400">No posts yet.</p>
+                ) : (
+                  sortedPosts.map((post) => {
+                    const key = String(post.id)
+                    return (
+                      <PostCard
+                        key={post.id}
+                        post={post}
+                        profile={profile}
+                        canManagePost={currentUserId === profile.id}
+                        menuOpen={openMenuId === key}
+                        onMenuToggle={() =>
+                          setOpenMenuId((prev) => (prev === key ? null : key))
+                        }
+                        onStartEditPost={() => {
+                          setEditingPost(post)
+                          setEditContent(post.content || "")
+                          setOpenMenuId(null)
+                        }}
+                        onTogglePinPost={() => void handlePinPost(post)}
+                        onSavePost={() => void handleSavePost(key)}
+                        onDeletePost={() => void handleDeletePost(key)}
+                        showInteractions={true}
+                        onLike={() => void handleLike(key, "post")}
+                        onToggleComments={() => openComments(key, "post")}
+                        commentsOpen={!!openCommentsState[`post:${key}`]}
+                        likeMeta={
+                          likesByPost[key] || { count: 0, liked: false }
+                        }
+                        comments={commentsByPost[key] || []}
+                        commentText={commentDraft[key] || ""}
+                        onCommentChange={(value) =>
+                          setCommentDraft((prev) => ({ ...prev, [key]: value }))
+                        }
+                        onCommentSubmit={() => void submitComment(key, "post")}
+                        commentSubmitting={!!commentSubmitting[key]}
+                      />
+                    )
+                  })
+                )}
+              </div>
+            )}
+
+            {activeTab === "calendar" && (
+              <div className="mt-4">
+                <Calendar
+                  trades={allTrades}
+                  showAccountFilter={false}
+                  showControls={false}
+                />
               </div>
             )}
 
@@ -800,6 +1874,29 @@ export default function ProfilePage() {
                   </div>
                 ) : (
                   <>
+                    <div className="mb-4 flex gap-2">
+                      {["All", "Eval", "Funded", "Live"].map((type) => (
+                        <button
+                          key={type}
+                          type="button"
+                          onClick={() => setAccountFilter(type)}
+                          className={`rounded px-3 py-1 text-sm ${
+                            accountFilter === type
+                              ? "bg-blue-500 text-white"
+                              : "bg-white/10 text-gray-300"
+                          }`}
+                        >
+                          {type}
+                        </button>
+                      ))}
+                    </div>
+
+                    {filteredTrades.length === 0 ? (
+                      <p className="text-sm text-gray-400">
+                        No trades for this account type
+                      </p>
+                    ) : null}
+
                     <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
                       <Stat title="Trades" value={totalTrades} />
 
@@ -867,77 +1964,206 @@ export default function ProfilePage() {
           </div>
 
         </div>
-        </div>
 
       </div>
 
-      {selectedPost && (
+      {showCreatePost &&
+        profile &&
+        currentUserId === profile.id && (
+          <div
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4 backdrop-blur-md"
+            role="presentation"
+            onClick={() => {
+              setShowCreatePost(false)
+              setPostContent("")
+              setPostImage(null)
+            }}
+          >
+            <div
+              className="w-full max-w-[400px] rounded-xl border border-white/10 bg-[#0f172a] p-6 shadow-2xl"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="create-post-title"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="mb-3 flex items-center justify-between">
+                <h2
+                  id="create-post-title"
+                  className="text-lg font-semibold text-white"
+                >
+                  Create Post
+                </h2>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCreatePost(false)
+                    setPostContent("")
+                    setPostImage(null)
+                  }}
+                  className="rounded p-1.5 text-gray-400 hover:bg-white/10 hover:text-white"
+                  aria-label="Close"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <textarea
+                value={postContent}
+                onChange={(e) => setPostContent(e.target.value)}
+                placeholder="What's on your mind?"
+                rows={4}
+                className="mb-3 w-full resize-none rounded-lg border border-white/10 bg-[#020617] p-2 text-sm text-white placeholder:text-gray-500"
+              />
+
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) =>
+                  setPostImage(e.target.files?.[0] ?? null)
+                }
+                className="mb-3 block w-full text-sm text-gray-300 file:mr-2 file:rounded file:border-0 file:bg-white/10 file:px-3 file:py-1.5 file:text-sm file:text-gray-100"
+              />
+
+              <button
+                type="button"
+                onClick={() => void handleCreatePost()}
+                disabled={creatingPost}
+                className="w-full rounded-lg bg-blue-500 px-3 py-2 text-sm font-medium text-white hover:bg-blue-600 disabled:opacity-50"
+              >
+                {creatingPost ? "Posting…" : "Post"}
+              </button>
+            </div>
+          </div>
+        )}
+
+      {showCreateStory && currentUserId && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
-          onClick={() => setSelectedPost(null)}
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 p-4"
+          role="presentation"
+          onClick={() => {
+            setShowCreateStory(false)
+            setStoryFile(null)
+          }}
         >
           <div
-            className="relative w-full max-w-2xl rounded-xl bg-[#0f172a] p-4"
+            className="w-full max-w-[400px] rounded-xl border border-white/10 bg-[#0f172a] p-6"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="create-story-title"
             onClick={(e) => e.stopPropagation()}
           >
+            <div className="mb-3 flex items-center justify-between">
+              <h2
+                id="create-story-title"
+                className="text-lg font-semibold text-white"
+              >
+                Add Story
+              </h2>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCreateStory(false)
+                  setStoryFile(null)
+                }}
+                className="rounded p-1.5 text-gray-400 hover:bg-white/10 hover:text-white"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) =>
+                setStoryFile(e.target.files?.[0] ?? null)
+              }
+              className="mb-4 block w-full text-sm text-gray-300 file:mr-2 file:rounded file:border-0 file:bg-white/10 file:px-3 file:py-1.5 file:text-sm file:text-gray-100"
+            />
+
             <button
               type="button"
-              onClick={() => setSelectedPost(null)}
-              className="absolute right-2 top-2 text-xl text-white"
-              aria-label="Close"
+              onClick={() => void handleCreateStory()}
+              disabled={creatingStory || !storyFile}
+              className="w-full rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-blue-600 disabled:opacity-50"
             >
-              ✕
+              {creatingStory ? "Posting…" : "Post Story"}
             </button>
-
-            {selectedPost.image_url ? (
-              <img
-                src={
-                  String(selectedPost.image_url).startsWith("http")
-                    ? selectedPost.image_url
-                    : `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/screenshots/${selectedPost.image_url}`
-                }
-                alt=""
-                className="w-full max-h-[400px] rounded-lg object-cover"
-              />
-            ) : null}
-
-            <div className="mt-3 space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span
-                  className={
-                    Number(selectedPost.pnl) >= 0
-                      ? "text-green-400"
-                      : "text-red-400"
-                  }
-                >
-                  ${selectedPost.pnl}
-                </span>
-                <span>RR {selectedPost.rr}</span>
-              </div>
-
-              <div className="flex justify-between text-gray-300">
-                <span>Points: {selectedPost.points || "-"}</span>
-                <span>Account: {selectedPost.account_type || "-"}</span>
-              </div>
-            </div>
-
-            <div className="mt-3 text-sm text-gray-300">
-              ❤️ {selectedPost.likesCount || 0} likes
-            </div>
-
-            <div className="mt-2 max-h-40 space-y-1 overflow-y-auto">
-              {selectedPost.comments?.map((c: any) => (
-                <div key={c.id} className="text-sm">
-                  <span className="font-semibold">
-                    {c.profiles?.username || "User"}
-                  </span>{" "}
-                  {c.content}
-                </div>
-              ))}
-            </div>
           </div>
         </div>
       )}
+
+      {activeStory && (
+        <div
+          role="presentation"
+          className="fixed inset-0 z-[300] flex cursor-pointer items-center justify-center bg-black"
+          onClick={() => setActiveStory(null)}
+        >
+          <img
+            src={storyImageSrc(activeStory.image_url) || ""}
+            alt=""
+            className="max-h-[90%] max-w-[90%] rounded-lg object-contain"
+          />
+        </div>
+      )}
+
+      {editingPost ? (
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 p-4 backdrop-blur-md"
+          role="presentation"
+          onClick={() => setEditingPost(null)}
+        >
+          <div
+            className="w-full max-w-[400px] rounded-xl border border-white/10 bg-[#0f172a] p-6"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="edit-post-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <h2 id="edit-post-title" className="text-lg font-semibold text-white">
+                Edit Post
+              </h2>
+              <button
+                type="button"
+                onClick={() => setEditingPost(null)}
+                className="rounded p-1.5 text-gray-400 hover:bg-white/10 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+            <textarea
+              value={editContent}
+              onChange={(e) => setEditContent(e.target.value)}
+              className="mb-3 w-full rounded border border-white/10 bg-[#020617] p-2 text-sm text-white"
+              rows={4}
+            />
+            <button
+              type="button"
+              onClick={() => void handleUpdatePost()}
+              className="w-full rounded bg-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-blue-600"
+            >
+              Save Changes
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {editingTrade ? (
+        <InputTradeForm
+          existingTrade={editingTrade}
+          onClose={() => setEditingTrade(null)}
+          onSave={() => {
+            if (profile?.id) {
+              setPage(0)
+              setHasMore(true)
+              void fetchTrades(profile.id, true)
+            }
+            setEditingTrade(null)
+          }}
+        />
+      ) : null}
 
       {showFollowers && (
         <div

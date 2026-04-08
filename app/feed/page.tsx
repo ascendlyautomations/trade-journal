@@ -433,19 +433,6 @@ export default function FeedPage() {
                     </div>
                   )}
 
-                  {post.trade_id ? (
-                    <div
-                      onClick={(e) => e.stopPropagation()}
-                      onKeyDown={(e) => e.stopPropagation()}
-                    >
-                      <TradeSocialLayer
-                        tradeId={post.trade_id}
-                        currentUserId={user?.id}
-                        tradeOwnerUserId={postTradeOwnerUserId(post)}
-                      />
-                    </div>
-                  ) : null}
-
                   {/* LIKE + COMMENT ACTIONS */}
                   <div
                     className="flex flex-col gap-2 pt-1 border-t border-white/5"
