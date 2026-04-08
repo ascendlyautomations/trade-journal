@@ -25,6 +25,8 @@ export default function SettingsPage() {
   const [experience, setExperience] = useState("")
   const [startedTrading, setStartedTrading] = useState<string>("")
   const [tradingModel, setTradingModel] = useState<string>("")
+  const [maxDrawdown, setMaxDrawdown] = useState("")
+  const [savingDrawdown, setSavingDrawdown] = useState(false)
 
   useEffect(() => {
     init()
@@ -56,6 +58,11 @@ export default function SettingsPage() {
       setExperience(data.experience || "")
       setStartedTrading(data.startedTrading || "")
       setTradingModel(data.trading_model || "")
+      setMaxDrawdown(
+        data.max_drawdown_limit != null && data.max_drawdown_limit !== ""
+          ? String(data.max_drawdown_limit)
+          : ""
+      )
 
       try {
         const { data: affiliate } = await supabase
@@ -132,7 +139,13 @@ export default function SettingsPage() {
         trading_style: tradingStyle,
         experience,
         started_trading: startedTrading,
-        trading_model: tradingModel || tradingStyle || null
+        trading_model: tradingModel || tradingStyle || null,
+        max_drawdown_limit: (() => {
+          const t = maxDrawdown.trim()
+          if (t === "") return null
+          const n = Number(t)
+          return Number.isFinite(n) && n >= 0 ? n : profile?.max_drawdown_limit ?? null
+        })(),
       })
       .eq("id", user.id)
 
@@ -144,6 +157,34 @@ export default function SettingsPage() {
     }
 
     setSaving(false)
+  }
+
+  async function saveDrawdownLimit() {
+    if (!user) return
+
+    const t = maxDrawdown.trim()
+    const n = t === "" ? null : Number(t)
+    if (t !== "" && (!Number.isFinite(n) || n === null || n < 0)) {
+      alert("Enter a valid non-negative dollar amount, or leave blank to clear your limit.")
+      return
+    }
+
+    setSavingDrawdown(true)
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        max_drawdown_limit: n,
+      })
+      .eq("id", user.id)
+    setSavingDrawdown(false)
+
+    if (error) {
+      alert(error.message)
+      return
+    }
+
+    setProfile((p: any) => (p ? { ...p, max_drawdown_limit: n } : p))
+    alert("Drawdown limit saved")
   }
 
   async function handleManageSubscription() {
@@ -277,6 +318,33 @@ export default function SettingsPage() {
                     onChange={(e) => setStartedTrading(e.target.value)}
                     className="w-full p-3 rounded bg-[#0f172a] border border-white/10"
                   />
+                </div>
+
+                <div className="rounded-lg border border-white/10 bg-black/20 p-4 space-y-3">
+                  <p className="text-sm text-gray-400">Drawdown limit</p>
+                  <p className="text-xs text-gray-500">
+                    Optional cap on drawdown from your equity peak (filtered trades on the
+                    dashboard). Leave blank to clear.
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      placeholder="Max Drawdown ($)"
+                      value={maxDrawdown}
+                      onChange={(e) => setMaxDrawdown(e.target.value)}
+                      className="bg-[#0f172a] text-white border border-white/10 rounded px-3 py-2 min-w-[12rem] flex-1"
+                    />
+                    <button
+                      type="button"
+                      onClick={saveDrawdownLimit}
+                      disabled={savingDrawdown}
+                      className="bg-slate-600 hover:bg-slate-500 px-4 py-2 rounded text-sm font-medium disabled:opacity-50"
+                    >
+                      {savingDrawdown ? "Saving…" : "Save limit"}
+                    </button>
+                  </div>
                 </div>
 
                 {profile?.is_pro && (

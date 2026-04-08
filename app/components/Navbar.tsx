@@ -156,9 +156,6 @@ export default function Navbar() {
               Dashboard
             </Link>
 
-            <Link href="/notifications" className="hover:text-blue-400">
-              Notifications
-            </Link>
 
             {/* DROPDOWN FUNCTION */}
             {[

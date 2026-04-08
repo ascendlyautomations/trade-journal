@@ -11,6 +11,7 @@ import {
   XAxis,
   YAxis,
   Tooltip,
+  Legend,
   CartesianGrid,
   ResponsiveContainer,
   PieChart,
@@ -26,6 +27,440 @@ function normalizeSessionBucket(sessionRaw: string | null | undefined): "London"
   return null
 }
 
+type SetupGroupResult = {
+  type: string
+  value: string
+  totalPnL: number
+  trades: number
+  wins: number
+  avgPnL: number
+  winRate: number
+}
+
+function analyzeBestSetups(trades: any[]): SetupGroupResult[] {
+  const groupStats: Record<
+    string,
+    { type: string; value: string; totalPnL: number; trades: number; wins: number }
+  > = {}
+
+  trades.forEach((trade) => {
+    const { session, ticker, direction } = trade
+    const pnl = Number(trade.pnl) || 0
+
+    const groups = [
+      { type: "session", value: session ?? "—" },
+      { type: "ticker", value: ticker ?? "—" },
+      { type: "direction", value: direction ?? "—" },
+    ]
+
+    groups.forEach(({ type, value }) => {
+      const key = `${type}:${value}`
+
+      if (!groupStats[key]) {
+        groupStats[key] = {
+          type,
+          value: String(value),
+          totalPnL: 0,
+          trades: 0,
+          wins: 0,
+        }
+      }
+
+      groupStats[key].totalPnL += pnl
+      groupStats[key].trades += 1
+      if (pnl > 0) groupStats[key].wins += 1
+    })
+  })
+
+  return Object.values(groupStats)
+    .map((g) => ({
+      ...g,
+      avgPnL: g.trades ? g.totalPnL / g.trades : 0,
+      winRate: g.trades ? g.wins / g.trades : 0,
+    }))
+    .filter((g) => g.trades >= 3)
+    .sort((a, b) => b.avgPnL - a.avgPnL)
+}
+
+function generateInsights(results: SetupGroupResult[]): string[] {
+  if (!results.length) return []
+
+  const insights: string[] = []
+
+  const bestSession = results.find((r) => r.type === "session")
+  const bestTicker = results.find((r) => r.type === "ticker")
+  const bestDirection = results.find((r) => r.type === "direction")
+
+  const formatMoney = (v: number) =>
+    v < 0
+      ? `-$${Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+      : `$${v.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+
+  const formatPct = (v: number) => `${(v * 100).toFixed(0)}%`
+
+  if (bestSession && bestSession.value !== "—") {
+    insights.push(
+      `You perform best trading ${bestSession.value} session (${formatMoney(
+        bestSession.avgPnL
+      )} avg, ${formatPct(bestSession.winRate)} win rate)`
+    )
+  }
+
+  if (bestTicker && bestTicker.value !== "—") {
+    insights.push(
+      `${bestTicker.value} is your most profitable market (${formatMoney(
+        bestTicker.avgPnL
+      )} avg per trade)`
+    )
+  }
+
+  if (bestDirection && bestDirection.value !== "—") {
+    insights.push(
+      `You are more profitable going ${bestDirection.value} (${formatMoney(
+        bestDirection.avgPnL
+      )} avg)`
+    )
+  }
+
+  return insights
+}
+
+type CombinedSetupResult = {
+  key: string
+  totalPnL: number
+  trades: number
+  wins: number
+  avgPnL: number
+  winRate: number
+}
+
+function analyzeCombinedSetups(trades: any[]): CombinedSetupResult[] {
+  const stats: Record<
+    string,
+    { key: string; totalPnL: number; trades: number; wins: number }
+  > = {}
+
+  trades.forEach((trade) => {
+    const { session, ticker, direction } = trade
+    const pnl = Number(trade.pnl) || 0
+
+    const s = session ?? "—"
+    const t = ticker ?? "—"
+    const d = direction ?? "—"
+
+    const combos = [
+      `session:${s}|ticker:${t}`,
+      `session:${s}|direction:${d}`,
+      `ticker:${t}|direction:${d}`,
+      `session:${s}|ticker:${t}|direction:${d}`,
+    ]
+
+    combos.forEach((key) => {
+      if (!stats[key]) {
+        stats[key] = { key, totalPnL: 0, trades: 0, wins: 0 }
+      }
+      stats[key].totalPnL += pnl
+      stats[key].trades += 1
+      if (pnl > 0) stats[key].wins += 1
+    })
+  })
+
+  return Object.values(stats)
+    .map((row) => ({
+      ...row,
+      avgPnL: row.trades ? row.totalPnL / row.trades : 0,
+      winRate: row.trades ? row.wins / row.trades : 0,
+    }))
+    .filter((row) => row.trades >= 3)
+    .sort((a, b) => b.avgPnL - a.avgPnL)
+}
+
+function formatCombo(key: string): string {
+  const parts = key.split("|").map((p) => {
+    const idx = p.indexOf(":")
+    return idx >= 0 ? p.slice(idx + 1) : p
+  })
+
+  if (parts.length === 2) {
+    return `${parts[1]} during ${parts[0]}`
+  }
+
+  if (parts.length === 3) {
+    return `${parts[1]} during ${parts[0]} going ${parts[2]}`
+  }
+
+  return parts.filter(Boolean).join(" ")
+}
+
+function generateCombinedInsights(results: CombinedSetupResult[]): string[] {
+  const meaningful = results.filter(
+    (r) => !r.key.includes("—") && !r.key.includes("undefined")
+  )
+  if (!meaningful.length) return []
+
+  const formatMoney = (v: number) =>
+    v < 0
+      ? `-$${Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+      : `$${v.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+
+  const formatPct = (v: number) => `${(v * 100).toFixed(0)}%`
+
+  const best = meaningful[0]
+
+  return [
+    `Your strongest setup is trading ${formatCombo(
+      best.key
+    )} (${formatMoney(best.avgPnL)} avg, ${formatPct(
+      best.winRate
+    )} win rate over ${best.trades} trades)`,
+  ]
+}
+
+function generateWorstInsight(worst: CombinedSetupResult | undefined): string | null {
+  if (!worst) return null
+
+  const formatMoney = (v: number) =>
+    v < 0
+      ? `-$${Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+      : `$${v.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+
+  const formatPct = (v: number) => `${(v * 100).toFixed(0)}%`
+
+  return `You struggle most trading ${formatCombo(
+    worst.key
+  )} (${formatMoney(worst.avgPnL)} avg, ${formatPct(
+    worst.winRate
+  )} win rate over ${worst.trades} trades)`
+}
+
+function detectLossStreak(trades: any[]): number | null {
+  if (trades.length < 4) return null
+
+  for (let i = 0; i <= trades.length - 4; i++) {
+    const a = Number(trades[i].pnl) || 0
+    const b = Number(trades[i + 1].pnl) || 0
+    const c = Number(trades[i + 2].pnl) || 0
+
+    if (a < 0 && b < 0 && c < 0) {
+      const nextTrades = trades.slice(i + 3, i + 8)
+      if (nextTrades.length === 0) return null
+
+      const wins = nextTrades.filter((t) => (Number(t.pnl) || 0) > 0).length
+      return wins / nextTrades.length
+    }
+  }
+
+  return null
+}
+
+function detectRRThreshold(trades: any[]): string | null {
+  const lowRR = trades.filter((t) => {
+    const r = Number(t.rr)
+    return Number.isFinite(r) && r < 1
+  })
+  const highRR = trades.filter((t) => {
+    const r = Number(t.rr)
+    return Number.isFinite(r) && r >= 1
+  })
+
+  if (lowRR.length < 3 || highRR.length < 3) return null
+
+  const lowWin = lowRR.filter((t) => (Number(t.pnl) || 0) > 0).length / lowRR.length
+  const highWin =
+    highRR.filter((t) => (Number(t.pnl) || 0) > 0).length / highRR.length
+
+  if (highWin > lowWin + 0.2) {
+    return "You perform significantly better when RR ≥ 1"
+  }
+
+  return null
+}
+
+function formatMoney(v: number) {
+  return v < 0
+    ? `-$${Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+    : `$${v.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+}
+
+function formatHour(h: number) {
+  const suffix = h >= 12 ? "PM" : "AM"
+  const hour = h % 12 || 12
+  return `${hour} ${suffix}`
+}
+
+function calculateDrawdown(trades: any[]) {
+  let equity = 0
+  let peak = 0
+  let maxDrawdown = 0
+  let currentDrawdown = 0
+  let peakIndex = 0
+  let recoveryIndex: number | null = null
+
+  const equityCurve: { equity: number; peak: number; drawdown: number }[] = []
+
+  trades.forEach((trade, i) => {
+    equity += Number(trade.pnl) || 0
+
+    if (equity > peak) {
+      peak = equity
+      peakIndex = i
+    }
+
+    const drawdown = peak - equity
+
+    if (drawdown > maxDrawdown) {
+      maxDrawdown = drawdown
+      recoveryIndex = null
+    }
+
+    if (drawdown === 0 && recoveryIndex === null && i > peakIndex) {
+      recoveryIndex = i
+    }
+
+    currentDrawdown = drawdown
+
+    equityCurve.push({
+      equity,
+      peak,
+      drawdown,
+    })
+  })
+
+  const recoveryTrades =
+    recoveryIndex !== null ? recoveryIndex - peakIndex : null
+
+  const recoveryPercent =
+    peak > 0 ? (maxDrawdown / peak) * 100 : 0
+
+  return {
+    maxDrawdown,
+    currentDrawdown,
+    recoveryTrades,
+    recoveryPercent,
+    equityCurve,
+  }
+}
+
+function calculateExpectancy(trades: any[]) {
+  if (!trades || trades.length === 0) return null
+
+  const wins = trades.filter((t) => (Number(t.pnl) || 0) > 0)
+  const losses = trades.filter((t) => (Number(t.pnl) || 0) < 0)
+
+  const winRate = wins.length / trades.length
+  const lossRate = losses.length / trades.length
+
+  const avgWin =
+    wins.length > 0
+      ? wins.reduce((sum, t) => sum + (Number(t.pnl) || 0), 0) / wins.length
+      : 0
+
+  const avgLoss =
+    losses.length > 0
+      ? Math.abs(
+          losses.reduce((sum, t) => sum + (Number(t.pnl) || 0), 0) /
+            losses.length
+        )
+      : 0
+
+  const expectancy = winRate * avgWin - lossRate * avgLoss
+
+  return {
+    expectancy,
+    winRate,
+    avgWin,
+    avgLoss,
+  }
+}
+
+function calculateStreaks(trades: any[]) {
+  if (!trades || trades.length === 0) return null
+
+  let currentStreak = 0
+  let currentType: "win" | "loss" | "even" | null = null
+
+  let maxWinStreak = 0
+  let maxLossStreak = 0
+
+  let tempStreak = 0
+  let tempType: "win" | "loss" | "even" | null = null
+
+  trades.forEach((trade) => {
+    const pnl = Number(trade.pnl) || 0
+    const type: "win" | "loss" | "even" =
+      pnl > 0 ? "win" : pnl < 0 ? "loss" : "even"
+
+    if (type === tempType) {
+      tempStreak++
+    } else {
+      tempStreak = 1
+      tempType = type
+    }
+
+    if (type === "win" && tempStreak > maxWinStreak) {
+      maxWinStreak = tempStreak
+    }
+
+    if (type === "loss" && tempStreak > maxLossStreak) {
+      maxLossStreak = tempStreak
+    }
+
+    currentStreak = tempStreak
+    currentType = tempType
+  })
+
+  return {
+    currentStreak,
+    currentType,
+    maxWinStreak,
+    maxLossStreak,
+  }
+}
+
+type HourlyAnalysisRow = { hour: number; avgPnL: number; trades: number }
+
+function analyzeTradingHours(trades: any[]) {
+  if (!trades || trades.length === 0) return null
+
+  const hourlyStats: Record<number, { totalPnL: number; trades: number }> = {}
+
+  trades.forEach((trade) => {
+    const raw = trade.created_at ?? trade.date
+    if (!raw) return
+    const date = new Date(raw)
+    if (Number.isNaN(date.getTime())) return
+
+    const hour = date.getHours()
+
+    if (!hourlyStats[hour]) {
+      hourlyStats[hour] = {
+        totalPnL: 0,
+        trades: 0,
+      }
+    }
+
+    hourlyStats[hour].totalPnL += Number(trade.pnl) || 0
+    hourlyStats[hour].trades += 1
+  })
+
+  const results: HourlyAnalysisRow[] = Object.entries(hourlyStats).map(
+    ([hourStr, data]) => ({
+      hour: Number(hourStr),
+      avgPnL: data.totalPnL / data.trades,
+      trades: data.trades,
+    })
+  )
+
+  if (results.length === 0) return null
+
+  results.sort((a, b) => b.avgPnL - a.avgPnL)
+
+  return {
+    best: results[0],
+    worst: results[results.length - 1],
+  }
+}
+
 export default function Dashboard() {
   const [trades, setTrades] = useState<any[]>([])
   const [accountFilter, setAccountFilter] = useState("all")
@@ -35,6 +470,16 @@ export default function Dashboard() {
   const [profile, setProfile] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [subscribing, setSubscribing] = useState(false)
+  const [showControls, setShowControls] = useState(false)
+  const [showEquity, setShowEquity] = useState(true)
+  const [showDrawdown, setShowDrawdown] = useState(true)
+  const [showInsights, setShowInsights] = useState(true)
+  const [showSessions, setShowSessions] = useState(true)
+  const [showBestSetup, setShowBestSetup] = useState(true)
+  const [showWorstSetup, setShowWorstSetup] = useState(true)
+  const [showWarnings, setShowWarnings] = useState(true)
+  const [maxDrawdown, setMaxDrawdown] = useState("")
+  const [savingDrawdownLimit, setSavingDrawdownLimit] = useState(false)
 
   const stripePromise = loadStripe(
     process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!
@@ -86,6 +531,27 @@ export default function Dashboard() {
     }
   }, [])
 
+  useEffect(() => {
+    if (!profile) return
+    setMaxDrawdown(
+      profile.max_drawdown_limit != null && profile.max_drawdown_limit !== ""
+        ? String(profile.max_drawdown_limit)
+        : ""
+    )
+  }, [profile])
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      const node = e.target
+      const el = node instanceof Element ? node : (node as Node).parentElement
+      if (!el?.closest(".dashboard-controls")) {
+        setShowControls(false)
+      }
+    }
+    document.addEventListener("click", handleClick)
+    return () => document.removeEventListener("click", handleClick)
+  }, [])
+
   // 🔥 FORMATTERS
   function formatCurrency(value: number) {
     if (value === null || value === undefined) return "-"
@@ -100,6 +566,32 @@ export default function Dashboard() {
     return value.toLocaleString()
   }
 
+  async function saveDrawdownLimit() {
+    if (!user) return
+
+    const t = maxDrawdown.trim()
+    const n = t === "" ? null : Number(t)
+    if (t !== "" && (!Number.isFinite(n as number) || (n as number) < 0)) {
+      alert("Enter a valid non-negative dollar amount, or leave blank to clear your limit.")
+      return
+    }
+
+    setSavingDrawdownLimit(true)
+    const { error } = await supabase
+      .from("profiles")
+      .update({ max_drawdown_limit: n })
+      .eq("id", user.id)
+    setSavingDrawdownLimit(false)
+
+    if (error) {
+      alert(error.message)
+      return
+    }
+
+    setProfile((p: any) => (p ? { ...p, max_drawdown_limit: n } : p))
+    alert("Drawdown limit saved")
+  }
+
   // 🔥 MEMOIZED CALCULATIONS (PERFORMANCE BOOST)
   const {
     filteredTrades,
@@ -112,7 +604,6 @@ export default function Dashboard() {
     biggestLoss,
     maxStreak,
     sessionStats,
-    equityData,
     avgWin,
     avgLoss,
     bestDay,
@@ -121,6 +612,15 @@ export default function Dashboard() {
     symbolPerformanceRows,
     sessionBuckets,
     bestSetup,
+    insights,
+    combinedInsights,
+    worstInsight,
+    warnings,
+    drawdownData,
+    equityDrawdownChartData,
+    expectancyData,
+    streakData,
+    hourData,
     weekdayData,
     sessionPieData
   } = useMemo(() => {
@@ -316,6 +816,52 @@ const biggestLoss = losses.length > 0
       }
     }
 
+    const setupResults = analyzeBestSetups(timeFilteredTrades)
+    const insights = generateInsights(setupResults)
+
+    const combinedResults = analyzeCombinedSetups(timeFilteredTrades)
+    const combinedInsights = generateCombinedInsights(combinedResults)
+
+    const meaningfulCombined = combinedResults.filter(
+      (r) => !r.key.includes("—") && !r.key.includes("undefined")
+    )
+    const worstResults = [...meaningfulCombined]
+      .filter((r) => r.trades >= 3)
+      .sort((a, b) => a.avgPnL - b.avgPnL)
+    const worst = worstResults[0]
+    const worstInsight = generateWorstInsight(worst)
+
+    const chronologicalTrades = [...timeFilteredTrades].sort(
+      (a, b) =>
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    )
+    const streakData = calculateStreaks(chronologicalTrades)
+    const drawdownData = calculateDrawdown(chronologicalTrades)
+    const expectancyData = calculateExpectancy(timeFilteredTrades)
+    const hourData = analyzeTradingHours(timeFilteredTrades)
+    const equityDrawdownChartData = chronologicalTrades.map((trade, i) => {
+      const pt = drawdownData.equityCurve[i]
+      return {
+        date: trade.created_at,
+        equity: pt?.equity ?? 0,
+        drawdown: pt?.drawdown ?? 0,
+      }
+    })
+    const lossStreakRate = detectLossStreak(chronologicalTrades)
+    const rrInsight = detectRRThreshold(timeFilteredTrades)
+
+    const warnings: string[] = []
+    if (lossStreakRate !== null && Number.isFinite(lossStreakRate)) {
+      warnings.push(
+        `After 3 consecutive losses, your win rate drops to ${(
+          lossStreakRate * 100
+        ).toFixed(0)}% in the next few trades`
+      )
+    }
+    if (rrInsight) {
+      warnings.push(rrInsight)
+    }
+
     function toEST(date: Date) {
       return new Date(date.toLocaleString("en-US", { timeZone: "America/New_York" }))
     }
@@ -350,33 +896,6 @@ const worstDay = dailyPnLs.length > 0
     const avgLoss =
       lossesOnly.reduce((sum, t) => sum + t.pnl, 0) / (lossesOnly.length || 1)
 
-    const dates: string[] = []
-
-    if (timeFilteredTrades.length > 0) {
-      const first = toEST(new Date(timeFilteredTrades[0].created_at))
-      const today = toEST(new Date())
-
-      let current = new Date(first)
-
-      while (current <= today) {
-        dates.push(toESTDateString(current))
-        current.setDate(current.getDate() + 1)
-      }
-    } else {
-      dates.push(toESTDateString(new Date()))
-    }
-
-    let running = 0
-
-    const equityData = dates.map((date) => {
-      running += dailyMap[date] || 0
-
-      return {
-        date: new Date(date).toLocaleDateString(),
-        equity: running
-      }
-    })
-
     return {
       filteredTrades,
       timeFilteredTrades,
@@ -388,7 +907,6 @@ const worstDay = dailyPnLs.length > 0
       biggestLoss,
       maxStreak,
       sessionStats,
-      equityData,
       avgWin,
       avgLoss,
       bestDay,
@@ -397,6 +915,15 @@ const worstDay = dailyPnLs.length > 0
       symbolPerformanceRows,
       sessionBuckets,
       bestSetup,
+      insights,
+      combinedInsights,
+      worstInsight,
+      warnings,
+      drawdownData,
+      equityDrawdownChartData,
+      expectancyData,
+      streakData,
+      hourData,
       weekdayData,
       sessionPieData
     }
@@ -438,15 +965,154 @@ const worstDay = dailyPnLs.length > 0
     )
   }
 
+  const drawdownLimitRaw = profile?.max_drawdown_limit
+  const drawdownLimitCap =
+    drawdownLimitRaw != null &&
+    drawdownLimitRaw !== "" &&
+    Number.isFinite(Number(drawdownLimitRaw)) &&
+    Number(drawdownLimitRaw) > 0
+      ? Number(drawdownLimitRaw)
+      : null
+
+  const drawdownLimitBreached =
+    drawdownLimitCap != null &&
+    (drawdownData.currentDrawdown >= drawdownLimitCap ||
+      drawdownData.maxDrawdown >= drawdownLimitCap)
+
+  const sectionTitle = "text-xs text-gray-400 uppercase tracking-wide mb-2"
+
   return (
     <>
       <Navbar />
 
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white p-10">
 
-        <h1 className="text-3xl font-semibold text-center mb-6 bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
-          Dashboard
-        </h1>
+        <div className="max-w-6xl mx-auto flex justify-between items-center mb-6">
+          <h1 className="text-xl font-semibold text-white">Dashboard</h1>
+
+          <div className="relative dashboard-controls">
+            <button
+              type="button"
+              onClick={() => setShowControls((prev) => !prev)}
+              className="bg-white/10 hover:bg-white/20 p-2 rounded-md text-lg leading-none"
+              aria-label="Dashboard controls"
+              aria-expanded={showControls}
+            >
+              ⚙️
+            </button>
+
+            {showControls ? (
+              <div className="absolute right-0 mt-2 w-72 bg-[#020617]/95 backdrop-blur-md border border-white/10 rounded-xl shadow-2xl p-4 z-50">
+                <p className="text-sm font-semibold text-white mb-3 pb-2 border-b border-white/10">
+                  Dashboard controls
+                </p>
+
+                <div className="mb-4">
+                  <p className={sectionTitle}>Display</p>
+
+                  <label className="flex justify-between items-center gap-3 text-sm mb-2 cursor-pointer">
+                    <span>Equity Curve</span>
+                    <input
+                      type="checkbox"
+                      className="accent-emerald-500"
+                      checked={showEquity}
+                      onChange={() => setShowEquity((v) => !v)}
+                    />
+                  </label>
+
+                  <label className="flex justify-between items-center gap-3 text-sm mb-2 cursor-pointer">
+                    <span>Drawdown</span>
+                    <input
+                      type="checkbox"
+                      className="accent-emerald-500"
+                      checked={showDrawdown}
+                      onChange={() => setShowDrawdown((v) => !v)}
+                    />
+                  </label>
+
+                  <label className="flex justify-between items-center gap-3 text-sm mb-2 cursor-pointer">
+                    <span>Insights</span>
+                    <input
+                      type="checkbox"
+                      className="accent-emerald-500"
+                      checked={showInsights}
+                      onChange={() => setShowInsights((v) => !v)}
+                    />
+                  </label>
+
+                  <label className="flex justify-between items-center gap-3 text-sm cursor-pointer">
+                    <span>Session Chart</span>
+                    <input
+                      type="checkbox"
+                      className="accent-emerald-500"
+                      checked={showSessions}
+                      onChange={() => setShowSessions((v) => !v)}
+                    />
+                  </label>
+                </div>
+
+                <div className="mb-4">
+                  <p className={sectionTitle}>Risk</p>
+
+                  <label className="text-sm text-gray-300 mb-1 block">Max Drawdown</label>
+
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={maxDrawdown}
+                    onChange={(e) => setMaxDrawdown(e.target.value)}
+                    className="w-full bg-[#020617] border border-white/10 rounded px-2 py-1 text-white text-sm"
+                    placeholder="e.g. 2000"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={saveDrawdownLimit}
+                    disabled={savingDrawdownLimit}
+                    className="mt-2 w-full bg-blue-500 hover:bg-blue-600 disabled:opacity-50 py-1.5 rounded text-sm font-medium"
+                  >
+                    {savingDrawdownLimit ? "Saving…" : "Save"}
+                  </button>
+                </div>
+
+                <div className="mb-0">
+                  <p className={sectionTitle}>Analytics</p>
+
+                  <label className="flex justify-between items-center gap-3 text-sm mb-2 cursor-pointer">
+                    <span>Show Best Setup</span>
+                    <input
+                      type="checkbox"
+                      className="accent-emerald-500"
+                      checked={showBestSetup}
+                      onChange={() => setShowBestSetup((v) => !v)}
+                    />
+                  </label>
+
+                  <label className="flex justify-between items-center gap-3 text-sm mb-2 cursor-pointer">
+                    <span>Show Worst Setup</span>
+                    <input
+                      type="checkbox"
+                      className="accent-emerald-500"
+                      checked={showWorstSetup}
+                      onChange={() => setShowWorstSetup((v) => !v)}
+                    />
+                  </label>
+
+                  <label className="flex justify-between items-center gap-3 text-sm cursor-pointer">
+                    <span>Behavior Warnings</span>
+                    <input
+                      type="checkbox"
+                      className="accent-emerald-500"
+                      checked={showWarnings}
+                      onChange={() => setShowWarnings((v) => !v)}
+                    />
+                  </label>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
 
         {profile && !profile.is_pro && (
           <div className="mb-4 rounded-lg bg-amber-500/10 border border-amber-400/40 text-amber-100 px-4 py-3 text-center text-sm">
@@ -497,92 +1163,356 @@ const worstDay = dailyPnLs.length > 0
         </div>
 
         <ProGate isPro={profile?.is_pro}>
-          <div className="space-y-8">
+          <div className="space-y-6">
 
   {/* TOP: STATS + CHART */}
-  <div className="grid lg:grid-cols-3 gap-8">
+  <div className="grid lg:grid-cols-3 gap-6">
 
     {/* LEFT: STATS */}
-    <div className="grid grid-cols-2 gap-4">
-      <Stat title="Trades" value={formatNumber(totalTrades)} />
-      <Stat title="Win %" value={`${winRate.toFixed(1)}%`} />
-      <Stat title="P&L" value={formatCurrency(totalPnL)} positive={totalPnL >= 0} />
-      <Stat title="Avg RR" value={avgRR.toFixed(2)} />
-      <Stat title="Big Loss" value={formatCurrency(biggestLoss)} positive={false} />
-      <Stat title="Streak" value={maxStreak} />
-      <Stat title="Avg Win" value={formatCurrency(avgWin)} positive />
-      <Stat title="Avg Loss" value={formatCurrency(avgLoss)} positive={false} />
-      <Stat title="Best Day" value={formatCurrency(bestDay)} positive />
-      <Stat title="Worst Day" value={formatCurrency(worstDay)} positive={false} />
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <Stat title="Trades" value={formatNumber(totalTrades)} />
+        <Stat title="Win %" value={`${winRate.toFixed(1)}%`} />
+        <Stat title="P&L" value={formatCurrency(totalPnL)} positive={totalPnL >= 0} />
+        <Stat title="Avg RR" value={avgRR.toFixed(2)} />
+        <Stat title="Big Loss" value={formatCurrency(biggestLoss)} positive={false} />
+        <Stat title="Streak" value={maxStreak} />
+        <Stat title="Avg Win" value={formatCurrency(avgWin)} positive />
+        <Stat title="Avg Loss" value={formatCurrency(avgLoss)} positive={false} />
+        <Stat title="Best Day" value={formatCurrency(bestDay)} positive />
+        <Stat title="Worst Day" value={formatCurrency(worstDay)} positive={false} />
+      </div>
+
+      {showDrawdown ? (
+        <div
+          className={`p-4 rounded-xl bg-white/5 border backdrop-blur-md ${
+            drawdownLimitBreached ? "border-amber-400/60" : "border-white/10"
+          }`}
+        >
+          <h3 className="text-sm text-gray-400 mb-2">Drawdown</h3>
+
+          <p className="text-red-400 text-lg font-semibold">
+            Max: {formatMoney(drawdownData.maxDrawdown)}
+          </p>
+
+          <p className="text-sm text-gray-300">
+            Current: {formatMoney(drawdownData.currentDrawdown)}
+          </p>
+
+          {drawdownLimitCap == null ? (
+            <p className="text-xs text-gray-500 mt-2">
+              Limit: not set — configure in Settings.
+            </p>
+          ) : (
+            <>
+              <p className="text-sm text-gray-300 mt-2">
+                Your limit: {formatMoney(drawdownLimitCap)}
+              </p>
+              {drawdownLimitBreached ? (
+                <p className="text-xs text-amber-300 mt-1">
+                  This range has met or exceeded your drawdown limit (current or historical
+                  max).
+                </p>
+              ) : (
+                <p className="text-xs text-gray-500 mt-1">Within your configured limit.</p>
+              )}
+            </>
+          )}
+        </div>
+      ) : null}
+
+      <div className="p-4 rounded-xl bg-white/5 border border-white/10 backdrop-blur-md">
+        <h3 className="text-sm text-gray-400 mb-2">Expectancy</h3>
+
+        {expectancyData ? (
+          <>
+            <p
+              className={`text-lg font-semibold ${
+                expectancyData.expectancy >= 0
+                  ? "text-green-400"
+                  : "text-red-400"
+              }`}
+            >
+              {formatMoney(expectancyData.expectancy)}
+            </p>
+
+            <div className="text-xs text-gray-400 mt-2 space-y-1">
+              <p>Win Rate: {(expectancyData.winRate * 100).toFixed(0)}%</p>
+              <p>Avg Win: {formatMoney(expectancyData.avgWin)}</p>
+              <p>Avg Loss: {formatMoney(expectancyData.avgLoss)}</p>
+            </div>
+          </>
+        ) : (
+          <p className="text-gray-500 text-sm">No data</p>
+        )}
+      </div>
+
+      <div className="p-4 rounded-xl bg-white/5 border border-white/10 backdrop-blur-md">
+        <h3 className="text-sm text-gray-400 mb-2">Streaks</h3>
+
+        {streakData ? (
+          <>
+            <p className="text-lg font-semibold text-white">
+              Current: {streakData.currentStreak}{" "}
+              <span
+                className={
+                  streakData.currentType === "win"
+                    ? "text-green-400"
+                    : streakData.currentType === "loss"
+                    ? "text-red-400"
+                    : "text-gray-400"
+                }
+              >
+                {streakData.currentType}
+              </span>
+            </p>
+
+            <div className="text-xs text-gray-400 mt-2 space-y-1">
+              <p>Max Wins: {streakData.maxWinStreak}</p>
+              <p>Max Losses: {streakData.maxLossStreak}</p>
+            </div>
+          </>
+        ) : (
+          <p className="text-gray-500 text-sm">No data</p>
+        )}
+      </div>
+
+      <div className="p-4 rounded-xl bg-white/5 border border-white/10 backdrop-blur-md">
+        <h3 className="text-sm text-gray-400 mb-2">Trading Hours</h3>
+
+        {hourData ? (
+          <>
+            <p className="text-green-400 text-sm">
+              Best: {formatHour(hourData.best.hour)} (
+              {formatMoney(hourData.best.avgPnL)})
+            </p>
+
+            <p className="text-red-400 text-sm mt-1">
+              Worst: {formatHour(hourData.worst.hour)} (
+              {formatMoney(hourData.worst.avgPnL)})
+            </p>
+          </>
+        ) : (
+          <p className="text-gray-500 text-sm">No data</p>
+        )}
+      </div>
     </div>
 
     {/* RIGHT: CHARTS */}
-    <div className="lg:col-span-2 space-y-6">
-      <div className="bg-white/5 border border-white/10 p-6 rounded-xl">
-        <h2 className="text-lg font-semibold mb-4 text-blue-300">
-          Equity Curve
-        </h2>
+    <div className="lg:col-span-2 space-y-4">
+      {showEquity ? (
+        <div className="p-4 rounded-xl bg-white/5 border border-white/10 backdrop-blur-md">
+          <h2 className="text-base font-semibold mb-3 text-blue-300">
+            Equity Curve
+          </h2>
 
-        <ResponsiveContainer width="100%" height={350}>
-          <LineChart data={equityData}>
-            <CartesianGrid stroke="#334155" />
-            <XAxis dataKey="date" stroke="#94a3b8" />
-            <YAxis stroke="#94a3b8" />
-            <Tooltip formatter={(value: any) => `$${value.toLocaleString()}`} />
-            <Line type="monotone" dataKey="equity" stroke="#22c55e" strokeWidth={3} dot={false} />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
+          <ResponsiveContainer width="100%" height={350}>
+            <LineChart
+              data={equityDrawdownChartData}
+              margin={{ top: 10, right: 20, left: 20, bottom: 20 }}
+            >
+              <CartesianGrid stroke="#334155" />
+              <XAxis
+                dataKey="date"
+                stroke="#94a3b8"
+                tick={{ fill: "#94a3b8", fontSize: 12 }}
+                tickFormatter={(value) => {
+                  const d = new Date(String(value))
+                  if (Number.isNaN(d.getTime())) return String(value).slice(0, 10)
+                  return `${d.getMonth() + 1}/${d.getDate()}`
+                }}
+                interval="preserveStartEnd"
+                minTickGap={24}
+                angle={-25}
+                textAnchor="end"
+                height={48}
+              />
+              <YAxis
+                stroke="#94a3b8"
+                tick={{ fill: "#94a3b8", fontSize: 12 }}
+                tickFormatter={(value) =>
+                  Number(value) < 0
+                    ? `-$${Math.abs(Number(value)).toLocaleString(undefined, {
+                        minimumFractionDigits: 0,
+                        maximumFractionDigits: 0,
+                      })}`
+                    : `$${Number(value).toLocaleString(undefined, {
+                        minimumFractionDigits: 0,
+                        maximumFractionDigits: 0,
+                      })}`
+                }
+              />
+              <Tooltip
+                formatter={(value, name) => {
+                  const n = Number(value)
+                  const formatted =
+                    n < 0
+                      ? `-$${Math.abs(n).toLocaleString()}`
+                      : `$${n.toLocaleString()}`
+                  const label =
+                    name === "Equity" || name === "equity"
+                      ? "Equity"
+                      : "Drawdown"
+                  return [formatted, label]
+                }}
+                labelFormatter={(label) => {
+                  const d = new Date(String(label))
+                  if (Number.isNaN(d.getTime())) return String(label)
+                  return d.toLocaleString(undefined, {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                    hour: "numeric",
+                    minute: "2-digit",
+                  })
+                }}
+                contentStyle={{
+                  backgroundColor: "#0f172a",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  borderRadius: "8px",
+                }}
+                labelStyle={{ color: "#94a3b8" }}
+              />
+              <Legend
+                wrapperStyle={{ paddingTop: 8 }}
+                formatter={(value) => (
+                  <span className="text-gray-300 text-xs">{value}</span>
+                )}
+              />
+              <Line
+                type="monotone"
+                dataKey="equity"
+                name="Equity"
+                stroke="#22c55e"
+                strokeWidth={2}
+                dot={false}
+              />
+              <Line
+                type="monotone"
+                dataKey="drawdown"
+                name="Drawdown"
+                stroke="#ef4444"
+                strokeWidth={2}
+                dot={false}
+              />
+            </LineChart>
+          </ResponsiveContainer>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white/5 border border-white/10 p-6 rounded-xl min-h-[320px]">
-          <h2 className="text-lg font-semibold mb-4 text-blue-300">
+          <div className="mt-3 flex flex-wrap gap-4 text-sm">
+            <div className="bg-white/5 border border-white/10 rounded-lg px-3 py-2">
+              <span className="text-gray-400">Max DD:</span>{" "}
+              <span className="text-red-400 font-medium">
+                {formatMoney(drawdownData.maxDrawdown)}
+              </span>
+            </div>
+
+            <div className="bg-white/5 border border-white/10 rounded-lg px-3 py-2">
+              <span className="text-gray-400">Current DD:</span>{" "}
+              <span className="text-yellow-300 font-medium">
+                {formatMoney(drawdownData.currentDrawdown)}
+              </span>
+            </div>
+
+            <div className="bg-white/5 border border-white/10 rounded-lg px-3 py-2">
+              <span className="text-gray-400">Recovery:</span>{" "}
+              <span className="text-green-400 font-medium">
+                {drawdownData.recoveryTrades !== null
+                  ? `${drawdownData.recoveryTrades} trades`
+                  : "In progress"}
+              </span>
+            </div>
+
+            <div className="bg-white/5 border border-white/10 rounded-lg px-3 py-2">
+              <span className="text-gray-400">DD %:</span>{" "}
+              <span className="text-red-400 font-medium">
+                {drawdownData.recoveryPercent.toFixed(1)}%
+              </span>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div
+          className={`p-4 rounded-xl bg-white/5 border border-white/10 backdrop-blur-md min-h-[300px] ${
+            !showSessions ? "lg:col-span-2" : ""
+          }`}
+        >
+          <h2 className="text-base font-semibold mb-3 text-blue-300">
             P&amp;L by Weekday
           </h2>
           <ResponsiveContainer width="100%" height={280}>
-            <LineChart data={weekdayData}>
+            <LineChart
+              data={weekdayData}
+              margin={{ top: 10, right: 20, left: 20, bottom: 20 }}
+            >
               <CartesianGrid stroke="#334155" />
-              <XAxis dataKey="day" stroke="#94a3b8" />
-              <YAxis stroke="#94a3b8" />
-              <Tooltip formatter={(value: any) => formatCurrency(Number(value))} />
+              <XAxis
+                dataKey="day"
+                stroke="#94a3b8"
+                tick={{ fill: "#94a3b8", fontSize: 12 }}
+              />
+              <YAxis
+                stroke="#94a3b8"
+                tick={{ fill: "#94a3b8", fontSize: 12 }}
+                tickFormatter={(value) =>
+                  Number(value) < 0
+                    ? `-$${Math.abs(Number(value)).toLocaleString()}`
+                    : `$${Number(value).toLocaleString()}`
+                }
+              />
+              <Tooltip
+                formatter={(value) =>
+                  Number(value) < 0
+                    ? `-$${Math.abs(Number(value)).toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                      })}`
+                    : `$${Number(value).toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                      })}`
+                }
+                labelFormatter={(label) => `${label}`}
+              />
               <Line type="monotone" dataKey="pnl" stroke="#38bdf8" strokeWidth={2} dot={{ r: 4, fill: "#38bdf8" }} />
             </LineChart>
           </ResponsiveContainer>
         </div>
 
-        <div className="bg-white/5 border border-white/10 p-6 rounded-xl min-h-[320px]">
-          <h2 className="text-lg font-semibold mb-4 text-blue-300">
-            Trades by Session
-          </h2>
-          <ResponsiveContainer width="100%" height={280}>
-            <PieChart>
-              <Pie
-                data={sessionPieData}
-                dataKey="value"
-                nameKey="name"
-                cx="50%"
-                cy="50%"
-                outerRadius={90}
-                label={({ name, value }) => `${name}: ${value}`}
-              >
-                {sessionPieData.map((entry, index) => (
-                  <Cell
-                    key={`cell-${entry.name}`}
-                    fill={["#60a5fa", "#34d399", "#c084fc"][index % 3]}
-                  />
-                ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
+        {showSessions ? (
+          <div className="p-4 rounded-xl bg-white/5 border border-white/10 backdrop-blur-md min-h-[300px]">
+            <h2 className="text-base font-semibold mb-3 text-blue-300">
+              Trades by Session
+            </h2>
+            <ResponsiveContainer width="100%" height={280}>
+              <PieChart>
+                <Pie
+                  data={sessionPieData}
+                  dataKey="value"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={90}
+                  label={({ name, value }) => `${name}: ${value}`}
+                >
+                  {sessionPieData.map((entry, index) => (
+                    <Cell
+                      key={`cell-${entry.name}`}
+                      fill={["#60a5fa", "#34d399", "#c084fc"][index % 3]}
+                    />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        ) : null}
       </div>
     </div>
 
   </div>
 
   {/* SYMBOL + RECENT */}
-  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+  <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
     <div className="lg:col-span-2 bg-white/5 border border-white/10 p-4 rounded-xl overflow-x-auto">
       <h3 className="text-blue-300 font-semibold mb-3">Symbol Performance</h3>
@@ -728,9 +1658,69 @@ const worstDay = dailyPnLs.length > 0
             })}
           </div>
 
-          <div className="mt-8 max-w-5xl mx-auto lg:max-w-none">
-            <div className="bg-white/5 border border-white/10 p-4 rounded-xl">
-              <h3 className="text-blue-300 font-semibold mb-3">Best Performing Setup</h3>
+          {(showInsights || showBestSetup) ? (
+          <div className="mt-8 max-w-5xl mx-auto lg:max-w-none grid grid-cols-1 md:grid-cols-2 gap-4">
+            {showInsights ? (
+            <div className={`space-y-4 ${!showBestSetup ? "md:col-span-2" : ""}`}>
+              <div className="p-4 rounded-xl bg-white/5 border border-white/10 backdrop-blur-md">
+                <h3 className="text-sm text-gray-400 mb-2">Performance Insights</h3>
+                <p className="text-xs text-gray-500 mb-3">
+                  Data-driven highlights (min. 3 trades per session, symbol, or
+                  direction). Respects current filters.
+                </p>
+                {insights.length > 0 ? (
+                  <div className="space-y-2">
+                    {insights.map((text, i) => (
+                      <p
+                        key={`${i}-${text.slice(0, 24)}`}
+                        className="text-sm text-gray-200"
+                      >
+                        • {text}
+                      </p>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-gray-400 text-sm">
+                    Not enough sample size yet — need at least 3 trades in a session,
+                    symbol, or direction bucket (with current filters).
+                  </p>
+                )}
+              </div>
+
+              <div className="p-4 rounded-xl bg-white/5 border border-white/10 backdrop-blur-md">
+                <h3 className="text-sm text-gray-400 mb-2">Advanced Edge</h3>
+                <p className="text-xs text-gray-500 mb-3">
+                  Strongest <span className="text-gray-400">combined</span> setup
+                  (pairs or triples, min. 3 trades). Same filters as above.
+                </p>
+                {combinedInsights.length > 0 ? (
+                  <div className="space-y-2">
+                    {combinedInsights.map((text, i) => (
+                      <p
+                        key={`combo-${i}-${text.slice(0, 20)}`}
+                        className="text-sm text-emerald-300 font-medium"
+                      >
+                        ⭐ {text}
+                      </p>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-gray-400 text-sm">
+                    No qualifying combined setup yet — need 3+ trades with consistent
+                    session, symbol, and direction data.
+                  </p>
+                )}
+              </div>
+            </div>
+            ) : null}
+
+            {showBestSetup ? (
+            <div
+              className={`p-4 rounded-xl bg-white/5 border border-white/10 backdrop-blur-md ${!showInsights ? "md:col-span-2" : ""}`}
+            >
+              <h3 className="text-blue-300 font-semibold mb-3 text-base">
+                Best Performing Setup
+              </h3>
               {bestSetup ? (
                 <div className="text-sm space-y-2 text-gray-300">
                   <p>
@@ -738,10 +1728,16 @@ const worstDay = dailyPnLs.length > 0
                     <span className="text-white font-medium">{bestSetup.trade_type}</span>
                   </p>
                   <p>
-                    <span className="text-gray-400">Win rate:</span> {bestSetup.winRate.toFixed(1)}%
+                    <span className="text-gray-400">Win rate:</span>{" "}
+                    {bestSetup.winRate.toFixed(1)}%
                   </p>
-                  <p className={bestSetup.totalPnL >= 0 ? "text-green-400" : "text-red-400"}>
-                    <span className="text-gray-400">Total P&amp;L:</span> {formatCurrency(bestSetup.totalPnL)}
+                  <p
+                    className={
+                      bestSetup.totalPnL >= 0 ? "text-green-400" : "text-red-400"
+                    }
+                  >
+                    <span className="text-gray-400">Total P&amp;L:</span>{" "}
+                    {formatCurrency(bestSetup.totalPnL)}
                   </p>
                   <p>
                     <span className="text-gray-400">Trades:</span> {bestSetup.trades}
@@ -749,11 +1745,60 @@ const worstDay = dailyPnLs.length > 0
                 </div>
               ) : (
                 <p className="text-gray-400 text-sm">
-                  Need at least 3 trades with the same setup type (and non-empty trade type) to rank setups.
+                  Need at least 3 trades with the same setup type (and non-empty
+                  trade type) to rank setups.
                 </p>
               )}
             </div>
+            ) : null}
           </div>
+          ) : null}
+
+          {(showWorstSetup || showWarnings) ? (
+          <div className="mt-4 max-w-5xl mx-auto lg:max-w-none grid grid-cols-1 md:grid-cols-2 gap-4">
+            {showWorstSetup ? (
+            <div
+              className={`p-4 rounded-xl bg-white/5 border border-white/10 backdrop-blur-md ${!showWarnings ? "md:col-span-2" : ""}`}
+            >
+              <h3 className="text-sm text-gray-400 mb-2">Risk Insights</h3>
+              <p className="text-xs text-gray-500 mb-3">
+                Lowest-performing combined setup (same 3+ trade rule as Advanced Edge).
+              </p>
+              {worstInsight ? (
+                <p className="text-sm text-red-400 font-medium">⚠️ {worstInsight}</p>
+              ) : (
+                <p className="text-gray-400 text-sm">
+                  No combined setup to rank yet, or filters removed too much data.
+                </p>
+              )}
+            </div>
+            ) : null}
+
+            {showWarnings ? (
+            <div
+              className={`p-4 rounded-xl bg-white/5 border border-white/10 backdrop-blur-md ${!showWorstSetup ? "md:col-span-2" : ""}`}
+            >
+              <h3 className="text-sm text-gray-400 mb-2">Behavior Warnings</h3>
+              <p className="text-xs text-gray-500 mb-3">
+                Post–loss streak win rate (next 5 trades) and RR sample comparison.
+              </p>
+              {warnings.length > 0 ? (
+                <div className="space-y-2">
+                  {warnings.map((w, i) => (
+                    <p key={`warn-${i}-${w.slice(0, 16)}`} className="text-sm text-yellow-300">
+                      🚨 {w}
+                    </p>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-gray-400 text-sm">
+                  No behavioral flags for the current trade set.
+                </p>
+              )}
+            </div>
+            ) : null}
+          </div>
+          ) : null}
         </ProGate>
       </div>
     </>
@@ -766,11 +1811,9 @@ function Stat({ title, value, positive }: any) {
   if (positive === false) color = "text-red-400"
 
   return (
-    <div className="bg-white/5 border border-white/10 p-4 rounded-xl">
-      <p className="text-xs text-blue-300">{title}</p>
-      <p className={`text-lg font-semibold ${color}`}>
-        {value}
-      </p>
+    <div className="p-4 rounded-xl bg-white/5 border border-white/10 backdrop-blur-md">
+      <p className="text-sm text-gray-400">{title}</p>
+      <p className={`text-xl font-semibold mt-0.5 ${color}`}>{value}</p>
     </div>
   )
 }
