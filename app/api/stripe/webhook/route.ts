@@ -95,6 +95,70 @@ export async function POST(req: Request) {
     }
 
     // ======================================================
+    // 💰 INVOICE PAID → REFERRAL EARNINGS (referral_earnings)
+    // ======================================================
+    if (event.type === "invoice.paid") {
+      try {
+        const invoice = event.data.object as Stripe.Invoice
+
+        console.log("💰 PROCESSING INVOICE FOR EARNINGS")
+
+        const customerId =
+          typeof invoice.customer === "string"
+            ? invoice.customer
+            : invoice.customer?.id
+
+        if (!customerId) {
+          console.log("❌ No customer on invoice")
+        } else {
+          const { data: buyer } = await supabase
+            .from("profiles")
+            .select("*")
+            .eq("stripe_customer_id", customerId)
+            .single()
+
+          if (!buyer) {
+            console.log("❌ No buyer found")
+          } else {
+            const referralCode = buyer.referred_by as string | null | undefined
+
+            if (!referralCode) {
+              console.log("❌ No referral on buyer")
+            } else {
+              const { data: referrer } = await supabase
+                .from("profiles")
+                .select("*")
+                .eq("referral_code", referralCode)
+                .single()
+
+              if (!referrer) {
+                console.log("❌ No referrer found")
+              } else {
+                const amountPaid = (invoice.amount_paid || 0) / 100
+                const commission = amountPaid * 0.18
+
+                console.log("💰 AMOUNT:", amountPaid)
+                console.log("💰 COMMISSION:", commission)
+
+                await supabase
+                  .from("profiles")
+                  .update({
+                    referral_earnings:
+                      Number(referrer.referral_earnings || 0) + commission,
+                  })
+                  .eq("id", referrer.id)
+
+                console.log("✅ EARNINGS UPDATED")
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.log("❌ EARNINGS ERROR:", err)
+      }
+    }
+
+    // ======================================================
     // ❌ SUB CANCEL
     // ======================================================
     if (event.type === "customer.subscription.deleted") {

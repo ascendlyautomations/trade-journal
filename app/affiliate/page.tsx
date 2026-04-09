@@ -1,15 +1,8 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useEffect, useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
-import { useUserProfile } from "../../lib/useUserProfile"
 import Navbar from "../components/Navbar"
-
-type AffiliateProfile = {
-  referral_count?: number | null
-  referral_earnings?: number | null
-  referral_code?: string | null
-}
 
 type ReferralRow = {
   referred_user_id?: string
@@ -17,10 +10,15 @@ type ReferralRow = {
   created_at?: string
 }
 
-export default function AffiliateDashboard() {
-  const { user, loading } = useUserProfile()
+/** Full `profiles` row from Supabase; these keys are what the dashboard displays. */
+type ProfileRow = Record<string, unknown> & {
+  referral_count?: number | null
+  referral_earnings?: number | null
+  referral_code?: string | null
+}
 
-  const [profile, setProfile] = useState<AffiliateProfile | null>(null)
+export default function AffiliateDashboard() {
+  const [profile, setProfile] = useState<ProfileRow | null>(null)
 
   const [referrals, setReferrals] = useState<ReferralRow[]>([])
   const [affiliateCode, setAffiliateCode] = useState<string | null>(null)
@@ -29,23 +27,45 @@ export default function AffiliateDashboard() {
   const BASE_URL =
     process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"
 
-  const fetchProfile = useCallback(async () => {
-    if (!user?.id) return
+  async function fetchProfile() {
+  const { data: authData } = await supabase.auth.getUser()
 
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("referral_count, referral_earnings, referral_code")
-      .eq("id", user.id)
-      .single()
+  console.log("AUTH DATA:", authData)
 
-    if (!error && data) {
-      console.log("🔥 FETCHED PROFILE:", data)
-      setProfile(data as AffiliateProfile)
+  if (!authData?.user) {
+    console.log("❌ NO USER")
+    return
+  }
+
+  const userId = authData.user.id
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("referral_count, referral_earnings, referral_code")
+    .eq("id", userId)
+    .single() // 🚨 THIS IS THE FIX
+
+  console.log("PROFILE RESULT:", data, error)
+
+  if (error) {
+    console.log("❌ FETCH ERROR:", error)
+    return
+  }
+
+  if (data) {
+    setProfile(data)
+  }
+}
+
+  async function fetchReferralsAndAffiliate() {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      setLoadingData(false)
+      return
     }
-  }, [user])
-
-  const fetchData = useCallback(async () => {
-    if (!user?.id) return
 
     setLoadingData(true)
 
@@ -67,32 +87,32 @@ export default function AffiliateDashboard() {
 
     setReferrals((refs as ReferralRow[]) || [])
     setLoadingData(false)
-  }, [user])
+  }
 
   useEffect(() => {
-    if (user) {
-      // Data load from Supabase on mount / user change (not synchronous DOM sync).
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      void fetchProfile()
-    }
-  }, [user, fetchProfile])
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- mount-only profile load
+    fetchProfile()
+  }, [])
 
   useEffect(() => {
-    if (user) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      void fetchData()
-    }
-  }, [user, fetchData])
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- mount-only referrals table
+    void fetchReferralsAndAffiliate()
+  }, [])
 
   function copyLink(link: string) {
     navigator.clipboard.writeText(link)
     alert("Copied 🚀")
   }
 
-  if (loading || !user) return null
+  const linkCode =
+    (profile?.referral_code != null &&
+    String(profile.referral_code).trim() !== ""
+      ? String(profile.referral_code)
+      : null) ||
+    affiliateCode ||
+    ""
 
-  const codeForLink = profile?.referral_code || affiliateCode
-  const referralLink = codeForLink ? `${BASE_URL}?ref=${codeForLink}` : ""
+  const referralLink = linkCode ? `${BASE_URL}?ref=${linkCode}` : ""
 
   return (
     <>
@@ -102,7 +122,6 @@ export default function AffiliateDashboard() {
 
         <div className="max-w-6xl mx-auto p-10">
 
-          {/* HEADER */}
           <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
             <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
               Affiliate Dashboard
@@ -116,7 +135,6 @@ export default function AffiliateDashboard() {
             </button>
           </div>
 
-          {/* STATS */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
 
             <div className="bg-white/5 backdrop-blur-md border border-white/10 p-6 rounded-xl">
@@ -139,14 +157,13 @@ export default function AffiliateDashboard() {
               <p className="text-gray-400 text-sm">Your Code</p>
 
               <h2 className="text-2xl font-bold text-blue-400 mt-1">
-                {profile?.referral_code || affiliateCode || "No Code"}
+                {profile?.referral_code || "—"}
               </h2>
             </div>
 
           </div>
 
-          {/* REFERRAL LINK */}
-          {codeForLink && (
+          {linkCode && (
             <div className="bg-white/5 backdrop-blur-md border border-white/10 p-6 rounded-xl mb-8">
 
               <p className="text-gray-400 mb-3">Your Referral Link</p>
@@ -160,6 +177,7 @@ export default function AffiliateDashboard() {
                 />
 
                 <button
+                  type="button"
                   onClick={() => copyLink(referralLink)}
                   className="bg-emerald-500 hover:bg-emerald-600 px-4 py-2 rounded font-semibold transition"
                 >
@@ -170,7 +188,6 @@ export default function AffiliateDashboard() {
             </div>
           )}
 
-          {/* REFERRALS TABLE */}
           <div className="bg-white/5 backdrop-blur-md border border-white/10 p-6 rounded-xl">
 
             <h2 className="text-lg font-semibold mb-4 text-blue-400">

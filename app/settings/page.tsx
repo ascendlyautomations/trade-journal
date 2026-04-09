@@ -11,7 +11,6 @@ export default function SettingsPage() {
   const [profile, setProfile] = useState<any>(null)
   const [managingSub, setManagingSub] = useState(false)
   const [affiliateData, setAffiliateData] = useState<any>(null)
-  const [referralCount, setReferralCount] = useState(0)
 
   const [name, setName] = useState("")
   const [username, setUsername] = useState("")
@@ -72,13 +71,7 @@ export default function SettingsPage() {
           .single()
 
         if (affiliate) {
-          const { data: referrals } = await supabase
-            .from("referrals")
-            .select("*")
-            .eq("affiliate_id", affiliate.id)
-
           setAffiliateData(affiliate)
-          setReferralCount(referrals?.length || 0)
         }
       } catch (e) {
         console.error("Affiliate stats fetch failed:", e)
@@ -378,7 +371,7 @@ export default function SettingsPage() {
                   <p className="text-sm text-gray-400 mb-4">
                     Total Referrals:
                     <span className="text-white ml-2">
-                      {referralCount}
+                      {Number(profile?.referral_count || 0)}
                     </span>
                   </p>
 

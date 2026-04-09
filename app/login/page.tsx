@@ -14,55 +14,51 @@ export default function LoginPage() {
 
   const router = useRouter()
 
-  function generateReferralCode() {
-    return Math.random().toString(36).substring(2, 8)
+  function generateRandomCode() {
+    return Math.random().toString(36).substring(2, 8).toUpperCase()
   }
 
   const handleAuth = async () => {
     setLoading(true)
 
     if (isSignup) {
-      const { data, error } = await supabase.auth.signUp({
+      const { data: authData, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
       })
 
-      if (error) {
-        alert(error.message)
+      if (signUpError) {
+        console.log("❌ SIGNUP ERROR:", signUpError)
+        alert(signUpError.message)
         setLoading(false)
         return
       }
 
-      if (data.user) {
-        let referredBy: string | null = null
+      const user = authData?.user
 
-        try {
-          const storedCode = typeof window !== "undefined"
-            ? window.localStorage.getItem("referral_code")
-            : null
+      if (!user) {
+        console.log("❌ NO USER RETURNED")
+        setLoading(false)
+        return
+      }
 
-          if (storedCode) {
-            const { data: ref } = await supabase
-              .from("profiles")
-              .select("id")
-              .eq("referral_code", storedCode)
-              .single()
+      const referralCode =
+        typeof window !== "undefined"
+          ? localStorage.getItem("referral_code")
+          : null
 
-            if (ref?.id) {
-              referredBy = ref.id
-            }
-          }
-        } catch (e) {
-          console.error("Referral lookup failed:", e)
-        }
+      console.log("🔥 REFERRAL ON SIGNUP:", referralCode)
 
-        await supabase.from("profiles").insert({
-          id: data.user.id,
-          name,
-          username,
-          referral_code: generateReferralCode(),
-          referred_by: referredBy,
-        })
+      const { error: profileInsertError } = await supabase.from("profiles").insert({
+        id: user.id,
+        name,
+        username: username || email.split("@")[0],
+        referral_code: generateRandomCode(),
+        referred_by: referralCode || null,
+      })
+
+      if (profileInsertError) {
+        console.log("❌ PROFILE INSERT ERROR:", profileInsertError)
       }
 
       alert("Account created! You can now log in.")
