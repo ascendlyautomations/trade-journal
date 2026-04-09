@@ -102,6 +102,8 @@ export default function InputTradeForm({
   const [postToFeed, setPostToFeed] = useState(false)
   const [image, setImage] = useState<File | null>(null)
 
+  const [selectedAccountType, setSelectedAccountType] = useState("funded")
+
   const [firm, setFirm] = useState("")
   const [accountSize, setAccountSize] = useState("")
   const [accountNumber, setAccountNumber] = useState("")
@@ -151,7 +153,22 @@ export default function InputTradeForm({
     setPublicDescription(t.public_description ?? "")
     setPostToFeed(false)
     setImage(null)
-    setFirm(t.account_type ?? "")
+    const at = String(t.account_type ?? "").toLowerCase().trim()
+    let category: "funded" | "eval" | "live" = "funded"
+    let firmFromLegacy = ""
+    if (at === "funded" || at === "eval" || at === "live") {
+      category = at
+    } else if (at.includes("fund")) {
+      category = "funded"
+    } else if (at.includes("eval")) {
+      category = "eval"
+    } else if (at.includes("live")) {
+      category = "live"
+    } else if (t.account_type) {
+      firmFromLegacy = String(t.account_type)
+    }
+    setSelectedAccountType(category)
+    setFirm(firmFromLegacy)
     setAccountSize(t.account_size ?? "")
     setAccountNumber(t.account_id ?? "")
     setTradeType(t.trade_type ?? "")
@@ -217,6 +234,7 @@ export default function InputTradeForm({
     setTradeType("")
     setTradeDate(getESTDate())
     setPostToFeed(false)
+    setSelectedAccountType("funded")
   }
 
   async function handleSubmit() {
@@ -295,7 +313,7 @@ export default function InputTradeForm({
         notes: notes ?? "",
         public_description: publicDescription ?? "",
         image_url: imageUrlOut,
-        account_type: firm || null,
+        account_type: selectedAccountType,
         account_size: accountSize || null,
         account_id: accountNumber || null,
         created_at: finalDate.toISOString(),
@@ -348,7 +366,7 @@ export default function InputTradeForm({
         notes,
         public_description: publicDescription,
         image_url: screenshotUrl,
-        account_type: firm,
+        account_type: selectedAccountType,
         account_size: accountSize,
         account_id: accountNumber,
         user_id: user.id,
@@ -443,6 +461,17 @@ export default function InputTradeForm({
             onChange={(e) => setTradeDate(e.target.value)}
             className="w-full p-2 rounded bg-[#0f172a] border border-white/10 text-white [color-scheme:dark]"
           />
+
+          <p className="text-sm text-gray-400">Account type (saved as account_type)</p>
+          <select
+            value={selectedAccountType}
+            onChange={(e) => setSelectedAccountType(e.target.value)}
+            className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
+          >
+            <option value="funded">Funded</option>
+            <option value="eval">Eval</option>
+            <option value="live">Live</option>
+          </select>
 
           <select
             value={firm}

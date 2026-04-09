@@ -33,7 +33,7 @@ export default function LandingPage() {
         },
         body: JSON.stringify({
           userId: user.id,
-          referralCode: ref,
+          referralCode: localStorage.getItem("referral_code"),
         }),
       })
         .then((res) => res.json())
@@ -67,6 +67,7 @@ export default function LandingPage() {
       },
       body: JSON.stringify({
         userId: user.id,
+        referralCode: localStorage.getItem("referral_code"),
       }),
     })
 

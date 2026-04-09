@@ -938,7 +938,10 @@ const worstDay = dailyPnLs.length > 0
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ userId }),
+        body: JSON.stringify({
+          userId,
+          referralCode: localStorage.getItem("referral_code"),
+        }),
       })
 
       const data = await res.json()

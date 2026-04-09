@@ -50,12 +50,6 @@ export async function POST(req: Request) {
       success_url: "http://localhost:3000/dashboard",
       cancel_url: "http://localhost:3000",
       customer_email: "test@example.com",
-
-      // 🔥 THIS IS WHAT MATTERS
-      metadata: {
-        userId: userId,
-        referralCode: referralCode,
-      },
     }
 
     // 🔥 OPTIONAL DISCOUNT LOGIC
@@ -77,6 +71,18 @@ export async function POST(req: Request) {
       }
     } else {
       sessionConfig.allow_promotion_codes = true
+    }
+
+    {
+      const referralCode = body?.referralCode || null
+
+      console.log("🚀 RECEIVED REFERRAL CODE:", referralCode)
+
+      sessionConfig.metadata = {
+        ...sessionConfig.metadata,
+        userId,
+        referralCode: referralCode || "",
+      }
     }
 
     const session = await stripe.checkout.sessions.create(sessionConfig)

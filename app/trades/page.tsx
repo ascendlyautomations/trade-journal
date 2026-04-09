@@ -36,6 +36,7 @@ export default function TradesPage() {
   const [resultFilter, setResultFilter] = useState<"all" | "wins" | "losses">("all")
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
   const [accountFilter, setAccountFilter] = useState("all")
+  const [accountTypeFilter, setAccountTypeFilter] = useState("all")
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [timeframe, setTimeframe] = useState("all")
   const [loading, setLoading] = useState(true)
@@ -165,33 +166,50 @@ export default function TradesPage() {
     )
   )
 
-  const filteredTrades = trades.filter((trade) => {
-    if (selectedDate) {
-      const tradeDate = new Date(trade.created_at)
+const filteredTrades = trades.filter((trade) => {
+  if (selectedDate) {
+    const tradeDate = new Date(trade.created_at)
+    const selected = new Date(selectedDate + "T00:00:00")
 
-      const selected = new Date(selectedDate + "T00:00:00")
-
-      if (
-        tradeDate.getFullYear() !== selected.getFullYear() ||
-        tradeDate.getMonth() !== selected.getMonth() ||
-        tradeDate.getDate() !== selected.getDate()
-      ) {
-        return false
-      }
+    if (
+      tradeDate.getFullYear() !== selected.getFullYear() ||
+      tradeDate.getMonth() !== selected.getMonth() ||
+      tradeDate.getDate() !== selected.getDate()
+    ) {
+      return false
     }
+  }
 
-    if (!filterByTime(trade)) return false
+  if (!filterByTime(trade)) return false
 
-    if (resultFilter === "wins" && trade.pnl <= 0) return false
-    if (resultFilter === "losses" && trade.pnl >= 0) return false
+  if (resultFilter === "wins" && trade.pnl <= 0) return false
+  if (resultFilter === "losses" && trade.pnl >= 0) return false
 
-    if (accountFilter !== "all") {
-      const label = `${trade.account_type} (${trade.account_id})`
-      if (label !== accountFilter) return false
-    }
+  if (accountFilter !== "all") {
+    const label = `${trade.account_type} (${trade.account_id})`
+    if (label !== accountFilter) return false
+  }
 
-    return true
-  })
+  // 🔥 ADD THIS BLOCK RIGHT HERE
+  const rawType =
+    trade.account_type ||
+    trade.accountType ||
+    trade.type ||
+    trade.account ||
+    ""
+
+  const tradeType = String(rawType).toLowerCase()
+
+  if (
+    accountTypeFilter !== "all" &&
+    !tradeType.includes(accountTypeFilter)
+  ) {
+    return false
+  }
+
+  // 🔥 THIS STAYS LAST
+  return true
+})
 
   const totalTrades = filteredTrades.length
   const wins = filteredTrades.filter(t => t.pnl > 0)
@@ -332,6 +350,17 @@ export default function TradesPage() {
                     ))}
                   </select>
 
+                  <select
+                    value={accountTypeFilter}
+                    onChange={(e) => setAccountTypeFilter(e.target.value)}
+                    className="bg-[#0f172a] hover:bg-[#1e293b] text-white border border-white/10 rounded-md px-3 py-1 text-sm shrink-0 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="all">All Types</option>
+                    <option value="funded">Funded</option>
+                    <option value="eval">Eval</option>
+                    <option value="live">Live</option>
+                  </select>
+
                   {(
                     [
                       { label: "All", value: "all" },
@@ -410,16 +439,33 @@ export default function TradesPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
                 {filteredTrades.map((trade) => {
-                  const entry = trade.entry_price ?? trade.entry ?? null
-                  const exit = trade.exit_price ?? trade.exit ?? null
+  const entry = trade.entry_price ?? trade.entry ?? null
+  const exit = trade.exit_price ?? trade.exit ?? null
 
-                  console.log("TRADE BEING RENDERED:", trade)
+  // 🔥 THIS LINE FIXES EVERYTHING
+  const rawType =
+    trade.account_type ||
+    trade.accountType ||
+    trade.type ||
+    trade.account ||
+    ""
 
-                  return (
-                  <div
-                    key={trade.id}
-                    className="relative bg-white/5 border border-white/10 backdrop-blur-md p-7 rounded-xl shadow hover:scale-[1.01] transition"
-                  >
+  const tradeType = String(trade.account_type || "").toLowerCase().trim()
+
+const filterValue = accountTypeFilter.toLowerCase().trim()
+
+if (
+  filterValue !== "all" &&
+  !tradeType.includes(filterValue)
+) {
+  return false
+}
+
+  return (
+    <div
+      key={trade.id}
+      className="relative bg-white/5 border border-white/10 backdrop-blur-md p-7 rounded-xl shadow hover:scale-[1.02] hover:border-white/20 transition-all duration-200"
+    >
 
                     <div className="absolute top-3 right-3 flex items-center gap-2">
                       <button
@@ -443,7 +489,7 @@ export default function TradesPage() {
                       <div className="flex-1">
                         <div className="space-y-1 text-base text-gray-200">
 
-                          <h2 className="text-lg font-semibold">
+                          <h2 className="text-lg font-semibold flex items-center gap-2 flex-wrap">
                             {trade.ticker} •{" "}
                             {trade.direction || (
                               trade.exit_price && trade.entry_price
@@ -454,16 +500,29 @@ export default function TradesPage() {
                             )}
                           </h2>
 
-                          <p className={`text-lg font-semibold ${trade.pnl >= 0 ? "text-green-400" : "text-red-400"}`}>
-                            {formatMoney(trade.pnl)}
+                          <p className="text-xs text-gray-400">
+                            {new Date(trade.created_at).toLocaleDateString()}
                           </p>
 
-                          <p className="text-sm">
-                            <span className="text-gray-400">RR:</span> {formatNumber(trade.rr)}
-                          </p>
-                          <p className="text-sm">
-                            <span className="text-gray-400">Points:</span> {formatNumber(trade.points)}
-                          </p>
+                          <div
+                            className={`inline-block px-3 py-1 rounded-lg text-lg font-bold mt-1 ${
+                              (Number(trade.pnl) || 0) >= 0
+                                ? "bg-green-500/20 text-green-400"
+                                : "bg-red-500/20 text-red-400"
+                            }`}
+                          >
+                            {formatMoney(trade.pnl)}
+                          </div>
+
+                          <div className="flex gap-2 mt-2 flex-wrap">
+                            <span className="bg-white/10 px-2 py-1 rounded text-xs">
+                              RR: {formatNumber(trade.rr)}
+                            </span>
+
+                            <span className="bg-white/10 px-2 py-1 rounded text-xs">
+                              Pts: {formatNumber(trade.points)}
+                            </span>
+                          </div>
                           <p className="text-sm">
                             <span className="text-gray-400">Contracts:</span>{" "}
                             {trade.contracts != null
@@ -474,12 +533,39 @@ export default function TradesPage() {
                             <span className="text-gray-400">Session:</span> {trade.session}
                           </p>
 
-                          <p className="text-sm">
-                            <span className="text-gray-400">Account:</span>{" "}
-                            {trade.account_type
-                              ? `${trade.account_type} (${trade.account_id})`
-                              : "-"}
-                          </p>
+                          <div className="flex items-center gap-2 mt-1 flex-wrap">
+                            {trade.account_type && (
+                              <span
+                                className={`px-2 py-0.5 text-xs rounded-full font-medium ${
+                                  String(trade.account_type)
+                                    .toLowerCase()
+                                    .includes("fund")
+                                    ? "bg-green-500/20 text-green-400"
+                                    : String(trade.account_type)
+                                        .toLowerCase()
+                                        .includes("eval")
+                                    ? "bg-yellow-500/20 text-yellow-400"
+                                    : String(trade.account_type)
+                                        .toLowerCase()
+                                        .includes("live")
+                                    ? "bg-blue-500/20 text-blue-400"
+                                    : "bg-gray-500/20 text-gray-400"
+                                }`}
+                              >
+                                {trade.account_type}
+                              </span>
+                            )}
+
+                            {trade.account_id && (
+                              <span className="text-xs text-gray-400">
+                                #{trade.account_id}
+                              </span>
+                            )}
+
+                            {!trade.account_type && !trade.account_id && (
+                              <span className="text-xs text-gray-500">—</span>
+                            )}
+                          </div>
 
                           {trade.public_description ? (
                             <div className="mt-2 px-0">

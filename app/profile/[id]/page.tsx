@@ -526,6 +526,7 @@ export default function ProfilePage() {
   const [editingTrade, setEditingTrade] = useState<any | null>(null)
   const [calendarTrades, setCalendarTrades] = useState<any[]>([])
   const [accountFilter, setAccountFilter] = useState("All")
+  const [accountTypeFilter, setAccountTypeFilter] = useState("All")
 
   const fetchTrades = async (forProfileId: string, reset = false) => {
     const from = reset ? 0 : page * PAGE_SIZE
@@ -1397,14 +1398,34 @@ export default function ProfilePage() {
     return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   })
 
-  const filteredTrades =
-    accountFilter === "All"
-      ? allTrades
-      : allTrades.filter(
-          (t) =>
-            t.account_type &&
-            String(t.account_type).toLowerCase() === accountFilter.toLowerCase()
-        )
+  const accountOptions = useMemo(() => {
+    const ids = new Set<string>()
+    for (const t of allTrades) {
+      if (t.account_id != null && String(t.account_id).trim() !== "") {
+        ids.add(String(t.account_id))
+      }
+    }
+    return ["All", ...Array.from(ids)]
+  }, [allTrades])
+
+  useEffect(() => {
+    console.log(allTrades)
+  }, [allTrades])
+
+  const filteredTrades = allTrades.filter((trade) => {
+    const matchesAccount =
+      accountFilter === "All"
+        ? true
+        : String(trade.account_id || "") === String(accountFilter)
+
+    const type = String(trade.account_type || "").toLowerCase()
+    const matchesType =
+      accountTypeFilter === "All"
+        ? true
+        : type.includes(accountTypeFilter.toLowerCase())
+
+    return matchesAccount && matchesType
+  })
 
   const statsVisible = canViewTrades
 
@@ -1856,7 +1877,7 @@ export default function ProfilePage() {
             {activeTab === "calendar" && (
               <div className="mt-4">
                 <Calendar
-                  trades={allTrades}
+                  trades={filteredTrades}
                   showAccountFilter={false}
                   showControls={false}
                 />
@@ -1874,26 +1895,43 @@ export default function ProfilePage() {
                   </div>
                 ) : (
                   <>
-                    <div className="mb-4 flex gap-2">
-                      {["All", "Eval", "Funded", "Live"].map((type) => (
-                        <button
-                          key={type}
-                          type="button"
-                          onClick={() => setAccountFilter(type)}
-                          className={`rounded px-3 py-1 text-sm ${
-                            accountFilter === type
-                              ? "bg-blue-500 text-white"
-                              : "bg-white/10 text-gray-300"
-                          }`}
+                    <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <label className="text-xs text-gray-400">Account</label>
+                        <select
+                          value={accountFilter}
+                          onChange={(e) => setAccountFilter(e.target.value)}
+                          className="rounded-lg border border-white/10 bg-white/10 px-3 py-1.5 text-xs text-gray-200"
                         >
-                          {type}
-                        </button>
-                      ))}
+                          {accountOptions.map((acc) => (
+                            <option key={acc} value={acc} className="bg-[#0f172a]">
+                              {acc}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="flex gap-1 rounded-lg bg-white/5 p-1">
+                        {["All", "Eval", "Funded", "Live"].map((type) => (
+                          <button
+                            key={type}
+                            type="button"
+                            onClick={() => setAccountTypeFilter(type)}
+                            className={`rounded px-3 py-1 text-xs ${
+                              accountTypeFilter === type
+                                ? "bg-blue-500 text-white"
+                                : "text-gray-400 hover:text-white"
+                            }`}
+                          >
+                            {type}
+                          </button>
+                        ))}
+                      </div>
                     </div>
 
                     {filteredTrades.length === 0 ? (
                       <p className="text-sm text-gray-400">
-                        No trades for this account type
+                        No trades for this filter selection
                       </p>
                     ) : null}
 

@@ -1,25 +1,52 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { useUserProfile } from "../../lib/useUserProfile"
 import Navbar from "../components/Navbar"
 
-export default function AffiliateDashboard() {
-  const { user, profile, loading } = useUserProfile()
+type AffiliateProfile = {
+  referral_count?: number | null
+  referral_earnings?: number | null
+  referral_code?: string | null
+}
 
-  const [referrals, setReferrals] = useState<any[]>([])
+type ReferralRow = {
+  referred_user_id?: string
+  revenue?: number
+  created_at?: string
+}
+
+export default function AffiliateDashboard() {
+  const { user, loading } = useUserProfile()
+
+  const [profile, setProfile] = useState<AffiliateProfile | null>(null)
+
+  const [referrals, setReferrals] = useState<ReferralRow[]>([])
   const [affiliateCode, setAffiliateCode] = useState<string | null>(null)
   const [loadingData, setLoadingData] = useState(true)
 
   const BASE_URL =
     process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"
 
-  useEffect(() => {
-    if (user) fetchData()
+  const fetchProfile = useCallback(async () => {
+    if (!user?.id) return
+
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("referral_count, referral_earnings, referral_code")
+      .eq("id", user.id)
+      .single()
+
+    if (!error && data) {
+      console.log("🔥 FETCHED PROFILE:", data)
+      setProfile(data as AffiliateProfile)
+    }
   }, [user])
 
-  async function fetchData() {
+  const fetchData = useCallback(async () => {
+    if (!user?.id) return
+
     setLoadingData(true)
 
     const { data: affiliate } = await supabase
@@ -38,23 +65,34 @@ export default function AffiliateDashboard() {
       .eq("affiliate_id", affiliate?.id)
       .order("created_at", { ascending: false })
 
-    setReferrals(refs || [])
+    setReferrals((refs as ReferralRow[]) || [])
     setLoadingData(false)
-  }
+  }, [user])
+
+  useEffect(() => {
+    if (user) {
+      // Data load from Supabase on mount / user change (not synchronous DOM sync).
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      void fetchProfile()
+    }
+  }, [user, fetchProfile])
+
+  useEffect(() => {
+    if (user) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      void fetchData()
+    }
+  }, [user, fetchData])
 
   function copyLink(link: string) {
     navigator.clipboard.writeText(link)
     alert("Copied 🚀")
   }
 
-  if (loading || !profile) return null
+  if (loading || !user) return null
 
-  const totalRevenue = Number(profile.referral_revenue || 0)
-  const earnings = totalRevenue * 0.18
-
-  const referralLink = affiliateCode
-    ? `${BASE_URL}?ref=${affiliateCode}`
-    : ""
+  const codeForLink = profile?.referral_code || affiliateCode
+  const referralLink = codeForLink ? `${BASE_URL}?ref=${codeForLink}` : ""
 
   return (
     <>
@@ -65,9 +103,18 @@ export default function AffiliateDashboard() {
         <div className="max-w-6xl mx-auto p-10">
 
           {/* HEADER */}
-          <h1 className="text-3xl font-bold mb-8 bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
-            Affiliate Dashboard
-          </h1>
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
+              Affiliate Dashboard
+            </h1>
+            <button
+              type="button"
+              onClick={fetchProfile}
+              className="px-4 py-2 bg-white/10 rounded-lg hover:bg-white/20"
+            >
+              Refresh Data
+            </button>
+          </div>
 
           {/* STATS */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
@@ -76,19 +123,15 @@ export default function AffiliateDashboard() {
               <p className="text-gray-400 text-sm">Affiliate Earnings</p>
 
               <h2 className="text-3xl font-bold text-emerald-400 mt-1">
-                ${earnings.toFixed(2)}
+                ${Number(profile?.referral_earnings || 0).toFixed(2)}
               </h2>
-
-              <p className="text-gray-400 text-xs mt-2">
-                From ${totalRevenue.toFixed(2)} total revenue
-              </p>
             </div>
 
             <div className="bg-white/5 backdrop-blur-md border border-white/10 p-6 rounded-xl">
               <p className="text-gray-400 text-sm">Total Referrals</p>
 
               <h2 className="text-3xl font-bold mt-1">
-                {profile.referral_count || 0}
+                {profile?.referral_count || 0}
               </h2>
             </div>
 
@@ -96,14 +139,14 @@ export default function AffiliateDashboard() {
               <p className="text-gray-400 text-sm">Your Code</p>
 
               <h2 className="text-2xl font-bold text-blue-400 mt-1">
-                {affiliateCode || "No Code"}
+                {profile?.referral_code || affiliateCode || "No Code"}
               </h2>
             </div>
 
           </div>
 
           {/* REFERRAL LINK */}
-          {affiliateCode && (
+          {codeForLink && (
             <div className="bg-white/5 backdrop-blur-md border border-white/10 p-6 rounded-xl mb-8">
 
               <p className="text-gray-400 mb-3">Your Referral Link</p>
@@ -161,11 +204,13 @@ export default function AffiliateDashboard() {
                         </td>
 
                         <td className="py-3 text-emerald-400 font-semibold">
-                          ${(ref.revenue * 0.18).toFixed(2)}
+                          ${((ref.revenue ?? 0) * 0.18).toFixed(2)}
                         </td>
 
                         <td className="py-3 text-gray-400">
-                          {new Date(ref.created_at).toLocaleDateString()}
+                          {ref.created_at
+                            ? new Date(ref.created_at).toLocaleDateString()
+                            : ""}
                         </td>
                       </tr>
                     ))}
