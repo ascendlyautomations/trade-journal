@@ -39,58 +39,50 @@ export async function POST(req: Request) {
     // ✅ CHECKOUT COMPLETE → UPGRADE USER + METADATA REFERRAL
     // ======================================================
     if (event.type === "checkout.session.completed") {
-      try {
-        const session = event.data.object as Stripe.Checkout.Session
+      const session = event.data.object as Stripe.Checkout.Session
 
-        const userId = session.metadata?.userId
-        const referralCode = session.metadata?.referralCode
-        const customerId = session.customer as string
+      const userId = session.metadata?.userId
+      const referralCode = session.metadata?.referralCode
+      const customerId =
+        typeof session.customer === "string"
+          ? session.customer
+          : session.customer?.id
 
-        console.log("🎯 REFERRAL CODE:", referralCode)
+      console.log("🔥 LINKING USER:", userId, customerId)
 
-        // ✅ Upgrade user
-        if (userId) {
+      // ✅ STEP 1: LINK STRIPE CUSTOMER TO PROFILE
+      if (userId && customerId) {
+        await supabase
+          .from("profiles")
+          .update({
+            stripe_customer_id: customerId,
+            is_pro: true,
+            subscription_status: "active",
+          })
+          .eq("id", userId)
+
+        console.log("✅ USER LINKED + UPGRADED")
+      }
+
+      // ✅ STEP 2: HANDLE REFERRAL COUNT
+      if (referralCode) {
+        const { data: referrer } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("referral_code", referralCode)
+          .single()
+
+        if (referrer) {
           await supabase
             .from("profiles")
             .update({
-              is_pro: true,
-              stripe_customer_id: customerId,
+              referral_count:
+                Number(referrer.referral_count || 0) + 1,
             })
-            .eq("id", userId)
+            .eq("id", referrer.id)
 
-          console.log("✅ USER UPGRADED:", userId)
+          console.log("✅ REFERRAL COUNT UPDATED")
         }
-
-        // ✅ Handle referral
-        if (referralCode) {
-          const { data: referrer, error } = await supabase
-            .from("profiles")
-            .select("*")
-            .eq("referral_code", referralCode)
-            .single()
-
-          console.log("👀 REFERRER LOOKUP:", referrer, error)
-
-          if (referrer) {
-            const { error: updateError } = await supabase
-              .from("profiles")
-              .update({
-                referral_count:
-                  Number(referrer.referral_count || 0) + 1,
-              })
-              .eq("id", referrer.id)
-
-            if (updateError) {
-              console.log("❌ UPDATE FAILED:", updateError)
-            } else {
-              console.log("✅ REFERRAL COUNT UPDATED")
-            }
-          } else {
-            console.log("❌ NO REFERRER FOUND")
-          }
-        }
-      } catch (err) {
-        console.error("❌ checkout.session.completed crash:", err)
       }
     }
 

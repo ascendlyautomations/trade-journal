@@ -14,70 +14,91 @@ export default function LoginPage() {
 
   const router = useRouter()
 
-  function generateRandomCode() {
-    return Math.random().toString(36).substring(2, 8).toUpperCase()
-  }
+  async function handleSignUp(e: React.MouseEvent<HTMLButtonElement>) {
+    e.preventDefault()
 
-  const handleAuth = async () => {
     setLoading(true)
 
-    if (isSignup) {
-      const { data: authData, error: signUpError } = await supabase.auth.signUp({
-        email,
-        password,
-      })
-
-      if (signUpError) {
-        console.log("❌ SIGNUP ERROR:", signUpError)
-        alert(signUpError.message)
-        setLoading(false)
-        return
-      }
-
-      const user = authData?.user
-
-      if (!user) {
-        console.log("❌ NO USER RETURNED")
-        setLoading(false)
-        return
-      }
-
+    try {
       const referralCode =
         typeof window !== "undefined"
           ? localStorage.getItem("referral_code")
           : null
 
-      console.log("🔥 REFERRAL ON SIGNUP:", referralCode)
-
-      const { error: profileInsertError } = await supabase.from("profiles").insert({
-        id: user.id,
+      console.log("🚀 SIGNUP DATA:", {
+        email,
+        username,
         name,
-        username: username || email.split("@")[0],
-        referral_code: generateRandomCode(),
-        referred_by: referralCode || null,
+        referralCode,
       })
 
-      if (profileInsertError) {
-        console.log("❌ PROFILE INSERT ERROR:", profileInsertError)
-      }
-
-      alert("Account created! You can now log in.")
-      setIsSignup(false)
-    } else {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
+        options: {
+          data: {
+            username: username?.trim() || null,
+            name: name?.trim() || null,
+            referral_code: referralCode || null,
+          },
+        },
       })
 
       if (error) {
+        console.error("❌ SIGNUP ERROR:", error)
         alert(error.message)
-        setLoading(false)
         return
       }
 
-      router.push("/trades")
+      const user = data?.user
+
+      if (!user) {
+        console.log("❌ NO USER RETURNED")
+        return
+      }
+
+      // 🔥 FORCE CREATE PROFILE
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .insert({
+          id: user.id,
+          username: username || `user_${user.id.slice(0, 6)}`,
+          name: name || "New User",
+          referred_by: referralCode || null,
+        })
+
+      if (profileError) {
+        console.error("❌ PROFILE INSERT FAILED:", profileError)
+      } else {
+        console.log("✅ PROFILE CREATED")
+      }
+
+      console.log("✅ SIGNUP SUCCESS:", data)
+
+      router.push("/dashboard")
+    } catch (err) {
+      console.error("❌ UNKNOWN ERROR:", err)
+      alert("Something went wrong during signup")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleLogin = async () => {
+    setLoading(true)
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
+
+    if (error) {
+      alert(error.message)
+      setLoading(false)
+      return
     }
 
+    router.push("/trades")
     setLoading(false)
   }
 
@@ -148,7 +169,7 @@ export default function LoginPage() {
 
         {/* MAIN BUTTON */}
         <button
-          onClick={handleAuth}
+          onClick={isSignup ? handleSignUp : handleLogin}
           disabled={loading}
           className="w-full bg-gradient-to-r from-blue-500 to-emerald-500 py-3 rounded-lg font-semibold hover:opacity-90 transition"
         >
