@@ -15,74 +15,70 @@ export default function LoginPage() {
   const router = useRouter()
 
   async function handleSignUp(e: React.MouseEvent<HTMLButtonElement>) {
-    e.preventDefault()
+  e.preventDefault()
+  setLoading(true)
 
-    setLoading(true)
+  try {
+    const referralCode =
+      typeof window !== "undefined"
+        ? localStorage.getItem("referral_code")
+        : null
 
-    try {
-      const referralCode =
-        typeof window !== "undefined"
-          ? localStorage.getItem("referral_code")
-          : null
-
-      console.log("🚀 SIGNUP DATA:", {
-        email,
-        username,
-        name,
-        referralCode,
-      })
-
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            username: username?.trim() || null,
-            name: name?.trim() || null,
-            referral_code: referralCode || null,
-          },
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          username: username?.trim() || null,
+          name: name?.trim() || null,
+          referral_code: referralCode || null,
         },
+      },
+    })
+
+    if (error) {
+      console.error("❌ SIGNUP ERROR:", error)
+      alert(error.message)
+      return
+    }
+
+    // ✅ USE USER FROM SIGNUP (NOT getUser)
+    const user = data?.user
+
+    console.log("SIGNUP USER:", user)
+
+    if (!user) {
+      alert("Check your email to confirm your account before continuing.")
+      return
+    }
+
+    // ✅ CREATE PROFILE
+    const { error: profileError } = await supabase
+      .from("profiles")
+      .insert({
+        id: user.id,
+        username: username || `user_${user.id.slice(0, 6)}`,
+        name: name || "New User",
+        referred_by: referralCode,
       })
 
-      if (error) {
-        console.error("❌ SIGNUP ERROR:", error)
-        alert(error.message)
-        return
-      }
-
-      const user = data?.user
-
-      if (!user) {
-        console.log("❌ NO USER RETURNED")
-        return
-      }
-
-      // 🔥 FORCE CREATE PROFILE
-      const { error: profileError } = await supabase
-        .from("profiles")
-        .insert({
-          id: user.id,
-          username: username || `user_${user.id.slice(0, 6)}`,
-          name: name || "New User",
-          referred_by: referralCode || null,
-        })
-
-      if (profileError) {
-        console.error("❌ PROFILE INSERT FAILED:", profileError)
-      } else {
-        console.log("✅ PROFILE CREATED")
-      }
-
-      console.log("✅ SIGNUP SUCCESS:", data)
-
-      router.push("/dashboard")
-    } catch (err) {
-      console.error("❌ UNKNOWN ERROR:", err)
-      alert("Something went wrong during signup")
-    } finally {
-      setLoading(false)
+    if (profileError) {
+      console.error("❌ PROFILE INSERT FAILED:", profileError)
+      alert("Profile creation failed")
+      return
     }
+
+    console.log("✅ PROFILE CREATED")
+
+    router.push("/dashboard")
+
+  } catch (err) {
+    console.error("❌ UNKNOWN ERROR:", err)
+    alert("Something went wrong during signup")
+  } finally {
+    setLoading(false)
   }
+}
 
   const handleLogin = async () => {
     setLoading(true)

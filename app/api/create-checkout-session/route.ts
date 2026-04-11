@@ -14,33 +14,79 @@ export async function POST(req: Request) {
   try {
     const body = await req.json()
 
-    const userId = body.userId
-    let referralCode = body.referralCode
+    const userId = body.userId as string | undefined
 
     console.log("🚀 RAW BODY:", body)
 
-    // 🔥 FORCE FIX: if referralCode missing, try fallback
-    if (!referralCode || referralCode === "") {
-      console.log("⚠️ referralCode missing — attempting fallback")
-
-      // If frontend forgot, just don't break flow
-      referralCode = ""
+    if (!userId) {
+      return Response.json({ error: "Missing userId" }, { status: 400 })
     }
 
-    console.log("🧠 FINAL referralCode:", referralCode)
+    const { data: authUserData, error: authUserError } =
+      await supabase.auth.admin.getUserById(userId)
 
-    if (!userId) {
+    if (authUserError || !authUserData?.user) {
+      console.error("❌ Invalid user / auth lookup failed:", authUserError)
+      return Response.json({ error: "Invalid user" }, { status: 401 })
+    }
+
+    const user = authUserData.user
+    const userEmail = user.email ?? undefined
+
+    console.log("👤 Checkout for user:", user.id, userEmail)
+
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("id, stripe_customer_id")
+      .eq("id", user.id)
+      .maybeSingle()
+
+    if (profileError) {
+      console.error("❌ Profile fetch error:", profileError)
       return Response.json(
-        { error: "Missing userId" },
-        { status: 400 }
+        { error: "Could not load profile" },
+        { status: 500 }
       )
+    }
+
+    let customerId = profile?.stripe_customer_id as string | null | undefined
+
+    if (!customerId) {
+      console.log("🆕 Creating Stripe customer (no stripe_customer_id on profile)")
+
+      const customer = await stripe.customers.create({
+        email: userEmail,
+        metadata: {
+          user_id: user.id,
+        },
+      })
+
+      customerId = customer.id
+
+      const { error: updateErr } = await supabase
+        .from("profiles")
+        .update({ stripe_customer_id: customerId })
+        .eq("id", user.id)
+
+      if (updateErr) {
+        console.error(
+          "⚠️ Could not save stripe_customer_id to profile (row may be missing):",
+          updateErr
+        )
+      } else {
+        console.log("✅ Saved stripe_customer_id to profile:", customerId)
+      }
+    } else {
+      console.log("♻️ Reusing existing Stripe customer:", customerId)
     }
 
     const PRICE_ID = "price_1TGugNQlLqJe3Tfgwg2q1ApV"
 
     const sessionConfig: Stripe.Checkout.SessionCreateParams = {
       mode: "subscription",
+      customer: customerId,
       payment_method_types: ["card"],
+      allow_promotion_codes: true,
       line_items: [
         {
           price: PRICE_ID,
@@ -49,53 +95,27 @@ export async function POST(req: Request) {
       ],
       success_url: "http://localhost:3000/dashboard",
       cancel_url: "http://localhost:3000",
-      customer_email: "test@example.com",
-    }
-
-    // 🔥 OPTIONAL DISCOUNT LOGIC
-    if (referralCode) {
-      const { data: affiliate } = await supabase
-        .from("affiliates")
-        .select("*")
-        .eq("code", referralCode)
-        .single()
-
-      if (affiliate?.stripe_promo_code_id) {
-        sessionConfig.discounts = [
-          {
-            promotion_code: affiliate.stripe_promo_code_id,
-          },
-        ]
-      } else {
-        sessionConfig.allow_promotion_codes = true
-      }
-    } else {
-      sessionConfig.allow_promotion_codes = true
-    }
-
-    {
-      const referralCode = body?.referralCode || null
-
-      console.log("🚀 RECEIVED REFERRAL CODE:", referralCode)
-
-      sessionConfig.metadata = {
-        ...sessionConfig.metadata,
-        userId,
-        referralCode: referralCode || "",
-      }
+      metadata: {
+        userId: user.id,
+        user_id: user.id,
+      },
+      subscription_data: {
+        metadata: {
+          userId: user.id,
+          user_id: user.id,
+        },
+      },
     }
 
     const session = await stripe.checkout.sessions.create(sessionConfig)
 
-    console.log("🔥 SESSION CREATED WITH METADATA:", session.metadata)
+    console.log("🔥 SESSION CREATED (manual promo codes only):", session.id, session.metadata)
 
     return Response.json({ url: session.url })
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Stripe failed"
     console.error("🔥 STRIPE ERROR:", err)
 
-    return Response.json(
-      { error: err?.message || "Stripe failed" },
-      { status: 500 }
-    )
+    return Response.json({ error: message }, { status: 500 })
   }
 }
