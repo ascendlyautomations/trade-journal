@@ -41,7 +41,18 @@ export default function LoginPage() {
           alert(error.message)
           return
         }
-        console.error("❌ SIGNUP ERROR:", error)
+        console.error(
+          "ERROR:",
+          JSON.stringify(
+            {
+              message: error.message,
+              name: error.name,
+              status: (error as { status?: number }).status,
+            },
+            null,
+            2
+          )
+        )
         alert(error.message)
         return
       }
@@ -62,13 +73,14 @@ export default function LoginPage() {
           name: name || "",
           is_pro: false,
           subscription_status: "inactive",
+          created_at: new Date().toISOString(),
         },
         { onConflict: "id" }
       )
 
       if (profileError) {
         console.error(
-          "PROFILE UPSERT FAILED:",
+          "ERROR:",
           JSON.stringify(profileError, null, 2)
         )
         alert("Profile creation failed")
@@ -79,7 +91,16 @@ export default function LoginPage() {
 
       router.push("/dashboard")
     } catch (err) {
-      console.error("❌ UNKNOWN ERROR:", err)
+      console.error(
+        "ERROR:",
+        JSON.stringify(
+          err instanceof Error
+            ? { message: err.message, name: err.name }
+            : err,
+          null,
+          2
+        )
+      )
       alert("Something went wrong during signup")
     } finally {
       setLoading(false)

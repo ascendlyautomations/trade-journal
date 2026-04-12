@@ -26,7 +26,10 @@ export async function POST(req: Request) {
       await supabase.auth.admin.getUserById(userId)
 
     if (authUserError || !authUserData?.user) {
-      console.error("❌ Invalid user / auth lookup failed:", authUserError)
+      console.error(
+        "ERROR:",
+        JSON.stringify(authUserError ?? { message: "No user" }, null, 2)
+      )
       return Response.json({ error: "Invalid user" }, { status: 401 })
     }
 
@@ -35,18 +38,57 @@ export async function POST(req: Request) {
 
     console.log("👤 Checkout for user:", user.id, userEmail)
 
-    const { data: profile, error: profileError } = await supabase
+    const { data: initialProfile, error: profileError } = await supabase
       .from("profiles")
       .select("id, stripe_customer_id")
       .eq("id", user.id)
       .maybeSingle()
 
     if (profileError) {
-      console.error("❌ Profile fetch error:", profileError)
+      console.error("ERROR:", JSON.stringify(profileError, null, 2))
       return Response.json(
         { error: "Could not load profile" },
         { status: 500 }
       )
+    }
+
+    let profile = initialProfile
+
+    if (!profile) {
+      const { error: ensureErr } = await supabase.from("profiles").upsert(
+        {
+          id: user.id,
+          username: userEmail?.split("@")[0] || `user_${user.id.slice(0, 6)}`,
+          name: "",
+          is_pro: false,
+          subscription_status: "inactive",
+          created_at: new Date().toISOString(),
+        },
+        { onConflict: "id" }
+      )
+
+      if (ensureErr) {
+        console.error("ERROR:", JSON.stringify(ensureErr, null, 2))
+        return Response.json(
+          { error: "Could not create profile" },
+          { status: 500 }
+        )
+      }
+
+      const refetch = await supabase
+        .from("profiles")
+        .select("id, stripe_customer_id")
+        .eq("id", user.id)
+        .maybeSingle()
+
+      profile = refetch.data
+      if (refetch.error) {
+        console.error("ERROR:", JSON.stringify(refetch.error, null, 2))
+        return Response.json(
+          { error: "Could not load profile" },
+          { status: 500 }
+        )
+      }
     }
 
     let customerId = profile?.stripe_customer_id as string | null | undefined
@@ -54,30 +96,52 @@ export async function POST(req: Request) {
     if (!customerId) {
       console.log("🆕 Creating Stripe customer (no stripe_customer_id on profile)")
 
-      const customer = await stripe.customers.create({
-        email: userEmail,
-        metadata: {
-          user_id: user.id,
-        },
-      })
+      try {
+        const customer = await stripe.customers.create({
+          email: userEmail,
+          metadata: {
+            user_id: user.id,
+          },
+        })
 
-      customerId = customer.id
+        customerId = customer.id
 
-      const { error: updateErr } = await supabase
-        .from("profiles")
-        .update({ stripe_customer_id: customerId })
-        .eq("id", user.id)
+        const { error: updateErr } = await supabase
+          .from("profiles")
+          .update({ stripe_customer_id: customerId })
+          .eq("id", user.id)
 
-      if (updateErr) {
+        if (updateErr) {
+          console.error("ERROR:", JSON.stringify(updateErr, null, 2))
+        } else {
+          console.log("✅ Saved stripe_customer_id to profile:", customerId)
+        }
+      } catch (stripeErr) {
         console.error(
-          "⚠️ Could not save stripe_customer_id to profile (row may be missing):",
-          updateErr
+          "ERROR:",
+          JSON.stringify(
+            stripeErr instanceof Error
+              ? { message: stripeErr.message, name: stripeErr.name }
+              : stripeErr,
+            null,
+            2
+          )
         )
-      } else {
-        console.log("✅ Saved stripe_customer_id to profile:", customerId)
+        return Response.json(
+          { error: "Could not create Stripe customer" },
+          { status: 500 }
+        )
       }
     } else {
       console.log("♻️ Reusing existing Stripe customer:", customerId)
+    }
+
+    if (!customerId) {
+      console.error("ERROR:", JSON.stringify({ message: "Missing customer id" }, null, 2))
+      return Response.json(
+        { error: "Stripe customer unavailable" },
+        { status: 500 }
+      )
     }
 
     const PRICE_ID = "price_1TGugNQlLqJe3Tfgwg2q1ApV"
@@ -96,26 +160,34 @@ export async function POST(req: Request) {
       success_url: "http://localhost:3000/dashboard",
       cancel_url: "http://localhost:3000",
       metadata: {
-        userId: user.id,
         user_id: user.id,
+        userId: user.id,
       },
       subscription_data: {
         metadata: {
-          userId: user.id,
           user_id: user.id,
+          userId: user.id,
         },
       },
     }
 
     const session = await stripe.checkout.sessions.create(sessionConfig)
 
-    console.log("🔥 SESSION CREATED (manual promo codes only):", session.id, session.metadata)
+    console.log("🔥 SESSION CREATED:", session.id, session.metadata)
 
     return Response.json({ url: session.url })
   } catch (err: unknown) {
+    console.error(
+      "ERROR:",
+      JSON.stringify(
+        err instanceof Error
+          ? { message: err.message, name: err.name }
+          : err,
+        null,
+        2
+      )
+    )
     const message = err instanceof Error ? err.message : "Stripe failed"
-    console.error("🔥 STRIPE ERROR:", err)
-
     return Response.json({ error: message }, { status: 500 })
   }
 }

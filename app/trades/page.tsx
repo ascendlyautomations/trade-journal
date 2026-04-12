@@ -74,18 +74,34 @@ export default function TradesPage() {
       console.log("🔥 REFERRAL ON SIGNUP:", referralCode)
 
       function generateReferralCode() {
-        return Math.random().toString(36).substring(2, 8)
+        return Math.random().toString(36).substring(2, 8).toUpperCase()
       }
 
-      await supabase.from("profiles").insert({
-        id: user.id,
-        name: user.user_metadata?.full_name || "User",
-        username:
-          user.user_metadata?.email?.split("@")[0] ||
-          `user_${Math.floor(Math.random() * 10000)}`,
-        referral_code: generateReferralCode(),
-        referred_by: referralCode || null,
-      })
+      const { error: profileUpsertErr } = await supabase
+        .from("profiles")
+        .upsert(
+          {
+            id: user.id,
+            username:
+              user.user_metadata?.email?.split("@")[0] ||
+              user.email ||
+              `user_${user.id.slice(0, 6)}`,
+            name: user.user_metadata?.full_name || "",
+            is_pro: false,
+            subscription_status: "inactive",
+            created_at: new Date().toISOString(),
+            referral_code: generateReferralCode(),
+            referred_by: referralCode || null,
+          },
+          { onConflict: "id", ignoreDuplicates: true }
+        )
+
+      if (profileUpsertErr) {
+        console.error(
+          "ERROR:",
+          JSON.stringify(profileUpsertErr, null, 2)
+        )
+      }
     }
 
     await fetchTrades(user.id)

@@ -3,6 +3,7 @@
 import Navbar from "../components/Navbar"
 import { useEffect, useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
+import { isProActive } from "../../lib/subscription"
 
 export default function SettingsPage() {
   const [user, setUser] = useState<any>(null)
@@ -340,7 +341,7 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
-                {profile?.is_pro && (
+                {isProActive(profile) && (
                   <button
                     onClick={handleManageSubscription}
                     disabled={managingSub}

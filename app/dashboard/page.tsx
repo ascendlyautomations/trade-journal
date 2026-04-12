@@ -3,7 +3,7 @@
 import Navbar from "../components/Navbar"
 import { useEffect, useState, useMemo } from "react"
 import { supabase } from "../../lib/supabaseClient"
-import { loadStripe } from "@stripe/stripe-js"
+import { isProActive } from "../../lib/subscription"
 import ProGate from "../components/ProGate"
 import {
   LineChart,
@@ -480,10 +480,6 @@ export default function Dashboard() {
   const [showWarnings, setShowWarnings] = useState(true)
   const [maxDrawdown, setMaxDrawdown] = useState("")
   const [savingDrawdownLimit, setSavingDrawdownLimit] = useState(false)
-
-  const stripePromise = loadStripe(
-    process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!
-  )
 
   // 🔥 SAFE DATA FETCH (FIXES YOUR ERROR)
   useEffect(() => {
@@ -968,6 +964,8 @@ const worstDay = dailyPnLs.length > 0
     )
   }
 
+  const isPro = isProActive(profile)
+
   const drawdownLimitRaw = profile?.max_drawdown_limit
   const drawdownLimitCap =
     drawdownLimitRaw != null &&
@@ -1117,7 +1115,7 @@ const worstDay = dailyPnLs.length > 0
           </div>
         </div>
 
-        {profile && !profile.is_pro && (
+        {profile && !isPro && (
           <div className="mb-4 rounded-lg bg-amber-500/10 border border-amber-400/40 text-amber-100 px-4 py-3 text-center text-sm">
             Upgrade to Pro to unlock full features 🚀
           </div>
@@ -1165,7 +1163,7 @@ const worstDay = dailyPnLs.length > 0
           </div>
         </div>
 
-        <ProGate isPro={profile?.is_pro}>
+        <ProGate isPro={isPro}>
           <div className="space-y-6">
 
   {/* TOP: STATS + CHART */}

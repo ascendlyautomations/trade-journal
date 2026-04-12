@@ -10,6 +10,17 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+/** Stripe subscription is active — mirror is_pro for legacy UI. */
+const SUBSCRIPTION_ACTIVE = {
+  subscription_status: "active" as const,
+  is_pro: true as const,
+}
+
+const SUBSCRIPTION_INACTIVE = {
+  subscription_status: "inactive" as const,
+  is_pro: false as const,
+}
+
 function stripeCustomerId(
   customer: string | Stripe.Customer | Stripe.DeletedCustomer | null | undefined
 ): string | null {
@@ -140,7 +151,7 @@ async function trackAffiliateFromManualCheckoutDiscount(params: {
       .eq("id", buyerProfileId)
 
     if (buyerRefErr) {
-      console.log("❌ Buyer referred_by update error:", buyerRefErr)
+      console.error("ERROR:", JSON.stringify(buyerRefErr, null, 2))
     } else {
       console.log("✅ Buyer referred_by set from manual promo:", affiliate.code)
     }
@@ -167,7 +178,7 @@ async function trackAffiliateFromManualCheckoutDiscount(params: {
         .eq("id", referrerProfile.id)
 
       if (refUpErr) {
-        console.log("❌ referral_count update error:", refUpErr)
+        console.error("ERROR:", JSON.stringify(refUpErr, null, 2))
       } else {
         console.log("✅ referral_count incremented for:", affiliate.code)
       }
@@ -183,7 +194,10 @@ export async function POST(req: Request) {
     const sig = req.headers.get("stripe-signature")
 
     if (!sig) {
-      console.error("❌ No signature")
+      console.error(
+        "ERROR:",
+        JSON.stringify({ message: "Missing stripe-signature header" }, null, 2)
+      )
       return new Response("No signature", { status: 400 })
     }
 
@@ -196,7 +210,16 @@ export async function POST(req: Request) {
         process.env.STRIPE_WEBHOOK_SECRET as string
       )
     } catch (err) {
-      console.error("❌ VERIFY FAILED:", err)
+      console.error(
+        "ERROR:",
+        JSON.stringify(
+          err instanceof Error
+            ? { message: err.message, name: err.name }
+            : err,
+          null,
+          2
+        )
+      )
       return new Response("Invalid signature", { status: 400 })
     }
 
@@ -214,9 +237,12 @@ export async function POST(req: Request) {
 
         console.log("🔥 CHECKOUT COMPLETE — customerId:", customerId)
 
-        let profileId: string | null = null
+        let userId: string | null =
+          session.metadata?.user_id ||
+          session.metadata?.userId ||
+          null
 
-        if (customerId) {
+        if (!userId && customerId) {
           const { data: byCustomer, error: lookupErr } = await supabase
             .from("profiles")
             .select("id")
@@ -227,71 +253,44 @@ export async function POST(req: Request) {
             console.log("⚠️ checkout profile lookup by customer error:", lookupErr)
           }
           if (byCustomer?.id) {
-            profileId = byCustomer.id
-            console.log("👤 Profile resolved via stripe_customer_id:", profileId)
+            userId = byCustomer.id
+            console.log("👤 Profile resolved via stripe_customer_id:", userId)
           }
         }
 
-        if (!profileId) {
-          const metaUserId =
-            session.metadata?.userId ?? session.metadata?.user_id ?? null
-          if (metaUserId) {
-            profileId = metaUserId
-            console.log("👤 Profile resolved via session metadata user id:", profileId)
-          }
-        }
-
-        if (!profileId) {
+        if (!userId) {
           console.log(
-            "❌ checkout.session.completed: could not resolve profile (no customer match, no metadata user id)"
+            "❌ checkout.session.completed: could not resolve user (no metadata user id, no stripe_customer_id match)"
           )
-        } else if (!customerId) {
-          console.log("❌ checkout.session.completed: missing customer id on session")
-          try {
-            const { error: upErr } = await supabase
-              .from("profiles")
-              .update({
-                is_pro: true,
-                subscription_status: "active",
-              })
-              .eq("id", profileId)
-
-            if (upErr) {
-              console.log("❌ Pro update error (no customer to store):", upErr)
-            } else {
-              console.log("✅ Pro activated (no stripe_customer_id on session)")
-            }
-          } catch (e) {
-            console.error("❌ checkout Pro update crash:", e)
-          }
         } else {
+          console.log("🔥 Activating subscription for:", userId)
+
           try {
             const { error: upErr } = await supabase
               .from("profiles")
               .update({
-                stripe_customer_id: customerId,
-                is_pro: true,
-                subscription_status: "active",
+                ...SUBSCRIPTION_ACTIVE,
+                ...(customerId ? { stripe_customer_id: customerId } : {}),
               })
-              .eq("id", profileId)
+              .eq("id", userId)
 
             if (upErr) {
-              console.log("❌ checkout profile update error:", upErr)
+              console.error("ERROR:", JSON.stringify(upErr, null, 2))
             } else {
-              console.log("✅ USER LINKED + UPGRADED (checkout.session.completed)")
+              console.log("✅ checkout.session.completed: profile updated to active")
             }
           } catch (e) {
             console.error("❌ checkout profile update crash:", e)
           }
         }
 
-        if (profileId && session.id) {
+        if (userId && session.id) {
           try {
             await trackAffiliateFromManualCheckoutDiscount({
               stripe,
               supabase,
               sessionId: session.id,
-              buyerProfileId: profileId,
+              buyerProfileId: userId,
             })
           } catch (affErr) {
             console.error("❌ Affiliate discount tracking error:", affErr)
@@ -345,14 +344,11 @@ export async function POST(req: Request) {
             try {
               const { error: proErr } = await supabase
                 .from("profiles")
-                .update({
-                  is_pro: true,
-                  subscription_status: "active",
-                })
+                .update(SUBSCRIPTION_ACTIVE)
                 .eq("id", buyer.id as string)
 
               if (proErr) {
-                console.log("❌ invoice.paid Pro refresh error:", proErr)
+                console.error("ERROR:", JSON.stringify(proErr, null, 2))
               } else {
                 console.log("✅ Pro refreshed (invoice.paid renewal)")
               }
@@ -390,7 +386,7 @@ export async function POST(req: Request) {
                     .eq("id", referrer.id)
 
                   if (earnErr) {
-                    console.log("❌ referral earnings update error:", earnErr)
+                    console.error("ERROR:", JSON.stringify(earnErr, null, 2))
                   } else {
                     console.log("✅ EARNINGS UPDATED")
                   }
@@ -436,14 +432,11 @@ export async function POST(req: Request) {
             try {
               const { error: upErr } = await supabase
                 .from("profiles")
-                .update({
-                  is_pro: false,
-                  subscription_status: "inactive",
-                })
+                .update(SUBSCRIPTION_INACTIVE)
                 .eq("id", profile.id)
 
               if (upErr) {
-                console.log("❌ subscription.deleted update error:", upErr)
+                console.error("ERROR:", JSON.stringify(upErr, null, 2))
               } else {
                 console.log("✅ Pro revoked (customer.subscription.deleted)")
               }
@@ -459,7 +452,16 @@ export async function POST(req: Request) {
 
     return new Response("OK")
   } catch (err) {
-    console.error("🔥 WEBHOOK CRASH:", err)
+    console.error(
+      "ERROR:",
+      JSON.stringify(
+        err instanceof Error
+          ? { message: err.message, name: err.name }
+          : err,
+        null,
+        2
+      )
+    )
     return new Response("OK")
   }
 }

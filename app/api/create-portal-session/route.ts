@@ -18,16 +18,20 @@ export async function POST(req: Request) {
 
     const { data: profile, error } = await supabase
       .from("profiles")
-      .select("stripe_customer_id")
+      .select("id, stripe_customer_id")
       .eq("id", userId)
-      .single()
+      .maybeSingle()
 
     if (error) {
-      console.error("Error fetching profile for portal session:", error)
+      console.error("ERROR:", JSON.stringify(error, null, 2))
       return Response.json({ error: "Profile lookup failed" }, { status: 500 })
     }
 
-    if (!profile?.stripe_customer_id) {
+    if (!profile?.id) {
+      return Response.json({ error: "Profile not found" }, { status: 404 })
+    }
+
+    if (!profile.stripe_customer_id) {
       return Response.json(
         { error: "No Stripe customer on file" },
         { status: 400 }
@@ -41,7 +45,16 @@ export async function POST(req: Request) {
 
     return Response.json({ url: session.url })
   } catch (err) {
-    console.error("Stripe portal error:", err)
+    console.error(
+      "ERROR:",
+      JSON.stringify(
+        err instanceof Error
+          ? { message: err.message, name: err.name }
+          : err,
+        null,
+        2
+      )
+    )
     return Response.json({ error: "Portal failed" }, { status: 500 })
   }
 }

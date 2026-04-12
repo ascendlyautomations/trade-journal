@@ -20,13 +20,16 @@ export async function POST(req: Request) {
   if (profileId) {
     const { data: profile, error } = await supabase
       .from("profiles")
-      .select("is_pro")
+      .select("subscription_status")
       .eq("id", profileId)
       .single()
 
     if (error) {
-      console.error("Pro gate profile fetch error:", error)
-    } else if (!profile?.is_pro) {
+      console.error(
+        "ERROR:",
+        JSON.stringify(error, null, 2)
+      )
+    } else if (profile?.subscription_status !== "active") {
       return Response.json({ error: "Pro required" }, { status: 403 })
     }
   }

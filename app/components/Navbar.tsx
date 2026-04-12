@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState, useRef } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { useRouter, usePathname } from "next/navigation"
 import { useUserProfile } from "../../lib/useUserProfile"
+import { isProActive } from "../../lib/subscription"
 
 export default function Navbar() {
   const { user, profile, loading } = useUserProfile()
@@ -41,10 +42,6 @@ export default function Navbar() {
     return () => document.removeEventListener("mousedown", handleClickOutside)
   }, [])
 
-  useEffect(() => {
-    if (user) fetchUnreadMessages()
-  }, [user])
-
   async function fetchUnreadMessages() {
     if (!user?.id) return
     const { count } = await supabase
@@ -55,6 +52,12 @@ export default function Navbar() {
 
     setUnreadMessagesCount(count ?? 0)
   }
+
+  useEffect(() => {
+    if (user) void fetchUnreadMessages()
+    // fetchUnreadMessages is redeclared each render; only user drives refetch
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user])
 
   const fetchUnread = useCallback(async () => {
     if (!user?.id) return
@@ -71,7 +74,7 @@ export default function Navbar() {
     }
 
     setUnreadCount(data?.length || 0)
-  }, [user?.id])
+  }, [user])
 
   useEffect(() => {
     if (!user?.id) {
@@ -79,7 +82,7 @@ export default function Navbar() {
       return
     }
     void fetchUnread()
-  }, [user?.id, fetchUnread])
+  }, [user, fetchUnread])
 
   useEffect(() => {
     if (!user?.id) return
@@ -107,7 +110,7 @@ export default function Navbar() {
     return () => {
       void supabase.removeChannel(channel)
     }
-  }, [user?.id, fetchUnread])
+  }, [user, fetchUnread])
 
   useEffect(() => {
     const onRefresh = () => {
@@ -172,7 +175,7 @@ export default function Navbar() {
                 label: "Analytics",
                 items: [
                   { label: "Calendar", link: "/calendar" },
-                  profile?.is_pro
+                  isProActive(profile)
                     ? { label: "AI Analyst", link: "/analyst", highlight: true }
                     : { label: "AI Analyst 🔒", link: null },
                 ],
