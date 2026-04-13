@@ -1,7 +1,7 @@
 "use client"
 
 import Navbar from "../../components/Navbar"
-import { useEffect, useMemo, useState, type ChangeEvent } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { supabase } from "../../../lib/supabaseClient"
 import { useParams, useRouter } from "next/navigation"
 import {
@@ -59,15 +59,6 @@ function getExperience(startDate: string | null | undefined) {
   const remainingMonths = months % 12
 
   return `${years}y ${remainingMonths}m`
-}
-
-function sliceDateInput(raw: unknown): string {
-  if (raw == null || raw === "") return ""
-  const s = String(raw)
-  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10)
-  const d = new Date(s)
-  if (Number.isNaN(d.getTime())) return ""
-  return d.toISOString().slice(0, 10)
 }
 
 function formatMoney(v: number) {
@@ -495,14 +486,6 @@ export default function ProfilePage() {
   const [postContent, setPostContent] = useState("")
   const [postImage, setPostImage] = useState<File | null>(null)
   const [creatingPost, setCreatingPost] = useState(false)
-  const [showProfileSettings, setShowProfileSettings] = useState(false)
-  const [profileForm, setProfileForm] = useState({
-    bio: "",
-    strategy: "",
-    startDate: "",
-    avatar: "",
-  })
-  const [savingProfile, setSavingProfile] = useState(false)
   const [stories, setStories] = useState<any[]>([])
   const [showCreateStory, setShowCreateStory] = useState(false)
   const [storyFile, setStoryFile] = useState<File | null>(null)
@@ -695,13 +678,7 @@ export default function ProfilePage() {
   }, [])
 
   useEffect(() => {
-    if (
-      showProfileSettings ||
-      showCreatePost ||
-      showCreateStory ||
-      activeStory ||
-      editingPost
-    ) {
+    if (showCreatePost || showCreateStory || activeStory || editingPost) {
       document.body.style.overflow = "hidden"
       return () => {
         document.body.style.overflow = ""
@@ -709,20 +686,13 @@ export default function ProfilePage() {
     }
     document.body.style.overflow = ""
     return undefined
-  }, [showProfileSettings, showCreatePost, showCreateStory, activeStory, editingPost])
+  }, [showCreatePost, showCreateStory, activeStory, editingPost])
 
   useEffect(() => {
-    if (
-      !showProfileSettings &&
-      !showCreatePost &&
-      !showCreateStory &&
-      !activeStory &&
-      !editingPost
-    )
+    if (!showCreatePost && !showCreateStory && !activeStory && !editingPost)
       return
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
-        setShowProfileSettings(false)
         setShowCreatePost(false)
         setShowCreateStory(false)
         setActiveStory(null)
@@ -731,18 +701,7 @@ export default function ProfilePage() {
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [showProfileSettings, showCreatePost, showCreateStory, activeStory, editingPost])
-
-  useEffect(() => {
-    if (!profile || !currentUserId || currentUserId !== profile.id) return
-
-    setProfileForm({
-      bio: profile.bio || "",
-      strategy: profile.trading_style || profile.trading_model || "",
-      startDate: sliceDateInput(profile.started_trading),
-      avatar: profile.avatar_url || "",
-    })
-  }, [profile, currentUserId])
+  }, [showCreatePost, showCreateStory, activeStory, editingPost])
 
   async function fetchProfile(forProfileId: string) {
     const { data: sessionData } = await supabase.auth.getSession()
@@ -980,57 +939,6 @@ export default function ProfilePage() {
       .in("id", ids)
 
     setFollowingModalUsers(profs ?? [])
-  }
-
-  async function handleAvatarUpload(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file || !currentUserId) return
-
-    const fileExt = file.name.split(".").pop() || "jpg"
-    const fileName = `${currentUserId}/${Date.now()}.${fileExt}`
-
-    const { error } = await supabase.storage.from("avatars").upload(fileName, file, {
-      upsert: true,
-    })
-
-    if (error) {
-      console.error(error)
-      alert(error.message)
-      return
-    }
-
-    const publicUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/avatars/${fileName}`
-
-    setProfileForm((prev) => ({
-      ...prev,
-      avatar: publicUrl,
-    }))
-  }
-
-  async function handleSaveProfile() {
-    if (!currentUserId || !profile || currentUserId !== profile.id) return
-
-    setSavingProfile(true)
-    const { error } = await supabase
-      .from("profiles")
-      .update({
-        bio: profileForm.bio,
-        trading_style: profileForm.strategy,
-        trading_model: profileForm.strategy || null,
-        started_trading: profileForm.startDate || null,
-        avatar_url: profileForm.avatar,
-      })
-      .eq("id", currentUserId)
-
-    setSavingProfile(false)
-
-    if (!error) {
-      setShowProfileSettings(false)
-      window.location.reload()
-    } else {
-      console.error(error)
-      alert(error.message)
-    }
   }
 
   async function handleCreatePost() {
@@ -1532,10 +1440,10 @@ export default function ProfilePage() {
                     {currentUserId === profile.id && (
                       <button
                         type="button"
-                        onClick={() => setShowProfileSettings(true)}
+                        onClick={() => router.push("/settings")}
                         className="rounded-md bg-white/10 px-3 py-1 text-sm text-gray-100 hover:bg-white/20"
                       >
-                        Edit Profile
+                        Settings
                       </button>
                     )}
 
@@ -2301,103 +2209,6 @@ export default function ProfilePage() {
         </div>
       )}
 
-      {showProfileSettings &&
-        profile &&
-        currentUserId === profile.id && (
-          <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[100] flex items-center justify-center p-4">
-            <div
-              className="bg-[#0f172a] p-6 rounded-xl w-full max-w-[420px] border border-white/10 shadow-2xl"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="profile-settings-title"
-            >
-              <div className="flex justify-between items-center mb-4">
-                <h2 id="profile-settings-title" className="text-lg font-semibold text-white">
-                  Edit Profile
-                </h2>
-
-                <button
-                  type="button"
-                  onClick={() => setShowProfileSettings(false)}
-                  className="rounded p-1.5 text-gray-400 hover:bg-white/10 hover:text-white"
-                  aria-label="Close"
-                >
-                  ✕
-                </button>
-              </div>
-
-              <div className="mb-4">
-                <label className="text-sm text-gray-400 block">Profile Picture</label>
-
-                {profileForm.avatar ? (
-                  <img
-                    src={profileForm.avatar}
-                    alt=""
-                    className="mt-2 h-14 w-14 rounded-full object-cover border border-white/10"
-                    onError={(ev) => {
-                      ev.currentTarget.src = "/default-avatar.png"
-                    }}
-                  />
-                ) : null}
-
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => void handleAvatarUpload(e)}
-                  className="mt-2 block w-full text-sm text-gray-300 file:mr-2 file:rounded file:border-0 file:bg-white/10 file:px-3 file:py-1.5 file:text-sm file:text-gray-100 hover:file:bg-white/20"
-                />
-              </div>
-
-              <div className="mb-6">
-                <label className="text-sm text-gray-400 block mb-1">Strategy</label>
-
-                <input
-                  value={profileForm.strategy}
-                  onChange={(e) =>
-                    setProfileForm({ ...profileForm, strategy: e.target.value })
-                  }
-                  className="w-full bg-[#020617] border border-white/10 rounded px-3 py-2 text-white placeholder:text-gray-500"
-                  placeholder="ICT, Scalping, Swing..."
-                />
-              </div>
-
-              <div className="mb-4">
-                <label className="text-sm text-gray-400 block mb-1">Bio</label>
-
-                <textarea
-                  value={profileForm.bio}
-                  onChange={(e) =>
-                    setProfileForm({ ...profileForm, bio: e.target.value })
-                  }
-                  className="w-full bg-[#020617] border border-white/10 rounded px-3 py-2 text-white placeholder:text-gray-500"
-                  rows={3}
-                />
-              </div>
-
-              <div className="mb-4">
-                <label className="text-sm text-gray-400 block mb-1">Started Trading</label>
-
-                <input
-                  type="date"
-                  value={profileForm.startDate}
-                  onChange={(e) =>
-                    setProfileForm({ ...profileForm, startDate: e.target.value })
-                  }
-                  className="w-full bg-[#020617] border border-white/10 rounded px-3 py-2 text-white"
-                />
-              </div>
-
-              <button
-                type="button"
-                onClick={() => void handleSaveProfile()}
-                disabled={savingProfile}
-                className="w-full bg-blue-500 hover:bg-blue-600 disabled:opacity-50 py-2 rounded text-white font-medium"
-              >
-                {savingProfile ? "Saving…" : "Save Changes"}
-              </button>
-            </div>
-          </div>
-        )}
     </>
   )
 }

@@ -21,7 +21,7 @@ export function profileNeedsUsername(
   return username == null || String(username).trim() === ""
 }
 
-/** Match Edit Profile (`profile/[id]`) date input `YYYY-MM-DD` normalization. */
+/** Normalize DB / ISO dates to `YYYY-MM-DD` for `<input type="date">`. */
 function sliceDateInput(raw: unknown): string {
   if (raw == null || raw === "") return ""
   const s = String(raw)

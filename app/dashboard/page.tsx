@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import Navbar from "../components/Navbar"
 import TradeFilterBar from "../components/TradeFilterBar"
 import ProfileOnboarding, {
@@ -486,8 +487,6 @@ export default function Dashboard() {
   const [showBestSetup, setShowBestSetup] = useState(true)
   const [showWorstSetup, setShowWorstSetup] = useState(true)
   const [showWarnings, setShowWarnings] = useState(true)
-  const [maxDrawdown, setMaxDrawdown] = useState("")
-  const [savingDrawdownLimit, setSavingDrawdownLimit] = useState(false)
 
   // 🔥 SAFE DATA FETCH (FIXES YOUR ERROR)
   useEffect(() => {
@@ -536,15 +535,6 @@ export default function Dashboard() {
   }, [])
 
   useEffect(() => {
-    if (!profile) return
-    setMaxDrawdown(
-      profile.max_drawdown_limit != null && profile.max_drawdown_limit !== ""
-        ? String(profile.max_drawdown_limit)
-        : ""
-    )
-  }, [profile])
-
-  useEffect(() => {
     if (loading || !profile || !user) return
     let fromSignup = false
     try {
@@ -581,32 +571,6 @@ export default function Dashboard() {
   function formatNumber(value: number) {
     if (value === null || value === undefined) return "-"
     return value.toLocaleString()
-  }
-
-  async function saveDrawdownLimit() {
-    if (!user) return
-
-    const t = maxDrawdown.trim()
-    const n = t === "" ? null : Number(t)
-    if (t !== "" && (!Number.isFinite(n as number) || (n as number) < 0)) {
-      alert("Enter a valid non-negative dollar amount, or leave blank to clear your limit.")
-      return
-    }
-
-    setSavingDrawdownLimit(true)
-    const { error } = await supabase
-      .from("profiles")
-      .update({ max_drawdown_limit: n })
-      .eq("id", user.id)
-    setSavingDrawdownLimit(false)
-
-    if (error) {
-      alert(error.message)
-      return
-    }
-
-    setProfile((p: any) => (p ? { ...p, max_drawdown_limit: n } : p))
-    alert("Drawdown limit saved")
   }
 
   // 🔥 MEMOIZED CALCULATIONS (PERFORMANCE BOOST)
@@ -1286,29 +1250,18 @@ const worstDay = dailyPnLs.length > 0
                   </label>
                 </div>
 
-                <div className="mb-4">
+                <div className="mb-4 rounded-lg border border-white/10 bg-black/20 p-3">
                   <p className={sectionTitle}>Risk</p>
-
-                  <label className="text-sm text-gray-300 mb-1 block">Max Drawdown</label>
-
-                  <input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    value={maxDrawdown}
-                    onChange={(e) => setMaxDrawdown(e.target.value)}
-                    className="w-full bg-[#020617] border border-white/10 rounded px-2 py-1 text-white text-sm"
-                    placeholder="e.g. 2000"
-                  />
-
-                  <button
-                    type="button"
-                    onClick={saveDrawdownLimit}
-                    disabled={savingDrawdownLimit}
-                    className="mt-2 w-full bg-blue-500 hover:bg-blue-600 disabled:opacity-50 py-1.5 rounded text-sm font-medium"
-                  >
-                    {savingDrawdownLimit ? "Saving…" : "Save"}
-                  </button>
+                  <p className="mt-2 text-xs text-gray-400">
+                    Set your max drawdown limit under{" "}
+                    <Link
+                      href="/settings"
+                      className="text-blue-300 underline hover:text-blue-200"
+                    >
+                      Settings → Trading
+                    </Link>
+                    .
+                  </p>
                 </div>
 
                 <div className="mb-0">
