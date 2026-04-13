@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { supabase } from "@/lib/supabaseClient"
 import { useRouter } from "next/navigation"
+import { ONBOARDING_FLAG } from "../components/ProfileOnboarding"
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
@@ -90,6 +91,12 @@ export default function LoginPage() {
 
       console.log("✅ PROFILE CREATED")
 
+      try {
+        sessionStorage.setItem(ONBOARDING_FLAG, "1")
+      } catch {
+        /* ignore private mode */
+      }
+
       router.push("/dashboard")
     } catch (err) {
       console.error(
@@ -121,6 +128,32 @@ export default function LoginPage() {
       alert(error.message)
       setLoading(false)
       return
+    }
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (user) {
+      const { data: prof } = await supabase
+        .from("profiles")
+        .select("username")
+        .eq("id", user.id)
+        .maybeSingle()
+
+      const missingUsername =
+        !prof?.username || String(prof.username).trim() === ""
+
+      if (missingUsername) {
+        try {
+          sessionStorage.setItem(ONBOARDING_FLAG, "1")
+        } catch {
+          /* ignore */
+        }
+        router.push("/dashboard")
+        setLoading(false)
+        return
+      }
     }
 
     router.push("/trades")

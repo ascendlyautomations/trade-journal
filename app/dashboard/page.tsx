@@ -2,6 +2,10 @@
 
 import Navbar from "../components/Navbar"
 import TradeFilterBar from "../components/TradeFilterBar"
+import ProfileOnboarding, {
+  ONBOARDING_FLAG,
+  profileNeedsUsername,
+} from "../components/ProfileOnboarding"
 import { useEffect, useState, useMemo } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { isProActive } from "../../lib/subscription"
@@ -463,6 +467,7 @@ function analyzeTradingHours(trades: any[]) {
 }
 
 export default function Dashboard() {
+  const [showOnboarding, setShowOnboarding] = useState(false)
   const [trades, setTrades] = useState<any[]>([])
   const [accountFilter, setAccountFilter] = useState("all")
   const [accountTypeFilter, setAccountTypeFilter] = useState("all")
@@ -538,6 +543,19 @@ export default function Dashboard() {
         : ""
     )
   }, [profile])
+
+  useEffect(() => {
+    if (loading || !profile || !user) return
+    let fromSignup = false
+    try {
+      fromSignup = sessionStorage.getItem(ONBOARDING_FLAG) === "1"
+    } catch {
+      /* ignore */
+    }
+    if (fromSignup || profileNeedsUsername(profile.username)) {
+      setShowOnboarding(true)
+    }
+  }, [loading, profile, user])
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -1132,6 +1150,21 @@ const worstDay = dailyPnLs.length > 0
   return (
     <>
       <Navbar />
+
+      {showOnboarding && user && profile ? (
+        <ProfileOnboarding
+          userId={user.id}
+          initialUsername={profile.username}
+          initialBio={profile.bio}
+          initialTradingStyle={profile.trading_style}
+          initialStartedTrading={profile.started_trading}
+          initialAvatarUrl={profile.avatar_url}
+          onComplete={(patch) => {
+            setProfile((p: any) => (p ? { ...p, ...patch } : p))
+            setShowOnboarding(false)
+          }}
+        />
+      ) : null}
 
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white p-10">
 

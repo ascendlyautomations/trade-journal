@@ -2,6 +2,10 @@
 
 import Navbar from "../components/Navbar"
 import TradeFilterBar from "../components/TradeFilterBar"
+import ProfileOnboarding, {
+  ONBOARDING_FLAG,
+  profileNeedsUsername,
+} from "../components/ProfileOnboarding"
 import InputTradeForm from "../components/InputTradeForm"
 import { useEffect, useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
@@ -43,12 +47,28 @@ export default function TradesPage() {
   const [loading, setLoading] = useState(true)
   const [selectedDate, setSelectedDate] = useState("")
   const [editingTrade, setEditingTrade] = useState<any | null>(null)
+  const [authUserId, setAuthUserId] = useState<string | null>(null)
+  const [gateProfile, setGateProfile] = useState<any | null>(null)
+  const [showOnboarding, setShowOnboarding] = useState(false)
 
   const router = useRouter()
 
   useEffect(() => {
     initPage()
   }, [])
+
+  useEffect(() => {
+    if (loading || !gateProfile) return
+    let fromSignup = false
+    try {
+      fromSignup = sessionStorage.getItem(ONBOARDING_FLAG) === "1"
+    } catch {
+      /* ignore */
+    }
+    if (fromSignup || profileNeedsUsername(gateProfile.username)) {
+      setShowOnboarding(true)
+    }
+  }, [loading, gateProfile])
 
   async function initPage() {
     const {
@@ -59,6 +79,8 @@ export default function TradesPage() {
       router.push("/login")
       return
     }
+
+    setAuthUserId(user.id)
 
     // 🔥 CREATE PROFILE IF NEEDED (GOOGLE FIX)
     const { data: existingProfile } = await supabase
@@ -104,6 +126,14 @@ export default function TradesPage() {
         )
       }
     }
+
+    const { data: profRow } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", user.id)
+      .maybeSingle()
+
+    setGateProfile(profRow ?? null)
 
     await fetchTrades(user.id)
   }
@@ -249,6 +279,21 @@ const filteredTrades = trades.filter((trade) => {
   return (
     <>
       <Navbar />
+
+      {showOnboarding && authUserId && gateProfile ? (
+        <ProfileOnboarding
+          userId={authUserId}
+          initialUsername={gateProfile.username}
+          initialBio={gateProfile.bio}
+          initialTradingStyle={gateProfile.trading_style}
+          initialStartedTrading={gateProfile.started_trading}
+          initialAvatarUrl={gateProfile.avatar_url}
+          onComplete={(patch) => {
+            setGateProfile((p: any) => (p ? { ...p, ...patch } : p))
+            setShowOnboarding(false)
+          }}
+        />
+      ) : null}
 
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100">
 
