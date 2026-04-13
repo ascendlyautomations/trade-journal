@@ -1,4 +1,4 @@
-"use client"
+'use client'
 
 import { useState } from "react"
 import { supabase } from "@/lib/supabaseClient"
@@ -9,12 +9,13 @@ export default function LoginPage() {
   const [password, setPassword] = useState("")
   const [name, setName] = useState("")
   const [username, setUsername] = useState("")
-  const [isSignup, setIsSignup] = useState(false)
+  const [isLogin, setIsLogin] = useState(true)
   const [loading, setLoading] = useState(false)
 
   const router = useRouter()
 
   async function handleSignUp(e: React.MouseEvent<HTMLButtonElement>) {
+    console.log("Signup clicked")
     e.preventDefault()
     setLoading(true)
 
@@ -108,6 +109,7 @@ export default function LoginPage() {
   }
 
   const handleLogin = async () => {
+    console.log("Login clicked")
     setLoading(true)
 
     const { error } = await supabase.auth.signInWithPassword({
@@ -135,86 +137,127 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#020617] text-white px-4">
+  <div className="min-h-screen relative flex items-center justify-center text-white">
 
-      <div className="w-full max-w-md bg-[#0f172a]/80 backdrop-blur border border-white/10 rounded-2xl shadow-2xl p-8">
+    {/* 🔥 FULL BACKGROUND IMAGE */}
+    <img
+      src="/tradetrax-bg.png"
+      alt="bg"
+      className="absolute inset-0 w-full h-full object-cover"
+    />
 
-        {/* TITLE */}
-        <h1 className="text-2xl font-bold mb-6 text-center bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
-          {isSignup ? "Create Account" : "Welcome Back"}
+    {/* 🔥 DARK OVERLAY (IMPORTANT FOR READABILITY) */}
+    <div className="absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
+
+    {/* 🔥 CONTENT */}
+    <div className="relative z-10 w-full max-w-6xl flex flex-col md:flex-row items-center justify-between px-6">
+
+      {/* LEFT TEXT */}
+      <div className="mb-10 md:mb-0 max-w-lg text-center md:text-left">
+        <p className="text-sm tracking-widest text-blue-300 mb-4">
+          WELCOME TO
+        </p>
+
+        <h1 className="text-5xl font-bold mb-4 bg-gradient-to-r from-blue-400 to-teal-300 bg-clip-text text-transparent">
+          TradeTrax
         </h1>
 
-        {/* GOOGLE BUTTON */}
+        <p className="text-lg text-gray-300">
+          Track. Analyze. Socialize. Dominate your trading.
+        </p>
+      </div>
+
+      {/* RIGHT LOGIN CARD */}
+      <div className="w-full max-w-md bg-white/10 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl p-8">
+
+        {/* Toggle */}
+        <div
+          className="flex bg-white/10 rounded-xl p-1 mb-6"
+          role="tablist"
+          aria-label="Login or sign up"
+        >
+          <button
+            type="button"
+            onClick={() => setIsLogin(true)}
+            className={`flex-1 py-2 rounded-lg font-semibold transition ${
+              isLogin ? "bg-white text-black" : "text-white"
+            }`}
+          >
+            Login
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsLogin(false)}
+            className={`flex-1 py-2 rounded-lg font-semibold transition ${
+              !isLogin ? "bg-white text-black" : "text-white"
+            }`}
+          >
+            Sign Up
+          </button>
+        </div>
+
+        <h2 className="text-xl font-semibold mb-6 text-center">
+          {isLogin ? "Sign in to continue" : "Create your account"}
+        </h2>
+
         <button
+          type="button"
           onClick={handleGoogleLogin}
-          className="w-full mb-4 bg-white text-black font-medium py-2 rounded-lg hover:bg-gray-200 transition"
+          className="w-full bg-white text-black py-3 rounded-xl mb-4 font-medium hover:scale-105 transition"
         >
           Continue with Google
         </button>
 
-        <div className="text-center text-sm text-gray-400 mb-4">or</div>
+        <div className="text-center text-gray-400 text-sm mb-4">or</div>
 
-        {/* SIGNUP ONLY */}
-        {isSignup && (
+        {!isLogin && (
           <>
             <input
-              className="w-full mb-3 p-3 rounded-lg bg-[#020617] border border-white/10 focus:outline-none focus:border-blue-500"
+              type="text"
               placeholder="Full Name"
+              className="w-full mb-4 px-4 py-3 rounded-xl bg-white/10 border border-white/10 focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder-gray-400"
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
 
             <input
-              className="w-full mb-3 p-3 rounded-lg bg-[#020617] border border-white/10 focus:outline-none focus:border-blue-500"
+              type="text"
               placeholder="Username"
+              className="w-full mb-4 px-4 py-3 rounded-xl bg-white/10 border border-white/10 focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder-gray-400"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
             />
           </>
         )}
 
-        {/* EMAIL */}
         <input
-          className="w-full mb-3 p-3 rounded-lg bg-[#020617] border border-white/10 focus:outline-none focus:border-blue-500"
+          type="email"
           placeholder="Email"
+          autoComplete="email"
+          className="w-full mb-4 px-4 py-3 rounded-xl bg-white/10 border border-white/10 focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder-gray-400"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
         />
 
-        {/* PASSWORD */}
         <input
           type="password"
-          className="w-full mb-5 p-3 rounded-lg bg-[#020617] border border-white/10 focus:outline-none focus:border-blue-500"
           placeholder="Password"
+          autoComplete={isLogin ? "current-password" : "new-password"}
+          className="w-full mb-6 px-4 py-3 rounded-xl bg-white/10 border border-white/10 focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder-gray-400"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />
 
-        {/* MAIN BUTTON */}
         <button
-          onClick={isSignup ? handleSignUp : handleLogin}
+          type="button"
           disabled={loading}
-          className="w-full bg-gradient-to-r from-blue-500 to-emerald-500 py-3 rounded-lg font-semibold hover:opacity-90 transition"
+          onClick={isLogin ? handleLogin : handleSignUp}
+          className="w-full bg-gradient-to-r from-blue-500 to-teal-400 py-3 rounded-xl font-semibold hover:scale-105 transition disabled:opacity-60 disabled:hover:scale-100"
         >
-          {loading
-            ? "Loading..."
-            : isSignup
-            ? "Create Account"
-            : "Login"}
+          {loading ? "Loading..." : isLogin ? "Login" : "Create Account"}
         </button>
-
-        {/* TOGGLE */}
-        <div className="text-center mt-5 text-sm text-gray-400">
-          {isSignup ? "Already have an account?" : "Don’t have an account?"}
-          <button
-            onClick={() => setIsSignup(!isSignup)}
-            className="ml-2 text-blue-400 hover:underline"
-          >
-            {isSignup ? "Login" : "Sign up"}
-          </button>
-        </div>
-
       </div>
     </div>
-  )
+  </div>
+)
 }

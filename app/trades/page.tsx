@@ -1,6 +1,7 @@
 "use client"
 
 import Navbar from "../components/Navbar"
+import TradeFilterBar from "../components/TradeFilterBar"
 import InputTradeForm from "../components/InputTradeForm"
 import { useEffect, useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
@@ -261,13 +262,23 @@ const filteredTrades = trades.filter((trade) => {
             <p className="text-center text-gray-400">Loading...</p>
           ) : (
             <>
-              <div className="w-full flex justify-center mb-5">
-                <div className="flex flex-wrap items-center justify-center gap-3 bg-white/5 backdrop-blur-md border border-white/10 rounded-xl px-4 py-3 max-w-full">
-                  <div className="flex items-center gap-2 shrink-0">
+              <TradeFilterBar
+                className="mb-5"
+                accounts={accounts}
+                accountFilter={accountFilter}
+                onAccountChange={setAccountFilter}
+                accountTypeFilter={accountTypeFilter}
+                onAccountTypeChange={setAccountTypeFilter}
+                timeframe={timeframe}
+                onTimeframeChange={setTimeframe}
+                selectedDate={selectedDate}
+                onSelectedDateChange={setSelectedDate}
+                leading={
+                  <div className="flex shrink-0 items-center gap-2">
                     <button
                       type="button"
                       onClick={() => setResultFilter("all")}
-                      className={`text-white px-3 py-1 rounded-md text-sm whitespace-nowrap ${
+                      className={`whitespace-nowrap rounded-md px-3 py-1 text-sm text-white ${
                         resultFilter === "all"
                           ? "bg-emerald-500 hover:bg-emerald-600"
                           : "bg-white/10 hover:bg-white/20"
@@ -311,14 +322,14 @@ const filteredTrades = trades.filter((trade) => {
                             )
                           }
                         }}
-                        className={`relative w-28 h-8 flex items-center rounded-full px-2 cursor-pointer transition
+                        className={`relative flex h-8 w-28 cursor-pointer items-center rounded-full px-2 transition
                           ${resultFilter === "wins" ? "bg-emerald-500" : ""}
                           ${resultFilter === "losses" ? "bg-red-500" : ""}
                           ${resultFilter === "all" ? "bg-white/10" : ""}
                         `}
                       >
                         <div
-                          className={`bg-white w-6 h-6 rounded-full shadow-md transform transition ${
+                          className={`h-6 w-6 transform rounded-full bg-white shadow-md transition ${
                             resultFilter === "wins"
                               ? "translate-x-0"
                               : resultFilter === "losses"
@@ -339,81 +350,17 @@ const filteredTrades = trades.filter((trade) => {
                       </span>
                     </div>
                   </div>
-
-                  <select
-                    value={accountFilter}
-                    onChange={(e) => setAccountFilter(e.target.value)}
-                    className="bg-[#0f172a] hover:bg-[#1e293b] text-white border border-white/10 rounded-md px-3 py-1 text-sm shrink-0 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="all">All Accounts</option>
-                    {accounts.map((acc) => (
-                      <option key={acc}>{acc}</option>
-                    ))}
-                  </select>
-
-                  <select
-                    value={accountTypeFilter}
-                    onChange={(e) => setAccountTypeFilter(e.target.value)}
-                    className="bg-[#0f172a] hover:bg-[#1e293b] text-white border border-white/10 rounded-md px-3 py-1 text-sm shrink-0 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="all">All Types</option>
-                    <option value="funded">Funded</option>
-                    <option value="eval">Eval</option>
-                    <option value="live">Live</option>
-                  </select>
-
-                  {(
-                    [
-                      { label: "All", value: "all" },
-                      { label: "Daily", value: "daily" },
-                      { label: "Weekly", value: "weekly" },
-                      { label: "Monthly", value: "monthly" },
-                    ] as const
-                  ).map(({ label, value }) => (
-                    <button
-                      type="button"
-                      key={value}
-                      onClick={() => setTimeframe(value)}
-                      className={`text-sm whitespace-nowrap shrink-0 px-3 py-1 rounded-md ${
-                        timeframe === value
-                          ? "bg-emerald-500 hover:bg-emerald-600 text-white"
-                          : "bg-white/10 hover:bg-white/20 text-white"
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  ))}
-
-                  <div className="relative shrink-0">
-                    <input
-                      type="date"
-                      value={selectedDate}
-                      onChange={(e) => setSelectedDate(e.target.value)}
-                      className="bg-[#0f172a] text-white border border-white/10 rounded-md px-3 py-1 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 [color-scheme:dark]"
-                      style={{ colorScheme: "dark" }}
-                    />
-
-                    {selectedDate && (
-                      <button
-                        type="button"
-                        onClick={() => setSelectedDate("")}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-300 hover:text-red-400 transition"
-                        aria-label="Clear date"
-                      >
-                        🗑
-                      </button>
-                    )}
-                  </div>
-
+                }
+                trailing={
                   <button
                     type="button"
                     onClick={() => setShowAdvanced(!showAdvanced)}
-                    className="bg-white/10 hover:bg-white/20 text-white px-3 py-1 rounded-md text-sm whitespace-nowrap shrink-0"
+                    className="shrink-0 whitespace-nowrap rounded-md bg-white/10 px-3 py-1 text-sm text-white hover:bg-white/20"
                   >
                     {showAdvanced ? "Hide Advanced" : "Show Advanced"}
                   </button>
-                </div>
-              </div>
+                }
+              />
 
               {/* 🔥 STATS BAR */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
