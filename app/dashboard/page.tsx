@@ -641,13 +641,26 @@ export default function Dashboard() {
     sessionPieData
   } = useMemo(() => {
 
-    const accounts = Array.from(
-      new Set(
-        trades
-          .filter(t => t.account_type && t.account_id)
-          .map(t => `${t.account_type} (${t.account_id})`)
-      )
-    )
+    const accountMap = new Map<
+      string,
+      { value: string; label: string; accountType?: string | null }
+    >()
+    trades
+      .filter(t => t.account_name && t.account_size && t.account_id)
+      .forEach((t) => {
+        const accountName = String(t.account_name || "").trim()
+        const size = String(t.account_size || "").trim()
+        const id = String(t.account_id || "").trim()
+        const value = `${accountName}|${size}|${id}`
+        const label = `${accountName} ${size} #${id}`
+          .trim()
+          .replace(/\s+/g, " ")
+        if (!accountMap.has(value)) {
+          accountMap.set(value, { value, label, accountType: t.account_type })
+        }
+      })
+    const accounts = Array.from(accountMap.values())
+    console.log("Accounts:", accounts)
 
     function filterByTime(trade: any) {
       if (timeFilter === "all") return true
@@ -687,22 +700,22 @@ export default function Dashboard() {
         if (!filterByTime(trade)) return false
 
         if (accountFilter !== "all") {
-          const label = `${trade.account_type} (${trade.account_id})`
-          if (label !== accountFilter) return false
+          const accountName = String(trade.account_name || "").trim()
+          const size = String(trade.account_size || "").trim()
+          const id = String(trade.account_id || "").trim()
+          const accountKey = `${accountName}|${size}|${id}`
+          if (accountKey !== accountFilter) return false
         }
 
-        const rawType =
-          trade.account_type ||
-          trade.accountType ||
-          trade.type ||
-          trade.account ||
-          ""
-        const tradeType = String(rawType).toLowerCase()
-        if (
-          accountTypeFilter !== "all" &&
-          !tradeType.includes(accountTypeFilter)
-        ) {
-          return false
+        const tradeAcct = String(trade.account_type ?? "")
+          .toLowerCase()
+          .trim()
+        const selectedAcct = accountTypeFilter.toLowerCase().trim()
+        if (accountTypeFilter !== "all") {
+          console.log("Filtering:", trade.account_type, accountTypeFilter)
+          if (tradeAcct !== selectedAcct) {
+            return false
+          }
         }
 
         return true

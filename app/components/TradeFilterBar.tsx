@@ -10,7 +10,11 @@ const TIME_OPTIONS = [
 ] as const
 
 export type TradeFilterBarProps = {
-  accounts: string[]
+  accounts: Array<{
+    value: string
+    label: string
+    accountType?: string | null
+  }>
   accountFilter: string
   onAccountChange: (value: string) => void
   accountTypeFilter: string
@@ -53,7 +57,9 @@ export default function TradeFilterBar({
         >
           <option value="all">All Accounts</option>
           {accounts.map((acc) => (
-            <option key={acc}>{acc}</option>
+            <option key={acc.value} value={acc.value}>
+              {acc.label}
+            </option>
           ))}
         </select>
 

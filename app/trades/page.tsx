@@ -190,13 +190,26 @@ export default function TradesPage() {
     return true
   }
 
-  const accounts = Array.from(
-    new Set(
-      trades
-        .filter(t => t.account_type && t.account_id)
-        .map(t => `${t.account_type} (${t.account_id})`)
-    )
-  )
+  const accountMap = new Map<
+    string,
+    { value: string; label: string; accountType?: string | null }
+  >()
+  trades
+    .filter(t => t.account_name && t.account_size && t.account_id)
+    .forEach((t) => {
+      const accountName = String(t.account_name || "").trim()
+      const size = String(t.account_size || "").trim()
+      const id = String(t.account_id || "").trim()
+      const value = `${accountName}|${size}|${id}`
+      const label = `${accountName} ${size} #${id}`
+        .trim()
+        .replace(/\s+/g, " ")
+      if (!accountMap.has(value)) {
+        accountMap.set(value, { value, label, accountType: t.account_type })
+      }
+    })
+  const accounts = Array.from(accountMap.values())
+  console.log("Accounts:", accounts)
 
 const filteredTrades = trades.filter((trade) => {
   if (selectedDate) {
@@ -218,25 +231,22 @@ const filteredTrades = trades.filter((trade) => {
   if (resultFilter === "losses" && trade.pnl >= 0) return false
 
   if (accountFilter !== "all") {
-    const label = `${trade.account_type} (${trade.account_id})`
-    if (label !== accountFilter) return false
+    const accountName = String(trade.account_name || "").trim()
+    const size = String(trade.account_size || "").trim()
+    const id = String(trade.account_id || "").trim()
+    const accountKey = `${accountName}|${size}|${id}`
+    if (accountKey !== accountFilter) return false
   }
 
-  // 🔥 ADD THIS BLOCK RIGHT HERE
-  const rawType =
-    trade.account_type ||
-    trade.accountType ||
-    trade.type ||
-    trade.account ||
-    ""
-
-  const tradeType = String(rawType).toLowerCase()
-
-  if (
-    accountTypeFilter !== "all" &&
-    !tradeType.includes(accountTypeFilter)
-  ) {
-    return false
+  const tradeAcct = String(trade.account_type ?? "")
+    .toLowerCase()
+    .trim()
+  const selectedAcct = accountTypeFilter.toLowerCase().trim()
+  if (accountTypeFilter !== "all") {
+    console.log("Filtering:", trade.account_type, accountTypeFilter)
+    if (tradeAcct !== selectedAcct) {
+      return false
+    }
   }
 
   // 🔥 THIS STAYS LAST
@@ -435,24 +445,12 @@ const filteredTrades = trades.filter((trade) => {
   const entry = trade.entry_price ?? trade.entry ?? null
   const exit = trade.exit_price ?? trade.exit ?? null
 
-  // 🔥 THIS LINE FIXES EVERYTHING
-  const rawType =
-    trade.account_type ||
-    trade.accountType ||
-    trade.type ||
-    trade.account ||
-    ""
-
-  const tradeType = String(trade.account_type || "").toLowerCase().trim()
-
-const filterValue = accountTypeFilter.toLowerCase().trim()
-
-if (
-  filterValue !== "all" &&
-  !tradeType.includes(filterValue)
-) {
-  return false
-}
+  const acctLower = String(trade.account_type ?? "").toLowerCase().trim()
+  const accountLabel = `${String(trade.account_name || "").trim()} ${String(
+    trade.account_size || ""
+  ).trim()} ${trade.account_id ? `#${String(trade.account_id).trim()}` : ""}`
+    .replace(/\s+/g, " ")
+    .trim()
 
   return (
     <div
@@ -526,36 +524,30 @@ if (
                             <span className="text-gray-400">Session:</span> {trade.session}
                           </p>
 
-                          <div className="flex items-center gap-2 mt-1 flex-wrap">
+                          <div className="mt-1 flex flex-wrap items-center gap-2">
                             {trade.account_type && (
                               <span
                                 className={`px-2 py-0.5 text-xs rounded-full font-medium ${
-                                  String(trade.account_type)
-                                    .toLowerCase()
-                                    .includes("fund")
+                                  acctLower === "funded"
                                     ? "bg-green-500/20 text-green-400"
-                                    : String(trade.account_type)
-                                        .toLowerCase()
-                                        .includes("eval")
-                                    ? "bg-yellow-500/20 text-yellow-400"
-                                    : String(trade.account_type)
-                                        .toLowerCase()
-                                        .includes("live")
-                                    ? "bg-blue-500/20 text-blue-400"
-                                    : "bg-gray-500/20 text-gray-400"
+                                    : acctLower === "eval"
+                                      ? "bg-yellow-500/20 text-yellow-400"
+                                      : acctLower === "live"
+                                        ? "bg-blue-500/20 text-blue-400"
+                                        : "bg-gray-500/20 text-gray-400"
                                 }`}
                               >
                                 {trade.account_type}
                               </span>
                             )}
 
-                            {trade.account_id && (
-                              <span className="text-xs text-gray-400">
-                                #{trade.account_id}
+                            {accountLabel && (
+                              <span className="text-sm text-gray-300">
+                                {accountLabel}
                               </span>
                             )}
 
-                            {!trade.account_type && !trade.account_id && (
+                            {!trade.account_type && !accountLabel && (
                               <span className="text-xs text-gray-500">—</span>
                             )}
                           </div>

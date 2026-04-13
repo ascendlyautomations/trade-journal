@@ -102,7 +102,7 @@ export default function InputTradeForm({
   const [postToFeed, setPostToFeed] = useState(false)
   const [image, setImage] = useState<File | null>(null)
 
-  const [selectedAccountType, setSelectedAccountType] = useState("funded")
+  const [accountType, setAccountType] = useState("eval")
 
   const [firm, setFirm] = useState("")
   const [accountSize, setAccountSize] = useState("")
@@ -154,7 +154,7 @@ export default function InputTradeForm({
     setPostToFeed(false)
     setImage(null)
     const at = String(t.account_type ?? "").toLowerCase().trim()
-    let category: "funded" | "eval" | "live" = "funded"
+    let category: "funded" | "eval" | "live" = "eval"
     let firmFromLegacy = ""
     if (at === "funded" || at === "eval" || at === "live") {
       category = at
@@ -167,7 +167,7 @@ export default function InputTradeForm({
     } else if (t.account_type) {
       firmFromLegacy = String(t.account_type)
     }
-    setSelectedAccountType(category)
+    setAccountType(category)
     setFirm(firmFromLegacy)
     setAccountSize(t.account_size ?? "")
     setAccountNumber(t.account_id ?? "")
@@ -234,7 +234,7 @@ export default function InputTradeForm({
     setTradeType("")
     setTradeDate(getESTDate())
     setPostToFeed(false)
-    setSelectedAccountType("funded")
+    setAccountType("eval")
   }
 
   async function handleSubmit() {
@@ -294,6 +294,7 @@ export default function InputTradeForm({
       psychologyNotes != null && String(psychologyNotes).trim() !== ""
         ? String(psychologyNotes).trim()
         : null
+    const firmToSave = String(firm || "").trim() || "Alpha Futures"
 
     if (isEditMode && existingTrade?.id) {
       const prevImg = existingTrade.image_url ?? null
@@ -313,7 +314,8 @@ export default function InputTradeForm({
         notes: notes ?? "",
         public_description: publicDescription ?? "",
         image_url: imageUrlOut,
-        account_type: selectedAccountType,
+        account_name: firmToSave,
+        account_type: accountType.toLowerCase(),
         account_size: accountSize || null,
         account_id: accountNumber || null,
         created_at: finalDate.toISOString(),
@@ -366,7 +368,8 @@ export default function InputTradeForm({
         notes,
         public_description: publicDescription,
         image_url: screenshotUrl,
-        account_type: selectedAccountType,
+        account_name: firmToSave,
+        account_type: accountType.toLowerCase(),
         account_size: accountSize,
         account_id: accountNumber,
         user_id: user.id,
@@ -462,17 +465,6 @@ export default function InputTradeForm({
             className="w-full p-2 rounded bg-[#0f172a] border border-white/10 text-white [color-scheme:dark]"
           />
 
-          <p className="text-sm text-gray-400">Account type (saved as account_type)</p>
-          <select
-            value={selectedAccountType}
-            onChange={(e) => setSelectedAccountType(e.target.value)}
-            className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
-          >
-            <option value="funded">Funded</option>
-            <option value="eval">Eval</option>
-            <option value="live">Live</option>
-          </select>
-
           <select
             value={firm}
             onChange={(e) => setFirm(e.target.value)}
@@ -521,9 +513,9 @@ export default function InputTradeForm({
               <button
                 key={type}
                 type="button"
-                onClick={() => setTradeType(type)}
+                onClick={() => setAccountType(type.toLowerCase())}
                 className={`px-3 py-1 rounded text-sm font-medium border transition ${
-                  tradeType === type
+                  accountType === type.toLowerCase()
                     ? "bg-emerald-500 border-emerald-400 text-white"
                     : "bg-[#0f172a] border-white/10 text-gray-300 hover:border-emerald-400"
                 }`}
