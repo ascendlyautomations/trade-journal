@@ -7,6 +7,8 @@ import { useRouter, usePathname } from "next/navigation"
 import { useUserProfile } from "../../lib/useUserProfile"
 import { isProActive } from "../../lib/subscription"
 
+const ADMIN_ID = "PASTE_YOUR_SUPABASE_USER_ID_HERE"
+
 export default function Navbar() {
   const { user, profile, loading } = useUserProfile()
 
@@ -261,6 +263,10 @@ export default function Navbar() {
                 )}
               </div>
             ))}
+
+            <Link href="/suggestions" className="hover:text-blue-400">
+              Feedback
+            </Link>
           </div>
         )}
       </div>
@@ -272,6 +278,12 @@ export default function Navbar() {
         </button>
       ) : (
         <div className="flex items-center gap-3 shrink-0">
+          {user?.id === ADMIN_ID ? (
+            <Link href="/admin/feedback" className="text-sm hover:text-blue-400">
+              Admin
+            </Link>
+          ) : null}
+
           <div
             className="relative mr-2 cursor-pointer shrink-0"
             role="button"
