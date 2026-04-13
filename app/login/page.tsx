@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { supabase } from "@/lib/supabaseClient"
 import { useRouter } from "next/navigation"
 import { ONBOARDING_FLAG } from "../components/ProfileOnboarding"
@@ -14,6 +14,17 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
 
   const router = useRouter()
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const ref = new URLSearchParams(window.location.search).get("ref")
+    if (!ref) return
+    try {
+      localStorage.setItem("referral_code", ref.trim())
+    } catch {
+      /* ignore */
+    }
+  }, [])
 
   async function handleSignUp(e: React.MouseEvent<HTMLButtonElement>) {
     console.log("Signup clicked")

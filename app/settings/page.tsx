@@ -7,7 +7,7 @@ import { supabase } from "../../lib/supabaseClient"
 import { isProActive } from "../../lib/subscription"
 import type { User } from "@supabase/supabase-js"
 
-type TabId = "profile" | "trading" | "affiliate" | "account"
+type TabId = "profile" | "affiliate" | "account" | "subscription"
 
 function sliceDateInput(raw: unknown): string {
   if (raw == null || raw === "") return ""
@@ -18,30 +18,47 @@ function sliceDateInput(raw: unknown): string {
   return d.toISOString().slice(0, 10)
 }
 
+function subscriptionStatusClass(statusRaw: unknown): string {
+  const s = String(statusRaw ?? "")
+    .toLowerCase()
+    .trim()
+  if (s === "active") return "text-emerald-400"
+  if (s === "trialing") return "text-amber-400"
+  if (s === "canceled" || s === "cancelled") return "text-red-400"
+  if (s === "inactive") return "text-gray-400"
+  return "text-gray-300"
+}
+
+function formatStripeCustomerId(id: unknown): string {
+  if (id == null || id === "") return "—"
+  const s = String(id)
+  return s.length > 10 ? `${s.slice(0, 10)}...` : s
+}
+
 const TABS: {
   id: TabId
   label: string
   description: string
 }[] = [
   {
-    id: "profile",
-    label: "Profile",
-    description: "Public avatar, username, and bio",
+    id: "account",
+    label: "Account",
+    description: "Login, security, and privacy",
   },
   {
-    id: "trading",
-    label: "Trading",
-    description: "Your trading identity and risk limits",
+    id: "subscription",
+    label: "Subscription",
+    description: "Plan, billing, and Pro access",
+  },
+  {
+    id: "profile",
+    label: "Profile",
+    description: "Public profile, trading style, and risk limits",
   },
   {
     id: "affiliate",
     label: "Affiliate",
     description: "Referrals, links, and earnings",
-  },
-  {
-    id: "account",
-    label: "Account",
-    description: "Login, security, and billing",
   },
 ]
 
@@ -52,12 +69,11 @@ export default function SettingsPage() {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [savingProfile, setSavingProfile] = useState(false)
-  const [savingTrading, setSavingTrading] = useState(false)
   const [savingAccountPrivacy, setSavingAccountPrivacy] = useState(false)
   const [savingPassword, setSavingPassword] = useState(false)
   const [cancelingSub, setCancelingSub] = useState(false)
+  const [checkoutLoading, setCheckoutLoading] = useState(false)
   const [profile, setProfile] = useState<Record<string, unknown> | null>(null)
-  const [managingSub, setManagingSub] = useState(false)
   const [newPassword, setNewPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [affiliateData, setAffiliateData] = useState<{
@@ -155,6 +171,13 @@ export default function SettingsPage() {
   async function saveProfileTab() {
     if (!user) return
 
+    const t = maxDrawdown.trim()
+    const n = t === "" ? null : Number(t)
+    if (t !== "" && (!Number.isFinite(n) || n === null || n < 0)) {
+      alert("Enter a valid non-negative dollar amount for drawdown limit, or leave blank to clear.")
+      return
+    }
+
     setSavingProfile(true)
 
     let avatarUrl = avatarPreview
@@ -169,6 +192,10 @@ export default function SettingsPage() {
         username,
         bio,
         avatar_url: avatarUrl,
+        trading_style: tradingStyle,
+        trading_model: tradingModel || tradingStyle || null,
+        started_trading: startedTrading.trim() || null,
+        max_drawdown_limit: n,
       })
       .eq("id", user.id)
 
@@ -186,44 +213,6 @@ export default function SettingsPage() {
             username,
             bio,
             avatar_url: avatarUrl,
-          }
-        : p
-    )
-    setAvatarFile(null)
-    alert("Profile saved")
-  }
-
-  async function saveTradingTab() {
-    if (!user) return
-
-    const t = maxDrawdown.trim()
-    const n = t === "" ? null : Number(t)
-    if (t !== "" && (!Number.isFinite(n) || n === null || n < 0)) {
-      alert("Enter a valid non-negative dollar amount for drawdown limit, or leave blank to clear.")
-      return
-    }
-
-    setSavingTrading(true)
-    const { error } = await supabase
-      .from("profiles")
-      .update({
-        trading_style: tradingStyle,
-        trading_model: tradingModel || tradingStyle || null,
-        started_trading: startedTrading.trim() || null,
-        max_drawdown_limit: n,
-      })
-      .eq("id", user.id)
-    setSavingTrading(false)
-
-    if (error) {
-      alert(error.message)
-      return
-    }
-
-    setProfile((p) =>
-      p
-        ? {
-            ...p,
             trading_style: tradingStyle,
             trading_model: tradingModel || tradingStyle || null,
             started_trading: startedTrading.trim() || null,
@@ -231,7 +220,8 @@ export default function SettingsPage() {
           }
         : p
     )
-    alert("Trading settings saved")
+    setAvatarFile(null)
+    alert("Profile saved")
   }
 
   async function saveAccountPrivacyTab() {
@@ -292,12 +282,44 @@ export default function SettingsPage() {
     alert("Password updated")
   }
 
+  async function startTraxProCheckout() {
+    if (!user) return
+
+    setCheckoutLoading(true)
+    try {
+      const res = await fetch("/api/create-checkout-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user.id,
+          referralCode:
+            typeof window !== "undefined"
+              ? localStorage.getItem("referral_code")
+              : null,
+        }),
+      })
+
+      const data = await res.json().catch(() => ({}))
+
+      if (data.url) {
+        window.location.href = data.url as string
+      } else {
+        alert(typeof data.error === "string" ? data.error : "Checkout failed")
+      }
+    } catch (e) {
+      console.error(e)
+      alert("Checkout failed")
+    } finally {
+      setCheckoutLoading(false)
+    }
+  }
+
   async function cancelSubscriptionAtPeriodEnd() {
     if (!user) return
 
     if (
       !window.confirm(
-        "Cancel your subscription at the end of the current billing period? You will keep access until then."
+        "Cancel at the end of the current billing period? You keep access until then."
       )
     ) {
       return
@@ -338,37 +360,6 @@ export default function SettingsPage() {
       alert("Something went wrong")
     } finally {
       setCancelingSub(false)
-    }
-  }
-
-  async function handleManageSubscription() {
-    if (!user) return
-
-    setManagingSub(true)
-    try {
-      if (!profile?.stripe_customer_id) {
-        alert("No active subscription found")
-        return
-      }
-
-      const res = await fetch("/api/create-portal-session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: user.id }),
-      })
-
-      const data = await res.json()
-
-      if (data.url) {
-        window.location.href = data.url
-      } else {
-        alert("Unable to open billing portal")
-      }
-    } catch (err) {
-      console.error("Manage subscription error:", err)
-      alert("Something went wrong")
-    } finally {
-      setManagingSub(false)
     }
   }
 
@@ -496,22 +487,9 @@ export default function SettingsPage() {
                   className="w-full rounded-xl border border-white/10 bg-black/30 p-3 placeholder:text-gray-500"
                 />
 
-                <button
-                  type="button"
-                  onClick={() => void saveProfileTab()}
-                  disabled={savingProfile}
-                  className="w-full rounded-xl bg-gradient-to-r from-blue-500 to-emerald-500 py-3 font-semibold disabled:opacity-50"
-                >
-                  {savingProfile ? "Saving…" : "Save profile"}
-                </button>
-              </div>
-            )}
-
-            {activeTab === "trading" && (
-              <div className="space-y-6 rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm">
                 <div>
                   <label className="mb-1 block text-sm text-gray-400">
-                    Trading style / model
+                    Trading style
                   </label>
                   <input
                     value={tradingModel}
@@ -526,7 +504,7 @@ export default function SettingsPage() {
 
                 <div>
                   <label className="mb-1 block text-sm text-gray-400">
-                    Started trading
+                    Started Trading Date
                   </label>
                   <input
                     type="date"
@@ -555,11 +533,11 @@ export default function SettingsPage() {
 
                 <button
                   type="button"
-                  onClick={() => void saveTradingTab()}
-                  disabled={savingTrading}
+                  onClick={() => void saveProfileTab()}
+                  disabled={savingProfile}
                   className="w-full rounded-xl bg-gradient-to-r from-blue-500 to-emerald-500 py-3 font-semibold disabled:opacity-50"
                 >
-                  {savingTrading ? "Saving…" : "Save trading settings"}
+                  {savingProfile ? "Saving…" : "Save profile"}
                 </button>
               </div>
             )}
@@ -714,74 +692,96 @@ export default function SettingsPage() {
                     {savingPassword ? "Updating…" : "Update password"}
                   </button>
                 </section>
+              </div>
+            )}
 
-                <section className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm">
-                  <h3 className="text-sm font-semibold uppercase tracking-wide text-blue-300">
-                    Subscription
-                  </h3>
-                  <p className="mt-1 text-sm text-gray-400">
-                    Plan status and billing management
-                  </p>
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                    <div className="rounded-xl border border-white/10 bg-black/20 p-4">
-                      <p className="text-xs text-gray-500">subscription_status</p>
-                      <p className="mt-1 font-semibold capitalize text-white">
-                        {profile?.subscription_status != null &&
-                        String(profile.subscription_status).trim() !== ""
-                          ? String(profile.subscription_status)
-                          : "—"}
-                      </p>
-                    </div>
-                    <div className="rounded-xl border border-white/10 bg-black/20 p-4">
-                      <p className="text-xs text-gray-500">is_pro</p>
-                      <p className="mt-1 font-semibold text-white">
-                        {profile?.is_pro === true
-                          ? "true"
-                          : profile?.is_pro === false
-                            ? "false"
-                            : "—"}
-                      </p>
-                    </div>
+            {activeTab === "subscription" && (
+              <div className="space-y-6 rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm">
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-white/10 bg-black/20 p-4">
+                    <p className="text-xs text-gray-500">Plan name</p>
+                    <p className="mt-1 font-semibold text-white">
+                      {profile?.is_pro === true
+                        ? "TraxPro ($16.99/month)"
+                        : "Free Plan"}
+                    </p>
                   </div>
 
-                  {isProActive(profile) && profile?.stripe_customer_id ? (
-                    <button
-                      type="button"
-                      onClick={() => void handleManageSubscription()}
-                      disabled={managingSub}
-                      className="mt-4 w-full rounded-xl bg-emerald-500 py-3 font-semibold hover:bg-emerald-600 disabled:opacity-50"
+                  <div className="rounded-xl border border-white/10 bg-black/20 p-4">
+                    <p className="text-xs text-gray-500">Status</p>
+                    <p
+                      className={`mt-1 font-semibold capitalize ${subscriptionStatusClass(
+                        profile?.subscription_status
+                      )}`}
                     >
-                      {managingSub ? "Opening billing…" : "Manage subscription"}
-                    </button>
-                  ) : null}
-                </section>
+                      {profile?.subscription_status != null &&
+                      String(profile.subscription_status).trim() !== ""
+                        ? String(profile.subscription_status)
+                        : "inactive"}
+                    </p>
+                  </div>
 
-                <section className="rounded-2xl border border-red-500/30 bg-red-950/20 p-6 backdrop-blur-sm">
-                  <h3 className="text-sm font-semibold uppercase tracking-wide text-red-300">
-                    Cancel subscription
-                  </h3>
-                  <p className="mt-2 text-sm text-red-200/90">
-                    Canceling will remove access after the billing period ends. You keep Pro
-                    features until then.
+                  <div className="rounded-xl border border-white/10 bg-black/20 p-4">
+                    <p className="text-xs text-gray-500">Customer ID</p>
+                    <p className="mt-1 font-mono text-sm text-gray-200">
+                      {formatStripeCustomerId(profile?.stripe_customer_id)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-white/10 bg-black/20 p-4">
+                  <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                    Feature access
                   </p>
+                  <ul className="mt-3 space-y-2">
+                    <li className="flex items-center justify-between gap-4 text-sm text-gray-200">
+                      <span>Full Dashboard</span>
+                      <span aria-hidden>
+                        {profile?.is_pro === true ? "✅" : "❌"}
+                      </span>
+                    </li>
+                    <li className="flex items-center justify-between gap-4 text-sm text-gray-200">
+                      <span>AI Analyst</span>
+                      <span aria-hidden>
+                        {profile?.is_pro === true ? "✅" : "❌"}
+                      </span>
+                    </li>
+                    <li className="flex items-center justify-between gap-4 text-sm text-gray-200">
+                      <span>Multiple Accounts</span>
+                      <span aria-hidden>
+                        {profile?.is_pro === true ? "✅" : "❌"}
+                      </span>
+                    </li>
+                  </ul>
+                </div>
+
+                {profile?.is_pro !== true ? (
                   <button
                     type="button"
-                    onClick={() => void cancelSubscriptionAtPeriodEnd()}
-                    disabled={
-                      cancelingSub ||
-                      !isProActive(profile) ||
-                      !profile?.stripe_customer_id
-                    }
-                    className="mt-4 w-full rounded-xl bg-red-600 py-3 font-semibold text-white hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-40"
+                    onClick={() => void startTraxProCheckout()}
+                    disabled={checkoutLoading}
+                    className="w-full rounded-xl bg-gradient-to-r from-blue-500 to-emerald-500 py-3 font-semibold disabled:opacity-50"
                   >
-                    {cancelingSub ? "Processing…" : "Cancel subscription"}
+                    {checkoutLoading ? "Redirecting…" : "Upgrade to TraxPro"}
                   </button>
-                  {!profile?.stripe_customer_id ? (
-                    <p className="mt-2 text-xs text-gray-500">
-                      No billing account on file.
+                ) : null}
+
+                {isProActive(profile) && profile?.stripe_customer_id ? (
+                  <div className="border-t border-white/10 pt-6">
+                    <button
+                      type="button"
+                      onClick={() => void cancelSubscriptionAtPeriodEnd()}
+                      disabled={cancelingSub}
+                      className="w-full rounded-xl bg-red-600 py-3 font-semibold text-white hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {cancelingSub ? "Processing…" : "Cancel Subscription"}
+                    </button>
+                    <p className="mt-3 text-center text-xs text-gray-400">
+                      Your subscription will remain active until the end of the billing
+                      period.
                     </p>
-                  ) : null}
-                </section>
+                  </div>
+                ) : null}
               </div>
             )}
           </div>

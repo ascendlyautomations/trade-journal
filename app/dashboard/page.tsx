@@ -478,7 +478,6 @@ export default function Dashboard() {
   const [user, setUser] = useState<any>(null)
   const [profile, setProfile] = useState<any>(null)
   const [loading, setLoading] = useState(true)
-  const [subscribing, setSubscribing] = useState(false)
   const [showControls, setShowControls] = useState(false)
   const [showEquity, setShowEquity] = useState(true)
   const [showDrawdown, setShowDrawdown] = useState(true)
@@ -952,32 +951,6 @@ const worstDay = dailyPnLs.length > 0
 
   }, [trades, accountFilter, accountTypeFilter, timeFilter, selectedDate])
 
-  async function handleSubscribe(userId: string) {
-    setSubscribing(true)
-    try {
-      const res = await fetch("/api/create-checkout-session", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          userId,
-          referralCode: localStorage.getItem("referral_code"),
-        }),
-      })
-
-      const data = await res.json()
-
-      if (data.url) {
-        window.location.href = data.url
-      } else {
-        alert("Checkout failed")
-      }
-    } finally {
-      setSubscribing(false)
-    }
-  }
-
   // 🔥 LOADING STATE (FIXES GLITCH)
   if (loading) {
     return (
@@ -1258,7 +1231,7 @@ const worstDay = dailyPnLs.length > 0
                       href="/settings"
                       className="text-blue-300 underline hover:text-blue-200"
                     >
-                      Settings → Trading
+                      Settings → Profile
                     </Link>
                     .
                   </p>
@@ -1305,12 +1278,6 @@ const worstDay = dailyPnLs.length > 0
           />
 
         </div>
-
-        {profile && !isPro && (
-          <div className="mb-4 rounded-lg bg-amber-500/10 border border-amber-400/40 text-amber-100 px-4 py-3 text-center text-sm">
-            Upgrade to Pro to unlock full features 🚀
-          </div>
-        )}
 
         <ProGate isPro={isPro}>
           <div className="relative z-0 space-y-6 overflow-visible">

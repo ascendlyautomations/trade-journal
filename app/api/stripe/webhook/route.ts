@@ -302,103 +302,242 @@ export async function POST(req: Request) {
     }
 
     // ======================================================
-    // 💰 INVOICE PAID → keep Pro active + referral earnings
+    // INVOICE PAID → Pro refresh + referral ledger + referrer earnings
+    // Idempotent per stripe_invoice_id. Detailed logs for commission debugging.
     // ======================================================
     if (event.type === "invoice.paid") {
-      console.log("📦 Processing invoice.paid")
-
       try {
-        const invoice = event.data.object as Stripe.Invoice
-
-        console.log("💰 INVOICE RECEIVED")
+        const invoice = event.data.object as Stripe.Invoice & {
+          subscription?: string | Stripe.Subscription | null
+        }
 
         const customerId = stripeCustomerId(invoice.customer)
+        const subscriptionRaw = invoice.subscription
+        const subscriptionId =
+          typeof subscriptionRaw === "string"
+            ? subscriptionRaw
+            : subscriptionRaw &&
+                typeof subscriptionRaw === "object" &&
+                "id" in subscriptionRaw
+              ? (subscriptionRaw as Stripe.Subscription).id
+              : null
+
+        const amountPaidCents = Number(invoice.amount_paid ?? 0)
+        const totalCents = Number(invoice.total ?? 0)
+        const status = invoice.status ?? "unknown"
+
+        console.log("[invoice.paid] event received", {
+          invoiceId: invoice.id,
+          customerId,
+          subscriptionId,
+          status,
+          currency: invoice.currency,
+          billing_reason: invoice.billing_reason,
+          amount_paid_cents: amountPaidCents,
+          total_cents: totalCents,
+          subtotal: invoice.subtotal,
+          amount_due: invoice.amount_due,
+        })
 
         if (!customerId) {
-          console.log("❌ No customer ID")
-        } else {
-          let buyer: Record<string, unknown> | null = null
-
-          for (let i = 0; i < 5; i++) {
-            const { data } = await supabase
-              .from("profiles")
-              .select("*")
-              .eq("stripe_customer_id", customerId)
-              .single()
-
-            if (data) {
-              buyer = data as Record<string, unknown>
-              break
-            }
-
-            console.log(`⏳ Waiting for profile... attempt ${i + 1}`)
-
-            await new Promise((res) => setTimeout(res, 1000))
-          }
-
-          if (!buyer) {
-            console.log("❌ No buyer found after retries (invoice.paid)")
-          } else {
-            console.log("👤 BUYER FOUND:", buyer.id)
-
-            try {
-              const { error: proErr } = await supabase
-                .from("profiles")
-                .update(SUBSCRIPTION_ACTIVE)
-                .eq("id", buyer.id as string)
-
-              if (proErr) {
-                console.error("ERROR:", JSON.stringify(proErr, null, 2))
-              } else {
-                console.log("✅ Pro refreshed (invoice.paid renewal)")
-              }
-            } catch (e) {
-              console.error("❌ invoice.paid Pro refresh crash:", e)
-            }
-
-            const referralCode = buyer.referred_by as
-              | string
-              | null
-              | undefined
-
-            if (!referralCode) {
-              console.log("❌ No referral on buyer")
-            } else {
-              const { data: referrer } = await supabase
-                .from("profiles")
-                .select("*")
-                .eq("referral_code", referralCode)
-                .single()
-
-              if (!referrer) {
-                console.log("❌ No referrer found")
-              } else {
-                try {
-                  const amountPaid = (invoice.amount_paid || 0) / 100
-                  const commission = amountPaid * 0.18
-
-                  const { error: earnErr } = await supabase
-                    .from("profiles")
-                    .update({
-                      referral_earnings:
-                        Number(referrer.referral_earnings || 0) + commission,
-                    })
-                    .eq("id", referrer.id)
-
-                  if (earnErr) {
-                    console.error("ERROR:", JSON.stringify(earnErr, null, 2))
-                  } else {
-                    console.log("✅ EARNINGS UPDATED")
-                  }
-                } catch (e) {
-                  console.error("❌ referral earnings crash:", e)
-                }
-              }
-            }
-          }
+          console.error(
+            "[invoice.paid] no Stripe customer id on invoice object"
+          )
+          return
         }
+
+        //----------------------------------------
+        // STEP 1: Get paying user (retry — profile may lag checkout)
+        //----------------------------------------
+
+        let payingUser: Record<string, unknown> | null = null
+
+        for (let attempt = 0; attempt < 5; attempt++) {
+          const { data, error: userError } = await supabase
+            .from("profiles")
+            .select("*")
+            .eq("stripe_customer_id", customerId)
+            .maybeSingle()
+
+          if (userError) {
+            console.error("[invoice.paid] profile lookup error", userError)
+          }
+
+          if (data) {
+            payingUser = data as Record<string, unknown>
+            break
+          }
+
+          console.log(
+            `Waiting for profile stripe_customer_id=${customerId} attempt ${attempt + 1}/5`
+          )
+          await new Promise((res) => setTimeout(res, 1000))
+        }
+
+        if (!payingUser?.id) {
+          console.error(
+            "[invoice.paid] no paying user for stripe_customer_id:",
+            customerId
+          )
+          return
+        }
+
+        console.log("[invoice.paid] paying user:", payingUser.id)
+
+        try {
+          const { error: proErr } = await supabase
+            .from("profiles")
+            .update(SUBSCRIPTION_ACTIVE)
+            .eq("id", payingUser.id as string)
+
+          if (proErr) {
+            console.error("Pro refresh failed (invoice.paid)", proErr)
+          } else {
+            console.log("[invoice.paid] Pro subscription_status refreshed")
+          }
+        } catch (e) {
+          console.error("[invoice.paid] Pro refresh crash:", e)
+        }
+
+        //----------------------------------------
+        // STEP 2: Referral on payer
+        //----------------------------------------
+
+        const referredRaw = payingUser.referred_by as string | null | undefined
+        const referredBy =
+          referredRaw != null ? String(referredRaw).trim() : ""
+
+        if (!referredBy) {
+          console.log(
+            "[invoice.paid] no referral on payer (referred_by empty), skip commission"
+          )
+          return
+        }
+
+        console.log("🔗 Referral code used:", referredBy)
+
+        //----------------------------------------
+        // STEP 3: Referrer profile
+        //----------------------------------------
+
+        const { data: referrer, error: refError } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("referral_code", referredBy)
+          .maybeSingle()
+
+        if (refError || !referrer?.id) {
+          console.error("[invoice.paid] referrer not found", refError, {
+            referredBy,
+          })
+          return
+        }
+
+        if (referrer.id === payingUser.id) {
+          console.log("[invoice.paid] skip self-referral")
+          return
+        }
+
+        console.log("[invoice.paid] referrer:", referrer.id)
+
+        if (!invoice.id) {
+          console.error(
+            "[invoice.paid] invoice.id missing — cannot record referral row"
+          )
+          return
+        }
+
+        const { data: existing } = await supabase
+          .from("referrals")
+          .select("id")
+          .eq("stripe_invoice_id", invoice.id)
+          .maybeSingle()
+
+        if (existing) {
+          console.log(
+            "[invoice.paid] referral already recorded for invoice, skipping:",
+            invoice.id
+          )
+          return
+        }
+
+        //----------------------------------------
+        // STEP 4: Commission basis (prefer amount_paid; fallback for edge cases)
+        //----------------------------------------
+
+        let basisCents = amountPaidCents
+        if (basisCents <= 0 && status === "paid" && totalCents > 0) {
+          console.log(
+            "amount_paid was 0 but invoice is paid with total > 0 — using total as commission basis (cents):",
+            totalCents
+          )
+          basisCents = totalCents
+        }
+
+        const amountPaid = basisCents / 100
+
+        console.log(
+          "[invoice.paid] commission basis (major units, after cents/100):",
+          amountPaid,
+          invoice.currency
+        )
+
+        if (amountPaid <= 0) {
+          console.log(
+            "[invoice.paid] commission basis is 0 — skip row (trial, $0, or unpaid shape)"
+          )
+          return
+        }
+
+        const commission = Math.round(amountPaid * 0.18 * 100) / 100
+
+        console.log("[invoice.paid] commission 18%:", commission)
+
+        //----------------------------------------
+        // STEP 5: Insert referral
+        //----------------------------------------
+
+        const { error: insertError } = await supabase.from("referrals").insert({
+          referrer_user_id: referrer.id,
+          referred_user_id: payingUser.id as string,
+          amount_earned: commission,
+          stripe_customer_id: customerId,
+          stripe_subscription_id: subscriptionId,
+          stripe_invoice_id: invoice.id,
+        })
+
+        if (insertError) {
+          console.error("[invoice.paid] referrals insert failed", insertError)
+          return
+        }
+
+        console.log("[invoice.paid] referral row inserted", {
+          amount_earned: commission,
+          stripe_invoice_id: invoice.id,
+        })
+
+        //----------------------------------------
+        // STEP 6: Referrer total
+        //----------------------------------------
+
+        const newTotal = Number(referrer.referral_earnings || 0) + commission
+
+        const { error: updateError } = await supabase
+          .from("profiles")
+          .update({ referral_earnings: newTotal })
+          .eq("id", referrer.id as string)
+
+        if (updateError) {
+          console.error(
+            "[invoice.paid] referrer referral_earnings update failed",
+            updateError
+          )
+          return
+        }
+
+        console.log("[invoice.paid] referrer referral_earnings →", newTotal)
       } catch (err) {
-        console.log("❌ EARNINGS ERROR:", err)
+        console.error("[invoice.paid] handler error:", err)
       }
     }
 
