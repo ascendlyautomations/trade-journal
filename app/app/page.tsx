@@ -101,7 +101,7 @@ export default function Home() {
 
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100">
         <div className="p-8 max-w-7xl mx-auto">
-          <h1 className="text-3xl font-semibold mb-4 text-center bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
+          <h1 className="text-3xl font-semibold mb-2 text-center bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
             Input Trade
           </h1>
 

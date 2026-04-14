@@ -102,7 +102,8 @@ export default function InputTradeForm({
   const [postToFeed, setPostToFeed] = useState(false)
   const [image, setImage] = useState<File | null>(null)
 
-  const [accountType, setAccountType] = useState("eval")
+  const [mode, setMode] = useState("Live")
+  const [strategy, setStrategy] = useState("")
 
   const [firm, setFirm] = useState("")
   const [accountSize, setAccountSize] = useState("")
@@ -153,10 +154,10 @@ export default function InputTradeForm({
     setPublicDescription(t.public_description ?? "")
     setPostToFeed(false)
     setImage(null)
-    const at = String(t.account_type ?? "").toLowerCase().trim()
-    let category: "funded" | "eval" | "live" = "eval"
+    const at = String(t.mode ?? t.account_type ?? "").toLowerCase().trim()
+    let category: "funded" | "eval" | "live" | "backtest" = "eval"
     let firmFromLegacy = ""
-    if (at === "funded" || at === "eval" || at === "live") {
+    if (at === "funded" || at === "eval" || at === "live" || at === "backtest") {
       category = at
     } else if (at.includes("fund")) {
       category = "funded"
@@ -164,10 +165,13 @@ export default function InputTradeForm({
       category = "eval"
     } else if (at.includes("live")) {
       category = "live"
+    } else if (at.includes("back")) {
+      category = "backtest"
     } else if (t.account_type) {
       firmFromLegacy = String(t.account_type)
     }
-    setAccountType(category)
+    setMode(category.charAt(0).toUpperCase() + category.slice(1))
+    setStrategy(t.strategy ?? "")
     setFirm(firmFromLegacy)
     setAccountSize(t.account_size ?? "")
     setAccountNumber(t.account_id ?? "")
@@ -234,7 +238,8 @@ export default function InputTradeForm({
     setTradeType("")
     setTradeDate(getESTDate())
     setPostToFeed(false)
-    setAccountType("eval")
+    setMode("Live")
+    setStrategy("")
   }
 
   async function handleSubmit() {
@@ -294,7 +299,8 @@ export default function InputTradeForm({
       psychologyNotes != null && String(psychologyNotes).trim() !== ""
         ? String(psychologyNotes).trim()
         : null
-    const firmToSave = String(firm || "").trim() || "Alpha Futures"
+    const firmToSaveRaw = String(firm || "").trim()
+    const firmToSave = firmToSaveRaw !== "" ? firmToSaveRaw : null
 
     if (isEditMode && existingTrade?.id) {
       const prevImg = existingTrade.image_url ?? null
@@ -315,7 +321,12 @@ export default function InputTradeForm({
         public_description: publicDescription ?? "",
         image_url: imageUrlOut,
         account_name: firmToSave,
-        account_type: accountType.toLowerCase(),
+        account_type: mode.toLowerCase(),
+        mode: mode.toLowerCase(),
+        strategy:
+          mode === "Backtest" && String(strategy).trim() !== ""
+            ? String(strategy).trim()
+            : null,
         account_size: accountSize || null,
         account_id: accountNumber || null,
         created_at: finalDate.toISOString(),
@@ -369,7 +380,12 @@ export default function InputTradeForm({
         public_description: publicDescription,
         image_url: screenshotUrl,
         account_name: firmToSave,
-        account_type: accountType.toLowerCase(),
+        account_type: mode.toLowerCase(),
+        mode: mode.toLowerCase(),
+        strategy:
+          mode === "Backtest" && String(strategy).trim() !== ""
+            ? String(strategy).trim()
+            : null,
         account_size: accountSize,
         account_id: accountNumber,
         user_id: user.id,
@@ -506,16 +522,16 @@ export default function InputTradeForm({
               <option key={s} value={s} />
             ))}
           </datalist>
-          <p className="text-sm text-gray-400 mt-2">Account Traded</p>
+          <p className="text-sm text-gray-400 mt-2">Mode</p>
 
           <div className="flex gap-2">
-            {["Eval", "Funded", "Live"].map((type) => (
+            {["Eval", "Funded", "Live", "Backtest"].map((type) => (
               <button
                 key={type}
                 type="button"
-                onClick={() => setAccountType(type.toLowerCase())}
+                onClick={() => setMode(type)}
                 className={`px-3 py-1 rounded text-sm font-medium border transition ${
-                  accountType === type.toLowerCase()
+                  mode === type
                     ? "bg-emerald-500 border-emerald-400 text-white"
                     : "bg-[#0f172a] border-white/10 text-gray-300 hover:border-emerald-400"
                 }`}
@@ -524,6 +540,19 @@ export default function InputTradeForm({
               </button>
             ))}
           </div>
+
+          {mode === "Backtest" && (
+            <div className="mt-2">
+              <label className="text-sm text-gray-400">Strategy Name</label>
+              <input
+                type="text"
+                value={strategy}
+                onChange={(e) => setStrategy(e.target.value)}
+                placeholder="e.g. NY Reversal, Liquidity Sweep"
+                className="w-full mt-1 p-2 rounded bg-black/30 text-white"
+              />
+            </div>
+          )}
 
           <div
             onClick={handleClickUpload}

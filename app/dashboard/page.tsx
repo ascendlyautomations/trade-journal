@@ -511,6 +511,7 @@ export default function Dashboard() {
         .from("trades")
         .select("*")
         .eq("user_id", currentUser.id)
+        .neq("mode", "backtest")
 
       if (mounted && tradesData) setTrades(tradesData)
 
@@ -589,6 +590,7 @@ export default function Dashboard() {
     worstDay,
     symbolStats,
     symbolPerformanceRows,
+    strategyPerformanceRows,
     sessionBuckets,
     bestSetup,
     insights,
@@ -619,7 +621,11 @@ export default function Dashboard() {
           .trim()
           .replace(/\s+/g, " ")
         if (!accountMap.has(value)) {
-          accountMap.set(value, { value, label, accountType: t.account_type })
+          accountMap.set(value, {
+            value,
+            label,
+            accountType: t.mode ?? t.account_type,
+          })
         }
       })
     const accounts = Array.from(accountMap.values())
@@ -670,7 +676,7 @@ export default function Dashboard() {
           if (accountKey !== accountFilter) return false
         }
 
-        const tradeAcct = String(trade.account_type ?? "")
+        const tradeAcct = String(trade.mode ?? trade.account_type ?? "")
           .toLowerCase()
           .trim()
         const selectedAcct = accountTypeFilter.toLowerCase().trim()
@@ -763,6 +769,34 @@ const biggestLoss = losses.length > 0
         winRate: s.totalTrades ? (s.wins / s.totalTrades) * 100 : 0,
         totalPnL: s.totalPnL,
         avgRR: s.rrSum / (s.totalTrades || 1)
+      }))
+      .sort((a, b) => b.totalPnL - a.totalPnL)
+
+    const strategyAgg: Record<
+      string,
+      { totalPnL: number; wins: number; totalTrades: number; rrSum: number }
+    > = {}
+
+    filteredTrades.forEach((t) => {
+      const strategy = (t.strategy && String(t.strategy).trim()) || ""
+      if (!strategy) return
+      if (!strategyAgg[strategy]) {
+        strategyAgg[strategy] = { totalPnL: 0, wins: 0, totalTrades: 0, rrSum: 0 }
+      }
+      strategyAgg[strategy].totalPnL += t.pnl || 0
+      strategyAgg[strategy].totalTrades += 1
+      if (t.pnl > 0) strategyAgg[strategy].wins += 1
+      strategyAgg[strategy].rrSum += Number(t.rr) || 0
+    })
+
+    const strategyPerformanceRows = Object.entries(strategyAgg)
+      .map(([strategy, s]) => ({
+        strategy,
+        totalTrades: s.totalTrades,
+        wins: s.wins,
+        winRate: s.totalTrades ? (s.wins / s.totalTrades) * 100 : 0,
+        totalPnL: s.totalPnL,
+        avgRR: s.rrSum / (s.totalTrades || 1),
       }))
       .sort((a, b) => b.totalPnL - a.totalPnL)
 
@@ -934,6 +968,7 @@ const worstDay = dailyPnLs.length > 0
       worstDay,
       symbolStats,
       symbolPerformanceRows,
+      strategyPerformanceRows,
       sessionBuckets,
       bestSetup,
       insights,
@@ -1032,6 +1067,13 @@ const worstDay = dailyPnLs.length > 0
                   </p>
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1">
+                  {String(trade.mode ?? trade.account_type ?? "")
+                    .toLowerCase()
+                    .trim() === "backtest" ? (
+                    <span className="rounded-md bg-blue-500/80 px-2 py-1 text-xs text-white">
+                      Backtest
+                    </span>
+                  ) : null}
                   {trade.public_description ? (
                     <span className="rounded-md bg-green-500/20 px-2 py-1 text-xs text-green-400">
                       Posted
@@ -1047,6 +1089,9 @@ const worstDay = dailyPnLs.length > 0
                 <p className="mt-2 line-clamp-2 text-sm text-gray-300">
                   {trade.public_description}
                 </p>
+              ) : null}
+              {trade.strategy ? (
+                <p className="mt-1 text-xs text-gray-400">Strategy: {trade.strategy}</p>
               ) : null}
             </div>
           ))}
@@ -1678,6 +1723,24 @@ const worstDay = dailyPnLs.length > 0
     {pnlByWeekdaySection}
 
   </div>
+
+  {strategyPerformanceRows.length > 0 ? (
+    <div className="rounded-xl border border-white/10 bg-white/10 p-4 backdrop-blur-md">
+      <h3 className="mb-2 text-sm text-gray-400">Strategy Performance</h3>
+      <div className="space-y-2">
+        {strategyPerformanceRows.slice(0, 5).map((row) => (
+          <div
+            key={row.strategy}
+            className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm"
+          >
+            <span className="font-medium text-white">{row.strategy}</span>
+            <span className="text-gray-300">Win Rate: {row.winRate.toFixed(0)}%</span>
+            <span className="text-gray-300">Avg RR: {row.avgRR.toFixed(2)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  ) : null}
 
           {(showInsights || showBestSetup) ? (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">

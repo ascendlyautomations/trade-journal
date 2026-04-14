@@ -143,6 +143,7 @@ export default function TradesPage() {
       .from("trades")
       .select("*")
       .eq("user_id", userId)
+      .neq("mode", "backtest")
       .order("created_at", { ascending: false })
 
     console.log("FETCHED TRADES:", data)
@@ -205,7 +206,11 @@ export default function TradesPage() {
         .trim()
         .replace(/\s+/g, " ")
       if (!accountMap.has(value)) {
-        accountMap.set(value, { value, label, accountType: t.account_type })
+        accountMap.set(value, {
+          value,
+          label,
+          accountType: t.mode ?? t.account_type,
+        })
       }
     })
   const accounts = Array.from(accountMap.values())
@@ -238,13 +243,13 @@ const filteredTrades = trades.filter((trade) => {
     if (accountKey !== accountFilter) return false
   }
 
-  const tradeAcct = String(trade.account_type ?? "")
+  const tradeMode = String(trade.mode ?? trade.account_type ?? "")
     .toLowerCase()
     .trim()
   const selectedAcct = accountTypeFilter.toLowerCase().trim()
   if (accountTypeFilter !== "all") {
-    console.log("Filtering:", trade.account_type, accountTypeFilter)
-    if (tradeAcct !== selectedAcct) {
+    console.log("Filtering:", trade.mode ?? trade.account_type, accountTypeFilter)
+    if (tradeMode !== selectedAcct) {
       return false
     }
   }
@@ -445,7 +450,7 @@ const filteredTrades = trades.filter((trade) => {
   const entry = trade.entry_price ?? trade.entry ?? null
   const exit = trade.exit_price ?? trade.exit ?? null
 
-  const acctLower = String(trade.account_type ?? "").toLowerCase().trim()
+  const acctLower = String(trade.mode ?? trade.account_type ?? "").toLowerCase().trim()
   const accountLabel = `${String(trade.account_name || "").trim()} ${String(
     trade.account_size || ""
   ).trim()} ${trade.account_id ? `#${String(trade.account_id).trim()}` : ""}`
@@ -525,7 +530,7 @@ const filteredTrades = trades.filter((trade) => {
                           </p>
 
                           <div className="mt-1 flex flex-wrap items-center gap-2">
-                            {trade.account_type && (
+                            {trade.mode !== "backtest" && trade.account_type && (
                               <span
                                 className={`px-2 py-0.5 text-xs rounded-full font-medium ${
                                   acctLower === "funded"
@@ -534,10 +539,18 @@ const filteredTrades = trades.filter((trade) => {
                                       ? "bg-yellow-500/20 text-yellow-400"
                                       : acctLower === "live"
                                         ? "bg-blue-500/20 text-blue-400"
+                                        : acctLower === "backtest"
+                                          ? "bg-indigo-500/20 text-indigo-300"
                                         : "bg-gray-500/20 text-gray-400"
                                 }`}
                               >
                                 {trade.account_type}
+                              </span>
+                            )}
+
+                            {acctLower === "backtest" && (
+                              <span className="rounded bg-blue-500 px-2 py-1 text-xs text-white">
+                                Backtest
                               </span>
                             )}
 
@@ -560,6 +573,12 @@ const filteredTrades = trades.filter((trade) => {
 </p>
                             </div>
                           ) : null}
+
+                          {trade.strategy && (
+                            <p className="text-xs text-gray-400">
+                              Strategy: {trade.strategy}
+                            </p>
+                          )}
 
                           <p className="text-sm">
                             <span className="text-gray-400">Notes:</span> {trade.notes || "-"}

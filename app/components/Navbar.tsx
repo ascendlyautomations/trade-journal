@@ -170,6 +170,7 @@ export default function Navbar() {
                 items: [
                   { label: "Input Trade", link: "/app" },
                   { label: "Trade History", link: "/trades" },
+                  { label: "Backtest Lab", link: "/backtest" },
                 ],
               },
               {
@@ -211,7 +212,7 @@ export default function Navbar() {
                 label: "Earnings",
                 items: [
                   { label: "Affiliate Dashboard", link: "/affiliate", highlight: true },
-                  { label: "Referral Stats", link: "/referrals" },
+                  
                   { label: "Payouts (Soon)", link: null },
                 ],
               },
@@ -264,9 +265,7 @@ export default function Navbar() {
               </div>
             ))}
 
-            <Link href="/referrals" className="hover:text-blue-400">
-              Referrals
-            </Link>
+            
 
             <Link href="/suggestions" className="hover:text-blue-400">
               Feedback

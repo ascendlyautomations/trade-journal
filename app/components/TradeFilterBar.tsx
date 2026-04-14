@@ -68,7 +68,7 @@ export default function TradeFilterBar({
           onChange={(e) => onAccountTypeChange(e.target.value)}
           className="shrink-0 rounded-md border border-white/10 bg-[#0f172a] px-3 py-1 text-sm text-white hover:bg-[#1e293b] focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
-          <option value="all">All Types</option>
+          <option value="all">All Modes</option>
           <option value="funded">Funded</option>
           <option value="eval">Eval</option>
           <option value="live">Live</option>

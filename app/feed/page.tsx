@@ -1,7 +1,8 @@
 "use client"
 
 import Link from "next/link"
-import { useCallback, useEffect, useState } from "react"
+import type { ChangeEvent } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import Navbar from "../components/Navbar"
 import TradeSocialLayer from "../components/TradeSocialLayer"
@@ -13,6 +14,23 @@ function postImageSrc(imageUrl: string | null | undefined): string | null {
   const base = process.env.NEXT_PUBLIC_SUPABASE_URL
   if (!base) return null
   return `${base}/storage/v1/object/public/screenshots/${raw}`
+}
+
+const STORY_WINDOW_MS = 24 * 60 * 60 * 1000
+/** Auto-advance each slide (Instagram-style). */
+const STORY_SLIDE_MS = 7000
+
+type StoryRow = {
+  id: string
+  user_id: string
+  image_url: string
+  created_at: string
+}
+
+type StoryBarProfile = {
+  id: string
+  username?: string | null
+  avatar_url?: string | null
 }
 
 function postPublicDescription(post: any): string | null {
@@ -38,31 +56,274 @@ type LikeMeta = { count: number; liked: boolean }
 
 export default function FeedPage() {
   const [posts, setPosts] = useState<any[]>([])
+  const [page, setPage] = useState(0)
+  const [loading, setLoading] = useState(false)
+  const [hasMore, setHasMore] = useState(true)
+  const pageRef = useRef(0)
+  const loadingRef = useRef(false)
+  const hasMoreRef = useRef(true)
   const [user, setUser] = useState<any>(null)
-  const [mode, setMode] = useState<"global" | "following">("global")
+  const [mode, setMode] = useState<"global" | "following">("following")
   const [openComments, setOpenComments] = useState<Record<string, boolean>>({})
   const [likesByPost, setLikesByPost] = useState<Record<string, LikeMeta>>({})
   const [commentsByPost, setCommentsByPost] = useState<Record<string, any[]>>({})
   const [commentDraft, setCommentDraft] = useState<Record<string, string>>({})
   const [commentSubmitting, setCommentSubmitting] = useState<Record<string, boolean>>({})
   const [selectedPost, setSelectedPost] = useState<any>(null)
+  const [storiesByUser, setStoriesByUser] = useState<Record<string, StoryRow[]>>(
+    {}
+  )
+  const [users, setUsers] = useState<StoryBarProfile[]>([])
+  const [activeStoryUser, setActiveStoryUser] = useState<string | null>(null)
+  const [currentStoryIndex, setCurrentStoryIndex] = useState(0)
+
+  const currentStories = activeStoryUser
+    ? (storiesByUser[activeStoryUser] ?? [])
+    : []
+  const currentStory = currentStories[currentStoryIndex]
 
   useEffect(() => {
     fetchUser()
   }, [])
 
-  useEffect(() => {
-    if (user) fetchPosts()
-  }, [user, mode])
+  const loadFollowingStories = useCallback(async () => {
+    if (!user?.id) return
+
+    const { data: following } = await supabase
+      .from("followers")
+      .select("following_id")
+      .eq("follower_id", user.id)
+
+    const followingIds = [
+      ...new Set(
+        (following ?? [])
+          .map((f) => f.following_id)
+          .filter((id): id is string => id != null && String(id).trim() !== "")
+      ),
+    ]
+
+    const storyUserIds = [...new Set([...followingIds, user.id])]
+
+    const { data: stories, error: storiesErr } = await supabase
+      .from("stories")
+      .select("*")
+      .in("user_id", storyUserIds)
+      .order("created_at", { ascending: false })
+
+    if (storiesErr) {
+      console.error("stories fetch:", storiesErr)
+      setStoriesByUser({})
+      setUsers([])
+      return
+    }
+
+    const now = Date.now()
+    const recentStories = (stories ?? []).filter((story) => {
+      const created = new Date(story.created_at).getTime()
+      return !Number.isNaN(created) && now - created < STORY_WINDOW_MS
+    })
+
+    const storiesByUserMap: Record<string, StoryRow[]> = {}
+    for (const story of recentStories) {
+      const uid = String(story.user_id)
+      if (!storiesByUserMap[uid]) storiesByUserMap[uid] = []
+      storiesByUserMap[uid].push(story as StoryRow)
+    }
+
+    for (const uid of Object.keys(storiesByUserMap)) {
+      storiesByUserMap[uid].sort(
+        (a, b) =>
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      )
+    }
+
+    const userIds = Object.keys(storiesByUserMap)
+    if (userIds.length === 0) {
+      setStoriesByUser({})
+      setUsers([])
+      return
+    }
+
+    const { data: profiles, error: profilesErr } = await supabase
+      .from("profiles")
+      .select("id, username, avatar_url")
+      .in("id", userIds)
+
+    if (profilesErr) {
+      console.error("story bar profiles:", profilesErr)
+      setStoriesByUser(storiesByUserMap)
+      setUsers([])
+      return
+    }
+
+    const list = (profiles ?? []) as StoryBarProfile[]
+    const latest = (id: string) =>
+      new Date(storiesByUserMap[id][0].created_at).getTime()
+
+    list.sort((a, b) => latest(b.id) - latest(a.id))
+
+    setStoriesByUser(storiesByUserMap)
+    setUsers(list)
+  }, [user])
 
   useEffect(() => {
-    if (selectedPost) {
+    if (!user || mode !== "following") {
+      setStoriesByUser({})
+      setUsers([])
+      setActiveStoryUser(null)
+      setCurrentStoryIndex(0)
+      return
+    }
+
+    void loadFollowingStories()
+  }, [user, mode, loadFollowingStories])
+
+  const handleStoryUpload = useCallback(
+    async (e: ChangeEvent<HTMLInputElement>) => {
+      const input = e.target
+      const file = input.files?.[0]
+      input.value = ""
+      if (!file || !user?.id) return
+
+      const fileExt = file.name.split(".").pop() || "png"
+      const fileName = `${user.id}/${Date.now()}.${fileExt}`
+
+      const { error: uploadError } = await supabase.storage
+        .from("stories")
+        .upload(fileName, file, { upsert: true })
+
+      if (uploadError) {
+        console.error(uploadError)
+        alert(uploadError.message)
+        return
+      }
+
+      const base = process.env.NEXT_PUBLIC_SUPABASE_URL
+      if (!base) {
+        alert("Missing NEXT_PUBLIC_SUPABASE_URL")
+        return
+      }
+
+      const publicUrl = `${base}/storage/v1/object/public/stories/${fileName}`
+
+      const { error: insertError } = await supabase.from("stories").insert({
+        user_id: user.id,
+        image_url: publicUrl,
+      })
+
+      if (insertError) {
+        console.error(insertError)
+        alert(insertError.message)
+        return
+      }
+
+      alert("Story uploaded!")
+      await loadFollowingStories()
+    },
+    [user, loadFollowingStories]
+  )
+
+  const openStory = useCallback((userId: string) => {
+    setActiveStoryUser(userId)
+    setCurrentStoryIndex(0)
+  }, [])
+
+  const nextStory = useCallback(() => {
+    const list = activeStoryUser
+      ? (storiesByUser[activeStoryUser] ?? [])
+      : []
+
+    if (currentStoryIndex < list.length - 1) {
+      setCurrentStoryIndex((prev) => prev + 1)
+      return
+    }
+
+    const userIds = users.map((u) => u.id)
+    const currentUserIndex = activeStoryUser
+      ? userIds.indexOf(activeStoryUser)
+      : -1
+
+    if (currentUserIndex >= 0 && currentUserIndex < userIds.length - 1) {
+      const nextUser = userIds[currentUserIndex + 1]
+      setActiveStoryUser(nextUser)
+      setCurrentStoryIndex(0)
+    } else {
+      setActiveStoryUser(null)
+      setCurrentStoryIndex(0)
+    }
+  }, [activeStoryUser, currentStoryIndex, storiesByUser, users])
+
+  const prevStory = useCallback(() => {
+    const list = activeStoryUser
+      ? (storiesByUser[activeStoryUser] ?? [])
+      : []
+
+    if (currentStoryIndex > 0) {
+      setCurrentStoryIndex((prev) => prev - 1)
+      return
+    }
+
+    const userIds = users.map((u) => u.id)
+    const currentUserIndex = activeStoryUser
+      ? userIds.indexOf(activeStoryUser)
+      : -1
+
+    if (currentUserIndex > 0) {
+      const prevUser = userIds[currentUserIndex - 1]
+      const prevUserStories = storiesByUser[prevUser] ?? []
+
+      setActiveStoryUser(prevUser)
+      setCurrentStoryIndex(Math.max(0, prevUserStories.length - 1))
+    }
+  }, [activeStoryUser, currentStoryIndex, storiesByUser, users])
+
+  useEffect(() => {
+    if (!activeStoryUser) return
+    const list = storiesByUser[activeStoryUser] ?? []
+    if (list.length === 0) {
+      setActiveStoryUser(null)
+      setCurrentStoryIndex(0)
+      return
+    }
+    if (currentStoryIndex >= list.length) {
+      setCurrentStoryIndex(Math.max(0, list.length - 1))
+    }
+  }, [activeStoryUser, storiesByUser, currentStoryIndex])
+
+  useEffect(() => {
+    if (!activeStoryUser) return
+    const list = storiesByUser[activeStoryUser] ?? []
+    if (list.length === 0) return
+
+    const timer = window.setTimeout(() => {
+      nextStory()
+    }, STORY_SLIDE_MS)
+
+    return () => clearTimeout(timer)
+  }, [activeStoryUser, currentStoryIndex, storiesByUser, nextStory])
+
+  useEffect(() => {
+    if (!activeStoryUser) return
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setActiveStoryUser(null)
+        setCurrentStoryIndex(0)
+      }
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [activeStoryUser])
+
+  useEffect(() => {
+    if (selectedPost || activeStoryUser) {
       document.body.style.overflow = "hidden"
       return () => {
         document.body.style.overflow = ""
       }
     }
-  }, [selectedPost])
+    document.body.style.overflow = ""
+    return undefined
+  }, [selectedPost, activeStoryUser])
 
   async function fetchUser() {
     const { data } = await supabase.auth.getSession()
@@ -71,9 +332,11 @@ export default function FeedPage() {
 
   const loadEngagementForPosts = useCallback(async (postList: any[], currentUser: any) => {
     if (!postList.length) {
-      setLikesByPost({})
-      setCommentsByPost({})
-      return
+      return {
+        enriched: [] as any[],
+        likesMap: {} as Record<string, LikeMeta>,
+        commentsMap: {} as Record<string, any[]>,
+      }
     }
 
     const ids = postList.map((p) => p.id)
@@ -118,9 +381,6 @@ export default function FeedPage() {
       commentsMap[pid].push(c)
     }
 
-    setLikesByPost(likesMap)
-    setCommentsByPost(commentsMap)
-
     const enriched = postList.map((p) => {
       const key = String(p.id)
       return {
@@ -129,51 +389,122 @@ export default function FeedPage() {
         comments: commentsMap[key] ?? [],
       }
     })
-    setPosts(enriched)
+    return { enriched, likesMap, commentsMap }
   }, [])
 
-  async function fetchPosts() {
-    if (!user) return
+  const loadPosts = useCallback(
+    async (pageOverride?: number) => {
+      if (!user || loadingRef.current || !hasMoreRef.current) return
 
-    let list: any[] = []
+      const currentPage = pageOverride ?? pageRef.current
+      const from = currentPage * 8
+      const to = from + 7
 
-    if (mode === "global") {
-      const { data } = await supabase
-        .from("posts")
-        .select("*, profiles(username, avatar_url), trades(public_description, user_id)")
-        .order("created_at", { ascending: false })
+      setLoading(true)
+      loadingRef.current = true
 
-      list = data || []
-      setPosts(list)
-    }
+      let list: any[] = []
 
-    if (mode === "following") {
-      const { data: following } = await supabase
-        .from("followers")
-        .select("following_id")
-        .eq("follower_id", user.id)
+      if (mode === "global") {
+        const { data, error } = await supabase
+          .from("posts")
+          .select("*, profiles(username, avatar_url), trades(public_description, user_id)")
+          .order("created_at", { ascending: false })
+          .range(from, to)
 
-      const ids = following?.map((f) => f.following_id) || []
+        if (error) {
+          console.error(error)
+          loadingRef.current = false
+          setLoading(false)
+          return
+        }
 
-      if (ids.length === 0) {
-        setPosts([])
-        setLikesByPost({})
-        setCommentsByPost({})
-        return
+        list = data || []
       }
 
-      const { data } = await supabase
-        .from("posts")
-        .select("*, profiles(username, avatar_url), trades(public_description, user_id)")
-        .in("user_id", ids)
-        .order("created_at", { ascending: false })
+      if (mode === "following") {
+        const { data: following, error: followingError } = await supabase
+          .from("followers")
+          .select("following_id")
+          .eq("follower_id", user.id)
 
-      list = data || []
-      setPosts(list)
+        if (followingError) {
+          console.error(followingError)
+          loadingRef.current = false
+          setLoading(false)
+          return
+        }
+
+        const ids = following?.map((f) => f.following_id) || []
+
+        if (ids.length === 0) {
+          hasMoreRef.current = false
+          setHasMore(false)
+          loadingRef.current = false
+          setLoading(false)
+          return
+        }
+
+        const { data, error } = await supabase
+          .from("posts")
+          .select("*, profiles(username, avatar_url), trades(public_description, user_id)")
+          .in("user_id", ids)
+          .order("created_at", { ascending: false })
+          .range(from, to)
+
+        if (error) {
+          console.error(error)
+          loadingRef.current = false
+          setLoading(false)
+          return
+        }
+
+        list = data || []
+      }
+
+      if (list.length < 8) {
+        hasMoreRef.current = false
+        setHasMore(false)
+      }
+
+      const { enriched, likesMap, commentsMap } = await loadEngagementForPosts(list, user)
+
+      setPosts((prev) => [...prev, ...enriched])
+      setLikesByPost((prev) => ({ ...prev, ...likesMap }))
+      setCommentsByPost((prev) => ({ ...prev, ...commentsMap }))
+      const nextPage = pageOverride != null ? pageOverride + 1 : pageRef.current + 1
+      pageRef.current = nextPage
+      setPage(nextPage)
+      loadingRef.current = false
+      setLoading(false)
+    },
+    [user, mode, loadEngagementForPosts]
+  )
+
+  useEffect(() => {
+    if (!user) return
+    setPosts([])
+    setLikesByPost({})
+    setCommentsByPost({})
+    setPage(0)
+    setHasMore(true)
+    setLoading(false)
+    pageRef.current = 0
+    hasMoreRef.current = true
+    loadingRef.current = false
+    void loadPosts(0)
+  }, [user, mode, loadPosts])
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 200) {
+        void loadPosts()
+      }
     }
 
-    await loadEngagementForPosts(list, user)
-  }
+    window.addEventListener("scroll", handleScroll)
+    return () => window.removeEventListener("scroll", handleScroll)
+  }, [loadPosts])
 
   async function toggleLike(post: any) {
     if (!user) return
@@ -327,30 +658,84 @@ export default function FeedPage() {
 
       <div className="flex justify-center px-4 py-6 sm:py-8 pb-10">
         <div className="w-full max-w-xl space-y-6">
-          {/* TOGGLE */}
-          <div className="flex justify-center gap-3 sm:gap-4 flex-wrap">
-            <button
-              onClick={() => setMode("global")}
-              className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
-                mode === "global"
-                  ? "bg-blue-500 text-white shadow-lg shadow-blue-500/20"
-                  : "bg-white/5 border border-white/10 hover:bg-white/10"
-              }`}
-            >
-              Global
-            </button>
+          <div className="flex justify-center mb-4">
+            <div className="flex gap-1 sm:gap-2 bg-white/5 p-1 rounded-xl border border-white/10">
+              <button
+                type="button"
+                onClick={() => setMode("following")}
+                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                  mode === "following"
+                    ? "bg-green-500 text-white shadow-sm"
+                    : "text-gray-400 hover:text-gray-200"
+                }`}
+              >
+                Following
+              </button>
 
-            <button
-              onClick={() => setMode("following")}
-              className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
-                mode === "following"
-                  ? "bg-blue-500 text-white shadow-lg shadow-blue-500/20"
-                  : "bg-white/5 border border-white/10 hover:bg-white/10"
-              }`}
-            >
-              Following
-            </button>
+              <button
+                type="button"
+                onClick={() => setMode("global")}
+                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                  mode === "global"
+                    ? "bg-green-500 text-white shadow-sm"
+                    : "text-gray-400 hover:text-gray-200"
+                }`}
+              >
+                Global
+              </button>
+            </div>
           </div>
+
+          {mode === "following" && user ? (
+            <>
+              <input
+                id="storyUploadInput"
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => void handleStoryUpload(e)}
+              />
+              <div className="flex items-center gap-4 overflow-x-auto pb-3 mb-4">
+                <button
+                  type="button"
+                  onClick={() =>
+                    document.getElementById("storyUploadInput")?.click()
+                  }
+                  className="flex flex-col items-center shrink-0 cursor-pointer text-left"
+                >
+                  <div className="w-16 h-16 rounded-full bg-green-500 flex items-center justify-center text-2xl text-white font-light leading-none hover:bg-green-600 transition-colors">
+                    +
+                  </div>
+                  <p className="text-xs mt-1 text-gray-300">Add</p>
+                </button>
+
+                {users.map((u) => (
+                  <button
+                    key={u.id}
+                    type="button"
+                    onClick={() => openStory(u.id)}
+                    className="flex flex-col items-center shrink-0 cursor-pointer text-left"
+                  >
+                    {u.avatar_url ? (
+                      <img
+                        src={u.avatar_url}
+                        alt=""
+                        className="w-16 h-16 rounded-full object-cover border-2 border-emerald-400 ring-2 ring-emerald-400/30"
+                      />
+                    ) : (
+                      <div
+                        className="w-16 h-16 rounded-full border-2 border-emerald-400 bg-gradient-to-br from-blue-500/40 to-emerald-500/40"
+                        aria-hidden
+                      />
+                    )}
+                    <p className="text-xs mt-1 max-w-[4.5rem] truncate text-center text-gray-200">
+                      {u.username?.trim() || "User"}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : null}
 
           {/* POSTS */}
           {posts.map((post) => {
@@ -533,8 +918,90 @@ export default function FeedPage() {
               </article>
             )
           })}
+
+          {loading && <p className="mt-4 text-center text-gray-400">Loading...</p>}
+
+          {hasMore && !loading && (
+            <div className="mt-4 flex justify-center">
+              <button
+                type="button"
+                onClick={() => void loadPosts()}
+                className="rounded bg-green-500 px-4 py-2 text-white"
+              >
+                View More
+              </button>
+            </div>
+          )}
         </div>
       </div>
+
+      {activeStoryUser && currentStory && (
+        <div
+          className="fixed inset-0 z-[9999] bg-black flex items-center justify-center"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Stories"
+        >
+          <div
+            className="relative w-[400px] h-[700px] bg-black rounded-2xl overflow-hidden flex items-center justify-center"
+            style={{ margin: 0, padding: 0 }}
+          >
+            <button
+              type="button"
+              aria-label="Close stories"
+              onClick={() => {
+                setActiveStoryUser(null)
+                setCurrentStoryIndex(0)
+              }}
+              className="absolute right-3 top-3 z-[10000] rounded-full bg-black/70 px-3 py-1 text-xs text-white hover:bg-black/90"
+            >
+              Esc
+            </button>
+
+            <div className="absolute left-3 top-3 z-[10000] text-sm text-white">
+              {users.find((u) => u.id === activeStoryUser)?.username}
+            </div>
+
+            <div className="absolute top-2 left-2 right-2 flex gap-1 z-[10000]">
+              {currentStories.map((s, i) => (
+                <div
+                  key={s.id}
+                  className={`h-[3px] flex-1 rounded ${
+                    i <= currentStoryIndex ? "bg-zinc-200" : "bg-zinc-500/40"
+                  }`}
+                />
+              ))}
+            </div>
+
+            <div className="absolute inset-0 z-0 flex h-full w-full items-center justify-center bg-black">
+              <img
+                src={currentStory.image_url}
+                alt=""
+                className="max-w-full max-h-full object-contain block"
+                draggable={false}
+              />
+            </div>
+
+            <button
+              type="button"
+              aria-label="Previous story"
+              onClick={prevStory}
+              className="absolute left-2 top-1/2 z-[10000] -translate-y-1/2 rounded-full bg-black/40 px-3 py-1 text-3xl text-white transition hover:scale-110"
+            >
+              ‹
+            </button>
+
+            <button
+              type="button"
+              aria-label="Next story"
+              onClick={nextStory}
+              className="absolute right-2 top-1/2 z-[10000] -translate-y-1/2 rounded-full bg-black/40 px-3 py-1 text-3xl text-white transition hover:scale-110"
+            >
+              ›
+            </button>
+          </div>
+        </div>
+      )}
 
       {selectedPost && (
         <div
