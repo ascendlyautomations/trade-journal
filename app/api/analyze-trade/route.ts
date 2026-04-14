@@ -20,7 +20,7 @@ export async function POST(req: Request) {
   if (profileId) {
     const { data: profile, error } = await supabase
       .from("profiles")
-      .select("subscription_status")
+      .select("is_pro, subscription_status")
       .eq("id", profileId)
       .single()
 
@@ -29,8 +29,16 @@ export async function POST(req: Request) {
         "ERROR:",
         JSON.stringify(error, null, 2)
       )
-    } else if (profile?.subscription_status !== "active") {
-      return Response.json({ error: "Pro required" }, { status: 403 })
+    } else {
+      const pro =
+        profile?.is_pro === true ||
+        profile?.subscription_status === "active"
+      if (!pro) {
+        return Response.json(
+          { error: "Pro required", reply: "AI Analyst is a Pro feature." },
+          { status: 403 }
+        )
+      }
     }
   }
 

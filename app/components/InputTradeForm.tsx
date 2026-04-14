@@ -1,7 +1,27 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useCallback } from "react"
 import { supabase } from "@/lib/supabaseClient"
+import { isProActive } from "@/lib/subscription"
+
+function tradeAccountKey(
+  accountType: string | null | undefined,
+  accountSize: string | null | undefined,
+  accountId: string | null | undefined
+): string {
+  return `${String(accountType ?? "")
+    .toLowerCase()
+    .trim()}-${String(accountSize ?? "").trim()}-${String(accountId ?? "").trim()}`
+}
+
+function modeLabelFromDb(raw: string | null | undefined): string {
+  const s = String(raw ?? "").toLowerCase().trim()
+  if (s === "eval") return "Eval"
+  if (s === "funded") return "Funded"
+  if (s === "live") return "Live"
+  if (s === "backtest") return "Backtest"
+  return "Live"
+}
 
 export type InputTradeFormProps = {
   existingTrade?: any | null
@@ -136,6 +156,78 @@ export default function InputTradeForm({
   const dateRef = useRef<HTMLInputElement>(null)
 
   const symbols = ["MNQ", "MES", "MGC", "MCL", "MYM", "M2K"]
+
+  const [planProfile, setPlanProfile] = useState<{
+    is_pro?: boolean | null
+    subscription_status?: string | null
+  } | null>(null)
+  const [accountFieldsLocked, setAccountFieldsLocked] = useState(false)
+
+  const refreshPlanAndAccountLock = useCallback(async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user?.id) {
+      setPlanProfile(null)
+      setAccountFieldsLocked(false)
+      return
+    }
+    const { data: prof } = await supabase
+      .from("profiles")
+      .select("is_pro, subscription_status")
+      .eq("id", user.id)
+      .maybeSingle()
+    setPlanProfile(prof ?? null)
+    if (isProActive(prof)) {
+      setAccountFieldsLocked(false)
+      return
+    }
+    const { data: rows } = await supabase
+      .from("trades")
+      .select("account_type, account_size, account_id")
+      .eq("user_id", user.id)
+      .neq("mode", "backtest")
+    const keys = new Set(
+      (rows ?? []).map((t) =>
+        tradeAccountKey(t.account_type, t.account_size, t.account_id)
+      )
+    )
+    setAccountFieldsLocked(keys.size >= 1)
+  }, [])
+
+  useEffect(() => {
+    void refreshPlanAndAccountLock()
+  }, [refreshPlanAndAccountLock, existingTrade?.id])
+
+  useEffect(() => {
+    if (isEditMode || mode === "Backtest" || !accountFieldsLocked) return
+    let cancelled = false
+    void (async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user?.id || cancelled) return
+      const { data: rows } = await supabase
+        .from("trades")
+        .select("account_type, account_size, account_id, account_name")
+        .eq("user_id", user.id)
+        .neq("mode", "backtest")
+        .order("created_at", { ascending: false })
+        .limit(1)
+      const first = rows?.[0]
+      if (!first || cancelled) return
+      setMode(modeLabelFromDb(first.account_type))
+      setAccountSize(first.account_size != null ? String(first.account_size) : "")
+      setAccountNumber(first.account_id != null ? String(first.account_id) : "")
+      setFirm(first.account_name != null ? String(first.account_name) : "")
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [isEditMode, mode, accountFieldsLocked, existingTrade?.id])
+
+  const accountInputsDisabled =
+    accountFieldsLocked && mode !== "Backtest" && !isProActive(planProfile)
 
   useEffect(() => {
     if (!existingTrade?.id) return
@@ -302,6 +394,43 @@ export default function InputTradeForm({
     const firmToSaveRaw = String(firm || "").trim()
     const firmToSave = firmToSaveRaw !== "" ? firmToSaveRaw : null
 
+    const { data: profileRow } = await supabase
+      .from("profiles")
+      .select("is_pro, subscription_status")
+      .eq("id", user.id)
+      .maybeSingle()
+    const userIsPro = isProActive(profileRow)
+
+    const modeLowerForLimit = mode.toLowerCase()
+    if (modeLowerForLimit !== "backtest") {
+      const newKey = tradeAccountKey(
+        modeLowerForLimit,
+        accountSize || "",
+        accountNumber || ""
+      )
+      let accQuery = supabase
+        .from("trades")
+        .select("id, account_type, account_size, account_id")
+        .eq("user_id", user.id)
+        .neq("mode", "backtest")
+      if (isEditMode && existingTrade?.id) {
+        accQuery = accQuery.neq("id", existingTrade.id)
+      }
+      const { data: existingTrades } = await accQuery
+      const uniqueAccounts = new Set(
+        (existingTrades ?? []).map((t) =>
+          tradeAccountKey(t.account_type, t.account_size, t.account_id)
+        )
+      )
+      if (!userIsPro && !uniqueAccounts.has(newKey) && uniqueAccounts.size >= 1) {
+        alert(
+          "Free plan allows only 1 account. Upgrade to Pro for unlimited accounts."
+        )
+        setSubmitting(false)
+        return
+      }
+    }
+
     if (isEditMode && existingTrade?.id) {
       const prevImg = existingTrade.image_url ?? null
       const imageUrlOut = screenshotUrl ?? prevImg
@@ -354,8 +483,16 @@ export default function InputTradeForm({
 
       if (error) {
         console.error("UPDATE ERROR:", error)
-        alert("Failed to update trade.")
+        const msg = String(error.message || "")
+        if (msg.includes("FREE_PLAN_ACCOUNT_LIMIT")) {
+          alert(
+            "Free plan allows only 1 account. Upgrade to Pro for unlimited accounts."
+          )
+        } else {
+          alert("Failed to update trade.")
+        }
       } else {
+        void refreshPlanAndAccountLock()
         onSave?.()
         onClose?.()
         alert("Trade updated!")
@@ -414,7 +551,14 @@ export default function InputTradeForm({
 
     if (error) {
       console.error("Trade insert error:", error)
-      alert("Failed to save trade. Please try again.")
+      const msg = String(error.message || "")
+      if (msg.includes("FREE_PLAN_ACCOUNT_LIMIT")) {
+        alert(
+          "Free plan allows only 1 account. Upgrade to Pro for unlimited accounts."
+        )
+      } else {
+        alert("Failed to save trade. Please try again.")
+      }
       setSubmitting(false)
       return
     }
@@ -435,6 +579,7 @@ export default function InputTradeForm({
       }
     }
 
+    void refreshPlanAndAccountLock()
     resetCreateForm()
     alert("Trade saved!")
     setSubmitting(false)
@@ -481,10 +626,18 @@ export default function InputTradeForm({
             className="w-full p-2 rounded bg-[#0f172a] border border-white/10 text-white [color-scheme:dark]"
           />
 
+          {accountInputsDisabled ? (
+            <p className="text-xs text-amber-400/90">
+              Free plan: account details are locked to your existing prop firm. Upgrade
+              to Pro for unlimited accounts.
+            </p>
+          ) : null}
+
           <select
             value={firm}
             onChange={(e) => setFirm(e.target.value)}
-            className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
+            disabled={accountInputsDisabled}
+            className="w-full p-2 rounded bg-[#0f172a] border border-white/10 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <option value="">Account Type</option>
             {firmOptions.map((f) => (
@@ -495,7 +648,8 @@ export default function InputTradeForm({
           <select
             value={accountSize}
             onChange={(e) => setAccountSize(e.target.value)}
-            className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
+            disabled={accountInputsDisabled}
+            className="w-full p-2 rounded bg-[#0f172a] border border-white/10 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <option value="">Account Size</option>
             {(accountSizes[firm] || []).map((size) => (
@@ -507,7 +661,8 @@ export default function InputTradeForm({
             placeholder="Account Number"
             value={accountNumber}
             onChange={(e) => setAccountNumber(e.target.value)}
-            className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
+            disabled={accountInputsDisabled}
+            className="w-full p-2 rounded bg-[#0f172a] border border-white/10 disabled:cursor-not-allowed disabled:opacity-50"
           />
 
           <input

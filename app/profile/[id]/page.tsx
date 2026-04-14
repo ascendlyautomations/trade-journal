@@ -11,6 +11,7 @@ import {
   YAxis,
   Tooltip,
   ResponsiveContainer,
+  CartesianGrid,
 } from "recharts"
 import TradeSocialLayer from "../../components/TradeSocialLayer"
 import InputTradeForm from "../../components/InputTradeForm"
@@ -32,15 +33,6 @@ function profileWallImageSrc(imageUrl: string | null | undefined): string | null
   const base = process.env.NEXT_PUBLIC_SUPABASE_URL
   if (!base) return null
   return `${base}/storage/v1/object/public/profile_posts/${raw}`
-}
-
-function storyImageSrc(imageUrl: string | null | undefined): string | null {
-  const raw = imageUrl != null ? String(imageUrl).trim() : ""
-  if (!raw) return null
-  if (raw.startsWith("http")) return raw
-  const base = process.env.NEXT_PUBLIC_SUPABASE_URL
-  if (!base) return null
-  return `${base}/storage/v1/object/public/stories/${raw}`
 }
 
 function getExperience(startDate: string | null | undefined) {
@@ -486,11 +478,6 @@ export default function ProfilePage() {
   const [postContent, setPostContent] = useState("")
   const [postImage, setPostImage] = useState<File | null>(null)
   const [creatingPost, setCreatingPost] = useState(false)
-  const [stories, setStories] = useState<any[]>([])
-  const [showCreateStory, setShowCreateStory] = useState(false)
-  const [storyFile, setStoryFile] = useState<File | null>(null)
-  const [activeStory, setActiveStory] = useState<any | null>(null)
-  const [creatingStory, setCreatingStory] = useState(false)
   const [openCommentsState, setOpenComments] = useState<
     Record<string, boolean>
   >({})
@@ -655,30 +642,8 @@ export default function ProfilePage() {
     }
   }, [profile?.id])
 
-  async function fetchStories() {
-    const since = new Date()
-    since.setHours(since.getHours() - 24)
-
-    const { data, error } = await supabase
-      .from("stories")
-      .select("*, profiles(username, avatar_url)")
-      .gte("created_at", since.toISOString())
-      .order("created_at", { ascending: false })
-
-    if (error) {
-      console.error("stories fetch:", error)
-      setStories([])
-      return
-    }
-    setStories(data || [])
-  }
-
   useEffect(() => {
-    void fetchStories()
-  }, [])
-
-  useEffect(() => {
-    if (showCreatePost || showCreateStory || activeStory || editingPost) {
+    if (showCreatePost || editingPost) {
       document.body.style.overflow = "hidden"
       return () => {
         document.body.style.overflow = ""
@@ -686,22 +651,19 @@ export default function ProfilePage() {
     }
     document.body.style.overflow = ""
     return undefined
-  }, [showCreatePost, showCreateStory, activeStory, editingPost])
+  }, [showCreatePost, editingPost])
 
   useEffect(() => {
-    if (!showCreatePost && !showCreateStory && !activeStory && !editingPost)
-      return
+    if (!showCreatePost && !editingPost) return
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
         setShowCreatePost(false)
-        setShowCreateStory(false)
-        setActiveStory(null)
         setEditingPost(null)
       }
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [showCreatePost, showCreateStory, activeStory, editingPost])
+  }, [showCreatePost, editingPost])
 
   async function fetchProfile(forProfileId: string) {
     const { data: sessionData } = await supabase.auth.getSession()
@@ -1001,53 +963,6 @@ export default function ProfilePage() {
     setWallPosts(data || [])
   }
 
-  async function handleCreateStory() {
-    if (!currentUserId || !storyFile) return
-
-    setCreatingStory(true)
-    const fileExt = storyFile.name.split(".").pop() || "jpg"
-    const fileName = `${currentUserId}/${Date.now()}.${fileExt}`
-
-    const { error: uploadError } = await supabase.storage
-      .from("stories")
-      .upload(fileName, storyFile, { upsert: true })
-
-    if (uploadError) {
-      console.error(uploadError)
-      alert(uploadError.message)
-      setCreatingStory(false)
-      return
-    }
-
-    const base = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const publicUrl = base
-      ? `${base}/storage/v1/object/public/stories/${fileName}`
-      : null
-
-    if (!publicUrl) {
-      setCreatingStory(false)
-      alert("Missing NEXT_PUBLIC_SUPABASE_URL")
-      return
-    }
-
-    const { error: insertError } = await supabase.from("stories").insert({
-      user_id: currentUserId,
-      image_url: publicUrl,
-    })
-
-    setCreatingStory(false)
-
-    if (insertError) {
-      console.error(insertError)
-      alert(insertError.message)
-      return
-    }
-
-    setShowCreateStory(false)
-    setStoryFile(null)
-    await fetchStories()
-  }
-
   const posts = wallPosts
   const sortedPosts = [...posts].sort((a, b) => {
     if (a.is_pinned && !b.is_pinned) return -1
@@ -1281,25 +1196,6 @@ export default function ProfilePage() {
       currentUserId === profile.id ||
       isFollowing)
 
-  const storyRings = useMemo(() => {
-    const byUser = new Map<string, any>()
-    for (const s of stories) {
-      const uid = s.user_id != null ? String(s.user_id) : ""
-      if (!uid) continue
-      const prev = byUser.get(uid)
-      if (
-        !prev ||
-        new Date(s.created_at).getTime() > new Date(prev.created_at).getTime()
-      ) {
-        byUser.set(uid, s)
-      }
-    }
-    return [...byUser.values()].sort(
-      (a, b) =>
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    )
-  }, [stories])
-
   const sortedTrades = [...trades].sort((a, b) => {
     if (a.is_pinned && !b.is_pinned) return -1
     if (!a.is_pinned && b.is_pinned) return 1
@@ -1375,6 +1271,9 @@ export default function ProfilePage() {
       },
       [] as { index: number; equity: number }[]
     )
+
+  const currentEquity =
+    equityData.length > 0 ? equityData[equityData.length - 1].equity : 0
 
   function formatCurrency(value: number) {
     return `${value < 0 ? "-" : ""}$${Math.abs(value).toLocaleString()}`
@@ -1526,13 +1425,6 @@ export default function ProfilePage() {
                 <div className="flex shrink-0 justify-center gap-2 sm:justify-end sm:pt-1">
                   <button
                     type="button"
-                    onClick={() => setShowCreateStory(true)}
-                    className="rounded-md bg-gradient-to-tr from-pink-500 to-yellow-500 px-3 py-1.5 text-xs font-medium text-white shadow-sm"
-                  >
-                    + Story
-                  </button>
-                  <button
-                    type="button"
                     onClick={() => setShowCreatePost(true)}
                     className="rounded-md bg-blue-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-600"
                   >
@@ -1640,50 +1532,6 @@ export default function ProfilePage() {
           <div className="mt-4 space-y-6">
             {activeTab === "trades" && (
               <div className="mx-auto mt-4 w-full max-w-xl space-y-6 pb-8">
-                <div className="-mx-4 flex gap-4 overflow-x-auto border-b border-white/10 px-4 py-3 sm:mx-0 sm:rounded-xl sm:border sm:border-white/10 sm:bg-white/[0.03]">
-                  {currentUserId ? (
-                    <button
-                      type="button"
-                      onClick={() => setShowCreateStory(true)}
-                      className="flex shrink-0 cursor-pointer flex-col items-center border-0 bg-transparent p-0 text-gray-100"
-                    >
-                      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-blue-500 text-xl text-white">
-                        +
-                      </div>
-                      <p className="mt-1 max-w-[72px] truncate text-center text-xs text-gray-300">
-                        Your Story
-                      </p>
-                    </button>
-                  ) : null}
-
-                  {storyRings.map((story) => {
-                    const av =
-                      story.profiles?.avatar_url || "/default-avatar.png"
-                    return (
-                      <button
-                        key={story.user_id}
-                        type="button"
-                        onClick={() => setActiveStory(story)}
-                        className="flex shrink-0 flex-col items-center border-0 bg-transparent p-0 text-gray-100"
-                      >
-                        <div className="rounded-full bg-gradient-to-tr from-pink-500 to-yellow-500 p-[2px]">
-                          <img
-                            src={av}
-                            alt=""
-                            className="h-[52px] w-[52px] rounded-full border-2 border-[#0f172a] object-cover"
-                            onError={(e) => {
-                              e.currentTarget.src = "/default-avatar.png"
-                            }}
-                          />
-                        </div>
-                        <p className="mt-1 max-w-[60px] truncate text-center text-xs text-gray-300">
-                          {story.profiles?.username || "User"}
-                        </p>
-                      </button>
-                    )
-                  })}
-                </div>
-
                 {sortedTrades.length === 0 ? (
                   <p className="text-center text-sm text-gray-400">
                     {currentUserId === profile.id
@@ -1884,18 +1732,66 @@ export default function ProfilePage() {
                     </div>
 
                     <div className="rounded-xl border border-white/10 bg-white/5 p-6">
-                      <h2 className="mb-4 text-lg font-semibold">Equity Curve</h2>
+                      <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                        <h2 className="text-lg font-semibold text-white">
+                          Equity Curve
+                        </h2>
+                        {filteredTrades.length > 0 ? (
+                          <p
+                            className={`text-xl font-bold tabular-nums ${
+                              currentEquity >= 0
+                                ? "text-green-400"
+                                : "text-red-400"
+                            }`}
+                          >
+                            {formatMoney(currentEquity)}
+                          </p>
+                        ) : null}
+                      </div>
 
                       <div className="h-64">
                         <ResponsiveContainer width="100%" height="100%">
                           <LineChart data={equityData}>
+                            <CartesianGrid stroke="#1f2937" />
                             <XAxis dataKey="index" hide />
-                            <YAxis />
-                            <Tooltip />
+                            <YAxis
+                              tick={{ fill: "#cbd5e1", fontSize: 12 }}
+                              tickFormatter={(value) => {
+                                const n = Number(value)
+                                if (!Number.isFinite(n)) return "$0"
+                                if (n < 0) {
+                                  return `-$${Math.abs(n).toLocaleString()}`
+                                }
+                                return `$${n.toLocaleString()}`
+                              }}
+                            />
+                            <Tooltip
+                              contentStyle={{
+                                backgroundColor: "#0f172a",
+                                border: "1px solid rgba(255,255,255,0.12)",
+                                borderRadius: "0.5rem",
+                              }}
+                              labelStyle={{ color: "#cbd5e1" }}
+                              formatter={(value) => {
+                                const n = Number(value)
+                                if (!Number.isFinite(n)) return ["$0", "Equity"]
+                                const formatted =
+                                  n < 0
+                                    ? `-$${Math.abs(n).toLocaleString(undefined, {
+                                        minimumFractionDigits: 2,
+                                        maximumFractionDigits: 2,
+                                      })}`
+                                    : `$${n.toLocaleString(undefined, {
+                                        minimumFractionDigits: 2,
+                                        maximumFractionDigits: 2,
+                                      })}`
+                                return [formatted, "Equity"]
+                              }}
+                            />
                             <Line
                               type="monotone"
                               dataKey="equity"
-                              stroke="#10b981"
+                              stroke="#22c55e"
                               strokeWidth={2}
                               dot={false}
                             />
@@ -1982,77 +1878,6 @@ export default function ProfilePage() {
             </div>
           </div>
         )}
-
-      {showCreateStory && currentUserId && (
-        <div
-          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 p-4"
-          role="presentation"
-          onClick={() => {
-            setShowCreateStory(false)
-            setStoryFile(null)
-          }}
-        >
-          <div
-            className="w-full max-w-[400px] rounded-xl border border-white/10 bg-[#0f172a] p-6"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="create-story-title"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="mb-3 flex items-center justify-between">
-              <h2
-                id="create-story-title"
-                className="text-lg font-semibold text-white"
-              >
-                Add Story
-              </h2>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowCreateStory(false)
-                  setStoryFile(null)
-                }}
-                className="rounded p-1.5 text-gray-400 hover:bg-white/10 hover:text-white"
-                aria-label="Close"
-              >
-                ✕
-              </button>
-            </div>
-
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(e) =>
-                setStoryFile(e.target.files?.[0] ?? null)
-              }
-              className="mb-4 block w-full text-sm text-gray-300 file:mr-2 file:rounded file:border-0 file:bg-white/10 file:px-3 file:py-1.5 file:text-sm file:text-gray-100"
-            />
-
-            <button
-              type="button"
-              onClick={() => void handleCreateStory()}
-              disabled={creatingStory || !storyFile}
-              className="w-full rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-blue-600 disabled:opacity-50"
-            >
-              {creatingStory ? "Posting…" : "Post Story"}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {activeStory && (
-        <div
-          role="presentation"
-          className="fixed inset-0 z-[300] flex cursor-pointer items-center justify-center bg-black"
-          onClick={() => setActiveStory(null)}
-        >
-          <img
-            src={storyImageSrc(activeStory.image_url) || ""}
-            alt=""
-            className="max-h-[90%] max-w-[90%] rounded-lg object-contain"
-          />
-        </div>
-      )}
 
       {editingPost ? (
         <div

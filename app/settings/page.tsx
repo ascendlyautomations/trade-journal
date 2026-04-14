@@ -411,9 +411,12 @@ export default function SettingsPage() {
         <div className="mx-auto flex max-w-6xl flex-col gap-6 md:flex-row md:items-start">
           {/* LEFT — tabs */}
           <aside className="w-full shrink-0 md:w-64">
-            <h1 className="mb-4 text-xl font-semibold text-white md:text-2xl">
+            <h1 className="mb-2 text-xl font-semibold text-white md:text-2xl">
               Settings
             </h1>
+            <p className="mb-4 text-sm text-gray-400">
+              Plan: {isProActive(profile as any) ? "Pro" : "Free"}
+            </p>
             <nav className="flex flex-row gap-2 overflow-x-auto pb-2 md:flex-col md:gap-1 md:overflow-visible md:pb-0">
               {TABS.map((tab) => (
                 <button

@@ -10,7 +10,6 @@ import ProfileOnboarding, {
 import { useEffect, useState, useMemo } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { isProActive } from "../../lib/subscription"
-import ProGate from "../components/ProGate"
 import {
   LineChart,
   Line,
@@ -987,6 +986,24 @@ const worstDay = dailyPnLs.length > 0
   }, [trades, accountFilter, accountTypeFilter, timeFilter, selectedDate])
 
   // 🔥 LOADING STATE (FIXES GLITCH)
+  const isPro = isProActive(profile)
+
+  const showFreePlanAccountBanner = useMemo(() => {
+    if (isPro || !trades.length) return false
+    const keys = new Set(
+      trades
+        .filter((t) => String(t.mode ?? "").toLowerCase() !== "backtest")
+        .map((t) =>
+          [
+            String(t.account_type ?? "").toLowerCase().trim(),
+            String(t.account_size ?? "").trim(),
+            String(t.account_id ?? "").trim(),
+          ].join("-")
+        )
+    )
+    return keys.size >= 1
+  }, [trades, isPro])
+
   if (loading) {
     return (
       <>
@@ -997,8 +1014,6 @@ const worstDay = dailyPnLs.length > 0
       </>
     )
   }
-
-  const isPro = isProActive(profile)
 
   const drawdownLimitRaw = profile?.max_drawdown_limit
   const drawdownLimitCap =
@@ -1164,9 +1179,12 @@ const worstDay = dailyPnLs.length > 0
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white p-10">
 
         <div className="relative z-50 mx-auto max-w-6xl">
-          <h1 className="mb-4 text-center text-2xl font-semibold text-blue-300">
+          <h1 className="mb-2 text-center text-2xl font-semibold text-blue-300">
             Dashboard
           </h1>
+          <p className="mb-4 text-center text-sm text-gray-400">
+            Plan: {isPro ? "Pro" : "Free"}
+          </p>
 
           <TradeFilterBar
             className="mb-8"
@@ -1322,10 +1340,17 @@ const worstDay = dailyPnLs.length > 0
             }
           />
 
+          {showFreePlanAccountBanner ? (
+            <div className="mb-4 rounded border border-yellow-500/20 bg-yellow-500/10 p-3">
+              <p className="text-sm text-yellow-300">
+                Free plan: 1 account limit. Upgrade for unlimited accounts.
+              </p>
+            </div>
+          ) : null}
+
         </div>
 
-        <ProGate isPro={isPro}>
-          <div className="relative z-0 space-y-6 overflow-visible">
+          <div className="relative z-0 mx-auto max-w-6xl space-y-6 overflow-visible">
 
   {/* TOP: STATS + CHART */}
   <div className="grid overflow-visible lg:grid-cols-3 gap-6">
@@ -1884,7 +1909,6 @@ const worstDay = dailyPnLs.length > 0
           ) : null}
 
           </div>
-        </ProGate>
       </div>
     </>
   )

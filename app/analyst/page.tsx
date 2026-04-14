@@ -1,35 +1,54 @@
 "use client"
 
+import Link from "next/link"
 import Navbar from "../components/Navbar"
 import { useEffect, useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
+import { isProActive } from "../../lib/subscription"
 
 export default function AnalystPage() {
   const [trades, setTrades] = useState<any[]>([])
   const [selectedTrade, setSelectedTrade] = useState<any>(null)
+  const [profile, setProfile] = useState<{
+    is_pro?: boolean | null
+    subscription_status?: string | null
+  } | null>(null)
 
   const [messages, setMessages] = useState<any[]>([])
   const [input, setInput] = useState("")
   const [loading, setLoading] = useState(false)
+  const [pageReady, setPageReady] = useState(false)
 
   useEffect(() => {
-    fetchTrades()
+    void fetchTrades()
   }, [])
 
   async function fetchTrades() {
+    setPageReady(false)
     const {
-      data: { user }
+      data: { user },
     } = await supabase.auth.getUser()
 
-    if (!user) return
+    if (!user) {
+      setPageReady(true)
+      return
+    }
 
-    const { data } = await supabase
-      .from("trades")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
+    const [{ data }, { data: prof }] = await Promise.all([
+      supabase
+        .from("trades")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("profiles")
+        .select("is_pro, subscription_status")
+        .eq("id", user.id)
+        .maybeSingle(),
+    ])
 
     setTrades(data || [])
+    setProfile(prof ?? null)
   }
 
   function formatCurrency(val: number) {
@@ -41,11 +60,11 @@ export default function AnalystPage() {
     return new Date(date).toLocaleDateString()
   }
 
-  // 🔥 MAIN ANALYZE FUNCTION
   async function analyzeTrade(trade: any) {
+    if (!isProActive(profile)) return
+
     setSelectedTrade(trade)
 
-    // ✅ IF ALREADY ANALYZED → LOAD INSTANTLY
     if (trade.ai_feedback) {
       setMessages([{ role: "assistant", content: trade.ai_feedback }])
       return
@@ -57,15 +76,29 @@ export default function AnalystPage() {
     const res = await fetch("/api/analyze-trade", {
       method: "POST",
       headers: {
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
         trade,
-        messages: []
-      })
+        messages: [],
+      }),
     })
 
     const data = await res.json()
+
+    if (!res.ok) {
+      setMessages([
+        {
+          role: "assistant",
+          content:
+            data.reply ||
+            data.error ||
+            "AI Analyst is a Pro feature. Upgrade to continue.",
+        },
+      ])
+      setLoading(false)
+      return
+    }
 
     setMessages([{ role: "assistant", content: data.reply }])
     setLoading(false)
@@ -73,11 +106,9 @@ export default function AnalystPage() {
 
   async function sendMessage() {
     if (!input.trim() || !selectedTrade) return
+    if (!isProActive(profile)) return
 
-    const newMessages = [
-      ...messages,
-      { role: "user", content: input }
-    ]
+    const newMessages = [...messages, { role: "user", content: input }]
 
     setMessages(newMessages)
     setInput("")
@@ -86,192 +117,215 @@ export default function AnalystPage() {
     const res = await fetch("/api/analyze-trade", {
       method: "POST",
       headers: {
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
         trade: selectedTrade,
-        messages: newMessages
-      })
+        messages: newMessages,
+      }),
     })
 
     const data = await res.json()
 
+    if (!res.ok) {
+      setMessages([
+        ...newMessages,
+        {
+          role: "assistant",
+          content:
+            data.reply ||
+            data.error ||
+            "AI Analyst is a Pro feature. Upgrade to continue.",
+        },
+      ])
+      setLoading(false)
+      return
+    }
+
     setMessages([
       ...newMessages,
-      { role: "assistant", content: data.reply }
+      { role: "assistant", content: data.reply },
     ])
 
     setLoading(false)
   }
+
+  const pro = isProActive(profile)
 
   return (
     <>
       <Navbar />
 
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100 p-10">
-
-        <h1 className="text-3xl text-center mb-8 bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
+        <h1 className="mb-8 text-center text-3xl bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
           AI Trade Analyst
         </h1>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {!pageReady ? (
+          <p className="text-center text-gray-400">Loading…</p>
+        ) : !pro ? (
+          <div className="mx-auto max-w-lg rounded-xl border border-white/10 bg-black/30 p-6 text-center">
+            <p className="mb-2 text-gray-400">
+              AI Analyst is a Pro feature
+            </p>
+            <Link
+              href="/settings"
+              className="inline-block rounded bg-emerald-500 px-4 py-2 font-medium text-white hover:bg-emerald-600"
+            >
+              Upgrade to Pro
+            </Link>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
+            <div className="max-h-[80vh] overflow-y-auto rounded-xl border border-white/10 bg-white/5 p-4">
+              {trades.map((trade) => (
+                <div
+                  key={trade.id}
+                  onClick={() => void analyzeTrade(trade)}
+                  className={`mb-3 cursor-pointer rounded border p-4 ${
+                    selectedTrade?.id === trade.id
+                      ? "border-emerald-400 bg-white/10"
+                      : "border-white/10 hover:bg-white/10"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-semibold">
+                        {trade.ticker} • {trade.direction}
+                      </p>
 
-          {/* LEFT — TRADE LIST */}
-          <div className="bg-white/5 border border-white/10 rounded-xl p-4 max-h-[80vh] overflow-y-auto">
+                      <p className="text-xs text-gray-400">
+                        {formatDate(trade.created_at)} • {trade.session}
+                      </p>
 
-            {trades.map((trade) => (
-              <div
-                key={trade.id}
-                onClick={() => analyzeTrade(trade)}
-                className={`p-4 mb-3 rounded cursor-pointer border ${
-                  selectedTrade?.id === trade.id
-                    ? "border-emerald-400 bg-white/10"
-                    : "border-white/10 hover:bg-white/10"
-                }`}
-              >
-                <div className="flex justify-between items-center">
+                      <p className="text-xs text-gray-500">
+                        {trade.account_type} {trade.account_size}
+                      </p>
+                    </div>
 
-                  <div>
-                    <p className="font-semibold">
-                      {trade.ticker} • {trade.direction}
-                    </p>
+                    <div className="text-right">
+                      <p
+                        className={
+                          trade.pnl >= 0 ? "text-green-400" : "text-red-400"
+                        }
+                      >
+                        {formatCurrency(trade.pnl)}
+                      </p>
 
-                    <p className="text-xs text-gray-400">
-                      {formatDate(trade.created_at)} • {trade.session}
-                    </p>
+                      <p className="text-xs text-gray-400">
+                        RR: {trade.rr ?? "-"}
+                        {trade.contracts != null
+                          ? ` • Contracts: ${trade.contracts}`
+                          : ""}
+                      </p>
 
-                    <p className="text-xs text-gray-500">
-                      {trade.account_type} {trade.account_size}
-                    </p>
+                      {trade.ai_feedback && (
+                        <p className="mt-1 text-xs text-emerald-400">Analyzed</p>
+                      )}
+                    </div>
                   </div>
+                </div>
+              ))}
+            </div>
 
-                  <div className="text-right">
-                    <p className={trade.pnl >= 0 ? "text-green-400" : "text-red-400"}>
-                      {formatCurrency(trade.pnl)}
+            <div className="flex h-[80vh] flex-col rounded-xl border border-white/10 bg-white/5 p-4">
+              {!selectedTrade && (
+                <p className="mt-10 text-center text-gray-400">Select a trade</p>
+              )}
+
+              {selectedTrade && (
+                <>
+                  <div className="mb-4 space-y-1 text-sm">
+                    <p className="text-lg font-semibold">
+                      {selectedTrade.ticker} • {selectedTrade.direction}
                     </p>
 
-                    <p className="text-xs text-gray-400">
-                      RR: {trade.rr ?? "-"}
-                      {trade.contracts != null ? ` • Contracts: ${trade.contracts}` : ""}
+                    <p
+                      className={
+                        selectedTrade.pnl >= 0
+                          ? "text-green-400"
+                          : "text-red-400"
+                      }
+                    >
+                      {formatCurrency(selectedTrade.pnl)}
                     </p>
 
-                    {trade.ai_feedback && (
-                      <p className="text-xs text-emerald-400 mt-1">
-                        Analyzed
+                    <p>
+                      {formatDate(selectedTrade.created_at)} •{" "}
+                      {selectedTrade.session}
+                    </p>
+
+                    <p className="text-gray-400">
+                      {selectedTrade.account_type}{" "}
+                      {selectedTrade.account_size} ({selectedTrade.account_id})
+                    </p>
+
+                    {selectedTrade.entry_price && (
+                      <p>
+                        Entry: {selectedTrade.entry_price} → Exit:{" "}
+                        {selectedTrade.exit_price}
+                      </p>
+                    )}
+
+                    {selectedTrade.contracts != null && (
+                      <p>Contracts: {selectedTrade.contracts}</p>
+                    )}
+
+                    {selectedTrade.notes && (
+                      <p className="italic text-gray-400">
+                        {selectedTrade.notes}
                       </p>
                     )}
                   </div>
 
-                </div>
-              </div>
-            ))}
-
-          </div>
-
-          {/* RIGHT — DETAILS + CHAT */}
-          <div className="bg-white/5 border border-white/10 rounded-xl p-4 flex flex-col h-[80vh]">
-
-            {!selectedTrade && (
-              <p className="text-gray-400 text-center mt-10">
-                Select a trade
-              </p>
-            )}
-
-            {selectedTrade && (
-              <>
-                {/* 🔥 TRADE HEADER */}
-                <div className="mb-4 text-sm space-y-1">
-
-                  <p className="font-semibold text-lg">
-                    {selectedTrade.ticker} • {selectedTrade.direction}
-                  </p>
-
-                  <p className={selectedTrade.pnl >= 0 ? "text-green-400" : "text-red-400"}>
-                    {formatCurrency(selectedTrade.pnl)}
-                  </p>
-
-                  <p>
-                    {formatDate(selectedTrade.created_at)} • {selectedTrade.session}
-                  </p>
-
-                  <p className="text-gray-400">
-                    {selectedTrade.account_type} {selectedTrade.account_size} ({selectedTrade.account_id})
-                  </p>
-
-                  {selectedTrade.entry_price && (
-                    <p>
-                      Entry: {selectedTrade.entry_price} → Exit: {selectedTrade.exit_price}
-                    </p>
+                  {selectedTrade.image_url && (
+                    <img
+                      src={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/screenshots/${selectedTrade.image_url}`}
+                      className="mb-4 max-h-48 rounded border border-white/10 object-cover"
+                      alt=""
+                    />
                   )}
 
-                  {selectedTrade.contracts != null && (
-                    <p>Contracts: {selectedTrade.contracts}</p>
-                  )}
-
-                  {selectedTrade.notes && (
-                    <p className="text-gray-400 italic">
-                      {selectedTrade.notes}
-                    </p>
-                  )}
-
-                </div>
-
-                {/* 🔥 IMAGE */}
-                {selectedTrade.image_url && (
-                  <img
-                    src={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/screenshots/${selectedTrade.image_url}`}
-                    className="rounded mb-4 border border-white/10 max-h-48 object-cover"
-                  />
-                )}
-
-                {/* 🔥 CHAT */}
-                <div className="flex-1 overflow-y-auto space-y-4 mb-4">
-
-                  {messages.map((msg, i) => (
-                    <div
-                      key={i}
-                      className={`p-3 rounded max-w-[80%] ${
-                        msg.role === "user"
-                          ? "bg-blue-500 ml-auto"
-                          : "bg-white/10"
-                      }`}
-                    >
-                      <div className="whitespace-pre-wrap text-sm">
-                        {msg.content}
+                  <div className="mb-4 flex-1 space-y-4 overflow-y-auto">
+                    {messages.map((msg, i) => (
+                      <div
+                        key={i}
+                        className={`max-w-[80%] rounded p-3 ${
+                          msg.role === "user"
+                            ? "ml-auto bg-blue-500"
+                            : "bg-white/10"
+                        }`}
+                      >
+                        <div className="whitespace-pre-wrap text-sm">
+                          {msg.content}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
 
-                  {loading && (
-                    <p className="text-gray-400">Analyzing...</p>
-                  )}
+                    {loading && <p className="text-gray-400">Analyzing...</p>}
+                  </div>
 
-                </div>
+                  <div className="flex gap-2">
+                    <input
+                      value={input}
+                      onChange={(e) => setInput(e.target.value)}
+                      placeholder="Ask about this trade..."
+                      className="flex-1 rounded border border-white/10 bg-[#0f172a] p-2"
+                    />
 
-                {/* INPUT */}
-                <div className="flex gap-2">
-                  <input
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    placeholder="Ask about this trade..."
-                    className="flex-1 p-2 rounded bg-[#0f172a] border border-white/10"
-                  />
-
-                  <button
-                    onClick={sendMessage}
-                    className="bg-emerald-500 px-4 rounded"
-                  >
-                    Send
-                  </button>
-                </div>
-
-              </>
-            )}
-
+                    <button
+                      type="button"
+                      onClick={() => void sendMessage()}
+                      className="rounded bg-emerald-500 px-4"
+                    >
+                      Send
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
-
-        </div>
-
+        )}
       </div>
     </>
   )

@@ -3,11 +3,20 @@
 import { useMemo, useState } from "react"
 
 type TradeLike = {
-  id: string
+  id: string | number
   created_at: string
   pnl: number | null
   ticker?: string | null
   direction?: string | null
+  image_url?: string | null
+  rr?: number | string | null
+  points?: number | string | null
+  session?: string | null
+  mode?: string | null
+  account_type?: string | null
+  account_size?: string | null
+  account_id?: string | number | null
+  strategy?: string | null
 }
 
 type CalendarProps = {
@@ -26,6 +35,15 @@ const formatMoney = (num: number | null | undefined) => {
     style: "currency",
     currency: "USD",
   }).format(num)
+}
+
+function tradeImageSrc(imageUrl: string | null | undefined): string | null {
+  const raw = imageUrl != null ? String(imageUrl).trim() : ""
+  if (!raw) return null
+  if (raw.startsWith("http")) return raw
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL
+  if (!base) return null
+  return `${base}/storage/v1/object/public/screenshots/${raw}`
 }
 
 export default function Calendar({
@@ -73,6 +91,12 @@ export default function Calendar({
 
   const selectedTrades = selectedDay ? byDay[selectedDay] || [] : []
   const dayTrades = selectedTrades
+  const sortedDayTrades = useMemo(() => {
+    return [...dayTrades].sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    )
+  }, [dayTrades])
   const totalPnl = dayTrades.reduce((sum, t) => sum + (Number(t.pnl) || 0), 0)
 
   return (
@@ -154,7 +178,9 @@ export default function Calendar({
               <h2 className="text-lg font-semibold text-white">
                 Trades on {selectedDay}
               </h2>
-              <span className="text-sm text-gray-400">{dayTrades.length} trades</span>
+              <span className="text-sm text-gray-400">
+                {sortedDayTrades.length} trades
+              </span>
             </div>
 
             <div className="mb-4 text-xl font-semibold">
@@ -163,30 +189,82 @@ export default function Calendar({
               </span>
             </div>
 
-            <div className="space-y-2">
-              {dayTrades.map((trade) => (
-                <div
-                  key={trade.id}
-                  onClick={() => setSelectedTrade(trade)}
-                  className="flex cursor-pointer items-center justify-between rounded-lg p-3 transition hover:bg-white/5"
-                >
-                  <div className="flex flex-col text-sm">
-                    <span className="font-medium text-white">
-                      {trade.ticker || "—"} • {trade.direction || "—"}
-                    </span>
-                    <span className="text-xs text-gray-400">
-                      {new Date(trade.created_at).toLocaleTimeString()}
-                    </span>
-                  </div>
-                  <span
-                    className={`text-sm font-medium ${
-                      (trade.pnl || 0) >= 0 ? "text-green-400" : "text-red-400"
-                    }`}
+            <div className="mt-3 space-y-3">
+              {sortedDayTrades.map((trade) => {
+                const img = tradeImageSrc(trade.image_url)
+                const pnl = Number(trade.pnl) || 0
+                const modeLower = String(trade.mode ?? "").toLowerCase().trim()
+                const acctId =
+                  trade.account_id != null && String(trade.account_id).trim() !== ""
+                    ? `#${String(trade.account_id).trim()}`
+                    : null
+                const accountLine = [trade.account_type, trade.account_size, acctId]
+                  .filter((x) => x != null && String(x).trim() !== "")
+                  .join(" ")
+
+                return (
+                  <div
+                    key={String(trade.id)}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setSelectedTrade(trade)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault()
+                        setSelectedTrade(trade)
+                      }
+                    }}
+                    className="flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-black/40 p-3 transition hover:bg-black/60 sm:gap-4 sm:p-4"
                   >
-                    {formatMoney(trade.pnl || 0)}
-                  </span>
-                </div>
-              ))}
+                    {img ? (
+                      <img
+                        src={img}
+                        alt=""
+                        className="h-16 w-16 shrink-0 rounded-lg border border-white/10 object-cover sm:h-20 sm:w-20"
+                      />
+                    ) : null}
+
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold text-white">
+                        {trade.ticker || "—"} • {trade.direction || "—"}
+                      </p>
+                      <p className="text-sm text-gray-400">
+                        {new Date(trade.created_at).toLocaleTimeString()}
+                      </p>
+                      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-gray-400">
+                        {trade.rr != null && trade.rr !== "" ? (
+                          <span>RR: {trade.rr}</span>
+                        ) : null}
+                        {trade.points != null && trade.points !== "" ? (
+                          <span>Pts: {trade.points}</span>
+                        ) : null}
+                        {trade.session ? <span>{trade.session}</span> : null}
+                        {modeLower === "backtest" ? (
+                          <span className="text-blue-300/90">Backtest</span>
+                        ) : null}
+                      </div>
+                      {modeLower !== "backtest" && accountLine ? (
+                        <p className="mt-1 text-xs text-gray-500">{accountLine}</p>
+                      ) : null}
+                      {trade.strategy ? (
+                        <p className="mt-1 text-xs text-blue-400">
+                          {trade.strategy}
+                        </p>
+                      ) : null}
+                    </div>
+
+                    <div className="shrink-0 text-right">
+                      <p
+                        className={`text-sm font-bold tabular-nums sm:text-base ${
+                          pnl >= 0 ? "text-green-400" : "text-red-400"
+                        }`}
+                      >
+                        {formatMoney(pnl)}
+                      </p>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           </div>
         )}
@@ -198,7 +276,7 @@ export default function Calendar({
           onClick={() => setSelectedTrade(null)}
         >
           <div
-            className="w-full max-w-md rounded-xl border border-white/10 bg-[#0f172a] p-4"
+            className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl border border-white/10 bg-[#0f172a] p-4"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-3 flex items-center justify-between">
@@ -211,19 +289,73 @@ export default function Calendar({
                 ✕
               </button>
             </div>
-            <p className="text-sm text-gray-300">
-              {selectedTrade.ticker || "—"} • {selectedTrade.direction || "—"}
-            </p>
-            <p className="mt-1 text-sm text-gray-400">
-              {new Date(selectedTrade.created_at).toLocaleString()}
-            </p>
-            <p
-              className={`mt-2 text-lg font-semibold ${
-                (selectedTrade.pnl || 0) >= 0 ? "text-green-400" : "text-red-400"
-              }`}
-            >
-              {formatMoney(selectedTrade.pnl || 0)}
-            </p>
+            {(() => {
+              const img = tradeImageSrc(selectedTrade.image_url)
+              const pnl = Number(selectedTrade.pnl) || 0
+              const modeLower = String(selectedTrade.mode ?? "")
+                .toLowerCase()
+                .trim()
+              const acctId =
+                selectedTrade.account_id != null &&
+                String(selectedTrade.account_id).trim() !== ""
+                  ? `#${String(selectedTrade.account_id).trim()}`
+                  : null
+              const accountLine = [
+                selectedTrade.account_type,
+                selectedTrade.account_size,
+                acctId,
+              ]
+                .filter((x) => x != null && String(x).trim() !== "")
+                .join(" ")
+              return (
+                <>
+                  {img ? (
+                    <img
+                      src={img}
+                      alt=""
+                      className="mb-3 max-h-48 w-full rounded-lg border border-white/10 object-contain"
+                    />
+                  ) : null}
+                  <p className="text-sm text-gray-300">
+                    {selectedTrade.ticker || "—"} •{" "}
+                    {selectedTrade.direction || "—"}
+                  </p>
+                  <p className="mt-1 text-sm text-gray-400">
+                    {new Date(selectedTrade.created_at).toLocaleString()}
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-400">
+                    {selectedTrade.rr != null && selectedTrade.rr !== "" ? (
+                      <span>RR: {selectedTrade.rr}</span>
+                    ) : null}
+                    {selectedTrade.points != null &&
+                    selectedTrade.points !== "" ? (
+                      <span>Pts: {selectedTrade.points}</span>
+                    ) : null}
+                    {selectedTrade.session ? (
+                      <span>{selectedTrade.session}</span>
+                    ) : null}
+                    {modeLower === "backtest" ? (
+                      <span className="text-blue-300/90">Backtest</span>
+                    ) : null}
+                  </div>
+                  {modeLower !== "backtest" && accountLine ? (
+                    <p className="mt-2 text-xs text-gray-500">{accountLine}</p>
+                  ) : null}
+                  {selectedTrade.strategy ? (
+                    <p className="mt-1 text-xs text-blue-400">
+                      {selectedTrade.strategy}
+                    </p>
+                  ) : null}
+                  <p
+                    className={`mt-3 text-lg font-bold tabular-nums ${
+                      pnl >= 0 ? "text-green-400" : "text-red-400"
+                    }`}
+                  >
+                    {formatMoney(pnl)}
+                  </p>
+                </>
+              )
+            })()}
           </div>
         </div>
       ) : null}

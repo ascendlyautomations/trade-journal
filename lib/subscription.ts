@@ -1,9 +1,12 @@
 /**
- * Pro access is driven by Stripe → profiles.subscription_status.
- * Use this everywhere instead of reading profile.is_pro directly.
+ * Pro access: `profiles.is_pro` (manual/admin) or active Stripe subscription.
  */
 export function isProActive(
-  profile: { subscription_status?: string | null } | null | undefined
+  profile: {
+    is_pro?: boolean | null
+    subscription_status?: string | null
+  } | null | undefined
 ): boolean {
+  if (profile?.is_pro === true) return true
   return profile?.subscription_status === "active"
 }

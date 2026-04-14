@@ -170,7 +170,7 @@ export default function Navbar() {
                 items: [
                   { label: "Input Trade", link: "/app" },
                   { label: "Trade History", link: "/trades" },
-                  { label: "Backtest Lab", link: "/backtest" },
+                  { label: "Backtest Data", link: "/backtest" },
                 ],
               },
               {
