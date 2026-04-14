@@ -33,11 +33,9 @@ export default function AffiliateDashboard() {
   const [experience, setExperience] = useState("")
   const [socialHandle, setSocialHandle] = useState("")
   const [why, setWhy] = useState("")
-
-  const baseUrl =
-    typeof window !== "undefined"
-      ? window.location.origin
-      : process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"
+  const [baseUrl, setBaseUrl] = useState(
+    process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"
+  )
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -97,6 +95,12 @@ export default function AffiliateDashboard() {
   useEffect(() => {
     void load()
   }, [load])
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setBaseUrl(window.location.origin)
+    }
+  }, [])
 
   const referralLink = referralCode
     ? `${baseUrl}?ref=${encodeURIComponent(referralCode)}`
