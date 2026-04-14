@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Navbar from "../components/Navbar"
 import { supabase } from "../../lib/supabaseClient"
@@ -56,7 +56,7 @@ function tradeImageSrc(imageUrl: string | null | undefined): string | null {
   return `${base}/storage/v1/object/public/screenshots/${raw}`
 }
 
-export default function CommunityPage() {
+function CommunityContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const roomParam = searchParams.get("room")
@@ -652,5 +652,13 @@ export default function CommunityPage() {
         </div>
       ) : null}
     </>
+  )
+}
+
+export default function CommunityPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <CommunityContent />
+    </Suspense>
   )
 }
