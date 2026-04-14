@@ -8,23 +8,31 @@ import Navbar from "../components/Navbar"
 type MeProfile = {
   id: string
   referral_code?: string | null
+  referral_count?: number | null
 }
 
 type ReferredUser = {
   id: string
   username?: string | null
-  subscription_status?: string | null
+  avatar_url?: string | null
   created_at?: string | null
 }
 
 export default function AffiliateDashboard() {
+  const COMMISSION_RATE = 0.18
+  const PLAN_PRICE = 15.99
+
   const router = useRouter()
   const [loading, setLoading] = useState(true)
-  const [profile, setProfile] = useState<MeProfile | null>(null)
-  const [referrals, setReferrals] = useState<ReferredUser[]>([])
-  const [earningsByUserId, setEarningsByUserId] = useState<Record<string, number>>({})
-  const [ledgerTotal, setLedgerTotal] = useState(0)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const [referralCode, setReferralCode] = useState<string | null>(null)
+  const [totalReferrals, setTotalReferrals] = useState(0)
+  const [referredUsers, setReferredUsers] = useState<ReferredUser[]>([])
   const [copyDone, setCopyDone] = useState(false)
+  const [showAffiliateModal, setShowAffiliateModal] = useState(false)
+  const [experience, setExperience] = useState("")
+  const [socialHandle, setSocialHandle] = useState("")
+  const [why, setWhy] = useState("")
 
   const baseUrl =
     typeof window !== "undefined"
@@ -43,77 +51,44 @@ export default function AffiliateDashboard() {
       router.push("/login")
       return
     }
+    setCurrentUserId(user.id)
 
-    const { data: prof, error: profErr } = await supabase
+    const { data: profile, error: profErr } = await supabase
       .from("profiles")
-      .select("id, referral_code")
+      .select("id, referral_code, referral_count")
       .eq("id", user.id)
       .single()
 
-    if (profErr || !prof) {
+    if (profErr || !profile) {
       console.error(profErr)
-      setProfile(null)
-      setReferrals([])
-      setEarningsByUserId({})
-      setLedgerTotal(0)
+      setReferralCode(null)
+      setTotalReferrals(0)
+      setReferredUsers([])
       setLoading(false)
       return
     }
-
-    setProfile(prof as MeProfile)
-
-    const { data: ledger, error: ledgerErr } = await supabase
-      .from("referrals")
-      .select("*")
-      .eq("referrer_user_id", user.id)
-
-    if (ledgerErr) {
-      console.error("referrals ledger:", ledgerErr)
-      setEarningsByUserId({})
-      setLedgerTotal(0)
-      setReferrals([])
-      setLoading(false)
-      return
-    }
-
-    const earningsMap: Record<string, number> = {}
-    let total = 0
-
-    for (const entry of ledger ?? []) {
-      const raw = entry.amount_earned
-      const amt =
-        raw != null && raw !== "" ? Number(raw) : 0
-      const add = Number.isFinite(amt) ? amt : 0
-      const refId = entry.referred_user_id
-      if (refId == null || refId === "") continue
-      const id = String(refId)
-      if (!earningsMap[id]) earningsMap[id] = 0
-      earningsMap[id] += add
-      total += add
-    }
-
-    setEarningsByUserId(earningsMap)
-    setLedgerTotal(total)
 
     const code =
-      prof.referral_code != null ? String(prof.referral_code).trim() : ""
+      profile.referral_code != null ? String(profile.referral_code).trim() : ""
+    setReferralCode(code || null)
+    setTotalReferrals(Number(profile.referral_count) || 0)
 
     if (!code) {
-      setReferrals([])
+      setReferredUsers([])
       setLoading(false)
       return
     }
 
     const { data: referredProfiles, error: refErr } = await supabase
       .from("profiles")
-      .select("*")
+      .select("id, username, avatar_url, created_at")
       .eq("referred_by", code)
 
     if (refErr) {
       console.error(refErr)
-      setReferrals([])
+      setReferredUsers([])
     } else {
-      setReferrals((referredProfiles as ReferredUser[]) ?? [])
+      setReferredUsers((referredProfiles as ReferredUser[]) ?? [])
     }
 
     setLoading(false)
@@ -123,15 +98,10 @@ export default function AffiliateDashboard() {
     void load()
   }, [load])
 
-  const linkCode =
-    profile?.referral_code != null ? String(profile.referral_code).trim() : ""
-
-  const referralLink = linkCode ? `${baseUrl}?ref=${encodeURIComponent(linkCode)}` : ""
-
-  const totalReferrals = referrals.length
-  const activeReferrals = referrals.filter(
-    (r) => String(r.subscription_status ?? "").toLowerCase() === "active"
-  ).length
+  const referralLink = referralCode
+    ? `${baseUrl}?ref=${encodeURIComponent(referralCode)}`
+    : ""
+  const earnings = (totalReferrals || 0) * PLAN_PRICE * COMMISSION_RATE
 
   async function copyLink() {
     if (!referralLink) return
@@ -144,6 +114,27 @@ export default function AffiliateDashboard() {
     }
   }
 
+  async function submitApplication() {
+    if (!currentUserId) return
+
+    const { error } = await supabase.from("affiliate_applications").insert({
+      user_id: currentUserId,
+      experience,
+      social_handle: socialHandle,
+      why,
+    })
+
+    if (error) {
+      console.error("affiliate application insert:", error)
+      return
+    }
+
+    setShowAffiliateModal(false)
+    setExperience("")
+    setSocialHandle("")
+    setWhy("")
+  }
+
   return (
     <>
       <Navbar />
@@ -154,21 +145,30 @@ export default function AffiliateDashboard() {
             <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent sm:text-3xl">
               Affiliate Dashboard
             </h1>
-            <button
-              type="button"
-              onClick={() => void load()}
-              disabled={loading}
-              className="rounded-lg bg-white/10 px-4 py-2 text-sm hover:bg-white/20 disabled:opacity-50"
-            >
-              {loading ? "Refreshing…" : "Refresh"}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowAffiliateModal(true)}
+                className="bg-green-500 px-4 py-2 rounded text-white"
+              >
+                Apply to be an Affiliate
+              </button>
+              <button
+                type="button"
+                onClick={() => void load()}
+                disabled={loading}
+                className="rounded-lg bg-white/10 px-4 py-2 text-sm hover:bg-white/20 disabled:opacity-50"
+              >
+                {loading ? "Refreshing…" : "Refresh"}
+              </button>
+            </div>
           </div>
 
           <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div className="rounded-xl border border-white/10 bg-white/5 p-5 backdrop-blur-md">
               <p className="text-sm text-gray-400">Total earnings</p>
               <p className="mt-1 text-2xl font-bold text-emerald-400">
-                ${ledgerTotal.toFixed(2)}
+                ${earnings.toFixed(2)}
               </p>
             </div>
             <div className="rounded-xl border border-white/10 bg-white/5 p-5 backdrop-blur-md">
@@ -176,8 +176,10 @@ export default function AffiliateDashboard() {
               <p className="mt-1 text-2xl font-bold text-white">{totalReferrals}</p>
             </div>
             <div className="rounded-xl border border-white/10 bg-white/5 p-5 backdrop-blur-md">
-              <p className="text-sm text-gray-400">Active referrals</p>
-              <p className="mt-1 text-2xl font-bold text-blue-300">{activeReferrals}</p>
+              <p className="text-sm text-gray-400">Referral code</p>
+              <p className="mt-1 text-sm font-bold text-blue-300 break-all">
+                {referralCode || "—"}
+              </p>
             </div>
           </div>
 
@@ -185,15 +187,16 @@ export default function AffiliateDashboard() {
             <h2 className="text-sm font-semibold uppercase tracking-wide text-blue-300">
               Share your link
             </h2>
-            {!linkCode ? (
+            {!referralCode ? (
               <p className="mt-3 text-sm text-gray-400">
-                No referral code on your profile yet. Contact support or check your account
-                setup.
+                No referral code on your profile yet
               </p>
             ) : (
               <>
                 <p className="mt-1 text-xs text-gray-500">Your code</p>
-                <p className="mt-0.5 font-mono text-lg font-semibold text-white">{linkCode}</p>
+                <p className="mt-0.5 font-mono text-lg font-semibold text-white">
+                  {referralCode}
+                </p>
                 <p className="mt-4 text-sm text-gray-400">Referral link</p>
                 <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
                   <input
@@ -218,43 +221,73 @@ export default function AffiliateDashboard() {
 
             {loading ? (
               <p className="text-sm text-gray-400">Loading…</p>
-            ) : referrals.length === 0 ? (
+            ) : referredUsers.length === 0 ? (
               <p className="rounded-xl border border-white/10 bg-white/5 p-6 text-center text-sm text-gray-400">
-                You have no referrals yet. Share your link to start earning.
+                You have no referrals yet.
               </p>
             ) : (
-              referrals.map((user) => (
+              referredUsers.map((user) => (
                 <div
                   key={user.id}
-                  className="mb-3 flex items-center justify-between rounded-xl bg-white/5 p-4 last:mb-0"
+                  className="mb-3 flex items-center gap-3 rounded-xl bg-white/5 p-4 last:mb-0"
                 >
-                  <div>
-                    <p className="font-semibold">{user.username?.trim() || "User"}</p>
-
-                    <p className="text-sm text-gray-400">
-                      Joined:{" "}
-                      {user.created_at
-                        ? new Date(user.created_at).toLocaleDateString()
-                        : "—"}
-                    </p>
-
-                    <p className="text-sm">
-                      Status: {user.subscription_status || "inactive"}
-                    </p>
-                  </div>
-
-                  <div className="rounded-lg bg-black/30 px-4 py-2 text-right">
-                    <p className="text-xs text-gray-400">Earned</p>
-                    <p className="text-lg font-bold text-green-400">
-                      ${earningsByUserId[user.id]?.toFixed(2) || "0.00"}
-                    </p>
-                  </div>
+                  <img
+                    src={user.avatar_url || "/default-avatar.png"}
+                    className="w-8 h-8 rounded-full"
+                    alt=""
+                  />
+                  <span>{user.username?.trim() || "User"}</span>
                 </div>
               ))
             )}
           </div>
         </div>
       </div>
+
+      {showAffiliateModal && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-[#1e2a4a] p-6 rounded-xl w-[400px]">
+            <h2 className="text-white text-lg mb-4">Affiliate Application</h2>
+
+            <textarea
+              placeholder="Your experience trading or promoting..."
+              value={experience}
+              onChange={(e) => setExperience(e.target.value)}
+              className="mb-3 w-full rounded border border-white/10 bg-[#0f172a] p-2 text-sm text-white placeholder:text-gray-400"
+            />
+            <input
+              placeholder="Social handle (optional)"
+              value={socialHandle}
+              onChange={(e) => setSocialHandle(e.target.value)}
+              className="mb-3 w-full rounded border border-white/10 bg-[#0f172a] p-2 text-sm text-white placeholder:text-gray-400"
+            />
+            <textarea
+              placeholder="Why should we accept you?"
+              value={why}
+              onChange={(e) => setWhy(e.target.value)}
+              className="w-full rounded border border-white/10 bg-[#0f172a] p-2 text-sm text-white placeholder:text-gray-400"
+            />
+
+            <div className="flex justify-end gap-2 mt-4">
+              <button
+                type="button"
+                onClick={() => setShowAffiliateModal(false)}
+                className="rounded bg-white/10 px-3 py-1.5 text-sm text-white hover:bg-white/20"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={() => void submitApplication()}
+                className="rounded bg-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-blue-600"
+              >
+                Submit
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }

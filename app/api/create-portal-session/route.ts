@@ -1,5 +1,7 @@
 import Stripe from "stripe"
 import { createClient } from "@supabase/supabase-js"
+import { createServerClient } from "@supabase/ssr"
+import { cookies } from "next/headers"
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string)
 
@@ -8,18 +10,30 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-export async function POST(req: Request) {
+export async function POST() {
   try {
-    const { userId } = await req.json()
+    const cookieStore = await cookies()
+    const supabaseAuth = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get: (name) => cookieStore.get(name)?.value,
+        },
+      }
+    )
+    const {
+      data: { user },
+    } = await supabaseAuth.auth.getUser()
 
-    if (!userId) {
-      return Response.json({ error: "Missing userId" }, { status: 400 })
+    if (!user) {
+      return Response.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const { data: profile, error } = await supabase
       .from("profiles")
       .select("id, stripe_customer_id")
-      .eq("id", userId)
+      .eq("id", user.id)
       .maybeSingle()
 
     if (error) {

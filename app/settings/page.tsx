@@ -80,6 +80,13 @@ export default function SettingsPage() {
     code?: string
     id?: string
   } | null>(null)
+  const [showAffiliateModal, setShowAffiliateModal] = useState(false)
+  const [existingApp, setExistingApp] = useState<{ id: string; status?: string | null } | null>(
+    null
+  )
+  const [experience, setExperience] = useState("")
+  const [socialHandle, setSocialHandle] = useState("")
+  const [why, setWhy] = useState("")
 
   const [name, setName] = useState("")
   const [username, setUsername] = useState("")
@@ -144,6 +151,22 @@ export default function SettingsPage() {
         if (affiliate) setAffiliateData(affiliate as { code?: string; id?: string })
       } catch (e) {
         console.error("Affiliate stats fetch failed:", e)
+      }
+
+      try {
+        const { data: appRow, error: appErr } = await supabase
+          .from("affiliate_applications")
+          .select("id, status")
+          .eq("user_id", data.id)
+          .maybeSingle()
+
+        if (appErr) {
+          console.error("Affiliate application fetch failed:", appErr)
+        } else {
+          setExistingApp((appRow as { id: string; status?: string | null } | null) ?? null)
+        }
+      } catch (e) {
+        console.error("Affiliate application fetch failed:", e)
       }
     }
 
@@ -376,8 +399,10 @@ export default function SettingsPage() {
       ? `${window.location.origin}?ref=${referralCode}`
       : ""
 
-  const earnings = Number(profile?.referral_earnings ?? 0)
   const referralCount = Number(profile?.referral_count ?? 0)
+  const COMMISSION_RATE = 0.18
+  const PLAN_PRICE = 15.99
+  const earnings = referralCount * PLAN_PRICE * COMMISSION_RATE
 
   async function copyReferralLink() {
     if (!referralLink) return
@@ -388,6 +413,32 @@ export default function SettingsPage() {
       console.error("Copy failed", err)
       alert("Failed to copy")
     }
+  }
+
+  async function submitApplication() {
+    if (!user) return
+
+    const { data: inserted, error } = await supabase
+      .from("affiliate_applications")
+      .insert({
+        user_id: user.id,
+        experience,
+        social_handle: socialHandle,
+        why,
+      })
+      .select("id, status")
+      .single()
+
+    if (error) {
+      console.error("Affiliate application submit failed:", error)
+      return
+    }
+
+    setExistingApp((inserted as { id: string; status?: string | null }) ?? null)
+    setShowAffiliateModal(false)
+    setExperience("")
+    setSocialHandle("")
+    setWhy("")
   }
 
   if (loading) {
@@ -601,6 +652,32 @@ export default function SettingsPage() {
                     </div>
                   </>
                 )}
+
+                <div className="mt-6">
+                  <h3 className="text-lg font-semibold text-white mb-2">Affiliate Program</h3>
+                  {existingApp ? (
+                    <>
+                      <p className="text-sm text-white/70">
+                        Application Status: {existingApp.status || "submitted"}
+                      </p>
+                      <button
+                        type="button"
+                        disabled
+                        className="mt-3 bg-green-500 hover:bg-green-600 px-4 py-2 rounded text-white opacity-50 cursor-not-allowed"
+                      >
+                        Application Submitted
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setShowAffiliateModal(true)}
+                      className="bg-green-500 hover:bg-green-600 px-4 py-2 rounded text-white"
+                    >
+                      Apply to be an Affiliate
+                    </button>
+                  )}
+                </div>
               </div>
             )}
 
@@ -790,6 +867,51 @@ export default function SettingsPage() {
           </div>
         </div>
       </div>
+
+      {showAffiliateModal && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-[#1e2a4a] p-6 rounded-xl w-[400px]">
+            <h2 className="text-white text-lg mb-4">Affiliate Application</h2>
+
+            <textarea
+              placeholder="Your experience trading or promoting..."
+              value={experience}
+              onChange={(e) => setExperience(e.target.value)}
+              className="mb-3 w-full rounded border border-white/10 bg-[#0f172a] p-2 text-sm text-white placeholder:text-gray-400"
+            />
+            <input
+              placeholder="Social handle (optional)"
+              value={socialHandle}
+              onChange={(e) => setSocialHandle(e.target.value)}
+              className="mb-3 w-full rounded border border-white/10 bg-[#0f172a] p-2 text-sm text-white placeholder:text-gray-400"
+            />
+            <textarea
+              placeholder="Why should we accept you?"
+              value={why}
+              onChange={(e) => setWhy(e.target.value)}
+              className="w-full rounded border border-white/10 bg-[#0f172a] p-2 text-sm text-white placeholder:text-gray-400"
+            />
+
+            <div className="flex justify-end gap-2 mt-4">
+              <button
+                type="button"
+                onClick={() => setShowAffiliateModal(false)}
+                className="rounded bg-white/10 px-3 py-1.5 text-sm text-white hover:bg-white/20"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={() => void submitApplication()}
+                className="rounded bg-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-blue-600"
+              >
+                Submit
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }

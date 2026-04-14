@@ -91,23 +91,24 @@ export default function Navbar() {
 
     const uid = user.id
 
-    const channel = supabase
-      .channel(`notif-${uid}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "notifications",
-        },
-        (payload: { new?: { user_id?: string }; old?: { user_id?: string } }) => {
-          const row = payload.new ?? payload.old
-          if (row?.user_id === uid) {
-            void fetchUnread()
-          }
+    const channel = supabase.channel(`notif-${uid}`)
+
+    channel.on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "notifications",
+      },
+      (payload: { new?: { user_id?: string }; old?: { user_id?: string } }) => {
+        const row = payload.new ?? payload.old
+        if (row?.user_id === uid) {
+          void fetchUnread()
         }
-      )
-      .subscribe()
+      }
+    )
+
+    channel.subscribe()
 
     return () => {
       void supabase.removeChannel(channel)
@@ -202,8 +203,11 @@ export default function Navbar() {
                     action: () => router.push("/messages"),
                     badge: unreadMessagesCount,
                   },
+                  { label: "Trade Rooms", action: () => router.push("/community") },
+                  
+                  
                   { label: "Leaderboard", action: () => router.push("/leaderboard") },
-                  { label: "Global Chat", action: () => router.push("/chat") },
+                
                   { label: "Explore", action: () => router.push("/explore") },
                 ],
               },

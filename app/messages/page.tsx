@@ -183,31 +183,33 @@ export default function MessagesPage() {
   useEffect(() => {
     if (!user?.id) return
 
-    const channel = supabase
-      .channel(`messages-list-${user.id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "messages",
-        },
-        () => {
-          void fetchConversations(user.id)
-        }
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "messages",
-        },
-        () => {
-          void fetchConversations(user.id)
-        }
-      )
-      .subscribe()
+    const channel = supabase.channel(`messages-list-${user.id}`)
+
+    channel.on(
+      "postgres_changes",
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "messages",
+      },
+      () => {
+        void fetchConversations(user.id)
+      }
+    )
+
+    channel.on(
+      "postgres_changes",
+      {
+        event: "UPDATE",
+        schema: "public",
+        table: "messages",
+      },
+      () => {
+        void fetchConversations(user.id)
+      }
+    )
+
+    channel.subscribe()
 
     return () => {
       void supabase.removeChannel(channel)

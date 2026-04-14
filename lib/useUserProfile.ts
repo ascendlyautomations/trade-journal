@@ -33,21 +33,20 @@ export function useUserProfile() {
         if (mounted) setProfile(profileData || null)
 
         // ✅ REALTIME SUBSCRIPTION (ONLY ONCE, AFTER USER LOADS)
-        channel = supabase
-          .channel(`profile-${sessionUser.id}`)
-          .on(
-            "postgres_changes",
-            {
-              event: "UPDATE",
-              schema: "public",
-              table: "profiles",
-              filter: `id=eq.${sessionUser.id}`
-            },
-            (payload) => {
-              setProfile(payload.new)
-            }
-          )
-          .subscribe()
+        channel = supabase.channel(`profile-${sessionUser.id}`)
+        channel.on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "profiles",
+            filter: `id=eq.${sessionUser.id}`
+          },
+          (payload) => {
+            setProfile(payload.new)
+          }
+        )
+        channel.subscribe()
       }
 
       setLoading(false)

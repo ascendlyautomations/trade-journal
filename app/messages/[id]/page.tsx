@@ -15,6 +15,15 @@ function tradeScreenshotSrc(url: string | null | undefined): string | null {
   return `${base}/storage/v1/object/public/screenshots/${raw}`
 }
 
+function postScreenshotSrc(url: string | null | undefined): string | null {
+  const raw = url != null ? String(url).trim() : ""
+  if (!raw) return null
+  if (raw.startsWith("http")) return raw
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL
+  if (!base) return null
+  return `${base}/storage/v1/object/public/screenshots/${raw}`
+}
+
 function getTradeStageRaw(trade: any): string {
   const v =
     trade?.account_status ??
@@ -223,6 +232,161 @@ function TradeMessageBubble({
   )
 }
 
+function PostMessageBubble({
+  message,
+  isMe,
+  userId,
+  activeMenuId,
+  setActiveMenuId,
+  deleteForMe,
+  deleteForEveryone,
+  onOpenPost,
+}: {
+  message: any
+  isMe: boolean
+  userId: string | undefined
+  activeMenuId: string | null
+  setActiveMenuId: (id: string | null) => void
+  deleteForMe: (m: any) => void
+  deleteForEveryone: (m: any) => void
+  onOpenPost: (post: any) => void
+}) {
+  const [post, setPost] = useState<any>(null)
+
+  useEffect(() => {
+    if (!message.post_id) return
+    let cancelled = false
+    ;(async () => {
+      const { data } = await supabase
+        .from("posts")
+        .select("*, profiles(username, avatar_url)")
+        .eq("id", message.post_id)
+        .maybeSingle()
+      if (!cancelled && data) {
+        setPost(data)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [message.post_id])
+
+  if (message.deleted_for_everyone) {
+    return (
+      <div className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
+        <p className="text-gray-400 italic text-sm">Message deleted</p>
+      </div>
+    )
+  }
+
+  if (!post) {
+    return (
+      <div className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
+        <div className="max-w-xs rounded-lg bg-[#1e293b] p-3 text-sm text-gray-400">
+          Loading post...
+        </div>
+      </div>
+    )
+  }
+
+  const menuOpen = activeMenuId === message.id
+  const imageSrc = postScreenshotSrc(post.image_url)
+  const pnl = Number(post.pnl)
+  const isWin = !Number.isNaN(pnl) && pnl >= 0
+
+  return (
+    <div className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
+      <div className="relative group inline-block max-w-[75%] overflow-visible">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            setActiveMenuId(menuOpen ? null : message.id)
+          }}
+          className={`absolute top-1 right-1 z-10 rounded px-1.5 py-0.5 text-xs text-gray-400 transition-opacity duration-200 hover:text-gray-200 ${
+            menuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+          }`}
+          aria-label="Message actions"
+        >
+          ⋯
+        </button>
+
+        {menuOpen ? (
+          <div
+            className={`absolute top-7 z-50 w-40 rounded-lg border border-gray-600 bg-[#1e293b] shadow-lg ${
+              isMe ? "right-1" : "left-1"
+            }`}
+          >
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                deleteForMe(message)
+              }}
+              className="w-full px-3 py-2 text-left text-sm hover:bg-white/10"
+            >
+              Delete for me
+            </button>
+            {message.sender_id === userId ? (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  deleteForEveryone(message)
+                }}
+                className="w-full px-3 py-2 text-left text-sm hover:bg-white/10"
+              >
+                Delete for everyone
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => onOpenPost(post)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault()
+              onOpenPost(post)
+            }
+          }}
+          className="cursor-pointer bg-gradient-to-br from-[#0f172a] to-[#1e293b] border border-gray-700 rounded-xl p-4 shadow-lg transition hover:scale-[1.02] hover:shadow-xl"
+        >
+          {message.content ? (
+            <p className="text-sm text-gray-300 mb-2">{message.content}</p>
+          ) : null}
+
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-sm font-semibold text-white">
+              @{post.profiles?.username || "User"}
+            </p>
+            <span className="text-xs text-gray-400">Shared Post</span>
+          </div>
+
+          {imageSrc ? (
+            <img
+              src={imageSrc}
+              alt=""
+              className="mb-3 h-32 w-full rounded-lg border border-gray-700 object-cover"
+            />
+          ) : null}
+
+          <div className="flex justify-between text-xs">
+            <span className={isWin ? "text-emerald-400" : "text-red-400"}>
+              {Number.isNaN(pnl) ? "—" : `${isWin ? "+" : ""}$${pnl}`}
+            </span>
+            <span className="text-gray-400">
+              RR {post.rr != null && post.rr !== "" ? post.rr : "—"}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function DMPage() {
   const params = useParams()
   const router = useRouter()
@@ -250,6 +414,7 @@ export default function DMPage() {
   const [showTradePicker, setShowTradePicker] = useState(false)
   const [trades, setTrades] = useState<any[]>([])
   const [tradeModalTrade, setTradeModalTrade] = useState<any>(null)
+  const [postModalPost, setPostModalPost] = useState<any>(null)
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const userIdRef = useRef<string | null>(null)
@@ -262,6 +427,10 @@ export default function DMPage() {
     setTradeModalTrade(trade)
   }
 
+  function openPostModal(post: any) {
+    setPostModalPost(post)
+  }
+
   useEffect(() => {
     init()
   }, [id])
@@ -269,7 +438,14 @@ export default function DMPage() {
   useEffect(() => {
     if (!activeConversationId) return
 
-    const channel = supabase.channel(`messages-${activeConversationId}`)
+    const topic = `messages-${activeConversationId}`
+    supabase.getChannels().forEach((c) => {
+      if (c.topic === topic) {
+        supabase.removeChannel(c)
+      }
+    })
+
+    const channel = supabase.channel(topic)
 
     channel.on(
       "postgres_changes",
@@ -925,6 +1101,28 @@ export default function DMPage() {
                 )
               }
 
+              if (message.type === "post") {
+                return (
+                  <div key={message.id} className={rowClass}>
+                    {showName && profileUsername ? (
+                      <p className="text-xs text-gray-400 mb-1 ml-1">
+                        {profileUsername}
+                      </p>
+                    ) : null}
+                    <PostMessageBubble
+                      message={message}
+                      isMe={isMe}
+                      userId={user?.id}
+                      activeMenuId={activeMenuId}
+                      setActiveMenuId={setActiveMenuId}
+                      deleteForMe={deleteForMe}
+                      deleteForEveryone={deleteForEveryone}
+                      onOpenPost={openPostModal}
+                    />
+                  </div>
+                )
+              }
+
               const menuOpen = activeMenuId === message.id
 
               return (
@@ -1335,6 +1533,53 @@ export default function DMPage() {
                   <button
                     type="button"
                     onClick={() => setTradeModalTrade(null)}
+                    className="mt-4 w-full rounded-lg bg-gray-700 px-4 py-2 text-white hover:bg-gray-600"
+                  >
+                    Close
+                  </button>
+                </>
+              )
+            })()}
+          </div>
+        </div>
+      ) : null}
+
+      {postModalPost ? (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4 text-white backdrop-blur-sm"
+          onClick={() => setPostModalPost(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-gray-600 bg-[#0f172a] p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {(() => {
+              const p = postModalPost
+              const imageSrc = postScreenshotSrc(p.image_url)
+              const pnl = Number(p.pnl)
+              const isWin = !Number.isNaN(pnl) && pnl >= 0
+              return (
+                <>
+                  <div className="bg-gradient-to-br from-[#0f172a] to-[#1e293b] border border-gray-700 rounded-xl p-4 shadow-lg">
+                    {imageSrc ? (
+                      <img
+                        src={imageSrc}
+                        alt=""
+                        className="mb-3 max-h-64 w-full rounded-lg border border-gray-700 object-contain"
+                      />
+                    ) : null}
+                    <div className="flex justify-between text-sm">
+                      <span className={isWin ? "text-emerald-400" : "text-red-400"}>
+                        {Number.isNaN(pnl) ? "—" : `${isWin ? "+" : ""}$${pnl}`}
+                      </span>
+                      <span className="text-gray-300">
+                        RR {p.rr != null && p.rr !== "" ? p.rr : "—"}
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPostModalPost(null)}
                     className="mt-4 w-full rounded-lg bg-gray-700 px-4 py-2 text-white hover:bg-gray-600"
                   >
                     Close

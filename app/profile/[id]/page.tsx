@@ -475,6 +475,7 @@ export default function ProfilePage() {
     "trades"
   )
   const [showCreatePost, setShowCreatePost] = useState(false)
+  const [showStoryModal, setShowStoryModal] = useState(false)
   const [postContent, setPostContent] = useState("")
   const [postImage, setPostImage] = useState<File | null>(null)
   const [creatingPost, setCreatingPost] = useState(false)
@@ -1425,6 +1426,13 @@ export default function ProfilePage() {
                 <div className="flex shrink-0 justify-center gap-2 sm:justify-end sm:pt-1">
                   <button
                     type="button"
+                    onClick={() => setShowStoryModal(true)}
+                    className="rounded-md bg-blue-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-600"
+                  >
+                    + Story
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setShowCreatePost(true)}
                     className="rounded-md bg-blue-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-600"
                   >
@@ -1878,6 +1886,43 @@ export default function ProfilePage() {
             </div>
           </div>
         )}
+
+      {showStoryModal && (
+        <div
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50"
+          onClick={() => setShowStoryModal(false)}
+        >
+          <div
+            className="bg-[#1e2a4a] border border-white/10 shadow-xl p-6 rounded-xl w-[400px]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-lg font-semibold mb-4 text-white">Create Story</h2>
+
+            <input
+              type="file"
+              accept="image/*"
+              className="text-sm text-white file:bg-blue-500 file:text-white file:px-3 file:py-1 file:rounded file:border-none"
+            />
+
+            <div className="flex justify-end gap-2 mt-4">
+              <button
+                type="button"
+                onClick={() => setShowStoryModal(false)}
+                className="px-3 py-1 rounded bg-white/10 hover:bg-white/20 text-white"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                className="bg-blue-500 hover:bg-blue-600 px-4 py-2 rounded text-white font-medium"
+              >
+                Post Story
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {editingPost ? (
         <div

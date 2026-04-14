@@ -88,6 +88,25 @@ export default function Calendar({
   for (let d = 1; d <= totalDays; d++) {
     cells.push({ date: new Date(monthDate.getFullYear(), monthDate.getMonth(), d) })
   }
+  while (cells.length % 7 !== 0) {
+    cells.push({ date: null })
+  }
+  const weeks: Array<Array<{ date: Date | null }>> = []
+  for (let i = 0; i < cells.length; i += 7) {
+    weeks.push(cells.slice(i, i + 7))
+  }
+
+  const getWeekTotal = (week: Array<{ date: Date | null }>) => {
+    return week.reduce((total, cell) => {
+      if (!cell.date) return total
+      const key = dayKey(cell.date)
+      const dayTotal = (byDay[key] || []).reduce(
+        (sum, trade) => sum + (Number(trade.pnl) || 0),
+        0
+      )
+      return total + dayTotal
+    }, 0)
+  }
 
   const selectedTrades = selectedDay ? byDay[selectedDay] || [] : []
   const dayTrades = selectedTrades
@@ -133,36 +152,65 @@ export default function Calendar({
         ))}
       </div>
 
-      <div className="grid grid-cols-7 gap-2">
-        {cells.map((cell, idx) => {
-          if (!cell.date) {
-            return <div key={`empty-${idx}`} className="h-14 rounded bg-transparent" />
-          }
-          const key = dayKey(cell.date)
-          const dayTrades = byDay[key] || []
-          const totalPnl = dayTrades.reduce((sum, t) => sum + (Number(t.pnl) || 0), 0)
-          const active = selectedDay === key
+      <div className="space-y-2">
+        {weeks.map((week, weekIndex) => {
+          const weekTotal = getWeekTotal(week)
           return (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setSelectedDay(key)}
-              className={`h-14 rounded p-1 text-left text-xs transition ${
-                dayTrades.length === 0
-                  ? "bg-white/5 text-gray-400"
-                  : totalPnl >= 0
-                  ? "bg-green-500/20 text-green-200"
-                  : "bg-red-500/20 text-red-200"
-              } ${active ? "ring-1 ring-blue-400" : ""}`}
-            >
-              <p>{cell.date.getDate()}</p>
-              {dayTrades.length ? (
-                <p className="mt-1 text-[10px] font-medium">
-                  {totalPnl >= 0 ? "+" : ""}
-                  {totalPnl.toFixed(0)}
-                </p>
-              ) : null}
-            </button>
+            <div key={`week-${weekIndex}`}>
+              <div className="grid grid-cols-7 gap-2">
+                {week.map((cell, idx) => {
+                  if (!cell.date) {
+                    return (
+                      <div
+                        key={`empty-${weekIndex}-${idx}`}
+                        className="h-14 rounded bg-transparent"
+                      />
+                    )
+                  }
+                  const key = dayKey(cell.date)
+                  const dayTrades = byDay[key] || []
+                  const totalPnl = dayTrades.reduce(
+                    (sum, t) => sum + (Number(t.pnl) || 0),
+                    0
+                  )
+                  const active = selectedDay === key
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setSelectedDay(key)}
+                      className={`h-14 rounded p-1 text-left text-xs transition ${
+                        dayTrades.length === 0
+                          ? "bg-white/5 text-gray-400"
+                          : totalPnl >= 0
+                          ? "bg-green-500/20 text-green-200"
+                          : "bg-red-500/20 text-red-200"
+                      } ${active ? "ring-1 ring-blue-400" : ""}`}
+                    >
+                      <p>{cell.date.getDate()}</p>
+                      {dayTrades.length ? (
+                        <p className="mt-1 text-[10px] font-medium">
+                          {totalPnl >= 0 ? "+" : ""}
+                          {totalPnl.toFixed(0)}
+                        </p>
+                      ) : null}
+                    </button>
+                  )
+                })}
+              </div>
+
+              <div className="mt-1 flex justify-end pr-1">
+                <span
+                  className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                    weekTotal >= 0
+                      ? "bg-green-500/20 text-green-400"
+                      : "bg-red-500/20 text-red-400"
+                  }`}
+                >
+                  Week: {formatMoney(weekTotal)}
+                </span>
+              </div>
+            </div>
           )
         })}
       </div>

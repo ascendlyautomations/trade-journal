@@ -5,7 +5,7 @@ import type { ChangeEvent } from "react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import Navbar from "../components/Navbar"
-import TradeSocialLayer from "../components/TradeSocialLayer"
+import PostInteractions from "../components/PostInteractions"
 
 function postImageSrc(imageUrl: string | null | undefined): string | null {
   const raw = imageUrl != null ? String(imageUrl).trim() : ""
@@ -70,6 +70,11 @@ export default function FeedPage() {
   const [commentDraft, setCommentDraft] = useState<Record<string, string>>({})
   const [commentSubmitting, setCommentSubmitting] = useState<Record<string, boolean>>({})
   const [selectedPost, setSelectedPost] = useState<any>(null)
+  const [sharePost, setSharePost] = useState<any>(null)
+  const [shareMessage, setShareMessage] = useState("")
+  const [shareConversations, setShareConversations] = useState<any[]>([])
+  const [selectedConversations, setSelectedConversations] = useState<string[]>([])
+  const [shareLoading, setShareLoading] = useState(false)
   const [storiesByUser, setStoriesByUser] = useState<Record<string, StoryRow[]>>(
     {}
   )
@@ -349,7 +354,7 @@ export default function FeedPage() {
       supabase.from("likes").select("post_id, user_id").in("post_id", ids),
       supabase
         .from("comments")
-        .select("*, profiles(username)")
+        .select("*, profiles(username, avatar_url)")
         .in("post_id", ids)
         .order("created_at", { ascending: true }),
       supabase
@@ -386,7 +391,6 @@ export default function FeedPage() {
       return {
         ...p,
         likesCount: likesMap[key]?.count ?? 0,
-        comments: commentsMap[key] ?? [],
       }
     })
     return { enriched, likesMap, commentsMap }
@@ -506,6 +510,91 @@ export default function FeedPage() {
     return () => window.removeEventListener("scroll", handleScroll)
   }, [loadPosts])
 
+  useEffect(() => {
+    if (!sharePost || !user?.id) return
+
+    const loadShareConversations = async () => {
+      setShareLoading(true)
+
+      const { data: membershipRows, error: membershipError } = await supabase
+        .from("conversation_participants")
+        .select("conversation_id")
+        .eq("user_id", user.id)
+
+      if (membershipError) {
+        console.error("Share conversations fetch error:", membershipError)
+        setShareConversations([])
+        setShareLoading(false)
+        return
+      }
+
+      const conversationIds = [
+        ...new Set((membershipRows || []).map((row: any) => row.conversation_id)),
+      ]
+
+      if (conversationIds.length === 0) {
+        setShareConversations([])
+        setShareLoading(false)
+        return
+      }
+
+      const { data: rows, error } = await supabase
+        .from("conversations")
+        .select(
+          `
+          id,
+          is_group,
+          name,
+          avatar_url,
+          participants:conversation_participants(
+            user_id,
+            profiles (
+              id,
+              username,
+              avatar_url
+            )
+          )
+        `
+        )
+        .in("id", conversationIds)
+
+      if (error) {
+        console.error("Conversations fetch error:", error)
+        setShareConversations([])
+        setShareLoading(false)
+        return
+      }
+
+      const list = (rows || []).map((conv: any) => {
+        const participants = Array.isArray(conv.participants) ? conv.participants : []
+        const otherUser = participants.find((p: any) => p.user_id !== user.id)
+        const otherProfileRaw = otherUser?.profiles
+        const otherProfile = Array.isArray(otherProfileRaw)
+          ? otherProfileRaw[0]
+          : otherProfileRaw
+
+        const displayName = conv.is_group
+          ? conv.name || "Group Chat"
+          : otherProfile?.username || "User"
+        const displayAvatar = conv.is_group
+          ? conv.avatar_url || "/default-avatar.png"
+          : otherProfile?.avatar_url || "/default-avatar.png"
+
+        return {
+          id: conv.id,
+          name: displayName,
+          is_group: conv.is_group === true,
+          avatar_url: displayAvatar,
+        }
+      })
+
+      setShareConversations(list)
+      setShareLoading(false)
+    }
+
+    void loadShareConversations()
+  }, [sharePost, user?.id])
+
   async function toggleLike(post: any) {
     if (!user) return
 
@@ -597,7 +686,7 @@ export default function FeedPage() {
         user_id: user.id,
         content: text,
       })
-      .select("*, profiles(username)")
+      .select("*, profiles(username, avatar_url)")
       .single()
 
     setCommentSubmitting((s) => ({ ...s, [pid]: false }))
@@ -607,20 +696,11 @@ export default function FeedPage() {
       return
     }
 
-    setCommentsByPost((prev) => {
-      const next = [...(prev[pid] || []), newRow]
-      setPosts((postsPrev) =>
-        postsPrev.map((p) =>
-          String(p.id) === pid ? { ...p, comments: next } : p
-        )
-      )
-      setSelectedPost((prevSel: any) =>
-        prevSel && String(prevSel.id) === pid
-          ? { ...prevSel, comments: next }
-          : prevSel
-      )
-      return { ...prev, [pid]: next }
-    })
+    const currentComments = commentsByPost[pid] || []
+    const nextComments = currentComments.some((c: any) => c.id === newRow.id)
+      ? currentComments
+      : [...currentComments, newRow]
+    updateComments(pid, nextComments)
     setCommentDraft((d) => ({ ...d, [pid]: "" }))
 
     const notifyUserId = postTradeOwnerUserId(post)
@@ -641,16 +721,59 @@ export default function FeedPage() {
     }
   }
 
+  const updateComments = (postId: string, newComments: any[]) => {
+    setCommentsByPost((prev) => ({
+      ...prev,
+      [postId]: newComments,
+    }))
+  }
+
+  const toggleConversation = (id: string) => {
+    setSelectedConversations((prev) =>
+      prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]
+    )
+  }
+
+  const handleSendPost = async () => {
+    if (!sharePost || selectedConversations.length === 0) return
+
+    const {
+      data: { user: authUser },
+    } = await supabase.auth.getUser()
+
+    if (!authUser?.id) return
+
+    const content = shareMessage.trim() || "Shared a post"
+
+    for (const conversationId of selectedConversations) {
+      const { error } = await supabase.from("messages").insert({
+        conversation_id: conversationId,
+        sender_id: authUser.id,
+        type: "post",
+        post_id: sharePost.id,
+        content,
+      })
+
+      if (error) {
+        console.error("Share post error:", error)
+      }
+    }
+
+    setSharePost(null)
+    setShareMessage("")
+    setSelectedConversations([])
+  }
+
   const modalPid = selectedPost ? String(selectedPost.id) : null
-  const modalLikesCount = modalPid
-    ? likesByPost[modalPid]?.count ?? selectedPost?.likesCount ?? 0
-    : 0
   const modalComments = modalPid
-    ? commentsByPost[modalPid] ?? selectedPost?.comments ?? []
+    ? commentsByPost[modalPid] ?? []
     : []
   const modalPublicDesc = selectedPost
     ? postPublicDescription(selectedPost)
     : null
+  const uniquePosts = Array.from(
+    new Map(posts.map((p) => [p.id, p])).values()
+  )
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white">
@@ -738,7 +861,7 @@ export default function FeedPage() {
           ) : null}
 
           {/* POSTS */}
-          {posts.map((post) => {
+          {uniquePosts.map((post) => {
             const imageSrc = postImageSrc(post.image_url)
             const pnl = Number(post.pnl)
             const pnlPositive = !Number.isNaN(pnl) && pnl >= 0
@@ -818,102 +941,28 @@ export default function FeedPage() {
                     </div>
                   )}
 
-                  {/* LIKE + COMMENT ACTIONS */}
-                  <div
-                    className="flex flex-col gap-2 pt-1 border-t border-white/5"
-                    onClick={(e) => e.stopPropagation()}
-                    onKeyDown={(e) => e.stopPropagation()}
-                  >
-                    <div className="flex items-center gap-4">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          toggleLike(post)
-                        }}
-                        disabled={!user}
-                        className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-200 disabled:opacity-50"
-                        aria-label={likeMeta.liked ? "Unlike" : "Like"}
-                      >
-                        <span className="text-lg leading-none" aria-hidden>
-                          {likeMeta.liked ? "❤️" : "🤍"}
-                        </span>
-                        <span className="tabular-nums">{likeMeta.count}</span>
-                      </button>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setOpenComments((prev) => ({
-                          ...prev,
-                          [post.id]: !prev[post.id],
-                        }))
-                      }}
-                      className="text-left text-sm text-gray-400 hover:text-gray-200"
-                    >
-                      {openComments[post.id]
-                        ? "Hide comments"
-                        : `View comments (${comments.length})`}
-                    </button>
-
-                    {openComments[post.id] ? (
-                      <div className="space-y-3 pt-1">
-                        <ul className="max-h-40 overflow-y-auto space-y-2 text-xs text-gray-400 pr-1">
-                          {comments.map((c: any) => (
-                            <li key={c.id} className="leading-relaxed">
-                              <span className="font-medium text-gray-300">
-                                {c.profiles?.username || "User"}
-                              </span>{" "}
-                              <span className="break-words">{c.content}</span>
-                            </li>
-                          ))}
-                        </ul>
-
-                        {user ? (
-                          <div
-                            className="flex flex-col sm:flex-row gap-2"
-                            onClick={(e) => e.stopPropagation()}
-                            onKeyDown={(e) => e.stopPropagation()}
-                          >
-                            <input
-                              id={`comment-input-${pid}`}
-                              type="text"
-                              placeholder="Add a comment…"
-                              value={commentDraft[pid] || ""}
-                              onChange={(e) =>
-                                setCommentDraft((d) => ({ ...d, [pid]: e.target.value }))
-                              }
-                              onClick={(e) => e.stopPropagation()}
-                              onFocus={(e) => e.stopPropagation()}
-                              onKeyDown={(e) => {
-                                e.stopPropagation()
-                                if (e.key === "Enter" && !e.shiftKey) {
-                                  e.preventDefault()
-                                  submitComment(post)
-                                }
-                              }}
-                              className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-[#0f172a]/80 border border-white/10 text-sm text-white placeholder:text-gray-500"
-                            />
-                            <button
-                              type="button"
-                              disabled={
-                                commentSubmitting[pid] || !(commentDraft[pid] || "").trim()
-                              }
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                submitComment(post)
-                              }}
-                              className="px-4 py-2 rounded-lg text-sm font-medium bg-blue-500/90 hover:bg-blue-500 text-white disabled:opacity-40 shrink-0"
-                            >
-                              {commentSubmitting[pid] ? "…" : "Post"}
-                            </button>
-                          </div>
-                        ) : null}
-                      </div>
-                    ) : null}
-                  </div>
+                  <PostInteractions
+                    post={post}
+                    user={user}
+                    comments={comments}
+                    likeMeta={likeMeta}
+                    commentsOpen={!!openComments[pid]}
+                    commentValue={commentDraft[pid] || ""}
+                    commentSubmitting={!!commentSubmitting[pid]}
+                    onToggleLike={toggleLike}
+                    onToggleComments={(postId) =>
+                      setOpenComments((prev) => ({
+                        ...prev,
+                        [postId]: !prev[postId],
+                      }))
+                    }
+                    onCommentChange={(postId, value) =>
+                      setCommentDraft((d) => ({ ...d, [postId]: value }))
+                    }
+                    onSubmitComment={submitComment}
+                    onSharePost={setSharePost}
+                    stopPropagation
+                  />
                 </div>
               </article>
             )
@@ -1061,36 +1110,107 @@ export default function FeedPage() {
               </div>
             )}
 
-            {selectedPost.trade_id ? (
+            {modalPid ? (
               <div className="mt-3">
-                <TradeSocialLayer
-                  tradeId={selectedPost.trade_id}
-                  currentUserId={user?.id}
-                  tradeOwnerUserId={postTradeOwnerUserId(selectedPost)}
+                <PostInteractions
+                  post={selectedPost}
+                  user={user}
+                  comments={modalComments}
+                  likeMeta={likesByPost[modalPid] || { count: 0, liked: false }}
+                  commentsOpen={!!openComments[modalPid]}
+                  commentValue={commentDraft[modalPid] || ""}
+                  commentSubmitting={!!commentSubmitting[modalPid]}
+                  onToggleLike={toggleLike}
+                  onToggleComments={(postId) =>
+                    setOpenComments((prev) => ({
+                      ...prev,
+                      [postId]: !prev[postId],
+                    }))
+                  }
+                  onCommentChange={(postId, value) =>
+                    setCommentDraft((d) => ({ ...d, [postId]: value }))
+                  }
+                  onSubmitComment={submitComment}
+                  onSharePost={setSharePost}
                 />
               </div>
             ) : null}
 
-            <div className="mt-3 text-sm text-gray-300">
-              ❤️ {modalLikesCount || selectedPost.likesCount || 0} likes
-            </div>
-
-            <div className="mt-2 max-h-40 space-y-1 overflow-y-auto">
-              {(modalComments.length
-                ? modalComments
-                : selectedPost.comments || []
-              ).map((c: any) => (
-                <div key={c.id} className="text-sm">
-                  <span className="font-semibold">
-                    {c.profiles?.username || "User"}
-                  </span>{" "}
-                  {c.content}
-                </div>
-              ))}
-            </div>
           </div>
         </div>
       )}
+
+      {sharePost ? (
+        <div
+          className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
+          onClick={() => {
+            setSharePost(null)
+            setShareMessage("")
+            setSelectedConversations([])
+          }}
+        >
+          <div
+            className="w-full max-w-[400px] rounded-xl border border-white/10 bg-[#0f172a] p-4 text-white"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-lg font-semibold mb-3">Send Post</h2>
+
+            <div className="mb-3">
+              {postImageSrc(sharePost.image_url) ? (
+                <img
+                  src={postImageSrc(sharePost.image_url) || ""}
+                  className="w-full h-40 object-cover rounded"
+                  alt=""
+                />
+              ) : null}
+            </div>
+
+            <textarea
+              placeholder="Add a message..."
+              value={shareMessage}
+              onChange={(e) => setShareMessage(e.target.value)}
+              className="w-full p-2 bg-white/5 rounded mb-3"
+            />
+
+            {shareLoading ? (
+              <p className="text-sm text-gray-400">Loading chats...</p>
+            ) : shareConversations.length === 0 ? (
+              <p className="text-sm text-gray-400">No chats found.</p>
+            ) : (
+              <div className="max-h-40 overflow-y-auto space-y-2">
+                {shareConversations.map((conv) => (
+                  <button
+                    key={conv.id}
+                    type="button"
+                    onClick={() => toggleConversation(conv.id)}
+                    className={`w-full flex items-center gap-3 p-2 rounded cursor-pointer text-left ${
+                      selectedConversations.includes(conv.id)
+                        ? "bg-blue-500/20"
+                        : "hover:bg-white/10"
+                    }`}
+                  >
+                    <img
+                      src={conv.avatar_url || "/default-avatar.png"}
+                      className="w-8 h-8 rounded-full object-cover"
+                      alt=""
+                    />
+                    <span>{conv.name || (conv.is_group ? "Group Chat" : "Chat")}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => void handleSendPost()}
+              disabled={selectedConversations.length === 0}
+              className="w-full mt-3 bg-blue-600 hover:bg-blue-700 p-2 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Send
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

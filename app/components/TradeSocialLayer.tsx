@@ -67,17 +67,21 @@ export default function TradeSocialLayer({
   useEffect(() => {
     if (!tradeId) return
 
-    const channel = supabase
-      .channel(`likes-${tradeId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "trade_likes",
-          filter: `trade_id=eq.${tradeId}`,
-        },
-        async () => {
+    const topic = `trade-${tradeId}-${crypto.randomUUID()}`
+    const channel = supabase.channel(topic)
+
+    // Listen to trade likes.
+    channel.on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "trade_likes",
+        filter: `trade_id=eq.${tradeId}`,
+      },
+      (payload) => {
+        console.log("Like update:", payload)
+        void (async () => {
           const { data } = await supabase
             .from("trade_likes")
             .select("user_id")
@@ -89,31 +93,25 @@ export default function TradeSocialLayer({
             currentUserId != null &&
               rows.some((l: { user_id: string }) => l.user_id === currentUserId)
           )
-        }
-      )
-      .subscribe()
+        })()
+      }
+    )
 
-    return () => {
-      void supabase.removeChannel(channel)
-    }
-  }, [tradeId, currentUserId])
-
-  useEffect(() => {
-    if (!tradeId) return
-
-    const channel = supabase
-      .channel(`comments-${tradeId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "trade_comments",
-          filter: `trade_id=eq.${tradeId}`,
-        },
-        async (payload) => {
+    // Listen to trade comments.
+    channel.on(
+      "postgres_changes",
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "trade_comments",
+        filter: `trade_id=eq.${tradeId}`,
+      },
+      (payload) => {
+        console.log("Comment update:", payload)
+        void (async () => {
           const id = (payload.new as { id?: string })?.id
           if (!id) return
+
           const { data } = await supabase
             .from("trade_comments")
             .select(
@@ -124,18 +122,23 @@ export default function TradeSocialLayer({
             )
             .eq("id", id)
             .maybeSingle()
+
           if (!data) return
           setComments((prev) =>
             prev.some((c) => c.id === data.id) ? prev : [...prev, data]
           )
-        }
-      )
-      .subscribe()
+        })()
+      }
+    )
+
+    channel.subscribe((status) => {
+      console.log("Realtime status:", status)
+    })
 
     return () => {
-      void supabase.removeChannel(channel)
+      supabase.removeChannel(channel)
     }
-  }, [tradeId])
+  }, [tradeId, currentUserId])
 
   const handleLike = async () => {
     if (!tradeId || !currentUserId) return

@@ -1,5 +1,7 @@
 import Stripe from "stripe"
 import { createClient } from "@supabase/supabase-js"
+import { createServerClient } from "@supabase/ssr"
+import { cookies } from "next/headers"
 
 export const runtime = "nodejs"
 
@@ -10,33 +12,27 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-export async function POST(req: Request) {
+export async function POST() {
   try {
-    const body = await req.json()
+    const cookieStore = await cookies()
+    const supabaseAuth = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get: (name) => cookieStore.get(name)?.value,
+        },
+      }
+    )
 
-    const userId = body.userId as string | undefined
+    const {
+      data: { user },
+    } = await supabaseAuth.auth.getUser()
 
-    console.log("🚀 RAW BODY:", body)
-
-    if (!userId) {
-      return Response.json({ error: "Missing userId" }, { status: 400 })
+    if (!user) {
+      return Response.json({ error: "Unauthorized" }, { status: 401 })
     }
-
-    const { data: authUserData, error: authUserError } =
-      await supabase.auth.admin.getUserById(userId)
-
-    if (authUserError || !authUserData?.user) {
-      console.error(
-        "ERROR:",
-        JSON.stringify(authUserError ?? { message: "No user" }, null, 2)
-      )
-      return Response.json({ error: "Invalid user" }, { status: 401 })
-    }
-
-    const user = authUserData.user
     const userEmail = user.email ?? undefined
-
-    console.log("👤 Checkout for user:", user.id, userEmail)
 
     const { data: initialProfile, error: profileError } = await supabase
       .from("profiles")

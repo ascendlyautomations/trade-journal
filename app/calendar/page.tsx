@@ -75,6 +75,22 @@ export default function CalendarPage() {
     const dayNumber = i - firstDayOfMonth + 1
     calendarDays.push(dayNumber > 0 && dayNumber <= daysInMonth ? dayNumber : null)
   }
+  const weeks: Array<Array<number | null>> = []
+  for (let i = 0; i < calendarDays.length; i += 7) {
+    weeks.push(calendarDays.slice(i, i + 7))
+  }
+
+  const getWeekTotal = (weekDays: Array<number | null>) => {
+    return weekDays.reduce((total, day) => {
+      if (!day) return total
+      const dayData = dailyData[day]
+      const dayTotal = dayData?.trades?.reduce(
+        (sum: number, t: any) => sum + (t.pnl || 0),
+        0
+      ) || 0
+      return total + dayTotal
+    }, 0)
+  }
 
   function changeMonth(offset: number) {
     const newDate = new Date(currentDate)
@@ -112,47 +128,68 @@ export default function CalendarPage() {
             </div>
 
             {/* CALENDAR GRID */}
-            <div className="grid grid-cols-7 gap-3">
-              {calendarDays.map((day, index) => {
-                if (!day) {
-                  return (
-                    <div
-                      key={index}
-                      className="aspect-square bg-white/5 rounded-xl border border-white/10"
-                    />
-                  )
-                }
-
-                const data = dailyData[day]
-
+            <div className="space-y-2">
+              {weeks.map((week, weekIndex) => {
+                const weekTotal = getWeekTotal(week)
                 return (
-                  <div
-                    key={index}
-                    className={`
-                      aspect-square rounded-xl border border-white/10 p-2
-                      flex flex-col justify-between cursor-pointer
-                      transition hover:scale-[1.03]
+                  <div key={weekIndex} className="mb-2">
+                    <div className="grid grid-cols-7 gap-3">
+                      {week.map((day, dayIndex) => {
+                        if (!day) {
+                          return (
+                            <div
+                              key={`empty-${weekIndex}-${dayIndex}`}
+                              className="aspect-square rounded-xl border border-white/10 bg-white/5"
+                            />
+                          )
+                        }
 
-                      ${data?.pnl > 0 ? "bg-emerald-500/25 border-emerald-400/40" : ""}
-                      ${data?.pnl < 0 ? "bg-red-500/25 border-red-400/40" : ""}
-                      ${!data ? "bg-white/5" : ""}
-                    `}
-                  >
-                    <div className="text-xs text-gray-300">{day}</div>
+                        const data = dailyData[day]
 
-                    {data && (
-                      <div className="text-center text-xs">
-                        <div className={`font-semibold ${
-                          data.pnl > 0 ? "text-emerald-400" :
-                          data.pnl < 0 ? "text-red-400" : ""
-                        }`}>
-                          {formatPNL(data.pnl)}
-                        </div>
-                        <div className="text-gray-400 text-[10px]">
-                          {data.trades.length} trades
-                        </div>
-                      </div>
-                    )}
+                        return (
+                          <div
+                            key={`day-${weekIndex}-${dayIndex}`}
+                            className={`
+                              aspect-square rounded-xl border border-white/10 p-2
+                              flex flex-col justify-between cursor-pointer
+                              transition hover:scale-[1.03]
+
+                              ${data?.pnl > 0 ? "bg-emerald-500/25 border-emerald-400/40" : ""}
+                              ${data?.pnl < 0 ? "bg-red-500/25 border-red-400/40" : ""}
+                              ${!data ? "bg-white/5" : ""}
+                            `}
+                          >
+                            <div className="text-xs text-gray-300">{day}</div>
+
+                            {data && (
+                              <div className="text-center text-xs">
+                                <div className={`font-semibold ${
+                                  data.pnl > 0 ? "text-emerald-400" :
+                                  data.pnl < 0 ? "text-red-400" : ""
+                                }`}>
+                                  {formatPNL(data.pnl)}
+                                </div>
+                                <div className="text-gray-400 text-[10px]">
+                                  {data.trades.length} trades
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+
+                    <div className="mt-1 flex justify-end pr-2">
+                      <span
+                        className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                          weekTotal >= 0
+                            ? "bg-green-500/20 text-green-400"
+                            : "bg-red-500/20 text-red-400"
+                        }`}
+                      >
+                        Week: {formatPNL(weekTotal)}
+                      </span>
+                    </div>
                   </div>
                 )
               })}
