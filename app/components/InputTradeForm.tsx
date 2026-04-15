@@ -597,22 +597,46 @@ export default function InputTradeForm({
 
   const formBody = (
     <>
-      <div className="flex items-center justify-between mb- flex-wrap gap-4">
-        <div className="w-full flex items-center mb-6 flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => setAdvanced(!advanced)}
-            className="bg-emerald-500 px-4 py-2 rounded"
-          >
-            {advanced ? "Advanced Mode: ON" : "Advanced Mode: OFF"}
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowSettings(true)}
-            className="ml-auto bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded"
-          >
-            ⚙️ Settings
-          </button>
+      <div className="md:block">
+        <div className="hidden md:flex items-center justify-between mb- flex-wrap gap-4">
+          <div className="w-full flex items-center mb-3 flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setAdvanced(!advanced)}
+              className="bg-emerald-500 px-4 py-2 rounded"
+            >
+              {advanced ? "Advanced Mode: ON" : "Advanced Mode: OFF"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowSettings(true)}
+              className="ml-auto bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded"
+            >
+              ⚙️ Settings
+            </button>
+          </div>
+        </div>
+
+        <div className="block md:hidden mb-3">
+          <div className="flex flex-col gap-2 mb-4">
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setAdvanced(!advanced)}
+                className="flex-1 px-3 py-2 text-sm rounded-lg bg-emerald-500"
+              >
+                {advanced ? "Advanced Mode: ON" : "Advanced Mode: OFF"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowSettings(true)}
+                className="px-3 py-2 bg-[#1f2937] rounded-lg flex items-center justify-center"
+                aria-label="Settings"
+              >
+                ⚙️
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 

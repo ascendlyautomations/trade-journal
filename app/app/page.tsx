@@ -100,35 +100,65 @@ export default function Home() {
       <Navbar />
 
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100">
-        <div className="p-8 max-w-7xl mx-auto">
-          <h1 className="text-3xl font-semibold mb-2 text-center bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
+        <div className="p-6 max-w-8xl mx-auto">
+          <h1 className="mb-2 text-center text-xl md:text-2xl font-semibold text-blue-300">
             Input Trade
           </h1>
 
-          <div className="flex items-center justify-between mb- flex-wrap gap-4">
-            <div className="w-full flex items-center mb-6">
-              <div className="flex gap-2">
-                <button
-                  onClick={() => csvInputRef.current?.click()}
-                  className="bg-blue-500 px-4 py-2 rounded disabled:opacity-60"
-                  disabled={loading}
-                  type="button"
-                >
-                  Upload CSV
-                </button>
+          <div className="md:block">
+            <div className="hidden md:flex items-center justify-between mb- flex-wrap gap-4">
+              <div className="w-full flex items-center mb-2">
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => csvInputRef.current?.click()}
+                    className="bg-blue-500 px-4 py-2 rounded disabled:opacity-60"
+                    disabled={loading}
+                    type="button"
+                  >
+                    Upload CSV
+                  </button>
 
-                <button
-                  onClick={() => (window.location.href = "/review")}
-                  className="relative bg-emerald-500 px-4 py-2 rounded"
-                  type="button"
-                >
-                  Review CSV Inputs
-                  {reviewCount > 0 && (
-                    <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
-                      {reviewCount > 99 ? "99+" : reviewCount}
-                    </span>
-                  )}
-                </button>
+                  <button
+                    onClick={() => (window.location.href = "/review")}
+                    className="relative bg-emerald-500 px-4 py-2 rounded"
+                    type="button"
+                  >
+                    Review CSV Inputs
+                    {reviewCount > 0 && (
+                      <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
+                        {reviewCount > 99 ? "99+" : reviewCount}
+                      </span>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="block md:hidden mb-3">
+              <div className="flex flex-col gap-2 mb-4">
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => csvInputRef.current?.click()}
+                    className="flex-1 px-3 py-2 text-sm rounded-lg bg-blue-500 disabled:opacity-60"
+                    disabled={loading}
+                    type="button"
+                  >
+                    Upload CSV
+                  </button>
+
+                  <button
+                    onClick={() => (window.location.href = "/review")}
+                    className="relative flex-1 px-3 py-2 text-sm rounded-lg bg-emerald-500"
+                    type="button"
+                  >
+                    Review CSV Inputs
+                    {reviewCount > 0 && (
+                      <span className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full text-[10px] px-1.5 py-0.5">
+                        {reviewCount > 99 ? "99+" : reviewCount}
+                      </span>
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
           </div>

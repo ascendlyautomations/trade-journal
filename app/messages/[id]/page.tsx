@@ -397,6 +397,8 @@ export default function DMPage() {
   const [input, setInput] = useState("")
   const [user, setUser] = useState<any>(null)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [selectedImage, setSelectedImage] = useState<File | null>(null)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [otherUser, setOtherUser] = useState<any>(null)
   const [conversation, setConversation] = useState<any>(null)
   const [participants, setParticipants] = useState<any[]>([])
@@ -417,6 +419,7 @@ export default function DMPage() {
   const [postModalPost, setPostModalPost] = useState<any>(null)
 
   const scrollRef = useRef<HTMLDivElement>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
   const userIdRef = useRef<string | null>(null)
 
   useEffect(() => {
@@ -672,6 +675,18 @@ export default function DMPage() {
 
   function removeImage() {
     setSelectedFile(null)
+    setSelectedImage(null)
+    setPreviewUrl(null)
+    if (fileRef.current) fileRef.current.value = ""
+  }
+
+  function handleImageChange(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setSelectedImage(file)
+    setSelectedFile(file)
+    setPreviewUrl(URL.createObjectURL(file))
   }
 
   async function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
@@ -766,6 +781,9 @@ export default function DMPage() {
 
     setInput("")
     setSelectedFile(null)
+    setSelectedImage(null)
+    setPreviewUrl(null)
+    if (fileRef.current) fileRef.current.value = ""
     setIsTyping(false)
   }
 
@@ -940,7 +958,6 @@ export default function DMPage() {
   const filteredAddMemberUsers = allUsers.filter(
     (u) => !existingMemberIds.includes(u.id)
   )
-  const visibleAvatars = participants.slice(0, 4)
   const typingText =
     typingUsers.length > 0 || isTyping ? "User is typing..." : ""
   const lastMessage = messages[messages.length - 1]
@@ -956,22 +973,22 @@ export default function DMPage() {
     <>
       <Navbar />
 
-      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] flex justify-center text-white px-4 pb-4 mt-0 pt-2">
+      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] flex justify-center text-white px-4 pb-4 mt-0 pt-2 w-full overflow-hidden">
 
         <div className="w-full max-w-3xl h-[calc(100vh-80px)] bg-black/30 border border-white/10 rounded-xl flex flex-col overflow-hidden">
 
           {/* HEADER */}
-          <div className="shrink-0 p-4 border-b border-white/10 flex items-center gap-3">
+          <div className="shrink-0 flex items-center justify-between px-3 py-2 border-b border-white/10 md:p-4 md:justify-start md:gap-3">
 
             <button
               onClick={() => router.push("/messages")}
-              className="text-sm px-3 py-1 bg-white/10 rounded hover:bg-white/20"
+              className="p-2 md:text-sm md:px-3 md:py-1 md:bg-white/10 md:rounded md:hover:bg-white/20"
             >
-              ← Back
+              ←
             </button>
 
-            {conversation?.is_group ? (
-              <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3">
+              {conversation?.is_group ? (
                 <img
                   src={
                     conversation.avatar_url || "/group-default.png"
@@ -979,65 +996,37 @@ export default function DMPage() {
                   onError={(e) => {
                     e.currentTarget.src = "/group-default.png"
                   }}
-                  className="w-10 h-10 rounded-full object-cover hover:scale-105 transition cursor-pointer"
+                  className="hidden h-10 w-10 rounded-full object-cover transition hover:scale-105 cursor-pointer md:block"
                 />
-                <div>
-                  <p className="text-white font-semibold">
-                    {conversation.name || "Group Chat"}
-                  </p>
-                  <p className="text-xs text-gray-400">
-                    Group Chat • {memberCount} members
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div className="flex flex-col">
-                <span className="font-semibold">
-                  {title}
+              ) : null}
+              <div className="flex flex-col leading-tight">
+                <span className="text-sm font-semibold">
+                  {conversation?.is_group
+                    ? conversation?.name || "Group Chat"
+                    : title}
                 </span>
                 <span className="text-xs text-gray-400">
-                  Direct Message • {memberCount} members
+                  {conversation?.is_group
+                    ? `Group Chat • ${memberCount} members`
+                    : `Direct Message • ${memberCount} members`}
                 </span>
               </div>
-            )}
+            </div>
 
             <div className="ml-auto flex items-center gap-2">
-              {conversation?.is_group ? (
-                <div
-                  className="flex -space-x-2 cursor-pointer"
-                  onClick={() => setShowGroupSettings(true)}
-                >
-                  {members.slice(0, 3).map((m: any, i: number) => (
-                    <img
-                      key={`${m.user_id}-${i}`}
-                      src={m.profiles?.avatar_url || "/default-avatar.png"}
-                      className="w-8 h-8 rounded-full border-2 border-[#0f172a] object-cover hover:scale-105 transition"
-                    />
-                  ))}
-                </div>
-              ) : (
-                visibleAvatars.map((p: any, i: number) => {
-                  const profile = Array.isArray(p.profiles) ? p.profiles[0] : p.profiles
-                  return (
-                    <img
-                      key={`${p.user_id}-${i}`}
-                      src={profile?.avatar_url || "/default-avatar.png"}
-                      className={`w-7 h-7 rounded-full object-cover border border-white/20 hover:scale-105 transition cursor-pointer ${i > 0 ? "-ml-2" : ""}`}
-                    />
-                  )
-                })
-              )}
-              {conversation?.is_group ? (
-                <button
-                  onClick={() => {
+              <button
+                onClick={() => {
+                  if (conversation?.is_group) {
                     setGroupName(conversation?.name || "")
                     setShowGroupSettings(true)
-                  }}
-                  className="px-3 py-1 bg-white/10 rounded hover:bg-white/20 text-sm"
-                >
-                  ⚙
-                </button>
-              ) : null}
+                    return
+                  }
+                  router.push("/settings")
+                }}
+                className="p-2 md:px-3 md:py-1 md:bg-white/10 md:rounded md:hover:bg-white/20 md:text-sm"
+              >
+                ⚙️
+              </button>
             </div>
 
           </div>
@@ -1045,7 +1034,7 @@ export default function DMPage() {
           {/* MESSAGES */}
           <div
             ref={scrollRef}
-            className="min-h-0 flex-1 overflow-y-auto overflow-x-visible p-4"
+            className="min-h-0 flex-1 overflow-y-auto overflow-x-visible px-2 py-3 md:p-4"
           >
             {messages.map((message, i) => {
               if (message.is_system) {
@@ -1212,79 +1201,78 @@ export default function DMPage() {
           </div>
 
           {/* INPUT */}
-          <div className="mt-auto shrink-0 border-t border-white/10 p-4 bg-[#020617]">
+          {previewUrl ? (
+            <div className="px-2 pb-2">
+              <div className="relative w-fit">
+                <img
+                  src={previewUrl}
+                  className="w-24 h-24 object-cover rounded-lg border border-white/10"
+                  alt="Selected preview"
+                />
 
-            <div className="flex gap-2">
+                <button
+                  onClick={removeImage}
+                  className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="mt-auto shrink-0 border-t border-white/10 bg-[#0B1220] p-2 md:p-4 md:bg-[#020617]">
+            <div className="flex items-center gap-1 w-full">
               <input
+                type="text"
+                placeholder="Send message..."
                 value={input}
                 onChange={(e) => {
                   setInput(e.target.value)
                   if (!isTyping) setIsTyping(true)
                 }}
-                placeholder="Send message..."
-                className="flex-1 p-3 bg-black rounded border border-white/10"
+                className="flex-1 px-3 py-2 rounded bg-[#111827] text-white text-sm"
                 onKeyDown={(e) => e.key === "Enter" && sendMessage()}
               />
-
+              <label className="p-2 bg-[#1f2937] rounded cursor-pointer flex items-center justify-center md:hover:bg-[#334155]">
+                📷
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageChange}
+                  className="hidden"
+                />
+              </label>
               <button
                 type="button"
                 onClick={() => setShowTradePicker(true)}
-                className="bg-[#1e293b] hover:bg-[#334155] text-white px-3 py-2 rounded-lg"
+                className="p-2 bg-[#1f2937] rounded flex items-center justify-center md:hover:bg-[#334155]"
               >
                 📊
               </button>
-
               <button
                 type="button"
                 onClick={sendMessage}
-                className="bg-gradient-to-r from-blue-500 to-emerald-500 px-5 py-3 rounded"
+                className="px-3 py-2 bg-blue-500 hover:bg-blue-600 rounded text-sm whitespace-nowrap"
               >
                 Send
               </button>
             </div>
+            
             {allSeen ? (
               <p className="mt-2 text-xs text-gray-400">Seen</p>
             ) : null}
             {groupSettingsSuccess ? (
               <p className="mt-1 text-xs text-emerald-400">{groupSettingsSuccess}</p>
             ) : null}
-
-            {/* 🔥 IMAGE SECTION */}
-            <div className="mt-2 flex flex-col gap-2 text-xs text-gray-400">
-
-              <input
-                type="file"
-                onChange={(e) =>
-                  setSelectedFile(e.target.files?.[0] || null)
-                }
-              />
-
-              {selectedFile ? (
-                <div className="bg-white/5 p-2 rounded flex flex-col gap-2">
-
-                  <span>{selectedFile.name}</span>
-
-                  <img
-                    src={URL.createObjectURL(selectedFile)}
-                    className="max-h-40 rounded"
-                  />
-
-                  <button
-                    onClick={removeImage}
-                    className="text-red-400 hover:underline text-xs self-start"
-                  >
-                    Remove image
-                  </button>
-
-                </div>
-              ) : (
-                <span>No file chosen</span>
-              )}
-
-            </div>
+            {selectedFile ? (
+              <div className="mt-2 text-xs text-gray-400">
+                <span>{selectedFile.name}</span>
+              </div>
+            ) : null}
 
           </div>
-
+            
         </div>
 
       </div>

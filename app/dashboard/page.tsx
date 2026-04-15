@@ -1194,15 +1194,15 @@ const worstDay = dailyPnLs.length > 0
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white p-3 md:p-10">
 
         <div className="relative z-50 mx-auto w-full max-w-[1600px] px-4 md:px-6">
-          <h1 className="mb-2 text-center text-xl md:text-2xl font-semibold text-blue-300">
+          <h1 className="mb-0 text-center text-xl md:text-2xl font-semibold text-blue-300">
             Dashboard
           </h1>
-          <p className="mb-4 text-center text-xs md:text-sm text-gray-400">
+          <p className="mb-2 text-center text-xs md:text-sm text-gray-400">
             Plan: {isPro ? "Pro" : "Free"}
           </p>
 
           <TradeFilterBar
-            className="mb-6 md:mb-8"
+            className="mb-3 md:mb-8"
             accounts={accounts}
             accountFilter={accountFilter}
             onAccountChange={setAccountFilter}
