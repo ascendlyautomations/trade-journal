@@ -899,12 +899,19 @@ const biggestLoss = losses.length > 0
     const drawdownData = calculateDrawdown(chronologicalTrades)
     const expectancyData = calculateExpectancy(filteredTrades)
     const hourData = analyzeTradingHours(filteredTrades)
-    const equityDrawdownChartData = chronologicalTrades.map((trade, i) => {
-      const pt = drawdownData.equityCurve[i]
+    let chartPeak = 0
+    const equityDrawdownChartData = chronologicalTrades.map((trade, index) => {
+      const equity = chronologicalTrades
+        .slice(0, index + 1)
+        .reduce((sum, t) => sum + (Number(t.pnl) || 0), 0)
+
+      chartPeak = Math.max(chartPeak, equity)
+      const drawdown = equity - chartPeak
+
       return {
         date: trade.created_at,
-        equity: pt?.equity ?? 0,
-        drawdown: pt?.drawdown ?? 0,
+        equity,
+        drawdown,
       }
     })
     const lossStreakRate = detectLossStreak(chronologicalTrades)
@@ -1365,19 +1372,22 @@ const worstDay = dailyPnLs.length > 0
 
     {/* LEFT: STATS */}
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3 md:gap-4">
+      <div className="grid grid-cols-2 gap-3 md:gap-3">
         <Stat title="Trades" value={formatNumber(totalTrades)} />
         <Stat title="Win %" value={`${winRate.toFixed(1)}%`} />
-        <Stat title="P&L" value={formatCurrency(totalPnL)} positive={totalPnL >= 0} />
         <Stat title="Avg RR" value={avgRR.toFixed(2)} />
-        <Stat title="Big Loss" value={formatCurrency(biggestLoss)} positive={false} />
+        <Stat title="P&L" value={formatCurrency(totalPnL)} positive={totalPnL >= 0} />
         <Stat title="Avg Win" value={formatCurrency(avgWin)} positive />
-        <Stat title="Avg Loss" value={formatCurrency(avgLoss)} positive={false} />
         <Stat
           title="Best Trade"
           value={formatCurrency(bestTrade)}
           positive={bestTrade >= 0}
         />
+        <Stat title="Avg Loss" value={formatCurrency(avgLoss)} positive={false} />
+        <Stat title="Big Loss" value={formatCurrency(biggestLoss)} positive={false} />
+        
+        
+        
         <Stat title="Best Day" value={formatCurrency(bestDay)} positive />
         <Stat title="Worst Day" value={formatCurrency(worstDay)} positive={false} />
       </div>
@@ -1435,11 +1445,7 @@ const worstDay = dailyPnLs.length > 0
               {formatMoney(expectancyData.expectancy)}
             </p>
 
-            <div className="text-[11px] md:text-xs text-gray-400 mt-2 space-y-1">
-              <p>Win Rate: {(expectancyData.winRate * 100).toFixed(0)}%</p>
-              <p>Avg Win: {formatMoney(expectancyData.avgWin)}</p>
-              <p>Avg Loss: {formatMoney(expectancyData.avgLoss)}</p>
-            </div>
+            
           </>
         ) : (
           <p className="text-gray-500 text-xs md:text-sm">No data</p>
@@ -1505,8 +1511,8 @@ const worstDay = dailyPnLs.length > 0
             Equity Curve
           </h2>
 
-          <div className="w-full overflow-x-auto">
-          <ResponsiveContainer width="100%" height={350}>
+          <div className="w-full h-[300px]">
+          <ResponsiveContainer width="100%" height={300}>
             <LineChart
               data={equityDrawdownChartData}
               margin={{ top: 10, right: 20, left: 20, bottom: 20 }}
