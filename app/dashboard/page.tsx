@@ -581,6 +581,7 @@ export default function Dashboard() {
     totalPnL,
     avgRR,
     biggestLoss,
+    bestTrade,
     maxStreak,
     sessionStats,
     avgWin,
@@ -709,6 +710,10 @@ export default function Dashboard() {
 const biggestLoss = losses.length > 0
   ? Math.min(...losses)
   : 0
+
+    const bestTrade = filteredTrades.length
+      ? Math.max(...filteredTrades.map((t) => Number(t.pnl) || 0))
+      : 0
 
     let currentStreak = 0
     let maxStreak = 0
@@ -959,6 +964,7 @@ const worstDay = dailyPnLs.length > 0
       totalPnL,
       avgRR,
       biggestLoss,
+      bestTrade,
       maxStreak,
       sessionStats,
       avgWin,
@@ -1180,7 +1186,7 @@ const worstDay = dailyPnLs.length > 0
 
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white p-3 md:p-10">
 
-        <div className="relative z-50 mx-auto max-w-6xl w-full">
+        <div className="relative z-50 mx-auto w-full max-w-[1600px] px-4 md:px-6">
           <h1 className="mb-2 text-center text-xl md:text-2xl font-semibold text-blue-300">
             Dashboard
           </h1>
@@ -1352,22 +1358,26 @@ const worstDay = dailyPnLs.length > 0
 
         </div>
 
-          <div className="relative z-0 mx-auto max-w-6xl w-full flex flex-col gap-6 md:gap-8 overflow-visible">
+          <div className="relative z-0 mx-auto w-full max-w-[1600px] px-4 md:px-6 flex flex-col gap-6 md:gap-8 overflow-visible">
 
   {/* TOP: STATS + CHART */}
   <div className="grid overflow-visible lg:grid-cols-3 gap-4 md:gap-6">
 
     {/* LEFT: STATS */}
     <div className="space-y-4">
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-6">
+      <div className="grid grid-cols-2 gap-3 md:gap-4">
         <Stat title="Trades" value={formatNumber(totalTrades)} />
         <Stat title="Win %" value={`${winRate.toFixed(1)}%`} />
         <Stat title="P&L" value={formatCurrency(totalPnL)} positive={totalPnL >= 0} />
         <Stat title="Avg RR" value={avgRR.toFixed(2)} />
         <Stat title="Big Loss" value={formatCurrency(biggestLoss)} positive={false} />
-        <Stat title="Streak" value={maxStreak} />
         <Stat title="Avg Win" value={formatCurrency(avgWin)} positive />
         <Stat title="Avg Loss" value={formatCurrency(avgLoss)} positive={false} />
+        <Stat
+          title="Best Trade"
+          value={formatCurrency(bestTrade)}
+          positive={bestTrade >= 0}
+        />
         <Stat title="Best Day" value={formatCurrency(bestDay)} positive />
         <Stat title="Worst Day" value={formatCurrency(worstDay)} positive={false} />
       </div>
@@ -1920,11 +1930,24 @@ function Stat({ title, value, positive }: any) {
   let color = "text-white"
   if (positive === true) color = "text-green-400"
   if (positive === false) color = "text-red-400"
+  const displayValue =
+    typeof value === "number"
+      ? value.toLocaleString(undefined, {
+          minimumFractionDigits: 0,
+          maximumFractionDigits: 2,
+        })
+      : String(value ?? "")
 
   return (
-    <div className="rounded-xl border border-white/10 bg-white/10 p-3 md:p-5 backdrop-blur-md">
-      <p className="mb-2 text-xs md:text-sm text-gray-400">{title}</p>
-      <p className={`text-sm md:text-lg font-semibold tabular-nums ${color}`}>{value}</p>
+    <div className="bg-[#111827] rounded-xl p-3 md:p-4 flex flex-col justify-center items-center text-center min-h-[90px] w-full">
+      <p className="text-xs md:text-sm text-gray-400 mb-1">{title}</p>
+      <div className="w-full text-center">
+        <span
+          className={`block font-semibold text-base md:text-lg lg:text-xl text-center leading-tight whitespace-nowrap tabular-nums ${color}`}
+        >
+          {displayValue}
+        </span>
+      </div>
     </div>
   )
 }

@@ -7,9 +7,15 @@ import { useRouter } from "next/navigation"
 
 function sortConversationsDesc(list: any[]) {
   return [...list].sort(
-    (a, b) =>
-      new Date(b.last_message_at || 0).getTime() -
-      new Date(a.last_message_at || 0).getTime()
+    (a, b) => {
+      const aPinned = a?.is_pinned === true
+      const bPinned = b?.is_pinned === true
+      if (aPinned !== bPinned) return aPinned ? -1 : 1
+      return (
+        new Date(b.last_message_at || 0).getTime() -
+        new Date(a.last_message_at || 0).getTime()
+      )
+    }
   )
 }
 
@@ -21,8 +27,12 @@ export default function MessagesPage() {
   const [showGroupModal, setShowGroupModal] = useState(false)
   const [showDMModal, setShowDMModal] = useState(false)
   const [allUsers, setAllUsers] = useState<any[]>([])
-  const [selectedUsers, setSelectedUsers] = useState<string[]>([])
-  const [dmSelectedUserId, setDmSelectedUserId] = useState<string | null>(null)
+  const [groupSearchQuery, setGroupSearchQuery] = useState("")
+  const [dmSearchQuery, setDmSearchQuery] = useState("")
+  const [groupResults, setGroupResults] = useState<any[]>([])
+  const [dmResults, setDmResults] = useState<any[]>([])
+  const [groupSelectedUsers, setGroupSelectedUsers] = useState<any[]>([])
+  const [dmSelectedUsers, setDmSelectedUsers] = useState<any[]>([])
   const [groupName, setGroupName] = useState("")
   const [creatingGroup, setCreatingGroup] = useState(false)
   const [creatingDM, setCreatingDM] = useState(false)
@@ -37,9 +47,55 @@ export default function MessagesPage() {
   }
 
   function openDMModal() {
-    setDmSelectedUserId(null)
+    setDmSelectedUsers([])
+    setDmSearchQuery("")
+    setDmResults([])
     setShowDMModal(true)
   }
+
+  useEffect(() => {
+    if (!showGroupModal || !user?.id) return
+    const query = groupSearchQuery.trim()
+    if (!query) {
+      setGroupResults([])
+      return
+    }
+
+    const fetchUsers = async () => {
+      const { data } = await supabase
+        .from("profiles")
+        .select("id, username, name, avatar_url")
+        .neq("id", user.id)
+        .or(`username.ilike.%${query}%,name.ilike.%${query}%`)
+        .limit(10)
+
+      setGroupResults(data || [])
+    }
+
+    void fetchUsers()
+  }, [groupSearchQuery, showGroupModal, user?.id])
+
+  useEffect(() => {
+    if (!showDMModal || !user?.id) return
+    const query = dmSearchQuery.trim()
+    if (!query) {
+      setDmResults([])
+      return
+    }
+
+    const fetchUsers = async () => {
+      const { data } = await supabase
+        .from("profiles")
+        .select("id, username, name, avatar_url")
+        .neq("id", user.id)
+        .or(`username.ilike.%${query}%,name.ilike.%${query}%`)
+        .limit(10)
+
+      setDmResults(data || [])
+    }
+
+    void fetchUsers()
+  }, [dmSearchQuery, showDMModal, user?.id])
 
   useEffect(() => {
     init()
@@ -97,6 +153,7 @@ export default function MessagesPage() {
         conversations (
           id,
           is_group,
+          is_pinned,
           name,
           avatar_url,
           last_message,
@@ -161,6 +218,7 @@ export default function MessagesPage() {
         return {
           id: convoId,
           is_group: isGroup,
+          is_pinned: convoMeta?.is_pinned === true,
           name: convoMeta?.name || null,
           displayName,
           username: profile?.username || "user",
@@ -219,7 +277,7 @@ export default function MessagesPage() {
   async function fetchAllUsers(currentUserId: string) {
     const { data } = await supabase
       .from("profiles")
-      .select("id, username, avatar_url")
+      .select("id, username, name, avatar_url")
       .neq("id", currentUserId)
       .order("username", { ascending: true })
       .limit(100)
@@ -228,7 +286,7 @@ export default function MessagesPage() {
   }
 
   async function createGroupChat() {
-    if (!user || selectedUsers.length === 0 || !groupName.trim()) return
+    if (!user || groupSelectedUsers.length === 0 || !groupName.trim()) return
 
     setCreatingGroup(true)
     const { data: convo } = await supabase
@@ -245,9 +303,9 @@ export default function MessagesPage() {
       return
     }
 
-    const participants = selectedUsers.map((userId) => ({
+    const participants = groupSelectedUsers.map((u) => ({
       conversation_id: convo.id,
-      user_id: userId
+      user_id: u.id
     }))
 
     participants.push({
@@ -263,6 +321,7 @@ export default function MessagesPage() {
     const newConversation = {
       id: convo.id,
       is_group: true,
+      is_pinned: false,
       name: groupName.trim(),
       displayName: groupName.trim(),
       username: "user",
@@ -276,7 +335,9 @@ export default function MessagesPage() {
     setConversations((prev) => mergeNewConversation(prev, newConversation))
 
     setShowGroupModal(false)
-    setSelectedUsers([])
+    setGroupSelectedUsers([])
+    setGroupSearchQuery("")
+    setGroupResults([])
     setGroupName("")
     setCreatingGroup(false)
     router.push(`/messages/${convo.id}`)
@@ -316,14 +377,17 @@ export default function MessagesPage() {
   }
 
   async function startDMChat() {
-    if (!user || !dmSelectedUserId) return
+    const selectedDmUserId = dmSelectedUsers[0]?.id
+    if (!user || !selectedDmUserId) return
 
     setCreatingDM(true)
-    const existingId = await findExistingDM(user.id, dmSelectedUserId)
+    const existingId = await findExistingDM(user.id, selectedDmUserId)
 
     if (existingId) {
       setShowDMModal(false)
-      setDmSelectedUserId(null)
+      setDmSelectedUsers([])
+      setDmSearchQuery("")
+      setDmResults([])
       setCreatingDM(false)
       router.push(`/messages/${existingId}`)
       return
@@ -343,14 +407,16 @@ export default function MessagesPage() {
 
     await supabase.from("conversation_participants").insert([
       { conversation_id: convo.id, user_id: user.id },
-      { conversation_id: convo.id, user_id: dmSelectedUserId },
+      { conversation_id: convo.id, user_id: selectedDmUserId },
     ])
 
-    const other = allUsers.find((u) => u.id === dmSelectedUserId)
+    const other =
+      dmSelectedUsers[0] ?? allUsers.find((u) => u.id === selectedDmUserId)
     const now = new Date().toISOString()
     const newConversation = {
       id: convo.id,
       is_group: false,
+      is_pinned: false,
       name: null as string | null,
       displayName: other?.username || "user",
       username: other?.username || "user",
@@ -364,7 +430,9 @@ export default function MessagesPage() {
     setConversations((prev) => mergeNewConversation(prev, newConversation))
 
     setShowDMModal(false)
-    setDmSelectedUserId(null)
+    setDmSelectedUsers([])
+    setDmSearchQuery("")
+    setDmResults([])
     setCreatingDM(false)
     router.push(`/messages/${convo.id}`)
   }
@@ -387,6 +455,18 @@ export default function MessagesPage() {
     setOpenConvoMenuId(null)
   }
 
+  async function togglePinChat(conversationId: string, currentState: boolean) {
+    await supabase
+      .from("conversations")
+      .update({ is_pinned: !currentState })
+      .eq("id", conversationId)
+
+    if (user?.id) {
+      await fetchConversations(user.id)
+    }
+    setOpenConvoMenuId(null)
+  }
+
   return (
     <>
       <Navbar />
@@ -399,20 +479,21 @@ export default function MessagesPage() {
             Messages
           </h1>
 
-          <div className="mb-4 flex justify-end gap-3">
-            <button
-              type="button"
-              onClick={() => setShowGroupModal(true)}
-              className="rounded-lg bg-blue-500 px-4 py-2 text-white hover:bg-blue-600"
-            >
-              New Group
-            </button>
+          <div className="mt-2 mb-4 flex justify-start gap-2 md:mt-3">
+            
             <button
               type="button"
               onClick={openDMModal}
-              className="rounded-lg bg-[#1e293b] px-4 py-2 text-white hover:bg-[#334155]"
+              className="w-auto rounded-lg bg-blue-500 px-3 py-2 text-white hover:bg-blue-600"
             >
               New Chat
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowGroupModal(true)}
+              className="w-auto rounded-lg bg-blue-500 px-3 py-2 text-white hover:bg-blue-600"
+            >
+              New Group
             </button>
           </div>
 
@@ -458,6 +539,16 @@ export default function MessagesPage() {
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation()
+                          void togglePinChat(c.id, c.is_pinned === true)
+                        }}
+                        className="w-full px-3 py-2 text-left text-sm text-white hover:bg-[#1f2937] cursor-pointer"
+                      >
+                        {c.is_pinned ? "Unpin Chat" : "Pin Chat"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
                           handleDeleteChat(c.id)
                         }}
                         className="w-full px-3 py-2 text-left text-sm text-white hover:bg-white/10 cursor-pointer"
@@ -480,6 +571,9 @@ export default function MessagesPage() {
                     <div className="min-w-0 flex-1">
                       <p className="text-emerald-400 font-semibold">
                         {c.is_group ? c.name || c.displayName : `@${c.username}`}
+                        {c.is_pinned ? (
+                          <span className="ml-2 text-xs text-yellow-400">📌</span>
+                        ) : null}
                       </p>
 
                       <p className="text-sm text-gray-400 truncate">
@@ -524,18 +618,26 @@ export default function MessagesPage() {
               className="w-full mb-3 p-3 rounded-lg bg-[#1e293b] text-white border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
 
+            <input
+              type="text"
+              placeholder="Search users..."
+              value={groupSearchQuery}
+              onChange={(e) => setGroupSearchQuery(e.target.value)}
+              className="w-full mb-3 p-3 rounded-lg bg-[#1e293b] text-white border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+
             <div className="max-h-64 overflow-y-auto space-y-2 mb-4">
-              {allUsers.map((u) => {
-                const selected = selectedUsers.includes(u.id)
+              {(groupSearchQuery.trim() ? groupResults : allUsers).map((u) => {
+                const selected = groupSelectedUsers.some((su) => su.id === u.id)
                 return (
                   <button
                     key={u.id}
                     type="button"
                     onClick={() =>
-                      setSelectedUsers((prev) =>
+                      setGroupSelectedUsers((prev) =>
                         selected
-                          ? prev.filter((id) => id !== u.id)
-                          : [...prev, u.id]
+                          ? prev.filter((entry) => entry.id !== u.id)
+                          : [...prev, u]
                       )
                     }
                     className={`flex w-full items-center gap-3 rounded-lg p-3 cursor-pointer transition ${
@@ -549,18 +651,40 @@ export default function MessagesPage() {
                       alt=""
                       className="h-8 w-8 shrink-0 rounded-full object-cover hover:scale-105 transition"
                     />
-                    <span
-                      className={`text-left text-sm ${
-                        selected
-                          ? "rounded-full bg-blue-500/20 px-3 py-1 text-blue-400"
-                          : "text-white"
-                      }`}
-                    >
-                      @{u.username}
-                    </span>
+                    <div className="flex flex-col text-left">
+                      <span
+                        className={`text-sm font-medium ${
+                          selected ? "text-blue-300" : "text-white"
+                        }`}
+                      >
+                        {u.name || u.username}
+                      </span>
+                      <span className="text-xs text-gray-400">@{u.username}</span>
+                    </div>
                   </button>
                 )
               })}
+            </div>
+
+            <div className="mt-2 flex flex-wrap gap-2">
+              {groupSelectedUsers.map((selectedUser) => (
+                <div
+                  key={selectedUser.id}
+                  className="flex items-center gap-1 rounded bg-blue-500 px-2 py-1 text-xs"
+                >
+                  {selectedUser.username}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setGroupSelectedUsers((prev) =>
+                        prev.filter((u) => u.id !== selectedUser.id)
+                      )
+                    }
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
             </div>
 
             <div className="mt-4 flex justify-end gap-3">
@@ -597,18 +721,22 @@ export default function MessagesPage() {
               New Chat
             </h2>
 
+            <input
+              type="text"
+              placeholder="Search users..."
+              value={dmSearchQuery}
+              onChange={(e) => setDmSearchQuery(e.target.value)}
+              className="w-full mb-3 p-3 rounded-lg bg-[#1e293b] text-white border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+
             <div className="max-h-64 overflow-y-auto space-y-2 mb-4">
-              {allUsers.map((u) => {
-                const selected = dmSelectedUserId === u.id
+              {(dmSearchQuery.trim() ? dmResults : allUsers).map((u) => {
+                const selected = dmSelectedUsers.some((su) => su.id === u.id)
                 return (
                   <button
                     key={u.id}
                     type="button"
-                    onClick={() =>
-                      setDmSelectedUserId((prev) =>
-                        prev === u.id ? null : u.id
-                      )
-                    }
+                    onClick={() => setDmSelectedUsers(selected ? [] : [u])}
                     className={`flex w-full items-center gap-3 rounded-lg p-3 cursor-pointer transition ${
                       selected
                         ? "bg-blue-500/20 ring-1 ring-blue-400/40"
@@ -620,18 +748,36 @@ export default function MessagesPage() {
                       alt=""
                       className="h-8 w-8 shrink-0 rounded-full object-cover hover:scale-105 transition"
                     />
-                    <span
-                      className={`text-left text-sm ${
-                        selected
-                          ? "rounded-full bg-blue-500/20 px-3 py-1 text-blue-400"
-                          : "text-white"
-                      }`}
-                    >
-                      @{u.username}
-                    </span>
+                    <div className="flex flex-col text-left">
+                      <span
+                        className={`text-sm font-medium ${
+                          selected ? "text-blue-300" : "text-white"
+                        }`}
+                      >
+                        {u.name || u.username}
+                      </span>
+                      <span className="text-xs text-gray-400">@{u.username}</span>
+                    </div>
                   </button>
                 )
               })}
+            </div>
+
+            <div className="mt-2 flex flex-wrap gap-2">
+              {dmSelectedUsers.map((selectedUser) => (
+                <div
+                  key={selectedUser.id}
+                  className="flex items-center gap-1 rounded bg-blue-500 px-2 py-1 text-xs"
+                >
+                  {selectedUser.username}
+                  <button
+                    type="button"
+                    onClick={() => setDmSelectedUsers([])}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
             </div>
 
             <div className="mt-4 flex justify-end gap-3">
@@ -645,7 +791,7 @@ export default function MessagesPage() {
               <button
                 type="button"
                 onClick={startDMChat}
-                disabled={creatingDM || !dmSelectedUserId}
+                disabled={creatingDM || dmSelectedUsers.length === 0}
                 className="rounded-lg bg-blue-500 px-4 py-2 text-white hover:bg-blue-600 disabled:opacity-50"
               >
                 {creatingDM ? "Opening..." : "Start chat"}

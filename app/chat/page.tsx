@@ -13,7 +13,6 @@ export default function ChatPage() {
   const [user, setUser] = useState<any>(null)
   const [profile, setProfile] = useState<any>(null)
   const [channel, setChannel] = useState<"random" | "trades">("random")
-  const [showRooms, setShowRooms] = useState(false)
 
   const [isAtBottom, setIsAtBottom] = useState(true)
   const [newMessages, setNewMessages] = useState(0)
@@ -22,6 +21,12 @@ export default function ChatPage() {
   const fileRef = useRef<HTMLInputElement>(null)
   const channelStateRef = useRef<"random" | "trades">("random")
   const router = useRouter()
+  const selectedRoom = channel
+  const setSelectedRoom = setChannel
+  const rooms = [
+    { id: "random" as const, name: "Random Chat" },
+    { id: "trades" as const, name: "Trade Chat" },
+  ]
 
   useEffect(() => {
     init()
@@ -206,59 +211,45 @@ export default function ChatPage() {
     <>
       <Navbar />
 
-      <div className="flex h-screen flex-col bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white md:flex-row">
+      <div className="h-screen w-full flex flex-col md:flex-row overflow-hidden">
         {/* SIDEBAR (ROOM LIST) */}
-        <aside className="hidden w-[250px] border-r border-white/10 bg-black/20 p-4 md:block">
+        <aside className="hidden md:flex w-[250px] flex-col border-r border-white/10">
           <h2 className="mb-4 text-xl font-semibold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
             Trade Rooms
           </h2>
           <div className="space-y-2">
-            {["random", "trades"].map((c) => (
+            {rooms.map((room) => (
               <button
-                key={c}
+                key={room.id}
                 type="button"
-                onClick={() => setChannel(c as "random" | "trades")}
+                onClick={() => setChannel(room.id)}
                 className={`w-full rounded px-4 py-2 text-left ${
-                  channel === c ? "bg-emerald-500" : "bg-white/10"
+                  channel === room.id ? "bg-emerald-500" : "bg-white/10"
                 }`}
               >
-                {c === "random" ? "Random Chat" : "Trade Chat"}
+                {room.name}
               </button>
             ))}
           </div>
         </aside>
 
         {/* CHAT AREA */}
-        <div className="relative flex-1 flex flex-col h-full">
-          {/* MOBILE TOP BAR */}
-          <div className="relative border-b border-white/10 bg-[#0B1220] md:hidden">
-            <button
-              className="px-3 py-2 text-white"
-              onClick={() => setShowRooms(!showRooms)}
-            >
-              Rooms
-            </button>
-            {showRooms && (
-              <div className="absolute top-12 left-0 z-50 w-full border-b border-white/10 bg-[#0B1220]">
-                <div className="space-y-2 p-3">
-                  {["random", "trades"].map((c) => (
-                    <button
-                      key={`mobile-${c}`}
-                      type="button"
-                      onClick={() => {
-                        setChannel(c as "random" | "trades")
-                        setShowRooms(false)
-                      }}
-                      className={`w-full rounded px-4 py-2 text-left ${
-                        channel === c ? "bg-emerald-500" : "bg-white/10"
-                      }`}
-                    >
-                      {c === "random" ? "Random Chat" : "Trade Chat"}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+        <div className="flex-1 flex flex-col w-full h-full">
+          {/* MOBILE TOP TABS */}
+          <div className="md:hidden w-full overflow-x-auto flex gap-2 px-2 py-2 border-b border-white/10">
+            {rooms.map((room) => (
+              <button
+                key={`mobile-${room.id}`}
+                onClick={() => setSelectedRoom(room.id)}
+                className={`whitespace-nowrap rounded-full px-3 py-1 text-sm ${
+                  selectedRoom === room.id
+                    ? "bg-blue-500 text-white"
+                    : "bg-[#1f2937] text-gray-300"
+                }`}
+              >
+                {room.name}
+              </button>
+            ))}
           </div>
 
           <div className="hidden border-b border-white/10 bg-black/20 px-6 py-4 md:block">
@@ -269,7 +260,7 @@ export default function ChatPage() {
 
           {/* NEW MESSAGE BUTTON */}
           {newMessages > 0 && (
-            <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-50">
+            <div className="absolute inset-x-0 bottom-24 z-50 flex justify-center">
               <button
                 onClick={() => {
                   if (scrollRef.current) {
@@ -297,7 +288,7 @@ export default function ChatPage() {
               setIsAtBottom(bottom)
               if (bottom) setNewMessages(0)
             }}
-            className="flex-1 overflow-y-auto px-3 md:px-6 py-2"
+            className="flex-1 overflow-y-auto w-full px-3 py-2"
           >
             {messages.map((msg, idx) => {
               const prev = idx > 0 ? messages[idx - 1] : null
@@ -348,7 +339,7 @@ export default function ChatPage() {
           </div>
 
           {/* INPUT */}
-          <div className="sticky bottom-0 border-t border-white/10 bg-[#0B1220] p-2">
+          <div className="sticky bottom-0 w-full bg-[#0B1220] border-t border-white/10 p-2">
             <div className="flex gap-2">
 
               <input
