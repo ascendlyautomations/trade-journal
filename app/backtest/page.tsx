@@ -105,18 +105,18 @@ export default function BacktestPage() {
       <Navbar />
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100">
         <div className="mx-auto max-w-7xl p-6">
-          <h1 className="mb-2 text-center text-3xl font-semibold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
+          <h1 className="mb-0 text-center text-3xl font-semibold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
             Backtest Lab
           </h1>
-          <p className="mb-6 text-center text-sm text-gray-400">
+          <p className="mb-2 text-center text-sm text-gray-400">
             Isolated backtests — does not affect Dashboard or Trade History.
           </p>
 
           {loading ? (
-            <p className="mb-6 text-center text-gray-400">Loading...</p>
+            <p className="mb-2 text-center text-gray-400">Loading...</p>
           ) : null}
 
-          <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-4">
               <select
                 value={selectedStrategy}
@@ -163,23 +163,23 @@ export default function BacktestPage() {
             </div>
           </div>
 
-          <div className="mb-8 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-gray-300">
+          <div className="mb-5 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-gray-300">
             Wins: <span className="font-semibold text-emerald-400">{wins}</span>{" "}
             / Losses:{" "}
             <span className="font-semibold text-red-400">{losses}</span>
           </div>
 
-          <h2 className="mb-4 text-xl font-semibold text-white">
+          <h2 className="mb-2 text-xl font-semibold text-white">
             Backtest Calendar
           </h2>
-          <div className="mb-10">
+          <div className="mb-4">
             <Calendar trades={filteredTrades as any} />
           </div>
 
-          <h2 className="mb-4 text-xl font-semibold text-white">
+          <h2 className="mb-3 text-xl font-semibold text-white">
             Strategy Breakdown
           </h2>
-          <div className="mb-10 space-y-4">
+          <div className="mb-4 space-y-4">
             {Object.entries(strategyMap)
               .filter(([name]) =>
                 selectedStrategy === "all" ? true : name === selectedStrategy
@@ -222,7 +222,7 @@ export default function BacktestPage() {
             ) : null}
           </div>
 
-          <h2 className="mb-4 text-xl font-semibold text-white">
+          <h2 className="mb-3 text-xl font-semibold text-white">
             Backtest Trades
           </h2>
           <div className="space-y-6 pb-12">

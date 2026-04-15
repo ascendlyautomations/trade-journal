@@ -105,64 +105,6 @@ export default function Home() {
             Input Trade
           </h1>
 
-          <div className="md:block">
-            <div className="hidden md:flex items-center justify-between mb- flex-wrap gap-4">
-              <div className="w-full flex items-center mb-2">
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => csvInputRef.current?.click()}
-                    className="bg-blue-500 px-4 py-2 rounded disabled:opacity-60"
-                    disabled={loading}
-                    type="button"
-                  >
-                    Upload CSV
-                  </button>
-
-                  <button
-                    onClick={() => (window.location.href = "/review")}
-                    className="relative bg-emerald-500 px-4 py-2 rounded"
-                    type="button"
-                  >
-                    Review CSV Inputs
-                    {reviewCount > 0 && (
-                      <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
-                        {reviewCount > 99 ? "99+" : reviewCount}
-                      </span>
-                    )}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div className="block md:hidden mb-3">
-              <div className="flex flex-col gap-2 mb-4">
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => csvInputRef.current?.click()}
-                    className="flex-1 px-3 py-2 text-sm rounded-lg bg-blue-500 disabled:opacity-60"
-                    disabled={loading}
-                    type="button"
-                  >
-                    Upload CSV
-                  </button>
-
-                  <button
-                    onClick={() => (window.location.href = "/review")}
-                    className="relative flex-1 px-3 py-2 text-sm rounded-lg bg-emerald-500"
-                    type="button"
-                  >
-                    Review CSV Inputs
-                    {reviewCount > 0 && (
-                      <span className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full text-[10px] px-1.5 py-0.5">
-                        {reviewCount > 99 ? "99+" : reviewCount}
-                      </span>
-                    )}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-
           <input
             ref={csvInputRef}
             type="file"
@@ -171,7 +113,14 @@ export default function Home() {
             onChange={handleCSVUpload}
           />
 
-          <InputTradeForm />
+          <InputTradeForm
+            onUploadCsvClick={() => csvInputRef.current?.click()}
+            onReviewCsvClick={() => {
+              window.location.href = "/review"
+            }}
+            reviewCount={reviewCount}
+            csvLoading={loading}
+          />
         </div>
       </div>
     </>

@@ -605,6 +605,10 @@ export default function Dashboard() {
     weekdayData,
     sessionPieData
   } = useMemo(() => {
+    if (process.env.NODE_ENV === "development") {
+      console.log("Trades:", trades)
+      if (trades.length) console.log("Sample trade:", trades[0])
+    }
 
     const accountMap = new Map<
       string,
@@ -652,47 +656,61 @@ export default function Dashboard() {
       return true
     }
 
-    const filteredTrades = trades
-      .filter((trade) => {
-        if (selectedDate) {
-          const tradeDate = new Date(trade.created_at)
-          const selected = new Date(selectedDate + "T00:00:00")
-          if (
-            tradeDate.getFullYear() !== selected.getFullYear() ||
-            tradeDate.getMonth() !== selected.getMonth() ||
-            tradeDate.getDate() !== selected.getDate()
-          ) {
-            return false
-          }
+    /** Public trades: DB flag and/or non-empty public note (matches InputTradeForm / feed). */
+    function tradeIsPublic(t: any) {
+      if (t?.is_public === true) return true
+      const desc = t?.public_description
+      return typeof desc === "string" && desc.trim().length > 0
+    }
+
+    const withoutPublicFilter = trades.filter((trade) => {
+      if (selectedDate) {
+        const tradeDate = new Date(trade.created_at)
+        const selected = new Date(selectedDate + "T00:00:00")
+        if (
+          tradeDate.getFullYear() !== selected.getFullYear() ||
+          tradeDate.getMonth() !== selected.getMonth() ||
+          tradeDate.getDate() !== selected.getDate()
+        ) {
+          return false
         }
+      }
 
-        if (!filterByTime(trade)) return false
+      if (!filterByTime(trade)) return false
 
-        if (accountFilter !== "all") {
-          const accountName = String(trade.account_name || "").trim()
-          const size = String(trade.account_size || "").trim()
-          const id = String(trade.account_id || "").trim()
-          const accountKey = `${accountName}|${size}|${id}`
-          if (accountKey !== accountFilter) return false
+      if (accountFilter !== "all") {
+        const accountName = String(trade.account_name || "").trim()
+        const size = String(trade.account_size || "").trim()
+        const id = String(trade.account_id || "").trim()
+        const accountKey = `${accountName}|${size}|${id}`
+        if (accountKey !== accountFilter) return false
+      }
+
+      const tradeAcct = String(trade.mode ?? trade.account_type ?? "")
+        .toLowerCase()
+        .trim()
+      const selectedAcct = accountTypeFilter.toLowerCase().trim()
+      if (accountTypeFilter !== "all") {
+        console.log("Filtering:", trade.account_type, accountTypeFilter)
+        if (tradeAcct !== selectedAcct) {
+          return false
         }
+      }
 
-        const tradeAcct = String(trade.mode ?? trade.account_type ?? "")
-          .toLowerCase()
-          .trim()
-        const selectedAcct = accountTypeFilter.toLowerCase().trim()
-        if (accountTypeFilter !== "all") {
-          console.log("Filtering:", trade.account_type, accountTypeFilter)
-          if (tradeAcct !== selectedAcct) {
-            return false
-          }
-        }
+      return true
+    })
 
-        return true
-      })
-      .sort(
-        (a, b) =>
-          new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-      )
+    let filteredTrades = withoutPublicFilter
+    if (showPublicOnly) {
+      const publicFiltered = withoutPublicFilter.filter((t) => tradeIsPublic(t))
+      filteredTrades =
+        publicFiltered.length > 0 ? publicFiltered : withoutPublicFilter
+    }
+
+    filteredTrades = filteredTrades.sort(
+      (a, b) =>
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    )
 
     const totalTrades = filteredTrades.length
     const wins = filteredTrades.filter(t => t.pnl > 0)
@@ -996,7 +1014,7 @@ const worstDay = dailyPnLs.length > 0
       sessionPieData
     }
 
-  }, [trades, accountFilter, accountTypeFilter, timeFilter, selectedDate])
+  }, [trades, showPublicOnly, accountFilter, accountTypeFilter, timeFilter, selectedDate])
 
   // 🔥 LOADING STATE (FIXES GLITCH)
   const isPro = isProActive(profile)
@@ -1055,13 +1073,7 @@ const worstDay = dailyPnLs.length > 0
             (a, b) =>
               new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
           )
-          .filter((trade) =>
-            showPublicOnly
-              ? trade.public_description &&
-                trade.public_description.length > 0
-              : true
-          )
-          .slice(0, showPublicOnly ? 200 : 5)
+          .slice(0, 5)
           .map((trade) => (
             <div
               key={trade.id}
@@ -1172,6 +1184,136 @@ const worstDay = dailyPnLs.length > 0
     </div>
   )
 
+  function renderDashboardFilterSettings() {
+    return (
+    <div className="relative z-[100] shrink-0 dashboard-controls">
+      <button
+        type="button"
+        onClick={() => setShowControls((prev) => !prev)}
+        className="flex items-center justify-center rounded-lg bg-[#1f2937] p-2 text-white transition hover:bg-[#1f2937]/90 md:bg-transparent md:hover:bg-white/10"
+        aria-label="Dashboard controls"
+        aria-expanded={showControls}
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden
+        >
+          <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+          <circle cx="12" cy="12" r="3" />
+        </svg>
+      </button>
+
+      {showControls ? (
+        <div className="absolute right-0 top-full z-[100] mt-2 w-72 rounded-lg border border-white/10 bg-[#0f172a] p-4 shadow-lg">
+          <p className="text-sm font-semibold text-white mb-3 pb-2 border-b border-white/10">
+            Dashboard controls
+          </p>
+
+          <div className="mb-4">
+            <p className={sectionTitle}>Display</p>
+
+            <label className="flex justify-between items-center gap-3 text-sm mb-2 cursor-pointer">
+              <span>Equity Curve</span>
+              <input
+                type="checkbox"
+                className="accent-emerald-500"
+                checked={showEquity}
+                onChange={() => setShowEquity((v) => !v)}
+              />
+            </label>
+
+            <label className="flex justify-between items-center gap-3 text-sm mb-2 cursor-pointer">
+              <span>Drawdown</span>
+              <input
+                type="checkbox"
+                className="accent-emerald-500"
+                checked={showDrawdown}
+                onChange={() => setShowDrawdown((v) => !v)}
+              />
+            </label>
+
+            <label className="flex justify-between items-center gap-3 text-sm mb-2 cursor-pointer">
+              <span>Insights</span>
+              <input
+                type="checkbox"
+                className="accent-emerald-500"
+                checked={showInsights}
+                onChange={() => setShowInsights((v) => !v)}
+              />
+            </label>
+
+            <label className="flex justify-between items-center gap-3 text-sm cursor-pointer">
+              <span>Session Chart</span>
+              <input
+                type="checkbox"
+                className="accent-emerald-500"
+                checked={showSessions}
+                onChange={() => setShowSessions((v) => !v)}
+              />
+            </label>
+          </div>
+
+          <div className="mb-4 rounded-lg border border-white/10 bg-black/20 p-3">
+            <p className={sectionTitle}>Risk</p>
+            <p className="mt-2 text-xs text-gray-400">
+              Set your max drawdown limit under{" "}
+              <Link
+                href="/settings"
+                className="text-blue-300 underline hover:text-blue-200"
+              >
+                Settings → Profile
+              </Link>
+              .
+            </p>
+          </div>
+
+          <div className="mb-0">
+            <p className={sectionTitle}>Analytics</p>
+
+            <label className="flex justify-between items-center gap-3 text-sm mb-2 cursor-pointer">
+              <span>Show Best Setup</span>
+              <input
+                type="checkbox"
+                className="accent-emerald-500"
+                checked={showBestSetup}
+                onChange={() => setShowBestSetup((v) => !v)}
+              />
+            </label>
+
+            <label className="flex justify-between items-center gap-3 text-sm mb-2 cursor-pointer">
+              <span>Show Worst Setup</span>
+              <input
+                type="checkbox"
+                className="accent-emerald-500"
+                checked={showWorstSetup}
+                onChange={() => setShowWorstSetup((v) => !v)}
+              />
+            </label>
+
+            <label className="flex justify-between items-center gap-3 text-sm cursor-pointer">
+              <span>Behavior Warnings</span>
+              <input
+                type="checkbox"
+                className="accent-emerald-500"
+                checked={showWarnings}
+                onChange={() => setShowWarnings((v) => !v)}
+              />
+            </label>
+          </div>
+        </div>
+      ) : null}
+    </div>
+    )
+  }
+
   return (
     <>
       <Navbar />
@@ -1212,6 +1354,7 @@ const worstDay = dailyPnLs.length > 0
             onTimeframeChange={setTimeFilter}
             selectedDate={selectedDate}
             onSelectedDateChange={setSelectedDate}
+            settingsNextToModes={renderDashboardFilterSettings()}
             trailing={
               <>
                 <button
@@ -1226,130 +1369,8 @@ const worstDay = dailyPnLs.length > 0
                   Public Trades
                 </button>
 
-                <div className="relative z-50 shrink-0 dashboard-controls">
-                  <button
-                    type="button"
-                    onClick={() => setShowControls((prev) => !prev)}
-                    className="rounded-lg p-2 text-white transition hover:bg-white/10"
-                    aria-label="Dashboard controls"
-                    aria-expanded={showControls}
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="20"
-                      height="20"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      aria-hidden
-                    >
-                      <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
-                      <circle cx="12" cy="12" r="3" />
-                    </svg>
-                  </button>
-
-                  {showControls ? (
-              <div className="absolute right-0 top-full z-50 mt-2 w-72 rounded-lg border border-white/10 bg-[#0f172a] p-4 shadow-lg">
-                <p className="text-sm font-semibold text-white mb-3 pb-2 border-b border-white/10">
-                  Dashboard controls
-                </p>
-
-                <div className="mb-4">
-                  <p className={sectionTitle}>Display</p>
-
-                  <label className="flex justify-between items-center gap-3 text-sm mb-2 cursor-pointer">
-                    <span>Equity Curve</span>
-                    <input
-                      type="checkbox"
-                      className="accent-emerald-500"
-                      checked={showEquity}
-                      onChange={() => setShowEquity((v) => !v)}
-                    />
-                  </label>
-
-                  <label className="flex justify-between items-center gap-3 text-sm mb-2 cursor-pointer">
-                    <span>Drawdown</span>
-                    <input
-                      type="checkbox"
-                      className="accent-emerald-500"
-                      checked={showDrawdown}
-                      onChange={() => setShowDrawdown((v) => !v)}
-                    />
-                  </label>
-
-                  <label className="flex justify-between items-center gap-3 text-sm mb-2 cursor-pointer">
-                    <span>Insights</span>
-                    <input
-                      type="checkbox"
-                      className="accent-emerald-500"
-                      checked={showInsights}
-                      onChange={() => setShowInsights((v) => !v)}
-                    />
-                  </label>
-
-                  <label className="flex justify-between items-center gap-3 text-sm cursor-pointer">
-                    <span>Session Chart</span>
-                    <input
-                      type="checkbox"
-                      className="accent-emerald-500"
-                      checked={showSessions}
-                      onChange={() => setShowSessions((v) => !v)}
-                    />
-                  </label>
-                </div>
-
-                <div className="mb-4 rounded-lg border border-white/10 bg-black/20 p-3">
-                  <p className={sectionTitle}>Risk</p>
-                  <p className="mt-2 text-xs text-gray-400">
-                    Set your max drawdown limit under{" "}
-                    <Link
-                      href="/settings"
-                      className="text-blue-300 underline hover:text-blue-200"
-                    >
-                      Settings → Profile
-                    </Link>
-                    .
-                  </p>
-                </div>
-
-                <div className="mb-0">
-                  <p className={sectionTitle}>Analytics</p>
-
-                  <label className="flex justify-between items-center gap-3 text-sm mb-2 cursor-pointer">
-                    <span>Show Best Setup</span>
-                    <input
-                      type="checkbox"
-                      className="accent-emerald-500"
-                      checked={showBestSetup}
-                      onChange={() => setShowBestSetup((v) => !v)}
-                    />
-                  </label>
-
-                  <label className="flex justify-between items-center gap-3 text-sm mb-2 cursor-pointer">
-                    <span>Show Worst Setup</span>
-                    <input
-                      type="checkbox"
-                      className="accent-emerald-500"
-                      checked={showWorstSetup}
-                      onChange={() => setShowWorstSetup((v) => !v)}
-                    />
-                  </label>
-
-                  <label className="flex justify-between items-center gap-3 text-sm cursor-pointer">
-                    <span>Behavior Warnings</span>
-                    <input
-                      type="checkbox"
-                      className="accent-emerald-500"
-                      checked={showWarnings}
-                      onChange={() => setShowWarnings((v) => !v)}
-                    />
-                  </label>
-                </div>
-              </div>
-                  ) : null}
+                <div className="hidden md:flex shrink-0 items-center justify-center">
+                  {renderDashboardFilterSettings()}
                 </div>
               </>
             }

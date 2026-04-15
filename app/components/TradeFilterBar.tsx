@@ -27,6 +27,8 @@ export type TradeFilterBarProps = {
   leading?: ReactNode
   /** Appended controls (e.g. Show Advanced, Public Trades, settings) */
   trailing?: ReactNode
+  /** Shown beside “All Modes” on small screens only (hide desktop copy with `hidden md:flex` on the trailing instance) */
+  settingsNextToModes?: ReactNode
   /** Outer wrapper, e.g. mb-5 w-full */
   className?: string
 }
@@ -43,6 +45,7 @@ export default function TradeFilterBar({
   onSelectedDateChange,
   leading,
   trailing,
+  settingsNextToModes,
   className = "",
 }: TradeFilterBarProps) {
   return (
@@ -63,16 +66,36 @@ export default function TradeFilterBar({
           ))}
         </select>
 
-        <select
-          value={accountTypeFilter}
-          onChange={(e) => onAccountTypeChange(e.target.value)}
-          className="shrink-0 rounded-md border border-white/10 bg-[#0f172a] px-3 py-1 text-sm text-white hover:bg-[#1e293b] focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="all">All Modes</option>
-          <option value="funded">Funded</option>
-          <option value="eval">Eval</option>
-          <option value="live">Live</option>
-        </select>
+        {settingsNextToModes ? (
+          <div className="flex w-full min-w-0 items-center gap-2 md:block md:w-auto">
+            <div className="min-w-0 flex-1 md:w-auto">
+              <select
+                value={accountTypeFilter}
+                onChange={(e) => onAccountTypeChange(e.target.value)}
+                className="w-full min-w-0 rounded-md border border-white/10 bg-[#0f172a] px-3 py-1 text-sm text-white hover:bg-[#1e293b] focus:outline-none focus:ring-2 focus:ring-blue-500 md:w-auto md:shrink-0"
+              >
+                <option value="all">All Modes</option>
+                <option value="funded">Funded</option>
+                <option value="eval">Eval</option>
+                <option value="live">Live</option>
+              </select>
+            </div>
+            <div className="flex shrink-0 items-center justify-center md:hidden">
+              {settingsNextToModes}
+            </div>
+          </div>
+        ) : (
+          <select
+            value={accountTypeFilter}
+            onChange={(e) => onAccountTypeChange(e.target.value)}
+            className="shrink-0 rounded-md border border-white/10 bg-[#0f172a] px-3 py-1 text-sm text-white hover:bg-[#1e293b] focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="all">All Modes</option>
+            <option value="funded">Funded</option>
+            <option value="eval">Eval</option>
+            <option value="live">Live</option>
+          </select>
+        )}
 
         <div className="flex shrink-0 gap-2">
           {TIME_OPTIONS.map(({ label, value }) => (
@@ -91,12 +114,12 @@ export default function TradeFilterBar({
           ))}
         </div>
 
-        <div className="relative z-50 shrink-0">
+        <div className="relative z-10 shrink-0">
           <input
             type="date"
             value={selectedDate}
             onChange={(e) => onSelectedDateChange(e.target.value)}
-            className="rounded-md border border-white/10 bg-[#0f172a] px-3 py-1 pr-10 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 [color-scheme:dark]"
+            className="relative z-10 rounded-md border border-white/10 bg-[#0f172a] px-3 py-1 pr-10 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 [color-scheme:dark]"
             style={{ colorScheme: "dark" }}
           />
 

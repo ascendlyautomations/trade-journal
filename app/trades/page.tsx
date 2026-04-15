@@ -312,9 +312,9 @@ const filteredTrades = trades.filter((trade) => {
 
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100">
 
-        <div className="p-12 max-w-7xl mx-auto px-3 pt-4 pb-8 md:p-12">
+        <div className="p-2 max-w-7xl mx-auto px-3 pt-2 pb-8 md:p-10">
 
-          <h1 className="text-3xl font-semibold mb-5 text-center bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent mt-4 md:mt-8">
+          <h1 className="text-3xl font-semibold mb-3 text-center bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent mt-2 md:mt-0">
             Trade History
           </h1>
 

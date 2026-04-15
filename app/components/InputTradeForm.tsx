@@ -27,6 +27,10 @@ export type InputTradeFormProps = {
   existingTrade?: any | null
   onSave?: () => void
   onClose?: () => void
+  onUploadCsvClick?: () => void
+  onReviewCsvClick?: () => void
+  reviewCount?: number
+  csvLoading?: boolean
 }
 
 function getESTDate() {
@@ -65,6 +69,10 @@ export default function InputTradeForm({
   existingTrade,
   onSave,
   onClose,
+  onUploadCsvClick,
+  onReviewCsvClick,
+  reviewCount = 0,
+  csvLoading = false,
 }: InputTradeFormProps) {
   const isEditMode = Boolean(existingTrade?.id)
   const showAsModal = isEditMode && Boolean(onClose)
@@ -597,45 +605,94 @@ export default function InputTradeForm({
 
   const formBody = (
     <>
-      <div className="md:block">
-        <div className="hidden md:flex items-center justify-between mb- flex-wrap gap-4">
-          <div className="w-full flex items-center mb-3 flex-wrap gap-2">
+      <div className="mb-4">
+        <div className="flex flex-col gap-2 md:hidden">
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={onUploadCsvClick}
+              disabled={!onUploadCsvClick || csvLoading}
+              className="flex-1 px-3 py-2 text-sm rounded-lg bg-blue-500 disabled:opacity-60"
+            >
+              Upload CSV
+            </button>
+            <button
+              type="button"
+              onClick={onReviewCsvClick}
+              disabled={!onReviewCsvClick}
+              className="relative flex-1 px-3 py-2 text-sm rounded-lg bg-emerald-500 disabled:opacity-60"
+            >
+              Review CSV Inputs
+              {reviewCount > 0 ? (
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full text-[10px] px-1.5 py-0.5">
+                  {reviewCount > 99 ? "99+" : reviewCount}
+                </span>
+              ) : null}
+            </button>
+          </div>
+
+          <div className="flex gap-2">
             <button
               type="button"
               onClick={() => setAdvanced(!advanced)}
-              className="bg-emerald-500 px-4 py-2 rounded"
+              className="flex-1 px-3 py-2 text-sm rounded-lg bg-[#1f2937]"
             >
               {advanced ? "Advanced Mode: ON" : "Advanced Mode: OFF"}
             </button>
             <button
               type="button"
               onClick={() => setShowSettings(true)}
-              className="ml-auto bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded"
+              className="px-3 py-2 bg-[#1f2937] rounded-lg flex items-center justify-center"
+              aria-label="Settings"
             >
-              ⚙️ Settings
+              ⚙️
             </button>
           </div>
         </div>
 
-        <div className="block md:hidden mb-3">
-          <div className="flex flex-col gap-2 mb-4">
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setAdvanced(!advanced)}
-                className="flex-1 px-3 py-2 text-sm rounded-lg bg-emerald-500"
-              >
-                {advanced ? "Advanced Mode: ON" : "Advanced Mode: OFF"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowSettings(true)}
-                className="px-3 py-2 bg-[#1f2937] rounded-lg flex items-center justify-center"
-                aria-label="Settings"
-              >
-                ⚙️
-              </button>
-            </div>
+        <div className="hidden md:flex items-center w-full">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={onUploadCsvClick}
+              disabled={!onUploadCsvClick || csvLoading}
+              className="px-4 py-2 text-sm rounded-lg bg-blue-500 disabled:opacity-60"
+            >
+              Upload CSV
+            </button>
+
+            <button
+              type="button"
+              onClick={onReviewCsvClick}
+              disabled={!onReviewCsvClick}
+              className="relative px-4 py-2 text-sm rounded-lg bg-emerald-500 disabled:opacity-60"
+            >
+              Review CSV Inputs
+              {reviewCount > 0 ? (
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full text-[10px] px-1.5 py-0.5">
+                  {reviewCount > 99 ? "99+" : reviewCount}
+                </span>
+              ) : null}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setAdvanced(!advanced)}
+              className="px-4 py-2 text-sm rounded-lg bg-[#1f2937]"
+            >
+              {advanced ? "Advanced Mode: ON" : "Advanced Mode: OFF"}
+            </button>
+          </div>
+
+          <div className="ml-auto">
+            <button
+              type="button"
+              onClick={() => setShowSettings(true)}
+              className="p-2 bg-[#1f2937] rounded-lg flex items-center justify-center"
+              aria-label="Settings"
+            >
+              ⚙️
+            </button>
           </div>
         </div>
       </div>
@@ -701,23 +758,25 @@ export default function InputTradeForm({
               <option key={s} value={s} />
             ))}
           </datalist>
-          <p className="text-sm text-gray-400 mt-2">Mode</p>
+          <div className="w-full">
+            <p className="text-sm text-gray-400 mt-0">Account Used</p>
 
-          <div className="flex gap-2">
-            {["Eval", "Funded", "Live", "Backtest"].map((type) => (
-              <button
-                key={type}
-                type="button"
-                onClick={() => setMode(type)}
-                className={`px-3 py-1 rounded text-sm font-medium border transition ${
-                  mode === type
-                    ? "bg-emerald-500 border-emerald-400 text-white"
-                    : "bg-[#0f172a] border-white/10 text-gray-300 hover:border-emerald-400"
-                }`}
-              >
-                {type}
-              </button>
-            ))}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full mt-1">
+              {["Eval", "Funded", "Live", "Backtest"].map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => setMode(type)}
+                  className={
+                    mode === type
+                      ? "w-full px-3 py-2 text-sm rounded bg-green-500 text-white"
+                      : "w-full px-3 py-2 text-sm rounded bg-[#111827] hover:bg-[#1f2937] text-white"
+                  }
+                >
+                  {type}
+                </button>
+              ))}
+            </div>
           </div>
 
           {mode === "Backtest" && (
@@ -860,7 +919,7 @@ export default function InputTradeForm({
             </>
           )}
 
-          <div className="mt-1">
+          <div className="mt-0">
             <label className="text-gray-400 text-sm mb-1 block">
               Public Description
             </label>
@@ -873,7 +932,7 @@ export default function InputTradeForm({
           </div>
 
           <label className="text-gray-400 text-sm mb-1 block">
-            Personal Thoughts
+            Personal Notes
           </label>
           {inputSettings.showNotes && (
             <textarea
@@ -939,7 +998,7 @@ export default function InputTradeForm({
             />
             Followed Plan?
           </label>
-          <p className="text-sm text-gray-400 mt-4">Context</p>
+          <p className="text-sm text-gray-400 mt-0">Context</p>
           <select
             value={marketCondition}
             onChange={(e) => setMarketCondition(e.target.value)}
@@ -967,7 +1026,7 @@ export default function InputTradeForm({
             />
             News Event?
           </label>
-          <p className="text-sm text-gray-400 mt-4">Psychology Notes</p>
+          <p className="text-sm text-gray-400 mt-0">Psychology Notes</p>
           <textarea
             placeholder="What were you thinking in the moment?"
             value={psychologyNotes}
@@ -1033,18 +1092,18 @@ export default function InputTradeForm({
     return (
       <>
         <div
-          className="fixed inset-0 bg-black/90 z-[100] flex items-start justify-center overflow-y-auto py-8 px-4"
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 overflow-y-auto py-4 px-4"
           onClick={() => onClose?.()}
           role="presentation"
         >
           <div
-            className="bg-gradient-to-br from-[#0f172a] via-[#1e3a8a]/80 to-[#065f46]/30 text-gray-100 rounded-xl border border-white/10 p-9 w-full max-w-7xl shadow-xl my-auto"
+            className="w-full max-w-md md:max-w-2xl mx-auto rounded-xl p-4 md:p-6 bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100 shadow-xl max-h-[90vh] overflow-y-auto my-auto"
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal="true"
             aria-labelledby="input-trade-modal-title"
           >
-            <div className="flex justify-between items-center gap-4 mb-4">
+            <div className="flex justify-between items-center gap-4 mb-2">
               <h2
                 id="input-trade-modal-title"
                 className="text-xl font-semibold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent"
