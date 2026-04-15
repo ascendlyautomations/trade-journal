@@ -146,7 +146,12 @@ export default function Calendar({
         </button>
       </div>
 
-      <div className="grid grid-cols-7 gap-2 text-center text-xs text-gray-400">
+      <div className="grid grid-cols-6 gap-2 text-center text-xs text-gray-400 md:hidden">
+        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri"].map((d) => (
+          <p key={d}>{d}</p>
+        ))}
+      </div>
+      <div className="hidden grid-cols-7 gap-2 text-center text-xs text-gray-400 md:grid">
         {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
           <p key={d}>{d}</p>
         ))}
@@ -157,7 +162,60 @@ export default function Calendar({
           const weekTotal = getWeekTotal(week)
           return (
             <div key={`week-${weekIndex}`}>
-              <div className="grid grid-cols-7 gap-2">
+              <div className="grid grid-cols-6 gap-2 md:hidden">
+                {week
+                  .filter((cell, idx) => {
+                    if (!cell.date) {
+                      const weekday = (weekIndex * 7 + idx) % 7
+                      return weekday !== 6
+                    }
+                    const d = new Date(cell.date).getDay()
+                    return d !== 6
+                  })
+                  .map((cell, idx) => {
+                    if (!cell.date) {
+                      return (
+                        <div
+                          key={`empty-mobile-${weekIndex}-${idx}`}
+                          className="aspect-square w-full rounded bg-transparent"
+                        />
+                      )
+                    }
+                    const key = dayKey(cell.date)
+                    const dayTrades = byDay[key] || []
+                    const totalPnl = dayTrades.reduce(
+                      (sum, t) => sum + (Number(t.pnl) || 0),
+                      0
+                    )
+                    const active = selectedDay === key
+                    return (
+                      <button
+                        key={`mobile-${key}`}
+                        type="button"
+                        onClick={() => setSelectedDay(key)}
+                        className={`aspect-square w-full flex flex-col items-center justify-center p-1 text-xs md:p-2 md:text-sm cursor-pointer relative z-10 rounded transition ${
+                          dayTrades.length === 0
+                            ? "bg-white/5 text-gray-400"
+                            : totalPnl >= 0
+                            ? "bg-green-500/20 text-green-200"
+                            : "bg-red-500/20 text-red-200"
+                        } ${active ? "ring-1 ring-blue-400" : ""}`}
+                      >
+                        <p className="w-full truncate text-center text-[10px] leading-tight md:text-xs">
+                          {cell.date.getDate()}
+                        </p>
+                        {dayTrades.length ? (
+                          <p className="mt-1 w-full truncate text-center text-[10px] font-medium leading-tight md:text-xs">
+                            {totalPnl >= 0 ? "+" : ""}
+                            {totalPnl.toFixed(0)}
+                          </p>
+                        ) : null}
+                      </button>
+                    )
+                  })}
+              </div>
+
+              <div className="hidden grid-cols-7 gap-2 md:grid">
                 {week.map((cell, idx) => {
                   if (!cell.date) {
                     return (
@@ -176,7 +234,7 @@ export default function Calendar({
                   const active = selectedDay === key
                   return (
                     <button
-                      key={key}
+                      key={`desktop-${key}`}
                       type="button"
                       onClick={() => setSelectedDay(key)}
                       className={`h-14 rounded p-1 text-left text-xs transition ${

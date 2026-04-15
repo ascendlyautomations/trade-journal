@@ -1029,11 +1029,11 @@ const worstDay = dailyPnLs.length > 0
     (drawdownData.currentDrawdown >= drawdownLimitCap ||
       drawdownData.maxDrawdown >= drawdownLimitCap)
 
-  const sectionTitle = "text-xs text-gray-400 uppercase tracking-wide mb-2"
+  const sectionTitle = "text-xs md:text-sm text-gray-400 uppercase tracking-wide mb-2"
 
   const recentTradesSection = (
-    <div className="h-full rounded-xl border border-white/10 bg-white/10 p-4">
-      <h3 className="mb-2 text-sm text-gray-400">Recent Trades</h3>
+    <div className="h-full rounded-xl border border-white/10 bg-white/10 p-3 md:p-4">
+      <h3 className="mb-2 text-xs md:text-sm text-gray-400">Recent Trades</h3>
 
       <div className="max-h-[28rem] space-y-3 overflow-y-auto pr-1">
         {(filteredTrades || [])
@@ -1115,10 +1115,11 @@ const worstDay = dailyPnLs.length > 0
   )
 
   const pnlByWeekdaySection = (
-    <div className="flex min-h-[300px] h-full flex-col rounded-xl border border-white/10 bg-white/10 p-4 backdrop-blur-md">
-      <h2 className="mb-3 text-base font-semibold text-blue-300">
+    <div className="flex min-h-[300px] h-full flex-col rounded-xl border border-white/10 bg-white/10 p-3 md:p-4 backdrop-blur-md">
+      <h2 className="mb-3 text-sm md:text-base font-semibold text-blue-300">
         P&amp;L by Weekday
       </h2>
+      <div className="w-full overflow-x-auto">
       <ResponsiveContainer width="100%" height={280}>
         <LineChart
           data={weekdayData}
@@ -1154,6 +1155,7 @@ const worstDay = dailyPnLs.length > 0
           <Line type="monotone" dataKey="pnl" stroke="#38bdf8" strokeWidth={2} dot={{ r: 4, fill: "#38bdf8" }} />
         </LineChart>
       </ResponsiveContainer>
+      </div>
     </div>
   )
 
@@ -1176,18 +1178,18 @@ const worstDay = dailyPnLs.length > 0
         />
       ) : null}
 
-      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white p-10">
+      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white p-3 md:p-10">
 
-        <div className="relative z-50 mx-auto max-w-6xl">
-          <h1 className="mb-2 text-center text-2xl font-semibold text-blue-300">
+        <div className="relative z-50 mx-auto max-w-6xl w-full">
+          <h1 className="mb-2 text-center text-xl md:text-2xl font-semibold text-blue-300">
             Dashboard
           </h1>
-          <p className="mb-4 text-center text-sm text-gray-400">
+          <p className="mb-4 text-center text-xs md:text-sm text-gray-400">
             Plan: {isPro ? "Pro" : "Free"}
           </p>
 
           <TradeFilterBar
-            className="mb-8"
+            className="mb-6 md:mb-8"
             accounts={accounts}
             accountFilter={accountFilter}
             onAccountChange={setAccountFilter}
@@ -1341,8 +1343,8 @@ const worstDay = dailyPnLs.length > 0
           />
 
           {showFreePlanAccountBanner ? (
-            <div className="mb-4 rounded border border-yellow-500/20 bg-yellow-500/10 p-3">
-              <p className="text-sm text-yellow-300">
+            <div className="mb-4 rounded border border-yellow-500/20 bg-yellow-500/10 p-3 md:p-4">
+              <p className="text-xs md:text-sm text-yellow-300">
                 Free plan: 1 account limit. Upgrade for unlimited accounts.
               </p>
             </div>
@@ -1350,14 +1352,14 @@ const worstDay = dailyPnLs.length > 0
 
         </div>
 
-          <div className="relative z-0 mx-auto max-w-6xl space-y-6 overflow-visible">
+          <div className="relative z-0 mx-auto max-w-6xl w-full flex flex-col gap-6 md:gap-8 overflow-visible">
 
   {/* TOP: STATS + CHART */}
-  <div className="grid overflow-visible lg:grid-cols-3 gap-6">
+  <div className="grid overflow-visible lg:grid-cols-3 gap-4 md:gap-6">
 
     {/* LEFT: STATS */}
     <div className="space-y-4">
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-6">
         <Stat title="Trades" value={formatNumber(totalTrades)} />
         <Stat title="Win %" value={`${winRate.toFixed(1)}%`} />
         <Stat title="P&L" value={formatCurrency(totalPnL)} positive={totalPnL >= 0} />
@@ -1372,49 +1374,49 @@ const worstDay = dailyPnLs.length > 0
 
       {showDrawdown ? (
         <div
-          className={`rounded-xl border bg-white/10 p-4 backdrop-blur-md ${
+          className={`rounded-xl border bg-white/10 p-3 md:p-4 backdrop-blur-md ${
             drawdownLimitBreached ? "border-amber-400/60" : "border-white/10"
           }`}
         >
-          <h3 className="mb-2 text-sm text-gray-400">Drawdown</h3>
+          <h3 className="mb-2 text-xs md:text-sm text-gray-400">Drawdown</h3>
 
-          <p className="text-lg font-semibold text-red-400">
+          <p className="text-sm md:text-lg font-semibold text-red-400">
             Max: {formatMoney(drawdownData.maxDrawdown)}
           </p>
 
-          <p className="text-sm text-gray-300">
+          <p className="text-xs md:text-sm text-gray-300">
             Current: {formatMoney(drawdownData.currentDrawdown)}
           </p>
 
           {drawdownLimitCap == null ? (
-            <p className="text-xs text-gray-500 mt-2">
+            <p className="text-[11px] md:text-xs text-gray-500 mt-2">
               Limit: not set — configure in Settings.
             </p>
           ) : (
             <>
-              <p className="text-sm text-gray-300 mt-2">
+              <p className="text-xs md:text-sm text-gray-300 mt-2">
                 Your limit: {formatMoney(drawdownLimitCap)}
               </p>
               {drawdownLimitBreached ? (
-                <p className="text-xs text-amber-300 mt-1">
+                <p className="text-[11px] md:text-xs text-amber-300 mt-1">
                   This range has met or exceeded your drawdown limit (current or historical
                   max).
                 </p>
               ) : (
-                <p className="text-xs text-gray-500 mt-1">Within your configured limit.</p>
+                <p className="text-[11px] md:text-xs text-gray-500 mt-1">Within your configured limit.</p>
               )}
             </>
           )}
         </div>
       ) : null}
 
-      <div className="rounded-xl border border-white/10 bg-white/10 p-4 backdrop-blur-md">
-        <h3 className="mb-2 text-sm text-gray-400">Expectancy</h3>
+      <div className="rounded-xl border border-white/10 bg-white/10 p-3 md:p-4 backdrop-blur-md">
+        <h3 className="mb-2 text-xs md:text-sm text-gray-400">Expectancy</h3>
 
         {expectancyData ? (
           <>
             <p
-              className={`text-lg font-semibold ${
+              className={`text-sm md:text-lg font-semibold ${
                 expectancyData.expectancy >= 0
                   ? "text-green-400"
                   : "text-red-400"
@@ -1423,23 +1425,23 @@ const worstDay = dailyPnLs.length > 0
               {formatMoney(expectancyData.expectancy)}
             </p>
 
-            <div className="text-xs text-gray-400 mt-2 space-y-1">
+            <div className="text-[11px] md:text-xs text-gray-400 mt-2 space-y-1">
               <p>Win Rate: {(expectancyData.winRate * 100).toFixed(0)}%</p>
               <p>Avg Win: {formatMoney(expectancyData.avgWin)}</p>
               <p>Avg Loss: {formatMoney(expectancyData.avgLoss)}</p>
             </div>
           </>
         ) : (
-          <p className="text-gray-500 text-sm">No data</p>
+          <p className="text-gray-500 text-xs md:text-sm">No data</p>
         )}
       </div>
 
-      <div className="rounded-xl border border-white/10 bg-white/10 p-4 backdrop-blur-md">
-        <h3 className="mb-2 text-sm text-gray-400">Streaks</h3>
+      <div className="rounded-xl border border-white/10 bg-white/10 p-3 md:p-4 backdrop-blur-md">
+        <h3 className="mb-2 text-xs md:text-sm text-gray-400">Streaks</h3>
 
         {streakData ? (
           <>
-            <p className="text-lg font-semibold text-white">
+            <p className="text-sm md:text-lg font-semibold text-white">
               Current: {streakData.currentStreak}{" "}
               <span
                 className={
@@ -1454,46 +1456,46 @@ const worstDay = dailyPnLs.length > 0
               </span>
             </p>
 
-            <div className="text-xs text-gray-400 mt-2 space-y-1">
+            <div className="text-[11px] md:text-xs text-gray-400 mt-2 space-y-1">
               <p>Max Wins: {streakData.maxWinStreak}</p>
               <p>Max Losses: {streakData.maxLossStreak}</p>
             </div>
           </>
         ) : (
-          <p className="text-gray-500 text-sm">No data</p>
+          <p className="text-gray-500 text-xs md:text-sm">No data</p>
         )}
       </div>
 
-      <div className="rounded-xl border border-white/10 bg-white/10 p-4 backdrop-blur-md">
-        <h3 className="mb-2 text-sm text-gray-400">Trading Hours</h3>
+      <div className="rounded-xl border border-white/10 bg-white/10 p-3 md:p-4 backdrop-blur-md">
+        <h3 className="mb-2 text-xs md:text-sm text-gray-400">Trading Hours</h3>
 
         {hourData ? (
           <>
-            <p className="text-green-400 text-sm">
+            <p className="text-green-400 text-xs md:text-sm">
               Best: {formatHour(hourData.best.hour)} (
               {formatMoney(hourData.best.avgPnL)})
             </p>
 
-            <p className="text-red-400 text-sm mt-1">
+            <p className="text-red-400 text-xs md:text-sm mt-1">
               Worst: {formatHour(hourData.worst.hour)} (
               {formatMoney(hourData.worst.avgPnL)})
             </p>
           </>
         ) : (
-          <p className="text-gray-500 text-sm">No data</p>
+          <p className="text-gray-500 text-xs md:text-sm">No data</p>
         )}
       </div>
     </div>
 
     {/* RIGHT: CHARTS */}
-    <div className="space-y-6 overflow-visible lg:col-span-2">
+    <div className="space-y-4 md:space-y-6 overflow-visible lg:col-span-2">
       {showEquity ? (
-        <div className="overflow-visible rounded-xl border border-white/10 bg-white/10 p-4 backdrop-blur-md">
-          <h2 className="text-base font-semibold mb-3 text-blue-300">
+        <div className="overflow-visible rounded-xl border border-white/10 bg-white/10 p-3 md:p-4 backdrop-blur-md">
+          <h2 className="text-sm md:text-base font-semibold mb-3 text-blue-300">
             Equity Curve
           </h2>
 
-          <div className="overflow-visible">
+          <div className="w-full overflow-x-auto">
           <ResponsiveContainer width="100%" height={350}>
             <LineChart
               data={equityDrawdownChartData}
@@ -1587,7 +1589,7 @@ const worstDay = dailyPnLs.length > 0
           </ResponsiveContainer>
           </div>
 
-          <div className="mt-3 flex flex-wrap gap-4 text-sm">
+          <div className="mt-3 flex flex-wrap gap-3 md:gap-4 text-xs md:text-sm">
             <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
               <span className="text-gray-400">Max DD:</span>{" "}
               <span className="text-red-400 font-medium">
@@ -1625,14 +1627,14 @@ const worstDay = dailyPnLs.length > 0
         {showSessions ? (
           <>
             {recentTradesSection}
-            <div className="flex min-h-[300px] h-full flex-col rounded-xl border border-white/10 bg-white/10 p-4 backdrop-blur-md">
-              <h2 className="mb-3 text-base font-semibold text-blue-300">
+            <div className="flex min-h-[300px] h-full flex-col rounded-xl border border-white/10 bg-white/10 p-3 md:p-4 backdrop-blur-md">
+              <h2 className="mb-3 text-sm md:text-base font-semibold text-blue-300">
                 Session Performance
               </h2>
               <div className="flex flex-1 flex-col gap-4">
                 <div className="flex min-h-[240px] flex-col">
-                  <p className="mb-2 text-sm text-gray-400">Trades by Session</p>
-                  <div className="min-h-0 flex-1">
+                  <p className="mb-2 text-xs md:text-sm text-gray-400">Trades by Session</p>
+                  <div className="min-h-0 flex-1 w-full overflow-x-auto">
                     <ResponsiveContainer width="100%" height={240}>
                       <PieChart>
                         <Pie
@@ -1657,8 +1659,8 @@ const worstDay = dailyPnLs.length > 0
                   </div>
                 </div>
                 <div className="flex flex-col">
-                  <p className="mb-2 text-sm text-gray-400">Session breakdown</p>
-                  <div className="grid grid-cols-3 gap-3">
+                  <p className="mb-2 text-xs md:text-sm text-gray-400">Session breakdown</p>
+                  <div className="grid grid-cols-3 gap-2 md:gap-3">
                     {(["London", "NY", "Asia"] as const).map((name) => {
                       const s = sessionBuckets[name]
                       const wr = s.totalTrades
@@ -1673,7 +1675,7 @@ const worstDay = dailyPnLs.length > 0
                       return (
                         <div
                           key={name}
-                          className="rounded-lg border border-white/10 bg-white/5 p-3 text-center text-sm"
+                          className="rounded-lg border border-white/10 bg-white/5 p-2 md:p-3 text-center text-xs md:text-sm"
                         >
                           <p className={`mb-2 font-semibold ${titleColor}`}>
                             {name}
@@ -1687,7 +1689,7 @@ const worstDay = dailyPnLs.length > 0
                             {wr.toFixed(1)}%
                           </p>
                           <p
-                            className={`mt-1 text-lg font-semibold tabular-nums ${
+                            className={`mt-1 text-sm md:text-lg font-semibold tabular-nums ${
                               s.totalPnL >= 0 ? "text-green-400" : "text-red-400"
                             }`}
                           >
@@ -1710,12 +1712,12 @@ const worstDay = dailyPnLs.length > 0
   </div>
 
   {/* SYMBOL + P&L BY WEEKDAY */}
-  <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:items-stretch">
+  <div className="grid grid-cols-1 gap-4 md:gap-6 lg:grid-cols-3 lg:items-stretch">
 
-    <div className="h-full overflow-x-auto rounded-xl border border-white/10 bg-white/10 p-4 lg:col-span-2">
-      <h3 className="mb-2 text-sm text-gray-400">Symbol Performance</h3>
+    <div className="h-full overflow-x-auto rounded-xl border border-white/10 bg-white/10 p-3 md:p-4 lg:col-span-2">
+      <h3 className="mb-2 text-xs md:text-sm text-gray-400">Symbol Performance</h3>
 
-      <table className="w-full min-w-[520px] text-sm">
+      <table className="w-full min-w-[520px] text-xs md:text-sm">
         <thead>
           <tr className="border-b border-white/10 text-gray-400">
             <th className="py-2 text-center">Ticker</th>
@@ -1750,13 +1752,13 @@ const worstDay = dailyPnLs.length > 0
   </div>
 
   {strategyPerformanceRows.length > 0 ? (
-    <div className="rounded-xl border border-white/10 bg-white/10 p-4 backdrop-blur-md">
-      <h3 className="mb-2 text-sm text-gray-400">Strategy Performance</h3>
+    <div className="rounded-xl border border-white/10 bg-white/10 p-3 md:p-4 backdrop-blur-md">
+      <h3 className="mb-2 text-xs md:text-sm text-gray-400">Strategy Performance</h3>
       <div className="space-y-2">
         {strategyPerformanceRows.slice(0, 5).map((row) => (
           <div
             key={row.strategy}
-            className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm"
+            className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs md:text-sm"
           >
             <span className="font-medium text-white">{row.strategy}</span>
             <span className="text-gray-300">Win Rate: {row.winRate.toFixed(0)}%</span>
@@ -1768,11 +1770,11 @@ const worstDay = dailyPnLs.length > 0
   ) : null}
 
           {(showInsights || showBestSetup) ? (
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 md:gap-6 md:grid-cols-2">
             {showInsights ? (
-            <div className="rounded-xl border border-white/10 bg-white/10 p-4 backdrop-blur-md">
-                <h3 className="mb-2 text-sm text-gray-400">Performance Insights</h3>
-                <p className="mb-3 text-xs text-gray-500">
+            <div className="rounded-xl border border-white/10 bg-white/10 p-3 md:p-4 backdrop-blur-md">
+                <h3 className="mb-2 text-xs md:text-sm text-gray-400">Performance Insights</h3>
+                <p className="mb-3 text-[11px] md:text-xs text-gray-500">
                   Data-driven highlights (min. 3 trades per session, symbol, or
                   direction). Respects current filters.
                 </p>
@@ -1781,14 +1783,14 @@ const worstDay = dailyPnLs.length > 0
                     {insights.map((text, i) => (
                       <p
                         key={`${i}-${text.slice(0, 24)}`}
-                        className="text-sm text-gray-200"
+                        className="text-xs md:text-sm text-gray-200"
                       >
                         • {text}
                       </p>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-gray-400">
+                  <p className="text-xs md:text-sm text-gray-400">
                     Not enough sample size yet — need at least 3 trades in a session,
                     symbol, or direction bucket (with current filters).
                   </p>
@@ -1798,25 +1800,25 @@ const worstDay = dailyPnLs.length > 0
 
             {showBestSetup ? (
             <div
-              className={`rounded-xl border border-white/10 bg-white/10 p-4 backdrop-blur-md ${!showInsights ? "md:col-span-2" : ""}`}
+              className={`rounded-xl border border-white/10 bg-white/10 p-3 md:p-4 backdrop-blur-md ${!showInsights ? "md:col-span-2" : ""}`}
             >
-              <h3 className="mb-2 text-sm text-gray-400">
+              <h3 className="mb-2 text-xs md:text-sm text-gray-400">
                 Best Performing Setup
               </h3>
               {bestSetup ? (
-                <div className="space-y-2 text-sm text-gray-300">
+                <div className="space-y-2 text-xs md:text-sm text-gray-300">
                   <p>
                     <span className="text-gray-400">Setup:</span>{" "}
-                    <span className="text-lg font-semibold text-white">{bestSetup.trade_type}</span>
+                    <span className="text-sm md:text-lg font-semibold text-white">{bestSetup.trade_type}</span>
                   </p>
                   <p>
                     <span className="text-gray-400">Win rate:</span>{" "}
-                    <span className="text-lg font-semibold text-white">{bestSetup.winRate.toFixed(1)}%</span>
+                    <span className="text-sm md:text-lg font-semibold text-white">{bestSetup.winRate.toFixed(1)}%</span>
                   </p>
                   <p>
                     <span className="text-gray-400">Total P&amp;L:</span>{" "}
                     <span
-                      className={`text-lg font-semibold tabular-nums ${
+                      className={`text-sm md:text-lg font-semibold tabular-nums ${
                         bestSetup.totalPnL >= 0 ? "text-green-400" : "text-red-400"
                       }`}
                     >
@@ -1825,11 +1827,11 @@ const worstDay = dailyPnLs.length > 0
                   </p>
                   <p>
                     <span className="text-gray-400">Trades:</span>{" "}
-                    <span className="text-lg font-semibold text-white">{bestSetup.trades}</span>
+                    <span className="text-sm md:text-lg font-semibold text-white">{bestSetup.trades}</span>
                   </p>
                 </div>
               ) : (
-                <p className="text-sm text-gray-400">
+                <p className="text-xs md:text-sm text-gray-400">
                   Need at least 3 trades with the same setup type (and non-empty
                   trade type) to rank setups.
                 </p>
@@ -1840,11 +1842,11 @@ const worstDay = dailyPnLs.length > 0
           ) : null}
 
           {(showInsights || showWorstSetup || showWarnings) ? (
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 md:gap-6 md:grid-cols-2">
             {showInsights ? (
-            <div className="rounded-xl border border-white/10 bg-white/10 p-4 backdrop-blur-md">
-                <h3 className="mb-2 text-sm text-gray-400">Advanced Edge</h3>
-                <p className="mb-3 text-xs text-gray-500">
+            <div className="rounded-xl border border-white/10 bg-white/10 p-3 md:p-4 backdrop-blur-md">
+                <h3 className="mb-2 text-xs md:text-sm text-gray-400">Advanced Edge</h3>
+                <p className="mb-3 text-[11px] md:text-xs text-gray-500">
                   Strongest <span className="text-gray-400">combined</span> setup
                   (pairs or triples, min. 3 trades). Same filters as above.
                 </p>
@@ -1853,14 +1855,14 @@ const worstDay = dailyPnLs.length > 0
                     {combinedInsights.map((text, i) => (
                       <p
                         key={`combo-${i}-${text.slice(0, 20)}`}
-                        className="text-sm font-medium text-emerald-300"
+                        className="text-xs md:text-sm font-medium text-emerald-300"
                       >
                         ⭐ {text}
                       </p>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-gray-400">
+                  <p className="text-xs md:text-sm text-gray-400">
                     No qualifying combined setup yet — need 3+ trades with consistent
                     session, symbol, and direction data.
                   </p>
@@ -1869,15 +1871,15 @@ const worstDay = dailyPnLs.length > 0
             ) : null}
 
             {showWorstSetup ? (
-            <div className="rounded-xl border border-white/10 bg-white/10 p-4 backdrop-blur-md">
-              <h3 className="mb-2 text-sm text-gray-400">Risk Insights</h3>
-              <p className="mb-3 text-xs text-gray-500">
+            <div className="rounded-xl border border-white/10 bg-white/10 p-3 md:p-4 backdrop-blur-md">
+              <h3 className="mb-2 text-xs md:text-sm text-gray-400">Risk Insights</h3>
+              <p className="mb-3 text-[11px] md:text-xs text-gray-500">
                 Lowest-performing combined setup (same 3+ trade rule as Advanced Edge).
               </p>
               {worstInsight ? (
-                <p className="text-lg font-semibold text-red-400">⚠️ {worstInsight}</p>
+                <p className="text-sm md:text-lg font-semibold text-red-400">⚠️ {worstInsight}</p>
               ) : (
-                <p className="text-sm text-gray-400">
+                <p className="text-xs md:text-sm text-gray-400">
                   No combined setup to rank yet, or filters removed too much data.
                 </p>
               )}
@@ -1885,21 +1887,21 @@ const worstDay = dailyPnLs.length > 0
             ) : null}
 
             {showWarnings ? (
-            <div className="rounded-xl border border-white/10 bg-white/10 p-4 backdrop-blur-md md:col-span-2">
-              <h3 className="mb-2 text-sm text-gray-400">Behavior Warnings</h3>
-              <p className="mb-3 text-xs text-gray-500">
+            <div className="rounded-xl border border-white/10 bg-white/10 p-3 md:p-4 backdrop-blur-md md:col-span-2">
+              <h3 className="mb-2 text-xs md:text-sm text-gray-400">Behavior Warnings</h3>
+              <p className="mb-3 text-[11px] md:text-xs text-gray-500">
                 Post–loss streak win rate (next 5 trades) and RR sample comparison.
               </p>
               {warnings.length > 0 ? (
                 <div className="space-y-2">
                   {warnings.map((w, i) => (
-                    <p key={`warn-${i}-${w.slice(0, 16)}`} className="text-sm text-yellow-300">
+                    <p key={`warn-${i}-${w.slice(0, 16)}`} className="text-xs md:text-sm text-yellow-300">
                       🚨 {w}
                     </p>
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-gray-400">
+                <p className="text-xs md:text-sm text-gray-400">
                   No behavioral flags for the current trade set.
                 </p>
               )}
@@ -1920,9 +1922,9 @@ function Stat({ title, value, positive }: any) {
   if (positive === false) color = "text-red-400"
 
   return (
-    <div className="rounded-xl border border-white/10 bg-white/10 p-4 backdrop-blur-md">
-      <p className="mb-2 text-sm text-gray-400">{title}</p>
-      <p className={`text-lg font-semibold tabular-nums ${color}`}>{value}</p>
+    <div className="rounded-xl border border-white/10 bg-white/10 p-3 md:p-5 backdrop-blur-md">
+      <p className="mb-2 text-xs md:text-sm text-gray-400">{title}</p>
+      <p className={`text-sm md:text-lg font-semibold tabular-nums ${color}`}>{value}</p>
     </div>
   )
 }

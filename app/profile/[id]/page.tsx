@@ -1,7 +1,8 @@
 "use client"
 
 import Navbar from "../../components/Navbar"
-import { useEffect, useMemo, useState } from "react"
+import type { ChangeEvent } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { supabase } from "../../../lib/supabaseClient"
 import { useParams, useRouter } from "next/navigation"
 import {
@@ -475,7 +476,6 @@ export default function ProfilePage() {
     "trades"
   )
   const [showCreatePost, setShowCreatePost] = useState(false)
-  const [showStoryModal, setShowStoryModal] = useState(false)
   const [postContent, setPostContent] = useState("")
   const [postImage, setPostImage] = useState<File | null>(null)
   const [creatingPost, setCreatingPost] = useState(false)
@@ -498,6 +498,54 @@ export default function ProfilePage() {
   const [calendarTrades, setCalendarTrades] = useState<any[]>([])
   const [accountFilter, setAccountFilter] = useState("All")
   const [accountTypeFilter, setAccountTypeFilter] = useState("All")
+
+  /** Feed refreshes the story bar here; profile has no story strip. */
+  const loadFollowingStories = useCallback(async () => {}, [])
+
+  const handleStoryUpload = useCallback(
+    async (e: ChangeEvent<HTMLInputElement>) => {
+      const input = e.target
+      const file = input.files?.[0]
+      input.value = ""
+      if (!file || !currentUserId) return
+
+      const fileExt = file.name.split(".").pop() || "png"
+      const fileName = `${currentUserId}/${Date.now()}.${fileExt}`
+
+      const { error: uploadError } = await supabase.storage
+        .from("stories")
+        .upload(fileName, file, { upsert: true })
+
+      if (uploadError) {
+        console.error(uploadError)
+        alert(uploadError.message)
+        return
+      }
+
+      const base = process.env.NEXT_PUBLIC_SUPABASE_URL
+      if (!base) {
+        alert("Missing NEXT_PUBLIC_SUPABASE_URL")
+        return
+      }
+
+      const publicUrl = `${base}/storage/v1/object/public/stories/${fileName}`
+
+      const { error: insertError } = await supabase.from("stories").insert({
+        user_id: currentUserId,
+        image_url: publicUrl,
+      })
+
+      if (insertError) {
+        console.error(insertError)
+        alert(insertError.message)
+        return
+      }
+
+      alert("Story uploaded!")
+      await loadFollowingStories()
+    },
+    [currentUserId, loadFollowingStories]
+  )
 
   const fetchTrades = async (forProfileId: string, reset = false) => {
     const from = reset ? 0 : page * PAGE_SIZE
@@ -1320,59 +1368,64 @@ export default function ProfilePage() {
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100">
         <div className="mx-auto max-w-5xl space-y-4 px-4 py-6 sm:px-6 lg:px-8">
           <div className="bg-white/5 border border-white/10 rounded-xl p-6 backdrop-blur-md">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-              <div className="flex min-w-0 flex-1 flex-col items-center gap-6 sm:flex-row sm:items-center sm:gap-6">
-                <img
-                  src={profile.avatar_url || "/default-avatar.png"}
-                  alt=""
-                  onError={(e) => {
-                    e.currentTarget.src = "/default-avatar.png"
-                  }}
-                  className="h-20 w-20 shrink-0 rounded-full border border-white/10 object-cover"
-                />
+            <div className="flex flex-col items-center text-center sm:items-stretch sm:text-left md:block">
+              <div className="flex w-full flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="flex min-w-0 w-full flex-1 flex-col items-center gap-2 sm:flex-row sm:items-center sm:gap-6">
+                  <img
+                    src={profile.avatar_url || "/default-avatar.png"}
+                    alt=""
+                    onError={(e) => {
+                      e.currentTarget.src = "/default-avatar.png"
+                    }}
+                    className="h-20 w-20 shrink-0 rounded-full border border-white/10 object-cover md:h-24 md:w-24"
+                  />
 
-                <div className="min-w-0 flex-1 text-center sm:text-left">
-                  <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start sm:gap-3">
-                    <h2 className="text-xl font-semibold text-white">
-                      {profile.username || "User"}
-                    </h2>
+                  <div className="min-w-0 w-full flex-1 text-center sm:text-left">
+                    <div className="flex flex-col items-center gap-2 sm:block">
+                      <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start sm:gap-3">
+                        <div className="flex items-center justify-center gap-2 sm:justify-start">
+                          <h2 className="text-lg font-semibold text-white md:text-xl">
+                            {profile.username || "User"}
+                          </h2>
 
-                    {currentUserId === profile.id && (
-                      <button
-                        type="button"
-                        onClick={() => router.push("/settings")}
-                        className="rounded-md bg-white/10 px-3 py-1 text-sm text-gray-100 hover:bg-white/20"
-                      >
-                        Settings
-                      </button>
-                    )}
+                          {currentUserId === profile.id && (
+                            <button
+                              type="button"
+                              onClick={() => router.push("/settings")}
+                              className="rounded-md bg-gray-600 px-2 py-1 text-xs text-gray-100 hover:bg-gray-500 md:bg-white/10 md:px-3 md:text-sm md:hover:bg-white/20"
+                            >
+                              Settings
+                            </button>
+                          )}
+                        </div>
 
-                    {currentUserId && currentUserId !== profile.id && (
-                      <>
-                        <button
-                          type="button"
-                          onClick={handleFollowToggle}
-                          disabled={followBusy}
-                          className={`rounded-md px-3 py-1 text-sm font-medium text-white disabled:opacity-50 ${
-                            isFollowing
-                              ? "bg-red-500 hover:bg-red-600"
-                              : "bg-blue-500 hover:bg-blue-600"
-                          }`}
-                        >
-                          {isFollowing ? "Unfollow" : "Follow"}
-                        </button>
+                        {currentUserId && currentUserId !== profile.id && (
+                          <div className="flex w-full flex-wrap items-center justify-center gap-2 sm:w-auto sm:justify-start">
+                            <button
+                              type="button"
+                              onClick={handleFollowToggle}
+                              disabled={followBusy}
+                              className={`rounded-md px-3 py-1 text-sm font-medium text-white disabled:opacity-50 ${
+                                isFollowing
+                                  ? "bg-red-500 hover:bg-red-600"
+                                  : "bg-blue-500 hover:bg-blue-600"
+                              }`}
+                            >
+                              {isFollowing ? "Unfollow" : "Follow"}
+                            </button>
 
-                        <button
-                          type="button"
-                          onClick={handleMessage}
-                          disabled={messageBusy}
-                          className="rounded-md border border-white/10 bg-white/10 px-3 py-1 text-sm text-gray-100 hover:bg-white/20 disabled:opacity-50"
-                        >
-                          Message
-                        </button>
-                      </>
-                    )}
-                  </div>
+                            <button
+                              type="button"
+                              onClick={handleMessage}
+                              disabled={messageBusy}
+                              className="rounded-md border border-white/10 bg-white/10 px-3 py-1 text-sm text-gray-100 hover:bg-white/20 disabled:opacity-50"
+                            >
+                              Message
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
 
                   {profile.name && profile.name !== profile.username ? (
                     <p className="mt-1 text-sm text-gray-400">{profile.name}</p>
@@ -1385,7 +1438,36 @@ export default function ProfilePage() {
                     • {getExperience(profile.started_trading) || "N/A"}
                   </p>
 
-                  <div className="mt-2 flex flex-wrap items-center justify-center gap-4 text-sm text-gray-400 sm:justify-start">
+                  <div className="mt-2 flex justify-center gap-6 text-sm sm:hidden md:text-base">
+                    <div className="text-center">
+                      <p className="font-semibold tabular-nums text-gray-200">
+                        {statsVisible ? totalTrades : "—"}
+                      </p>
+                      <p className="text-xs text-gray-400">Trades</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => openFollowersModal()}
+                      className="relative z-10 flex min-h-[44px] min-w-[44px] cursor-pointer flex-col items-center justify-center rounded-md px-2 py-1 active:scale-95"
+                    >
+                      <p className="font-semibold tabular-nums text-gray-200">
+                        {followersCount}
+                      </p>
+                      <p className="text-xs text-gray-400">Followers</p>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openFollowingModal()}
+                      className="relative z-10 flex min-h-[44px] min-w-[44px] cursor-pointer flex-col items-center justify-center rounded-md px-2 py-1 active:scale-95"
+                    >
+                      <p className="font-semibold tabular-nums text-gray-200">
+                        {followingCount}
+                      </p>
+                      <p className="text-xs text-gray-400">Following</p>
+                    </button>
+                  </div>
+
+                  <div className="mt-2 hidden flex-wrap items-center justify-center gap-4 text-sm text-gray-400 sm:flex sm:justify-start">
                     <span
                       role="button"
                       tabIndex={0}
@@ -1416,34 +1498,46 @@ export default function ProfilePage() {
                     </span>
                   </div>
 
-                  <p className="mt-2 text-sm leading-relaxed text-gray-300">
+                  <p className="mt-2 px-4 text-sm leading-relaxed text-gray-300 md:px-0">
                     {profile.bio || "No bio yet"}
                   </p>
                 </div>
               </div>
 
               {currentUserId === profile.id && (
-                <div className="flex shrink-0 justify-center gap-2 sm:justify-end sm:pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setShowStoryModal(true)}
-                    className="rounded-md bg-blue-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-600"
-                  >
-                    + Story
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowCreatePost(true)}
-                    className="rounded-md bg-blue-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-600"
-                  >
-                    + Post
-                  </button>
-                </div>
+                <>
+                  <input
+                    id="storyUploadInput"
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => void handleStoryUpload(e)}
+                  />
+                  <div className="mt-3 flex w-full shrink-0 justify-center gap-2 sm:mt-0 sm:w-auto sm:justify-end sm:pt-1 md:w-auto">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        document.getElementById("storyUploadInput")?.click()
+                      }
+                      className="flex-1 rounded-md bg-blue-500 px-3 py-2 text-sm font-medium text-white hover:bg-blue-600 sm:flex-none sm:py-1.5 sm:text-xs"
+                    >
+                      + Story
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowCreatePost(true)}
+                      className="flex-1 rounded-md bg-blue-500 px-3 py-2 text-sm font-medium text-white hover:bg-blue-600 sm:flex-none sm:py-1.5 sm:text-xs"
+                    >
+                      + Post
+                    </button>
+                  </div>
+                </>
               )}
+            </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
+          <div className="hidden grid-cols-2 gap-3 md:grid md:grid-cols-4 md:gap-4">
             <div className="rounded-lg border border-white/10 bg-white/5 p-3 text-center">
               <p className="text-lg font-semibold tabular-nums text-white">
                 {statsVisible ? totalTrades : "—"}
@@ -1487,13 +1581,13 @@ export default function ProfilePage() {
             </p>
           ) : null}
 
-          <div className="mt-6 flex gap-6 border-b border-white/10 pb-2">
+          <div className="mt-4 flex justify-around border-b border-white/10 sm:mt-6 sm:justify-start sm:gap-6 sm:pb-2">
             <button
               type="button"
-              className={`text-sm ${
+              className={`text-sm font-medium border-b-2 py-2 sm:py-0 ${
                 activeTab === "trades"
-                  ? "text-white border-b-2 border-blue-500 pb-1"
-                  : "text-gray-400"
+                  ? "border-blue-400 text-white sm:border-blue-500 sm:pb-1"
+                  : "border-transparent text-gray-400 sm:border-b-0"
               }`}
               onClick={() => setActiveTab("trades")}
             >
@@ -1502,10 +1596,10 @@ export default function ProfilePage() {
 
             <button
               type="button"
-              className={`text-sm ${
+              className={`text-sm font-medium border-b-2 py-2 sm:py-0 ${
                 activeTab === "posts"
-                  ? "text-white border-b-2 border-blue-500 pb-1"
-                  : "text-gray-400"
+                  ? "border-blue-400 text-white sm:border-blue-500 sm:pb-1"
+                  : "border-transparent text-gray-400 sm:border-b-0"
               }`}
               onClick={() => setActiveTab("posts")}
             >
@@ -1514,10 +1608,10 @@ export default function ProfilePage() {
 
             <button
               type="button"
-              className={`text-sm ${
+              className={`text-sm font-medium border-b-2 py-2 sm:py-0 ${
                 activeTab === "stats"
-                  ? "text-white border-b-2 border-blue-500 pb-1"
-                  : "text-gray-400"
+                  ? "border-blue-400 text-white sm:border-blue-500 sm:pb-1"
+                  : "border-transparent text-gray-400 sm:border-b-0"
               }`}
               onClick={() => setActiveTab("stats")}
             >
@@ -1526,10 +1620,10 @@ export default function ProfilePage() {
 
             <button
               type="button"
-              className={`text-sm ${
+              className={`text-sm font-medium border-b-2 py-2 sm:py-0 ${
                 activeTab === "calendar"
-                  ? "text-white border-b-2 border-blue-500 pb-1"
-                  : "text-gray-400"
+                  ? "border-blue-400 text-white sm:border-blue-500 sm:pb-1"
+                  : "border-transparent text-gray-400 sm:border-b-0"
               }`}
               onClick={() => setActiveTab("calendar")}
             >
@@ -1537,7 +1631,7 @@ export default function ProfilePage() {
             </button>
           </div>
 
-          <div className="mt-4 space-y-6">
+          <div className="mt-3 space-y-6 px-2 md:mt-4 md:px-0">
             {activeTab === "trades" && (
               <div className="mx-auto mt-4 w-full max-w-xl space-y-6 pb-8">
                 {sortedTrades.length === 0 ? (
@@ -1886,43 +1980,6 @@ export default function ProfilePage() {
             </div>
           </div>
         )}
-
-      {showStoryModal && (
-        <div
-          className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50"
-          onClick={() => setShowStoryModal(false)}
-        >
-          <div
-            className="bg-[#1e2a4a] border border-white/10 shadow-xl p-6 rounded-xl w-[400px]"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 className="text-lg font-semibold mb-4 text-white">Create Story</h2>
-
-            <input
-              type="file"
-              accept="image/*"
-              className="text-sm text-white file:bg-blue-500 file:text-white file:px-3 file:py-1 file:rounded file:border-none"
-            />
-
-            <div className="flex justify-end gap-2 mt-4">
-              <button
-                type="button"
-                onClick={() => setShowStoryModal(false)}
-                className="px-3 py-1 rounded bg-white/10 hover:bg-white/20 text-white"
-              >
-                Cancel
-              </button>
-
-              <button
-                type="button"
-                className="bg-blue-500 hover:bg-blue-600 px-4 py-2 rounded text-white font-medium"
-              >
-                Post Story
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {editingPost ? (
         <div

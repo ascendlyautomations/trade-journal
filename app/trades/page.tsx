@@ -312,9 +312,9 @@ const filteredTrades = trades.filter((trade) => {
 
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100">
 
-        <div className="p-12 max-w-7xl mx-auto">
+        <div className="p-12 max-w-7xl mx-auto px-3 pt-4 pb-8 md:p-12">
 
-          <h1 className="text-3xl font-semibold mb-5 text-center bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
+          <h1 className="text-3xl font-semibold mb-5 text-center bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent mt-4 md:mt-8">
             Trade History
           </h1>
 
@@ -323,6 +323,7 @@ const filteredTrades = trades.filter((trade) => {
           ) : (
             <>
               <TradeFilterBar
+                variant="trades"
                 className="mb-5"
                 accounts={accounts}
                 accountFilter={accountFilter}
@@ -334,7 +335,7 @@ const filteredTrades = trades.filter((trade) => {
                 selectedDate={selectedDate}
                 onSelectedDateChange={setSelectedDate}
                 leading={
-                  <div className="flex shrink-0 items-center gap-2">
+                  <div className="flex shrink-0 items-center gap-2 w-full justify-center md:w-auto">
                     <button
                       type="button"
                       onClick={() => setResultFilter("all")}
@@ -415,7 +416,7 @@ const filteredTrades = trades.filter((trade) => {
                   <button
                     type="button"
                     onClick={() => setShowAdvanced(!showAdvanced)}
-                    className="shrink-0 whitespace-nowrap rounded-md bg-white/10 px-3 py-1 text-sm text-white hover:bg-white/20"
+                    className="shrink-0 whitespace-nowrap rounded-md bg-white/10 px-3 py-1 text-sm text-white hover:bg-white/20 w-full md:w-auto"
                   >
                     {showAdvanced ? "Hide Advanced" : "Show Advanced"}
                   </button>
@@ -423,7 +424,7 @@ const filteredTrades = trades.filter((trade) => {
               />
 
               {/* 🔥 STATS BAR */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10 px-2 mt-4 md:px-0 md:mt-0">
 
                 <Stat
                   title="Trades"
@@ -731,7 +732,7 @@ function Stat({ title, value, positive }: any) {
   if (positive === false) color = "text-red-400"
 
   return (
-    <div className="bg-white/5 border border-white/10 p-4 rounded-xl text-center">
+    <div className="bg-white/5 border border-white/10 p-4 p-3 md:p-5 rounded-xl text-center">
       <p className="text-xs text-blue-300">{title}</p>
       <p className={`text-lg font-semibold ${color}`}>{value}</p>
     </div>

@@ -13,6 +13,7 @@ export default function ChatPage() {
   const [user, setUser] = useState<any>(null)
   const [profile, setProfile] = useState<any>(null)
   const [channel, setChannel] = useState<"random" | "trades">("random")
+  const [showRooms, setShowRooms] = useState(false)
 
   const [isAtBottom, setIsAtBottom] = useState(true)
   const [newMessages, setNewMessages] = useState(0)
@@ -205,32 +206,66 @@ export default function ChatPage() {
     <>
       <Navbar />
 
-      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white flex flex-col items-center p-6">
+      <div className="flex h-screen flex-col bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white md:flex-row">
+        {/* SIDEBAR (ROOM LIST) */}
+        <aside className="hidden w-[250px] border-r border-white/10 bg-black/20 p-4 md:block">
+          <h2 className="mb-4 text-xl font-semibold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
+            Trade Rooms
+          </h2>
+          <div className="space-y-2">
+            {["random", "trades"].map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => setChannel(c as "random" | "trades")}
+                className={`w-full rounded px-4 py-2 text-left ${
+                  channel === c ? "bg-emerald-500" : "bg-white/10"
+                }`}
+              >
+                {c === "random" ? "Random Chat" : "Trade Chat"}
+              </button>
+            ))}
+          </div>
+        </aside>
 
-        {/* HEADER */}
-        <div className="text-center mb-4">
-          <h1 className="text-3xl font-semibold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
-            Global Chat
-          </h1>
-        </div>
-
-        {/* CHANNEL SWITCH */}
-        <div className="flex gap-4 mb-4">
-          {["random", "trades"].map((c) => (
+        {/* CHAT AREA */}
+        <div className="relative flex-1 flex flex-col h-full">
+          {/* MOBILE TOP BAR */}
+          <div className="relative border-b border-white/10 bg-[#0B1220] md:hidden">
             <button
-              key={c}
-              onClick={() => setChannel(c as any)}
-              className={`px-4 py-2 rounded ${
-                channel === c ? "bg-emerald-500" : "bg-white/10"
-              }`}
+              className="px-3 py-2 text-white"
+              onClick={() => setShowRooms(!showRooms)}
             >
-              {c === "random" ? "Random Chat" : "Random ChatTrades"}
+              Rooms
             </button>
-          ))}
-        </div>
+            {showRooms && (
+              <div className="absolute top-12 left-0 z-50 w-full border-b border-white/10 bg-[#0B1220]">
+                <div className="space-y-2 p-3">
+                  {["random", "trades"].map((c) => (
+                    <button
+                      key={`mobile-${c}`}
+                      type="button"
+                      onClick={() => {
+                        setChannel(c as "random" | "trades")
+                        setShowRooms(false)
+                      }}
+                      className={`w-full rounded px-4 py-2 text-left ${
+                        channel === c ? "bg-emerald-500" : "bg-white/10"
+                      }`}
+                    >
+                      {c === "random" ? "Random Chat" : "Trade Chat"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
 
-        {/* CHAT BOX */}
-        <div className="relative w-full max-w-4xl h-[70vh] bg-black/20 border border-white/10 rounded-xl flex flex-col overflow-hidden">
+          <div className="hidden border-b border-white/10 bg-black/20 px-6 py-4 md:block">
+            <h1 className="text-3xl font-semibold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
+              Global Chat
+            </h1>
+          </div>
 
           {/* NEW MESSAGE BUTTON */}
           {newMessages > 0 && (
@@ -262,70 +297,82 @@ export default function ChatPage() {
               setIsAtBottom(bottom)
               if (bottom) setNewMessages(0)
             }}
-            className="flex-1 overflow-y-auto p-4 space-y-4"
+            className="flex-1 overflow-y-auto px-3 md:px-6 py-2"
           >
-            {messages.map((msg) => (
-              <div key={msg.id} className="bg-white/5 p-4 rounded-xl">
+            {messages.map((msg, idx) => {
+              const prev = idx > 0 ? messages[idx - 1] : null
+              const showName = !prev || prev.sender_id !== msg.sender_id
+              const isMe = msg.sender_id === user?.id
+              return (
+                <div
+                  key={msg.id}
+                  className={`mb-2 flex ${isMe ? "justify-end" : "justify-start"}`}
+                >
+                  <div className="max-w-[80%] md:max-w-[60%] rounded-xl bg-white/5 p-3 md:p-4">
+                    {showName && (
+                      <div className="mb-1 flex justify-between text-sm">
+                        <span
+                          onClick={() => router.push(`/profile/${msg.profiles?.id}`)}
+                          className="cursor-pointer text-emerald-400 transition hover:underline"
+                        >
+                          {msg.profiles?.username || "user"}
+                        </span>
+                        <span className="text-gray-400">
+                          {formatTimeEST(msg.created_at)}
+                        </span>
+                      </div>
+                    )}
 
-                <div className="flex justify-between text-sm">
-                  <span
-                    onClick={() => router.push(`/profile/${msg.profiles?.id}`)}
-                    className="text-emerald-400 cursor-pointer hover:underline transition"
-                  >
-                    {msg.profiles?.username || "user"}
-                  </span>
-                  <span className="text-gray-400">
-                    {formatTimeEST(msg.created_at)}
-                  </span>
+                    {msg.content && <p className="mt-1 break-words">{msg.content}</p>}
+
+                    {msg.image_url && (
+                      <img src={msg.image_url} className="mt-3 max-h-64 rounded-lg" />
+                    )}
+
+                    <div className="mt-2 flex gap-4 text-sm">
+                      <button onClick={() => react(msg.id, "like")}>
+                        👍 {countReactions(msg, "like")}
+                      </button>
+                      <button onClick={() => react(msg.id, "dislike")}>
+                        👎 {countReactions(msg, "dislike")}
+                      </button>
+                      <button onClick={() => react(msg.id, "laugh")}>
+                        😂 {countReactions(msg, "laugh")}
+                      </button>
+                    </div>
+                  </div>
                 </div>
-
-                {msg.content && <p className="mt-1">{msg.content}</p>}
-
-                {msg.image_url && (
-                  <img src={msg.image_url} className="mt-3 rounded-lg max-h-64" />
-                )}
-
-                <div className="flex gap-4 mt-2 text-sm">
-                  <button onClick={() => react(msg.id, "like")}>
-                    👍 {countReactions(msg, "like")}
-                  </button>
-                  <button onClick={() => react(msg.id, "dislike")}>
-                    👎 {countReactions(msg, "dislike")}
-                  </button>
-                  <button onClick={() => react(msg.id, "laugh")}>
-                    😂 {countReactions(msg, "laugh")}
-                  </button>
-                </div>
-
-              </div>
-            ))}
+              )
+            })}
             <div id="chat-bottom" />
           </div>
 
           {/* INPUT */}
-          <div className="border-t border-white/10 p-4 flex gap-2 bg-[#020617]">
+          <div className="sticky bottom-0 border-t border-white/10 bg-[#0B1220] p-2">
+            <div className="flex gap-2">
 
-            <input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Send message..."
-              className="flex-1 p-3 bg-black rounded border border-white/10"
-              onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-            />
+              <input
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="Send message..."
+                className="w-full rounded bg-[#111827] px-3 py-2 text-white"
+                onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+              />
 
-            <input
-              ref={fileRef}
-              type="file"
-              onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
-              className="text-sm"
-            />
+              <input
+                ref={fileRef}
+                type="file"
+                onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                className="text-sm"
+              />
 
-            <button
-              onClick={sendMessage}
-              className="bg-gradient-to-r from-blue-500 to-emerald-500 px-6 rounded"
-            >
-              Send
-            </button>
+              <button
+                onClick={sendMessage}
+                className="rounded bg-blue-500 px-3 py-2 text-white"
+              >
+                Send
+              </button>
+            </div>
 
           </div>
 

@@ -871,17 +871,19 @@ export default function InputTradeForm({
             </label>
           )}
 
-          <button
-            type="button"
-            disabled={submitting}
-            onClick={() => void handleSubmit()}
-            className="w-full bg-blue-500 hover:bg-blue-600 p-2 rounded font-semibold disabled:opacity-60"
-          >
-            {submitting ? "Saving…" : isEditMode ? "Save changes" : "Add Trade"}
-          </button>
+          <div className="hidden lg:block">
+            <button
+              type="button"
+              disabled={submitting}
+              onClick={() => void handleSubmit()}
+              className="w-full bg-blue-500 hover:bg-blue-600 p-2 rounded font-semibold disabled:opacity-60"
+            >
+              {submitting ? "Saving…" : isEditMode ? "Save changes" : "Add Trade"}
+            </button>
+          </div>
         </div>
 
-        <div className="bg-white/5 p-4 rounded-xl border border-white/10 space-y-3">
+        <div className="bg-white/5 p-4 rounded-xl border border-white/10 flex flex-col gap-3 md:gap-4">
           <p className="text-sm text-gray-400">Psychology</p>
           <select
             value={confidence}
@@ -948,6 +950,16 @@ export default function InputTradeForm({
             onChange={(e) => setPsychologyNotes(e.target.value)}
             className="w-full p-2 h-24 rounded bg-[#0f172a] border border-white/10 text-white"
           />
+          <div className="mt-4 lg:hidden">
+            <button
+              type="button"
+              disabled={submitting}
+              onClick={() => void handleSubmit()}
+              className="w-full py-3 rounded-lg bg-blue-500 hover:bg-blue-600 text-white font-semibold disabled:opacity-60"
+            >
+              {submitting ? "Saving…" : isEditMode ? "Save changes" : "Add Trade"}
+            </button>
+          </div>
         </div>
       </div>
     </>
