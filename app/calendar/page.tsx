@@ -1,7 +1,7 @@
 "use client"
 import Navbar from "../components/Navbar"
 import TradeCard from "../components/TradeCard"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
 
 function toDateKey(y: number, mZeroBased: number, dayNum: number) {
@@ -38,6 +38,12 @@ export default function CalendarPage() {
     return `${value < 0 ? "-" : ""}$${Math.abs(value).toLocaleString()}`
   }
 
+  function safeTradeCount(value: unknown) {
+    const n = typeof value === "string" ? parseFloat(value) : Number(value)
+    if (!Number.isFinite(n)) return 0
+    return Math.max(0, Math.round(n))
+  }
+
   const accounts = Array.from(
     new Set(
       trades
@@ -71,7 +77,7 @@ export default function CalendarPage() {
 
   const monthTrades = Object.values(dailyData).flatMap((d: any) => d.trades)
 
-  const totalTrades = monthTrades.length
+  const totalTrades = safeTradeCount(monthTrades.length)
   const wins = monthTrades.filter((t: any) => t.pnl > 0)
   const winRate = totalTrades ? (wins.length / totalTrades) * 100 : 0
   const totalPnL = monthTrades.reduce((sum: number, t: any) => sum + (t.pnl || 0), 0)
@@ -108,6 +114,11 @@ export default function CalendarPage() {
 
   function handleDaySelect(dayNum: number) {
     const key = toDateKey(year, month, dayNum)
+    if (selectedDate === key) {
+      setSelectedDate(null)
+      setSelectedTrades([])
+      return
+    }
     setSelectedDate(key)
     const list = filteredTrades.filter((trade) => {
       const d = new Date(trade.created_at)
@@ -120,6 +131,73 @@ export default function CalendarPage() {
     setSelectedTrades(list)
   }
 
+  const selectedDayStats = useMemo(() => {
+    if (!selectedDate) return null
+    const dayTrades = selectedTrades || []
+    const totalTradesForDay = safeTradeCount(dayTrades.length)
+    const totalPnlForDay = dayTrades.reduce(
+      (sum: number, t: any) => sum + (Number(t.pnl) || 0),
+      0
+    )
+    const winsForDay = dayTrades.filter((t: any) => (Number(t.pnl) || 0) > 0)
+    const lossesForDay = dayTrades.filter((t: any) => (Number(t.pnl) || 0) < 0)
+    const winRateForDay = totalTradesForDay
+      ? (winsForDay.length / totalTradesForDay) * 100
+      : 0
+    const avgRRForDay = totalTradesForDay
+      ? dayTrades.reduce((sum: number, t: any) => sum + (Number(t.rr) || 0), 0) /
+        totalTradesForDay
+      : 0
+    const bestTradeForDay = dayTrades.length
+      ? Math.max(...dayTrades.map((t: any) => Number(t.pnl) || 0))
+      : 0
+    const worstTradeForDay = dayTrades.length
+      ? Math.min(...dayTrades.map((t: any) => Number(t.pnl) || 0))
+      : 0
+    const avgWinForDay = winsForDay.length
+      ? winsForDay.reduce((sum: number, t: any) => sum + (Number(t.pnl) || 0), 0) /
+        winsForDay.length
+      : 0
+    const avgLossForDay = lossesForDay.length
+      ? lossesForDay.reduce((sum: number, t: any) => sum + (Number(t.pnl) || 0), 0) /
+        lossesForDay.length
+      : 0
+    const totalPointsForDay = dayTrades.reduce(
+      (sum: number, t: any) => sum + (Number(t.points) || 0),
+      0
+    )
+    const sessionCounts = dayTrades.reduce((acc: Record<string, number>, t: any) => {
+      const session = String(t.session || "").trim()
+      if (!session) return acc
+      acc[session] = (acc[session] || 0) + 1
+      return acc
+    }, {})
+    const modeCounts = dayTrades.reduce((acc: Record<string, number>, t: any) => {
+      const mode = String(t.mode ?? t.account_type ?? "").trim()
+      if (!mode) return acc
+      acc[mode] = (acc[mode] || 0) + 1
+      return acc
+    }, {})
+    const mainSession = Object.entries(sessionCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || null
+    const mainMode = Object.entries(modeCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || null
+
+    return {
+      totalTradesForDay,
+      totalPnlForDay,
+      winRateForDay,
+      avgRRForDay,
+      winningTrades: safeTradeCount(winsForDay.length),
+      losingTrades: safeTradeCount(lossesForDay.length),
+      bestTradeForDay,
+      worstTradeForDay,
+      avgWinForDay,
+      avgLossForDay,
+      totalPointsForDay,
+      mainSession,
+      mainMode,
+    }
+  }, [selectedDate, selectedTrades])
+
   function renderCalendarDay(
     day: number | null,
     weekIndex: number,
@@ -129,7 +207,7 @@ export default function CalendarPage() {
       return (
         <div
           key={`empty-${weekIndex}-${keySuffix}`}
-          className="aspect-square w-full min-h-0 flex flex-col items-center justify-center text-xs md:text-sm p-1 md:p-2 relative rounded-xl border border-white/10 bg-white/5"
+          className="relative aspect-square w-full min-h-0 rounded-lg border border-white/10 bg-white/[0.03]"
         />
       )
     }
@@ -150,35 +228,35 @@ export default function CalendarPage() {
           }
         }}
         className={`
-          aspect-square w-full min-h-0 flex flex-col items-center justify-center text-xs md:text-sm p-1 md:p-2 relative z-10 cursor-pointer
-          rounded-xl border border-white/10
-          transition hover:scale-[1.03]
+          relative z-10 aspect-square w-full min-h-0 cursor-pointer rounded-lg border
+          flex flex-col items-center justify-center px-0.5 py-1 text-center text-xs md:text-sm
+          transition md:hover:scale-[1.03]
           ${selectedDate === dayKey ? "ring-2 ring-blue-400 ring-inset" : ""}
-          ${data?.pnl > 0 ? "bg-emerald-500/25 border-emerald-400/40" : ""}
-          ${data?.pnl < 0 ? "bg-red-500/25 border-red-400/40" : ""}
-          ${!data ? "bg-white/5" : ""}
+          ${data?.pnl > 0 ? "border-emerald-400/50 bg-emerald-500/20 text-white" : ""}
+          ${data?.pnl < 0 ? "border-red-400/50 bg-red-500/20 text-white" : ""}
+          ${!data ? "border-white/15 bg-[#0b1220] text-gray-100" : ""}
         `}
       >
-        <div className="flex flex-col items-center justify-center overflow-hidden w-full max-w-full leading-tight">
-          <div className="truncate text-center text-[10px] md:text-xs text-gray-300 w-full leading-tight">
+        <div className="flex w-full max-w-full flex-col items-center justify-center overflow-hidden leading-tight">
+          <div className="w-full truncate text-center text-sm font-semibold leading-tight text-current">
             {day}
           </div>
 
           {data ? (
-            <div className="w-full truncate text-center text-[10px] md:text-xs leading-tight">
+            <div className="mt-0.5 w-full truncate text-center text-[11px] leading-tight">
               <div
                 className={`truncate text-center font-semibold leading-tight ${
                   data.pnl > 0
-                    ? "text-emerald-400"
+                    ? "text-emerald-100"
                     : data.pnl < 0
-                      ? "text-red-400"
-                      : ""
+                      ? "text-red-100"
+                      : "text-white"
                 }`}
               >
                 {formatPNL(data.pnl)}
               </div>
-              <div className="truncate text-center text-gray-400 text-[10px] md:text-xs leading-tight">
-                {data.trades.length} trades
+              <div className="truncate text-center text-[10px] leading-tight text-white/80">
+                {safeTradeCount(data?.trades?.length)} trades
               </div>
             </div>
           ) : null}
@@ -303,15 +381,60 @@ export default function CalendarPage() {
 
             {/* STATS */}
             <div className="bg-white/5 p-5 rounded-xl border border-white/10">
-              <h3 className="text-blue-400 font-semibold mb-3">Monthly Stats</h3>
+              {selectedDate && selectedDayStats ? (
+                <>
+                  <h3 className="text-blue-400 font-semibold mb-1">Selected Day Stats</h3>
+                  <p className="text-xs text-gray-400 mb-3">
+                    {new Date(selectedDate + "T12:00:00").toLocaleDateString()}
+                  </p>
 
-              <div className="space-y-2 text-sm">
-                <p>Total Trades: {totalTrades}</p>
-                <p>Win Rate: {winRate.toFixed(1)}%</p>
-                <p className={totalPnL > 0 ? "text-emerald-400" : totalPnL < 0 ? "text-red-400" : ""}>
-                  Total P&L: {formatPNL(totalPnL)}
-                </p>
-              </div>
+                  {selectedDayStats.totalTradesForDay === 0 ? (
+                    <p className="text-sm text-gray-400">No trades for this day.</p>
+                  ) : (
+                    <div className="space-y-2 text-sm">
+                      <p>
+                        Total P&L:{" "}
+                        <span
+                          className={
+                            selectedDayStats.totalPnlForDay > 0
+                              ? "text-emerald-400"
+                              : selectedDayStats.totalPnlForDay < 0
+                                ? "text-red-400"
+                                : ""
+                          }
+                        >
+                          {formatPNL(selectedDayStats.totalPnlForDay)}
+                        </span>
+                      </p>
+                      <p>Total Trades: {selectedDayStats.totalTradesForDay}</p>
+                      <p>Win Rate: {selectedDayStats.winRateForDay.toFixed(1)}%</p>
+                      <p>Avg RR: {selectedDayStats.avgRRForDay.toFixed(2)}</p>
+                      <p>Winning Trades: {selectedDayStats.winningTrades}</p>
+                      <p>Losing Trades: {selectedDayStats.losingTrades}</p>
+                      <p className={selectedDayStats.bestTradeForDay >= 0 ? "text-emerald-400" : "text-red-400"}>
+                        Best Trade: {formatPNL(selectedDayStats.bestTradeForDay)}
+                      </p>
+                      <p className={selectedDayStats.worstTradeForDay >= 0 ? "text-emerald-400" : "text-red-400"}>
+                        Worst Trade: {formatPNL(selectedDayStats.worstTradeForDay)}
+                      </p>
+                      <p>Avg Win: {formatPNL(selectedDayStats.avgWinForDay)}</p>
+                      <p>Total Points: {selectedDayStats.totalPointsForDay.toFixed(1)}</p>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  <h3 className="text-blue-400 font-semibold mb-3">Monthly Stats</h3>
+
+                  <div className="space-y-2 text-sm">
+                    <p>Total Trades: {totalTrades}</p>
+                    <p>Win Rate: {winRate.toFixed(1)}%</p>
+                    <p className={totalPnL > 0 ? "text-emerald-400" : totalPnL < 0 ? "text-red-400" : ""}>
+                      Total P&L: {formatPNL(totalPnL)}
+                    </p>
+                  </div>
+                </>
+              )}
             </div>
 
             {selectedDate ? (

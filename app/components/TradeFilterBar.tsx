@@ -29,6 +29,10 @@ export type TradeFilterBarProps = {
   trailing?: ReactNode
   /** Shown beside “All Modes” on small screens only (hide desktop copy with `hidden md:flex` on the trailing instance) */
   settingsNextToModes?: ReactNode
+  /** Optional compact public-trades control shown beside “All Modes” on mobile */
+  publicNextToModes?: ReactNode
+  /** Optional mobile date control rendered beside “All Modes” */
+  dateNextToModes?: ReactNode
   /** Outer wrapper, e.g. mb-5 w-full */
   className?: string
 }
@@ -46,17 +50,19 @@ export default function TradeFilterBar({
   leading,
   trailing,
   settingsNextToModes,
+  publicNextToModes,
+  dateNextToModes,
   className = "",
 }: TradeFilterBarProps) {
   return (
     <div className={`flex w-full justify-center ${className}`}>
-      <div className="relative z-50 flex max-w-full flex-wrap items-center justify-center gap-3 overflow-visible rounded-xl border border-white/10 bg-white/5 px-4 py-3 backdrop-blur-md lg:flex-nowrap">
+      <div className="relative z-50 flex max-w-full flex-wrap items-center justify-center gap-2 overflow-visible rounded-xl border border-white/10 bg-white/5 px-3 py-2 backdrop-blur-md md:gap-3 md:px-4 md:py-3 lg:flex-nowrap">
         {leading}
 
         <select
           value={accountFilter}
           onChange={(e) => onAccountChange(e.target.value)}
-          className="shrink-0 rounded-md border border-white/10 bg-[#0f172a] px-3 py-1 text-sm text-white hover:bg-[#1e293b] focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="h-[34px] w-full min-w-0 rounded-md border border-white/10 bg-[#0f172a] px-3 py-1 text-sm text-white hover:bg-[#1e293b] focus:outline-none focus:ring-2 focus:ring-blue-500 md:w-auto md:shrink-0"
         >
           <option value="all">All Accounts</option>
           {accounts.map((acc) => (
@@ -66,13 +72,13 @@ export default function TradeFilterBar({
           ))}
         </select>
 
-        {settingsNextToModes ? (
-          <div className="flex w-full min-w-0 items-center gap-2 md:block md:w-auto">
-            <div className="min-w-0 flex-1 md:w-auto">
+        {settingsNextToModes || dateNextToModes || publicNextToModes ? (
+          <div className="flex w-full min-w-0 items-center justify-center gap-1.5 md:block md:w-auto">
+            <div className="min-w-0 flex-[1.5] md:w-auto md:flex-none">
               <select
                 value={accountTypeFilter}
                 onChange={(e) => onAccountTypeChange(e.target.value)}
-                className="w-full min-w-0 rounded-md border border-white/10 bg-[#0f172a] px-3 py-1 text-sm text-white hover:bg-[#1e293b] focus:outline-none focus:ring-2 focus:ring-blue-500 md:w-auto md:shrink-0"
+                className="h-[34px] w-full min-w-0 rounded-md border border-white/10 bg-[#0f172a] px-2 py-1 text-sm text-white hover:bg-[#1e293b] focus:outline-none focus:ring-2 focus:ring-blue-500 md:w-auto md:shrink-0 md:px-3"
               >
                 <option value="all">All Modes</option>
                 <option value="funded">Funded</option>
@@ -80,15 +86,27 @@ export default function TradeFilterBar({
                 <option value="live">Live</option>
               </select>
             </div>
-            <div className="flex shrink-0 items-center justify-center md:hidden">
-              {settingsNextToModes}
-            </div>
+            {publicNextToModes ? (
+              <div className="flex shrink-0 items-center justify-center md:hidden">
+                {publicNextToModes}
+              </div>
+            ) : null}
+            {dateNextToModes ? (
+              <div className="flex shrink-0 items-center justify-center md:hidden">
+                {dateNextToModes}
+              </div>
+            ) : null}
+            {settingsNextToModes ? (
+              <div className="flex shrink-0 items-center justify-center md:hidden">
+                {settingsNextToModes}
+              </div>
+            ) : null}
           </div>
         ) : (
           <select
             value={accountTypeFilter}
             onChange={(e) => onAccountTypeChange(e.target.value)}
-            className="shrink-0 rounded-md border border-white/10 bg-[#0f172a] px-3 py-1 text-sm text-white hover:bg-[#1e293b] focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="h-[34px] shrink-0 rounded-md border border-white/10 bg-[#0f172a] px-3 py-1 text-sm text-white hover:bg-[#1e293b] focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="all">All Modes</option>
             <option value="funded">Funded</option>
@@ -97,13 +115,13 @@ export default function TradeFilterBar({
           </select>
         )}
 
-        <div className="flex shrink-0 gap-2">
+        <div className="flex w-full shrink-0 justify-center gap-2 md:w-auto">
           {TIME_OPTIONS.map(({ label, value }) => (
             <button
               key={value}
               type="button"
               onClick={() => onTimeframeChange(value)}
-              className={`shrink-0 whitespace-nowrap rounded-md px-3 py-1 text-sm ${
+              className={`flex h-[34px] shrink-0 items-center whitespace-nowrap rounded-md px-3 py-1 text-sm ${
                 timeframe === value
                   ? "bg-emerald-500 text-white hover:bg-emerald-600"
                   : "bg-white/10 text-white hover:bg-white/20"
@@ -114,12 +132,16 @@ export default function TradeFilterBar({
           ))}
         </div>
 
-        <div className="relative z-10 shrink-0">
+        <div
+          className={`relative z-10 shrink-0 ${
+            dateNextToModes ? "hidden md:block" : ""
+          }`}
+        >
           <input
             type="date"
             value={selectedDate}
             onChange={(e) => onSelectedDateChange(e.target.value)}
-            className="relative z-10 rounded-md border border-white/10 bg-[#0f172a] px-3 py-1 pr-10 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 [color-scheme:dark]"
+            className="relative z-10 h-[34px] rounded-md border border-white/10 bg-[#0f172a] px-3 py-1 pr-10 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 [color-scheme:dark]"
             style={{ colorScheme: "dark" }}
           />
 

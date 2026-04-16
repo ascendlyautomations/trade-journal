@@ -1354,13 +1354,41 @@ const worstDay = dailyPnLs.length > 0
             onTimeframeChange={setTimeFilter}
             selectedDate={selectedDate}
             onSelectedDateChange={setSelectedDate}
+            publicNextToModes={
+              <button
+                type="button"
+                onClick={() => setShowPublicOnly(!showPublicOnly)}
+                className={`h-[34px] whitespace-nowrap rounded-md border px-2 text-xs md:hidden ${
+                  showPublicOnly
+                    ? "border-emerald-400 bg-emerald-500 text-white hover:bg-emerald-600"
+                    : "border-white/10 bg-[#0f172a] text-white hover:bg-[#1e293b]"
+                }`}
+              >
+                Public
+              </button>
+            }
+            dateNextToModes={
+              <label
+                className="relative flex h-[34px] min-w-[34px] cursor-pointer items-center justify-center rounded-md border border-white/10 bg-[#0f172a] px-2 text-white transition hover:bg-[#1e293b] md:hidden"
+                aria-label="Filter by date"
+                title="Filter by date"
+              >
+                <span aria-hidden>📅</span>
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0 [color-scheme:dark]"
+                />
+              </label>
+            }
             settingsNextToModes={renderDashboardFilterSettings()}
             trailing={
               <>
                 <button
                   type="button"
                   onClick={() => setShowPublicOnly(!showPublicOnly)}
-                  className={`shrink-0 whitespace-nowrap rounded-md px-3 py-1 text-sm ${
+                  className={`hidden md:inline-flex shrink-0 whitespace-nowrap rounded-md px-3 py-1 text-sm ${
                     showPublicOnly
                       ? "bg-emerald-500 text-white hover:bg-emerald-600"
                       : "bg-white/10 text-white hover:bg-white/20"

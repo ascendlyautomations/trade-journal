@@ -177,7 +177,7 @@ export default function Calendar({
                       return (
                         <div
                           key={`empty-mobile-${weekIndex}-${idx}`}
-                          className="aspect-square w-full rounded bg-transparent"
+                          className="aspect-square w-full rounded-lg border border-white/10 bg-white/[0.02]"
                         />
                       )
                     }
@@ -193,19 +193,19 @@ export default function Calendar({
                         key={`mobile-${key}`}
                         type="button"
                         onClick={() => setSelectedDay(key)}
-                        className={`aspect-square w-full flex flex-col items-center justify-center p-1 text-xs md:p-2 md:text-sm cursor-pointer relative z-10 rounded transition ${
+                        className={`relative z-10 flex aspect-square w-full cursor-pointer flex-col items-center justify-center rounded-lg border px-1 py-1 text-center text-xs transition md:p-2 md:text-sm ${
                           dayTrades.length === 0
-                            ? "bg-white/5 text-gray-400"
+                            ? "border-white/15 bg-[#0b1220] text-gray-100"
                             : totalPnl >= 0
-                            ? "bg-green-500/20 text-green-200"
-                            : "bg-red-500/20 text-red-200"
-                        } ${active ? "ring-1 ring-blue-400" : ""}`}
+                            ? "border-green-400/40 bg-green-500/20 text-white"
+                            : "border-red-400/40 bg-red-500/20 text-white"
+                        } ${active ? "ring-2 ring-blue-400" : ""}`}
                       >
-                        <p className="w-full truncate text-center text-[10px] leading-tight md:text-xs">
+                        <p className="w-full truncate text-center text-sm font-semibold leading-tight">
                           {cell.date.getDate()}
                         </p>
                         {dayTrades.length ? (
-                          <p className="mt-1 w-full truncate text-center text-[10px] font-medium leading-tight md:text-xs">
+                          <p className="mt-0.5 w-full truncate text-center text-[11px] font-medium leading-tight text-white/90">
                             {totalPnl >= 0 ? "+" : ""}
                             {totalPnl.toFixed(0)}
                           </p>

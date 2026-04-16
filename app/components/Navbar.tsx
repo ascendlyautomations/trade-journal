@@ -21,7 +21,7 @@ export default function Navbar() {
 
   const router = useRouter()
   const pathname = usePathname()
-  const isHome = pathname === "/"
+  const isHomePage = pathname === "/"
 
   const navRef = useRef<HTMLDivElement>(null)
 
@@ -136,6 +136,10 @@ export default function Navbar() {
     setActiveMenu(activeMenu === menu ? null : menu)
   }
 
+  const toggleSection = (section: string) => {
+    setOpenSection((prev) => (prev === section ? null : section))
+  }
+
   useEffect(() => {
     setIsOpen(false)
     setOpenSection(null)
@@ -143,54 +147,27 @@ export default function Navbar() {
 
   if (loading) return null
 
-  const appNavMenus = [
-    {
-      key: "trades",
-      label: "Trades",
-      items: [
-        { label: "Input Trade", link: "/app" },
-        { label: "Trade History", link: "/trades" },
-        { label: "Backtest Data", link: "/backtest" },
-      ],
-    },
-    {
-      key: "analytics",
-      label: "Analytics",
-      items: [
-        { label: "Calendar", link: "/calendar" },
-        isProActive(profile)
-          ? { label: "AI Analyst", link: "/analyst", highlight: true }
-          : { label: "AI Analyst 🔒", link: null },
-      ],
-    },
-    {
-      key: "community",
-      label: "Community",
-      items: [
-        {
-          label: "My Profile",
-          action: () => router.push(`/profile/${profile?.id}`),
-          className: `${pathname.includes("/profile") ? "text-blue-400" : "text-gray-300"} hover:text-blue-300 font-medium`,
-        },
-        { label: "Feed", action: () => router.push("/feed") },
-        {
-          label: "Messages",
-          action: () => router.push("/messages"),
-          badge: unreadMessagesCount,
-        },
-        { label: "Trade Rooms", action: () => router.push("/community") },
-        { label: "Leaderboard", action: () => router.push("/leaderboard") },
-        { label: "Explore", action: () => router.push("/explore") },
-      ],
-    },
-    {
-      key: "earnings",
-      label: "Earnings",
-      items: [
-        { label: "Affiliate Dashboard", link: "/affiliate", highlight: true },
-        { label: "Payouts (Soon)", link: null },
-      ],
-    },
+  const analyticsLinks: {
+    label: string
+    href: string
+    proOnly?: boolean
+  }[] = [
+    { label: "Trade History", href: "/trade-history" },
+    { label: "Backtest Stats", href: "/backtest" },
+    { label: "Calendar", href: "/calendar" },
+    { label: "AI Analysis", href: "/ai", proOnly: true },
+  ]
+
+  const communityLinks: { label: string; href: string }[] = [
+    { label: "Feed", href: "/feed" },
+    { label: "Trade Rooms", href: "/trade-rooms" },
+    { label: "Leaderboard", href: "/leaderboard" },
+    { label: "Explore", href: "/explore" },
+  ]
+
+  const affiliateLinks: { label: string; href: string }[] = [
+    { label: "Affiliate Dashboard", href: "/affiliate" },
+    { label: "Payouts", href: "/payouts" },
   ]
 
   const closeMobile = () => {
@@ -213,65 +190,132 @@ export default function Navbar() {
             TradeTraxs
           </Link>
 
-          {!user ? (
+          {!user && !isHomePage ? (
             <Link href="/faq" className="hidden md:inline text-sm text-gray-200 hover:text-blue-400 transition">
               FAQ
             </Link>
           ) : null}
 
-          {!isHome && user ? (
+          {!isHomePage && user ? (
             <div className="hidden md:flex items-center gap-6 text-sm">
               <Link href="/dashboard" className="hover:text-blue-400">
                 Dashboard
               </Link>
 
-              {appNavMenus.map((menu) => (
-                <div key={menu.key} className="relative">
-                  <button type="button" onClick={() => toggleMenu(menu.key)} className="hover:text-blue-400">
-                    {menu.label} ▾
-                  </button>
+              <Link href="/input-trade" className="hover:text-blue-400">
+                Input Trade
+              </Link>
 
-                  {activeMenu === menu.key ? (
-                    <div className="absolute top-full mt-2 w-56 bg-[#1e293b] border border-white/10 rounded shadow-lg z-[9999]">
-                      {menu.items.map((item, i: number) => (
-                        <div key={i}>
-                          {"link" in item && item.link ? (
-                            <Link
-                              href={item.link}
-                              className={`block px-4 py-2 hover:bg-white/10 ${item.highlight ? "text-emerald-400 font-semibold" : ""}`}
-                            >
-                              {item.label}
-                            </Link>
-                          ) : "action" in item && item.action ? (
-                            <button
-                              type="button"
-                              onClick={item.action}
-                              className={`flex justify-between w-full px-4 py-2 hover:bg-white/10 text-left ${item.className || ""}`}
-                            >
-                              {item.label}
-                              {"badge" in item && (item.badge ?? 0) > 0 ? (
-                                <span className="bg-red-500 text-xs px-2 rounded-full">{item.badge}</span>
-                              ) : null}
-                            </button>
-                          ) : (
-                            <div className="px-4 py-2 text-gray-400">{item.label}</div>
-                          )}
+              <div className="relative">
+                <button type="button" onClick={() => toggleMenu("analytics")} className="hover:text-blue-400">
+                  Analytics ▾
+                </button>
+                {activeMenu === "analytics" ? (
+                  <div className="absolute top-full mt-2 w-56 bg-[#1e293b] border border-white/10 rounded shadow-lg z-[9999]">
+                    {analyticsLinks.map((item) =>
+                      item.proOnly && !isProActive(profile) ? (
+                        <div key={item.label} className="px-4 py-2 text-gray-400">
+                          {item.label} 🔒
                         </div>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-              ))}
+                      ) : (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          className="block px-4 py-2 hover:bg-white/10 text-gray-200"
+                        >
+                          {item.label}
+                        </Link>
+                      )
+                    )}
+                  </div>
+                ) : null}
+              </div>
 
-              <Link href="/suggestions" className="hover:text-blue-400">
-                Feedback
+              <div className="relative">
+                <button type="button" onClick={() => toggleMenu("community")} className="hover:text-blue-400">
+                  Community ▾
+                </button>
+                {activeMenu === "community" ? (
+                  <div className="absolute top-full mt-2 w-56 bg-[#1e293b] border border-white/10 rounded shadow-lg z-[9999]">
+                    {communityLinks.map((item) => (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        className="block px-4 py-2 hover:bg-white/10 text-gray-200"
+                      >
+                        {item.label}
+                      </Link>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="relative">
+                <button type="button" onClick={() => toggleMenu("affiliate")} className="hover:text-blue-400">
+                  Affiliate ▾
+                </button>
+                {activeMenu === "affiliate" ? (
+                  <div className="absolute top-full mt-2 w-56 bg-[#1e293b] border border-white/10 rounded shadow-lg z-[9999]">
+                    {affiliateLinks.map((item) => (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        className="block px-4 py-2 hover:bg-white/10 text-gray-200"
+                      >
+                        {item.label}
+                      </Link>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+
+              {profile?.id ? (
+                <Link
+                  href={`/profile/${profile.id}`}
+                  className={`hover:text-blue-400 ${pathname.includes("/profile") ? "text-blue-400" : ""}`}
+                >
+                  Profile
+                </Link>
+              ) : (
+                <span className="text-gray-500">Profile</span>
+              )}
+
+              <Link href="/messages" className="hover:text-blue-400 inline-flex items-center gap-2">
+                Messages
+                {unreadMessagesCount > 0 ? (
+                  <span className="bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full tabular-nums">
+                    {unreadMessagesCount > 9 ? "9+" : unreadMessagesCount}
+                  </span>
+                ) : null}
               </Link>
             </div>
           ) : null}
         </div>
 
         {/* RIGHT */}
-        {!user ? (
+        {isHomePage ? (
+          user ? (
+            profile?.id ? (
+              <Link
+                href={`/profile/${profile.id}`}
+                className="shrink-0 rounded border border-white/20 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10"
+              >
+                Profile
+              </Link>
+            ) : (
+              <span className="shrink-0 rounded border border-white/10 px-4 py-2 text-sm text-gray-500">
+                Profile
+              </span>
+            )
+          ) : (
+            <Link
+              href="/login"
+              className="shrink-0 rounded bg-blue-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-600"
+            >
+              Login
+            </Link>
+          )
+        ) : !user ? (
           <div className="flex items-center gap-3 shrink-0">
             <Link href="/faq" className="md:hidden text-sm text-gray-200 hover:text-blue-400 transition">
               FAQ
@@ -384,56 +428,42 @@ export default function Navbar() {
         )}
       </div>
 
-      {isOpen && user ? (
-        <div className="md:hidden px-4 pb-4 space-y-2 bg-[#0B1220] border-t border-white/10 pt-2">
-          <Link href="/dashboard" className="block py-2 text-white hover:text-blue-400" onClick={closeMobile}>
+      {isOpen && user && !isHomePage ? (
+        <div className="md:hidden px-4 pb-4 flex flex-col gap-3 text-white text-sm bg-[#0B1220] border-t border-white/10 pt-2">
+          <Link href="/dashboard" className="py-2 hover:text-blue-400" onClick={closeMobile}>
             Dashboard
           </Link>
 
-          <div>
-            <button
-              type="button"
-              className="w-full flex justify-between items-center py-2 text-white hover:text-blue-400 text-left"
-              onClick={() => setOpenSection(openSection === "trades" ? null : "trades")}
-            >
-              Trades
-              <span className="text-gray-400 tabular-nums">{openSection === "trades" ? "−" : "+"}</span>
-            </button>
-            {openSection === "trades" ? (
-              <div className="pl-4 flex flex-col gap-2 text-sm text-gray-300">
-                <Link href="/app" className="hover:text-white py-0.5" onClick={closeMobile}>
-                  Input Trade
-                </Link>
-                <Link href="/trades" className="hover:text-white py-0.5" onClick={closeMobile}>
-                  Trade History
-                </Link>
-                <Link href="/backtest" className="hover:text-white py-0.5" onClick={closeMobile}>
-                  Backtest Data
-                </Link>
-              </div>
-            ) : null}
-          </div>
+          <Link href="/input-trade" className="py-2 hover:text-blue-400" onClick={closeMobile}>
+            Input Trade
+          </Link>
 
           <div>
             <button
               type="button"
-              className="w-full flex justify-between items-center py-2 text-white hover:text-blue-400 text-left"
-              onClick={() => setOpenSection(openSection === "analytics" ? null : "analytics")}
+              className="w-full flex justify-between items-center py-2 cursor-pointer text-left text-white hover:text-blue-400"
+              onClick={() => toggleSection("analytics")}
             >
-              Analytics
+              <span>Analytics</span>
               <span className="text-gray-400 tabular-nums">{openSection === "analytics" ? "−" : "+"}</span>
             </button>
             {openSection === "analytics" ? (
-              <div className="pl-4 flex flex-col gap-2 text-sm text-gray-300">
-                <Link href="/calendar" className="hover:text-white py-0.5" onClick={closeMobile}>
-                  Calendar
-                </Link>
-                {isProActive(profile) ? (
-                  <Link href="/analyst" className="hover:text-emerald-300 font-medium py-0.5" onClick={closeMobile}>
-                    AI Analyst
-                  </Link>
-                ) : (
-                  <span className="text-gray-500 py-0.5">AI Analyst 🔒</span>
+              <div className="pl-4 mt-2 space-y-2 text-sm">
+                {analyticsLinks.map((item) =>
+                  item.proOnly && !isProActive(profile) ? (
+                    <span key={item.label} className="block text-gray-400">
+                      {item.label} 🔒
+                    </span>
+                  ) : (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className="block text-gray-400 hover:text-white"
+                      onClick={closeMobile}
+                    >
+                      {item.label}
+                    </Link>
+                  )
                 )}
               </div>
             ) : null}
@@ -442,37 +472,24 @@ export default function Navbar() {
           <div>
             <button
               type="button"
-              className="w-full flex justify-between items-center py-2 text-white hover:text-blue-400 text-left"
-              onClick={() => setOpenSection(openSection === "community" ? null : "community")}
+              className="w-full flex justify-between items-center py-2 cursor-pointer text-left text-white hover:text-blue-400"
+              onClick={() => toggleSection("community")}
             >
-              Community
+              <span>Community</span>
               <span className="text-gray-400 tabular-nums">{openSection === "community" ? "−" : "+"}</span>
             </button>
             {openSection === "community" ? (
-              <div className="pl-4 flex flex-col gap-2 text-sm text-gray-300">
-                {profile?.id ? (
+              <div className="pl-4 mt-2 space-y-2 text-sm">
+                {communityLinks.map((item) => (
                   <Link
-                    href={`/profile/${profile.id}`}
-                    className={`hover:text-white py-0.5 ${pathname.includes("/profile") ? "text-blue-400" : ""}`}
+                    key={item.href}
+                    href={item.href}
+                    className="block text-gray-400 hover:text-white"
                     onClick={closeMobile}
                   >
-                    My Profile
+                    {item.label}
                   </Link>
-                ) : (
-                  <span className="text-gray-500 py-0.5">My Profile</span>
-                )}
-                <Link href="/feed" className="hover:text-white py-0.5" onClick={closeMobile}>
-                  Feed
-                </Link>
-                <Link href="/community" className="hover:text-white py-0.5" onClick={closeMobile}>
-                  Trade Rooms
-                </Link>
-                <Link href="/leaderboard" className="hover:text-white py-0.5" onClick={closeMobile}>
-                  Leaderboard
-                </Link>
-                <Link href="/explore" className="hover:text-white py-0.5" onClick={closeMobile}>
-                  Explore
-                </Link>
+                ))}
               </div>
             ) : null}
           </div>
@@ -480,55 +497,63 @@ export default function Navbar() {
           <div>
             <button
               type="button"
-              className="w-full flex justify-between items-center py-2 text-white hover:text-blue-400 text-left"
-              onClick={() => setOpenSection(openSection === "earnings" ? null : "earnings")}
+              className="w-full flex justify-between items-center py-2 cursor-pointer text-left text-white hover:text-blue-400"
+              onClick={() => toggleSection("affiliate")}
             >
-              Earnings
-              <span className="text-gray-400 tabular-nums">{openSection === "earnings" ? "−" : "+"}</span>
+              <span>Affiliate</span>
+              <span className="text-gray-400 tabular-nums">{openSection === "affiliate" ? "−" : "+"}</span>
             </button>
-            {openSection === "earnings" ? (
-              <div className="pl-4 flex flex-col gap-2 text-sm text-gray-300">
-                <Link href="/affiliate" className="hover:text-emerald-300 font-medium py-0.5" onClick={closeMobile}>
-                  Affiliate Dashboard
-                </Link>
-                <span className="text-gray-500 py-0.5">Payouts (Soon)</span>
+            {openSection === "affiliate" ? (
+              <div className="pl-4 mt-2 space-y-2 text-sm">
+                {affiliateLinks.map((item) => (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className="block text-gray-400 hover:text-white"
+                    onClick={closeMobile}
+                  >
+                    {item.label}
+                  </Link>
+                ))}
               </div>
             ) : null}
           </div>
 
-          <Link href="/suggestions" className="block py-2 text-white hover:text-blue-400" onClick={closeMobile}>
-            Feedback
-          </Link>
+          {profile?.id ? (
+            <Link
+              href={`/profile/${profile.id}`}
+              className={`py-2 hover:text-blue-400 ${pathname.includes("/profile") ? "text-blue-400" : ""}`}
+              onClick={closeMobile}
+            >
+              Profile
+            </Link>
+          ) : (
+            <span className="py-2 text-gray-500">Profile</span>
+          )}
 
           <Link
             href="/messages"
-            className="flex items-center justify-between py-2 text-white hover:text-blue-400"
+            className="flex items-center justify-between py-2 hover:text-blue-400"
             onClick={closeMobile}
           >
             <span>Messages</span>
             {unreadMessagesCount > 0 ? (
-              <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full tabular-nums">{unreadMessagesCount}</span>
+              <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full tabular-nums">
+                {unreadMessagesCount > 9 ? "9+" : unreadMessagesCount}
+              </span>
             ) : null}
           </Link>
 
-          {profile?.id ? (
-            <Link href={`/profile/${profile.id}`} className="block py-2 text-white hover:text-blue-400" onClick={closeMobile}>
-              Profile
-            </Link>
-          ) : (
-            <span className="block py-2 text-gray-500">Profile</span>
-          )}
-
-          <Link href="/settings" className="block py-2 text-white hover:text-blue-400" onClick={closeMobile}>
-            Settings
-          </Link>
-
-          <div className="border-t border-white/10 pt-2 space-y-2">
+          <div className="border-t border-white/10 pt-2 flex flex-col gap-2">
             {user?.id === ADMIN_ID ? (
-              <Link href="/admin/feedback" className="block py-2 text-white hover:text-blue-400" onClick={closeMobile}>
+              <Link href="/admin/feedback" className="py-2 text-white hover:text-blue-400" onClick={closeMobile}>
                 Admin
               </Link>
             ) : null}
+
+            <Link href="/settings" className="py-2 text-white hover:text-blue-400" onClick={closeMobile}>
+              Settings
+            </Link>
 
             <button
               type="button"

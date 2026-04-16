@@ -104,12 +104,12 @@ export default function BacktestPage() {
     <>
       <Navbar />
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100">
-        <div className="mx-auto max-w-7xl p-6">
-          <h1 className="mb-0 text-center text-3xl font-semibold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
-            Backtest Lab
-          </h1>
+        <div className="mx-auto max-w-7xl px-6 pb-6 pt-3">
+          <h1 className="text-xl md:text-2xl font-semibold text-blue-300 text-center mb-1 mt-0 md:mt-0">
+  Backtest Lab
+</h1>
           <p className="mb-2 text-center text-sm text-gray-400">
-            Isolated backtests — does not affect Dashboard or Trade History.
+            Isolated backtests, does not affect dashboard or trade history.
           </p>
 
           {loading ? (

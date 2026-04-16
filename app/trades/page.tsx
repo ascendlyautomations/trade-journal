@@ -312,11 +312,11 @@ const filteredTrades = trades.filter((trade) => {
 
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100">
 
-        <div className="p-2 max-w-7xl mx-auto px-3 pt-2 pb-8 md:p-10">
+        <div className="p-2 max-w-7xl mx-auto px-3 pt-1 pb-8 md:p-10">
 
-          <h1 className="text-3xl font-semibold mb-3 text-center bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent mt-2 md:mt-0">
-            Trade History
-          </h1>
+          <h1 className="text-xl md:text-2xl font-semibold text-blue-300 text-center mb-2 mt-2 md:mt-0">
+  Trade History
+</h1>
 
           {loading ? (
             <p className="text-center text-gray-400">Loading...</p>
@@ -334,6 +334,21 @@ const filteredTrades = trades.filter((trade) => {
                 onTimeframeChange={setTimeframe}
                 selectedDate={selectedDate}
                 onSelectedDateChange={setSelectedDate}
+                dateNextToModes={
+                  <label
+                    className="relative flex h-[34px] min-w-[34px] cursor-pointer items-center justify-center rounded-md border border-white/10 bg-[#0f172a] px-2 text-white transition hover:bg-[#1e293b]"
+                    aria-label="Filter by date"
+                    title="Filter by date"
+                  >
+                    <span aria-hidden>📅</span>
+                    <input
+                      type="date"
+                      value={selectedDate}
+                      onChange={(e) => setSelectedDate(e.target.value)}
+                      className="absolute inset-0 h-full w-full cursor-pointer opacity-0 [color-scheme:dark]"
+                    />
+                  </label>
+                }
                 leading={
                   <div className="flex shrink-0 items-center gap-2 w-full justify-center md:w-auto">
                     <button
@@ -424,7 +439,7 @@ const filteredTrades = trades.filter((trade) => {
               />
 
               {/* 🔥 STATS BAR */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10 px-2 mt-4 md:px-0 md:mt-0">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5 px-2 mt-1 md:px-0 md:mt-0">
 
                 <Stat
                   title="Trades"
@@ -445,7 +460,7 @@ const filteredTrades = trades.filter((trade) => {
               </div>
 
               {/* GRID */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
                 {filteredTrades.map((trade) => {
   const entry = trade.entry_price ?? trade.entry ?? null
