@@ -10,8 +10,10 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-export async function POST() {
+export async function POST(req: Request) {
   try {
+    console.log("🚀 /api/create-portal-session hit")
+
     const cookieStore = await cookies()
     const supabaseAuth = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -23,10 +25,33 @@ export async function POST() {
       }
     )
     const {
-      data: { user },
+      data: { user: cookieUser },
     } = await supabaseAuth.auth.getUser()
 
+    let user = cookieUser
+
     if (!user) {
+      const authHeader = req.headers.get("authorization") || ""
+      const bearer = authHeader.startsWith("Bearer ")
+        ? authHeader.slice("Bearer ".length).trim()
+        : ""
+
+      if (bearer) {
+        const { data: tokenData, error: tokenErr } = await supabase.auth.getUser(
+          bearer
+        )
+        if (tokenErr) {
+          console.log("❌ Bearer token auth failed for portal:", tokenErr.message)
+        } else if (tokenData.user) {
+          user = tokenData.user
+        }
+      }
+    }
+
+    if (!user) {
+      console.log(
+        "❌ Unauthorized portal attempt: no Supabase auth user in request cookies or bearer token"
+      )
       return Response.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -46,15 +71,19 @@ export async function POST() {
     }
 
     if (!profile.stripe_customer_id) {
+      console.log("❌ No stripe_customer_id on profile for portal:", user.id)
       return Response.json(
         { error: "No Stripe customer on file" },
         { status: 400 }
       )
     }
 
+    const baseUrl =
+      process.env.NEXT_PUBLIC_BASE_URL?.trim() || new URL(req.url).origin
+
     const session = await stripe.billingPortal.sessions.create({
       customer: profile.stripe_customer_id,
-      return_url: "http://localhost:3000/settings"
+      return_url: `${baseUrl}/settings`
     })
 
     return Response.json({ url: session.url })

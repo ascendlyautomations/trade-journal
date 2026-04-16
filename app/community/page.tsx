@@ -1,8 +1,17 @@
 "use client"
 
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+} from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Navbar from "../components/Navbar"
+import DmStyleComposer from "../components/DmStyleComposer"
 import { supabase } from "../../lib/supabaseClient"
 
 type Room = {
@@ -72,8 +81,9 @@ function CommunityContent() {
   const [typingUsers, setTypingUsers] = useState<string[]>([])
   const [selectTrade, setSelectTrade] = useState(false)
   const [userTrades, setUserTrades] = useState<any[]>([])
+  const [mobileRoomsOpen, setMobileRoomsOpen] = useState(false)
   const typingChannelRef = useRef<any>(null)
-  const messagesEndRef = useRef<HTMLDivElement | null>(null)
+  const messagesScrollRef = useRef<HTMLDivElement | null>(null)
 
   const selectedRoom = useMemo(
     () => rooms.find((r) => r.id === selectedRoomId) ?? null,
@@ -342,8 +352,16 @@ function CommunityContent() {
     }
   }, [selectedRoomId, user?.id, username])
 
+  // Match Messages (`app/messages/[id]/page.tsx`): scroll only the messages
+  // overflow container — never scrollIntoView on inner content, or mobile Safari
+  // will scroll the document and hide the Navbar.
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+    const el = messagesScrollRef.current
+    if (!el) return
+    const id = window.setTimeout(() => {
+      el.scrollTop = el.scrollHeight
+    }, 50)
+    return () => window.clearTimeout(id)
   }, [messages])
 
   const sendTyping = useCallback(() => {
@@ -373,7 +391,7 @@ function CommunityContent() {
     setDraft("")
   }
 
-  async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleImageUpload(e: ChangeEvent<HTMLInputElement>) {
     if (!user?.id || !selectedRoomId) return
     const file = e.target.files?.[0]
     e.target.value = ""
@@ -449,42 +467,84 @@ function CommunityContent() {
   return (
     <>
       <Navbar />
-      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white px-4 py-4">
-        <div className="mx-auto flex h-[calc(100vh-90px)] w-full max-w-6xl overflow-hidden rounded-2xl border border-white/10 bg-black/25">
-          <aside className="w-72 shrink-0 border-r border-white/10 bg-[#0b1220]/80">
+      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white px-4 py-2">
+        <div className="mx-auto flex w-full max-w-6xl flex-col overflow-visible rounded-2xl border border-white/10 bg-black/25 md:h-[calc(100vh-90px)] md:flex-row md:overflow-hidden">
+          <aside className="shrink-0 border-b border-white/10 bg-[#0b1220]/80 md:w-72 md:border-b-0 md:border-r">
             <div className="border-b border-white/10 px-4 py-3">
-              <h1 className="text-lg font-semibold">Trade Rooms</h1>
+              <h1 className="hidden text-lg font-semibold md:block">Trade Rooms</h1>
+              <button
+                type="button"
+                className="flex w-full min-h-[48px] items-center justify-between gap-3 rounded-lg border border-white/10 bg-[#0f172a]/60 px-3 py-2.5 text-left transition hover:bg-white/5 md:hidden"
+                onClick={() => setMobileRoomsOpen((o) => !o)}
+                aria-expanded={mobileRoomsOpen}
+                aria-controls="trade-rooms-list"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
+                    Trade Rooms
+                  </p>
+                  <p className="truncate text-sm font-semibold text-white">
+                    {selectedRoom?.name || "Select room"}
+                  </p>
+                </div>
+                <svg
+                  className={`h-5 w-5 shrink-0 text-gray-300 transition-transform duration-200 ${
+                    mobileRoomsOpen ? "rotate-180" : ""
+                  }`}
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden
+                >
+                  <path d="M6 9l6 6 6-6" />
+                </svg>
+              </button>
             </div>
-            <div className="p-2">
-              {loadingRooms ? (
-                <p className="px-2 py-3 text-sm text-gray-400">Loading rooms...</p>
-              ) : rooms.length === 0 ? (
-                <p className="px-2 py-3 text-sm text-gray-400">No rooms found.</p>
-              ) : (
-                rooms.map((room) => {
-                  const selected = room.id === selectedRoomId
-                  return (
-                    <button
-                      key={room.id}
-                      type="button"
-                      onClick={() => setSelectedRoomId(room.id)}
-                      className={`mb-1 w-full rounded-lg px-3 py-2 text-left text-sm transition ${
-                        selected
-                          ? "bg-blue-500/25 text-blue-100"
-                          : "text-gray-200 hover:bg-white/10"
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span>{room.name || "Room"}</span>
-                      </div>
-                    </button>
-                  )
-                })
-              )}
+            <div
+              id="trade-rooms-list"
+              className={`grid overflow-hidden transition-[grid-template-rows] duration-200 ease-out ${
+                mobileRoomsOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+              } md:grid-rows-[1fr]`}
+            >
+              <div className="min-h-0 overflow-hidden">
+                <div className="max-h-[min(50svh,280px)] overflow-y-auto p-2 md:max-h-none">
+                  {loadingRooms ? (
+                    <p className="px-2 py-3 text-sm text-gray-400">Loading rooms...</p>
+                  ) : rooms.length === 0 ? (
+                    <p className="px-2 py-3 text-sm text-gray-400">No rooms found.</p>
+                  ) : (
+                    rooms.map((room) => {
+                      const selected = room.id === selectedRoomId
+                      return (
+                        <button
+                          key={room.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedRoomId(room.id)
+                            setMobileRoomsOpen(false)
+                          }}
+                          className={`mb-1 flex min-h-[44px] w-full items-center rounded-lg px-3 py-2 text-left text-sm transition ${
+                            selected
+                              ? "bg-blue-500/25 text-blue-100"
+                              : "text-gray-200 hover:bg-white/10"
+                          }`}
+                        >
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className="truncate">{room.name || "Room"}</span>
+                          </div>
+                        </button>
+                      )
+                    })
+                  )}
+                </div>
+              </div>
             </div>
           </aside>
 
-          <section className="flex min-w-0 flex-1 flex-col">
+          <section className="flex min-h-0 w-full min-w-0 flex-col md:flex-1">
             <div className="border-b border-white/10 px-4 py-3">
               <h2 className="text-base font-medium">
                 {selectedRoom?.name || "Select a room"}
@@ -508,7 +568,10 @@ function CommunityContent() {
               ) : null}
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+            <div
+              ref={messagesScrollRef}
+              className="min-h-0 max-h-[min(65svh,525px)] overflow-y-auto px-4 py-3 md:max-h-none md:flex-1"
+            >
               {!selectedRoomId ? (
                 <p className="text-sm text-gray-400">Pick a room to start chatting.</p>
               ) : loadingMessages ? (
@@ -559,59 +622,34 @@ function CommunityContent() {
                       </div>
                     </div>
                   ))}
-                  <div ref={messagesEndRef} />
                 </div>
               )}
             </div>
 
-            <div className="border-t border-white/10 p-3">
-              {typingUsers.length > 0 ? (
-                <p className="mb-2 text-xs text-gray-400">
-                  {typingUsers.join(", ")} typing...
-                </p>
-              ) : null}
-              <div className="flex gap-2">
-                <input
-                  value={draft}
-                  onChange={(e) => {
-                    setDraft(e.target.value)
-                    sendTyping()
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault()
-                      void sendMessage()
-                    }
-                  }}
-                  placeholder={selectedRoomId ? "Message room..." : "Select a room first"}
-                  disabled={!selectedRoomId}
-                  className="flex-1 rounded-lg border border-white/10 bg-[#0f172a]/80 px-3 py-2 text-sm text-white placeholder:text-gray-500 disabled:opacity-60"
-                />
-                <input
-                  type="file"
-                  accept="image/*"
-                  disabled={!selectedRoomId}
-                  onChange={(e) => void handleImageUpload(e)}
-                  className="rounded-lg border border-white/10 bg-[#0f172a]/80 px-2 py-2 text-xs text-gray-300 file:mr-2 file:rounded file:border-0 file:bg-blue-600 file:px-2 file:py-1 file:text-white disabled:opacity-60"
-                />
-                <button
-                  type="button"
-                  onClick={() => setSelectTrade(true)}
-                  disabled={!selectedRoomId}
-                  className="rounded-lg bg-[#1e293b] px-3 py-2 text-xs font-medium text-white hover:bg-[#334155] disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Send Trade
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void sendMessage()}
-                  disabled={!selectedRoomId || !draft.trim()}
-                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Send
-                </button>
-              </div>
-            </div>
+            <DmStyleComposer
+              value={draft}
+              onChange={(v) => {
+                setDraft(v)
+                sendTyping()
+              }}
+              onSend={() => void sendMessage()}
+              placeholder={
+                selectedRoomId ? "Message room..." : "Select a room first"
+              }
+              textDisabled={!selectedRoomId}
+              sendDisabled={!selectedRoomId || !draft.trim()}
+              onImageChange={(e) => void handleImageUpload(e)}
+              imageDisabled={!selectedRoomId}
+              onTradeClick={() => setSelectTrade(true)}
+              tradeDisabled={!selectedRoomId}
+              beforeRow={
+                typingUsers.length > 0 ? (
+                  <p className="text-xs text-gray-400">
+                    {typingUsers.join(", ")} typing...
+                  </p>
+                ) : null
+              }
+            />
           </section>
         </div>
       </div>
@@ -656,6 +694,36 @@ function CommunityContent() {
 }
 
 export default function CommunityPage() {
+  useEffect(() => {
+    const prevRestoration =
+      typeof history !== "undefined" ? history.scrollRestoration : undefined
+    if (typeof history !== "undefined") {
+      history.scrollRestoration = "manual"
+    }
+
+    const scrollPageTop = () => {
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" })
+      document.documentElement.scrollTop = 0
+      document.documentElement.scrollLeft = 0
+      document.body.scrollTop = 0
+      document.body.scrollLeft = 0
+    }
+
+    scrollPageTop()
+    const raf = requestAnimationFrame(() => {
+      scrollPageTop()
+    })
+    const t = window.setTimeout(scrollPageTop, 100)
+
+    return () => {
+      cancelAnimationFrame(raf)
+      window.clearTimeout(t)
+      if (typeof history !== "undefined" && prevRestoration != null) {
+        history.scrollRestoration = prevRestoration
+      }
+    }
+  }, [])
+
   return (
     <Suspense fallback={<div>Loading...</div>}>
       <CommunityContent />

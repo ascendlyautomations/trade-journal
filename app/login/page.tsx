@@ -15,6 +15,48 @@ export default function LoginPage() {
 
   const router = useRouter()
 
+  const shouldStartCheckout = () => {
+    if (typeof window === "undefined") return false
+    return new URLSearchParams(window.location.search).get("next") === "checkout"
+  }
+
+  async function startCheckoutAfterAuth(userId: string) {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+    const accessToken = session?.access_token
+
+    const referralCode =
+      typeof window !== "undefined"
+        ? localStorage.getItem("referral_code")
+        : null
+
+    const res = await fetch("/api/create-checkout-session", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      },
+      body: JSON.stringify({
+        userId,
+        referralCode,
+      }),
+    })
+
+    const data = await res.json()
+    console.log("Checkout API response from login:", { status: res.status, data })
+
+    if (!res.ok) {
+      throw new Error(data?.error || "Checkout failed")
+    }
+
+    if (!data.url) {
+      throw new Error("Missing checkout URL")
+    }
+
+    window.location.href = data.url
+  }
+
   useEffect(() => {
     if (typeof window === "undefined") return
     const ref = new URLSearchParams(window.location.search).get("ref")
@@ -23,6 +65,35 @@ export default function LoginPage() {
       localStorage.setItem("referral_code", ref.trim())
     } catch {
       /* ignore */
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!shouldStartCheckout()) return
+
+    let cancelled = false
+    const run = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user || cancelled) return
+
+      try {
+        setLoading(true)
+        await startCheckoutAfterAuth(user.id)
+      } catch (e) {
+        if (!cancelled) {
+          console.error("Checkout continuation failed:", e)
+        }
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+
+    void run()
+    return () => {
+      cancelled = true
     }
   }, [])
 
@@ -108,6 +179,16 @@ export default function LoginPage() {
         /* ignore private mode */
       }
 
+      if (shouldStartCheckout()) {
+        try {
+          await startCheckoutAfterAuth(user.id)
+          return
+        } catch (e) {
+          console.error("Checkout after signup failed:", e)
+          alert("Signed up, but checkout failed. Please try again from Pricing.")
+        }
+      }
+
       router.push("/dashboard")
     } catch (err) {
       console.error(
@@ -146,6 +227,19 @@ export default function LoginPage() {
     } = await supabase.auth.getUser()
 
     if (user) {
+      if (shouldStartCheckout()) {
+        try {
+          await startCheckoutAfterAuth(user.id)
+          setLoading(false)
+          return
+        } catch (e) {
+          console.error("Checkout after login failed:", e)
+          alert("Logged in, but checkout failed. Please try again from Pricing.")
+          setLoading(false)
+          return
+        }
+      }
+
       const { data: prof } = await supabase
         .from("profiles")
         .select("username")
@@ -172,10 +266,11 @@ export default function LoginPage() {
   }
 
   const handleGoogleLogin = async () => {
+    const redirectPath = shouldStartCheckout() ? "/login?next=checkout" : "/trades"
     await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${location.origin}/trades`,
+        redirectTo: `${location.origin}${redirectPath}`,
       },
     })
   }

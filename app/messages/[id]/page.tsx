@@ -1,6 +1,7 @@
 "use client"
 
 import Navbar from "../../components/Navbar"
+import DmStyleComposer from "../../components/DmStyleComposer"
 import TradeSocialLayer from "../../components/TradeSocialLayer"
 import { useEffect, useState, useRef, type ChangeEvent } from "react"
 import { supabase } from "../../../lib/supabaseClient"
@@ -422,6 +423,19 @@ export default function DMPage() {
   const fileRef = useRef<HTMLInputElement>(null)
   const userIdRef = useRef<string | null>(null)
 
+  function normalizeSeenBy(raw: unknown): string[] {
+    if (Array.isArray(raw)) return raw.map(String)
+    if (typeof raw === "string") {
+      try {
+        const parsed = JSON.parse(raw)
+        if (Array.isArray(parsed)) return parsed.map(String)
+      } catch {
+        return []
+      }
+    }
+    return []
+  }
+
   useEffect(() => {
     userIdRef.current = user?.id ?? null
   }, [user?.id])
@@ -437,6 +451,39 @@ export default function DMPage() {
   useEffect(() => {
     init()
   }, [id])
+
+  async function markMessageNotificationsRead(currentUserId: string) {
+    console.log("[messages/[id]] mark read start", {
+      userId: currentUserId,
+      conversationId: id,
+      type: "message",
+    })
+
+    const { data, error, count } = await supabase
+      .from("notifications")
+      .update({ read: true })
+      .eq("user_id", currentUserId)
+      .eq("type", "message")
+      .eq("read", false)
+      .select("id,type", { count: "exact" })
+
+    if (error) {
+      console.error("[messages/[id]] mark read error:", {
+        userId: currentUserId,
+        conversationId: id,
+        error,
+      })
+      return
+    }
+
+    console.log("[messages/[id]] mark read success", {
+      userId: currentUserId,
+      conversationId: id,
+      updated: count ?? data?.length ?? 0,
+    })
+
+    window.dispatchEvent(new CustomEvent("tj-unread-notifications-refresh"))
+  }
 
   useEffect(() => {
     if (!activeConversationId) return
@@ -580,6 +627,7 @@ export default function DMPage() {
     setUser(user)
 
     if (user) {
+      await markMessageNotificationsRead(user.id)
       await fetchConversationDetails(user.id)
       await loadMessages(user.id)
     }
@@ -656,15 +704,45 @@ export default function DMPage() {
       .select("id, seen_by, sender_id")
       .eq("conversation_id", id)
 
+    let updatedCount = 0
     for (const msg of data || []) {
       if (!msg.sender_id) continue
       if (msg.sender_id === currentUserId) continue
-      const seenBy = Array.isArray(msg.seen_by) ? msg.seen_by : []
+      const seenBy = normalizeSeenBy(msg.seen_by)
       if (seenBy.includes(currentUserId)) continue
+      const nextSeenBy = [...seenBy, currentUserId]
+      console.log("[messages/[id]] seen_by update attempt", {
+        messageId: msg.id,
+        oldSeenBy: seenBy,
+        newSeenBy: nextSeenBy,
+      })
       await supabase
         .from("messages")
-        .update({ seen_by: [...seenBy, currentUserId] })
+        .update({ seen_by: nextSeenBy })
         .eq("id", msg.id)
+      updatedCount += 1
+    }
+
+    const { data: verifyRows, error: verifyErr } = await supabase
+      .from("messages")
+      .select("id, sender_id, seen_by")
+      .eq("conversation_id", id)
+
+    if (verifyErr) {
+      console.error("[messages/[id]] verify seen_by error:", verifyErr)
+    } else {
+      const remainingUnread = (verifyRows || []).filter((r) => {
+        if (!r.sender_id || r.sender_id === currentUserId) return false
+        const seen = normalizeSeenBy(r.seen_by)
+        return !seen.includes(currentUserId)
+      })
+      console.log("[messages/[id]] markMessagesSeen verify", {
+        userId: currentUserId,
+        conversationId: id,
+        updatedCount,
+        remainingUnreadCount: remainingUnread.length,
+        remainingUnreadMessageIds: remainingUnread.map((r) => r.id),
+      })
     }
   }
 
@@ -1220,58 +1298,35 @@ export default function DMPage() {
             </div>
           ) : null}
 
-          <div className="mt-auto shrink-0 border-t border-white/10 bg-[#0B1220] p-2 md:p-4 md:bg-[#020617]">
-            <div className="flex items-center gap-1 w-full">
-              <input
-                type="text"
-                placeholder="Send message..."
-                value={input}
-                onChange={(e) => {
-                  setInput(e.target.value)
-                  if (!isTyping) setIsTyping(true)
-                }}
-                className="flex-1 px-3 py-2 rounded bg-[#111827] text-white text-sm"
-                onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-              />
-              <label className="p-2 bg-[#1f2937] rounded cursor-pointer flex items-center justify-center md:hover:bg-[#334155]">
-                📷
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImageChange}
-                  className="hidden"
-                />
-              </label>
-              <button
-                type="button"
-                onClick={() => setShowTradePicker(true)}
-                className="p-2 bg-[#1f2937] rounded flex items-center justify-center md:hover:bg-[#334155]"
-              >
-                📊
-              </button>
-              <button
-                type="button"
-                onClick={sendMessage}
-                className="px-3 py-2 bg-blue-500 hover:bg-blue-600 rounded text-sm whitespace-nowrap"
-              >
-                Send
-              </button>
-            </div>
-            
-            {allSeen ? (
-              <p className="mt-2 text-xs text-gray-400">Seen</p>
-            ) : null}
-            {groupSettingsSuccess ? (
-              <p className="mt-1 text-xs text-emerald-400">{groupSettingsSuccess}</p>
-            ) : null}
-            {selectedFile ? (
-              <div className="mt-2 text-xs text-gray-400">
-                <span>{selectedFile.name}</span>
-              </div>
-            ) : null}
-
-          </div>
+          <DmStyleComposer
+            value={input}
+            onChange={(v) => {
+              setInput(v)
+              if (!isTyping) setIsTyping(true)
+            }}
+            onSend={() => void sendMessage()}
+            placeholder="Send message..."
+            sendDisabled={false}
+            onImageChange={handleImageChange}
+            imageDisabled={false}
+            fileInputRef={fileRef}
+            onTradeClick={() => setShowTradePicker(true)}
+            afterRow={
+              <>
+                {allSeen ? (
+                  <p className="text-xs text-gray-400">Seen</p>
+                ) : null}
+                {groupSettingsSuccess ? (
+                  <p className="mt-1 text-xs text-emerald-400">{groupSettingsSuccess}</p>
+                ) : null}
+                {selectedFile ? (
+                  <div className="mt-1 text-xs text-gray-400">
+                    <span>{selectedFile.name}</span>
+                  </div>
+                ) : null}
+              </>
+            }
+          />
             
         </div>
 

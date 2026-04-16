@@ -6,14 +6,26 @@ import { cookies } from "next/headers"
 export const runtime = "nodejs"
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string)
+const STRIPE_PRICE_ID =
+  process.env.STRIPE_PRICE_ID || "price_1TGugNQlLqJe3Tfgwg2q1ApV"
+const TRIAL_DAYS = 14
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-export async function POST() {
+export async function POST(req: Request) {
   try {
+    console.log("🚀 /api/create-checkout-session hit")
+
+    if (!process.env.STRIPE_SECRET_KEY) {
+      return Response.json(
+        { error: "Missing STRIPE_SECRET_KEY" },
+        { status: 500 }
+      )
+    }
+
     const cookieStore = await cookies()
     const supabaseAuth = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -26,10 +38,35 @@ export async function POST() {
     )
 
     const {
-      data: { user },
+      data: { user: cookieUser },
     } = await supabaseAuth.auth.getUser()
 
+    let user = cookieUser
+
+    // Fallback for post-login race conditions where auth cookies are not yet
+    // attached to this request; still requires a valid Supabase bearer token.
     if (!user) {
+      const authHeader = req.headers.get("authorization") || ""
+      const bearer = authHeader.startsWith("Bearer ")
+        ? authHeader.slice("Bearer ".length).trim()
+        : ""
+
+      if (bearer) {
+        const { data: tokenData, error: tokenErr } = await supabase.auth.getUser(
+          bearer
+        )
+        if (tokenErr) {
+          console.log("❌ Bearer token auth failed for checkout:", tokenErr.message)
+        } else if (tokenData.user) {
+          user = tokenData.user
+        }
+      }
+    }
+
+    if (!user) {
+      console.log(
+        "❌ Unauthorized checkout attempt: no Supabase auth user in request cookies or bearer token"
+      )
       return Response.json({ error: "Unauthorized" }, { status: 401 })
     }
     const userEmail = user.email ?? undefined
@@ -140,7 +177,15 @@ export async function POST() {
       )
     }
 
-    const PRICE_ID = "price_1TGugNQlLqJe3Tfgwg2q1ApV"
+    const baseUrl =
+      process.env.NEXT_PUBLIC_BASE_URL?.trim() || new URL(req.url).origin
+
+    console.log("💳 Checkout config:", {
+      priceId: STRIPE_PRICE_ID,
+      baseUrl,
+      trialDays: TRIAL_DAYS,
+      userId: user.id,
+    })
 
     const sessionConfig: Stripe.Checkout.SessionCreateParams = {
       mode: "subscription",
@@ -149,17 +194,18 @@ export async function POST() {
       allow_promotion_codes: true,
       line_items: [
         {
-          price: PRICE_ID,
+          price: STRIPE_PRICE_ID,
           quantity: 1,
         },
       ],
-      success_url: "http://localhost:3000/dashboard",
-      cancel_url: "http://localhost:3000",
+      success_url: `${baseUrl}/dashboard?checkout=success`,
+      cancel_url: `${baseUrl}/?checkout=cancelled`,
       metadata: {
         user_id: user.id,
         userId: user.id,
       },
       subscription_data: {
+        trial_period_days: TRIAL_DAYS,
         metadata: {
           user_id: user.id,
           userId: user.id,

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import PublicNavbar from "./components/PublicNavbar"
 import AIAssistant from "@/app/components/AIAssistant"
@@ -8,6 +8,7 @@ import { supabase } from "../lib/supabaseClient"
 
 export default function LandingPage() {
   const router = useRouter()
+  const [checkoutLoading, setCheckoutLoading] = useState(false)
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -36,7 +37,13 @@ export default function LandingPage() {
           referralCode: localStorage.getItem("referral_code"),
         }),
       })
-        .then((res) => res.json())
+        .then(async (res) => {
+          const data = await res.json()
+          if (!res.ok) {
+            throw new Error(data?.error || "Referral checkout failed")
+          }
+          return data
+        })
         .then((data) => {
           if (data.url) {
             window.location.href = data.url
@@ -51,30 +58,52 @@ export default function LandingPage() {
   }, [])
 
   const handleSubscribe = async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+    setCheckoutLoading(true)
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
 
-    if (!user) {
-      alert("Please log in first")
-      return
-    }
+      if (!user) {
+        const qs = new URLSearchParams(window.location.search)
+        const ref = qs.get("ref")
+        const next = new URLSearchParams({ next: "checkout" })
+        if (ref) next.set("ref", ref)
+        router.push(`/login?${next.toString()}`)
+        return
+      }
 
-    const res = await fetch("/api/create-checkout-session", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        userId: user.id,
-        referralCode: localStorage.getItem("referral_code"),
-      }),
-    })
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+      const accessToken = session?.access_token
 
-    const data = await res.json()
+      const res = await fetch("/api/create-checkout-session", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+        body: JSON.stringify({
+          userId: user.id,
+          referralCode: localStorage.getItem("referral_code"),
+        }),
+      })
 
-    if (data.url) {
-      window.location.href = data.url
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data?.error || "Checkout failed")
+      }
+
+      if (data.url) {
+        window.location.href = data.url
+      }
+    } catch (err) {
+      console.error("Checkout error:", err)
+      alert("Checkout failed. Please try again.")
+    } finally {
+      setCheckoutLoading(false)
     }
   }
 
@@ -118,10 +147,11 @@ export default function LandingPage() {
           <div className="flex flex-wrap justify-center gap-4 z-10">
             <button
               type="button"
+              disabled={checkoutLoading}
               onClick={() => void handleSubscribe()}
-              className="bg-emerald-500 hover:bg-emerald-600 px-6 py-3 rounded-xl font-semibold text-white"
+              className="bg-emerald-500 hover:bg-emerald-600 disabled:opacity-60 disabled:cursor-not-allowed px-6 py-3 rounded-xl font-semibold text-white"
             >
-              Start 14-Day Free Trial
+              {checkoutLoading ? "Starting trial..." : "Start 14-Day Free Trial"}
             </button>
 
             <button

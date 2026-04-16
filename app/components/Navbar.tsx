@@ -24,6 +24,7 @@ export default function Navbar() {
   const isHomePage = pathname === "/"
 
   const navRef = useRef<HTMLDivElement>(null)
+  const badgeText = (count: number) => (count > 99 ? "99+" : String(count))
 
   // CLOSE ON OUTSIDE CLICK (nav + profile menu)
   useEffect(() => {
@@ -68,18 +69,27 @@ export default function Navbar() {
   const fetchUnread = useCallback(async () => {
     if (!user?.id) return
 
-    const { data, error } = await supabase
+    const { count, error } = await supabase
       .from("notifications")
-      .select("id")
+      .select("*", { count: "exact", head: true })
       .eq("user_id", user.id)
+      .eq("type", "message")
       .eq("read", false)
 
     if (error) {
-      console.error("Unread fetch error:", error)
+      console.error("[navbar] unread notifications fetch failed", {
+        query:
+          "notifications select count where user_id = currentUser and type = message and read = false",
+        userId: user.id,
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code,
+      })
       return
     }
 
-    setUnreadCount(data?.length || 0)
+    setUnreadCount(count ?? 0)
   }, [user])
 
   useEffect(() => {
@@ -374,7 +384,7 @@ export default function Navbar() {
                 </div>
                 {unreadCount > 0 ? (
                   <span className="absolute -top-1 -right-2 bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full tabular-nums min-w-[1.25rem] text-center">
-                    {unreadCount > 9 ? "9+" : unreadCount}
+                    {badgeText(unreadCount)}
                   </span>
                 ) : null}
               </div>
@@ -568,7 +578,7 @@ export default function Navbar() {
               <span>Notifications</span>
               {unreadCount > 0 ? (
                 <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full tabular-nums">
-                  {unreadCount > 9 ? "9+" : unreadCount}
+                  {badgeText(unreadCount)}
                 </span>
               ) : null}
             </button>

@@ -64,14 +64,14 @@ const TABS: {
 
 export default function SettingsPage() {
   const router = useRouter()
-  const [activeTab, setActiveTab] = useState<TabId>("profile")
+  const [activeTab, setActiveTab] = useState<TabId>("account")
 
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [savingProfile, setSavingProfile] = useState(false)
   const [savingAccountPrivacy, setSavingAccountPrivacy] = useState(false)
   const [savingPassword, setSavingPassword] = useState(false)
-  const [cancelingSub, setCancelingSub] = useState(false)
+  const [manageLoading, setManageLoading] = useState(false)
   const [checkoutLoading, setCheckoutLoading] = useState(false)
   const [profile, setProfile] = useState<Record<string, unknown> | null>(null)
   const [newPassword, setNewPassword] = useState("")
@@ -105,23 +105,11 @@ export default function SettingsPage() {
     void init()
   }, [])
 
-  async function init() {
-    const {
-      data: { user: u },
-    } = await supabase.auth.getUser()
-
-    if (!u) {
-      setLoading(false)
-      router.push("/login")
-      return
-    }
-
-    setUser(u)
-
+  async function fetchProfile(userId: string) {
     const { data } = await supabase
       .from("profiles")
       .select("*")
-      .eq("id", u.id)
+      .eq("id", userId)
       .single()
 
     if (data) {
@@ -140,7 +128,32 @@ export default function SettingsPage() {
       setMaxDrawdown(
         raw != null && raw !== "" ? String(raw) : ""
       )
+    }
 
+    return data ?? null
+  }
+
+  async function getAccessToken(): Promise<string | null> {
+    const { data: sessionData } = await supabase.auth.getSession()
+    return sessionData.session?.access_token ?? null
+  }
+
+  async function init() {
+    const {
+      data: { user: u },
+    } = await supabase.auth.getUser()
+
+    if (!u) {
+      setLoading(false)
+      router.push("/login")
+      return
+    }
+
+    setUser(u)
+
+    const data = await fetchProfile(u.id)
+
+    if (data) {
       try {
         const { data: affiliate } = await supabase
           .from("affiliates")
@@ -310,9 +323,18 @@ export default function SettingsPage() {
 
     setCheckoutLoading(true)
     try {
+      const token = await getAccessToken()
+      if (!token) {
+        router.push("/login?next=checkout")
+        return
+      }
+
       const res = await fetch("/api/create-checkout-session", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({
           userId: user.id,
           referralCode:
@@ -323,6 +345,17 @@ export default function SettingsPage() {
       })
 
       const data = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        console.error("Settings checkout failed:", { status: res.status, data })
+        if (res.status === 401) {
+          alert("Session expired. Please sign in again.")
+          router.push("/login?next=checkout")
+          return
+        }
+        alert(typeof data.error === "string" ? data.error : "Checkout failed")
+        return
+      }
 
       if (data.url) {
         window.location.href = data.url as string
@@ -337,52 +370,53 @@ export default function SettingsPage() {
     }
   }
 
-  async function cancelSubscriptionAtPeriodEnd() {
+  async function openStripeSubscriptionPortal() {
     if (!user) return
 
-    if (
-      !window.confirm(
-        "Cancel at the end of the current billing period? You keep access until then."
-      )
-    ) {
-      return
-    }
-
-    setCancelingSub(true)
+    setManageLoading(true)
     try {
-      const { data: sessionData } = await supabase.auth.getSession()
-      const token = sessionData.session?.access_token
+      const token = await getAccessToken()
       if (!token) {
         alert("Session expired. Please sign in again.")
+        router.push("/login")
         return
       }
 
-      const res = await fetch("/api/stripe/cancel-subscription", {
+      const res = await fetch("/api/create-portal-session", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ userId: user.id }),
       })
 
       const data = await res.json().catch(() => ({}))
 
       if (!res.ok) {
-        alert(typeof data.error === "string" ? data.error : "Cancel request failed")
+        console.error("Settings portal failed:", { status: res.status, data })
+        if (res.status === 401) {
+          alert("Session expired. Please sign in again.")
+          router.push("/login")
+          return
+        }
+        alert(
+          typeof data.error === "string"
+            ? data.error
+            : "Unable to open billing portal"
+        )
         return
       }
 
-      alert(
-        typeof data.message === "string"
-          ? data.message
-          : "Subscription updated."
-      )
+      if (data.url) {
+        window.location.href = data.url as string
+      } else {
+        alert("Unable to open billing portal")
+      }
     } catch (e) {
       console.error(e)
       alert("Something went wrong")
     } finally {
-      setCancelingSub(false)
+      setManageLoading(false)
     }
   }
 
@@ -453,6 +487,12 @@ export default function SettingsPage() {
   }
 
   const activeMeta = TABS.find((t) => t.id === activeTab)!
+  const rawStatus = String(profile?.subscription_status ?? "").toLowerCase().trim()
+  const displayStatus = rawStatus || "inactive"
+  const isSubscribed =
+    displayStatus === "active" ||
+    displayStatus === "trialing" ||
+    isProActive(profile)
 
   return (
     <>
@@ -791,13 +831,10 @@ export default function SettingsPage() {
                     <p className="text-xs text-gray-500">Status</p>
                     <p
                       className={`mt-1 font-semibold capitalize ${subscriptionStatusClass(
-                        profile?.subscription_status
+                        displayStatus
                       )}`}
                     >
-                      {profile?.subscription_status != null &&
-                      String(profile.subscription_status).trim() !== ""
-                        ? String(profile.subscription_status)
-                        : "inactive"}
+                      {displayStatus}
                     </p>
                   </div>
 
@@ -835,7 +872,7 @@ export default function SettingsPage() {
                   </ul>
                 </div>
 
-                {profile?.is_pro !== true ? (
+                {!isSubscribed ? (
                   <button
                     type="button"
                     onClick={() => void startTraxProCheckout()}
@@ -846,19 +883,19 @@ export default function SettingsPage() {
                   </button>
                 ) : null}
 
-                {isProActive(profile) && profile?.stripe_customer_id ? (
+                {isSubscribed || profile?.stripe_customer_id ? (
                   <div className="border-t border-white/10 pt-6">
                     <button
                       type="button"
-                      onClick={() => void cancelSubscriptionAtPeriodEnd()}
-                      disabled={cancelingSub}
-                      className="w-full rounded-xl bg-red-600 py-3 font-semibold text-white hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
+                      onClick={() => void openStripeSubscriptionPortal()}
+                      disabled={manageLoading}
+                      className="w-full rounded-xl bg-white/10 py-3 font-semibold text-white hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      {cancelingSub ? "Processing…" : "Cancel Subscription"}
+                      {manageLoading ? "Opening…" : "Manage / Cancel Subscription"}
                     </button>
                     <p className="mt-3 text-center text-xs text-gray-400">
-                      Your subscription will remain active until the end of the billing
-                      period.
+                      Subscription changes and cancellation are handled securely in
+                      Stripe Customer Portal.
                     </p>
                   </div>
                 ) : null}
