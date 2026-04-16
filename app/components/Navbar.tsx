@@ -165,6 +165,7 @@ export default function Navbar() {
     { label: "Trade History", href: "/trade-history" },
     { label: "Backtest Stats", href: "/backtest" },
     { label: "Calendar", href: "/calendar" },
+    { label: "Achievements", href: "/achievements" },
     { label: "AI Analysis", href: "/ai", proOnly: true },
   ]
 

@@ -17,6 +17,15 @@ import {
 import TradeSocialLayer from "../../components/TradeSocialLayer"
 import InputTradeForm from "../../components/InputTradeForm"
 import Calendar from "../../components/Calendar"
+import {
+  type Achievement,
+  badgeIconForKey,
+  fetchOwnAchievements,
+  fetchVisibleProfileAchievements,
+  formatAchievementDate,
+  formatAchievementValue,
+  tierClassName,
+} from "../../../lib/achievements"
 
 function postImageSrc(imageUrl: string | null | undefined): string | null {
   const raw = imageUrl != null ? String(imageUrl).trim() : ""
@@ -471,7 +480,7 @@ export default function ProfilePage() {
   const [followingModalUsers, setFollowingModalUsers] = useState<any[]>([])
   const [wallPosts, setWallPosts] = useState<any[]>([])
   const [activeTab, setActiveTab] = useState<
-    "trades" | "posts" | "calendar" | "stats"
+    "trades" | "posts" | "calendar" | "stats" | "achievements"
   >(
     "trades"
   )
@@ -498,6 +507,7 @@ export default function ProfilePage() {
   const [calendarTrades, setCalendarTrades] = useState<any[]>([])
   const [accountFilter, setAccountFilter] = useState("All")
   const [accountTypeFilter, setAccountTypeFilter] = useState("All")
+  const [achievements, setAchievements] = useState<Achievement[]>([])
 
   /** Feed refreshes the story bar here; profile has no story strip. */
   const loadFollowingStories = useCallback(async () => {}, [])
@@ -633,6 +643,32 @@ export default function ProfilePage() {
       cancelled = true
     }
   }, [profile?.id])
+
+  useEffect(() => {
+    if (!profile?.id || !currentUserId) {
+      setAchievements([])
+      return
+    }
+    let cancelled = false
+    async function fetchProfileAchievements() {
+      const isOwner = currentUserId === profile.id
+      const query = isOwner
+        ? await fetchOwnAchievements(profile.id)
+        : await fetchVisibleProfileAchievements(profile.id)
+      const { data, error } = query
+      if (cancelled) return
+      if (error) {
+        console.error("profile achievements fetch:", error)
+        setAchievements([])
+        return
+      }
+      setAchievements((data || []) as Achievement[])
+    }
+    void fetchProfileAchievements()
+    return () => {
+      cancelled = true
+    }
+  }, [profile?.id, currentUserId])
 
   useEffect(() => {
     if (!profile?.id) {
@@ -1629,6 +1665,17 @@ export default function ProfilePage() {
             >
               Calendar
             </button>
+            <button
+              type="button"
+              className={`text-sm font-medium border-b-2 py-2 sm:py-0 ${
+                activeTab === "achievements"
+                  ? "border-blue-400 text-white sm:border-blue-500 sm:pb-1"
+                  : "border-transparent text-gray-400 sm:border-b-0"
+              }`}
+              onClick={() => setActiveTab("achievements")}
+            >
+              Achievements
+            </button>
           </div>
 
           <div className="mt-3 space-y-6 px-2 md:mt-4 md:px-0">
@@ -1900,6 +1947,74 @@ export default function ProfilePage() {
                           </LineChart>
                         </ResponsiveContainer>
                       </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {activeTab === "achievements" && (
+              <div className="space-y-4">
+                {achievements.length === 0 ? (
+                  <div className="rounded-xl border border-white/10 bg-white/5 p-6 text-center">
+                    <p className="text-sm text-gray-300">
+                      {currentUserId === profile.id
+                        ? "No achievements yet."
+                        : "No public achievements yet."}
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    {achievements.some((a) => a.is_featured) ? (
+                      <div className="space-y-2">
+                        <h3 className="text-sm font-semibold text-white">Featured</h3>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          {achievements
+                            .filter((a) => a.is_featured)
+                            .map((a) => (
+                              <article
+                                key={a.id}
+                                className={`rounded-xl border p-3 ${tierClassName(a.tier ?? null)}`}
+                              >
+                                <p className="text-lg">
+                                  {badgeIconForKey(a.badge_key, a.achievement_type)}
+                                </p>
+                                <p className="text-sm font-semibold text-white">{a.title}</p>
+                                <p className="text-xs text-gray-300">
+                                  {a.description || "Achievement unlocked"}
+                                </p>
+                                <p className="mt-1 text-[11px] text-gray-400">
+                                  {formatAchievementDate(a.achieved_at)}
+                                </p>
+                              </article>
+                            ))}
+                        </div>
+                      </div>
+                    ) : null}
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                      {achievements.map((a) => (
+                        <article
+                          key={a.id}
+                          className={`rounded-xl border p-3 ${tierClassName(a.tier ?? null)}`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-sm font-semibold text-white">{a.title}</p>
+                            <span className="text-base">
+                              {badgeIconForKey(a.badge_key, a.achievement_type)}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-xs text-gray-300">
+                            {a.description || "Achievement unlocked"}
+                          </p>
+                          <p className="mt-1 text-xs text-emerald-300">
+                            {formatAchievementValue(a) || "—"}
+                          </p>
+                          <p className="mt-1 text-[11px] text-gray-400">
+                            {formatAchievementDate(a.achieved_at)} •{" "}
+                            {a.is_public ? "Public" : "Private"}
+                          </p>
+                        </article>
+                      ))}
                     </div>
                   </>
                 )}
