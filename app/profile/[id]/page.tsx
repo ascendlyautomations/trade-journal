@@ -1,6 +1,7 @@
 "use client"
 
 import Navbar from "../../components/Navbar"
+import AchievementCard from "../../components/AchievementCard"
 import type { ChangeEvent } from "react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { supabase } from "../../../lib/supabaseClient"
@@ -19,12 +20,9 @@ import InputTradeForm from "../../components/InputTradeForm"
 import Calendar from "../../components/Calendar"
 import {
   type Achievement,
-  badgeIconForKey,
   fetchOwnAchievements,
   fetchVisibleProfileAchievements,
   formatAchievementDate,
-  formatAchievementValue,
-  tierClassName,
 } from "../../../lib/achievements"
 
 function postImageSrc(imageUrl: string | null | undefined): string | null {
@@ -80,6 +78,8 @@ function TradeCard({
   onSaveTrade,
   onDeleteTrade,
   showInteractions,
+  onOpenDetail,
+  disableOpen,
 }: {
   trade: any
   profile: any
@@ -91,6 +91,8 @@ function TradeCard({
   onSaveTrade?: () => void
   onDeleteTrade?: () => void
   showInteractions?: boolean
+  onOpenDetail?: () => void
+  disableOpen?: boolean
 }) {
   const imageSrc = postImageSrc(trade.image_url)
   const pnlRaw = Number(trade.pnl)
@@ -104,19 +106,37 @@ function TradeCard({
     : ""
 
   return (
-    <article className="mx-auto mb-6 max-w-xl overflow-hidden rounded-xl border border-white/10 bg-[#020617]">
-      <div className="flex items-center justify-between px-4 py-3">
+    <article
+      className={`mx-auto mb-6 max-w-xl overflow-hidden rounded-xl border border-white/10 bg-white/5 shadow-lg shadow-black/20 ${
+        onOpenDetail && !disableOpen
+          ? "cursor-pointer transition-all duration-200 hover:border-white/20 hover:bg-white/[0.07] hover:shadow-xl"
+          : ""
+      }`}
+      role={onOpenDetail && !disableOpen ? "button" : undefined}
+      tabIndex={onOpenDetail && !disableOpen ? 0 : undefined}
+      onClick={() => {
+        if (onOpenDetail && !disableOpen) onOpenDetail()
+      }}
+      onKeyDown={(e) => {
+        if (!onOpenDetail || disableOpen) return
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault()
+          onOpenDetail()
+        }
+      }}
+    >
+      <div className="flex items-center justify-between border-b border-white/5 px-4 py-3">
         <div className="flex min-w-0 items-center gap-3">
           <img
             src={profile.avatar_url || "/default-avatar.png"}
             alt=""
-            className="h-8 w-8 shrink-0 rounded-full object-cover"
+            className="h-10 w-10 shrink-0 rounded-full object-cover ring-2 ring-white/10"
             onError={(e) => {
               e.currentTarget.src = "/default-avatar.png"
             }}
           />
           <div className="min-w-0">
-            <p className="truncate text-sm font-medium text-white">
+            <p className="truncate text-sm font-semibold text-white">
               {profile.username || "User"}
             </p>
             <p className="text-xs font-medium text-amber-400/90">
@@ -188,11 +208,11 @@ function TradeCard({
       </div>
 
       {imageSrc ? (
-        <div className="relative w-full bg-black/40">
+        <div className="relative w-full bg-black/30">
           <img
             src={imageSrc}
             alt=""
-            className="max-h-[400px] w-full object-cover"
+            className="block max-h-[400px] w-full object-cover"
           />
         </div>
       ) : (
@@ -211,30 +231,30 @@ function TradeCard({
         </div>
       ) : null}
 
-      <div className="space-y-1 px-4 py-3">
-        <p className="text-sm text-gray-100">
-          <span className="font-medium text-white">{ticker}</span>
-          {" · "}
-          <span>{direction}</span>
-          {" · "}
+      <div className="space-y-3 p-4">
+        <div className="flex items-center justify-between gap-4 text-sm">
           <span
             className={
-              Number.isFinite(pnl)
-                ? pnl >= 0
-                  ? "text-emerald-400"
-                  : "text-red-400"
-                : "text-gray-400"
+              `font-semibold tabular-nums ${
+                Number.isFinite(pnl)
+                  ? pnl >= 0
+                    ? "text-emerald-400"
+                    : "text-red-400"
+                  : "text-gray-400"
+              }`
             }
           >
             {Number.isFinite(pnl) ? formatMoney(pnl) : "—"}
           </span>
-          {" · RR "}
-          {rr}
+          <span className="shrink-0 text-gray-300 tabular-nums">RR {rr}</span>
+        </div>
+        <p className="text-sm text-gray-100">
+          <span className="font-medium text-white">{ticker}</span> · <span>{direction}</span>
         </p>
         {desc ? (
-          <p className="text-sm leading-relaxed text-gray-300">{desc}</p>
+          <p className="px-1 text-sm leading-relaxed text-white">{desc}</p>
         ) : null}
-        <p className="text-xs text-gray-500">
+        <p className="text-xs text-gray-400">
           {new Date(trade.created_at).toLocaleString()}
         </p>
       </div>
@@ -262,6 +282,8 @@ function PostCard({
   onCommentChange,
   onCommentSubmit,
   commentSubmitting,
+  onOpenDetail,
+  disableOpen,
 }: {
   post: any
   profile: any
@@ -282,23 +304,43 @@ function PostCard({
   onCommentChange?: (value: string) => void
   onCommentSubmit?: () => void
   commentSubmitting?: boolean
+  onOpenDetail?: () => void
+  disableOpen?: boolean
 }) {
   const imgSrc = profileWallImageSrc(post.image_url)
 
   return (
-    <div className="mx-auto max-w-xl rounded-xl border border-white/10 bg-[#020617] p-4">
-      <div className="mb-3 flex items-center justify-between gap-3">
+    <article
+      className={`mx-auto max-w-xl overflow-hidden rounded-xl border border-white/10 bg-white/5 shadow-lg shadow-black/20 ${
+        onOpenDetail && !disableOpen
+          ? "cursor-pointer transition-all duration-200 hover:border-white/20 hover:bg-white/[0.07] hover:shadow-xl"
+          : ""
+      }`}
+      role={onOpenDetail && !disableOpen ? "button" : undefined}
+      tabIndex={onOpenDetail && !disableOpen ? 0 : undefined}
+      onClick={() => {
+        if (onOpenDetail && !disableOpen) onOpenDetail()
+      }}
+      onKeyDown={(e) => {
+        if (!onOpenDetail || disableOpen) return
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault()
+          onOpenDetail()
+        }
+      }}
+    >
+      <div className="flex items-center justify-between gap-3 border-b border-white/5 p-4">
         <div className="flex min-w-0 items-center gap-3">
           <img
             src={profile.avatar_url || "/default-avatar.png"}
             alt=""
-            className="h-8 w-8 rounded-full object-cover"
+            className="h-10 w-10 rounded-full object-cover ring-2 ring-white/10"
             onError={(e) => {
               e.currentTarget.src = "/default-avatar.png"
             }}
           />
           <div className="min-w-0">
-            <p className="truncate text-sm font-medium text-white">
+            <p className="truncate text-sm font-semibold text-white">
               {profile.username || "User"}
             </p>
             <p className="text-xs font-medium text-sky-400/90">
@@ -369,32 +411,36 @@ function PostCard({
         ) : null}
       </div>
 
-      {post.content ? (
-        <p className="mb-3 text-sm leading-relaxed text-gray-200">
-          {post.content}
-        </p>
-      ) : null}
-
       {imgSrc ? (
-        <img
-          src={imgSrc}
-          alt=""
-          className="max-h-[420px] w-full rounded-lg object-cover"
-          onError={(e) => {
-            e.currentTarget.style.display = "none"
-          }}
-        />
+        <div className="w-full bg-black/30">
+          <img
+            src={imgSrc}
+            alt=""
+            className="block max-h-[400px] w-full object-cover"
+            onError={(e) => {
+              e.currentTarget.style.display = "none"
+            }}
+          />
+        </div>
       ) : null}
 
-      <p className="mt-2 text-xs text-gray-500">
-        {new Date(post.created_at).toLocaleString()}
-      </p>
-      {showInteractions ? (
-        <div className="mt-3 border-t border-white/10 pt-3">
+      <div className="space-y-3 p-4">
+        {post.content ? (
+          <p className="px-1 text-sm leading-relaxed text-white">
+            {post.content}
+          </p>
+        ) : null}
+
+        <p className="text-xs text-gray-400">{new Date(post.created_at).toLocaleString()}</p>
+        {showInteractions ? (
+          <div className="border-t border-white/10 pt-3">
           <div className="flex items-center gap-4 px-1 text-sm">
             <button
               type="button"
-              onClick={onLike}
+              onClick={(e) => {
+                e.stopPropagation()
+                onLike?.()
+              }}
               className="flex items-center gap-1 text-gray-300 hover:text-white"
             >
               <span>{likeMeta?.liked ? "❤️" : "🤍"}</span>
@@ -402,7 +448,10 @@ function PostCard({
             </button>
             <button
               type="button"
-              onClick={onToggleComments}
+              onClick={(e) => {
+                e.stopPropagation()
+                onToggleComments?.()
+              }}
               className="text-gray-300 hover:text-white"
             >
               💬 {comments?.length ?? 0}
@@ -427,6 +476,7 @@ function PostCard({
                 <input
                   value={commentText || ""}
                   onChange={(e) => onCommentChange?.(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault()
@@ -438,7 +488,10 @@ function PostCard({
                 />
                 <button
                   type="button"
-                  onClick={onCommentSubmit}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onCommentSubmit?.()
+                  }}
                   disabled={commentSubmitting || !(commentText || "").trim()}
                   className="rounded-lg bg-blue-500 px-3 py-2 text-sm text-white disabled:opacity-40"
                 >
@@ -447,9 +500,10 @@ function PostCard({
               </div>
             </div>
           ) : null}
-        </div>
-      ) : null}
-    </div>
+          </div>
+        ) : null}
+      </div>
+    </article>
   )
 }
 
@@ -508,6 +562,14 @@ export default function ProfilePage() {
   const [accountFilter, setAccountFilter] = useState("All")
   const [accountTypeFilter, setAccountTypeFilter] = useState("All")
   const [achievements, setAchievements] = useState<Achievement[]>([])
+  const [selectedTradeDetail, setSelectedTradeDetail] = useState<any | null>(null)
+  const [selectedPostDetail, setSelectedPostDetail] = useState<any | null>(null)
+  const [selectedAchievementImage, setSelectedAchievementImage] = useState<{
+    src: string
+    title: string
+    achievedAt: string | null
+    description: string | null
+  } | null>(null)
 
   /** Feed refreshes the story bar here; profile has no story strip. */
   const loadFollowingStories = useCallback(async () => {}, [])
@@ -728,7 +790,13 @@ export default function ProfilePage() {
   }, [profile?.id])
 
   useEffect(() => {
-    if (showCreatePost || editingPost) {
+    if (
+      showCreatePost ||
+      editingPost ||
+      selectedAchievementImage ||
+      selectedTradeDetail ||
+      selectedPostDetail
+    ) {
       document.body.style.overflow = "hidden"
       return () => {
         document.body.style.overflow = ""
@@ -736,19 +804,29 @@ export default function ProfilePage() {
     }
     document.body.style.overflow = ""
     return undefined
-  }, [showCreatePost, editingPost])
+  }, [showCreatePost, editingPost, selectedAchievementImage, selectedTradeDetail, selectedPostDetail])
 
   useEffect(() => {
-    if (!showCreatePost && !editingPost) return
+    if (
+      !showCreatePost &&
+      !editingPost &&
+      !selectedAchievementImage &&
+      !selectedTradeDetail &&
+      !selectedPostDetail
+    )
+      return
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
         setShowCreatePost(false)
         setEditingPost(null)
+        setSelectedAchievementImage(null)
+        setSelectedTradeDetail(null)
+        setSelectedPostDetail(null)
       }
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [showCreatePost, editingPost])
+  }, [showCreatePost, editingPost, selectedAchievementImage, selectedTradeDetail, selectedPostDetail])
 
   async function fetchProfile(forProfileId: string) {
     const { data: sessionData } = await supabase.auth.getSession()
@@ -1708,6 +1786,9 @@ export default function ProfilePage() {
                       onSaveTrade={() => void handleSaveTrade(String(trade.id))}
                       onDeleteTrade={() => void handleDeleteTrade(String(trade.id))}
                       showInteractions={true}
+                      onOpenDetail={() =>
+                        setSelectedTradeDetail({ ...trade, currentUserId })
+                      }
                     />
                   ))
                 )}
@@ -1772,6 +1853,7 @@ export default function ProfilePage() {
                         }
                         onCommentSubmit={() => void submitComment(key, "post")}
                         commentSubmitting={!!commentSubmitting[key]}
+                        onOpenDetail={() => setSelectedPostDetail(post)}
                       />
                     )
                   })
@@ -1971,50 +2053,44 @@ export default function ProfilePage() {
                         <div className="grid gap-3 sm:grid-cols-2">
                           {achievements
                             .filter((a) => a.is_featured)
-                            .map((a) => (
-                              <article
+                            .map((a) => {
+                              return (
+                              <AchievementCard
                                 key={a.id}
-                                className={`rounded-xl border p-3 ${tierClassName(a.tier ?? null)}`}
-                              >
-                                <p className="text-lg">
-                                  {badgeIconForKey(a.badge_key, a.achievement_type)}
-                                </p>
-                                <p className="text-sm font-semibold text-white">{a.title}</p>
-                                <p className="text-xs text-gray-300">
-                                  {a.description || "Achievement unlocked"}
-                                </p>
-                                <p className="mt-1 text-[11px] text-gray-400">
-                                  {formatAchievementDate(a.achieved_at)}
-                                </p>
-                              </article>
-                            ))}
+                                achievement={a}
+                                featured
+                                showVisibility={false}
+                                onImageClick={(src, achievement) =>
+                                  setSelectedAchievementImage({
+                                    src,
+                                    title: achievement.title,
+                                    achievedAt: achievement.achieved_at,
+                                    description: achievement.description,
+                                  })
+                                }
+                              />
+                              )
+                            })}
                         </div>
                       </div>
                     ) : null}
                     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                      {achievements.map((a) => (
-                        <article
+                      {achievements.map((a) => {
+                        return (
+                        <AchievementCard
                           key={a.id}
-                          className={`rounded-xl border p-3 ${tierClassName(a.tier ?? null)}`}
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <p className="text-sm font-semibold text-white">{a.title}</p>
-                            <span className="text-base">
-                              {badgeIconForKey(a.badge_key, a.achievement_type)}
-                            </span>
-                          </div>
-                          <p className="mt-1 text-xs text-gray-300">
-                            {a.description || "Achievement unlocked"}
-                          </p>
-                          <p className="mt-1 text-xs text-emerald-300">
-                            {formatAchievementValue(a) || "—"}
-                          </p>
-                          <p className="mt-1 text-[11px] text-gray-400">
-                            {formatAchievementDate(a.achieved_at)} •{" "}
-                            {a.is_public ? "Public" : "Private"}
-                          </p>
-                        </article>
-                      ))}
+                          achievement={a}
+                          onImageClick={(src, achievement) =>
+                            setSelectedAchievementImage({
+                              src,
+                              title: achievement.title,
+                              achievedAt: achievement.achieved_at,
+                              description: achievement.description,
+                            })
+                          }
+                        />
+                        )
+                      })}
                     </div>
                   </>
                 )}
@@ -2095,6 +2171,162 @@ export default function ProfilePage() {
             </div>
           </div>
         )}
+
+      {selectedAchievementImage ? (
+        <div
+          className="fixed inset-0 z-[210] flex items-center justify-center bg-black/80 p-3 backdrop-blur-md sm:p-5"
+          role="presentation"
+          onClick={() => setSelectedAchievementImage(null)}
+        >
+          <div
+            className="w-full max-w-4xl rounded-2xl border border-white/10 bg-gradient-to-br from-[#0f172a] via-[#0b1532] to-[#0a2230] p-3 shadow-2xl shadow-blue-900/20 sm:p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Achievement image preview"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-2 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-white">
+                  {selectedAchievementImage.title}
+                </p>
+                <p className="text-xs text-gray-400">
+                  {formatAchievementDate(selectedAchievementImage.achievedAt)}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedAchievementImage(null)}
+                className="rounded-md p-1.5 text-gray-300 hover:bg-white/10 hover:text-white"
+                aria-label="Close preview"
+              >
+                ✕
+              </button>
+            </div>
+            <img
+              src={selectedAchievementImage.src}
+              alt={selectedAchievementImage.title}
+              className="max-h-[75vh] w-full rounded-xl border border-white/10 object-contain bg-black/30"
+            />
+            {selectedAchievementImage.description ? (
+              <p className="mt-2 text-sm text-gray-300">
+                {selectedAchievementImage.description}
+              </p>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {selectedTradeDetail ? (
+        <div
+          className="fixed inset-0 z-[205] flex items-center justify-center bg-black/75 p-3 backdrop-blur-md sm:p-4"
+          role="presentation"
+          onClick={() => setSelectedTradeDetail(null)}
+        >
+          <div
+            className="relative max-h-[92vh] w-full max-w-2xl overflow-y-auto"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Trade details"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setSelectedTradeDetail(null)}
+              className="absolute right-2 top-2 z-10 rounded-md bg-black/50 px-2 py-1 text-sm text-white hover:bg-black/70"
+              aria-label="Close trade details"
+            >
+              ✕
+            </button>
+            <TradeCard
+              trade={selectedTradeDetail}
+              profile={profile}
+              canManageTrade={currentUserId === profile.id}
+              menuOpen={openTradeMenuId === String(selectedTradeDetail.id)}
+              onMenuToggle={() =>
+                setOpenTradeMenuId((prev) =>
+                  prev === String(selectedTradeDetail.id)
+                    ? null
+                    : String(selectedTradeDetail.id)
+                )
+              }
+              onStartEditTrade={() => {
+                openEditTradeModal(selectedTradeDetail)
+                setOpenTradeMenuId(null)
+                setSelectedTradeDetail(null)
+              }}
+              onTogglePinTrade={() => void handlePinTrade(selectedTradeDetail)}
+              onSaveTrade={() => void handleSaveTrade(String(selectedTradeDetail.id))}
+              onDeleteTrade={() => void handleDeleteTrade(String(selectedTradeDetail.id))}
+              showInteractions={true}
+              disableOpen
+            />
+          </div>
+        </div>
+      ) : null}
+
+      {selectedPostDetail ? (
+        <div
+          className="fixed inset-0 z-[205] flex items-center justify-center bg-black/75 p-3 backdrop-blur-md sm:p-4"
+          role="presentation"
+          onClick={() => setSelectedPostDetail(null)}
+        >
+          <div
+            className="relative max-h-[92vh] w-full max-w-2xl overflow-y-auto"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Post details"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setSelectedPostDetail(null)}
+              className="absolute right-2 top-2 z-10 rounded-md bg-black/50 px-2 py-1 text-sm text-white hover:bg-black/70"
+              aria-label="Close post details"
+            >
+              ✕
+            </button>
+            <PostCard
+              post={selectedPostDetail}
+              profile={profile}
+              canManagePost={currentUserId === profile.id}
+              menuOpen={openMenuId === String(selectedPostDetail.id)}
+              onMenuToggle={() =>
+                setOpenMenuId((prev) =>
+                  prev === String(selectedPostDetail.id)
+                    ? null
+                    : String(selectedPostDetail.id)
+                )
+              }
+              onStartEditPost={() => {
+                setEditingPost(selectedPostDetail)
+                setEditContent(selectedPostDetail.content || "")
+                setOpenMenuId(null)
+                setSelectedPostDetail(null)
+              }}
+              onTogglePinPost={() => void handlePinPost(selectedPostDetail)}
+              onSavePost={() => void handleSavePost(String(selectedPostDetail.id))}
+              onDeletePost={() => void handleDeletePost(String(selectedPostDetail.id))}
+              showInteractions={true}
+              onLike={() => void handleLike(String(selectedPostDetail.id), "post")}
+              onToggleComments={() => openComments(String(selectedPostDetail.id), "post")}
+              commentsOpen={!!openCommentsState[`post:${String(selectedPostDetail.id)}`]}
+              likeMeta={likesByPost[String(selectedPostDetail.id)] || { count: 0, liked: false }}
+              comments={commentsByPost[String(selectedPostDetail.id)] || []}
+              commentText={commentDraft[String(selectedPostDetail.id)] || ""}
+              onCommentChange={(value) =>
+                setCommentDraft((prev) => ({
+                  ...prev,
+                  [String(selectedPostDetail.id)]: value,
+                }))
+              }
+              onCommentSubmit={() => void submitComment(String(selectedPostDetail.id), "post")}
+              commentSubmitting={!!commentSubmitting[String(selectedPostDetail.id)]}
+              disableOpen
+            />
+          </div>
+        </div>
+      ) : null}
 
       {editingPost ? (
         <div

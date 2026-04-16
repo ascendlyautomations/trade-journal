@@ -1,18 +1,15 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Navbar from "../components/Navbar"
+import AchievementCard from "../components/AchievementCard"
 import { supabase } from "../../lib/supabaseClient"
 import {
   type Achievement,
-  badgeIconForKey,
   badgeKeyFromType,
   categoryFromType,
   fetchOwnAchievements,
-  formatAchievementDate,
-  formatAchievementValue,
   normalizeAchievementType,
-  tierClassName,
 } from "../../lib/achievements"
 
 type CategoryFilter = "all" | "payouts" | "passed_evals" | "milestones"
@@ -22,6 +19,7 @@ type AchievementFormState = {
   title: string
   description: string
   achieved_at: string
+  image_url: string | null
   is_public: boolean
   is_featured: boolean
 }
@@ -31,15 +29,9 @@ const EMPTY_FORM: AchievementFormState = {
   title: "",
   description: "",
   achieved_at: "",
+  image_url: null,
   is_public: true,
   is_featured: false,
-}
-
-function cardSubtitle(a: Achievement): string {
-  const parts = [a.firm, a.account_type, a.account_size].filter(
-    (v) => v && String(v).trim() !== ""
-  )
-  return parts.length ? parts.join(" • ") : "Trading achievement"
 }
 
 export default function AchievementsPage() {
@@ -52,6 +44,10 @@ export default function AchievementsPage() {
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState<AchievementFormState>(EMPTY_FORM)
+  const [file, setFile] = useState<File | null>(null)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [removeImage, setRemoveImage] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   const loadAchievements = useCallback(async (uid: string) => {
     setLoading(true)
@@ -103,9 +99,22 @@ export default function AchievementsPage() {
 
   const unreadFeatured = featured.length
 
+  useEffect(() => {
+    if (!file) {
+      setPreviewUrl(null)
+      return
+    }
+    const nextPreviewUrl = URL.createObjectURL(file)
+    setPreviewUrl(nextPreviewUrl)
+    return () => URL.revokeObjectURL(nextPreviewUrl)
+  }, [file])
+
   function openCreate() {
     setEditingId(null)
     setForm(EMPTY_FORM)
+    setFile(null)
+    setPreviewUrl(null)
+    setRemoveImage(false)
     setShowForm(true)
   }
 
@@ -116,15 +125,51 @@ export default function AchievementsPage() {
       title: a.title || "",
       description: a.description || "",
       achieved_at: a.achieved_at ? String(a.achieved_at).slice(0, 10) : "",
+      image_url: a.image_url || null,
       is_public: !!a.is_public,
       is_featured: !!a.is_featured,
     })
+    setFile(null)
+    setPreviewUrl(null)
+    setRemoveImage(false)
     setShowForm(true)
   }
 
   async function saveAchievement() {
     if (!userId || !form.title.trim() || !form.achievement_type.trim()) return
     setBusy(true)
+    setError(null)
+
+    let imageUrl = form.image_url
+    if (removeImage) {
+      imageUrl = null
+    }
+
+    if (file) {
+      const ext = file.name.includes(".")
+        ? file.name.split(".").pop()?.toLowerCase() || "jpg"
+        : "bin"
+      const safeBase = file.name
+        .replace(/\.[^/.]+$/, "")
+        .toLowerCase()
+        .replace(/[^a-z0-9-_]+/g, "-")
+        .replace(/-+/g, "-")
+        .replace(/^-|-$/g, "")
+      const filePath = `achievements/${userId}/${Date.now()}-${safeBase || "image"}.${ext}`
+
+      const { error: uploadErr } = await supabase.storage
+        .from("screenshots")
+        .upload(filePath, file, { upsert: true })
+      if (uploadErr) {
+        setBusy(false)
+        setError(uploadErr.message || "Could not upload image.")
+        return
+      }
+
+      const { data: publicData } = supabase.storage.from("screenshots").getPublicUrl(filePath)
+      imageUrl = publicData.publicUrl
+    }
+
     const payload = {
       user_id: userId,
       achievement_type: normalizeAchievementType(form.achievement_type),
@@ -141,6 +186,7 @@ export default function AchievementsPage() {
       mode: null,
       firm: null,
       achieved_at: form.achieved_at || null,
+      image_url: imageUrl,
       is_public: form.is_public,
       is_featured: form.is_featured,
     }
@@ -159,6 +205,9 @@ export default function AchievementsPage() {
     setShowForm(false)
     setForm(EMPTY_FORM)
     setEditingId(null)
+    setFile(null)
+    setPreviewUrl(null)
+    setRemoveImage(false)
     await loadAchievements(userId)
   }
 
@@ -236,29 +285,12 @@ export default function AchievementsPage() {
               </div>
               <div className="grid gap-3 md:grid-cols-2">
                 {featured.map((a) => (
-                  <article
+                  <AchievementCard
                     key={a.id}
-                    className={`rounded-xl border p-4 ${tierClassName(a.tier ?? null)}`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-lg">
-                          {badgeIconForKey(a.badge_key, a.achievement_type)}
-                        </p>
-                        <h3 className="text-sm font-semibold text-white">{a.title}</h3>
-                        <p className="text-xs text-gray-300">{a.description || cardSubtitle(a)}</p>
-                      </div>
-                      <p className="text-[11px] uppercase text-gray-400">
-                        {String(a.tier || "standard")}
-                      </p>
-                    </div>
-                    <p className="mt-2 text-xs text-gray-300">
-                      {formatAchievementValue(a) || "Achievement unlocked"}
-                    </p>
-                    <p className="mt-1 text-[11px] text-gray-400">
-                      Achieved {formatAchievementDate(a.achieved_at)}
-                    </p>
-                  </article>
+                    achievement={a}
+                    featured
+                    showVisibility={false}
+                  />
                 ))}
               </div>
             </section>
@@ -278,50 +310,12 @@ export default function AchievementsPage() {
           ) : (
             <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {visible.map((a) => (
-                <article
+                <AchievementCard
                   key={a.id}
-                  className={`rounded-xl border p-4 ${tierClassName(a.tier ?? null)}`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="text-lg">
-                        {badgeIconForKey(a.badge_key, a.achievement_type)}
-                      </p>
-                      <h3 className="truncate text-sm font-semibold text-white">{a.title}</h3>
-                    </div>
-                    <span className="text-[10px] uppercase text-gray-400">
-                      {String(a.tier || "standard")}
-                    </span>
-                  </div>
-                  <p className="mt-1 text-xs text-gray-300">
-                    {a.description || "Achievement unlocked"}
-                  </p>
-                  <p className="mt-1 text-xs text-gray-400">{cardSubtitle(a)}</p>
-                  {formatAchievementValue(a) ? (
-                    <p className="mt-1 text-xs text-emerald-300">
-                      {formatAchievementValue(a)}
-                    </p>
-                  ) : null}
-                  <p className="mt-1 text-[11px] text-gray-400">
-                    {formatAchievementDate(a.achieved_at)} • {a.is_public ? "Public" : "Private"}
-                  </p>
-                  <div className="mt-3 flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => openEdit(a)}
-                      className="rounded-md border border-white/20 px-2 py-1 text-xs hover:bg-white/10"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void deleteAchievement(a.id)}
-                      className="rounded-md border border-red-400/40 px-2 py-1 text-xs text-red-300 hover:bg-red-500/10"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </article>
+                  achievement={a}
+                  onEdit={() => openEdit(a)}
+                  onDelete={() => void deleteAchievement(a.id)}
+                />
               ))}
             </section>
           )}
@@ -330,17 +324,31 @@ export default function AchievementsPage() {
 
       {showForm ? (
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4"
-          onClick={() => setShowForm(false)}
+          className="fixed inset-0 z-[100] flex items-end justify-center bg-black/75 p-2 backdrop-blur-md sm:items-center sm:p-4"
+          onClick={() => {
+            setShowForm(false)
+            setFile(null)
+            setPreviewUrl(null)
+            setRemoveImage(false)
+          }}
         >
           <div
-            className="w-full max-w-2xl rounded-xl border border-white/10 bg-[#0f172a] p-4"
+            className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-white/10 bg-gradient-to-br from-[#0f172a] via-[#0b1532] to-[#0a2230] p-4 shadow-2xl shadow-blue-900/20 sm:p-6"
             onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label={editingId ? "Edit Achievement" : "Add Achievement"}
           >
-            <h2 className="mb-3 text-lg font-semibold text-white">
-              {editingId ? "Edit Achievement" : "Add Achievement"}
-            </h2>
-            <div className="grid gap-2 sm:grid-cols-2">
+            <div className="mb-3 border-b border-white/10 pb-3">
+              <h2 className="text-xl font-semibold tracking-tight text-white">
+                {editingId ? "Edit Achievement" : "Add Achievement"}
+              </h2>
+              <p className="mt-0.5 text-sm text-slate-300">
+                Capture your achievements with a quick summary and image. 
+              </p>
+            </div>
+
+            <div className="grid gap-2 sm:grid-cols-2 sm:gap-3">
               <label className="text-xs text-gray-300">
                 Achievement Type
                 <select
@@ -348,7 +356,7 @@ export default function AchievementsPage() {
                   onChange={(e) =>
                     setForm((prev) => ({ ...prev, achievement_type: e.target.value }))
                   }
-                  className="mt-1 w-full rounded-md border border-white/10 bg-[#020617] px-2 py-1.5 text-sm text-white"
+                  className="mt-1.5 h-11 w-full rounded-lg border border-white/15 bg-[#0a1329] px-3 text-sm text-white outline-none transition focus:border-blue-400/60 focus:ring-2 focus:ring-blue-500/20"
                 >
                   <option value="payout">Payout</option>
                   <option value="passed_eval">Passed Eval</option>
@@ -361,7 +369,8 @@ export default function AchievementsPage() {
                   type="text"
                   value={form.title}
                   onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))}
-                  className="mt-1 w-full rounded-md border border-white/10 bg-[#020617] px-2 py-1.5 text-sm text-white"
+                  placeholder="e.g. First payout from Apex"
+                  className="mt-1.5 h-11 w-full rounded-lg border border-white/15 bg-[#0a1329] px-3 text-sm text-white placeholder:text-slate-500 outline-none transition focus:border-blue-400/60 focus:ring-2 focus:ring-blue-500/20"
                 />
               </label>
               <label className="text-xs text-gray-300">
@@ -372,32 +381,101 @@ export default function AchievementsPage() {
                   onChange={(e) =>
                     setForm((prev) => ({ ...prev, achieved_at: e.target.value }))
                   }
-                  className="mt-1 w-full rounded-md border border-white/10 bg-[#020617] px-2 py-1.5 text-sm text-white"
+                  className="mt-1.5 h-11 w-full rounded-lg border border-white/15 bg-[#0a1329] px-3 text-base text-white [color-scheme:dark] outline-none transition focus:border-blue-400/60 focus:ring-2 focus:ring-blue-500/20 sm:text-sm"
                 />
               </label>
+              <label className="text-xs text-gray-300">
+                Upload Image
+                <div className="mt-1.5 rounded-lg border border-white/15 bg-[#0a1329] p-2.5">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const selected = e.target.files?.[0] ?? null
+                      setFile(selected)
+                      if (selected) setRemoveImage(false)
+                    }}
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="h-9 rounded-md border border-blue-300/30 bg-blue-500/15 px-3 text-sm font-medium text-blue-100 transition hover:bg-blue-500/25"
+                  >
+                    {file ? "Change image" : "Choose image"}
+                  </button>
+                  <input
+                    type="text"
+                    readOnly
+                    value={file?.name || ""}
+                    placeholder="No image selected"
+                    className="mt-2 w-full rounded-md border border-white/10 bg-[#0b1220] px-2 py-1.5 text-xs text-slate-300"
+                  />
+                  {previewUrl ? (
+                    <img
+                      src={previewUrl}
+                      alt="Selected preview"
+                      className="mt-2 max-h-40 w-full rounded-md border border-white/10 object-cover"
+                    />
+                  ) : form.image_url && !removeImage ? (
+                    <div className="mt-2 space-y-2">
+                      <img
+                        src={form.image_url}
+                        alt="Current achievement image"
+                        className="max-h-40 w-full rounded-md border border-white/10 object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setRemoveImage(true)}
+                        className="rounded border border-red-400/40 px-2 py-0.5 text-[11px] text-red-300 hover:bg-red-500/10"
+                      >
+                        Remove image
+                      </button>
+                    </div>
+                  ) : removeImage ? (
+                    <p className="mt-2 text-xs text-amber-300">
+                      Image will be removed when you save.
+                    </p>
+                  ) : null}
+                </div>
+              </label>
+
               <label className="sm:col-span-2 text-xs text-gray-300">
                 Description
                 <textarea
-                  rows={3}
+                  rows={4}
                   value={form.description}
                   onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
-                  className="mt-1 w-full rounded-md border border-white/10 bg-[#020617] px-2 py-1.5 text-sm text-white"
+                  placeholder="What happened and why it matters..."
+                  className="mt-1.5 w-full rounded-lg border border-white/15 bg-[#0a1329] px-3 py-2.5 text-sm text-white placeholder:text-slate-500 outline-none transition focus:border-blue-400/60 focus:ring-2 focus:ring-blue-500/20"
                 />
               </label>
-              <label className="inline-flex items-center gap-2 text-sm text-gray-200">
-                <input
-                  type="checkbox"
-                  checked={form.is_public}
-                  onChange={(e) => setForm((prev) => ({ ...prev, is_public: e.target.checked }))}
-                />
-                Public
-              </label>
+
+              <div className="sm:col-span-2 mt-1 flex items-center justify-between rounded-lg border border-white/10 bg-white/5 px-3 py-2.5">
+                <p className="text-sm text-slate-200">Visibility</p>
+                <label className="inline-flex items-center gap-2 text-sm text-gray-100">
+                  <input
+                    type="checkbox"
+                    checked={form.is_public}
+                    onChange={(e) => setForm((prev) => ({ ...prev, is_public: e.target.checked }))}
+                    className="h-4 w-4 rounded border-white/20 bg-[#0b1220] accent-blue-500"
+                  />
+                  Public
+                </label>
+              </div>
             </div>
-            <div className="mt-4 flex justify-end gap-2">
+
+            <div className="mt-5 flex flex-col-reverse gap-2 border-t border-white/10 pt-4 sm:flex-row sm:justify-end">
               <button
                 type="button"
-                onClick={() => setShowForm(false)}
-                className="rounded-md border border-white/20 px-3 py-1.5 text-sm"
+                onClick={() => {
+                  setShowForm(false)
+                  setFile(null)
+                  setPreviewUrl(null)
+                  setRemoveImage(false)
+                }}
+                className="h-10 rounded-lg border border-white/20 bg-white/5 px-4 text-sm font-medium text-slate-200 transition hover:bg-white/10"
               >
                 Cancel
               </button>
@@ -405,9 +483,9 @@ export default function AchievementsPage() {
                 type="button"
                 onClick={() => void saveAchievement()}
                 disabled={busy}
-                className="rounded-md bg-blue-500 px-3 py-1.5 text-sm text-white disabled:opacity-60"
+                className="h-10 rounded-lg bg-gradient-to-r from-blue-500 to-emerald-500 px-4 text-sm font-semibold text-white transition hover:from-blue-400 hover:to-emerald-400 disabled:opacity-60"
               >
-                {busy ? "Saving..." : "Save"}
+                {busy ? "Saving..." : editingId ? "Update Achievement" : "Save Achievement"}
               </button>
             </div>
           </div>

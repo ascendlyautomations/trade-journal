@@ -26,6 +26,7 @@ export type Achievement = {
   account_size: string | null
   mode: string | null
   firm: string | null
+  image_url: string | null
   achieved_at: string | null
   created_at: string
   updated_at: string
@@ -52,6 +53,7 @@ export const ACHIEVEMENT_SELECT = `
   account_size,
   mode,
   firm,
+  image_url,
   achieved_at,
   created_at,
   updated_at,
@@ -77,6 +79,13 @@ export function categoryFromType(type: string | null): "payouts" | "passed_evals
 
 export function badgeKeyFromType(type: string | null): "payout" | "passed_eval" | "milestone" {
   return normalizeAchievementType(type)
+}
+
+export function achievementTypeLabel(type: string | null): "Payout" | "Passed Eval" | "Milestone" {
+  const normalized = normalizeAchievementType(type)
+  if (normalized === "payout") return "Payout"
+  if (normalized === "passed_eval") return "Passed Eval"
+  return "Milestone"
 }
 
 export function badgeIconForKey(
