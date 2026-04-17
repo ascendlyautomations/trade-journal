@@ -8,58 +8,114 @@ type Props = {
   open: boolean
   onClose: () => void
   onSubmit: () => void | Promise<void>
-  defaultFullName?: string
-  defaultEmail?: string | null
   title?: string
+}
+
+function normalizeAffiliateRequestedCode(raw: string): string {
+  return raw.trim().toUpperCase()
+}
+
+type CodeAvailability = "idle" | "empty" | "checking" | "taken" | "available" | "check_error"
+
+async function affiliateCodeIsTaken(normalized: string): Promise<boolean | null> {
+  if (!normalized) return false
+  const { data, error } = await supabase
+    .from("affiliates")
+    .select("code")
+    .eq("code", normalized)
+    .maybeSingle()
+
+  if (error) return null
+  return data != null
 }
 
 export default function AffiliateApplyModal({
   open,
   onClose,
   onSubmit,
-  defaultFullName = "",
-  defaultEmail,
   title = "Affiliate application",
 }: Props) {
-  const [fullName, setFullName] = useState(defaultFullName)
-  const [email, setEmail] = useState(defaultEmail ?? "")
-  const [platform, setPlatform] = useState("")
-  const [audienceSize, setAudienceSize] = useState("")
   const [socialHandle, setSocialHandle] = useState("")
-  const [whyJoin, setWhyJoin] = useState("")
-  const [promoPlan, setPromoPlan] = useState("")
+  const [followers, setFollowers] = useState("")
   const [requestedCode, setRequestedCode] = useState("")
   const [busy, setBusy] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
-
-  useEffect(() => {
-    setFullName(defaultFullName)
-  }, [defaultFullName, open])
-
-  useEffect(() => {
-    setEmail(defaultEmail ?? "")
-  }, [defaultEmail, open])
+  const [codeAvailability, setCodeAvailability] = useState<CodeAvailability>("idle")
 
   useEffect(() => {
     if (!open) {
-      setPlatform("")
-      setAudienceSize("")
       setSocialHandle("")
-      setWhyJoin("")
-      setPromoPlan("")
+      setFollowers("")
       setRequestedCode("")
       setFormError(null)
+      setCodeAvailability("idle")
     }
   }, [open])
 
+  /* Debounced live check while typing */
+  useEffect(() => {
+    if (!open) return
+
+    const normalized = normalizeAffiliateRequestedCode(requestedCode)
+    if (!normalized) {
+      setCodeAvailability("empty")
+      return
+    }
+
+    let cancelled = false
+    setCodeAvailability("checking")
+
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        const taken = await affiliateCodeIsTaken(normalized)
+        if (cancelled) return
+        if (taken === null) {
+          setCodeAvailability("check_error")
+          return
+        }
+        setCodeAvailability(taken ? "taken" : "available")
+      })()
+    }, 400)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [requestedCode, open])
+
   if (!open) return null
+
+  const normalizedRequestedCode = normalizeAffiliateRequestedCode(requestedCode)
+  const submitDisabled = busy || codeAvailability === "taken"
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setFormError(null)
-    if (!whyJoin.trim()) {
-      setFormError("Please tell us why you’d like to join.")
+
+    const handle = socialHandle.trim()
+    if (!handle) {
+      setFormError("Enter your social handle or profile link.")
       return
+    }
+
+    const n = parseInt(followers.trim(), 10)
+    if (!Number.isFinite(n) || n < 0) {
+      setFormError("Enter a valid follower count (0 or more).")
+      return
+    }
+
+    const codeForSubmit = normalizedRequestedCode || null
+    if (codeForSubmit) {
+      const taken = await affiliateCodeIsTaken(codeForSubmit)
+      if (taken === null) {
+        setFormError("Could not verify code availability. Try again.")
+        return
+      }
+      if (taken) {
+        setFormError("This code is already taken")
+        setCodeAvailability("taken")
+        return
+      }
     }
 
     setBusy(true)
@@ -73,14 +129,9 @@ export default function AffiliateApplyModal({
     }
 
     const { ok, error } = await submitAffiliateApplication(supabase, user.id, {
-      email: user.email ?? (email.trim() || null),
-      fullName: fullName.trim() || null,
-      socialHandle: socialHandle.trim() || null,
-      platform: platform.trim() || null,
-      audienceSize: audienceSize.trim() || null,
-      whyJoin: whyJoin.trim(),
-      promoPlan: promoPlan.trim() || null,
-      requestedCode: requestedCode.trim() || null,
+      socialHandle: handle,
+      followers: n,
+      requestedCode: codeForSubmit,
     })
 
     setBusy(false)
@@ -103,75 +154,31 @@ export default function AffiliateApplyModal({
           {title}
         </h2>
         <p className="mt-1 text-xs text-gray-400">
-          We review every application. You’ll see status here and in Settings → Affiliate.
+          Status updates appear on this page and in Settings → Affiliate.
         </p>
 
         <form onSubmit={(e) => void handleSubmit(e)} className="mt-4 space-y-3">
           <div>
-            <label className="text-xs text-gray-400">Full name</label>
-            <input
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-white/10 bg-[#0f172a] p-2.5 text-sm text-white placeholder:text-gray-500"
-              placeholder="Your name"
-            />
-          </div>
-          <div>
-            <label className="text-xs text-gray-400">Email</label>
-            <input
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              readOnly={Boolean(defaultEmail)}
-              className="mt-1 w-full rounded-lg border border-white/10 bg-[#0f172a] p-2.5 text-sm text-white placeholder:text-gray-500 read-only:opacity-80"
-              placeholder="Email"
-            />
-          </div>
-          <div>
-            <label className="text-xs text-gray-400">Primary platform</label>
-            <input
-              value={platform}
-              onChange={(e) => setPlatform(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-white/10 bg-[#0f172a] p-2.5 text-sm text-white placeholder:text-gray-500"
-              placeholder="e.g. X, YouTube, TikTok, Discord"
-            />
-          </div>
-          <div>
-            <label className="text-xs text-gray-400">Audience size (approx.)</label>
-            <input
-              value={audienceSize}
-              onChange={(e) => setAudienceSize(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-white/10 bg-[#0f172a] p-2.5 text-sm text-white placeholder:text-gray-500"
-              placeholder="e.g. 5k followers, 12k subscribers"
-            />
-          </div>
-          <div>
-            <label className="text-xs text-gray-400">Social handle / link</label>
+            <label className="text-xs text-gray-400">Social handle</label>
             <input
               value={socialHandle}
               onChange={(e) => setSocialHandle(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-white/10 bg-[#0f172a] p-2.5 text-sm text-white placeholder:text-gray-500"
-              placeholder="@handle or profile URL"
-            />
-          </div>
-          <div>
-            <label className="text-xs text-gray-400">Why do you want to join?</label>
-            <textarea
-              value={whyJoin}
-              onChange={(e) => setWhyJoin(e.target.value)}
-              rows={4}
               required
-              className="mt-1 w-full resize-none rounded-lg border border-white/10 bg-[#0f172a] p-2.5 text-sm text-white placeholder:text-gray-500"
-              placeholder="Tell us how you’ll promote TradeTrax…"
+              className="mt-1 w-full rounded-lg border border-white/10 bg-[#0f172a] p-2.5 text-sm text-white placeholder:text-gray-500"
+              placeholder="@you or profile URL"
             />
           </div>
           <div>
-            <label className="text-xs text-gray-400">Promotion plan (optional)</label>
-            <textarea
-              value={promoPlan}
-              onChange={(e) => setPromoPlan(e.target.value)}
-              rows={2}
-              className="mt-1 w-full resize-none rounded-lg border border-white/10 bg-[#0f172a] p-2.5 text-sm text-white placeholder:text-gray-500"
-              placeholder="Short plan, content types, timeline…"
+            <label className="text-xs text-gray-400">Followers</label>
+            <input
+              type="number"
+              min={0}
+              step={1}
+              value={followers}
+              onChange={(e) => setFollowers(e.target.value)}
+              required
+              className="mt-1 w-full rounded-lg border border-white/10 bg-[#0f172a] p-2.5 text-sm text-white placeholder:text-gray-500"
+              placeholder="Approximate follower count"
             />
           </div>
           <div>
@@ -179,9 +186,23 @@ export default function AffiliateApplyModal({
             <input
               value={requestedCode}
               onChange={(e) => setRequestedCode(e.target.value.toUpperCase())}
+              aria-invalid={codeAvailability === "taken"}
               className="mt-1 w-full rounded-lg border border-white/10 bg-[#0f172a] p-2.5 font-mono text-sm text-white placeholder:text-gray-500"
-              placeholder="YOURCODE — subject to approval"
+              placeholder="YOURCODE"
             />
+            {normalizedRequestedCode ? (
+              <div className="mt-1.5 min-h-[1.25rem] text-xs">
+                {codeAvailability === "checking" ? (
+                  <span className="text-gray-500">Checking availability…</span>
+                ) : codeAvailability === "taken" ? (
+                  <span className="text-red-300">This code is already taken</span>
+                ) : codeAvailability === "available" ? (
+                  <span className="text-emerald-400/90">Code available</span>
+                ) : codeAvailability === "check_error" ? (
+                  <span className="text-amber-200/90">Could not verify code (try again)</span>
+                ) : null}
+              </div>
+            ) : null}
           </div>
 
           {formError ? <p className="text-sm text-red-300">{formError}</p> : null}
@@ -196,7 +217,7 @@ export default function AffiliateApplyModal({
             </button>
             <button
               type="submit"
-              disabled={busy}
+              disabled={submitDisabled}
               className="rounded-lg bg-gradient-to-r from-blue-500 to-emerald-500 px-5 py-2 text-sm font-semibold disabled:opacity-50"
             >
               {busy ? "Submitting…" : "Submit application"}

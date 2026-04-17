@@ -7,11 +7,7 @@ import { useRouter } from "next/navigation"
 import { supabase } from "../../lib/supabaseClient"
 import { isProActive } from "../../lib/subscription"
 import type { User } from "@supabase/supabase-js"
-import {
-  fetchLatestAffiliateApplication,
-  fetchPendingAffiliateApplication,
-  type AffiliateApplicationRow,
-} from "@/lib/affiliateApplication"
+import { fetchLatestAffiliateApplication, type AffiliateApplicationRow } from "@/lib/affiliateApplication"
 
 type TabId = "profile" | "affiliate" | "account" | "subscription"
 
@@ -83,12 +79,7 @@ export default function SettingsPage() {
   const [profile, setProfile] = useState<Record<string, unknown> | null>(null)
   const [newPassword, setNewPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
-  const [affiliateData, setAffiliateData] = useState<{
-    code?: string
-    id?: string
-  } | null>(null)
   const [showAffiliateModal, setShowAffiliateModal] = useState(false)
-  const [pendingApp, setPendingApp] = useState<AffiliateApplicationRow | null>(null)
   const [latestApp, setLatestApp] = useState<AffiliateApplicationRow | null>(null)
 
   const [name, setName] = useState("")
@@ -151,18 +142,8 @@ export default function SettingsPage() {
   }
 
   async function refreshAffiliateState(userId: string) {
-    const [pending, latest, aff] = await Promise.all([
-      fetchPendingAffiliateApplication(supabase, userId),
-      fetchLatestAffiliateApplication(supabase, userId),
-      supabase.from("affiliates").select("id, code").eq("user_id", userId).maybeSingle(),
-    ])
-    setPendingApp(pending)
+    const latest = await fetchLatestAffiliateApplication(supabase, userId)
     setLatestApp(latest)
-    if (aff.data) {
-      setAffiliateData(aff.data as { code?: string; id?: string })
-    } else {
-      setAffiliateData(null)
-    }
   }
 
   async function getAccessToken(): Promise<string | null> {
@@ -450,12 +431,9 @@ export default function SettingsPage() {
   }
 
   const referralCode =
-    (profile?.referral_code != null &&
-    String(profile.referral_code).trim() !== ""
+    profile?.referral_code != null && String(profile.referral_code).trim() !== ""
       ? String(profile.referral_code)
-      : null) ||
-    affiliateData?.code ||
-    ""
+      : ""
 
   const referralLink =
     typeof window !== "undefined" && referralCode
@@ -467,9 +445,11 @@ export default function SettingsPage() {
   const PLAN_PRICE = 15.99
   const earnings = referralCount * PLAN_PRICE * COMMISSION_RATE
 
+  const isAffiliatePending = latestApp?.status === "pending"
+
   const showAffiliateApplyCta = Boolean(
     user &&
-      !pendingApp &&
+      !isAffiliatePending &&
       !String(referralCode).trim() &&
       (!latestApp || latestApp.status === "rejected")
   )
@@ -648,20 +628,24 @@ export default function SettingsPage() {
                       >
                         Open Affiliate Dashboard
                       </a>
+                      {" · "}
+                      <a href="/payouts" className="text-blue-300 underline hover:text-blue-200">
+                        Payouts
+                      </a>
                     </p>
                   </div>
-                  {(showAffiliateApplyCta || pendingApp) && (
+                  {(showAffiliateApplyCta || isAffiliatePending) && (
                     <button
                       type="button"
                       onClick={() => setShowAffiliateModal(true)}
                       className="shrink-0 rounded-xl bg-gradient-to-r from-emerald-500 to-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-lg hover:opacity-95"
                     >
-                      {pendingApp ? "Update application" : "Apply to be an Affiliate"}
+                      {isAffiliatePending ? "Update application" : "Apply to be an Affiliate"}
                     </button>
                   )}
                 </div>
 
-                {pendingApp ? (
+                {isAffiliatePending ? (
                   <div className="rounded-xl border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm text-amber-50">
                     <p className="font-medium text-white">Application status: pending</p>
                     <p className="mt-1 text-amber-100/90">
@@ -689,7 +673,7 @@ export default function SettingsPage() {
 
                 {!referralCode ? (
                   <p className="text-sm text-gray-400">
-                    {pendingApp
+                    {isAffiliatePending
                       ? "When approved, your referral code and share link will show here."
                       : "Submit an application to request access. When approved, your referral code and link will appear here and on the Affiliate Dashboard."}
                   </p>
@@ -989,8 +973,6 @@ export default function SettingsPage() {
         open={showAffiliateModal}
         onClose={() => setShowAffiliateModal(false)}
         onSubmit={() => void afterAffiliateModalSubmit()}
-        defaultFullName={typeof profile?.name === "string" ? profile.name : name}
-        defaultEmail={user?.email ?? null}
         title="Affiliate application"
       />
     </>

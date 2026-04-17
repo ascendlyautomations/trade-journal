@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import Navbar from "@/app/components/Navbar"
 import {
@@ -9,7 +9,11 @@ import {
   adminRejectAffiliateApplication,
 } from "@/lib/affiliateAdmin"
 import { getCurrentAdminCheckResult } from "@/lib/adminUsers"
-import type { AffiliateApplicationRow } from "@/lib/affiliateApplication"
+import {
+  AFFILIATE_APPLICATION_SELECT_COLUMNS,
+  type AffiliateApplicationRow,
+} from "@/lib/affiliateApplication"
+import { logPostgrestErrorDev } from "@/lib/postgrestError"
 import { supabase } from "@/lib/supabaseClient"
 
 type TabId = "pending" | "approved" | "rejected"
@@ -27,19 +31,35 @@ function formatTs(iso: string | null | undefined): string {
   return d.toLocaleString()
 }
 
-function applicantLabel(
-  row: AffiliateApplicationRow,
-  profileByUser: Record<string, ProfileBrief>
-): string {
+function formatFollowers(v: number | null | undefined): string {
+  if (v == null || typeof v !== "number" || Number.isNaN(v)) return "—"
+  return v.toLocaleString()
+}
+
+function applicantLabel(row: AffiliateApplicationRow, profileByUser: Record<string, ProfileBrief>): string {
   const p = profileByUser[row.user_id]
-  const bits = [
-    p?.username?.trim() || null,
-    p?.name?.trim() || null,
-    row.full_name?.trim() || null,
-  ].filter(Boolean)
+  const bits = [p?.username?.trim() || null, p?.name?.trim() || null].filter(Boolean)
   if (bits.length) return bits.join(" · ")
-  if (row.email?.trim()) return row.email.trim()
   return row.user_id.slice(0, 8) + "…"
+}
+
+function InlineSpinner({ className }: { className?: string }) {
+  return (
+    <svg
+      className={`animate-spin ${className ?? "h-4 w-4 text-white"}`}
+      xmlns="http://www.w3.org/2000/svg"
+      fill="none"
+      viewBox="0 0 24 24"
+      aria-hidden
+    >
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path
+        className="opacity-75"
+        fill="currentColor"
+        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+      />
+    </svg>
+  )
 }
 
 export default function AdminAffiliateApplicationsPage() {
@@ -51,23 +71,28 @@ export default function AdminAffiliateApplicationsPage() {
   const [profileByUser, setProfileByUser] = useState<Record<string, ProfileBrief>>({})
   const [loading, setLoading] = useState(false)
   const [selected, setSelected] = useState<AffiliateApplicationRow | null>(null)
-  const [finalCode, setFinalCode] = useState("")
+  const [pendingAction, setPendingAction] = useState<null | "approve" | "reject">(null)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const [successBanner, setSuccessBanner] = useState<
+    null | { message: string; variant: "success" | "neutral" }
+  >(null)
+  const [finalCodeOverride, setFinalCodeOverride] = useState("")
   const [stripePromoId, setStripePromoId] = useState("")
-  const [adminNotes, setAdminNotes] = useState("")
   const [rejectNotes, setRejectNotes] = useState("")
-  const [actionBusy, setActionBusy] = useState(false)
+
+  const actionBusy = pendingAction !== null
 
   const fetchApplications = useCallback(async () => {
     if (!allowed) return
     setLoading(true)
     const { data, error } = await supabase
       .from("affiliate_applications")
-      .select("*")
+      .select(AFFILIATE_APPLICATION_SELECT_COLUMNS)
       .eq("status", tab)
       .order("created_at", { ascending: false })
 
     if (error) {
-      console.error("[admin-affiliates] fetch failed", error)
+      logPostgrestErrorDev("adminAffiliates list fetch", error)
       setRows([])
       setProfileByUser({})
       setLoading(false)
@@ -90,7 +115,7 @@ export default function AdminAffiliateApplicationsPage() {
       .in("id", ids)
 
     if (pErr) {
-      console.error("[admin-affiliates] profiles failed", pErr)
+      logPostgrestErrorDev("adminAffiliates profiles fetch", pErr)
       setProfileByUser({})
     } else {
       const map: Record<string, ProfileBrief> = {}
@@ -131,48 +156,82 @@ export default function AdminAffiliateApplicationsPage() {
 
   function openDetail(row: AffiliateApplicationRow) {
     setSelected(row)
-    setFinalCode((row.requested_code || "").trim())
+    setActionError(null)
+    setSuccessBanner(null)
+    setFinalCodeOverride("")
     setStripePromoId("")
-    setAdminNotes("")
     setRejectNotes("")
+    setPendingAction(null)
   }
+
+  function closeDetail() {
+    setSelected(null)
+    setActionError(null)
+    setFinalCodeOverride("")
+    setStripePromoId("")
+    setRejectNotes("")
+    setPendingAction(null)
+  }
+
+  const finalCodePreview = useMemo(() => {
+    const o = finalCodeOverride.trim()
+    if (o) return o.toUpperCase()
+    const req = selected?.requested_code?.trim()
+    if (req) return req.toUpperCase()
+    return "— will be auto-generated from username + 3 digits"
+  }, [finalCodeOverride, selected?.requested_code])
 
   async function handleApprove() {
     if (!selected?.id) return
-    const code = finalCode.trim()
-    if (!code) {
-      alert("Enter the final affiliate code to assign.")
+    const promo = stripePromoId.trim()
+    if (!promo) {
+      setActionError("Stripe promo code ID is required to approve.")
       return
     }
-    setActionBusy(true)
+    setPendingAction("approve")
+    setActionError(null)
+    const override = finalCodeOverride.trim()
     const { error } = await adminApproveAffiliateApplication(supabase, {
       applicationId: selected.id,
-      finalCode: code,
-      stripePromoCodeId: stripePromoId.trim() || null,
-      adminNotes: adminNotes.trim() || null,
+      adminCode: override ? override : null,
+      stripePromo: promo,
     })
-    setActionBusy(false)
+    setPendingAction(null)
     if (error) {
-      alert(error.message)
+      setActionError(error.message)
       return
     }
     setSelected(null)
+    setActionError(null)
+    setFinalCodeOverride("")
+    setStripePromoId("")
+    setRejectNotes("")
+    setTab("approved")
+    setSuccessBanner({ message: "Affiliate approved successfully", variant: "success" })
     void fetchApplications()
   }
 
   async function handleReject() {
     if (!selected?.id) return
-    setActionBusy(true)
+    setPendingAction("reject")
+    setActionError(null)
+    const notes = rejectNotes.trim()
     const { error } = await adminRejectAffiliateApplication(supabase, {
       applicationId: selected.id,
-      adminNotes: rejectNotes.trim() || null,
+      adminNotes: notes ? notes : null,
     })
-    setActionBusy(false)
+    setPendingAction(null)
     if (error) {
-      alert(error.message)
+      setActionError(error.message)
       return
     }
     setSelected(null)
+    setActionError(null)
+    setFinalCodeOverride("")
+    setStripePromoId("")
+    setRejectNotes("")
+    setTab("rejected")
+    setSuccessBanner({ message: "Application rejected", variant: "neutral" })
     void fetchApplications()
   }
 
@@ -201,10 +260,31 @@ export default function AdminAffiliateApplicationsPage() {
                 Affiliate applications
               </h1>
               <p className="mt-1 text-sm text-gray-400">
-                Review applications, approve with a final code, or reject with notes.
+                Approve or reject applications. Approval requires a Stripe promo code ID; you can optionally
+                override the final affiliate code.
               </p>
             </div>
           </div>
+
+          {successBanner ? (
+            <div
+              className={
+                successBanner.variant === "success"
+                  ? "flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-400/40 bg-emerald-500/15 px-4 py-3 text-sm text-emerald-50"
+                  : "flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-400/35 bg-amber-500/10 px-4 py-3 text-sm text-amber-100"
+              }
+              role="status"
+            >
+              <span>{successBanner.message}</span>
+              <button
+                type="button"
+                className="shrink-0 rounded-md bg-white/10 px-3 py-1 text-xs hover:bg-white/20"
+                onClick={() => setSuccessBanner(null)}
+              >
+                Dismiss
+              </button>
+            </div>
+          ) : null}
 
           <div className="flex flex-wrap gap-2 border-b border-white/10 pb-3">
             {(
@@ -244,15 +324,15 @@ export default function AdminAffiliateApplicationsPage() {
                       className="flex w-full flex-col gap-1 px-4 py-4 text-left transition hover:bg-white/5 sm:flex-row sm:items-center sm:justify-between"
                     >
                       <div className="min-w-0">
-                        <p className="truncate font-medium text-white">
-                          {applicantLabel(row, profileByUser)}
+                        <p className="truncate font-medium text-white">{applicantLabel(row, profileByUser)}</p>
+                        <p className="truncate text-xs text-gray-400">
+                          {(profileByUser[row.user_id]?.username && `@${profileByUser[row.user_id]!.username}`) ||
+                            "—"}
                         </p>
-                        <p className="truncate text-xs text-gray-400">{row.email || "—"}</p>
                       </div>
                       <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-400">
-                        <span>{row.platform?.trim() || "—"}</span>
                         <span className="font-mono text-blue-200/90">{row.social_handle?.trim() || "—"}</span>
-                        <span>{row.audience_size?.trim() || "—"}</span>
+                        <span>{formatFollowers(row.followers)}</span>
                         <span className="font-mono text-emerald-200/90">
                           req: {row.requested_code?.trim() || "—"}
                         </span>
@@ -277,120 +357,129 @@ export default function AdminAffiliateApplicationsPage() {
           >
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h2 className="text-lg font-semibold text-emerald-300">Application detail</h2>
+                <h2 className="text-lg font-semibold text-emerald-300">Application</h2>
                 <p className="mt-1 text-xs text-gray-400">{applicantLabel(selected, profileByUser)}</p>
               </div>
               <button
                 type="button"
-                onClick={() => setSelected(null)}
+                onClick={() => closeDetail()}
                 className="rounded-lg bg-white/10 px-3 py-1 text-sm hover:bg-white/20"
               >
                 Close
               </button>
             </div>
 
+            <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.07] p-4">
+              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Social presence</p>
+              <p className="mt-1 break-all font-mono text-lg font-semibold text-blue-200">
+                {selected.social_handle?.trim() || "—"}
+              </p>
+              <p className="mt-3 text-sm">
+                <span className="text-gray-500">Followers </span>
+                <span className="font-semibold text-white">{formatFollowers(selected.followers)}</span>
+              </p>
+            </div>
+
             <dl className="mt-4 space-y-3 text-sm">
               <div>
-                <dt className="text-xs text-gray-500">Email</dt>
-                <dd className="text-gray-200">{selected.email || "—"}</dd>
+                <dt className="text-xs text-gray-500">Username</dt>
+                <dd className="text-gray-200">{profileByUser[selected.user_id]?.username || "—"}</dd>
               </div>
               <div>
-                <dt className="text-xs text-gray-500">Platform</dt>
-                <dd className="text-gray-200">{selected.platform?.trim() || "—"}</dd>
+                <dt className="text-xs text-gray-500">Name</dt>
+                <dd className="text-gray-200">{profileByUser[selected.user_id]?.name || "—"}</dd>
               </div>
               <div>
-                <dt className="text-xs text-gray-500">Audience</dt>
-                <dd className="text-gray-200">{selected.audience_size?.trim() || "—"}</dd>
+                <dt className="text-xs text-gray-500">Requested affiliate code</dt>
+                <dd className="font-mono text-emerald-200">
+                  {selected.requested_code?.trim() || "— (none — auto on approve if no override)"}
+                </dd>
               </div>
               <div>
-                <dt className="text-xs text-gray-500">Social</dt>
-                <dd className="font-mono text-gray-200">{selected.social_handle?.trim() || "—"}</dd>
-              </div>
-              <div>
-                <dt className="text-xs text-gray-500">Why join</dt>
-                <dd className="whitespace-pre-wrap text-gray-200">{selected.why_join?.trim() || "—"}</dd>
-              </div>
-              <div>
-                <dt className="text-xs text-gray-500">Promotion plan</dt>
-                <dd className="whitespace-pre-wrap text-gray-200">{selected.promo_plan?.trim() || "—"}</dd>
-              </div>
-              <div>
-                <dt className="text-xs text-gray-500">Requested code</dt>
-                <dd className="font-mono text-emerald-200">{selected.requested_code?.trim() || "—"}</dd>
+                <dt className="text-xs text-gray-500">Created</dt>
+                <dd className="text-xs text-gray-400">{formatTs(selected.created_at)}</dd>
               </div>
               {selected.status !== "pending" ? (
-                <>
-                  <div>
-                    <dt className="text-xs text-gray-500">Approved code</dt>
-                    <dd className="font-mono text-emerald-200">{selected.approved_code?.trim() || "—"}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs text-gray-500">Admin notes</dt>
-                    <dd className="whitespace-pre-wrap text-gray-300">{selected.admin_notes?.trim() || "—"}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs text-gray-500">Reviewed</dt>
-                    <dd className="text-xs text-gray-400">{formatTs(selected.reviewed_at)}</dd>
-                  </div>
-                </>
+                <div>
+                  <dt className="text-xs text-gray-500">Reviewed</dt>
+                  <dd className="text-xs text-gray-400">{formatTs(selected.reviewed_at)}</dd>
+                </div>
               ) : null}
             </dl>
 
             {selected.status === "pending" ? (
               <div className="mt-6 space-y-4 border-t border-white/10 pt-4">
-                <div>
-                  <label className="text-xs text-gray-400">Final affiliate code</label>
-                  <input
-                    value={finalCode}
-                    onChange={(e) => setFinalCode(e.target.value.toUpperCase())}
-                    className="mt-1 w-full rounded-lg border border-white/10 bg-[#0f172a] p-2.5 font-mono text-sm"
-                    placeholder="REQUIRED"
-                  />
+                <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2">
+                  <p className="text-xs text-gray-400">Final code preview</p>
+                  <p className="mt-1 font-mono text-sm font-medium text-emerald-200">{finalCodePreview}</p>
                 </div>
-                <div>
-                  <label className="text-xs text-gray-400">Stripe promo code ID (optional)</label>
-                  <input
-                    value={stripePromoId}
-                    onChange={(e) => setStripePromoId(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-white/10 bg-[#0f172a] p-2.5 text-sm"
-                    placeholder="promo_…"
-                  />
+
+                {actionError ? (
+                  <p className="rounded-lg border border-red-400/40 bg-red-500/15 px-3 py-2 text-xs whitespace-pre-wrap text-red-100">
+                    {actionError}
+                  </p>
+                ) : null}
+
+                <div className="space-y-3">
+                  <label className="block">
+                    <span className="text-xs text-gray-400">Final affiliate code (optional override)</span>
+                    <input
+                      type="text"
+                      value={finalCodeOverride}
+                      onChange={(e) => setFinalCodeOverride(e.target.value)}
+                      disabled={actionBusy}
+                      className="mt-1 w-full rounded-lg border border-white/15 bg-[#0f172a]/80 px-3 py-2 font-mono text-sm text-white placeholder:text-gray-600 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/40 disabled:opacity-50"
+                      placeholder="Leave blank to use requested code or auto-generate"
+                      autoComplete="off"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-xs text-gray-400">Stripe promo code ID (required for approval)</span>
+                    <input
+                      type="text"
+                      value={stripePromoId}
+                      onChange={(e) => setStripePromoId(e.target.value)}
+                      disabled={actionBusy}
+                      className="mt-1 w-full rounded-lg border border-white/15 bg-[#0f172a]/80 px-3 py-2 font-mono text-sm text-white placeholder:text-gray-600 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/40 disabled:opacity-50"
+                      placeholder="promo_…"
+                      autoComplete="off"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-xs text-gray-400">Admin notes (optional, stored if you reject)</span>
+                    <textarea
+                      value={rejectNotes}
+                      onChange={(e) => setRejectNotes(e.target.value)}
+                      disabled={actionBusy}
+                      rows={2}
+                      className="mt-1 w-full resize-none rounded-lg border border-white/15 bg-[#0f172a]/80 px-3 py-2 text-sm text-white placeholder:text-gray-600 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/40 disabled:opacity-50"
+                      placeholder="Visible on the application when rejected"
+                    />
+                  </label>
                 </div>
-                <div>
-                  <label className="text-xs text-gray-400">Admin notes (optional)</label>
-                  <textarea
-                    value={adminNotes}
-                    onChange={(e) => setAdminNotes(e.target.value)}
-                    rows={2}
-                    className="mt-1 w-full resize-none rounded-lg border border-white/10 bg-[#0f172a] p-2.5 text-sm"
-                  />
-                </div>
-                <div className="flex flex-wrap gap-2">
+
+                <div className="flex flex-wrap gap-2 pt-1">
                   <button
                     type="button"
                     disabled={actionBusy}
                     onClick={() => void handleApprove()}
-                    className="rounded-lg bg-gradient-to-r from-emerald-500 to-blue-500 px-5 py-2 text-sm font-semibold disabled:opacity-50"
+                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-emerald-500 to-blue-500 px-5 py-2 text-sm font-semibold disabled:opacity-50"
                   >
+                    {pendingAction === "approve" ? (
+                      <InlineSpinner className="h-4 w-4 text-white" />
+                    ) : null}
                     Approve
                   </button>
-                </div>
-
-                <div className="border-t border-white/10 pt-4">
-                  <label className="text-xs text-gray-400">Reject — notes (optional)</label>
-                  <textarea
-                    value={rejectNotes}
-                    onChange={(e) => setRejectNotes(e.target.value)}
-                    rows={2}
-                    className="mt-1 w-full resize-none rounded-lg border border-white/10 bg-[#0f172a] p-2.5 text-sm"
-                  />
                   <button
                     type="button"
                     disabled={actionBusy}
                     onClick={() => void handleReject()}
-                    className="mt-3 rounded-lg border border-red-400/50 bg-red-500/15 px-5 py-2 text-sm font-semibold text-red-100 hover:bg-red-500/25 disabled:opacity-50"
+                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-red-400/50 bg-red-500/15 px-5 py-2 text-sm font-semibold text-red-100 hover:bg-red-500/25 disabled:opacity-50"
                   >
-                    Reject application
+                    {pendingAction === "reject" ? (
+                      <InlineSpinner className="h-4 w-4 text-red-100" />
+                    ) : null}
+                    Reject
                   </button>
                 </div>
               </div>

@@ -1,129 +1,156 @@
-import type { SupabaseClient } from "@supabase/supabase-js"
+import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js"
+
+import {
+  formatPostgrestErrorMessage,
+  isPostgrestRowCardinalityError,
+  logPostgrestErrorDev,
+} from "@/lib/postgrestError"
+
+const MAX_INT4 = 2_147_483_647
+
+/** Matches live `affiliate_applications` minimal schema. */
+export const AFFILIATE_APPLICATION_SELECT_COLUMNS =
+  ["id", "user_id", "social_handle", "followers", "requested_code", "status", "created_at", "reviewed_at", "reviewed_by"].join(
+    ", "
+  )
 
 export type AffiliateApplicationRow = {
   id: string
   user_id: string
-  email: string | null
-  full_name: string | null
   social_handle: string | null
-  platform: string | null
-  audience_size: string | null
-  why_join: string | null
-  promo_plan: string | null
-  status: string
+  followers: number | null
   requested_code: string | null
-  approved_code: string | null
-  admin_notes: string | null
-  reviewed_by: string | null
-  reviewed_at: string | null
+  status: string
   created_at: string | null
-  updated_at: string | null
+  reviewed_at: string | null
+  reviewed_by: string | null
 }
 
 export type SubmitAffiliateApplicationInput = {
-  email: string | null
-  fullName: string | null
-  socialHandle: string | null
-  platform: string | null
-  audienceSize: string | null
-  whyJoin: string
-  promoPlan: string | null
+  socialHandle: string
+  followers: number
   requestedCode: string | null
+}
+
+/** User-authored fields for insert/update (not status/review timestamps). */
+type AffiliateApplicationWritePayload = {
+  social_handle: string
+  followers: number
+  requested_code: string | null
+  status: "pending"
+}
+
+function parseFollowersFromDb(v: unknown): number | null {
+  if (v == null) return null
+  if (typeof v === "number" && Number.isFinite(v)) return Math.trunc(Math.min(Math.max(v, 0), MAX_INT4))
+  if (typeof v === "string" && v.trim() !== "") {
+    const n = parseInt(v, 10)
+    if (Number.isFinite(n)) return Math.min(Math.max(n, 0), MAX_INT4)
+  }
+  return null
 }
 
 function rowFromRaw(raw: Record<string, unknown>): AffiliateApplicationRow {
   return {
     id: String(raw.id ?? ""),
     user_id: String(raw.user_id ?? ""),
-    email: raw.email != null ? String(raw.email) : null,
-    full_name: raw.full_name != null ? String(raw.full_name) : null,
     social_handle: raw.social_handle != null ? String(raw.social_handle) : null,
-    platform: raw.platform != null ? String(raw.platform) : null,
-    audience_size: raw.audience_size != null ? String(raw.audience_size) : null,
-    why_join: raw.why_join != null ? String(raw.why_join) : null,
-    promo_plan: raw.promo_plan != null ? String(raw.promo_plan) : null,
-    status: String(raw.status ?? "pending"),
+    followers: parseFollowersFromDb(raw.followers),
     requested_code: raw.requested_code != null ? String(raw.requested_code) : null,
-    approved_code: raw.approved_code != null ? String(raw.approved_code) : null,
-    admin_notes: raw.admin_notes != null ? String(raw.admin_notes) : null,
-    reviewed_by: raw.reviewed_by != null ? String(raw.reviewed_by) : null,
-    reviewed_at: raw.reviewed_at != null ? String(raw.reviewed_at) : null,
+    status: String(raw.status ?? "pending"),
     created_at: raw.created_at != null ? String(raw.created_at) : null,
-    updated_at: raw.updated_at != null ? String(raw.updated_at) : null,
+    reviewed_at: raw.reviewed_at != null ? String(raw.reviewed_at) : null,
+    reviewed_by: raw.reviewed_by != null ? String(raw.reviewed_by) : null,
   }
 }
 
-/** Pending row for this user, if any. */
-export async function fetchPendingAffiliateApplication(
-  supabase: SupabaseClient,
-  userId: string
-): Promise<AffiliateApplicationRow | null> {
-  const { data, error } = await supabase
-    .from("affiliate_applications")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("status", "pending")
-    .maybeSingle()
-
-  if (error || !data) return null
+function mapSelectToApplicationRow(
+  context: string,
+  data: unknown,
+  error: PostgrestError | null
+): AffiliateApplicationRow | null {
+  if (error) {
+    if (!isPostgrestRowCardinalityError(error)) {
+      logPostgrestErrorDev(context, error)
+    }
+    return null
+  }
+  if (data == null) return null
   return rowFromRaw(data as Record<string, unknown>)
 }
 
-/** Most recent application (any status) for display when no pending. */
+/**
+ * Latest application row for this user (any status). No row → null (not an error).
+ */
 export async function fetchLatestAffiliateApplication(
   supabase: SupabaseClient,
   userId: string
 ): Promise<AffiliateApplicationRow | null> {
   const { data, error } = await supabase
     .from("affiliate_applications")
-    .select("*")
+    .select(AFFILIATE_APPLICATION_SELECT_COLUMNS)
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle()
 
-  if (error || !data) return null
-  return rowFromRaw(data as Record<string, unknown>)
+  return mapSelectToApplicationRow("fetchLatestAffiliateApplication", data, error)
+}
+
+function buildWritePayload(input: SubmitAffiliateApplicationInput): AffiliateApplicationWritePayload {
+  const followers = Number.isFinite(input.followers)
+    ? Math.min(Math.max(0, Math.floor(input.followers)), MAX_INT4)
+    : 0
+  const requested =
+    input.requestedCode?.trim() !== ""
+      ? input.requestedCode!.trim().toUpperCase()
+      : null
+  return {
+    social_handle: input.socialHandle.trim(),
+    followers,
+    requested_code: requested,
+    status: "pending",
+  }
 }
 
 /**
- * Upsert a single pending application:
- * - If a pending row exists → update it.
- * - Else → insert new pending row (user may re-apply after rejection).
+ * Submit or update pending application only:
+ * - update if latest row for user is pending
+ * - insert otherwise (no row, rejected, etc.)
  */
 export async function submitAffiliateApplication(
   supabase: SupabaseClient,
   userId: string,
   input: SubmitAffiliateApplicationInput
 ): Promise<{ ok: boolean; error: string | null }> {
-  const payload = {
-    user_id: userId,
-    email: input.email,
-    full_name: input.fullName?.trim() || null,
-    social_handle: input.socialHandle?.trim() || null,
-    platform: input.platform?.trim() || null,
-    audience_size: input.audienceSize?.trim() || null,
-    why_join: input.whyJoin.trim(),
-    promo_plan: input.promoPlan?.trim() || null,
-    requested_code: input.requestedCode?.trim().toUpperCase() || null,
-    status: "pending" as const,
-    updated_at: new Date().toISOString(),
+  const latest = await fetchLatestAffiliateApplication(supabase, userId)
+
+  if (latest?.status === "approved") {
+    return { ok: false, error: "You are already approved as an affiliate." }
   }
 
-  const pending = await fetchPendingAffiliateApplication(supabase, userId)
+  const payload = buildWritePayload(input)
 
-  if (pending) {
-    const { error } = await supabase.from("affiliate_applications").update(payload).eq("id", pending.id)
-    if (error) return { ok: false, error: error.message }
+  if (latest?.status === "pending") {
+    const { error } = await supabase.from("affiliate_applications").update(payload).eq("id", latest.id)
+
+    if (error) {
+      logPostgrestErrorDev("submitAffiliateApplication update", error)
+      return { ok: false, error: formatPostgrestErrorMessage(error) }
+    }
     return { ok: true, error: null }
   }
 
   const insertPayload = {
     ...payload,
-    created_at: new Date().toISOString(),
+    user_id: userId,
   }
 
   const { error } = await supabase.from("affiliate_applications").insert(insertPayload)
-  if (error) return { ok: false, error: error.message }
+
+  if (error) {
+    logPostgrestErrorDev("submitAffiliateApplication insert", error)
+    return { ok: false, error: formatPostgrestErrorMessage(error) }
+  }
   return { ok: true, error: null }
 }

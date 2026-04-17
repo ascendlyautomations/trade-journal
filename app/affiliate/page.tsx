@@ -1,15 +1,14 @@
 "use client"
 
+import Link from "next/link"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "../../lib/supabaseClient"
 import Navbar from "../components/Navbar"
 import AffiliateApplyModal from "../components/AffiliateApplyModal"
-import {
-  fetchLatestAffiliateApplication,
-  fetchPendingAffiliateApplication,
-  type AffiliateApplicationRow,
-} from "@/lib/affiliateApplication"
+import { estimateEarningsFromReferralCount } from "@/lib/affiliateEarnings"
+import { fetchLatestAffiliateApplication, type AffiliateApplicationRow } from "@/lib/affiliateApplication"
+import { isPostgrestRowCardinalityError } from "@/lib/postgrestError"
 
 type MeProfile = {
   id: string
@@ -25,14 +24,8 @@ type ReferredUser = {
 }
 
 export default function AffiliateDashboard() {
-  const COMMISSION_RATE = 0.18
-  const PLAN_PRICE = 15.99
-
   const router = useRouter()
   const [loading, setLoading] = useState(true)
-  const [displayName, setDisplayName] = useState("")
-  const [email, setEmail] = useState<string | null>(null)
-  const [pendingApp, setPendingApp] = useState<AffiliateApplicationRow | null>(null)
   const [latestApp, setLatestApp] = useState<AffiliateApplicationRow | null>(null)
   const [referralCode, setReferralCode] = useState<string | null>(null)
   const [totalReferrals, setTotalReferrals] = useState(0)
@@ -43,14 +36,13 @@ export default function AffiliateDashboard() {
     process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"
   )
 
-  const approvedByApplication = latestApp?.status === "approved"
-  const hasAffiliateAccess = Boolean((referralCode && referralCode.length > 0) || approvedByApplication)
+  const isPending = latestApp?.status === "pending"
+  const hasAffiliateAccess = Boolean(referralCode && referralCode.length > 0)
 
   const applicationStatusLabel = useMemo(() => {
-    if (pendingApp) return "pending"
     if (!latestApp) return null
     return latestApp.status
-  }, [pendingApp, latestApp])
+  }, [latestApp])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -65,36 +57,31 @@ export default function AffiliateDashboard() {
       return
     }
 
-    setEmail(user.email ?? null)
-
-    const [profileRes, pendingRes, latestRes] = await Promise.all([
+    const [profileRes, appRes] = await Promise.all([
       supabase
         .from("profiles")
         .select("id, referral_code, referral_count, name")
         .eq("id", user.id)
-        .single(),
-      fetchPendingAffiliateApplication(supabase, user.id),
+        .maybeSingle(),
       fetchLatestAffiliateApplication(supabase, user.id),
     ])
 
-    setPendingApp(pendingRes)
-    setLatestApp(latestRes)
+    setLatestApp(appRes)
 
     const profile = profileRes.data as MeProfile | null
     const profErr = profileRes.error
 
-    if (profErr || !profile) {
-      console.error(profErr)
-      setDisplayName("")
+    if (profErr && !isPostgrestRowCardinalityError(profErr)) {
+      console.error("[affiliate dashboard] profile fetch", profErr)
+    }
+
+    if (!profile) {
       setReferralCode(null)
       setTotalReferrals(0)
       setReferredUsers([])
       setLoading(false)
       return
     }
-
-    const rawName = (profile as { name?: string }).name
-    setDisplayName(typeof rawName === "string" ? rawName.trim() : "")
 
     const code =
       profile.referral_code != null ? String(profile.referral_code).trim() : ""
@@ -133,7 +120,7 @@ export default function AffiliateDashboard() {
   }, [])
 
   const referralLink = referralCode ? `${baseUrl}?ref=${encodeURIComponent(referralCode)}` : ""
-  const earnings = (totalReferrals || 0) * PLAN_PRICE * COMMISSION_RATE
+  const earnings = estimateEarningsFromReferralCount(totalReferrals)
 
   async function copyLink() {
     if (!referralLink) return
@@ -152,9 +139,7 @@ export default function AffiliateDashboard() {
   }
 
   const showApplyCta =
-    !pendingApp &&
-    !referralCode &&
-    (!latestApp || latestApp.status === "rejected")
+    !referralCode && (!latestApp || latestApp.status === "rejected")
 
   return (
     <>
@@ -167,15 +152,21 @@ export default function AffiliateDashboard() {
               Affiliate Dashboard
             </h1>
             <div className="flex items-center gap-2">
-              {(showApplyCta || pendingApp) && (
+              {(showApplyCta || isPending) && (
                 <button
                   type="button"
                   onClick={() => setShowAffiliateModal(true)}
                   className="rounded-lg bg-gradient-to-r from-emerald-500 to-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-lg hover:opacity-95"
                 >
-                  {pendingApp ? "Update application" : "Apply to be an Affiliate"}
+                  {isPending ? "Update application" : "Apply to be an Affiliate"}
                 </button>
               )}
+              <Link
+                href="/payouts"
+                className="rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-4 py-2 text-sm font-medium text-emerald-100 hover:bg-emerald-500/25"
+              >
+                Payouts
+              </Link>
               <button
                 type="button"
                 onClick={() => void load()}
@@ -189,15 +180,22 @@ export default function AffiliateDashboard() {
 
           {applicationStatusLabel === "pending" && (
             <div className="mb-6 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
-              Your affiliate application is <strong>pending review</strong>. You can update your
-              submission anytime before a decision is made.
+              Your affiliate application is <strong>under review</strong>. You can update your answers
+              anytime before a decision is made.
             </div>
           )}
 
-          {latestApp?.status === "rejected" && !pendingApp && (
+          {latestApp?.status === "rejected" && (
             <div className="mb-6 rounded-xl border border-red-500/35 bg-red-500/10 px-4 py-3 text-sm text-red-100">
               Your previous application was <strong>not approved</strong>. You may submit a new
-              application if you&apos;d like to apply again.
+              application when you&apos;re ready.
+            </div>
+          )}
+
+          {latestApp?.status === "approved" && !referralCode && (
+            <div className="mb-6 rounded-xl border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm text-amber-50">
+              You&apos;re approved — add a requested code on your next application or contact support if
+              your referral code hasn&apos;t appeared yet.
             </div>
           )}
 
@@ -235,7 +233,7 @@ export default function AffiliateDashboard() {
             </h2>
             {!referralCode ? (
               <p className="mt-3 text-sm text-gray-400">
-                {pendingApp
+                {isPending
                   ? "Once approved, your referral code and link will appear here."
                   : "Apply for the affiliate program. When approved, your code and link will appear here."}
               </p>
@@ -298,8 +296,6 @@ export default function AffiliateDashboard() {
         open={showAffiliateModal}
         onClose={() => setShowAffiliateModal(false)}
         onSubmit={() => afterModalSubmit()}
-        defaultFullName={displayName}
-        defaultEmail={email}
       />
     </>
   )

@@ -218,6 +218,12 @@ export default function AdminPage() {
               }
             />
             <AdminModuleCard
+              href="/admin/payout-requests"
+              title="Affiliate payout requests"
+              description="Placeholder — affiliate-submitted payout requests (table ready; review UI next phase)."
+              variant="emerald"
+            />
+            <AdminModuleCard
               href="/admin/activity"
               title="Recent admin activity"
               description="Full audit log of moderation actions."
