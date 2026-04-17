@@ -10,6 +10,11 @@ import InputTradeForm from "../components/InputTradeForm"
 import { useEffect, useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { useRouter } from "next/navigation"
+import {
+  formatTradeClockTime,
+  formatTradePrice,
+  getTradeDurationDisplay,
+} from "@/lib/tradeDisplayFormat"
 
 function formatMoney(value: unknown): string {
   if (value === null || value === undefined) return "-"
@@ -465,6 +470,11 @@ const filteredTrades = trades.filter((trade) => {
                 {filteredTrades.map((trade) => {
   const entry = trade.entry_price ?? trade.entry ?? null
   const exit = trade.exit_price ?? trade.exit ?? null
+  const durationDisplay = getTradeDurationDisplay(
+    trade.duration_text,
+    trade.duration_seconds
+  )
+  const showDuration = durationDisplay !== null
 
   const acctLower = String(trade.mode ?? trade.account_type ?? "").toLowerCase().trim()
   const accountLabel = `${String(trade.account_name || "").trim()} ${String(
@@ -472,6 +482,16 @@ const filteredTrades = trades.filter((trade) => {
   ).trim()} ${trade.account_id ? `#${String(trade.account_id).trim()}` : ""}`
     .replace(/\s+/g, " ")
     .trim()
+
+  if (process.env.NODE_ENV !== "production" && showAdvanced) {
+    console.debug("[trades-page-duration-ui]", {
+      tradeId: trade?.id ?? null,
+      imported: String(trade?.account_type ?? "").toLowerCase() === "imported",
+      durationText: trade?.duration_text ?? null,
+      durationSeconds: trade?.duration_seconds ?? null,
+      omittedFromUi: !showDuration,
+    })
+  }
 
   return (
     <div
@@ -604,18 +624,30 @@ const filteredTrades = trades.filter((trade) => {
                             <div className="mt-3 text-sm text-gray-300 space-y-1 border-t border-white/10 pt-3">
                               <p className="text-sm">
                                 <span className="text-gray-400">Entry:</span>{" "}
-                                {formatNumber(entry)}
+                                {formatTradePrice(entry)}
                               </p>
                               <p className="text-sm">
                                 <span className="text-gray-400">Exit:</span>{" "}
-                                {formatNumber(exit)}
+                                {formatTradePrice(exit)}
                               </p>
                               <p className="text-sm">
-                                <span className="text-gray-400">Entry Time:</span> {trade.entry_time || "-"}
+                                <span className="text-gray-400">Entry Time:</span>{" "}
+                                {formatTradeClockTime(trade.entry_time, {
+                                  sameDayAs: trade.created_at,
+                                })}
                               </p>
                               <p className="text-sm">
-                                <span className="text-gray-400">Exit Time:</span> {trade.exit_time || "-"}
+                                <span className="text-gray-400">Exit Time:</span>{" "}
+                                {formatTradeClockTime(trade.exit_time, {
+                                  sameDayAs: trade.created_at,
+                                })}
                               </p>
+                              {showDuration ? (
+                                <p className="text-sm">
+                                  <span className="text-gray-400">Duration:</span>{" "}
+                                  {durationDisplay}
+                                </p>
+                              ) : null}
                             </div>
                           )}
 

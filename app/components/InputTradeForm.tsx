@@ -27,6 +27,7 @@ export type InputTradeFormProps = {
   existingTrade?: any | null
   onSave?: () => void
   onClose?: () => void
+  forceMarkReviewedOnSave?: boolean
   onUploadCsvClick?: () => void
   onReviewCsvClick?: () => void
   reviewCount?: number
@@ -69,6 +70,7 @@ export default function InputTradeForm({
   existingTrade,
   onSave,
   onClose,
+  forceMarkReviewedOnSave = false,
   onUploadCsvClick,
   onReviewCsvClick,
   reviewCount = 0,
@@ -159,6 +161,8 @@ export default function InputTradeForm({
   const [contracts, setContracts] = useState("")
   const [entryTime, setEntryTime] = useState("")
   const [exitTime, setExitTime] = useState("")
+  const [entryTimeTouched, setEntryTimeTouched] = useState(false)
+  const [exitTimeTouched, setExitTimeTouched] = useState(false)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dateRef = useRef<HTMLInputElement>(null)
@@ -299,6 +303,8 @@ export default function InputTradeForm({
     )
     setEntryTime(toTimeInputValue(t.entry_time))
     setExitTime(toTimeInputValue(t.exit_time))
+    setEntryTimeTouched(false)
+    setExitTimeTouched(false)
     setAdvanced(
       Boolean(
         (t.entry_price != null && t.entry_price !== "") ||
@@ -471,8 +477,12 @@ export default function InputTradeForm({
           entryVal !== null && Number.isFinite(entryVal) ? entryVal : null,
         exit_price:
           exitVal !== null && Number.isFinite(exitVal) ? exitVal : null,
-        entry_time: entryTime || null,
-        exit_time: exitTime || null,
+        entry_time: entryTimeTouched
+          ? entryTime || null
+          : existingTrade.entry_time ?? null,
+        exit_time: exitTimeTouched
+          ? exitTime || null
+          : existingTrade.exit_time ?? null,
         psychology_notes: psychologyVal,
         trade_type: tradeTypeToSave,
         confidence: confidence ? Number(confidence) : null,
@@ -482,6 +492,12 @@ export default function InputTradeForm({
         market_condition: marketCondition || null,
         news_event: newsEvent,
         timeframe: timeframe || null,
+      }
+      const importedUnreviewed =
+        ["imported"].includes(String(existingTrade.account_type ?? "").toLowerCase()) &&
+        existingTrade.reviewed === false
+      if (forceMarkReviewedOnSave || importedUnreviewed) {
+        updateRow.reviewed = true
       }
 
       const { error } = await supabase
@@ -503,7 +519,11 @@ export default function InputTradeForm({
         void refreshPlanAndAccountLock()
         onSave?.()
         onClose?.()
-        alert("Trade updated!")
+        if (forceMarkReviewedOnSave || importedUnreviewed) {
+          alert("Trade reviewed and updated!")
+        } else {
+          alert("Trade updated!")
+        }
       }
       setSubmitting(false)
       return
@@ -697,14 +717,14 @@ export default function InputTradeForm({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="bg-white/5 p-4 rounded-xl border border-white/10 space-y-2">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-5 lg:gap-7 xl:gap-8">
+        <div className="bg-white/5 p-4 lg:p-5 rounded-xl border border-white/10 space-y-3">
           <input
             ref={dateRef}
             type="date"
             value={tradeDate}
             onChange={(e) => setTradeDate(e.target.value)}
-            className="w-full p-2 rounded bg-[#0f172a] border border-white/10 text-white [color-scheme:dark]"
+            className="w-full p-2 lg:p-2.5 rounded bg-[#0f172a] border border-white/10 text-white [color-scheme:dark]"
           />
 
           {accountInputsDisabled ? (
@@ -718,7 +738,7 @@ export default function InputTradeForm({
             value={firm}
             onChange={(e) => setFirm(e.target.value)}
             disabled={accountInputsDisabled}
-            className="w-full p-2 rounded bg-[#0f172a] border border-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+            className="w-full p-2 lg:p-2.5 rounded bg-[#0f172a] border border-white/10 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <option value="">Account Type</option>
             {firmOptions.map((f) => (
@@ -730,7 +750,7 @@ export default function InputTradeForm({
             value={accountSize}
             onChange={(e) => setAccountSize(e.target.value)}
             disabled={accountInputsDisabled}
-            className="w-full p-2 rounded bg-[#0f172a] border border-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+            className="w-full p-2 lg:p-2.5 rounded bg-[#0f172a] border border-white/10 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <option value="">Account Size</option>
             {(accountSizes[firm] || []).map((size) => (
@@ -743,7 +763,7 @@ export default function InputTradeForm({
             value={accountNumber}
             onChange={(e) => setAccountNumber(e.target.value)}
             disabled={accountInputsDisabled}
-            className="w-full p-2 rounded bg-[#0f172a] border border-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+            className="w-full p-2 lg:p-2.5 rounded bg-[#0f172a] border border-white/10 disabled:cursor-not-allowed disabled:opacity-50"
           />
 
           <input
@@ -751,7 +771,7 @@ export default function InputTradeForm({
             placeholder="Symbol / ticker"
             value={ticker}
             onChange={(e) => setTicker(e.target.value)}
-            className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
+            className="w-full p-2 lg:p-2.5 rounded bg-[#0f172a] border border-white/10"
           />
           <datalist id="trade-symbol-options">
             {symbols.map((s) => (
@@ -761,7 +781,7 @@ export default function InputTradeForm({
           <div className="w-full">
             <p className="text-sm text-gray-400 mt-0">Account Used</p>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full mt-1">
+            <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-1 gap-2 w-full mt-1">
               {["Eval", "Funded", "Live", "Backtest"].map((type) => (
                 <button
                   key={type}
@@ -780,14 +800,14 @@ export default function InputTradeForm({
           </div>
 
           {mode === "Backtest" && (
-            <div className="mt-2">
+            <div className="mt-3">
               <label className="text-sm text-gray-400">Strategy Name</label>
               <input
                 type="text"
                 value={strategy}
                 onChange={(e) => setStrategy(e.target.value)}
                 placeholder="e.g. NY Reversal, Liquidity Sweep"
-                className="w-full mt-1 p-2 rounded bg-black/30 text-white"
+                className="w-full mt-1 p-2 lg:p-2.5 rounded bg-black/30 text-white"
               />
             </div>
           )}
@@ -796,7 +816,7 @@ export default function InputTradeForm({
             onClick={handleClickUpload}
             onDrop={handleDrop}
             onDragOver={(e) => e.preventDefault()}
-            className="border-2 border-dashed border-white/20 p-4 rounded text-center cursor-pointer"
+            className="border-2 border-dashed border-white/20 p-4 lg:p-5 rounded text-center cursor-pointer min-h-[96px] lg:min-h-[128px] flex items-center justify-center"
           >
             {image ? (
               <p>{image.name}</p>
@@ -818,11 +838,11 @@ export default function InputTradeForm({
           </div>
         </div>
 
-        <div className="bg-white/5 p-4 rounded-xl border border-white/10 space-y-2">
+        <div className="bg-white/5 p-4 lg:p-5 rounded-xl border border-white/10 space-y-3 xl:space-y-3.5">
           <select
             value={direction}
             onChange={(e) => setDirection(e.target.value)}
-            className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
+            className="w-full p-2 lg:p-2.5 rounded bg-[#0f172a] border border-white/10"
           >
             <option>Long</option>
             <option>Short</option>
@@ -831,7 +851,7 @@ export default function InputTradeForm({
           <select
             value={session}
             onChange={(e) => setSession(e.target.value)}
-            className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
+            className="w-full p-2 lg:p-2.5 rounded bg-[#0f172a] border border-white/10"
           >
             <option value="NY">NY</option>
             <option value="London">London</option>
@@ -848,7 +868,7 @@ export default function InputTradeForm({
               const val = handleNumberInput(raw)
               if (val !== null) setPnl(val)
             }}
-            className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
+            className="w-full p-2 lg:p-2.5 rounded bg-[#0f172a] border border-white/10"
           />
 
           {inputSettings.showRR && (
@@ -859,7 +879,7 @@ export default function InputTradeForm({
                 const val = handleNumberInput(e.target.value)
                 if (val !== null) setRR(val)
               }}
-              className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
+              className="w-full p-2 lg:p-2.5 rounded bg-[#0f172a] border border-white/10"
             />
           )}
 
@@ -871,7 +891,7 @@ export default function InputTradeForm({
                 const val = handleNumberInput(e.target.value)
                 if (val !== null) setPoints(val)
               }}
-              className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
+              className="w-full p-2 lg:p-2.5 rounded bg-[#0f172a] border border-white/10"
             />
           )}
 
@@ -880,12 +900,12 @@ export default function InputTradeForm({
               placeholder="Contracts"
               value={contracts}
               onChange={(e) => setContracts(e.target.value)}
-              className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
+              className="w-full p-2 lg:p-2.5 rounded bg-[#0f172a] border border-white/10"
             />
           )}
 
           {inputSettings.showEntryExit && advanced && (
-            <>
+            <div className="grid grid-cols-1 gap-3">
               <input
                 placeholder="Entry Price"
                 value={entryPrice}
@@ -893,7 +913,7 @@ export default function InputTradeForm({
                   const val = handleNumberInput(e.target.value)
                   if (val !== null) setEntryPrice(val)
                 }}
-                className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
+                className="w-full p-2 lg:p-2.5 rounded bg-[#0f172a] border border-white/10"
               />
               <input
                 placeholder="Exit Price"
@@ -902,21 +922,27 @@ export default function InputTradeForm({
                   const val = handleNumberInput(e.target.value)
                   if (val !== null) setExitPrice(val)
                 }}
-                className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
+                className="w-full p-2 lg:p-2.5 rounded bg-[#0f172a] border border-white/10"
               />
               <input
                 type="time"
                 value={entryTime}
-                onChange={(e) => setEntryTime(e.target.value)}
-                className="w-full p-2 rounded bg-[#0f172a] border border-white/10 [color-scheme:dark]"
+                onChange={(e) => {
+                  setEntryTimeTouched(true)
+                  setEntryTime(e.target.value)
+                }}
+                className="w-full p-2 lg:p-2.5 rounded bg-[#0f172a] border border-white/10 [color-scheme:dark]"
               />
               <input
                 type="time"
                 value={exitTime}
-                onChange={(e) => setExitTime(e.target.value)}
-                className="w-full p-2 rounded bg-[#0f172a] border border-white/10 [color-scheme:dark]"
+                onChange={(e) => {
+                  setExitTimeTouched(true)
+                  setExitTime(e.target.value)
+                }}
+                className="w-full p-2 lg:p-2.5 rounded bg-[#0f172a] border border-white/10 [color-scheme:dark]"
               />
-            </>
+            </div>
           )}
 
           <div className="mt-0">
@@ -927,7 +953,7 @@ export default function InputTradeForm({
               value={publicDescription}
               onChange={(e) => setPublicDescription(e.target.value)}
               placeholder="Insert public thoughts..."
-              className="w-full p-2 rounded-lg bg-[#0f172a] text-white border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[80px]"
+              className="w-full p-2 lg:p-2.5 rounded-lg bg-[#0f172a] text-white border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[96px] lg:min-h-[120px]"
             />
           </div>
 
@@ -939,7 +965,7 @@ export default function InputTradeForm({
               placeholder="Notes"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              className="w-full p-2 h-20 rounded bg-[#0f172a] border border-white/10"
+              className="w-full p-2 lg:p-2.5 h-24 lg:h-28 rounded bg-[#0f172a] border border-white/10"
             />
           )}
 
@@ -966,12 +992,12 @@ export default function InputTradeForm({
           </div>
         </div>
 
-        <div className="bg-white/5 p-4 rounded-xl border border-white/10 flex flex-col gap-3 md:gap-4">
+        <div className="bg-white/5 p-4 lg:p-5 rounded-xl border border-white/10 flex flex-col gap-3 lg:gap-4 xl:gap-5">
           <p className="text-sm text-gray-400">Psychology</p>
           <select
             value={confidence}
             onChange={(e) => setConfidence(e.target.value)}
-            className="w-full p-2 bg-[#0f172a] border border-white/10 rounded"
+            className="w-full p-2 lg:p-2.5 bg-[#0f172a] border border-white/10 rounded"
           >
             <option value="">Confidence (bad to great)</option>
             <option>1</option>
@@ -983,7 +1009,7 @@ export default function InputTradeForm({
           <select
             value={emotion}
             onChange={(e) => setEmotion(e.target.value)}
-            className="w-full p-2 bg-[#0f172a] border border-white/10 rounded"
+            className="w-full p-2 lg:p-2.5 bg-[#0f172a] border border-white/10 rounded"
           >
             <option value="">Emotion</option>
             <option>Calm</option>
@@ -1002,7 +1028,7 @@ export default function InputTradeForm({
           <select
             value={marketCondition}
             onChange={(e) => setMarketCondition(e.target.value)}
-            className="w-full p-2 bg-[#0f172a] border border-white/10 rounded"
+            className="w-full p-2 lg:p-2.5 bg-[#0f172a] border border-white/10 rounded"
           >
             <option value="">Market</option>
             <option>Trending</option>
@@ -1011,7 +1037,7 @@ export default function InputTradeForm({
           <select
             value={timeframe}
             onChange={(e) => setTimeframe(e.target.value)}
-            className="w-full p-2 bg-[#0f172a] border border-white/10 rounded"
+            className="w-full p-2 lg:p-2.5 bg-[#0f172a] border border-white/10 rounded"
           >
             <option value="">Timeframe</option>
             <option>1m</option>
@@ -1031,7 +1057,7 @@ export default function InputTradeForm({
             placeholder="What were you thinking in the moment?"
             value={psychologyNotes}
             onChange={(e) => setPsychologyNotes(e.target.value)}
-            className="w-full p-2 h-24 rounded bg-[#0f172a] border border-white/10 text-white"
+            className="w-full p-2 lg:p-2.5 h-28 lg:h-36 xl:h-40 rounded bg-[#0f172a] border border-white/10 text-white"
           />
           <div className="mt-4 lg:hidden">
             <button
@@ -1092,12 +1118,12 @@ export default function InputTradeForm({
     return (
       <>
         <div
-          className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 overflow-y-auto py-4 px-4"
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 overflow-y-auto py-4 md:py-6 px-3 sm:px-4 lg:px-6"
           onClick={() => onClose?.()}
           role="presentation"
         >
           <div
-            className="w-full max-w-md md:max-w-2xl mx-auto rounded-xl p-4 md:p-6 bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100 shadow-xl max-h-[90vh] overflow-y-auto my-auto"
+            className="w-full max-w-md md:max-w-4xl xl:max-w-7xl mx-auto rounded-xl p-4 md:p-6 lg:p-7 bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100 shadow-xl max-h-[92vh] overflow-y-auto my-auto"
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal="true"

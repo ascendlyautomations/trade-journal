@@ -7,6 +7,8 @@ import {
   type CsvRow,
   buildTradesFromParsedCsv,
   isTradovateCsvRow,
+  mapCsvHeadersToFields,
+  stripBom,
 } from "@/lib/csvTradeParsers"
 import Navbar from "../components/Navbar"
 
@@ -18,6 +20,7 @@ export default function ImportPage() {
     Papa.parse<CsvRow>(file, {
       header: true,
       skipEmptyLines: true,
+      transformHeader: (h: string) => stripBom(String(h).trim()),
       complete: (results) => {
         const data = (results.data || []) as CsvRow[]
         const filtered = data.filter(
@@ -42,12 +45,31 @@ export default function ImportPage() {
       return
     }
 
-    const { isTradovate, parsedTrades } = buildTradesFromParsedCsv(
+    const { isTradovate, parsedTrades, summary, rowResults } = buildTradesFromParsedCsv(
       parsed,
       user.id
     )
     console.log("TRADOVATE DETECTED:", isTradovate)
+    console.log("CSV import summary:", summary)
     console.log("PARSED TRADES:", parsedTrades)
+    if (parsedTrades.length) {
+      console.debug(
+        "CSV duration debug (first 5):",
+        parsedTrades.slice(0, 5).map((t) => ({
+          ticker: t.ticker,
+          duration_text: t.duration_text,
+          duration_seconds: t.duration_seconds,
+        }))
+      )
+    }
+
+    if (!parsedTrades.length) {
+      alert(
+        `Nothing to import: ${summary.failed} of ${summary.total} row(s) failed validation. Check console for details.`
+      )
+      setLoading(false)
+      return
+    }
 
     const { data, error } = await supabase
       .from("trades")
@@ -61,7 +83,16 @@ export default function ImportPage() {
       console.error("INSERT ERROR:", error)
       alert("Import failed")
     } else {
-      alert("Trades imported successfully!")
+      const skipped = summary.failed
+      const errLines = rowResults
+        .filter((r): r is { ok: false; rowNumber: number; reason: string } => !r.ok)
+        .slice(0, 5)
+        .map((r) => `Row ${r.rowNumber}: ${r.reason}`)
+        .join("\n")
+      let msg = `Imported ${parsedTrades.length} trade(s).`
+      if (skipped) msg += ` ${skipped} row(s) skipped.`
+      if (errLines) msg += `\n\n${errLines}`
+      alert(msg)
       setParsed([])
     }
 
@@ -95,8 +126,10 @@ export default function ImportPage() {
             </p>
           ) : null}
           <p className="text-sm text-gray-400 mb-2">
-            Supported: Tradovate raw export (buyPrice / sellPrice) or clean CSV
-            (Date, Symbol, Direction, Entry Price, Exit Price, PnL, Contracts).
+            Tradovate raw exports (buyPrice / sellPrice) or flexible broker CSV: headers like
+            Date / Trade Date, Symbol / Ticker, Direction / Side, PnL / Realized P&L, optional
+            entry/exit, contracts, session, account fields. Row errors are skipped; valid rows
+            import.
           </p>
 
           {parsed.length > 0 && (
@@ -115,30 +148,32 @@ export default function ImportPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {parsed.slice(0, 10).map((t, i) => (
+                    {parsed.slice(0, 10).map((t, i) => {
+                      const mapped = isTradovateFormat ? null : mapCsvHeadersToFields(t)
+                      return (
                       <tr key={i} className="border-t border-white/10">
                         <td className="p-2">
                           {isTradovateFormat
                             ? t["boughtTimestamp"] || "-"
-                            : t["Date"] || "-"}
+                            : mapped?.date || "—"}
                         </td>
                         <td className="p-2">
                           {isTradovateFormat
                             ? t["symbol"] || "-"
-                            : t["Symbol"] || "-"}
+                            : mapped?.symbol || "—"}
                         </td>
                         <td className="p-2">
                           {isTradovateFormat
                             ? Number(t["sellPrice"]) > Number(t["buyPrice"])
                               ? "Long"
                               : "Short"
-                            : t["Direction"] || "-"}
+                            : mapped?.direction || "—"}
                         </td>
                         <td className="p-2">
-                          {isTradovateFormat ? (t["pnl"] ?? "-") : (t["PnL"] ?? "-")}
+                          {isTradovateFormat ? (t["pnl"] ?? "-") : mapped?.pnl ?? "—"}
                         </td>
                       </tr>
-                    ))}
+                    )})}
                   </tbody>
                 </table>
               </div>

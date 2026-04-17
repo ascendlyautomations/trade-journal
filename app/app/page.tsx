@@ -5,7 +5,10 @@ import InputTradeForm from "../components/InputTradeForm"
 import { useState, useRef, useEffect } from "react"
 import Papa from "papaparse"
 import { supabase } from "../../lib/supabaseClient"
-import { buildTradesFromParsedCsv } from "@/lib/csvTradeParsers"
+import {
+  buildTradesFromParsedCsv,
+  stripBom,
+} from "@/lib/csvTradeParsers"
 
 export default function Home() {
   const [loading, setLoading] = useState(false)
@@ -36,6 +39,7 @@ export default function Home() {
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
+      transformHeader: (h: string) => stripBom(String(h).trim()),
       complete: async (results: any) => {
         try {
           const rows = (results.data || []).filter(
@@ -47,12 +51,34 @@ export default function Home() {
             return
           }
 
-          const { isTradovate, parsedTrades: tradesToInsert } =
+          const { isTradovate, parsedTrades: tradesToInsert, summary, rowResults } =
             buildTradesFromParsedCsv(rows, user.id)
 
           console.log("TRADOVATE DETECTED:", isTradovate)
+          console.log("CSV import summary:", summary)
           console.log("PARSED TRADES:", tradesToInsert)
-          console.log("✅ FINAL INSERT PAYLOAD:", tradesToInsert)
+          if (tradesToInsert.length) {
+            console.debug(
+              "CSV duration debug (first 5):",
+              tradesToInsert.slice(0, 5).map((t) => ({
+                ticker: t.ticker,
+                duration_text: t.duration_text,
+                duration_seconds: t.duration_seconds,
+              }))
+            )
+          }
+          if (rowResults?.length) {
+            const bad = rowResults.filter((r) => !r.ok)
+            if (bad.length) console.warn("CSV row issues:", bad)
+          }
+
+          if (!tradesToInsert.length) {
+            alert(
+              `No valid rows to import. ${summary.total} row(s) scanned, ${summary.failed} failed. Check the console for details.`
+            )
+            setLoading(false)
+            return
+          }
 
           const chunkSize = 100
 
@@ -69,7 +95,21 @@ export default function Home() {
             }
           }
 
-          alert(`Uploaded ${tradesToInsert.length} trades 🚀`)
+          const skipped = summary.failed
+          const errLines = (rowResults || [])
+            .filter((r): r is { ok: false; rowNumber: number; reason: string } => !r.ok)
+            .slice(0, 6)
+            .map((r) => `Row ${r.rowNumber}: ${r.reason}`)
+            .join("\n")
+
+          let msg = `Uploaded ${tradesToInsert.length} trade(s).`
+          if (summary.total > tradesToInsert.length) {
+            msg += ` ${skipped} row(s) skipped (${summary.total} total).`
+          }
+          if (errLines) {
+            msg += `\n\n${errLines}${skipped > 6 ? "\n…" : ""}`
+          }
+          alert(msg)
           fetchReviewCount()
         } catch (err) {
           console.error(err)
@@ -90,6 +130,7 @@ export default function Home() {
       .from("trades")
       .select("*", { count: "exact", head: true })
       .eq("user_id", user?.id)
+      .in("account_type", ["imported", "Imported"])
       .eq("reviewed", false)
 
     setReviewCount(count || 0)

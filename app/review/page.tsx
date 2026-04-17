@@ -4,12 +4,13 @@ import { useEffect, useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import Navbar from "../components/Navbar"
 import { useRouter } from "next/navigation"
-
+import InputTradeForm from "../components/InputTradeForm"
 
 export default function ReviewPage() {
   const [trades, setTrades] = useState<any[]>([])
-  const [index, setIndex] = useState(0)
-  const [notes, setNotes] = useState("")
+  const [editingTrade, setEditingTrade] = useState<any | null>(null)
+  const [showApproveAllConfirm, setShowApproveAllConfirm] = useState(false)
+  const [bulkApproving, setBulkApproving] = useState(false)
   const [loading, setLoading] = useState(true)
 
   const router = useRouter()
@@ -27,6 +28,7 @@ export default function ReviewPage() {
       .from("trades")
       .select("*")
       .eq("user_id", user?.id)
+      .in("account_type", ["imported", "Imported"])
       .eq("reviewed", false)
       .order("created_at", { ascending: true })
 
@@ -34,51 +36,57 @@ export default function ReviewPage() {
     setLoading(false)
   }
 
-  const trade = trades[index]
+  async function handleApproveAll() {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user?.id) return
 
-  async function handleSave() {
-    if (!trade) return
-
-    await supabase
+    setBulkApproving(true)
+    const { error } = await supabase
       .from("trades")
-      .update({
-        notes,
-        reviewed: true
-      })
-      .eq("id", trade.id)
+      .update({ reviewed: true })
+      .eq("user_id", user.id)
+      .in("account_type", ["imported", "Imported"])
+      .eq("reviewed", false)
 
-    setNotes("")
-    setIndex((prev) => prev + 1)
+    if (error) {
+      console.error("Approve all failed:", error)
+      alert("Failed to approve all imported trades.")
+    } else {
+      setShowApproveAllConfirm(false)
+      await fetchTrades()
+      alert("All pending imported trades were approved.")
+    }
+    setBulkApproving(false)
   }
-
-  async function handleSaveAndExit() {
-  if (!trade) return
-
-  await supabase
-    .from("trades")
-    .update({
-      notes,
-      reviewed: true
-    })
-    .eq("id", trade.id)
-
-  router.push("/app") // ✅ THIS is your input trade page
-}
 
   if (loading) {
     return (
-      <div className="text-white p-10">Loading trades...</div>
+      <>
+        <Navbar />
+        <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white p-10">
+          Loading trades...
+        </div>
+      </>
     )
   }
 
-  if (!trade) {
+  if (!trades.length) {
     return (
       <>
         <Navbar />
         <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white">
-          <h1 className="text-2xl font-bold">
-            No trades left to review 🎉
-          </h1>
+          <div className="text-center">
+            <h1 className="text-2xl font-bold">No trades left to review 🎉</h1>
+            <button
+              type="button"
+              onClick={() => router.push("/app")}
+              className="mt-4 rounded bg-emerald-500 px-4 py-2 font-semibold hover:bg-emerald-600"
+            >
+              Back to Input Trade
+            </button>
+          </div>
         </div>
       </>
     )
@@ -89,62 +97,113 @@ export default function ReviewPage() {
       <Navbar />
 
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white">
-
-        <div className="max-w-4xl mx-auto p-10">
-
-          <h1 className="text-2xl mb-6 bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent font-bold">
-            Review Trade {index + 1} of {trades.length}
-          </h1>
-
-          <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-xl p-6 space-y-4">
-
-            {/* Trade Info */}
-            <div className="flex justify-between">
-              <p><b>{trade.ticker}</b></p>
-              <p className={trade.pnl > 0 ? "text-emerald-400" : "text-red-400"}>
-                ${trade.pnl}
-              </p>
-            </div>
-
-            <p className="text-gray-400 text-sm">
-              {new Date(trade.created_at).toLocaleDateString()}
-            </p>
-
-            {/* Notes */}
-            <textarea
-              placeholder="What did you see here? (confluences, mistakes, etc.)"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              className="w-full p-3 bg-[#0f172a] border border-white/10 rounded text-white"
-            />
-
-            {/* Buttons */}
-            <div className="flex gap-3 mt-4">
-              {/* Save & Exit */}
+        <div className="max-w-6xl mx-auto p-4 md:p-8">
+          <div className="mb-6 flex items-center justify-between gap-3">
+            <h1 className="text-2xl bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent font-bold">
+              Review CSV Inputs ({trades.length} pending)
+            </h1>
+            <div className="flex items-center gap-2">
               <button
-                onClick={handleSaveAndExit}
-                className="flex-1 bg-red-500 hover:bg-red-600 py-3 rounded font-semibold transition"
+                type="button"
+                onClick={() => setShowApproveAllConfirm(true)}
+                disabled={!trades.length}
+                className="rounded bg-emerald-600 px-3 py-2 text-sm font-semibold hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Save & Exit
+                Approve All
               </button>
-              
-              {/* Save & Next */}
               <button
-                onClick={handleSave}
-                className="flex-1 bg-emerald-500 hover:bg-emerald-600 py-3 rounded font-semibold transition"
+                type="button"
+                onClick={() => router.push("/app")}
+                className="rounded bg-white/10 px-3 py-2 text-sm hover:bg-white/20"
               >
-                Save & Next →
+                Back
               </button>
-
-              
-
             </div>
-
           </div>
 
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {trades.map((trade, i) => (
+              <button
+                key={trade.id}
+                type="button"
+                onClick={() => setEditingTrade(trade)}
+                className="rounded-xl border border-white/10 bg-white/5 p-4 text-left transition hover:border-white/20 hover:bg-white/10"
+              >
+                <div className="flex items-center justify-between">
+                  <p className="font-semibold">
+                    {i + 1}. {trade.ticker || "—"} • {trade.direction || "—"}
+                  </p>
+                  <span
+                    className={`font-semibold ${
+                      Number(trade.pnl) >= 0 ? "text-emerald-400" : "text-red-400"
+                    }`}
+                  >
+                    {Number.isFinite(Number(trade.pnl))
+                      ? `${Number(trade.pnl) >= 0 ? "$" : "-$"}${Math.abs(
+                          Number(trade.pnl)
+                        ).toLocaleString(undefined, {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}`
+                      : "—"}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-gray-400">
+                  {new Date(trade.created_at).toLocaleString()}
+                </p>
+                <p className="mt-3 inline-flex rounded bg-emerald-500 px-3 py-1 text-xs font-semibold text-white">
+                  Review / Edit Trade
+                </p>
+              </button>
+            ))}
+          </div>
         </div>
-
       </div>
+
+      {editingTrade ? (
+        <InputTradeForm
+          existingTrade={editingTrade}
+          forceMarkReviewedOnSave={true}
+          onClose={() => setEditingTrade(null)}
+          onSave={() => {
+            setEditingTrade(null)
+            void fetchTrades()
+          }}
+        />
+      ) : null}
+
+      {showApproveAllConfirm ? (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-xl border border-white/10 bg-[#0f172a] p-5 text-white shadow-xl">
+            <h2 className="text-lg font-semibold">Approve All Imported Trades</h2>
+            <p className="mt-3 text-sm text-gray-300">
+              Are you sure you want to approve all imported trades?
+            </p>
+            <p className="mt-1 text-sm text-gray-400">
+              This will mark all pending imported trades as reviewed without opening them individually.
+            </p>
+            <div className="mt-5 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowApproveAllConfirm(false)}
+                disabled={bulkApproving}
+                className="rounded bg-white/10 px-3 py-2 text-sm hover:bg-white/20 disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleApproveAll()}
+                disabled={bulkApproving}
+                className="rounded bg-emerald-600 px-3 py-2 text-sm font-semibold hover:bg-emerald-500 disabled:opacity-60"
+              >
+                {bulkApproving ? "Approving..." : "Approve All"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
     </>
   )
 }

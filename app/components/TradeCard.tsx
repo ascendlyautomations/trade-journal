@@ -1,5 +1,11 @@
 "use client"
 
+import {
+  formatTradeClockTime,
+  formatTradePrice,
+  getTradeDurationDisplay,
+} from "@/lib/tradeDisplayFormat"
+
 function formatMoney(value: unknown): string {
   if (value === null || value === undefined) return "-"
   const number = Number(value)
@@ -62,6 +68,21 @@ export default function TradeCard({
 }: TradeCardProps) {
   const entry = trade.entry_price ?? trade.entry ?? null
   const exit = trade.exit_price ?? trade.exit ?? null
+  const durationDisplay = getTradeDurationDisplay(
+    trade.duration_text,
+    trade.duration_seconds
+  )
+  const showDuration = durationDisplay !== null
+
+  if (process.env.NODE_ENV !== "production" && showAdvanced) {
+    console.debug("[trade-card-duration-ui]", {
+      tradeId: trade?.id ?? null,
+      imported: String(trade?.account_type ?? "").toLowerCase() === "imported",
+      durationText: trade?.duration_text ?? null,
+      durationSeconds: trade?.duration_seconds ?? null,
+      omittedFromUi: !showDuration,
+    })
+  }
 
   const modeLower = String(trade.mode ?? "").toLowerCase().trim()
   const acctNum = trade.account_number ?? trade.account_id
@@ -187,20 +208,30 @@ export default function TradeCard({
               <div className="mt-3 space-y-1 border-t border-white/10 pt-3 text-sm text-gray-300">
                 <p className="text-sm">
                   <span className="text-gray-400">Entry:</span>{" "}
-                  {formatNumber(entry)}
+                  {formatTradePrice(entry)}
                 </p>
                 <p className="text-sm">
                   <span className="text-gray-400">Exit:</span>{" "}
-                  {formatNumber(exit)}
+                  {formatTradePrice(exit)}
                 </p>
                 <p className="text-sm">
                   <span className="text-gray-400">Entry Time:</span>{" "}
-                  {trade.entry_time || "-"}
+                  {formatTradeClockTime(trade.entry_time, {
+                    sameDayAs: trade.created_at,
+                  })}
                 </p>
                 <p className="text-sm">
                   <span className="text-gray-400">Exit Time:</span>{" "}
-                  {trade.exit_time || "-"}
+                  {formatTradeClockTime(trade.exit_time, {
+                    sameDayAs: trade.created_at,
+                  })}
                 </p>
+                {showDuration ? (
+                  <p className="text-sm">
+                    <span className="text-gray-400">Duration:</span>{" "}
+                    {durationDisplay}
+                  </p>
+                ) : null}
               </div>
             ) : null}
           </div>
