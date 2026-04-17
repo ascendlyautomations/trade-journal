@@ -453,6 +453,16 @@ export default function Navbar() {
                     >
                       Feedback
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAccountMenuOpen(false)
+                        router.push("/support")
+                      }}
+                      className="px-4 py-2 hover:bg-white/10 w-full text-left text-sm"
+                    >
+                      Support
+                    </button>
 
                     <button
                       type="button"
@@ -601,6 +611,9 @@ export default function Navbar() {
             </Link>
             <Link href="/feedback" className="py-2 text-white hover:text-blue-400" onClick={closeMobile}>
               Feedback
+            </Link>
+            <Link href="/support" className="py-2 text-white hover:text-blue-400" onClick={closeMobile}>
+              Support
             </Link>
 
             <button
