@@ -6,8 +6,7 @@ import { supabase } from "../../lib/supabaseClient"
 import { useRouter, usePathname } from "next/navigation"
 import { useUserProfile } from "../../lib/useUserProfile"
 import { isProActive } from "../../lib/subscription"
-
-const ADMIN_ID = "PASTE_YOUR_SUPABASE_USER_ID_HERE"
+import { getCurrentAdminCheckResult } from "../../lib/adminUsers"
 
 export default function Navbar() {
   const { user, profile, loading } = useUserProfile()
@@ -18,6 +17,7 @@ export default function Navbar() {
   const [openSection, setOpenSection] = useState<string | null>(null)
   const [unreadMessagesCount, setUnreadMessagesCount] = useState(0)
   const [unreadCount, setUnreadCount] = useState(0)
+  const [isAdmin, setIsAdmin] = useState(false)
 
   const router = useRouter()
   const pathname = usePathname()
@@ -65,6 +65,30 @@ export default function Navbar() {
     // fetchUnreadMessages is redeclared each render; only user drives refetch
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user])
+
+  useEffect(() => {
+    let cancelled = false
+    if (!user?.id) {
+      setIsAdmin(false)
+      return
+    }
+    void (async () => {
+      const check = await getCurrentAdminCheckResult()
+      if (process.env.NODE_ENV !== "production") {
+        console.debug("[admin-check][navbar] resolved", {
+          userId: check.userId,
+          email: check.email,
+          adminRow: check.row,
+          error: check.error,
+          isAdmin: check.isAdmin,
+        })
+      }
+      if (!cancelled) setIsAdmin(check.isAdmin)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [user?.id])
 
   const fetchUnread = useCallback(async () => {
     if (!user?.id) return
@@ -356,8 +380,8 @@ export default function Navbar() {
             </button>
 
             <div className="hidden md:flex items-center gap-3 shrink-0">
-              {user?.id === ADMIN_ID ? (
-                <Link href="/admin/feedback" className="text-sm hover:text-blue-400">
+              {isAdmin ? (
+                <Link href="/admin" className="text-sm hover:text-blue-400">
                   Admin
                 </Link>
               ) : null}
@@ -418,6 +442,16 @@ export default function Navbar() {
                       className="px-4 py-2 hover:bg-white/10 w-full text-left text-sm"
                     >
                       Settings
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAccountMenuOpen(false)
+                        router.push("/feedback")
+                      }}
+                      className="px-4 py-2 hover:bg-white/10 w-full text-left text-sm"
+                    >
+                      Feedback
                     </button>
 
                     <button
@@ -556,14 +590,17 @@ export default function Navbar() {
           </Link>
 
           <div className="border-t border-white/10 pt-2 flex flex-col gap-2">
-            {user?.id === ADMIN_ID ? (
-              <Link href="/admin/feedback" className="py-2 text-white hover:text-blue-400" onClick={closeMobile}>
+            {isAdmin ? (
+              <Link href="/admin" className="py-2 text-white hover:text-blue-400" onClick={closeMobile}>
                 Admin
               </Link>
             ) : null}
 
             <Link href="/settings" className="py-2 text-white hover:text-blue-400" onClick={closeMobile}>
               Settings
+            </Link>
+            <Link href="/feedback" className="py-2 text-white hover:text-blue-400" onClick={closeMobile}>
+              Feedback
             </Link>
 
             <button
