@@ -652,9 +652,33 @@ export default function SettingsPage() {
                 </button>
               </div>
             )}
-
+            <div className="mt-4">
+                  <h3 className="text-lg font-semibold text-white mb-2">Affiliate Program</h3>
+                  {existingApp ? (
+                    <>
+                      <p className="text-sm text-white/70">
+                        Application Status: {existingApp.status || "submitted"}
+                      </p>
+                      <button
+                        type="button"
+                        disabled
+                        className="mt-3 bg-green-500 hover:bg-green-600 px-4 py-2 rounded text-white opacity-50 cursor-not-allowed"
+                      >
+                        Application Submitted
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setShowAffiliateModal(true)}
+                      className="bg-green-500 hover:bg-green-600 px-4 py-2 rounded text-white"
+                    >
+                      Apply to be an Affiliate
+                    </button>
+                  )}
+                </div>
             {activeTab === "affiliate" && (
-              <div className="space-y-6 rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm">
+              <div className="space-y-6 rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-sm">
                 {!referralCode ? (
                   <p className="text-sm text-gray-400">
                     No referral code on file yet. Visit the{" "}
@@ -710,31 +734,7 @@ export default function SettingsPage() {
                   </>
                 )}
 
-                <div className="mt-6">
-                  <h3 className="text-lg font-semibold text-white mb-2">Affiliate Program</h3>
-                  {existingApp ? (
-                    <>
-                      <p className="text-sm text-white/70">
-                        Application Status: {existingApp.status || "submitted"}
-                      </p>
-                      <button
-                        type="button"
-                        disabled
-                        className="mt-3 bg-green-500 hover:bg-green-600 px-4 py-2 rounded text-white opacity-50 cursor-not-allowed"
-                      >
-                        Application Submitted
-                      </button>
-                    </>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setShowAffiliateModal(true)}
-                      className="bg-green-500 hover:bg-green-600 px-4 py-2 rounded text-white"
-                    >
-                      Apply to be an Affiliate
-                    </button>
-                  )}
-                </div>
+                
               </div>
             )}
 
