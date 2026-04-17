@@ -1,13 +1,12 @@
 "use client"
 
-import Link from "next/link"
 import Navbar from "../components/Navbar"
 import TradeFilterBar from "../components/TradeFilterBar"
 import ProfileOnboarding, {
   ONBOARDING_FLAG,
   profileNeedsUsername,
 } from "../components/ProfileOnboarding"
-import { useEffect, useState, useMemo } from "react"
+import { useEffect, useState, useMemo, useRef } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { isProActive } from "../../lib/subscription"
 import {
@@ -23,6 +22,78 @@ import {
   Pie,
   Cell
 } from "recharts"
+
+const DASHBOARD_GEAR_PREFS_KEY = "tradetrax_dashboard_prefs_v1"
+
+type DashboardGearPersistedPrefs = {
+  timeFilter: string
+  accountFilter: string
+  accountTypeFilter: string
+  showPublicOnly: boolean
+  showEquity: boolean
+  showDrawdown: boolean
+  showInsights: boolean
+  showSessions: boolean
+  showBestSetup: boolean
+  showWorstSetup: boolean
+  showWarnings: boolean
+}
+
+type GearDraftState = DashboardGearPersistedPrefs & { drawdownLimit: string }
+
+function loadDashboardGearPrefs(): Partial<DashboardGearPersistedPrefs> | null {
+  if (typeof window === "undefined") return null
+  try {
+    const s = window.localStorage.getItem(DASHBOARD_GEAR_PREFS_KEY)
+    if (!s) return null
+    const p = JSON.parse(s) as Partial<DashboardGearPersistedPrefs>
+    return p && typeof p === "object" ? p : null
+  } catch {
+    return null
+  }
+}
+
+function saveDashboardGearPrefs(p: DashboardGearPersistedPrefs) {
+  try {
+    window.localStorage.setItem(DASHBOARD_GEAR_PREFS_KEY, JSON.stringify(p))
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
+/** Strip to digits + one dot; max 2 decimal places (internal value for save). */
+function sanitizeDrawdownLimitInput(raw: string): string {
+  let t = raw.replace(/[^0-9.]/g, "")
+  const dot = t.indexOf(".")
+  if (dot !== -1) {
+    t = t.slice(0, dot + 1) + t.slice(dot + 1).replace(/\./g, "")
+  }
+  const [intPart = "", frac] = t.split(".")
+  if (frac !== undefined) {
+    return `${intPart}.${frac.slice(0, 2)}`
+  }
+  return intPart
+}
+
+function finalizeDrawdownLimitInput(raw: string): string {
+  let t = sanitizeDrawdownLimitInput(raw)
+  if (t.endsWith(".")) t = t.slice(0, -1)
+  return t
+}
+
+function formatDrawdownLimitForDisplay(raw: string, focused: boolean): string {
+  const s = sanitizeDrawdownLimitInput(raw)
+  if (focused) return s
+  if (s === "" || s === ".") return ""
+  const n = Number(s)
+  if (!Number.isFinite(n) || n < 0) return ""
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(n)
+}
 
 function normalizeSessionBucket(sessionRaw: string | null | undefined): "London" | "NY" | "Asia" | null {
   const s = (sessionRaw || "").trim().toLowerCase()
@@ -295,7 +366,8 @@ function formatHour(h: number) {
 
 function calculateDrawdown(trades: any[]) {
   let equity = 0
-  let peak = 0
+  /** Running high-water mark; must not start at 0 or drawdown tracks equity when P&L stays negative. */
+  let peak = Number.NEGATIVE_INFINITY
   let maxDrawdown = 0
   let currentDrawdown = 0
   let peakIndex = 0
@@ -485,6 +557,11 @@ export default function Dashboard() {
   const [showBestSetup, setShowBestSetup] = useState(true)
   const [showWorstSetup, setShowWorstSetup] = useState(true)
   const [showWarnings, setShowWarnings] = useState(true)
+  /** Snapshot of gear-panel fields while open; committed on Save. */
+  const [gearDraft, setGearDraft] = useState<GearDraftState | null>(null)
+  const [ddInputFocused, setDdInputFocused] = useState(false)
+  const [savingGearSettings, setSavingGearSettings] = useState(false)
+  const didHydrateDashboardPrefs = useRef(false)
 
   // 🔥 SAFE DATA FETCH (FIXES YOUR ERROR)
   useEffect(() => {
@@ -557,6 +634,60 @@ export default function Dashboard() {
     document.addEventListener("click", handleClick)
     return () => document.removeEventListener("click", handleClick)
   }, [])
+
+  useEffect(() => {
+    if (!showControls) {
+      setGearDraft(null)
+      setDdInputFocused(false)
+      return
+    }
+    const raw = profile?.max_drawdown_limit
+    setGearDraft({
+      timeFilter,
+      accountFilter,
+      accountTypeFilter,
+      showPublicOnly,
+      showEquity,
+      showDrawdown,
+      showInsights,
+      showSessions,
+      showBestSetup,
+      showWorstSetup,
+      showWarnings,
+      drawdownLimit:
+        raw != null && raw !== "" ? sanitizeDrawdownLimitInput(String(raw)) : "",
+    })
+    // Snapshot when the panel opens only (avoid resetting drafts while editing).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showControls])
+
+  useEffect(() => {
+    if (loading || didHydrateDashboardPrefs.current) return
+    didHydrateDashboardPrefs.current = true
+    const p = loadDashboardGearPrefs()
+    if (!p) return
+    const tf = p.timeFilter
+    if (tf === "all" || tf === "daily" || tf === "weekly" || tf === "monthly") {
+      setTimeFilter(tf)
+    }
+    if (typeof p.accountFilter === "string") setAccountFilter(p.accountFilter)
+    if (
+      p.accountTypeFilter === "all" ||
+      p.accountTypeFilter === "funded" ||
+      p.accountTypeFilter === "eval" ||
+      p.accountTypeFilter === "live"
+    ) {
+      setAccountTypeFilter(p.accountTypeFilter)
+    }
+    if (typeof p.showPublicOnly === "boolean") setShowPublicOnly(p.showPublicOnly)
+    if (typeof p.showEquity === "boolean") setShowEquity(p.showEquity)
+    if (typeof p.showDrawdown === "boolean") setShowDrawdown(p.showDrawdown)
+    if (typeof p.showInsights === "boolean") setShowInsights(p.showInsights)
+    if (typeof p.showSessions === "boolean") setShowSessions(p.showSessions)
+    if (typeof p.showBestSetup === "boolean") setShowBestSetup(p.showBestSetup)
+    if (typeof p.showWorstSetup === "boolean") setShowWorstSetup(p.showWorstSetup)
+    if (typeof p.showWarnings === "boolean") setShowWarnings(p.showWarnings)
+  }, [loading])
 
   // 🔥 FORMATTERS
   function formatCurrency(value: number) {
@@ -917,18 +1048,25 @@ const biggestLoss = losses.length > 0
     const drawdownData = calculateDrawdown(chronologicalTrades)
     const expectancyData = calculateExpectancy(filteredTrades)
     const hourData = analyzeTradingHours(filteredTrades)
-    let chartPeak = 0
+    let runningEquity = 0
+    /** Running high-water mark for peak-to-valley drawdown (equity − peak, always ≤ 0). */
+    let chartPeak = Number.NEGATIVE_INFINITY
     const equityDrawdownChartData = chronologicalTrades.map((trade, index) => {
-      const equity = chronologicalTrades
-        .slice(0, index + 1)
-        .reduce((sum, t) => sum + (Number(t.pnl) || 0), 0)
+      runningEquity += Number(trade.pnl) || 0
+      chartPeak = Math.max(chartPeak, runningEquity)
+      const drawdown = runningEquity - chartPeak
 
-      chartPeak = Math.max(chartPeak, equity)
-      const drawdown = equity - chartPeak
+      if (process.env.NODE_ENV === "development" && index < 5) {
+        console.log({
+          equity: runningEquity,
+          peak: chartPeak,
+          drawdown,
+        })
+      }
 
       return {
         date: trade.created_at,
-        equity,
+        equity: runningEquity,
         drawdown,
       }
     })
@@ -1061,6 +1199,76 @@ const worstDay = dailyPnLs.length > 0
       drawdownData.maxDrawdown >= drawdownLimitCap)
 
   const sectionTitle = "text-xs md:text-sm text-gray-400 uppercase tracking-wide mb-2"
+
+  async function saveDashboardGearPanel() {
+    if (!user || !gearDraft) return
+
+    const rawLimit = finalizeDrawdownLimitInput(gearDraft.drawdownLimit).trim()
+    const n =
+      rawLimit === "" || rawLimit === "."
+        ? null
+        : Number(finalizeDrawdownLimitInput(gearDraft.drawdownLimit))
+    if (
+      rawLimit !== "" &&
+      rawLimit !== "." &&
+      (n === null || !Number.isFinite(n) || n < 0)
+    ) {
+      alert(
+        "Enter a valid non-negative dollar amount for drawdown limit, or leave blank to clear."
+      )
+      return
+    }
+
+    setSavingGearSettings(true)
+    const { error } = await supabase
+      .from("profiles")
+      .update({ max_drawdown_limit: n })
+      .eq("id", user.id)
+    setSavingGearSettings(false)
+
+    if (error) {
+      alert(error.message)
+      return
+    }
+
+    let nextAccount = gearDraft.accountFilter
+    if (nextAccount !== "all" && !accounts.some((a) => a.value === nextAccount)) {
+      nextAccount = "all"
+    }
+
+    setTimeFilter(gearDraft.timeFilter)
+    setAccountFilter(nextAccount)
+    setAccountTypeFilter(gearDraft.accountTypeFilter)
+    setShowPublicOnly(gearDraft.showPublicOnly)
+    setShowEquity(gearDraft.showEquity)
+    setShowDrawdown(gearDraft.showDrawdown)
+    setShowInsights(gearDraft.showInsights)
+    setShowSessions(gearDraft.showSessions)
+    setShowBestSetup(gearDraft.showBestSetup)
+    setShowWorstSetup(gearDraft.showWorstSetup)
+    setShowWarnings(gearDraft.showWarnings)
+
+    saveDashboardGearPrefs({
+      timeFilter: gearDraft.timeFilter,
+      accountFilter: nextAccount,
+      accountTypeFilter: gearDraft.accountTypeFilter,
+      showPublicOnly: gearDraft.showPublicOnly,
+      showEquity: gearDraft.showEquity,
+      showDrawdown: gearDraft.showDrawdown,
+      showInsights: gearDraft.showInsights,
+      showSessions: gearDraft.showSessions,
+      showBestSetup: gearDraft.showBestSetup,
+      showWorstSetup: gearDraft.showWorstSetup,
+      showWarnings: gearDraft.showWarnings,
+    })
+
+    setProfile((p: any) => (p ? { ...p, max_drawdown_limit: n } : p))
+    setShowControls(false)
+  }
+
+  function cancelDashboardGearPanel() {
+    setShowControls(false)
+  }
 
   const recentTradesSection = (
     <div className="h-full rounded-xl border border-white/10 bg-white/10 p-3 md:p-4">
@@ -1212,102 +1420,156 @@ const worstDay = dailyPnLs.length > 0
       </button>
 
       {showControls ? (
-        <div className="absolute right-0 top-full z-[100] mt-2 w-72 rounded-lg border border-white/10 bg-[#0f172a] p-4 shadow-lg">
-          <p className="text-sm font-semibold text-white mb-3 pb-2 border-b border-white/10">
-            Dashboard controls
+        <div className="absolute right-0 top-full z-[100] mt-2 w-[min(22rem,calc(100vw-1.5rem))] max-h-[min(85vh,36rem)] overflow-y-auto rounded-xl border border-white/10 bg-[#0f172a]/95 p-4 shadow-xl shadow-black/40 backdrop-blur-md">
+          <p className="mb-3 border-b border-white/10 pb-2 text-sm font-semibold text-white">
+            Dashboard preferences
           </p>
 
-          <div className="mb-4">
-            <p className={sectionTitle}>Display</p>
+          {!gearDraft ? (
+            <p className="text-xs text-gray-400">Loading…</p>
+          ) : (
+            <>
+              
 
-            <label className="flex justify-between items-center gap-3 text-sm mb-2 cursor-pointer">
-              <span>Equity Curve</span>
-              <input
-                type="checkbox"
-                className="accent-emerald-500"
-                checked={showEquity}
-                onChange={() => setShowEquity((v) => !v)}
-              />
-            </label>
+              <div className="mb-3 space-y-2 rounded-lg border border-white/10 bg-black/25 p-3">
+                <p className={sectionTitle}>Display</p>
+                <label className="flex cursor-pointer items-center justify-between gap-2 text-sm text-gray-200">
+                  <span>Performance charts</span>
+                  <input
+                    type="checkbox"
+                    className="accent-emerald-500"
+                    checked={gearDraft.showEquity && gearDraft.showDrawdown}
+                    onChange={(e) => {
+                      const on = e.target.checked
+                      setGearDraft((d) =>
+                        d ? { ...d, showEquity: on, showDrawdown: on } : d
+                      )
+                    }}
+                  />
+                </label>
+                <label className="flex cursor-pointer items-center justify-between gap-2 text-sm text-gray-200">
+                  <span>Insights overview</span>
+                  <input
+                    type="checkbox"
+                    className="accent-emerald-500"
+                    checked={gearDraft.showInsights}
+                    onChange={() =>
+                      setGearDraft((d) =>
+                        d ? { ...d, showInsights: !d.showInsights } : d
+                      )
+                    }
+                  />
+                </label>
+                <label className="flex cursor-pointer items-center justify-between gap-2 text-sm text-gray-200">
+                  <span>Session chart</span>
+                  <input
+                    type="checkbox"
+                    className="accent-emerald-500"
+                    checked={gearDraft.showSessions}
+                    onChange={() =>
+                      setGearDraft((d) =>
+                        d ? { ...d, showSessions: !d.showSessions } : d
+                      )
+                    }
+                  />
+                </label>
+                <label className="flex cursor-pointer items-center justify-between gap-2 text-sm text-gray-200">
+                  <span>Setups & behavior tips</span>
+                  <input
+                    type="checkbox"
+                    className="accent-emerald-500"
+                    checked={
+                      gearDraft.showBestSetup &&
+                      gearDraft.showWorstSetup &&
+                      gearDraft.showWarnings
+                    }
+                    onChange={(e) => {
+                      const on = e.target.checked
+                      setGearDraft((d) =>
+                        d
+                          ? {
+                              ...d,
+                              showBestSetup: on,
+                              showWorstSetup: on,
+                              showWarnings: on,
+                            }
+                          : d
+                      )
+                    }}
+                  />
+                </label>
+              </div>
 
-            <label className="flex justify-between items-center gap-3 text-sm mb-2 cursor-pointer">
-              <span>Drawdown</span>
-              <input
-                type="checkbox"
-                className="accent-emerald-500"
-                checked={showDrawdown}
-                onChange={() => setShowDrawdown((v) => !v)}
-              />
-            </label>
+              <div className="mb-3 rounded-lg border border-white/10 bg-black/25 p-3">
+                <p className={sectionTitle}>Risk</p>
+                <p className="mt-1 text-[11px] leading-snug text-gray-400">
+                  Max drawdown from equity peak. Leave blank for no limit.
+                </p>
+                <label htmlFor="dashboard-max-dd" className="sr-only">
+                  Max drawdown limit
+                </label>
+                <input
+                  id="dashboard-max-dd"
+                  type="text"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  placeholder="$0"
+                  disabled={!user}
+                  value={formatDrawdownLimitForDisplay(
+                    gearDraft.drawdownLimit,
+                    ddInputFocused
+                  )}
+                  onFocus={() => setDdInputFocused(true)}
+                  onBlur={() => {
+                    setDdInputFocused(false)
+                    setGearDraft((d) =>
+                      d
+                        ? {
+                            ...d,
+                            drawdownLimit: finalizeDrawdownLimitInput(d.drawdownLimit),
+                          }
+                        : d
+                    )
+                  }}
+                  onChange={(e) => {
+                    const next = sanitizeDrawdownLimitInput(e.target.value)
+                    setGearDraft((d) => (d ? { ...d, drawdownLimit: next } : d))
+                  }}
+                  className="mt-2 w-full rounded-lg border border-white/10 bg-[#020617] px-3 py-2 text-sm text-white tabular-nums placeholder:text-gray-500 focus:border-blue-400/50 focus:outline-none focus:ring-1 focus:ring-blue-400/40 disabled:opacity-50"
+                />
+              </div>
 
-            <label className="flex justify-between items-center gap-3 text-sm mb-2 cursor-pointer">
-              <span>Insights</span>
-              <input
-                type="checkbox"
-                className="accent-emerald-500"
-                checked={showInsights}
-                onChange={() => setShowInsights((v) => !v)}
-              />
-            </label>
-
-            <label className="flex justify-between items-center gap-3 text-sm cursor-pointer">
-              <span>Session Chart</span>
-              <input
-                type="checkbox"
-                className="accent-emerald-500"
-                checked={showSessions}
-                onChange={() => setShowSessions((v) => !v)}
-              />
-            </label>
-          </div>
-
-          <div className="mb-4 rounded-lg border border-white/10 bg-black/20 p-3">
-            <p className={sectionTitle}>Risk</p>
-            <p className="mt-2 text-xs text-gray-400">
-              Set your max drawdown limit under{" "}
-              <Link
-                href="/settings"
-                className="text-blue-300 underline hover:text-blue-200"
-              >
-                Settings → Profile
-              </Link>
-              .
-            </p>
-          </div>
-
-          <div className="mb-0">
-            <p className={sectionTitle}>Analytics</p>
-
-            <label className="flex justify-between items-center gap-3 text-sm mb-2 cursor-pointer">
-              <span>Show Best Setup</span>
-              <input
-                type="checkbox"
-                className="accent-emerald-500"
-                checked={showBestSetup}
-                onChange={() => setShowBestSetup((v) => !v)}
-              />
-            </label>
-
-            <label className="flex justify-between items-center gap-3 text-sm mb-2 cursor-pointer">
-              <span>Show Worst Setup</span>
-              <input
-                type="checkbox"
-                className="accent-emerald-500"
-                checked={showWorstSetup}
-                onChange={() => setShowWorstSetup((v) => !v)}
-              />
-            </label>
-
-            <label className="flex justify-between items-center gap-3 text-sm cursor-pointer">
-              <span>Behavior Warnings</span>
-              <input
-                type="checkbox"
-                className="accent-emerald-500"
-                checked={showWarnings}
-                onChange={() => setShowWarnings((v) => !v)}
-              />
-            </label>
-          </div>
+              <div className="mt-1 border-t border-white/10 pt-3">
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      void saveDashboardGearPanel()
+                    }}
+                    disabled={savingGearSettings || !user}
+                    className="flex-1 rounded-lg bg-gradient-to-r from-blue-500 to-emerald-600 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:from-blue-600 hover:to-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {savingGearSettings ? "Saving…" : "Save"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      cancelDashboardGearPanel()
+                    }}
+                    disabled={savingGearSettings}
+                    className="flex-1 rounded-lg border border-white/15 bg-white/5 py-2.5 text-sm font-medium text-gray-200 transition hover:bg-white/10 disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
+                <p className="mt-2 text-center text-[10px] text-gray-500">
+                  Save applies defaults, display options, and your drawdown limit.
+                </p>
+              </div>
+            </>
+          )}
         </div>
       ) : null}
     </div>
@@ -1604,11 +1866,13 @@ const worstDay = dailyPnLs.length > 0
                     n < 0
                       ? `-$${Math.abs(n).toLocaleString()}`
                       : `$${n.toLocaleString()}`
-                  const label =
-                    name === "Equity" || name === "equity"
-                      ? "Equity"
-                      : "Drawdown"
-                  return [formatted, label]
+                  const isEquity = name === "Equity" || name === "equity"
+                  const label = isEquity ? "Equity" : "Drawdown"
+                  if (isEquity) return [formatted, label]
+                  return [
+                    `${formatted} (drop from highest balance)`,
+                    label,
+                  ]
                 }}
                 labelFormatter={(label) => {
                   const d = new Date(String(label))
@@ -1646,8 +1910,8 @@ const worstDay = dailyPnLs.length > 0
                 type="monotone"
                 dataKey="drawdown"
                 name="Drawdown"
-                stroke="#ef4444"
-                strokeWidth={2}
+                stroke="#f87171"
+                strokeWidth={1.25}
                 dot={false}
               />
             </LineChart>
@@ -1994,7 +2258,7 @@ function Stat({ title, value, positive }: any) {
       : String(value ?? "")
 
   return (
-    <div className="bg-[#111827] rounded-xl p-3 md:p-4 flex flex-col justify-center items-center text-center min-h-[90px] w-full">
+    <div className="flex min-h-[90px] w-full flex-col items-center justify-center rounded-xl border border-white/10 bg-white/10 p-3 text-center backdrop-blur-md md:p-4">
       <p className="text-xs md:text-sm text-gray-400 mb-1">{title}</p>
       <div className="w-full text-center">
         <span

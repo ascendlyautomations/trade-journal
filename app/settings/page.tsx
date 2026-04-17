@@ -53,7 +53,7 @@ const TABS: {
   {
     id: "profile",
     label: "Profile",
-    description: "Public profile, trading style, and risk limits",
+    description: "Public profile and trading style",
   },
   {
     id: "affiliate",
@@ -69,6 +69,7 @@ export default function SettingsPage() {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [savingProfile, setSavingProfile] = useState(false)
+  const [savingDrawdownLimit, setSavingDrawdownLimit] = useState(false)
   const [savingAccountPrivacy, setSavingAccountPrivacy] = useState(false)
   const [savingPassword, setSavingPassword] = useState(false)
   const [manageLoading, setManageLoading] = useState(false)
@@ -104,6 +105,20 @@ export default function SettingsPage() {
   useEffect(() => {
     void init()
   }, [])
+
+  useEffect(() => {
+    if (loading) return
+    if (typeof window === "undefined") return
+    if (window.location.hash !== "#dashboard-risk") return
+    setActiveTab("account")
+    const id = window.requestAnimationFrame(() => {
+      document.getElementById("dashboard-risk")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      })
+    })
+    return () => window.cancelAnimationFrame(id)
+  }, [loading])
 
   async function fetchProfile(userId: string) {
     const { data } = await supabase
@@ -207,13 +222,6 @@ export default function SettingsPage() {
   async function saveProfileTab() {
     if (!user) return
 
-    const t = maxDrawdown.trim()
-    const n = t === "" ? null : Number(t)
-    if (t !== "" && (!Number.isFinite(n) || n === null || n < 0)) {
-      alert("Enter a valid non-negative dollar amount for drawdown limit, or leave blank to clear.")
-      return
-    }
-
     setSavingProfile(true)
 
     let avatarUrl = avatarPreview
@@ -231,7 +239,6 @@ export default function SettingsPage() {
         trading_style: tradingStyle,
         trading_model: tradingModel || tradingStyle || null,
         started_trading: startedTrading.trim() || null,
-        max_drawdown_limit: n,
       })
       .eq("id", user.id)
 
@@ -252,12 +259,39 @@ export default function SettingsPage() {
             trading_style: tradingStyle,
             trading_model: tradingModel || tradingStyle || null,
             started_trading: startedTrading.trim() || null,
-            max_drawdown_limit: n,
           }
         : p
     )
     setAvatarFile(null)
     alert("Profile saved")
+  }
+
+  async function saveDrawdownLimit() {
+    if (!user) return
+
+    const t = maxDrawdown.trim()
+    const n = t === "" ? null : Number(t)
+    if (t !== "" && (!Number.isFinite(n) || n === null || n < 0)) {
+      alert(
+        "Enter a valid non-negative dollar amount for drawdown limit, or leave blank to clear."
+      )
+      return
+    }
+
+    setSavingDrawdownLimit(true)
+    const { error } = await supabase
+      .from("profiles")
+      .update({ max_drawdown_limit: n })
+      .eq("id", user.id)
+    setSavingDrawdownLimit(false)
+
+    if (error) {
+      alert(error.message)
+      return
+    }
+
+    setProfile((p) => (p ? { ...p, max_drawdown_limit: n } : p))
+    alert("Drawdown limit saved")
   }
 
   async function saveAccountPrivacyTab() {
@@ -608,23 +642,6 @@ export default function SettingsPage() {
                   />
                 </div>
 
-                <div className="rounded-xl border border-white/10 bg-black/20 p-4">
-                  <p className="text-sm font-medium text-white">Drawdown limit</p>
-                  <p className="mt-1 text-xs text-gray-500">
-                    Optional cap from your equity peak (used on the dashboard). Leave blank
-                    to clear.
-                  </p>
-                  <input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    placeholder="Max drawdown ($)"
-                    value={maxDrawdown}
-                    onChange={(e) => setMaxDrawdown(e.target.value)}
-                    className="mt-3 w-full rounded-xl border border-white/10 bg-[#0f172a] p-3"
-                  />
-                </div>
-
                 <button
                   type="button"
                   onClick={() => void saveProfileTab()}
@@ -778,6 +795,68 @@ export default function SettingsPage() {
                   >
                     {savingAccountPrivacy ? "Saving…" : "Save display & privacy"}
                   </button>
+                </section>
+
+                <section
+                  id="dashboard-risk"
+                  className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm"
+                >
+                  <div className="flex items-center gap-2">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="shrink-0 text-blue-300"
+                      aria-hidden
+                    >
+                      <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                    <h3 className="text-sm font-semibold uppercase tracking-wide text-blue-300">
+                      Dashboard & risk
+                    </h3>
+                  </div>
+                  <p className="mt-1 text-sm text-gray-400">
+                    Controls how drawdown warnings appear on your dashboard (same as the gear
+                    menu).
+                  </p>
+                  <div className="mt-4 flex flex-col gap-3 rounded-xl border border-white/10 bg-black/20 p-4 sm:flex-row sm:items-end sm:justify-between">
+                    <div className="min-w-0 flex-1">
+                      <label
+                        htmlFor="max-drawdown-limit"
+                        className="text-sm font-medium text-white"
+                      >
+                        Max drawdown limit
+                      </label>
+                      <p className="mt-1 text-xs text-gray-500">
+                        Optional cap from your equity peak. Leave blank to clear.
+                      </p>
+                      <input
+                        id="max-drawdown-limit"
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        placeholder="Max drawdown ($)"
+                        value={maxDrawdown}
+                        onChange={(e) => setMaxDrawdown(e.target.value)}
+                        className="mt-3 w-full rounded-xl border border-white/10 bg-black/30 p-3 placeholder:text-gray-500"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void saveDrawdownLimit()}
+                      disabled={savingDrawdownLimit}
+                      className="shrink-0 rounded-lg bg-white/10 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-white/15 disabled:opacity-50 sm:mb-0"
+                    >
+                      {savingDrawdownLimit ? "Saving…" : "Save limit"}
+                    </button>
+                  </div>
                 </section>
 
                 <section className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm">

@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import { formatPnlCurrency, formatPnlWholeDollars } from "../../lib/formatMoney"
 
 type TradeLike = {
   id: string | number
@@ -27,14 +28,6 @@ type CalendarProps = {
 
 function dayKey(date: Date) {
   return date.toISOString().slice(0, 10)
-}
-
-const formatMoney = (num: number | null | undefined) => {
-  if (num == null) return "$0.00"
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  }).format(num)
 }
 
 function tradeImageSrc(imageUrl: string | null | undefined): string | null {
@@ -206,8 +199,7 @@ export default function Calendar({
                         </p>
                         {dayTrades.length ? (
                           <p className="mt-0.5 w-full truncate text-center text-[11px] font-medium leading-tight text-white/90">
-                            {totalPnl >= 0 ? "+" : ""}
-                            {totalPnl.toFixed(0)}
+                            {formatPnlWholeDollars(totalPnl)}
                           </p>
                         ) : null}
                       </button>
@@ -248,8 +240,7 @@ export default function Calendar({
                       <p>{cell.date.getDate()}</p>
                       {dayTrades.length ? (
                         <p className="mt-1 text-[10px] font-medium">
-                          {totalPnl >= 0 ? "+" : ""}
-                          {totalPnl.toFixed(0)}
+                          {formatPnlWholeDollars(totalPnl)}
                         </p>
                       ) : null}
                     </button>
@@ -265,7 +256,7 @@ export default function Calendar({
                       : "bg-red-500/20 text-red-400"
                   }`}
                 >
-                  Week: {formatMoney(weekTotal)}
+                  Week: {formatPnlWholeDollars(weekTotal)}
                 </span>
               </div>
             </div>
@@ -291,7 +282,7 @@ export default function Calendar({
 
             <div className="mb-4 text-xl font-semibold">
               <span className={totalPnl >= 0 ? "text-green-400" : "text-red-400"}>
-                {formatMoney(totalPnl)}
+                {formatPnlCurrency(totalPnl)}
               </span>
             </div>
 
@@ -365,7 +356,7 @@ export default function Calendar({
                           pnl >= 0 ? "text-green-400" : "text-red-400"
                         }`}
                       >
-                        {formatMoney(pnl)}
+                        {formatPnlCurrency(pnl)}
                       </p>
                     </div>
                   </div>
@@ -457,7 +448,7 @@ export default function Calendar({
                       pnl >= 0 ? "text-green-400" : "text-red-400"
                     }`}
                   >
-                    {formatMoney(pnl)}
+                    {formatPnlCurrency(pnl)}
                   </p>
                 </>
               )

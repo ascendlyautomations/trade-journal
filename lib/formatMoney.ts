@@ -22,3 +22,18 @@ export function formatPnlCurrency(
   })
   return value < 0 ? `-$${formatted}` : `$${formatted}`
 }
+
+/**
+ * Whole-dollar P&L for compact calendar cells (no cents, en-US grouping).
+ * Negative: -$55. Zero: $0.
+ */
+export function formatPnlWholeDollars(value: number): string {
+  if (!Number.isFinite(value)) return "—"
+  const rounded = Math.round(value)
+  const abs = Math.abs(rounded)
+  const formatted = abs.toLocaleString("en-US", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  })
+  return rounded < 0 ? `-$${formatted}` : `$${formatted}`
+}

@@ -24,6 +24,7 @@ import {
   fetchVisibleProfileAchievements,
   formatAchievementDate,
 } from "../../../lib/achievements"
+import { formatPnlCurrency } from "../../../lib/formatMoney"
 
 function postImageSrc(imageUrl: string | null | undefined): string | null {
   const raw = imageUrl != null ? String(imageUrl).trim() : ""
@@ -570,6 +571,18 @@ export default function ProfilePage() {
     achievedAt: string | null
     description: string | null
   } | null>(null)
+
+  /** Profile Stats equity chart: Recharts props tuned below ~sm breakpoint. */
+  const [equityChartNarrow, setEquityChartNarrow] = useState(false)
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const mq = window.matchMedia("(max-width: 639px)")
+    const sync = () => setEquityChartNarrow(mq.matches)
+    sync()
+    mq.addEventListener("change", sync)
+    return () => mq.removeEventListener("change", sync)
+  }, [])
 
   /** Feed refreshes the story bar here; profile has no story strip. */
   const loadFollowingStories = useCallback(async () => {}, [])
@@ -1939,15 +1952,15 @@ export default function ProfilePage() {
                     <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
                       <div className="rounded-xl border border-white/10 bg-white/5 p-4">
                         <p className="text-sm text-gray-400">Biggest Win</p>
-                        <p className="font-semibold text-green-400">
-                          ${biggestWin.toFixed(2)}
+                        <p className="font-semibold text-green-400 tabular-nums">
+                          {formatPnlCurrency(biggestWin)}
                         </p>
                       </div>
 
                       <div className="rounded-xl border border-white/10 bg-white/5 p-4">
                         <p className="text-sm text-gray-400">Biggest Loss</p>
-                        <p className="font-semibold text-red-400">
-                          ${biggestLoss.toFixed(2)}
+                        <p className="font-semibold text-red-400 tabular-nums">
+                          {formatPnlCurrency(biggestLoss)}
                         </p>
                       </div>
 
@@ -1962,14 +1975,14 @@ export default function ProfilePage() {
                       </div>
                     </div>
 
-                    <div className="rounded-xl border border-white/10 bg-white/5 p-6">
-                      <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                    <div className="rounded-xl border border-white/10 bg-white/5 p-4 md:p-6">
+                      <div className="mb-3 flex flex-col gap-1 sm:mb-4 sm:flex-row sm:items-end sm:justify-between">
                         <h2 className="text-lg font-semibold text-white">
                           Equity Curve
                         </h2>
                         {filteredTrades.length > 0 ? (
                           <p
-                            className={`text-xl font-bold tabular-nums ${
+                            className={`text-lg font-bold tabular-nums sm:text-xl ${
                               currentEquity >= 0
                                 ? "text-green-400"
                                 : "text-red-400"
@@ -1980,13 +1993,37 @@ export default function ProfilePage() {
                         ) : null}
                       </div>
 
-                      <div className="h-64">
+                      <div
+                        className={`w-full md:h-64 ${
+                          equityChartNarrow
+                            ? "h-[min(52vw,340px)] min-h-[280px]"
+                            : "h-72"
+                        }`}
+                      >
                         <ResponsiveContainer width="100%" height="100%">
-                          <LineChart data={equityData}>
-                            <CartesianGrid stroke="#1f2937" />
+                          <LineChart
+                            data={equityData}
+                            margin={
+                              equityChartNarrow
+                                ? { top: 12, right: 8, left: 4, bottom: 12 }
+                                : { top: 8, right: 16, left: 12, bottom: 8 }
+                            }
+                          >
+                            <CartesianGrid stroke="rgba(148, 163, 184, 0.08)" />
                             <XAxis dataKey="index" hide />
                             <YAxis
-                              tick={{ fill: "#cbd5e1", fontSize: 12 }}
+                              width={equityChartNarrow ? 50 : undefined}
+                              tickCount={equityChartNarrow ? 5 : 7}
+                              axisLine={{
+                                stroke: "rgba(148, 163, 184, 0.1)",
+                              }}
+                              tickLine={{
+                                stroke: "rgba(148, 163, 184, 0.08)",
+                              }}
+                              tick={{
+                                fill: "#cbd5e1",
+                                fontSize: equityChartNarrow ? 10 : 12,
+                              }}
                               tickFormatter={(value) => {
                                 const n = Number(value)
                                 if (!Number.isFinite(n)) return "$0"
@@ -2023,7 +2060,7 @@ export default function ProfilePage() {
                               type="monotone"
                               dataKey="equity"
                               stroke="#22c55e"
-                              strokeWidth={2}
+                              strokeWidth={equityChartNarrow ? 2.5 : 2}
                               dot={false}
                             />
                           </LineChart>
