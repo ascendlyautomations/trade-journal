@@ -1,11 +1,17 @@
 "use client"
 
 import Navbar from "../components/Navbar"
+import AffiliateApplyModal from "../components/AffiliateApplyModal"
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "../../lib/supabaseClient"
 import { isProActive } from "../../lib/subscription"
 import type { User } from "@supabase/supabase-js"
+import {
+  fetchLatestAffiliateApplication,
+  fetchPendingAffiliateApplication,
+  type AffiliateApplicationRow,
+} from "@/lib/affiliateApplication"
 
 type TabId = "profile" | "affiliate" | "account" | "subscription"
 
@@ -82,12 +88,8 @@ export default function SettingsPage() {
     id?: string
   } | null>(null)
   const [showAffiliateModal, setShowAffiliateModal] = useState(false)
-  const [existingApp, setExistingApp] = useState<{ id: string; status?: string | null } | null>(
-    null
-  )
-  const [experience, setExperience] = useState("")
-  const [socialHandle, setSocialHandle] = useState("")
-  const [why, setWhy] = useState("")
+  const [pendingApp, setPendingApp] = useState<AffiliateApplicationRow | null>(null)
+  const [latestApp, setLatestApp] = useState<AffiliateApplicationRow | null>(null)
 
   const [name, setName] = useState("")
   const [username, setUsername] = useState("")
@@ -148,6 +150,21 @@ export default function SettingsPage() {
     return data ?? null
   }
 
+  async function refreshAffiliateState(userId: string) {
+    const [pending, latest, aff] = await Promise.all([
+      fetchPendingAffiliateApplication(supabase, userId),
+      fetchLatestAffiliateApplication(supabase, userId),
+      supabase.from("affiliates").select("id, code").eq("user_id", userId).maybeSingle(),
+    ])
+    setPendingApp(pending)
+    setLatestApp(latest)
+    if (aff.data) {
+      setAffiliateData(aff.data as { code?: string; id?: string })
+    } else {
+      setAffiliateData(null)
+    }
+  }
+
   async function getAccessToken(): Promise<string | null> {
     const { data: sessionData } = await supabase.auth.getSession()
     return sessionData.session?.access_token ?? null
@@ -168,33 +185,11 @@ export default function SettingsPage() {
 
     const data = await fetchProfile(u.id)
 
-    if (data) {
+    if (data?.id) {
       try {
-        const { data: affiliate } = await supabase
-          .from("affiliates")
-          .select("*")
-          .eq("user_id", data.id)
-          .single()
-
-        if (affiliate) setAffiliateData(affiliate as { code?: string; id?: string })
+        await refreshAffiliateState(data.id)
       } catch (e) {
-        console.error("Affiliate stats fetch failed:", e)
-      }
-
-      try {
-        const { data: appRow, error: appErr } = await supabase
-          .from("affiliate_applications")
-          .select("id, status")
-          .eq("user_id", data.id)
-          .maybeSingle()
-
-        if (appErr) {
-          console.error("Affiliate application fetch failed:", appErr)
-        } else {
-          setExistingApp((appRow as { id: string; status?: string | null } | null) ?? null)
-        }
-      } catch (e) {
-        console.error("Affiliate application fetch failed:", e)
+        console.error("Affiliate state refresh failed:", e)
       }
     }
 
@@ -472,6 +467,13 @@ export default function SettingsPage() {
   const PLAN_PRICE = 15.99
   const earnings = referralCount * PLAN_PRICE * COMMISSION_RATE
 
+  const showAffiliateApplyCta = Boolean(
+    user &&
+      !pendingApp &&
+      !String(referralCode).trim() &&
+      (!latestApp || latestApp.status === "rejected")
+  )
+
   async function copyReferralLink() {
     if (!referralLink) return
     try {
@@ -483,30 +485,11 @@ export default function SettingsPage() {
     }
   }
 
-  async function submitApplication() {
+  async function afterAffiliateModalSubmit() {
     if (!user) return
-
-    const { data: inserted, error } = await supabase
-      .from("affiliate_applications")
-      .insert({
-        user_id: user.id,
-        experience,
-        social_handle: socialHandle,
-        why,
-      })
-      .select("id, status")
-      .single()
-
-    if (error) {
-      console.error("Affiliate application submit failed:", error)
-      return
-    }
-
-    setExistingApp((inserted as { id: string; status?: string | null }) ?? null)
     setShowAffiliateModal(false)
-    setExperience("")
-    setSocialHandle("")
-    setWhy("")
+    await fetchProfile(user.id)
+    await refreshAffiliateState(user.id)
   }
 
   if (loading) {
@@ -652,43 +635,63 @@ export default function SettingsPage() {
                 </button>
               </div>
             )}
-            <div className="mt-4">
-                  <h3 className="text-lg font-semibold text-white mb-2">Affiliate Program</h3>
-                  {existingApp ? (
-                    <>
-                      <p className="text-sm text-white/70">
-                        Application Status: {existingApp.status || "submitted"}
-                      </p>
-                      <button
-                        type="button"
-                        disabled
-                        className="mt-3 bg-green-500 hover:bg-green-600 px-4 py-2 rounded text-white opacity-50 cursor-not-allowed"
+            {activeTab === "affiliate" && (
+              <div className="space-y-6 rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-sm">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-lg font-semibold text-white">Affiliate program</h3>
+                    <p className="mt-1 text-sm text-gray-400">
+                      Apply, track status, and manage your referral link.{" "}
+                      <a
+                        href="/affiliate"
+                        className="text-blue-300 underline hover:text-blue-200"
                       >
-                        Application Submitted
-                      </button>
-                    </>
-                  ) : (
+                        Open Affiliate Dashboard
+                      </a>
+                    </p>
+                  </div>
+                  {(showAffiliateApplyCta || pendingApp) && (
                     <button
                       type="button"
                       onClick={() => setShowAffiliateModal(true)}
-                      className="bg-green-500 hover:bg-green-600 px-4 py-2 rounded text-white"
+                      className="shrink-0 rounded-xl bg-gradient-to-r from-emerald-500 to-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-lg hover:opacity-95"
                     >
-                      Apply to be an Affiliate
+                      {pendingApp ? "Update application" : "Apply to be an Affiliate"}
                     </button>
                   )}
                 </div>
-            {activeTab === "affiliate" && (
-              <div className="space-y-6 rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-sm">
+
+                {pendingApp ? (
+                  <div className="rounded-xl border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm text-amber-50">
+                    <p className="font-medium text-white">Application status: pending</p>
+                    <p className="mt-1 text-amber-100/90">
+                      We&apos;ll email you at {user?.email ?? "your account email"} when there&apos;s
+                      an update. You can refine your answers anytime before a decision is made.
+                    </p>
+                  </div>
+                ) : latestApp?.status === "rejected" ? (
+                  <div className="rounded-xl border border-red-500/35 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+                    <p className="font-medium text-white">Application status: rejected</p>
+                    <p className="mt-1 text-red-100/90">
+                      Your last application wasn&apos;t approved. You can submit a new one when
+                      you&apos;re ready.
+                    </p>
+                  </div>
+                ) : latestApp?.status === "approved" && referralCode ? (
+                  <div className="rounded-xl border border-emerald-500/35 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-50">
+                    <p className="font-medium text-white">Application status: approved</p>
+                    <p className="mt-1 text-emerald-100/90">
+                      You&apos;re active as an affiliate. Your code is{" "}
+                      <span className="font-mono font-semibold text-white">{referralCode}</span>.
+                    </p>
+                  </div>
+                ) : null}
+
                 {!referralCode ? (
                   <p className="text-sm text-gray-400">
-                    No referral code on file yet. Visit the{" "}
-                    <a
-                      href="/affiliate"
-                      className="text-blue-300 underline hover:text-blue-200"
-                    >
-                      Affiliate Dashboard
-                    </a>{" "}
-                    to get set up.
+                    {pendingApp
+                      ? "When approved, your referral code and share link will show here."
+                      : "Submit an application to request access. When approved, your referral code and link will appear here and on the Affiliate Dashboard."}
                   </p>
                 ) : (
                   <>
@@ -733,8 +736,6 @@ export default function SettingsPage() {
                     </div>
                   </>
                 )}
-
-                
               </div>
             )}
 
@@ -984,50 +985,14 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {showAffiliateModal && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-[#1e2a4a] p-6 rounded-xl w-[400px]">
-            <h2 className="text-white text-lg mb-4">Affiliate Application</h2>
-
-            <textarea
-              placeholder="Your experience trading or promoting..."
-              value={experience}
-              onChange={(e) => setExperience(e.target.value)}
-              className="mb-3 w-full rounded border border-white/10 bg-[#0f172a] p-2 text-sm text-white placeholder:text-gray-400"
-            />
-            <input
-              placeholder="Social handle (optional)"
-              value={socialHandle}
-              onChange={(e) => setSocialHandle(e.target.value)}
-              className="mb-3 w-full rounded border border-white/10 bg-[#0f172a] p-2 text-sm text-white placeholder:text-gray-400"
-            />
-            <textarea
-              placeholder="Why should we accept you?"
-              value={why}
-              onChange={(e) => setWhy(e.target.value)}
-              className="w-full rounded border border-white/10 bg-[#0f172a] p-2 text-sm text-white placeholder:text-gray-400"
-            />
-
-            <div className="flex justify-end gap-2 mt-4">
-              <button
-                type="button"
-                onClick={() => setShowAffiliateModal(false)}
-                className="rounded bg-white/10 px-3 py-1.5 text-sm text-white hover:bg-white/20"
-              >
-                Cancel
-              </button>
-
-              <button
-                type="button"
-                onClick={() => void submitApplication()}
-                className="rounded bg-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-blue-600"
-              >
-                Submit
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <AffiliateApplyModal
+        open={showAffiliateModal}
+        onClose={() => setShowAffiliateModal(false)}
+        onSubmit={() => void afterAffiliateModalSubmit()}
+        defaultFullName={typeof profile?.name === "string" ? profile.name : name}
+        defaultEmail={user?.email ?? null}
+        title="Affiliate application"
+      />
     </>
   )
 }

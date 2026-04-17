@@ -1,9 +1,15 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "../../lib/supabaseClient"
 import Navbar from "../components/Navbar"
+import AffiliateApplyModal from "../components/AffiliateApplyModal"
+import {
+  fetchLatestAffiliateApplication,
+  fetchPendingAffiliateApplication,
+  type AffiliateApplicationRow,
+} from "@/lib/affiliateApplication"
 
 type MeProfile = {
   id: string
@@ -24,18 +30,27 @@ export default function AffiliateDashboard() {
 
   const router = useRouter()
   const [loading, setLoading] = useState(true)
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const [displayName, setDisplayName] = useState("")
+  const [email, setEmail] = useState<string | null>(null)
+  const [pendingApp, setPendingApp] = useState<AffiliateApplicationRow | null>(null)
+  const [latestApp, setLatestApp] = useState<AffiliateApplicationRow | null>(null)
   const [referralCode, setReferralCode] = useState<string | null>(null)
   const [totalReferrals, setTotalReferrals] = useState(0)
   const [referredUsers, setReferredUsers] = useState<ReferredUser[]>([])
   const [copyDone, setCopyDone] = useState(false)
   const [showAffiliateModal, setShowAffiliateModal] = useState(false)
-  const [experience, setExperience] = useState("")
-  const [socialHandle, setSocialHandle] = useState("")
-  const [why, setWhy] = useState("")
   const [baseUrl, setBaseUrl] = useState(
     process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"
   )
+
+  const approvedByApplication = latestApp?.status === "approved"
+  const hasAffiliateAccess = Boolean((referralCode && referralCode.length > 0) || approvedByApplication)
+
+  const applicationStatusLabel = useMemo(() => {
+    if (pendingApp) return "pending"
+    if (!latestApp) return null
+    return latestApp.status
+  }, [pendingApp, latestApp])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -49,22 +64,37 @@ export default function AffiliateDashboard() {
       router.push("/login")
       return
     }
-    setCurrentUserId(user.id)
 
-    const { data: profile, error: profErr } = await supabase
-      .from("profiles")
-      .select("id, referral_code, referral_count")
-      .eq("id", user.id)
-      .single()
+    setEmail(user.email ?? null)
+
+    const [profileRes, pendingRes, latestRes] = await Promise.all([
+      supabase
+        .from("profiles")
+        .select("id, referral_code, referral_count, name")
+        .eq("id", user.id)
+        .single(),
+      fetchPendingAffiliateApplication(supabase, user.id),
+      fetchLatestAffiliateApplication(supabase, user.id),
+    ])
+
+    setPendingApp(pendingRes)
+    setLatestApp(latestRes)
+
+    const profile = profileRes.data as MeProfile | null
+    const profErr = profileRes.error
 
     if (profErr || !profile) {
       console.error(profErr)
+      setDisplayName("")
       setReferralCode(null)
       setTotalReferrals(0)
       setReferredUsers([])
       setLoading(false)
       return
     }
+
+    const rawName = (profile as { name?: string }).name
+    setDisplayName(typeof rawName === "string" ? rawName.trim() : "")
 
     const code =
       profile.referral_code != null ? String(profile.referral_code).trim() : ""
@@ -102,9 +132,7 @@ export default function AffiliateDashboard() {
     }
   }, [])
 
-  const referralLink = referralCode
-    ? `${baseUrl}?ref=${encodeURIComponent(referralCode)}`
-    : ""
+  const referralLink = referralCode ? `${baseUrl}?ref=${encodeURIComponent(referralCode)}` : ""
   const earnings = (totalReferrals || 0) * PLAN_PRICE * COMMISSION_RATE
 
   async function copyLink() {
@@ -118,26 +146,15 @@ export default function AffiliateDashboard() {
     }
   }
 
-  async function submitApplication() {
-    if (!currentUserId) return
-
-    const { error } = await supabase.from("affiliate_applications").insert({
-      user_id: currentUserId,
-      experience,
-      social_handle: socialHandle,
-      why,
-    })
-
-    if (error) {
-      console.error("affiliate application insert:", error)
-      return
-    }
-
+  async function afterModalSubmit() {
     setShowAffiliateModal(false)
-    setExperience("")
-    setSocialHandle("")
-    setWhy("")
+    await load()
   }
+
+  const showApplyCta =
+    !pendingApp &&
+    !referralCode &&
+    (!latestApp || latestApp.status === "rejected")
 
   return (
     <>
@@ -150,13 +167,15 @@ export default function AffiliateDashboard() {
               Affiliate Dashboard
             </h1>
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setShowAffiliateModal(true)}
-                className="bg-green-500 px-4 py-2 rounded text-white"
-              >
-                Apply to be an Affiliate
-              </button>
+              {(showApplyCta || pendingApp) && (
+                <button
+                  type="button"
+                  onClick={() => setShowAffiliateModal(true)}
+                  className="rounded-lg bg-gradient-to-r from-emerald-500 to-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-lg hover:opacity-95"
+                >
+                  {pendingApp ? "Update application" : "Apply to be an Affiliate"}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => void load()}
@@ -168,20 +187,43 @@ export default function AffiliateDashboard() {
             </div>
           </div>
 
+          {applicationStatusLabel === "pending" && (
+            <div className="mb-6 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+              Your affiliate application is <strong>pending review</strong>. You can update your
+              submission anytime before a decision is made.
+            </div>
+          )}
+
+          {latestApp?.status === "rejected" && !pendingApp && (
+            <div className="mb-6 rounded-xl border border-red-500/35 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+              Your previous application was <strong>not approved</strong>. You may submit a new
+              application if you&apos;d like to apply again.
+            </div>
+          )}
+
+          {referralCode && (
+            <div className="mb-6 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-50">
+              You&apos;re set up as an affiliate. Share your link below — your code is{" "}
+              <span className="font-mono font-semibold text-white">{referralCode}</span>.
+            </div>
+          )}
+
           <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div className="rounded-xl border border-white/10 bg-white/5 p-5 backdrop-blur-md">
               <p className="text-sm text-gray-400">Total earnings</p>
               <p className="mt-1 text-2xl font-bold text-emerald-400">
-                ${earnings.toFixed(2)}
+                ${hasAffiliateAccess ? earnings.toFixed(2) : "0.00"}
               </p>
             </div>
             <div className="rounded-xl border border-white/10 bg-white/5 p-5 backdrop-blur-md">
               <p className="text-sm text-gray-400">Total referrals</p>
-              <p className="mt-1 text-2xl font-bold text-white">{totalReferrals}</p>
+              <p className="mt-1 text-2xl font-bold text-white">
+                {hasAffiliateAccess ? totalReferrals : 0}
+              </p>
             </div>
             <div className="rounded-xl border border-white/10 bg-white/5 p-5 backdrop-blur-md">
               <p className="text-sm text-gray-400">Referral code</p>
-              <p className="mt-1 text-sm font-bold text-blue-300 break-all">
+              <p className="mt-1 break-all text-sm font-bold text-blue-300">
                 {referralCode || "—"}
               </p>
             </div>
@@ -193,14 +235,14 @@ export default function AffiliateDashboard() {
             </h2>
             {!referralCode ? (
               <p className="mt-3 text-sm text-gray-400">
-                No referral code on your profile yet
+                {pendingApp
+                  ? "Once approved, your referral code and link will appear here."
+                  : "Apply for the affiliate program. When approved, your code and link will appear here."}
               </p>
             ) : (
               <>
                 <p className="mt-1 text-xs text-gray-500">Your code</p>
-                <p className="mt-0.5 font-mono text-lg font-semibold text-white">
-                  {referralCode}
-                </p>
+                <p className="mt-0.5 font-mono text-lg font-semibold text-white">{referralCode}</p>
                 <p className="mt-4 text-sm text-gray-400">Referral link</p>
                 <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
                   <input
@@ -225,22 +267,26 @@ export default function AffiliateDashboard() {
 
             {loading ? (
               <p className="text-sm text-gray-400">Loading…</p>
+            ) : !referralCode ? (
+              <p className="rounded-xl border border-white/10 bg-white/5 p-6 text-center text-sm text-gray-400">
+                No referrals yet — your list appears here once you have an active referral code.
+              </p>
             ) : referredUsers.length === 0 ? (
               <p className="rounded-xl border border-white/10 bg-white/5 p-6 text-center text-sm text-gray-400">
                 You have no referrals yet.
               </p>
             ) : (
-              referredUsers.map((user) => (
+              referredUsers.map((u) => (
                 <div
-                  key={user.id}
+                  key={u.id}
                   className="mb-3 flex items-center gap-3 rounded-xl bg-white/5 p-4 last:mb-0"
                 >
                   <img
-                    src={user.avatar_url || "/default-avatar.png"}
-                    className="w-8 h-8 rounded-full"
+                    src={u.avatar_url || "/default-avatar.png"}
+                    className="h-8 w-8 rounded-full"
                     alt=""
                   />
-                  <span>{user.username?.trim() || "User"}</span>
+                  <span>{u.username?.trim() || "User"}</span>
                 </div>
               ))
             )}
@@ -248,50 +294,13 @@ export default function AffiliateDashboard() {
         </div>
       </div>
 
-      {showAffiliateModal && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-[#1e2a4a] p-6 rounded-xl w-[400px]">
-            <h2 className="text-white text-lg mb-4">Affiliate Application</h2>
-
-            <textarea
-              placeholder="Your experience trading or promoting..."
-              value={experience}
-              onChange={(e) => setExperience(e.target.value)}
-              className="mb-3 w-full rounded border border-white/10 bg-[#0f172a] p-2 text-sm text-white placeholder:text-gray-400"
-            />
-            <input
-              placeholder="Social handle (optional)"
-              value={socialHandle}
-              onChange={(e) => setSocialHandle(e.target.value)}
-              className="mb-3 w-full rounded border border-white/10 bg-[#0f172a] p-2 text-sm text-white placeholder:text-gray-400"
-            />
-            <textarea
-              placeholder="Why should we accept you?"
-              value={why}
-              onChange={(e) => setWhy(e.target.value)}
-              className="w-full rounded border border-white/10 bg-[#0f172a] p-2 text-sm text-white placeholder:text-gray-400"
-            />
-
-            <div className="flex justify-end gap-2 mt-4">
-              <button
-                type="button"
-                onClick={() => setShowAffiliateModal(false)}
-                className="rounded bg-white/10 px-3 py-1.5 text-sm text-white hover:bg-white/20"
-              >
-                Cancel
-              </button>
-
-              <button
-                type="button"
-                onClick={() => void submitApplication()}
-                className="rounded bg-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-blue-600"
-              >
-                Submit
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <AffiliateApplyModal
+        open={showAffiliateModal}
+        onClose={() => setShowAffiliateModal(false)}
+        onSubmit={() => afterModalSubmit()}
+        defaultFullName={displayName}
+        defaultEmail={email}
+      />
     </>
   )
 }
