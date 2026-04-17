@@ -79,6 +79,11 @@ export default function AdminAffiliateApplicationsPage() {
   const [finalCodeOverride, setFinalCodeOverride] = useState("")
   const [stripePromoId, setStripePromoId] = useState("")
   const [rejectNotes, setRejectNotes] = useState("")
+  const [affStripe, setAffStripe] = useState<{
+    stripe_connected_account_id: string | null
+    stripe_onboarding_complete: boolean
+    stripe_payouts_enabled: boolean
+  } | null>(null)
 
   const actionBusy = pendingAction !== null
 
@@ -154,6 +159,37 @@ export default function AdminAffiliateApplicationsPage() {
     void fetchApplications()
   }, [fetchApplications])
 
+  useEffect(() => {
+    if (!selected?.user_id || selected.status !== "approved") {
+      setAffStripe(null)
+      return
+    }
+    let cancelled = false
+    void supabase
+      .from("affiliates")
+      .select("stripe_connected_account_id, stripe_onboarding_complete, stripe_payouts_enabled")
+      .eq("user_id", selected.user_id)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (cancelled) return
+        if (error || !data) {
+          setAffStripe(null)
+          return
+        }
+        setAffStripe({
+          stripe_connected_account_id:
+            data.stripe_connected_account_id != null
+              ? String(data.stripe_connected_account_id)
+              : null,
+          stripe_onboarding_complete: Boolean(data.stripe_onboarding_complete),
+          stripe_payouts_enabled: Boolean(data.stripe_payouts_enabled),
+        })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [selected])
+
   function openDetail(row: AffiliateApplicationRow) {
     setSelected(row)
     setActionError(null)
@@ -201,6 +237,24 @@ export default function AdminAffiliateApplicationsPage() {
       setActionError(error.message)
       return
     }
+
+    const approvedUserId = selected.user_id
+    void (async () => {
+      try {
+        const res = await fetch("/api/admin/affiliates/provision-connect", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ affiliateUserId: approvedUserId }),
+        })
+        if (!res.ok && process.env.NODE_ENV === "development") {
+          const j = await res.json().catch(() => ({}))
+          console.warn("[admin] provision-connect failed", res.status, j)
+        }
+      } catch (e) {
+        if (process.env.NODE_ENV === "development") console.warn("[admin] provision-connect", e)
+      }
+    })()
+
     setSelected(null)
     setActionError(null)
     setFinalCodeOverride("")
@@ -406,6 +460,40 @@ export default function AdminAffiliateApplicationsPage() {
                 </div>
               ) : null}
             </dl>
+
+            {selected.status === "approved" ? (
+              <div className="mt-4 rounded-lg border border-white/10 bg-white/5 px-3 py-3 text-xs">
+                <p className="font-medium text-gray-300">Stripe payout setup</p>
+                {affStripe == null ? (
+                  <p className="mt-1 text-gray-500">Loading…</p>
+                ) : (
+                  <dl className="mt-2 space-y-1.5 text-gray-300">
+                    <div>
+                      <span className="text-gray-500">Connected account ID </span>
+                      <span className="break-all font-mono text-gray-200">
+                        {affStripe.stripe_connected_account_id || "—"}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Onboarding complete </span>
+                      {affStripe.stripe_onboarding_complete ? (
+                        <span className="text-emerald-300">Yes</span>
+                      ) : (
+                        <span className="text-amber-200">No</span>
+                      )}
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Payouts enabled </span>
+                      {affStripe.stripe_payouts_enabled ? (
+                        <span className="text-emerald-300">Yes</span>
+                      ) : (
+                        <span className="text-amber-200">No</span>
+                      )}
+                    </div>
+                  </dl>
+                )}
+              </div>
+            ) : null}
 
             {selected.status === "pending" ? (
               <div className="mt-6 space-y-4 border-t border-white/10 pt-4">

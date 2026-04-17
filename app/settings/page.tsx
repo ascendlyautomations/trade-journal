@@ -7,7 +7,14 @@ import { useRouter } from "next/navigation"
 import { supabase } from "../../lib/supabaseClient"
 import { isProActive } from "../../lib/subscription"
 import type { User } from "@supabase/supabase-js"
+import AffiliatePayoutSetupCard from "@/app/components/AffiliatePayoutSetupCard"
+import { supabaseBearerHeaders } from "@/lib/supabaseBearerFetch"
 import { fetchLatestAffiliateApplication, type AffiliateApplicationRow } from "@/lib/affiliateApplication"
+import {
+  AFFILIATE_CONNECT_SELECT,
+  parseAffiliateConnectRow,
+  type AffiliateConnectRow,
+} from "@/lib/affiliateStripeConnect"
 
 type TabId = "profile" | "affiliate" | "account" | "subscription"
 
@@ -81,6 +88,7 @@ export default function SettingsPage() {
   const [confirmPassword, setConfirmPassword] = useState("")
   const [showAffiliateModal, setShowAffiliateModal] = useState(false)
   const [latestApp, setLatestApp] = useState<AffiliateApplicationRow | null>(null)
+  const [affiliateConnectRow, setAffiliateConnectRow] = useState<AffiliateConnectRow | null>(null)
 
   const [name, setName] = useState("")
   const [username, setUsername] = useState("")
@@ -146,6 +154,39 @@ export default function SettingsPage() {
     setLatestApp(latest)
   }
 
+  async function refreshAffiliateConnect(userId: string) {
+    const { data } = await supabase
+      .from("affiliates")
+      .select(AFFILIATE_CONNECT_SELECT)
+      .eq("user_id", userId)
+      .maybeSingle()
+
+    let row: AffiliateConnectRow | null =
+      data && typeof data === "object"
+        ? parseAffiliateConnectRow(data as Record<string, unknown>)
+        : null
+
+    if (row?.stripe_connected_account_id) {
+      try {
+        const syncRes = await fetch("/api/affiliates/connect/sync", {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            ...(await supabaseBearerHeaders()),
+          },
+        })
+        const j = (await syncRes.json().catch(() => ({}))) as {
+          affiliate?: AffiliateConnectRow | null
+        }
+        if (j?.affiliate) row = j.affiliate
+      } catch {
+        // ignore
+      }
+    }
+
+    setAffiliateConnectRow(row)
+  }
+
   async function getAccessToken(): Promise<string | null> {
     const { data: sessionData } = await supabase.auth.getSession()
     return sessionData.session?.access_token ?? null
@@ -169,6 +210,7 @@ export default function SettingsPage() {
     if (data?.id) {
       try {
         await refreshAffiliateState(data.id)
+        await refreshAffiliateConnect(data.id)
       } catch (e) {
         console.error("Affiliate state refresh failed:", e)
       }
@@ -454,6 +496,12 @@ export default function SettingsPage() {
       (!latestApp || latestApp.status === "rejected")
   )
 
+  const showAffiliatePayoutSetup = Boolean(
+    String(referralCode).trim() ||
+      latestApp?.status === "approved" ||
+      affiliateConnectRow?.id
+  )
+
   async function copyReferralLink() {
     if (!referralLink) return
     try {
@@ -470,6 +518,7 @@ export default function SettingsPage() {
     setShowAffiliateModal(false)
     await fetchProfile(user.id)
     await refreshAffiliateState(user.id)
+    await refreshAffiliateConnect(user.id)
   }
 
   if (loading) {
@@ -670,6 +719,13 @@ export default function SettingsPage() {
                     </p>
                   </div>
                 ) : null}
+
+                <div className="mb-4">
+                  <AffiliatePayoutSetupCard
+                    affiliateConnect={affiliateConnectRow}
+                    show={showAffiliatePayoutSetup}
+                  />
+                </div>
 
                 {!referralCode ? (
                   <p className="text-sm text-gray-400">

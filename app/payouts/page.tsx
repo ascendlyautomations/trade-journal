@@ -1,14 +1,21 @@
 "use client"
 
 import Link from "next/link"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import Navbar from "@/app/components/Navbar"
+import AffiliatePayoutSetupCard from "@/app/components/AffiliatePayoutSetupCard"
 import AffiliatePayoutRequestModal from "@/app/components/AffiliatePayoutRequestModal"
 import {
-  estimateEarningsFromReferralCount,
-  payoutEarningsBase,
-} from "@/lib/affiliateEarnings"
+  AFFILIATE_CONNECT_SELECT,
+  isAffiliatePayoutSetupComplete,
+  parseAffiliateConnectRow,
+  type AffiliateConnectRow,
+} from "@/lib/affiliateStripeConnect"
+import {
+  fetchAffiliatePayoutBalance,
+  type AffiliatePayoutBalance,
+} from "@/lib/affiliatePayoutBalance"
 import {
   fetchMyAffiliatePayoutRequests,
   insertAffiliatePayoutRequest,
@@ -16,6 +23,7 @@ import {
   type AffiliatePayoutStatus,
 } from "@/lib/affiliatePayoutRequests"
 import { supabase } from "@/lib/supabaseClient"
+import { supabaseBearerHeaders } from "@/lib/supabaseBearerFetch"
 
 type MeProfile = {
   id: string
@@ -23,11 +31,6 @@ type MeProfile = {
   name?: string | null
   referral_code?: string | null
   referral_earnings?: number | string | null
-}
-
-type AffiliateRowBrief = {
-  id: string
-  code: string | null
 }
 
 function formatMoney(n: number): string {
@@ -91,12 +94,13 @@ export default function AffiliatePayoutsPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [referralCode, setReferralCode] = useState<string | null>(null)
-  const [referralCount, setReferralCount] = useState(0)
-  const [recordedEarnings, setRecordedEarnings] = useState<number | null>(null)
+  const [payoutBalance, setPayoutBalance] = useState<AffiliatePayoutBalance | null>(null)
   const [affiliateRowId, setAffiliateRowId] = useState<string | null>(null)
+  const [affiliateConnectRow, setAffiliateConnectRow] = useState<AffiliateConnectRow | null>(null)
   const [payoutRows, setPayoutRows] = useState<AffiliatePayoutRequestRow[]>([])
   const [modalOpen, setModalOpen] = useState(false)
   const [successBanner, setSuccessBanner] = useState<string | null>(null)
+  const [returnFromStripeSetup, setReturnFromStripeSetup] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -111,123 +115,100 @@ export default function AffiliatePayoutsPage() {
       return
     }
 
-    const [profileRes, affRes, payoutsRes] = await Promise.all([
+    const [balRes, profileRes, affRes, payoutsRes] = await Promise.all([
+      fetchAffiliatePayoutBalance(supabase, user.id),
       supabase
         .from("profiles")
         .select("id, username, name, referral_code, referral_earnings")
         .eq("id", user.id)
         .maybeSingle(),
-      supabase.from("affiliates").select("id, code").eq("user_id", user.id).maybeSingle(),
+      supabase.from("affiliates").select(AFFILIATE_CONNECT_SELECT).eq("user_id", user.id).maybeSingle(),
       fetchMyAffiliatePayoutRequests(supabase, user.id),
     ])
 
     const profile = profileRes.data as MeProfile | null
-    const affRow = affRes.data as AffiliateRowBrief | null
+
+    let connectRow: AffiliateConnectRow | null = null
+    if (affRes.data && typeof affRes.data === "object") {
+      connectRow = parseAffiliateConnectRow(affRes.data as Record<string, unknown>)
+    }
+
+    if (connectRow?.stripe_connected_account_id) {
+      try {
+        const syncRes = await fetch("/api/affiliates/connect/sync", {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            ...(await supabaseBearerHeaders()),
+          },
+        })
+        const sj = (await syncRes.json().catch(() => ({}))) as {
+          affiliate?: AffiliateConnectRow | null
+        }
+        if (sj?.affiliate) connectRow = sj.affiliate
+      } catch {
+        // ignore
+      }
+    }
+
+    setAffiliateConnectRow(connectRow)
 
     const profileCode =
       profile?.referral_code != null ? String(profile.referral_code).trim() : ""
     const affiliateCode =
-      affRow?.code != null ? String(affRow.code).trim() : ""
+      connectRow?.code != null ? String(connectRow.code).trim() : ""
     /** Shown everywhere we previously used `referralCode` — profile wins, then `affiliates.code`. */
     const effectiveReferralCode = profileCode || affiliateCode || null
-
-    let recordedEarningsParsed: number | null = null
-    if (profile != null && profile.referral_earnings != null && profile.referral_earnings !== "") {
-      const n = Number(profile.referral_earnings)
-      if (Number.isFinite(n)) recordedEarningsParsed = n
-    }
-
-    let referralCountResolved = 0
-    if (effectiveReferralCode) {
-      const { count, error: countErr } = await supabase
-        .from("profiles")
-        .select("id", { count: "exact", head: true })
-        .eq("referred_by", effectiveReferralCode)
-      if (!countErr && count != null) referralCountResolved = count
-    }
 
     const payoutRowsSafe = payoutsRes.error ? [] : payoutsRes.rows
 
     setReferralCode(effectiveReferralCode)
-    setReferralCount(referralCountResolved)
-    setRecordedEarnings(recordedEarningsParsed)
-    setAffiliateRowId(affRow?.id != null ? String(affRow.id) : null)
+    setPayoutBalance(
+      balRes.balance ?? {
+        totalEarnings: 0,
+        earningsSinceLastPayout: 0,
+        pendingReserved: 0,
+        approvedReserved: 0,
+        availableToRequest: 0,
+        lastPaidAt: null,
+      }
+    )
+    setAffiliateRowId(connectRow?.id != null ? String(connectRow.id) : null)
     setPayoutRows(payoutRowsSafe)
     setLoading(false)
 
-    if (process.env.NODE_ENV === "development") {
-      let reservedPre = 0
-      let pendingPre = false
-      for (const r of payoutRowsSafe) {
-        if (r.status === "pending") {
-          pendingPre = true
-          reservedPre += r.amount
-        } else if (r.status === "approved") {
-          reservedPre += r.amount
-        }
-      }
-      const earningsBasePre = payoutEarningsBase(recordedEarningsParsed, referralCountResolved)
-      const availablePre = Math.max(
-        0,
-        Math.round((earningsBasePre - reservedPre) * 100) / 100
-      )
-      const canRequestPre =
-        Boolean(affRow?.id) && !pendingPre && availablePre > 0.009
-      const isActiveAffiliatePre = Boolean(affRow?.id || effectiveReferralCode)
-
-      console.debug("[payouts] profile fetch", {
-        data: profileRes.data,
-        error: profileRes.error,
-      })
-      console.debug("[payouts] affiliate fetch", {
-        data: affRes.data,
-        error: affRes.error,
-      })
-      console.debug("[payouts] payout requests fetch", {
-        rowCount: payoutRowsSafe.length,
-        error: payoutsRes.error,
-      })
-      console.debug("[payouts] eligibility", {
-        isActiveAffiliate: isActiveAffiliatePre,
-        canRequestPayout: canRequestPre,
-        affiliateRowId: affRow?.id ?? null,
-        effectiveReferralCode,
-        profileCodePresent: Boolean(profileCode),
-        affiliateCodePresent: Boolean(affiliateCode),
-        hasPendingRequest: pendingPre,
-        availableToRequest: availablePre,
-      })
+    if (balRes.error && process.env.NODE_ENV === "development") {
+      console.warn("[payouts] affiliate_payout_balance RPC failed:", balRes.error.message)
     }
   }, [router])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- page data load
     void load()
   }, [load])
 
-  const estimatedEarnings = useMemo(
-    () => estimateEarningsFromReferralCount(referralCount),
-    [referralCount]
-  )
-
-  const earningsBase = useMemo(
-    () => payoutEarningsBase(recordedEarnings, referralCount),
-    [recordedEarnings, referralCount]
-  )
-
-  const { reservedAmount, availableToRequest, hasPending } = useMemo(() => {
-    let reserved = 0
-    let pending = false
-    for (const r of payoutRows) {
-      if (r.status === "pending") {
-        pending = true
-        reserved += r.amount
-      } else if (r.status === "approved") {
-        reserved += r.amount
-      }
+  /* Stripe return URL lands with ?setup=return; strip param after showing banner */
+  useLayoutEffect(() => {
+    if (typeof window === "undefined") return
+    const p = new URLSearchParams(window.location.search)
+    if (p.get("setup") === "return") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- client-only URL flag after Stripe redirect
+      setReturnFromStripeSetup(true)
+      window.history.replaceState({}, "", "/payouts")
     }
-    const avail = Math.max(0, Math.round((earningsBase - reserved) * 100) / 100)
-    return { reservedAmount: reserved, availableToRequest: avail, hasPending: pending }
-  }, [payoutRows, earningsBase])
+  }, [])
+
+  const totalEarnings = payoutBalance?.totalEarnings ?? 0
+  const earningsSinceLastPayout = payoutBalance?.earningsSinceLastPayout ?? 0
+  const availableToRequest = payoutBalance?.availableToRequest ?? 0
+  const pendingReserved = payoutBalance?.pendingReserved ?? 0
+  const approvedReserved = payoutBalance?.approvedReserved ?? 0
+  const reservedTotal = pendingReserved + approvedReserved
+
+  const hasPending = useMemo(
+    () => payoutRows.some((r) => r.status === "pending"),
+    [payoutRows]
+  )
 
   const pendingList = payoutRows.filter((r) => r.status === "pending")
   const approvedList = payoutRows.filter((r) => r.status === "approved")
@@ -236,8 +217,13 @@ export default function AffiliatePayoutsPage() {
 
   const isActiveAffiliate = Boolean(affiliateRowId || referralCode)
 
+  const payoutSetupComplete = isAffiliatePayoutSetupComplete(affiliateConnectRow)
+
   const canRequestPayout = Boolean(
-    affiliateRowId && !hasPending && availableToRequest > 0.009
+    affiliateRowId &&
+      payoutSetupComplete &&
+      !hasPending &&
+      availableToRequest > 0.009
   )
 
   async function handleSubmitRequest(amount: number): Promise<{ error: string | null }> {
@@ -247,11 +233,27 @@ export default function AffiliatePayoutsPage() {
     if (!user || !affiliateRowId) {
       return { error: "You must be an active affiliate to request a payout." }
     }
+    if (amount <= 0 || !Number.isFinite(amount)) {
+      return { error: "Enter an amount greater than zero." }
+    }
+
+    const { balance: freshBal, error: balErr } = await fetchAffiliatePayoutBalance(supabase, user.id)
+    if (balErr || !freshBal) {
+      return { error: "Could not verify your available balance. Try again." }
+    }
+
+    const cap = freshBal.availableToRequest
+    if (amount > cap + 0.001) {
+      return { error: `Amount cannot exceed available to request (${cap.toFixed(2)}).` }
+    }
+
     if (hasPending) {
       return { error: "You already have a pending payout request." }
     }
-    if (amount > availableToRequest + 0.001) {
-      return { error: `Amount cannot exceed available balance (${availableToRequest.toFixed(2)}).` }
+    if (!isAffiliatePayoutSetupComplete(affiliateConnectRow)) {
+      return {
+        error: "Complete Stripe payout setup on the Affiliate Dashboard before requesting a payout.",
+      }
     }
 
     const { error } = await insertAffiliatePayoutRequest(supabase, {
@@ -285,8 +287,8 @@ export default function AffiliatePayoutsPage() {
                 Payouts
               </h1>
               <p className="mt-1 text-sm text-gray-400">
-                Request a payout from your affiliate earnings. Transfers are processed manually for now—no
-                instant Stripe payouts yet.
+                Balances below come from your referral earnings and payout history. Request amounts are capped by
+                what&apos;s still available after pending and approved requests.
               </p>
             </div>
             <button
@@ -315,19 +317,41 @@ export default function AffiliatePayoutsPage() {
             </div>
           ) : null}
 
+          {returnFromStripeSetup ? (
+            <div className="mb-6 rounded-xl border border-emerald-500/35 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-50">
+              You&apos;re back from Stripe. Your payout setup status is updated below.
+            </div>
+          ) : null}
+
+          {affiliateRowId ? (
+            <div className="mb-6">
+              <AffiliatePayoutSetupCard affiliateConnect={affiliateConnectRow} show />
+            </div>
+          ) : null}
+
           {loading ? (
             <p className="text-sm text-gray-400">Loading…</p>
           ) : (
             <>
-              <div className="mb-6 grid gap-4 sm:grid-cols-2">
+              <div className="mb-6 grid gap-4 sm:grid-cols-3">
                 <div className="rounded-xl border border-white/10 bg-white/5 p-5 backdrop-blur-md">
-                  <p className="text-sm text-gray-400">Earnings basis</p>
+                  <p className="text-sm text-gray-400">Total earnings</p>
                   <p className="mt-1 text-2xl font-bold tabular-nums text-emerald-400">
-                    ${formatMoney(earningsBase)}
+                    ${formatMoney(totalEarnings)}
                   </p>
                   <p className="mt-2 text-xs text-gray-500">
-                    Uses your recorded referral balance when available; otherwise the same estimate as the
-                    affiliate dashboard ({referralCount} referrals × commission).
+                    Lifetime affiliate earnings basis (recorded Stripe commissions when available, otherwise
+                    estimated from referrals).
+                  </p>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-white/5 p-5 backdrop-blur-md">
+                  <p className="text-sm text-gray-400">Earnings since last payout</p>
+                  <p className="mt-1 text-2xl font-bold tabular-nums text-blue-300">
+                    ${formatMoney(earningsSinceLastPayout)}
+                  </p>
+                  <p className="mt-2 text-xs text-gray-500">
+                    Your unpaid earnings pool: total earnings minus amounts already marked{" "}
+                    <span className="text-gray-400">paid</span> in payout requests.
                   </p>
                 </div>
                 <div className="rounded-xl border border-white/10 bg-white/5 p-5 backdrop-blur-md">
@@ -336,13 +360,18 @@ export default function AffiliatePayoutsPage() {
                     ${formatMoney(availableToRequest)}
                   </p>
                   <p className="mt-2 text-xs text-gray-500">
-                    Pending and approved requests reserve{" "}
-                    <span className="tabular-nums text-gray-400">${formatMoney(reservedAmount)}</span>.
-                    Estimated (dashboard-style) total:{" "}
-                    <span className="tabular-nums text-gray-400">${formatMoney(estimatedEarnings)}</span>.
+                    Earnings since last payout minus pending (${formatMoney(pendingReserved)}) and approved (
+                    ${formatMoney(approvedReserved)}) reservations. Floored at $0.
                   </p>
                 </div>
               </div>
+
+              {payoutBalance?.lastPaidAt ? (
+                <p className="mb-6 text-xs text-gray-500">
+                  Last paid payout request:{" "}
+                  <span className="tabular-nums text-gray-400">{formatTs(payoutBalance.lastPaidAt)}</span>
+                </p>
+              ) : null}
 
               {!isActiveAffiliate ? (
                 <div className="mb-8 rounded-xl border border-amber-500/35 bg-amber-500/10 px-4 py-4 text-sm text-amber-50">
@@ -359,6 +388,17 @@ export default function AffiliatePayoutsPage() {
                     Affiliate Dashboard
                   </Link>{" "}
                   — payout requests unlock once your account is connected.
+                </div>
+              ) : null}
+
+              {affiliateRowId && isActiveAffiliate && !payoutSetupComplete ? (
+                <div className="mb-8 rounded-xl border border-violet-500/35 bg-violet-500/10 px-4 py-3 text-sm text-violet-100">
+                  Complete <strong className="text-white">Stripe payout setup</strong> before requesting a
+                  payout.{" "}
+                  <Link href="/affiliate" className="font-medium text-blue-300 underline hover:text-blue-200">
+                    Open Affiliate Dashboard
+                  </Link>{" "}
+                  and use <span className="font-medium text-white">Complete payout setup</span>.
                 </div>
               ) : null}
 
@@ -380,9 +420,13 @@ export default function AffiliatePayoutsPage() {
                 </button>
                 {!canRequestPayout && affiliateRowId ? (
                   <span className="text-xs text-gray-500">
-                    {availableToRequest <= 0 && !hasPending
-                      ? "Nothing available to request after reservations."
-                      : null}
+                    {!payoutSetupComplete
+                      ? "Finish Stripe payout setup on the Affiliate Dashboard first."
+                      : hasPending
+                        ? "Wait until your pending request is approved, paid, or rejected."
+                        : availableToRequest <= 0
+                          ? `Nothing left to request (reserved $${formatMoney(reservedTotal)} against earnings since last payout).`
+                          : null}
                   </span>
                 ) : null}
               </div>

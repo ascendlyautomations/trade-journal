@@ -1,14 +1,21 @@
 "use client"
 
 import Link from "next/link"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "../../lib/supabaseClient"
 import Navbar from "../components/Navbar"
 import AffiliateApplyModal from "../components/AffiliateApplyModal"
+import AffiliatePayoutSetupCard from "../components/AffiliatePayoutSetupCard"
 import { estimateEarningsFromReferralCount } from "@/lib/affiliateEarnings"
+import {
+  AFFILIATE_CONNECT_SELECT,
+  parseAffiliateConnectRow,
+  type AffiliateConnectRow,
+} from "@/lib/affiliateStripeConnect"
 import { fetchLatestAffiliateApplication, type AffiliateApplicationRow } from "@/lib/affiliateApplication"
 import { isPostgrestRowCardinalityError } from "@/lib/postgrestError"
+import { supabaseBearerHeaders } from "@/lib/supabaseBearerFetch"
 
 type MeProfile = {
   id: string
@@ -32,6 +39,8 @@ export default function AffiliateDashboard() {
   const [referredUsers, setReferredUsers] = useState<ReferredUser[]>([])
   const [copyDone, setCopyDone] = useState(false)
   const [showAffiliateModal, setShowAffiliateModal] = useState(false)
+  const [affiliateConnect, setAffiliateConnect] = useState<AffiliateConnectRow | null>(null)
+  const [returnFromStripe, setReturnFromStripe] = useState(false)
   const [baseUrl, setBaseUrl] = useState(
     process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"
   )
@@ -57,16 +66,42 @@ export default function AffiliateDashboard() {
       return
     }
 
-    const [profileRes, appRes] = await Promise.all([
+    const [profileRes, appRes, affConnRes] = await Promise.all([
       supabase
         .from("profiles")
         .select("id, referral_code, referral_count, name")
         .eq("id", user.id)
         .maybeSingle(),
       fetchLatestAffiliateApplication(supabase, user.id),
+      supabase.from("affiliates").select(AFFILIATE_CONNECT_SELECT).eq("user_id", user.id).maybeSingle(),
     ])
 
     setLatestApp(appRes)
+
+    let connectRow: AffiliateConnectRow | null = null
+    if (affConnRes.data && typeof affConnRes.data === "object") {
+      connectRow = parseAffiliateConnectRow(affConnRes.data as Record<string, unknown>)
+    }
+
+    if (connectRow?.stripe_connected_account_id) {
+      try {
+        const syncRes = await fetch("/api/affiliates/connect/sync", {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            ...(await supabaseBearerHeaders()),
+          },
+        })
+        const sj = (await syncRes.json().catch(() => ({}))) as {
+          affiliate?: AffiliateConnectRow | null
+        }
+        if (sj?.affiliate) connectRow = sj.affiliate
+      } catch {
+        // non-fatal; UI still shows last known DB state
+      }
+    }
+
+    setAffiliateConnect(connectRow)
 
     const profile = profileRes.data as MeProfile | null
     const profErr = profileRes.error
@@ -113,6 +148,15 @@ export default function AffiliateDashboard() {
     void load()
   }, [load])
 
+  useLayoutEffect(() => {
+    if (typeof window === "undefined") return
+    const p = new URLSearchParams(window.location.search)
+    if (p.get("connect") === "return" || p.get("setup") === "return") {
+      setReturnFromStripe(true)
+      window.history.replaceState({}, "", "/affiliate")
+    }
+  }, [])
+
   useEffect(() => {
     if (typeof window !== "undefined") {
       setBaseUrl(window.location.origin)
@@ -140,6 +184,10 @@ export default function AffiliateDashboard() {
 
   const showApplyCta =
     !referralCode && (!latestApp || latestApp.status === "rejected")
+
+  const showPayoutSetupSection = Boolean(
+    referralCode || latestApp?.status === "approved" || affiliateConnect?.id
+  )
 
   return (
     <>
@@ -206,6 +254,12 @@ export default function AffiliateDashboard() {
             </div>
           )}
 
+          {returnFromStripe ? (
+            <div className="mb-6 rounded-xl border border-emerald-500/35 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-50">
+              You&apos;re back from Stripe. Your payout setup status is updated below.
+            </div>
+          ) : null}
+
           <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div className="rounded-xl border border-white/10 bg-white/5 p-5 backdrop-blur-md">
               <p className="text-sm text-gray-400">Total earnings</p>
@@ -225,6 +279,10 @@ export default function AffiliateDashboard() {
                 {referralCode || "—"}
               </p>
             </div>
+          </div>
+
+          <div className="mb-8">
+            <AffiliatePayoutSetupCard affiliateConnect={affiliateConnect} show={showPayoutSetupSection} />
           </div>
 
           <div className="mb-8 rounded-xl border border-white/10 bg-white/5 p-6 backdrop-blur-md">

@@ -16,6 +16,7 @@ export type AffiliatePayoutRequestRow = {
   paid_at: string | null
   admin_notes: string | null
   payout_reference: string | null
+  stripe_transfer_id: string | null
   created_at: string | null
   updated_at: string | null
 }
@@ -32,11 +33,12 @@ export const AFFILIATE_PAYOUT_REQUEST_COLUMNS = [
   "paid_at",
   "admin_notes",
   "payout_reference",
+  "stripe_transfer_id",
   "created_at",
   "updated_at",
 ].join(", ")
 
-function parseRow(raw: Record<string, unknown>): AffiliatePayoutRequestRow {
+export function parseAffiliatePayoutRequestRow(raw: Record<string, unknown>): AffiliatePayoutRequestRow {
   return {
     id: String(raw.id ?? ""),
     user_id: String(raw.user_id ?? ""),
@@ -49,6 +51,8 @@ function parseRow(raw: Record<string, unknown>): AffiliatePayoutRequestRow {
     paid_at: raw.paid_at != null ? String(raw.paid_at) : null,
     admin_notes: raw.admin_notes != null ? String(raw.admin_notes) : null,
     payout_reference: raw.payout_reference != null ? String(raw.payout_reference) : null,
+    stripe_transfer_id:
+      raw.stripe_transfer_id != null ? String(raw.stripe_transfer_id) : null,
     created_at: raw.created_at != null ? String(raw.created_at) : null,
     updated_at: raw.updated_at != null ? String(raw.updated_at) : null,
   }
@@ -68,7 +72,7 @@ export async function fetchMyAffiliatePayoutRequests(
     return { rows: [], error: new Error(formatPostgrestErrorMessage(error)) }
   }
 
-  const list = (data || []).map((r) => parseRow(r as Record<string, unknown>))
+  const list = (data || []).map((r) => parseAffiliatePayoutRequestRow(r as Record<string, unknown>))
   return { rows: list, error: null }
 }
 
