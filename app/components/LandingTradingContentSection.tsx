@@ -35,6 +35,11 @@ const BLOCKS = [
     body: "Visibility changes the game—discipline stops being optional.",
     Icon: IconEye,
   },
+  {
+    title: "See What Actually Works",
+    body: "Spot patterns across real trades — what wins, what fails, and what to repeat.",
+    Icon: IconChartTrend,
+  },
 ] as const
 
 function IconLayers({ className }: { className?: string }) {
@@ -104,6 +109,20 @@ function IconEye({ className }: { className?: string }) {
         strokeLinejoin="round"
       />
       <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.75" />
+    </svg>
+  )
+}
+
+function IconChartTrend({ className }: { className?: string }) {
+  return (
+    <svg className={className} width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M4 19V5M4 19h15M8 14l3.5-4 3.5 3 4.5-7"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   )
 }

@@ -16,8 +16,33 @@ import {
   LANDING_REVEAL_FROM,
   LANDING_REVEAL_TO,
   LANDING_REVEAL_TRANSITION,
+  LANDING_TITLE_GRADIENT,
   useLandingReveal,
 } from "@/lib/landingPageUi"
+
+const PRICING_FREE_FEATURES = [
+  "Track your trades",
+  "1 trading account",
+  "Basic dashboard insights",
+  "Trading calendar access",
+  "Public profile",
+  "Community feed access",
+  "View and interact with other traders",
+  "Basic messaging (limited)",
+] as const
+
+const PRICING_PRO_FEATURES = [
+  "Unlimited trading accounts",
+  "Full performance dashboard",
+  "Advanced analytics & stats",
+  "AI Trade Analyst (automated insights)",
+  "Session + strategy breakdowns",
+  "Trading calendar with full analytics",
+  "Enhanced public profile & stats",
+  "Full messaging & networking",
+  "Priority community features",
+  "Track what actually makes you money",
+] as const
 
 const HOW_STEPS = [
   {
@@ -141,22 +166,20 @@ export default function LandingPage() {
       <PublicNavbar />
       <AIAssistant />
 
-      {/* 🔥 NEW BLUE → GREEN THEME */}
-      <div className="relative min-h-screen text-gray-100 overflow-hidden">
-        {/* 🔥 BACKGROUND IMAGE */}
-        <div className="absolute inset-0">
-          <img
-            src="/hero.png"
-            className="w-full h-full object-cover opacity-40"
-            style={{ objectPosition: "15% center" }}
-            alt=""
-          />
-        </div>
-        {/* 🔥 DARK OVERLAY */}
-        <div className="absolute inset-0 bg-gradient-to-br from-[#0f172a]/60 via-[#1e293b]/60 to-[#065f46]/60" />
+      {/* Landing shell: cinematic bg (z-0) + overlay (z-1) + content (z-10) */}
+      <div className="relative min-h-screen overflow-hidden text-gray-100">
+        <div
+          className="pointer-events-none absolute inset-0 z-0 bg-[url('/images/hero-bg.png')] bg-cover bg-center bg-no-repeat opacity-[0.52] blur-[1px]"
+          aria-hidden
+        />
+        <div
+          className="pointer-events-none absolute inset-0 z-[1] bg-gradient-to-b from-[#0a0f1c]/80 via-[#0a0f1c]/60 to-[#0a0f1c]/90"
+          aria-hidden
+        />
 
+        <div className="relative z-10">
         {/* HERO */}
-        <div className="relative z-10 flex flex-col items-center text-center px-6 pt-32 pb-14 md:pb-20">
+        <div className="relative flex flex-col items-center px-6 pt-32 pb-14 text-center md:pb-20">
           {/* 🔥 GLOW */}
           <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 via-emerald-500/10 to-transparent blur-3xl opacity-30" />
 
@@ -233,31 +256,101 @@ export default function LandingPage() {
         <LandingFeatureShowcaseSections />
 
         {/* PRICING */}
-        <div id="pricing" className="py-24 px-6 text-center border-t border-white/10">
-          <h2 className="text-4xl font-extrabold mb-4 text-white tracking-tight drop-shadow-lg">
-            Pricing
-          </h2>
-          <p className="text-gray-400 text-sm mb-10 max-w-md mx-auto">
-            Start free. Upgrade when you&apos;re ready to go deeper.
-          </p>
-
-          <div className="flex justify-center">
-            <div className="bg-white/5 border border-white/10 backdrop-blur-md p-8 rounded-xl w-80">
-              <h3 className="text-xl font-semibold mb-4">Starter</h3>
-              <p className="text-4xl font-bold mb-4">$0</p>
-              <p className="text-gray-400 text-sm mb-6 leading-relaxed">
-                Core journaling and exploration—no card required.
-              </p>
-              <button
-                type="button"
-                onClick={() => router.push("/login")}
-                className="bg-emerald-500 hover:bg-emerald-600 px-6 py-3 rounded-lg w-full"
+        <section
+          id="pricing"
+          className="border-t border-white/10 px-6 py-24 md:py-28"
+          aria-labelledby="pricing-heading"
+        >
+          <div className="mx-auto max-w-5xl">
+            <header className="mx-auto mb-12 max-w-2xl text-center md:mb-16">
+              <h2
+                id="pricing-heading"
+                className="text-3xl font-extrabold tracking-tight text-white drop-shadow-lg md:text-4xl"
               >
-                Get Started
-              </button>
+                Take Your Trading to the{" "}
+                <span className={LANDING_TITLE_GRADIENT}>Next Level</span>
+              </h2>
+              <p className="mt-4 text-lg leading-relaxed text-gray-400 md:text-xl">
+                Stop guessing. Start tracking, analyzing, and improving with real data.
+              </p>
+              <p className="mt-4 text-sm text-gray-500">
+                Trusted by growing traders every day
+              </p>
+            </header>
+
+            <div className="grid gap-8 lg:grid-cols-2 lg:gap-10 lg:items-stretch">
+              {/* Free */}
+              <div className="flex h-full flex-col rounded-2xl border border-white/10 bg-white/[0.04] p-8 shadow-lg shadow-black/25 backdrop-blur-md md:p-9">
+                <div className="flex min-h-[7.25rem] flex-col text-left md:min-h-[7rem] lg:min-h-[6.75rem]">
+                  <h3 className="text-xl font-semibold text-gray-100">Free</h3>
+                  <p className="mt-2 text-4xl font-bold tracking-tight text-white">$0</p>
+                  <p className="mt-3 flex-1 text-sm leading-relaxed text-gray-400">
+                    Everything you need to start tracking and sharing your trades.
+                  </p>
+                </div>
+                <ul className="mt-8 flex flex-1 flex-col gap-3 text-left text-sm text-gray-300">
+                  {PRICING_FREE_FEATURES.map((line) => (
+                    <li key={line} className="flex gap-3">
+                      <span className="mt-0.5 shrink-0 text-emerald-400/90" aria-hidden>
+                        ✓
+                      </span>
+                      <span className="leading-snug">{line}</span>
+                    </li>
+                  ))}
+                </ul>
+                <button
+                  type="button"
+                  onClick={() => router.push("/login")}
+                  className="mt-10 w-full rounded-xl border border-white/15 bg-white/[0.06] px-6 py-3.5 font-semibold text-white transition-[transform,box-shadow] duration-200 hover:scale-[1.02] hover:border-emerald-400/25 hover:bg-white/[0.10] hover:shadow-[0_0_24px_rgba(52,211,153,0.12)] motion-reduce:hover:scale-100"
+                >
+                  Start Free
+                </button>
+              </div>
+
+              {/* TraxPro */}
+              <div className="relative flex h-full flex-col lg:-translate-y-1 lg:justify-center">
+                <div className="pointer-events-none absolute left-1/2 top-2 z-10 -translate-x-1/2 lg:-top-1">
+                  <span className="inline-flex rounded-full bg-gradient-to-r from-blue-500 to-emerald-500 px-4 py-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-white shadow-lg shadow-emerald-500/30">
+                    MOST POPULAR
+                  </span>
+                </div>
+                <div className="flex h-full flex-col rounded-2xl border border-emerald-400/45 bg-gradient-to-b from-white/[0.1] to-emerald-950/30 p-8 pb-9 pt-12 shadow-[0_8px_48px_rgba(0,0,0,0.35),0_0_52px_rgba(52,211,153,0.2)] backdrop-blur-md transition-[transform,box-shadow] duration-300 ease-out hover:z-[1] hover:scale-[1.02] hover:border-emerald-400/60 hover:shadow-[0_12px_56px_rgba(0,0,0,0.4),0_0_64px_rgba(52,211,153,0.32)] motion-reduce:transition-none motion-reduce:hover:scale-100 md:p-10 md:pb-10 md:pt-14">
+                  <div className="flex min-h-[7.25rem] flex-col text-left md:min-h-[7rem] lg:min-h-[6.75rem]">
+                    <h3 className="text-xl font-semibold text-emerald-200">TraxPro</h3>
+                    <p className="mt-2 text-4xl font-bold tracking-tight text-white md:text-[2.35rem]">
+                      $16.99
+                      <span className="text-lg font-semibold text-gray-400">/month</span>
+                    </p>
+                    <p className="mt-3 flex-1 text-sm leading-relaxed text-gray-200">
+                      Unlock full analytics, deeper insights, and unlimited access.
+                    </p>
+                  </div>
+                  <ul className="mt-8 flex flex-1 flex-col gap-3 text-left text-sm text-gray-100">
+                    {PRICING_PRO_FEATURES.map((line) => (
+                      <li key={line} className="flex gap-3">
+                        <span className="mt-0.5 shrink-0 text-emerald-400" aria-hidden>
+                          ✓
+                        </span>
+                        <span className="leading-snug">{line}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <button
+                    type="button"
+                    disabled={checkoutLoading}
+                    onClick={() => void handleSubscribe()}
+                    className="mt-10 w-full rounded-xl bg-gradient-to-r from-blue-500 to-emerald-500 px-6 py-3.5 font-semibold text-white shadow-lg shadow-emerald-500/20 transition-[transform,box-shadow] duration-200 hover:scale-[1.02] hover:from-blue-600 hover:to-emerald-600 hover:shadow-[0_0_28px_rgba(52,211,153,0.35)] disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:hover:scale-100"
+                  >
+                    {checkoutLoading ? "Starting trial..." : "Start Free Trial"}
+                  </button>
+                  <p className="mt-4 text-center text-xs leading-relaxed text-gray-500">
+                    ✓ 14-day free trial ✓ Cancel anytime ✓ No commitment
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
+        </section>
 
         <LandingFinalCtaSection
           checkoutLoading={checkoutLoading}
@@ -266,8 +359,9 @@ export default function LandingPage() {
         />
 
         {/* FOOTER */}
-        <div className="text-center text-gray-500 text-sm py-10 border-t border-white/10">
+        <div className="border-t border-white/10 py-10 text-center text-sm text-gray-500">
           Built for traders who actually want to improve.
+        </div>
         </div>
       </div>
     </>

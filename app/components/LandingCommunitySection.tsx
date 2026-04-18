@@ -14,7 +14,7 @@ import {
 const COMMUNITY_ITEMS = [
   {
     title: "Social feed",
-    img: "https://picsum.photos/seed/tradejournal-feed/960/540",
+    img: "/images/social-feed.png",
     bullets: [
       "Follow traders you respect",
       "Share charts and thoughts",
@@ -24,7 +24,7 @@ const COMMUNITY_ITEMS = [
   },
   {
     title: "Public profiles",
-    img: "https://picsum.photos/seed/tradejournal-profile/960/540",
+    img: "/images/public-profiles.png",
     bullets: [
       "Showcase performance",
       "Share strategy tags",
@@ -33,7 +33,7 @@ const COMMUNITY_ITEMS = [
   },
   {
     title: "Leaderboards & accountability",
-    img: "https://picsum.photos/seed/tradejournal-leaderboard/960/540",
+    img: "/images/leaderboard.png",
     bullets: [
       "Compare stats with peers",
       "Optional challenges",
@@ -42,7 +42,7 @@ const COMMUNITY_ITEMS = [
   },
   {
     title: "Community learning",
-    img: "https://picsum.photos/seed/tradejournal-learning/960/540",
+    img: "/images/community-learning.png",
     bullets: [
       "Learn from shared mistakes",
       "Ask questions and get feedback",

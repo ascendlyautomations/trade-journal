@@ -1,5 +1,6 @@
 "use client"
 
+import Image from "next/image"
 import { useEffect, useRef, useState } from "react"
 import {
   LANDING_REVEAL_FROM,
@@ -120,7 +121,19 @@ function FeatureSplitSection({ block }: { block: ShowcaseBlock }) {
     >
       <div className="mx-auto max-w-6xl">
         <div
-          className={`flex flex-col gap-10 lg:flex-row lg:items-center lg:gap-14 ${block.reverse ? "lg:flex-row-reverse" : ""}`}
+          className={`flex gap-10 lg:items-center lg:gap-14 ${
+            block.id === "showcase-trade-input"
+              ? "flex-col-reverse lg:flex-row-reverse"
+              : block.id === "showcase-dashboard"
+                ? "flex-col-reverse lg:flex-row"
+                : block.id === "showcase-trade-review"
+                  ? "flex-col-reverse lg:flex-row"
+                  : block.id === "showcase-messaging"
+                    ? "flex-col-reverse lg:flex-row-reverse"
+                    : block.reverse
+                      ? "flex-col lg:flex-row-reverse"
+                      : "flex-col lg:flex-row"
+          }`}
         >
           <div className="min-w-0 flex-1 space-y-5 text-left">
             <h2
@@ -141,15 +154,73 @@ function FeatureSplitSection({ block }: { block: ShowcaseBlock }) {
           </div>
 
           <div className="min-w-0 flex-1">
-            <div
-              className="flex aspect-[4/3] w-full flex-col items-center justify-center rounded-2xl border border-dashed border-white/15 bg-gradient-to-br from-white/[0.04] to-emerald-500/[0.03] px-6 py-8 shadow-inner shadow-black/20"
-              aria-hidden
-            >
-              <span className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-gray-500">
-                Placeholder
-              </span>
-              <span className="text-center text-sm text-gray-500">{block.placeholderLabel}</span>
-            </div>
+            {block.id === "showcase-trade-input" ? (
+              <div
+                className="group rounded-2xl border border-emerald-400/20 bg-white/5 p-3 shadow-lg shadow-black/25 backdrop-blur-md transition-transform duration-300 ease-out hover:scale-[1.02] motion-reduce:transition-none motion-reduce:hover:scale-100 md:p-4"
+              >
+                <Image
+                  src="/images/trade-input.png"
+                  alt="Trade entry and import options in TradeTrax"
+                  width={1600}
+                  height={1000}
+                  className="h-auto w-full rounded-xl object-cover"
+                  sizes="(max-width: 1024px) 100vw, 50vw"
+                  priority={false}
+                />
+              </div>
+            ) : block.id === "showcase-trade-review" ? (
+              <div
+                className="group rounded-2xl border border-emerald-400/20 bg-white/5 p-3 shadow-lg shadow-black/25 backdrop-blur-md transition-transform duration-300 ease-out hover:scale-[1.02] motion-reduce:transition-none motion-reduce:hover:scale-100 md:p-4"
+              >
+                <Image
+                  src="/images/trade-history.png"
+                  alt="Trade history with screenshots and notes in TradeTrax"
+                  width={1600}
+                  height={1000}
+                  className="h-auto w-full rounded-xl object-cover"
+                  sizes="(max-width: 1024px) 100vw, 50vw"
+                  priority={false}
+                />
+              </div>
+            ) : block.id === "showcase-messaging" ? (
+              <div
+                className="group rounded-2xl border border-emerald-400/20 bg-white/5 p-3 shadow-lg shadow-black/25 backdrop-blur-md transition-transform duration-300 ease-out hover:scale-[1.02] motion-reduce:transition-none motion-reduce:hover:scale-100 md:p-4"
+              >
+                <Image
+                  src="/images/messaging-ui-v2.png"
+                  alt="Messaging and trade discussions in TradeTrax"
+                  width={1600}
+                  height={1000}
+                  className="h-auto w-full rounded-xl object-cover"
+                  sizes="(max-width: 1024px) 100vw, 50vw"
+                  priority={false}
+                />
+              </div>
+            ) : block.id === "showcase-dashboard" ? (
+              <div
+                className="group rounded-2xl border border-emerald-400/20 bg-white/5 p-3 shadow-lg shadow-black/25 backdrop-blur-md transition-transform duration-300 ease-out hover:scale-[1.02] motion-reduce:transition-none motion-reduce:hover:scale-100 md:p-4"
+              >
+                <Image
+                  src="/images/dashboard.png"
+                  alt="Trading dashboard with analytics in TradeTrax"
+                  width={1600}
+                  height={1000}
+                  className="h-auto w-full rounded-xl object-cover"
+                  sizes="(max-width: 1024px) 100vw, 50vw"
+                  priority={false}
+                />
+              </div>
+            ) : (
+              <div
+                className="flex aspect-[4/3] w-full flex-col items-center justify-center rounded-2xl border border-dashed border-white/15 bg-gradient-to-br from-white/[0.04] to-emerald-500/[0.03] px-6 py-8 shadow-inner shadow-black/20"
+                aria-hidden
+              >
+                <span className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-gray-500">
+                  Placeholder
+                </span>
+                <span className="text-center text-sm text-gray-500">{block.placeholderLabel}</span>
+              </div>
+            )}
           </div>
         </div>
       </div>
