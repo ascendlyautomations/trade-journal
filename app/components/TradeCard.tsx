@@ -1,5 +1,6 @@
 "use client"
 
+import ShareTradeButton from "./ShareTradeButton"
 import {
   formatTradeClockTime,
   formatTradePrice,
@@ -105,29 +106,28 @@ export default function TradeCard({
 
   return (
     <div className="relative rounded-xl border border-white/10 bg-white/5 p-7 shadow backdrop-blur-md transition-all duration-200 hover:scale-[1.02] hover:border-white/20">
-      {(onEdit || onDelete) && (
-        <div className="absolute right-3 top-3 flex items-center gap-2">
-          {onEdit ? (
-            <button
-              type="button"
-              onClick={onEdit}
-              className="rounded bg-white/10 px-2 py-1 text-sm text-white transition hover:bg-white/20"
-            >
-              Edit
-            </button>
-          ) : null}
-          {onDelete ? (
-            <button
-              type="button"
-              onClick={onDelete}
-              className="rounded bg-white/10 px-2 py-1 text-sm text-white transition hover:bg-red-500/30 hover:text-red-200"
-              aria-label="Delete trade"
-            >
-              Delete
-            </button>
-          ) : null}
-        </div>
-      )}
+      <div className="absolute right-3 top-3 flex items-center gap-2">
+        {onEdit ? (
+          <button
+            type="button"
+            onClick={onEdit}
+            className="rounded bg-white/10 px-2 py-1 text-sm text-white transition hover:bg-white/20"
+          >
+            Edit
+          </button>
+        ) : null}
+        <ShareTradeButton variant="icon" trade={trade} />
+        {onDelete ? (
+          <button
+            type="button"
+            onClick={onDelete}
+            className="rounded bg-white/10 px-2 py-1 text-sm text-white transition hover:bg-red-500/30 hover:text-red-200"
+            aria-label="Delete trade"
+          >
+            Delete
+          </button>
+        ) : null}
+      </div>
 
       <div className="flex flex-col gap-6 md:flex-row">
         <div className="flex-1">

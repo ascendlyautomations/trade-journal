@@ -6,9 +6,12 @@ import ProfileOnboarding, {
   ONBOARDING_FLAG,
   profileNeedsUsername,
 } from "../components/ProfileOnboarding"
+import OnboardingModal from "../components/OnboardingModal"
+import PerformanceShareModal from "../components/PerformanceShareModal"
 import { useEffect, useState, useMemo, useRef } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { isProActive } from "../../lib/subscription"
+import { filterTradesForPerformanceSharePool } from "@/lib/performanceShare"
 import {
   LineChart,
   Line,
@@ -540,6 +543,7 @@ function analyzeTradingHours(trades: any[]) {
 
 export default function Dashboard() {
   const [showOnboarding, setShowOnboarding] = useState(false)
+  const [showOnboardingModal, setShowOnboardingModal] = useState(false)
   const [trades, setTrades] = useState<any[]>([])
   const [accountFilter, setAccountFilter] = useState("all")
   const [accountTypeFilter, setAccountTypeFilter] = useState("all")
@@ -561,7 +565,19 @@ export default function Dashboard() {
   const [gearDraft, setGearDraft] = useState<GearDraftState | null>(null)
   const [ddInputFocused, setDdInputFocused] = useState(false)
   const [savingGearSettings, setSavingGearSettings] = useState(false)
+  const [showPerformanceShare, setShowPerformanceShare] = useState(false)
   const didHydrateDashboardPrefs = useRef(false)
+
+  const tradesForPerformanceSharePool = useMemo(
+    () =>
+      filterTradesForPerformanceSharePool(trades, {
+        selectedDate,
+        accountFilter,
+        accountTypeFilter,
+        showPublicOnly,
+      }),
+    [trades, selectedDate, accountFilter, accountTypeFilter, showPublicOnly]
+  )
 
   // 🔥 SAFE DATA FETCH (FIXES YOUR ERROR)
   useEffect(() => {
@@ -622,6 +638,27 @@ export default function Dashboard() {
       setShowOnboarding(true)
     }
   }, [loading, profile, user])
+
+  useEffect(() => {
+    if (loading || !profile || !user) return
+    if (showOnboarding) return
+    if (profile.onboarding_completed !== false) {
+      setShowOnboardingModal(false)
+      return
+    }
+    setShowOnboardingModal(true)
+  }, [loading, profile, user, showOnboarding])
+
+  async function completeCsvOnboarding() {
+    if (!user?.id) return
+    const { error } = await supabase
+      .from("profiles")
+      .update({ onboarding_completed: true })
+      .eq("id", user.id)
+    if (error) console.error("completeCsvOnboarding:", error)
+    setProfile((p: any) => (p ? { ...p, onboarding_completed: true } : p))
+    setShowOnboardingModal(false)
+  }
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -1595,6 +1632,8 @@ const worstDay = dailyPnLs.length > 0
         />
       ) : null}
 
+      <OnboardingModal open={showOnboardingModal} onComplete={() => void completeCsvOnboarding()} />
+
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white p-3 md:p-10">
 
         <div className="relative z-50 mx-auto w-full max-w-[1600px] px-4 md:px-6">
@@ -1647,6 +1686,15 @@ const worstDay = dailyPnLs.length > 0
             settingsNextToModes={renderDashboardFilterSettings()}
             trailing={
               <>
+                <button
+                  type="button"
+                  onClick={() => setShowPerformanceShare(true)}
+                  className="inline-flex h-[34px] shrink-0 items-center whitespace-nowrap rounded-md bg-white/10 px-3 py-1 text-sm text-white hover:bg-white/20"
+                  title="Share performance"
+                  aria-label="Share performance"
+                >
+                  📤 Share
+                </button>
                 <button
                   type="button"
                   onClick={() => setShowPublicOnly(!showPublicOnly)}
@@ -2241,6 +2289,13 @@ const worstDay = dailyPnLs.length > 0
 
           </div>
       </div>
+
+      <PerformanceShareModal
+        open={showPerformanceShare}
+        onClose={() => setShowPerformanceShare(false)}
+        tradePool={tradesForPerformanceSharePool}
+        subtitle="Dashboard · respects account, mode, date & public filters"
+      />
     </>
   )
 }

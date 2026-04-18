@@ -3,7 +3,6 @@
 import Image from "next/image"
 import {
   LANDING_CARD_FULL,
-  LANDING_CARD_PADDING,
   LANDING_REVEAL_FROM,
   LANDING_REVEAL_TO,
   LANDING_REVEAL_TRANSITION,
@@ -15,6 +14,7 @@ const COMMUNITY_ITEMS = [
   {
     title: "Social feed",
     img: "/images/social-feed.png",
+    objectPosition: "object-top",
     bullets: [
       "Follow traders you respect",
       "Share charts and thoughts",
@@ -25,6 +25,7 @@ const COMMUNITY_ITEMS = [
   {
     title: "Public profiles",
     img: "/images/public-profiles.png",
+    objectPosition: "object-top",
     bullets: [
       "Showcase performance",
       "Share strategy tags",
@@ -34,6 +35,7 @@ const COMMUNITY_ITEMS = [
   {
     title: "Leaderboards & accountability",
     img: "/images/leaderboard.png",
+    objectPosition: "object-center",
     bullets: [
       "Compare stats with peers",
       "Optional challenges",
@@ -43,6 +45,7 @@ const COMMUNITY_ITEMS = [
   {
     title: "Community learning",
     img: "/images/community-learning.png",
+    objectPosition: "object-center",
     bullets: [
       "Learn from shared mistakes",
       "Ask questions and get feedback",
@@ -85,17 +88,17 @@ export default function LandingCommunitySection() {
                 transitionDelay: visible ? `${i * 75}ms` : "0ms",
               }}
             >
-              <div className="relative mb-4 aspect-[16/9] w-full overflow-hidden rounded-lg">
+              <div className="relative h-[260px] w-full shrink-0 overflow-hidden md:h-[320px] lg:h-[360px]">
                 <Image
                   src={item.img}
                   alt=""
                   fill
-                  className="object-cover transition-transform duration-[400ms] ease-out group-hover:scale-[1.03] motion-reduce:group-hover:scale-100"
+                  className={`object-cover transition-transform duration-[400ms] ease-out group-hover:scale-[1.03] motion-reduce:group-hover:scale-100 ${item.objectPosition}`}
                   sizes="(max-width: 768px) 100vw, 50vw"
                   loading="lazy"
                 />
               </div>
-              <div className={`flex flex-1 flex-col ${LANDING_CARD_PADDING}`}>
+              <div className="flex flex-1 flex-col p-6 md:p-8">
                 <h3 className="text-xl font-semibold text-white">
                   {item.title}
                 </h3>

@@ -7,6 +7,7 @@ import Navbar from "../components/Navbar"
 import TradeCard from "@/components/TradeCard"
 import Calendar from "@/components/Calendar"
 import InputTradeForm from "../components/InputTradeForm"
+import PerformanceShareModal from "../components/PerformanceShareModal"
 
 type BacktestTrade = Record<string, unknown> & {
   id: string
@@ -24,6 +25,7 @@ export default function BacktestPage() {
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [editingTrade, setEditingTrade] = useState<BacktestTrade | null>(null)
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
+  const [showPerformanceShare, setShowPerformanceShare] = useState(false)
 
   useEffect(() => {
     void loadBacktests()
@@ -130,13 +132,24 @@ export default function BacktestPage() {
                 ))}
               </select>
             </div>
-            <button
-              type="button"
-              onClick={() => setShowAdvanced((v) => !v)}
-              className="rounded-lg bg-white/10 px-4 py-2 text-sm text-white hover:bg-white/20"
-            >
-              {showAdvanced ? "Hide Advanced" : "Show Advanced"}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowPerformanceShare(true)}
+                className="rounded-lg bg-white/10 px-4 py-2 text-sm text-white hover:bg-white/20"
+                title="Share performance"
+                aria-label="Share performance"
+              >
+                📤 Share
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowAdvanced((v) => !v)}
+                className="rounded-lg bg-white/10 px-4 py-2 text-sm text-white hover:bg-white/20"
+              >
+                {showAdvanced ? "Hide Advanced" : "Show Advanced"}
+              </button>
+            </div>
           </div>
 
           <div className="mb-4 grid grid-cols-2 gap-4 md:grid-cols-4">
@@ -268,6 +281,13 @@ export default function BacktestPage() {
           }}
         />
       ) : null}
+
+      <PerformanceShareModal
+        open={showPerformanceShare}
+        onClose={() => setShowPerformanceShare(false)}
+        tradePool={filteredTrades as any[]}
+        subtitle="Backtest Lab · current strategy filter"
+      />
     </>
   )
 }

@@ -7,7 +7,10 @@ import ProfileOnboarding, {
   profileNeedsUsername,
 } from "../components/ProfileOnboarding"
 import InputTradeForm from "../components/InputTradeForm"
-import { useEffect, useState } from "react"
+import PerformanceShareModal from "../components/PerformanceShareModal"
+import ShareTradeButton from "../components/ShareTradeButton"
+import { filterTradesForPerformanceSharePool } from "@/lib/performanceShare"
+import { useEffect, useMemo, useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { useRouter } from "next/navigation"
 import {
@@ -55,6 +58,7 @@ export default function TradesPage() {
   const [authUserId, setAuthUserId] = useState<string | null>(null)
   const [gateProfile, setGateProfile] = useState<any | null>(null)
   const [showOnboarding, setShowOnboarding] = useState(false)
+  const [showPerformanceShare, setShowPerformanceShare] = useState(false)
 
   const router = useRouter()
 
@@ -221,47 +225,23 @@ export default function TradesPage() {
   const accounts = Array.from(accountMap.values())
   console.log("Accounts:", accounts)
 
-const filteredTrades = trades.filter((trade) => {
-  if (selectedDate) {
-    const tradeDate = new Date(trade.created_at)
-    const selected = new Date(selectedDate + "T00:00:00")
+  const tradesForPerformanceSharePool = useMemo(
+    () =>
+      filterTradesForPerformanceSharePool(trades, {
+        selectedDate,
+        accountFilter,
+        accountTypeFilter,
+        resultFilter,
+      }),
+    [trades, selectedDate, accountFilter, accountTypeFilter, resultFilter]
+  )
 
-    if (
-      tradeDate.getFullYear() !== selected.getFullYear() ||
-      tradeDate.getMonth() !== selected.getMonth() ||
-      tradeDate.getDate() !== selected.getDate()
-    ) {
-      return false
-    }
-  }
-
-  if (!filterByTime(trade)) return false
-
-  if (resultFilter === "wins" && trade.pnl <= 0) return false
-  if (resultFilter === "losses" && trade.pnl >= 0) return false
-
-  if (accountFilter !== "all") {
-    const accountName = String(trade.account_name || "").trim()
-    const size = String(trade.account_size || "").trim()
-    const id = String(trade.account_id || "").trim()
-    const accountKey = `${accountName}|${size}|${id}`
-    if (accountKey !== accountFilter) return false
-  }
-
-  const tradeMode = String(trade.mode ?? trade.account_type ?? "")
-    .toLowerCase()
-    .trim()
-  const selectedAcct = accountTypeFilter.toLowerCase().trim()
-  if (accountTypeFilter !== "all") {
-    console.log("Filtering:", trade.mode ?? trade.account_type, accountTypeFilter)
-    if (tradeMode !== selectedAcct) {
-      return false
-    }
-  }
-
-  // 🔥 THIS STAYS LAST
-  return true
-})
+  const filteredTrades = useMemo(() => {
+    return tradesForPerformanceSharePool.filter((trade) => {
+      if (!filterByTime(trade)) return false
+      return true
+    })
+  }, [tradesForPerformanceSharePool, timeframe])
 
   const totalTrades = filteredTrades.length
   const wins = filteredTrades.filter(t => t.pnl > 0)
@@ -433,13 +413,24 @@ const filteredTrades = trades.filter((trade) => {
                   </div>
                 }
                 trailing={
-                  <button
-                    type="button"
-                    onClick={() => setShowAdvanced(!showAdvanced)}
-                    className="shrink-0 whitespace-nowrap rounded-md bg-white/10 px-3 py-1 text-sm text-white hover:bg-white/20 w-full md:w-auto"
-                  >
-                    {showAdvanced ? "Hide Advanced" : "Show Advanced"}
-                  </button>
+                  <div className="flex w-full flex-wrap items-center justify-center gap-2 md:w-auto">
+                    <button
+                      type="button"
+                      onClick={() => setShowPerformanceShare(true)}
+                      className="flex h-[34px] shrink-0 items-center justify-center whitespace-nowrap rounded-md bg-white/10 px-3 py-1 text-sm text-white hover:bg-white/20"
+                      title="Share performance"
+                      aria-label="Share performance"
+                    >
+                      📤 Share
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowAdvanced(!showAdvanced)}
+                      className="shrink-0 whitespace-nowrap rounded-md bg-white/10 px-3 py-1 text-sm text-white hover:bg-white/20"
+                    >
+                      {showAdvanced ? "Hide Advanced" : "Show Advanced"}
+                    </button>
+                  </div>
                 }
               />
 
@@ -507,6 +498,7 @@ const filteredTrades = trades.filter((trade) => {
                       >
                         Edit
                       </button>
+                      <ShareTradeButton variant="icon" trade={trade} />
                       <button
                         onClick={() => deleteTrade(trade.id)}
                         className="text-white hover:text-red-400 text-xl transition leading-none"
@@ -769,6 +761,13 @@ const filteredTrades = trades.filter((trade) => {
 
         </div>
       </div>
+
+      <PerformanceShareModal
+        open={showPerformanceShare}
+        onClose={() => setShowPerformanceShare(false)}
+        tradePool={tradesForPerformanceSharePool}
+        subtitle="Matches account, mode & date filters"
+      />
     </>
   )
 }

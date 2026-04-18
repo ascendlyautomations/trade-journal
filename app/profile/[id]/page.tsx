@@ -16,6 +16,7 @@ import {
   CartesianGrid,
 } from "recharts"
 import TradeSocialLayer from "../../components/TradeSocialLayer"
+import ShareTradeButton from "../../components/ShareTradeButton"
 import InputTradeForm from "../../components/InputTradeForm"
 import Calendar from "../../components/Calendar"
 import {
@@ -145,7 +146,11 @@ function TradeCard({
             </p>
           </div>
         </div>
-        {canManageTrade ? (
+        <div className="flex shrink-0 items-center gap-1">
+          <div onClick={(e) => e.stopPropagation()}>
+            <ShareTradeButton variant="icon" trade={trade} />
+          </div>
+          {canManageTrade ? (
           <div className="relative">
             <button
               type="button"
@@ -205,7 +210,8 @@ function TradeCard({
               </div>
             ) : null}
           </div>
-        ) : null}
+          ) : null}
+        </div>
       </div>
 
       {imageSrc ? (
