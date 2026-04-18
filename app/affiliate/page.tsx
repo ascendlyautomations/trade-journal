@@ -7,7 +7,10 @@ import { supabase } from "../../lib/supabaseClient"
 import Navbar from "../components/Navbar"
 import AffiliateApplyModal from "../components/AffiliateApplyModal"
 import AffiliatePayoutSetupCard from "../components/AffiliatePayoutSetupCard"
-import { estimateEarningsFromReferralCount } from "@/lib/affiliateEarnings"
+import {
+  AFFILIATE_PER_REFERRAL_EARNINGS,
+  affiliateTotalEarningsFromReferralCount,
+} from "@/lib/affiliateEarnings"
 import {
   AFFILIATE_CONNECT_SELECT,
   parseAffiliateConnectRow,
@@ -122,7 +125,6 @@ export default function AffiliateDashboard() {
       profile.referral_code != null ? String(profile.referral_code).trim() : ""
     setReferralCode(code || null)
     setTotalReferrals(Number(profile.referral_count) || 0)
-
     if (!code) {
       setReferredUsers([])
       setLoading(false)
@@ -164,7 +166,10 @@ export default function AffiliateDashboard() {
   }, [])
 
   const referralLink = referralCode ? `${baseUrl}?ref=${encodeURIComponent(referralCode)}` : ""
-  const earnings = estimateEarningsFromReferralCount(totalReferrals)
+  const earnings = useMemo(
+    () => affiliateTotalEarningsFromReferralCount(totalReferrals),
+    [totalReferrals]
+  )
 
   async function copyLink() {
     if (!referralLink) return
@@ -266,6 +271,11 @@ export default function AffiliateDashboard() {
               <p className="mt-1 text-2xl font-bold text-emerald-400">
                 ${hasAffiliateAccess ? earnings.toFixed(2) : "0.00"}
               </p>
+              {hasAffiliateAccess ? (
+                <p className="mt-2 text-xs text-gray-500">
+                  Total referrals × ${AFFILIATE_PER_REFERRAL_EARNINGS.toFixed(2)} — same basis as the Payouts page.
+                </p>
+              ) : null}
             </div>
             <div className="rounded-xl border border-white/10 bg-white/5 p-5 backdrop-blur-md">
               <p className="text-sm text-gray-400">Total referrals</p>

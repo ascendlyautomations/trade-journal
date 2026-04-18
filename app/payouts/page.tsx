@@ -12,6 +12,7 @@ import {
   parseAffiliateConnectRow,
   type AffiliateConnectRow,
 } from "@/lib/affiliateStripeConnect"
+import { AFFILIATE_PER_REFERRAL_EARNINGS } from "@/lib/affiliateEarnings"
 import {
   fetchAffiliatePayoutBalance,
   type AffiliatePayoutBalance,
@@ -30,7 +31,6 @@ type MeProfile = {
   username?: string | null
   name?: string | null
   referral_code?: string | null
-  referral_earnings?: number | string | null
 }
 
 function formatMoney(n: number): string {
@@ -95,6 +95,7 @@ export default function AffiliatePayoutsPage() {
   const [loading, setLoading] = useState(true)
   const [referralCode, setReferralCode] = useState<string | null>(null)
   const [payoutBalance, setPayoutBalance] = useState<AffiliatePayoutBalance | null>(null)
+  const [balanceRpcError, setBalanceRpcError] = useState<string | null>(null)
   const [affiliateRowId, setAffiliateRowId] = useState<string | null>(null)
   const [affiliateConnectRow, setAffiliateConnectRow] = useState<AffiliateConnectRow | null>(null)
   const [payoutRows, setPayoutRows] = useState<AffiliatePayoutRequestRow[]>([])
@@ -119,7 +120,7 @@ export default function AffiliatePayoutsPage() {
       fetchAffiliatePayoutBalance(supabase, user.id),
       supabase
         .from("profiles")
-        .select("id, username, name, referral_code, referral_earnings")
+        .select("id, username, name, referral_code")
         .eq("id", user.id)
         .maybeSingle(),
       supabase.from("affiliates").select(AFFILIATE_CONNECT_SELECT).eq("user_id", user.id).maybeSingle(),
@@ -163,23 +164,23 @@ export default function AffiliatePayoutsPage() {
     const payoutRowsSafe = payoutsRes.error ? [] : payoutsRes.rows
 
     setReferralCode(effectiveReferralCode)
-    setPayoutBalance(
-      balRes.balance ?? {
-        totalEarnings: 0,
-        earningsSinceLastPayout: 0,
-        pendingReserved: 0,
-        approvedReserved: 0,
-        availableToRequest: 0,
-        lastPaidAt: null,
-      }
-    )
+
+    if (balRes.error) {
+      setBalanceRpcError(balRes.error.message)
+      setPayoutBalance(null)
+    } else {
+      setBalanceRpcError(null)
+      setPayoutBalance(balRes.balance)
+    }
+
+    if (process.env.NODE_ENV === "development") {
+      console.log("[payouts] affiliate_payout_balance raw RPC result", balRes.raw)
+      console.log("[payouts] affiliate_payout_balance mapped for UI", balRes.balance)
+    }
+
     setAffiliateRowId(connectRow?.id != null ? String(connectRow.id) : null)
     setPayoutRows(payoutRowsSafe)
     setLoading(false)
-
-    if (balRes.error && process.env.NODE_ENV === "development") {
-      console.warn("[payouts] affiliate_payout_balance RPC failed:", balRes.error.message)
-    }
   }, [router])
 
   useEffect(() => {
@@ -198,12 +199,18 @@ export default function AffiliatePayoutsPage() {
     }
   }, [])
 
+  const referralCountBalance = payoutBalance?.referralCount ?? 0
+  const perReferralFromRpc = payoutBalance?.perReferralEarnings ?? AFFILIATE_PER_REFERRAL_EARNINGS
   const totalEarnings = payoutBalance?.totalEarnings ?? 0
+  const totalPaidOut = payoutBalance?.totalPaid ?? 0
   const earningsSinceLastPayout = payoutBalance?.earningsSinceLastPayout ?? 0
   const availableToRequest = payoutBalance?.availableToRequest ?? 0
   const pendingReserved = payoutBalance?.pendingReserved ?? 0
   const approvedReserved = payoutBalance?.approvedReserved ?? 0
-  const reservedTotal = pendingReserved + approvedReserved
+  /** Amounts treated as consumed from the lifetime pool (approved + paid requests). */
+  const consumedApprovedAndPaid = Math.max(0, totalEarnings - earningsSinceLastPayout)
+  const minimumPayout = payoutBalance?.minimumPayout ?? 100
+  const rpcCanRequest = payoutBalance?.canRequest === true
 
   const hasPending = useMemo(
     () => payoutRows.some((r) => r.status === "pending"),
@@ -223,7 +230,9 @@ export default function AffiliatePayoutsPage() {
     affiliateRowId &&
       payoutSetupComplete &&
       !hasPending &&
-      availableToRequest > 0.009
+      payoutBalance != null &&
+      rpcCanRequest &&
+      availableToRequest >= minimumPayout - 0.001
   )
 
   async function handleSubmitRequest(amount: number): Promise<{ error: string | null }> {
@@ -240,6 +249,17 @@ export default function AffiliatePayoutsPage() {
     const { balance: freshBal, error: balErr } = await fetchAffiliatePayoutBalance(supabase, user.id)
     if (balErr || !freshBal) {
       return { error: "Could not verify your available balance. Try again." }
+    }
+
+    const minReq = freshBal.minimumPayout > 0 ? freshBal.minimumPayout : 100
+    if (freshBal.availableToRequest < minReq - 0.001 || !freshBal.canRequest) {
+      return {
+        error: `You need at least $${minReq.toFixed(0)} available to request a payout.`,
+      }
+    }
+
+    if (amount < minReq - 0.001) {
+      return { error: `Minimum payout request is $${minReq.toFixed(0)}.` }
     }
 
     const cap = freshBal.availableToRequest
@@ -287,8 +307,10 @@ export default function AffiliatePayoutsPage() {
                 Payouts
               </h1>
               <p className="mt-1 text-sm text-gray-400">
-                Balances below come from your referral earnings and payout history. Request amounts are capped by
-                what&apos;s still available after pending and approved requests.
+                Totals follow the affiliate earnings model (referrals × ${AFFILIATE_PER_REFERRAL_EARNINGS.toFixed(2)});
+                payout request statuses in this app reserve or consume balance — not Stripe settlement timing.
+                You need at least <strong className="text-gray-200">${minimumPayout.toFixed(0)}</strong>{" "}
+                <span className="text-gray-500">available</span> before you can submit a payout request.
               </p>
             </div>
             <button
@@ -323,6 +345,13 @@ export default function AffiliatePayoutsPage() {
             </div>
           ) : null}
 
+          {balanceRpcError ? (
+            <div className="mb-6 rounded-xl border border-red-400/40 bg-red-500/15 px-4 py-3 text-sm text-red-100">
+              Could not load payout balance ({balanceRpcError}). Try Refresh — if this persists, the payout balance
+              function may need to be applied on the database.
+            </div>
+          ) : null}
+
           {affiliateRowId ? (
             <div className="mb-6">
               <AffiliatePayoutSetupCard affiliateConnect={affiliateConnectRow} show />
@@ -333,15 +362,19 @@ export default function AffiliatePayoutsPage() {
             <p className="text-sm text-gray-400">Loading…</p>
           ) : (
             <>
-              <div className="mb-6 grid gap-4 sm:grid-cols-3">
+              <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <div className="rounded-xl border border-white/10 bg-white/5 p-5 backdrop-blur-md">
                   <p className="text-sm text-gray-400">Total earnings</p>
                   <p className="mt-1 text-2xl font-bold tabular-nums text-emerald-400">
                     ${formatMoney(totalEarnings)}
                   </p>
-                  <p className="mt-2 text-xs text-gray-500">
-                    Lifetime affiliate earnings basis (recorded Stripe commissions when available, otherwise
-                    estimated from referrals).
+                  <p className="mt-1 text-xs text-gray-500">
+                    {referralCountBalance} referrals × ${perReferralFromRpc.toFixed(2)} — matches the Affiliate
+                    dashboard.
+                  </p>
+                  <p className="mt-2 border-t border-white/10 pt-2 text-xs text-gray-400">
+                    Paid out via completed requests (status paid):{" "}
+                    <span className="font-semibold tabular-nums text-gray-300">${formatMoney(totalPaidOut)}</span>
                   </p>
                 </div>
                 <div className="rounded-xl border border-white/10 bg-white/5 p-5 backdrop-blur-md">
@@ -350,8 +383,9 @@ export default function AffiliatePayoutsPage() {
                     ${formatMoney(earningsSinceLastPayout)}
                   </p>
                   <p className="mt-2 text-xs text-gray-500">
-                    Your unpaid earnings pool: total earnings minus amounts already marked{" "}
-                    <span className="text-gray-400">paid</span> in payout requests.
+                    Total earnings minus amounts on <strong className="text-gray-400">approved</strong> or{" "}
+                    <strong className="text-gray-400">paid</strong> payout requests (${formatMoney(consumedApprovedAndPaid)}{" "}
+                    consumed).
                   </p>
                 </div>
                 <div className="rounded-xl border border-white/10 bg-white/5 p-5 backdrop-blur-md">
@@ -360,8 +394,19 @@ export default function AffiliatePayoutsPage() {
                     ${formatMoney(availableToRequest)}
                   </p>
                   <p className="mt-2 text-xs text-gray-500">
-                    Earnings since last payout minus pending (${formatMoney(pendingReserved)}) and approved (
-                    ${formatMoney(approvedReserved)}) reservations. Floored at $0.
+                    Earnings since last payout (${formatMoney(earningsSinceLastPayout)}) minus{" "}
+                    <strong className="text-gray-400">pending</strong> requests (${formatMoney(pendingReserved)}). Approved
+                    (${formatMoney(approvedReserved)}) is already deducted in “earnings since last payout”.
+                  </p>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-white/5 p-5 backdrop-blur-md">
+                  <p className="text-sm text-gray-400">Minimum payout</p>
+                  <p className="mt-1 text-2xl font-bold tabular-nums text-amber-200">
+                    ${formatMoney(minimumPayout)}
+                  </p>
+                  <p className="mt-2 text-xs text-gray-500">
+                    You need at least this much <strong className="text-gray-300">available</strong> before the Request
+                    payout button unlocks.
                   </p>
                 </div>
               </div>
@@ -409,6 +454,21 @@ export default function AffiliatePayoutsPage() {
                 </div>
               ) : null}
 
+              {affiliateRowId &&
+              isActiveAffiliate &&
+              payoutSetupComplete &&
+              !hasPending &&
+              payoutBalance &&
+              !rpcCanRequest &&
+              availableToRequest < minimumPayout - 0.001 ? (
+                <div className="mb-8 rounded-xl border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm text-amber-50">
+                  You need at least <strong className="text-white">${minimumPayout.toFixed(0)}</strong> available to
+                  request a payout. You currently have{" "}
+                  <span className="tabular-nums font-semibold text-white">${formatMoney(availableToRequest)}</span>{" "}
+                  available — keep earning referrals until you reach the minimum.
+                </div>
+              ) : null}
+
               <div className="mb-10 flex flex-wrap items-center gap-3">
                 <button
                   type="button"
@@ -422,11 +482,17 @@ export default function AffiliatePayoutsPage() {
                   <span className="text-xs text-gray-500">
                     {!payoutSetupComplete
                       ? "Finish Stripe payout setup on the Affiliate Dashboard first."
-                      : hasPending
-                        ? "Wait until your pending request is approved, paid, or rejected."
-                        : availableToRequest <= 0
-                          ? `Nothing left to request (reserved $${formatMoney(reservedTotal)} against earnings since last payout).`
-                          : null}
+                      : balanceRpcError
+                        ? "Fix balance loading to request a payout."
+                        : hasPending
+                          ? "Wait until your pending request is approved, paid, or rejected."
+                          : payoutBalance && !rpcCanRequest && availableToRequest < minimumPayout - 0.001
+                            ? `You need at least $${minimumPayout.toFixed(0)} available to request a payout.`
+                            : payoutBalance && availableToRequest <= 0
+                              ? pendingReserved > 0.001
+                                ? `Nothing left to request — $${formatMoney(pendingReserved)} reserved by pending request(s).`
+                                : `Nothing left to request — remaining balance is consumed by approved or paid requests.`
+                              : null}
                   </span>
                 ) : null}
               </div>
@@ -502,6 +568,7 @@ export default function AffiliatePayoutsPage() {
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         availableAmount={availableToRequest}
+        minimumAmount={minimumPayout}
         onSubmit={handleSubmitRequest}
       />
     </>

@@ -5,7 +5,10 @@ import { useEffect, useState } from "react"
 type Props = {
   open: boolean
   onClose: () => void
+  /** Max that can be requested this cycle (RPC `availableToRequest`). */
   availableAmount: number
+  /** Minimum request amount in USD (e.g. 100). */
+  minimumAmount: number
   onSubmit: (amount: number) => Promise<{ error: string | null }>
 }
 
@@ -17,6 +20,7 @@ export default function AffiliatePayoutRequestModal({
   open,
   onClose,
   availableAmount,
+  minimumAmount,
   onSubmit,
 }: Props) {
   const [amountInput, setAmountInput] = useState("")
@@ -25,6 +29,7 @@ export default function AffiliatePayoutRequestModal({
 
   useEffect(() => {
     if (!open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset modal when closed
       setAmountInput("")
       setFormError(null)
       setBusy(false)
@@ -34,6 +39,7 @@ export default function AffiliatePayoutRequestModal({
   if (!open) return null
 
   const max = roundMoney(Math.max(0, availableAmount))
+  const min = roundMoney(Math.max(0, minimumAmount))
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -45,8 +51,12 @@ export default function AffiliatePayoutRequestModal({
       return
     }
     const rounded = roundMoney(n)
+    if (min > 0 && rounded < min - 0.001) {
+      setFormError(`Minimum request is $${min.toFixed(2)}.`)
+      return
+    }
     if (rounded > max + 0.001) {
-      setFormError(`Amount cannot exceed available balance (${max.toFixed(2)}).`)
+      setFormError(`Amount cannot exceed available to request (${max.toFixed(2)}).`)
       return
     }
 
@@ -83,8 +93,15 @@ export default function AffiliatePayoutRequestModal({
         </div>
 
         <p className="mt-2 text-sm text-gray-400">
-          Available to request now:{" "}
+          Available to request:{" "}
           <span className="font-semibold tabular-nums text-emerald-300">${max.toFixed(2)}</span>
+          {min > 0 ? (
+            <>
+              {" "}
+              · Minimum request:{" "}
+              <span className="font-semibold tabular-nums text-amber-200">${min.toFixed(2)}</span>
+            </>
+          ) : null}
         </p>
 
         <form className="mt-5 space-y-4" onSubmit={(e) => void handleSubmit(e)}>
@@ -106,14 +123,14 @@ export default function AffiliatePayoutRequestModal({
                 onChange={(e) => setAmountInput(e.target.value)}
                 disabled={busy}
                 className="w-full rounded-lg border border-white/15 bg-[#0f172a]/80 py-2 pl-7 pr-3 font-mono text-sm text-white placeholder:text-gray-600 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/40 disabled:opacity-50"
-                placeholder="0.00"
+                placeholder={max >= min && min > 0 ? `${min.toFixed(2)} – ${max.toFixed(2)}` : "0.00"}
               />
             </div>
           </label>
 
           <button
             type="submit"
-            disabled={busy || max <= 0}
+            disabled={busy || max <= 0 || (min > 0 && max < min - 0.001)}
             className="w-full rounded-lg bg-gradient-to-r from-emerald-500 to-blue-500 py-2.5 text-sm font-semibold disabled:opacity-50"
           >
             {busy ? "Submitting…" : "Submit request"}
@@ -121,8 +138,7 @@ export default function AffiliatePayoutRequestModal({
         </form>
 
         <p className="mt-4 text-xs text-gray-500">
-          Payouts are reviewed by the team; you will not be charged here. Stripe transfers are not automated
-          yet.
+          Requests are reviewed by the team. Amount must be between the minimum and your available balance.
         </p>
       </div>
     </div>
