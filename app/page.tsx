@@ -3,12 +3,41 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import PublicNavbar from "./components/PublicNavbar"
+import LandingComparisonSection from "./components/LandingComparisonSection"
+import LandingFeatureShowcaseSections from "./components/LandingFeatureShowcaseSections"
+import LandingCommunitySection from "./components/LandingCommunitySection"
+import LandingTradingContentSection from "./components/LandingTradingContentSection"
+import LandingFeatureGridSection from "./components/LandingFeatureGridSection"
+import LandingFinalCtaSection from "./components/LandingFinalCtaSection"
 import AIAssistant from "@/app/components/AIAssistant"
 import { supabase } from "../lib/supabaseClient"
+import {
+  LANDING_CARD_FULL,
+  LANDING_REVEAL_FROM,
+  LANDING_REVEAL_TO,
+  LANDING_REVEAL_TRANSITION,
+  useLandingReveal,
+} from "@/lib/landingPageUi"
+
+const HOW_STEPS = [
+  {
+    title: "1. Log Your Trades",
+    body: "Seconds per entry: P&L, risk/reward, session tags, notes that stick.",
+  },
+  {
+    title: "2. See Exactly What You Saw",
+    body: "Screenshots bring levels, zones, and context back—the way you saw them live.",
+  },
+  {
+    title: "3. Fix Mistakes & Improve Faster",
+    body: "Spot costly patterns—overtrading, loose entries, weak risk—and correct with data, not guesses.",
+  },
+] as const
 
 export default function LandingPage() {
   const router = useRouter()
   const [checkoutLoading, setCheckoutLoading] = useState(false)
+  const howItWorks = useLandingReveal()
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -127,7 +156,7 @@ export default function LandingPage() {
         <div className="absolute inset-0 bg-gradient-to-br from-[#0f172a]/60 via-[#1e293b]/60 to-[#065f46]/60" />
 
         {/* HERO */}
-        <div className="relative z-10 flex flex-col items-center text-center px-6 py-32">
+        <div className="relative z-10 flex flex-col items-center text-center px-6 pt-32 pb-14 md:pb-20">
           {/* 🔥 GLOW */}
           <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 via-emerald-500/10 to-transparent blur-3xl opacity-30" />
 
@@ -139,9 +168,10 @@ export default function LandingPage() {
             </span>
           </h1>
 
-          <p className="text-lg text-gray-400 max-w-xl mb-10 z-10">
-            Track your trades, analyze performance, and fix your mistakes faster.
-            Built for serious traders.
+          <p className="text-lg text-gray-400 max-w-xl mb-10 z-10 leading-relaxed">
+            Log every trade. See the full picture. Tighten your edge—fast.
+            <br />
+            <span className="text-gray-500">Built for traders who treat this like a craft.</span>
           </p>
 
           <div className="flex flex-wrap justify-center gap-4 z-10">
@@ -164,79 +194,59 @@ export default function LandingPage() {
           </div>
         </div>
 
-        {/* FEATURES */}
-        <div className="max-w-6xl mx-auto px-6 py-20 grid md:grid-cols-3 gap-8">
-          <div className="p-6 bg-white/5 border border-white/10 backdrop-blur-md rounded-xl">
-            <h3 className="text-xl font-semibold mb-2 text-emerald-300">📊 Track Everything</h3>
-            <p className="text-gray-400 text-sm">
-              Log trades, track P&L, and analyze your performance across all accounts.
-            </p>
-          </div>
-
-          <div className="p-6 bg-white/5 border border-white/10 backdrop-blur-md rounded-xl">
-            <h3 className="text-xl font-semibold mb-2 text-emerald-300">📸 Visual Review</h3>
-            <p className="text-gray-400 text-sm">
-              Upload screenshots and break down exactly what you did right or wrong.
-            </p>
-          </div>
-
-          <div className="p-6 bg-white/5 border border-white/10 backdrop-blur-md rounded-xl">
-            <h3 className="text-xl font-semibold mb-2 text-emerald-300">⚡ Improve Faster</h3>
-            <p className="text-gray-400 text-sm">
-              Identify patterns and mistakes that are costing you money.
-            </p>
-          </div>
-        </div>
-
         {/* HOW IT WORKS */}
-        <div id="how" className="text-center py-24 px-6">
-          <h2 className="text-4xl font-extrabold mb-14 text-white drop-shadow-lg tracking-tight">
+        <section
+          ref={howItWorks.ref}
+          id="how"
+          className="text-center px-6 pt-12 pb-24 md:pt-16 md:pb-24"
+        >
+          <h2
+            className={`text-4xl font-extrabold mb-12 md:mb-14 text-white drop-shadow-lg tracking-tight ${LANDING_REVEAL_TRANSITION} ${howItWorks.visible ? LANDING_REVEAL_TO : LANDING_REVEAL_FROM}`}
+          >
             How It Works
           </h2>
 
-          <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
-            <div className="bg-white/10 backdrop-blur-md p-8 rounded-xl border border-white/20 hover:scale-105 transition">
-              <h3 className="text-xl font-semibold mb-3 text-emerald-300">
-                1. Log Your Trades
-              </h3>
-              <p className="text-gray-200 text-sm leading-relaxed">
-                Enter your trades in seconds with everything that matters -
-                P&L, risk-reward, session, and detailed notes.
-              </p>
-            </div>
-
-            <div className="bg-white/10 backdrop-blur-md p-8 rounded-xl border border-white/20 hover:scale-105 transition">
-              <h3 className="text-xl font-semibold mb-3 text-emerald-300">
-                2. See Exactly What You Saw
-              </h3>
-              <p className="text-gray-200 text-sm leading-relaxed">
-                Upload screenshots and revisit your trades with full context -
-                your levels, zones, session sweeps, and confluences exactly how you saw them in the moment.
-              </p>
-            </div>
-
-            <div className="bg-white/10 backdrop-blur-md p-8 rounded-xl border border-white/20 hover:scale-105 transition">
-              <h3 className="text-xl font-semibold mb-3 text-emerald-300">
-                3. Fix Mistakes & Improve Faster
-              </h3>
-              <p className="text-gray-200 text-sm leading-relaxed">
-                Identify patterns like overtrading, poor entries, or bad risk management -
-                and correct them with real data and visual feedback.
-              </p>
-            </div>
+          <div className="grid md:grid-cols-3 gap-6 md:gap-8 max-w-6xl mx-auto">
+            {HOW_STEPS.map((step, i) => (
+              <div
+                key={step.title}
+                className={`flex flex-col text-left ${LANDING_CARD_FULL} p-8 ${LANDING_REVEAL_TRANSITION} ${howItWorks.visible ? LANDING_REVEAL_TO : LANDING_REVEAL_FROM}`}
+                style={{
+                  transitionDelay: howItWorks.visible ? `${i * 75}ms` : "0ms",
+                }}
+              >
+                <h3 className="text-xl font-semibold mb-3 text-emerald-300">{step.title}</h3>
+                <p className="text-gray-200 text-sm leading-relaxed">{step.body}</p>
+              </div>
+            ))}
           </div>
-        </div>
+        </section>
+
+        <LandingCommunitySection />
+
+        <LandingTradingContentSection />
+
+        <LandingFeatureGridSection />
+
+        <LandingComparisonSection />
+
+        <LandingFeatureShowcaseSections />
 
         {/* PRICING */}
-        <div id="pricing" className="py-20 px-6 text-center">
-          <h2 className="text-3xl font-bold mb-10">Pricing</h2>
+        <div id="pricing" className="py-24 px-6 text-center border-t border-white/10">
+          <h2 className="text-4xl font-extrabold mb-4 text-white tracking-tight drop-shadow-lg">
+            Pricing
+          </h2>
+          <p className="text-gray-400 text-sm mb-10 max-w-md mx-auto">
+            Start free. Upgrade when you&apos;re ready to go deeper.
+          </p>
 
           <div className="flex justify-center">
             <div className="bg-white/5 border border-white/10 backdrop-blur-md p-8 rounded-xl w-80">
               <h3 className="text-xl font-semibold mb-4">Starter</h3>
               <p className="text-4xl font-bold mb-4">$0</p>
-              <p className="text-gray-400 text-sm mb-6">
-                Perfect for getting started
+              <p className="text-gray-400 text-sm mb-6 leading-relaxed">
+                Core journaling and exploration—no card required.
               </p>
               <button
                 type="button"
@@ -248,6 +258,12 @@ export default function LandingPage() {
             </div>
           </div>
         </div>
+
+        <LandingFinalCtaSection
+          checkoutLoading={checkoutLoading}
+          onStartTrial={() => void handleSubscribe()}
+          onPreview={() => router.push("/app")}
+        />
 
         {/* FOOTER */}
         <div className="text-center text-gray-500 text-sm py-10 border-t border-white/10">
