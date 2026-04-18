@@ -211,13 +211,11 @@ export default function Navbar() {
   }
 
   return (
-    <div
-      ref={navRef}
-      className="w-full border-b border-white/10 bg-[#0f172a] text-gray-100 relative z-[9999] overflow-visible"
-    >
-      <div className="flex items-center justify-between px-4 md:px-6 py-3">
+    <div ref={navRef} className="fixed top-0 left-0 z-[9999] w-full overflow-visible text-gray-100">
+      <div className="flex h-16 w-full shrink-0 items-center border-b border-white/5 bg-[#0b1f3a]">
+        <div className="flex h-full w-full items-center justify-between px-4 md:px-6">
         {/* LEFT */}
-        <div className="flex items-center gap-8 min-w-0">
+        <div className="flex min-w-0 items-center gap-6">
           <Link
             href="/"
             className="font-bold text-xl shrink-0 bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent"
@@ -328,6 +326,7 @@ export default function Navbar() {
         </div>
 
         {/* RIGHT */}
+        <div className="flex shrink-0 items-center gap-3 md:gap-4">
         {isHomePage ? (
           user ? (
             profile?.id ? (
@@ -481,10 +480,13 @@ export default function Navbar() {
             </div>
           </div>
         )}
+        </div>
+        </div>
       </div>
 
       {isOpen && user && !isHomePage ? (
-        <div className="md:hidden px-4 pb-4 flex flex-col gap-3 text-white text-sm bg-[#0B1220] border-t border-white/10 pt-2">
+        <div className="w-full border-t border-white/5 bg-[#0b1f3a] md:hidden">
+          <div className="flex w-full flex-col gap-3 px-4 pb-4 pt-2 text-sm text-white md:px-6">
           <Link href="/dashboard" className="py-2 hover:text-blue-400" onClick={closeMobile}>
             Dashboard
           </Link>
@@ -599,7 +601,7 @@ export default function Navbar() {
             ) : null}
           </div>
 
-          <div className="border-t border-white/10 pt-2 flex flex-col gap-2">
+          <div className="flex flex-col gap-2 border-t border-white/5 pt-2">
             {isAdmin ? (
               <Link href="/admin" className="py-2 text-white hover:text-blue-400" onClick={closeMobile}>
                 Admin
@@ -645,6 +647,7 @@ export default function Navbar() {
             >
               Sign Out
             </button>
+          </div>
           </div>
         </div>
       ) : null}

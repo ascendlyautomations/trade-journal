@@ -620,7 +620,7 @@ export default function MessagesPage() {
     <>
       <Navbar />
 
-      <div className="min-h-screen bg-[#0f172a] bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white px-6 pb-6 pt-4">
+      <div className="min-h-screen bg-[#0f172a] bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white px-6 pb-6 pt-0">
 
         <div className="max-w-3xl mx-auto">
 

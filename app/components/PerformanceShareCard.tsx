@@ -2,9 +2,14 @@
 
 import { forwardRef, useMemo } from "react"
 import {
+  Area,
+  CartesianGrid,
   Line,
   LineChart,
   ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
 } from "recharts"
 import type { EquityCurvePoint, PerformanceStats } from "@/lib/performanceShare"
 
@@ -17,12 +22,17 @@ export type PerformanceShareCardProps = {
   equityCurve: EquityCurvePoint[]
   /** Large title (same position/size as ticker) — e.g. WEEKLY */
   timeframeTitle: string
-  /** Badge text (same position as Long/Short) — e.g. WEEKLY */
-  timeframeBadge: string
+  /** Loaded by parent — affiliate referral code */
+  profile?: { referral_code?: string | null } | null
   stats: PerformanceStats
-  /** Same position as trade date line */
-  dateRangeLabel: string
+  /** ISO strings or Dates for bottom range line */
+  rangeStart?: Date | string | number | null
+  rangeEnd?: Date | string | number | null
+  /** Used when range cannot be formatted */
+  dateRangeFallback?: string
 }
+
+type ChartRow = { index: number; equity: number }
 
 function formatMoney(value: unknown): string {
   if (value === null || value === undefined) return "—"
@@ -49,7 +59,20 @@ function formatNumber(value: unknown): string {
   })
 }
 
-const LINE_STROKE = "#34d399"
+function formatRange(
+  start: Date | string | number,
+  end: Date | string | number
+): string {
+  const options: Intl.DateTimeFormatOptions = {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }
+  const s = new Date(start)
+  const e = new Date(end)
+  if (Number.isNaN(s.getTime()) || Number.isNaN(e.getTime())) return ""
+  return `${s.toLocaleDateString("en-US", options)} – ${e.toLocaleDateString("en-US", options)}`
+}
 
 const PerformanceShareCard = forwardRef<HTMLDivElement, PerformanceShareCardProps>(
   function PerformanceShareCard(
@@ -57,9 +80,11 @@ const PerformanceShareCard = forwardRef<HTMLDivElement, PerformanceShareCardProp
       exportId,
       equityCurve,
       timeframeTitle,
-      timeframeBadge,
+      profile,
       stats,
-      dateRangeLabel,
+      rangeStart,
+      rangeEnd,
+      dateRangeFallback,
     },
     ref
   ) {
@@ -67,12 +92,20 @@ const PerformanceShareCard = forwardRef<HTMLDivElement, PerformanceShareCardProp
     const hasPnl = Number.isFinite(pnl)
     const positive = hasPnl && pnl >= 0
 
-    const chartData = useMemo(() => {
-      if (equityCurve && equityCurve.length >= 2) return equityCurve
-      return [
-        { step: 0, equity: 0 },
-        { step: 1, equity: 0 },
-      ]
+    const gradientId = `equity-${String(exportId ?? "share").replace(/[^a-zA-Z0-9_-]/g, "") || "share"}`
+
+    const chartData = useMemo((): ChartRow[] => {
+      const raw =
+        equityCurve?.length >= 2
+          ? equityCurve
+          : [
+              { step: 0, equity: 0 },
+              { step: 1, equity: 0 },
+            ]
+      return raw.map((p) => ({
+        index: typeof p.step === "number" ? p.step : Number(p.step) || 0,
+        equity: Number(p.equity) || 0,
+      }))
     }, [equityCurve])
 
     const winRateStr = stats.totalTrades
@@ -83,100 +116,151 @@ const PerformanceShareCard = forwardRef<HTMLDivElement, PerformanceShareCardProp
         ? stats.totalTrades.toLocaleString()
         : "—"
 
+    const codeTrim =
+      profile?.referral_code != null &&
+      String(profile.referral_code).trim() !== ""
+        ? String(profile.referral_code).trim()
+        : null
+
+    let rangeDisplay = ""
+    if (
+      rangeStart != null &&
+      rangeEnd != null &&
+      rangeStart !== "" &&
+      rangeEnd !== ""
+    ) {
+      rangeDisplay = formatRange(rangeStart, rangeEnd)
+    }
+    if (!rangeDisplay && dateRangeFallback) {
+      rangeDisplay = dateRangeFallback
+    }
+
     return (
-      <div
-        ref={ref}
-        id={exportId}
-        className="box-border w-[420px] overflow-hidden rounded-3xl border border-white/[0.12] shadow-2xl"
-        style={{
-          backgroundColor: "#0a0f1c",
-          fontFamily:
-            'ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif',
-        }}
-      >
-        <div className="relative aspect-[4/3] w-full bg-black/50">
-          <div className="absolute inset-0">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart
-                data={chartData}
-                margin={{ top: 8, right: 8, left: 8, bottom: 8 }}
+      <div className="mx-auto box-border w-full max-w-[520px] px-5">
+        <div
+          ref={ref}
+          id={exportId}
+          className="w-full overflow-hidden rounded-3xl bg-gradient-to-br from-[#0b1a2a] via-[#123c4a] to-[#1c7f6e] shadow-2xl"
+          style={{
+            fontFamily:
+              'ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif',
+          }}
+        >
+          <div className="w-full px-2 pt-4">
+            <div className="flex h-[260px] w-full flex-col rounded-2xl bg-[#0b1a2a]/60 p-2 backdrop-blur-sm">
+              <div className="min-h-0 flex-1">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart
+                    data={chartData}
+                    margin={{ top: 10, right: 6, left: 0, bottom: 18 }}
+                  >
+                    <defs>
+                      <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#10b981" stopOpacity={0.35} />
+                        <stop offset="100%" stopColor="#10b981" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid
+                      stroke="rgba(255,255,255,0.04)"
+                      vertical={false}
+                    />
+                    <XAxis
+                      dataKey="index"
+                      type="number"
+                      tickFormatter={(value) => String(Math.floor(Number(value)))}
+                      tick={{ fill: "#94a3b8", fontSize: 10 }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      tickFormatter={(value) =>
+                        `$${Math.round(Number(value)).toLocaleString()}`
+                      }
+                      tick={{ fill: "#94a3b8", fontSize: 10 }}
+                      axisLine={false}
+                      tickLine={false}
+                      width={48}
+                    />
+                    <Tooltip cursor={false} />
+                    <Area
+                      type="monotone"
+                      dataKey="equity"
+                      stroke="none"
+                      fill={`url(#${gradientId})`}
+                      isAnimationActive={false}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="equity"
+                      stroke="#10b981"
+                      strokeWidth={3}
+                      dot={false}
+                      activeDot={{ r: 4 }}
+                      isAnimationActive={false}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col px-7 py-6">
+            <div className="mt-3 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs tracking-widest text-gray-400">TRADE</p>
+                <h2 className="text-3xl font-bold leading-tight text-white">
+                  {timeframeTitle}
+                </h2>
+              </div>
+              {codeTrim ? (
+                <div className="shrink-0 rounded-full border border-emerald-400/20 bg-emerald-500/20 px-3 py-1 text-xs text-emerald-400">
+                  CODE: {codeTrim}
+                </div>
+              ) : null}
+            </div>
+
+            <div className="mt-4">
+              <p className="text-xs text-gray-400">P&amp;L</p>
+              <h1
+                className={`mt-1 text-4xl font-extrabold tabular-nums tracking-tight leading-tight md:text-5xl ${
+                  !hasPnl
+                    ? "text-gray-400"
+                    : positive
+                      ? "text-emerald-400"
+                      : "text-red-400/90"
+                }`}
               >
-                <Line
-                  type="monotone"
-                  dataKey="equity"
-                  stroke={LINE_STROKE}
-                  strokeWidth={3}
-                  dot={false}
-                  isAnimationActive={false}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        <div className="space-y-5 px-7 pb-8 pt-6">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
-                Trade
-              </p>
-              <p className="mt-1 text-3xl font-bold tracking-tight text-white">
-                {timeframeTitle}
-              </p>
+                {formatMoney(stats.totalPnL)}
+              </h1>
             </div>
-            <span className="mt-7 shrink-0 rounded-full border border-emerald-400/40 bg-emerald-500/15 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-emerald-300">
-              {timeframeBadge}
-            </span>
-          </div>
 
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-              P&amp;L
-            </p>
-            <p
-              className={`mt-1 text-[2.65rem] font-bold leading-none tabular-nums tracking-tight ${
-                !hasPnl
-                  ? "text-slate-400"
-                  : positive
-                    ? "text-emerald-400"
-                    : "text-red-400"
-              }`}
-            >
-              {formatMoney(stats.totalPnL)}
-            </p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 text-sm">
-            <div className="rounded-2xl border border-white/[0.08] bg-white/[0.04] px-4 py-3">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                Win Rate
-              </p>
-              <p className="mt-1 font-semibold tabular-nums text-white">
-                {winRateStr}
-              </p>
+            <div className="mt-4 grid grid-cols-2 gap-5">
+              <div className="rounded-xl border border-white/10 bg-white/5 p-5">
+                <p className="text-xs tracking-wide text-gray-400">WIN RATE</p>
+                <p className="mt-1 text-lg font-semibold tabular-nums text-white">
+                  {winRateStr}
+                </p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-white/5 p-5">
+                <p className="text-xs tracking-wide text-gray-400">TRADES</p>
+                <p className="mt-1 text-lg font-semibold tabular-nums text-white">
+                  {tradesStr}
+                </p>
+              </div>
+              <div className="col-span-2 rounded-xl border border-white/10 bg-white/5 p-5">
+                <p className="text-xs tracking-wide text-gray-400">AVG RR</p>
+                <p className="mt-1 text-lg font-semibold tabular-nums text-white">
+                  {formatNumber(stats.avgRR)}
+                </p>
+              </div>
             </div>
-            <div className="rounded-2xl border border-white/[0.08] bg-white/[0.04] px-4 py-3">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                Trades
-              </p>
-              <p className="mt-1 font-semibold tabular-nums text-white">
-                {tradesStr}
-              </p>
-            </div>
-          </div>
 
-          <div className="rounded-2xl border border-white/[0.08] bg-white/[0.04] px-4 py-3 text-sm">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-              Avg RR
-            </p>
-            <p className="mt-1 font-medium text-gray-100">
-              {formatNumber(stats.avgRR)}
-            </p>
+            {rangeDisplay ? (
+              <div className="mt-4 text-center text-sm text-gray-400">
+                {rangeDisplay}
+              </div>
+            ) : null}
           </div>
-
-          {dateRangeLabel ? (
-            <p className="text-center text-xs text-slate-600">{dateRangeLabel}</p>
-          ) : null}
         </div>
       </div>
     )

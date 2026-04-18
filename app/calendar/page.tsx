@@ -10,6 +10,9 @@ function toDateKey(y: number, mZeroBased: number, dayNum: number) {
 
 export default function CalendarPage() {
   const [trades, setTrades] = useState<any[]>([])
+  const [shareProfile, setShareProfile] = useState<{
+    referral_code?: string | null
+  } | null>(null)
   const [accountFilter, setAccountFilter] = useState("all")
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
@@ -25,6 +28,13 @@ export default function CalendarPage() {
     } = await supabase.auth.getUser()
 
     if (!user) return
+
+    const { data: profileRow } = await supabase
+      .from("profiles")
+      .select("referral_code")
+      .eq("id", user.id)
+      .maybeSingle()
+    setShareProfile(profileRow ?? null)
 
     const { data } = await supabase
       .from("trades")
@@ -448,7 +458,11 @@ export default function CalendarPage() {
                 ) : (
                   <div className="flex flex-col gap-3">
                     {selectedTrades.map((trade) => (
-                      <TradeCard key={trade.id} trade={trade} />
+                      <TradeCard
+                        key={trade.id}
+                        trade={trade}
+                        shareProfile={shareProfile}
+                      />
                     ))}
                   </div>
                 )}

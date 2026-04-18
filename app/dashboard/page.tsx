@@ -1634,18 +1634,11 @@ const worstDay = dailyPnLs.length > 0
 
       <OnboardingModal open={showOnboardingModal} onComplete={() => void completeCsvOnboarding()} />
 
-      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white p-3 md:p-10">
+      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white px-3 pb-3 pt-0 md:px-10 md:pb-10">
 
         <div className="relative z-50 mx-auto w-full max-w-[1600px] px-4 md:px-6">
-          <h1 className="mb-0 text-center text-xl md:text-2xl font-semibold text-blue-300">
-            Dashboard
-          </h1>
-          <p className="mb-2 text-center text-xs md:text-sm text-gray-400">
-            Plan: {isPro ? "Pro" : "Free"}
-          </p>
-
           <TradeFilterBar
-            className="mb-3 md:mb-8"
+            className="mt-2.5 mb-0"
             accounts={accounts}
             accountFilter={accountFilter}
             onAccountChange={setAccountFilter}
@@ -1713,6 +1706,17 @@ const worstDay = dailyPnLs.length > 0
               </>
             }
           />
+
+          <div className="mt-3 mb-4 text-left text-sm text-white/60">
+            Plan:{" "}
+            <span
+              className={`font-medium ${
+                isPro ? "text-green-400" : "text-gray-400"
+              }`}
+            >
+              {isPro ? "Pro" : "Free"}
+            </span>
+          </div>
 
           {showFreePlanAccountBanner ? (
             <div className="mb-4 rounded border border-yellow-500/20 bg-yellow-500/10 p-3 md:p-4">
@@ -2295,6 +2299,7 @@ const worstDay = dailyPnLs.length > 0
         onClose={() => setShowPerformanceShare(false)}
         tradePool={tradesForPerformanceSharePool}
         subtitle="Dashboard · respects account, mode, date & public filters"
+        profile={profile}
       />
     </>
   )

@@ -14,12 +14,15 @@ export type ShareTradeButtonProps = {
   className?: string
   /** Compact 📤 icon for toolbar (between edit/delete) */
   variant?: "full" | "icon"
+  /** Loaded by parent — used for affiliate code on export */
+  profile?: { referral_code?: string | null } | null
 }
 
 export default function ShareTradeButton({
   trade,
   className = "",
   variant = "full",
+  profile = null,
 }: ShareTradeButtonProps) {
   const [busy, setBusy] = useState(false)
   const lockRef = useRef(false)
@@ -65,10 +68,11 @@ export default function ShareTradeButton({
           requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
         })
 
+        // Card is already 1080×1920; pixelRatio emulates high-DPI (e.g. scale: 2)
         const dataUrl = await toPng(root, {
           pixelRatio: 2,
           cacheBust: true,
-          backgroundColor: "#0a0f1c",
+          backgroundColor: "#0b1a2a",
         })
 
         const link = document.createElement("a")
@@ -91,10 +95,10 @@ export default function ShareTradeButton({
   return (
     <>
       <div
-        className="pointer-events-none fixed left-[-12000px] top-0 z-[1]"
+        className="pointer-events-none fixed left-[-12000px] top-0 z-[1] flex w-full justify-center px-2"
         aria-hidden
       >
-        <TradeShareCard trade={trade} exportId={exportDomId} />
+        <TradeShareCard trade={trade} exportId={exportDomId} profile={profile} />
       </div>
       <button
         type="button"

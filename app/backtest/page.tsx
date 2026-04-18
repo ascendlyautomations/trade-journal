@@ -26,6 +26,9 @@ export default function BacktestPage() {
   const [editingTrade, setEditingTrade] = useState<BacktestTrade | null>(null)
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
   const [showPerformanceShare, setShowPerformanceShare] = useState(false)
+  const [shareProfile, setShareProfile] = useState<{
+    referral_code?: string | null
+  } | null>(null)
 
   useEffect(() => {
     void loadBacktests()
@@ -40,6 +43,13 @@ export default function BacktestPage() {
       setLoading(false)
       return
     }
+
+    const { data: profileRow } = await supabase
+      .from("profiles")
+      .select("referral_code")
+      .eq("id", user.id)
+      .maybeSingle()
+    setShareProfile(profileRow ?? null)
 
     const { data, error } = await supabase
       .from("trades")
@@ -247,6 +257,7 @@ export default function BacktestPage() {
                 onEdit={() => setEditingTrade(trade)}
                 onDelete={() => void deleteTrade(trade.id)}
                 onImageClick={(url) => setSelectedImage(url)}
+                shareProfile={shareProfile}
               />
             ))}
             {!loading && filteredTrades.length === 0 ? (
@@ -287,6 +298,7 @@ export default function BacktestPage() {
         onClose={() => setShowPerformanceShare(false)}
         tradePool={filteredTrades as any[]}
         subtitle="Backtest Lab · current strategy filter"
+        profile={shareProfile}
       />
     </>
   )

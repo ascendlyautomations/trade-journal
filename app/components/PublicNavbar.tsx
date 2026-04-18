@@ -18,8 +18,9 @@ export default function PublicNavbar() {
   const closeMenu = () => setMenuOpen(false)
 
   return (
-    <div className="relative w-full border-b border-gray-700 bg-[#0f172a] text-white">
-      <div className="flex h-[64px] w-full items-center justify-between px-6">
+    <div className="fixed top-0 left-0 z-[9999] w-full overflow-visible text-white">
+      <div className="flex h-16 w-full shrink-0 items-center border-b border-white/5 bg-[#0b1f3a]">
+        <div className="flex h-full w-full items-center justify-between px-4 md:px-6">
         <div className="flex items-center gap-6 whitespace-nowrap">
           <Link
             href="/"
@@ -43,7 +44,7 @@ export default function PublicNavbar() {
           </Link>
         </div>
 
-        <div className="flex items-center gap-4 whitespace-nowrap">
+        <div className="flex shrink-0 items-center gap-4 whitespace-nowrap">
           {!user && (
             <Link
               href="/login"
@@ -74,11 +75,12 @@ export default function PublicNavbar() {
             </>
           ) : null}
         </div>
+        </div>
       </div>
 
       {menuOpen && user ? (
-        <div className="absolute top-full left-0 z-50 w-full border-t border-white/10 bg-[#0f172a] p-4 md:hidden">
-          <div className="flex flex-col gap-3 text-sm">
+        <div className="absolute left-0 top-full z-50 w-full border-t border-white/5 bg-[#0b1f3a] md:hidden">
+          <div className="flex w-full flex-col gap-3 px-4 py-4 text-sm md:px-6">
             <Link href="/dashboard" onClick={closeMenu} className="text-white hover:text-blue-400">
               Dashboard
             </Link>

@@ -6,6 +6,7 @@ export type TradeShareCardProps = {
   trade: any
   /** For html-to-image: target this id with `document.getElementById` */
   exportId?: string
+  profile?: { referral_code?: string | null } | null
 }
 
 function resolveScreenshotUrl(trade: any): string | null {
@@ -53,11 +54,9 @@ function directionLabel(trade: any): string {
   )
 }
 
-/**
- * Fixed-layout card for PNG export (Instagram-friendly 4:5-ish proportions).
- */
+/** Responsive export card — premium glass layout */
 const TradeShareCard = forwardRef<HTMLDivElement, TradeShareCardProps>(
-  function TradeShareCard({ trade, exportId }, ref) {
+  function TradeShareCard({ trade, exportId, profile }, ref) {
     const screenshotUrl = resolveScreenshotUrl(trade)
     const pnl = Number(trade.pnl)
     const hasPnl = Number.isFinite(pnl)
@@ -81,6 +80,11 @@ const TradeShareCard = forwardRef<HTMLDivElement, TradeShareCardProps>(
         ? String(trade.session)
         : "—"
 
+    const points =
+      trade.points != null && trade.points !== ""
+        ? formatNumber(trade.points)
+        : "—"
+
     const dateStr =
       trade.created_at != null
         ? new Date(trade.created_at).toLocaleDateString(undefined, {
@@ -90,107 +94,124 @@ const TradeShareCard = forwardRef<HTMLDivElement, TradeShareCardProps>(
           })
         : ""
 
-    return (
-      <div
-        ref={ref}
-        id={exportId}
-        className="box-border w-[420px] overflow-hidden rounded-3xl border border-white/[0.12] shadow-2xl"
-        style={{
-          backgroundColor: "#0a0f1c",
-          fontFamily:
-            'ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif',
-        }}
-      >
-        <div className="relative aspect-[4/3] w-full bg-black/50">
-          {screenshotUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element -- intentional for html-to-image capture
-            <img
-              alt=""
-              src={screenshotUrl}
-              crossOrigin="anonymous"
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            <div className="flex h-full min-h-[200px] flex-col items-center justify-center gap-2 bg-gradient-to-br from-white/[0.06] to-transparent px-6 text-center">
-              <span className="text-sm font-medium text-gray-400">
-                No screenshot
-              </span>
-              <span className="text-xs text-gray-600">
-                Chart capture will appear here when attached
-              </span>
-            </div>
-          )}
-        </div>
+    const codeTrim =
+      profile?.referral_code != null &&
+      String(profile.referral_code).trim() !== ""
+        ? String(profile.referral_code).trim()
+        : null
 
-        <div className="space-y-5 px-7 pb-8 pt-6">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
-                Trade
-              </p>
-              <p className="mt-1 text-3xl font-bold tracking-tight text-white">
-                {trade.ticker ?? "—"}
-              </p>
+    return (
+      <div className="mx-auto box-border w-full max-w-[640px] border border-red-500">
+        <div
+          ref={ref}
+          id={exportId}
+          className="w-full overflow-hidden rounded-3xl bg-gradient-to-br from-[#0b1a2a] via-[#123c4a] to-[#1c7f6e] shadow-2xl"
+          style={{
+            fontFamily:
+              'ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif',
+          }}
+        >
+          <div className="w-full pt-4">
+            <div className="w-full h-[240px] px-2">
+              <div className="relative flex h-full w-full flex-col overflow-hidden rounded-2xl bg-[#0b1a2a]/60 p-2 backdrop-blur-sm">
+              {screenshotUrl ? (
+                <>
+                  {/* eslint-disable-next-line @next/next/no-img-element -- intentional for html-to-image capture */}
+                  <img
+                    alt=""
+                    src={screenshotUrl}
+                    crossOrigin="anonymous"
+                    className="absolute inset-0 h-full w-full rounded-xl object-cover"
+                  />
+                  <div className="pointer-events-none absolute inset-0 rounded-xl bg-gradient-to-t from-[#0b1a2a]/85 via-transparent to-transparent" />
+                </>
+              ) : (
+                <div className="flex flex-1 flex-col items-center justify-center gap-2 px-4 text-center">
+                  <span className="text-sm font-medium text-gray-300">
+                    No screenshot
+                  </span>
+                  <span className="text-xs text-gray-500">
+                    Attach a chart capture to show here
+                  </span>
+                </div>
+              )}
+              </div>
             </div>
-            <span
-              className={`mt-7 shrink-0 rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide ${
-                longShort === "long"
-                  ? "border-emerald-400/40 bg-emerald-500/15 text-emerald-300"
-                  : longShort === "short"
-                    ? "border-rose-400/40 bg-rose-500/15 text-rose-300"
-                    : "border-white/20 bg-white/10 text-gray-300"
-              }`}
-            >
-              {dir}
-            </span>
           </div>
 
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-              P&amp;L
-            </p>
-            <p
-              className={`mt-1 text-[2.65rem] font-bold leading-none tabular-nums tracking-tight ${
+          <div className="flex flex-col px-8 py-6">
+            <div className="mt-3 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-xs tracking-widest text-gray-400">TRADE</p>
+              <h2 className="text-3xl font-bold leading-tight text-white">
+                {trade.ticker ?? "—"}
+              </h2>
+            </div>
+            {codeTrim ? (
+              <div className="shrink-0 rounded-full border border-emerald-400/20 bg-emerald-500/20 px-3 py-1 text-xs text-emerald-400">
+                CODE: {codeTrim}
+              </div>
+            ) : (
+              <span
+                className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium uppercase tracking-wide ${
+                  longShort === "long"
+                    ? "border border-emerald-400/20 bg-emerald-500/15 text-emerald-400"
+                    : longShort === "short"
+                      ? "border border-red-400/20 bg-red-500/15 text-red-400"
+                      : "border border-white/10 bg-white/5 text-gray-400"
+                }`}
+              >
+                {dir}
+              </span>
+            )}
+            </div>
+
+            <div className="mt-4">
+            <p className="text-xs tracking-wide text-gray-400">P&amp;L</p>
+            <h1
+              className={`mt-1 text-4xl font-extrabold tabular-nums tracking-tight leading-tight md:text-5xl ${
                 !hasPnl
-                  ? "text-slate-400"
+                  ? "text-gray-400"
                   : positive
                     ? "text-emerald-400"
-                    : "text-red-400"
+                    : "text-red-400/90"
               }`}
             >
               {formatMoney(trade.pnl)}
-            </p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 text-sm">
-            <div className="rounded-2xl border border-white/[0.08] bg-white/[0.04] px-4 py-3">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                Risk-reward (RR)
-              </p>
-              <p className="mt-1 font-semibold tabular-nums text-white">
-                {formatNumber(trade.rr)}
-              </p>
+            </h1>
             </div>
-            <div className="rounded-2xl border border-white/[0.08] bg-white/[0.04] px-4 py-3">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                Contracts
-              </p>
-              <p className="mt-1 font-semibold tabular-nums text-white">
+
+            <div className="mt-4 grid grid-cols-2 gap-6">
+            <div className="rounded-xl border border-white/10 bg-white/5 p-6">
+              <p className="text-xs tracking-wide text-gray-400">CONTRACTS</p>
+              <p className="mt-1 text-lg font-semibold tabular-nums text-white">
                 {contracts}
               </p>
             </div>
-          </div>
+            <div className="rounded-xl border border-white/10 bg-white/5 p-6">
+              <p className="text-xs tracking-wide text-gray-400">POINTS</p>
+              <p className="mt-1 text-lg font-semibold tabular-nums text-white">
+                {points}
+              </p>
+            </div>
+            <div className="col-span-2 rounded-xl border border-white/10 bg-white/5 p-6">
+              <p className="text-xs tracking-wide text-gray-400">RR</p>
+              <p className="mt-1 text-lg font-semibold tabular-nums text-white">
+                {formatNumber(trade.rr)}
+              </p>
+            </div>
+            <div className="col-span-2 rounded-xl border border-white/10 bg-white/5 p-6">
+              <p className="text-xs tracking-wide text-gray-400">SESSION</p>
+              <p className="mt-1 text-lg font-medium leading-snug text-white">
+                {session}
+              </p>
+            </div>
+            </div>
 
-          <div className="rounded-2xl border border-white/[0.08] bg-white/[0.04] px-4 py-3 text-sm">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-              Session
-            </p>
-            <p className="mt-1 font-medium text-gray-100">{session}</p>
+            {dateStr ? (
+              <div className="mt-4 text-center text-sm text-gray-400">{dateStr}</div>
+            ) : null}
           </div>
-
-          {dateStr ? (
-            <p className="text-center text-xs text-slate-600">{dateStr}</p>
-          ) : null}
         </div>
       </div>
     )

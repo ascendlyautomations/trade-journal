@@ -179,7 +179,7 @@ export default function LandingPage() {
 
         <div className="relative z-10">
         {/* HERO */}
-        <div className="relative flex flex-col items-center px-6 pt-32 pb-14 text-center md:pb-20">
+        <div className="relative flex flex-col items-center px-6 pt-20 pb-14 text-center md:pb-20">
           {/* 🔥 GLOW */}
           <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 via-emerald-500/10 to-transparent blur-3xl opacity-30" />
 

@@ -72,6 +72,7 @@ function formatMoney(v: number) {
 function TradeCard({
   trade,
   profile,
+  shareProfile,
   canManageTrade,
   menuOpen,
   onMenuToggle,
@@ -85,6 +86,8 @@ function TradeCard({
 }: {
   trade: any
   profile: any
+  /** Logged-in viewer profile (referral_code for share PNG) */
+  shareProfile?: { referral_code?: string | null } | null
   canManageTrade?: boolean
   menuOpen?: boolean
   onMenuToggle?: () => void
@@ -148,7 +151,7 @@ function TradeCard({
         </div>
         <div className="flex shrink-0 items-center gap-1">
           <div onClick={(e) => e.stopPropagation()}>
-            <ShareTradeButton variant="icon" trade={trade} />
+            <ShareTradeButton variant="icon" trade={trade} profile={shareProfile ?? null} />
           </div>
           {canManageTrade ? (
           <div className="relative">
@@ -532,6 +535,9 @@ export default function ProfilePage() {
   const [followersCount, setFollowersCount] = useState(0)
   const [followingCount, setFollowingCount] = useState(0)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const [viewerShareProfile, setViewerShareProfile] = useState<{
+    referral_code?: string | null
+  } | null>(null)
   const [isFollowing, setIsFollowing] = useState(false)
   const [followBusy, setFollowBusy] = useState(false)
   const [messageBusy, setMessageBusy] = useState(false)
@@ -589,6 +595,26 @@ export default function ProfilePage() {
     mq.addEventListener("change", sync)
     return () => mq.removeEventListener("change", sync)
   }, [])
+
+  useEffect(() => {
+    if (!currentUserId) {
+      setViewerShareProfile(null)
+      return
+    }
+    let cancelled = false
+    async function load() {
+      const { data } = await supabase
+        .from("profiles")
+        .select("referral_code")
+        .eq("id", currentUserId)
+        .maybeSingle()
+      if (!cancelled) setViewerShareProfile(data ?? null)
+    }
+    void load()
+    return () => {
+      cancelled = true
+    }
+  }, [currentUserId])
 
   /** Feed refreshes the story bar here; profile has no story strip. */
   const loadFollowingStories = useCallback(async () => {}, [])
@@ -1790,6 +1816,7 @@ export default function ProfilePage() {
                       key={trade.id}
                       trade={{ ...trade, currentUserId }}
                       profile={profile}
+                      shareProfile={viewerShareProfile}
                       canManageTrade={currentUserId === profile.id}
                       menuOpen={openTradeMenuId === String(trade.id)}
                       onMenuToggle={() =>
@@ -2284,6 +2311,7 @@ export default function ProfilePage() {
             <TradeCard
               trade={selectedTradeDetail}
               profile={profile}
+              shareProfile={viewerShareProfile}
               canManageTrade={currentUserId === profile.id}
               menuOpen={openTradeMenuId === String(selectedTradeDetail.id)}
               onMenuToggle={() =>

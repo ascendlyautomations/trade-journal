@@ -167,6 +167,52 @@ export function performanceWindowLabel(w: PerformanceWindow): string {
 }
 
 /**
+ * Start/end dates for the performance share card range line (en-US format applied in UI).
+ */
+export function getPerformanceShareRangeBounds(
+  window: PerformanceWindow,
+  filteredTrades: any[],
+  now = new Date()
+): { start: Date; end: Date } | null {
+  const dates = filteredTrades
+    .map((t) => new Date(t.created_at))
+    .filter((d) => !Number.isNaN(d.getTime()))
+
+  if (dates.length > 0) {
+    const minT = Math.min(...dates.map((d) => d.getTime()))
+    const maxT = Math.max(...dates.map((d) => d.getTime()))
+    return { start: new Date(minT), end: new Date(maxT) }
+  }
+
+  switch (window) {
+    case "daily": {
+      const start = new Date(now)
+      start.setHours(0, 0, 0, 0)
+      const end = new Date(start)
+      end.setHours(23, 59, 59, 999)
+      return { start, end }
+    }
+    case "weekly": {
+      const start = new Date(now)
+      start.setDate(now.getDate() - 7)
+      return { start, end: new Date(now) }
+    }
+    case "monthly": {
+      const start = new Date(now.getFullYear(), now.getMonth(), 1)
+      const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999)
+      return { start, end }
+    }
+    case "yearly": {
+      const start = new Date(now.getFullYear(), 0, 1)
+      const end = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999)
+      return { start, end }
+    }
+    default:
+      return null
+  }
+}
+
+/**
  * Human-readable range for the performance share card date line (TradeShareCard parity).
  */
 export function formatPerformanceShareDateRange(

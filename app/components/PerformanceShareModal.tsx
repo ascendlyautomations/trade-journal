@@ -9,6 +9,7 @@ import {
   computePerformanceStats,
   filterTradesByPerformanceWindow,
   formatPerformanceShareDateRange,
+  getPerformanceShareRangeBounds,
   performanceWindowLabel,
 } from "@/lib/performanceShare"
 
@@ -21,6 +22,8 @@ export type PerformanceShareModalProps = {
   tradePool: any[]
   /** Shown under the period title */
   subtitle?: string
+  /** From parent fetch — referral code for export card */
+  profile?: { referral_code?: string | null } | null
 }
 
 export default function PerformanceShareModal({
@@ -28,6 +31,7 @@ export default function PerformanceShareModal({
   onClose,
   tradePool,
   subtitle,
+  profile = null,
 }: PerformanceShareModalProps) {
   const [windowKey, setWindowKey] = useState<PerformanceWindow>("monthly")
   const [busy, setBusy] = useState(false)
@@ -50,6 +54,11 @@ export default function PerformanceShareModal({
   const timeframeUpper = periodLabel.toUpperCase()
   const dateRangeLabel = useMemo(
     () => formatPerformanceShareDateRange(windowKey, filtered),
+    [windowKey, filtered]
+  )
+
+  const rangeBounds = useMemo(
+    () => getPerformanceShareRangeBounds(windowKey, filtered),
     [windowKey, filtered]
   )
 
@@ -86,7 +95,7 @@ export default function PerformanceShareModal({
       const dataUrl = await toPng(root, {
         pixelRatio: 2,
         cacheBust: true,
-        backgroundColor: "#0a0f1c",
+        backgroundColor: "#0b1a2a",
       })
       const link = document.createElement("a")
       link.download = `performance-${windowKey}-${Date.now()}.png`
@@ -204,9 +213,11 @@ export default function PerformanceShareModal({
             exportId={exportId}
             equityCurve={equityCurve}
             timeframeTitle={timeframeUpper}
-            timeframeBadge={timeframeUpper}
+            profile={profile}
             stats={stats}
-            dateRangeLabel={dateRangeLabel}
+            rangeStart={rangeBounds?.start ?? null}
+            rangeEnd={rangeBounds?.end ?? null}
+            dateRangeFallback={dateRangeLabel}
           />
         </div>
 

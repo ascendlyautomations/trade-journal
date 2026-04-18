@@ -58,6 +58,8 @@ export type TradeCardProps = {
   onEdit?: () => void
   onDelete?: () => void
   onImageClick?: (fullImageUrl: string) => void
+  /** Parent-loaded profile snippet for share export affiliate code */
+  shareProfile?: { referral_code?: string | null } | null
 }
 
 export default function TradeCard({
@@ -66,6 +68,7 @@ export default function TradeCard({
   onEdit,
   onDelete,
   onImageClick,
+  shareProfile = null,
 }: TradeCardProps) {
   const entry = trade.entry_price ?? trade.entry ?? null
   const exit = trade.exit_price ?? trade.exit ?? null
@@ -116,7 +119,7 @@ export default function TradeCard({
             Edit
           </button>
         ) : null}
-        <ShareTradeButton variant="icon" trade={trade} />
+        <ShareTradeButton variant="icon" trade={trade} profile={shareProfile} />
         {onDelete ? (
           <button
             type="button"

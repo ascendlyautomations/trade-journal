@@ -28,10 +28,14 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} h-full bg-[#0b1f3a] antialiased`}
     >
-      <body className="min-h-screen min-h-full flex flex-col bg-[#0f172a]">
-        <BannedAccountShell>{children}</BannedAccountShell>
+      <body className="flex min-h-screen min-h-full flex-col bg-[#0b1f3a]">
+        <BannedAccountShell>
+          <div className="flex min-h-screen flex-1 flex-col bg-[#0b1f3a] pt-16">
+            {children}
+          </div>
+        </BannedAccountShell>
       </body>
     </html>
   );

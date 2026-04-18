@@ -276,7 +276,7 @@ export default function LoginPage() {
   }
 
   return (
-  <div className="min-h-screen relative flex items-center justify-center text-white">
+  <div className="relative -mt-16 flex min-h-screen items-center justify-center text-white">
 
     {/* 🔥 FULL BACKGROUND IMAGE */}
     <img

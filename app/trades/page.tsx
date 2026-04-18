@@ -243,6 +243,15 @@ export default function TradesPage() {
     })
   }, [tradesForPerformanceSharePool, timeframe])
 
+  const tradesPageTitle = useMemo(() => {
+    if (resultFilter === "wins") return "Winning Trades"
+    if (resultFilter === "losses") return "Losing Trades"
+    if (timeframe === "daily") return "Daily Trades"
+    if (timeframe === "weekly") return "Weekly Trades"
+    if (timeframe === "monthly") return "Monthly Trades"
+    return "All Trades"
+  }, [resultFilter, timeframe])
+
   const totalTrades = filteredTrades.length
   const wins = filteredTrades.filter(t => t.pnl > 0)
   const winRate = totalTrades ? (wins.length / totalTrades) * 100 : 0
@@ -297,19 +306,18 @@ export default function TradesPage() {
 
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100">
 
-        <div className="p-2 max-w-7xl mx-auto px-3 pt-1 pb-8 md:p-10">
-
-          <h1 className="text-xl md:text-2xl font-semibold text-blue-300 text-center mb-2 mt-2 md:mt-0">
-  Trade History
-</h1>
+        <div className="mx-auto max-w-7xl px-3 pb-8 pt-0 md:p-10">
 
           {loading ? (
             <p className="text-center text-gray-400">Loading...</p>
           ) : (
             <>
+              <h1 className="text-xl md:text-2xl font-semibold text-white/85 mb-2">
+                {tradesPageTitle}
+              </h1>
               <TradeFilterBar
                 variant="trades"
-                className="mb-5"
+                className="mt-2.5 mb-5"
                 accounts={accounts}
                 accountFilter={accountFilter}
                 onAccountChange={setAccountFilter}
@@ -498,7 +506,11 @@ export default function TradesPage() {
                       >
                         Edit
                       </button>
-                      <ShareTradeButton variant="icon" trade={trade} />
+                      <ShareTradeButton
+                        variant="icon"
+                        trade={trade}
+                        profile={gateProfile}
+                      />
                       <button
                         onClick={() => deleteTrade(trade.id)}
                         className="text-white hover:text-red-400 text-xl transition leading-none"
@@ -767,6 +779,7 @@ export default function TradesPage() {
         onClose={() => setShowPerformanceShare(false)}
         tradePool={tradesForPerformanceSharePool}
         subtitle="Matches account, mode & date filters"
+        profile={gateProfile}
       />
     </>
   )
