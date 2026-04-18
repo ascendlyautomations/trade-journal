@@ -241,6 +241,26 @@ export default function Navbar() {
                 Input Trade
               </Link>
 
+              {profile?.id ? (
+                <Link
+                  href={`/profile/${profile.id}`}
+                  className={`hover:text-blue-400 ${pathname.includes("/profile") ? "text-blue-400" : ""}`}
+                >
+                  Profile
+                </Link>
+              ) : (
+                <span className="text-gray-500">Profile</span>
+              )}
+
+              <Link href="/messages" className="hover:text-blue-400 inline-flex items-center gap-2">
+                Messages
+                {unreadMessagesCount > 0 ? (
+                  <span className="bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full tabular-nums">
+                    {unreadMessagesCount > 9 ? "9+" : unreadMessagesCount}
+                  </span>
+                ) : null}
+              </Link>
+
               <div className="relative">
                 <button type="button" onClick={() => toggleMenu("analytics")} className="hover:text-blue-400">
                   Analytics ▾
@@ -303,26 +323,6 @@ export default function Navbar() {
                   </div>
                 ) : null}
               </div>
-
-              {profile?.id ? (
-                <Link
-                  href={`/profile/${profile.id}`}
-                  className={`hover:text-blue-400 ${pathname.includes("/profile") ? "text-blue-400" : ""}`}
-                >
-                  Profile
-                </Link>
-              ) : (
-                <span className="text-gray-500">Profile</span>
-              )}
-
-              <Link href="/messages" className="hover:text-blue-400 inline-flex items-center gap-2">
-                Messages
-                {unreadMessagesCount > 0 ? (
-                  <span className="bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full tabular-nums">
-                    {unreadMessagesCount > 9 ? "9+" : unreadMessagesCount}
-                  </span>
-                ) : null}
-              </Link>
             </div>
           ) : null}
         </div>
@@ -493,6 +493,31 @@ export default function Navbar() {
             Input Trade
           </Link>
 
+          {profile?.id ? (
+            <Link
+              href={`/profile/${profile.id}`}
+              className={`py-2 hover:text-blue-400 ${pathname.includes("/profile") ? "text-blue-400" : ""}`}
+              onClick={closeMobile}
+            >
+              Profile
+            </Link>
+          ) : (
+            <span className="py-2 text-gray-500">Profile</span>
+          )}
+
+          <Link
+            href="/messages"
+            className="flex items-center justify-between py-2 hover:text-blue-400"
+            onClick={closeMobile}
+          >
+            <span>Messages</span>
+            {unreadMessagesCount > 0 ? (
+              <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full tabular-nums">
+                {unreadMessagesCount > 9 ? "9+" : unreadMessagesCount}
+              </span>
+            ) : null}
+          </Link>
+
           <div>
             <button
               type="button"
@@ -573,31 +598,6 @@ export default function Navbar() {
               </div>
             ) : null}
           </div>
-
-          {profile?.id ? (
-            <Link
-              href={`/profile/${profile.id}`}
-              className={`py-2 hover:text-blue-400 ${pathname.includes("/profile") ? "text-blue-400" : ""}`}
-              onClick={closeMobile}
-            >
-              Profile
-            </Link>
-          ) : (
-            <span className="py-2 text-gray-500">Profile</span>
-          )}
-
-          <Link
-            href="/messages"
-            className="flex items-center justify-between py-2 hover:text-blue-400"
-            onClick={closeMobile}
-          >
-            <span>Messages</span>
-            {unreadMessagesCount > 0 ? (
-              <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full tabular-nums">
-                {unreadMessagesCount > 9 ? "9+" : unreadMessagesCount}
-              </span>
-            ) : null}
-          </Link>
 
           <div className="border-t border-white/10 pt-2 flex flex-col gap-2">
             {isAdmin ? (
