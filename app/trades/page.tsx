@@ -9,7 +9,9 @@ import ProfileOnboarding, {
 import InputTradeForm from "../components/InputTradeForm"
 import PerformanceShareModal from "../components/PerformanceShareModal"
 import ShareTradeButton from "../components/ShareTradeButton"
+import ShareToConversationsModal from "../components/ShareToConversationsModal"
 import { filterTradesForPerformanceSharePool } from "@/lib/performanceShare"
+import { downloadTradeShareCardPng } from "@/lib/tradeShareExport"
 import { useEffect, useMemo, useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { useRouter } from "next/navigation"
@@ -52,6 +54,8 @@ export default function TradesPage() {
   const [accountTypeFilter, setAccountTypeFilter] = useState("all")
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [timeframe, setTimeframe] = useState("all")
+  const [customRangeStart, setCustomRangeStart] = useState("")
+  const [customRangeEnd, setCustomRangeEnd] = useState("")
   const [loading, setLoading] = useState(true)
   const [selectedDate, setSelectedDate] = useState("")
   const [editingTrade, setEditingTrade] = useState<any | null>(null)
@@ -59,6 +63,11 @@ export default function TradesPage() {
   const [gateProfile, setGateProfile] = useState<any | null>(null)
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [showPerformanceShare, setShowPerformanceShare] = useState(false)
+  const [shareTradeMenuOpen, setShareTradeMenuOpen] = useState(false)
+  const [shareTradeSelected, setShareTradeSelected] = useState<any | null>(
+    null
+  )
+  const [shareTradeDmOpen, setShareTradeDmOpen] = useState(false)
 
   const router = useRouter()
 
@@ -197,7 +206,33 @@ export default function TradesPage() {
       )
     }
 
+    if (timeframe === "yearly") {
+      return tradeDate.getFullYear() === now.getFullYear()
+    }
+
+    if (timeframe === "custom") {
+      if (!customRangeStart?.trim() || !customRangeEnd?.trim()) return true
+      const start = new Date(customRangeStart + "T00:00:00")
+      const end = new Date(customRangeEnd + "T23:59:59.999")
+      return tradeDate >= start && tradeDate <= end
+    }
+
     return true
+  }
+
+  function handleTimeframeChange(value: string) {
+    setTimeframe(value)
+    if (value !== "custom") {
+      setCustomRangeStart("")
+      setCustomRangeEnd("")
+    }
+  }
+
+  function handleCustomRangeApply(start: string, end: string) {
+    setSelectedDate("")
+    setCustomRangeStart(start)
+    setCustomRangeEnd(end)
+    setTimeframe("custom")
   }
 
   const accountMap = new Map<
@@ -241,7 +276,7 @@ export default function TradesPage() {
       if (!filterByTime(trade)) return false
       return true
     })
-  }, [tradesForPerformanceSharePool, timeframe])
+  }, [tradesForPerformanceSharePool, timeframe, customRangeStart, customRangeEnd])
 
   const tradesPageTitle = useMemo(() => {
     if (resultFilter === "wins") return "Winning Trades"
@@ -249,8 +284,11 @@ export default function TradesPage() {
     if (timeframe === "daily") return "Daily Trades"
     if (timeframe === "weekly") return "Weekly Trades"
     if (timeframe === "monthly") return "Monthly Trades"
+    if (timeframe === "yearly") return "Yearly Trades"
+    if (timeframe === "custom") return "Custom Range"
+    if (selectedDate?.trim()) return "Specific Date"
     return "All Trades"
-  }, [resultFilter, timeframe])
+  }, [resultFilter, timeframe, selectedDate])
 
   const totalTrades = filteredTrades.length
   const wins = filteredTrades.filter(t => t.pnl > 0)
@@ -324,24 +362,12 @@ export default function TradesPage() {
                 accountTypeFilter={accountTypeFilter}
                 onAccountTypeChange={setAccountTypeFilter}
                 timeframe={timeframe}
-                onTimeframeChange={setTimeframe}
+                onTimeframeChange={handleTimeframeChange}
+                customRangeStart={customRangeStart}
+                customRangeEnd={customRangeEnd}
+                onCustomRangeApply={handleCustomRangeApply}
                 selectedDate={selectedDate}
                 onSelectedDateChange={setSelectedDate}
-                dateNextToModes={
-                  <label
-                    className="relative flex h-[34px] min-w-[34px] cursor-pointer items-center justify-center rounded-md border border-white/10 bg-[#0f172a] px-2 text-white transition hover:bg-[#1e293b]"
-                    aria-label="Filter by date"
-                    title="Filter by date"
-                  >
-                    <span aria-hidden>📅</span>
-                    <input
-                      type="date"
-                      value={selectedDate}
-                      onChange={(e) => setSelectedDate(e.target.value)}
-                      className="absolute inset-0 h-full w-full cursor-pointer opacity-0 [color-scheme:dark]"
-                    />
-                  </label>
-                }
                 leading={
                   <div className="flex shrink-0 items-center gap-2 w-full justify-center md:w-auto">
                     <button
@@ -510,6 +536,11 @@ export default function TradesPage() {
                         variant="icon"
                         trade={trade}
                         profile={gateProfile}
+                        shareMenu
+                        onShareMenu={() => {
+                          setShareTradeSelected(trade)
+                          setShareTradeMenuOpen(true)
+                        }}
                       />
                       <button
                         onClick={() => deleteTrade(trade.id)}
@@ -780,6 +811,62 @@ export default function TradesPage() {
         tradePool={tradesForPerformanceSharePool}
         subtitle="Matches account, mode & date filters"
         profile={gateProfile}
+      />
+
+      {shareTradeMenuOpen && shareTradeSelected ? (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#0b1f3a] p-5">
+            <h2 className="mb-4 text-lg font-semibold text-white">Share Trade</h2>
+
+            <div className="flex flex-col gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  void downloadTradeShareCardPng(shareTradeSelected)
+                  setShareTradeMenuOpen(false)
+                  setShareTradeSelected(null)
+                }}
+                className="w-full rounded-lg bg-green-500 py-2 font-medium text-black"
+              >
+                Download Image
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShareTradeMenuOpen(false)
+                  setShareTradeDmOpen(true)
+                }}
+                className="w-full rounded-lg bg-white/10 py-2 text-white hover:bg-white/20"
+              >
+                Send in Messages
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setShareTradeMenuOpen(false)
+                setShareTradeSelected(null)
+              }}
+              className="mt-4 text-sm text-white/50 hover:text-white"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      <ShareToConversationsModal
+        open={shareTradeDmOpen && Boolean(shareTradeSelected?.id)}
+        onClose={() => {
+          setShareTradeDmOpen(false)
+          setShareTradeSelected(null)
+        }}
+        title="Send trade"
+        tradeId={
+          shareTradeSelected?.id != null ? String(shareTradeSelected.id) : null
+        }
       />
     </>
   )

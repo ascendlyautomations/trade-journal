@@ -1,8 +1,9 @@
 "use client"
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
-import { toPng } from "html-to-image"
 import PerformanceShareCard from "./PerformanceShareCard"
+import ShareToConversationsModal from "./ShareToConversationsModal"
+import { captureShareCardElementToPng } from "@/lib/shareImageCapture"
 import {
   type PerformanceWindow,
   buildEquityCurveFromTrades,
@@ -35,6 +36,8 @@ export default function PerformanceShareModal({
 }: PerformanceShareModalProps) {
   const [windowKey, setWindowKey] = useState<PerformanceWindow>("monthly")
   const [busy, setBusy] = useState(false)
+  const [perfShareActionsOpen, setPerfShareActionsOpen] = useState(false)
+  const [perfDmOpen, setPerfDmOpen] = useState(false)
   const lockRef = useRef(false)
   const exportId = useId().replace(/:/g, "perf-share")
 
@@ -80,23 +83,19 @@ export default function PerformanceShareModal({
     }
   }, [open])
 
+  useEffect(() => {
+    if (!open) {
+      setPerfShareActionsOpen(false)
+      setPerfDmOpen(false)
+    }
+  }, [open])
+
   const handleDownload = useCallback(async () => {
-    const root = document.getElementById(exportId)
-    if (!root || lockRef.current) return
+    if (lockRef.current) return
     lockRef.current = true
     setBusy(true)
     try {
-      await new Promise<void>((resolve) => {
-        requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
-      })
-      await new Promise<void>((resolve) => {
-        window.setTimeout(resolve, 240)
-      })
-      const dataUrl = await toPng(root, {
-        pixelRatio: 2,
-        cacheBust: true,
-        backgroundColor: "#0b1a2a",
-      })
+      const dataUrl = await captureShareCardElementToPng(exportId)
       const link = document.createElement("a")
       link.download = `performance-${windowKey}-${Date.now()}.png`
       link.href = dataUrl
@@ -108,6 +107,15 @@ export default function PerformanceShareModal({
       setBusy(false)
     }
   }, [exportId, windowKey])
+
+  const capturePerformancePng = useCallback(async () => {
+    try {
+      return await captureShareCardElementToPng(exportId)
+    } catch (e) {
+      console.error("Performance share capture:", e)
+      return null
+    }
+  }, [exportId])
 
   if (!open) return null
 
@@ -237,8 +245,63 @@ export default function PerformanceShareModal({
           >
             {busy ? "Saving…" : "Download PNG"}
           </button>
+          <button
+            type="button"
+            onClick={() => setPerfShareActionsOpen(true)}
+            className="rounded-xl border border-emerald-400/40 bg-emerald-500/15 px-4 py-2.5 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-500/25"
+          >
+            Share…
+          </button>
         </div>
       </div>
+
+      {perfShareActionsOpen ? (
+        <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#0b1f3a] p-5 shadow-xl">
+            <h3 className="mb-4 text-lg font-semibold text-white">
+              Share performance
+            </h3>
+            <div className="flex flex-col gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  void handleDownload()
+                  setPerfShareActionsOpen(false)
+                }}
+                disabled={busy}
+                className="w-full rounded-lg bg-green-500 py-2 font-medium text-black disabled:opacity-50"
+              >
+                Download Image
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setPerfShareActionsOpen(false)
+                  setPerfDmOpen(true)
+                }}
+                className="w-full rounded-lg bg-white/10 py-2 text-white hover:bg-white/20"
+              >
+                Send in Messages
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => setPerfShareActionsOpen(false)}
+              className="mt-4 text-sm text-white/50 hover:text-white"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      <ShareToConversationsModal
+        open={perfDmOpen}
+        onClose={() => setPerfDmOpen(false)}
+        title="Send performance card"
+        captionPlaceholder="Optional message with image…"
+        imageDataUrlPromise={capturePerformancePng}
+      />
     </div>
   )
 }

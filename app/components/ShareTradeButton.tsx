@@ -1,13 +1,8 @@
 "use client"
 
 import { useCallback, useId, useRef, useState } from "react"
-import { toPng } from "html-to-image"
 import TradeShareCard from "./TradeShareCard"
-
-function slugPart(raw: string): string {
-  const s = raw.replace(/[^a-zA-Z0-9_-]/g, "")
-  return s || "trade"
-}
+import { downloadTradeShareCardPng, tradeShareExportDomId } from "@/lib/tradeShareExport"
 
 export type ShareTradeButtonProps = {
   trade: any
@@ -16,6 +11,11 @@ export type ShareTradeButtonProps = {
   variant?: "full" | "icon"
   /** Loaded by parent — used for affiliate code on export */
   profile?: { referral_code?: string | null } | null
+  /**
+   * When set with `onShareMenu`, click opens the menu instead of downloading immediately.
+   */
+  shareMenu?: boolean
+  onShareMenu?: () => void
 }
 
 export default function ShareTradeButton({
@@ -23,73 +23,37 @@ export default function ShareTradeButton({
   className = "",
   variant = "full",
   profile = null,
+  shareMenu = false,
+  onShareMenu,
 }: ShareTradeButtonProps) {
   const [busy, setBusy] = useState(false)
   const lockRef = useRef(false)
   const instanceId = useId().replace(/:/g, "")
-  const exportDomId = `trade-share-export-${
-    trade?.id != null ? String(trade.id) : instanceId
-  }`
+  const exportDomId = tradeShareExportDomId(trade, instanceId)
+
+  const handleDownload = useCallback(async () => {
+    if (lockRef.current) return
+    lockRef.current = true
+    setBusy(true)
+    try {
+      await downloadTradeShareCardPng(trade, instanceId)
+    } finally {
+      lockRef.current = false
+      setBusy(false)
+    }
+  }, [trade])
 
   const handleClick = useCallback(
     async (e: React.MouseEvent) => {
       e.stopPropagation()
       e.preventDefault()
-      if (lockRef.current) return
-      lockRef.current = true
-
-      const root = document.getElementById(exportDomId)
-      if (!root) {
-        console.error("ShareTradeButton: export root missing")
-        lockRef.current = false
+      if (shareMenu && onShareMenu) {
+        onShareMenu()
         return
       }
-
-      setBusy(true)
-      try {
-        const imgs = root.querySelectorAll("img")
-        await Promise.all(
-          [...imgs].map(
-            (img) =>
-              new Promise<void>((resolve) => {
-                if (img.complete && img.naturalWidth > 0) {
-                  resolve()
-                  return
-                }
-                const done = () => resolve()
-                img.addEventListener("load", done, { once: true })
-                img.addEventListener("error", done, { once: true })
-                window.setTimeout(done, 5000)
-              })
-          )
-        )
-
-        await new Promise<void>((resolve) => {
-          requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
-        })
-
-        // Card is already 1080×1920; pixelRatio emulates high-DPI (e.g. scale: 2)
-        const dataUrl = await toPng(root, {
-          pixelRatio: 2,
-          cacheBust: true,
-          backgroundColor: "#0b1a2a",
-        })
-
-        const link = document.createElement("a")
-        const ticker = slugPart(String(trade.ticker ?? "trade"))
-        const idBit =
-          trade.id != null ? String(trade.id).slice(0, 10) : "export"
-        link.download = `trade-${ticker}-${idBit}.png`
-        link.href = dataUrl
-        link.click()
-      } catch (err) {
-        console.error("Share trade image:", err)
-      } finally {
-        lockRef.current = false
-        setBusy(false)
-      }
+      await handleDownload()
     },
-    [trade, exportDomId]
+    [shareMenu, onShareMenu, handleDownload]
   )
 
   return (

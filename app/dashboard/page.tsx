@@ -548,6 +548,8 @@ export default function Dashboard() {
   const [accountFilter, setAccountFilter] = useState("all")
   const [accountTypeFilter, setAccountTypeFilter] = useState("all")
   const [timeFilter, setTimeFilter] = useState("all")
+  const [customRangeStart, setCustomRangeStart] = useState("")
+  const [customRangeEnd, setCustomRangeEnd] = useState("")
   const [selectedDate, setSelectedDate] = useState("")
   const [showPublicOnly, setShowPublicOnly] = useState(false)
   const [user, setUser] = useState<any>(null)
@@ -567,6 +569,21 @@ export default function Dashboard() {
   const [savingGearSettings, setSavingGearSettings] = useState(false)
   const [showPerformanceShare, setShowPerformanceShare] = useState(false)
   const didHydrateDashboardPrefs = useRef(false)
+
+  function handleDashboardTimeframeChange(value: string) {
+    setTimeFilter(value)
+    if (value !== "custom") {
+      setCustomRangeStart("")
+      setCustomRangeEnd("")
+    }
+  }
+
+  function handleDashboardCustomRangeApply(start: string, end: string) {
+    setSelectedDate("")
+    setCustomRangeStart(start)
+    setCustomRangeEnd(end)
+    setTimeFilter("custom")
+  }
 
   const tradesForPerformanceSharePool = useMemo(
     () =>
@@ -820,6 +837,15 @@ export default function Dashboard() {
           tradeDate.getMonth() === now.getMonth() &&
           tradeDate.getFullYear() === now.getFullYear()
         )
+      }
+      if (timeFilter === "yearly") {
+        return tradeDate.getFullYear() === now.getFullYear()
+      }
+      if (timeFilter === "custom") {
+        if (!customRangeStart?.trim() || !customRangeEnd?.trim()) return true
+        const start = new Date(customRangeStart + "T00:00:00")
+        const end = new Date(customRangeEnd + "T23:59:59.999")
+        return tradeDate >= start && tradeDate <= end
       }
       return true
     }
@@ -1189,7 +1215,16 @@ const worstDay = dailyPnLs.length > 0
       sessionPieData
     }
 
-  }, [trades, showPublicOnly, accountFilter, accountTypeFilter, timeFilter, selectedDate])
+  }, [
+    trades,
+    showPublicOnly,
+    accountFilter,
+    accountTypeFilter,
+    timeFilter,
+    selectedDate,
+    customRangeStart,
+    customRangeEnd,
+  ])
 
   // 🔥 LOADING STATE (FIXES GLITCH)
   const isPro = isProActive(profile)
@@ -1645,7 +1680,10 @@ const worstDay = dailyPnLs.length > 0
             accountTypeFilter={accountTypeFilter}
             onAccountTypeChange={setAccountTypeFilter}
             timeframe={timeFilter}
-            onTimeframeChange={setTimeFilter}
+            onTimeframeChange={handleDashboardTimeframeChange}
+            customRangeStart={customRangeStart}
+            customRangeEnd={customRangeEnd}
+            onCustomRangeApply={handleDashboardCustomRangeApply}
             selectedDate={selectedDate}
             onSelectedDateChange={setSelectedDate}
             publicNextToModes={
@@ -1660,21 +1698,6 @@ const worstDay = dailyPnLs.length > 0
               >
                 Public
               </button>
-            }
-            dateNextToModes={
-              <label
-                className="relative flex h-[34px] min-w-[34px] cursor-pointer items-center justify-center rounded-md border border-white/10 bg-[#0f172a] px-2 text-white transition hover:bg-[#1e293b] md:hidden"
-                aria-label="Filter by date"
-                title="Filter by date"
-              >
-                <span aria-hidden>📅</span>
-                <input
-                  type="date"
-                  value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0 [color-scheme:dark]"
-                />
-              </label>
             }
             settingsNextToModes={renderDashboardFilterSettings()}
             trailing={

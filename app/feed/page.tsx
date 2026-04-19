@@ -4,6 +4,7 @@ import Link from "next/link"
 import type { ChangeEvent } from "react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
+import { fetchShareConversations } from "@/lib/shareToConversations"
 import Navbar from "../components/Navbar"
 import PostInteractions from "../components/PostInteractions"
 
@@ -515,79 +516,7 @@ export default function FeedPage() {
 
     const loadShareConversations = async () => {
       setShareLoading(true)
-
-      const { data: membershipRows, error: membershipError } = await supabase
-        .from("conversation_participants")
-        .select("conversation_id")
-        .eq("user_id", user.id)
-
-      if (membershipError) {
-        console.error("Share conversations fetch error:", membershipError)
-        setShareConversations([])
-        setShareLoading(false)
-        return
-      }
-
-      const conversationIds = [
-        ...new Set((membershipRows || []).map((row: any) => row.conversation_id)),
-      ]
-
-      if (conversationIds.length === 0) {
-        setShareConversations([])
-        setShareLoading(false)
-        return
-      }
-
-      const { data: rows, error } = await supabase
-        .from("conversations")
-        .select(
-          `
-          id,
-          is_group,
-          name,
-          avatar_url,
-          participants:conversation_participants(
-            user_id,
-            profiles (
-              id,
-              username,
-              avatar_url
-            )
-          )
-        `
-        )
-        .in("id", conversationIds)
-
-      if (error) {
-        console.error("Conversations fetch error:", error)
-        setShareConversations([])
-        setShareLoading(false)
-        return
-      }
-
-      const list = (rows || []).map((conv: any) => {
-        const participants = Array.isArray(conv.participants) ? conv.participants : []
-        const otherUser = participants.find((p: any) => p.user_id !== user.id)
-        const otherProfileRaw = otherUser?.profiles
-        const otherProfile = Array.isArray(otherProfileRaw)
-          ? otherProfileRaw[0]
-          : otherProfileRaw
-
-        const displayName = conv.is_group
-          ? conv.name || "Group Chat"
-          : otherProfile?.username || "User"
-        const displayAvatar = conv.is_group
-          ? conv.avatar_url || "/default-avatar.png"
-          : otherProfile?.avatar_url || "/default-avatar.png"
-
-        return {
-          id: conv.id,
-          name: displayName,
-          is_group: conv.is_group === true,
-          avatar_url: displayAvatar,
-        }
-      })
-
+      const list = await fetchShareConversations(supabase, user.id)
       setShareConversations(list)
       setShareLoading(false)
     }

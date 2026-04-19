@@ -1,13 +1,24 @@
 "use client"
 
 import type { ReactNode } from "react"
+import { useEffect, useState } from "react"
 
-const TIME_OPTIONS = [
-  { label: "All", value: "all" },
-  { label: "Daily", value: "daily" },
-  { label: "Weekly", value: "weekly" },
-  { label: "Monthly", value: "monthly" },
-] as const
+const TF_LABEL_FROM_VALUE: Record<string, string> = {
+  all: "All",
+  daily: "Daily",
+  weekly: "Weekly",
+  monthly: "Monthly",
+  yearly: "Yearly",
+  custom: "Custom",
+}
+
+const PRESET_LABEL_TO_VALUE: Record<string, string> = {
+  All: "all",
+  Daily: "daily",
+  Weekly: "weekly",
+  Monthly: "monthly",
+  Yearly: "yearly",
+}
 
 export type TradeFilterBarProps = {
   accounts: Array<{
@@ -23,18 +34,22 @@ export type TradeFilterBarProps = {
   onTimeframeChange: (value: string) => void
   selectedDate: string
   onSelectedDateChange: (value: string) => void
+  /** Custom range (YYYY-MM-DD), used when timeframe is `custom` */
+  customRangeStart?: string
+  customRangeEnd?: string
+  onCustomRangeApply?: (start: string, end: string) => void
   /** Prepended controls (e.g. Trade History win/loss toggle) */
   leading?: ReactNode
   /** Appended controls (e.g. Show Advanced, Public Trades, settings) */
   trailing?: ReactNode
-  /** Shown beside “All Modes” on small screens only (hide desktop copy with `hidden md:flex` on the trailing instance) */
+  /** Shown beside “All Modes” on small screens only */
   settingsNextToModes?: ReactNode
-  /** Optional compact public-trades control shown beside “All Modes” on mobile */
+  /** Optional compact control shown beside “All Modes” on mobile */
   publicNextToModes?: ReactNode
-  /** Optional mobile date control rendered beside “All Modes” */
-  dateNextToModes?: ReactNode
   /** Outer wrapper, e.g. mb-5 w-full */
   className?: string
+  /** Unused layout hint for pages that differentiate usage */
+  variant?: string
 }
 
 export default function TradeFilterBar({
@@ -47,120 +62,235 @@ export default function TradeFilterBar({
   onTimeframeChange,
   selectedDate,
   onSelectedDateChange,
+  customRangeStart = "",
+  customRangeEnd = "",
+  onCustomRangeApply,
   leading,
   trailing,
   settingsNextToModes,
   publicNextToModes,
-  dateNextToModes,
   className = "",
+  variant: _variant,
 }: TradeFilterBarProps) {
+  const [timeframeOpen, setTimeframeOpen] = useState(false)
+  const [selectedTimeframe, setSelectedTimeframe] = useState("All")
+  const [startDate, setStartDate] = useState("")
+  const [endDate, setEndDate] = useState("")
+
+  useEffect(() => {
+    if (timeframe === "custom") {
+      setSelectedTimeframe("Custom")
+    } else if (selectedDate?.trim()) {
+      setSelectedTimeframe("Specific Date")
+    } else {
+      setSelectedTimeframe(TF_LABEL_FROM_VALUE[timeframe] ?? "All")
+    }
+  }, [timeframe, selectedDate])
+
+  useEffect(() => {
+    if (!timeframeOpen) return
+    if (timeframe === "custom") {
+      setStartDate(customRangeStart)
+      setEndDate(customRangeEnd)
+    } else if (selectedDate?.trim()) {
+      setStartDate(selectedDate)
+      setEndDate(selectedDate)
+    } else {
+      setStartDate("")
+      setEndDate("")
+    }
+  }, [timeframeOpen, timeframe, selectedDate, customRangeStart, customRangeEnd])
+
+  const timeframeButtonLabel =
+    selectedTimeframe === "All" ? "Timeframe" : selectedTimeframe
+
   return (
-    <div className={`flex w-full justify-center ${className}`}>
-      <div className="relative z-50 flex max-w-full flex-wrap items-center justify-center gap-2 overflow-visible rounded-xl border border-white/10 bg-white/5 px-3 py-2 backdrop-blur-md md:gap-3 md:px-4 md:py-3 lg:flex-nowrap">
-        {leading}
+    <>
+      <div className={`flex w-full justify-center ${className}`}>
+        <div className="relative z-50 flex max-w-full flex-wrap items-center justify-center gap-2 overflow-visible rounded-xl border border-white/10 bg-white/5 px-3 py-2 backdrop-blur-md md:gap-3 md:px-4 md:py-3 lg:flex-nowrap">
+          {leading}
 
-        <select
-          value={accountFilter}
-          onChange={(e) => onAccountChange(e.target.value)}
-          className="h-[34px] w-full min-w-0 rounded-md border border-white/10 bg-[#0f172a] px-3 py-1 text-sm text-white hover:bg-[#1e293b] focus:outline-none focus:ring-2 focus:ring-blue-500 md:w-auto md:shrink-0"
-        >
-          <option value="all">All Accounts</option>
-          {accounts.map((acc) => (
-            <option key={acc.value} value={acc.value}>
-              {acc.label}
-            </option>
-          ))}
-        </select>
-
-        {settingsNextToModes || dateNextToModes || publicNextToModes ? (
-          <div className="flex w-full min-w-0 items-center justify-center gap-1.5 md:block md:w-auto">
-            <div className="min-w-0 flex-[1.5] md:w-auto md:flex-none">
-              <select
-                value={accountTypeFilter}
-                onChange={(e) => onAccountTypeChange(e.target.value)}
-                className="h-[34px] w-full min-w-0 rounded-md border border-white/10 bg-[#0f172a] px-2 py-1 text-sm text-white hover:bg-[#1e293b] focus:outline-none focus:ring-2 focus:ring-blue-500 md:w-auto md:shrink-0 md:px-3"
-              >
-                <option value="all">All Modes</option>
-                <option value="funded">Funded</option>
-                <option value="eval">Eval</option>
-                <option value="live">Live</option>
-              </select>
-            </div>
-            {publicNextToModes ? (
-              <div className="flex shrink-0 items-center justify-center md:hidden">
-                {publicNextToModes}
-              </div>
-            ) : null}
-            {dateNextToModes ? (
-              <div className="flex shrink-0 items-center justify-center md:hidden">
-                {dateNextToModes}
-              </div>
-            ) : null}
-            {settingsNextToModes ? (
-              <div className="flex shrink-0 items-center justify-center md:hidden">
-                {settingsNextToModes}
-              </div>
-            ) : null}
-          </div>
-        ) : (
           <select
-            value={accountTypeFilter}
-            onChange={(e) => onAccountTypeChange(e.target.value)}
-            className="h-[34px] shrink-0 rounded-md border border-white/10 bg-[#0f172a] px-3 py-1 text-sm text-white hover:bg-[#1e293b] focus:outline-none focus:ring-2 focus:ring-blue-500"
+            value={accountFilter}
+            onChange={(e) => onAccountChange(e.target.value)}
+            className="h-[34px] w-full min-w-0 rounded-md border border-white/10 bg-[#0f172a] px-3 py-1 text-sm text-white hover:bg-[#1e293b] focus:outline-none focus:ring-2 focus:ring-blue-500 md:w-auto md:shrink-0"
           >
-            <option value="all">All Modes</option>
-            <option value="funded">Funded</option>
-            <option value="eval">Eval</option>
-            <option value="live">Live</option>
+            <option value="all">All Accounts</option>
+            {accounts.map((acc) => (
+              <option key={acc.value} value={acc.value}>
+                {acc.label}
+              </option>
+            ))}
           </select>
-        )}
 
-        <div className="flex w-full shrink-0 justify-center gap-2 md:w-auto">
-          {TIME_OPTIONS.map(({ label, value }) => (
-            <button
-              key={value}
-              type="button"
-              onClick={() => onTimeframeChange(value)}
-              className={`flex h-[34px] shrink-0 items-center whitespace-nowrap rounded-md px-3 py-1 text-sm ${
-                timeframe === value
-                  ? "bg-emerald-500 text-white hover:bg-emerald-600"
-                  : "bg-white/10 text-white hover:bg-white/20"
-              }`}
+          {settingsNextToModes || publicNextToModes ? (
+            <div className="flex w-full min-w-0 items-center justify-center gap-1.5 md:block md:w-auto">
+              <div className="min-w-0 flex-[1.5] md:w-auto md:flex-none">
+                <select
+                  value={accountTypeFilter}
+                  onChange={(e) => onAccountTypeChange(e.target.value)}
+                  className="h-[34px] w-full min-w-0 rounded-md border border-white/10 bg-[#0f172a] px-2 py-1 text-sm text-white hover:bg-[#1e293b] focus:outline-none focus:ring-2 focus:ring-blue-500 md:w-auto md:shrink-0 md:px-3"
+                >
+                  <option value="all">All Modes</option>
+                  <option value="funded">Funded</option>
+                  <option value="eval">Eval</option>
+                  <option value="live">Live</option>
+                </select>
+              </div>
+              {publicNextToModes ? (
+                <div className="flex shrink-0 items-center justify-center md:hidden">
+                  {publicNextToModes}
+                </div>
+              ) : null}
+              {settingsNextToModes ? (
+                <div className="flex shrink-0 items-center justify-center md:hidden">
+                  {settingsNextToModes}
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <select
+              value={accountTypeFilter}
+              onChange={(e) => onAccountTypeChange(e.target.value)}
+              className="h-[34px] shrink-0 rounded-md border border-white/10 bg-[#0f172a] px-3 py-1 text-sm text-white hover:bg-[#1e293b] focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              {label}
-            </button>
-          ))}
-        </div>
+              <option value="all">All Modes</option>
+              <option value="funded">Funded</option>
+              <option value="eval">Eval</option>
+              <option value="live">Live</option>
+            </select>
+          )}
 
-        <div
-          className={`relative z-10 shrink-0 ${
-            dateNextToModes ? "hidden md:block" : ""
-          }`}
-        >
-          <input
-            type="date"
-            value={selectedDate}
-            onChange={(e) => onSelectedDateChange(e.target.value)}
-            className="relative z-10 h-[34px] rounded-md border border-white/10 bg-[#0f172a] px-3 py-1 pr-10 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500 [color-scheme:dark]"
-            style={{ colorScheme: "dark" }}
-          />
-
-          {selectedDate ? (
+          <div className="flex w-full shrink-0 justify-center md:w-auto">
             <button
               type="button"
-              onClick={() => onSelectedDateChange("")}
-              className="absolute right-1 top-1/2 -translate-y-1/2 rounded-lg bg-white/10 p-2 text-white transition hover:bg-white/20"
-              aria-label="Clear date"
+              onClick={() => setTimeframeOpen(true)}
+              className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm font-medium transition"
             >
-              <span className="text-base leading-none" aria-hidden>
-                🗑
-              </span>
+              {timeframeButtonLabel}
             </button>
-          ) : null}
-        </div>
+          </div>
 
-        {trailing}
+          {trailing}
+        </div>
       </div>
-    </div>
+
+      {timeframeOpen ? (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="w-full max-w-md bg-[#0b1f3a] rounded-2xl p-6 border border-white/10 shadow-xl">
+            <h2 className="text-lg font-semibold text-white mb-4">
+              Select Timeframe
+            </h2>
+
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              {(["All", "Daily", "Weekly", "Monthly", "Yearly"] as const).map(
+                (tf) => (
+                  <button
+                    key={tf}
+                    type="button"
+                    onClick={() => {
+                      const v = PRESET_LABEL_TO_VALUE[tf]
+                      setSelectedTimeframe(tf)
+                      onSelectedDateChange("")
+                      onTimeframeChange(v)
+                      setTimeframeOpen(false)
+                    }}
+                    className="px-3 py-2 rounded-lg bg-white/10 hover:bg-green-500/20 text-white text-sm"
+                  >
+                    {tf}
+                  </button>
+                )
+              )}
+            </div>
+
+            <div className="mt-5">
+              <p className="text-sm text-white/60 mb-2">Specific Date</p>
+
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => {
+                  const v = e.target.value
+                  setStartDate(v)
+                  setEndDate(v)
+                }}
+                className="w-full bg-white/10 rounded-lg px-3 py-2 text-white text-sm [color-scheme:dark]"
+              />
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (!startDate?.trim()) return
+                  onSelectedDateChange(startDate)
+                  setEndDate(startDate)
+                  onTimeframeChange("all")
+                  setSelectedTimeframe("Specific Date")
+                  setTimeframeOpen(false)
+                }}
+                className="w-full mt-2 py-2 rounded-lg bg-green-500 text-black font-medium"
+              >
+                Apply Specific Date
+              </button>
+            </div>
+
+            <div className="mt-5">
+              <p className="text-sm text-white/60 mb-2">Custom Range</p>
+
+              <div className="flex gap-2">
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full bg-white/10 rounded-lg px-3 py-2 text-white text-sm [color-scheme:dark]"
+                />
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="w-full bg-white/10 rounded-lg px-3 py-2 text-white text-sm [color-scheme:dark]"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (!startDate?.trim() || !endDate?.trim()) return
+                  onSelectedDateChange("")
+                  onCustomRangeApply?.(startDate, endDate)
+                  setSelectedTimeframe("Custom")
+                  setTimeframeOpen(false)
+                }}
+                className="w-full mt-2 py-2 rounded-lg bg-green-500 text-black font-medium"
+              >
+                Apply Range
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setStartDate("")
+                setEndDate("")
+                onSelectedDateChange("")
+                onTimeframeChange("all")
+                setSelectedTimeframe("All")
+                setTimeframeOpen(false)
+              }}
+              className="w-full mt-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm"
+            >
+              Clear Dates
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setTimeframeOpen(false)}
+              className="mt-4 text-sm text-white/50 hover:text-white"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </>
   )
 }

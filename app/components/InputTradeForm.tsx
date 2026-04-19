@@ -276,9 +276,16 @@ export default function InputTradeForm({
     }
     setMode(category.charAt(0).toUpperCase() + category.slice(1))
     setStrategy(t.strategy ?? "")
-    setFirm(firmFromLegacy)
-    setAccountSize(t.account_size ?? "")
-    setAccountNumber(t.account_id ?? "")
+    const accountNameStr = String(t.account_name ?? "").trim()
+    setFirm(accountNameStr || firmFromLegacy)
+    setAccountSize(
+      t.account_size != null && t.account_size !== ""
+        ? String(t.account_size)
+        : ""
+    )
+    setAccountNumber(
+      t.account_id != null && t.account_id !== "" ? String(t.account_id) : ""
+    )
     setTradeType(t.trade_type ?? "")
     setConfidence(
       t.confidence != null && t.confidence !== "" ? String(t.confidence) : ""
@@ -313,7 +320,7 @@ export default function InputTradeForm({
           t.exit_time
       )
     )
-  }, [existingTrade?.id])
+  }, [existingTrade])
 
   function resetCreateForm() {
     setTicker("")
@@ -742,7 +749,9 @@ export default function InputTradeForm({
           >
             <option value="">Account Type</option>
             {firmOptions.map((f) => (
-              <option key={f}>{f}</option>
+              <option key={f} value={f}>
+                {f}
+              </option>
             ))}
           </select>
 
@@ -754,7 +763,9 @@ export default function InputTradeForm({
           >
             <option value="">Account Size</option>
             {(accountSizes[firm] || []).map((size) => (
-              <option key={size}>{size}</option>
+              <option key={size} value={size}>
+                {size}
+              </option>
             ))}
           </select>
 
