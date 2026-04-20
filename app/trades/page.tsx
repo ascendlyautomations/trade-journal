@@ -155,7 +155,7 @@ export default function TradesPage() {
       .from("trades")
       .select("*")
       .eq("user_id", userId)
-      .order("date", { ascending: false })
+      .order("created_at", { ascending: false })
       .limit(20);
 
     console.log("FETCHED TRADES:", trades)

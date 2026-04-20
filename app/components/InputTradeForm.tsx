@@ -1112,42 +1112,29 @@ export default function InputTradeForm({
             />
           )}
 
-          {isEditMode && (
-            <div className="flex items-center justify-between mt-4 p-3 rounded-xl bg-white/5 border border-white/10">
-              <div>
-                <p className="text-sm font-medium text-white">Share to Community</p>
-                <p className="text-xs text-white/50">
-                  Make this trade visible on the public feed
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsPublic(!isPublic)}
-                className={`
-                  px-4 py-1.5 rounded-full text-xs font-medium
-                  transition
-                  ${
-                    isPublic
-                      ? "bg-green-500/20 text-green-400 border border-green-400/30"
-                      : "bg-white/10 text-white/50 border border-white/10"
-                  }
-                `}
-              >
-                {isPublic ? "Public" : "Private"}
-              </button>
+          <div className="flex items-center justify-between mt-4 p-3 rounded-xl bg-white/5 border border-white/10">
+            <div>
+              <p className="text-sm font-medium text-white">Share to Community</p>
+              <p className="text-xs text-white/50">
+                Make this trade visible on the public feed
+              </p>
             </div>
-          )}
-
-          {!isEditMode && (
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={postToFeed}
-                onChange={(e) => setPostToFeed(e.target.checked)}
-              />
-              Share to Feed
-            </label>
-          )}
+            <button
+              type="button"
+              onClick={() => setIsPublic(!isPublic)}
+              className={`
+                px-4 py-1.5 rounded-full text-xs font-medium
+                transition
+                ${
+                  isPublic
+                    ? "bg-green-500/20 text-green-400 border border-green-400/30"
+                    : "bg-white/10 text-white/50 border border-white/10"
+                }
+              `}
+            >
+              {isPublic ? "Public" : "Private"}
+            </button>
+          </div>
 
           <div className="hidden lg:block">
             <button

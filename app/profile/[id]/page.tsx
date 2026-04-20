@@ -714,6 +714,7 @@ export default function ProfilePage() {
       .from("trades")
       .select("*")
       .eq("user_id", forProfileId)
+      .eq("is_public", true)
       .order("created_at", { ascending: false })
       .range(from, to)
 
