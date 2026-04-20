@@ -9,6 +9,7 @@ import {
   isTradovateCsvRow,
   mapCsvHeadersToFields,
   stripBom,
+  tradesInsertRowsPrivate,
 } from "@/lib/csvTradeParsers"
 
 export type CsvImportPanelProps = {
@@ -65,7 +66,9 @@ export default function CsvImportPanel({
       return
     }
 
-    const { error } = await supabase.from("trades").insert(parsedTrades).select()
+    const rowsToInsert = tradesInsertRowsPrivate(parsedTrades)
+
+    const { error } = await supabase.from("trades").insert(rowsToInsert).select()
 
     if (error) {
       console.error("INSERT ERROR:", error)
@@ -77,7 +80,7 @@ export default function CsvImportPanel({
         .slice(0, 5)
         .map((r) => `Row ${r.rowNumber}: ${r.reason}`)
         .join("\n")
-      let msg = `Imported ${parsedTrades.length} trade(s).`
+      let msg = `Trades imported successfully. They are private by default. You can make them public by editing a trade. (${parsedTrades.length} imported)`
       if (skipped) msg += ` ${skipped} row(s) skipped.`
       if (errLines) msg += `\n\n${errLines}`
       alert(msg)

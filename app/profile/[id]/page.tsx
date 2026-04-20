@@ -3,7 +3,7 @@
 import Navbar from "../../components/Navbar"
 import AchievementCard from "../../components/AchievementCard"
 import type { ChangeEvent } from "react"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { supabase } from "../../../lib/supabaseClient"
 import { useParams, useRouter } from "next/navigation"
 import {
@@ -170,7 +170,7 @@ function TradeCard({
 
   return (
     <article
-      className={`mx-auto mb-6 max-w-xl overflow-hidden rounded-xl border border-white/10 bg-white/5 shadow-lg shadow-black/20 ${
+      className={`h-fit w-full overflow-hidden rounded-xl border border-white/10 bg-white/5 shadow-lg shadow-black/20 ${
         onOpenDetail && !disableOpen
           ? "cursor-pointer transition-all duration-200 hover:border-white/20 hover:bg-white/[0.07] hover:shadow-xl"
           : ""
@@ -364,7 +364,7 @@ function PostCard({
 
   return (
     <article
-      className={`mx-auto max-w-xl overflow-hidden rounded-xl border border-white/10 bg-white/5 shadow-lg shadow-black/20 ${
+      className={`h-fit w-full overflow-hidden rounded-xl border border-white/10 bg-white/5 shadow-lg shadow-black/20 ${
         onOpenDetail && !disableOpen
           ? "cursor-pointer transition-all duration-200 hover:border-white/20 hover:bg-white/[0.07] hover:shadow-xl"
           : ""
@@ -615,8 +615,7 @@ export default function ProfilePage() {
   const [editContent, setEditContent] = useState("")
   const [editingTrade, setEditingTrade] = useState<any | null>(null)
   const [calendarTrades, setCalendarTrades] = useState<any[]>([])
-  const [accountFilter, setAccountFilter] = useState("All")
-  const [accountTypeFilter, setAccountTypeFilter] = useState("All")
+  const [selectedMode, setSelectedMode] = useState("all")
   const [achievements, setAchievements] = useState<Achievement[]>([])
   const [selectedTradeDetail, setSelectedTradeDetail] = useState<any | null>(null)
   const [selectedPostDetail, setSelectedPostDetail] = useState<any | null>(null)
@@ -1453,33 +1452,16 @@ export default function ProfilePage() {
     return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   })
 
-  const accountOptions = useMemo(() => {
-    const ids = new Set<string>()
-    for (const t of allTrades) {
-      if (t.account_id != null && String(t.account_id).trim() !== "") {
-        ids.add(String(t.account_id))
-      }
-    }
-    return ["All", ...Array.from(ids)]
-  }, [allTrades])
-
   useEffect(() => {
     console.log(allTrades)
   }, [allTrades])
 
   const filteredTrades = allTrades.filter((trade) => {
-    const matchesAccount =
-      accountFilter === "All"
-        ? true
-        : String(trade.account_id || "") === String(accountFilter)
-
-    const type = String(trade.account_type || "").toLowerCase()
-    const matchesType =
-      accountTypeFilter === "All"
-        ? true
-        : type.includes(accountTypeFilter.toLowerCase())
-
-    return matchesAccount && matchesType
+    if (selectedMode === "all") return true
+    const m = selectedMode.toLowerCase()
+    const modeStr = String(trade.mode ?? "").trim().toLowerCase()
+    const typeStr = String(trade.account_type ?? "").trim().toLowerCase()
+    return modeStr === m || typeStr === m
   })
 
   const statsVisible = canViewTrades
@@ -1846,7 +1828,7 @@ export default function ProfilePage() {
 
           <div className="mt-3 space-y-6 px-2 md:mt-4 md:px-0">
             {activeTab === "trades" && (
-              <div className="mx-auto mt-4 w-full max-w-xl space-y-6 pb-8">
+              <div className="mt-4 w-full pb-8">
                 {sortedTrades.length === 0 ? (
                   <p className="text-center text-sm text-gray-400">
                     {currentUserId === profile.id
@@ -1854,32 +1836,34 @@ export default function ProfilePage() {
                       : "No trades yet."}
                   </p>
                 ) : (
-                  sortedTrades.map((trade) => (
-                    <TradeCard
-                      key={trade.id}
-                      trade={{ ...trade, currentUserId }}
-                      profile={profile}
-                      shareProfile={viewerShareProfile}
-                      canManageTrade={currentUserId === profile.id}
-                      menuOpen={openTradeMenuId === String(trade.id)}
-                      onMenuToggle={() =>
-                        setOpenTradeMenuId((prev) =>
-                          prev === String(trade.id) ? null : String(trade.id)
-                        )
-                      }
-                      onStartEditTrade={() => {
-                        openEditTradeModal(trade)
-                        setOpenTradeMenuId(null)
-                      }}
-                      onTogglePinTrade={() => void handlePinTrade(trade)}
-                      onSaveTrade={() => void handleSaveTrade(String(trade.id))}
-                      onDeleteTrade={() => void handleDeleteTrade(String(trade.id))}
-                      showInteractions={true}
-                      onOpenDetail={() =>
-                        setSelectedTradeDetail({ ...trade, currentUserId })
-                      }
-                    />
-                  ))
+                  <div className="grid grid-cols-1 gap-x-6 gap-y-8 md:grid-cols-2">
+                    {sortedTrades.map((trade) => (
+                      <TradeCard
+                        key={trade.id}
+                        trade={{ ...trade, currentUserId }}
+                        profile={profile}
+                        shareProfile={viewerShareProfile}
+                        canManageTrade={currentUserId === profile.id}
+                        menuOpen={openTradeMenuId === String(trade.id)}
+                        onMenuToggle={() =>
+                          setOpenTradeMenuId((prev) =>
+                            prev === String(trade.id) ? null : String(trade.id)
+                          )
+                        }
+                        onStartEditTrade={() => {
+                          openEditTradeModal(trade)
+                          setOpenTradeMenuId(null)
+                        }}
+                        onTogglePinTrade={() => void handlePinTrade(trade)}
+                        onSaveTrade={() => void handleSaveTrade(String(trade.id))}
+                        onDeleteTrade={() => void handleDeleteTrade(String(trade.id))}
+                        showInteractions={true}
+                        onOpenDetail={() =>
+                          setSelectedTradeDetail({ ...trade, currentUserId })
+                        }
+                      />
+                    ))}
+                  </div>
                 )}
                 {hasMore && canViewTrades ? (
                   <button
@@ -1896,7 +1880,7 @@ export default function ProfilePage() {
             )}
 
             {activeTab === "posts" && (
-              <div className="mx-auto mt-4 w-full max-w-xl space-y-6 pb-8">
+              <div className="mt-4 w-full pb-8">
                 <button
                   type="button"
                   onClick={() => setShowCreatePost(true)}
@@ -1906,46 +1890,50 @@ export default function ProfilePage() {
                 </button>
 
                 {sortedPosts.length === 0 ? (
-                  <p className="text-center text-sm text-gray-400">No posts yet.</p>
+                  <p className="mt-6 text-center text-sm text-gray-400">
+                    No posts yet.
+                  </p>
                 ) : (
-                  sortedPosts.map((post) => {
-                    const key = String(post.id)
-                    return (
-                      <PostCard
-                        key={post.id}
-                        post={post}
-                        profile={profile}
-                        canManagePost={currentUserId === profile.id}
-                        menuOpen={openMenuId === key}
-                        onMenuToggle={() =>
-                          setOpenMenuId((prev) => (prev === key ? null : key))
-                        }
-                        onStartEditPost={() => {
-                          setEditingPost(post)
-                          setEditContent(post.content || "")
-                          setOpenMenuId(null)
-                        }}
-                        onTogglePinPost={() => void handlePinPost(post)}
-                        onSavePost={() => void handleSavePost(key)}
-                        onDeletePost={() => void handleDeletePost(key)}
-                        showInteractions={true}
-                        onLike={() => void handleLike(key, "post")}
-                        onToggleComments={() => openComments(key, "post")}
-                        commentsOpen={!!openCommentsState[`post:${key}`]}
-                        likeMeta={
-                          likesByPost[key] || { count: 0, liked: false }
-                        }
-                        comments={commentsByPost[key] || []}
-                        commentText={commentDraft[key] || ""}
-                        onCommentChange={(value) =>
-                          setCommentDraft((prev) => ({ ...prev, [key]: value }))
-                        }
-                        onCommentSubmit={() => void submitComment(key, "post")}
-                        commentSubmitting={!!commentSubmitting[key]}
-                        onOpenDetail={() => setSelectedPostDetail(post)}
-                      />
-                    )
-                  })
+                  <div className="mt-6 grid grid-cols-1 gap-x-6 gap-y-8 md:grid-cols-2">
+                    {sortedPosts.map((post) => {
+                      const key = String(post.id)
+                      return (
+                        <PostCard
+                          key={post.id}
+                          post={post}
+                          profile={profile}
+                          canManagePost={currentUserId === profile.id}
+                          menuOpen={openMenuId === key}
+                          onMenuToggle={() =>
+                            setOpenMenuId((prev) => (prev === key ? null : key))
+                          }
+                          onStartEditPost={() => {
+                            setEditingPost(post)
+                            setEditContent(post.content || "")
+                            setOpenMenuId(null)
+                          }}
+                          onTogglePinPost={() => void handlePinPost(post)}
+                          onSavePost={() => void handleSavePost(key)}
+                          onDeletePost={() => void handleDeletePost(key)}
+                          showInteractions={true}
+                          onLike={() => void handleLike(key, "post")}
+                          onToggleComments={() => openComments(key, "post")}
+                          commentsOpen={!!openCommentsState[`post:${key}`]}
+                          likeMeta={
+                            likesByPost[key] || { count: 0, liked: false }
+                          }
+                          comments={commentsByPost[key] || []}
+                          commentText={commentDraft[key] || ""}
+                          onCommentChange={(value) =>
+                            setCommentDraft((prev) => ({ ...prev, [key]: value }))
+                          }
+                          onCommentSubmit={() => void submitComment(key, "post")}
+                          commentSubmitting={!!commentSubmitting[key]}
+                          onOpenDetail={() => setSelectedPostDetail(post)}
+                        />
+                      )
+                    })}
+                  </div>
                 )}
               </div>
             )}
@@ -1971,38 +1959,32 @@ export default function ProfilePage() {
                   </div>
                 ) : (
                   <>
-                    <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <label className="text-xs text-gray-400">Account</label>
-                        <select
-                          value={accountFilter}
-                          onChange={(e) => setAccountFilter(e.target.value)}
-                          className="rounded-lg border border-white/10 bg-white/10 px-3 py-1.5 text-xs text-gray-200"
-                        >
-                          {accountOptions.map((acc) => (
-                            <option key={acc} value={acc} className="bg-[#0f172a]">
-                              {acc}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div className="flex gap-1 rounded-lg bg-white/5 p-1">
-                        {["All", "Eval", "Funded", "Live"].map((type) => (
+                    <div className="mb-4 flex items-center justify-between">
+                      <div className="flex flex-wrap items-center gap-2 md:gap-3">
+                        {(
+                          [
+                            { id: "all", label: "All" },
+                            { id: "eval", label: "Eval" },
+                            { id: "funded", label: "Funded" },
+                            { id: "live", label: "Live" },
+                            { id: "backtest", label: "Backtest" },
+                          ] as const
+                        ).map(({ id, label }) => (
                           <button
-                            key={type}
+                            key={id}
                             type="button"
-                            onClick={() => setAccountTypeFilter(type)}
-                            className={`rounded px-3 py-1 text-xs ${
-                              accountTypeFilter === type
+                            onClick={() => setSelectedMode(id)}
+                            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition ${
+                              selectedMode === id
                                 ? "bg-blue-500 text-white"
-                                : "text-gray-400 hover:text-white"
+                                : "bg-white/5 text-white/70 hover:bg-white/10"
                             }`}
                           >
-                            {type}
+                            {label}
                           </button>
                         ))}
                       </div>
+                      <div />
                     </div>
 
                     {filteredTrades.length === 0 ? (

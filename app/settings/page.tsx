@@ -488,6 +488,9 @@ export default function SettingsPage() {
   const earnings = referralCount * PLAN_PRICE * COMMISSION_RATE
 
   const isAffiliatePending = latestApp?.status === "pending"
+  const affiliateApplicationLocked = Boolean(
+    isAffiliatePending && latestApp?.has_edited
+  )
 
   const showAffiliateApplyCta = Boolean(
     user &&
@@ -687,9 +690,17 @@ export default function SettingsPage() {
                     <button
                       type="button"
                       onClick={() => setShowAffiliateModal(true)}
-                      className="shrink-0 rounded-xl bg-gradient-to-r from-emerald-500 to-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-lg hover:opacity-95"
+                      className={
+                        affiliateApplicationLocked
+                          ? "shrink-0 rounded-xl bg-white/10 px-4 py-2 text-sm font-semibold text-white/60 hover:bg-white/15"
+                          : "shrink-0 rounded-xl bg-gradient-to-r from-emerald-500 to-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-lg hover:opacity-95"
+                      }
                     >
-                      {isAffiliatePending ? "Update application" : "Apply to be an Affiliate"}
+                      {affiliateApplicationLocked
+                        ? "View Application"
+                        : isAffiliatePending
+                          ? "Edit Application"
+                          : "Apply to be an Affiliate"}
                     </button>
                   )}
                 </div>
@@ -699,8 +710,16 @@ export default function SettingsPage() {
                     <p className="font-medium text-white">Application status: pending</p>
                     <p className="mt-1 text-amber-100/90">
                       We&apos;ll email you at {user?.email ?? "your account email"} when there&apos;s
-                      an update. You can refine your answers anytime before a decision is made.
+                      an update.
+                      {!latestApp?.has_edited
+                        ? " You have one edit available before your application is locked."
+                        : ""}
                     </p>
+                    {latestApp?.has_edited ? (
+                      <p className="mt-2 text-xs text-amber-200/90">
+                        You have already used your one edit.
+                      </p>
+                    ) : null}
                   </div>
                 ) : latestApp?.status === "rejected" ? (
                   <div className="rounded-xl border border-red-500/35 bg-red-500/10 px-4 py-3 text-sm text-red-100">
@@ -1029,7 +1048,12 @@ export default function SettingsPage() {
         open={showAffiliateModal}
         onClose={() => setShowAffiliateModal(false)}
         onSubmit={() => void afterAffiliateModalSubmit()}
-        title="Affiliate application"
+        prefillFrom={latestApp}
+        title={
+          affiliateApplicationLocked
+            ? "View application"
+            : "Affiliate application"
+        }
       />
     </>
   )

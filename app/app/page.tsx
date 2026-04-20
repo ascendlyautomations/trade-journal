@@ -8,6 +8,7 @@ import { supabase } from "../../lib/supabaseClient"
 import {
   buildTradesFromParsedCsv,
   stripBom,
+  tradesInsertRowsPrivate,
 } from "@/lib/csvTradeParsers"
 
 export default function Home() {
@@ -83,7 +84,7 @@ export default function Home() {
           const chunkSize = 100
 
           for (let i = 0; i < tradesToInsert.length; i += chunkSize) {
-            const chunk = tradesToInsert.slice(i, i + chunkSize)
+            const chunk = tradesInsertRowsPrivate(tradesToInsert.slice(i, i + chunkSize))
 
             const { error } = await supabase.from("trades").insert(chunk)
 
@@ -102,7 +103,7 @@ export default function Home() {
             .map((r) => `Row ${r.rowNumber}: ${r.reason}`)
             .join("\n")
 
-          let msg = `Uploaded ${tradesToInsert.length} trade(s).`
+          let msg = `Trades imported successfully. They are private by default. You can make them public by editing a trade. (${tradesToInsert.length} imported)`
           if (summary.total > tradesToInsert.length) {
             msg += ` ${skipped} row(s) skipped (${summary.total} total).`
           }

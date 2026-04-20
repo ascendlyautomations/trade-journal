@@ -2,12 +2,9 @@
 import Navbar from "../components/Navbar"
 import TradeCard from "../components/TradeCard"
 import { formatEST } from "@/lib/formatEST"
+import { getESTDateKey, toDateKey } from "@/lib/formatDate"
 import { useEffect, useMemo, useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
-
-function toDateKey(y: number, mZeroBased: number, dayNum: number) {
-  return `${y}-${String(mZeroBased + 1).padStart(2, "0")}-${String(dayNum).padStart(2, "0")}`
-}
 
 export default function CalendarPage() {
   const [trades, setTrades] = useState<any[]>([])
@@ -15,6 +12,7 @@ export default function CalendarPage() {
     referral_code?: string | null
   } | null>(null)
   const [accountFilter, setAccountFilter] = useState("all")
+  const [selectedMode, setSelectedMode] = useState("all")
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [selectedTrades, setSelectedTrades] = useState<any[]>([])
@@ -64,8 +62,17 @@ export default function CalendarPage() {
   )
 
   const filteredTrades = trades.filter((trade) => {
-    if (accountFilter === "all") return true
-    return `${trade.account_type} (${trade.account_id})` === accountFilter
+    if (accountFilter !== "all") {
+      if (`${trade.account_type} (${trade.account_id})` !== accountFilter) {
+        return false
+      }
+    }
+    if (selectedMode === "all") return true
+    const m = selectedMode.toLowerCase()
+    return (
+      trade.mode?.toLowerCase() === m ||
+      trade.account_type?.toLowerCase() === m
+    )
   })
 
   const year = currentDate.getFullYear()
@@ -77,13 +84,16 @@ export default function CalendarPage() {
   const dailyData: any = {}
 
   filteredTrades.forEach((trade) => {
-    const d = new Date(trade.created_at)
-    if (d.getMonth() === month && d.getFullYear() === year) {
-      const day = d.getDate()
-      if (!dailyData[day]) dailyData[day] = { pnl: 0, trades: [] }
-      dailyData[day].pnl += trade.pnl || 0
-      dailyData[day].trades.push(trade)
-    }
+    const tradeKey = getESTDateKey(String(trade.created_at ?? ""))
+    if (!tradeKey) return
+
+    const [yk, mk, dk] = tradeKey.split("-").map(Number)
+    if (yk !== year || mk !== month + 1) return
+
+    const day = dk
+    if (!dailyData[day]) dailyData[day] = { pnl: 0, trades: [] }
+    dailyData[day].pnl += trade.pnl || 0
+    dailyData[day].trades.push(trade)
   })
 
   const monthTrades = Object.values(dailyData).flatMap((d: any) => d.trades)
@@ -132,12 +142,7 @@ export default function CalendarPage() {
     }
     setSelectedDate(key)
     const list = filteredTrades.filter((trade) => {
-      const d = new Date(trade.created_at)
-      return (
-        d.getFullYear() === year &&
-        d.getMonth() === month &&
-        d.getDate() === dayNum
-      )
+      return getESTDateKey(String(trade.created_at ?? "")) === key
     })
     setSelectedTrades(list)
   }
@@ -280,12 +285,14 @@ export default function CalendarPage() {
     <>
       <Navbar />
 
-      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white p-6">
+      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white py-6">
 
-        <div className="max-w-7xl mx-auto flex flex-col gap-4 md:flex-row md:gap-8 items-start">
+        <div className="max-w-7xl mx-auto w-full px-4">
+
+          <div className="grid grid-cols-1 md:grid-cols-[2fr_1.4fr] gap-4 md:gap-8 items-start">
 
           {/* LEFT SIDE (CALENDAR) */}
-          <div className="w-full min-w-0 overflow-x-hidden md:w-[65%]">
+          <div className="w-full min-w-0 overflow-x-hidden">
 
             {/* HEADER — arrows + month (same row mobile & desktop) */}
             <div className="flex items-center justify-between mb-3 md:mb-6">
@@ -310,7 +317,7 @@ export default function CalendarPage() {
               </button>
             </div>
 
-            <div className="w-full max-w-xs mx-auto mb-3 md:mb-4">
+            <div className="flex items-center gap-3 flex-wrap w-full max-w-xl mx-auto mb-3 md:mb-4">
               <select
                 value={accountFilter}
                 onChange={(e) => {
@@ -318,12 +325,27 @@ export default function CalendarPage() {
                   setSelectedDate(null)
                   setSelectedTrades([])
                 }}
-                className="w-full bg-[#0f172a] border border-white/10 px-3 py-2 rounded text-white"
+                className="flex-1 min-w-[140px] bg-[#0f172a] border border-white/10 px-3 py-2 rounded text-white"
               >
                 <option value="all">All Accounts</option>
                 {accounts.map((acc) => (
                   <option key={acc}>{acc}</option>
                 ))}
+              </select>
+              <select
+                value={selectedMode}
+                onChange={(e) => {
+                  setSelectedMode(e.target.value)
+                  setSelectedDate(null)
+                  setSelectedTrades([])
+                }}
+                className="flex-1 min-w-[140px] bg-[#0b1f3a] text-white border border-white/10 rounded-lg px-3 py-2"
+              >
+                <option value="all">All Modes</option>
+                <option value="live">Live</option>
+                <option value="funded">Funded</option>
+                <option value="eval">Eval</option>
+                <option value="backtest">Backtest</option>
               </select>
             </div>
 
@@ -342,7 +364,7 @@ export default function CalendarPage() {
             {/* CALENDAR GRID */}
             <div className="space-y-2">
               {weeks.map((week, weekIndex) => {
-                const weekTotal = getWeekTotal(week)
+                const weekTotal = Number(getWeekTotal(week) ?? 0)
                 const mobileWeek = week.filter((day, dayIndex) => {
                   if (day === null) {
                     const weekday = (weekIndex * 7 + dayIndex) % 7
@@ -388,7 +410,7 @@ export default function CalendarPage() {
           </div>
 
           {/* RIGHT SIDE PANEL — NOW ALIGNED TO TOP */}
-          <div className="w-full md:w-[35%] md:max-w-[300px] space-y-4 mt-4 md:mt-[52px]">
+          <div className="w-full min-w-0 max-w-none space-y-4 mt-4 md:mt-[52px]">
 
             {/* STATS */}
             <div className="bg-white/5 p-5 rounded-xl border border-white/10">
@@ -457,18 +479,21 @@ export default function CalendarPage() {
                 {selectedTrades.length === 0 ? (
                   <p className="text-center text-gray-400 text-sm">No trades this day</p>
                 ) : (
-                  <div className="flex flex-col gap-3">
+                  <div className="flex w-full flex-col gap-3">
                     {selectedTrades.map((trade) => (
-                      <TradeCard
-                        key={trade.id}
-                        trade={trade}
-                        shareProfile={shareProfile}
-                      />
+                      <div key={trade.id} className="w-full min-w-0">
+                        <TradeCard
+                          trade={trade}
+                          shareProfile={shareProfile}
+                        />
+                      </div>
                     ))}
                   </div>
                 )}
               </div>
             ) : null}
+
+          </div>
 
           </div>
 

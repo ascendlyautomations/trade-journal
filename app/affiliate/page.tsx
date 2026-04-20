@@ -49,6 +49,7 @@ export default function AffiliateDashboard() {
   )
 
   const isPending = latestApp?.status === "pending"
+  const applicationLocked = Boolean(isPending && latestApp?.has_edited)
   const hasAffiliateAccess = Boolean(referralCode && referralCode.length > 0)
 
   const applicationStatusLabel = useMemo(() => {
@@ -209,9 +210,17 @@ export default function AffiliateDashboard() {
                 <button
                   type="button"
                   onClick={() => setShowAffiliateModal(true)}
-                  className="rounded-lg bg-gradient-to-r from-emerald-500 to-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-lg hover:opacity-95"
+                  className={
+                    applicationLocked
+                      ? "rounded-lg bg-white/10 px-4 py-2 text-sm font-semibold text-white/60 hover:bg-white/15"
+                      : "rounded-lg bg-gradient-to-r from-emerald-500 to-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-lg hover:opacity-95"
+                  }
                 >
-                  {isPending ? "Update application" : "Apply to be an Affiliate"}
+                  {applicationLocked
+                    ? "View Application"
+                    : isPending
+                      ? "Edit Application"
+                      : "Apply to be an Affiliate"}
                 </button>
               )}
               <Link
@@ -231,10 +240,29 @@ export default function AffiliateDashboard() {
             </div>
           </div>
 
+          {!loading && !latestApp && !referralCode ? (
+            <div className="mb-6 text-sm text-white/60">
+              No application submitted yet.
+            </div>
+          ) : null}
+
           {applicationStatusLabel === "pending" && (
             <div className="mb-6 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
-              Your affiliate application is <strong>under review</strong>. You can update your answers
-              anytime before a decision is made.
+              <p>
+                Your affiliate application is <strong>under review</strong>.
+                {!latestApp?.has_edited ? (
+                  <>
+                    {" "}
+                    Use <strong>Edit Application</strong> once to change your answers before a decision
+                    is made.
+                  </>
+                ) : null}
+              </p>
+              {latestApp?.has_edited ? (
+                <p className="mt-2 text-xs text-amber-200/90">
+                  You have already used your one edit.
+                </p>
+              ) : null}
             </div>
           )}
 
@@ -364,6 +392,8 @@ export default function AffiliateDashboard() {
         open={showAffiliateModal}
         onClose={() => setShowAffiliateModal(false)}
         onSubmit={() => afterModalSubmit()}
+        prefillFrom={latestApp}
+        title={applicationLocked ? "View application" : "Affiliate application"}
       />
     </>
   )

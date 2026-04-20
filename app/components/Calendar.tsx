@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react"
 import { formatPnlCurrency, formatPnlWholeDollars } from "../../lib/formatMoney"
 import { formatEST } from "@/lib/formatEST"
+import { getESTDateKey, toDateKey } from "@/lib/formatDate"
 
 type TradeLike = {
   id: string | number
@@ -21,14 +22,12 @@ type TradeLike = {
   strategy?: string | null
 }
 
+type NormalizedTrade = TradeLike & { estKey: string }
+
 type CalendarProps = {
   trades: TradeLike[]
   showAccountFilter?: boolean
   showControls?: boolean
-}
-
-function dayKey(date: Date) {
-  return date.toISOString().slice(0, 10)
 }
 
 function tradeImageSrc(imageUrl: string | null | undefined): string | null {
@@ -53,19 +52,26 @@ export default function Calendar({
     new Date(now.getFullYear(), now.getMonth(), 1)
   )
   const [selectedDay, setSelectedDay] = useState<string | null>(null)
-  const [selectedTrade, setSelectedTrade] = useState<TradeLike | null>(null)
+  const [selectedTrade, setSelectedTrade] = useState<NormalizedTrade | null>(
+    null
+  )
+
+  const normalizedTrades = useMemo((): NormalizedTrade[] => {
+    return (trades || []).map((trade) => ({
+      ...trade,
+      estKey: getESTDateKey(String(trade.created_at ?? "")),
+    }))
+  }, [trades])
 
   const byDay = useMemo(() => {
-    const map: Record<string, TradeLike[]> = {}
-    for (const t of trades || []) {
-      const d = new Date(t.created_at)
-      if (Number.isNaN(d.getTime())) continue
-      const key = dayKey(new Date(d.getFullYear(), d.getMonth(), d.getDate()))
-      if (!map[key]) map[key] = []
-      map[key].push(t)
+    const map: Record<string, NormalizedTrade[]> = {}
+    for (const t of normalizedTrades) {
+      if (!t.estKey) continue
+      if (!map[t.estKey]) map[t.estKey] = []
+      map[t.estKey].push(t)
     }
     return map
-  }, [trades])
+  }, [normalizedTrades])
 
   const monthLabel = monthDate.toLocaleString(undefined, {
     month: "long",
@@ -93,7 +99,11 @@ export default function Calendar({
   const getWeekTotal = (week: Array<{ date: Date | null }>) => {
     return week.reduce((total, cell) => {
       if (!cell.date) return total
-      const key = dayKey(cell.date)
+      const key = toDateKey(
+        cell.date.getFullYear(),
+        cell.date.getMonth(),
+        cell.date.getDate()
+      )
       const dayTotal = (byDay[key] || []).reduce(
         (sum, trade) => sum + (Number(trade.pnl) || 0),
         0
@@ -102,15 +112,18 @@ export default function Calendar({
     }, 0)
   }
 
-  const selectedTrades = selectedDay ? byDay[selectedDay] || [] : []
-  const dayTrades = selectedTrades
+  const tradesForDay = selectedDay
+    ? normalizedTrades.filter((trade) => trade.estKey === selectedDay)
+    : []
   const sortedDayTrades = useMemo(() => {
-    return [...dayTrades].sort(
-      (a, b) =>
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    return [...tradesForDay].sort((a, b) =>
+      String(b.created_at ?? "").localeCompare(String(a.created_at ?? ""))
     )
-  }, [dayTrades])
-  const totalPnl = dayTrades.reduce((sum, t) => sum + (Number(t.pnl) || 0), 0)
+  }, [tradesForDay])
+  const totalPnl = tradesForDay.reduce(
+    (sum, t) => sum + (Number(t.pnl) || 0),
+    0
+  )
 
   return (
     <div className="space-y-4 rounded-xl border border-white/10 bg-white/[0.03] p-4">
@@ -175,7 +188,11 @@ export default function Calendar({
                         />
                       )
                     }
-                    const key = dayKey(cell.date)
+                    const key = toDateKey(
+                      cell.date.getFullYear(),
+                      cell.date.getMonth(),
+                      cell.date.getDate()
+                    )
                     const dayTrades = byDay[key] || []
                     const totalPnl = dayTrades.reduce(
                       (sum, t) => sum + (Number(t.pnl) || 0),
@@ -218,7 +235,11 @@ export default function Calendar({
                       />
                     )
                   }
-                  const key = dayKey(cell.date)
+                  const key = toDateKey(
+                    cell.date.getFullYear(),
+                    cell.date.getMonth(),
+                    cell.date.getDate()
+                  )
                   const dayTrades = byDay[key] || []
                   const totalPnl = dayTrades.reduce(
                     (sum, t) => sum + (Number(t.pnl) || 0),
@@ -268,7 +289,7 @@ export default function Calendar({
       <div className="mx-auto mt-6 w-full max-w-2xl rounded-xl border border-white/10 bg-[#020617]/80 p-5 backdrop-blur-md">
         {!selectedDay ? (
           <p className="text-sm text-gray-400">Select a day to view trades.</p>
-        ) : dayTrades.length === 0 ? (
+        ) : tradesForDay.length === 0 ? (
           <p className="text-sm text-gray-400">No trades on this day.</p>
         ) : (
           <div>

@@ -31,6 +31,8 @@ export type CsvTradeInsert = {
   reviewed: boolean
   duration_seconds: number | null
   duration_text: string | null
+  /** CSV imports are always private; user can publish from the trade editor. */
+  is_public: false
 }
 
 export type LogicalField =
@@ -495,6 +497,7 @@ export function parseTradovateRow(row: CsvRow, userId: string): CsvTradeInsert {
     reviewed: false,
     duration_seconds,
     duration_text,
+    is_public: false,
   }
 }
 
@@ -681,6 +684,7 @@ function buildFlexibleTradeInsert(
     reviewed: false,
     duration_seconds,
     duration_text,
+    is_public: false,
   }
 
   return { ok: true, rowNumber, trade }
@@ -692,6 +696,11 @@ export function buildCleanCsvTrade(row: CsvRow, userId: string): CsvTradeInsert 
   const res = buildFlexibleTradeInsert(f, userId, 1)
   if (res.ok) return res.trade
   throw new Error(res.reason)
+}
+
+/** Force private flag on insert payloads (belt-and-suspenders). */
+export function tradesInsertRowsPrivate<T extends Record<string, unknown>>(rows: T[]) {
+  return rows.map((row) => ({ ...row, is_public: false }))
 }
 
 export function buildTradesFromParsedCsv(

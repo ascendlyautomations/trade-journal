@@ -2,13 +2,18 @@
 
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabaseClient"
-import { submitAffiliateApplication } from "@/lib/affiliateApplication"
+import {
+  submitAffiliateApplication,
+  type AffiliateApplicationRow,
+} from "@/lib/affiliateApplication"
 
 type Props = {
   open: boolean
   onClose: () => void
   onSubmit: () => void | Promise<void>
   title?: string
+  /** Latest application row — pre-fills the form when editing (pending / rejected). */
+  prefillFrom?: AffiliateApplicationRow | null
 }
 
 function normalizeAffiliateRequestedCode(raw: string): string {
@@ -34,23 +39,45 @@ export default function AffiliateApplyModal({
   onClose,
   onSubmit,
   title = "Affiliate application",
+  prefillFrom = null,
 }: Props) {
   const [socialHandle, setSocialHandle] = useState("")
   const [followers, setFollowers] = useState("")
   const [requestedCode, setRequestedCode] = useState("")
+  const [isEditing, setIsEditing] = useState(false)
+  const [showEditConfirm, setShowEditConfirm] = useState(false)
   const [busy, setBusy] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [codeAvailability, setCodeAvailability] = useState<CodeAvailability>("idle")
 
   useEffect(() => {
-    if (!open) {
+    if (!open) return
+
+    const row = prefillFrom
+    const canPrefill = row && row.status !== "approved"
+
+    if (canPrefill) {
+      setSocialHandle(row.social_handle ?? "")
+      setFollowers(row.followers != null ? String(row.followers) : "")
+      setRequestedCode(
+        row.requested_code ? row.requested_code.trim().toUpperCase() : ""
+      )
+    } else {
       setSocialHandle("")
       setFollowers("")
       setRequestedCode("")
-      setFormError(null)
-      setCodeAvailability("idle")
     }
-  }, [open])
+
+    if (!row || row.status === "rejected") {
+      setIsEditing(true)
+    } else {
+      setIsEditing(false)
+    }
+
+    setFormError(null)
+    setCodeAvailability("idle")
+    setShowEditConfirm(false)
+  }, [open, prefillFrom])
 
   /* Debounced live check while typing */
   useEffect(() => {
@@ -86,11 +113,30 @@ export default function AffiliateApplyModal({
   if (!open) return null
 
   const normalizedRequestedCode = normalizeAffiliateRequestedCode(requestedCode)
-  const submitDisabled = busy || codeAvailability === "taken"
+
+  const canEditFields = Boolean(
+    !prefillFrom ||
+      prefillFrom.status === "rejected" ||
+      (prefillFrom.status === "pending" &&
+        !prefillFrom.has_edited &&
+        isEditing)
+  )
+
+  const showInnerEdit =
+    Boolean(
+      prefillFrom?.status === "pending" &&
+        !prefillFrom.has_edited &&
+        !isEditing
+    )
+
+  const submitDisabled =
+    busy || codeAvailability === "taken" || !canEditFields
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setFormError(null)
+
+    if (!canEditFields) return
 
     const handle = socialHandle.trim()
     if (!handle) {
@@ -128,11 +174,23 @@ export default function AffiliateApplyModal({
       return
     }
 
-    const { ok, error } = await submitAffiliateApplication(supabase, user.id, {
+    const formPayload = {
       socialHandle: handle,
       followers: n,
       requestedCode: codeForSubmit,
-    })
+    }
+    console.log("SUBMITTING:", formPayload)
+
+    const saveAndLock =
+      prefillFrom?.status === "pending" &&
+      isEditing &&
+      !prefillFrom.has_edited
+
+    const { ok, error } = await submitAffiliateApplication(
+      supabase,
+      user.id,
+      formPayload
+    )
 
     setBusy(false)
     if (!ok || error) {
@@ -140,10 +198,15 @@ export default function AffiliateApplyModal({
       return
     }
 
+    if (saveAndLock) {
+      alert("Application saved and locked.")
+    }
+
     await onSubmit()
   }
 
   return (
+    <>
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
       <div
         className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-white/10 bg-[#152238] p-6 text-white shadow-2xl"
@@ -157,14 +220,21 @@ export default function AffiliateApplyModal({
           Status updates appear on this page and in Settings → Affiliate.
         </p>
 
+        {prefillFrom?.status === "pending" && prefillFrom.has_edited ? (
+          <p className="mt-3 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-gray-400">
+            You have already used your one edit.
+          </p>
+        ) : null}
+
         <form onSubmit={(e) => void handleSubmit(e)} className="mt-4 space-y-3">
           <div>
             <label className="text-xs text-gray-400">Social handle</label>
             <input
               value={socialHandle}
               onChange={(e) => setSocialHandle(e.target.value)}
-              required
-              className="mt-1 w-full rounded-lg border border-white/10 bg-[#0f172a] p-2.5 text-sm text-white placeholder:text-gray-500"
+              required={canEditFields}
+              disabled={!canEditFields}
+              className="mt-1 w-full rounded-lg border border-white/10 bg-[#0f172a] p-2.5 text-sm text-white placeholder:text-gray-500 disabled:cursor-not-allowed disabled:opacity-60"
               placeholder="@you or profile URL"
             />
           </div>
@@ -176,8 +246,9 @@ export default function AffiliateApplyModal({
               step={1}
               value={followers}
               onChange={(e) => setFollowers(e.target.value)}
-              required
-              className="mt-1 w-full rounded-lg border border-white/10 bg-[#0f172a] p-2.5 text-sm text-white placeholder:text-gray-500"
+              required={canEditFields}
+              disabled={!canEditFields}
+              className="mt-1 w-full rounded-lg border border-white/10 bg-[#0f172a] p-2.5 text-sm text-white placeholder:text-gray-500 disabled:cursor-not-allowed disabled:opacity-60"
               placeholder="Approximate follower count"
             />
           </div>
@@ -187,7 +258,8 @@ export default function AffiliateApplyModal({
               value={requestedCode}
               onChange={(e) => setRequestedCode(e.target.value.toUpperCase())}
               aria-invalid={codeAvailability === "taken"}
-              className="mt-1 w-full rounded-lg border border-white/10 bg-[#0f172a] p-2.5 font-mono text-sm text-white placeholder:text-gray-500"
+              disabled={!canEditFields}
+              className="mt-1 w-full rounded-lg border border-white/10 bg-[#0f172a] p-2.5 font-mono text-sm text-white placeholder:text-gray-500 disabled:cursor-not-allowed disabled:opacity-60"
               placeholder="YOURCODE"
             />
             {normalizedRequestedCode ? (
@@ -207,24 +279,94 @@ export default function AffiliateApplyModal({
 
           {formError ? <p className="text-sm text-red-300">{formError}</p> : null}
 
-          <div className="flex justify-end gap-2 pt-2">
+          <div className="flex flex-wrap justify-end gap-2 pt-2">
             <button
               type="button"
               onClick={onClose}
               className="rounded-lg bg-white/10 px-4 py-2 text-sm hover:bg-white/20"
             >
-              Cancel
+              {prefillFrom?.status === "pending" && prefillFrom.has_edited
+                ? "Close"
+                : "Cancel"}
             </button>
-            <button
-              type="submit"
-              disabled={submitDisabled}
-              className="rounded-lg bg-gradient-to-r from-blue-500 to-emerald-500 px-5 py-2 text-sm font-semibold disabled:opacity-50"
-            >
-              {busy ? "Submitting…" : "Submit application"}
-            </button>
+            {showInnerEdit ? (
+              <button
+                type="button"
+                onClick={() => setShowEditConfirm(true)}
+                className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-blue-600"
+              >
+                Edit Application
+              </button>
+            ) : null}
+            {canEditFields ? (
+              <button
+                type="submit"
+                disabled={submitDisabled}
+                className="rounded-lg bg-gradient-to-r from-blue-500 to-emerald-500 px-5 py-2 text-sm font-semibold disabled:opacity-50"
+              >
+                {busy
+                  ? "Submitting…"
+                  : prefillFrom?.status === "pending" &&
+                      isEditing &&
+                      !prefillFrom.has_edited
+                    ? "Save & lock"
+                    : "Submit application"}
+              </button>
+            ) : null}
           </div>
         </form>
       </div>
     </div>
+
+    {showEditConfirm ? (
+      <div
+        className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4"
+        role="presentation"
+        onClick={() => setShowEditConfirm(false)}
+      >
+        <div
+          className="w-[90%] max-w-md rounded-2xl border border-white/10 bg-[#0b1f3a] p-6"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="affiliate-edit-confirm-title"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <h2
+            id="affiliate-edit-confirm-title"
+            className="mb-2 text-lg font-semibold text-white"
+          >
+            Edit Application
+          </h2>
+
+          <p className="mb-6 text-sm text-white/70">
+            You can only edit your affiliate application{" "}
+            <span className="font-semibold text-red-400">once</span>. After saving, it will be
+            permanently locked.
+          </p>
+
+          <div className="flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => setShowEditConfirm(false)}
+              className="rounded-lg bg-white/10 px-4 py-2 text-white"
+            >
+              Cancel
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setIsEditing(true)
+                setShowEditConfirm(false)
+              }}
+              className="rounded-lg bg-blue-500 px-4 py-2 text-white"
+            >
+              Continue
+            </button>
+          </div>
+        </div>
+      </div>
+    ) : null}
+    </>
   )
 }

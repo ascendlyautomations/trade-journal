@@ -1708,17 +1708,8 @@ const worstDay = dailyPnLs.length > 0
               <>
                 <button
                   type="button"
-                  onClick={() => setShowPerformanceShare(true)}
-                  className="inline-flex h-[34px] shrink-0 items-center whitespace-nowrap rounded-md bg-white/10 px-3 py-1 text-sm text-white hover:bg-white/20"
-                  title="Share performance"
-                  aria-label="Share performance"
-                >
-                  📤 Share
-                </button>
-                <button
-                  type="button"
                   onClick={() => setShowPublicOnly(!showPublicOnly)}
-                  className={`hidden md:inline-flex shrink-0 whitespace-nowrap rounded-md px-3 py-1 text-sm ${
+                  className={`hidden md:inline-flex shrink-0 whitespace-nowrap rounded-md px-3 py-2 text-sm ${
                     showPublicOnly
                       ? "bg-emerald-500 text-white hover:bg-emerald-600"
                       : "bg-white/10 text-white hover:bg-white/20"
@@ -1726,6 +1717,16 @@ const worstDay = dailyPnLs.length > 0
                 >
                   Public Trades
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setShowPerformanceShare(true)}
+                  className="inline-flex h-[34px] shrink-0 items-center whitespace-nowrap rounded-md bg-white/10 px-3 py-1 text-sm text-white hover:bg-white/20"
+                  title="Share performance"
+                  aria-label="Share performance"
+                >
+                  📤 Share
+                </button>
+                
 
                 <div className="hidden md:flex shrink-0 items-center justify-center">
                   {renderDashboardFilterSettings()}
