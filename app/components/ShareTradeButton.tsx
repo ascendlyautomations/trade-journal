@@ -18,6 +18,8 @@ export type ShareTradeButtonProps = {
    * `message-only` — open conversation picker only (no download UI).
    */
   mode?: "full" | "message-only"
+  /** When set, parent owns the send-to-DMs UI (no in-component picker). */
+  onSendClick?: () => void
 }
 
 export default function ShareTradeButton({
@@ -26,6 +28,7 @@ export default function ShareTradeButton({
   variant = "full",
   profile = null,
   mode = "full",
+  onSendClick,
 }: ShareTradeButtonProps) {
   const [busy, setBusy] = useState(false)
   const [isOpen, setIsOpen] = useState(false)
@@ -56,12 +59,16 @@ export default function ShareTradeButton({
       e.stopPropagation()
       e.preventDefault()
       if (mode === "message-only") {
+        if (onSendClick) {
+          onSendClick()
+          return
+        }
         setConversationOpen(true)
         return
       }
       setIsOpen(true)
     },
-    [mode]
+    [mode, onSendClick]
   )
 
   const tradeIdForDm =
@@ -88,12 +95,10 @@ export default function ShareTradeButton({
         onClick={() => setIsOpen(true)}
         className={
           className.trim() ||
-          (variant === "icon"
-            ? "rounded-lg bg-white/10 px-2 py-1 text-base leading-none text-white transition hover:bg-white/20 disabled:opacity-60"
-            : "rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10 disabled:opacity-60")
+          "p-1 rounded-lg bg-blue-500/20 hover:bg-blue-500/30 transition"
         }
       >
-        {busy ? (variant === "icon" ? "…" : "Saving…") : variant === "icon" ? "📤" : "Share Trade"}
+        {busy ? (variant === "icon" ? "…" : "Saving…") : "📤"}
       </button>
 
       {isOpen &&
@@ -126,7 +131,14 @@ export default function ShareTradeButton({
 
                 <button
                   type="button"
-                  onClick={() => openMessageShare()}
+                  onClick={() => {
+                    setIsOpen(false)
+                    if (onSendClick) {
+                      onSendClick()
+                      return
+                    }
+                    openMessageShare()
+                  }}
                   className="w-full rounded-lg bg-white/10 py-2 text-white hover:bg-white/20"
                 >
                   Send in Messages
@@ -145,12 +157,14 @@ export default function ShareTradeButton({
           document.body
         )}
 
-      <ShareToConversationsModal
-        open={conversationOpen && Boolean(tradeIdForDm)}
-        onClose={() => setConversationOpen(false)}
-        title="Send trade"
-        tradeId={tradeIdForDm}
-      />
+      {!onSendClick ? (
+        <ShareToConversationsModal
+          open={conversationOpen && Boolean(tradeIdForDm)}
+          onClose={() => setConversationOpen(false)}
+          title="Send trade"
+          tradeId={tradeIdForDm}
+        />
+      ) : null}
     </>
   )
 }

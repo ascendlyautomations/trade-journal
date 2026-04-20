@@ -18,6 +18,8 @@ import {
   getTradeDurationDisplay,
 } from "@/lib/tradeDisplayFormat"
 import { formatEST } from "@/lib/formatEST"
+import ShareTradeButton from "@/app/components/ShareTradeButton"
+import ShareToConversationsModal from "@/app/components/ShareToConversationsModal"
 
 function formatMoney(value: unknown): string {
   if (value === null || value === undefined) return "-"
@@ -62,8 +64,8 @@ export default function TradesPage() {
   const [gateProfile, setGateProfile] = useState<any | null>(null)
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [showPerformanceShare, setShowPerformanceShare] = useState(false)
-  const [isSendModalOpen, setIsSendModalOpen] = useState(false)
   const [selectedTrade, setSelectedTrade] = useState<any>(null)
+  const [isSendModalOpen, setIsSendModalOpen] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
@@ -380,16 +382,7 @@ export default function TradesPage() {
                     >
                       All
                     </button>
-                    <button
-                      onClick={() => setShowPublicOnly((prev) => !prev)}
-                      className={`px-4 py-2 rounded-xl text-sm font-medium transition
-                        ${showPublicOnly
-                          ? "bg-blue-500 text-white"
-                          : "bg-white/10 text-gray-300 hover:bg-white/20"
-                        }`}
-                    >
-                      Public
-                    </button>
+                    
 
                     <div className="flex items-center gap-2">
                       <span
@@ -457,6 +450,16 @@ export default function TradesPage() {
                 }
                 trailing={
                   <div className="flex w-full flex-wrap items-center justify-center gap-2 md:w-auto">
+                    <button
+                      onClick={() => setShowPublicOnly((prev) => !prev)}
+                      className={`px-4 py-2 rounded-xl text-sm font-medium transition
+                        ${showPublicOnly
+                          ? "bg-blue-500 text-white"
+                          : "bg-white/10 text-gray-300 hover:bg-white/20"
+                        }`}
+                    >
+                      Public
+                    </button>
                     <button
                       type="button"
                       onClick={() => setShowPerformanceShare(true)}
@@ -541,16 +544,13 @@ export default function TradesPage() {
                       >
                         Edit
                       </button>
-                      <button
-                        onClick={() => {
-                          console.log("SHARE BUTTON CLICKED", trade);
-                          setSelectedTrade(trade);
-                          setIsSendModalOpen(true);
+                      <ShareTradeButton
+                        trade={trade}
+                        onSendClick={() => {
+                          setSelectedTrade(trade)
+                          setIsSendModalOpen(true)
                         }}
-                        className="p-2 rounded-lg bg-blue-500/20 hover:bg-blue-500/30 transition"
-                      >
-                        📤
-                      </button>
+                      />
                       <button
                         onClick={() => deleteTrade(trade.id)}
                         className="text-white hover:text-red-400 text-xl transition leading-none"
@@ -826,6 +826,17 @@ export default function TradesPage() {
         subtitle="Matches account, mode & date filters"
         profile={gateProfile}
       />
+
+      {isSendModalOpen && selectedTrade && (
+        <ShareToConversationsModal
+          open={isSendModalOpen}
+          onClose={() => setIsSendModalOpen(false)}
+          title="Send trade"
+          tradeId={
+            selectedTrade?.id != null ? String(selectedTrade.id) : null
+          }
+        />
+      )}
 
     </>
   )

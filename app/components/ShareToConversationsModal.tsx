@@ -124,12 +124,12 @@ export default function ShareToConversationsModal({
 
   return (
     <div
-      className="fixed inset-0 z-[10002] flex items-center justify-center bg-black/60 p-4"
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm"
       onClick={onClose}
       role="presentation"
     >
       <div
-        className="w-full max-w-[400px] rounded-xl border border-white/10 bg-[#0f172a] p-4 text-white shadow-xl"
+        className="w-full max-w-md bg-[#0b1f3a] rounded-2xl shadow-xl p-6 text-white"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="mb-3 text-lg font-semibold">{title}</h2>
