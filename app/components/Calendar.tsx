@@ -3,7 +3,11 @@
 import { useMemo, useState } from "react"
 import { formatPnlCurrency, formatPnlWholeDollars } from "../../lib/formatMoney"
 import { formatEST } from "@/lib/formatEST"
-import { getESTDateKey, toDateKey } from "@/lib/formatDate"
+import {
+  getTradingDayKey,
+  resolveTradingTimeSourceForKey,
+  toDateKey,
+} from "@/lib/formatDate"
 
 type TradeLike = {
   id: string | number
@@ -59,7 +63,11 @@ export default function Calendar({
   const normalizedTrades = useMemo((): NormalizedTrade[] => {
     return (trades || []).map((trade) => ({
       ...trade,
-      estKey: getESTDateKey(String(trade.created_at ?? "")),
+      estKey: (() => {
+        const resolved = resolveTradingTimeSourceForKey(trade)
+        if (!resolved) return ""
+        return getTradingDayKey(resolved) ?? ""
+      })(),
     }))
   }, [trades])
 

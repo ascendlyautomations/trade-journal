@@ -66,11 +66,16 @@ export default function TradesPage() {
   const [showPerformanceShare, setShowPerformanceShare] = useState(false)
   const [selectedTrade, setSelectedTrade] = useState<any>(null)
   const [isSendModalOpen, setIsSendModalOpen] = useState(false)
+  const [visibleCount, setVisibleCount] = useState(10)
   const router = useRouter()
 
   useEffect(() => {
     initPage()
   }, [])
+
+  useEffect(() => {
+    setVisibleCount(10)
+  }, [timeframe, accountFilter, accountTypeFilter, resultFilter])
 
   useEffect(() => {
     if (loading || !gateProfile) return
@@ -159,7 +164,6 @@ export default function TradesPage() {
       .select("*")
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
-      .limit(20);
 
     console.log("FETCHED TRADES:", trades)
 
@@ -291,13 +295,13 @@ export default function TradesPage() {
     return "All Trades"
   }, [resultFilter, timeframe, selectedDate])
 
-  const totalTrades = filteredTrades.length
-  const wins = filteredTrades.filter(t => t.pnl > 0)
+  const totalTrades = trades.length
+  const wins = trades.filter((t) => t.pnl > 0)
   const winRate = totalTrades ? (wins.length / totalTrades) * 100 : 0
-  const totalPnL = filteredTrades.reduce((sum, t) => sum + (t.pnl || 0), 0)
+  const totalPnL = trades.reduce((sum, t) => sum + (t.pnl || 0), 0)
   const avgRR =
-    filteredTrades.reduce((sum, t) => sum + (Number(t.rr) || 0), 0) /
-    (filteredTrades.length || 1)
+    trades.reduce((sum, t) => sum + (Number(t.rr) || 0), 0) /
+    (trades.length || 1)
 
   const symbolMap: any = {
     MNQ: "CME_MINI:NQ1!",
@@ -480,8 +484,12 @@ export default function TradesPage() {
                 }
               />
 
+              <p className="mb-1.5 mt-1 text-xs text-gray-400 px-2 md:px-0 md:mt-0">
+                All-time stats
+              </p>
+
               {/* 🔥 STATS BAR */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5 px-2 mt-1 md:px-0 md:mt-0">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5 px-2 mt-0 md:px-0">
 
                 <Stat
                   title="Trades"
@@ -504,7 +512,7 @@ export default function TradesPage() {
               {/* GRID */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
-                {visibleTrades.map((trade) => {
+                {visibleTrades.slice(0, visibleCount).map((trade) => {
   const entry = trade.entry_price ?? trade.entry ?? null
   const exit = trade.exit_price ?? trade.exit ?? null
   const durationDisplay = getTradeDurationDisplay(
@@ -796,6 +804,18 @@ export default function TradesPage() {
                 })}
 
               </div>
+
+              {visibleCount < visibleTrades.length && (
+                <div className="flex justify-center mt-4">
+                  <button
+                    type="button"
+                    onClick={() => setVisibleCount((prev) => prev + 10)}
+                    className="px-4 py-2 rounded-lg bg-blue-500 hover:bg-blue-600 transition"
+                  >
+                    Load More
+                  </button>
+                </div>
+              )}
             </>
           )}
 

@@ -14,6 +14,11 @@ import { isProActive } from "../../lib/subscription"
 import { filterTradesForPerformanceSharePool } from "@/lib/performanceShare"
 import { formatEST } from "@/lib/formatEST"
 import {
+  getTradingDayKey,
+  getTradingWeekday,
+  resolveTradingTimeSourceForKey,
+} from "@/lib/formatDate"
+import {
   LineChart,
   Line,
   XAxis,
@@ -362,64 +367,11 @@ function formatMoney(v: number) {
     : `$${v.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
 }
 
+/** 0 → 12 AM, 13 → 1 PM (12-hour clock labels). */
 function formatHour(h: number) {
   const suffix = h >= 12 ? "PM" : "AM"
-  const hour = h % 12 || 12
-  return `${hour} ${suffix}`
-}
-
-function calculateDrawdown(trades: any[]) {
-  let equity = 0
-  /** Running high-water mark; must not start at 0 or drawdown tracks equity when P&L stays negative. */
-  let peak = Number.NEGATIVE_INFINITY
-  let maxDrawdown = 0
-  let currentDrawdown = 0
-  let peakIndex = 0
-  let recoveryIndex: number | null = null
-
-  const equityCurve: { equity: number; peak: number; drawdown: number }[] = []
-
-  trades.forEach((trade, i) => {
-    equity += Number(trade.pnl) || 0
-
-    if (equity > peak) {
-      peak = equity
-      peakIndex = i
-    }
-
-    const drawdown = peak - equity
-
-    if (drawdown > maxDrawdown) {
-      maxDrawdown = drawdown
-      recoveryIndex = null
-    }
-
-    if (drawdown === 0 && recoveryIndex === null && i > peakIndex) {
-      recoveryIndex = i
-    }
-
-    currentDrawdown = drawdown
-
-    equityCurve.push({
-      equity,
-      peak,
-      drawdown,
-    })
-  })
-
-  const recoveryTrades =
-    recoveryIndex !== null ? recoveryIndex - peakIndex : null
-
-  const recoveryPercent =
-    peak > 0 ? (maxDrawdown / peak) * 100 : 0
-
-  return {
-    maxDrawdown,
-    currentDrawdown,
-    recoveryTrades,
-    recoveryPercent,
-    equityCurve,
-  }
+  const hour12 = h % 12 || 12
+  return `${hour12} ${suffix}`
 }
 
 function calculateExpectancy(trades: any[]) {
@@ -498,47 +450,66 @@ function calculateStreaks(trades: any[]) {
   }
 }
 
-type HourlyAnalysisRow = { hour: number; avgPnL: number; trades: number }
+type TradingHoursSummary = {
+  hourlyMap: Record<number, number>
+  hasValidTradingHoursData: boolean
+  bestHour: number | null
+  worstHour: number | null
+}
 
-function analyzeTradingHours(trades: any[]) {
+/** Hour from entry/exit time: full datetime, or HH:MM / HH:MM:SS. */
+function parseHourFromEntryOrExit(timeSource: unknown): number | null {
+  if (timeSource == null || timeSource === "") return null
+  const raw = String(timeSource).trim()
+  if (!raw) return null
+
+  const date = new Date(raw)
+  if (!Number.isNaN(date.getTime())) {
+    return date.getHours()
+  }
+
+  const m = raw.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/)
+  if (!m) return null
+  const h = parseInt(m[1], 10)
+  if (!Number.isFinite(h) || h < 0 || h > 23) return null
+  return h
+}
+
+function analyzeTradingHours(trades: any[]): TradingHoursSummary | null {
   if (!trades || trades.length === 0) return null
 
-  const hourlyStats: Record<number, { totalPnL: number; trades: number }> = {}
+  const hourlyMap: Record<number, number> = {}
 
   trades.forEach((trade) => {
-    const raw = trade.created_at ?? trade.date
-    if (!raw) return
-    const date = new Date(raw)
-    if (Number.isNaN(date.getTime())) return
+    const timeSource = trade.entry_time || trade.exit_time
+    if (!timeSource) return
 
-    const hour = date.getHours()
+    const hour = parseHourFromEntryOrExit(timeSource)
+    if (hour === null) return
 
-    if (!hourlyStats[hour]) {
-      hourlyStats[hour] = {
-        totalPnL: 0,
-        trades: 0,
-      }
-    }
-
-    hourlyStats[hour].totalPnL += Number(trade.pnl) || 0
-    hourlyStats[hour].trades += 1
+    hourlyMap[hour] = (hourlyMap[hour] || 0) + (Number(trade.pnl) || 0)
   })
 
-  const results: HourlyAnalysisRow[] = Object.entries(hourlyStats).map(
-    ([hourStr, data]) => ({
-      hour: Number(hourStr),
-      avgPnL: data.totalPnL / data.trades,
-      trades: data.trades,
-    })
-  )
+  const hasValidTradingHoursData = Object.keys(hourlyMap).length > 1
 
-  if (results.length === 0) return null
+  let bestHour: number | null = null
+  let worstHour: number | null = null
 
-  results.sort((a, b) => b.avgPnL - a.avgPnL)
+  if (hasValidTradingHoursData) {
+    const rows = Object.entries(hourlyMap).map(([h, pnl]) => ({
+      hour: Number(h),
+      pnl,
+    }))
+    rows.sort((a, b) => b.pnl - a.pnl)
+    bestHour = rows[0].hour
+    worstHour = rows[rows.length - 1].hour
+  }
 
   return {
-    best: results[0],
-    worst: results[results.length - 1],
+    hourlyMap,
+    hasValidTradingHoursData,
+    bestHour,
+    worstHour,
   }
 }
 
@@ -644,7 +615,6 @@ export default function Dashboard() {
         .select("*")
         .eq("user_id", currentUser.id)
         .order("date", { ascending: false })
-        .limit(20);
 
       if (mounted && trades) setTrades(trades)
 
@@ -806,13 +776,17 @@ export default function Dashboard() {
     combinedInsights,
     worstInsight,
     warnings,
-    drawdownData,
     equityDrawdownChartData,
     expectancyData,
     streakData,
     hourData,
     weekdayData,
-    sessionPieData
+    sessionPieData,
+    insightBestSymbol,
+    insightBestSymbolAvg,
+    insightBestWeekday,
+    insightBestWeekdayAvg,
+    hasTradingDayTimeSource,
   } = useMemo(() => {
     if (process.env.NODE_ENV === "development") {
       console.log("Trades:", trades)
@@ -988,6 +962,17 @@ const biggestLoss = losses.length > 0
       if (t.pnl > 0) symbolStats[t.ticker].wins += 1
     })
 
+    let insightBestSymbol: string | null = null
+    let insightBestSymbolAvg = -Infinity
+    Object.entries(symbolStats).forEach(([symbol, data]: [string, any]) => {
+      if (!symbol || symbol === "undefined" || data.trades < 3) return
+      const avg = Number(data.pnl) / data.trades
+      if (avg > insightBestSymbolAvg) {
+        insightBestSymbolAvg = avg
+        insightBestSymbol = symbol
+      }
+    })
+
     const tickerAgg: Record<string, { totalPnL: number; wins: number; totalTrades: number; rrSum: number }> = {}
 
     filteredTrades.forEach((t) => {
@@ -1068,20 +1053,55 @@ const biggestLoss = losses.length > 0
       Fri: 0
     }
 
-    const shortDayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const
+    const tradingLongToShort: Record<
+      string,
+      keyof typeof weekdayMap
+    > = {
+      Monday: "Mon",
+      Tuesday: "Tue",
+      Wednesday: "Wed",
+      Thursday: "Thu",
+      Friday: "Fri",
+    }
 
     filteredTrades.forEach((t) => {
-      const d = new Date(t.created_at)
-      const short = shortDayNames[d.getDay()] as string
-      if (short in weekdayMap) {
-        weekdayMap[short as keyof typeof weekdayMap] += t.pnl || 0
-      }
+      const resolved = resolveTradingTimeSourceForKey(t)
+      if (!resolved) return
+      const longDay = getTradingWeekday(resolved)
+      if (!longDay) return
+      const short = tradingLongToShort[longDay]
+      if (!short) return
+      weekdayMap[short] += Number(t.pnl) || 0
     })
 
     const weekdayData = (["Mon", "Tue", "Wed", "Thu", "Fri"] as const).map((day) => ({
       day,
       pnl: weekdayMap[day]
     }))
+
+    const weekdayInsightStats: Record<string, { pnl: number; trades: number }> = {}
+    filteredTrades.forEach((trade) => {
+      const resolved = resolveTradingTimeSourceForKey(trade)
+      if (!resolved) return
+      const day = getTradingWeekday(resolved)
+      if (!day) return
+      if (!weekdayInsightStats[day]) {
+        weekdayInsightStats[day] = { pnl: 0, trades: 0 }
+      }
+      weekdayInsightStats[day].pnl += Number(trade.pnl) || 0
+      weekdayInsightStats[day].trades += 1
+    })
+
+    let insightBestWeekday: string | null = null
+    let insightBestWeekdayAvg = -Infinity
+    Object.entries(weekdayInsightStats).forEach(([day, data]) => {
+      if (data.trades < 2) return
+      const avg = data.pnl / data.trades
+      if (avg > insightBestWeekdayAvg) {
+        insightBestWeekdayAvg = avg
+        insightBestWeekday = day
+      }
+    })
 
     const setupAgg: Record<string, { trades: number; wins: number; totalPnL: number }> = {}
     filteredTrades.forEach((t) => {
@@ -1132,29 +1152,21 @@ const biggestLoss = losses.length > 0
         new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
     )
     const streakData = calculateStreaks(chronologicalTrades)
-    const drawdownData = calculateDrawdown(chronologicalTrades)
     const expectancyData = calculateExpectancy(filteredTrades)
     const hourData = analyzeTradingHours(filteredTrades)
     let runningEquity = 0
-    /** Running high-water mark for peak-to-valley drawdown (equity − peak, always ≤ 0). */
-    let chartPeak = Number.NEGATIVE_INFINITY
     const equityDrawdownChartData = chronologicalTrades.map((trade, index) => {
       runningEquity += Number(trade.pnl) || 0
-      chartPeak = Math.max(chartPeak, runningEquity)
-      const drawdown = runningEquity - chartPeak
 
       if (process.env.NODE_ENV === "development" && index < 5) {
         console.log({
           equity: runningEquity,
-          peak: chartPeak,
-          drawdown,
         })
       }
 
       return {
         date: trade.created_at,
         equity: runningEquity,
-        drawdown,
       }
     })
     const lossStreakRate = detectLossStreak(chronologicalTrades)
@@ -1172,19 +1184,14 @@ const biggestLoss = losses.length > 0
       warnings.push(rrInsight)
     }
 
-    function toEST(date: Date) {
-      return new Date(date.toLocaleString("en-US", { timeZone: "America/New_York" }))
-    }
-
-    function toESTDateString(date: Date) {
-      return toEST(date).toISOString().split("T")[0]
-    }
-
     const dailyMap: Record<string, number> = {}
 
     filteredTrades.forEach((t) => {
-      const estDate = toESTDateString(new Date(t.created_at))
-      dailyMap[estDate] = (dailyMap[estDate] || 0) + (t.pnl || 0)
+      const resolved = resolveTradingTimeSourceForKey(t)
+      if (!resolved) return
+      const dateKey = getTradingDayKey(resolved)
+      if (!dateKey) return
+      dailyMap[dateKey] = (dailyMap[dateKey] || 0) + (Number(t.pnl) || 0)
     })
 
     const dailyPnLs = Object.values(dailyMap)
@@ -1205,6 +1212,10 @@ const worstDay = dailyPnLs.length > 0
 
     const avgLoss =
       lossesOnly.reduce((sum, t) => sum + t.pnl, 0) / (lossesOnly.length || 1)
+
+    const hasTradingDayTimeSource = filteredTrades.some(
+      (t) => resolveTradingTimeSourceForKey(t) != null
+    )
 
     return {
       filteredTrades,
@@ -1230,13 +1241,17 @@ const worstDay = dailyPnLs.length > 0
       combinedInsights,
       worstInsight,
       warnings,
-      drawdownData,
       equityDrawdownChartData,
       expectancyData,
       streakData,
       hourData,
       weekdayData,
-      sessionPieData
+      sessionPieData,
+      insightBestSymbol,
+      insightBestSymbolAvg,
+      insightBestWeekday,
+      insightBestWeekdayAvg,
+      hasTradingDayTimeSource,
     }
 
   }, [
@@ -1280,19 +1295,51 @@ const worstDay = dailyPnLs.length > 0
     )
   }
 
-  const drawdownLimitRaw = profile?.max_drawdown_limit
-  const drawdownLimitCap =
-    drawdownLimitRaw != null &&
-    drawdownLimitRaw !== "" &&
-    Number.isFinite(Number(drawdownLimitRaw)) &&
-    Number(drawdownLimitRaw) > 0
-      ? Number(drawdownLimitRaw)
-      : null
+  const currentStreak =
+    streakData?.currentType === "loss"
+      ? -Number(streakData.currentStreak || 0)
+      : streakData?.currentType === "win"
+        ? Number(streakData.currentStreak || 0)
+        : 0
 
-  const drawdownLimitBreached =
-    drawdownLimitCap != null &&
-    (drawdownData.currentDrawdown >= drawdownLimitCap ||
-      drawdownData.maxDrawdown >= drawdownLimitCap)
+  const grossProfit = filteredTrades
+    .filter((t) => (Number(t.pnl) || 0) > 0)
+    .reduce((sum, t) => sum + (Number(t.pnl) || 0), 0)
+
+  const grossLoss = filteredTrades
+    .filter((t) => (Number(t.pnl) || 0) < 0)
+    .reduce((sum, t) => sum + Math.abs(Number(t.pnl) || 0), 0)
+
+  const profitFactor = grossLoss === 0 ? 0 : grossProfit / grossLoss
+
+  const dailyMap: Record<string, number> = {}
+
+  filteredTrades.forEach((t) => {
+    const resolved = resolveTradingTimeSourceForKey(t)
+    if (!resolved) return
+    const date = getTradingDayKey(resolved)
+    if (!date) return
+
+    if (!dailyMap[date]) {
+      dailyMap[date] = 0
+    }
+
+    dailyMap[date] += Number(t.pnl) || 0
+  })
+
+  const dailyValues = Object.values(dailyMap)
+
+  const avgDay =
+    dailyValues.length > 0
+      ? dailyValues.reduce((a, b) => a + b, 0) / dailyValues.length
+      : 0
+
+  const greenDays = dailyValues.filter((v) => v > 0).length
+
+  const consistency =
+    dailyValues.length > 0
+      ? (greenDays / dailyValues.length) * 100
+      : 0
 
   const sectionTitle = "text-xs md:text-sm text-gray-400 uppercase tracking-wide mb-2"
 
@@ -1806,44 +1853,6 @@ const worstDay = dailyPnLs.length > 0
         <Stat title="Worst Day" value={formatCurrency(worstDay)} positive={false} />
       </div>
 
-      {showDrawdown ? (
-        <div
-          className={`rounded-xl border bg-white/10 p-3 md:p-4 backdrop-blur-md ${
-            drawdownLimitBreached ? "border-amber-400/60" : "border-white/10"
-          }`}
-        >
-          <h3 className="mb-2 text-xs md:text-sm text-gray-400">Drawdown</h3>
-
-          <p className="text-sm md:text-lg font-semibold text-red-400">
-            Max: {formatMoney(drawdownData.maxDrawdown)}
-          </p>
-
-          <p className="text-xs md:text-sm text-gray-300">
-            Current: {formatMoney(drawdownData.currentDrawdown)}
-          </p>
-
-          {drawdownLimitCap == null ? (
-            <p className="text-[11px] md:text-xs text-gray-500 mt-2">
-              Limit: not set — configure in Settings.
-            </p>
-          ) : (
-            <>
-              <p className="text-xs md:text-sm text-gray-300 mt-2">
-                Your limit: {formatMoney(drawdownLimitCap)}
-              </p>
-              {drawdownLimitBreached ? (
-                <p className="text-[11px] md:text-xs text-amber-300 mt-1">
-                  This range has met or exceeded your drawdown limit (current or historical
-                  max).
-                </p>
-              ) : (
-                <p className="text-[11px] md:text-xs text-gray-500 mt-1">Within your configured limit.</p>
-              )}
-            </>
-          )}
-        </div>
-      ) : null}
-
       <div className="rounded-xl border border-white/10 bg-white/10 p-3 md:p-4 backdrop-blur-md">
         <h3 className="mb-2 text-xs md:text-sm text-gray-400">Expectancy</h3>
 
@@ -1899,20 +1908,21 @@ const worstDay = dailyPnLs.length > 0
       <div className="rounded-xl border border-white/10 bg-white/10 p-3 md:p-4 backdrop-blur-md">
         <h3 className="mb-2 text-xs md:text-sm text-gray-400">Trading Hours</h3>
 
-        {hourData ? (
+        {hourData === null ? (
+          <p className="text-gray-500 text-xs md:text-sm">No data</p>
+        ) : !hourData.hasValidTradingHoursData ? (
+          <p className="text-white/60 text-sm">
+            Add entry/exit times to unlock trading hour insights
+          </p>
+        ) : (
           <>
-            <p className="text-green-400 text-xs md:text-sm">
-              Best: {formatHour(hourData.best.hour)} (
-              {formatMoney(hourData.best.avgPnL)})
+            <p className="text-green-400">
+              {`Best: ${formatHour(hourData.bestHour!)} ($${hourData.hourlyMap[hourData.bestHour!].toFixed(2)})`}
             </p>
-
-            <p className="text-red-400 text-xs md:text-sm mt-1">
-              Worst: {formatHour(hourData.worst.hour)} (
-              {formatMoney(hourData.worst.avgPnL)})
+            <p className="text-red-400">
+              {`Worst: ${formatHour(hourData.worstHour!)} ($${hourData.hourlyMap[hourData.worstHour!].toFixed(2)})`}
             </p>
           </>
-        ) : (
-          <p className="text-gray-500 text-xs md:text-sm">No data</p>
         )}
       </div>
     </div>
@@ -1963,19 +1973,13 @@ const worstDay = dailyPnLs.length > 0
                 }
               />
               <Tooltip
-                formatter={(value, name) => {
+                formatter={(value) => {
                   const n = Number(value)
                   const formatted =
                     n < 0
                       ? `-$${Math.abs(n).toLocaleString()}`
                       : `$${n.toLocaleString()}`
-                  const isEquity = name === "Equity" || name === "equity"
-                  const label = isEquity ? "Equity" : "Drawdown"
-                  if (isEquity) return [formatted, label]
-                  return [
-                    `${formatted} (drop from highest balance)`,
-                    label,
-                  ]
+                  return [formatted, "Equity"]
                 }}
                 labelFormatter={(label) => {
                   const s = String(label)
@@ -2002,47 +2006,28 @@ const worstDay = dailyPnLs.length > 0
                 strokeWidth={2}
                 dot={false}
               />
-              <Line
-                type="monotone"
-                dataKey="drawdown"
-                name="Drawdown"
-                stroke="#f87171"
-                strokeWidth={1.25}
-                dot={false}
-              />
             </LineChart>
           </ResponsiveContainer>
           </div>
 
-          <div className="mt-3 flex flex-wrap gap-3 md:gap-4 text-xs md:text-sm">
-            <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
-              <span className="text-gray-400">Max DD:</span>{" "}
-              <span className="text-red-400 font-medium">
-                {formatMoney(drawdownData.maxDrawdown)}
-              </span>
+          <div className="flex flex-wrap gap-3 mt-4">
+            <div className="px-4 py-2 rounded-xl bg-white/10">
+              Profit Factor: {profitFactor.toFixed(2)}
             </div>
 
-            <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
-              <span className="text-gray-400">Current DD:</span>{" "}
-              <span className="text-yellow-300 font-medium">
-                {formatMoney(drawdownData.currentDrawdown)}
-              </span>
+            <div className="px-4 py-2 rounded-xl bg-white/10">
+              Streak:{" "}
+              {currentStreak > 0
+                ? `${currentStreak} Wins`
+                : `${Math.abs(currentStreak)} Losses`}
             </div>
 
-            <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
-              <span className="text-gray-400">Recovery:</span>{" "}
-              <span className="text-green-400 font-medium">
-                {drawdownData.recoveryTrades !== null
-                  ? `${drawdownData.recoveryTrades} trades`
-                  : "In progress"}
-              </span>
+            <div className="px-4 py-2 rounded-xl bg-white/10">
+              Avg Day: {avgDay.toFixed(0)}
             </div>
 
-            <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
-              <span className="text-gray-400">DD %:</span>{" "}
-              <span className="text-red-400 font-medium">
-                {drawdownData.recoveryPercent.toFixed(1)}%
-              </span>
+            <div className="px-4 py-2 rounded-xl bg-white/10">
+              Consistency: {consistency.toFixed(0)}%
             </div>
           </div>
         </div>
@@ -2203,7 +2188,14 @@ const worstDay = dailyPnLs.length > 0
                   Data-driven highlights (min. 3 trades per session, symbol, or
                   direction). Respects current filters.
                 </p>
-                {insights.length > 0 ? (
+                {totalTrades > 0 && !hasTradingDayTimeSource ? (
+                  <p className="mb-3 text-[11px] md:text-xs text-amber-200/90">
+                    Add entry/exit times to unlock trading day insights
+                  </p>
+                ) : null}
+                {insights.length > 0 ||
+                insightBestSymbol ||
+                insightBestWeekday ? (
                   <div className="space-y-2">
                     {insights.map((text, i) => (
                       <p
@@ -2213,6 +2205,16 @@ const worstDay = dailyPnLs.length > 0
                         • {text}
                       </p>
                     ))}
+                    {insightBestSymbol ? (
+                      <p className="text-xs md:text-sm text-blue-200">
+                        {`• ${insightBestSymbol} is your most profitable symbol ($${insightBestSymbolAvg.toFixed(2)} avg per trade)`}
+                      </p>
+                    ) : null}
+                    {insightBestWeekday ? (
+                      <p className="text-xs md:text-sm text-blue-200">
+                        {`• You perform best on ${insightBestWeekday}s ($${insightBestWeekdayAvg.toFixed(2)} avg)`}
+                      </p>
+                    ) : null}
                   </div>
                 ) : (
                   <p className="text-xs md:text-sm text-gray-400">

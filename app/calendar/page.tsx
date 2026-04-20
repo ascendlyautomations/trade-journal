@@ -2,7 +2,11 @@
 import Navbar from "../components/Navbar"
 import TradeCard from "../components/TradeCard"
 import { formatEST } from "@/lib/formatEST"
-import { getESTDateKey, toDateKey } from "@/lib/formatDate"
+import {
+  getTradingDayKey,
+  resolveTradingTimeSourceForKey,
+  toDateKey,
+} from "@/lib/formatDate"
 import { useEffect, useMemo, useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
 
@@ -84,7 +88,9 @@ export default function CalendarPage() {
   const dailyData: any = {}
 
   filteredTrades.forEach((trade) => {
-    const tradeKey = getESTDateKey(String(trade.created_at ?? ""))
+    const resolved = resolveTradingTimeSourceForKey(trade)
+    if (!resolved) return
+    const tradeKey = getTradingDayKey(resolved)
     if (!tradeKey) return
 
     const [yk, mk, dk] = tradeKey.split("-").map(Number)
@@ -142,7 +148,9 @@ export default function CalendarPage() {
     }
     setSelectedDate(key)
     const list = filteredTrades.filter((trade) => {
-      return getESTDateKey(String(trade.created_at ?? "")) === key
+      const resolved = resolveTradingTimeSourceForKey(trade)
+      if (!resolved) return false
+      return getTradingDayKey(resolved) === key
     })
     setSelectedTrades(list)
   }
