@@ -1,5 +1,4 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
-import { isProActive } from "@/lib/subscription"
 
 /** Free users may run CSV import only once until they upgrade to Pro. */
 export async function assertCsvImportAllowedForFreePlan(
@@ -8,11 +7,11 @@ export async function assertCsvImportAllowedForFreePlan(
 ): Promise<{ ok: true } | { ok: false }> {
   const { data: profile } = await supabase
     .from("profiles")
-    .select("has_used_csv_import, is_pro, subscription_status")
+    .select("is_pro, has_used_csv_import")
     .eq("id", userId)
-    .maybeSingle()
+    .single()
 
-  if (isProActive(profile)) return { ok: true }
+  if (profile?.is_pro) return { ok: true }
 
   if (profile?.has_used_csv_import === true) return { ok: false }
 

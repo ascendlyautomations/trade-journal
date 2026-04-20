@@ -716,6 +716,40 @@ export default function InputTradeForm({
     fileInputRef.current?.click()
   }
 
+  async function handleUploadCsvGuardClick() {
+    if (!onUploadCsvClick) return
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user?.id) {
+      alert("Please log in first")
+      return
+    }
+
+    const { data: profile, error: profileErr } = await supabase
+      .from("profiles")
+      .select("is_pro, has_used_csv_import")
+      .eq("id", user.id)
+      .single()
+
+    if (profileErr || !profile) {
+      console.error("Profile fetch failed:", profileErr)
+      alert("Could not verify account. Try again.")
+      return
+    }
+
+    console.log("CSV BLOCK CHECK:", profile)
+
+    if (!profile.is_pro && profile.has_used_csv_import) {
+      alert("Free plan includes one CSV import only. Upgrade to import more.")
+      return
+    }
+
+    onUploadCsvClick()
+  }
+
   const formBody = (
     <>
       <div className="mb-4">
@@ -723,7 +757,7 @@ export default function InputTradeForm({
           <div className="flex gap-2">
             <button
               type="button"
-              onClick={onUploadCsvClick}
+              onClick={() => void handleUploadCsvGuardClick()}
               disabled={!onUploadCsvClick || csvLoading}
               className="flex-1 px-3 py-2 text-sm rounded-lg bg-blue-500 disabled:opacity-60"
             >
@@ -767,7 +801,7 @@ export default function InputTradeForm({
           <div className="flex items-center gap-3">
             <button
               type="button"
-              onClick={onUploadCsvClick}
+              onClick={() => void handleUploadCsvGuardClick()}
               disabled={!onUploadCsvClick || csvLoading}
               className="px-4 py-2 text-sm rounded-lg bg-blue-500 disabled:opacity-60"
             >

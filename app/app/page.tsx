@@ -10,7 +10,6 @@ import {
   stripBom,
   tradesInsertRowsPrivate,
 } from "@/lib/csvTradeParsers"
-import { assertCsvImportAllowedForFreePlan, markProfileCsvImportUsed } from "@/lib/csvImportGate"
 import { ensureImportedCsvAccountRegistered } from "@/lib/ensureManualUserAccount"
 
 export default function Home() {
@@ -39,11 +38,23 @@ export default function Home() {
       return
     }
 
-    const gate = await assertCsvImportAllowedForFreePlan(supabase, user.id)
-    if (!gate.ok) {
-      alert(
-        "Free plan allows one CSV import only. Upgrade for unlimited imports."
-      )
+    const { data: profile, error: profileErr } = await supabase
+      .from("profiles")
+      .select("is_pro, has_used_csv_import")
+      .eq("id", user.id)
+      .single()
+
+    if (profileErr || !profile) {
+      console.error("Profile fetch failed:", profileErr)
+      alert("Could not verify account. Try again.")
+      setLoading(false)
+      return
+    }
+
+    console.log("CSV CHECK:", profile)
+
+    if (!profile.is_pro && profile.has_used_csv_import) {
+      alert("Free plan includes one CSV import only. Upgrade to import more.")
       setLoading(false)
       return
     }
@@ -133,8 +144,13 @@ export default function Home() {
             msg += `\n\n${errLines}${skipped > 6 ? "\n…" : ""}`
           }
           alert(msg)
-          const { error: flagErr } = await markProfileCsvImportUsed(supabase, user.id)
-          if (flagErr) console.error("markProfileCsvImportUsed:", flagErr)
+          if (!profile.is_pro) {
+            const { error: flagErr } = await supabase
+              .from("profiles")
+              .update({ has_used_csv_import: true })
+              .eq("id", user.id)
+            if (flagErr) console.error("markProfileCsvImportUsed:", flagErr)
+          }
           fetchReviewCount()
         } catch (err) {
           console.error(err)
