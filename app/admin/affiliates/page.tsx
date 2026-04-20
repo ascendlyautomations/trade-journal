@@ -36,8 +36,14 @@ function formatFollowers(v: number | null | undefined): string {
   return v.toLocaleString()
 }
 
-function applicantLabel(row: AffiliateApplicationRow, profileByUser: Record<string, ProfileBrief>): string {
-  const p = profileByUser[row.user_id]
+function applicantProfile(row: AffiliateApplicationRow): ProfileBrief | null {
+  const p = (row as AffiliateApplicationRow & { profiles?: ProfileBrief | ProfileBrief[] | null }).profiles
+  if (Array.isArray(p)) return p[0] ?? null
+  return p ?? null
+}
+
+function applicantLabel(row: AffiliateApplicationRow): string {
+  const p = applicantProfile(row)
   const bits = [p?.username?.trim() || null, p?.name?.trim() || null].filter(Boolean)
   if (bits.length) return bits.join(" · ")
   return row.user_id.slice(0, 8) + "…"
@@ -68,7 +74,6 @@ export default function AdminAffiliateApplicationsPage() {
   const [allowed, setAllowed] = useState(false)
   const [tab, setTab] = useState<TabId>("pending")
   const [rows, setRows] = useState<AffiliateApplicationRow[]>([])
-  const [profileByUser, setProfileByUser] = useState<Record<string, ProfileBrief>>({})
   const [loading, setLoading] = useState(false)
   const [selected, setSelected] = useState<AffiliateApplicationRow | null>(null)
   const [pendingAction, setPendingAction] = useState<null | "approve" | "reject">(null)
@@ -92,43 +97,26 @@ export default function AdminAffiliateApplicationsPage() {
     setLoading(true)
     const { data, error } = await supabase
       .from("affiliate_applications")
-      .select(AFFILIATE_APPLICATION_SELECT_COLUMNS)
+      .select(`
+        ${AFFILIATE_APPLICATION_SELECT_COLUMNS},
+        profiles (
+          id,
+          username,
+          avatar_url
+        )
+      `)
       .eq("status", tab)
       .order("created_at", { ascending: false })
 
     if (error) {
       logPostgrestErrorDev("adminAffiliates list fetch", error)
       setRows([])
-      setProfileByUser({})
       setLoading(false)
       return
     }
 
     const list = (data || []) as unknown as AffiliateApplicationRow[]
     setRows(list)
-
-    const ids = [...new Set(list.map((r) => r.user_id))]
-    if (ids.length === 0) {
-      setProfileByUser({})
-      setLoading(false)
-      return
-    }
-
-    const { data: profs, error: pErr } = await supabase
-      .from("profiles")
-      .select("id, username, name")
-      .in("id", ids)
-
-    if (pErr) {
-      logPostgrestErrorDev("adminAffiliates profiles fetch", pErr)
-      setProfileByUser({})
-    } else {
-      const map: Record<string, ProfileBrief> = {}
-      for (const p of (profs || []) as ProfileBrief[]) {
-        map[p.id] = p
-      }
-      setProfileByUser(map)
-    }
 
     setLoading(false)
   }, [allowed, tab])
@@ -378,10 +366,9 @@ export default function AdminAffiliateApplicationsPage() {
                       className="flex w-full flex-col gap-1 px-4 py-4 text-left transition hover:bg-white/5 sm:flex-row sm:items-center sm:justify-between"
                     >
                       <div className="min-w-0">
-                        <p className="truncate font-medium text-white">{applicantLabel(row, profileByUser)}</p>
+                        <p className="truncate font-medium text-white">{applicantLabel(row)}</p>
                         <p className="truncate text-xs text-gray-400">
-                          {(profileByUser[row.user_id]?.username && `@${profileByUser[row.user_id]!.username}`) ||
-                            "—"}
+                          {(applicantProfile(row)?.username && `@${applicantProfile(row)!.username}`) || "—"}
                         </p>
                       </div>
                       <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-400">
@@ -412,7 +399,7 @@ export default function AdminAffiliateApplicationsPage() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 className="text-lg font-semibold text-emerald-300">Application</h2>
-                <p className="mt-1 text-xs text-gray-400">{applicantLabel(selected, profileByUser)}</p>
+                <p className="mt-1 text-xs text-gray-400">{applicantLabel(selected)}</p>
               </div>
               <button
                 type="button"
@@ -437,11 +424,11 @@ export default function AdminAffiliateApplicationsPage() {
             <dl className="mt-4 space-y-3 text-sm">
               <div>
                 <dt className="text-xs text-gray-500">Username</dt>
-                <dd className="text-gray-200">{profileByUser[selected.user_id]?.username || "—"}</dd>
+                <dd className="text-gray-200">{applicantProfile(selected)?.username || "—"}</dd>
               </div>
               <div>
                 <dt className="text-xs text-gray-500">Name</dt>
-                <dd className="text-gray-200">{profileByUser[selected.user_id]?.name || "—"}</dd>
+                <dd className="text-gray-200">{applicantProfile(selected)?.name || "—"}</dd>
               </div>
               <div>
                 <dt className="text-xs text-gray-500">Requested affiliate code</dt>

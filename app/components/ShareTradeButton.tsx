@@ -28,7 +28,7 @@ export default function ShareTradeButton({
   mode = "full",
 }: ShareTradeButtonProps) {
   const [busy, setBusy] = useState(false)
-  const [shareModalOpen, setShareModalOpen] = useState(false)
+  const [isOpen, setIsOpen] = useState(false)
   const [conversationOpen, setConversationOpen] = useState(false)
   const lockRef = useRef(false)
   const instanceId = useId().replace(/:/g, "")
@@ -47,7 +47,7 @@ export default function ShareTradeButton({
   }, [trade, instanceId])
 
   const openMessageShare = useCallback(() => {
-    setShareModalOpen(false)
+    setIsOpen(false)
     setConversationOpen(true)
   }, [])
 
@@ -59,7 +59,7 @@ export default function ShareTradeButton({
         setConversationOpen(true)
         return
       }
-      setShareModalOpen(true)
+      setIsOpen(true)
     },
     [mode]
   )
@@ -68,55 +68,6 @@ export default function ShareTradeButton({
     trade?.id != null && String(trade.id).trim() !== ""
       ? String(trade.id)
       : null
-
-  const shareModal =
-    mode === "full" && shareModalOpen ? (
-      <div
-        className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm"
-        onClick={() => setShareModalOpen(false)}
-      >
-        <div
-          className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#0b1f3a] p-5 shadow-2xl"
-          onClick={(e) => e.stopPropagation()}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="share-trade-title"
-        >
-          <h2 id="share-trade-title" className="mb-4 text-lg font-semibold text-white">
-            Share Trade
-          </h2>
-
-          <div className="flex flex-col gap-3">
-            <button
-              type="button"
-              onClick={() => {
-                void handleDownload()
-                setShareModalOpen(false)
-              }}
-              className="w-full rounded-lg bg-green-500 py-2 font-medium text-black"
-            >
-              Download Image
-            </button>
-
-            <button
-              type="button"
-              onClick={() => openMessageShare()}
-              className="w-full rounded-lg bg-white/10 py-2 text-white hover:bg-white/20"
-            >
-              Send in Messages
-            </button>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setShareModalOpen(false)}
-            className="mt-4 text-sm text-white/50 hover:text-white"
-          >
-            Cancel
-          </button>
-        </div>
-      </div>
-    ) : null
 
   return (
     <>
@@ -134,7 +85,7 @@ export default function ShareTradeButton({
         disabled={busy}
         title={variant === "icon" ? "Share trade" : undefined}
         aria-label={variant === "icon" ? "Share trade" : undefined}
-        onClick={(e) => void handleClick(e)}
+        onClick={() => setIsOpen(true)}
         className={
           className.trim() ||
           (variant === "icon"
@@ -145,9 +96,54 @@ export default function ShareTradeButton({
         {busy ? (variant === "icon" ? "…" : "Saving…") : variant === "icon" ? "📤" : "Share Trade"}
       </button>
 
-      {typeof document !== "undefined" && shareModal
-        ? createPortal(shareModal, document.body)
-        : null}
+      {isOpen &&
+        typeof window !== "undefined" &&
+        createPortal(
+          <div className="fixed inset-0 z-[99999] flex items-center justify-center pointer-events-none">
+            <div
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm pointer-events-auto"
+              onClick={() => setIsOpen(false)}
+            />
+            <div
+              className="relative z-10 w-full max-w-md bg-[#0b1f3a] rounded-2xl p-6 border border-white/10 pointer-events-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 id="share-trade-title" className="mb-4 text-lg font-semibold text-white">
+                Share Trade
+              </h2>
+
+              <div className="flex flex-col gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    void handleDownload()
+                    setIsOpen(false)
+                  }}
+                  className="w-full rounded-lg bg-green-500 py-2 font-medium text-black"
+                >
+                  Download Image
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => openMessageShare()}
+                  className="w-full rounded-lg bg-white/10 py-2 text-white hover:bg-white/20"
+                >
+                  Send in Messages
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsOpen(false)}
+                className="mt-4 text-sm text-white/50 hover:text-white"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>,
+          document.body
+        )}
 
       <ShareToConversationsModal
         open={conversationOpen && Boolean(tradeIdForDm)}

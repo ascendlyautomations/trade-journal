@@ -8,7 +8,6 @@ import ProfileOnboarding, {
 } from "../components/ProfileOnboarding"
 import InputTradeForm from "../components/InputTradeForm"
 import PerformanceShareModal from "../components/PerformanceShareModal"
-import ShareTradeButton from "../components/ShareTradeButton"
 import { filterTradesForPerformanceSharePool } from "@/lib/performanceShare"
 import { useEffect, useMemo, useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
@@ -62,6 +61,8 @@ export default function TradesPage() {
   const [gateProfile, setGateProfile] = useState<any | null>(null)
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [showPerformanceShare, setShowPerformanceShare] = useState(false)
+  const [isSendModalOpen, setIsSendModalOpen] = useState(false)
+  const [selectedTrade, setSelectedTrade] = useState<any>(null)
   const router = useRouter()
 
   useEffect(() => {
@@ -150,16 +151,16 @@ export default function TradesPage() {
   }
 
   async function fetchTrades(userId: string) {
-    const { data } = await supabase
+    const { data: trades } = await supabase
       .from("trades")
       .select("*")
       .eq("user_id", userId)
-      .neq("mode", "backtest")
-      .order("created_at", { ascending: false })
+      .order("date", { ascending: false })
+      .limit(20);
 
-    console.log("FETCHED TRADES:", data)
+    console.log("FETCHED TRADES:", trades)
 
-    setTrades(data || [])
+    setTrades(trades || [])
     setLoading(false)
   }
 
@@ -525,12 +526,16 @@ export default function TradesPage() {
                       >
                         Edit
                       </button>
-                      <ShareTradeButton
-                        variant="icon"
-                        trade={trade}
-                        profile={gateProfile}
-                        mode="full"
-                      />
+                      <button
+                        onClick={() => {
+                          console.log("SHARE BUTTON CLICKED", trade);
+                          setSelectedTrade(trade);
+                          setIsSendModalOpen(true);
+                        }}
+                        className="p-2 rounded-lg bg-blue-500/20 hover:bg-blue-500/30 transition"
+                      >
+                        📤
+                      </button>
                       <button
                         onClick={() => deleteTrade(trade.id)}
                         className="text-white hover:text-red-400 text-xl transition leading-none"

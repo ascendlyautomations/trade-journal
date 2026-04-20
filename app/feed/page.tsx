@@ -425,7 +425,7 @@ export default function FeedPage() {
         const { data, error } = await supabase
           .from("posts")
           .select(
-            "*, profiles(username, avatar_url), trades(public_description, user_id, ticker, direction, account_type)"
+            "*, profiles(id, username, avatar_url), trades(public_description, user_id, ticker, direction, account_type)"
           )
           .order("created_at", { ascending: false })
           .range(from, to)
@@ -466,7 +466,7 @@ export default function FeedPage() {
         const { data, error } = await supabase
           .from("posts")
           .select(
-            "*, profiles(username, avatar_url), trades(public_description, user_id, ticker, direction, account_type)"
+            "*, profiles(id, username, avatar_url), trades(public_description, user_id, ticker, direction, account_type)"
           )
           .in("user_id", ids)
           .order("created_at", { ascending: false })
