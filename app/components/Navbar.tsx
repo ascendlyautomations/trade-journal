@@ -18,6 +18,12 @@ export default function Navbar() {
   const [unreadMessagesCount, setUnreadMessagesCount] = useState(0)
   const [unreadCount, setUnreadCount] = useState(0)
   const [isAdmin, setIsAdmin] = useState(false)
+  const [isReady, setIsReady] = useState(false)
+  const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const [messagesOpen, setMessagesOpen] = useState(false)
+  const [hasFetchedNotifications, setHasFetchedNotifications] = useState(false)
+  const [hasFetchedMessages, setHasFetchedMessages] = useState(false)
+  const [hasFetchedAdmin, setHasFetchedAdmin] = useState(false)
 
   const router = useRouter()
   const pathname = usePathname()
@@ -60,36 +66,6 @@ export default function Navbar() {
     setUnreadMessagesCount(count ?? 0)
   }
 
-  useEffect(() => {
-    if (user) void fetchUnreadMessages()
-    // fetchUnreadMessages is redeclared each render; only user drives refetch
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user])
-
-  useEffect(() => {
-    let cancelled = false
-    if (!user?.id) {
-      setIsAdmin(false)
-      return
-    }
-    void (async () => {
-      const check = await getCurrentAdminCheckResult()
-      if (process.env.NODE_ENV !== "production") {
-        console.debug("[admin-check][navbar] resolved", {
-          userId: check.userId,
-          email: check.email,
-          adminRow: check.row,
-          error: check.error,
-          isAdmin: check.isAdmin,
-        })
-      }
-      if (!cancelled) setIsAdmin(check.isAdmin)
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [user?.id])
-
   const fetchUnread = useCallback(async () => {
     if (!user?.id) return
 
@@ -115,14 +91,6 @@ export default function Navbar() {
 
     setUnreadCount(count ?? 0)
   }, [user])
-
-  useEffect(() => {
-    if (!user?.id) {
-      setUnreadCount(0)
-      return
-    }
-    void fetchUnread()
-  }, [user, fetchUnread])
 
   useEffect(() => {
     if (!user?.id) return
@@ -174,12 +142,54 @@ export default function Navbar() {
     setOpenSection((prev) => (prev === section ? null : section))
   }
 
+  const handleToggleNotifications = async () => {
+    setNotificationsOpen((prev) => !prev)
+
+    if (!hasFetchedNotifications) {
+      await fetchUnread()
+      setHasFetchedNotifications(true)
+    }
+  }
+
+  const handleToggleMessages = async () => {
+    setMessagesOpen((prev) => !prev)
+
+    if (!hasFetchedMessages) {
+      await fetchUnreadMessages()
+      setHasFetchedMessages(true)
+    }
+  }
+
+  const handleToggleAccountMenu = async () => {
+    setActiveMenu(null)
+    setAccountMenuOpen((open) => !open)
+
+    if (!hasFetchedAdmin && user?.id) {
+      const check = await getCurrentAdminCheckResult()
+      if (process.env.NODE_ENV !== "production") {
+        console.debug("[admin-check][navbar] resolved", {
+          userId: check.userId,
+          email: check.email,
+          adminRow: check.row,
+          error: check.error,
+          isAdmin: check.isAdmin,
+        })
+      }
+      setIsAdmin(check.isAdmin)
+      setHasFetchedAdmin(true)
+    }
+  }
+
   useEffect(() => {
     setIsOpen(false)
     setOpenSection(null)
   }, [pathname])
 
-  if (loading) return null
+  useEffect(() => {
+    if (!loading) {
+      setIsReady(true)
+    }
+  }, [loading])
 
   const analyticsLinks: {
     label: string
@@ -250,7 +260,13 @@ export default function Navbar() {
                 <span className="text-gray-500">Profile</span>
               )}
 
-              <Link href="/messages" className="hover:text-blue-400 inline-flex items-center gap-2">
+              <Link
+                href="/messages"
+                className="hover:text-blue-400 inline-flex items-center gap-2"
+                onClick={() => {
+                  void handleToggleMessages()
+                }}
+              >
                 Messages
                 {unreadMessagesCount > 0 ? (
                   <span className="bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full tabular-nums">
@@ -390,6 +406,7 @@ export default function Navbar() {
                 role="button"
                 tabIndex={0}
                 onClick={() => {
+                  void handleToggleNotifications()
                   setAccountMenuOpen(false)
                   setActiveMenu(null)
                   router.push("/notifications")
@@ -397,6 +414,7 @@ export default function Navbar() {
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault()
+                    void handleToggleNotifications()
                     setAccountMenuOpen(false)
                     setActiveMenu(null)
                     router.push("/notifications")
@@ -417,17 +435,20 @@ export default function Navbar() {
                 <button
                   type="button"
                   onClick={() => {
-                    setActiveMenu(null)
-                    setAccountMenuOpen((open) => !open)
+                    void handleToggleAccountMenu()
                   }}
                   className="flex items-center gap-2 border px-3 py-1 rounded"
                 >
-                  {profile?.avatar_url ? (
-                    <img src={profile.avatar_url} className="w-6 h-6 rounded-full" alt="" />
+                  {isReady ? (
+                    <img src={profile?.avatar_url} className="w-8 h-8 rounded-full" alt="" />
                   ) : (
-                    <div className="w-6 h-6 rounded-full bg-gray-500" aria-hidden />
+                    <div className="w-8 h-8 rounded-full bg-white/10 animate-pulse" aria-hidden />
                   )}
-                  <span>{profile?.name || profile?.username}</span>
+                  {isReady ? (
+                    <span>{profile?.username}</span>
+                  ) : (
+                    <div className="w-20 h-4 bg-white/10 rounded animate-pulse" />
+                  )}
                 </button>
 
                 {accountMenuOpen ? (
@@ -510,7 +531,10 @@ export default function Navbar() {
           <Link
             href="/messages"
             className="flex items-center justify-between py-2 hover:text-blue-400"
-            onClick={closeMobile}
+            onClick={() => {
+              void handleToggleMessages()
+              closeMobile()
+            }}
           >
             <span>Messages</span>
             {unreadMessagesCount > 0 ? (
@@ -622,6 +646,7 @@ export default function Navbar() {
               type="button"
               className="w-full flex items-center justify-between py-2 text-left text-white hover:text-blue-400"
               onClick={() => {
+                void handleToggleNotifications()
                 closeMobile()
                 setAccountMenuOpen(false)
                 setActiveMenu(null)

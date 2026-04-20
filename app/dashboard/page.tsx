@@ -616,14 +616,37 @@ export default function Dashboard() {
       if (!mounted) return
       setUser(currentUser)
 
+      const { data: statsData } = await supabase
+        .from("trades")
+        .select("pnl, rr")
+        .eq("user_id", currentUser.id);
+
+      const totalPnL =
+        statsData?.reduce((sum, t) => sum + (t.pnl || 0), 0) || 0;
+
+      const totalTrades = statsData?.length || 0;
+
+      const wins =
+        statsData?.filter((t) => (t.pnl || 0) > 0).length || 0;
+
+      const winRate =
+        totalTrades > 0 ? (wins / totalTrades) * 100 : 0;
+
+      const avgRR =
+        statsData && statsData.length > 0
+          ? statsData.reduce((sum, t) => sum + (t.rr || 0), 0) /
+            statsData.length
+          : 0;
+
       // ✅ fetch trades ONLY for this user (huge speed boost)
-      const { data: tradesData } = await supabase
+      const { data: trades } = await supabase
         .from("trades")
         .select("*")
         .eq("user_id", currentUser.id)
-        .neq("mode", "backtest")
+        .order("date", { ascending: false })
+        .limit(20);
 
-      if (mounted && tradesData) setTrades(tradesData)
+      if (mounted && trades) setTrades(trades)
 
       // ✅ fetch user settings/profile
       const { data: profileData } = await supabase
