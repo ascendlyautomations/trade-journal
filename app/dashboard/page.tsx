@@ -12,6 +12,7 @@ import { useEffect, useState, useMemo, useRef } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { isProActive } from "../../lib/subscription"
 import { filterTradesForPerformanceSharePool } from "@/lib/performanceShare"
+import { formatEST } from "@/lib/formatEST"
 import {
   LineChart,
   Line,
@@ -1385,6 +1386,9 @@ const worstDay = dailyPnLs.length > 0
                       ? trade.rr
                       : "—"}
                   </p>
+                  <p className="text-xs text-gray-500">
+                    {formatEST(String(trade.created_at ?? ""))}
+                  </p>
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1">
                   {String(trade.mode ?? trade.account_type ?? "")
@@ -1950,15 +1954,8 @@ const worstDay = dailyPnLs.length > 0
                   ]
                 }}
                 labelFormatter={(label) => {
-                  const d = new Date(String(label))
-                  if (Number.isNaN(d.getTime())) return String(label)
-                  return d.toLocaleString(undefined, {
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                    hour: "numeric",
-                    minute: "2-digit",
-                  })
+                  const s = String(label)
+                  return formatEST(s) || s
                 }}
                 contentStyle={{
                   backgroundColor: "#0f172a",

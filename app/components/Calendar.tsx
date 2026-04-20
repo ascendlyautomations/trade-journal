@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react"
 import { formatPnlCurrency, formatPnlWholeDollars } from "../../lib/formatMoney"
-import { formatEST } from "@/lib/formatDate"
+import { formatEST } from "@/lib/formatEST"
 
 type TradeLike = {
   id: string | number

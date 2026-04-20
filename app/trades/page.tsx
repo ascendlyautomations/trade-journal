@@ -18,25 +18,7 @@ import {
   formatTradePrice,
   getTradeDurationDisplay,
 } from "@/lib/tradeDisplayFormat"
-
-function formatEST(dateString: string) {
-  if (!dateString) return ""
-
-  // FORCE UTC by appending Z if missing
-  const isoString = dateString.includes("Z")
-    ? dateString
-    : dateString + "Z"
-
-  return new Date(isoString).toLocaleString("en-US", {
-    timeZone: "America/New_York",
-    month: "numeric",
-    day: "numeric",
-    year: "2-digit",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  })
-}
+import { formatEST } from "@/lib/formatEST"
 
 function formatMoney(value: unknown): string {
   if (value === null || value === undefined) return "-"

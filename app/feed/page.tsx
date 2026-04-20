@@ -5,7 +5,7 @@ import type { ChangeEvent } from "react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { fetchShareConversations } from "@/lib/shareToConversations"
-import { formatEST } from "@/lib/formatDate"
+import { formatEST } from "@/lib/formatEST"
 import Navbar from "../components/Navbar"
 import ShareTradeButton from "../components/ShareTradeButton"
 import {

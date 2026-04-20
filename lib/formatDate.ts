@@ -1,24 +1,12 @@
 const EST_TIMEZONE = "America/New_York"
 
+export { formatEST } from "./formatEST"
+
 function parseDateLike(value: string | Date | null | undefined): Date | null {
   if (!value) return null
   const d = value instanceof Date ? value : new Date(value)
   if (Number.isNaN(d.getTime())) return null
   return d
-}
-
-export function formatEST(dateString: string): string {
-  const d = parseDateLike(dateString)
-  if (!d) return ""
-  return d.toLocaleString("en-US", {
-    timeZone: EST_TIMEZONE,
-    month: "numeric",
-    day: "numeric",
-    year: "2-digit",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  })
 }
 
 export function formatESTDate(dateString: string | null | undefined): string {

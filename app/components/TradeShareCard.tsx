@@ -1,7 +1,7 @@
 "use client"
 
 import { forwardRef } from "react"
-import { formatEST } from "@/lib/formatDate"
+import { formatEST } from "@/lib/formatEST"
 
 export type TradeShareCardProps = {
   trade: any

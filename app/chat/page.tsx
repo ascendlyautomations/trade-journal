@@ -1,6 +1,7 @@
 "use client"
 
 import Navbar from "../components/Navbar"
+import { formatEST } from "@/lib/formatEST"
 import { useEffect, useState, useRef } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { useRouter } from "next/navigation"
@@ -194,14 +195,6 @@ export default function ChatPage() {
     return msg.message_likes?.filter((l: any) => l.type === type).length || 0
   }
 
-  function formatTimeEST(date: string) {
-    return new Date(date).toLocaleTimeString("en-US", {
-      timeZone: "America/New_York",
-      hour: "numeric",
-      minute: "2-digit"
-    })
-  }
-
   useEffect(() => {
     const el = document.getElementById("chat-bottom")
     el?.scrollIntoView({ behavior: "smooth" })
@@ -309,7 +302,7 @@ export default function ChatPage() {
                           {msg.profiles?.username || "user"}
                         </span>
                         <span className="text-gray-400">
-                          {formatTimeEST(msg.created_at)}
+                          {formatEST(String(msg.created_at ?? ""))}
                         </span>
                       </div>
                     )}

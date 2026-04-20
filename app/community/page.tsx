@@ -13,6 +13,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import Navbar from "../components/Navbar"
 import DmStyleComposer from "../components/DmStyleComposer"
 import { supabase } from "../../lib/supabaseClient"
+import { formatEST } from "@/lib/formatEST"
 
 type Room = {
   id: string
@@ -48,12 +49,6 @@ type ActivePresence = {
     username?: string | null
     avatar_url?: string | null
   } | null
-}
-
-function formatLocalTime(value: string) {
-  const d = new Date(value)
-  if (Number.isNaN(d.getTime())) return ""
-  return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
 }
 
 function tradeImageSrc(imageUrl: string | null | undefined): string | null {
@@ -592,7 +587,7 @@ function CommunityContent() {
                           {msg.profiles?.username || "User"}
                         </span>
                         <span className="text-xs text-gray-400">
-                          {formatLocalTime(msg.created_at)}
+                          {formatEST(String(msg.created_at ?? ""))}
                         </span>
                       </div>
 

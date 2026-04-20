@@ -1,6 +1,7 @@
 "use client"
 import Navbar from "../components/Navbar"
 import TradeCard from "../components/TradeCard"
+import { formatEST } from "@/lib/formatEST"
 import { useEffect, useMemo, useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
 
@@ -395,7 +396,7 @@ export default function CalendarPage() {
                 <>
                   <h3 className="text-blue-400 font-semibold mb-1">Selected Day Stats</h3>
                   <p className="text-xs text-gray-400 mb-3">
-                    {new Date(selectedDate + "T12:00:00").toLocaleDateString()}
+                    {formatEST(`${selectedDate}T12:00:00`)}
                   </p>
 
                   {selectedDayStats.totalTradesForDay === 0 ? (
@@ -450,7 +451,7 @@ export default function CalendarPage() {
             {selectedDate ? (
               <div className="mt-4">
                 <h3 className="text-sm md:text-lg font-semibold mb-2 text-center">
-                  Trades on {new Date(selectedDate + "T12:00:00").toLocaleDateString()}
+                  Trades on {formatEST(`${selectedDate}T12:00:00`)}
                 </h3>
 
                 {selectedTrades.length === 0 ? (

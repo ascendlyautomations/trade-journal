@@ -5,7 +5,7 @@ import { supabase } from "../../lib/supabaseClient"
 import Navbar from "../components/Navbar"
 import { useRouter } from "next/navigation"
 import InputTradeForm from "../components/InputTradeForm"
-import { formatEST } from "@/lib/formatDate"
+import { formatEST } from "@/lib/formatEST"
 
 export default function ReviewPage() {
   const [trades, setTrades] = useState<any[]>([])

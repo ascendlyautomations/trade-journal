@@ -30,7 +30,7 @@ import {
   formatAchievementDate,
 } from "../../../lib/achievements"
 import { formatPnlCurrency } from "../../../lib/formatMoney"
-import { formatEST } from "@/lib/formatDate"
+import { formatEST } from "@/lib/formatEST"
 
 function postImageSrc(imageUrl: string | null | undefined): string | null {
   const raw = imageUrl != null ? String(imageUrl).trim() : ""

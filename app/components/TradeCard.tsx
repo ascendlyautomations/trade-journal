@@ -6,7 +6,7 @@ import {
   formatTradePrice,
   getTradeDurationDisplay,
 } from "@/lib/tradeDisplayFormat"
-import { formatEST } from "@/lib/formatDate"
+import { formatEST } from "@/lib/formatEST"
 
 function formatMoney(value: unknown): string {
   if (value === null || value === undefined) return "-"

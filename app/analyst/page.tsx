@@ -5,7 +5,7 @@ import Navbar from "../components/Navbar"
 import { useEffect, useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { isProActive } from "../../lib/subscription"
-import { formatEST } from "@/lib/formatDate"
+import { formatEST } from "@/lib/formatEST"
 
 export default function AnalystPage() {
   const [trades, setTrades] = useState<any[]>([])
