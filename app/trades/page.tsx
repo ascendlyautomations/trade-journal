@@ -50,6 +50,7 @@ export default function TradesPage() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
   const [accountFilter, setAccountFilter] = useState("all")
   const [accountTypeFilter, setAccountTypeFilter] = useState("all")
+  const [showPublicOnly, setShowPublicOnly] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [timeframe, setTimeframe] = useState("all")
   const [customRangeStart, setCustomRangeStart] = useState("")
@@ -272,6 +273,10 @@ export default function TradesPage() {
     })
   }, [tradesForPerformanceSharePool, timeframe, customRangeStart, customRangeEnd])
 
+  const visibleTrades = showPublicOnly
+    ? filteredTrades.filter((t) => t.is_public === true)
+    : filteredTrades
+
   const tradesPageTitle = useMemo(() => {
     if (resultFilter === "wins") return "Winning Trades"
     if (resultFilter === "losses") return "Losing Trades"
@@ -374,6 +379,16 @@ export default function TradesPage() {
                       }`}
                     >
                       All
+                    </button>
+                    <button
+                      onClick={() => setShowPublicOnly((prev) => !prev)}
+                      className={`px-4 py-2 rounded-xl text-sm font-medium transition
+                        ${showPublicOnly
+                          ? "bg-blue-500 text-white"
+                          : "bg-white/10 text-gray-300 hover:bg-white/20"
+                        }`}
+                    >
+                      Public
                     </button>
 
                     <div className="flex items-center gap-2">
@@ -486,7 +501,7 @@ export default function TradesPage() {
               {/* GRID */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
-                {filteredTrades.map((trade) => {
+                {visibleTrades.map((trade) => {
   const entry = trade.entry_price ?? trade.entry ?? null
   const exit = trade.exit_price ?? trade.exit ?? null
   const durationDisplay = getTradeDurationDisplay(
