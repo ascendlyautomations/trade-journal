@@ -335,9 +335,9 @@ export default function TradesPage() {
         />
       ) : null}
 
-      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100">
+      <div className="w-full text-white px-3 pb-3 pt-0 md:px-10 md:pb-10">
 
-        <div className="mx-auto max-w-7xl px-3 pb-8 pt-0 md:p-10">
+        <div className="relative z-50 mx-auto w-full max-w-[1600px] px-4 md:px-6">
 
           {loading ? (
             <p className="text-center text-gray-400">Loading...</p>

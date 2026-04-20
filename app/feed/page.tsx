@@ -730,7 +730,7 @@ export default function FeedPage() {
   )
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white">
+    <div className="w-full text-white">
       <Navbar />
 
       <div className="flex justify-center px-4 py-6 sm:py-8 pb-10">

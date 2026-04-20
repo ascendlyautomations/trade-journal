@@ -1516,7 +1516,7 @@ export default function ProfilePage() {
     return (
       <>
         <Navbar />
-        <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-red-400">
+        <div className="w-full flex items-center justify-center text-red-400">
           Invalid profile
         </div>
       </>
@@ -1527,7 +1527,7 @@ export default function ProfilePage() {
     return (
       <>
         <Navbar />
-        <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-400">
+        <div className="w-full flex items-center justify-center text-gray-400">
           Loading profile...
         </div>
       </>
@@ -1538,7 +1538,7 @@ export default function ProfilePage() {
     return (
       <>
         <Navbar />
-        <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-red-400">
+        <div className="w-full flex items-center justify-center text-red-400">
           User not found
         </div>
       </>
@@ -1549,7 +1549,7 @@ export default function ProfilePage() {
     <>
       <Navbar />
 
-      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100">
+      <div className="w-full text-gray-100">
         <div className="mx-auto max-w-5xl space-y-4 px-4 py-6 sm:px-6 lg:px-8">
           <div className="bg-white/5 border border-white/10 rounded-xl p-6 backdrop-blur-md">
             <div className="flex flex-col items-center text-center sm:items-stretch sm:text-left md:block">
