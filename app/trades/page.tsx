@@ -9,9 +9,7 @@ import ProfileOnboarding, {
 import InputTradeForm from "../components/InputTradeForm"
 import PerformanceShareModal from "../components/PerformanceShareModal"
 import ShareTradeButton from "../components/ShareTradeButton"
-import ShareToConversationsModal from "../components/ShareToConversationsModal"
 import { filterTradesForPerformanceSharePool } from "@/lib/performanceShare"
-import { downloadTradeShareCardPng } from "@/lib/tradeShareExport"
 import { useEffect, useMemo, useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { useRouter } from "next/navigation"
@@ -63,12 +61,6 @@ export default function TradesPage() {
   const [gateProfile, setGateProfile] = useState<any | null>(null)
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [showPerformanceShare, setShowPerformanceShare] = useState(false)
-  const [shareTradeMenuOpen, setShareTradeMenuOpen] = useState(false)
-  const [shareTradeSelected, setShareTradeSelected] = useState<any | null>(
-    null
-  )
-  const [shareTradeDmOpen, setShareTradeDmOpen] = useState(false)
-
   const router = useRouter()
 
   useEffect(() => {
@@ -536,11 +528,7 @@ export default function TradesPage() {
                         variant="icon"
                         trade={trade}
                         profile={gateProfile}
-                        shareMenu
-                        onShareMenu={() => {
-                          setShareTradeSelected(trade)
-                          setShareTradeMenuOpen(true)
-                        }}
+                        mode="full"
                       />
                       <button
                         onClick={() => deleteTrade(trade.id)}
@@ -565,6 +553,11 @@ export default function TradesPage() {
                                   : "Short"
                                 : "Unknown"
                             )}
+                            {trade.is_public ? (
+                              <span className="text-xs font-normal text-green-400 ml-2">
+                                Public
+                              </span>
+                            ) : null}
                           </h2>
 
                           <p className="text-xs text-gray-400">
@@ -813,61 +806,6 @@ export default function TradesPage() {
         profile={gateProfile}
       />
 
-      {shareTradeMenuOpen && shareTradeSelected ? (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#0b1f3a] p-5">
-            <h2 className="mb-4 text-lg font-semibold text-white">Share Trade</h2>
-
-            <div className="flex flex-col gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  void downloadTradeShareCardPng(shareTradeSelected)
-                  setShareTradeMenuOpen(false)
-                  setShareTradeSelected(null)
-                }}
-                className="w-full rounded-lg bg-green-500 py-2 font-medium text-black"
-              >
-                Download Image
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setShareTradeMenuOpen(false)
-                  setShareTradeDmOpen(true)
-                }}
-                className="w-full rounded-lg bg-white/10 py-2 text-white hover:bg-white/20"
-              >
-                Send in Messages
-              </button>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                setShareTradeMenuOpen(false)
-                setShareTradeSelected(null)
-              }}
-              className="mt-4 text-sm text-white/50 hover:text-white"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      ) : null}
-
-      <ShareToConversationsModal
-        open={shareTradeDmOpen && Boolean(shareTradeSelected?.id)}
-        onClose={() => {
-          setShareTradeDmOpen(false)
-          setShareTradeSelected(null)
-        }}
-        title="Send trade"
-        tradeId={
-          shareTradeSelected?.id != null ? String(shareTradeSelected.id) : null
-        }
-      />
     </>
   )
 }

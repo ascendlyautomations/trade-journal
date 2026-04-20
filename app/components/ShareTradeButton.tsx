@@ -1,7 +1,9 @@
 "use client"
 
 import { useCallback, useId, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import TradeShareCard from "./TradeShareCard"
+import ShareToConversationsModal from "./ShareToConversationsModal"
 import { downloadTradeShareCardPng, tradeShareExportDomId } from "@/lib/tradeShareExport"
 
 export type ShareTradeButtonProps = {
@@ -12,10 +14,10 @@ export type ShareTradeButtonProps = {
   /** Loaded by parent — used for affiliate code on export */
   profile?: { referral_code?: string | null } | null
   /**
-   * When set with `onShareMenu`, click opens the menu instead of downloading immediately.
+   * `full` — open menu: download PNG + send in messages.
+   * `message-only` — open conversation picker only (no download UI).
    */
-  shareMenu?: boolean
-  onShareMenu?: () => void
+  mode?: "full" | "message-only"
 }
 
 export default function ShareTradeButton({
@@ -23,10 +25,11 @@ export default function ShareTradeButton({
   className = "",
   variant = "full",
   profile = null,
-  shareMenu = false,
-  onShareMenu,
+  mode = "full",
 }: ShareTradeButtonProps) {
   const [busy, setBusy] = useState(false)
+  const [shareModalOpen, setShareModalOpen] = useState(false)
+  const [conversationOpen, setConversationOpen] = useState(false)
   const lockRef = useRef(false)
   const instanceId = useId().replace(/:/g, "")
   const exportDomId = tradeShareExportDomId(trade, instanceId)
@@ -41,29 +44,91 @@ export default function ShareTradeButton({
       lockRef.current = false
       setBusy(false)
     }
-  }, [trade])
+  }, [trade, instanceId])
+
+  const openMessageShare = useCallback(() => {
+    setShareModalOpen(false)
+    setConversationOpen(true)
+  }, [])
 
   const handleClick = useCallback(
-    async (e: React.MouseEvent) => {
+    (e: React.MouseEvent) => {
       e.stopPropagation()
       e.preventDefault()
-      if (shareMenu && onShareMenu) {
-        onShareMenu()
+      if (mode === "message-only") {
+        setConversationOpen(true)
         return
       }
-      await handleDownload()
+      setShareModalOpen(true)
     },
-    [shareMenu, onShareMenu, handleDownload]
+    [mode]
   )
+
+  const tradeIdForDm =
+    trade?.id != null && String(trade.id).trim() !== ""
+      ? String(trade.id)
+      : null
+
+  const shareModal =
+    mode === "full" && shareModalOpen ? (
+      <div
+        className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm"
+        onClick={() => setShareModalOpen(false)}
+      >
+        <div
+          className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#0b1f3a] p-5 shadow-2xl"
+          onClick={(e) => e.stopPropagation()}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="share-trade-title"
+        >
+          <h2 id="share-trade-title" className="mb-4 text-lg font-semibold text-white">
+            Share Trade
+          </h2>
+
+          <div className="flex flex-col gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                void handleDownload()
+                setShareModalOpen(false)
+              }}
+              className="w-full rounded-lg bg-green-500 py-2 font-medium text-black"
+            >
+              Download Image
+            </button>
+
+            <button
+              type="button"
+              onClick={() => openMessageShare()}
+              className="w-full rounded-lg bg-white/10 py-2 text-white hover:bg-white/20"
+            >
+              Send in Messages
+            </button>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShareModalOpen(false)}
+            className="mt-4 text-sm text-white/50 hover:text-white"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    ) : null
 
   return (
     <>
-      <div
-        className="pointer-events-none fixed left-[-12000px] top-0 z-[1] flex w-full justify-center px-2"
-        aria-hidden
-      >
-        <TradeShareCard trade={trade} exportId={exportDomId} profile={profile} />
-      </div>
+      {mode === "full" ? (
+        <div
+          className="pointer-events-none fixed left-[-12000px] top-0 z-[1] flex w-full justify-center px-2"
+          aria-hidden
+        >
+          <TradeShareCard trade={trade} exportId={exportDomId} profile={profile} />
+        </div>
+      ) : null}
+
       <button
         type="button"
         disabled={busy}
@@ -79,6 +144,17 @@ export default function ShareTradeButton({
       >
         {busy ? (variant === "icon" ? "…" : "Saving…") : variant === "icon" ? "📤" : "Share Trade"}
       </button>
+
+      {typeof document !== "undefined" && shareModal
+        ? createPortal(shareModal, document.body)
+        : null}
+
+      <ShareToConversationsModal
+        open={conversationOpen && Boolean(tradeIdForDm)}
+        onClose={() => setConversationOpen(false)}
+        title="Send trade"
+        tradeId={tradeIdForDm}
+      />
     </>
   )
 }

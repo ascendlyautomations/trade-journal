@@ -130,6 +130,7 @@ export default function InputTradeForm({
   const [notes, setNotes] = useState("")
   const [publicDescription, setPublicDescription] = useState("")
   const [postToFeed, setPostToFeed] = useState(false)
+  const [isPublic, setIsPublic] = useState(false)
   const [image, setImage] = useState<File | null>(null)
 
   const [mode, setMode] = useState("Live")
@@ -257,6 +258,7 @@ export default function InputTradeForm({
     setNotes(t.notes ?? "")
     setPublicDescription(t.public_description ?? "")
     setPostToFeed(false)
+    setIsPublic(Boolean(t.is_public))
     setImage(null)
     const at = String(t.mode ?? t.account_type ?? "").toLowerCase().trim()
     let category: "funded" | "eval" | "live" | "backtest" = "eval"
@@ -499,6 +501,7 @@ export default function InputTradeForm({
         market_condition: marketCondition || null,
         news_event: newsEvent,
         timeframe: timeframe || null,
+        is_public: isPublic,
       }
       const importedUnreviewed =
         ["imported"].includes(String(existingTrade.account_type ?? "").toLowerCase()) &&
@@ -520,17 +523,40 @@ export default function InputTradeForm({
             "Free plan allows only 1 account. Upgrade to Pro for unlimited accounts."
           )
         } else {
-          alert("Failed to update trade.")
+          alert(msg || "Failed to update trade.")
         }
+        setSubmitting(false)
+        return
+      }
+
+      if (isPublic) {
+        const { error: postErr } = await supabase.from("posts").upsert(
+          {
+            trade_id: existingTrade.id,
+            user_id: user.id,
+            image_url: imageUrlOut,
+            pnl: parsedPnl,
+            rr: parsedRR,
+            caption: notes ?? "",
+          },
+          { onConflict: "trade_id" }
+        )
+        if (postErr) console.error("posts upsert:", postErr)
       } else {
-        void refreshPlanAndAccountLock()
-        onSave?.()
-        onClose?.()
-        if (forceMarkReviewedOnSave || importedUnreviewed) {
-          alert("Trade reviewed and updated!")
-        } else {
-          alert("Trade updated!")
-        }
+        const { error: delErr } = await supabase
+          .from("posts")
+          .delete()
+          .eq("trade_id", existingTrade.id)
+        if (delErr) console.error("posts delete:", delErr)
+      }
+
+      void refreshPlanAndAccountLock()
+      onSave?.()
+      onClose?.()
+      if (forceMarkReviewedOnSave || importedUnreviewed) {
+        alert("Trade reviewed and updated!")
+      } else {
+        alert("Trade updated!")
       }
       setSubmitting(false)
       return
@@ -575,6 +601,7 @@ export default function InputTradeForm({
         market_condition: marketCondition || null,
         news_event: newsEvent,
         timeframe: timeframe || null,
+        is_public: postToFeed,
       },
     ]
 
@@ -978,6 +1005,32 @@ export default function InputTradeForm({
               onChange={(e) => setNotes(e.target.value)}
               className="w-full p-2 lg:p-2.5 h-24 lg:h-28 rounded bg-[#0f172a] border border-white/10"
             />
+          )}
+
+          {isEditMode && (
+            <div className="flex items-center justify-between mt-4 p-3 rounded-xl bg-white/5 border border-white/10">
+              <div>
+                <p className="text-sm font-medium text-white">Share to Community</p>
+                <p className="text-xs text-white/50">
+                  Make this trade visible on the public feed
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsPublic(!isPublic)}
+                className={`
+                  px-4 py-1.5 rounded-full text-xs font-medium
+                  transition
+                  ${
+                    isPublic
+                      ? "bg-green-500/20 text-green-400 border border-green-400/30"
+                      : "bg-white/10 text-white/50 border border-white/10"
+                  }
+                `}
+              >
+                {isPublic ? "Public" : "Private"}
+              </button>
+            </div>
           )}
 
           {!isEditMode && (

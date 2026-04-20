@@ -6,7 +6,11 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { fetchShareConversations } from "@/lib/shareToConversations"
 import Navbar from "../components/Navbar"
-import PostInteractions from "../components/PostInteractions"
+import ShareTradeButton from "../components/ShareTradeButton"
+import {
+  PostInteractionsComments,
+  PostInteractionsEngagement,
+} from "../components/PostInteractions"
 
 function postImageSrc(imageUrl: string | null | undefined): string | null {
   const raw = imageUrl != null ? String(imageUrl).trim() : ""
@@ -51,6 +55,12 @@ function postTradeOwnerUserId(post: any): string | null | undefined {
   const fromTrade = row?.user_id
   if (fromTrade != null && String(fromTrade).trim() !== "") return String(fromTrade)
   return post?.user_id ?? null
+}
+
+function postTradeJoin(post: any) {
+  const t = post?.trades
+  if (!t) return null
+  return Array.isArray(t) ? t[0] : t
 }
 
 type LikeMeta = { count: number; liked: boolean }
@@ -413,7 +423,9 @@ export default function FeedPage() {
       if (mode === "global") {
         const { data, error } = await supabase
           .from("posts")
-          .select("*, profiles(username, avatar_url), trades(public_description, user_id)")
+          .select(
+            "*, profiles(username, avatar_url), trades(public_description, user_id, ticker, direction, account_type)"
+          )
           .order("created_at", { ascending: false })
           .range(from, to)
 
@@ -452,7 +464,9 @@ export default function FeedPage() {
 
         const { data, error } = await supabase
           .from("posts")
-          .select("*, profiles(username, avatar_url), trades(public_description, user_id)")
+          .select(
+            "*, profiles(username, avatar_url), trades(public_description, user_id, ticker, direction, account_type)"
+          )
           .in("user_id", ids)
           .order("created_at", { ascending: false })
           .range(from, to)
@@ -700,6 +714,16 @@ export default function FeedPage() {
   const modalPublicDesc = selectedPost
     ? postPublicDescription(selectedPost)
     : null
+  const modalTradeJoin = selectedPost ? postTradeJoin(selectedPost) : null
+  const modalTicker =
+    modalTradeJoin?.ticker != null ? String(modalTradeJoin.ticker) : "—"
+  const modalDir =
+    modalTradeJoin?.direction != null ? String(modalTradeJoin.direction) : "—"
+  const modalAcctNorm = String(modalTradeJoin?.account_type ?? "")
+    .trim()
+    .toLowerCase()
+  const modalPnl = selectedPost ? Number(selectedPost.pnl) : NaN
+  const modalPnlPositive = !Number.isNaN(modalPnl) && modalPnl >= 0
   const uniquePosts = Array.from(
     new Map(posts.map((p) => [p.id, p])).values()
   )
@@ -798,6 +822,13 @@ export default function FeedPage() {
             const likeMeta = likesByPost[pid] || { count: 0, liked: false }
             const comments = commentsByPost[pid] || []
             const publicDesc = postPublicDescription(post)
+            const tradeRow = postTradeJoin(post)
+            const tickerLabel = tradeRow?.ticker != null ? String(tradeRow.ticker) : "—"
+            const dirLabel =
+              tradeRow?.direction != null ? String(tradeRow.direction) : "—"
+            const accountTypeNorm = String(tradeRow?.account_type ?? "")
+              .trim()
+              .toLowerCase()
 
             return (
               <article
@@ -847,30 +878,9 @@ export default function FeedPage() {
                   </div>
                 ) : null}
 
-                {/* STATS + public description (notes never shown on feed) */}
-                <div className="p-4 space-y-3">
-                  <div className="flex justify-between items-center text-sm gap-4">
-                    <span
-                      className={`font-semibold tabular-nums ${
-                        pnlPositive ? "text-emerald-400" : "text-red-400"
-                      }`}
-                    >
-                      {Number.isNaN(pnl) ? "—" : `${pnlPositive ? "+" : ""}$${pnl}`}
-                    </span>
-                    <span className="text-gray-300 tabular-nums shrink-0">
-                      RR {post.rr != null && post.rr !== "" ? post.rr : "—"}
-                    </span>
-                  </div>
-
-                  {publicDesc && (
-                    <div className="mt-2 px-1">
-                      <p className="text-white text-sm leading-relaxed">
-                        {publicDesc}
-                      </p>
-                    </div>
-                  )}
-
-                  <PostInteractions
+                <div className="flex items-start justify-between gap-3 border-t border-white/10 px-4 py-2">
+                  <div className="min-w-0 flex-1">
+                  <PostInteractionsEngagement
                     post={post}
                     user={user}
                     comments={comments}
@@ -892,7 +902,90 @@ export default function FeedPage() {
                     onSharePost={setSharePost}
                     stopPropagation
                   />
+                  </div>
+                  {post.trade_id ? (
+                    <div className="shrink-0 pt-0.5" onClick={(e) => e.stopPropagation()}>
+                      <ShareTradeButton
+                        variant="icon"
+                        trade={{ id: post.trade_id }}
+                        mode="message-only"
+                      />
+                    </div>
+                  ) : null}
                 </div>
+
+                <div className="space-y-3 px-4 pb-3">
+                  <div className="flex items-center gap-2 flex-wrap text-sm text-gray-100">
+                    <span>
+                      <span className="font-medium text-white">{tickerLabel}</span>
+                      {" - "}
+                      <span>{dirLabel}</span>
+                    </span>
+                    {accountTypeNorm ? (
+                      <span
+                        className={`
+                        px-2 py-0.5 text-xs rounded-full font-medium
+                        ${
+                          accountTypeNorm === "funded"
+                            ? "bg-green-500/20 text-green-400 border border-green-400/30"
+                            : accountTypeNorm === "eval"
+                              ? "bg-yellow-500/20 text-yellow-300 border border-yellow-400/30"
+                              : accountTypeNorm === "live"
+                                ? "bg-blue-500/20 text-blue-300 border border-blue-400/30"
+                                : "bg-white/10 text-white/60"
+                        }
+                      `}
+                      >
+                        {accountTypeNorm.toUpperCase()}
+                      </span>
+                    ) : null}
+                  </div>
+
+                  {publicDesc ? (
+                    <p className="px-1 text-sm leading-relaxed text-white">{publicDesc}</p>
+                  ) : null}
+
+                  <div className="flex justify-between items-center gap-4 text-sm">
+                    <span
+                      className={`font-semibold tabular-nums ${
+                        pnlPositive ? "text-emerald-400" : "text-red-400"
+                      }`}
+                    >
+                      {Number.isNaN(pnl) ? "—" : `${pnlPositive ? "+" : ""}$${pnl}`}
+                    </span>
+                    <span className="text-gray-300 tabular-nums shrink-0">
+                      RR {post.rr != null && post.rr !== "" ? post.rr : "—"}
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-white/40">
+                    {new Date(post.created_at).toLocaleString()}
+                  </p>
+                </div>
+
+                <PostInteractionsComments
+                  post={post}
+                  user={user}
+                  comments={comments}
+                  likeMeta={likeMeta}
+                  commentsOpen={!!openComments[pid]}
+                  commentValue={commentDraft[pid] || ""}
+                  commentSubmitting={!!commentSubmitting[pid]}
+                  onToggleLike={toggleLike}
+                  onToggleComments={(postId) =>
+                    setOpenComments((prev) => ({
+                      ...prev,
+                      [postId]: !prev[postId],
+                    }))
+                  }
+                  onCommentChange={(postId, value) =>
+                    setCommentDraft((d) => ({ ...d, [postId]: value }))
+                  }
+                  onSubmitComment={submitComment}
+                  onSharePost={setSharePost}
+                  stopPropagation
+                  className="px-4 pb-4 mt-2"
+                />
               </article>
             )
           })}
@@ -1011,37 +1104,102 @@ export default function FeedPage() {
               />
             ) : null}
 
-            <div className="mt-3 space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span
-                  className={
-                    Number(selectedPost.pnl) >= 0
-                      ? "text-green-400"
-                      : "text-red-400"
-                  }
-                >
-                  ${selectedPost.pnl}
-                </span>
-                <span>RR {selectedPost.rr}</span>
-              </div>
-
-              <div className="flex justify-between text-gray-300">
-                <span>Points: {selectedPost.points || "-"}</span>
-                <span>Account: {selectedPost.account_type || "-"}</span>
-              </div>
-            </div>
-
-            {modalPublicDesc && (
-              <div className="mt-2 px-1">
-                <p className="text-white text-sm leading-relaxed">
-                  {modalPublicDesc}
-                </p>
-              </div>
-            )}
-
             {modalPid ? (
-              <div className="mt-3">
-                <PostInteractions
+              <>
+                <div className="mt-3 flex items-start justify-between gap-3 border-t border-white/10 pt-3">
+                  <div className="min-w-0 flex-1">
+                  <PostInteractionsEngagement
+                    post={selectedPost}
+                    user={user}
+                    comments={modalComments}
+                    likeMeta={likesByPost[modalPid] || { count: 0, liked: false }}
+                    commentsOpen={!!openComments[modalPid]}
+                    commentValue={commentDraft[modalPid] || ""}
+                    commentSubmitting={!!commentSubmitting[modalPid]}
+                    onToggleLike={toggleLike}
+                    onToggleComments={(postId) =>
+                      setOpenComments((prev) => ({
+                        ...prev,
+                        [postId]: !prev[postId],
+                      }))
+                    }
+                    onCommentChange={(postId, value) =>
+                      setCommentDraft((d) => ({ ...d, [postId]: value }))
+                    }
+                    onSubmitComment={submitComment}
+                    onSharePost={setSharePost}
+                  />
+                  </div>
+                  {selectedPost.trade_id ? (
+                    <div className="shrink-0 pt-0.5" onClick={(e) => e.stopPropagation()}>
+                      <ShareTradeButton
+                        variant="icon"
+                        trade={{ id: selectedPost.trade_id }}
+                        mode="message-only"
+                      />
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="mt-3 space-y-3 text-sm">
+                  <div className="flex items-center gap-2 flex-wrap text-gray-100">
+                    <span>
+                      <span className="font-medium text-white">{modalTicker}</span>
+                      {" - "}
+                      <span>{modalDir}</span>
+                    </span>
+                    {modalAcctNorm ? (
+                      <span
+                        className={`
+                        px-2 py-0.5 text-xs rounded-full font-medium
+                        ${
+                          modalAcctNorm === "funded"
+                            ? "bg-green-500/20 text-green-400 border border-green-400/30"
+                            : modalAcctNorm === "eval"
+                              ? "bg-yellow-500/20 text-yellow-300 border border-yellow-400/30"
+                              : modalAcctNorm === "live"
+                                ? "bg-blue-500/20 text-blue-300 border border-blue-400/30"
+                                : "bg-white/10 text-white/60"
+                        }
+                      `}
+                      >
+                        {modalAcctNorm.toUpperCase()}
+                      </span>
+                    ) : null}
+                  </div>
+
+                  {modalPublicDesc ? (
+                    <p className="text-white text-sm leading-relaxed">{modalPublicDesc}</p>
+                  ) : null}
+
+                  <div className="flex justify-between gap-4">
+                    <span
+                      className={`font-semibold tabular-nums ${
+                        modalPnlPositive ? "text-emerald-400" : "text-red-400"
+                      }`}
+                    >
+                      {Number.isNaN(modalPnl)
+                        ? "—"
+                        : `${modalPnlPositive ? "+" : ""}$${modalPnl}`}
+                    </span>
+                    <span className="text-gray-300 tabular-nums shrink-0">
+                      RR{" "}
+                      {selectedPost.rr != null && selectedPost.rr !== ""
+                        ? selectedPost.rr
+                        : "—"}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between text-xs text-gray-400">
+                    <span>Points: {selectedPost.points ?? "—"}</span>
+                  </div>
+
+                  <p className="text-xs text-white/40">
+                    {new Date(selectedPost.created_at).toLocaleString()}
+                  </p>
+                </div>
+
+                <PostInteractionsComments
                   post={selectedPost}
                   user={user}
                   comments={modalComments}
@@ -1061,8 +1219,9 @@ export default function FeedPage() {
                   }
                   onSubmitComment={submitComment}
                   onSharePost={setSharePost}
+                  className="mt-3"
                 />
-              </div>
+              </>
             ) : null}
 
           </div>

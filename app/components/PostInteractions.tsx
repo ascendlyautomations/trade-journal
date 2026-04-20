@@ -5,7 +5,7 @@ type LikeMeta = {
   liked: boolean
 }
 
-type PostInteractionsProps = {
+type PostInteractionsBaseProps = {
   post: any
   user: any
   comments: any[]
@@ -21,34 +21,30 @@ type PostInteractionsProps = {
   stopPropagation?: boolean
 }
 
-export default function PostInteractions({
-  post,
-  user,
-  comments,
-  likeMeta,
-  commentsOpen,
-  commentValue,
-  commentSubmitting,
-  onToggleLike,
-  onToggleComments,
-  onCommentChange,
-  onSubmitComment,
-  onSharePost,
-  stopPropagation = false,
-}: PostInteractionsProps) {
-  const pid = String(post.id)
-  const guardProps = stopPropagation
+const guard = (stop: boolean) =>
+  stop
     ? {
         onClick: (e: React.MouseEvent) => e.stopPropagation(),
         onKeyDown: (e: React.KeyboardEvent) => e.stopPropagation(),
       }
     : {}
 
+/** Likes, share, and “view comments” toggle only (matches original stacking). */
+export function PostInteractionsEngagement({
+  post,
+  user,
+  comments,
+  likeMeta,
+  commentsOpen,
+  onToggleLike,
+  onToggleComments,
+  onSharePost,
+  stopPropagation = false,
+  className = "",
+}: PostInteractionsBaseProps & { className?: string }) {
+  const pid = String(post.id)
   return (
-    <div
-      className="flex flex-col gap-2 pt-1 border-t border-white/5"
-      {...guardProps}
-    >
+    <div className={`flex flex-col gap-2 text-sm ${className}`.trim()} {...guard(stopPropagation)}>
       <div className="flex items-center gap-4">
         <button
           type="button"
@@ -90,73 +86,112 @@ export default function PostInteractions({
       >
         {commentsOpen ? "Hide comments" : `View comments (${comments.length})`}
       </button>
+    </div>
+  )
+}
 
-      {commentsOpen ? (
-        <div className="mt-3 space-y-2">
-          {comments.map((c: any) => {
-            return (
-              <div key={c.id} className="flex gap-2 items-start">
-                <img
-                  src={c.profiles?.avatar_url || "/default-avatar.png"}
-                  className="w-8 h-8 rounded-full object-cover shrink-0"
-                  alt="avatar"
-                />
-                <div className="min-w-0">
-                  <p className="text-xs text-gray-400">
-                    {c.profiles?.username || "User"}
-                  </p>
-                  <p className="text-white text-sm break-words">{c.content}</p>
-                </div>
-              </div>
-            )
-          })}
+/** Comment thread + composer (only when `commentsOpen`). */
+export function PostInteractionsComments({
+  post,
+  user,
+  comments,
+  commentsOpen,
+  commentValue,
+  commentSubmitting,
+  onCommentChange,
+  onSubmitComment,
+  stopPropagation = false,
+  className = "",
+}: PostInteractionsBaseProps & { className?: string }) {
+  const pid = String(post.id)
+  if (!commentsOpen) return null
 
-          {user ? (
-            <div
-              className="flex gap-2 mt-2"
-              onClick={(e) => {
-                if (stopPropagation) e.stopPropagation()
-              }}
-              onKeyDown={(e) => {
-                if (stopPropagation) e.stopPropagation()
-              }}
-            >
-              <input
-                id={`comment-input-${pid}`}
-                type="text"
-                placeholder="Add a comment…"
-                value={commentValue}
-                onChange={(e) => onCommentChange(pid, e.target.value)}
-                onClick={(e) => {
-                  if (stopPropagation) e.stopPropagation()
-                }}
-                onFocus={(e) => {
-                  if (stopPropagation) e.stopPropagation()
-                }}
-                onKeyDown={(e) => {
-                  if (stopPropagation) e.stopPropagation()
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault()
-                    onSubmitComment(post)
-                  }
-                }}
-                className="flex-1 min-w-0 p-2 bg-[#1e293b] text-white rounded-lg border border-gray-600 text-sm placeholder:text-gray-500"
+  return (
+    <div
+      className={`space-y-3 border-t border-white/10 pt-3 ${className}`.trim()}
+      {...guard(stopPropagation)}
+    >
+      <div className="space-y-2">
+        {comments.map((c: any) => {
+          return (
+            <div key={c.id} className="flex gap-2 items-start">
+              <img
+                src={c.profiles?.avatar_url || "/default-avatar.png"}
+                className="w-8 h-8 rounded-full object-cover shrink-0"
+                alt="avatar"
               />
-              <button
-                type="button"
-                disabled={commentSubmitting || !commentValue.trim()}
-                onClick={(e) => {
-                  if (stopPropagation) e.stopPropagation()
-                  onSubmitComment(post)
-                }}
-                className="bg-blue-500 px-3 rounded-lg text-white text-sm font-medium disabled:opacity-40 shrink-0"
-              >
-                {commentSubmitting ? "…" : "Post"}
-              </button>
+              <div className="min-w-0">
+                <p className="text-xs text-gray-400">{c.profiles?.username || "User"}</p>
+                <p className="text-white text-sm break-words">{c.content}</p>
+              </div>
             </div>
-          ) : null}
+          )
+        })}
+      </div>
+
+      {user ? (
+        <div
+          className="flex gap-2 mt-2"
+          onClick={(e) => {
+            if (stopPropagation) e.stopPropagation()
+          }}
+          onKeyDown={(e) => {
+            if (stopPropagation) e.stopPropagation()
+          }}
+        >
+          <input
+            id={`comment-input-${pid}`}
+            type="text"
+            placeholder="Add a comment…"
+            value={commentValue}
+            onChange={(e) => onCommentChange(pid, e.target.value)}
+            onClick={(e) => {
+              if (stopPropagation) e.stopPropagation()
+            }}
+            onFocus={(e) => {
+              if (stopPropagation) e.stopPropagation()
+            }}
+            onKeyDown={(e) => {
+              if (stopPropagation) e.stopPropagation()
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault()
+                onSubmitComment(post)
+              }
+            }}
+            className="flex-1 min-w-0 p-2 bg-[#1e293b] text-white rounded-lg border border-gray-600 text-sm placeholder:text-gray-500"
+          />
+          <button
+            type="button"
+            disabled={commentSubmitting || !commentValue.trim()}
+            onClick={(e) => {
+              if (stopPropagation) e.stopPropagation()
+              onSubmitComment(post)
+            }}
+            className="bg-blue-500 px-3 rounded-lg text-white text-sm font-medium disabled:opacity-40 shrink-0"
+          >
+            {commentSubmitting ? "…" : "Post"}
+          </button>
         </div>
       ) : null}
+    </div>
+  )
+}
+
+type PostInteractionsProps = PostInteractionsBaseProps & {
+  className?: string
+}
+
+export default function PostInteractions({
+  className = "",
+  ...rest
+}: PostInteractionsProps) {
+  const outerClass =
+    `flex flex-col gap-2 pt-1 border-t border-white/5 ${className}`.trim()
+
+  return (
+    <div className={outerClass} {...guard(rest.stopPropagation ?? false)}>
+      <PostInteractionsEngagement {...rest} />
+      <PostInteractionsComments {...rest} />
     </div>
   )
 }

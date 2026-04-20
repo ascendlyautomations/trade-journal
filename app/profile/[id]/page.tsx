@@ -15,7 +15,11 @@ import {
   ResponsiveContainer,
   CartesianGrid,
 } from "recharts"
-import TradeSocialLayer from "../../components/TradeSocialLayer"
+import {
+  TradeSocialProvider,
+  TradeSocialEngagementBar,
+  TradeSocialCommentsSection,
+} from "../../components/TradeSocialLayer"
 import ShareTradeButton from "../../components/ShareTradeButton"
 import InputTradeForm from "../../components/InputTradeForm"
 import Calendar from "../../components/Calendar"
@@ -104,11 +108,64 @@ function TradeCard({
   const pnl = Number.isFinite(pnlRaw) ? pnlRaw : NaN
   const direction = trade.direction ?? "—"
   const ticker = trade.ticker ?? "—"
+  const accountTypeNorm = String(trade.account_type ?? "").trim().toLowerCase()
   const rr =
     trade.rr != null && trade.rr !== "" ? trade.rr : "—"
   const desc = trade.public_description
     ? String(trade.public_description).trim()
     : ""
+
+  const tradeDetails = (
+    <>
+      <div className="flex items-center gap-2 flex-wrap text-sm text-gray-100">
+        <span>
+          <span className="font-medium text-white">{ticker}</span>
+          {" - "}
+          <span>{direction}</span>
+        </span>
+        {accountTypeNorm ? (
+          <span
+            className={`
+        px-2 py-0.5 text-xs rounded-full font-medium
+        ${
+          accountTypeNorm === "funded"
+            ? "bg-green-500/20 text-green-400 border border-green-400/30"
+            : accountTypeNorm === "eval"
+              ? "bg-yellow-500/20 text-yellow-300 border border-yellow-400/30"
+              : accountTypeNorm === "live"
+                ? "bg-blue-500/20 text-blue-300 border border-blue-400/30"
+                : "bg-white/10 text-white/60"
+        }
+      `}
+          >
+            {accountTypeNorm.toUpperCase()}
+          </span>
+        ) : null}
+      </div>
+      {desc ? (
+        <p className="px-1 text-sm leading-relaxed text-white">{desc}</p>
+      ) : null}
+      <div className="flex items-center justify-between gap-4 text-sm">
+        <span
+          className={
+            `font-semibold tabular-nums ${
+              Number.isFinite(pnl)
+                ? pnl >= 0
+                  ? "text-emerald-400"
+                  : "text-red-400"
+                : "text-gray-400"
+            }`
+          }
+        >
+          {Number.isFinite(pnl) ? formatMoney(pnl) : "—"}
+        </span>
+        <span className="shrink-0 text-gray-300 tabular-nums">RR {rr}</span>
+      </div>
+      <p className="text-xs text-gray-400">
+        {new Date(trade.created_at).toLocaleString()}
+      </p>
+    </>
+  )
 
   return (
     <article
@@ -151,7 +208,12 @@ function TradeCard({
         </div>
         <div className="flex shrink-0 items-center gap-1">
           <div onClick={(e) => e.stopPropagation()}>
-            <ShareTradeButton variant="icon" trade={trade} profile={shareProfile ?? null} />
+            <ShareTradeButton
+              variant="icon"
+              trade={trade}
+              profile={shareProfile ?? null}
+              mode="message-only"
+            />
           </div>
           {canManageTrade ? (
           <div className="relative">
@@ -232,42 +294,22 @@ function TradeCard({
       )}
 
       {showInteractions ? (
-        <div className="border-t border-white/10 px-4 py-3">
-          <TradeSocialLayer
+        <div onKeyDown={(e) => e.stopPropagation()}>
+          <TradeSocialProvider
             tradeId={trade.id}
             currentUserId={trade.currentUserId}
             tradeOwnerUserId={trade.user_id}
-          />
-        </div>
-      ) : null}
-
-      <div className="space-y-3 p-4">
-        <div className="flex items-center justify-between gap-4 text-sm">
-          <span
-            className={
-              `font-semibold tabular-nums ${
-                Number.isFinite(pnl)
-                  ? pnl >= 0
-                    ? "text-emerald-400"
-                    : "text-red-400"
-                  : "text-gray-400"
-              }`
-            }
           >
-            {Number.isFinite(pnl) ? formatMoney(pnl) : "—"}
-          </span>
-          <span className="shrink-0 text-gray-300 tabular-nums">RR {rr}</span>
+            <div className="border-t border-white/10 px-4 py-2">
+              <TradeSocialEngagementBar />
+            </div>
+            <div className="space-y-3 px-4 pb-3">{tradeDetails}</div>
+            <TradeSocialCommentsSection className="px-4 pb-4" />
+          </TradeSocialProvider>
         </div>
-        <p className="text-sm text-gray-100">
-          <span className="font-medium text-white">{ticker}</span> · <span>{direction}</span>
-        </p>
-        {desc ? (
-          <p className="px-1 text-sm leading-relaxed text-white">{desc}</p>
-        ) : null}
-        <p className="text-xs text-gray-400">
-          {new Date(trade.created_at).toLocaleString()}
-        </p>
-      </div>
+      ) : (
+        <div className="space-y-3 p-4">{tradeDetails}</div>
+      )}
     </article>
   )
 }

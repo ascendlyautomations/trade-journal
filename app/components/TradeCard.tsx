@@ -119,7 +119,7 @@ export default function TradeCard({
             Edit
           </button>
         ) : null}
-        <ShareTradeButton variant="icon" trade={trade} profile={shareProfile} />
+        <ShareTradeButton variant="icon" trade={trade} profile={shareProfile} mode="full" />
         {onDelete ? (
           <button
             type="button"
