@@ -5,6 +5,7 @@ import { supabase } from "../../lib/supabaseClient"
 import Navbar from "../components/Navbar"
 import { useRouter } from "next/navigation"
 import InputTradeForm from "../components/InputTradeForm"
+import { formatEST } from "@/lib/formatDate"
 
 export default function ReviewPage() {
   const [trades, setTrades] = useState<any[]>([])
@@ -149,7 +150,7 @@ export default function ReviewPage() {
                   </span>
                 </div>
                 <p className="mt-1 text-xs text-gray-400">
-                  {new Date(trade.created_at).toLocaleString()}
+                  {formatEST(trade.created_at)}
                 </p>
                 <p className="mt-3 inline-flex rounded bg-emerald-500 px-3 py-1 text-xs font-semibold text-white">
                   Review / Edit Trade

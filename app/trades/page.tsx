@@ -19,6 +19,25 @@ import {
   getTradeDurationDisplay,
 } from "@/lib/tradeDisplayFormat"
 
+function formatEST(dateString: string) {
+  if (!dateString) return ""
+
+  // FORCE UTC by appending Z if missing
+  const isoString = dateString.includes("Z")
+    ? dateString
+    : dateString + "Z"
+
+  return new Date(isoString).toLocaleString("en-US", {
+    timeZone: "America/New_York",
+    month: "numeric",
+    day: "numeric",
+    year: "2-digit",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  })
+}
+
 function formatMoney(value: unknown): string {
   if (value === null || value === undefined) return "-"
   const number = Number(value)
@@ -561,7 +580,7 @@ export default function TradesPage() {
                           </h2>
 
                           <p className="text-xs text-gray-400">
-                            {new Date(trade.created_at).toLocaleDateString()}
+                            {formatEST(trade.created_at)}
                           </p>
 
                           <div
@@ -767,7 +786,7 @@ export default function TradesPage() {
                     </button>
 
                     <p className="text-sm text-gray-400 mt-4">
-                      {new Date(trade.created_at).toLocaleString()}
+                      {formatEST(trade.created_at)}
                     </p>
 
                   </div>

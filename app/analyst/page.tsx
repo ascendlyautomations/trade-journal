@@ -5,6 +5,7 @@ import Navbar from "../components/Navbar"
 import { useEffect, useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { isProActive } from "../../lib/subscription"
+import { formatEST } from "@/lib/formatDate"
 
 export default function AnalystPage() {
   const [trades, setTrades] = useState<any[]>([])
@@ -54,10 +55,6 @@ export default function AnalystPage() {
   function formatCurrency(val: number) {
     if (val === null || val === undefined) return "-"
     return `${val < 0 ? "-" : ""}$${Math.abs(val).toLocaleString()}`
-  }
-
-  function formatDate(date: string) {
-    return new Date(date).toLocaleDateString()
   }
 
   async function analyzeTrade(trade: any) {
@@ -195,7 +192,7 @@ export default function AnalystPage() {
                       </p>
 
                       <p className="text-xs text-gray-400">
-                        {formatDate(trade.created_at)} • {trade.session}
+                        {formatEST(trade.created_at)} • {trade.session}
                       </p>
 
                       <p className="text-xs text-gray-500">
@@ -251,7 +248,7 @@ export default function AnalystPage() {
                     </p>
 
                     <p>
-                      {formatDate(selectedTrade.created_at)} •{" "}
+                      {formatEST(selectedTrade.created_at)} •{" "}
                       {selectedTrade.session}
                     </p>
 

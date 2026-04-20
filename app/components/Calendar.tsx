@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react"
 import { formatPnlCurrency, formatPnlWholeDollars } from "../../lib/formatMoney"
+import { formatEST } from "@/lib/formatDate"
 
 type TradeLike = {
   id: string | number
@@ -326,7 +327,7 @@ export default function Calendar({
                         {trade.ticker || "—"} • {trade.direction || "—"}
                       </p>
                       <p className="text-sm text-gray-400">
-                        {new Date(trade.created_at).toLocaleTimeString()}
+                        {formatEST(trade.created_at)}
                       </p>
                       <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-gray-400">
                         {trade.rr != null && trade.rr !== "" ? (
@@ -418,7 +419,7 @@ export default function Calendar({
                     {selectedTrade.direction || "—"}
                   </p>
                   <p className="mt-1 text-sm text-gray-400">
-                    {new Date(selectedTrade.created_at).toLocaleString()}
+                    {formatEST(selectedTrade.created_at)}
                   </p>
                   <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-400">
                     {selectedTrade.rr != null && selectedTrade.rr !== "" ? (

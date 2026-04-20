@@ -5,6 +5,7 @@ import type { ChangeEvent } from "react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { fetchShareConversations } from "@/lib/shareToConversations"
+import { formatEST } from "@/lib/formatDate"
 import Navbar from "../components/Navbar"
 import ShareTradeButton from "../components/ShareTradeButton"
 import {
@@ -959,7 +960,7 @@ export default function FeedPage() {
                   </div>
 
                   <p className="text-xs text-white/40">
-                    {new Date(post.created_at).toLocaleString()}
+                    {formatEST(post.created_at)}
                   </p>
                 </div>
 
@@ -1195,7 +1196,7 @@ export default function FeedPage() {
                   </div>
 
                   <p className="text-xs text-white/40">
-                    {new Date(selectedPost.created_at).toLocaleString()}
+                    {formatEST(selectedPost.created_at)}
                   </p>
                 </div>
 

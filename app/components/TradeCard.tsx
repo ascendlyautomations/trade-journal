@@ -6,6 +6,7 @@ import {
   formatTradePrice,
   getTradeDurationDisplay,
 } from "@/lib/tradeDisplayFormat"
+import { formatEST } from "@/lib/formatDate"
 
 function formatMoney(value: unknown): string {
   if (value === null || value === undefined) return "-"
@@ -146,7 +147,7 @@ export default function TradeCard({
             </h2>
 
             <p className="text-xs text-gray-400">
-              {new Date(trade.created_at).toLocaleDateString()}
+              {formatEST(trade.created_at)}
             </p>
 
             <div
@@ -332,7 +333,7 @@ export default function TradeCard({
       </button>
 
       <p className="mt-4 text-sm text-gray-400">
-        {new Date(trade.created_at).toLocaleString()}
+        {formatEST(trade.created_at)}
       </p>
     </div>
   )

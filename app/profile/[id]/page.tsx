@@ -30,6 +30,7 @@ import {
   formatAchievementDate,
 } from "../../../lib/achievements"
 import { formatPnlCurrency } from "../../../lib/formatMoney"
+import { formatEST } from "@/lib/formatDate"
 
 function postImageSrc(imageUrl: string | null | undefined): string | null {
   const raw = imageUrl != null ? String(imageUrl).trim() : ""
@@ -162,7 +163,7 @@ function TradeCard({
         <span className="shrink-0 text-gray-300 tabular-nums">RR {rr}</span>
       </div>
       <p className="text-xs text-gray-400">
-        {new Date(trade.created_at).toLocaleString()}
+        {formatEST(trade.created_at)}
       </p>
     </>
   )
@@ -483,7 +484,7 @@ function PostCard({
           </p>
         ) : null}
 
-        <p className="text-xs text-gray-400">{new Date(post.created_at).toLocaleString()}</p>
+        <p className="text-xs text-gray-400">{formatEST(post.created_at)}</p>
         {showInteractions ? (
           <div className="border-t border-white/10 pt-3">
           <div className="flex items-center gap-4 px-1 text-sm">

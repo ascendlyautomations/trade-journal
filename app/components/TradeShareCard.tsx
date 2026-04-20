@@ -1,6 +1,7 @@
 "use client"
 
 import { forwardRef } from "react"
+import { formatEST } from "@/lib/formatDate"
 
 export type TradeShareCardProps = {
   trade: any
@@ -87,11 +88,7 @@ const TradeShareCard = forwardRef<HTMLDivElement, TradeShareCardProps>(
 
     const dateStr =
       trade.created_at != null
-        ? new Date(trade.created_at).toLocaleDateString(undefined, {
-            month: "short",
-            day: "numeric",
-            year: "numeric",
-          })
+        ? formatEST(trade.created_at)
         : ""
 
     const codeTrim =

@@ -391,19 +391,6 @@ export default function InputTradeForm({
     const parsedContracts = Number.parseInt(contracts, 10)
     const contractsNum = Number.isFinite(parsedContracts) ? parsedContracts : 0
 
-    const now = new Date()
-    const selectedDateObj = new Date(tradeDate + "T00:00:00")
-    const isToday = selectedDateObj.toDateString() === now.toDateString()
-
-    let finalDate: Date
-    if (entryTime) {
-      finalDate = new Date(`${tradeDate}T${entryTime}:00`)
-    } else if (isToday) {
-      finalDate = now
-    } else {
-      finalDate = new Date(`${tradeDate}T16:00:00`)
-    }
-
     const sessionToSave = (session && String(session).trim()) || "NY"
     const tradeTypeToSave =
       tradeType != null && String(tradeType).trim() !== ""
@@ -481,7 +468,7 @@ export default function InputTradeForm({
             : null,
         account_size: accountSize || null,
         account_id: accountNumber || null,
-        created_at: finalDate.toISOString(),
+        created_at: existingTrade.created_at,
         entry_price:
           entryVal !== null && Number.isFinite(entryVal) ? entryVal : null,
         exit_price:
@@ -562,6 +549,10 @@ export default function InputTradeForm({
       return
     }
 
+    const now = new Date()
+
+    console.log("FINAL SAVED DATE:", now.toISOString())
+
     const parsedEntry = advanced ? parseFloat(entryPrice) || 0 : null
     const parsedExit = advanced ? parseFloat(exitPrice) || 0 : null
 
@@ -587,7 +578,8 @@ export default function InputTradeForm({
         account_size: accountSize,
         account_id: accountNumber,
         user_id: user.id,
-        created_at: finalDate.toISOString(),
+        created_at: now.toISOString(),
+        date: now.toISOString(),
         entry_price: parsedEntry,
         exit_price: parsedExit,
         entry_time: entryTime,
