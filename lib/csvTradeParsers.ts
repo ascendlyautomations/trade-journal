@@ -698,9 +698,13 @@ export function buildCleanCsvTrade(row: CsvRow, userId: string): CsvTradeInsert 
   throw new Error(res.reason)
 }
 
-/** Force private flag on insert payloads (belt-and-suspenders). */
+/** CSV bulk rows: private + imported account type (never counts toward free-plan slots). */
 export function tradesInsertRowsPrivate<T extends Record<string, unknown>>(rows: T[]) {
-  return rows.map((row) => ({ ...row, is_public: false }))
+  return rows.map((row) => ({
+    ...row,
+    is_public: false,
+    account_type: "imported",
+  }))
 }
 
 export function buildTradesFromParsedCsv(

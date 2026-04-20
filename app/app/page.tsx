@@ -10,6 +10,8 @@ import {
   stripBom,
   tradesInsertRowsPrivate,
 } from "@/lib/csvTradeParsers"
+import { assertCsvImportAllowedForFreePlan, markProfileCsvImportUsed } from "@/lib/csvImportGate"
+import { ensureImportedCsvAccountRegistered } from "@/lib/ensureManualUserAccount"
 
 export default function Home() {
   const [loading, setLoading] = useState(false)
@@ -33,6 +35,15 @@ export default function Home() {
 
     if (!user?.id) {
       alert("Please log in first")
+      setLoading(false)
+      return
+    }
+
+    const gate = await assertCsvImportAllowedForFreePlan(supabase, user.id)
+    if (!gate.ok) {
+      alert(
+        "Free plan allows one CSV import only. Upgrade for unlimited imports."
+      )
       setLoading(false)
       return
     }
@@ -83,6 +94,17 @@ export default function Home() {
 
           const chunkSize = 100
 
+          const { error: importAcctErr } = await ensureImportedCsvAccountRegistered(
+            supabase,
+            user.id
+          )
+          if (importAcctErr) {
+            console.error(importAcctErr)
+            alert("Could not register imported account row. Try again.")
+            setLoading(false)
+            return
+          }
+
           for (let i = 0; i < tradesToInsert.length; i += chunkSize) {
             const chunk = tradesInsertRowsPrivate(tradesToInsert.slice(i, i + chunkSize))
 
@@ -111,6 +133,8 @@ export default function Home() {
             msg += `\n\n${errLines}${skipped > 6 ? "\n…" : ""}`
           }
           alert(msg)
+          const { error: flagErr } = await markProfileCsvImportUsed(supabase, user.id)
+          if (flagErr) console.error("markProfileCsvImportUsed:", flagErr)
           fetchReviewCount()
         } catch (err) {
           console.error(err)

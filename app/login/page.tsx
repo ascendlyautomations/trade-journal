@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { supabase } from "@/lib/supabaseClient"
+import { isProfilesUsernameConflict } from "@/lib/profileUsername"
 import { useRouter } from "next/navigation"
 import { ONBOARDING_FLAG } from "../components/ProfileOnboarding"
 
@@ -108,36 +109,62 @@ export default function LoginPage() {
           ? localStorage.getItem("referral_code")
           : null
 
-      const { data, error } = await supabase.auth.signUp({
+      const cleanUsername = (username ?? "")
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9_]/g, "")
+      if (!cleanUsername.length) {
+        alert("Please enter a username")
+        return
+      }
+
+      const { data: existingUser, error: usernameLookupErr } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("username", cleanUsername)
+        .maybeSingle()
+
+      if (usernameLookupErr) {
+        console.error("Username lookup:", usernameLookupErr)
+        alert("Could not validate username. Try again.")
+        return
+      }
+
+      if (existingUser) {
+        alert("Username already in use")
+        return
+      }
+
+      const { data, error: authError } = await supabase.auth.signUp({
         email,
         password,
         options: {
           data: {
-            username: username?.trim() || null,
+            username: cleanUsername,
             name: name?.trim() || null,
             referral_code: referralCode || null,
           },
         },
       })
 
-      if (error) {
-        if (/already registered/i.test(error.message || "")) {
-          alert(error.message)
+      if (authError) {
+        if (/already registered/i.test(authError.message || "")) {
+          alert(authError.message)
           return
         }
         console.error(
-          "ERROR:",
+          "AUTH ERROR:",
           JSON.stringify(
             {
-              message: error.message,
-              name: error.name,
-              status: (error as { status?: number }).status,
+              message: authError.message,
+              name: authError.name,
+              status: (authError as { status?: number }).status,
             },
             null,
             2
           )
         )
-        alert(error.message)
+        alert(authError.message)
         return
       }
 
@@ -150,24 +177,34 @@ export default function LoginPage() {
         return
       }
 
-      const { error: profileError } = await supabase.from("profiles").upsert(
-        {
-          id: user.id,
-          username: username || user.email || `user_${user.id.slice(0, 6)}`,
-          name: name || "",
-          is_pro: false,
-          subscription_status: "inactive",
-          created_at: new Date().toISOString(),
-        },
-        { onConflict: "id" }
-      )
+      const profileRow = {
+        id: user.id,
+        username: cleanUsername,
+        name: (name ?? "").trim(),
+        is_pro: false,
+        subscription_status: "inactive",
+        created_at: new Date().toISOString(),
+      }
+
+      let profileError = (
+        await supabase.from("profiles").insert(profileRow)
+      ).error
+
+      if (profileError?.code === "23505" && !isProfilesUsernameConflict(profileError)) {
+        profileError = (
+          await supabase.from("profiles").upsert(profileRow, {
+            onConflict: "id",
+          })
+        ).error
+      }
 
       if (profileError) {
-        console.error(
-          "ERROR:",
-          JSON.stringify(profileError, null, 2)
-        )
-        alert("Profile creation failed")
+        if (profileError.code === "23505" && isProfilesUsernameConflict(profileError)) {
+          alert("Username already in use")
+          return
+        }
+        console.error("PROFILE INSERT ERROR:", profileError)
+        alert("Error creating profile")
         return
       }
 
@@ -359,13 +396,24 @@ export default function LoginPage() {
               onChange={(e) => setName(e.target.value)}
             />
 
-            <input
-              type="text"
-              placeholder="Username"
-              className="w-full mb-4 px-4 py-3 rounded-xl bg-white/10 border border-white/10 focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder-gray-400"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-            />
+            <div className="mb-4">
+              <input
+                type="text"
+                placeholder="username (lowercase only)"
+                autoComplete="username"
+                className="w-full px-4 py-3 rounded-xl bg-white/10 border border-white/10 focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder-gray-400"
+                value={username}
+                onChange={(e) => {
+                  let value = e.target.value
+                  value = value.toLowerCase()
+                  value = value.replace(/[^a-z0-9_]/g, "")
+                  setUsername(value)
+                }}
+              />
+              <p className="text-xs text-white/50 mt-1">
+                Only lowercase letters, numbers, and underscores allowed
+              </p>
+            </div>
           </>
         )}
 

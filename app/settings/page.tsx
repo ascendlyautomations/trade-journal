@@ -6,6 +6,7 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "../../lib/supabaseClient"
 import { isProActive } from "../../lib/subscription"
+import { isProfilesUsernameConflict } from "@/lib/profileUsername"
 import type { User } from "@supabase/supabase-js"
 import AffiliatePayoutSetupCard from "@/app/components/AffiliatePayoutSetupCard"
 import { supabaseBearerHeaders } from "@/lib/supabaseBearerFetch"
@@ -248,10 +249,12 @@ export default function SettingsPage() {
       if (uploaded) avatarUrl = uploaded
     }
 
+    const cleanUsername = username.toLowerCase().trim()
+
     const { error } = await supabase
       .from("profiles")
       .update({
-        username,
+        username: cleanUsername,
         bio,
         avatar_url: avatarUrl,
         trading_style: tradingStyle,
@@ -263,15 +266,20 @@ export default function SettingsPage() {
     setSavingProfile(false)
 
     if (error) {
-      alert(error.message)
+      if (error.code === "23505" && isProfilesUsernameConflict(error)) {
+        alert("Username already in use")
+      } else {
+        alert(error.message)
+      }
       return
     }
 
+    setUsername(cleanUsername)
     setProfile((p) =>
       p
         ? {
             ...p,
-            username,
+            username: cleanUsername,
             bio,
             avatar_url: avatarUrl,
             trading_style: tradingStyle,
