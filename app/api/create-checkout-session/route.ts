@@ -7,7 +7,7 @@ export const runtime = "nodejs"
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string)
 const STRIPE_PRICE_ID =
-  process.env.STRIPE_PRICE_ID || "price_1TGugNQlLqJe3Tfgwg2q1ApV"
+  process.env.STRIPE_PRICE_ID || "price_1TOWLoFtHxLxKCWEtD6AhvDl"
 const TRIAL_DAYS = 14
 
 const supabase = createClient(

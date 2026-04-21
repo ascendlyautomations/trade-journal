@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { AFFILIATE_PER_REFERRAL_EARNINGS } from "./affiliateEarnings"
 
 export type AffiliatePayoutBalance = {
   referralCount: number
@@ -77,7 +78,10 @@ export function parseAffiliatePayoutBalance(raw: unknown): AffiliatePayoutBalanc
   const referralCount = Number.isFinite(referralCountRaw) ? Math.max(0, Math.floor(referralCountRaw)) : 0
 
   const perReferralRaw = pickNum(o, "perReferralEarnings", "per_referral_earnings")
-  const perReferralEarnings = Number.isFinite(perReferralRaw) && perReferralRaw > 0 ? perReferralRaw : 2.88
+  const perReferralEarnings =
+    Number.isFinite(perReferralRaw) && perReferralRaw > 0
+      ? perReferralRaw
+      : AFFILIATE_PER_REFERRAL_EARNINGS
 
   return {
     referralCount,

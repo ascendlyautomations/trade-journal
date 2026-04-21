@@ -1,3 +1,5 @@
+
+
 import Stripe from "stripe"
 import { createClient, type SupabaseClient } from "@supabase/supabase-js"
 
@@ -189,6 +191,7 @@ async function trackAffiliateFromManualCheckoutDiscount(params: {
 }
 
 export async function POST(req: Request) {
+  console.log("🔥 WEBHOOK HIT")
   try {
     const body = await req.text()
     const sig = req.headers.get("stripe-signature")
@@ -204,6 +207,10 @@ export async function POST(req: Request) {
     let event: Stripe.Event
 
     try {
+      console.log(
+        "🔐 Webhook secret exists:",
+        !!process.env.STRIPE_WEBHOOK_SECRET
+      )
       event = stripe.webhooks.constructEvent(
         body,
         sig,
@@ -223,7 +230,17 @@ export async function POST(req: Request) {
       return new Response("Invalid signature", { status: 400 })
     }
 
-    console.log("🔥 WEBHOOK HIT:", event.type)
+    console.log("📩 Event received:", event.type)
+
+    switch (event.type) {
+      case "checkout.session.completed":
+      case "invoice.payment_succeeded":
+      case "customer.subscription.created":
+        console.log("➡️ Handling event:", event.type)
+        break
+      default:
+        break
+    }
 
     // ======================================================
     // ✅ CHECKOUT SESSION COMPLETED → link customer + Pro
@@ -241,6 +258,7 @@ export async function POST(req: Request) {
           session.metadata?.user_id ||
           session.metadata?.userId ||
           null
+        console.log("👤 User ID from metadata:", userId)
 
         if (!userId && customerId) {
           const { data: byCustomer, error: lookupErr } = await supabase
@@ -266,6 +284,7 @@ export async function POST(req: Request) {
           console.log("🔥 Activating subscription for:", userId)
 
           try {
+            console.log("🛠 Updating user to PRO:", userId)
             const { error: upErr } = await supabase
               .from("profiles")
               .update({
@@ -343,7 +362,7 @@ export async function POST(req: Request) {
           console.error(
             "[invoice.paid] no Stripe customer id on invoice object"
           )
-          return
+          return new Response("OK", { status: 200 })
         }
 
         //----------------------------------------
@@ -379,7 +398,7 @@ export async function POST(req: Request) {
             "[invoice.paid] no paying user for stripe_customer_id:",
             customerId
           )
-          return
+          return new Response("OK", { status: 200 })
         }
 
         console.log("[invoice.paid] paying user:", payingUser.id)
@@ -411,7 +430,7 @@ export async function POST(req: Request) {
           console.log(
             "[invoice.paid] no referral on payer (referred_by empty), skip commission"
           )
-          return
+          return new Response("OK", { status: 200 })
         }
 
         console.log("🔗 Referral code used:", referredBy)
@@ -430,12 +449,12 @@ export async function POST(req: Request) {
           console.error("[invoice.paid] referrer not found", refError, {
             referredBy,
           })
-          return
+          return new Response("OK", { status: 200 })
         }
 
         if (referrer.id === payingUser.id) {
           console.log("[invoice.paid] skip self-referral")
-          return
+          return new Response("OK", { status: 200 })
         }
 
         console.log("[invoice.paid] referrer:", referrer.id)
@@ -444,7 +463,7 @@ export async function POST(req: Request) {
           console.error(
             "[invoice.paid] invoice.id missing — cannot record referral row"
           )
-          return
+          return new Response("OK", { status: 200 })
         }
 
         const { data: existing } = await supabase
@@ -458,7 +477,7 @@ export async function POST(req: Request) {
             "[invoice.paid] referral already recorded for invoice, skipping:",
             invoice.id
           )
-          return
+          return new Response("OK", { status: 200 })
         }
 
         //----------------------------------------
@@ -486,7 +505,7 @@ export async function POST(req: Request) {
           console.log(
             "[invoice.paid] commission basis is 0 — skip row (trial, $0, or unpaid shape)"
           )
-          return
+          return new Response("OK", { status: 200 })
         }
 
         const commission = Math.round(amountPaid * 0.18 * 100) / 100
@@ -508,7 +527,7 @@ export async function POST(req: Request) {
 
         if (insertError) {
           console.error("[invoice.paid] referrals insert failed", insertError)
-          return
+          return new Response("OK", { status: 200 })
         }
 
         console.log("[invoice.paid] referral row inserted", {
@@ -532,7 +551,7 @@ export async function POST(req: Request) {
             "[invoice.paid] referrer referral_earnings update failed",
             updateError
           )
-          return
+          return new Response("OK", { status: 200 })
         }
 
         console.log("[invoice.paid] referrer referral_earnings →", newTotal)
@@ -589,8 +608,9 @@ export async function POST(req: Request) {
       }
     }
 
-    return new Response("OK")
+    return new Response("OK", { status: 200 })
   } catch (err) {
+    console.error("❌ WEBHOOK ERROR:", err)
     console.error(
       "ERROR:",
       JSON.stringify(
@@ -601,6 +621,6 @@ export async function POST(req: Request) {
         2
       )
     )
-    return new Response("OK")
+    return new Response("Webhook error", { status: 500 })
   }
 }
