@@ -51,6 +51,20 @@ function toTimeInputValue(raw: unknown): string {
   return ""
 }
 
+/** Combine trade date (YYYY-MM-DD) + time input (HH:MM) into a full ISO datetime for DB. */
+function buildDateTime(
+  date: string | null | undefined,
+  time: string | null | undefined
+): string | null {
+  if (!date || !time) return null
+  const dateStr = String(date).trim()
+  const timeStr = String(time).trim()
+  if (!dateStr || !timeStr) return null
+  const parsed = new Date(`${dateStr} ${timeStr}`)
+  if (Number.isNaN(parsed.getTime())) return null
+  return parsed.toISOString()
+}
+
 function tradeDateFromRow(t: any): string {
   if (t?.created_at) return String(t.created_at).split("T")[0]
   if (t?.date) return String(t.date).split("T")[0]
@@ -541,10 +555,10 @@ export default function InputTradeForm({
         exit_price:
           exitVal !== null && Number.isFinite(exitVal) ? exitVal : null,
         entry_time: entryTimeTouched
-          ? entryTime || null
+          ? buildDateTime(tradeDate, entryTime)
           : existingTrade.entry_time ?? null,
         exit_time: exitTimeTouched
-          ? exitTime || null
+          ? buildDateTime(tradeDate, exitTime)
           : existingTrade.exit_time ?? null,
         psychology_notes: psychologyVal,
         trade_type: tradeTypeToSave,
@@ -649,8 +663,8 @@ export default function InputTradeForm({
         date: now.toISOString(),
         entry_price: parsedEntry,
         exit_price: parsedExit,
-        entry_time: entryTime,
-        exit_time: exitTime,
+        entry_time: buildDateTime(tradeDate, entryTime),
+        exit_time: buildDateTime(tradeDate, exitTime),
         psychology_notes: psychologyVal,
         trade_type: tradeTypeToSave,
         confidence: confidence ? Number(confidence) : null,

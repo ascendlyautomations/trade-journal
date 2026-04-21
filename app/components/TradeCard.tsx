@@ -146,9 +146,45 @@ export default function TradeCard({
                   : "Unknown")}
             </h2>
 
-            <p className="text-xs text-gray-400">
-              {formatEST(trade.created_at)}
-            </p>
+            {(() => {
+              const formatTime = (dateString: string | null | undefined) => {
+                if (!dateString) return null
+                const d = new Date(dateString)
+                if (Number.isNaN(d.getTime())) return null
+                return d.toLocaleTimeString("en-US", {
+                  hour: "numeric",
+                  minute: "2-digit",
+                })
+              }
+
+              const formatDate = (dateString: string | null | undefined) => {
+                if (!dateString) return ""
+                const d = new Date(dateString)
+                if (Number.isNaN(d.getTime())) return ""
+                return d.toLocaleDateString("en-US")
+              }
+
+              const entryT = trade.entry_time
+              const exitT = trade.exit_time
+
+              const baseDate = entryT || exitT || trade.created_at
+
+              const entryTime = formatTime(entryT)
+              const exitTime = formatTime(exitT)
+
+              return (
+                <div className="text-sm text-gray-400">
+                  {formatDate(baseDate)}
+                  {entryTime && (
+                    <span>
+                      {" • "}
+                      {entryTime}
+                      {exitTime ? ` - ${exitTime}` : ""}
+                    </span>
+                  )}
+                </div>
+              )
+            })()}
 
             <div
               className={`mt-1 inline-block rounded-lg px-3 py-1 text-lg font-bold ${

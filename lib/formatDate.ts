@@ -175,3 +175,35 @@ export function resolveTradingTimeSourceForKey(trade: {
   return `${dayKey}T${hh}:${mm}:${ss}`
 }
 
+/**
+ * Rough EST session bucket from a trade timestamp (entry/exit string).
+ * Does not replace user-selected session on trades — for optional automation / debugging.
+ */
+export function getTradingSession(
+  dateString: string | null | undefined
+): string | null {
+  if (!dateString) return null
+
+  const date = new Date(dateString)
+
+  const estDate = new Date(
+    date.toLocaleString("en-US", { timeZone: EST_TIMEZONE })
+  )
+
+  const hour = estDate.getHours()
+
+  if (hour >= 18 || hour < 2) {
+    return "Asia"
+  }
+
+  if (hour >= 2 && hour < 9) {
+    return "London"
+  }
+
+  if (hour >= 9 && hour < 16) {
+    return "NY"
+  }
+
+  return null
+}
+

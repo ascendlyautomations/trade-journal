@@ -589,9 +589,87 @@ export default function TradesPage() {
                             ) : null}
                           </h2>
 
-                          <p className="text-xs text-gray-400">
-                            {formatEST(trade.created_at)}
-                          </p>
+                          {(() => {
+                            const formatTime = (
+                              dateString: string | null | undefined
+                            ) => {
+                              if (!dateString) return null
+                              const d = new Date(dateString)
+                              if (Number.isNaN(d.getTime())) return null
+                              return d.toLocaleTimeString("en-US", {
+                                hour: "numeric",
+                                minute: "2-digit",
+                              })
+                            }
+
+                            const formatDate = (
+                              dateString: string | null | undefined
+                            ) => {
+                              if (!dateString) return ""
+                              const d = new Date(dateString)
+                              if (Number.isNaN(d.getTime())) return ""
+                              return d.toLocaleDateString("en-US")
+                            }
+
+                            const entry = trade.entry_time
+                            const exit = trade.exit_time
+
+                            const baseDate = entry || exit || trade.created_at
+
+                            const entryTime = formatTime(entry)
+                            const exitTime = formatTime(exit)
+
+                            const getDuration = (
+                              start: string | null | undefined,
+                              end: string | null | undefined
+                            ) => {
+                              if (!start || !end) return null
+
+                              const startDate = new Date(start)
+                              const endDate = new Date(end)
+
+                              if (
+                                Number.isNaN(startDate.getTime()) ||
+                                Number.isNaN(endDate.getTime())
+                              )
+                                return null
+
+                              const diffMs = endDate.getTime() - startDate.getTime()
+
+                              if (diffMs <= 0) return null
+
+                              const totalMinutes = Math.floor(diffMs / 60000)
+
+                              const hours = Math.floor(totalMinutes / 60)
+                              const minutes = totalMinutes % 60
+
+                              if (hours === 0) {
+                                return `${minutes}m`
+                              }
+
+                              if (minutes === 0) {
+                                return `${hours}h`
+                              }
+
+                              return `${hours}h ${minutes}m`
+                            }
+
+                            const duration = getDuration(entry, exit)
+
+                            return (
+                              <p className="text-xs text-gray-400">
+                                {formatDate(baseDate)}
+                                {entryTime && (
+                                  <span>
+                                    {" • "}
+                                    {entryTime}
+                                    {exitTime ? ` - ${exitTime}` : ""}
+                                    {duration ? ` (${duration})` : ""}
+                                  </span>
+                                )}
+                              </p>
+                            )
+                          })()}
 
                           <div
                             className={`inline-block px-3 py-1 rounded-lg text-lg font-bold mt-1 ${

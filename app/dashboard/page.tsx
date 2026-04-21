@@ -15,6 +15,7 @@ import { filterTradesForPerformanceSharePool } from "@/lib/performanceShare"
 import { formatEST } from "@/lib/formatEST"
 import {
   getTradingDayKey,
+  getTradingSession,
   getTradingWeekday,
   resolveTradingTimeSourceForKey,
 } from "@/lib/formatDate"
@@ -1217,6 +1218,15 @@ const worstDay = dailyPnLs.length > 0
       (t) => resolveTradingTimeSourceForKey(t) != null
     )
 
+    if (process.env.NODE_ENV === "development") {
+      console.log(
+        filteredTrades.map((t) => ({
+          pnl: t.pnl,
+          session: getTradingSession(t.entry_time || t.exit_time),
+        }))
+      )
+    }
+
     return {
       filteredTrades,
       accounts,
@@ -2190,7 +2200,8 @@ const worstDay = dailyPnLs.length > 0
                 </p>
                 {totalTrades > 0 && !hasTradingDayTimeSource ? (
                   <p className="mb-3 text-[11px] md:text-xs text-amber-200/90">
-                    Add entry/exit times to unlock trading day insights
+                    Trading day stats use entry/exit times with a 6PM EST session
+                    rollover. Add entry/exit times to unlock these insights.
                   </p>
                 ) : null}
                 {insights.length > 0 ||
