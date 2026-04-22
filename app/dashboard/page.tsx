@@ -13,6 +13,7 @@ import { supabase } from "../../lib/supabaseClient"
 import { isProActive } from "../../lib/subscription"
 import { filterTradesForPerformanceSharePool } from "@/lib/performanceShare"
 import { formatEST } from "@/lib/formatEST"
+import { formatCurrency } from "@/lib/formatCurrency"
 import {
   getTradingDayKey,
   getTradingSession,
@@ -738,15 +739,6 @@ export default function Dashboard() {
     if (typeof p.showWarnings === "boolean") setShowWarnings(p.showWarnings)
   }, [loading])
 
-  // 🔥 FORMATTERS
-  function formatCurrency(value: number) {
-    if (value === null || value === undefined) return "-"
-    return `${value < 0 ? "-" : ""}$${Math.abs(value).toLocaleString(undefined, {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    })}`
-  }
-
   function formatNumber(value: number) {
     if (value === null || value === undefined) return "-"
     return value.toLocaleString()
@@ -822,7 +814,9 @@ export default function Dashboard() {
     function filterByTime(trade: any) {
       if (timeFilter === "all") return true
       const now = new Date()
-      const tradeDate = new Date(trade.created_at)
+      const tradeDateRaw = trade.entry_time || trade.exit_time || trade.created_at
+      if (!tradeDateRaw) return false
+      const tradeDate = new Date(tradeDateRaw)
       if (timeFilter === "daily") {
         return tradeDate.toDateString() === now.toDateString()
       }
@@ -1548,6 +1542,79 @@ const worstDay = dailyPnLs.length > 0
     </div>
   )
 
+  const sessionPerformanceSection = (
+    <div className="flex min-h-[300px] h-full flex-col rounded-xl border border-white/10 bg-white/10 p-3 md:p-4 backdrop-blur-md">
+      <h2 className="mb-3 text-sm md:text-base font-semibold text-blue-300">
+        Session Performance
+      </h2>
+      <div className="flex flex-1 flex-col gap-4">
+        <div className="flex min-h-[240px] flex-col">
+          <p className="mb-2 text-xs md:text-sm text-gray-400">Trades by Session</p>
+          <div className="min-h-0 flex-1 w-full overflow-hidden">
+            <ResponsiveContainer width="100%" height={240}>
+              <PieChart>
+                <Pie
+                  data={sessionPieData}
+                  dataKey="value"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={88}
+                  label={({ name, value }) => `${name}: ${value}`}
+                >
+                  {sessionPieData.map((entry, index) => (
+                    <Cell
+                      key={`cell-${entry.name}`}
+                      fill={["#60a5fa", "#34d399", "#c084fc"][index % 3]}
+                    />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+        <div className="flex flex-col">
+          <p className="mb-2 text-xs md:text-sm text-gray-400">Session breakdown</p>
+          <div className="grid grid-cols-3 gap-2 md:gap-3">
+            {(["London", "NY", "Asia"] as const).map((name) => {
+              const s = sessionBuckets[name]
+              const wr = s.totalTrades ? (s.wins / s.totalTrades) * 100 : 0
+              const titleColor =
+                name === "London"
+                  ? "text-blue-300"
+                  : name === "NY"
+                    ? "text-emerald-400"
+                    : "text-purple-300"
+              return (
+                <div
+                  key={name}
+                  className="rounded-lg border border-white/10 bg-white/5 p-2 md:p-3 text-center text-xs md:text-sm"
+                >
+                  <p className={`mb-2 font-semibold ${titleColor}`}>{name}</p>
+                  <p className="text-gray-300">
+                    <span className="text-gray-400">Trades:</span>{" "}
+                    {formatNumber(s.totalTrades)}
+                  </p>
+                  <p className="text-gray-300">
+                    <span className="text-gray-400">Win rate:</span> {wr.toFixed(1)}%
+                  </p>
+                  <p
+                    className={`mt-1 text-sm md:text-lg font-semibold tabular-nums ${
+                      s.totalPnL >= 0 ? "text-green-400" : "text-red-400"
+                    }`}
+                  >
+                    {formatCurrency(s.totalPnL)}
+                  </p>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+
   function renderDashboardFilterSettings() {
     return (
     <div className="relative z-[100] shrink-0 dashboard-controls">
@@ -1758,6 +1825,7 @@ const worstDay = dailyPnLs.length > 0
         <div className="relative z-50 mx-auto w-full max-w-[1600px] px-4 md:px-6">
           <TradeFilterBar
             className="mt-2.5 mb-0"
+            mobileThreeRowLayout
             accounts={accounts}
             accountFilter={accountFilter}
             onAccountChange={setAccountFilter}
@@ -1774,7 +1842,7 @@ const worstDay = dailyPnLs.length > 0
               <button
                 type="button"
                 onClick={() => setShowPublicOnly(!showPublicOnly)}
-                className={`h-[34px] whitespace-nowrap rounded-md border px-2 text-xs md:hidden ${
+                className={`h-[34px] w-full whitespace-nowrap rounded-md border px-4 py-2 text-sm md:h-[34px] md:w-auto md:px-2 md:py-1 md:text-xs md:hidden ${
                   showPublicOnly
                     ? "border-emerald-400 bg-emerald-500 text-white hover:bg-emerald-600"
                     : "border-white/10 bg-[#0f172a] text-white hover:bg-[#1e293b]"
@@ -1783,9 +1851,20 @@ const worstDay = dailyPnLs.length > 0
                 Public
               </button>
             }
-            settingsNextToModes={renderDashboardFilterSettings()}
+            settingsNextToModes={
+              <div className="md:hidden">{renderDashboardFilterSettings()}</div>
+            }
             trailing={
               <>
+                <button
+                  type="button"
+                  onClick={() => setShowPerformanceShare(true)}
+                  className="inline-flex h-[34px] w-full items-center justify-center whitespace-nowrap rounded-md bg-white/10 px-4 py-2 text-sm text-white hover:bg-white/20 md:hidden"
+                  title="Share performance"
+                  aria-label="Share performance"
+                >
+                  📤 Share
+                </button>
                 <button
                   type="button"
                   onClick={() => setShowPublicOnly(!showPublicOnly)}
@@ -1800,7 +1879,7 @@ const worstDay = dailyPnLs.length > 0
                 <button
                   type="button"
                   onClick={() => setShowPerformanceShare(true)}
-                  className="inline-flex h-[34px] shrink-0 items-center whitespace-nowrap rounded-md bg-white/10 px-3 py-1 text-sm text-white hover:bg-white/20"
+                  className="hidden md:inline-flex h-[34px] shrink-0 items-center whitespace-nowrap rounded-md bg-white/10 px-3 py-1 text-sm text-white hover:bg-white/20"
                   title="Share performance"
                   aria-label="Share performance"
                 >
@@ -1842,12 +1921,84 @@ const worstDay = dailyPnLs.length > 0
   <div className="grid overflow-visible lg:grid-cols-3 gap-4 md:gap-6">
 
     {/* LEFT: STATS */}
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4 md:block md:space-y-4">
       <div className="grid grid-cols-2 gap-3 md:gap-3">
         <Stat title="Trades" value={formatNumber(totalTrades)} />
         <Stat title="Win %" value={`${winRate.toFixed(1)}%`} />
         <Stat title="Avg RR" value={avgRR.toFixed(2)} />
         <Stat title="P&L" value={formatCurrency(totalPnL)} positive={totalPnL >= 0} />
+        {showEquity ? (
+          <div className="col-span-2 block md:hidden overflow-visible rounded-xl border border-white/10 bg-white/10 p-3 backdrop-blur-md">
+            <h2 className="mb-3 text-sm font-semibold text-blue-300">Equity Curve</h2>
+            <div className="h-[240px] w-full">
+              <ResponsiveContainer width="100%" height={240}>
+                <LineChart
+                  data={equityDrawdownChartData}
+                  margin={{ top: 10, right: 12, left: 12, bottom: 20 }}
+                >
+                  <CartesianGrid stroke="#334155" />
+                  <XAxis
+                    dataKey="date"
+                    stroke="#94a3b8"
+                    tick={{ fill: "#94a3b8", fontSize: 11 }}
+                    tickFormatter={(value) => {
+                      const d = new Date(String(value))
+                      if (Number.isNaN(d.getTime())) return String(value).slice(0, 10)
+                      return `${d.getMonth() + 1}/${d.getDate()}`
+                    }}
+                    interval="preserveStartEnd"
+                    minTickGap={24}
+                    angle={-25}
+                    textAnchor="end"
+                    height={48}
+                  />
+                  <YAxis
+                    stroke="#94a3b8"
+                    tick={{ fill: "#94a3b8", fontSize: 11 }}
+                    tickFormatter={(value) =>
+                      Number(value) < 0
+                        ? `-$${Math.abs(Number(value)).toLocaleString(undefined, {
+                            minimumFractionDigits: 0,
+                            maximumFractionDigits: 0,
+                          })}`
+                        : `$${Number(value).toLocaleString(undefined, {
+                            minimumFractionDigits: 0,
+                            maximumFractionDigits: 0,
+                          })}`
+                    }
+                  />
+                  <Tooltip
+                    formatter={(value) => {
+                      const n = Number(value)
+                      const formatted =
+                        n < 0 ? `-$${Math.abs(n).toLocaleString()}` : `$${n.toLocaleString()}`
+                      return [formatted, "Equity"]
+                    }}
+                    labelFormatter={(label) => {
+                      const s = String(label)
+                      return formatEST(s) || s
+                    }}
+                    contentStyle={{
+                      backgroundColor: "#0f172a",
+                      border: "1px solid rgba(255,255,255,0.1)",
+                      borderRadius: "8px",
+                    }}
+                    labelStyle={{ color: "#94a3b8" }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="equity"
+                    name="Equity"
+                    stroke="#22c55e"
+                    strokeWidth={2}
+                    dot={false}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        ) : null}
+        <div className="col-span-2 block md:hidden">{pnlByWeekdaySection}</div>
         <Stat title="Avg Win" value={formatCurrency(avgWin)} positive />
         <Stat
           title="Best Trade"
@@ -1915,6 +2066,10 @@ const worstDay = dailyPnLs.length > 0
         )}
       </div>
 
+      <div className="block md:hidden">
+        {showSessions ? sessionPerformanceSection : null}
+      </div>
+
       <div className="rounded-xl border border-white/10 bg-white/10 p-3 md:p-4 backdrop-blur-md">
         <h3 className="mb-2 text-xs md:text-sm text-gray-400">Trading Hours</h3>
 
@@ -1927,10 +2082,10 @@ const worstDay = dailyPnLs.length > 0
         ) : (
           <>
             <p className="text-green-400">
-              {`Best: ${formatHour(hourData.bestHour!)} ($${hourData.hourlyMap[hourData.bestHour!].toFixed(2)})`}
+              {`Best: ${formatHour(hourData.bestHour!)} (${formatCurrency(hourData.hourlyMap[hourData.bestHour!])})`}
             </p>
             <p className="text-red-400">
-              {`Worst: ${formatHour(hourData.worstHour!)} ($${hourData.hourlyMap[hourData.worstHour!].toFixed(2)})`}
+              {`Worst: ${formatHour(hourData.worstHour!)} (${formatCurrency(hourData.hourlyMap[hourData.worstHour!])})`}
             </p>
           </>
         )}
@@ -1940,7 +2095,7 @@ const worstDay = dailyPnLs.length > 0
     {/* RIGHT: CHARTS */}
     <div className="space-y-4 md:space-y-6 overflow-visible lg:col-span-2">
       {showEquity ? (
-        <div className="overflow-visible rounded-xl border border-white/10 bg-white/10 p-3 md:p-4 backdrop-blur-md">
+        <div className="hidden md:block overflow-visible rounded-xl border border-white/10 bg-white/10 p-3 md:p-4 backdrop-blur-md">
           <h2 className="text-sm md:text-base font-semibold mb-3 text-blue-300">
             Equity Curve
           </h2>
@@ -2021,22 +2176,50 @@ const worstDay = dailyPnLs.length > 0
           </div>
 
           <div className="flex flex-wrap gap-3 mt-4">
-            <div className="px-4 py-2 rounded-xl bg-white/10">
+            <div
+              className={`px-3 py-2 rounded-lg text-sm font-medium backdrop-blur-md transition-all duration-200 hover:scale-[1.03] ${
+                profitFactor >= 1
+                  ? "text-green-400 bg-green-500/10 border border-green-500/20"
+                  : "text-red-400 bg-red-500/10 border border-red-500/20"
+              }`}
+            >
               Profit Factor: {profitFactor.toFixed(2)}
             </div>
 
-            <div className="px-4 py-2 rounded-xl bg-white/10">
+            <div
+              className={`px-3 py-2 rounded-lg text-sm font-medium backdrop-blur-md transition-all duration-200 hover:scale-[1.03] ${
+                currentStreak > 0
+                  ? "text-green-400 bg-green-500/10 border border-green-500/20"
+                  : "text-red-400 bg-red-500/10 border border-red-500/20"
+              }`}
+            >
               Streak:{" "}
               {currentStreak > 0
                 ? `${currentStreak} Wins`
                 : `${Math.abs(currentStreak)} Losses`}
             </div>
 
-            <div className="px-4 py-2 rounded-xl bg-white/10">
-              Avg Day: {avgDay.toFixed(0)}
+            <div
+              className={`px-3 py-2 rounded-lg text-sm font-medium backdrop-blur-md transition-all duration-200 hover:scale-[1.03] ${
+                avgDay > 0
+                  ? "text-green-400 bg-green-500/10 border border-green-500/20"
+                  : avgDay < 0
+                    ? "text-red-400 bg-red-500/10 border border-red-500/20"
+                    : "text-gray-300 bg-white/10 border border-white/10"
+              }`}
+            >
+              Avg Day: {formatCurrency(avgDay)}
             </div>
 
-            <div className="px-4 py-2 rounded-xl bg-white/10">
+            <div
+              className={`px-3 py-2 rounded-lg text-sm font-medium backdrop-blur-md transition-all duration-200 hover:scale-[1.03] ${
+                consistency >= 60
+                  ? "text-green-400 bg-green-500/10 border border-green-500/20"
+                  : consistency >= 30
+                    ? "text-yellow-400 bg-yellow-500/10 border border-yellow-500/20"
+                    : "text-red-400 bg-red-500/10 border border-red-500/20"
+              }`}
+            >
               Consistency: {consistency.toFixed(0)}%
             </div>
           </div>
@@ -2047,81 +2230,7 @@ const worstDay = dailyPnLs.length > 0
         {showSessions ? (
           <>
             {recentTradesSection}
-            <div className="flex min-h-[300px] h-full flex-col rounded-xl border border-white/10 bg-white/10 p-3 md:p-4 backdrop-blur-md">
-              <h2 className="mb-3 text-sm md:text-base font-semibold text-blue-300">
-                Session Performance
-              </h2>
-              <div className="flex flex-1 flex-col gap-4">
-                <div className="flex min-h-[240px] flex-col">
-                  <p className="mb-2 text-xs md:text-sm text-gray-400">Trades by Session</p>
-                  <div className="min-h-0 flex-1 w-full overflow-hidden">
-                    <ResponsiveContainer width="100%" height={240}>
-                      <PieChart>
-                        <Pie
-                          data={sessionPieData}
-                          dataKey="value"
-                          nameKey="name"
-                          cx="50%"
-                          cy="50%"
-                          outerRadius={88}
-                          label={({ name, value }) => `${name}: ${value}`}
-                        >
-                          {sessionPieData.map((entry, index) => (
-                            <Cell
-                              key={`cell-${entry.name}`}
-                              fill={["#60a5fa", "#34d399", "#c084fc"][index % 3]}
-                            />
-                          ))}
-                        </Pie>
-                        <Tooltip />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-                <div className="flex flex-col">
-                  <p className="mb-2 text-xs md:text-sm text-gray-400">Session breakdown</p>
-                  <div className="grid grid-cols-3 gap-2 md:gap-3">
-                    {(["London", "NY", "Asia"] as const).map((name) => {
-                      const s = sessionBuckets[name]
-                      const wr = s.totalTrades
-                        ? (s.wins / s.totalTrades) * 100
-                        : 0
-                      const titleColor =
-                        name === "London"
-                          ? "text-blue-300"
-                          : name === "NY"
-                            ? "text-emerald-400"
-                            : "text-purple-300"
-                      return (
-                        <div
-                          key={name}
-                          className="rounded-lg border border-white/10 bg-white/5 p-2 md:p-3 text-center text-xs md:text-sm"
-                        >
-                          <p className={`mb-2 font-semibold ${titleColor}`}>
-                            {name}
-                          </p>
-                          <p className="text-gray-300">
-                            <span className="text-gray-400">Trades:</span>{" "}
-                            {formatNumber(s.totalTrades)}
-                          </p>
-                          <p className="text-gray-300">
-                            <span className="text-gray-400">Win rate:</span>{" "}
-                            {wr.toFixed(1)}%
-                          </p>
-                          <p
-                            className={`mt-1 text-sm md:text-lg font-semibold tabular-nums ${
-                              s.totalPnL >= 0 ? "text-green-400" : "text-red-400"
-                            }`}
-                          >
-                            {formatCurrency(s.totalPnL)}
-                          </p>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              </div>
-            </div>
+            <div className="hidden md:block">{sessionPerformanceSection}</div>
           </>
         ) : (
           <div className="lg:col-span-2">{recentTradesSection}</div>
@@ -2167,27 +2276,9 @@ const worstDay = dailyPnLs.length > 0
       </table>
     </div>
 
-    {pnlByWeekdaySection}
+    <div className="hidden md:block">{pnlByWeekdaySection}</div>
 
   </div>
-
-  {strategyPerformanceRows.length > 0 ? (
-    <div className="rounded-xl border border-white/10 bg-white/10 p-3 md:p-4 backdrop-blur-md">
-      <h3 className="mb-2 text-xs md:text-sm text-gray-400">Strategy Performance</h3>
-      <div className="space-y-2">
-        {strategyPerformanceRows.slice(0, 5).map((row) => (
-          <div
-            key={row.strategy}
-            className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs md:text-sm"
-          >
-            <span className="font-medium text-white">{row.strategy}</span>
-            <span className="text-gray-300">Win Rate: {row.winRate.toFixed(0)}%</span>
-            <span className="text-gray-300">Avg RR: {row.avgRR.toFixed(2)}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  ) : null}
 
           {(showInsights || showBestSetup) ? (
           <div className="grid grid-cols-1 gap-4 md:gap-6 md:grid-cols-2">
@@ -2218,12 +2309,12 @@ const worstDay = dailyPnLs.length > 0
                     ))}
                     {insightBestSymbol ? (
                       <p className="text-xs md:text-sm text-blue-200">
-                        {`• ${insightBestSymbol} is your most profitable symbol ($${insightBestSymbolAvg.toFixed(2)} avg per trade)`}
+                        {`• ${insightBestSymbol} is your most profitable symbol (${formatCurrency(insightBestSymbolAvg)} avg per trade)`}
                       </p>
                     ) : null}
                     {insightBestWeekday ? (
                       <p className="text-xs md:text-sm text-blue-200">
-                        {`• You perform best on ${insightBestWeekday}s ($${insightBestWeekdayAvg.toFixed(2)} avg)`}
+                        {`• You perform best on ${insightBestWeekday}s (${formatCurrency(insightBestWeekdayAvg)} avg)`}
                       </p>
                     ) : null}
                   </div>

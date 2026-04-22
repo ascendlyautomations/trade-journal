@@ -50,6 +50,8 @@ export type TradeFilterBarProps = {
   className?: string
   /** Unused layout hint for pages that differentiate usage */
   variant?: string
+  /** Dashboard-only mobile three-row layout; desktop remains unchanged */
+  mobileThreeRowLayout?: boolean
 }
 
 export default function TradeFilterBar({
@@ -71,6 +73,7 @@ export default function TradeFilterBar({
   publicNextToModes,
   className = "",
   variant: _variant,
+  mobileThreeRowLayout = false,
 }: TradeFilterBarProps) {
   const [timeframeOpen, setTimeframeOpen] = useState(false)
   const [selectedTimeframe, setSelectedTimeframe] = useState("All")
@@ -107,13 +110,21 @@ export default function TradeFilterBar({
   return (
     <>
       <div className={`flex w-full justify-center ${className}`}>
-        <div className="relative z-50 flex max-w-full flex-wrap items-center justify-center gap-2 overflow-visible rounded-xl border border-white/10 bg-white/5 px-3 py-2 backdrop-blur-md md:gap-3 md:px-4 md:py-3 lg:flex-nowrap">
+        <div
+          className={`relative z-50 flex max-w-full overflow-visible rounded-xl border border-white/10 bg-white/5 px-3 py-2 backdrop-blur-md md:gap-3 md:px-4 md:py-3 ${
+            mobileThreeRowLayout
+              ? "w-full flex-col items-stretch gap-2 md:flex-row md:flex-wrap md:items-center md:justify-center lg:flex-nowrap"
+              : "flex-wrap items-center justify-center gap-2 lg:flex-nowrap"
+          }`}
+        >
           {leading}
 
           <select
             value={accountFilter}
             onChange={(e) => onAccountChange(e.target.value)}
-            className="h-[34px] w-full min-w-0 rounded-md border border-white/10 bg-[#0f172a] px-3 py-1 text-sm text-white hover:bg-[#1e293b] focus:outline-none focus:ring-2 focus:ring-blue-500 md:w-auto md:shrink-0"
+            className={`h-[34px] min-w-0 rounded-md border border-white/10 bg-[#0f172a] px-3 py-1 text-sm text-white hover:bg-[#1e293b] focus:outline-none focus:ring-2 focus:ring-blue-500 md:w-auto md:shrink-0 ${
+              mobileThreeRowLayout ? "w-full" : "w-full"
+            }`}
           >
             <option value="all">All Accounts</option>
             {accounts.map((acc) => (
@@ -124,8 +135,16 @@ export default function TradeFilterBar({
           </select>
 
           {settingsNextToModes || publicNextToModes ? (
-            <div className="flex w-full min-w-0 items-center justify-center gap-1.5 md:block md:w-auto">
-              <div className="min-w-0 flex-[1.5] md:w-auto md:flex-none">
+            <div
+              className={`flex w-full min-w-0 items-center gap-2 md:block md:w-auto ${
+                mobileThreeRowLayout ? "justify-stretch" : "justify-center"
+              }`}
+            >
+              <div
+                className={`min-w-0 md:w-auto md:flex-none ${
+                  mobileThreeRowLayout ? "flex-1" : "flex-[1.5]"
+                }`}
+              >
                 <select
                   value={accountTypeFilter}
                   onChange={(e) => onAccountTypeChange(e.target.value)}
@@ -138,12 +157,20 @@ export default function TradeFilterBar({
                 </select>
               </div>
               {publicNextToModes ? (
-                <div className="flex shrink-0 items-center justify-center md:hidden">
+                <div
+                  className={`flex items-center justify-center md:hidden ${
+                    mobileThreeRowLayout ? "flex-1" : "shrink-0"
+                  }`}
+                >
                   {publicNextToModes}
                 </div>
               ) : null}
               {settingsNextToModes ? (
-                <div className="flex shrink-0 items-center justify-center md:hidden">
+                <div
+                  className={`flex items-center justify-center md:hidden ${
+                    mobileThreeRowLayout ? "hidden" : "shrink-0"
+                  }`}
+                >
                   {settingsNextToModes}
                 </div>
               ) : null}
@@ -161,17 +188,39 @@ export default function TradeFilterBar({
             </select>
           )}
 
-          <div className="flex w-full shrink-0 justify-center md:w-auto">
-            <button
-              type="button"
-              onClick={() => setTimeframeOpen(true)}
-              className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm font-medium transition"
-            >
-              {timeframeButtonLabel}
-            </button>
-          </div>
+          {mobileThreeRowLayout ? (
+            <div className="flex w-full items-center gap-2 md:contents">
+              <div className="flex-1 md:w-auto md:flex-none">
+                <button
+                  type="button"
+                  onClick={() => setTimeframeOpen(true)}
+                  className="w-full rounded-lg bg-white/10 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/20 md:w-auto"
+                >
+                  {timeframeButtonLabel}
+                </button>
+              </div>
+              <div className="flex-1 md:contents">{trailing}</div>
+              {settingsNextToModes ? (
+                <div className="flex h-[34px] w-12 items-center justify-center md:hidden">
+                  {settingsNextToModes}
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <>
+              <div className="flex w-full shrink-0 justify-center md:w-auto">
+                <button
+                  type="button"
+                  onClick={() => setTimeframeOpen(true)}
+                  className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm font-medium transition"
+                >
+                  {timeframeButtonLabel}
+                </button>
+              </div>
 
-          {trailing}
+              {trailing}
+            </>
+          )}
         </div>
       </div>
 
