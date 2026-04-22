@@ -13,6 +13,9 @@ export default function LoginPage() {
   const [username, setUsername] = useState("")
   const [isLogin, setIsLogin] = useState(true)
   const [loading, setLoading] = useState(false)
+  const [showReset, setShowReset] = useState(false)
+  const [resetEmail, setResetEmail] = useState("")
+  const [resetMessage, setResetMessage] = useState("")
 
   const router = useRouter()
 
@@ -312,6 +315,19 @@ export default function LoginPage() {
     })
   }
 
+  const handleReset = async () => {
+    const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    })
+
+    if (error) {
+      console.error("Reset error:", error)
+      setResetMessage("Error sending reset email")
+    } else {
+      setResetMessage("Check your email for reset link")
+    }
+  }
+
   return (
   <div className="relative -mt-16 flex min-h-screen items-center justify-center text-white">
 
@@ -435,6 +451,16 @@ export default function LoginPage() {
           onChange={(e) => setPassword(e.target.value)}
         />
 
+        {isLogin && (
+          <button
+            type="button"
+            onClick={() => setShowReset(!showReset)}
+            className="text-sm text-blue-400 hover:underline -mt-3 mb-4"
+          >
+            Forgot password?
+          </button>
+        )}
+
         <button
           type="button"
           disabled={loading}
@@ -443,6 +469,30 @@ export default function LoginPage() {
         >
           {loading ? "Loading..." : isLogin ? "Login" : "Create Account"}
         </button>
+
+        {isLogin && showReset && (
+          <div className="mt-4 rounded-lg border border-white/10 bg-white/5 p-4">
+            <p className="mb-2 text-sm">Enter your email to reset your password</p>
+
+            <input
+              type="email"
+              placeholder="Email"
+              value={resetEmail}
+              onChange={(e) => setResetEmail(e.target.value)}
+              className="w-full rounded bg-black/30 border border-white/10 p-2"
+            />
+
+            <button
+              type="button"
+              onClick={handleReset}
+              className="mt-2 w-full rounded bg-blue-500 py-2 text-white hover:bg-blue-600"
+            >
+              Send Reset Link
+            </button>
+
+            {resetMessage && <p className="mt-2 text-xs text-gray-400">{resetMessage}</p>}
+          </div>
+        )}
       </div>
     </div>
   </div>
