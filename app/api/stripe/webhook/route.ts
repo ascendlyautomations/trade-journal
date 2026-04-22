@@ -231,6 +231,7 @@ export async function POST(req: Request) {
     }
 
     console.log("📩 Event received:", event.type)
+    console.log("📩 Stripe event:", event.type)
 
     switch (event.type) {
       case "checkout.session.completed":
@@ -557,6 +558,70 @@ export async function POST(req: Request) {
         console.log("[invoice.paid] referrer referral_earnings →", newTotal)
       } catch (err) {
         console.error("[invoice.paid] handler error:", err)
+      }
+    }
+
+    // ======================================================
+    // SUBSCRIPTION CREATED/UPDATED → sync membership fields
+    // ======================================================
+    if (
+      event.type === "customer.subscription.created" ||
+      event.type === "customer.subscription.updated"
+    ) {
+      try {
+        const subscription = event.data.object as Stripe.Subscription
+        const customerId = stripeCustomerId(subscription.customer)
+
+        if (!customerId) {
+          console.log(
+            "❌ subscription sync: missing customer id",
+            event.type
+          )
+        } else {
+          console.log("🔄 Subscription update received:", {
+            status: subscription.status,
+            cancel_at_period_end: subscription.cancel_at_period_end,
+            trial_end: subscription.trial_end,
+            current_period_end: subscription.current_period_end,
+          })
+
+          const updatePayload: any = {
+            subscription_status: subscription.status,
+            cancel_at_period_end: subscription.cancel_at_period_end ?? false,
+          }
+
+          // Handle trial end
+          if (subscription.trial_end) {
+            updatePayload.trial_end = new Date(subscription.trial_end * 1000)
+          }
+
+          // Handle period end (important for canceling users)
+          if (subscription.current_period_end) {
+            updatePayload.current_period_end = new Date(
+              subscription.current_period_end * 1000
+            )
+          }
+
+          // If still in trial, ensure current_period_end is set correctly
+          if (!subscription.current_period_end && subscription.trial_end) {
+            updatePayload.current_period_end = new Date(
+              subscription.trial_end * 1000
+            )
+          }
+
+          const { error } = await supabase
+            .from("profiles")
+            .update(updatePayload)
+            .eq("stripe_customer_id", customerId)
+
+          if (error) {
+            console.error("❌ Failed to update subscription:", error)
+          } else {
+            console.log("✅ Subscription synced successfully")
+          }
+        }
+      } catch (err) {
+        console.error("❌ subscription sync handler error:", err)
       }
     }
 

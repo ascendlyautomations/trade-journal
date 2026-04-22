@@ -6,6 +6,7 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "../../lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
+import { getMembershipStatus } from "@/lib/getMembershipStatus"
 import { isProActive } from "../../lib/subscription"
 import { isProfilesUsernameConflict } from "@/lib/profileUsername"
 import type { User } from "@supabase/supabase-js"
@@ -1030,12 +1031,8 @@ export default function SettingsPage() {
 
                   <div className="rounded-xl border border-white/10 bg-black/20 p-4">
                     <p className="text-xs text-gray-500">Status</p>
-                    <p
-                      className={`mt-1 font-semibold capitalize ${subscriptionStatusClass(
-                        displayStatus
-                      )}`}
-                    >
-                      {displayStatus}
+                    <p className="text-sm text-gray-400">
+                      Membership: {getMembershipStatus(profile)}
                     </p>
                   </div>
 
