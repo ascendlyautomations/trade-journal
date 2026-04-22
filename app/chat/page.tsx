@@ -130,17 +130,10 @@ export default function ChatPage() {
 
     if (selectedFile) {
       let uploadFile: File = selectedFile
-      if (selectedFile.type.startsWith("image/")) {
-        try {
-          const compressed = await compressImage(selectedFile)
-          uploadFile = new File([compressed], selectedFile.name, {
-            type: "image/jpeg",
-          })
-        } catch (err) {
-          console.warn("Compression failed, using original image", err)
-        }
+      if (selectedFile.type?.startsWith("image/")) {
+        uploadFile = await compressImage(selectedFile)
       }
-      const fileName = `${Date.now()}-${selectedFile.name}`
+      const fileName = `${Date.now()}-${uploadFile.name}`
 
       await supabase.storage
         .from("screenshots")

@@ -234,19 +234,11 @@ export default function SettingsPage() {
   async function uploadAvatar(): Promise<string | null> {
     if (!avatarFile || !user) return null
 
-    const fileExt = avatarFile.name.split(".").pop()
-    const fileName = `${user.id}/${Date.now()}.${fileExt}`
     let uploadFile: File = avatarFile
-    if (avatarFile.type.startsWith("image/")) {
-      try {
-        const compressed = await compressImage(avatarFile)
-        uploadFile = new File([compressed], avatarFile.name, {
-          type: "image/jpeg",
-        })
-      } catch (err) {
-        console.warn("Compression failed, using original image", err)
-      }
+    if (avatarFile.type?.startsWith("image/")) {
+      uploadFile = await compressImage(avatarFile)
     }
+    const fileName = `${user.id}/${Date.now()}-${uploadFile.name}`
 
     const { error: uploadError } = await supabase.storage
       .from("avatars")

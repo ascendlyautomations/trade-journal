@@ -13,6 +13,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import Navbar from "../components/Navbar"
 import DmStyleComposer from "../components/DmStyleComposer"
 import { supabase } from "../../lib/supabaseClient"
+import { compressImage } from "@/lib/compressImage"
 import { formatEST } from "@/lib/formatEST"
 
 type Room = {
@@ -392,11 +393,15 @@ function CommunityContent() {
     e.target.value = ""
     if (!file) return
 
-    const filePath = `room-images/${Date.now()}-${file.name}`
+    let uploadFile: File = file
+    if (file.type?.startsWith("image/")) {
+      uploadFile = await compressImage(file)
+    }
+    const filePath = `room-images/${Date.now()}-${uploadFile.name}`
 
     const { error: uploadError } = await supabase.storage
       .from("screenshots")
-      .upload(filePath, file)
+      .upload(filePath, uploadFile)
 
     if (uploadError) {
       console.error("room image upload:", uploadError)

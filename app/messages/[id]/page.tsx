@@ -774,19 +774,11 @@ export default function DMPage() {
 
     setGroupImage(file)
     let uploadFile: File = file
-    if (file.type.startsWith("image/")) {
-      try {
-        const compressed = await compressImage(file)
-        uploadFile = new File([compressed], file.name, {
-          type: "image/jpeg",
-        })
-      } catch (err) {
-        console.warn("Compression failed, using original image", err)
-      }
+    if (file.type?.startsWith("image/")) {
+      uploadFile = await compressImage(file)
     }
 
-    const fileExt = file.name.split(".").pop()
-    const fileName = `${conversation.id}-${Date.now()}.${fileExt}`
+    const fileName = `${conversation.id}-${Date.now()}-${uploadFile.name}`
     const filePath = `${fileName}`
 
     const { error: uploadError } = await supabase.storage
@@ -831,17 +823,10 @@ export default function DMPage() {
 
     if (selectedFile) {
       let uploadFile: File = selectedFile
-      if (selectedFile.type.startsWith("image/")) {
-        try {
-          const compressed = await compressImage(selectedFile)
-          uploadFile = new File([compressed], selectedFile.name, {
-            type: "image/jpeg",
-          })
-        } catch (err) {
-          console.warn("Compression failed, using original image", err)
-        }
+      if (selectedFile.type?.startsWith("image/")) {
+        uploadFile = await compressImage(selectedFile)
       }
-      const fileName = `${Date.now()}-${selectedFile.name}`
+      const fileName = `${Date.now()}-${uploadFile.name}`
 
       await supabase.storage
         .from("screenshots")

@@ -417,18 +417,11 @@ export default function InputTradeForm({
     let screenshotUrl: string | null = null
 
     if (image) {
-      const fileName = `${user.id}/${Date.now()}-${image.name}`
       let uploadFile: File = image
-      if (image.type.startsWith("image/")) {
-        try {
-          const compressed = await compressImage(image)
-          uploadFile = new File([compressed], image.name, {
-            type: "image/jpeg",
-          })
-        } catch (err) {
-          console.warn("Compression failed, using original image", err)
-        }
+      if (image.type?.startsWith("image/")) {
+        uploadFile = await compressImage(image)
       }
+      const fileName = `${user.id}/${Date.now()}-${uploadFile.name}`
       const { error: upErr } = await supabase.storage
         .from("screenshots")
         .upload(fileName, uploadFile)

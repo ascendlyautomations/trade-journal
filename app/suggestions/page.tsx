@@ -3,6 +3,7 @@
 import { useState } from "react"
 import Navbar from "../components/Navbar"
 import { supabase } from "../../lib/supabaseClient"
+import { compressImage } from "@/lib/compressImage"
 
 export default function SuggestionsPage() {
   const [note, setNote] = useState("")
@@ -27,11 +28,15 @@ export default function SuggestionsPage() {
       return
     }
 
-    const fileName = `${user.id}-${Date.now()}`
+    let uploadFile: File = image
+    if (image.type?.startsWith("image/")) {
+      uploadFile = await compressImage(image)
+    }
+    const fileName = `${user.id}-${Date.now()}-${uploadFile.name}`
 
     const { error: uploadError } = await supabase.storage
       .from("suggestions")
-      .upload(fileName, image)
+      .upload(fileName, uploadFile)
 
     if (uploadError) {
       alert(uploadError.message)

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Navbar from "../components/Navbar"
 import { supabase } from "../../lib/supabaseClient"
+import { compressImage } from "@/lib/compressImage"
 
 const CATEGORIES = [
   { value: "bug", label: "Bug" },
@@ -91,11 +92,14 @@ export default function SupportPage() {
 
     let screenshotUrl: string | null = null
     if (image) {
-      const safeName = image.name.replace(/\s+/g, "-")
-      const filePath = `support/${user.id}/${Date.now()}-${safeName}`
+      let uploadFile: File = image
+      if (image.type?.startsWith("image/")) {
+        uploadFile = await compressImage(image)
+      }
+      const filePath = `support/${user.id}/${Date.now()}-${uploadFile.name}`
       const { error: uploadError } = await supabase.storage
         .from("screenshots")
-        .upload(filePath, image, { upsert: false })
+        .upload(filePath, uploadFile, { upsert: false })
 
       if (uploadError) {
         setError(uploadError.message)

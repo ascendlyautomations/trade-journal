@@ -669,19 +669,11 @@ export default function ProfilePage() {
       input.value = ""
       if (!file || !currentUserId) return
 
-      const fileExt = file.name.split(".").pop() || "png"
-      const fileName = `${currentUserId}/${Date.now()}.${fileExt}`
       let uploadFile: File = file
-      if (file.type.startsWith("image/")) {
-        try {
-          const compressed = await compressImage(file)
-          uploadFile = new File([compressed], file.name, {
-            type: "image/jpeg",
-          })
-        } catch (err) {
-          console.warn("Compression failed, using original image", err)
-        }
+      if (file.type?.startsWith("image/")) {
+        uploadFile = await compressImage(file)
       }
+      const fileName = `${currentUserId}/${Date.now()}-${uploadFile.name}`
 
       const { error: uploadError } = await supabase.storage
         .from("stories")
@@ -1179,12 +1171,15 @@ export default function ProfilePage() {
     let imageUrl: string | null = null
 
     if (postImage) {
-      const fileExt = postImage.name.split(".").pop() || "jpg"
-      const fileName = `${currentUserId}/${Date.now()}.${fileExt}`
+      let uploadFile: File = postImage
+      if (postImage.type?.startsWith("image/")) {
+        uploadFile = await compressImage(postImage)
+      }
+      const fileName = `${currentUserId}/${Date.now()}-${uploadFile.name}`
 
       const { error: upErr } = await supabase.storage
         .from("profile_posts")
-        .upload(fileName, postImage, { upsert: true })
+        .upload(fileName, uploadFile, { upsert: true })
 
       if (upErr) {
         console.error(upErr)

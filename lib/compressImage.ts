@@ -1,19 +1,15 @@
-/**
- * Browser-only: resize wide images and encode as JPEG for smaller uploads.
- * Call only from client components / client-side handlers.
- */
-export async function compressImage(file: File): Promise<Blob> {
+export async function compressImage(file: File): Promise<File> {
+  if (!file.type?.startsWith("image/")) return file
+
   const img = document.createElement("img")
   const canvas = document.createElement("canvas")
   const ctx = canvas.getContext("2d")
 
-  if (!ctx) {
-    return Promise.reject(new Error("Canvas 2D context unavailable"))
-  }
+  if (!ctx) return file
 
   const objectUrl = URL.createObjectURL(file)
 
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     img.onload = () => {
       URL.revokeObjectURL(objectUrl)
 
@@ -35,17 +31,24 @@ export async function compressImage(file: File): Promise<Blob> {
 
       canvas.toBlob(
         (blob) => {
-          if (!blob) return reject(new Error("Compression failed"))
-          resolve(blob)
+          if (!blob) return resolve(file)
+
+          const newName = file.name.replace(/\.[^/.]+$/, "") + ".webp"
+
+          resolve(
+            new File([blob], newName, {
+              type: "image/webp",
+            })
+          )
         },
-        "image/jpeg",
-        0.7
+        "image/webp",
+        0.92
       )
     }
 
     img.onerror = () => {
       URL.revokeObjectURL(objectUrl)
-      reject(new Error("Failed to decode image"))
+      resolve(file)
     }
 
     img.src = objectUrl

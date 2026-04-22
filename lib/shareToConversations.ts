@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { compressImage } from "./compressImage"
 
 export type ShareConversationRow = {
   id: string
@@ -145,11 +146,20 @@ export async function sendImageDataUrlToConversations(
 ): Promise<{ error: Error | null }> {
   const res = await fetch(opts.dataUrl)
   const blob = await res.blob()
-  const path = `${opts.senderId}/share-${Date.now()}.png`
+  let uploadFile = new File([blob], "share.png", {
+    type: blob.type || "image/png",
+  })
+  if (uploadFile.type?.startsWith("image/")) {
+    uploadFile = await compressImage(uploadFile)
+  }
+  const path = `${opts.senderId}/share-${Date.now()}-${uploadFile.name}`
 
   const { error: upErr } = await supabase.storage
     .from("screenshots")
-    .upload(path, blob, { contentType: "image/png", upsert: false })
+    .upload(path, uploadFile, {
+      contentType: uploadFile.type || "application/octet-stream",
+      upsert: false,
+    })
 
   if (upErr) {
     console.error("sendImageDataUrlToConversations upload:", upErr)

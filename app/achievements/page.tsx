@@ -156,18 +156,14 @@ export default function AchievementsPage() {
         .replace(/[^a-z0-9-_]+/g, "-")
         .replace(/-+/g, "-")
         .replace(/^-|-$/g, "")
-      const filePath = `achievements/${userId}/${Date.now()}-${safeBase || "image"}.${ext}`
       let uploadFile: File = file
-      if (file.type.startsWith("image/")) {
-        try {
-          const compressed = await compressImage(file)
-          uploadFile = new File([compressed], file.name, {
-            type: "image/jpeg",
-          })
-        } catch (err) {
-          console.warn("Compression failed, using original image", err)
-        }
+      if (file.type?.startsWith("image/")) {
+        uploadFile = await compressImage(file)
       }
+      const uploadName = uploadFile.type?.startsWith("image/")
+        ? uploadFile.name
+        : `${safeBase || "image"}.${ext}`
+      const filePath = `achievements/${userId}/${Date.now()}-${uploadName}`
 
       const { error: uploadErr } = await supabase.storage
         .from("screenshots")

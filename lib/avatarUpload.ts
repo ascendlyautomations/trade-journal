@@ -6,17 +6,11 @@ export async function uploadAvatarFile(
   userId: string,
   file: File
 ): Promise<string | null> {
-  const fileExt = file.name.split(".").pop()
-  const fileName = `${userId}/${Date.now()}.${fileExt}`
   let uploadFile: File = file
-  if (file.type.startsWith("image/")) {
-    try {
-      const compressed = await compressImage(file)
-      uploadFile = new File([compressed], file.name, { type: "image/jpeg" })
-    } catch (err) {
-      console.warn("Compression failed, using original image", err)
-    }
+  if (file.type?.startsWith("image/")) {
+    uploadFile = await compressImage(file)
   }
+  const fileName = `${userId}/${Date.now()}-${uploadFile.name}`
 
   const { error } = await supabase.storage
     .from("avatars")
