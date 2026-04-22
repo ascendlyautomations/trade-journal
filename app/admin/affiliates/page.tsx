@@ -9,11 +9,7 @@ import {
   adminRejectAffiliateApplication,
 } from "@/lib/affiliateAdmin"
 import { getCurrentAdminCheckResult } from "@/lib/adminUsers"
-import {
-  AFFILIATE_APPLICATION_SELECT_COLUMNS,
-  type AffiliateApplicationRow,
-} from "@/lib/affiliateApplication"
-import { logPostgrestErrorDev } from "@/lib/postgrestError"
+import { type AffiliateApplicationRow } from "@/lib/affiliateApplication"
 import { supabase } from "@/lib/supabaseClient"
 
 type TabId = "pending" | "approved" | "rejected"
@@ -95,30 +91,28 @@ export default function AdminAffiliateApplicationsPage() {
   const fetchApplications = useCallback(async () => {
     if (!allowed) return
     setLoading(true)
-    const { data, error } = await supabase
-      .from("affiliate_applications")
-      .select(`
-        ${AFFILIATE_APPLICATION_SELECT_COLUMNS},
-        profiles (
-          id,
-          username,
-          avatar_url
-        )
-      `)
-      .eq("status", tab)
-      .order("created_at", { ascending: false })
-
-    if (error) {
-      logPostgrestErrorDev("adminAffiliates list fetch", error)
+    try {
+      const params = new URLSearchParams({ status: tab })
+      const res = await fetch(`/api/admin/affiliates/applications?${params}`, {
+        credentials: "same-origin",
+      })
+      const json = (await res.json()) as {
+        applications?: unknown[]
+        error?: string
+      }
+      if (!res.ok) {
+        console.error("❌ Affiliate fetch error:", json?.error ?? res.statusText)
+        setRows([])
+        return
+      }
+      const list = (json.applications || []) as unknown as AffiliateApplicationRow[]
+      setRows(list)
+    } catch (e) {
+      console.error("❌ Affiliate fetch error:", e)
       setRows([])
+    } finally {
       setLoading(false)
-      return
     }
-
-    const list = (data || []) as unknown as AffiliateApplicationRow[]
-    setRows(list)
-
-    setLoading(false)
   }, [allowed, tab])
 
   useEffect(() => {
