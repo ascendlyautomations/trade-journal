@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import Navbar from "../components/Navbar"
 
@@ -11,6 +11,16 @@ export default function InputPage() {
   const [session, setSession] = useState("NY")
   const [notes, setNotes] = useState("")
   const [loading, setLoading] = useState(false)
+  const [popupMessage, setPopupMessage] = useState("")
+  const [popupType, setPopupType] = useState<"success" | "error">("success")
+  const [showPopup, setShowPopup] = useState(false)
+
+  useEffect(() => {
+    if (showPopup) {
+      const timer = setTimeout(() => setShowPopup(false), 2500)
+      return () => clearTimeout(timer)
+    }
+  }, [showPopup])
 
   async function handleSubmit(e: any) {
     e.preventDefault()
@@ -48,9 +58,13 @@ export default function InputPage() {
 
     if (error) {
       console.error(error)
-      alert("Error saving trade")
+      setPopupMessage("Failed to save trade")
+      setPopupType("error")
+      setShowPopup(true)
     } else {
-      alert("Trade saved 🚀")
+      setPopupMessage("Trade saved successfully")
+      setPopupType("success")
+      setShowPopup(true)
       setTicker("")
       setPnl("")
       setSession("NY")
@@ -124,6 +138,28 @@ export default function InputPage() {
         </form>
 
       </div>
+      {showPopup && (
+        <div className="fixed inset-0 flex items-center justify-center z-50">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+          <div
+            className={`relative w-full max-w-sm rounded-xl border px-6 py-5 text-center shadow-xl ${
+              popupType === "success" ? "border-green-500 bg-green-900/20" : "border-red-500 bg-red-900/20"
+            }`}
+          >
+            <p className={`text-sm font-medium ${popupType === "success" ? "text-green-400" : "text-red-400"}`}>
+              {popupMessage}
+            </p>
+
+            <button
+              type="button"
+              onClick={() => setShowPopup(false)}
+              className="mt-4 text-xs text-gray-400 hover:underline"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
     </>
   )
 }

@@ -16,6 +16,9 @@ export default function LoginPage() {
   const [showReset, setShowReset] = useState(false)
   const [resetEmail, setResetEmail] = useState("")
   const [resetMessage, setResetMessage] = useState("")
+  const [loadingReset, setLoadingReset] = useState(false)
+  const [popupMessage, setPopupMessage] = useState("")
+  const [showPopup, setShowPopup] = useState(false)
 
   const router = useRouter()
 
@@ -100,6 +103,13 @@ export default function LoginPage() {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    if (showPopup) {
+      const timer = setTimeout(() => setShowPopup(false), 3000)
+      return () => clearTimeout(timer)
+    }
+  }, [showPopup])
 
   async function handleSignUp(e: React.MouseEvent<HTMLButtonElement>) {
     console.log("Signup clicked")
@@ -257,7 +267,10 @@ export default function LoginPage() {
     })
 
     if (error) {
-      alert(error.message)
+      setPopupMessage("Incorrect email or password")
+      setEmail("")
+      setPassword("")
+      setShowPopup(true)
       setLoading(false)
       return
     }
@@ -316,6 +329,9 @@ export default function LoginPage() {
   }
 
   const handleReset = async () => {
+    if (!resetEmail) return
+
+    setLoadingReset(true)
     const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
       redirectTo: `${window.location.origin}/reset-password`,
     })
@@ -323,9 +339,14 @@ export default function LoginPage() {
     if (error) {
       console.error("Reset error:", error)
       setResetMessage("Error sending reset email")
+      setPopupMessage("Error sending reset email")
     } else {
-      setResetMessage("Check your email for reset link")
+      setResetMessage("Check your email for instructions to reset your password")
+      setPopupMessage("Check your email for instructions to reset your password")
+      setResetEmail("")
     }
+    setShowPopup(true)
+    setLoadingReset(false)
   }
 
   return (
@@ -433,42 +454,49 @@ export default function LoginPage() {
           </>
         )}
 
-        <input
-          type="email"
-          placeholder="Email"
-          autoComplete="email"
-          className="w-full mb-4 px-4 py-3 rounded-xl bg-white/10 border border-white/10 focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder-gray-400"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-
-        <input
-          type="password"
-          placeholder="Password"
-          autoComplete={isLogin ? "current-password" : "new-password"}
-          className="w-full mb-6 px-4 py-3 rounded-xl bg-white/10 border border-white/10 focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder-gray-400"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
-
-        {isLogin && (
-          <button
-            type="button"
-            onClick={() => setShowReset(!showReset)}
-            className="text-sm text-blue-400 hover:underline -mt-3 mb-4"
-          >
-            Forgot password?
-          </button>
-        )}
-
-        <button
-          type="button"
-          disabled={loading}
-          onClick={isLogin ? handleLogin : handleSignUp}
-          className="w-full bg-gradient-to-r from-blue-500 to-teal-400 py-3 rounded-xl font-semibold hover:scale-105 transition disabled:opacity-60 disabled:hover:scale-100"
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (isLogin) handleLogin()
+          }}
         >
-          {loading ? "Loading..." : isLogin ? "Login" : "Create Account"}
-        </button>
+          <input
+            type="email"
+            placeholder="Email"
+            autoComplete="email"
+            className="w-full mb-4 px-4 py-3 rounded-xl bg-white/10 border border-white/10 focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder-gray-400"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+
+          <input
+            type="password"
+            placeholder="Password"
+            autoComplete={isLogin ? "current-password" : "new-password"}
+            className="w-full mb-6 px-4 py-3 rounded-xl bg-white/10 border border-white/10 focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder-gray-400"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+
+          {isLogin && (
+            <button
+              type="button"
+              onClick={() => setShowReset(!showReset)}
+              className="text-sm text-blue-400 hover:underline -mt-3 mb-4"
+            >
+              Forgot password?
+            </button>
+          )}
+
+          <button
+            type={isLogin ? "submit" : "button"}
+            disabled={loading}
+            onClick={isLogin ? undefined : handleSignUp}
+            className="w-full bg-gradient-to-r from-blue-500 to-teal-400 py-3 rounded-xl font-semibold hover:scale-105 transition disabled:opacity-60 disabled:hover:scale-100"
+          >
+            {loading ? "Loading..." : isLogin ? "Login" : "Create Account"}
+          </button>
+        </form>
 
         {isLogin && showReset && (
           <div className="mt-4 rounded-lg border border-white/10 bg-white/5 p-4">
@@ -485,9 +513,10 @@ export default function LoginPage() {
             <button
               type="button"
               onClick={handleReset}
-              className="mt-2 w-full rounded bg-blue-500 py-2 text-white hover:bg-blue-600"
+              disabled={loadingReset}
+              className="mt-2 w-full bg-blue-500 hover:bg-blue-600 text-white py-2 rounded disabled:opacity-50"
             >
-              Send Reset Link
+              {loadingReset ? "Sending..." : "Send Reset Link"}
             </button>
 
             {resetMessage && <p className="mt-2 text-xs text-gray-400">{resetMessage}</p>}
@@ -495,6 +524,18 @@ export default function LoginPage() {
         )}
       </div>
     </div>
+    {showPopup && (
+      <div className="fixed left-1/2 top-1/2 z-50 w-full max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-lg border border-white/10 bg-black/80 px-4 py-3 shadow-lg">
+        <p className="text-sm text-white">{popupMessage}</p>
+        <button
+          type="button"
+          onClick={() => setShowPopup(false)}
+          className="mt-1 text-xs text-blue-400 hover:underline"
+        >
+          Close
+        </button>
+      </div>
+    )}
   </div>
 )
 }

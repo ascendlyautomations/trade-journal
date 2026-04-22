@@ -1508,7 +1508,7 @@ const worstDay = dailyPnLs.length > 0
       <h2 className="mb-3 text-sm md:text-base font-semibold text-blue-300">
         P&amp;L by Weekday
       </h2>
-      <div className="w-full overflow-x-auto">
+      <div className="w-full overflow-hidden">
       <ResponsiveContainer width="100%" height={280}>
         <LineChart
           data={weekdayData}
@@ -2054,7 +2054,7 @@ const worstDay = dailyPnLs.length > 0
               <div className="flex flex-1 flex-col gap-4">
                 <div className="flex min-h-[240px] flex-col">
                   <p className="mb-2 text-xs md:text-sm text-gray-400">Trades by Session</p>
-                  <div className="min-h-0 flex-1 w-full overflow-x-auto">
+                  <div className="min-h-0 flex-1 w-full overflow-hidden">
                     <ResponsiveContainer width="100%" height={240}>
                       <PieChart>
                         <Pie

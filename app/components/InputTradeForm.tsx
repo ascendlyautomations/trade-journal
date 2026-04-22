@@ -90,6 +90,9 @@ export default function InputTradeForm({
   const [psychologyNotes, setPsychologyNotes] = useState("")
   const [tradeType, setTradeType] = useState("")
   const [showSettings, setShowSettings] = useState(false)
+  const [popupMessage, setPopupMessage] = useState("")
+  const [popupType, setPopupType] = useState<"success" | "error">("success")
+  const [showPopup, setShowPopup] = useState(false)
 
   const [inputSettings, setInputSettings] = useState({
     showRR: true,
@@ -220,6 +223,13 @@ export default function InputTradeForm({
   useEffect(() => {
     void refreshPlanAndAccountLock()
   }, [refreshPlanAndAccountLock, existingTrade?.id])
+
+  useEffect(() => {
+    if (showPopup) {
+      const timer = setTimeout(() => setShowPopup(false), 2500)
+      return () => clearTimeout(timer)
+    }
+  }, [showPopup])
 
   useEffect(() => {
     if (isEditMode || mode === "Backtest" || !accountFieldsLocked) return
@@ -396,7 +406,9 @@ export default function InputTradeForm({
     } = await supabase.auth.getUser()
 
     if (!user?.id) {
-      alert("Please log in first")
+      setPopupMessage("Failed to save trade")
+      setPopupType("error")
+      setShowPopup(true)
       setSubmitting(false)
       return
     }
@@ -472,7 +484,9 @@ export default function InputTradeForm({
           .eq("id", user.id)
         if (lockErr) {
           console.error("locked account update:", lockErr)
-          alert("Could not lock your account. Try again.")
+          setPopupMessage("Failed to save trade")
+          setPopupType("error")
+          setShowPopup(true)
           setSubmitting(false)
           return
         }
@@ -490,7 +504,9 @@ export default function InputTradeForm({
           incomingName !== lockedName ||
           incomingNumber !== lockedNumber
         ) {
-          alert("Free plan allows only one account. Upgrade to change accounts.")
+          setPopupMessage("Failed to save trade")
+          setPopupType("error")
+          setShowPopup(true)
           setMode(modeLabelFromDb(lockedType))
           setAccountSize(lockedSize)
           setFirm(lockedName)
@@ -511,13 +527,9 @@ export default function InputTradeForm({
     })
 
     if (!ensured.ok) {
-      if (ensured.reason === "limit") {
-        alert(
-          "Free plan allows only 1 account. Upgrade to Pro for unlimited accounts."
-        )
-      } else {
-        alert("Could not verify account settings. Try again.")
-      }
+      setPopupMessage("Failed to save trade")
+      setPopupType("error")
+      setShowPopup(true)
       setSubmitting(false)
       return
     }
@@ -585,14 +597,9 @@ export default function InputTradeForm({
 
       if (error) {
         console.error("UPDATE ERROR:", error)
-        const msg = String(error.message || "")
-        if (msg.includes("FREE_PLAN_ACCOUNT_LIMIT")) {
-          alert(
-            "Free plan allows only 1 account. Upgrade to Pro for unlimited accounts."
-          )
-        } else {
-          alert(msg || "Failed to update trade.")
-        }
+        setPopupMessage("Failed to save trade")
+        setPopupType("error")
+        setShowPopup(true)
         setSubmitting(false)
         return
       }
@@ -621,11 +628,9 @@ export default function InputTradeForm({
       void refreshPlanAndAccountLock()
       onSave?.()
       onClose?.()
-      if (forceMarkReviewedOnSave || importedUnreviewed) {
-        alert("Trade reviewed and updated!")
-      } else {
-        alert("Trade updated!")
-      }
+      setPopupMessage("Trade saved successfully")
+      setPopupType("success")
+      setShowPopup(true)
       setSubmitting(false)
       return
     }
@@ -686,14 +691,9 @@ export default function InputTradeForm({
 
     if (error) {
       console.error("Trade insert error:", error)
-      const msg = String(error.message || "")
-      if (msg.includes("FREE_PLAN_ACCOUNT_LIMIT")) {
-        alert(
-          "Free plan allows only 1 account. Upgrade to Pro for unlimited accounts."
-        )
-      } else {
-        alert("Failed to save trade. Please try again.")
-      }
+      setPopupMessage("Failed to save trade")
+      setPopupType("error")
+      setShowPopup(true)
       setSubmitting(false)
       return
     }
@@ -716,7 +716,9 @@ export default function InputTradeForm({
 
     void refreshPlanAndAccountLock()
     resetCreateForm()
-    alert("Trade saved!")
+    setPopupMessage("Trade saved successfully")
+    setPopupType("success")
+    setShowPopup(true)
     setSubmitting(false)
   }
 
@@ -738,7 +740,9 @@ export default function InputTradeForm({
     } = await supabase.auth.getUser()
 
     if (!user?.id) {
-      alert("Please log in first")
+      setPopupMessage("Failed to save trade")
+      setPopupType("error")
+      setShowPopup(true)
       return
     }
 
@@ -750,14 +754,18 @@ export default function InputTradeForm({
 
     if (profileErr || !profile) {
       console.error("Profile fetch failed:", profileErr)
-      alert("Could not verify account. Try again.")
+      setPopupMessage("Failed to save trade")
+      setPopupType("error")
+      setShowPopup(true)
       return
     }
 
     console.log("CSV BLOCK CHECK:", profile)
 
     if (!profile.is_pro && profile.has_used_csv_import) {
-      alert("Free plan includes one CSV import only. Upgrade to import more.")
+      setPopupMessage("Failed to save trade")
+      setPopupType("error")
+      setShowPopup(true)
       return
     }
 
@@ -1284,6 +1292,28 @@ export default function InputTradeForm({
     </div>
   )
 
+  const popupModal = showPopup && (
+    <div className="fixed inset-0 flex items-center justify-center z-50">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+      <div
+        className={`relative w-full max-w-sm rounded-xl border px-6 py-5 text-center shadow-xl ${
+          popupType === "success" ? "border-green-500 bg-green-900/20" : "border-red-500 bg-red-900/20"
+        }`}
+      >
+        <p className={`text-sm font-medium ${popupType === "success" ? "text-green-400" : "text-red-400"}`}>
+          {popupMessage}
+        </p>
+        <button
+          type="button"
+          onClick={() => setShowPopup(false)}
+          className="mt-4 text-xs text-gray-400 hover:underline"
+        >
+          Close
+        </button>
+      </div>
+    </div>
+  )
+
   if (showAsModal) {
     return (
       <>
@@ -1318,6 +1348,7 @@ export default function InputTradeForm({
           </div>
         </div>
         {settingsModal}
+        {popupModal}
       </>
     )
   }
@@ -1326,6 +1357,7 @@ export default function InputTradeForm({
     <>
       {formBody}
       {settingsModal}
+      {popupModal}
     </>
   )
 }

@@ -84,6 +84,9 @@ export default function SettingsPage() {
   const [savingPassword, setSavingPassword] = useState(false)
   const [manageLoading, setManageLoading] = useState(false)
   const [checkoutLoading, setCheckoutLoading] = useState(false)
+  const [popupMessage, setPopupMessage] = useState("")
+  const [popupType, setPopupType] = useState<"success" | "error">("success")
+  const [showPopup, setShowPopup] = useState(false)
   const [profile, setProfile] = useState<Record<string, unknown> | null>(null)
   const [newPassword, setNewPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
@@ -121,6 +124,13 @@ export default function SettingsPage() {
     })
     return () => window.cancelAnimationFrame(id)
   }, [loading])
+
+  useEffect(() => {
+    if (showPopup) {
+      const timer = setTimeout(() => setShowPopup(false), 2500)
+      return () => clearTimeout(timer)
+    }
+  }, [showPopup])
 
   async function fetchProfile(userId: string) {
     const { data } = await supabase
@@ -267,9 +277,13 @@ export default function SettingsPage() {
 
     if (error) {
       if (error.code === "23505" && isProfilesUsernameConflict(error)) {
-        alert("Username already in use")
+        setPopupMessage("Something went wrong")
+        setPopupType("error")
+        setShowPopup(true)
       } else {
-        alert(error.message)
+        setPopupMessage("Something went wrong")
+        setPopupType("error")
+        setShowPopup(true)
       }
       return
     }
@@ -289,7 +303,9 @@ export default function SettingsPage() {
         : p
     )
     setAvatarFile(null)
-    alert("Profile saved")
+    setPopupMessage("Profile updated successfully")
+    setPopupType("success")
+    setShowPopup(true)
   }
 
   async function saveDrawdownLimit() {
@@ -298,9 +314,9 @@ export default function SettingsPage() {
     const t = maxDrawdown.trim()
     const n = t === "" ? null : Number(t)
     if (t !== "" && (!Number.isFinite(n) || n === null || n < 0)) {
-      alert(
-        "Enter a valid non-negative dollar amount for drawdown limit, or leave blank to clear."
-      )
+      setPopupMessage("Something went wrong")
+      setPopupType("error")
+      setShowPopup(true)
       return
     }
 
@@ -312,12 +328,16 @@ export default function SettingsPage() {
     setSavingDrawdownLimit(false)
 
     if (error) {
-      alert(error.message)
+      setPopupMessage("Something went wrong")
+      setPopupType("error")
+      setShowPopup(true)
       return
     }
 
     setProfile((p) => (p ? { ...p, max_drawdown_limit: n } : p))
-    alert("Drawdown limit saved")
+    setPopupMessage("Limit saved successfully")
+    setPopupType("success")
+    setShowPopup(true)
   }
 
   async function saveAccountPrivacyTab() {
@@ -334,7 +354,9 @@ export default function SettingsPage() {
     setSavingAccountPrivacy(false)
 
     if (error) {
-      alert(error.message)
+      setPopupMessage("Something went wrong")
+      setPopupType("error")
+      setShowPopup(true)
       return
     }
 
@@ -347,18 +369,24 @@ export default function SettingsPage() {
           }
         : p
     )
-    alert("Account preferences saved")
+    setPopupMessage("Profile updated successfully")
+    setPopupType("success")
+    setShowPopup(true)
   }
 
   async function updatePassword() {
     if (!user) return
 
     if (newPassword.length < 6) {
-      alert("Password must be at least 6 characters.")
+      setPopupMessage("Something went wrong")
+      setPopupType("error")
+      setShowPopup(true)
       return
     }
     if (newPassword !== confirmPassword) {
-      alert("Passwords do not match.")
+      setPopupMessage("Something went wrong")
+      setPopupType("error")
+      setShowPopup(true)
       return
     }
 
@@ -369,13 +397,17 @@ export default function SettingsPage() {
     setSavingPassword(false)
 
     if (error) {
-      alert(error.message)
+      setPopupMessage("Something went wrong")
+      setPopupType("error")
+      setShowPopup(true)
       return
     }
 
     setNewPassword("")
     setConfirmPassword("")
-    alert("Password updated")
+    setPopupMessage("Password updated successfully")
+    setPopupType("success")
+    setShowPopup(true)
   }
 
   async function startTraxProCheckout() {
@@ -409,22 +441,30 @@ export default function SettingsPage() {
       if (!res.ok) {
         console.error("Settings checkout failed:", { status: res.status, data })
         if (res.status === 401) {
-          alert("Session expired. Please sign in again.")
+          setPopupMessage("Something went wrong")
+          setPopupType("error")
+          setShowPopup(true)
           router.push("/login?next=checkout")
           return
         }
-        alert(typeof data.error === "string" ? data.error : "Checkout failed")
+        setPopupMessage("Something went wrong")
+        setPopupType("error")
+        setShowPopup(true)
         return
       }
 
       if (data.url) {
         window.location.href = data.url as string
       } else {
-        alert(typeof data.error === "string" ? data.error : "Checkout failed")
+        setPopupMessage("Something went wrong")
+        setPopupType("error")
+        setShowPopup(true)
       }
     } catch (e) {
       console.error(e)
-      alert("Checkout failed")
+      setPopupMessage("Something went wrong")
+      setPopupType("error")
+      setShowPopup(true)
     } finally {
       setCheckoutLoading(false)
     }
@@ -437,7 +477,9 @@ export default function SettingsPage() {
     try {
       const token = await getAccessToken()
       if (!token) {
-        alert("Session expired. Please sign in again.")
+        setPopupMessage("Something went wrong")
+        setPopupType("error")
+        setShowPopup(true)
         router.push("/login")
         return
       }
@@ -455,26 +497,30 @@ export default function SettingsPage() {
       if (!res.ok) {
         console.error("Settings portal failed:", { status: res.status, data })
         if (res.status === 401) {
-          alert("Session expired. Please sign in again.")
+          setPopupMessage("Something went wrong")
+          setPopupType("error")
+          setShowPopup(true)
           router.push("/login")
           return
         }
-        alert(
-          typeof data.error === "string"
-            ? data.error
-            : "Unable to open billing portal"
-        )
+        setPopupMessage("Something went wrong")
+        setPopupType("error")
+        setShowPopup(true)
         return
       }
 
       if (data.url) {
         window.location.href = data.url as string
       } else {
-        alert("Unable to open billing portal")
+        setPopupMessage("Something went wrong")
+        setPopupType("error")
+        setShowPopup(true)
       }
     } catch (e) {
       console.error(e)
-      alert("Something went wrong")
+      setPopupMessage("Something went wrong")
+      setPopupType("error")
+      setShowPopup(true)
     } finally {
       setManageLoading(false)
     }
@@ -517,10 +563,14 @@ export default function SettingsPage() {
     if (!referralLink) return
     try {
       await navigator.clipboard.writeText(referralLink)
-      alert("Copied!")
+      setPopupMessage("Copied!")
+      setPopupType("success")
+      setShowPopup(true)
     } catch (err) {
       console.error("Copy failed", err)
-      alert("Failed to copy")
+      setPopupMessage("Something went wrong")
+      setPopupType("error")
+      setShowPopup(true)
     }
   }
 
@@ -1063,6 +1113,27 @@ export default function SettingsPage() {
             : "Affiliate application"
         }
       />
+      {showPopup && (
+        <div className="fixed inset-0 flex items-center justify-center z-50">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+          <div
+            className={`relative w-full max-w-sm rounded-xl border px-6 py-5 text-center shadow-xl ${
+              popupType === "success" ? "border-green-500 bg-green-900/20" : "border-red-500 bg-red-900/20"
+            }`}
+          >
+            <p className={`text-sm font-medium ${popupType === "success" ? "text-green-400" : "text-red-400"}`}>
+              {popupMessage}
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowPopup(false)}
+              className="mt-4 text-xs text-gray-400 hover:underline"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
     </>
   )
 }
