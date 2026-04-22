@@ -5,6 +5,7 @@ import DmStyleComposer from "../../components/DmStyleComposer"
 import TradeSocialLayer from "../../components/TradeSocialLayer"
 import { useEffect, useState, useRef, type ChangeEvent } from "react"
 import { supabase } from "../../../lib/supabaseClient"
+import { compressImage } from "@/lib/compressImage"
 import { useParams, useRouter } from "next/navigation"
 
 function tradeScreenshotSrc(url: string | null | undefined): string | null {
@@ -772,6 +773,17 @@ export default function DMPage() {
     if (!file || !conversation?.id) return
 
     setGroupImage(file)
+    let uploadFile: File = file
+    if (file.type.startsWith("image/")) {
+      try {
+        const compressed = await compressImage(file)
+        uploadFile = new File([compressed], file.name, {
+          type: "image/jpeg",
+        })
+      } catch (err) {
+        console.warn("Compression failed, using original image", err)
+      }
+    }
 
     const fileExt = file.name.split(".").pop()
     const fileName = `${conversation.id}-${Date.now()}.${fileExt}`
@@ -779,7 +791,7 @@ export default function DMPage() {
 
     const { error: uploadError } = await supabase.storage
       .from("group-avatars")
-      .upload(filePath, file, {
+      .upload(filePath, uploadFile, {
         cacheControl: "3600",
         upsert: true
       })
@@ -818,11 +830,22 @@ export default function DMPage() {
     let imageUrl = null
 
     if (selectedFile) {
+      let uploadFile: File = selectedFile
+      if (selectedFile.type.startsWith("image/")) {
+        try {
+          const compressed = await compressImage(selectedFile)
+          uploadFile = new File([compressed], selectedFile.name, {
+            type: "image/jpeg",
+          })
+        } catch (err) {
+          console.warn("Compression failed, using original image", err)
+        }
+      }
       const fileName = `${Date.now()}-${selectedFile.name}`
 
       await supabase.storage
         .from("screenshots")
-        .upload(fileName, selectedFile)
+        .upload(fileName, uploadFile)
 
       imageUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/screenshots/${fileName}`
     }

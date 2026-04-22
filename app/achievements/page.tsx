@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Navbar from "../components/Navbar"
 import AchievementCard from "../components/AchievementCard"
 import { supabase } from "../../lib/supabaseClient"
+import { compressImage } from "@/lib/compressImage"
 import {
   type Achievement,
   badgeKeyFromType,
@@ -156,10 +157,21 @@ export default function AchievementsPage() {
         .replace(/-+/g, "-")
         .replace(/^-|-$/g, "")
       const filePath = `achievements/${userId}/${Date.now()}-${safeBase || "image"}.${ext}`
+      let uploadFile: File = file
+      if (file.type.startsWith("image/")) {
+        try {
+          const compressed = await compressImage(file)
+          uploadFile = new File([compressed], file.name, {
+            type: "image/jpeg",
+          })
+        } catch (err) {
+          console.warn("Compression failed, using original image", err)
+        }
+      }
 
       const { error: uploadErr } = await supabase.storage
         .from("screenshots")
-        .upload(filePath, file, { upsert: true })
+        .upload(filePath, uploadFile, { upsert: true })
       if (uploadErr) {
         setBusy(false)
         setError(uploadErr.message || "Could not upload image.")

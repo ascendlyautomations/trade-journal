@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react"
 import { supabase } from "@/lib/supabaseClient"
+import { compressImage } from "@/lib/compressImage"
 import { ensureManualUserAccountRegistered } from "@/lib/ensureManualUserAccount"
 import { isProActive } from "@/lib/subscription"
 
@@ -417,9 +418,20 @@ export default function InputTradeForm({
 
     if (image) {
       const fileName = `${user.id}/${Date.now()}-${image.name}`
+      let uploadFile: File = image
+      if (image.type.startsWith("image/")) {
+        try {
+          const compressed = await compressImage(image)
+          uploadFile = new File([compressed], image.name, {
+            type: "image/jpeg",
+          })
+        } catch (err) {
+          console.warn("Compression failed, using original image", err)
+        }
+      }
       const { error: upErr } = await supabase.storage
         .from("screenshots")
-        .upload(fileName, image)
+        .upload(fileName, uploadFile)
       if (upErr) {
         console.error("Upload error:", upErr)
       } else {

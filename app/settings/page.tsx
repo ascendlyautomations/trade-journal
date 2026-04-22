@@ -5,6 +5,7 @@ import AffiliateApplyModal from "../components/AffiliateApplyModal"
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "../../lib/supabaseClient"
+import { compressImage } from "@/lib/compressImage"
 import { isProActive } from "../../lib/subscription"
 import { isProfilesUsernameConflict } from "@/lib/profileUsername"
 import type { User } from "@supabase/supabase-js"
@@ -235,10 +236,21 @@ export default function SettingsPage() {
 
     const fileExt = avatarFile.name.split(".").pop()
     const fileName = `${user.id}/${Date.now()}.${fileExt}`
+    let uploadFile: File = avatarFile
+    if (avatarFile.type.startsWith("image/")) {
+      try {
+        const compressed = await compressImage(avatarFile)
+        uploadFile = new File([compressed], avatarFile.name, {
+          type: "image/jpeg",
+        })
+      } catch (err) {
+        console.warn("Compression failed, using original image", err)
+      }
+    }
 
     const { error: uploadError } = await supabase.storage
       .from("avatars")
-      .upload(fileName, avatarFile, { upsert: true })
+      .upload(fileName, uploadFile, { upsert: true })
 
     if (uploadError) {
       console.error("Avatar upload:", uploadError.message)

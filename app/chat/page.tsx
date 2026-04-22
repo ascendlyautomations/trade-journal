@@ -4,6 +4,7 @@ import Navbar from "../components/Navbar"
 import { formatEST } from "@/lib/formatEST"
 import { useEffect, useState, useRef } from "react"
 import { supabase } from "../../lib/supabaseClient"
+import { compressImage } from "@/lib/compressImage"
 import { useRouter } from "next/navigation"
 
 export default function ChatPage() {
@@ -128,11 +129,22 @@ export default function ChatPage() {
     let imageUrl = null
 
     if (selectedFile) {
+      let uploadFile: File = selectedFile
+      if (selectedFile.type.startsWith("image/")) {
+        try {
+          const compressed = await compressImage(selectedFile)
+          uploadFile = new File([compressed], selectedFile.name, {
+            type: "image/jpeg",
+          })
+        } catch (err) {
+          console.warn("Compression failed, using original image", err)
+        }
+      }
       const fileName = `${Date.now()}-${selectedFile.name}`
 
       await supabase.storage
         .from("screenshots")
-        .upload(fileName, selectedFile)
+        .upload(fileName, uploadFile)
 
       imageUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/screenshots/${fileName}`
     }

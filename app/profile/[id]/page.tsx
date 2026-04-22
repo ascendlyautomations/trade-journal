@@ -5,6 +5,7 @@ import AchievementCard from "../../components/AchievementCard"
 import type { ChangeEvent } from "react"
 import { useCallback, useEffect, useState } from "react"
 import { supabase } from "../../../lib/supabaseClient"
+import { compressImage } from "@/lib/compressImage"
 import { useParams, useRouter } from "next/navigation"
 import {
   LineChart,
@@ -670,10 +671,21 @@ export default function ProfilePage() {
 
       const fileExt = file.name.split(".").pop() || "png"
       const fileName = `${currentUserId}/${Date.now()}.${fileExt}`
+      let uploadFile: File = file
+      if (file.type.startsWith("image/")) {
+        try {
+          const compressed = await compressImage(file)
+          uploadFile = new File([compressed], file.name, {
+            type: "image/jpeg",
+          })
+        } catch (err) {
+          console.warn("Compression failed, using original image", err)
+        }
+      }
 
       const { error: uploadError } = await supabase.storage
         .from("stories")
-        .upload(fileName, file, { upsert: true })
+        .upload(fileName, uploadFile, { upsert: true })
 
       if (uploadError) {
         console.error(uploadError)
