@@ -84,6 +84,9 @@ export default function SettingsPage() {
   const [savingDrawdownLimit, setSavingDrawdownLimit] = useState(false)
   const [savingAccountPrivacy, setSavingAccountPrivacy] = useState(false)
   const [savingPassword, setSavingPassword] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [confirmText, setConfirmText] = useState("")
   const [manageLoading, setManageLoading] = useState(false)
   const [checkoutLoading, setCheckoutLoading] = useState(false)
   const [popupMessage, setPopupMessage] = useState("")
@@ -413,6 +416,64 @@ export default function SettingsPage() {
     setPopupMessage("Password updated successfully")
     setPopupType("success")
     setShowPopup(true)
+  }
+
+  async function handleDeleteAccount() {
+    setDeleting(true)
+
+    try {
+      const session = await supabase.auth.getSession()
+
+      const res = await fetch("/api/delete-account", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.data.session?.access_token}`,
+        },
+      })
+
+      if (!res.ok) {
+        throw new Error("Failed")
+      }
+
+      await supabase.auth.signOut()
+      window.location.href = "/login"
+    } catch (err) {
+      console.error(err)
+      alert("Failed to delete account")
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  async function handleExportData() {
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
+      const res = await fetch("/api/export-data", {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+      })
+
+      if (!res.ok) throw new Error("Failed")
+
+      const blob = await res.blob()
+      const url = window.URL.createObjectURL(blob)
+
+      const a = document.createElement("a")
+      a.href = url
+      a.download = "tradetrax_data.csv"
+      a.click()
+
+      window.URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error(err)
+      alert("Failed to export data")
+    }
   }
 
   async function startTraxProCheckout() {
@@ -1013,6 +1074,24 @@ export default function SettingsPage() {
                   >
                     {savingPassword ? "Updating…" : "Update password"}
                   </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setConfirmText("")
+                      setShowDeleteConfirm(true)
+                    }}
+                    className="mt-6 rounded-lg bg-red-500/10 px-5 py-2 text-red-400 hover:bg-red-500/20"
+                  >
+                    Delete Account
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleExportData()}
+                    className="mt-4 rounded-lg bg-blue-500/10 px-4 py-2 text-blue-400 hover:bg-blue-500/20"
+                  >
+                    Export My Data (CSV)
+                  </button>
                 </section>
               </div>
             )}
@@ -1114,6 +1193,49 @@ export default function SettingsPage() {
             : "Affiliate application"
         }
       />
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="w-full max-w-md rounded-xl bg-[#0f172a] p-6">
+            <h2 className="mb-2 text-lg font-semibold text-red-400">Delete Account</h2>
+            <p className="mb-4 text-sm text-gray-400">
+              This action is permanent and cannot be undone.
+            </p>
+            <input
+              type="text"
+              placeholder='Type "DELETE" to confirm'
+              value={confirmText}
+              onChange={(e) => setConfirmText(e.target.value)}
+              className="mt-3 w-full rounded-lg border border-white/10 bg-[#020617] px-3 py-2 text-sm"
+            />
+
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDeleteConfirm(false)
+                  setConfirmText("")
+                }}
+                className="px-3 py-1 text-gray-400"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={() => void handleDeleteAccount()}
+                disabled={confirmText !== "DELETE" || deleting}
+                className={`rounded-lg px-4 py-2 ${
+                  confirmText === "DELETE"
+                    ? "bg-red-500 text-white"
+                    : "cursor-not-allowed bg-gray-700 text-gray-400"
+                }`}
+              >
+                {deleting ? "Deleting..." : "Confirm Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {showPopup && (
         <div className="fixed inset-0 flex items-center justify-center z-50">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
