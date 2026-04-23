@@ -505,9 +505,20 @@ export default function SettingsPage() {
         .eq("id", user.id)
         .single()
 
-      await createUserRoom(user.id, profile?.username || "user")
+      const room = await createUserRoom(user.id, profile?.username || "user")
+      const slug =
+        room && typeof room === "object" && "slug" in room
+          ? String((room as { slug?: string }).slug ?? "").trim()
+          : ""
 
-      alert("Trade Room created!")
+      if (!slug) {
+        alert("Trade Room created!")
+        return
+      }
+
+      router.push(
+        `/trade-rooms?room=${encodeURIComponent(slug)}&setup=true`
+      )
     } catch (err) {
       console.error(err)
       alert("Failed to create room")
@@ -1113,15 +1124,6 @@ export default function SettingsPage() {
                     className="mt-4 w-full rounded-xl bg-gradient-to-r from-blue-500 to-emerald-500 py-3 font-semibold disabled:opacity-50"
                   >
                     {savingPassword ? "Updating…" : "Update password"}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => void handleCreateRoom()}
-                    disabled={creatingRoom}
-                    className="mt-4 rounded-lg bg-purple-500/10 px-4 py-2 text-purple-400 hover:bg-purple-500/20 disabled:opacity-50"
-                  >
-                    {creatingRoom ? "Creating..." : "Create My Trade Room"}
                   </button>
 
                   <div className="mt-6 flex gap-3">

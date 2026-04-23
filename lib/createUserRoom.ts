@@ -30,5 +30,15 @@ export async function createUserRoom(userId: string, username: string) {
     throw sectionsError
   }
 
+  const { error: memberError } = await supabase.from("room_members").insert({
+    room_id: data.id,
+    user_id: userId,
+  })
+
+  if (memberError) {
+    console.error("Create room_members error:", memberError)
+    throw memberError
+  }
+
   return data
 }

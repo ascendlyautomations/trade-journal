@@ -32,6 +32,7 @@ import {
 } from "../../../lib/achievements"
 import { formatPnlCurrency } from "../../../lib/formatMoney"
 import { formatEST } from "@/lib/formatEST"
+import { createUserRoom } from "@/lib/createUserRoom"
 
 function postImageSrc(imageUrl: string | null | undefined): string | null {
   const raw = imageUrl != null ? String(imageUrl).trim() : ""
@@ -585,6 +586,7 @@ export default function ProfilePage() {
   const [isFollowing, setIsFollowing] = useState(false)
   const [followBusy, setFollowBusy] = useState(false)
   const [messageBusy, setMessageBusy] = useState(false)
+  const [creatingRoom, setCreatingRoom] = useState(false)
   const [userRoom, setUserRoom] = useState<any>(null)
   const [showFollowers, setShowFollowers] = useState(false)
   const [showFollowing, setShowFollowing] = useState(false)
@@ -964,6 +966,7 @@ export default function ProfilePage() {
       .from("rooms")
       .select("id, name, slug")
       .eq("owner_user_id", prof.id)
+      .eq("show_on_profile", true)
       .maybeSingle()
 
     setUserRoom(room)
@@ -1112,6 +1115,43 @@ export default function ProfilePage() {
       router.push(`/messages/${convo.id}`)
     } finally {
       setMessageBusy(false)
+    }
+  }
+
+  async function handleCreateRoom() {
+    setCreatingRoom(true)
+
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user) return
+
+      const { data: existing } = await supabase
+        .from("rooms")
+        .select("id")
+        .eq("owner_user_id", user.id)
+        .maybeSingle()
+
+      if (existing) {
+        router.push(`/trade-rooms?room=${existing.id}`)
+        return
+      }
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("username")
+        .eq("id", user.id)
+        .single()
+
+      const room = await createUserRoom(user.id, profile?.username || "user")
+
+      router.push(`/trade-rooms?room=${room.slug}&setup=true`)
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setCreatingRoom(false)
     }
   }
 
@@ -1591,13 +1631,22 @@ export default function ProfilePage() {
                           </h2>
 
                           {currentUserId === profile.id && (
-                            <button
-                              type="button"
-                              onClick={() => router.push("/settings")}
-                              className="rounded-md bg-gray-600 px-2 py-1 text-xs text-gray-100 hover:bg-gray-500 md:bg-white/10 md:px-3 md:text-sm md:hover:bg-white/20"
-                            >
-                              Settings
-                            </button>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => router.push("/settings")}
+                                className="rounded-md bg-gray-600 px-2 py-1 text-xs text-gray-100 hover:bg-gray-500 md:bg-white/10 md:px-3 md:text-sm md:hover:bg-white/20"
+                              >
+                                Settings
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void handleCreateRoom()}
+                                className="rounded-md bg-green-500/10 px-3 py-1.5 text-sm text-green-400 hover:bg-green-500/20"
+                              >
+                                {creatingRoom ? "Creating..." : "Create Trade Room"}
+                              </button>
+                            </div>
                           )}
                         </div>
 

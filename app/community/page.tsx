@@ -21,12 +21,16 @@ type Room = {
   name?: string | null
   description?: string | null
   slug?: string | null
+  image_url?: string | null
+  owner_user_id?: string | null
+  show_on_profile?: boolean | null
 }
 
 type RoomMessage = {
   id: string
   room_id: string
   user_id: string
+  pinned?: boolean | null
   section_id?: string | null
   type?: string | null
   trade_id?: string | null
@@ -35,6 +39,7 @@ type RoomMessage = {
   created_at: string
   trades?: {
     id?: string
+    ticker?: string | null
     image_url?: string | null
     pnl?: number | string | null
     rr?: number | string | null
@@ -67,11 +72,13 @@ function CommunityContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const roomParam = searchParams.get("room")
+  const setupMode = searchParams.get("setup") === "true"
   const [user, setUser] = useState<any>(null)
   const [username, setUsername] = useState("User")
   const [rooms, setRooms] = useState<Room[]>([])
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null)
   const [messages, setMessages] = useState<RoomMessage[]>([])
+  const [pinnedMessages, setPinnedMessages] = useState<RoomMessage[]>([])
   const [loadingRooms, setLoadingRooms] = useState(true)
   const [loadingMessages, setLoadingMessages] = useState(false)
   const [draft, setDraft] = useState("")
@@ -83,6 +90,21 @@ function CommunityContent() {
   const [sections, setSections] = useState<any[]>([])
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null)
   const [isOwner, setIsOwner] = useState(false)
+  const [activeMembers, setActiveMembers] = useState<number>(0)
+  const [leftMembers, setLeftMembers] = useState<number>(0)
+  const [showOnProfile, setShowOnProfile] = useState(true)
+  const [roomName, setRoomName] = useState("")
+  const [inviteOrigin, setInviteOrigin] = useState("")
+  const [roomImage, setRoomImage] = useState<string | null>(null)
+  const [inviteTargetRoom, setInviteTargetRoom] = useState<Room | null>(null)
+  const [showRoomSettings, setShowRoomSettings] = useState(false)
+  const [showInviteModal, setShowInviteModal] = useState(false)
+  const [showCreateSectionModal, setShowCreateSectionModal] = useState(false)
+  const [newSectionName, setNewSectionName] = useState("")
+  const [newSectionAllowChat, setNewSectionAllowChat] = useState(true)
+  const [editingSection, setEditingSection] = useState<any>(null)
+  const [editSectionName, setEditSectionName] = useState("")
+  const [editAllowChat, setEditAllowChat] = useState(true)
   const typingChannelRef = useRef<any>(null)
   const messagesScrollRef = useRef<HTMLDivElement | null>(null)
   const sectionFilterRef = useRef<{ len: number; id: string | null }>({
@@ -95,6 +117,68 @@ function CommunityContent() {
     () => rooms.find((r) => r.id === selectedRoomId) ?? null,
     [rooms, selectedRoomId]
   )
+
+  const inviteRoomKey = useMemo(() => {
+    if (!selectedRoom) return ""
+    const rawSlug = selectedRoom.slug
+    if (rawSlug != null && String(rawSlug).trim() !== "")
+      return String(rawSlug)
+    return selectedRoom.name ? String(selectedRoom.name) : ""
+  }, [selectedRoom])
+
+  const inviteLinkDisplay = useMemo(() => {
+    if (!inviteOrigin || !inviteRoomKey) return ""
+    return `${inviteOrigin}/trade-rooms?room=${encodeURIComponent(inviteRoomKey)}`
+  }, [inviteOrigin, inviteRoomKey])
+  const inviteLink =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/trade-rooms?room=${selectedRoom?.slug ?? ""}`
+      : ""
+
+  const needsJoin = useMemo(() => {
+    if (!inviteTargetRoom || !selectedRoomId) return false
+    return (
+      inviteTargetRoom.id === selectedRoomId &&
+      !rooms.some((r) => r.id === selectedRoomId)
+    )
+  }, [inviteTargetRoom, selectedRoomId, rooms])
+
+  const currentSection = useMemo(
+    () => sections.find((s) => s.id === selectedSectionId) ?? null,
+    [sections, selectedSectionId]
+  )
+
+  const canPostInRoom = useMemo(() => {
+    if (!selectedRoomId || needsJoin) return false
+    if (isOwner) return true
+    if (sections.length === 0) return true
+    return currentSection?.allow_members_chat !== false
+  }, [
+    selectedRoomId,
+    needsJoin,
+    isOwner,
+    sections.length,
+    currentSection?.allow_members_chat,
+  ])
+
+  useEffect(() => {
+    setInviteOrigin(typeof window !== "undefined" ? window.location.origin : "")
+  }, [])
+
+  useEffect(() => {
+    setRoomName(selectedRoom?.name ?? "")
+  }, [selectedRoom?.name, selectedRoom?.id])
+
+  useEffect(() => {
+    setShowOnProfile(selectedRoom?.show_on_profile ?? true)
+  }, [selectedRoom?.show_on_profile, selectedRoom?.id])
+
+  useEffect(() => {
+    const url = selectedRoom?.image_url
+    setRoomImage(
+      url != null && String(url).trim() !== "" ? String(url) : null
+    )
+  }, [selectedRoom?.image_url, selectedRoom?.id])
 
   useEffect(() => {
     sectionsRef.current = sections
@@ -135,19 +219,57 @@ function CommunityContent() {
     void checkOwner()
   }, [selectedRoomId])
 
+  useEffect(() => {
+    if (!selectedRoomId) {
+      setActiveMembers(0)
+      setLeftMembers(0)
+      return
+    }
+
+    void loadMemberStats(selectedRoomId)
+  }, [selectedRoomId])
+
+  function applySectionFiltersToQuery(
+    q: any,
+    roomId: string,
+    sectionsList: { id: string; name?: string | null }[],
+    activeSectionId: string | null
+  ) {
+    let next = q.eq("room_id", roomId)
+
+    if (sectionsList.length > 0) {
+      if (activeSectionId) {
+        const sec = sectionsList.find((s) => s.id === activeSectionId)
+        const nameLower = String(sec?.name ?? "")
+          .trim()
+          .toLowerCase()
+        if (nameLower === "general") {
+          next = next.or(
+            `section_id.eq.${activeSectionId},section_id.is.null`
+          )
+        } else {
+          next = next.eq("section_id", activeSectionId)
+        }
+      } else {
+        next = next.is("section_id", null)
+      }
+    }
+
+    return next
+  }
+
   async function fetchRoomMessages(
     roomId: string,
     sectionsList: { id: string; name?: string | null }[],
     activeSectionId: string | null
   ) {
     setLoadingMessages(true)
-    let q = supabase
-      .from("room_messages")
-      .select(
-        `
+
+    const selectShape = `
         *,
         trades (
           id,
+          ticker,
           image_url,
           pnl,
           rr
@@ -157,42 +279,79 @@ function CommunityContent() {
           avatar_url
         )
       `
-      )
-      .eq("room_id", roomId)
+
+    let pinnedQ = supabase
+      .from("room_messages")
+      .select(selectShape)
+      .eq("pinned", true)
+      .order("pinned", { ascending: false })
       .order("created_at", { ascending: true })
 
-    if (sectionsList.length > 0) {
-      if (activeSectionId) {
-        const sec = sectionsList.find((s) => s.id === activeSectionId)
-        const nameLower = String(sec?.name ?? "")
-          .trim()
-          .toLowerCase()
-        if (nameLower === "general") {
-          q = q.or(
-            `section_id.eq.${activeSectionId},section_id.is.null`
-          )
-        } else {
-          q = q.eq("section_id", activeSectionId)
-        }
-      } else {
-        q = q.is("section_id", null)
-      }
+    pinnedQ = applySectionFiltersToQuery(
+      pinnedQ,
+      roomId,
+      sectionsList,
+      activeSectionId
+    )
+
+    let mainQ = supabase
+      .from("room_messages")
+      .select(selectShape)
+      .eq("pinned", false)
+      .order("pinned", { ascending: false })
+      .order("created_at", { ascending: true })
+
+    mainQ = applySectionFiltersToQuery(
+      mainQ,
+      roomId,
+      sectionsList,
+      activeSectionId
+    )
+
+    const [pinnedRes, mainRes] = await Promise.all([pinnedQ, mainQ])
+
+    if (pinnedRes.error) {
+      console.error(
+        "room_messages pinned fetch:",
+        JSON.stringify(pinnedRes.error, null, 2)
+      )
+      setPinnedMessages([])
+    } else {
+      setPinnedMessages((pinnedRes.data || []) as RoomMessage[])
     }
 
-    const { data, error } = await q
-
-    if (error) {
+    if (mainRes.error) {
       console.error(
         "room_messages fetch FULL:",
-        JSON.stringify(error, null, 2)
+        JSON.stringify(mainRes.error, null, 2)
       )
       setMessages([])
+      setPinnedMessages([])
       setLoadingMessages(false)
       return
     }
 
-    setMessages((data || []) as RoomMessage[])
+    setMessages((mainRes.data || []) as RoomMessage[])
     setLoadingMessages(false)
+  }
+
+  async function handleTogglePin(
+    messageId: string,
+    isPinned: boolean | null | undefined
+  ) {
+    const { error } = await supabase
+      .from("room_messages")
+      .update({ pinned: !isPinned })
+      .eq("id", messageId)
+
+    if (error) {
+      console.error("handleTogglePin:", error)
+      return
+    }
+
+    if (selectedRoomId) {
+      await fetchRoomMessages(selectedRoomId, sections, selectedSectionId)
+    }
   }
 
   async function loadSections(roomId: string) {
@@ -214,8 +373,8 @@ function CommunityContent() {
     return { list, activeSectionId: null as string | null }
   }
 
-  async function handleCreateSection(name: string) {
-    const trimmed = name.trim()
+  async function handleCreateSection() {
+    const trimmed = newSectionName.trim()
     if (!trimmed || !selectedRoomId) return
 
     try {
@@ -225,6 +384,7 @@ function CommunityContent() {
           room_id: selectedRoomId,
           name: trimmed,
           position: sections.length + 1,
+          allow_members_chat: newSectionAllowChat,
         })
         .select()
         .single()
@@ -233,31 +393,223 @@ function CommunityContent() {
       if (newSection) {
         setSections((prev) => [...prev, newSection])
       }
+
+      setNewSectionName("")
+      setNewSectionAllowChat(true)
+      setShowCreateSectionModal(false)
     } catch (err) {
       console.error(err)
       alert("Failed to create channel")
     }
   }
 
-  async function handleRenameSection(id: string, name: string) {
-    const trimmed = name.trim()
-    if (!trimmed) return
+  async function handleSaveSectionEdit() {
+    if (!editingSection) return
+
+    const trimmed = editSectionName.trim()
+    if (!trimmed) {
+      alert("Channel name cannot be empty")
+      return
+    }
 
     try {
       const { error } = await supabase
         .from("room_sections")
-        .update({ name: trimmed })
-        .eq("id", id)
+        .update({
+          name: trimmed,
+          allow_members_chat: editAllowChat,
+        })
+        .eq("id", editingSection.id)
 
       if (error) throw error
 
       setSections((prev) =>
-        prev.map((s) => (s.id === id ? { ...s, name: trimmed } : s))
+        prev.map((s) =>
+          s.id === editingSection.id
+            ? {
+                ...s,
+                name: trimmed,
+                allow_members_chat: editAllowChat,
+              }
+            : s
+        )
       )
+
+      setEditingSection(null)
     } catch (err) {
       console.error(err)
-      alert("Failed to rename channel")
+      alert("Failed to update channel")
     }
+  }
+
+  async function handleRenameRoom(opts?: { closeSettings?: boolean }) {
+    if (!selectedRoomId) return
+    const trimmed = roomName.trim()
+
+    try {
+      const { error } = await supabase
+        .from("rooms")
+        .update({
+          name: trimmed,
+          show_on_profile: showOnProfile,
+        })
+        .eq("id", selectedRoomId)
+
+      if (error) throw error
+
+      setRooms((prev) =>
+        prev.map((r) =>
+          r.id === selectedRoomId
+            ? { ...r, name: trimmed, show_on_profile: showOnProfile }
+            : r
+        )
+      )
+      if (opts?.closeSettings) setShowRoomSettings(false)
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  async function loadMemberStats(roomId: string) {
+    const { count: active } = await supabase
+      .from("room_members")
+      .select("*", { count: "exact", head: true })
+      .eq("room_id", roomId)
+      .is("left_at", null)
+
+    const { count: total } = await supabase
+      .from("room_members")
+      .select("*", { count: "exact", head: true })
+      .eq("room_id", roomId)
+
+    setActiveMembers(active || 0)
+    setLeftMembers((total || 0) - (active || 0))
+  }
+
+  async function loadMemberRooms(userId: string): Promise<Room[]> {
+    const { data: memberships, error: memErr } = await supabase
+      .from("room_members")
+      .select("room_id")
+      .eq("user_id", userId)
+      .is("left_at", null)
+
+    if (memErr) {
+      console.error("room_members fetch:", memErr)
+      return []
+    }
+
+    const roomIds = [
+      ...new Set(
+        (memberships ?? []).map((m: { room_id: string }) => m.room_id)
+      ),
+    ]
+
+    if (roomIds.length === 0) {
+      return []
+    }
+
+    const { data, error } = await supabase
+      .from("rooms")
+      .select("id, name, description, slug, image_url, owner_user_id, show_on_profile")
+      .in("id", roomIds)
+      .order("name", { ascending: true })
+
+    if (error) {
+      console.error("rooms fetch:", error)
+      return []
+    }
+
+    return (data ?? []) as Room[]
+  }
+
+  async function joinRoom(roomId: string) {
+    const {
+      data: { user: authUser },
+    } = await supabase.auth.getUser()
+
+    if (!authUser) return
+
+    const { error } = await supabase.from("room_members").insert({
+      room_id: roomId,
+      user_id: authUser.id,
+    })
+
+    if (error) {
+      console.error("joinRoom:", error)
+      return
+    }
+
+    const nextRooms = await loadMemberRooms(authUser.id)
+    setRooms(nextRooms)
+    setInviteTargetRoom(null)
+    setSelectedRoomId(roomId)
+  }
+
+  async function handleLeaveRoom() {
+    const {
+      data: { user: authUser },
+    } = await supabase.auth.getUser()
+
+    if (!authUser || !selectedRoomId) return
+
+    const { error } = await supabase
+      .from("room_members")
+      .update({ left_at: new Date().toISOString() })
+      .eq("room_id", selectedRoomId)
+      .eq("user_id", authUser.id)
+      .is("left_at", null)
+
+    if (error) {
+      console.error("handleLeaveRoom:", error)
+      return
+    }
+
+    setActiveMembers((prev) => Math.max(0, prev - 1))
+    setLeftMembers((prev) => prev + 1)
+    router.push("/trade-rooms")
+  }
+
+  async function handleRoomImageUpload(file: File) {
+    if (!selectedRoomId) return
+
+    let uploadFile: File = file
+    if (file.type?.startsWith("image/")) {
+      uploadFile = await compressImage(file)
+    }
+
+    const filePath = `room-images/${Date.now()}-${uploadFile.name}`
+
+    const { error: upErr } = await supabase.storage
+      .from("avatars")
+      .upload(filePath, uploadFile)
+
+    if (upErr) {
+      console.error(upErr)
+      return
+    }
+
+    const { data: urlData } = supabase.storage
+      .from("avatars")
+      .getPublicUrl(filePath)
+
+    const publicUrl = urlData.publicUrl
+
+    const { error: updErr } = await supabase
+      .from("rooms")
+      .update({ image_url: publicUrl })
+      .eq("id", selectedRoomId)
+
+    if (updErr) {
+      console.error(updErr)
+      return
+    }
+
+    setRoomImage(publicUrl)
+    setRooms((prev) =>
+      prev.map((r) =>
+        r.id === selectedRoomId ? { ...r, image_url: publicUrl } : r
+      )
+    )
   }
 
   useEffect(() => {
@@ -281,40 +633,71 @@ function CommunityContent() {
         setUsername(profile.username)
       }
 
-      const { data, error } = await supabase
-        .from("rooms")
-        .select("id, name, description, slug")
-        .order("name", { ascending: true })
-
-      if (error) {
-        console.error("rooms fetch:", error)
-        setRooms([])
-        setLoadingRooms(false)
-        return
-      }
-
-      const nextRooms = (data ?? []) as Room[]
+      const nextRooms = await loadMemberRooms(authUser.id)
       setRooms(nextRooms)
       setLoadingRooms(false)
-      if (nextRooms.length > 0) {
+
+      const rp = searchParams.get("room")
+      if (nextRooms.length > 0 && !rp) {
         setSelectedRoomId(nextRooms[0].id)
       }
     }
 
     void init()
-  }, [router])
+  }, [router, searchParams])
 
   useEffect(() => {
-    if (!roomParam || rooms.length === 0) return
+    if (!roomParam || loadingRooms) return
+
+    const decoded = decodeURIComponent(roomParam.trim())
     const match =
-      rooms.find((r) => r.slug === roomParam) ||
-      rooms.find((r) => r.name === roomParam)
-    if (match) setSelectedRoomId(match.id)
-  }, [roomParam, rooms])
+      rooms.find((r) => r.slug === decoded || r.slug === roomParam) ||
+      rooms.find((r) => r.name === decoded || r.name === roomParam)
+
+    if (match) {
+      setSelectedRoomId(match.id)
+      setInviteTargetRoom(null)
+      return
+    }
+
+    let cancelled = false
+
+    ;(async () => {
+      const { data: slugRow } = await supabase
+        .from("rooms")
+        .select("id, name, description, slug, image_url, owner_user_id, show_on_profile")
+        .eq("slug", decoded)
+        .maybeSingle()
+
+      const row =
+        slugRow ??
+        (
+          await supabase
+            .from("rooms")
+            .select("id, name, description, slug, image_url, owner_user_id, show_on_profile")
+            .eq("name", decoded)
+            .maybeSingle()
+        ).data
+
+      if (cancelled) return
+      if (!row) {
+        setInviteTargetRoom(null)
+        return
+      }
+
+      setInviteTargetRoom(row as Room)
+      setSelectedRoomId(row.id)
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [roomParam, rooms, loadingRooms])
 
   useEffect(() => {
-    if (!selectedRoomId) {
+    if (!selectedRoomId || needsJoin) {
       setMessages([])
+      setPinnedMessages([])
       setSections([])
       setSelectedSectionId(null)
       setActiveUsers([])
@@ -332,10 +715,10 @@ function CommunityContent() {
     return () => {
       cancelled = true
     }
-  }, [selectedRoomId])
+  }, [selectedRoomId, needsJoin])
 
   useEffect(() => {
-    if (!selectedRoomId || !user?.id) {
+    if (!selectedRoomId || !user?.id || needsJoin) {
       setActiveUsers([])
       return
     }
@@ -407,10 +790,10 @@ function CommunityContent() {
       cancelled = true
       window.clearInterval(intervalId)
     }
-  }, [selectedRoomId, user?.id])
+  }, [selectedRoomId, user?.id, needsJoin])
 
   useEffect(() => {
-    if (!selectedRoomId) return
+    if (!selectedRoomId || needsJoin) return
 
     const channel = supabase.channel(`room-${selectedRoomId}`)
     channel.on(
@@ -432,6 +815,7 @@ function CommunityContent() {
             id,
             room_id,
             user_id,
+            pinned,
             section_id,
             type,
             trade_id,
@@ -473,6 +857,15 @@ function CommunityContent() {
           return
         }
 
+        if (row.pinned === true) {
+          void fetchRoomMessages(
+            selectedRoomId,
+            sectionsRef.current,
+            sectionFilterRef.current.id
+          )
+          return
+        }
+
         setMessages((prev) => {
           if (prev.some((m) => m.id === data.id)) return prev
           return [...prev, row]
@@ -484,10 +877,10 @@ function CommunityContent() {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [selectedRoomId])
+  }, [selectedRoomId, needsJoin])
 
   useEffect(() => {
-    if (!selectedRoomId || !user?.id) {
+    if (!selectedRoomId || !user?.id || needsJoin) {
       setTypingUsers([])
       return
     }
@@ -518,7 +911,7 @@ function CommunityContent() {
       }
       setTypingUsers([])
     }
-  }, [selectedRoomId, user?.id, username])
+  }, [selectedRoomId, user?.id, username, needsJoin])
 
   // Match Messages (`app/messages/[id]/page.tsx`): scroll only the messages
   // overflow container — never scrollIntoView on inner content, or mobile Safari
@@ -721,13 +1114,66 @@ function CommunityContent() {
 
           <section className="flex min-h-0 w-full min-w-0 flex-col md:flex-1">
             <div className="border-b border-white/10 px-4 py-3">
-              <h2 className="text-base font-medium">
-                {selectedRoom?.name || "Select a room"}
-              </h2>
-              {selectedRoomId ? (
+              {(roomImage ||
+                selectedRoom?.image_url ||
+                inviteTargetRoom?.image_url) && (
+                <img
+                  src={
+                    (roomImage ??
+                      selectedRoom?.image_url ??
+                      inviteTargetRoom?.image_url) ||
+                    ""
+                  }
+                  alt=""
+                  className="mb-2 h-10 w-10 rounded-full object-cover"
+                />
+              )}
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-base font-medium">
+                  {selectedRoom?.name ??
+                    inviteTargetRoom?.name ??
+                    "Select a room"}
+                </h2>
+                {!isOwner && selectedRoomId && !needsJoin ? (
+                  <button
+                    type="button"
+                    onClick={() => void handleLeaveRoom()}
+                    className="ml-2 rounded-md bg-red-500/10 px-3 py-1 text-xs text-red-400 hover:bg-red-500/20"
+                  >
+                    Leave Room
+                  </button>
+                ) : null}
+                {isOwner && selectedRoomId && !needsJoin ? (
+                  <>
+                    <button
+                      type="button"
+                      aria-label="Room settings"
+                      onClick={() => setShowRoomSettings(true)}
+                      className="text-gray-400 hover:text-white"
+                    >
+                      ⚙️
+                    </button>
+                    {isOwner ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowInviteModal(true)}
+                        className="ml-2 text-gray-400 hover:text-green-400"
+                      >
+                        🔗
+                      </button>
+                    ) : null}
+                  </>
+                ) : null}
+              </div>
+              {isOwner && selectedRoomId && !needsJoin ? (
+                <div className="mt-1 text-xs text-gray-400">
+                  {activeMembers} members • {leftMembers} left
+                </div>
+              ) : null}
+              {selectedRoomId && !needsJoin ? (
                 <div className="mt-1 flex items-center">
                   <div className="flex items-center space-x-[-8px]">
-                    {activeUsers.slice(0, 5).map((u) => (
+                    {activeUsers.slice(0, 3).map((u) => (
                       <img
                         key={u.user_id}
                         src={u.profiles?.avatar_url || "/default-avatar.png"}
@@ -736,6 +1182,11 @@ function CommunityContent() {
                       />
                     ))}
                   </div>
+                  {activeUsers.length > 3 ? (
+                    <div className="ml-1 text-xs text-gray-400">
+                      +{activeUsers.length - 3}
+                    </div>
+                  ) : null}
                   <span className="ml-2 text-sm text-gray-400">
                     {activeUsers.length} active traders
                   </span>
@@ -743,16 +1194,126 @@ function CommunityContent() {
               ) : null}
             </div>
 
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col md:flex-row">
+            {setupMode && isOwner && selectedRoomId ? (
+              <div className="border-b border-green-500/15 px-4 pb-4">
+                <div className="rounded-lg border border-green-500/20 bg-green-500/10 p-4">
+                  <h2 className="mb-2 text-lg font-semibold text-green-300">
+                    Set up your Trade Room
+                  </h2>
+
+                  <p className="mb-3 text-sm text-gray-400">
+                    Customize your room, create channels, and share your invite
+                    link.
+                  </p>
+
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="mb-2 block w-full max-w-xs text-sm text-gray-400 file:mr-2 file:rounded-md file:border-0 file:bg-white/10 file:px-2 file:py-1 file:text-gray-200"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      e.target.value = ""
+                      if (file) void handleRoomImageUpload(file)
+                    }}
+                  />
+
+                  <input
+                    type="text"
+                    value={roomName}
+                    onChange={(e) => setRoomName(e.target.value)}
+                    className="mb-2 w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-gray-500"
+                    placeholder="Room name"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => void handleRenameRoom()}
+                    className="rounded-md bg-green-500/20 px-3 py-1 text-sm text-green-200 hover:bg-green-500/30"
+                  >
+                    Save Name
+                  </button>
+
+                  <label className="mt-3 flex items-center gap-2 text-sm text-gray-300">
+                    <input
+                      type="checkbox"
+                      checked={showOnProfile}
+                      onChange={(e) => setShowOnProfile(e.target.checked)}
+                    />
+                    Show on my profile
+                  </label>
+
+                  <p className="mt-1 text-xs text-gray-500">
+                    If off, users can only join via invite link.
+                  </p>
+
+                  <div className="mt-3">
+                    <p className="mb-1 text-xs text-gray-400">Invite link</p>
+
+                    <div className="flex gap-2">
+                      <input
+                        readOnly
+                        value={inviteLinkDisplay}
+                        className="flex-1 rounded border border-white/10 bg-black/30 px-2 py-1 text-xs text-gray-200"
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!inviteLinkDisplay) return
+                          void navigator.clipboard.writeText(inviteLinkDisplay)
+                        }}
+                        className="rounded bg-white/10 px-2 py-1 text-xs text-gray-200 hover:bg-white/15"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!inviteRoomKey) return
+                      router.push(
+                        `/trade-rooms?room=${encodeURIComponent(inviteRoomKey)}`
+                      )
+                    }}
+                    className="mt-3 text-xs text-gray-400 hover:text-white"
+                  >
+                    Done setting up
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            {needsJoin && inviteTargetRoom ? (
+              <div className="flex flex-1 flex-col items-center justify-center px-6 py-16 text-center">
+                <p className="mb-6 max-w-md text-gray-300">
+                  Join{" "}
+                  <span className="font-semibold text-white">
+                    {inviteTargetRoom.name || "this room"}
+                  </span>{" "}
+                  to view channels and messages.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void joinRoom(inviteTargetRoom.id)}
+                  className="rounded-lg bg-green-500/30 px-6 py-3 text-sm font-medium text-green-100 hover:bg-green-500/40"
+                >
+                  Join room
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col md:flex-row">
               {sections.length > 0 ? (
                 <div className="flex max-h-[min(40svh,220px)] shrink-0 flex-col border-b border-white/10 p-2 md:max-h-none md:w-48 md:border-b-0 md:border-r md:border-white/10 md:p-2">
                   <div className="flex max-h-[min(36svh,180px)] flex-row gap-1 overflow-x-auto md:max-h-none md:flex-col md:gap-0 md:overflow-y-auto">
                     {sections.map((section) => (
                       <div
                         key={section.id}
-                        className={`flex w-full min-w-[8rem] items-stretch rounded-md md:min-w-0 ${
+                        className={`flex min-w-[8rem] items-stretch rounded-md md:min-w-0 ${
                           selectedSectionId === section.id
-                            ? "bg-purple-500/20 text-purple-300"
+                            ? "bg-green-500/20 text-green-300"
                             : "text-gray-400"
                         }`}
                       >
@@ -768,22 +1329,21 @@ function CommunityContent() {
                               )
                             }
                           }}
-                          className="min-w-0 flex-1 px-3 py-2 text-left text-sm hover:bg-white/5"
+                          className="min-w-0 flex-1 px-3 py-2 text-left hover:bg-white/5"
                         >
-                          <span className="block truncate"># {section.name}</span>
+                          <span className="block truncate font-medium text-sm">
+                            {section.name}
+                          </span>
                         </button>
                         {isOwner ? (
                           <button
                             type="button"
-                            aria-label="Rename channel"
+                            aria-label="Edit channel"
                             onClick={(e) => {
                               e.stopPropagation()
-                              const newName = prompt(
-                                "Rename channel",
-                                section.name
-                              )
-                              if (!newName) return
-                              void handleRenameSection(section.id, newName)
+                              setEditingSection(section)
+                              setEditSectionName(section.name ?? "")
+                              setEditAllowChat(section.allow_members_chat !== false)
                             }}
                             className="shrink-0 px-2 py-2 text-xs text-gray-500 hover:text-white"
                           >
@@ -796,12 +1356,8 @@ function CommunityContent() {
                   {isOwner && sections.length < 5 ? (
                     <button
                       type="button"
-                      onClick={() => {
-                        const name = prompt("Enter channel name")
-                        if (!name) return
-                        void handleCreateSection(name)
-                      }}
-                      className="mt-2 w-full rounded-md px-3 py-2 text-left text-sm text-purple-400 hover:bg-white/5"
+                      onClick={() => setShowCreateSectionModal(true)}
+                      className="mt-2 w-full rounded-md px-3 py-2 text-left text-sm text-green-400 hover:bg-white/5"
                     >
                       + Add Channel
                     </button>
@@ -817,16 +1373,19 @@ function CommunityContent() {
                 <p className="text-sm text-gray-400">Pick a room to start chatting.</p>
               ) : loadingMessages ? (
                 <p className="text-sm text-gray-400">Loading messages...</p>
-              ) : messages.length === 0 ? (
-                <p className="text-sm text-gray-400">No messages yet.</p>
               ) : (
+                <>
+                  {messages.length === 0 && pinnedMessages.length === 0 ? (
+                    <p className="text-sm text-gray-400">No messages yet.</p>
+                  ) : null}
+                  {messages.length > 0 ? (
                 <div className="space-y-3">
                   {messages.map((msg) => (
                     <div key={msg.id} className="rounded-xl bg-white/5 p-3">
-                      <div className="flex items-center gap-2 mb-1">
+                      <div className="mb-1 flex flex-wrap items-center gap-2">
                         <img
                           src={msg.profiles?.avatar_url || "/default-avatar.png"}
-                          className="w-6 h-6 rounded-full"
+                          className="h-6 w-6 shrink-0 rounded-full"
                           alt=""
                         />
                         <span className="text-sm font-semibold">
@@ -835,17 +1394,30 @@ function CommunityContent() {
                         <span className="text-xs text-gray-400">
                           {formatEST(String(msg.created_at ?? ""))}
                         </span>
+                        {isOwner ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void handleTogglePin(msg.id, msg.pinned)
+                            }
+                            className={`text-xs ml-2 ${
+                              msg.pinned ? "text-yellow-400" : "text-gray-400"
+                            }`}
+                          >
+                            📌
+                          </button>
+                        ) : null}
                       </div>
 
                       <div className="text-sm">
                         {msg.type === "image" ? (
                           <img
                             src={msg.image_url || ""}
-                            className="rounded max-w-xs mt-1"
+                            className="mt-1 max-w-xs rounded"
                             alt=""
                           />
                         ) : msg.type === "trade" && msg.trades ? (
-                          <div className="bg-white/5 p-2 rounded mt-1 max-w-xs">
+                          <div className="mt-1 rounded bg-white/5 p-2 max-w-xs">
                             {tradeImageSrc(msg.trades.image_url) ? (
                               <img
                                 src={tradeImageSrc(msg.trades.image_url) || ""}
@@ -853,7 +1425,7 @@ function CommunityContent() {
                                 alt=""
                               />
                             ) : null}
-                            <p className="text-xs mt-1">
+                            <p className="mt-1 text-xs">
                               PnL: {msg.trades.pnl ?? "—"} | RR: {msg.trades.rr ?? "—"}
                             </p>
                           </div>
@@ -864,37 +1436,305 @@ function CommunityContent() {
                     </div>
                   ))}
                 </div>
+                  ) : null}
+                  {pinnedMessages.length > 0 ? (
+                    <div className="mt-3 rounded-lg border border-yellow-500/20 bg-yellow-500/10 p-3">
+                      <p className="mb-2 text-xs text-yellow-400">Pinned</p>
+
+                      <div className="space-y-2">
+                        {pinnedMessages.map((msg) => (
+                          <div key={msg.id} className="rounded-lg bg-black/20 p-2">
+                            <div className="mb-1 flex items-center justify-between gap-2">
+                              <p className="text-xs text-gray-400">
+                                {msg.profiles?.username || "User"}
+                              </p>
+                              {isOwner ? (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    void handleTogglePin(msg.id, msg.pinned)
+                                  }
+                                  className={`shrink-0 text-xs ${
+                                    msg.pinned ? "text-yellow-400" : "text-gray-400"
+                                  }`}
+                                >
+                                  📌
+                                </button>
+                              ) : null}
+                            </div>
+                            <div className="text-sm text-white">
+                              {msg.type === "image" ? (
+                                <img
+                                  src={msg.image_url || ""}
+                                  className="mt-1 max-h-24 rounded"
+                                  alt=""
+                                />
+                              ) : msg.type === "trade" && msg.trades ? (
+                                <span>
+                                  Trade · {msg.trades.ticker ?? "—"} · PnL{" "}
+                                  {msg.trades.pnl ?? "—"}
+                                </span>
+                              ) : (
+                                <span className="break-words">{msg.content}</span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </>
               )}
               </div>
-            </div>
+                </div>
 
-            <DmStyleComposer
-              value={draft}
-              onChange={(v) => {
-                setDraft(v)
-                sendTyping()
-              }}
-              onSend={() => void sendMessage()}
-              placeholder={
-                selectedRoomId ? "Message room..." : "Select a room first"
-              }
-              textDisabled={!selectedRoomId}
-              sendDisabled={!selectedRoomId || !draft.trim()}
-              onImageChange={(e) => void handleImageUpload(e)}
-              imageDisabled={!selectedRoomId}
-              onTradeClick={() => setSelectTrade(true)}
-              tradeDisabled={!selectedRoomId}
-              beforeRow={
-                typingUsers.length > 0 ? (
-                  <p className="text-xs text-gray-400">
-                    {typingUsers.join(", ")} typing...
-                  </p>
-                ) : null
-              }
-            />
+                {selectedRoomId &&
+                !needsJoin &&
+                !canPostInRoom &&
+                !isOwner ? (
+                  <div className="p-3 text-sm text-gray-400">
+                    Only the room owner can post in this section.
+                  </div>
+                ) : (
+                  <DmStyleComposer
+                    value={draft}
+                    onChange={(v) => {
+                      setDraft(v)
+                      sendTyping()
+                    }}
+                    onSend={() => void sendMessage()}
+                    placeholder={
+                      !selectedRoomId
+                        ? "Select a room first"
+                        : needsJoin
+                          ? "Join this room to chat"
+                          : "Message room..."
+                    }
+                    textDisabled={!canPostInRoom}
+                    sendDisabled={!canPostInRoom || !draft.trim()}
+                    onImageChange={(e) => void handleImageUpload(e)}
+                    imageDisabled={!canPostInRoom}
+                    onTradeClick={() => setSelectTrade(true)}
+                    tradeDisabled={!canPostInRoom}
+                    beforeRow={
+                      typingUsers.length > 0 ? (
+                        <p className="text-xs text-gray-400">
+                          {typingUsers.join(", ")} typing...
+                        </p>
+                      ) : null
+                    }
+                  />
+                )}
+              </>
+            )}
           </section>
         </div>
       </div>
+
+      {showCreateSectionModal ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setShowCreateSectionModal(false)}
+          role="presentation"
+        >
+          <div
+            className="w-[350px] rounded-lg bg-[#0b1f3a] p-6 text-white shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="mb-3 text-lg font-semibold">Create Channel</h2>
+
+            <input
+              type="text"
+              value={newSectionName}
+              onChange={(e) => setNewSectionName(e.target.value)}
+              className="mb-3 w-full rounded border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-gray-500"
+              placeholder="Channel name"
+            />
+
+            <label className="mb-4 flex cursor-pointer items-center gap-2 text-sm text-gray-300">
+              <input
+                type="checkbox"
+                className="rounded border-white/20 bg-black/30"
+                checked={newSectionAllowChat}
+                onChange={(e) => setNewSectionAllowChat(e.target.checked)}
+              />
+              Open discussion
+            </label>
+
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowCreateSectionModal(false)}
+                className="text-sm text-gray-400 hover:text-white"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={() => void handleCreateSection()}
+                className="rounded bg-green-500/20 px-4 py-2 text-sm text-white hover:bg-green-500/30"
+              >
+                Create
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {editingSection ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setEditingSection(null)}
+          role="presentation"
+        >
+          <div
+            className="w-[350px] rounded-lg bg-[#0b1f3a] p-6 text-white shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="mb-3 text-lg font-semibold">Edit Channel</h2>
+
+            <input
+              type="text"
+              value={editSectionName}
+              onChange={(e) => setEditSectionName(e.target.value)}
+              className="mb-3 w-full rounded border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-gray-500"
+              placeholder="Channel name"
+            />
+
+            <label className="mb-4 flex cursor-pointer items-center gap-2 text-sm text-gray-300">
+              <input
+                type="checkbox"
+                className="rounded border-white/20 bg-black/30"
+                checked={editAllowChat}
+                onChange={(e) => setEditAllowChat(e.target.checked)}
+              />
+              Allow members to chat
+            </label>
+
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setEditingSection(null)}
+                className="text-sm text-gray-400 hover:text-white"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={() => void handleSaveSectionEdit()}
+                className="rounded bg-green-500/20 px-4 py-2 text-sm text-green-100 hover:bg-green-500/30"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showInviteModal ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setShowInviteModal(false)}
+          role="presentation"
+        >
+          <div
+            className="w-[320px] rounded-lg bg-[#0b1f3a] p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="mb-3 text-lg text-white">Invite Link</h2>
+
+            <input
+              readOnly
+              value={inviteLink}
+              className="mb-3 w-full rounded border border-white/10 bg-black/30 px-2 py-1 text-xs text-gray-200"
+            />
+
+            <div className="flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!inviteLink) return
+                  void navigator.clipboard.writeText(inviteLink)
+                }}
+                className="rounded bg-green-500/20 px-3 py-1 text-xs text-green-400 hover:bg-green-500/30"
+              >
+                Copy
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowInviteModal(false)}
+                className="text-xs text-gray-400"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showRoomSettings && isOwner && selectedRoomId ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setShowRoomSettings(false)}
+          role="presentation"
+        >
+          <div
+            className="w-full max-w-[400px] rounded-lg bg-[#0b1f3a] p-6 text-white shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="mb-3 text-lg font-semibold">Room Settings</h2>
+
+            <input
+              type="text"
+              value={roomName}
+              onChange={(e) => setRoomName(e.target.value)}
+              className="mb-3 w-full rounded border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-gray-500"
+              placeholder="Room name"
+            />
+
+            <input
+              type="file"
+              accept="image/*"
+              className="mb-3 block w-full text-sm text-gray-400 file:mr-2 file:rounded-md file:border-0 file:bg-white/10 file:px-2 file:py-1 file:text-gray-200"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                e.target.value = ""
+                if (file) void handleRoomImageUpload(file)
+              }}
+            />
+
+            <label className="mt-3 flex items-center gap-2 text-sm text-gray-300">
+              <input
+                type="checkbox"
+                checked={showOnProfile}
+                onChange={(e) => setShowOnProfile(e.target.checked)}
+              />
+              Show on my profile
+            </label>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void handleRenameRoom({ closeSettings: true })}
+                className="rounded bg-green-500/20 px-4 py-2 text-sm text-green-100 hover:bg-green-500/30"
+              >
+                Save Changes
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowRoomSettings(false)}
+                className="text-sm text-gray-400 hover:text-white"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {selectTrade ? (
         <div
