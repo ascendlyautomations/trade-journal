@@ -585,6 +585,7 @@ export default function ProfilePage() {
   const [isFollowing, setIsFollowing] = useState(false)
   const [followBusy, setFollowBusy] = useState(false)
   const [messageBusy, setMessageBusy] = useState(false)
+  const [userRoom, setUserRoom] = useState<any>(null)
   const [showFollowers, setShowFollowers] = useState(false)
   const [showFollowing, setShowFollowing] = useState(false)
   const [followersModalUsers, setFollowersModalUsers] = useState<any[]>([])
@@ -933,6 +934,7 @@ export default function ProfilePage() {
 
     if (!prof || error) {
       setProfile(null)
+      setUserRoom(null)
       setTrades([])
       setPage(0)
       setHasMore(false)
@@ -957,6 +959,14 @@ export default function ProfilePage() {
 
     setProfile(prof)
     setIsFollowing(following)
+
+    const { data: room } = await supabase
+      .from("rooms")
+      .select("id, name, slug")
+      .eq("owner_user_id", prof.id)
+      .maybeSingle()
+
+    setUserRoom(room)
 
     const { count: followersN } = await supabase
       .from("followers")
@@ -1617,6 +1627,19 @@ export default function ProfilePage() {
                           </div>
                         )}
                       </div>
+
+                      {userRoom && (userRoom.slug || userRoom.name) ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const q = String(userRoom.slug ?? userRoom.name ?? "")
+                            window.location.href = `/trade-rooms?room=${encodeURIComponent(q)}`
+                          }}
+                          className="mt-3 rounded-lg bg-purple-500/10 px-4 py-2 text-purple-400 hover:bg-purple-500/20"
+                        >
+                          View Trade Room
+                        </button>
+                      ) : null}
                     </div>
 
                   {profile.name && profile.name !== profile.username ? (

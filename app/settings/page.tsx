@@ -18,6 +18,7 @@ import {
   parseAffiliateConnectRow,
   type AffiliateConnectRow,
 } from "@/lib/affiliateStripeConnect"
+import { createUserRoom } from "@/lib/createUserRoom"
 
 type TabId = "profile" | "affiliate" | "account" | "subscription"
 
@@ -96,6 +97,7 @@ export default function SettingsPage() {
   const [newPassword, setNewPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [showAffiliateModal, setShowAffiliateModal] = useState(false)
+  const [creatingRoom, setCreatingRoom] = useState(false)
   const [latestApp, setLatestApp] = useState<AffiliateApplicationRow | null>(null)
   const [affiliateConnectRow, setAffiliateConnectRow] = useState<AffiliateConnectRow | null>(null)
 
@@ -473,6 +475,44 @@ export default function SettingsPage() {
     } catch (err) {
       console.error(err)
       alert("Failed to export data")
+    }
+  }
+
+  async function handleCreateRoom() {
+    setCreatingRoom(true)
+
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user) throw new Error("Not logged in")
+
+      const { data: existing } = await supabase
+        .from("rooms")
+        .select("id, slug")
+        .eq("owner_user_id", user.id)
+        .maybeSingle()
+
+      if (existing) {
+        alert("You already have a Trade Room")
+        return
+      }
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("username")
+        .eq("id", user.id)
+        .single()
+
+      await createUserRoom(user.id, profile?.username || "user")
+
+      alert("Trade Room created!")
+    } catch (err) {
+      console.error(err)
+      alert("Failed to create room")
+    } finally {
+      setCreatingRoom(false)
     }
   }
 
@@ -1073,6 +1113,15 @@ export default function SettingsPage() {
                     className="mt-4 w-full rounded-xl bg-gradient-to-r from-blue-500 to-emerald-500 py-3 font-semibold disabled:opacity-50"
                   >
                     {savingPassword ? "Updating…" : "Update password"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => void handleCreateRoom()}
+                    disabled={creatingRoom}
+                    className="mt-4 rounded-lg bg-purple-500/10 px-4 py-2 text-purple-400 hover:bg-purple-500/20 disabled:opacity-50"
+                  >
+                    {creatingRoom ? "Creating..." : "Create My Trade Room"}
                   </button>
 
                   <div className="mt-6 flex gap-3">

@@ -20,12 +20,14 @@ type Room = {
   id: string
   name?: string | null
   description?: string | null
+  slug?: string | null
 }
 
 type RoomMessage = {
   id: string
   room_id: string
   user_id: string
+  section_id?: string | null
   type?: string | null
   trade_id?: string | null
   content: string
@@ -78,17 +80,68 @@ function CommunityContent() {
   const [selectTrade, setSelectTrade] = useState(false)
   const [userTrades, setUserTrades] = useState<any[]>([])
   const [mobileRoomsOpen, setMobileRoomsOpen] = useState(false)
+  const [sections, setSections] = useState<any[]>([])
+  const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null)
+  const [isOwner, setIsOwner] = useState(false)
   const typingChannelRef = useRef<any>(null)
   const messagesScrollRef = useRef<HTMLDivElement | null>(null)
+  const sectionFilterRef = useRef<{ len: number; id: string | null }>({
+    len: 0,
+    id: null,
+  })
+  const sectionsRef = useRef(sections)
 
   const selectedRoom = useMemo(
     () => rooms.find((r) => r.id === selectedRoomId) ?? null,
     [rooms, selectedRoomId]
   )
 
-  const loadMessages = useCallback(async (roomId: string) => {
+  useEffect(() => {
+    sectionsRef.current = sections
+  }, [sections])
+
+  useEffect(() => {
+    sectionFilterRef.current = {
+      len: sections.length,
+      id: selectedSectionId,
+    }
+  }, [sections.length, selectedSectionId])
+
+  useEffect(() => {
+    async function checkOwner() {
+      if (!selectedRoomId) {
+        setIsOwner(false)
+        return
+      }
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user) {
+        setIsOwner(false)
+        return
+      }
+
+      const { data } = await supabase
+        .from("rooms")
+        .select("owner_user_id")
+        .eq("id", selectedRoomId)
+        .maybeSingle()
+
+      setIsOwner(data?.owner_user_id === user.id)
+    }
+
+    void checkOwner()
+  }, [selectedRoomId])
+
+  async function fetchRoomMessages(
+    roomId: string,
+    sectionsList: { id: string; name?: string | null }[],
+    activeSectionId: string | null
+  ) {
     setLoadingMessages(true)
-    const { data, error } = await supabase
+    let q = supabase
       .from("room_messages")
       .select(
         `
@@ -108,6 +161,26 @@ function CommunityContent() {
       .eq("room_id", roomId)
       .order("created_at", { ascending: true })
 
+    if (sectionsList.length > 0) {
+      if (activeSectionId) {
+        const sec = sectionsList.find((s) => s.id === activeSectionId)
+        const nameLower = String(sec?.name ?? "")
+          .trim()
+          .toLowerCase()
+        if (nameLower === "general") {
+          q = q.or(
+            `section_id.eq.${activeSectionId},section_id.is.null`
+          )
+        } else {
+          q = q.eq("section_id", activeSectionId)
+        }
+      } else {
+        q = q.is("section_id", null)
+      }
+    }
+
+    const { data, error } = await q
+
     if (error) {
       console.error(
         "room_messages fetch FULL:",
@@ -120,7 +193,72 @@ function CommunityContent() {
 
     setMessages((data || []) as RoomMessage[])
     setLoadingMessages(false)
-  }, [])
+  }
+
+  async function loadSections(roomId: string) {
+    const { data } = await supabase
+      .from("room_sections")
+      .select("*")
+      .eq("room_id", roomId)
+      .order("position", { ascending: true })
+
+    const list = data || []
+    setSections(list)
+
+    if (list.length > 0) {
+      setSelectedSectionId(list[0].id)
+      return { list, activeSectionId: list[0].id as string }
+    }
+
+    setSelectedSectionId(null)
+    return { list, activeSectionId: null as string | null }
+  }
+
+  async function handleCreateSection(name: string) {
+    const trimmed = name.trim()
+    if (!trimmed || !selectedRoomId) return
+
+    try {
+      const { data: newSection, error } = await supabase
+        .from("room_sections")
+        .insert({
+          room_id: selectedRoomId,
+          name: trimmed,
+          position: sections.length + 1,
+        })
+        .select()
+        .single()
+
+      if (error) throw error
+      if (newSection) {
+        setSections((prev) => [...prev, newSection])
+      }
+    } catch (err) {
+      console.error(err)
+      alert("Failed to create channel")
+    }
+  }
+
+  async function handleRenameSection(id: string, name: string) {
+    const trimmed = name.trim()
+    if (!trimmed) return
+
+    try {
+      const { error } = await supabase
+        .from("room_sections")
+        .update({ name: trimmed })
+        .eq("id", id)
+
+      if (error) throw error
+
+      setSections((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, name: trimmed } : s))
+      )
+    } catch (err) {
+      console.error(err)
+      alert("Failed to rename channel")
+    }
+  }
 
   useEffect(() => {
     const init = async () => {
@@ -145,7 +283,7 @@ function CommunityContent() {
 
       const { data, error } = await supabase
         .from("rooms")
-        .select("id, name, description")
+        .select("id, name, description, slug")
         .order("name", { ascending: true })
 
       if (error) {
@@ -168,18 +306,33 @@ function CommunityContent() {
 
   useEffect(() => {
     if (!roomParam || rooms.length === 0) return
-    const match = rooms.find((r) => r.name === roomParam)
+    const match =
+      rooms.find((r) => r.slug === roomParam) ||
+      rooms.find((r) => r.name === roomParam)
     if (match) setSelectedRoomId(match.id)
   }, [roomParam, rooms])
 
   useEffect(() => {
     if (!selectedRoomId) {
       setMessages([])
+      setSections([])
+      setSelectedSectionId(null)
       setActiveUsers([])
       return
     }
-    void loadMessages(selectedRoomId)
-  }, [selectedRoomId, loadMessages])
+
+    let cancelled = false
+
+    ;(async () => {
+      const { list, activeSectionId } = await loadSections(selectedRoomId)
+      if (cancelled) return
+      await fetchRoomMessages(selectedRoomId, list, activeSectionId)
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [selectedRoomId])
 
   useEffect(() => {
     if (!selectedRoomId || !user?.id) {
@@ -279,6 +432,7 @@ function CommunityContent() {
             id,
             room_id,
             user_id,
+            section_id,
             type,
             trade_id,
             content,
@@ -301,9 +455,27 @@ function CommunityContent() {
 
         if (error || !data) return
 
+        const row = data as RoomMessage
+        const f = sectionFilterRef.current
+        if (f.len > 0 && f.id) {
+          const sec = sectionsRef.current.find(
+            (s: { id: string }) => s.id === f.id
+          )
+          const nameLower = String(sec?.name ?? "")
+            .trim()
+            .toLowerCase()
+          const generalMerge =
+            nameLower === "general" &&
+            (row.section_id === f.id || row.section_id == null)
+          const strictMatch = nameLower !== "general" && row.section_id === f.id
+          if (!generalMerge && !strictMatch) return
+        } else if (f.len > 0 && !f.id && row.section_id != null) {
+          return
+        }
+
         setMessages((prev) => {
           if (prev.some((m) => m.id === data.id)) return prev
-          return [...prev, data as RoomMessage]
+          return [...prev, row]
         })
       }
     )
@@ -378,6 +550,7 @@ function CommunityContent() {
       room_id: selectedRoomId,
       user_id: user.id,
       content,
+      section_id: selectedSectionId,
     })
     if (error) {
       console.error("room_messages insert:", error)
@@ -415,6 +588,7 @@ function CommunityContent() {
       user_id: user.id,
       type: "image",
       image_url: data.publicUrl,
+      section_id: selectedSectionId,
     })
 
     if (insertError) {
@@ -454,6 +628,7 @@ function CommunityContent() {
       type: "trade",
       trade_id: trade.id,
       content: "Shared a trade",
+      section_id: selectedSectionId,
     })
 
     if (error) {
@@ -568,10 +743,76 @@ function CommunityContent() {
               ) : null}
             </div>
 
-            <div
-              ref={messagesScrollRef}
-              className="min-h-0 max-h-[min(65svh,525px)] overflow-y-auto px-4 py-3 md:max-h-none md:flex-1"
-            >
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col md:flex-row">
+              {sections.length > 0 ? (
+                <div className="flex max-h-[min(40svh,220px)] shrink-0 flex-col border-b border-white/10 p-2 md:max-h-none md:w-48 md:border-b-0 md:border-r md:border-white/10 md:p-2">
+                  <div className="flex max-h-[min(36svh,180px)] flex-row gap-1 overflow-x-auto md:max-h-none md:flex-col md:gap-0 md:overflow-y-auto">
+                    {sections.map((section) => (
+                      <div
+                        key={section.id}
+                        className={`flex w-full min-w-[8rem] items-stretch rounded-md md:min-w-0 ${
+                          selectedSectionId === section.id
+                            ? "bg-purple-500/20 text-purple-300"
+                            : "text-gray-400"
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedSectionId(section.id)
+                            if (selectedRoomId) {
+                              void fetchRoomMessages(
+                                selectedRoomId,
+                                sections,
+                                section.id
+                              )
+                            }
+                          }}
+                          className="min-w-0 flex-1 px-3 py-2 text-left text-sm hover:bg-white/5"
+                        >
+                          <span className="block truncate"># {section.name}</span>
+                        </button>
+                        {isOwner ? (
+                          <button
+                            type="button"
+                            aria-label="Rename channel"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              const newName = prompt(
+                                "Rename channel",
+                                section.name
+                              )
+                              if (!newName) return
+                              void handleRenameSection(section.id, newName)
+                            }}
+                            className="shrink-0 px-2 py-2 text-xs text-gray-500 hover:text-white"
+                          >
+                            ✏️
+                          </button>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                  {isOwner && sections.length < 5 ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const name = prompt("Enter channel name")
+                        if (!name) return
+                        void handleCreateSection(name)
+                      }}
+                      className="mt-2 w-full rounded-md px-3 py-2 text-left text-sm text-purple-400 hover:bg-white/5"
+                    >
+                      + Add Channel
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+
+              <div
+                ref={messagesScrollRef}
+                className="min-h-0 min-w-0 max-h-[min(65svh,525px)] flex-1 overflow-y-auto px-4 py-3 md:max-h-none"
+              >
               {!selectedRoomId ? (
                 <p className="text-sm text-gray-400">Pick a room to start chatting.</p>
               ) : loadingMessages ? (
@@ -624,6 +865,7 @@ function CommunityContent() {
                   ))}
                 </div>
               )}
+              </div>
             </div>
 
             <DmStyleComposer
