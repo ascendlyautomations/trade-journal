@@ -5,11 +5,7 @@ import InputTradeForm from "../components/InputTradeForm"
 import { useState, useRef, useEffect } from "react"
 import Papa from "papaparse"
 import { supabase } from "../../lib/supabaseClient"
-import {
-  buildTradesFromParsedCsv,
-  stripBom,
-  tradesInsertRowsPrivate,
-} from "@/lib/csvTradeParsers"
+import { buildTradesFromParsedCsv, stripBom } from "@/lib/csvTradeParsers"
 
 export default function Home() {
   const [loading, setLoading] = useState(false)
@@ -90,30 +86,6 @@ export default function Home() {
     setReviewCount(count || 0)
   }
 
-  const handleManualImport = async () => {
-    try {
-      console.log("Importing trades...")
-
-      const rows = tradesInsertRowsPrivate(parsedTrades)
-
-      const { error } = await supabase.from("trades").insert(rows)
-
-      if (error) {
-        console.error(error)
-        alert("Import failed")
-        return
-      }
-
-      alert(`Imported ${parsedTrades.length} trades`)
-
-      setParsedTrades([])
-      fetchReviewCount()
-    } catch (err) {
-      console.error(err)
-      alert("Something went wrong")
-    }
-  }
-
   return (
     <>
       <Navbar />
@@ -140,7 +112,10 @@ export default function Home() {
             reviewCount={reviewCount}
             csvLoading={loading}
             parsedTrades={parsedTrades}
-            handleManualImport={handleManualImport}
+            onParsedTradesClear={() => {
+              setParsedTrades([])
+              fetchReviewCount()
+            }}
           />
         </div>
       </div>

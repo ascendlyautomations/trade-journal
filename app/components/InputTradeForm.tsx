@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
 import { ensureManualUserAccountRegistered } from "@/lib/ensureManualUserAccount"
 import { isProActive } from "@/lib/subscription"
+import { tradesInsertRowsPrivate } from "@/lib/csvTradeParsers"
 
 function modeLabelFromDb(raw: string | null | undefined): string {
   const s = String(raw ?? "").toLowerCase().trim()
@@ -26,7 +27,8 @@ export type InputTradeFormProps = {
   csvLoading?: boolean
   /** Parsed CSV rows on parent (e.g. home); when non-empty, show Import next to Upload CSV */
   parsedTrades?: any[]
-  handleManualImport?: () => void | Promise<void>
+  /** Called after successful CSV import so parent can clear `parsedTrades` */
+  onParsedTradesClear?: () => void
 }
 
 function getESTDate() {
@@ -85,10 +87,13 @@ export default function InputTradeForm({
   reviewCount = 0,
   csvLoading = false,
   parsedTrades = [],
-  handleManualImport,
+  onParsedTradesClear,
 }: InputTradeFormProps) {
   const isEditMode = Boolean(existingTrade?.id)
   const showAsModal = isEditMode && Boolean(onClose)
+
+  const [accounts, setAccounts] = useState<any[]>([])
+  const [selectedAccount, setSelectedAccount] = useState<any | null>(null)
 
   const [submitting, setSubmitting] = useState(false)
   const [pnlFocused, setPnlFocused] = useState(false)
@@ -229,6 +234,39 @@ export default function InputTradeForm({
   useEffect(() => {
     void refreshPlanAndAccountLock()
   }, [refreshPlanAndAccountLock, existingTrade?.id])
+
+  useEffect(() => {
+    async function loadAccounts() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user?.id) return
+
+      const { data } = await supabase
+        .from("trades")
+        .select("account_name, account_size, account_id, mode")
+        .eq("user_id", user.id)
+        .not("account_name", "is", null)
+
+      const unique = new Map<string, { name: unknown; size: unknown; id: unknown; mode: unknown }>()
+
+      data?.forEach((t) => {
+        const key = `${t.account_name}|${t.account_size}|${t.account_id}`
+        if (!unique.has(key)) {
+          unique.set(key, {
+            name: t.account_name,
+            size: t.account_size,
+            id: t.account_id,
+            mode: t.mode,
+          })
+        }
+      })
+
+      setAccounts(Array.from(unique.values()))
+    }
+
+    void loadAccounts()
+  }, [])
 
   useEffect(() => {
     if (showPopup) {
@@ -782,6 +820,41 @@ export default function InputTradeForm({
     onUploadCsvClick()
   }
 
+  async function handleCsvManualImport() {
+    if (!selectedAccount) {
+      alert("Please select an account first")
+      return
+    }
+
+    try {
+      const finalTrades = parsedTrades.map((trade: any) => ({
+        ...trade,
+        account_name: selectedAccount.name,
+        account_size: selectedAccount.size,
+        account_id: selectedAccount.id,
+        mode: selectedAccount.mode,
+      }))
+
+      const rows = tradesInsertRowsPrivate(finalTrades)
+
+      const { error } = await supabase.from("trades").insert(rows)
+
+      if (error) {
+        console.error(error)
+        alert("Import failed")
+        return
+      }
+
+      alert(`Imported ${parsedTrades.length} trades`)
+
+      onParsedTradesClear?.()
+      setSelectedAccount(null)
+    } catch (err) {
+      console.error(err)
+      alert("Something went wrong")
+    }
+  }
+
   const formBody = (
     <>
       <div className="mb-4">
@@ -795,11 +868,41 @@ export default function InputTradeForm({
             >
               Upload CSV
             </button>
-            {parsedTrades.length > 0 && handleManualImport ? (
+            {onUploadCsvClick ? (
+              <select
+                value={selectedAccount ? JSON.stringify(selectedAccount) : ""}
+                onChange={(e) => {
+                  const val = e.target.value
+                  if (!val) {
+                    setSelectedAccount(null)
+                    return
+                  }
+                  try {
+                    setSelectedAccount(JSON.parse(val))
+                  } catch {
+                    setSelectedAccount(null)
+                  }
+                }}
+                className="ml-2 px-2 py-2 bg-black/30 border border-white/10 rounded text-sm min-w-0"
+              >
+                <option value="">Select Account</option>
+                {accounts.map((acc, i) => (
+                  <option key={i} value={JSON.stringify(acc)}>
+                    {acc.name} {acc.size} #{acc.id}
+                  </option>
+                ))}
+              </select>
+            ) : null}
+            {parsedTrades.length > 0 ? (
               <button
                 type="button"
-                onClick={() => void handleManualImport()}
-                className="ml-2 px-4 py-2 bg-green-500/20 text-green-400 rounded"
+                onClick={() => void handleCsvManualImport()}
+                disabled={!selectedAccount}
+                className={`ml-2 px-4 py-2 rounded ${
+                  selectedAccount
+                    ? "bg-green-500/20 text-green-400"
+                    : "bg-gray-700 text-gray-400 cursor-not-allowed"
+                }`}
               >
                 Import {parsedTrades.length}
               </button>
@@ -849,11 +952,42 @@ export default function InputTradeForm({
               Upload CSV
             </button>
 
-            {parsedTrades.length > 0 && handleManualImport ? (
+            {onUploadCsvClick ? (
+              <select
+                value={selectedAccount ? JSON.stringify(selectedAccount) : ""}
+                onChange={(e) => {
+                  const val = e.target.value
+                  if (!val) {
+                    setSelectedAccount(null)
+                    return
+                  }
+                  try {
+                    setSelectedAccount(JSON.parse(val))
+                  } catch {
+                    setSelectedAccount(null)
+                  }
+                }}
+                className="ml-2 px-2 py-2 bg-black/30 border border-white/10 rounded text-sm min-w-0"
+              >
+                <option value="">Select Account</option>
+                {accounts.map((acc, i) => (
+                  <option key={i} value={JSON.stringify(acc)}>
+                    {acc.name} {acc.size} #{acc.id}
+                  </option>
+                ))}
+              </select>
+            ) : null}
+
+            {parsedTrades.length > 0 ? (
               <button
                 type="button"
-                onClick={() => void handleManualImport()}
-                className="ml-2 px-4 py-2 bg-green-500/20 text-green-400 rounded"
+                onClick={() => void handleCsvManualImport()}
+                disabled={!selectedAccount}
+                className={`ml-2 px-4 py-2 rounded ${
+                  selectedAccount
+                    ? "bg-green-500/20 text-green-400"
+                    : "bg-gray-700 text-gray-400 cursor-not-allowed"
+                }`}
               >
                 Import {parsedTrades.length}
               </button>

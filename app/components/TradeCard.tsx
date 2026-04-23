@@ -147,16 +147,6 @@ export default function TradeCard({
             </h2>
 
             {(() => {
-              const formatTime = (dateString: string | null | undefined) => {
-                if (!dateString) return null
-                const d = new Date(dateString)
-                if (Number.isNaN(d.getTime())) return null
-                return d.toLocaleTimeString("en-US", {
-                  hour: "numeric",
-                  minute: "2-digit",
-                })
-              }
-
               const formatDate = (dateString: string | null | undefined) => {
                 if (!dateString) return ""
                 const d = new Date(dateString)
@@ -169,19 +159,9 @@ export default function TradeCard({
 
               const baseDate = entryT || exitT || trade.created_at
 
-              const entryTime = formatTime(entryT)
-              const exitTime = formatTime(exitT)
-
               return (
                 <div className="text-sm text-gray-400">
                   {formatDate(baseDate)}
-                  {entryTime && (
-                    <span>
-                      {" • "}
-                      {entryTime}
-                      {exitTime ? ` - ${exitTime}` : ""}
-                    </span>
-                  )}
                 </div>
               )
             })()}
@@ -368,7 +348,7 @@ export default function TradeCard({
         View Trade in TradingView
       </button>
 
-      <p className="mt-4 text-sm text-gray-400">
+      <p className="mt-4 text-xs text-gray-400">
         {formatEST(trade.created_at)}
       </p>
     </div>
