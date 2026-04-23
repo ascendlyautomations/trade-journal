@@ -700,6 +700,7 @@ export function buildCleanCsvTrade(row: CsvRow, userId: string): CsvTradeInsert 
 
 /** CSV bulk rows: private + imported account type (never counts toward free-plan slots). */
 export function tradesInsertRowsPrivate<T extends Record<string, unknown>>(rows: T[]) {
+  console.log("🚫 tradesInsertRowsPrivate called")
   return rows.map((row) => ({
     ...row,
     is_public: false,

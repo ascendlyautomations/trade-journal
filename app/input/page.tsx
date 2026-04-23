@@ -54,6 +54,11 @@ export default function InputPage() {
       JSON.stringify(tradesToInsert, null, 2)
     )
 
+    // TEMP DEBUG: block all trade inserts — restore block below when done
+    console.log("🚫 INSERT BLOCKED HERE")
+    setLoading(false)
+    return
+    /*
     const { error } = await supabase.from("trades").insert(tradesToInsert)
 
     if (error) {
@@ -72,6 +77,7 @@ export default function InputPage() {
     }
 
     setLoading(false)
+    */
   }
 
   return (

@@ -101,6 +101,11 @@ export default function CsvImportPanel({
       return
     }
 
+    // TEMP DEBUG: block all trade inserts — restore block below when done
+    console.log("🚫 INSERT BLOCKED HERE")
+    setLoading(false)
+    return
+    /*
     const { error } = await supabase.from("trades").insert(rowsToInsert).select()
 
     if (error) {
@@ -129,6 +134,7 @@ export default function CsvImportPanel({
     }
 
     setLoading(false)
+    */
   }
 
   const isTradovateFormat = parsed.length > 0 && isTradovateCsvRow(parsed[0])

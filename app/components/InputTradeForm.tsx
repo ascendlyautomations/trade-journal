@@ -24,6 +24,9 @@ export type InputTradeFormProps = {
   onReviewCsvClick?: () => void
   reviewCount?: number
   csvLoading?: boolean
+  /** Parsed CSV rows on parent (e.g. home); when non-empty, show Import next to Upload CSV */
+  parsedTrades?: any[]
+  handleManualImport?: () => void | Promise<void>
 }
 
 function getESTDate() {
@@ -81,6 +84,8 @@ export default function InputTradeForm({
   onReviewCsvClick,
   reviewCount = 0,
   csvLoading = false,
+  parsedTrades = [],
+  handleManualImport,
 }: InputTradeFormProps) {
   const isEditMode = Boolean(existingTrade?.id)
   const showAsModal = isEditMode && Boolean(onClose)
@@ -781,7 +786,7 @@ export default function InputTradeForm({
     <>
       <div className="mb-4">
         <div className="flex flex-col gap-2 md:hidden">
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <button
               type="button"
               onClick={() => void handleUploadCsvGuardClick()}
@@ -790,6 +795,15 @@ export default function InputTradeForm({
             >
               Upload CSV
             </button>
+            {parsedTrades.length > 0 && handleManualImport ? (
+              <button
+                type="button"
+                onClick={() => void handleManualImport()}
+                className="ml-2 px-4 py-2 bg-green-500/20 text-green-400 rounded"
+              >
+                Import {parsedTrades.length}
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={onReviewCsvClick}
@@ -834,6 +848,16 @@ export default function InputTradeForm({
             >
               Upload CSV
             </button>
+
+            {parsedTrades.length > 0 && handleManualImport ? (
+              <button
+                type="button"
+                onClick={() => void handleManualImport()}
+                className="ml-2 px-4 py-2 bg-green-500/20 text-green-400 rounded"
+              >
+                Import {parsedTrades.length}
+              </button>
+            ) : null}
 
             <button
               type="button"

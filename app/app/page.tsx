@@ -10,11 +10,11 @@ import {
   stripBom,
   tradesInsertRowsPrivate,
 } from "@/lib/csvTradeParsers"
-import { ensureImportedCsvAccountRegistered } from "@/lib/ensureManualUserAccount"
 
 export default function Home() {
   const [loading, setLoading] = useState(false)
   const [reviewCount, setReviewCount] = useState(0)
+  const [parsedTrades, setParsedTrades] = useState<any[]>([])
 
   const csvInputRef = useRef<HTMLInputElement>(null)
 
@@ -63,99 +63,12 @@ export default function Home() {
       header: true,
       skipEmptyLines: true,
       transformHeader: (h: string) => stripBom(String(h).trim()),
-      complete: async (results: any) => {
-        try {
-          const rows = (results.data || []).filter(
-            (r: any) => r && typeof r === "object" && Object.keys(r).length > 0
-          )
-          if (!rows.length) {
-            alert("No rows to import")
-            setLoading(false)
-            return
-          }
+      complete: (results: any) => {
+        const parsed = buildTradesFromParsedCsv(results.data, user.id)
 
-          const { isTradovate, parsedTrades: tradesToInsert, summary, rowResults } =
-            buildTradesFromParsedCsv(rows, user.id)
+        setParsedTrades(parsed.parsedTrades)
 
-          console.log("TRADOVATE DETECTED:", isTradovate)
-          console.log("CSV import summary:", summary)
-          console.log("PARSED TRADES:", tradesToInsert)
-          if (tradesToInsert.length) {
-            console.debug(
-              "CSV duration debug (first 5):",
-              tradesToInsert.slice(0, 5).map((t) => ({
-                ticker: t.ticker,
-                duration_text: t.duration_text,
-                duration_seconds: t.duration_seconds,
-              }))
-            )
-          }
-          if (rowResults?.length) {
-            const bad = rowResults.filter((r) => !r.ok)
-            if (bad.length) console.warn("CSV row issues:", bad)
-          }
-
-          if (!tradesToInsert.length) {
-            alert(
-              `No valid rows to import. ${summary.total} row(s) scanned, ${summary.failed} failed. Check the console for details.`
-            )
-            setLoading(false)
-            return
-          }
-
-          const chunkSize = 100
-
-          const { error: importAcctErr } = await ensureImportedCsvAccountRegistered(
-            supabase,
-            user.id
-          )
-          if (importAcctErr) {
-            console.error(importAcctErr)
-            alert("Could not register imported account row. Try again.")
-            setLoading(false)
-            return
-          }
-
-          for (let i = 0; i < tradesToInsert.length; i += chunkSize) {
-            const chunk = tradesInsertRowsPrivate(tradesToInsert.slice(i, i + chunkSize))
-
-            const { error } = await supabase.from("trades").insert(chunk)
-
-            if (error) {
-              console.error(error)
-              alert("Error uploading trades")
-              setLoading(false)
-              return
-            }
-          }
-
-          const skipped = summary.failed
-          const errLines = (rowResults || [])
-            .filter((r): r is { ok: false; rowNumber: number; reason: string } => !r.ok)
-            .slice(0, 6)
-            .map((r) => `Row ${r.rowNumber}: ${r.reason}`)
-            .join("\n")
-
-          let msg = `Trades imported successfully. They are private by default. You can make them public by editing a trade. (${tradesToInsert.length} imported)`
-          if (summary.total > tradesToInsert.length) {
-            msg += ` ${skipped} row(s) skipped (${summary.total} total).`
-          }
-          if (errLines) {
-            msg += `\n\n${errLines}${skipped > 6 ? "\n…" : ""}`
-          }
-          alert(msg)
-          if (!profile.is_pro) {
-            const { error: flagErr } = await supabase
-              .from("profiles")
-              .update({ has_used_csv_import: true })
-              .eq("id", user.id)
-            if (flagErr) console.error("markProfileCsvImportUsed:", flagErr)
-          }
-          fetchReviewCount()
-        } catch (err) {
-          console.error(err)
-          alert("CSV processing failed")
-        }
+        console.log("SET PARSED TRADES:", parsed.parsedTrades.length)
 
         setLoading(false)
       },
@@ -175,6 +88,30 @@ export default function Home() {
       .eq("reviewed", false)
 
     setReviewCount(count || 0)
+  }
+
+  const handleManualImport = async () => {
+    try {
+      console.log("Importing trades...")
+
+      const rows = tradesInsertRowsPrivate(parsedTrades)
+
+      const { error } = await supabase.from("trades").insert(rows)
+
+      if (error) {
+        console.error(error)
+        alert("Import failed")
+        return
+      }
+
+      alert(`Imported ${parsedTrades.length} trades`)
+
+      setParsedTrades([])
+      fetchReviewCount()
+    } catch (err) {
+      console.error(err)
+      alert("Something went wrong")
+    }
   }
 
   return (
@@ -202,6 +139,8 @@ export default function Home() {
             }}
             reviewCount={reviewCount}
             csvLoading={loading}
+            parsedTrades={parsedTrades}
+            handleManualImport={handleManualImport}
           />
         </div>
       </div>
