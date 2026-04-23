@@ -1075,23 +1075,26 @@ export default function SettingsPage() {
                     {savingPassword ? "Updating…" : "Update password"}
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setConfirmText("")
-                      setShowDeleteConfirm(true)
-                    }}
-                    className="mt-6 rounded-lg bg-red-500/10 px-5 py-2 text-red-400 hover:bg-red-500/20"
-                  >
-                    Delete Account
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleExportData()}
-                    className="mt-4 rounded-lg bg-blue-500/10 px-4 py-2 text-blue-400 hover:bg-blue-500/20"
-                  >
-                    Export My Data (CSV)
-                  </button>
+                  <div className="mt-6 flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setConfirmText("")
+                        setShowDeleteConfirm(true)
+                      }}
+                      className="rounded-lg bg-red-500/10 px-5 py-2 text-red-400 hover:bg-red-500/20"
+                    >
+                      Delete Account
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => void handleExportData()}
+                      className="rounded-lg bg-blue-500/10 px-4 py-2 text-blue-400 hover:bg-blue-500/20"
+                    >
+                      Export My Data (CSV)
+                    </button>
+                  </div>
                 </section>
               </div>
             )}
