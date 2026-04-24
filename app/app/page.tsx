@@ -92,9 +92,11 @@ export default function Home() {
 
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100">
         <div className="pt-3 px-6 pb-6 max-w-8xl mx-auto">
-          <h1 className="mb-2 text-center text-xl md:text-2xl font-semibold text-blue-300">
-            Input Trade
-          </h1>
+          <div className="w-full flex items-center justify-between mb-4">
+            <h1 className="text-xl md:text-2xl font-semibold text-blue-300">
+              Input Trade
+            </h1>
+          </div>
 
           <input
             ref={csvInputRef}
