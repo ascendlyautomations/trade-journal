@@ -122,6 +122,7 @@ export default function InputTradeForm({
 
   const [accounts, setAccounts] = useState<any[]>([])
   const [selectedAccount, setSelectedAccount] = useState<any | null>(null)
+  const [accountDropdownOpen, setAccountDropdownOpen] = useState(false)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showAccountWarning, setShowAccountWarning] = useState(false)
 
@@ -339,6 +340,18 @@ export default function InputTradeForm({
       return () => clearTimeout(timer)
     }
   }, [showPopup])
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      const target = e.target as HTMLElement
+      if (!target.closest(".account-dropdown")) {
+        setAccountDropdownOpen(false)
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [])
 
   const effectiveModeLower = String(
     selectedAccount?.mode ??
@@ -959,46 +972,53 @@ export default function InputTradeForm({
     <>
       <div className="mb-4">
         <div className="flex flex-col gap-2 md:hidden">
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex items-center gap-3 flex-wrap">
             {onUploadCsvClick ? (
-              <select
-                value={selectedAccount ? JSON.stringify(selectedAccount) : ""}
-                onChange={(e) => {
-                  const val = e.target.value
-
-                  if (!val) {
-                    setSelectedAccount(null)
-                    return
-                  }
-
-                  if (val === "NEW_ACCOUNT") {
-                    setShowCreateModal(true)
-                    return
-                  }
-
-                  try {
-                    setSelectedAccount(JSON.parse(val))
-                  } catch {
-                    setSelectedAccount(null)
-                  }
-                }}
-                className="ml-2 px-2 py-2 bg-black/30 border border-white/10 rounded text-sm min-w-0"
-              >
-                <option value="">Select Account</option>
-                {accounts.map((acc, i) => (
-                  <option key={i} value={JSON.stringify(acc)}>
-                    {acc.name} • {formatAccountSize(acc.size)} • {acc.category || "Personal"} •{" "}
-                    {formatMode(acc.mode)} • #{acc.id}
-                  </option>
-                ))}
-                <option value="NEW_ACCOUNT">+ Create New Account</option>
-              </select>
+              <div className="relative w-[260px] account-dropdown">
+                <div
+                  onClick={() => setAccountDropdownOpen(!accountDropdownOpen)}
+                  className="w-full p-2 rounded bg-[#0f172a] border border-white/10 text-white cursor-pointer flex justify-between items-center"
+                >
+                  <span className="truncate">
+                    {selectedAccount
+                      ? `${selectedAccount.name} • ${selectedAccount.size} • ${selectedAccount.category || "Personal"} • ${formatMode(selectedAccount.mode)} • #${selectedAccount.id}`
+                      : "Select Account"}
+                  </span>
+                  <span className="text-gray-400">▾</span>
+                </div>
+                {accountDropdownOpen && (
+                  <div className="absolute z-50 mt-1 w-full bg-[#0f172a] border border-white/10 rounded shadow-lg max-h-60 overflow-y-auto">
+                    {accounts.map((acc) => (
+                      <div
+                        key={`${acc.name}-${acc.id}-${acc.mode}`}
+                        onClick={() => {
+                          setSelectedAccount(acc)
+                          setAccountDropdownOpen(false)
+                        }}
+                        className="px-3 py-2 hover:bg-[#1f2937] cursor-pointer text-sm text-white"
+                      >
+                        {acc.name} • {formatAccountSize(acc.size)} • {acc.category || "Personal"} •{" "}
+                        {formatMode(acc.mode)} • #{acc.id}
+                      </div>
+                    ))}
+                    <div
+                      onClick={() => {
+                        setShowCreateModal(true)
+                        setAccountDropdownOpen(false)
+                      }}
+                      className="px-3 py-2 hover:bg-[#1f2937] cursor-pointer text-sm text-green-400"
+                    >
+                      + Create New Account
+                    </div>
+                  </div>
+                )}
+              </div>
             ) : null}
             <button
               type="button"
               onClick={() => void handleUploadCsvGuardClick()}
               disabled={!onUploadCsvClick || csvLoading}
-              className="flex-1 px-3 py-2 text-sm rounded-lg bg-blue-500 disabled:opacity-60"
+              className="shrink-0 flex-1 px-3 py-2 text-sm rounded-lg bg-blue-500 disabled:opacity-60"
             >
               Upload CSV
             </button>
@@ -1020,7 +1040,7 @@ export default function InputTradeForm({
               type="button"
               onClick={onReviewCsvClick}
               disabled={!onReviewCsvClick}
-              className="relative flex-1 px-3 py-2 text-sm rounded-lg bg-emerald-500 disabled:opacity-60"
+              className="shrink-0 relative flex-1 px-3 py-2 text-sm rounded-lg bg-emerald-500 disabled:opacity-60"
             >
               Review CSV Inputs
               {reviewCount > 0 ? (
@@ -1044,47 +1064,54 @@ export default function InputTradeForm({
         </div>
 
         <div className="hidden md:flex items-center w-full">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             {onUploadCsvClick ? (
-              <select
-                value={selectedAccount ? JSON.stringify(selectedAccount) : ""}
-                onChange={(e) => {
-                  const val = e.target.value
-
-                  if (!val) {
-                    setSelectedAccount(null)
-                    return
-                  }
-
-                  if (val === "NEW_ACCOUNT") {
-                    setShowCreateModal(true)
-                    return
-                  }
-
-                  try {
-                    setSelectedAccount(JSON.parse(val))
-                  } catch {
-                    setSelectedAccount(null)
-                  }
-                }}
-                className="ml-2 px-2 py-2 bg-black/30 border border-white/10 rounded text-sm min-w-0"
-              >
-                <option value="">Select Account</option>
-                {accounts.map((acc, i) => (
-                  <option key={i} value={JSON.stringify(acc)}>
-                    {acc.name} • {formatAccountSize(acc.size)} • {acc.category || "Personal"} •{" "}
-                    {formatMode(acc.mode)} • #{acc.id}
-                  </option>
-                ))}
-                <option value="NEW_ACCOUNT">+ Create New Account</option>
-              </select>
+              <div className="relative w-[260px] account-dropdown">
+                <div
+                  onClick={() => setAccountDropdownOpen(!accountDropdownOpen)}
+                  className="w-full p-2 rounded bg-[#0f172a] border border-white/10 text-white cursor-pointer flex justify-between items-center"
+                >
+                  <span className="truncate">
+                    {selectedAccount
+                      ? `${selectedAccount.name} • ${selectedAccount.size} • ${selectedAccount.category || "Personal"} • ${formatMode(selectedAccount.mode)} • #${selectedAccount.id}`
+                      : "Select Account"}
+                  </span>
+                  <span className="text-gray-400">▾</span>
+                </div>
+                {accountDropdownOpen && (
+                  <div className="absolute z-50 mt-1 w-full bg-[#0f172a] border border-white/10 rounded shadow-lg max-h-60 overflow-y-auto">
+                    {accounts.map((acc) => (
+                      <div
+                        key={`${acc.name}-${acc.id}-${acc.mode}`}
+                        onClick={() => {
+                          setSelectedAccount(acc)
+                          setAccountDropdownOpen(false)
+                        }}
+                        className="px-3 py-2 hover:bg-[#1f2937] cursor-pointer text-sm text-white"
+                      >
+                        {acc.name} • {formatAccountSize(acc.size)} • {acc.category || "Personal"} •{" "}
+                        {formatMode(acc.mode)} • #{acc.id}
+                      </div>
+                    ))}
+                    <div
+                      onClick={() => {
+                        setShowCreateModal(true)
+                        setAccountDropdownOpen(false)
+                      }}
+                      className="px-3 py-2 hover:bg-[#1f2937] cursor-pointer text-sm text-green-400"
+                    >
+                      + Create New Account
+                    </div>
+                  </div>
+                )}
+              </div>
             ) : null}
 
             <button
               type="button"
               onClick={() => void handleUploadCsvGuardClick()}
               disabled={!onUploadCsvClick || csvLoading}
-              className="px-4 py-2 text-sm rounded-lg bg-blue-500 disabled:opacity-60"
+              className="shrink-0 px-4 py-2 text-sm rounded-lg bg-blue-500 disabled:opacity-60"
             >
               Upload CSV
             </button>
@@ -1108,7 +1135,7 @@ export default function InputTradeForm({
               type="button"
               onClick={onReviewCsvClick}
               disabled={!onReviewCsvClick}
-              className="relative px-4 py-2 text-sm rounded-lg bg-emerald-500 disabled:opacity-60"
+              className="shrink-0 relative px-4 py-2 text-sm rounded-lg bg-emerald-500 disabled:opacity-60"
             >
               Review CSV Inputs
               {reviewCount > 0 ? (
