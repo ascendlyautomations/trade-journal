@@ -6,6 +6,11 @@ import { compressImage } from "@/lib/compressImage"
 import { ensureManualUserAccountRegistered } from "@/lib/ensureManualUserAccount"
 import { isProActive } from "@/lib/subscription"
 import { tradesInsertRowsPrivate } from "@/lib/csvTradeParsers"
+import CreateAccountModal, {
+  type Props as CreateAccountModalProps,
+} from "@/components/CreateAccountModal"
+
+type CreateAccountSavePayload = Parameters<CreateAccountModalProps["onSave"]>[0]
 
 function modeLabelFromDb(raw: string | null | undefined): string {
   const s = String(raw ?? "").toLowerCase().trim()
@@ -77,6 +82,29 @@ function tradeDateFromRow(t: any): string {
   return getESTDate()
 }
 
+function formatAccountSize(size: any) {
+  if (!size) return ""
+  const num = Number(size)
+
+  if (!isNaN(num) && num >= 1000) {
+    return `${num / 1000}K`
+  }
+
+  return size
+}
+
+function formatMode(mode: any) {
+  if (!mode) return "Live"
+
+  const m = String(mode).toLowerCase()
+
+  if (m === "eval") return "Eval"
+  if (m === "funded") return "Funded"
+  if (m === "live") return "Live"
+
+  return mode
+}
+
 export default function InputTradeForm({
   existingTrade,
   onSave,
@@ -94,6 +122,7 @@ export default function InputTradeForm({
 
   const [accounts, setAccounts] = useState<any[]>([])
   const [selectedAccount, setSelectedAccount] = useState<any | null>(null)
+  const [showCreateModal, setShowCreateModal] = useState(false)
 
   const [submitting, setSubmitting] = useState(false)
   const [pnlFocused, setPnlFocused] = useState(false)
@@ -240,29 +269,28 @@ export default function InputTradeForm({
       const {
         data: { user },
       } = await supabase.auth.getUser()
+
       if (!user?.id) return
 
-      const { data } = await supabase
-        .from("trades")
-        .select("account_name, account_size, account_id, mode")
+      const { data, error } = await supabase
+        .from("accounts")
+        .select("*")
         .eq("user_id", user.id)
-        .not("account_name", "is", null)
 
-      const unique = new Map<string, { name: unknown; size: unknown; id: unknown; mode: unknown }>()
+      if (error) {
+        console.error(error)
+        return
+      }
 
-      data?.forEach((t) => {
-        const key = `${t.account_name}|${t.account_size}|${t.account_id}`
-        if (!unique.has(key)) {
-          unique.set(key, {
-            name: t.account_name,
-            size: t.account_size,
-            id: t.account_id,
-            mode: t.mode,
-          })
-        }
-      })
+      const formatted = (data || []).map((acc) => ({
+        name: acc.name,
+        size: acc.account_size,
+        id: acc.account_number,
+        mode: acc.mode,
+        category: acc.category,
+      }))
 
-      setAccounts(Array.from(unique.values()))
+      setAccounts(formatted)
     }
 
     void loadAccounts()
@@ -855,6 +883,64 @@ export default function InputTradeForm({
     }
   }
 
+  async function handleCreateAccountSave(newAccount: CreateAccountSavePayload) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) return
+
+    const { data, error } = await supabase
+      .from("accounts")
+      .insert([
+        {
+          user_id: user.id,
+          name: newAccount.name,
+          account_size: newAccount.size,
+          account_number: newAccount.id,
+          category: newAccount.category,
+          mode: newAccount.mode,
+
+          consistency: newAccount.rules?.consistency ?? null,
+          max_drawdown: newAccount.rules?.maxDrawdown ?? null,
+          daily_drawdown: newAccount.rules?.dailyDrawdown ?? null,
+          profit_target: newAccount.rules?.profitTarget ?? null,
+          winning_days: newAccount.rules?.winningDays ?? null,
+        },
+      ])
+      .select()
+      .single()
+
+    if (error) {
+      console.error(error)
+      alert("Failed to create account")
+      return
+    }
+
+    if (!data) return
+
+    setAccounts((prev) => [
+      ...prev,
+      {
+        name: data.name,
+        size: data.account_size,
+        id: data.account_number,
+        mode: data.mode,
+        category: data.category,
+      },
+    ])
+
+    setSelectedAccount({
+      name: data.name,
+      size: data.account_size,
+      id: data.account_number,
+      mode: data.mode,
+      category: data.category,
+    })
+
+    setShowCreateModal(false)
+  }
+
   const formBody = (
     <>
       <div className="mb-4">
@@ -873,10 +959,17 @@ export default function InputTradeForm({
                 value={selectedAccount ? JSON.stringify(selectedAccount) : ""}
                 onChange={(e) => {
                   const val = e.target.value
+
                   if (!val) {
                     setSelectedAccount(null)
                     return
                   }
+
+                  if (val === "NEW_ACCOUNT") {
+                    setShowCreateModal(true)
+                    return
+                  }
+
                   try {
                     setSelectedAccount(JSON.parse(val))
                   } catch {
@@ -888,9 +981,11 @@ export default function InputTradeForm({
                 <option value="">Select Account</option>
                 {accounts.map((acc, i) => (
                   <option key={i} value={JSON.stringify(acc)}>
-                    {acc.name} {acc.size} #{acc.id}
+                    {acc.name} • {formatAccountSize(acc.size)} • {acc.category || "Personal"} •{" "}
+                    {formatMode(acc.mode)} • #{acc.id}
                   </option>
                 ))}
+                <option value="NEW_ACCOUNT">+ Create New Account</option>
               </select>
             ) : null}
             {parsedTrades.length > 0 ? (
@@ -957,10 +1052,17 @@ export default function InputTradeForm({
                 value={selectedAccount ? JSON.stringify(selectedAccount) : ""}
                 onChange={(e) => {
                   const val = e.target.value
+
                   if (!val) {
                     setSelectedAccount(null)
                     return
                   }
+
+                  if (val === "NEW_ACCOUNT") {
+                    setShowCreateModal(true)
+                    return
+                  }
+
                   try {
                     setSelectedAccount(JSON.parse(val))
                   } catch {
@@ -972,9 +1074,11 @@ export default function InputTradeForm({
                 <option value="">Select Account</option>
                 {accounts.map((acc, i) => (
                   <option key={i} value={JSON.stringify(acc)}>
-                    {acc.name} {acc.size} #{acc.id}
+                    {acc.name} • {formatAccountSize(acc.size)} • {acc.category || "Personal"} •{" "}
+                    {formatMode(acc.mode)} • #{acc.id}
                   </option>
                 ))}
+                <option value="NEW_ACCOUNT">+ Create New Account</option>
               </select>
             ) : null}
 
@@ -1088,18 +1192,6 @@ export default function InputTradeForm({
             </div>
           ) : null}
 
-          <input
-            list="trade-symbol-options"
-            placeholder="Symbol / ticker"
-            value={ticker}
-            onChange={(e) => setTicker(e.target.value)}
-            className="w-full p-2 lg:p-2.5 rounded bg-[#0f172a] border border-white/10"
-          />
-          <datalist id="trade-symbol-options">
-            {symbols.map((s) => (
-              <option key={s} value={s} />
-            ))}
-          </datalist>
           <div className="w-full">
             <p className="text-sm text-gray-400 mt-0">
               Account Used
@@ -1126,6 +1218,19 @@ export default function InputTradeForm({
               ))}
             </div>
           </div>
+
+          <input
+            list="trade-symbol-options"
+            placeholder="Symbol / ticker"
+            value={ticker}
+            onChange={(e) => setTicker(e.target.value)}
+            className="w-full p-2 lg:p-2.5 rounded bg-[#0f172a] border border-white/10"
+          />
+          <datalist id="trade-symbol-options">
+            {symbols.map((s) => (
+              <option key={s} value={s} />
+            ))}
+          </datalist>
 
           {displayedMode === "Backtest" && (
             <div className="mt-3">
@@ -1512,6 +1617,11 @@ export default function InputTradeForm({
         </div>
         {settingsModal}
         {popupModal}
+        <CreateAccountModal
+          open={showCreateModal}
+          onClose={() => setShowCreateModal(false)}
+          onSave={handleCreateAccountSave}
+        />
       </>
     )
   }
@@ -1521,6 +1631,11 @@ export default function InputTradeForm({
       {formBody}
       {settingsModal}
       {popupModal}
+      <CreateAccountModal
+        open={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onSave={handleCreateAccountSave}
+      />
     </>
   )
 }
