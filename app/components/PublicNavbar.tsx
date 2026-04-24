@@ -16,6 +16,9 @@ export default function PublicNavbar() {
   }, [pathname])
 
   const closeMenu = () => setMenuOpen(false)
+  const isActive = (path: string) => pathname === path
+  const isGroupActive = (paths: string[]) =>
+    paths.some((p) => pathname.startsWith(p))
 
   return (
     <div className="fixed top-0 left-0 z-[9999] w-full overflow-visible text-white">
@@ -31,14 +34,22 @@ export default function PublicNavbar() {
 
           <Link
             href="/faq"
-            className="whitespace-nowrap text-sm font-medium transition hover:text-blue-400"
+            className={`whitespace-nowrap px-3 py-1 rounded transition ${
+              isActive("/faq")
+                ? "bg-blue-500/20 text-blue-300"
+                : "text-gray-300 hover:text-white"
+            }`}
           >
             FAQ
           </Link>
 
           <Link
             href="/pricing"
-            className="whitespace-nowrap text-sm font-medium transition hover:text-blue-400"
+            className={`whitespace-nowrap px-3 py-1 rounded transition ${
+              isActive("/pricing")
+                ? "bg-blue-500/20 text-blue-300"
+                : "text-gray-300 hover:text-white"
+            }`}
           >
             Pricing
           </Link>
@@ -58,7 +69,11 @@ export default function PublicNavbar() {
             <>
               <Link
                 href="/dashboard"
-                className="hidden rounded border px-2 py-1 text-sm font-medium whitespace-nowrap md:inline"
+                className={`hidden px-3 py-1 rounded transition whitespace-nowrap md:inline ${
+                  isActive("/dashboard")
+                    ? "bg-blue-500/20 text-blue-300"
+                    : "text-gray-300 hover:text-white"
+                }`}
               >
                 Dashboard
               </Link>
@@ -81,28 +96,84 @@ export default function PublicNavbar() {
       {menuOpen && user ? (
         <div className="absolute left-0 top-full z-50 w-full border-t border-white/5 bg-[#0b1f3a] md:hidden">
           <div className="flex w-full flex-col gap-3 px-4 py-4 text-sm md:px-6">
-            <Link href="/dashboard" onClick={closeMenu} className="text-white hover:text-blue-400">
+            <Link
+              href="/dashboard"
+              onClick={closeMenu}
+              className={`px-3 py-1 rounded transition ${
+                isActive("/dashboard")
+                  ? "bg-blue-500/20 text-blue-300"
+                  : "text-gray-300 hover:text-white"
+              }`}
+            >
               Dashboard
             </Link>
-            <Link href="/input-trade" onClick={closeMenu} className="text-white hover:text-blue-400">
+            <Link
+              href="/app"
+              onClick={closeMenu}
+              className={`px-3 py-1 rounded transition ${
+                isActive("/app")
+                  ? "bg-blue-500/20 text-blue-300"
+                  : "text-gray-300 hover:text-white"
+              }`}
+            >
               Input Trade
             </Link>
 
             <div className="my-2 border-t border-white/10" />
 
-            <div className="font-medium text-white">Analytics</div>
+            <div
+              className={`font-medium px-3 py-1 rounded transition ${
+                isGroupActive(["/analytics", "/analyst"])
+                  ? "bg-blue-500/20 text-blue-300"
+                  : "text-gray-300 hover:text-white"
+              }`}
+            >
+              Analytics
+            </div>
             <div className="flex flex-col gap-1 pl-3 text-gray-400">
-              <Link href="/trade-history" onClick={closeMenu} className="hover:text-white">
+              <Link
+                href="/trades"
+                onClick={closeMenu}
+                className={`block px-3 py-2 rounded ${
+                  isActive("/trades")
+                    ? "bg-blue-500/20 text-blue-300"
+                    : "hover:bg-white/10 text-gray-300"
+                }`}
+              >
                 Trade History
               </Link>
-              <Link href="/backtest" onClick={closeMenu} className="hover:text-white">
+              <Link
+                href="/backtest"
+                onClick={closeMenu}
+                className={`block px-3 py-2 rounded ${
+                  isActive("/backtest")
+                    ? "bg-blue-500/20 text-blue-300"
+                    : "hover:bg-white/10 text-gray-300"
+                }`}
+              >
                 Backtest Stats
               </Link>
-              <Link href="/calendar" onClick={closeMenu} className="hover:text-white">
+              <Link
+                href="/calendar"
+                onClick={closeMenu}
+                className={`block px-3 py-2 rounded ${
+                  isActive("/calendar")
+                    ? "bg-blue-500/20 text-blue-300"
+                    : "hover:bg-white/10 text-gray-300"
+                }`}
+              >
                 Calendar
               </Link>
               {isProActive(profile) ? (
-                <Link href="/ai" onClick={closeMenu} className="hover:text-white">
+                <Link
+                  href="/analyst"
+                  onClick={closeMenu}
+                  className={`block px-3 py-2 rounded ${
+                    isActive("/analyst")
+                      ? "bg-blue-500/20 text-blue-300"
+                      : "hover:bg-white/10 text-gray-300"
+                  }`}
+                >
                   AI Analysis
                 </Link>
               ) : (
@@ -112,30 +183,94 @@ export default function PublicNavbar() {
 
             <div className="my-2 border-t border-white/10" />
 
-            <div className="font-medium text-white">Community</div>
+            <div
+              className={`font-medium px-3 py-1 rounded transition ${
+                isGroupActive(["/community", "/feed", "/trade-rooms", "/leaderboard", "/explore"])
+                  ? "bg-blue-500/20 text-blue-300"
+                  : "text-gray-300 hover:text-white"
+              }`}
+            >
+              Community
+            </div>
             <div className="flex flex-col gap-1 pl-3 text-gray-400">
-              <Link href="/feed" onClick={closeMenu} className="hover:text-white">
+              <Link
+                href="/feed"
+                onClick={closeMenu}
+                className={`block px-3 py-2 rounded ${
+                  isActive("/feed")
+                    ? "bg-blue-500/20 text-blue-300"
+                    : "hover:bg-white/10 text-gray-300"
+                }`}
+              >
                 Feed
               </Link>
-              <Link href="/trade-rooms" onClick={closeMenu} className="hover:text-white">
+              <Link
+                href="/trade-rooms"
+                onClick={closeMenu}
+                className={`block px-3 py-2 rounded ${
+                  isActive("/trade-rooms")
+                    ? "bg-blue-500/20 text-blue-300"
+                    : "hover:bg-white/10 text-gray-300"
+                }`}
+              >
                 Trade Rooms
               </Link>
-              <Link href="/leaderboard" onClick={closeMenu} className="hover:text-white">
+              <Link
+                href="/leaderboard"
+                onClick={closeMenu}
+                className={`block px-3 py-2 rounded ${
+                  isActive("/leaderboard")
+                    ? "bg-blue-500/20 text-blue-300"
+                    : "hover:bg-white/10 text-gray-300"
+                }`}
+              >
                 Leaderboard
               </Link>
-              <Link href="/explore" onClick={closeMenu} className="hover:text-white">
+              <Link
+                href="/explore"
+                onClick={closeMenu}
+                className={`block px-3 py-2 rounded ${
+                  isActive("/explore")
+                    ? "bg-blue-500/20 text-blue-300"
+                    : "hover:bg-white/10 text-gray-300"
+                }`}
+              >
                 Explore
               </Link>
             </div>
 
             <div className="my-2 border-t border-white/10" />
 
-            <div className="font-medium text-white">Affiliate</div>
+            <div
+              className={`font-medium px-3 py-1 rounded transition ${
+                isGroupActive(["/affiliate", "/payouts"])
+                  ? "bg-blue-500/20 text-blue-300"
+                  : "text-gray-300 hover:text-white"
+              }`}
+            >
+              Affiliate
+            </div>
             <div className="flex flex-col gap-1 pl-3 text-gray-400">
-              <Link href="/affiliate" onClick={closeMenu} className="hover:text-white">
+              <Link
+                href="/affiliate"
+                onClick={closeMenu}
+                className={`block px-3 py-2 rounded ${
+                  isActive("/affiliate")
+                    ? "bg-blue-500/20 text-blue-300"
+                    : "hover:bg-white/10 text-gray-300"
+                }`}
+              >
                 Affiliate Dashboard
               </Link>
-              <Link href="/payouts" onClick={closeMenu} className="hover:text-white">
+              <Link
+                href="/payouts"
+                onClick={closeMenu}
+                className={`block px-3 py-2 rounded ${
+                  isActive("/payouts")
+                    ? "bg-blue-500/20 text-blue-300"
+                    : "hover:bg-white/10 text-gray-300"
+                }`}
+              >
                 Payouts
               </Link>
             </div>
@@ -146,14 +281,26 @@ export default function PublicNavbar() {
               <Link
                 href={`/profile/${profile.id}`}
                 onClick={closeMenu}
-                className="text-white hover:text-blue-400"
+                className={`px-3 py-1 rounded transition ${
+                  isGroupActive(["/profile"])
+                    ? "bg-blue-500/20 text-blue-300"
+                    : "text-gray-300 hover:text-white"
+                }`}
               >
                 Profile
               </Link>
             ) : (
               <span className="text-gray-500">Profile</span>
             )}
-            <Link href="/messages" onClick={closeMenu} className="text-white hover:text-blue-400">
+            <Link
+              href="/messages"
+              onClick={closeMenu}
+              className={`px-3 py-1 rounded transition ${
+                isActive("/messages")
+                  ? "bg-blue-500/20 text-blue-300"
+                  : "text-gray-300 hover:text-white"
+              }`}
+            >
               Messages
             </Link>
           </div>
