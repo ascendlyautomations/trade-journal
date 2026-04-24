@@ -306,7 +306,14 @@ export default function Navbar() {
                   type="button"
                   onClick={() => toggleMenu("analytics")}
                   className={`px-3 py-1 rounded transition ${
-                    isGroupActive(["/analytics", "/analyst"])
+                    isGroupActive([
+                      "/analytics",
+                      "/trades",
+                      "/backtest",
+                      "/calendar",
+                      "/achievements",
+                      "/analyst",
+                    ])
                       ? "bg-blue-500/20 text-blue-300"
                       : "text-gray-300 hover:text-white"
                   }`}
@@ -634,7 +641,14 @@ export default function Navbar() {
             <button
               type="button"
               className={`w-full flex justify-between items-center px-3 py-1 rounded transition ${
-                isGroupActive(["/analytics", "/analyst"])
+                isGroupActive([
+                  "/analytics",
+                  "/trades",
+                  "/backtest",
+                  "/calendar",
+                  "/achievements",
+                  "/analyst",
+                ])
                   ? "bg-blue-500/20 text-blue-300"
                   : "text-gray-300 hover:text-white"
               }`}
