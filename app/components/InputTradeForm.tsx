@@ -187,15 +187,24 @@ export default function InputTradeForm({
     }
   ) {
     let cleaned = value.replace(/,/g, "")
-
     const { allowDecimal = false, allowNegative = false } = options || {}
+    // 🚫 BLOCK MULTIPLE DECIMALS
+    if (allowDecimal) {
+      const decimalCount = (cleaned.match(/\./g) || []).length
+      if (decimalCount > 1) {
+        setDecimalError("Only one decimal point allowed")
+        return
+      } else {
+        setDecimalError("")
+      }
+    }
 
     let regex
 
     if (allowDecimal && allowNegative) {
-      regex = /^-?\d*\.?\d*$/
+      regex = /^-?\d*(\.\d*)?$/
     } else if (allowDecimal) {
-      regex = /^\d*\.?\d*$/
+      regex = /^\d*(\.\d*)?$/
     } else if (allowNegative) {
       regex = /^-?\d*$/
     } else {
@@ -207,7 +216,8 @@ export default function InputTradeForm({
       cleaned === "" ||
       cleaned === "-" ||
       cleaned === "." ||
-      cleaned === "-."
+      cleaned === "-." ||
+      cleaned.endsWith(".")
     ) {
       setter(cleaned)
       return
@@ -225,6 +235,7 @@ export default function InputTradeForm({
   const [rr, setRR] = useState("")
   const [points, setPoints] = useState("")
   const [session, setSession] = useState("NY")
+  const [decimalError, setDecimalError] = useState("")
   const [confluences, setConfluences] = useState("")
   const [publicDescription, setPublicDescription] = useState("")
   const [postToFeed, setPostToFeed] = useState(false)
@@ -448,6 +459,18 @@ export default function InputTradeForm({
     if (!selectedAccount) {
       setShowAccountWarning(true)
       return
+    }
+
+    if (entryTime && exitTime) {
+      const entry = new Date(`1970-01-01T${entryTime}`)
+      const exit = new Date(`1970-01-01T${exitTime}`)
+
+      if (entry > exit) {
+        setPopupMessage("Entry time cannot be after exit time")
+        setPopupType("error")
+        setShowPopup(true)
+        return
+      }
     }
 
     const acct = selectedAccount
@@ -747,7 +770,7 @@ export default function InputTradeForm({
       market_condition: market || null,
       news_event: newsEvent,
       timeframe: timeframe || null,
-      is_public: postToFeed,
+      is_public: isPublic,
     }
 
     const { data: newTradeData, error } = await supabase
@@ -765,7 +788,7 @@ export default function InputTradeForm({
       return
     }
 
-    if (postToFeed && newTradeData) {
+    if (isPublic && newTradeData) {
       const { error: postError } = await supabase.from("posts").insert([
         {
           user_id: user.id,
@@ -1120,13 +1143,27 @@ export default function InputTradeForm({
         <div className="p-4 rounded-xl bg-[#0b1220]/60 border border-white/5">
           <h3 className="text-sm text-gray-400 mb-2">Trade</h3>
           <div className="space-y-3">
-          <input
-            ref={dateRef}
-            type="date"
-            value={tradeDate}
-            onChange={(e) => setTradeDate(e.target.value)}
-            className="w-full p-2 lg:p-2.5 rounded bg-[#0f172a] border border-white/10 text-white [color-scheme:dark]"
-          />
+          <div
+            className="relative w-full cursor-pointer"
+            onClick={() =>
+              (
+                document.getElementById("trade-date") as HTMLInputElement | null
+              )?.showPicker?.()
+            }
+          >
+            <input
+              ref={dateRef}
+              id="trade-date"
+              type="date"
+              tabIndex={1}
+              value={tradeDate}
+              onChange={(e) => setTradeDate(e.target.value)}
+              className="w-full p-2 pr-10 rounded bg-[#0f172a] border border-white/10 text-white"
+            />
+            <div className="absolute right-3 top-1/2 -translate-y-1/2 text-white pointer-events-none">
+              📅
+            </div>
+          </div>
 
           <div className="relative w-full">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
@@ -1135,8 +1172,12 @@ export default function InputTradeForm({
 
             <input
               type="text"
+              tabIndex={2}
               value={
-                pnl === "-" || pnl === "." || pnl === "-."
+                pnl === "-" ||
+                pnl === "." ||
+                pnl === "-." ||
+                pnl.endsWith(".")
                   ? pnl
                   : formatCurrency(pnl)
               }
@@ -1149,10 +1190,16 @@ export default function InputTradeForm({
               className="w-full pl-8 pr-3 py-2 rounded bg-[#0f172a] border border-white/10 focus:border-green-500 outline-none"
             />
           </div>
+          {decimalError && (
+            <p className="text-red-400 text-xs mt-1">
+              {decimalError}
+            </p>
+          )}
 
           <input
             type="text"
             placeholder="Symbol / Ticker (e.g. MNQ, ES, AAPL)"
+            tabIndex={3}
             value={ticker}
             onChange={(e) => setTicker(e.target.value.toUpperCase())}
             className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
@@ -1161,12 +1208,14 @@ export default function InputTradeForm({
           <input
             type="text"
             placeholder="Strategy used (e.g. Breakout, Liquidity Sweep)"
+            tabIndex={4}
             value={strategy}
             onChange={(e) => setStrategy(e.target.value)}
             className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
           />
 
           <select
+            tabIndex={5}
             value={direction}
             onChange={(e) => setDirection(e.target.value)}
             className="w-full p-2 lg:p-2.5 rounded bg-[#0f172a] border border-white/10"
@@ -1176,6 +1225,7 @@ export default function InputTradeForm({
           </select>
 
           <select
+            tabIndex={6}
             value={session}
             onChange={(e) => setSession(e.target.value)}
             className="w-full p-2 lg:p-2.5 rounded bg-[#0f172a] border border-white/10"
@@ -1189,6 +1239,7 @@ export default function InputTradeForm({
             <input
               placeholder="Risk Reward"
               type="text"
+              tabIndex={7}
               value={rr}
               onChange={(e) =>
                 handleNumericInput(e.target.value, setRR, { allowDecimal: true })
@@ -1201,10 +1252,14 @@ export default function InputTradeForm({
             <input
               placeholder="Points"
               type="text"
+              tabIndex={8}
               value={
-                points === "-" || points === "." || points === "-."
+                points === "-" ||
+                points === "." ||
+                points === "-." ||
+                points.endsWith(".")
                   ? points
-                  : formatWithCommas(points)
+                  : formatCurrency(points)
               }
               onChange={(e) =>
                 handleNumericInput(e.target.value, setPoints, {
@@ -1220,6 +1275,7 @@ export default function InputTradeForm({
             <input
               placeholder="Contracts"
               type="text"
+              tabIndex={9}
               value={formatWithCommas(contracts)}
               onChange={(e) => handleNumericInput(e.target.value, setContracts)}
               className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
@@ -1230,6 +1286,7 @@ export default function InputTradeForm({
           {inputSettings.showNotes && (
             <textarea
               placeholder="What confirmations led to this trade?"
+              tabIndex={10}
               value={confluences}
               onChange={(e) => setConfluences(e.target.value)}
               className="w-full p-2 lg:p-2.5 h-24 lg:h-28 rounded bg-[#0f172a] border border-white/10"
@@ -1260,10 +1317,12 @@ export default function InputTradeForm({
 
                   <input
                     type="text"
+                    tabIndex={11}
                     value={
                       entryPrice === "-" ||
                       entryPrice === "." ||
-                      entryPrice === "-."
+                      entryPrice === "-." ||
+                      entryPrice.endsWith(".")
                         ? entryPrice
                         : formatCurrency(entryPrice)
                     }
@@ -1285,8 +1344,12 @@ export default function InputTradeForm({
 
                   <input
                     type="text"
+                    tabIndex={12}
                     value={
-                      exitPrice === "-" || exitPrice === "." || exitPrice === "-."
+                      exitPrice === "-" ||
+                      exitPrice === "." ||
+                      exitPrice === "-." ||
+                      exitPrice.endsWith(".")
                         ? exitPrice
                         : formatCurrency(exitPrice)
                     }
@@ -1301,27 +1364,55 @@ export default function InputTradeForm({
               </div>
               <div>
                 <label className="text-xs text-gray-400">Entry Time</label>
-                <input
-                  type="time"
-                  value={entryTime}
-                  onChange={(e) => {
-                    setEntryTimeTouched(true)
-                    setEntryTime(e.target.value)
-                  }}
-                  className="w-full p-2 lg:p-2.5 rounded bg-[#0f172a] border border-white/10 [color-scheme:dark]"
-                />
+                <div
+                  className="relative w-full cursor-pointer"
+                  onClick={() =>
+                    (
+                      document.getElementById("entry-time") as HTMLInputElement | null
+                    )?.showPicker?.()
+                  }
+                >
+                  <input
+                    id="entry-time"
+                    type="time"
+                    tabIndex={13}
+                    value={entryTime}
+                    onChange={(e) => {
+                      setEntryTimeTouched(true)
+                      setEntryTime(e.target.value)
+                    }}
+                    className="w-full p-2 pr-10 rounded bg-[#0f172a] border border-white/10 text-white"
+                  />
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 text-white pointer-events-none">
+                    🕒
+                  </div>
+                </div>
               </div>
               <div>
                 <label className="text-xs text-gray-400">Exit Time</label>
-                <input
-                  type="time"
-                  value={exitTime}
-                  onChange={(e) => {
-                    setExitTimeTouched(true)
-                    setExitTime(e.target.value)
-                  }}
-                  className="w-full p-2 lg:p-2.5 rounded bg-[#0f172a] border border-white/10 [color-scheme:dark]"
-                />
+                <div
+                  className="relative w-full cursor-pointer"
+                  onClick={() =>
+                    (
+                      document.getElementById("exit-time") as HTMLInputElement | null
+                    )?.showPicker?.()
+                  }
+                >
+                  <input
+                    id="exit-time"
+                    type="time"
+                    tabIndex={14}
+                    value={exitTime}
+                    onChange={(e) => {
+                      setExitTimeTouched(true)
+                      setExitTime(e.target.value)
+                    }}
+                    className="w-full p-2 pr-10 rounded bg-[#0f172a] border border-white/10 text-white"
+                  />
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 text-white pointer-events-none">
+                    🕒
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -1331,6 +1422,7 @@ export default function InputTradeForm({
               Public Description
             </label>
             <textarea
+              tabIndex={15}
               value={publicDescription}
               onChange={(e) => setPublicDescription(e.target.value)}
               placeholder="Insert public thoughts..."
@@ -1347,6 +1439,7 @@ export default function InputTradeForm({
             </div>
             <button
               type="button"
+              tabIndex={16}
               onClick={() => setIsPublic(!isPublic)}
               className={`
                 px-4 py-1.5 rounded-full text-xs font-medium
@@ -1368,6 +1461,7 @@ export default function InputTradeForm({
           <h3 className="text-sm text-gray-400 mb-2">Psychology</h3>
           <div className="space-y-3">
           <select
+            tabIndex={17}
             value={confidence}
             onChange={(e) => setConfidence(e.target.value)}
             className="w-full p-2 lg:p-2.5 bg-[#0f172a] border border-white/10 rounded"
@@ -1379,45 +1473,50 @@ export default function InputTradeForm({
             <option>4</option>
             <option>5</option>
           </select>
-          <input
-            type="text"
-            placeholder="Emotion"
+          <select
+            tabIndex={18}
             value={emotion}
             onChange={(e) => setEmotion(e.target.value)}
-            list="emotion-options"
-            className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
-          />
-          <datalist id="emotion-options">
-            <option value="Confident" />
-            <option value="Fearful" />
-            <option value="FOMO" />
-            <option value="Calm" />
-            <option value="Overconfident" />
-          </datalist>
+            className="w-full p-2 lg:p-2.5 bg-[#0f172a] border border-white/10 rounded"
+          >
+            <option value="">Emotion</option>
+            <option value="Confident">Confident</option>
+            <option value="Calm">Calm</option>
+            <option value="Focused">Focused</option>
+            <option value="Fearful">Fearful</option>
+            <option value="FOMO">FOMO</option>
+            <option value="Overconfident">Overconfident</option>
+            <option value="Hesitant">Hesitant</option>
+            <option value="Frustrated">Frustrated</option>
+          </select>
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
+              tabIndex={21}
               checked={followedPlan}
               onChange={(e) => setFollowedPlan(e.target.checked)}
             />
             Followed Plan?
           </label>
           <p className="text-sm text-gray-400 mt-0">Context</p>
-          <input
-            type="text"
-            placeholder="Market"
+          <select
+            tabIndex={19}
             value={market}
             onChange={(e) => setMarket(e.target.value)}
-            list="market-options"
-            className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
-          />
-          <datalist id="market-options">
-            <option value="Trending" />
-            <option value="Ranging" />
-            <option value="Choppy" />
-            <option value="News-driven" />
-          </datalist>
+            className="w-full p-2 lg:p-2.5 bg-[#0f172a] border border-white/10 rounded"
+          >
+            <option value="">Market</option>
+            <option value="Trending">Trending</option>
+            <option value="Strong Trend">Strong Trend</option>
+            <option value="Ranging">Ranging</option>
+            <option value="Choppy">Choppy</option>
+            <option value="Low Volume">Low Volume</option>
+            <option value="High Volume">High Volume</option>
+            <option value="News Driven">News Driven</option>
+            <option value="Volatile">Volatile</option>
+          </select>
           <select
+            tabIndex={20}
             value={timeframe}
             onChange={(e) => setTimeframe(e.target.value)}
             className="w-full p-2 lg:p-2.5 bg-[#0f172a] border border-white/10 rounded"
@@ -1430,6 +1529,7 @@ export default function InputTradeForm({
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
+              tabIndex={22}
               checked={newsEvent}
               onChange={(e) => setNewsEvent(e.target.checked)}
             />
@@ -1438,12 +1538,14 @@ export default function InputTradeForm({
           <p className="text-sm text-gray-400 mt-0">Psychology Notes</p>
           <textarea
             placeholder="What were you thinking in the moment?"
+            tabIndex={23}
             value={psychologyNotes}
             onChange={(e) => setPsychologyNotes(e.target.value)}
             className="w-full p-2 lg:p-2.5 h-28 lg:h-36 xl:h-40 rounded bg-[#0f172a] border border-white/10 text-white"
           />
 
           <div
+            tabIndex={24}
             onClick={handleClickUpload}
             onDrop={handleDrop}
             onDragOver={(e) => e.preventDefault()}
@@ -1470,6 +1572,7 @@ export default function InputTradeForm({
 
           <button
             type="button"
+            tabIndex={25}
             disabled={submitting}
             onClick={() => void handleSubmit()}
             className="w-full py-3 text-lg font-semibold rounded bg-green-500 hover:bg-green-600 text-white"

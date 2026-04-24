@@ -71,3 +71,23 @@ body {
   scrollbar-width: thin;
   scrollbar-color: rgba(100, 116, 139, 0.5) transparent;
 }
+
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator {
+  opacity: 0;
+  position: absolute;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+}
+
+input[type="date"],
+input[type="time"] {
+  color-scheme: dark;
+}
+
+input[type="date"]:hover::-webkit-calendar-picker-indicator,
+input[type="time"]:hover::-webkit-calendar-picker-indicator {
+  opacity: 1;
+}
