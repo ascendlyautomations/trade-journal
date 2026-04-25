@@ -34,36 +34,31 @@ function formatNumber(value: unknown): string {
   })
 }
 
-const symbolMap: Record<string, string> = {
-  MNQ: "CME_MINI:NQ1!",
-  MES: "CME_MINI:ES1!",
-  MGC: "COMEX:GC1!",
-  MCL: "NYMEX:CL1!",
-  MYM: "CBOT_MINI:YM1!",
-  M2K: "CME_MINI:RTY1!",
-}
-
 function getDuration(
   start: string | null | undefined,
   end: string | null | undefined
 ) {
   if (!start || !end) return null
-  const diff = new Date(String(end)).getTime() - new Date(String(start)).getTime()
-  if (Number.isNaN(diff) || diff <= 0) return null
-  const minutes = Math.floor(diff / 60000)
-  const seconds = Math.floor((diff % 60000) / 1000)
-  return `${minutes}m ${seconds}s`
-}
 
-function openTradeInTradingView(trade: any) {
-  const tvSymbol = symbolMap[trade.ticker] || trade.ticker
-  const date = String(trade.created_at).split("T")[0]
-  const time = trade.entry_time || "12:00"
-  const timestamp = Math.floor(new Date(`${date}T${time}:00`).getTime() / 1000)
-  window.open(
-    `https://www.tradingview.com/chart/?symbol=${tvSymbol}&interval=5&time=${timestamp}`,
-    "_blank"
-  )
+  const diff = +new Date(String(end)) - +new Date(String(start))
+  if (!Number.isFinite(diff) || diff <= 0) return null
+
+  const totalSeconds = Math.floor(diff / 1000)
+
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+
+  // under 1 minute → force 0m
+  if (hours === 0 && minutes === 0) {
+    return "0m"
+  }
+
+  if (hours === 0) {
+    return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`
+  }
+
+  return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`
 }
 
 export type TradeCardProps = {
@@ -369,14 +364,6 @@ export default function TradeCard({
           onClick={() => onImageClick?.(screenshotUrl)}
         />
       ) : null}
-
-      <button
-        type="button"
-        onClick={() => openTradeInTradingView(trade)}
-        className="mt-4 w-full rounded bg-blue-500 p-2 font-semibold hover:bg-blue-600"
-      >
-        View Trade in TradingView
-      </button>
 
       <p className="mt-4 text-xs text-gray-400">
         {formatEST(trade.created_at)}

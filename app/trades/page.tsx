@@ -51,11 +51,26 @@ function getDuration(
   end: string | null | undefined
 ) {
   if (!start || !end) return null
+
   const diff = +new Date(String(end)) - +new Date(String(start))
   if (!Number.isFinite(diff) || diff <= 0) return null
-  const minutes = Math.floor(diff / 60000)
-  const seconds = Math.floor((diff % 60000) / 1000)
-  return `${minutes}m ${seconds}s`
+
+  const totalSeconds = Math.floor(diff / 1000)
+
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+
+  // under 1 minute → force 0m
+  if (hours === 0 && minutes === 0) {
+    return "0m"
+  }
+
+  if (hours === 0) {
+    return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`
+  }
+
+  return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`
 }
 
 export default function TradesPage() {
@@ -314,31 +329,6 @@ export default function TradesPage() {
   const avgRR =
     trades.reduce((sum, t) => sum + (Number(t.rr) || 0), 0) /
     (trades.length || 1)
-
-  const symbolMap: any = {
-    MNQ: "CME_MINI:NQ1!",
-    MES: "CME_MINI:ES1!",
-    MGC: "COMEX:GC1!",
-    MCL: "NYMEX:CL1!",
-    MYM: "CBOT_MINI:YM1!",
-    M2K: "CME_MINI:RTY1!"
-  }
-
-  function openTrade(trade: any) {
-    const tvSymbol = symbolMap[trade.ticker] || trade.ticker
-
-    const date = trade.created_at.split("T")[0]
-    const time = trade.entry_time || "12:00"
-
-    const timestamp = Math.floor(
-      new Date(`${date}T${time}:00`).getTime() / 1000
-    )
-
-    window.open(
-      `https://www.tradingview.com/chart/?symbol=${tvSymbol}&interval=5&time=${timestamp}`,
-      "_blank"
-    )
-  }
 
   return (
     <>
@@ -809,13 +799,6 @@ export default function TradesPage() {
                         }
                       />
                     )}
-
-                    <button
-                      onClick={() => openTrade(trade)}
-                      className="mt-4 w-full bg-blue-500 hover:bg-blue-600 p-2 rounded font-semibold"
-                    >
-                      View Trade in TradingView
-                    </button>
 
                   </div>
                   );

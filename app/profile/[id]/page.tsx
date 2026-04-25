@@ -82,11 +82,26 @@ function getDuration(
   end: string | null | undefined
 ) {
   if (!start || !end) return null
+
   const diff = +new Date(String(end)) - +new Date(String(start))
   if (!Number.isFinite(diff) || diff <= 0) return null
-  const minutes = Math.floor(diff / 60000)
-  const seconds = Math.floor((diff % 60000) / 1000)
-  return `${minutes}m ${seconds}s`
+
+  const totalSeconds = Math.floor(diff / 1000)
+
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+
+  // under 1 minute → force 0m
+  if (hours === 0 && minutes === 0) {
+    return "0m"
+  }
+
+  if (hours === 0) {
+    return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`
+  }
+
+  return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`
 }
 
 function TradeCard({
