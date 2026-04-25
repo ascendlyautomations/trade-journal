@@ -100,6 +100,7 @@ function buildHeaderAliasMap(): Map<string, LogicalField> {
       "open price",
       "entry px",
       "avg entry price",
+      "avg buy price",
       "buy price",
     ],
     exit_price: [
@@ -108,13 +109,18 @@ function buildHeaderAliasMap(): Map<string, LogicalField> {
       "avg exit",
       "close price",
       "avg exit price",
+      "avg sell price",
       "sell price",
     ],
     pnl: [
       "pnl",
       "p l",
+      "p  l", // extra space from headers like "P  L" after non-alnum strip
       "profit",
       "net pnl",
+      "net p l", // e.g. "Net P&L" → normalizeHeaderKey
+      "gross p l",
+      "gross pnl",
       "realized pnl",
       "realized p l",
       "gain",
@@ -124,6 +130,7 @@ function buildHeaderAliasMap(): Map<string, LogicalField> {
     ],
     contracts: [
       "contracts",
+      "executions",
       "qty",
       "quantity",
       "size",
@@ -133,7 +140,15 @@ function buildHeaderAliasMap(): Map<string, LogicalField> {
       "position size",
     ],
     points: ["points", "net points", "tick gain", "ticks"],
-    rr: ["rr", "r r", "risk reward", "risk reward ratio", "reward risk"],
+    rr: [
+      "rr",
+      "r r",
+      "risk reward",
+      "risk reward ratio",
+      "reward risk",
+      "reward ratio",
+      "realized rr",
+    ],
     session: ["session", "trading session", "market session"],
     account_type: ["account type", "acct type"],
     mode: ["mode", "account mode", "trading mode"],
@@ -384,6 +399,300 @@ export function isTradovateCsvRow(row: CsvRow): boolean {
     }
   }
   return false
+}
+
+// --- TradeZella: lowercase+trim key namespace (P&L etc.); avoids duplicate `date` for open+close. ---
+
+const TRADEZELLA_FIELD_ALIASES = {
+  symbol: ["symbol", "instrument"],
+  pnl: ["p&l", "net p&l", "gross p&l"],
+  entry_price: ["entry price", "avg buy price"],
+  exit_price: ["exit price", "avg sell price"],
+  entry_date: ["open date", "date", "trade date", "entry date"],
+  exit_date: ["close date", "closed date", "exit date", "date"],
+  entry_time: ["open time"],
+  exit_time: ["close time"],
+  direction: ["side"],
+  contracts: ["executions", "quantity"],
+  rr: ["reward ratio", "realized rr"],
+  points: ["points"],
+} as const
+
+type TradeZellaKey = keyof typeof TRADEZELLA_FIELD_ALIASES
+
+/** Step 1: headers only — lowercase+trim, trim values. */
+function normalizeRowKeysForTradeZella(row: CsvRow): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(row).map(([key, value]) => [
+      key.toLowerCase().trim(),
+      value == null ? "" : String(value).trim(),
+    ])
+  )
+}
+
+/**
+ * Step 3: for each field, alias order wins (e.g. "close date" before "date" for exit).
+ * Falls back to a scan of `Object.keys` for the same set, in key order.
+ */
+function getValueForTradeZella(
+  row: Record<string, string>,
+  field: TradeZellaKey
+): string | null {
+  const aliases = TRADEZELLA_FIELD_ALIASES[field] as readonly string[]
+  for (const a of aliases) {
+    if (Object.prototype.hasOwnProperty.call(row, a)) {
+      const s = String(row[a] ?? "").trim()
+      if (s !== "") return s
+    }
+  }
+  for (const k of Object.keys(row)) {
+    if (aliases.includes(k)) {
+      const s = String(row[k] ?? "").trim()
+      if (s !== "") return s
+    }
+  }
+  return null
+}
+
+/** Step 4. Uses shared parseCsvNumeric (currency, accounting negatives, commas, etc.). */
+function cleanNumberTradeZella(val: string | null | undefined): number | null {
+  if (val == null) return null
+  const t = val.toString().trim()
+  if (t === "") return null
+  return parseCsvNumeric(t)
+}
+
+/**
+ * TradeZella: strip " UTC" from the cell, parse as UTC (with optional date), show as local
+ * 12h time. Does not include "UTC" in the return value.
+ */
+function cleanTimeTradeZella(
+  val: string | null | undefined,
+  dateVal: string | null | undefined
+): string | null {
+  if (!val) return null
+  const raw = val.toString().replace(" UTC", "").trim()
+  if (!raw) return null
+  try {
+    const full = dateVal
+      ? `${dateVal} ${raw} UTC`
+      : `${raw} UTC`
+    const dateObj = new Date(full)
+    if (Number.isNaN(dateObj.getTime())) {
+      console.warn("Time parse failed:", val)
+      return raw
+    }
+    return dateObj.toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    })
+  } catch (err) {
+    console.warn("Time parse failed:", val, err)
+    return raw
+  }
+}
+
+/**
+ * Same UTC construction as `cleanTimeTradeZella` — stores the correct instant as ISO
+ * in the database (import times are read as UTC per TradeZella).
+ */
+function parseTradeZellaTimeToIso(
+  timeVal: string | null | undefined,
+  dateVal: string | null | undefined,
+  dateIsoFallback: string
+): string {
+  if (timeVal == null || timeVal === "") {
+    return dateIsoFallback
+  }
+  const raw = timeVal.toString().replace(" UTC", "").trim()
+  if (!raw) {
+    return dateIsoFallback
+  }
+  const full = dateVal && String(dateVal).trim() !== ""
+    ? `${String(dateVal).trim()} ${raw} UTC`
+    : `${raw} UTC`
+  const dateObj = new Date(full)
+  if (!Number.isNaN(dateObj.getTime())) {
+    return dateObj.toISOString()
+  }
+  return combineTradeDateAndTime(dateIsoFallback, raw) || dateIsoFallback
+}
+
+export function isTradeZellaShapedRow(
+  row: CsvRow | Record<string, string>
+): boolean {
+  const n = normalizeRowKeysForTradeZella(row as CsvRow)
+  const k = new Set(Object.keys(n))
+  if (k.has("open date") && k.has("close date")) return true
+  if (
+    k.has("instrument") &&
+    (k.has("p&l") || k.has("net p&l") || k.has("gross p&l"))
+  )
+    return true
+  if (k.has("avg buy price") && k.has("avg sell price")) return true
+  if (k.has("open date") && (k.has("p&l") || k.has("net p&l") || k.has("gross p&l")))
+    return true
+  if (k.has("reward ratio") && k.has("open date")) return true
+  return false
+}
+
+function parseTradeZellaRow(
+  userId: string,
+  rowNumber: number,
+  normalized: Record<string, string>
+): CsvParseRowResult {
+  const pnlRaw = getValueForTradeZella(normalized, "pnl")
+  const symbolRaw = getValueForTradeZella(normalized, "symbol")
+
+  if (!symbolRaw?.trim() && !pnlRaw?.trim()) {
+    return { ok: false, rowNumber, reason: "Empty row" }
+  }
+  if (pnlRaw == null || pnlRaw === "") {
+    return { ok: false, rowNumber, reason: "Missing required field: PnL" }
+  }
+
+  const entryDate = getValueForTradeZella(normalized, "entry_date")
+  const entryTimeRaw = getValueForTradeZella(normalized, "entry_time")
+  const exitDate = getValueForTradeZella(normalized, "exit_date")
+  const exitTimeRaw = getValueForTradeZella(normalized, "exit_time")
+
+  const entryTime = cleanTimeTradeZella(entryTimeRaw, entryDate)
+  const exitTime = cleanTimeTradeZella(exitTimeRaw, exitDate)
+
+  const pnlParsed = cleanNumberTradeZella(pnlRaw)
+  if (pnlParsed == null) {
+    return { ok: false, rowNumber, reason: `Invalid PnL: "${pnlRaw}"` }
+  }
+  const pnl = pnlParsed
+
+  const entry_price = cleanNumberTradeZella(
+    getValueForTradeZella(normalized, "entry_price")
+  )
+  const exit_price = cleanNumberTradeZella(
+    getValueForTradeZella(normalized, "exit_price")
+  )
+
+  const side = getValueForTradeZella(normalized, "direction")
+  const fromSide = side ? normalizeDirection(side) : null
+  const direction: "Long" | "Short" =
+    fromSide ??
+    (entry_price != null && exit_price != null
+      ? exit_price > entry_price
+        ? "Long"
+        : "Short"
+      : "Long")
+
+  const contractsQ = cleanNumberTradeZella(
+    getValueForTradeZella(normalized, "contracts")
+  )
+  const c = contractsQ == null || contractsQ <= 0
+    ? 1
+    : Math.max(1, Math.round(contractsQ))
+
+  const rr = cleanNumberTradeZella(getValueForTradeZella(normalized, "rr"))
+  const points = cleanNumberTradeZella(
+    getValueForTradeZella(normalized, "points")
+  )
+
+  const baseRaw = exitDate || entryDate
+  if (!baseRaw) {
+    return { ok: false, rowNumber, reason: "Missing required field: date" }
+  }
+
+  const baseIso = parseFlexibleTradeDate(baseRaw)
+  if (!baseIso) {
+    return {
+      ok: false,
+      rowNumber,
+      reason: `Unrecognized date format: "${baseRaw}"`,
+    }
+  }
+
+  const entryDateIso = entryDate
+    ? parseFlexibleTradeDate(entryDate) || baseIso
+    : baseIso
+  const exitDateIso = exitDate
+    ? parseFlexibleTradeDate(exitDate) || baseIso
+    : baseIso
+
+  const entryTimeIso = entryTimeRaw?.trim()
+    ? parseTradeZellaTimeToIso(entryTimeRaw, entryDate, entryDateIso)
+    : entryDateIso
+  const exitTimeIso = exitTimeRaw?.trim()
+    ? parseTradeZellaTimeToIso(exitTimeRaw, exitDate, exitDateIso)
+    : exitDateIso
+
+  const nowIso = new Date().toISOString()
+  const eIso = Number.isFinite(new Date(entryTimeIso).getTime())
+    ? entryTimeIso
+    : nowIso
+  const xIso = Number.isFinite(new Date(exitTimeIso).getTime())
+    ? exitTimeIso
+    : eIso
+
+  let duration_seconds: number | null = null
+  if (eIso && xIso) {
+    const a = new Date(eIso).getTime()
+    const b = new Date(xIso).getTime()
+    if (Number.isFinite(a) && Number.isFinite(b) && b > a) {
+      duration_seconds = Math.round((b - a) / 1000)
+    }
+  }
+
+  const normalizedTicker = normalizeFuturesSymbol(symbolRaw ?? "")
+  const ticker = normalizedTicker || symbolRaw || "UNKNOWN"
+
+  const dateIso = xIso
+  const created = dateIso
+
+  const trade: CsvTradeInsert = {
+    user_id: userId,
+    ticker,
+    entry_price: entry_price ?? null,
+    exit_price: exit_price ?? null,
+    entry_time: eIso,
+    exit_time: xIso,
+    direction,
+    pnl,
+    contracts: c,
+    rr: rr != null && Number.isFinite(rr) ? rr : null,
+    points: points != null && Number.isFinite(points) ? points : null,
+    date: dateIso,
+    created_at: created,
+    session: null,
+    account_type: "imported",
+    mode: "live",
+    notes: "",
+    public_description: "",
+    image_url: null,
+    account_size: null,
+    account_id: null,
+    account_name: null,
+    reviewed: false,
+    duration_seconds,
+    duration_text: null,
+    is_public: false,
+  }
+
+  console.log("Parsed Time:", entryTime, exitTime)
+  console.log("Contracts:", trade.contracts)
+  if (process.env.NODE_ENV === "development") {
+    console.log("Parsed Trade:", {
+      symbol: getValueForTradeZella(normalized, "symbol") || "UNKNOWN",
+      pnl,
+      entry_price,
+      exit_price,
+      entry_time: entryTime,
+      exit_time: exitTime,
+      direction,
+      contracts: c,
+      rr,
+      points,
+    })
+  }
+
+  return { ok: true, rowNumber, trade }
 }
 
 function getCellByAliases(row: CsvRow, aliases: readonly string[]): string | null {
@@ -692,6 +1001,12 @@ function buildFlexibleTradeInsert(
 
 /** Back-compat: flexible “clean” CSV (non-Tradovate). */
 export function buildCleanCsvTrade(row: CsvRow, userId: string): CsvTradeInsert {
+  const z = normalizeRowKeysForTradeZella(row)
+  if (isTradeZellaShapedRow(z)) {
+    const res = parseTradeZellaRow(userId, 1, z)
+    if (res.ok) return res.trade
+    throw new Error(res.reason)
+  }
   const f = mapCsvHeadersToFields(row)
   const res = buildFlexibleTradeInsert(f, userId, 1)
   if (res.ok) return res.trade
@@ -735,6 +1050,11 @@ export function buildTradesFromParsedCsv(
   } else {
     rows.forEach((row, i) => {
       const rowNumber = i + 2
+      const zellaNorm = normalizeRowKeysForTradeZella(row)
+      if (isTradeZellaShapedRow(zellaNorm)) {
+        rowResults.push(parseTradeZellaRow(userId, rowNumber, zellaNorm))
+        return
+      }
       const f = mapCsvHeadersToFields(row)
       const keys = Object.keys(f)
       if (keys.length === 0) {

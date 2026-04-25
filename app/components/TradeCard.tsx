@@ -42,6 +42,18 @@ const symbolMap: Record<string, string> = {
   M2K: "CME_MINI:RTY1!",
 }
 
+function getDuration(
+  start: string | null | undefined,
+  end: string | null | undefined
+) {
+  if (!start || !end) return null
+  const diff = new Date(String(end)).getTime() - new Date(String(start)).getTime()
+  if (Number.isNaN(diff) || diff <= 0) return null
+  const minutes = Math.floor(diff / 60000)
+  const seconds = Math.floor((diff % 60000) / 1000)
+  return `${minutes}m ${seconds}s`
+}
+
 function openTradeInTradingView(trade: any) {
   const tvSymbol = symbolMap[trade.ticker] || trade.ticker
   const date = String(trade.created_at).split("T")[0]
@@ -71,8 +83,32 @@ export default function TradeCard({
   onImageClick,
   shareProfile = null,
 }: TradeCardProps) {
-  const entry = trade.entry_price ?? trade.entry ?? null
-  const exit = trade.exit_price ?? trade.exit ?? null
+  const entryPrice = trade.entry_price ?? trade.entry ?? null
+  const exitPrice = trade.exit_price ?? trade.exit ?? null
+
+  const entryRaw =
+    trade.entry_time ||
+    trade.entryTime ||
+    trade.open_time ||
+    null
+  const exitRaw =
+    trade.exit_time ||
+    trade.exitTime ||
+    trade.close_time ||
+    null
+
+  const entry = entryRaw ? formatEST(String(entryRaw)) : null
+  const exit = exitRaw ? formatEST(String(exitRaw)) : null
+
+  if (process.env.NODE_ENV === "development") {
+    console.log("TRADE TIMES:", { entryRaw, exitRaw, trade })
+  }
+
+  const duration = getDuration(
+    entryRaw == null ? null : String(entryRaw),
+    exitRaw == null ? null : String(exitRaw)
+  )
+
   const durationDisplay = getTradeDurationDisplay(
     trade.duration_text,
     trade.duration_seconds
@@ -146,25 +182,17 @@ export default function TradeCard({
                   : "Unknown")}
             </h2>
 
-            {(() => {
-              const formatDate = (dateString: string | null | undefined) => {
-                if (!dateString) return ""
-                const d = new Date(dateString)
-                if (Number.isNaN(d.getTime())) return ""
-                return d.toLocaleDateString("en-US")
-              }
+            <p className="text-xs text-gray-400">
+              {formatEST(String(trade.date || trade.created_at || ""))}
 
-              const entryT = trade.entry_time
-              const exitT = trade.exit_time
-
-              const baseDate = entryT || exitT || trade.created_at
-
-              return (
-                <div className="text-sm text-gray-400">
-                  {formatDate(baseDate)}
-                </div>
-              )
-            })()}
+              {entry && exit && (
+                <>
+                  {" • "}
+                  {entry} – {exit}
+                  {duration && ` (${duration})`}
+                </>
+              )}
+            </p>
 
             <div
               className={`mt-1 inline-block rounded-lg px-3 py-1 text-lg font-bold ${
@@ -228,21 +256,21 @@ export default function TradeCard({
               <div className="mt-3 space-y-1 border-t border-white/10 pt-3 text-sm text-gray-300">
                 <p className="text-sm">
                   <span className="text-gray-400">Entry:</span>{" "}
-                  {formatTradePrice(entry)}
+                  {formatTradePrice(entryPrice)}
                 </p>
                 <p className="text-sm">
                   <span className="text-gray-400">Exit:</span>{" "}
-                  {formatTradePrice(exit)}
+                  {formatTradePrice(exitPrice)}
                 </p>
                 <p className="text-sm">
                   <span className="text-gray-400">Entry Time:</span>{" "}
-                  {formatTradeClockTime(trade.entry_time, {
+                  {formatTradeClockTime(entryRaw, {
                     sameDayAs: trade.created_at,
                   })}
                 </p>
                 <p className="text-sm">
                   <span className="text-gray-400">Exit Time:</span>{" "}
-                  {formatTradeClockTime(trade.exit_time, {
+                  {formatTradeClockTime(exitRaw, {
                     sameDayAs: trade.created_at,
                   })}
                 </p>
