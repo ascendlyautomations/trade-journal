@@ -199,7 +199,6 @@ export default function Navbar() {
     href: string
     proOnly?: boolean
   }[] = [
-    { label: "Trade History", href: "/trades" },
     { label: "Backtest Stats", href: "/backtest" },
     { label: "Calendar", href: "/calendar" },
     { label: "PropFirm Mode", href: "/analytics/propfirm" },
@@ -229,7 +228,7 @@ export default function Navbar() {
       <div className="flex h-16 w-full shrink-0 items-center border-b border-white/5 bg-[#0b1f3a]">
         <div className="flex h-full w-full items-center justify-between px-4 md:px-6">
         {/* LEFT */}
-        <div className="flex min-w-0 items-center gap-6">
+        <div className="flex min-w-0 items-center gap-3">
           <Link
             href="/"
             className="font-bold text-xl shrink-0 bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent"
@@ -244,10 +243,21 @@ export default function Navbar() {
           ) : null}
 
           {!isHomePage && user ? (
-            <div className="hidden md:flex items-center gap-6 text-sm">
+            <div className="hidden md:flex items-center gap-3 text-sm">
+              <Link
+                href="/app"
+                className={`px-2 py-1 rounded transition ${
+                  isActive("/app")
+                    ? "bg-blue-500/20 text-blue-300"
+                    : "text-gray-300 hover:text-white"
+                }`}
+              >
+                Input Trade
+              </Link>
+
               <Link
                 href="/dashboard"
-                className={`px-3 py-1 rounded transition ${
+                className={`px-2 py-1 rounded transition ${
                   isActive("/dashboard")
                     ? "bg-blue-500/20 text-blue-300"
                     : "text-gray-300 hover:text-white"
@@ -257,20 +267,20 @@ export default function Navbar() {
               </Link>
 
               <Link
-                href="/app"
-                className={`px-3 py-1 rounded transition ${
-                  isActive("/app")
+                href="/trades"
+                className={`px-2 py-1 rounded transition ${
+                  isActive("/trades")
                     ? "bg-blue-500/20 text-blue-300"
                     : "text-gray-300 hover:text-white"
                 }`}
               >
-                Input Trade
+                Trades
               </Link>
 
               {profile?.id ? (
                 <Link
                   href={`/profile/${profile.id}`}
-                  className={`px-3 py-1 rounded transition ${
+                  className={`px-2 py-1 rounded transition ${
                     isGroupActive(["/profile"])
                       ? "bg-blue-500/20 text-blue-300"
                       : "text-gray-300 hover:text-white"
@@ -284,7 +294,7 @@ export default function Navbar() {
 
               <Link
                 href="/messages"
-                className={`inline-flex items-center gap-2 px-3 py-1 rounded transition ${
+                className={`inline-flex items-center gap-2 px-2 py-1 rounded transition ${
                   isActive("/messages")
                     ? "bg-blue-500/20 text-blue-300"
                     : "text-gray-300 hover:text-white"
@@ -305,10 +315,9 @@ export default function Navbar() {
                 <button
                   type="button"
                   onClick={() => toggleMenu("analytics")}
-                  className={`px-3 py-1 rounded transition ${
+                  className={`px-2 py-1 rounded transition ${
                     isGroupActive([
                       "/analytics",
-                      "/trades",
                       "/backtest",
                       "/calendar",
                       "/achievements",
@@ -349,7 +358,7 @@ export default function Navbar() {
                 <button
                   type="button"
                   onClick={() => toggleMenu("community")}
-                  className={`px-3 py-1 rounded transition ${
+                  className={`px-2 py-1 rounded transition ${
                     isGroupActive(["/community", "/feed", "/trade-rooms", "/leaderboard", "/explore"])
                       ? "bg-blue-500/20 text-blue-300"
                       : "text-gray-300 hover:text-white"
@@ -380,7 +389,7 @@ export default function Navbar() {
                 <button
                   type="button"
                   onClick={() => toggleMenu("affiliate")}
-                  className={`px-3 py-1 rounded transition ${
+                  className={`px-2 py-1 rounded transition ${
                     isGroupActive(["/affiliate", "/payouts"])
                       ? "bg-blue-500/20 text-blue-300"
                       : "text-gray-300 hover:text-white"
@@ -578,8 +587,20 @@ export default function Navbar() {
         <div className="w-full border-t border-white/5 bg-[#0b1f3a] md:hidden">
           <div className="flex w-full flex-col gap-3 px-4 pb-4 pt-2 text-sm text-white md:px-6">
           <Link
+            href="/app"
+            className={`px-2 py-1 rounded transition ${
+              isActive("/app")
+                ? "bg-blue-500/20 text-blue-300"
+                : "text-gray-300 hover:text-white"
+            }`}
+            onClick={closeMobile}
+          >
+            Input Trade
+          </Link>
+
+          <Link
             href="/dashboard"
-            className={`px-3 py-1 rounded transition ${
+            className={`px-2 py-1 rounded transition ${
               isActive("/dashboard")
                 ? "bg-blue-500/20 text-blue-300"
                 : "text-gray-300 hover:text-white"
@@ -590,21 +611,21 @@ export default function Navbar() {
           </Link>
 
           <Link
-            href="/app"
-            className={`px-3 py-1 rounded transition ${
-              isActive("/app")
+            href="/trades"
+            className={`px-2 py-1 rounded transition ${
+              isActive("/trades")
                 ? "bg-blue-500/20 text-blue-300"
                 : "text-gray-300 hover:text-white"
             }`}
             onClick={closeMobile}
           >
-            Input Trade
+            Trades
           </Link>
 
           {profile?.id ? (
             <Link
               href={`/profile/${profile.id}`}
-              className={`px-3 py-1 rounded transition ${
+              className={`px-2 py-1 rounded transition ${
                 isGroupActive(["/profile"])
                   ? "bg-blue-500/20 text-blue-300"
                   : "text-gray-300 hover:text-white"
@@ -619,7 +640,7 @@ export default function Navbar() {
 
           <Link
             href="/messages"
-            className={`flex items-center justify-between px-3 py-1 rounded transition ${
+            className={`flex items-center justify-between px-2 py-1 rounded transition ${
               isActive("/messages")
                 ? "bg-blue-500/20 text-blue-300"
                 : "text-gray-300 hover:text-white"
@@ -640,10 +661,9 @@ export default function Navbar() {
           <div>
             <button
               type="button"
-              className={`w-full flex justify-between items-center px-3 py-1 rounded transition ${
+              className={`w-full flex justify-between items-center px-2 py-1 rounded transition ${
                 isGroupActive([
                   "/analytics",
-                  "/trades",
                   "/backtest",
                   "/calendar",
                   "/achievements",
@@ -686,7 +706,7 @@ export default function Navbar() {
           <div>
             <button
               type="button"
-              className={`w-full flex justify-between items-center px-3 py-1 rounded transition ${
+              className={`w-full flex justify-between items-center px-2 py-1 rounded transition ${
                 isGroupActive(["/community", "/feed", "/trade-rooms", "/leaderboard", "/explore"])
                   ? "bg-blue-500/20 text-blue-300"
                   : "text-gray-300 hover:text-white"
@@ -719,7 +739,7 @@ export default function Navbar() {
           <div>
             <button
               type="button"
-              className={`w-full flex justify-between items-center px-3 py-1 rounded transition ${
+              className={`w-full flex justify-between items-center px-2 py-1 rounded transition ${
                 isGroupActive(["/affiliate", "/payouts"])
                   ? "bg-blue-500/20 text-blue-300"
                   : "text-gray-300 hover:text-white"
