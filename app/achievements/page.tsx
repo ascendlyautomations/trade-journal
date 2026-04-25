@@ -5,6 +5,7 @@ import Navbar from "../components/Navbar"
 import AchievementCard from "../components/AchievementCard"
 import { supabase } from "../../lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
+import { formatDateOnly } from "@/lib/formatDate"
 import {
   type Achievement,
   badgeKeyFromType,
@@ -45,10 +46,17 @@ export default function AchievementsPage() {
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState<AchievementFormState>(EMPTY_FORM)
+  const [achievedDate, setAchievedDate] = useState<string | null>(null)
+  const [showCalendar, setShowCalendar] = useState(false)
+  const [calendarMonth, setCalendarMonth] = useState<Date>(() => {
+    const now = new Date()
+    return new Date(now.getFullYear(), now.getMonth(), 1)
+  })
   const [file, setFile] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [removeImage, setRemoveImage] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const calendarWrapperRef = useRef<HTMLDivElement | null>(null)
 
   const loadAchievements = useCallback(async (uid: string) => {
     setLoading(true)
@@ -110,9 +118,25 @@ export default function AchievementsPage() {
     return () => URL.revokeObjectURL(nextPreviewUrl)
   }, [file])
 
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      const target = e.target as Node
+      if (!calendarWrapperRef.current?.contains(target)) {
+        setShowCalendar(false)
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [])
+
   function openCreate() {
     setEditingId(null)
     setForm(EMPTY_FORM)
+    setAchievedDate(null)
+    setShowCalendar(false)
+    const now = new Date()
+    setCalendarMonth(new Date(now.getFullYear(), now.getMonth(), 1))
     setFile(null)
     setPreviewUrl(null)
     setRemoveImage(false)
@@ -130,11 +154,43 @@ export default function AchievementsPage() {
       is_public: !!a.is_public,
       is_featured: !!a.is_featured,
     })
+    setAchievedDate(a.achieved_at ? String(a.achieved_at).slice(0, 10) : null)
+    setShowCalendar(false)
+    if (a.achieved_at) {
+      const d = new Date(String(a.achieved_at))
+      if (!Number.isNaN(d.getTime())) {
+        setCalendarMonth(new Date(d.getFullYear(), d.getMonth(), 1))
+      }
+    }
     setFile(null)
     setPreviewUrl(null)
     setRemoveImage(false)
     setShowForm(true)
   }
+
+  function openAchievedDateCalendar() {
+    if (achievedDate) {
+      const parsed = new Date(achievedDate)
+      if (!Number.isNaN(parsed.getTime())) {
+        setCalendarMonth(new Date(parsed.getFullYear(), parsed.getMonth(), 1))
+      }
+    }
+    setShowCalendar(true)
+  }
+
+  const monthLabel = calendarMonth.toLocaleString(undefined, {
+    month: "long",
+    year: "numeric",
+  })
+
+  const monthStart = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1)
+  const monthEnd = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 0)
+  const startWeekday = monthStart.getDay()
+  const totalDays = monthEnd.getDate()
+  const cells: Array<number | null> = []
+  for (let i = 0; i < startWeekday; i++) cells.push(null)
+  for (let day = 1; day <= totalDays; day++) cells.push(day)
+  while (cells.length % 7 !== 0) cells.push(null)
 
   async function saveAchievement() {
     if (!userId || !form.title.trim() || !form.achievement_type.trim()) return
@@ -193,7 +249,7 @@ export default function AchievementsPage() {
       account_size: null,
       mode: null,
       firm: null,
-      achieved_at: form.achieved_at || null,
+      achieved_at: achievedDate || form.achieved_at || null,
       image_url: imageUrl,
       is_public: form.is_public,
       is_featured: form.is_featured,
@@ -212,6 +268,7 @@ export default function AchievementsPage() {
     }
     setShowForm(false)
     setForm(EMPTY_FORM)
+    setAchievedDate("")
     setEditingId(null)
     setFile(null)
     setPreviewUrl(null)
@@ -383,14 +440,121 @@ export default function AchievementsPage() {
               </label>
               <label className="text-xs text-gray-300">
                 Achieved Date
-                <input
-                  type="date"
-                  value={form.achieved_at}
-                  onChange={(e) =>
-                    setForm((prev) => ({ ...prev, achieved_at: e.target.value }))
-                  }
-                  className="mt-1.5 h-11 w-full rounded-lg border border-white/15 bg-[#0a1329] px-3 text-base text-white [color-scheme:dark] outline-none transition focus:border-blue-400/60 focus:ring-2 focus:ring-blue-500/20 sm:text-sm"
-                />
+                <div ref={calendarWrapperRef} className="relative calendar-wrapper">
+                  <div
+                    className="mt-1.5 w-full px-3 py-2.5 rounded-lg bg-[#0f172a]/70 border border-white/10 text-white cursor-pointer flex items-center hover:border-blue-400 transition"
+                    onClick={openAchievedDateCalendar}
+                  >
+                    <span
+                      className={
+                        achievedDate
+                          ? "text-sm md:text-base font-medium text-white"
+                          : "text-sm text-gray-400"
+                      }
+                    >
+                      {achievedDate ? formatDateOnly(achievedDate) : "Select date"}
+                    </span>
+                  </div>
+
+                  {showCalendar ? (
+                    <div className="absolute left-0 top-full mt-2 z-50 rounded-xl border border-white/10 bg-[#0f172a] shadow-lg">
+                      <div className="flex items-center justify-between gap-2 border-b border-white/10 px-3 py-2 text-sm text-white">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setCalendarMonth(
+                              new Date(
+                                calendarMonth.getFullYear(),
+                                calendarMonth.getMonth() - 1,
+                                1
+                              )
+                            )
+                          }
+                          className="rounded bg-white/10 px-2 py-1 hover:bg-white/20"
+                        >
+                          ←
+                        </button>
+                        <span>{monthLabel}</span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setCalendarMonth(
+                              new Date(
+                                calendarMonth.getFullYear(),
+                                calendarMonth.getMonth() + 1,
+                                1
+                              )
+                            )
+                          }
+                          className="rounded bg-white/10 px-2 py-1 hover:bg-white/20"
+                        >
+                          →
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-7 gap-1 p-2 text-center text-xs text-gray-400">
+                        {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((label) => (
+                          <span key={label}>{label}</span>
+                        ))}
+                        {cells.map((day, i) => {
+                          if (!day) return <span key={`empty-${i}`} className="h-8" />
+                          const y = calendarMonth.getFullYear()
+                          const m = String(calendarMonth.getMonth() + 1).padStart(2, "0")
+                          const d = String(day).padStart(2, "0")
+                          const dateValue = `${y}-${m}-${d}`
+                          const isSelected = achievedDate === dateValue
+                          return (
+                            <button
+                              key={dateValue}
+                              type="button"
+                              onClick={() => {
+                                setAchievedDate(dateValue)
+                                setForm((prev) => ({ ...prev, achieved_at: dateValue }))
+                                setShowCalendar(false)
+                              }}
+                              className={`h-8 w-8 rounded ${
+                                isSelected
+                                  ? "bg-blue-500/30 text-blue-200"
+                                  : "text-gray-200 hover:bg-white/10"
+                              }`}
+                            >
+                              {day}
+                            </button>
+                          )
+                        })}
+                      </div>
+                      <div className="mt-2 flex justify-between px-2 pb-2">
+                        <button
+                          type="button"
+                          className="text-xs text-blue-400 hover:text-blue-300"
+                          onClick={() => {
+                            const today = new Date()
+                            const y = today.getFullYear()
+                            const m = String(today.getMonth() + 1).padStart(2, "0")
+                            const d = String(today.getDate()).padStart(2, "0")
+                            const dateValue = `${y}-${m}-${d}`
+                            setAchievedDate(dateValue)
+                            setForm((prev) => ({ ...prev, achieved_at: dateValue }))
+                            setCalendarMonth(new Date(today.getFullYear(), today.getMonth(), 1))
+                            setShowCalendar(false)
+                          }}
+                        >
+                          Today
+                        </button>
+                        <button
+                          type="button"
+                          className="text-xs text-gray-400 hover:text-white"
+                          onClick={() => {
+                            setAchievedDate(null)
+                            setForm((prev) => ({ ...prev, achieved_at: "" }))
+                            setShowCalendar(false)
+                          }}
+                        >
+                          Clear
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
               </label>
               <label className="text-xs text-gray-300">
                 Upload Image
