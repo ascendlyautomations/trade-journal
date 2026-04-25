@@ -17,7 +17,7 @@ import {
   formatTradePrice,
   getTradeDurationDisplay,
 } from "@/lib/tradeDisplayFormat"
-import { formatEST } from "@/lib/formatEST"
+import { formatDateOnly, formatTimeOnly } from "@/lib/formatDate"
 import ShareTradeButton from "@/app/components/ShareTradeButton"
 import ShareToConversationsModal from "@/app/components/ShareToConversationsModal"
 
@@ -44,6 +44,18 @@ function formatNumber(value: unknown): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })
+}
+
+function getDuration(
+  start: string | null | undefined,
+  end: string | null | undefined
+) {
+  if (!start || !end) return null
+  const diff = +new Date(String(end)) - +new Date(String(start))
+  if (!Number.isFinite(diff) || diff <= 0) return null
+  const minutes = Math.floor(diff / 60000)
+  const seconds = Math.floor((diff % 60000) / 1000)
+  return `${minutes}m ${seconds}s`
 }
 
 export default function TradesPage() {
@@ -513,8 +525,13 @@ export default function TradesPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
                 {visibleTrades.slice(0, visibleCount).map((trade) => {
-  const entry = trade.entry_price ?? trade.entry ?? null
-  const exit = trade.exit_price ?? trade.exit ?? null
+  const entryPrice = trade.entry_price ?? trade.entry ?? null
+  const exitPrice = trade.exit_price ?? trade.exit ?? null
+  const entryRaw = trade.entry_time
+  const exitRaw = trade.exit_time
+  const entry = entryRaw ? formatTimeOnly(entryRaw) : null
+  const exit = exitRaw ? formatTimeOnly(exitRaw) : null
+  const duration = getDuration(entryRaw, exitRaw)
   const durationDisplay = getTradeDurationDisplay(
     trade.duration_text,
     trade.duration_seconds
@@ -589,27 +606,14 @@ export default function TradesPage() {
                             ) : null}
                           </h2>
 
-                          {(() => {
-                            const formatDate = (
-                              dateString: string | null | undefined
-                            ) => {
-                              if (!dateString) return ""
-                              const d = new Date(dateString)
-                              if (Number.isNaN(d.getTime())) return ""
-                              return d.toLocaleDateString("en-US")
-                            }
-
-                            const baseDate =
-                              trade.entry_time ||
-                              trade.exit_time ||
-                              trade.created_at
-
-                            return (
-                              <p className="text-xs text-gray-400">
-                                {formatDate(baseDate)}
-                              </p>
-                            )
-                          })()}
+                          <p className="text-xs text-gray-400">
+                            {formatDateOnly(
+                              trade.entry_time || trade.created_at || undefined
+                            )}
+                            {entry ? ` • ${entry}` : ""}
+                            {exit ? ` – ${exit}` : ""}
+                            {duration ? ` (${duration})` : ""}
+                          </p>
 
                           <div
                             className={`inline-block px-3 py-1 rounded-lg text-lg font-bold mt-1 ${
@@ -699,11 +703,11 @@ export default function TradesPage() {
                             <div className="mt-3 text-sm text-gray-300 space-y-1 border-t border-white/10 pt-3">
                               <p className="text-sm">
                                 <span className="text-gray-400">Entry:</span>{" "}
-                                {formatTradePrice(entry)}
+                                {formatTradePrice(entryPrice)}
                               </p>
                               <p className="text-sm">
                                 <span className="text-gray-400">Exit:</span>{" "}
-                                {formatTradePrice(exit)}
+                                {formatTradePrice(exitPrice)}
                               </p>
                               <p className="text-sm">
                                 <span className="text-gray-400">Entry Time:</span>{" "}
@@ -812,10 +816,6 @@ export default function TradesPage() {
                     >
                       View Trade in TradingView
                     </button>
-
-                    <p className="text-xs text-gray-400 mt-4">
-                      {formatEST(trade.created_at)}
-                    </p>
 
                   </div>
                   );

@@ -6,6 +6,7 @@ import {
   formatTradePrice,
   getTradeDurationDisplay,
 } from "@/lib/tradeDisplayFormat"
+import { formatDateOnly, formatTimeOnly } from "@/lib/formatDate"
 import { formatEST } from "@/lib/formatEST"
 
 function formatMoney(value: unknown): string {
@@ -83,31 +84,22 @@ export default function TradeCard({
   onImageClick,
   shareProfile = null,
 }: TradeCardProps) {
+  console.log("REAL TRADE CARD RENDERED")
+
+  console.log("FINAL TRADE CHECK:", trade)
+
   const entryPrice = trade.entry_price ?? trade.entry ?? null
   const exitPrice = trade.exit_price ?? trade.exit ?? null
 
-  const entryRaw =
-    trade.entry_time ||
-    trade.entryTime ||
-    trade.open_time ||
-    null
-  const exitRaw =
-    trade.exit_time ||
-    trade.exitTime ||
-    trade.close_time ||
-    null
-
-  const entry = entryRaw ? formatEST(String(entryRaw)) : null
-  const exit = exitRaw ? formatEST(String(exitRaw)) : null
+  const entryRaw = trade.entry_time
+  const exitRaw = trade.exit_time
+  const entry = entryRaw ? formatTimeOnly(entryRaw) : null
+  const exit = exitRaw ? formatTimeOnly(exitRaw) : null
+  const duration = getDuration(entryRaw, exitRaw)
 
   if (process.env.NODE_ENV === "development") {
-    console.log("TRADE TIMES:", { entryRaw, exitRaw, trade })
+    console.log("TRADE TIMES FINAL:", { entryRaw, exitRaw, entry, exit, duration })
   }
-
-  const duration = getDuration(
-    entryRaw == null ? null : String(entryRaw),
-    exitRaw == null ? null : String(exitRaw)
-  )
 
   const durationDisplay = getTradeDurationDisplay(
     trade.duration_text,
@@ -182,16 +174,26 @@ export default function TradeCard({
                   : "Unknown")}
             </h2>
 
-            <p className="text-xs text-gray-400">
-              {formatEST(String(trade.date || trade.created_at || ""))}
+            <p className="text-red-400 text-xs">
+              RAW ENTRY: {String(trade.entry_time)}
+            </p>
+            <p className="text-red-400 text-xs">
+              RAW EXIT: {String(trade.exit_time)}
+            </p>
+            <p className="text-yellow-400 text-xs">
+              TEST ENTRY: {new Date(trade.entry_time).toString()}
+            </p>
+            <p className="text-yellow-400 text-xs">
+              TEST EXIT: {new Date(trade.exit_time).toString()}
+            </p>
 
-              {entry && exit && (
-                <>
-                  {" • "}
-                  {entry} – {exit}
-                  {duration && ` (${duration})`}
-                </>
+            <p className="text-xs text-gray-400">
+              {formatDateOnly(
+                trade.entry_time || trade.date || trade.created_at || undefined
               )}
+              {entry ? ` • ${entry}` : ""}
+              {exit ? ` – ${exit}` : ""}
+              {duration ? ` (${duration})` : ""}
             </p>
 
             <div

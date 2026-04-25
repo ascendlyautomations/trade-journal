@@ -31,6 +31,7 @@ import {
   formatAchievementDate,
 } from "../../../lib/achievements"
 import { formatPnlCurrency } from "../../../lib/formatMoney"
+import { formatDateOnly, formatTimeOnly } from "@/lib/formatDate"
 import { formatEST } from "@/lib/formatEST"
 import { createUserRoom } from "@/lib/createUserRoom"
 
@@ -76,6 +77,18 @@ function formatMoney(v: number) {
     : `$${v.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
 }
 
+function getDuration(
+  start: string | null | undefined,
+  end: string | null | undefined
+) {
+  if (!start || !end) return null
+  const diff = +new Date(String(end)) - +new Date(String(start))
+  if (!Number.isFinite(diff) || diff <= 0) return null
+  const minutes = Math.floor(diff / 60000)
+  const seconds = Math.floor((diff % 60000) / 1000)
+  return `${minutes}m ${seconds}s`
+}
+
 function TradeCard({
   trade,
   profile,
@@ -117,6 +130,12 @@ function TradeCard({
   const desc = trade.public_description
     ? String(trade.public_description).trim()
     : ""
+
+  const entryRaw = trade.entry_time
+  const exitRaw = trade.exit_time
+  const entry = entryRaw ? formatTimeOnly(entryRaw) : null
+  const exit = exitRaw ? formatTimeOnly(exitRaw) : null
+  const duration = getDuration(entryRaw, exitRaw)
 
   const tradeDetails = (
     <>
@@ -165,7 +184,10 @@ function TradeCard({
         <span className="shrink-0 text-gray-300 tabular-nums">RR {rr}</span>
       </div>
       <p className="text-xs text-gray-400">
-        {formatEST(trade.created_at)}
+        {formatDateOnly(trade.entry_time || trade.created_at || undefined)}
+        {entry ? ` • ${entry}` : ""}
+        {exit ? ` – ${exit}` : ""}
+        {duration ? ` (${duration})` : ""}
       </p>
     </>
   )

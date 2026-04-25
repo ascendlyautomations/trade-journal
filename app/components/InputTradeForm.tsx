@@ -76,6 +76,18 @@ function buildDateTime(
   return parsed.toISOString()
 }
 
+function getDuration(
+  start: string | null,
+  end: string | null
+) {
+  if (!start || !end) return null
+  const diff = +new Date(end) - +new Date(start)
+  if (!Number.isFinite(diff) || diff <= 0) return null
+  const minutes = Math.floor(diff / 60000)
+  const seconds = Math.floor((diff % 60000) / 1000)
+  return `${minutes}m ${seconds}s`
+}
+
 function tradeDateFromRow(t: any): string {
   if (t?.created_at) return String(t.created_at).split("T")[0]
   if (t?.date) return String(t.date).split("T")[0]
@@ -968,6 +980,10 @@ export default function InputTradeForm({
     setShowCreateModal(false)
   }
 
+  const entryDateTime = entryTime ? buildDateTime(tradeDate, entryTime) : null
+  const exitDateTime = exitTime ? buildDateTime(tradeDate, exitTime) : null
+  const duration = getDuration(entryDateTime, exitDateTime)
+
   const formBody = (
     <>
       <div className="mb-4">
@@ -1440,6 +1456,18 @@ export default function InputTradeForm({
                     🕒
                   </div>
                 </div>
+                {duration && (
+                  <p className="text-xs text-gray-400 mt-1">
+                    Duration: {duration}
+                  </p>
+                )}
+                {entryDateTime &&
+                  exitDateTime &&
+                  new Date(exitDateTime) <= new Date(entryDateTime) && (
+                    <p className="text-xs text-red-400 mt-1">
+                      Invalid time range
+                    </p>
+                  )}
               </div>
             </div>
           )}

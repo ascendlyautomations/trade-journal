@@ -30,6 +30,34 @@ export function formatESTTime(dateString: string | null | undefined): string {
   })
 }
 
+/** Time of day only (no date) in the runtime’s local zone — for entry/exit segments next to a full date line. */
+export function formatTimeOnly(
+  val: string | Date | null | undefined
+): string | null {
+  if (val == null || val === "") return null
+  const d = val instanceof Date ? val : new Date(val)
+  if (Number.isNaN(d.getTime())) return null
+  return d.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  })
+}
+
+/** Date only (M/D/YY) in the runtime’s local zone — for trade card first segment. */
+export function formatDateOnly(
+  val: string | Date | null | undefined
+): string {
+  if (val == null || val === "") return ""
+  const d = val instanceof Date ? val : new Date(val)
+  if (Number.isNaN(d.getTime())) return ""
+  return d.toLocaleDateString("en-US", {
+    month: "numeric",
+    day: "numeric",
+    year: "2-digit",
+  })
+}
+
 /** America/New_York calendar date key (YYYY-MM-DD). Matches app/calendar/page.tsx. */
 export function getESTDateKey(value: string | Date | null | undefined): string {
   if (value == null || value === "") return ""
