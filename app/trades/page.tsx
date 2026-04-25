@@ -18,6 +18,7 @@ import {
   getTradeDurationDisplay,
 } from "@/lib/tradeDisplayFormat"
 import { formatDateOnly, formatTimeOnly } from "@/lib/formatDate"
+import { formatEST } from "@/lib/formatEST"
 import ShareTradeButton from "@/app/components/ShareTradeButton"
 import ShareToConversationsModal from "@/app/components/ShareToConversationsModal"
 
@@ -310,18 +311,6 @@ export default function TradesPage() {
     ? filteredTrades.filter((t) => t.is_public === true)
     : filteredTrades
 
-  const tradesPageTitle = useMemo(() => {
-    if (resultFilter === "wins") return "Winning Trades"
-    if (resultFilter === "losses") return "Losing Trades"
-    if (timeframe === "daily") return "Daily Trades"
-    if (timeframe === "weekly") return "Weekly Trades"
-    if (timeframe === "monthly") return "Monthly Trades"
-    if (timeframe === "yearly") return "Yearly Trades"
-    if (timeframe === "custom") return "Custom Range"
-    if (selectedDate?.trim()) return "Specific Date"
-    return "All Trades"
-  }, [resultFilter, timeframe, selectedDate])
-
   const totalTrades = trades.length
   const wins = trades.filter((t) => t.pnl > 0)
   const winRate = totalTrades ? (wins.length / totalTrades) * 100 : 0
@@ -357,26 +346,24 @@ export default function TradesPage() {
             <p className="text-center text-gray-400">Loading...</p>
           ) : (
             <>
-              <h1 className="text-xl md:text-2xl font-semibold text-white/85 mb-2">
-                {tradesPageTitle}
-              </h1>
-              <TradeFilterBar
-                variant="trades"
-                className="mt-2.5 mb-5"
-                accounts={accounts}
-                accountFilter={accountFilter}
-                onAccountChange={setAccountFilter}
-                accountTypeFilter={accountTypeFilter}
-                onAccountTypeChange={setAccountTypeFilter}
-                timeframe={timeframe}
-                onTimeframeChange={handleTimeframeChange}
-                customRangeStart={customRangeStart}
-                customRangeEnd={customRangeEnd}
-                onCustomRangeApply={handleCustomRangeApply}
-                selectedDate={selectedDate}
-                onSelectedDateChange={setSelectedDate}
-                leading={
-                  <div className="flex shrink-0 items-center gap-2 w-full justify-center md:w-auto">
+              <div className="max-w-7xl mx-auto px-4 w-full mt-2.5 mb-5">
+                <TradeFilterBar
+                  variant="trades"
+                  fullWidth
+                  accounts={accounts}
+                  accountFilter={accountFilter}
+                  onAccountChange={setAccountFilter}
+                  accountTypeFilter={accountTypeFilter}
+                  onAccountTypeChange={setAccountTypeFilter}
+                  timeframe={timeframe}
+                  onTimeframeChange={handleTimeframeChange}
+                  customRangeStart={customRangeStart}
+                  customRangeEnd={customRangeEnd}
+                  onCustomRangeApply={handleCustomRangeApply}
+                  selectedDate={selectedDate}
+                  onSelectedDateChange={setSelectedDate}
+                  leading={
+                  <div className="flex w-full shrink-0 flex-wrap items-center justify-center gap-2 md:w-auto md:flex-nowrap">
                     <button
                       type="button"
                       onClick={() => setResultFilter("all")}
@@ -453,8 +440,8 @@ export default function TradesPage() {
                       </span>
                     </div>
                   </div>
-                }
-                trailing={
+                  }
+                  trailing={
                   <div className="flex w-full flex-wrap items-center justify-center gap-2 md:w-auto">
                     <button
                       onClick={() => setShowPublicOnly((prev) => !prev)}
@@ -483,8 +470,9 @@ export default function TradesPage() {
                       {showAdvanced ? "Hide Advanced" : "Show Advanced"}
                     </button>
                   </div>
-                }
-              />
+                  }
+                />
+              </div>
 
               <p className="mb-1.5 mt-1 text-xs text-gray-400 px-2 md:px-0 md:mt-0">
                 All-time stats
@@ -798,6 +786,12 @@ export default function TradesPage() {
                           setSelectedImage(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/screenshots/${trade.image_url}`)
                         }
                       />
+                    )}
+
+                    {trade.created_at && (
+                      <p className="text-xs text-gray-400 mt-3">
+                        {formatEST(trade.created_at)}
+                      </p>
                     )}
 
                   </div>

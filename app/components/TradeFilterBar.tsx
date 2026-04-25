@@ -52,6 +52,8 @@ export type TradeFilterBarProps = {
   variant?: string
   /** Dashboard-only mobile three-row layout; desktop remains unchanged */
   mobileThreeRowLayout?: boolean
+  /** Trades page: full-width row, no centered shrink-wrap */
+  fullWidth?: boolean
 }
 
 export default function TradeFilterBar({
@@ -74,6 +76,7 @@ export default function TradeFilterBar({
   className = "",
   variant: _variant,
   mobileThreeRowLayout = false,
+  fullWidth = false,
 }: TradeFilterBarProps) {
   const [timeframeOpen, setTimeframeOpen] = useState(false)
   const [selectedTimeframe, setSelectedTimeframe] = useState("All")
@@ -109,13 +112,21 @@ export default function TradeFilterBar({
 
   return (
     <>
-      <div className={`flex w-full justify-center ${className}`}>
+      <div
+        className={
+          fullWidth
+            ? `w-full flex flex-wrap items-center justify-center gap-3 ${className}`
+            : `flex w-full justify-center ${className}`
+        }
+      >
         <div
-          className={`relative z-50 flex max-w-full overflow-visible rounded-xl border border-white/10 bg-white/5 px-3 py-2 backdrop-blur-md md:gap-3 md:px-4 md:py-3 ${
+          className={
             mobileThreeRowLayout
-              ? "w-full flex-col items-stretch gap-2 md:flex-row md:flex-wrap md:items-center md:justify-center lg:flex-nowrap"
-              : "flex-wrap items-center justify-center gap-2 lg:flex-nowrap"
-          }`}
+              ? `relative z-50 flex max-w-full overflow-visible rounded-xl border border-white/10 bg-white/5 px-3 py-2 backdrop-blur-md md:gap-3 md:px-4 md:py-3 w-full flex-col items-stretch gap-2 md:flex-row md:flex-wrap md:items-center md:justify-center lg:flex-nowrap`
+              : fullWidth
+                ? "relative z-50 flex max-w-full flex-wrap items-center gap-3 overflow-visible rounded-xl border border-white/10 bg-white/5 px-4 py-2 backdrop-blur-md"
+                : `relative z-50 flex max-w-full overflow-visible rounded-xl border border-white/10 bg-white/5 px-3 py-2 backdrop-blur-md md:gap-3 md:px-4 md:py-3 flex-wrap items-center justify-center gap-2 lg:flex-nowrap`
+          }
         >
           {leading}
 
