@@ -1,5 +1,6 @@
 import { parseCsvNumeric } from "./parseCsvNumeric"
 import { normalizeFuturesSymbol } from "./normalizeFuturesSymbol"
+import { getSessionFromDate } from "./getSession"
 
 export type CsvRow = Record<string, string>
 
@@ -660,7 +661,7 @@ function parseTradeZellaRow(
     points: points != null && Number.isFinite(points) ? points : null,
     date: dateIso,
     created_at: created,
-    session: null,
+    session: getSessionFromDate(eIso) || "NY",
     account_type: "imported",
     mode: "live",
     notes: "",
@@ -759,6 +760,7 @@ export function parseTradovateRow(row: CsvRow, userId: string): CsvTradeInsert {
   const nowIso = new Date().toISOString()
   const entryIso = entryOk ? entryTime.toISOString() : nowIso
   const exitIso = exitOk ? exitTime.toISOString() : entryIso
+  const session = getSessionFromDate(entryIso) || "NY"
 
   const duration_text = durationRaw?.trim() || null
   let duration_seconds: number | null = null
@@ -794,7 +796,7 @@ export function parseTradovateRow(row: CsvRow, userId: string): CsvTradeInsert {
     points: entry != null && exit != null ? Math.abs(exit - entry) : null,
     date: entryIso,
     created_at: entryIso,
-    session: "NY",
+    session,
     account_type: "imported",
     mode: "live",
     notes: "",
@@ -830,6 +832,68 @@ function parseTradovateRowSafe(
       reason: e instanceof Error ? e.message : "Tradovate parse error",
     }
   }
+}
+
+function isEnteredExitedFormatRow(row: CsvRow): boolean {
+  const entered = row.EnteredAt?.trim()
+  const exited = row.ExitedAt?.trim()
+  return Boolean(entered && exited)
+}
+
+function parseEnteredExitedFormatRow(
+  row: CsvRow,
+  userId: string,
+  rowNumber: number
+): CsvParseRowResult {
+  const entry = row.EnteredAt ? new Date(row.EnteredAt) : null
+  const exit = row.ExitedAt ? new Date(row.ExitedAt) : null
+
+  if (!entry || Number.isNaN(entry.getTime())) {
+    return { ok: false, rowNumber, reason: `Invalid EnteredAt: "${row.EnteredAt ?? ""}"` }
+  }
+  if (!exit || Number.isNaN(exit.getTime())) {
+    return { ok: false, rowNumber, reason: `Invalid ExitedAt: "${row.ExitedAt ?? ""}"` }
+  }
+
+  const entryPrice = parseFloat(String(row.EntryPrice ?? "").trim())
+  const exitPrice = parseFloat(String(row.ExitPrice ?? "").trim())
+  const pnlParsed = parseFloat(String(row.PnL ?? "").trim())
+  const contractsParsed = parseInt(String(row.Size ?? "").trim(), 10)
+
+  const contractName = String(row.ContractName ?? "").trim()
+  const normalizedTicker = normalizeFuturesSymbol(contractName)
+
+  const trade: CsvTradeInsert = {
+    user_id: userId,
+    ticker: normalizedTicker || contractName || "",
+    direction: row.Type?.toLowerCase() === "long" ? "Long" : "Short",
+    entry_price: Number.isFinite(entryPrice) ? entryPrice : 0,
+    exit_price: Number.isFinite(exitPrice) ? exitPrice : 0,
+    pnl: Number.isFinite(pnlParsed) ? pnlParsed : 0,
+    contracts:
+      Number.isFinite(contractsParsed) && contractsParsed > 0 ? contractsParsed : 1,
+    entry_time: entry.toISOString(),
+    exit_time: exit.toISOString(),
+    date: entry.toISOString(),
+    created_at: entry.toISOString(),
+    session: getSessionFromDate(entry.toISOString()) || "NY",
+    account_type: "imported",
+    mode: "live",
+    notes: "",
+    public_description: "",
+    image_url: null,
+    account_size: null,
+    account_id: null,
+    account_name: null,
+    reviewed: false,
+    rr: null,
+    points: null,
+    duration_seconds: null,
+    duration_text: null,
+    is_public: false,
+  }
+
+  return { ok: true, rowNumber, trade }
 }
 
 function buildFlexibleTradeInsert(
@@ -942,6 +1006,7 @@ function buildFlexibleTradeInsert(
   })
 
   const sessionVal = f.session?.trim() || null
+  const autoSession = getSessionFromDate(entryTimeIso)
   const acctTypeRaw = f.account_type?.trim() || ""
   const modeRaw = f.mode?.trim() || ""
   const account_type = acctTypeRaw ? acctTypeRaw.toLowerCase() : "imported"
@@ -980,7 +1045,10 @@ function buildFlexibleTradeInsert(
     points,
     date: dateIso,
     created_at: dateIso,
-    session: sessionVal && sessionVal.length > 0 ? sessionVal : null,
+    session:
+      sessionVal && sessionVal.length > 0
+        ? sessionVal
+        : autoSession || "NY",
     account_type,
     mode,
     notes,
@@ -1004,6 +1072,10 @@ export function buildCleanCsvTrade(row: CsvRow, userId: string): CsvTradeInsert 
   const z = normalizeRowKeysForTradeZella(row)
   if (isTradeZellaShapedRow(z)) {
     const res = parseTradeZellaRow(userId, 1, z)
+    if (res.ok) return res.trade
+    throw new Error(res.reason)
+  } else if (isEnteredExitedFormatRow(row)) {
+    const res = parseEnteredExitedFormatRow(row, userId, 1)
     if (res.ok) return res.trade
     throw new Error(res.reason)
   }
@@ -1053,6 +1125,9 @@ export function buildTradesFromParsedCsv(
       const zellaNorm = normalizeRowKeysForTradeZella(row)
       if (isTradeZellaShapedRow(zellaNorm)) {
         rowResults.push(parseTradeZellaRow(userId, rowNumber, zellaNorm))
+        return
+      } else if (isEnteredExitedFormatRow(row)) {
+        rowResults.push(parseEnteredExitedFormatRow(row, userId, rowNumber))
         return
       }
       const f = mapCsvHeadersToFields(row)

@@ -6,6 +6,7 @@ import { compressImage } from "@/lib/compressImage"
 import { ensureManualUserAccountRegistered } from "@/lib/ensureManualUserAccount"
 import { isProActive } from "@/lib/subscription"
 import { tradesInsertRowsPrivate } from "@/lib/csvTradeParsers"
+import { getSessionFromDate } from "@/lib/getSession"
 import CreateAccountModal, {
   type Props as CreateAccountModalProps,
 } from "@/components/CreateAccountModal"
@@ -260,6 +261,7 @@ export default function InputTradeForm({
   const [rr, setRR] = useState("")
   const [points, setPoints] = useState("")
   const [session, setSession] = useState("NY")
+  const [sessionManuallySet, setSessionManuallySet] = useState(false)
   const [decimalError, setDecimalError] = useState("")
   const [confluences, setConfluences] = useState("")
   const [publicDescription, setPublicDescription] = useState("")
@@ -412,6 +414,7 @@ export default function InputTradeForm({
     setRR(t.rr != null && t.rr !== "" ? String(t.rr) : "")
     setPoints(t.points != null && t.points !== "" ? String(t.points) : "")
     setSession(t.session || "NY")
+    setSessionManuallySet(false)
     setConfluences(t.top_confluences ?? t.notes ?? "")
     setPublicDescription(t.public_description ?? "")
     setPostToFeed(false)
@@ -467,6 +470,7 @@ export default function InputTradeForm({
     setRR("")
     setPoints("")
     setSession("NY")
+    setSessionManuallySet(false)
     setConfluences("")
     setPublicDescription("")
     setImage(null)
@@ -550,7 +554,14 @@ export default function InputTradeForm({
     const parsedContracts = Number.parseInt(contracts, 10)
     const contractsNum = Number.isFinite(parsedContracts) ? parsedContracts : 0
 
-    const sessionToSave = (session && String(session).trim()) || "NY"
+    const entryTimeForSave = buildDateTime(tradeDate, entryTime)
+    const autoDetectedSession = entryTimeForSave
+      ? getSessionFromDate(entryTimeForSave)
+      : null
+    const cleanedSession = (session && String(session).trim()) || ""
+    const sessionToSave = sessionManuallySet
+      ? cleanedSession || "NY"
+      : autoDetectedSession || cleanedSession || "NY"
     const tradeTypeToSave =
       tradeType != null && String(tradeType).trim() !== ""
         ? String(tradeType).trim()
@@ -996,6 +1007,14 @@ export default function InputTradeForm({
   const exitDateTime = exitTime ? buildDateTime(tradeDate, exitTime) : null
   const duration = getDuration(entryDateTime, exitDateTime)
 
+  useEffect(() => {
+    if (sessionManuallySet || !entryDateTime) return
+    const detected = getSessionFromDate(entryDateTime)
+    if (detected && (session === "" || session === "NY")) {
+      setSession(detected)
+    }
+  }, [entryDateTime, session, sessionManuallySet])
+
   const formBody = (
     <>
       <div className="mb-4">
@@ -1282,12 +1301,16 @@ export default function InputTradeForm({
           <select
             tabIndex={6}
             value={session}
-            onChange={(e) => setSession(e.target.value)}
+            onChange={(e) => {
+              setSessionManuallySet(true)
+              setSession(e.target.value)
+            }}
             className="w-full p-2 lg:p-2.5 rounded bg-[#0f172a] border border-white/10"
           >
             <option value="NY">NY</option>
             <option value="London">London</option>
             <option value="Asia">Asia</option>
+            <option value="After">After</option>
           </select>
 
           {inputSettings.showRR && (
