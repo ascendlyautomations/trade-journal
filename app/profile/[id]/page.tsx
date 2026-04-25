@@ -1714,18 +1714,6 @@ export default function ProfilePage() {
                         )}
                       </div>
 
-                      {userRoom && (userRoom.slug || userRoom.name) ? (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const q = String(userRoom.slug ?? userRoom.name ?? "")
-                            window.location.href = `/trade-rooms?room=${encodeURIComponent(q)}`
-                          }}
-                          className="mt-3 rounded-lg bg-purple-500/10 px-4 py-2 text-purple-400 hover:bg-purple-500/20"
-                        >
-                          View Trade Room
-                        </button>
-                      ) : null}
                     </div>
 
                   {profile.name && profile.name !== profile.username ? (
@@ -1802,6 +1790,20 @@ export default function ProfilePage() {
                   <p className="mt-2 px-4 text-sm leading-relaxed text-gray-300 md:px-0">
                     {profile.bio || "No bio yet"}
                   </p>
+                  {userRoom && (userRoom.slug || userRoom.name) ? (
+                    <div className="mt-4">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const q = String(userRoom.slug ?? userRoom.name ?? "")
+                          router.push(`/trade-rooms?room=${encodeURIComponent(q)}`)
+                        }}
+                        className="w-full md:w-auto px-4 py-2 rounded-lg bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-medium transition"
+                      >
+                        View Trade Room
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
               </div>
 

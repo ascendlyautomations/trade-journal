@@ -1,14 +1,13 @@
 import OpenAI from "openai"
 import { createClient } from "@supabase/supabase-js"
-import { createServerClient } from "@supabase/ssr"
-import { cookies } from "next/headers"
+import { NextResponse } from "next/server"
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 })
 
 // 🔥 SERVER-LEVEL SUPABASE CLIENT
-const supabase = createClient(
+const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
@@ -16,37 +15,43 @@ const supabase = createClient(
 const aiCallByUser = new Map<string, number>()
 
 export async function POST(req: Request) {
-  const cookieStore = await cookies()
-  const supabaseAuth = createServerClient(
+  console.log("AI API HIT")
+  const token = req.headers.get("authorization")?.replace("Bearer ", "")
+
+  const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
-      cookies: {
-        get: (name) => cookieStore.get(name)?.value,
+      global: {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
       },
     }
   )
   const {
     data: { user },
-  } = await supabaseAuth.auth.getUser()
+  } = await supabase.auth.getUser()
 
   if (!user) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 })
+    console.error("AI AUTH FAILED")
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
+  console.log("AI AUTH USER:", user.id)
 
   const lastCall = aiCallByUser.get(user.id) ?? 0
   if (Date.now() - lastCall < 3000) {
-    return Response.json({ error: "Slow down" }, { status: 429 })
+    return NextResponse.json({ error: "Slow down" }, { status: 429 })
   }
   aiCallByUser.set(user.id, Date.now())
 
   const { trade, messages } = await req.json()
   const tradeId = trade?.id
   if (!tradeId) {
-    return Response.json({ error: "Missing trade id" }, { status: 400 })
+    return NextResponse.json({ error: "Missing trade id" }, { status: 400 })
   }
 
-  const { data: profile, error: profileError } = await supabase
+  const { data: profile, error: profileError } = await supabaseAdmin
     .from("profiles")
     .select("is_pro, subscription_status")
     .eq("id", user.id)
@@ -54,20 +59,20 @@ export async function POST(req: Request) {
 
   if (profileError) {
     console.error("ERROR:", JSON.stringify(profileError, null, 2))
-    return Response.json({ error: "Could not verify subscription" }, { status: 500 })
+    return NextResponse.json({ error: "Could not verify subscription" }, { status: 500 })
   }
 
   const pro =
     profile?.is_pro === true ||
     profile?.subscription_status === "active"
   if (!pro) {
-    return Response.json(
+    return NextResponse.json(
       { error: "Pro required", reply: "AI Analyst is a Pro feature." },
       { status: 403 }
     )
   }
 
-  const { data: existingTrade, error: tradeLookupError } = await supabase
+  const { data: existingTrade, error: tradeLookupError } = await supabaseAdmin
     .from("trades")
     .select("id, user_id, image_url")
     .eq("id", tradeId)
@@ -75,11 +80,11 @@ export async function POST(req: Request) {
 
   if (tradeLookupError) {
     console.error("ERROR:", JSON.stringify(tradeLookupError, null, 2))
-    return Response.json({ error: "Trade not found" }, { status: 404 })
+    return NextResponse.json({ error: "Trade not found" }, { status: 404 })
   }
 
   if (!existingTrade || existingTrade.user_id !== user.id) {
-    return Response.json({ error: "Forbidden" }, { status: 403 })
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
   const imageUrl = existingTrade.image_url
@@ -92,18 +97,47 @@ export async function POST(req: Request) {
       {
         role: "system",
         content: `
-You are a professional trading coach.
+You are an elite trading performance analyst.
 
-Return:
+You specialize in:
+- futures trading (NQ, ES, MNQ)
+- risk management
+- trade execution
+- trader psychology
+- consistency and discipline
 
-Valid Setup:
-...
+Your job is to analyze a trader's executed trade and give direct, actionable feedback.
 
-What Could Be Improved:
-- ...
+Give a structured breakdown:
 
-Advice For Next Time:
-- ...
+1. EXECUTION QUALITY
+- Was entry logical?
+- Was exit optimal or premature?
+- Any signs of chasing or hesitation?
+
+2. RISK MANAGEMENT
+- Was the trade size appropriate?
+- Was the loss controlled properly?
+- Was RR acceptable?
+
+3. PSYCHOLOGY
+- What does this trade suggest about the trader’s mindset?
+- Any signs of fear, greed, revenge trading, hesitation?
+
+4. WHAT WAS DONE WELL
+- Highlight at least one positive behavior
+
+5. WHAT TO IMPROVE
+- Give specific, actionable improvements
+
+6. FINAL VERDICT
+- 1–2 sentence blunt summary (like a coach)
+
+STYLE:
+- Be direct, not generic
+- Avoid vague advice like "manage risk better"
+- Speak like a trading coach reviewing a real trade
+- Keep it concise but insightful
 `
       },
       {
@@ -112,11 +146,19 @@ Advice For Next Time:
           {
             type: "text",
             text: `
-Ticker: ${trade.ticker}
-PnL: ${trade.pnl}
-RR: ${trade.rr}
-Contracts: ${trade.contracts ?? "—"}
-Notes: ${trade.notes}
+TRADE DATA:
+
+- Symbol: ${trade.symbol ?? trade.ticker ?? "Unknown"}
+- Direction: ${trade.direction ?? "Unknown"}
+- Entry Price: ${trade.entry_price ?? "N/A"}
+- Exit Price: ${trade.exit_price ?? "N/A"}
+- PnL: ${trade.pnl ?? "N/A"}
+- Risk Reward (RR): ${trade.rr ?? "N/A"}
+- Contracts: ${trade.contracts ?? "N/A"}
+- Session: ${trade.session ?? "N/A"}
+- Entry Time: ${trade.entry_time ?? "N/A"}
+- Exit Time: ${trade.exit_time ?? "N/A"}
+- Notes: ${trade.notes || "None"}
 `
           },
           ...(imageUrl
@@ -128,13 +170,23 @@ Notes: ${trade.notes}
     ]
   })
 
-  const reply = response.choices[0].message.content
+  const aiResult = response.choices[0].message.content
 
   // 🔥 SAVE FEEDBACK (THIS NOW WORKS)
-  await supabase
+  await supabaseAdmin
     .from("trades")
-    .update({ ai_feedback: reply })
+    .update({ ai_feedback: aiResult })
     .eq("id", tradeId)
 
-  return Response.json({ reply })
+  if (aiResult) {
+    return NextResponse.json({
+      result: aiResult,
+      reply: aiResult
+    })
+  }
+
+  return NextResponse.json(
+    { error: "No response generated" },
+    { status: 500 }
+  )
 }

@@ -26,6 +26,7 @@ export default function AnalystPage() {
 
   async function fetchTrades() {
     setPageReady(false)
+    console.log("AI ANALYSIS: fetching trades...")
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -35,7 +36,8 @@ export default function AnalystPage() {
       return
     }
 
-    const [{ data }, { data: prof }] = await Promise.all([
+    const [{ data, error: tradesError }, { data: prof, error: profileError }] =
+      await Promise.all([
       supabase
         .from("trades")
         .select("*")
@@ -46,10 +48,37 @@ export default function AnalystPage() {
         .select("is_pro, subscription_status")
         .eq("id", user.id)
         .maybeSingle(),
-    ])
+      ])
+
+    if (tradesError) {
+      console.error("AI ANALYSIS TRADES ERROR:", tradesError)
+    }
+    if (profileError) {
+      console.error("AI ANALYSIS PROFILE ERROR:", profileError)
+    }
+    if (tradesError || profileError) {
+      setPageReady(true)
+    }
+
+    console.log("AI ANALYSIS RAW:", data)
+    console.log(
+      "AI ANALYSIS FEEDBACK FIELDS:",
+      (data || []).map((t) => ({
+        id: t.id,
+        ai_feedback: t.ai_feedback,
+        ai_feedback_created_at: t.ai_feedback_created_at,
+      }))
+    )
+    const aiTrades = (data || []).filter(
+      (t) => t.ai_feedback !== null && t.ai_feedback !== ""
+    )
+    console.log("AI TRADES:", aiTrades)
 
     setTrades(data || [])
     setProfile(prof ?? null)
+    setPageReady(true)
+    console.log("AI ANALYSIS: page ready")
+    console.log("AI ANALYSIS: loading finished")
   }
 
   function formatCurrency(val: number) {
@@ -70,10 +99,16 @@ export default function AnalystPage() {
     setMessages([])
     setLoading(true)
 
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+    console.log("AI TOKEN:", session?.access_token)
+
     const res = await fetch("/api/analyze-trade", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        Authorization: `Bearer ${session?.access_token}`,
       },
       body: JSON.stringify({
         trade,
@@ -81,23 +116,26 @@ export default function AnalystPage() {
       }),
     })
 
-    const data = await res.json()
+    let data = null
+
+    try {
+      data = await res.json()
+    } catch (err) {
+      console.error("AI JSON PARSE ERROR:", err)
+    }
 
     if (!res.ok) {
-      setMessages([
-        {
-          role: "assistant",
-          content:
-            data.reply ||
-            data.error ||
-            "AI Analyst is a Pro feature. Upgrade to continue.",
-        },
-      ])
+      console.error("AI ERROR RESPONSE:", data)
       setLoading(false)
       return
     }
 
-    setMessages([{ role: "assistant", content: data.reply }])
+    setMessages([
+      {
+        role: "assistant",
+        content: data?.reply || data?.error || "AI unavailable",
+      },
+    ])
     setLoading(false)
   }
 
@@ -111,10 +149,16 @@ export default function AnalystPage() {
     setInput("")
     setLoading(true)
 
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+    console.log("AI TOKEN:", session?.access_token)
+
     const res = await fetch("/api/analyze-trade", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        Authorization: `Bearer ${session?.access_token}`,
       },
       body: JSON.stringify({
         trade: selectedTrade,
@@ -221,6 +265,21 @@ export default function AnalystPage() {
                       )}
                     </div>
                   </div>
+
+                  {trade.ai_feedback ? (
+                    <div className="mt-2 rounded-lg border border-blue-400/20 bg-blue-500/10 p-3">
+                      <p className="mb-1 text-sm font-medium text-blue-300">
+                        AI Analysis
+                      </p>
+                      <p className="text-sm text-gray-300">
+                        {trade.ai_feedback}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="mt-2 text-xs italic text-gray-500">
+                      No AI analysis yet
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
