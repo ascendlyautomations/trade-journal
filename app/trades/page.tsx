@@ -338,15 +338,15 @@ export default function TradesPage() {
         />
       ) : null}
 
-      <div className="w-full text-white px-3 pb-3 pt-0 md:px-10 md:pb-10">
+      <div className="w-full text-white px-2 pb-3 pt-0 md:px-4 md:pb-10">
 
-        <div className="relative z-50 mx-auto w-full max-w-[1600px] px-4 md:px-6">
+        <div className="relative z-50 w-full px-1 md:px-6 md:max-w-[1600px] md:mx-auto">
 
           {loading ? (
             <p className="text-center text-gray-400">Loading...</p>
           ) : (
             <>
-              <div className="max-w-7xl mx-auto px-4 w-full mt-2.5 mb-5">
+              <div className="w-full px-2 md:px-4 mt-2.5 mb-5">
                 <TradeFilterBar
                   variant="trades"
                   fullWidth
@@ -442,10 +442,17 @@ export default function TradesPage() {
                   </div>
                   }
                   trailing={
-                  <div className="flex w-full flex-wrap items-center justify-center gap-2 md:w-auto">
+                  <div className="flex items-center gap-2 w-full md:w-auto">
+                    <button
+                      type="button"
+                      onClick={() => setShowAdvanced(!showAdvanced)}
+                      className="order-1 flex-1 h-10 px-3 rounded bg-white/10 hover:bg-white/20 text-sm text-white flex items-center justify-center md:order-3 md:h-auto md:flex-none md:rounded-md md:px-3 md:py-1"
+                    >
+                      {showAdvanced ? "Hide Advanced" : "Show Advanced"}
+                    </button>
                     <button
                       onClick={() => setShowPublicOnly((prev) => !prev)}
-                      className={`px-4 py-2 rounded-xl text-sm font-medium transition
+                      className={`order-2 flex-[0.8] h-10 px-2 rounded text-sm font-medium transition flex items-center justify-center md:order-1 md:h-auto md:flex-none md:rounded-xl md:px-4 md:py-2
                         ${showPublicOnly
                           ? "bg-blue-500 text-white"
                           : "bg-white/10 text-gray-300 hover:bg-white/20"
@@ -456,18 +463,24 @@ export default function TradesPage() {
                     <button
                       type="button"
                       onClick={() => setShowPerformanceShare(true)}
-                      className="flex h-[34px] shrink-0 items-center justify-center whitespace-nowrap rounded-md bg-white/10 px-3 py-1 text-sm text-white hover:bg-white/20"
+                      className="order-3 h-10 w-10 rounded bg-white/10 hover:bg-white/20 flex items-center justify-center md:order-2 md:h-[34px] md:w-auto md:rounded-md md:px-3 md:py-1 md:text-sm md:text-white"
                       title="Share performance"
                       aria-label="Share performance"
                     >
-                      📤 Share
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setShowAdvanced(!showAdvanced)}
-                      className="shrink-0 whitespace-nowrap rounded-md bg-white/10 px-3 py-1 text-sm text-white hover:bg-white/20"
-                    >
-                      {showAdvanced ? "Hide Advanced" : "Show Advanced"}
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="h-4 w-4 text-blue-300"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M4 12v7a1 1 0 001 1h14a1 1 0 001-1v-7M16 6l-4-4m0 0L8 6m4-4v12"
+                        />
+                      </svg>
                     </button>
                   </div>
                   }
@@ -479,7 +492,7 @@ export default function TradesPage() {
               </p>
 
               {/* 🔥 STATS BAR */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5 px-2 mt-0 md:px-0">
+              <div className="w-full grid grid-cols-2 md:grid-cols-4 gap-3 mb-5 px-2 mt-0 md:px-0">
 
                 <Stat
                   title="Trades"
@@ -500,7 +513,7 @@ export default function TradesPage() {
               </div>
 
               {/* GRID */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-4">
 
                 {visibleTrades.slice(0, visibleCount).map((trade) => {
   const entryPrice = trade.entry_price ?? trade.entry ?? null
@@ -536,7 +549,7 @@ export default function TradesPage() {
   return (
     <div
       key={trade.id}
-      className="relative bg-white/5 border border-white/10 backdrop-blur-md p-7 rounded-xl shadow hover:scale-[1.02] hover:border-white/20 transition-all duration-200"
+      className="relative w-full bg-white/5 border border-white/10 backdrop-blur-md px-2 py-3 md:px-4 rounded-xl shadow hover:scale-[1.02] hover:border-white/20 transition-all duration-200"
     >
 
                     <div className="absolute top-3 right-3 flex items-center gap-2">

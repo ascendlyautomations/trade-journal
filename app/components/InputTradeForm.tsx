@@ -1018,10 +1018,10 @@ export default function InputTradeForm({
   const formBody = (
     <>
       <div className="mb-4">
-        <div className="flex flex-col gap-2 md:hidden">
-          <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex flex-col gap-3 md:hidden">
+          <div className="flex items-center gap-2">
             {onUploadCsvClick ? (
-              <div className="relative w-[260px] account-dropdown">
+              <div className="relative flex-1 account-dropdown">
                 <div
                   onClick={() => setAccountDropdownOpen(!accountDropdownOpen)}
                   className="w-full p-2 rounded bg-[#0f172a] border border-white/10 text-white cursor-pointer flex justify-between items-center"
@@ -1063,33 +1063,29 @@ export default function InputTradeForm({
             ) : null}
             <button
               type="button"
+              onClick={() => setShowSettings(true)}
+              className="p-2 bg-[#1f2937] rounded-lg flex items-center justify-center"
+              aria-label="Settings"
+            >
+              ⚙️
+            </button>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
               onClick={() => void handleUploadCsvGuardClick()}
               disabled={!onUploadCsvClick || csvLoading}
               className="shrink-0 flex-1 px-3 py-2 text-sm rounded-lg bg-blue-500 disabled:opacity-60"
             >
               Upload CSV
             </button>
-            {parsedTrades.length > 0 ? (
-              <button
-                type="button"
-                onClick={() => void handleCsvManualImport()}
-                disabled={!selectedAccount}
-                className={`ml-2 px-4 py-2 rounded ${
-                  selectedAccount
-                    ? "bg-green-500/20 text-green-400"
-                    : "bg-gray-700 text-gray-400 cursor-not-allowed"
-                }`}
-              >
-                Import {parsedTrades.length}
-              </button>
-            ) : null}
             <button
               type="button"
               onClick={onReviewCsvClick}
               disabled={!onReviewCsvClick}
               className="shrink-0 relative flex-1 px-3 py-2 text-sm rounded-lg bg-emerald-500 disabled:opacity-60"
             >
-              Review CSV Inputs
+              Review CSV
               {reviewCount > 0 ? (
                 <span className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full text-[10px] px-1.5 py-0.5">
                   {reviewCount > 99 ? "99+" : reviewCount}
@@ -1097,17 +1093,20 @@ export default function InputTradeForm({
               ) : null}
             </button>
           </div>
-
-          <div className="flex justify-end">
+          {parsedTrades.length > 0 ? (
             <button
               type="button"
-              onClick={() => setShowSettings(true)}
-              className="px-3 py-2 bg-[#1f2937] rounded-lg flex items-center justify-center"
-              aria-label="Settings"
+              onClick={() => void handleCsvManualImport()}
+              disabled={!selectedAccount}
+              className={`w-full px-4 py-2 rounded text-sm ${
+                selectedAccount
+                  ? "bg-green-500/20 text-green-400"
+                  : "bg-gray-700 text-gray-400 cursor-not-allowed"
+              }`}
             >
-              ⚙️
+              Import {parsedTrades.length}
             </button>
-          </div>
+          ) : null}
         </div>
 
         <div className="hidden md:flex items-center w-full">
@@ -1184,7 +1183,7 @@ export default function InputTradeForm({
               disabled={!onReviewCsvClick}
               className="shrink-0 relative px-4 py-2 text-sm rounded-lg bg-emerald-500 disabled:opacity-60"
             >
-              Review CSV Inputs
+              Review CSV
               {reviewCount > 0 ? (
                 <span className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full text-[10px] px-1.5 py-0.5">
                   {reviewCount > 99 ? "99+" : reviewCount}
