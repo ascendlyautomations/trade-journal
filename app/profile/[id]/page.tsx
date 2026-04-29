@@ -2041,20 +2041,12 @@ export default function ProfilePage() {
 
             {activeTab === "posts" && (
               <div className="mt-4 w-full pb-8">
-                <button
-                  type="button"
-                  onClick={() => setShowCreatePost(true)}
-                  className="w-full rounded bg-blue-500 px-4 py-2 text-sm font-medium hover:bg-blue-600"
-                >
-                  + Create Post
-                </button>
-
                 {sortedPosts.length === 0 ? (
-                  <p className="mt-6 text-center text-sm text-gray-400">
+                  <p className="text-center text-sm text-gray-400">
                     No posts yet.
                   </p>
                 ) : (
-                  <div className="mt-6 grid grid-cols-1 gap-x-6 gap-y-8 md:grid-cols-2">
+                  <div className="grid grid-cols-1 gap-x-6 gap-y-8 md:grid-cols-2">
                     {sortedPosts.map((post) => {
                       const key = String(post.id)
                       return (

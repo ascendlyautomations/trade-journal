@@ -742,6 +742,7 @@ export default function InputTradeForm({
         exit_time: exitTimeTouched
           ? buildDateTime(tradeDate, exitTime)
           : existingTrade.exit_time ?? null,
+        trade_date: tradeDate,
         psychology_notes: psychologyVal,
         trade_type: tradeTypeToSave,
         confidence: confidence ? Number(confidence) : null,
@@ -818,6 +819,9 @@ export default function InputTradeForm({
       rr: rr ? Number(rr) : null,
     }
 
+    const selectedDate = tradeDate
+    console.log("Saving trade_date:", selectedDate)
+
     const tradeData = {
       ticker,
       direction,
@@ -839,6 +843,7 @@ export default function InputTradeForm({
       user_id: user.id,
       created_at: now.toISOString(),
       date: now.toISOString(),
+      trade_date: selectedDate,
       entry_price: parsedTrade.entry_price,
       exit_price: parsedTrade.exit_price,
       entry_time: buildDateTime(tradeDate, entryTime),

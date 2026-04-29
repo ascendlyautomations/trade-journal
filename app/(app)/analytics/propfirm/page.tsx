@@ -3,21 +3,46 @@
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabaseClient"
 
-const getTradingDay = (trade: { date?: string; entry_time?: string }) => {
-  if (!trade.date) return null
+type TradeForDay = {
+  trade_date?: string | null
+  entry_time?: string | null
+}
 
-  const time = trade.entry_time || "12:00"
-  const d = new Date(`${trade.date}T${time}`)
+const getTradingDay = (trade: TradeForDay) => {
+  if (!trade.trade_date) return null
 
-  const est = new Date(
-    d.toLocaleString("en-US", { timeZone: "America/New_York" })
-  )
+  const parts = trade.trade_date.split("-").map(Number)
+  if (parts.length !== 3 || parts.some((n) => !Number.isFinite(n))) return null
+  const [year, month, day] = parts
 
-  if (est.getHours() >= 18) {
-    est.setDate(est.getDate() + 1)
+  let hours = 12
+  let minutes = 0
+
+  if (trade.entry_time) {
+    const utc = new Date(trade.entry_time)
+    if (Number.isNaN(utc.getTime())) return null
+
+    const est = new Date(
+      utc.toLocaleString("en-US", {
+        timeZone: "America/New_York",
+      })
+    )
+
+    hours = est.getHours()
+    minutes = est.getMinutes()
   }
 
-  return est.toISOString().split("T")[0]
+  const d = new Date(year, month - 1, day, hours, minutes)
+
+  if (hours >= 18) {
+    d.setDate(d.getDate() + 1)
+  }
+
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, "0")
+  const da = String(d.getDate()).padStart(2, "0")
+
+  return `${y}-${m}-${da}`
 }
 
 export default function PropFirmPage() {
@@ -26,7 +51,15 @@ export default function PropFirmPage() {
   const [trades, setTrades] = useState<any[]>([])
   const [loadingTrades, setLoadingTrades] = useState(false)
 
-  const filteredTrades = trades
+  const filteredTrades = [...trades].sort((a, b) => {
+    const da = String(a.trade_date ?? "")
+    const db = String(b.trade_date ?? "")
+    const byDate = da.localeCompare(db)
+    if (byDate !== 0) return byDate
+    const at = a.entry_time ? new Date(a.entry_time).getTime() : 0
+    const bt = b.entry_time ? new Date(b.entry_time).getTime() : 0
+    return at - bt
+  })
 
   const dailyPnLMap: Record<string, number> = {}
 
@@ -34,35 +67,30 @@ export default function PropFirmPage() {
     const day = getTradingDay(t)
     if (!day) return
 
-    if (!dailyPnLMap[day]) {
-      dailyPnLMap[day] = 0
-    }
-
-    dailyPnLMap[day] += Number(t.pnl || 0)
+    dailyPnLMap[day] = (dailyPnLMap[day] || 0) + Number(t.pnl || 0)
   })
 
-  const dailyRows = Object.entries(dailyPnLMap)
+  const dailyRows = Object.entries(dailyPnLMap).sort(([a], [b]) =>
+    a.localeCompare(b)
+  )
 
   const winningDays = Object.values(dailyPnLMap).filter(
     (pnl) => pnl > 0
   ).length
 
-  const todayEST = new Date(
+  const nowEST = new Date(
     new Date().toLocaleString("en-US", {
       timeZone: "America/New_York",
     })
   )
-  const todayKey = todayEST.toISOString().split("T")[0]
+  const todayKey = `${nowEST.getFullYear()}-${String(
+    nowEST.getMonth() + 1
+  ).padStart(2, "0")}-${String(nowEST.getDate()).padStart(2, "0")}`
   const todayPnL = dailyPnLMap[todayKey] || 0
 
   const dayPnLValues = Object.values(dailyPnLMap)
   const worstDay =
     dayPnLValues.length > 0 ? Math.min(...dayPnLValues) : 0
-
-  console.log("DAILY MAP:", dailyPnLMap)
-  console.log("WINNING DAYS:", winningDays)
-  console.log("TODAY KEY:", todayKey)
-  console.log("TODAY PNL:", todayPnL)
 
   useEffect(() => {
     async function loadAccounts() {
@@ -104,7 +132,7 @@ export default function PropFirmPage() {
           .from("trades")
           .select("*")
           .eq("account_id", selectedAccount.id)
-          .order("date", { ascending: true })
+          .order("trade_date", { ascending: true })
           .order("entry_time", { ascending: true })
 
         if (error) {
@@ -122,20 +150,21 @@ export default function PropFirmPage() {
     loadTrades()
   }, [selectedAccount])
 
-  const totalPnL = trades.reduce((sum, t) => sum + (t.pnl || 0), 0)
+  const totalPnL = filteredTrades.reduce((sum, t) => sum + (t.pnl || 0), 0)
 
-  let runningPnL = 0
-  let peak = 0
+  let runningDaily = 0
+  let peakDaily = 0
   let maxDrawdown = 0
 
-  trades.forEach((t) => {
-    runningPnL += t.pnl || 0
+  const sortedDayKeys = Object.keys(dailyPnLMap).sort()
+  sortedDayKeys.forEach((dayKey) => {
+    runningDaily += dailyPnLMap[dayKey]
 
-    if (runningPnL > peak) {
-      peak = runningPnL
+    if (runningDaily > peakDaily) {
+      peakDaily = runningDaily
     }
 
-    const dd = runningPnL - peak
+    const dd = runningDaily - peakDaily
 
     if (dd < maxDrawdown) {
       maxDrawdown = dd
@@ -386,7 +415,7 @@ export default function PropFirmPage() {
       <div className="text-gray-400">
         Select a prop firm account to view progress
       </div>
-      <div className="hidden">{accounts.length + trades.length}</div>
+      <div className="hidden">{accounts.length + filteredTrades.length}</div>
     </div>
   )
 }
