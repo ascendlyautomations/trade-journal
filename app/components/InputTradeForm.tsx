@@ -13,6 +13,18 @@ import CreateAccountModal, {
 
 type CreateAccountSavePayload = Parameters<CreateAccountModalProps["onSave"]>[0]
 
+/** Display token after `#` — human account number when present, else shortened UUID. */
+function accountNumberLabel(acc: {
+  account_number?: string | null
+  id?: string | null
+}): string {
+  const num = String(acc.account_number ?? "").trim()
+  if (num) return num
+  const id = String(acc.id ?? "").trim()
+  if (!id) return "—"
+  return id.length > 14 ? `${id.slice(0, 8)}…` : id
+}
+
 function modeLabelFromDb(raw: string | null | undefined): string {
   const s = String(raw ?? "").toLowerCase().trim()
   if (s === "eval") return "Eval"
@@ -349,7 +361,8 @@ export default function InputTradeForm({
       const formatted = (data || []).map((acc) => ({
         name: acc.name,
         size: acc.account_size,
-        id: acc.account_number,
+        id: acc.id,
+        account_number: acc.account_number ?? null,
         mode: acc.mode,
         category: acc.category,
       }))
@@ -422,6 +435,7 @@ export default function InputTradeForm({
     setImage(null)
     setStrategy(t.strategy ?? "")
     const acctCat = (t as { account_category?: string | null }).account_category
+    const tradeAcctNum = (t as { account_number?: string | null }).account_number
     setSelectedAccount({
       name: String(t.account_name ?? "").trim(),
       size:
@@ -429,6 +443,10 @@ export default function InputTradeForm({
           ? String(t.account_size)
           : "",
       id: t.account_id != null && t.account_id !== "" ? String(t.account_id) : "",
+      account_number:
+        tradeAcctNum != null && String(tradeAcctNum).trim() !== ""
+          ? String(tradeAcctNum).trim()
+          : null,
       mode: String(t.mode ?? t.account_type ?? "live"),
       category:
         acctCat != null && String(acctCat).trim() !== ""
@@ -578,7 +596,9 @@ export default function InputTradeForm({
       type: modeLower,
       name: String(acct.name ?? "").trim() || null,
       size: String(acct.size ?? "").trim() || null,
-      id: String(acct.id ?? "").trim() || null,
+      id: acct.id != null ? String(acct.id).trim() || null : null,
+      account_number:
+        String(acct.account_number ?? "").trim() || null,
       mode: String(acct.mode ?? "live"),
       category: acct.category ?? null,
     }
@@ -600,7 +620,7 @@ export default function InputTradeForm({
       const incomingType = String(modeLower).trim().toLowerCase()
       const incomingSize = String(rowAcct.size ?? "").trim()
       const incomingName = String(rowAcct.name ?? "").trim()
-      const incomingNumber = String(rowAcct.id ?? "").trim()
+      const incomingNumber = String(rowAcct.account_number ?? "").trim()
 
       if (!lockedType) {
         const { error: lockErr } = await supabase
@@ -621,11 +641,24 @@ export default function InputTradeForm({
           return
         }
       } else {
+        const { data: lockedAccountMatch } = await supabase
+          .from("accounts")
+          .select("id")
+          .eq("user_id", user.id)
+          .eq("account_number", lockedNumber)
+          .maybeSingle()
+
+        const lockedAccountId =
+          lockedAccountMatch?.id != null
+            ? String(lockedAccountMatch.id).trim()
+            : null
+
         rowAcct = {
           type: lockedType || modeLower,
           size: lockedSize || null,
           name: lockedName || null,
-          id: lockedNumber || null,
+          id: lockedAccountId,
+          account_number: lockedNumber || null,
           mode: lockedType || modeLower,
           category: rowAcct.category,
         }
@@ -642,7 +675,8 @@ export default function InputTradeForm({
           setSelectedAccount({
             name: lockedName,
             size: lockedSize,
-            id: lockedNumber,
+            id: lockedAccountId ?? "",
+            account_number: lockedNumber,
             mode: lockedType || modeLower,
             category: rowAcct.category ?? undefined,
           })
@@ -986,7 +1020,8 @@ export default function InputTradeForm({
       {
         name: data.name,
         size: data.account_size,
-        id: data.account_number,
+        id: data.id,
+        account_number: data.account_number ?? null,
         mode: data.mode,
         category: data.category,
       },
@@ -995,7 +1030,8 @@ export default function InputTradeForm({
     setSelectedAccount({
       name: data.name,
       size: data.account_size,
-      id: data.account_number,
+      id: data.id,
+      account_number: data.account_number ?? null,
       mode: data.mode,
       category: data.category,
     })
@@ -1028,7 +1064,7 @@ export default function InputTradeForm({
                 >
                   <span className="truncate">
                     {selectedAccount
-                      ? `${selectedAccount.name} • ${selectedAccount.size} • ${selectedAccount.category || "Personal"} • ${formatMode(selectedAccount.mode)} • #${selectedAccount.id}`
+                      ? `${selectedAccount.name} • ${selectedAccount.size} • ${selectedAccount.category || "Personal"} • ${formatMode(selectedAccount.mode)} • #${accountNumberLabel(selectedAccount)}`
                       : "Select Account"}
                   </span>
                   <span className="text-gray-400">▾</span>
@@ -1045,7 +1081,7 @@ export default function InputTradeForm({
                         className="px-3 py-2 hover:bg-[#1f2937] cursor-pointer text-sm text-white"
                       >
                         {acc.name} • {formatAccountSize(acc.size)} • {acc.category || "Personal"} •{" "}
-                        {formatMode(acc.mode)} • #{acc.id}
+                        {formatMode(acc.mode)} • #{accountNumberLabel(acc)}
                       </div>
                     ))}
                     <div
@@ -1119,7 +1155,7 @@ export default function InputTradeForm({
                 >
                   <span className="truncate">
                     {selectedAccount
-                      ? `${selectedAccount.name} • ${selectedAccount.size} • ${selectedAccount.category || "Personal"} • ${formatMode(selectedAccount.mode)} • #${selectedAccount.id}`
+                      ? `${selectedAccount.name} • ${selectedAccount.size} • ${selectedAccount.category || "Personal"} • ${formatMode(selectedAccount.mode)} • #${accountNumberLabel(selectedAccount)}`
                       : "Select Account"}
                   </span>
                   <span className="text-gray-400">▾</span>
@@ -1136,7 +1172,7 @@ export default function InputTradeForm({
                         className="px-3 py-2 hover:bg-[#1f2937] cursor-pointer text-sm text-white"
                       >
                         {acc.name} • {formatAccountSize(acc.size)} • {acc.category || "Personal"} •{" "}
-                        {formatMode(acc.mode)} • #{acc.id}
+                        {formatMode(acc.mode)} • #{accountNumberLabel(acc)}
                       </div>
                     ))}
                     <div

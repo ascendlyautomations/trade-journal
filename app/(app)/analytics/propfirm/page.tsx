@@ -3,24 +3,77 @@
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabaseClient"
 
+/**
+ * Trading day from user-selected date + entry_time (noon if missing),
+ * interpreted in EST, with >= 6PM → next calendar day.
+ */
+function getTradingDay(trade: Record<string, unknown>): string | null {
+  if (!trade.date) return null
+
+  const dateOnly = String(trade.date).trim().split("T")[0]
+  if (!dateOnly) return null
+
+  let d: Date
+  const etRaw = trade.entry_time
+  if (etRaw != null && String(etRaw).trim() !== "") {
+    const et = String(etRaw).trim()
+    if (et.includes("T")) {
+      d = new Date(et)
+    } else {
+      const time = et.length >= 5 ? et.slice(0, 5) : "12:00"
+      d = new Date(`${dateOnly}T${time.length === 5 ? `${time}:00` : time}`)
+    }
+  } else {
+    d = new Date(`${dateOnly}T12:00:00`)
+  }
+
+  if (Number.isNaN(d.getTime())) return null
+
+  const est = new Date(
+    d.toLocaleString("en-US", { timeZone: "America/New_York" })
+  )
+
+  const hours = est.getHours()
+
+  if (hours >= 18) {
+    est.setDate(est.getDate() + 1)
+  }
+
+  return est.toISOString().split("T")[0]
+}
+
 export default function PropFirmPage() {
   const [accounts, setAccounts] = useState<any[]>([])
   const [selectedAccount, setSelectedAccount] = useState<any | null>(null)
   const [trades, setTrades] = useState<any[]>([])
+  const [loadingTrades, setLoadingTrades] = useState(false)
+
+  const filteredTrades = trades
 
   const dailyPnLMap: Record<string, number> = {}
 
-  trades.forEach((t) => {
-    const date = t.created_at.split("T")[0]
+  filteredTrades.forEach((t) => {
+    const day = getTradingDay(t as Record<string, unknown>)
+    if (!day) return
 
-    if (!dailyPnLMap[date]) {
-      dailyPnLMap[date] = 0
+    if (!dailyPnLMap[day]) {
+      dailyPnLMap[day] = 0
     }
 
-    dailyPnLMap[date] += t.pnl || 0
+    dailyPnLMap[day] += Number(t.pnl || 0)
   })
 
   const dailyRows = Object.entries(dailyPnLMap)
+
+  const winningDays = Object.values(dailyPnLMap).filter(
+    (pnl) => pnl > 0
+  ).length
+
+  const dayPnLValues = Object.values(dailyPnLMap)
+  const worstDay =
+    dayPnLValues.length > 0 ? Math.min(...dayPnLValues) : 0
+
+  console.log("TRADING DAYS:", dailyPnLMap)
 
   useEffect(() => {
     async function loadAccounts() {
@@ -41,7 +94,9 @@ export default function PropFirmPage() {
         return
       }
 
-      setAccounts(data || [])
+      const list = data || []
+      console.log("ACCOUNTS LOADED:", list)
+      setAccounts(list)
     }
 
     loadAccounts()
@@ -50,18 +105,29 @@ export default function PropFirmPage() {
   useEffect(() => {
     if (!selectedAccount) return
 
+    setTrades([])
+
     async function loadTrades() {
-      const { data, error } = await supabase
-        .from("trades")
-        .select("*")
-        .eq("account_id", selectedAccount.account_number)
+      setLoadingTrades(true)
+      try {
+        console.log("FETCHING TRADES FOR:", selectedAccount.account_number)
+        const { data, error } = await supabase
+          .from("trades")
+          .select("*")
+          .eq("account_id", selectedAccount.id)
+          .order("date", { ascending: true })
+          .order("entry_time", { ascending: true })
 
-      if (error) {
-        console.error(error)
-        return
+        if (error) {
+          console.error(error)
+          return
+        }
+
+        console.log("TRADES RESULT:", data)
+        setTrades(data || [])
+      } finally {
+        setLoadingTrades(false)
       }
-
-      setTrades(data || [])
     }
 
     loadTrades()
@@ -89,19 +155,12 @@ export default function PropFirmPage() {
 
   const drawdownUsed = Math.abs(maxDrawdown)
 
-  const winningDays = new Set(
-    trades.filter((t) => t.pnl > 0).map((t) => t.created_at.split("T")[0])
-  ).size
-
   const progressPercent = selectedAccount?.profit_target
     ? Math.min((totalPnL / selectedAccount.profit_target) * 100, 100)
     : 0
 
-  const today = new Date().toISOString().split("T")[0]
-
-  const todayLoss = trades
-    .filter((t) => t.created_at.startsWith(today))
-    .reduce((sum, t) => sum + (t.pnl || 0), 0)
+  const worstDailyLossUsed =
+    worstDay < 0 ? Math.abs(worstDay) : 0
 
   const isPassed =
     selectedAccount && totalPnL >= selectedAccount.profit_target
@@ -118,6 +177,21 @@ export default function PropFirmPage() {
   const ddPercent = selectedAccount?.max_drawdown
     ? Math.min((drawdownUsed / selectedAccount.max_drawdown) * 100, 100)
     : 0
+
+  const formatAccount = (acc: any) => {
+    if (!acc) return "None"
+    let sizePart =
+      acc.account_size != null && acc.account_size !== ""
+        ? String(acc.account_size).trim()
+        : ""
+    if (sizePart && !/k/i.test(sizePart)) {
+      const n = Number(sizePart.replace(/,/g, ""))
+      if (Number.isFinite(n) && n >= 1 && n <= 999) {
+        sizePart = `${n}K`
+      }
+    }
+    return `${acc.name} • ${sizePart || "—"} • ${acc.mode}`
+  }
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -139,20 +213,31 @@ export default function PropFirmPage() {
       </div>
 
       <select
-        value={selectedAccount?.id || ""}
+        value={
+          selectedAccount?.id != null ? String(selectedAccount.id) : ""
+        }
         onChange={(e) => {
-          const acc = accounts.find((a) => a.id === Number(e.target.value))
-          setSelectedAccount(acc ?? null)
+          const selected = accounts.find(
+            (a) => String(a.id) === e.target.value
+          )
+          console.log("SELECTED ACCOUNT:", selected)
+          setSelectedAccount(selected ?? null)
         }}
         className="mb-6 w-full max-w-md rounded border border-white/10 bg-[#0f172a] p-2"
       >
         <option value="">Select Account</option>
         {accounts.map((acc) => (
-          <option key={acc.id} value={acc.id}>
+          <option key={acc.id} value={String(acc.id)}>
             {acc.name} • {acc.account_size} • {acc.mode}
           </option>
         ))}
       </select>
+
+      <p className="text-sm text-gray-400">
+        Selected: {formatAccount(selectedAccount)}
+      </p>
+
+      {loadingTrades && <p className="text-sm text-gray-400">Loading...</p>}
 
       {selectedAccount && (
         <div className="mb-6 rounded-xl border border-white/10 bg-[#0f172a] p-4">
@@ -238,7 +323,7 @@ export default function PropFirmPage() {
           )}
 
           {selectedAccount &&
-            Math.abs(todayLoss) > selectedAccount.daily_drawdown && (
+            worstDailyLossUsed > selectedAccount.daily_drawdown && (
               <div className="mt-2 text-sm text-red-400">
                 ⚠️ Daily drawdown exceeded
               </div>
@@ -264,12 +349,12 @@ export default function PropFirmPage() {
 
             <div
               className={
-                Math.abs(todayLoss) > selectedAccount.daily_drawdown
+                worstDailyLossUsed > selectedAccount.daily_drawdown
                   ? "text-red-400"
                   : "text-green-400"
               }
             >
-              {Math.abs(todayLoss) > selectedAccount.daily_drawdown ? "❌" : "✔"}{" "}
+              {worstDailyLossUsed > selectedAccount.daily_drawdown ? "❌" : "✔"}{" "}
               Daily Drawdown
             </div>
 
