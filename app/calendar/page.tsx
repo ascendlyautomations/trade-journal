@@ -9,11 +9,6 @@ import {
 } from "@/lib/formatDate"
 import { useEffect, useMemo, useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
-import {
-  formatTradeAccountDisplay,
-  TRADES_WITH_ACCOUNT_SELECT,
-} from "@/lib/tradeAccountDisplay"
-
 export default function CalendarPage() {
   const [trades, setTrades] = useState<any[]>([])
   const [shareProfile, setShareProfile] = useState<{
@@ -45,7 +40,7 @@ export default function CalendarPage() {
 
     const { data } = await supabase
       .from("trades")
-      .select(TRADES_WITH_ACCOUNT_SELECT)
+      .select("*")
       .eq("user_id", user.id)
 
     if (data) setTrades(data)
@@ -68,7 +63,7 @@ export default function CalendarPage() {
       const id = t.account_id != null ? String(t.account_id) : ""
       if (!id || seen.has(id)) continue
       seen.add(id)
-      const label = formatTradeAccountDisplay(t)
+      const label = `${t.account_name ?? ""} ${t.account_size ?? ""}`.trim()
       const prefix = t.account_type ? `${t.account_type} · ` : ""
       opts.push({
         value: id,

@@ -8,8 +8,6 @@ import {
   resolveTradingTimeSourceForKey,
   toDateKey,
 } from "@/lib/formatDate"
-import { formatTradeAccountDisplay } from "@/lib/tradeAccountDisplay"
-
 type TradeLike = {
   id: string | number
   created_at: string
@@ -329,7 +327,7 @@ export default function Calendar({
                 const img = tradeImageSrc(trade.image_url)
                 const pnl = Number(trade.pnl) || 0
                 const modeLower = String(trade.mode ?? "").toLowerCase().trim()
-                const accountLine = formatTradeAccountDisplay(trade)
+                const accountLine = `${trade.account_name ?? ""} ${trade.account_size ?? ""}`.trim()
                 const accountLineWithType =
                   trade.account_type && accountLine
                     ? `${trade.account_type} · ${accountLine}`
@@ -430,7 +428,7 @@ export default function Calendar({
               const modeLower = String(selectedTrade.mode ?? "")
                 .toLowerCase()
                 .trim()
-              const accountLine = formatTradeAccountDisplay(selectedTrade)
+              const accountLine = `${selectedTrade.account_name ?? ""} ${selectedTrade.account_size ?? ""}`.trim()
               const accountLineWithType =
                 selectedTrade.account_type && accountLine
                   ? `${selectedTrade.account_type} · ${accountLine}`
