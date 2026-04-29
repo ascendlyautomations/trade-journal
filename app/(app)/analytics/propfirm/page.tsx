@@ -3,39 +3,17 @@
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabaseClient"
 
-/**
- * Trading day from user-selected date + entry_time (noon if missing),
- * interpreted in EST, with >= 6PM → next calendar day.
- */
-function getTradingDay(trade: Record<string, unknown>): string | null {
+const getTradingDay = (trade: { date?: string; entry_time?: string }) => {
   if (!trade.date) return null
 
-  const dateOnly = String(trade.date).trim().split("T")[0]
-  if (!dateOnly) return null
-
-  let d: Date
-  const etRaw = trade.entry_time
-  if (etRaw != null && String(etRaw).trim() !== "") {
-    const et = String(etRaw).trim()
-    if (et.includes("T")) {
-      d = new Date(et)
-    } else {
-      const time = et.length >= 5 ? et.slice(0, 5) : "12:00"
-      d = new Date(`${dateOnly}T${time.length === 5 ? `${time}:00` : time}`)
-    }
-  } else {
-    d = new Date(`${dateOnly}T12:00:00`)
-  }
-
-  if (Number.isNaN(d.getTime())) return null
+  const time = trade.entry_time || "12:00"
+  const d = new Date(`${trade.date}T${time}`)
 
   const est = new Date(
     d.toLocaleString("en-US", { timeZone: "America/New_York" })
   )
 
-  const hours = est.getHours()
-
-  if (hours >= 18) {
+  if (est.getHours() >= 18) {
     est.setDate(est.getDate() + 1)
   }
 
@@ -53,7 +31,7 @@ export default function PropFirmPage() {
   const dailyPnLMap: Record<string, number> = {}
 
   filteredTrades.forEach((t) => {
-    const day = getTradingDay(t as Record<string, unknown>)
+    const day = getTradingDay(t)
     if (!day) return
 
     if (!dailyPnLMap[day]) {
@@ -69,11 +47,22 @@ export default function PropFirmPage() {
     (pnl) => pnl > 0
   ).length
 
+  const todayEST = new Date(
+    new Date().toLocaleString("en-US", {
+      timeZone: "America/New_York",
+    })
+  )
+  const todayKey = todayEST.toISOString().split("T")[0]
+  const todayPnL = dailyPnLMap[todayKey] || 0
+
   const dayPnLValues = Object.values(dailyPnLMap)
   const worstDay =
     dayPnLValues.length > 0 ? Math.min(...dayPnLValues) : 0
 
-  console.log("TRADING DAYS:", dailyPnLMap)
+  console.log("DAILY MAP:", dailyPnLMap)
+  console.log("WINNING DAYS:", winningDays)
+  console.log("TODAY KEY:", todayKey)
+  console.log("TODAY PNL:", todayPnL)
 
   useEffect(() => {
     async function loadAccounts() {
@@ -297,6 +286,13 @@ export default function PropFirmPage() {
             <div className="flex justify-between">
               <span>Winning Days</span>
               <span>{winningDays}</span>
+            </div>
+
+            <div className="flex justify-between">
+              <span>Today P&L</span>
+              <span className={todayPnL >= 0 ? "text-green-400" : "text-red-400"}>
+                ${todayPnL.toFixed(2)}
+              </span>
             </div>
           </div>
 
