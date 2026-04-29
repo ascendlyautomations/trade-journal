@@ -355,11 +355,15 @@ function CommunityContent() {
   }
 
   async function loadSections(roomId: string) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("room_sections")
       .select("*")
       .eq("room_id", roomId)
       .order("position", { ascending: true })
+
+    if (error) {
+      console.error(error)
+    }
 
     const list = data || []
     setSections(list)
@@ -373,9 +377,66 @@ function CommunityContent() {
     return { list, activeSectionId: null as string | null }
   }
 
+  async function refetchSections() {
+    if (!selectedRoomId) return
+    const { list, activeSectionId } = await loadSections(selectedRoomId)
+    await fetchRoomMessages(selectedRoomId, list, activeSectionId)
+  }
+
+  async function handleAddSection() {
+    if (sections.length >= 5) {
+      alert("Max 5 pages allowed")
+      return
+    }
+    if (!selectedRoomId) return
+
+    const nextPosition =
+      sections.length > 0
+        ? Math.max(...sections.map((s) => Number(s.position) || 0), 0) + 1
+        : 1
+
+    const { error } = await supabase.from("room_sections").insert({
+      room_id: selectedRoomId,
+      name: `Page ${sections.length + 1}`,
+      position: nextPosition,
+      allow_members_chat: true,
+    })
+
+    if (error) {
+      console.error(error)
+      return
+    }
+
+    await refetchSections()
+  }
+
+  async function handleDeleteSection(sectionId: string) {
+    if (sections.length <= 1) {
+      alert("You must have at least 1 page")
+      return
+    }
+
+    const { error } = await supabase
+      .from("room_sections")
+      .delete()
+      .eq("id", sectionId)
+
+    if (error) {
+      console.error(error)
+      return
+    }
+
+    await refetchSections()
+  }
+
   async function handleCreateSection() {
     const trimmed = newSectionName.trim()
     if (!trimmed || !selectedRoomId) return
+
+    if (sections.length >= 5) {
+      alert("Max 5 pages allowed")
+      return
+    }
 
     try {
       const { data: newSection, error } = await supabase
@@ -1114,64 +1175,81 @@ function CommunityContent() {
 
           <section className="flex min-h-0 w-full min-w-0 flex-col md:flex-1">
             <div className="border-b border-white/10 px-4 py-3">
-              {(roomImage ||
-                selectedRoom?.image_url ||
-                inviteTargetRoom?.image_url) && (
+              <div className="flex items-center gap-3">
                 <img
                   src={
                     (roomImage ??
                       selectedRoom?.image_url ??
                       inviteTargetRoom?.image_url) ||
-                    ""
+                    "/default-avatar.png"
                   }
-                  alt=""
-                  className="mb-2 h-10 w-10 rounded-full object-cover"
+                  alt="Room Avatar"
+                  className="h-12 w-12 shrink-0 rounded-full object-cover"
                 />
-              )}
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-base font-medium">
-                  {selectedRoom?.name ??
-                    inviteTargetRoom?.name ??
-                    "Select a room"}
-                </h2>
-                {!isOwner && selectedRoomId && !needsJoin ? (
-                  <button
-                    type="button"
-                    onClick={() => void handleLeaveRoom()}
-                    className="ml-2 rounded-md bg-red-500/10 px-3 py-1 text-xs text-red-400 hover:bg-red-500/20"
-                  >
-                    Leave Room
-                  </button>
-                ) : null}
-                {isOwner && selectedRoomId && !needsJoin ? (
-                  <>
-                    <button
-                      type="button"
-                      aria-label="Room settings"
-                      onClick={() => setShowRoomSettings(true)}
-                      className="text-gray-400 hover:text-white"
-                    >
-                      ⚙️
-                    </button>
-                    {isOwner ? (
+
+                <div className="flex min-w-0 flex-1 flex-col justify-center">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="truncate text-lg font-semibold text-white">
+                      {selectedRoom?.name ??
+                        inviteTargetRoom?.name ??
+                        "Select a room"}
+                    </h2>
+
+                    {!isOwner && selectedRoomId && !needsJoin ? (
                       <button
                         type="button"
-                        onClick={() => setShowInviteModal(true)}
-                        className="ml-2 text-gray-400 hover:text-green-400"
+                        onClick={() => void handleLeaveRoom()}
+                        className="rounded-md bg-red-500/10 px-3 py-1 text-xs text-red-400 hover:bg-red-500/20"
                       >
-                        🔗
+                        Leave Room
                       </button>
                     ) : null}
-                  </>
-                ) : null}
-              </div>
-              {isOwner && selectedRoomId && !needsJoin ? (
-                <div className="mt-1 text-xs text-gray-400">
-                  {activeMembers} members • {leftMembers} left
+
+                    {isOwner && selectedRoomId && !needsJoin ? (
+                      <div className="flex shrink-0 items-center gap-2">
+                        <button
+                          type="button"
+                          aria-label="Room settings"
+                          onClick={() => setShowRoomSettings(true)}
+                          className="flex items-center justify-center rounded-md bg-white/10 p-2 hover:bg-white/20"
+                        >
+                          ⚙️
+                        </button>
+                        <button
+                          type="button"
+                          aria-label="Share invite"
+                          onClick={() => setShowInviteModal(true)}
+                          className="flex items-center justify-center rounded-md bg-white/10 p-2 hover:bg-white/20"
+                        >
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            className="h-5 w-5 text-blue-300"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M12 16V4m0 0l-4 4m4-4l4 4M4 20h16"
+                            />
+                          </svg>
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {isOwner && selectedRoomId && !needsJoin ? (
+                    <p className="text-sm text-gray-400">
+                      {activeMembers} members • {leftMembers} left
+                    </p>
+                  ) : null}
                 </div>
-              ) : null}
+              </div>
+
               {selectedRoomId && !needsJoin ? (
-                <div className="mt-1 flex items-center">
+                <div className="mt-2 flex items-center">
                   <div className="flex items-center space-x-[-8px]">
                     {activeUsers.slice(0, 3).map((u) => (
                       <img
@@ -1715,7 +1793,37 @@ function CommunityContent() {
               Show on my profile
             </label>
 
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="mt-4 border-t border-white/10 pt-4">
+              <p className="mb-2 text-sm font-medium text-gray-300">Pages</p>
+              <div className="mt-4 space-y-2">
+                {sections.map((section) => (
+                  <div
+                    key={section.id}
+                    className="flex items-center justify-between rounded-lg bg-white/5 p-2"
+                  >
+                    <span className="text-sm text-white">{section.name}</span>
+
+                    <button
+                      type="button"
+                      onClick={() => void handleDeleteSection(section.id)}
+                      className="text-red-400 hover:text-red-500"
+                    >
+                      🗑
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => void handleAddSection()}
+                className="mt-3 w-full rounded-lg bg-blue-500 py-2 text-sm text-white hover:bg-blue-600"
+              >
+                + Add Page
+              </button>
+            </div>
+
+            <div className="mt-4 flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={() => void handleRenameRoom({ closeSettings: true })}

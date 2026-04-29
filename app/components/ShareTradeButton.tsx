@@ -98,7 +98,31 @@ export default function ShareTradeButton({
           "p-1 rounded-lg bg-blue-500/20 hover:bg-blue-500/30 transition"
         }
       >
-        {busy ? (variant === "icon" ? "…" : "Saving…") : "📤"}
+        {busy ? (
+          variant === "icon" ? (
+            <span className="text-xs tabular-nums">…</span>
+          ) : (
+            "Saving…"
+          )
+        ) : variant === "icon" ? (
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="h-4 w-4 text-blue-300"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            aria-hidden
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 16V4m0 0l-4 4m4-4l4 4M4 20h16"
+            />
+          </svg>
+        ) : (
+          "📤"
+        )}
       </button>
 
       {isOpen &&

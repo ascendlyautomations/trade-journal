@@ -1816,7 +1816,7 @@ export default function ProfilePage() {
                     className="hidden"
                     onChange={(e) => void handleStoryUpload(e)}
                   />
-                  <div className="mt-3 flex w-full shrink-0 justify-center gap-2 sm:mt-0 sm:w-auto sm:justify-end sm:pt-1 md:w-auto">
+                  <div className="mt-0 flex w-full shrink-0 justify-center gap-2 sm:mt-0 sm:w-auto sm:justify-end sm:pt-1 md:w-auto">
                     <button
                       type="button"
                       onClick={() =>

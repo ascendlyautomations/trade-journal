@@ -6,6 +6,10 @@ import { useState, useRef, useEffect } from "react"
 import Papa from "papaparse"
 import { supabase } from "../../lib/supabaseClient"
 import { buildTradesFromParsedCsv, stripBom } from "@/lib/csvTradeParsers"
+import {
+  INPUT_TRADE_PAGE_TITLE_CLASSNAME,
+  INPUT_TRADE_PAGE_TITLE_ROW_CLASSNAME,
+} from "@/lib/inputTradePageTitle"
 
 export default function Home() {
   const [loading, setLoading] = useState(false)
@@ -92,10 +96,8 @@ export default function Home() {
 
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100">
         <div className="pt-3 px-6 pb-6 max-w-8xl mx-auto">
-          <div className="w-full flex items-center justify-between mb-4">
-            <h1 className="text-xl md:text-2xl font-semibold text-blue-300">
-              Input Trade
-            </h1>
+          <div className={INPUT_TRADE_PAGE_TITLE_ROW_CLASSNAME}>
+            <h1 className={INPUT_TRADE_PAGE_TITLE_CLASSNAME}>Input Trade</h1>
           </div>
 
           <input

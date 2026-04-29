@@ -346,7 +346,7 @@ export default function TradesPage() {
             <p className="text-center text-gray-400">Loading...</p>
           ) : (
             <>
-              <div className="w-full px-2 md:px-4 mt-2.5 mb-5">
+              <div className="w-full px-2 md:px-4 mt-2.5 mb-1.5">
                 <TradeFilterBar
                   variant="trades"
                   fullWidth
@@ -446,7 +446,7 @@ export default function TradesPage() {
                     <button
                       type="button"
                       onClick={() => setShowAdvanced(!showAdvanced)}
-                      className="order-1 flex-1 h-10 px-3 rounded bg-white/10 hover:bg-white/20 text-sm text-white flex items-center justify-center md:order-3 md:h-auto md:flex-none md:rounded-md md:px-3 md:py-1"
+                      className="order-1 flex-1 h-10 px-3 rounded bg-white/10 hover:bg-white/20 text-sm text-white flex items-center justify-center md:order-3 md:h-auto md:flex-none md:rounded-md md:px-3 md:py-1.5"
                     >
                       {showAdvanced ? "Hide Advanced" : "Show Advanced"}
                     </button>
@@ -487,12 +487,12 @@ export default function TradesPage() {
                 />
               </div>
 
-              <p className="mb-1.5 mt-1 text-xs text-gray-400 px-2 md:px-0 md:mt-0">
+              <p className="mb-1 mt-1 text-xs text-gray-400 px-2 md:px-0 md:mt-0">
                 All-time stats
               </p>
 
               {/* 🔥 STATS BAR */}
-              <div className="w-full grid grid-cols-2 md:grid-cols-4 gap-3 mb-5 px-2 mt-0 md:px-0">
+              <div className="w-full grid grid-cols-2 md:grid-cols-4 gap-2 mb-3 px-1 mt-0 md:px-0">
 
                 <Stat
                   title="Trades"
@@ -552,16 +552,19 @@ export default function TradesPage() {
       className="relative w-full bg-white/5 border border-white/10 backdrop-blur-md px-2 py-3 md:px-4 rounded-xl shadow hover:scale-[1.02] hover:border-white/20 transition-all duration-200"
     >
 
-                    <div className="absolute top-3 right-3 flex items-center gap-2">
+                    <div className="absolute top-3 right-3 flex items-center gap-1">
                       <button
                         onClick={() => setEditingTrade({ ...trade })}
-                        className="text-sm px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-white transition"
+                        className="flex items-center justify-center rounded-md bg-white/10 px-3 py-1 text-sm text-white transition hover:bg-white/20"
                         type="button"
                       >
                         Edit
                       </button>
                       <ShareTradeButton
                         trade={trade}
+                        variant="icon"
+                        profile={gateProfile}
+                        className="flex items-center justify-center rounded-md bg-white/10 px-3 py-1.5 text-sm text-white transition hover:bg-white/20"
                         onSendClick={() => {
                           setSelectedTrade(trade)
                           setIsSendModalOpen(true)
@@ -577,7 +580,7 @@ export default function TradesPage() {
                       </button>
                     </div>
 
-                    <div className="flex flex-col md:flex-row gap-6">
+                    <div className="flex flex-col md:flex-row gap-2.5">
                       <div className="flex-1">
                         <div className="space-y-1 text-base text-gray-200">
 

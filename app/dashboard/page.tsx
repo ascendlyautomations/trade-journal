@@ -1894,7 +1894,7 @@ const worstDay = dailyPnLs.length > 0
             }
           />
 
-          <div className="mt-3 mb-4 text-left text-sm text-white/60">
+          <div className="mt-1 mb-2 text-left text-sm text-white/60">
             Plan:{" "}
             <span
               className={`font-medium ${
