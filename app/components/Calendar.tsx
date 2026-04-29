@@ -8,6 +8,7 @@ import {
   resolveTradingTimeSourceForKey,
   toDateKey,
 } from "@/lib/formatDate"
+import { formatTradeAccountDisplay } from "@/lib/tradeAccountDisplay"
 
 type TradeLike = {
   id: string | number
@@ -22,7 +23,14 @@ type TradeLike = {
   mode?: string | null
   account_type?: string | null
   account_size?: string | null
+  account_name?: string | null
+  account_number?: string | null
   account_id?: string | number | null
+  account?: {
+    name?: string | null
+    account_size?: string | null
+    account_number?: string | null
+  } | null
   strategy?: string | null
 }
 
@@ -321,13 +329,11 @@ export default function Calendar({
                 const img = tradeImageSrc(trade.image_url)
                 const pnl = Number(trade.pnl) || 0
                 const modeLower = String(trade.mode ?? "").toLowerCase().trim()
-                const acctId =
-                  trade.account_id != null && String(trade.account_id).trim() !== ""
-                    ? `#${String(trade.account_id).trim()}`
-                    : null
-                const accountLine = [trade.account_type, trade.account_size, acctId]
-                  .filter((x) => x != null && String(x).trim() !== "")
-                  .join(" ")
+                const accountLine = formatTradeAccountDisplay(trade)
+                const accountLineWithType =
+                  trade.account_type && accountLine
+                    ? `${trade.account_type} · ${accountLine}`
+                    : accountLine || null
 
                 return (
                   <div
@@ -370,8 +376,10 @@ export default function Calendar({
                           <span className="text-blue-300/90">Backtest</span>
                         ) : null}
                       </div>
-                      {modeLower !== "backtest" && accountLine ? (
-                        <p className="mt-1 text-xs text-gray-500">{accountLine}</p>
+                      {modeLower !== "backtest" && accountLineWithType ? (
+                        <p className="mt-1 text-xs text-gray-500">
+                          {accountLineWithType}
+                        </p>
                       ) : null}
                       {trade.strategy ? (
                         <p className="mt-1 text-xs text-blue-400">
@@ -422,18 +430,11 @@ export default function Calendar({
               const modeLower = String(selectedTrade.mode ?? "")
                 .toLowerCase()
                 .trim()
-              const acctId =
-                selectedTrade.account_id != null &&
-                String(selectedTrade.account_id).trim() !== ""
-                  ? `#${String(selectedTrade.account_id).trim()}`
-                  : null
-              const accountLine = [
-                selectedTrade.account_type,
-                selectedTrade.account_size,
-                acctId,
-              ]
-                .filter((x) => x != null && String(x).trim() !== "")
-                .join(" ")
+              const accountLine = formatTradeAccountDisplay(selectedTrade)
+              const accountLineWithType =
+                selectedTrade.account_type && accountLine
+                  ? `${selectedTrade.account_type} · ${accountLine}`
+                  : accountLine || null
               return (
                 <>
                   {img ? (
@@ -465,8 +466,10 @@ export default function Calendar({
                       <span className="text-blue-300/90">Backtest</span>
                     ) : null}
                   </div>
-                  {modeLower !== "backtest" && accountLine ? (
-                    <p className="mt-2 text-xs text-gray-500">{accountLine}</p>
+                  {modeLower !== "backtest" && accountLineWithType ? (
+                    <p className="mt-2 text-xs text-gray-500">
+                      {accountLineWithType}
+                    </p>
                   ) : null}
                   {selectedTrade.strategy ? (
                     <p className="mt-1 text-xs text-blue-400">

@@ -9,6 +9,10 @@ import {
 } from "@/lib/formatDate"
 import { useEffect, useMemo, useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
+import {
+  formatTradeAccountDisplay,
+  TRADES_WITH_ACCOUNT_SELECT,
+} from "@/lib/tradeAccountDisplay"
 
 export default function CalendarPage() {
   const [trades, setTrades] = useState<any[]>([])
@@ -41,7 +45,7 @@ export default function CalendarPage() {
 
     const { data } = await supabase
       .from("trades")
-      .select("*")
+      .select(TRADES_WITH_ACCOUNT_SELECT)
       .eq("user_id", user.id)
 
     if (data) setTrades(data)
@@ -57,17 +61,26 @@ export default function CalendarPage() {
     return Math.max(0, Math.round(n))
   }
 
-  const accounts = Array.from(
-    new Set(
-      trades
-        .filter(t => t.account_type && t.account_id)
-        .map(t => `${t.account_type} (${t.account_id})`)
-    )
-  )
+  const accountFilterOptions = useMemo(() => {
+    const seen = new Set<string>()
+    const opts: { value: string; label: string }[] = []
+    for (const t of trades) {
+      const id = t.account_id != null ? String(t.account_id) : ""
+      if (!id || seen.has(id)) continue
+      seen.add(id)
+      const label = formatTradeAccountDisplay(t)
+      const prefix = t.account_type ? `${t.account_type} · ` : ""
+      opts.push({
+        value: id,
+        label: `${prefix}${label || "Account"}`.trim(),
+      })
+    }
+    return opts
+  }, [trades])
 
   const filteredTrades = trades.filter((trade) => {
     if (accountFilter !== "all") {
-      if (`${trade.account_type} (${trade.account_id})` !== accountFilter) {
+      if (String(trade.account_id ?? "") !== accountFilter) {
         return false
       }
     }
@@ -336,8 +349,10 @@ export default function CalendarPage() {
                 className="flex-1 min-w-[140px] bg-[#0f172a] border border-white/10 px-3 py-2 rounded text-white"
               >
                 <option value="all">All Accounts</option>
-                {accounts.map((acc) => (
-                  <option key={acc}>{acc}</option>
+                {accountFilterOptions.map(({ value, label }) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
                 ))}
               </select>
               <select

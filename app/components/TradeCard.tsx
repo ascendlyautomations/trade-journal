@@ -1,6 +1,9 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import ShareTradeButton from "./ShareTradeButton"
+import { supabase } from "@/lib/supabaseClient"
+import { formatTradeAccountDisplay } from "@/lib/tradeAccountDisplay"
 import {
   formatTradeClockTime,
   formatTradePrice,
@@ -61,6 +64,22 @@ function getDuration(
   return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`
 }
 
+let accountsLoadPromise: Promise<Record<string, any>> | null = null
+
+async function loadAccountMap(): Promise<Record<string, any>> {
+  if (!accountsLoadPromise) {
+    accountsLoadPromise = (async () => {
+      const { data } = await supabase.from("accounts").select("*")
+      const accountMap: Record<string, any> = {}
+      ;(data ?? []).forEach((acc: any) => {
+        accountMap[acc.id] = acc
+      })
+      return accountMap
+    })()
+  }
+  return accountsLoadPromise
+}
+
 export type TradeCardProps = {
   trade: any
   showAdvanced?: boolean
@@ -69,6 +88,8 @@ export type TradeCardProps = {
   onImageClick?: (fullImageUrl: string) => void
   /** Parent-loaded profile snippet for share export affiliate code */
   shareProfile?: { referral_code?: string | null } | null
+  /** Optional id → account row map (avoids fetch when parent already loaded accounts) */
+  accountById?: Record<string, any> | null
 }
 
 export default function TradeCard({
@@ -78,6 +99,7 @@ export default function TradeCard({
   onDelete,
   onImageClick,
   shareProfile = null,
+  accountById = null,
 }: TradeCardProps) {
   console.log("REAL TRADE CARD RENDERED")
 
@@ -113,14 +135,38 @@ export default function TradeCard({
   }
 
   const modeLower = String(trade.mode ?? "").toLowerCase().trim()
-  const acctNum = trade.account_number ?? trade.account_id
-  const accountParts = [
-    trade.account_type,
-    trade.account_size,
-    acctNum != null && String(acctNum).trim() !== ""
-      ? `#${String(acctNum).trim()}`
-      : null,
-  ].filter((x) => x != null && String(x).trim() !== "")
+
+  const [accountMap, setAccountMap] = useState<Record<string, any> | null>(
+    () => accountById ?? null
+  )
+
+  useEffect(() => {
+    if (trade.account) {
+      return
+    }
+    if (accountById) {
+      setAccountMap(accountById)
+      return
+    }
+    let cancelled = false
+    loadAccountMap().then((m) => {
+      if (!cancelled) setAccountMap(m)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [accountById, trade.account])
+
+  const acc =
+    trade.account ??
+    (accountMap && trade.account_id != null
+      ? accountMap[String(trade.account_id)]
+      : undefined)
+
+  const accountDisplay = formatTradeAccountDisplay({
+    ...trade,
+    account: acc ?? undefined,
+  })
 
   const base = process.env.NEXT_PUBLIC_SUPABASE_URL
   const screenshotUrl = trade.image_url
@@ -225,10 +271,8 @@ export default function TradeCard({
                 <span className="rounded bg-blue-500 px-2 py-1 text-xs text-white">
                   Backtest
                 </span>
-              ) : accountParts.length > 0 ? (
-                <p className="text-sm text-gray-400">
-                  {accountParts.join(" ")}
-                </p>
+              ) : accountDisplay.length > 0 ? (
+                <p className="text-sm text-gray-400">{accountDisplay}</p>
               ) : null}
             </div>
 

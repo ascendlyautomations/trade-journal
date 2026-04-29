@@ -95,7 +95,17 @@ export default function TradesPage() {
   const [selectedTrade, setSelectedTrade] = useState<any>(null)
   const [isSendModalOpen, setIsSendModalOpen] = useState(false)
   const [visibleCount, setVisibleCount] = useState(10)
+  /** Account rows for id → account_number (trades query unchanged; separate fetch) */
+  const [accountRows, setAccountRows] = useState<any[]>([])
   const router = useRouter()
+
+  const accountById = useMemo(() => {
+    const m: Record<string, any> = {}
+    accountRows.forEach((acc) => {
+      m[String(acc.id)] = acc
+    })
+    return m
+  }, [accountRows])
 
   useEffect(() => {
     initPage()
@@ -183,6 +193,12 @@ export default function TradesPage() {
 
     setGateProfile(profRow ?? null)
 
+    const { data: accountsData } = await supabase
+      .from("accounts")
+      .select("id, account_number, name, account_size, mode, category")
+      .eq("user_id", user.id)
+    setAccountRows(accountsData || [])
+
     await fetchTrades(user.id)
   }
 
@@ -264,29 +280,33 @@ export default function TradesPage() {
     setTimeframe("custom")
   }
 
-  const accountMap = new Map<
+  const accountFilterMap = new Map<
     string,
     { value: string; label: string; accountType?: string | null }
   >()
   trades
-    .filter(t => t.account_name && t.account_size && t.account_id)
+    .filter((t) => t.account_name && t.account_size && t.account_id)
     .forEach((t) => {
       const accountName = String(t.account_name || "").trim()
       const size = String(t.account_size || "").trim()
       const id = String(t.account_id || "").trim()
       const value = `${accountName}|${size}|${id}`
-      const label = `${accountName} ${size} #${id}`
-        .trim()
+      const accRow = accountById[id]
+      const num = accRow?.account_number
+      const label = [accountName, size, num ? `• #${num}` : ""]
+        .filter((x) => x !== "")
+        .join(" ")
         .replace(/\s+/g, " ")
-      if (!accountMap.has(value)) {
-        accountMap.set(value, {
+        .trim()
+      if (!accountFilterMap.has(value)) {
+        accountFilterMap.set(value, {
           value,
           label,
           accountType: t.mode ?? t.account_type,
         })
       }
     })
-  const accounts = Array.from(accountMap.values())
+  const accounts = Array.from(accountFilterMap.values())
   console.log("Accounts:", accounts)
 
   const tradesForPerformanceSharePool = useMemo(
@@ -530,11 +550,11 @@ export default function TradesPage() {
   const showDuration = durationDisplay !== null
 
   const acctLower = String(trade.mode ?? trade.account_type ?? "").toLowerCase().trim()
-  const accountLabel = `${String(trade.account_name || "").trim()} ${String(
-    trade.account_size || ""
-  ).trim()} ${trade.account_id ? `#${String(trade.account_id).trim()}` : ""}`
-    .replace(/\s+/g, " ")
-    .trim()
+  const acc = accountById[String(trade.account_id ?? "")]
+  const hasAccountLine =
+    !!(String(trade.account_name || "").trim() ||
+      String(trade.account_size || "").trim() ||
+      acc?.account_number)
 
   if (process.env.NODE_ENV !== "production" && showAdvanced) {
     console.debug("[trades-page-duration-ui]", {
@@ -663,13 +683,20 @@ export default function TradesPage() {
                               </span>
                             )}
 
-                            {accountLabel && (
-                              <span className="text-sm text-gray-300">
-                                {accountLabel}
-                              </span>
-                            )}
+                            {hasAccountLine ? (
+                              <div className="flex items-center gap-2 text-sm text-gray-300">
+                                <span>
+                                  {trade.account_name} {trade.account_size}
+                                </span>
+                                {acc?.account_number ? (
+                                  <span className="opacity-70">
+                                    • #{acc.account_number}
+                                  </span>
+                                ) : null}
+                              </div>
+                            ) : null}
 
-                            {!trade.account_type && !accountLabel && (
+                            {!trade.account_type && !hasAccountLine && (
                               <span className="text-xs text-gray-500">—</span>
                             )}
                           </div>
