@@ -624,7 +624,7 @@ export default function ProfilePage() {
   const [followBusy, setFollowBusy] = useState(false)
   const [messageBusy, setMessageBusy] = useState(false)
   const [creatingRoom, setCreatingRoom] = useState(false)
-  const [userRoom, setUserRoom] = useState<any>(null)
+  const [room, setRoom] = useState<any | null>(null)
   const [showFollowers, setShowFollowers] = useState(false)
   const [showFollowing, setShowFollowing] = useState(false)
   const [followersModalUsers, setFollowersModalUsers] = useState<any[]>([])
@@ -973,7 +973,7 @@ export default function ProfilePage() {
 
     if (!prof || error) {
       setProfile(null)
-      setUserRoom(null)
+      setRoom(null)
       setTrades([])
       setPage(0)
       setHasMore(false)
@@ -999,14 +999,17 @@ export default function ProfilePage() {
     setProfile(prof)
     setIsFollowing(following)
 
-    const { data: room } = await supabase
+    const { data: roomRow, error: roomError } = await supabase
       .from("rooms")
-      .select("id, name, slug")
+      .select("*")
       .eq("owner_user_id", prof.id)
-      .eq("show_on_profile", true)
       .maybeSingle()
 
-    setUserRoom(room)
+    if (roomError) {
+      console.error(roomError)
+    }
+
+    setRoom(roomRow ?? null)
 
     const { count: followersN } = await supabase
       .from("followers")
@@ -1165,26 +1168,35 @@ export default function ProfilePage() {
 
       if (!user) return
 
-      const { data: existing } = await supabase
+      const { data: existing, error: existingErr } = await supabase
         .from("rooms")
-        .select("id")
+        .select("*")
         .eq("owner_user_id", user.id)
         .maybeSingle()
 
+      if (existingErr) {
+        console.error(existingErr)
+      }
+
       if (existing) {
-        router.push(`/trade-rooms?room=${existing.id}`)
+        setRoom(existing)
+        router.push(
+          `/trade-rooms?room=${encodeURIComponent(String(existing.slug ?? existing.id))}`
+        )
         return
       }
 
-      const { data: profile } = await supabase
+      const { data: profileRow } = await supabase
         .from("profiles")
         .select("username")
         .eq("id", user.id)
         .single()
 
-      const room = await createUserRoom(user.id, profile?.username || "user")
-
-      router.push(`/trade-rooms?room=${room.slug}&setup=true`)
+      const newRoom = await createUserRoom(user.id, profileRow?.username || "user")
+      setRoom(newRoom)
+      router.push(
+        `/trade-rooms?room=${encodeURIComponent(String(newRoom.slug))}&setup=true`
+      )
     } catch (err) {
       console.error(err)
     } finally {
@@ -1640,6 +1652,9 @@ export default function ProfilePage() {
     )
   }
 
+  const isOwnProfile = currentUserId === profile.id
+  const hasRoom = !!room
+
   return (
     <>
       <Navbar />
@@ -1659,12 +1674,12 @@ export default function ProfilePage() {
                     className="h-20 w-20 shrink-0 rounded-full border border-white/10 object-cover md:h-24 md:w-24"
                   />
 
-                  <div className="min-w-0 w-full flex-1 text-center sm:text-left">
+                  <div className="flex min-w-0 w-full flex-1 flex-col justify-center text-center sm:text-left">
                     <div className="flex flex-col items-center gap-2 sm:block">
                       <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start sm:gap-3">
                         <div className="flex items-center justify-center gap-2 sm:justify-start">
                           <h2 className="text-lg font-semibold text-white md:text-xl">
-                            {profile.username || "User"}
+                            {profile.name || profile.username || "User"}
                           </h2>
 
                           {currentUserId === profile.id && (
@@ -1675,13 +1690,6 @@ export default function ProfilePage() {
                                 className="rounded-md bg-gray-600 px-2 py-1 text-xs text-gray-100 hover:bg-gray-500 md:bg-white/10 md:px-3 md:text-sm md:hover:bg-white/20"
                               >
                                 Settings
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => void handleCreateRoom()}
-                                className="rounded-md bg-green-500/10 px-3 py-1.5 text-sm text-green-400 hover:bg-green-500/20"
-                              >
-                                {creatingRoom ? "Creating..." : "Create Trade Room"}
                               </button>
                             </div>
                           )}
@@ -1716,9 +1724,7 @@ export default function ProfilePage() {
 
                     </div>
 
-                  {profile.name && profile.name !== profile.username ? (
-                    <p className="mt-1 text-sm text-gray-400">{profile.name}</p>
-                  ) : null}
+                  <p className="mt-1 text-sm text-gray-400">{profile.username}</p>
 
                   <p className="mt-1 text-sm text-gray-400">
                     {profile.trading_style ||
@@ -1790,15 +1796,50 @@ export default function ProfilePage() {
                   <p className="mt-2 px-4 text-sm leading-relaxed text-gray-300 md:px-0">
                     {profile.bio || "No bio yet"}
                   </p>
-                  {userRoom && (userRoom.slug || userRoom.name) ? (
-                    <div className="mt-4">
+
+                  {isOwnProfile ? (
+                    hasRoom ? (
+                      <div className="mt-3">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            router.push(
+                              `/trade-rooms?room=${encodeURIComponent(
+                                String(room.slug ?? room.id)
+                              )}`
+                            )
+                          }
+                          className="px-6 py-2 rounded-lg bg-green-500 font-semibold text-sm text-white hover:bg-green-600"
+                        >
+                          View Trade Room
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="mt-3">
+                        <button
+                          type="button"
+                          onClick={() => void handleCreateRoom()}
+                          disabled={creatingRoom}
+                          className="px-6 py-2 rounded-lg bg-green-500 font-semibold text-sm text-white hover:bg-green-600 disabled:opacity-60"
+                        >
+                          {creatingRoom ? "Creating…" : "Create Trade Room"}
+                        </button>
+                      </div>
+                    )
+                  ) : room &&
+                    room.show_on_profile !== false &&
+                    (room.slug || room.name) ? (
+                    <div className="mt-3">
                       <button
                         type="button"
-                        onClick={() => {
-                          const q = String(userRoom.slug ?? userRoom.name ?? "")
-                          router.push(`/trade-rooms?room=${encodeURIComponent(q)}`)
-                        }}
-                        className="w-full md:w-auto px-4 py-2 rounded-lg bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-medium transition"
+                        onClick={() =>
+                          router.push(
+                            `/trade-rooms?room=${encodeURIComponent(
+                              String(room.slug ?? room.name ?? room.id)
+                            )}`
+                          )
+                        }
+                        className="px-6 py-2 rounded-lg bg-green-500 font-semibold text-sm text-white hover:bg-green-600"
                       >
                         View Trade Room
                       </button>

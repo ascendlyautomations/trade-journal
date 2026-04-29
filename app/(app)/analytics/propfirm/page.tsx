@@ -112,28 +112,26 @@ export default function PropFirmPage() {
   const status = isFailed
     ? "FAILED"
     : isPassed
-    ? "PASSED"
-    : "IN PROGRESS"
+      ? "PASSED"
+      : "IN PROGRESS"
 
   const ddPercent = selectedAccount?.max_drawdown
     ? Math.min((drawdownUsed / selectedAccount.max_drawdown) * 100, 100)
     : 0
 
   return (
-    <div className="p-6 text-white">
-      <h1 className="text-2xl font-semibold mb-6">
-        Prop Firm Mode
-      </h1>
+    <div className="mx-auto max-w-6xl space-y-6">
+      <h1 className="text-2xl font-semibold">Prop Firm Mode</h1>
 
-      <div className="mb-4 text-lg font-semibold">
+      <div className="text-lg font-semibold">
         Status:{" "}
         <span
           className={
             status === "PASSED"
               ? "text-green-400"
               : status === "FAILED"
-              ? "text-red-400"
-              : "text-yellow-400"
+                ? "text-red-400"
+                : "text-yellow-400"
           }
         >
           {status}
@@ -146,7 +144,7 @@ export default function PropFirmPage() {
           const acc = accounts.find((a) => a.id === Number(e.target.value))
           setSelectedAccount(acc ?? null)
         }}
-        className="w-full max-w-md p-2 rounded bg-[#0f172a] border border-white/10 mb-6"
+        className="mb-6 w-full max-w-md rounded border border-white/10 bg-[#0f172a] p-2"
       >
         <option value="">Select Account</option>
         {accounts.map((acc) => (
@@ -157,8 +155,8 @@ export default function PropFirmPage() {
       </select>
 
       {selectedAccount && (
-        <div className="bg-[#0f172a] border border-white/10 rounded-xl p-4 mb-6">
-          <h2 className="text-lg mb-3">Account Rules</h2>
+        <div className="mb-6 rounded-xl border border-white/10 bg-[#0f172a] p-4">
+          <h2 className="mb-3 text-lg">Account Rules</h2>
 
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
@@ -190,8 +188,8 @@ export default function PropFirmPage() {
       )}
 
       {selectedAccount && (
-        <div className="bg-[#0f172a] border border-white/10 rounded-xl p-4">
-          <h2 className="text-lg mb-3">Progress</h2>
+        <div className="rounded-xl border border-white/10 bg-[#0f172a] p-4">
+          <h2 className="mb-3 text-lg">Progress</h2>
 
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
@@ -208,9 +206,7 @@ export default function PropFirmPage() {
 
             <div className="flex justify-between">
               <span>Max Drawdown Used</span>
-              <span className="text-red-400">
-                ${drawdownUsed}
-              </span>
+              <span className="text-red-400">${drawdownUsed}</span>
             </div>
 
             <div className="flex justify-between">
@@ -220,59 +216,79 @@ export default function PropFirmPage() {
           </div>
 
           <div className="mt-4">
-            <div className="w-full bg-white/10 h-2 rounded">
+            <div className="h-2 w-full rounded bg-white/10">
               <div
-                className="bg-green-500 h-2 rounded"
+                className="h-2 rounded bg-green-500"
                 style={{ width: `${progressPercent}%` }}
               />
             </div>
           </div>
 
           <div className="mt-3">
-            <div className="w-full bg-white/10 h-2 rounded">
+            <div className="h-2 w-full rounded bg-white/10">
               <div
-                className="bg-red-500 h-2 rounded"
+                className="h-2 rounded bg-red-500"
                 style={{ width: `${ddPercent}%` }}
               />
             </div>
           </div>
 
           {selectedAccount && drawdownUsed > selectedAccount.max_drawdown && (
-            <div className="mt-4 text-red-400 text-sm">
-              ⚠️ Max drawdown exceeded
-            </div>
+            <div className="mt-4 text-sm text-red-400">⚠️ Max drawdown exceeded</div>
           )}
 
-          {selectedAccount && Math.abs(todayLoss) > selectedAccount.daily_drawdown && (
-            <div className="mt-2 text-red-400 text-sm">
-              ⚠️ Daily drawdown exceeded
-            </div>
-          )}
+          {selectedAccount &&
+            Math.abs(todayLoss) > selectedAccount.daily_drawdown && (
+              <div className="mt-2 text-sm text-red-400">
+                ⚠️ Daily drawdown exceeded
+              </div>
+            )}
         </div>
       )}
 
       {selectedAccount && (
-        <div className="bg-[#0f172a] border border-white/10 rounded-xl p-4 mt-6">
-          <h2 className="text-lg mb-3">Rule Status</h2>
+        <div className="mt-6 rounded-xl border border-white/10 bg-[#0f172a] p-4">
+          <h2 className="mb-3 text-lg">Rule Status</h2>
 
           <div className="space-y-2 text-sm">
-            <div className={drawdownUsed > selectedAccount.max_drawdown ? "text-red-400" : "text-green-400"}>
-              {drawdownUsed > selectedAccount.max_drawdown ? "❌" : "✔"} Max Drawdown
+            <div
+              className={
+                drawdownUsed > selectedAccount.max_drawdown
+                  ? "text-red-400"
+                  : "text-green-400"
+              }
+            >
+              {drawdownUsed > selectedAccount.max_drawdown ? "❌" : "✔"} Max
+              Drawdown
             </div>
 
-            <div className={Math.abs(todayLoss) > selectedAccount.daily_drawdown ? "text-red-400" : "text-green-400"}>
-              {Math.abs(todayLoss) > selectedAccount.daily_drawdown ? "❌" : "✔"} Daily Drawdown
+            <div
+              className={
+                Math.abs(todayLoss) > selectedAccount.daily_drawdown
+                  ? "text-red-400"
+                  : "text-green-400"
+              }
+            >
+              {Math.abs(todayLoss) > selectedAccount.daily_drawdown ? "❌" : "✔"}{" "}
+              Daily Drawdown
             </div>
 
-            <div className={winningDays >= selectedAccount.winning_days ? "text-green-400" : "text-yellow-400"}>
-              {winningDays >= selectedAccount.winning_days ? "✔" : "⚠"} Winning Days
+            <div
+              className={
+                winningDays >= selectedAccount.winning_days
+                  ? "text-green-400"
+                  : "text-yellow-400"
+              }
+            >
+              {winningDays >= selectedAccount.winning_days ? "✔" : "⚠"} Winning
+              Days
             </div>
           </div>
         </div>
       )}
 
-      <div className="bg-[#0f172a] border border-white/10 rounded-xl p-4 mt-6">
-        <h2 className="text-lg mb-3">Daily Performance</h2>
+      <div className="mt-6 rounded-xl border border-white/10 bg-[#0f172a] p-4">
+        <h2 className="mb-3 text-lg">Daily Performance</h2>
 
         <div className="space-y-2 text-sm">
           {dailyRows.map(([date, pnl]) => (
