@@ -15,6 +15,8 @@ import DmStyleComposer from "../components/DmStyleComposer"
 import { supabase } from "../../lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
 import { formatEST } from "@/lib/formatEST"
+import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
+import { handleLimitError } from "@/lib/limitErrorMessage"
 
 type Room = {
   id: string
@@ -1000,6 +1002,19 @@ function CommunityContent() {
     const content = draft.trim()
     if (!content) return
 
+    const userIsPro = await isUserPro(supabase as any, user.id)
+    if (!userIsPro) {
+      const limitReached = await reachedMessagesCommentsLimit(
+        supabase as any,
+        user.id,
+        10
+      )
+      if (limitReached) {
+        alert("Free plan allows 10 messages/comments per day.")
+        return
+      }
+    }
+
     const { error } = await supabase.from("room_messages").insert({
       room_id: selectedRoomId,
       user_id: user.id,
@@ -1007,7 +1022,12 @@ function CommunityContent() {
       section_id: selectedSectionId,
     })
     if (error) {
-      console.error("room_messages insert:", error)
+      const friendly = handleLimitError(error)
+      if (friendly) {
+        alert(friendly)
+      } else {
+        console.error("room_messages insert:", error)
+      }
       return
     }
 
@@ -1019,6 +1039,19 @@ function CommunityContent() {
     const file = e.target.files?.[0]
     e.target.value = ""
     if (!file) return
+
+    const userIsPro = await isUserPro(supabase as any, user.id)
+    if (!userIsPro) {
+      const limitReached = await reachedMessagesCommentsLimit(
+        supabase as any,
+        user.id,
+        10
+      )
+      if (limitReached) {
+        alert("Free plan allows 10 messages/comments per day.")
+        return
+      }
+    }
 
     let uploadFile: File = file
     if (file.type?.startsWith("image/")) {
@@ -1046,7 +1079,12 @@ function CommunityContent() {
     })
 
     if (insertError) {
-      console.error("room image message insert:", insertError)
+      const friendly = handleLimitError(insertError)
+      if (friendly) {
+        alert(friendly)
+      } else {
+        console.error("room image message insert:", insertError)
+      }
     }
   }
 
@@ -1076,6 +1114,19 @@ function CommunityContent() {
   async function sendTradeMessage(trade: any) {
     if (!user?.id || !selectedRoomId) return
 
+    const userIsPro = await isUserPro(supabase as any, user.id)
+    if (!userIsPro) {
+      const limitReached = await reachedMessagesCommentsLimit(
+        supabase as any,
+        user.id,
+        10
+      )
+      if (limitReached) {
+        alert("Free plan allows 10 messages/comments per day.")
+        return
+      }
+    }
+
     const { error } = await supabase.from("room_messages").insert({
       room_id: selectedRoomId,
       user_id: user.id,
@@ -1086,7 +1137,12 @@ function CommunityContent() {
     })
 
     if (error) {
-      console.error("room trade message insert:", error)
+      const friendly = handleLimitError(error)
+      if (friendly) {
+        alert(friendly)
+      } else {
+        console.error("room trade message insert:", error)
+      }
       return
     }
 

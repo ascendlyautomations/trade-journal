@@ -7,6 +7,8 @@ import { supabase } from "../../lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
 import { fetchShareConversations } from "@/lib/shareToConversations"
 import { formatEST } from "@/lib/formatEST"
+import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
+import { handleLimitError } from "@/lib/limitErrorMessage"
 import Navbar from "../components/Navbar"
 import {
   PostInteractionsComments,
@@ -635,6 +637,19 @@ export default function FeedPage() {
     const text = (commentDraft[pid] || "").trim()
     if (!text) return
 
+    const userIsPro = await isUserPro(supabase as any, user.id)
+    if (!userIsPro) {
+      const limitReached = await reachedMessagesCommentsLimit(
+        supabase as any,
+        user.id,
+        10
+      )
+      if (limitReached) {
+        alert("Free plan allows 10 messages/comments per day.")
+        return
+      }
+    }
+
     setCommentSubmitting((s) => ({ ...s, [pid]: true }))
 
     const { data: newRow, error } = await supabase
@@ -650,7 +665,12 @@ export default function FeedPage() {
     setCommentSubmitting((s) => ({ ...s, [pid]: false }))
 
     if (error) {
-      console.error("Comment insert error:", error)
+      const friendly = handleLimitError(error)
+      if (friendly) {
+        alert(friendly)
+      } else {
+        console.error("Comment insert error:", error)
+      }
       return
     }
 
@@ -701,6 +721,19 @@ export default function FeedPage() {
 
     if (!authUser?.id) return
 
+    const userIsPro = await isUserPro(supabase as any, authUser.id)
+    if (!userIsPro) {
+      const limitReached = await reachedMessagesCommentsLimit(
+        supabase as any,
+        authUser.id,
+        10
+      )
+      if (limitReached) {
+        alert("Free plan allows 10 messages/comments per day.")
+        return
+      }
+    }
+
     const content = shareMessage.trim() || "Shared a post"
 
     for (const conversationId of selectedConversations) {
@@ -713,6 +746,11 @@ export default function FeedPage() {
       })
 
       if (error) {
+        const friendly = handleLimitError(error)
+        if (friendly) {
+          alert(friendly)
+          return
+        }
         console.error("Share post error:", error)
       }
     }

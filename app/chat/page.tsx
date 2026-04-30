@@ -5,6 +5,8 @@ import { formatEST } from "@/lib/formatEST"
 import { useEffect, useState, useRef } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
+import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
+import { handleLimitError } from "@/lib/limitErrorMessage"
 import { useRouter } from "next/navigation"
 
 export default function ChatPage() {
@@ -125,6 +127,20 @@ export default function ChatPage() {
 
   async function sendMessage() {
     if (!input.trim() && !selectedFile) return
+    if (!user?.id) return
+
+    const userIsPro = await isUserPro(supabase as any, user.id)
+    if (!userIsPro) {
+      const limitReached = await reachedMessagesCommentsLimit(
+        supabase as any,
+        user.id,
+        10
+      )
+      if (limitReached) {
+        alert("Free plan allows 10 messages/comments per day.")
+        return
+      }
+    }
 
     let imageUrl = null
 
@@ -152,12 +168,21 @@ export default function ChatPage() {
 
     setMessages((prev) => [...prev, temp])
 
-    await supabase.from("messages").insert({
+    const { error: sendErr } = await supabase.from("messages").insert({
       user_id: user.id,
       content: input,
       image_url: imageUrl,
       channel
     })
+    if (sendErr) {
+      const friendly = handleLimitError(sendErr)
+      if (friendly) {
+        alert(friendly)
+      } else {
+        console.error("chat sendMessage insert:", sendErr)
+      }
+      return
+    }
 
     setInput("")
     setSelectedFile(null)

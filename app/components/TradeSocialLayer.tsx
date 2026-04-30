@@ -10,6 +10,8 @@ import {
   type ReactNode,
 } from "react"
 import { supabase } from "../../lib/supabaseClient"
+import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
+import { handleLimitError } from "@/lib/limitErrorMessage"
 
 type TradeSocialContextValue = {
   tradeId: string
@@ -232,6 +234,19 @@ export function TradeSocialProvider({
   const handleComment = useCallback(async () => {
     if (!resolvedId || !currentUserId || !newComment.trim()) return
 
+    const userIsPro = await isUserPro(supabase as any, currentUserId)
+    if (!userIsPro) {
+      const limitReached = await reachedMessagesCommentsLimit(
+        supabase as any,
+        currentUserId,
+        10
+      )
+      if (limitReached) {
+        alert("Free plan allows 10 messages/comments per day.")
+        return
+      }
+    }
+
     const { data, error } = await supabase
       .from("trade_comments")
       .insert({
@@ -248,7 +263,12 @@ export function TradeSocialProvider({
       .single()
 
     if (error) {
-      console.error("Trade comment error:", error)
+      const friendly = handleLimitError(error)
+      if (friendly) {
+        alert(friendly)
+      } else {
+        console.error("Trade comment error:", error)
+      }
       return
     }
 

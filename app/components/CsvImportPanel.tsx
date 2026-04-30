@@ -16,6 +16,8 @@ import {
   type CsvSelectedAccount,
   insertCsvTradesWithAccount,
 } from "@/lib/insertCsvTradesWithAccount"
+import { last24hIso } from "@/lib/freePlanLimits"
+import { handleLimitError } from "@/lib/limitErrorMessage"
 
 export type CsvImportPanelProps = {
   /** Smaller preview + less chrome (e.g. onboarding modal) */
@@ -42,9 +44,6 @@ export default function CsvImportPanel({
 }: CsvImportPanelProps) {
   const [parsed, setParsed] = useState<CsvRow[]>([])
   const [loading, setLoading] = useState(false)
-  const csvLimitMessage =
-    "Free plan includes 1 CSV import. Upgrade to Pro to import more trades."
-
   const handleFile = (file: File) => {
     Papa.parse<CsvRow>(file, {
       header: true,
@@ -80,21 +79,13 @@ export default function CsvImportPanel({
 
     const { data: profile, error: profileErr } = await supabase
       .from("profiles")
-      .select("is_pro, has_used_csv_import")
+      .select("is_pro")
       .eq("id", user.id)
       .single()
 
     if (profileErr || !profile) {
       console.error("Profile fetch failed:", profileErr)
       alert("Could not verify account. Try again.")
-      setLoading(false)
-      return
-    }
-
-    console.log("CSV CHECK:", profile)
-
-    if (!profile.is_pro && profile.has_used_csv_import) {
-      alert(csvLimitMessage)
       setLoading(false)
       return
     }
@@ -109,17 +100,47 @@ export default function CsvImportPanel({
       return
     }
 
-    let error: { message?: string } | null = null
+    let tradesToInsert = parsedTrades
+    if (!profile.is_pro) {
+      const { data: existingTrades, error: existingErr } = await supabase
+        .from("trades")
+        .select("id")
+        .eq("user_id", user.id)
+        .gte("created_at", last24hIso())
+
+      if (existingErr) {
+        console.error("trade count check failed:", existingErr)
+        alert("Could not verify daily trade limit. Please try again.")
+        setLoading(false)
+        return
+      }
+
+      const remaining = 3 - (existingTrades?.length ?? 0)
+      if (remaining <= 0) {
+        alert("You've reached your daily trade limit. Upgrade to Pro.")
+        setLoading(false)
+        return
+      }
+      tradesToInsert = parsedTrades.slice(0, remaining)
+    }
+
+    if (!tradesToInsert.length) {
+      alert("You've reached your daily trade limit. Upgrade to Pro.")
+      setLoading(false)
+      return
+    }
+
+    let error: { message?: string; details?: string; hint?: string } | null = null
 
     if (selectedAccount) {
       const res = await insertCsvTradesWithAccount(
         supabase,
-        parsedTrades,
+        tradesToInsert,
         selectedAccount
       )
       error = res.error
     } else {
-      const rowsToInsert = tradesInsertRowsPrivate(parsedTrades)
+      const rowsToInsert = tradesInsertRowsPrivate(tradesToInsert)
 
       const { error: importAcctErr } = await ensureImportedCsvAccountRegistered(
         supabase,
@@ -137,8 +158,13 @@ export default function CsvImportPanel({
     }
 
     if (error) {
-      console.error("INSERT ERROR:", error)
-      alert("Import failed")
+      const friendly = handleLimitError(error)
+      if (friendly) {
+        alert(friendly)
+      } else {
+        console.error("INSERT ERROR:", error)
+        alert(error.message || "Import failed")
+      }
     } else {
       const skipped = summary.failed
       const errLines = rowResults
@@ -146,19 +172,17 @@ export default function CsvImportPanel({
         .slice(0, 5)
         .map((r) => `Row ${r.rowNumber}: ${r.reason}`)
         .join("\n")
-      let msg = `Trades imported successfully. They are private by default. You can make them public by editing a trade. (${parsedTrades.length} imported)`
+      const importedCount = tradesToInsert.length
+      const partialCount = parsedTrades.length - tradesToInsert.length
+      let msg = `Trades imported successfully. They are private by default. You can make them public by editing a trade. (${importedCount} imported)`
+      if (partialCount > 0) {
+        msg = `Imported ${importedCount} trades. Upgrade to Pro to import more.`
+      }
       if (skipped) msg += ` ${skipped} row(s) skipped.`
       if (errLines) msg += `\n\n${errLines}`
       alert(msg)
       setParsed([])
-      if (!profile.is_pro) {
-        const { error: flagErr } = await supabase
-          .from("profiles")
-          .update({ has_used_csv_import: true })
-          .eq("id", user.id)
-        if (flagErr) console.error("markProfileCsvImportUsed:", flagErr)
-      }
-      onImportSuccess?.({ count: parsedTrades.length, skipped })
+      onImportSuccess?.({ count: importedCount, skipped })
     }
 
     setLoading(false)

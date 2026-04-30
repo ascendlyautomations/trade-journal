@@ -6,6 +6,8 @@ import TradeSocialLayer from "../../components/TradeSocialLayer"
 import { useEffect, useState, useRef, type ChangeEvent } from "react"
 import { supabase } from "../../../lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
+import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
+import { handleLimitError } from "@/lib/limitErrorMessage"
 import { useParams, useRouter } from "next/navigation"
 
 function tradeScreenshotSrc(url: string | null | undefined): string | null {
@@ -819,6 +821,19 @@ export default function DMPage() {
     if (!user) return
     if (!input.trim() && !selectedFile) return
 
+    const userIsPro = await isUserPro(supabase as any, user.id)
+    if (!userIsPro) {
+      const limitReached = await reachedMessagesCommentsLimit(
+        supabase as any,
+        user.id,
+        10
+      )
+      if (limitReached) {
+        alert("Free plan allows 10 messages/comments per day.")
+        return
+      }
+    }
+
     let imageUrl = null
 
     if (selectedFile) {
@@ -835,12 +850,21 @@ export default function DMPage() {
       imageUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/screenshots/${fileName}`
     }
 
-    await supabase.from("messages").insert({
+    const { error: sendErr } = await supabase.from("messages").insert({
       conversation_id: id,
       sender_id: user.id,
       content: input || "",
       image_url: imageUrl,
     })
+    if (sendErr) {
+      const friendly = handleLimitError(sendErr)
+      if (friendly) {
+        alert(friendly)
+      } else {
+        console.error("sendMessage insert:", sendErr)
+      }
+      return
+    }
 
     const lastMsg = input || (imageUrl ? "Image" : "")
     const lastMessageAt = new Date().toISOString()
@@ -876,13 +900,35 @@ export default function DMPage() {
   async function handleSendTrade(trade: any) {
     if (!user) return
 
-    await supabase.from("messages").insert({
+    const userIsPro = await isUserPro(supabase as any, user.id)
+    if (!userIsPro) {
+      const limitReached = await reachedMessagesCommentsLimit(
+        supabase as any,
+        user.id,
+        10
+      )
+      if (limitReached) {
+        alert("Free plan allows 10 messages/comments per day.")
+        return
+      }
+    }
+
+    const { error: tradeSendErr } = await supabase.from("messages").insert({
       conversation_id: activeConversationId,
       sender_id: user.id,
       type: "trade",
       trade_id: trade.id,
       content: "Shared a trade",
     })
+    if (tradeSendErr) {
+      const friendly = handleLimitError(tradeSendErr)
+      if (friendly) {
+        alert(friendly)
+      } else {
+        console.error("handleSendTrade insert:", tradeSendErr)
+      }
+      return
+    }
 
     const lastMsg = "Shared a trade"
     const lastMessageAt = new Date().toISOString()

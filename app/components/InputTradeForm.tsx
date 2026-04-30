@@ -6,6 +6,8 @@ import { compressImage } from "@/lib/compressImage"
 import { ensureManualUserAccountRegistered } from "@/lib/ensureManualUserAccount"
 import { isProActive } from "@/lib/subscription"
 import { insertCsvTradesWithAccount } from "@/lib/insertCsvTradesWithAccount"
+import { hasReachedRowLimit, last24hIso } from "@/lib/freePlanLimits"
+import { handleLimitError } from "@/lib/limitErrorMessage"
 import { getSessionFromDate } from "@/lib/getSession"
 import CreateAccountModal, {
   type Props as CreateAccountModalProps,
@@ -584,6 +586,53 @@ export default function InputTradeForm({
       return
     }
 
+    const sinceIso = last24hIso()
+
+    const { data: profileRow } = await supabase
+      .from("profiles")
+      .select(
+        "is_pro, subscription_status, locked_account_type, locked_account_size, locked_account_name, locked_account_number"
+      )
+      .eq("id", user.id)
+      .maybeSingle()
+    const userIsPro = isProActive(profileRow)
+
+    if (!isEditMode && !userIsPro) {
+      const tradeLimitReached = await hasReachedRowLimit(supabase as any, {
+        table: "trades",
+        userColumn: "user_id",
+        userId: user.id,
+        limit: 3,
+        sinceIso,
+      })
+      if (tradeLimitReached) {
+        setPopupMessage("Free plan allows 3 trades per 24 hours. Upgrade to Pro.")
+        setPopupType("error")
+        setShowPopup(true)
+        setSubmitting(false)
+        return
+      }
+    }
+
+    if (!userIsPro && isPublic) {
+      const publicTradeLimitReached = await hasReachedRowLimit(supabase as any, {
+        table: "trades",
+        userColumn: "user_id",
+        userId: user.id,
+        limit: 1,
+        sinceIso,
+        extraEquals: { is_public: true },
+      })
+      if (publicTradeLimitReached) {
+        setIsPublic(false)
+        setPopupMessage("Free plan allows 1 public trade per day.")
+        setPopupType("error")
+        setShowPopup(true)
+        setSubmitting(false)
+        return
+      }
+    }
+
     let screenshotUrl: string | null = null
 
     if (image) {
@@ -638,15 +687,6 @@ export default function InputTradeForm({
       mode: String(acct.mode ?? "live"),
       category: acct.category ?? null,
     }
-
-    const { data: profileRow } = await supabase
-      .from("profiles")
-      .select(
-        "is_pro, subscription_status, locked_account_type, locked_account_size, locked_account_name, locked_account_number"
-      )
-      .eq("id", user.id)
-      .maybeSingle()
-    const userIsPro = isProActive(profileRow)
 
     if (!userIsPro && modeLower !== "backtest" && modeLower !== "imported") {
       const lockedType = String(profileRow?.locked_account_type ?? "").trim().toLowerCase()
@@ -812,6 +852,31 @@ export default function InputTradeForm({
       }
 
       if (isPublic) {
+        if (!userIsPro) {
+          const { data: existingPost } = await supabase
+            .from("posts")
+            .select("id")
+            .eq("trade_id", existingTrade.id)
+            .maybeSingle()
+
+          if (!existingPost) {
+            const postLimitReached = await hasReachedRowLimit(supabase as any, {
+              table: "posts",
+              userColumn: "user_id",
+              userId: user.id,
+              limit: 1,
+              sinceIso,
+            })
+            if (postLimitReached) {
+              setPopupMessage("Free plan allows 1 post per day. Upgrade to Pro.")
+              setPopupType("error")
+              setShowPopup(true)
+              setSubmitting(false)
+              return
+            }
+          }
+        }
+
         const { error: postErr } = await supabase.from("posts").upsert(
           {
             trade_id: existingTrade.id,
@@ -823,7 +888,16 @@ export default function InputTradeForm({
           },
           { onConflict: "trade_id" }
         )
-        if (postErr) console.error("posts upsert:", postErr)
+        if (postErr) {
+          const friendly = handleLimitError(postErr)
+          if (friendly) {
+            setPopupMessage(friendly)
+            setPopupType("error")
+            setShowPopup(true)
+          } else {
+            console.error("posts upsert:", postErr)
+          }
+        }
       } else {
         const { error: delErr } = await supabase
           .from("posts")
@@ -903,8 +977,11 @@ export default function InputTradeForm({
       .single()
 
     if (error) {
-      console.error("Trade insert error:", error)
-      setPopupMessage("Failed to save trade")
+      const friendly = handleLimitError(error)
+      if (!friendly) {
+        console.error("Trade insert error:", error)
+      }
+      setPopupMessage(friendly || "Failed to save trade")
       setPopupType("error")
       setShowPopup(true)
       setSubmitting(false)
@@ -912,6 +989,23 @@ export default function InputTradeForm({
     }
 
     if (isPublic && newTradeData) {
+      if (!userIsPro) {
+        const postLimitReached = await hasReachedRowLimit(supabase as any, {
+          table: "posts",
+          userColumn: "user_id",
+          userId: user.id,
+          limit: 1,
+          sinceIso,
+        })
+        if (postLimitReached) {
+          setPopupMessage("Free plan allows 1 post per day. Upgrade to Pro.")
+          setPopupType("error")
+          setShowPopup(true)
+          setSubmitting(false)
+          return
+        }
+      }
+
       const { error: postError } = await supabase.from("posts").insert([
         {
           user_id: user.id,
@@ -923,7 +1017,14 @@ export default function InputTradeForm({
         },
       ])
       if (postError) {
-        console.error("Post insert error:", postError)
+        const friendly = handleLimitError(postError)
+        if (friendly) {
+          setPopupMessage(friendly)
+          setPopupType("error")
+          setShowPopup(true)
+        } else {
+          console.error("Post insert error:", postError)
+        }
       }
     }
 
@@ -933,6 +1034,48 @@ export default function InputTradeForm({
     setPopupType("success")
     setShowPopup(true)
     setSubmitting(false)
+  }
+
+  async function handlePublicToggle() {
+    const nextIsPublic = !isPublic
+    if (!nextIsPublic) {
+      setIsPublic(false)
+      return
+    }
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user?.id) {
+      setIsPublic(nextIsPublic)
+      return
+    }
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("is_pro, subscription_status")
+      .eq("id", user.id)
+      .maybeSingle()
+
+    if (!isProActive(profile)) {
+      const publicTradeLimitReached = await hasReachedRowLimit(supabase as any, {
+        table: "trades",
+        userColumn: "user_id",
+        userId: user.id,
+        limit: 1,
+        sinceIso: last24hIso(),
+        extraEquals: { is_public: true },
+      })
+      if (publicTradeLimitReached) {
+        setPopupMessage("Free plan allows 1 public trade per day.")
+        setPopupType("error")
+        setShowPopup(true)
+        setIsPublic(false)
+        return
+      }
+    }
+
+    setIsPublic(true)
   }
 
   function handleDrop(e: React.DragEvent<HTMLDivElement>) {
@@ -1691,7 +1834,7 @@ export default function InputTradeForm({
             <button
               type="button"
               tabIndex={16}
-              onClick={() => setIsPublic(!isPublic)}
+              onClick={() => void handlePublicToggle()}
               className={`
                 px-4 py-1.5 rounded-full text-xs font-medium
                 transition

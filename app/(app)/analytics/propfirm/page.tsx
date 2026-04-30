@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabaseClient"
+import { isProActive } from "@/lib/subscription"
 
 type TradeForDay = {
   trade_date?: string | null
@@ -46,6 +47,8 @@ const getTradingDay = (trade: TradeForDay) => {
 }
 
 export default function PropFirmPage() {
+  const [planChecked, setPlanChecked] = useState(false)
+  const [hasProAccess, setHasProAccess] = useState(false)
   const [accounts, setAccounts] = useState<any[]>([])
   const [selectedAccount, setSelectedAccount] = useState<any | null>(null)
   const [trades, setTrades] = useState<any[]>([])
@@ -93,6 +96,28 @@ export default function PropFirmPage() {
     dayPnLValues.length > 0 ? Math.min(...dayPnLValues) : 0
 
   useEffect(() => {
+    async function checkPlan() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user?.id) {
+        setHasProAccess(false)
+        setPlanChecked(true)
+        return
+      }
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("is_pro, subscription_status")
+        .eq("id", user.id)
+        .maybeSingle()
+      setHasProAccess(isProActive(profile))
+      setPlanChecked(true)
+    }
+    void checkPlan()
+  }, [])
+
+  useEffect(() => {
+    if (!planChecked || !hasProAccess) return
     async function loadAccounts() {
       const {
         data: { user },
@@ -117,9 +142,10 @@ export default function PropFirmPage() {
     }
 
     loadAccounts()
-  }, [])
+  }, [planChecked, hasProAccess])
 
   useEffect(() => {
+    if (!planChecked || !hasProAccess) return
     if (!selectedAccount) return
 
     setTrades([])
@@ -148,7 +174,26 @@ export default function PropFirmPage() {
     }
 
     loadTrades()
-  }, [selectedAccount])
+  }, [selectedAccount, planChecked, hasProAccess])
+
+  if (!planChecked) {
+    return <div className="mx-auto max-w-6xl p-6 text-gray-400">Loading...</div>
+  }
+
+  if (!hasProAccess) {
+    return (
+      <div className="mx-auto max-w-6xl p-6">
+        <div className="rounded-xl border border-white/10 bg-[#0f172a] p-6 text-center">
+          <h1 className="text-2xl font-semibold text-white">
+            Prop Firm Analytics is a Pro feature
+          </h1>
+          <p className="mt-2 text-sm text-gray-400">
+            Upgrade to Pro to unlock prop firm performance tracking.
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   const totalPnL = filteredTrades.reduce((sum, t) => sum + (t.pnl || 0), 0)
 
