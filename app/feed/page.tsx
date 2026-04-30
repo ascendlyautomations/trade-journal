@@ -8,7 +8,6 @@ import { compressImage } from "@/lib/compressImage"
 import { fetchShareConversations } from "@/lib/shareToConversations"
 import { formatEST } from "@/lib/formatEST"
 import Navbar from "../components/Navbar"
-import ShareTradeButton from "../components/ShareTradeButton"
 import {
   PostInteractionsComments,
   PostInteractionsEngagement,
@@ -63,6 +62,15 @@ function postTradeJoin(post: any) {
   const t = post?.trades
   if (!t) return null
   return Array.isArray(t) ? t[0] : t
+}
+
+function getModeStyles(mode: string | null | undefined): string {
+  if (!mode) return ""
+  const m = mode.toLowerCase()
+  if (m === "funded") return "bg-green-500/20 text-green-300"
+  if (m === "eval") return "bg-yellow-500/20 text-yellow-300"
+  if (m === "live") return "bg-blue-500/20 text-blue-300"
+  return "bg-white/10 text-gray-300"
 }
 
 type LikeMeta = { count: number; liked: boolean }
@@ -429,7 +437,7 @@ export default function FeedPage() {
         const { data, error } = await supabase
           .from("posts")
           .select(
-            "*, profiles(id, username, avatar_url), trades(public_description, user_id, ticker, direction, account_type)"
+            "*, profiles(id, username, avatar_url), trades(public_description, user_id, ticker, direction, account_type, points)"
           )
           .order("created_at", { ascending: false })
           .range(from, to)
@@ -470,7 +478,7 @@ export default function FeedPage() {
         const { data, error } = await supabase
           .from("posts")
           .select(
-            "*, profiles(id, username, avatar_url), trades(public_description, user_id, ticker, direction, account_type)"
+            "*, profiles(id, username, avatar_url), trades(public_description, user_id, ticker, direction, account_type, points)"
           )
           .in("user_id", ids)
           .order("created_at", { ascending: false })
@@ -485,6 +493,8 @@ export default function FeedPage() {
 
         list = data || []
       }
+
+      console.log("FEED TRADE SAMPLE:", list?.[0])
 
       if (list.length < 8) {
         hasMoreRef.current = false
@@ -883,8 +893,8 @@ export default function FeedPage() {
                   </div>
                 ) : null}
 
-                <div className="flex items-start justify-between gap-3 border-t border-white/10 px-4 py-2">
-                  <div className="min-w-0 flex-1">
+                <div className="border-t border-white/10 px-4 py-2">
+                  <div className="min-w-0">
                   <PostInteractionsEngagement
                     post={post}
                     user={user}
@@ -908,60 +918,48 @@ export default function FeedPage() {
                     stopPropagation
                   />
                   </div>
-                  {post.trade_id ? (
-                    <div className="shrink-0 pt-0.5" onClick={(e) => e.stopPropagation()}>
-                      <ShareTradeButton
-                        variant="icon"
-                        trade={{ id: post.trade_id }}
-                        mode="message-only"
-                      />
-                    </div>
-                  ) : null}
                 </div>
 
                 <div className="space-y-3 px-4 pb-3">
-                  <div className="flex items-center gap-2 flex-wrap text-sm text-gray-100">
-                    <span>
-                      <span className="font-medium text-white">{tickerLabel}</span>
-                      {" - "}
-                      <span>{dirLabel}</span>
-                    </span>
-                    {accountTypeNorm ? (
-                      <span
-                        className={`
-                        px-2 py-0.5 text-xs rounded-full font-medium
-                        ${
-                          accountTypeNorm === "funded"
-                            ? "bg-green-500/20 text-green-400 border border-green-400/30"
-                            : accountTypeNorm === "eval"
-                              ? "bg-yellow-500/20 text-yellow-300 border border-yellow-400/30"
-                              : accountTypeNorm === "live"
-                                ? "bg-blue-500/20 text-blue-300 border border-blue-400/30"
-                                : "bg-white/10 text-white/60"
-                        }
-                      `}
+                  <div className="mt-2 flex items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div
+                        className={`shrink-0 text-lg font-semibold tabular-nums ${
+                          pnlPositive ? "text-emerald-400" : "text-red-400"
+                        }`}
                       >
-                        {accountTypeNorm.toUpperCase()}
-                      </span>
-                    ) : null}
+                        {Number.isNaN(pnl) ? "—" : `${pnlPositive ? "+" : ""}$${pnl}`}
+                      </div>
+
+                      <div className="flex min-w-0 items-center gap-2 text-sm font-medium text-white">
+                        <span className="truncate">
+                          {tickerLabel} • {dirLabel}
+                        </span>
+                        {accountTypeNorm ? (
+                          <span
+                            className={`px-2 py-0.5 text-xs rounded-full ${getModeStyles(accountTypeNorm)}`}
+                          >
+                            {accountTypeNorm}
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    <div className="flex shrink-0 items-center gap-2 text-sm text-gray-300">
+                      {post.rr != null && post.rr !== "" ? (
+                        <span className="tabular-nums">RR {post.rr}</span>
+                      ) : null}
+                      {post.points !== null && post.points !== undefined ? (
+                        <span className="rounded-md bg-white/10 px-2 py-0.5 text-gray-200">
+                          {post.points} pts
+                        </span>
+                      ) : null}
+                    </div>
                   </div>
 
                   {publicDesc ? (
                     <p className="px-1 text-sm leading-relaxed text-white">{publicDesc}</p>
                   ) : null}
-
-                  <div className="flex justify-between items-center gap-4 text-sm">
-                    <span
-                      className={`font-semibold tabular-nums ${
-                        pnlPositive ? "text-emerald-400" : "text-red-400"
-                      }`}
-                    >
-                      {Number.isNaN(pnl) ? "—" : `${pnlPositive ? "+" : ""}$${pnl}`}
-                    </span>
-                    <span className="text-gray-300 tabular-nums shrink-0">
-                      RR {post.rr != null && post.rr !== "" ? post.rr : "—"}
-                    </span>
-                  </div>
 
                   <p className="text-xs text-white/40">
                     {formatEST(post.created_at)}
@@ -1111,8 +1109,8 @@ export default function FeedPage() {
 
             {modalPid ? (
               <>
-                <div className="mt-3 flex items-start justify-between gap-3 border-t border-white/10 pt-3">
-                  <div className="min-w-0 flex-1">
+                <div className="mt-3 border-t border-white/10 pt-3">
+                  <div className="min-w-0">
                   <PostInteractionsEngagement
                     post={selectedPost}
                     user={user}
@@ -1135,69 +1133,50 @@ export default function FeedPage() {
                     onSharePost={setSharePost}
                   />
                   </div>
-                  {selectedPost.trade_id ? (
-                    <div className="shrink-0 pt-0.5" onClick={(e) => e.stopPropagation()}>
-                      <ShareTradeButton
-                        variant="icon"
-                        trade={{ id: selectedPost.trade_id }}
-                        mode="message-only"
-                      />
-                    </div>
-                  ) : null}
                 </div>
 
                 <div className="mt-3 space-y-3 text-sm">
-                  <div className="flex items-center gap-2 flex-wrap text-gray-100">
-                    <span>
-                      <span className="font-medium text-white">{modalTicker}</span>
-                      {" - "}
-                      <span>{modalDir}</span>
-                    </span>
-                    {modalAcctNorm ? (
-                      <span
-                        className={`
-                        px-2 py-0.5 text-xs rounded-full font-medium
-                        ${
-                          modalAcctNorm === "funded"
-                            ? "bg-green-500/20 text-green-400 border border-green-400/30"
-                            : modalAcctNorm === "eval"
-                              ? "bg-yellow-500/20 text-yellow-300 border border-yellow-400/30"
-                              : modalAcctNorm === "live"
-                                ? "bg-blue-500/20 text-blue-300 border border-blue-400/30"
-                                : "bg-white/10 text-white/60"
-                        }
-                      `}
+                  <div className="mt-2 flex items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div
+                        className={`shrink-0 text-lg font-semibold tabular-nums ${
+                          modalPnlPositive ? "text-emerald-400" : "text-red-400"
+                        }`}
                       >
-                        {modalAcctNorm.toUpperCase()}
-                      </span>
-                    ) : null}
+                        {Number.isNaN(modalPnl)
+                          ? "—"
+                          : `${modalPnlPositive ? "+" : ""}$${modalPnl}`}
+                      </div>
+
+                      <div className="flex min-w-0 items-center gap-2 text-sm font-medium text-white">
+                        <span className="truncate">
+                          {modalTicker} • {modalDir}
+                        </span>
+                        {modalAcctNorm ? (
+                          <span
+                            className={`px-2 py-0.5 text-xs rounded-full ${getModeStyles(modalAcctNorm)}`}
+                          >
+                            {modalAcctNorm}
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    <div className="flex shrink-0 items-center gap-2 text-sm text-gray-300">
+                      {selectedPost.rr != null && selectedPost.rr !== "" ? (
+                        <span className="tabular-nums">RR {selectedPost.rr}</span>
+                      ) : null}
+                      {selectedPost.points !== null && selectedPost.points !== undefined ? (
+                        <span className="rounded-md bg-white/10 px-2 py-0.5 text-gray-200">
+                          {selectedPost.points} pts
+                        </span>
+                      ) : null}
+                    </div>
                   </div>
 
                   {modalPublicDesc ? (
                     <p className="text-white text-sm leading-relaxed">{modalPublicDesc}</p>
                   ) : null}
-
-                  <div className="flex justify-between gap-4">
-                    <span
-                      className={`font-semibold tabular-nums ${
-                        modalPnlPositive ? "text-emerald-400" : "text-red-400"
-                      }`}
-                    >
-                      {Number.isNaN(modalPnl)
-                        ? "—"
-                        : `${modalPnlPositive ? "+" : ""}$${modalPnl}`}
-                    </span>
-                    <span className="text-gray-300 tabular-nums shrink-0">
-                      RR{" "}
-                      {selectedPost.rr != null && selectedPost.rr !== ""
-                        ? selectedPost.rr
-                        : "—"}
-                    </span>
-                  </div>
-
-                  <div className="flex justify-between text-xs text-gray-400">
-                    <span>Points: {selectedPost.points ?? "—"}</span>
-                  </div>
 
                   <p className="text-xs text-white/40">
                     {formatEST(selectedPost.created_at)}

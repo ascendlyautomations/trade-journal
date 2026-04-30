@@ -29,7 +29,7 @@ const guard = (stop: boolean) =>
       }
     : {}
 
-/** Likes, share, and “view comments” toggle only (matches original stacking). */
+/** Likes, comments, and share controls in a single row. */
 export function PostInteractionsEngagement({
   post,
   user,
@@ -44,8 +44,8 @@ export function PostInteractionsEngagement({
 }: PostInteractionsBaseProps & { className?: string }) {
   const pid = String(post.id)
   return (
-    <div className={`flex flex-col gap-2 text-sm ${className}`.trim()} {...guard(stopPropagation)}>
-      <div className="flex items-center gap-4">
+    <div className={`text-sm ${className}`.trim()} {...guard(stopPropagation)}>
+      <div className="flex items-center gap-3">
         <button
           type="button"
           onClick={(e) => {
@@ -53,13 +53,27 @@ export function PostInteractionsEngagement({
             onToggleLike(post)
           }}
           disabled={!user}
-          className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-200 disabled:opacity-50"
+          className="flex items-center justify-center w-9 h-9 rounded-lg bg-white/5 hover:bg-white/10 transition text-sm text-gray-300 hover:text-white disabled:opacity-50"
           aria-label={likeMeta.liked ? "Unlike" : "Like"}
         >
-          <span className="text-lg leading-none" aria-hidden>
+          <span className="leading-none" aria-hidden>
             {likeMeta.liked ? "❤️" : "🤍"}
           </span>
-          <span className="tabular-nums">{likeMeta.count}</span>
+          <span className="text-xs tabular-nums">{likeMeta.count}</span>
+        </button>
+        <button
+          type="button"
+          onClick={(e) => {
+            if (stopPropagation) e.stopPropagation()
+            onToggleComments(pid)
+          }}
+          className="flex items-center justify-center w-9 h-9 rounded-lg bg-white/5 hover:bg-white/10 transition text-gray-300 hover:text-white"
+          aria-label={commentsOpen ? "Hide comments" : "View comments"}
+        >
+          <div className="flex items-center gap-1">
+            <span aria-hidden>💬</span>
+            <span className="text-xs tabular-nums">{comments.length || 0}</span>
+          </div>
         </button>
         {onSharePost ? (
           <button
@@ -68,24 +82,27 @@ export function PostInteractionsEngagement({
               if (stopPropagation) e.stopPropagation()
               onSharePost(post)
             }}
-            className="text-gray-400 hover:text-white"
+            className="flex items-center justify-center w-9 h-9 rounded-lg bg-white/5 hover:bg-white/10 transition text-gray-300 hover:text-white"
             aria-label="Share post"
           >
-            📤
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              aria-hidden
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 16V4m0 0l-4 4m4-4l4 4M4 20h16"
+              />
+            </svg>
           </button>
         ) : null}
       </div>
-
-      <button
-        type="button"
-        onClick={(e) => {
-          if (stopPropagation) e.stopPropagation()
-          onToggleComments(pid)
-        }}
-        className="text-left text-sm text-gray-400 hover:text-gray-200"
-      >
-        {commentsOpen ? "Hide comments" : `View comments (${comments.length})`}
-      </button>
     </div>
   )
 }
