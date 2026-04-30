@@ -46,6 +46,7 @@ type Props = {
   selectedAccount: TradeAccountOption | null
   onSelect: (acc: TradeAccountOption) => void
   onOpenCreate: () => void
+  disableCreate?: boolean
 }
 
 /**
@@ -56,6 +57,7 @@ export default function TradeAccountPicker({
   selectedAccount,
   onSelect,
   onOpenCreate,
+  disableCreate = false,
 }: Props) {
   const [open, setOpen] = useState(false)
 
@@ -109,33 +111,40 @@ export default function TradeAccountPicker({
                 {formatMode(acc.mode)} • #{accountNumberLabel(acc)}
               </div>
             ))}
-            <div
-              role="button"
-              tabIndex={0}
-              onClick={() => {
-                onOpenCreate()
-                setOpen(false)
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault()
+            {!disableCreate ? (
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => {
                   onOpenCreate()
                   setOpen(false)
-                }
-              }}
-              className="cursor-pointer px-3 py-2 text-sm text-green-400 hover:bg-[#1f2937]"
-            >
-              + Create New Account
-            </div>
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault()
+                    onOpenCreate()
+                    setOpen(false)
+                  }
+                }}
+                className="cursor-pointer px-3 py-2 text-sm text-green-400 hover:bg-[#1f2937]"
+              >
+                + Create New Account
+              </div>
+            ) : (
+              <div className="px-3 py-2 text-sm text-amber-300/90">
+                Upgrade to Pro to add more accounts
+              </div>
+            )}
           </div>
         ) : null}
       </div>
       <button
         type="button"
         onClick={onOpenCreate}
+        disabled={disableCreate}
         className="shrink-0 rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-4 py-2.5 text-sm font-medium text-emerald-200 transition hover:bg-emerald-500/25"
       >
-        + Create Account
+        {disableCreate ? "Upgrade to Pro to add more accounts" : "+ Create Account"}
       </button>
     </div>
   )

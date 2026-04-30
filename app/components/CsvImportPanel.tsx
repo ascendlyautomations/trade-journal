@@ -42,6 +42,8 @@ export default function CsvImportPanel({
 }: CsvImportPanelProps) {
   const [parsed, setParsed] = useState<CsvRow[]>([])
   const [loading, setLoading] = useState(false)
+  const csvLimitMessage =
+    "Free plan includes 1 CSV import. Upgrade to Pro to import more trades."
 
   const handleFile = (file: File) => {
     Papa.parse<CsvRow>(file, {
@@ -92,7 +94,7 @@ export default function CsvImportPanel({
     console.log("CSV CHECK:", profile)
 
     if (!profile.is_pro && profile.has_used_csv_import) {
-      alert("Free plan includes one CSV import only. Upgrade to import more.")
+      alert(csvLimitMessage)
       setLoading(false)
       return
     }

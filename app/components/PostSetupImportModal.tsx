@@ -9,6 +9,7 @@ import CreateAccountModal, {
   type Props as CreateAccountModalProps,
 } from "@/components/CreateAccountModal"
 import { supabase } from "@/lib/supabaseClient"
+import { isProActive } from "@/lib/subscription"
 
 const CSV_INPUT_ID = "post-setup-csv-import"
 
@@ -24,6 +25,7 @@ export default function PostSetupImportModal({ open, onComplete }: Props) {
   const [accounts, setAccounts] = useState<TradeAccountOption[]>([])
   const [selectedAccount, setSelectedAccount] = useState<TradeAccountOption | null>(null)
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [canCreateMoreAccounts, setCanCreateMoreAccounts] = useState(true)
 
   useEffect(() => {
     if (!open) {
@@ -63,6 +65,14 @@ export default function PostSetupImportModal({ open, onComplete }: Props) {
       }))
 
       setAccounts(formatted)
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("is_pro, subscription_status")
+        .eq("id", user.id)
+        .maybeSingle()
+      const userIsPro = isProActive(profile)
+      setCanCreateMoreAccounts(userIsPro || formatted.length < 1)
     }
 
     void loadAccounts()
@@ -77,6 +87,29 @@ export default function PostSetupImportModal({ open, onComplete }: Props) {
       data: { user },
     } = await supabase.auth.getUser()
     if (!user) return
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("is_pro, subscription_status")
+      .eq("id", user.id)
+      .maybeSingle()
+    const userIsPro = isProActive(profile)
+    if (!userIsPro) {
+      const { data: existingAccounts, error: countErr } = await supabase
+        .from("accounts")
+        .select("id")
+        .eq("user_id", user.id)
+      if (countErr) {
+        console.error(countErr)
+        alert("Failed to verify account limit")
+        return
+      }
+      if ((existingAccounts || []).length >= 1) {
+        setCanCreateMoreAccounts(false)
+        alert("Free plan allows only 1 account. Upgrade to Pro to create more.")
+        return
+      }
+    }
 
     const { data, error } = await supabase
       .from("accounts")
@@ -117,6 +150,7 @@ export default function PostSetupImportModal({ open, onComplete }: Props) {
 
     setAccounts((prev) => [...prev, row])
     setSelectedAccount(row)
+    setCanCreateMoreAccounts(isProActive(profile))
     setShowCreateModal(false)
   }
 
@@ -170,6 +204,7 @@ export default function PostSetupImportModal({ open, onComplete }: Props) {
             selectedAccount={selectedAccount}
             onSelect={setSelectedAccount}
             onOpenCreate={() => setShowCreateModal(true)}
+            disableCreate={!canCreateMoreAccounts}
           />
           {!selectedAccount ? (
             <p className="mt-2 text-sm text-amber-200/90">

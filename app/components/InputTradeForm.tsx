@@ -10,8 +10,14 @@ import { getSessionFromDate } from "@/lib/getSession"
 import CreateAccountModal, {
   type Props as CreateAccountModalProps,
 } from "@/components/CreateAccountModal"
+import PresetFormModal from "./PresetFormModal"
 
 type CreateAccountSavePayload = Parameters<CreateAccountModalProps["onSave"]>[0]
+type TradePreset = {
+  id: string
+  name: string
+  values: Record<string, any>
+}
 
 /** Display token after `#` — human account number when present, else shortened UUID. */
 function accountNumberLabel(acc: {
@@ -162,6 +168,9 @@ export default function InputTradeForm({
   const [accountDropdownOpen, setAccountDropdownOpen] = useState(false)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showAccountWarning, setShowAccountWarning] = useState(false)
+  const [presets, setPresets] = useState<TradePreset[]>([])
+  const [selectedPresetId, setSelectedPresetId] = useState("")
+  const [showPresetFormModal, setShowPresetFormModal] = useState(false)
 
   const [submitting, setSubmitting] = useState(false)
   const [confidence, setConfidence] = useState("")
@@ -304,6 +313,9 @@ export default function InputTradeForm({
   } | null>(null)
   const [accountFieldsLocked, setAccountFieldsLocked] = useState(false)
 
+  const csvLimitMessage =
+    "Free plan includes 1 CSV import. Upgrade to Pro to import more trades."
+
   const refreshPlanAndAccountLock = useCallback(async () => {
     const {
       data: { user },
@@ -372,6 +384,30 @@ export default function InputTradeForm({
 
     void loadAccounts()
   }, [])
+
+  const loadPresets = useCallback(async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user?.id) return
+
+    const { data, error } = await supabase
+      .from("presets")
+      .select("id, name, values")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+
+    if (error) {
+      console.error("preset load:", error)
+      return
+    }
+
+    setPresets((data || []) as TradePreset[])
+  }, [])
+
+  useEffect(() => {
+    void loadPresets()
+  }, [loadPresets])
 
   useEffect(() => {
     if (showPopup) {
@@ -940,7 +976,7 @@ export default function InputTradeForm({
     console.log("CSV BLOCK CHECK:", profile)
 
     if (!profile.is_pro && profile.has_used_csv_import) {
-      setPopupMessage("Failed to save trade")
+      setPopupMessage(csvLimitMessage)
       setPopupType("error")
       setShowPopup(true)
       return
@@ -956,6 +992,29 @@ export default function InputTradeForm({
     }
 
     try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user?.id) {
+        alert("Please log in first")
+        return
+      }
+
+      const { data: profile, error: profileErr } = await supabase
+        .from("profiles")
+        .select("is_pro, has_used_csv_import")
+        .eq("id", user.id)
+        .single()
+      if (profileErr || !profile) {
+        console.error("Profile fetch failed:", profileErr)
+        alert("Could not verify account. Try again.")
+        return
+      }
+      if (!profile.is_pro && profile.has_used_csv_import) {
+        alert(csvLimitMessage)
+        return
+      }
+
       const { error } = await insertCsvTradesWithAccount(supabase, parsedTrades, {
         id: selectedAccount.id,
         name: selectedAccount.name,
@@ -972,6 +1031,14 @@ export default function InputTradeForm({
 
       alert(`Imported ${parsedTrades.length} trades`)
 
+      if (!profile.is_pro) {
+        const { error: flagErr } = await supabase
+          .from("profiles")
+          .update({ has_used_csv_import: true })
+          .eq("id", user.id)
+        if (flagErr) console.error("markProfileCsvImportUsed:", flagErr)
+      }
+
       onParsedTradesClear?.()
       setSelectedAccount(null)
     } catch (err) {
@@ -980,12 +1047,65 @@ export default function InputTradeForm({
     }
   }
 
+  function applyPresetById(presetId: string) {
+    setSelectedPresetId(presetId)
+    if (!presetId) return
+    const preset = presets.find((p) => p.id === presetId)
+    if (!preset) return
+    const values = preset.values || {}
+
+    if (values.ticker != null) setTicker(String(values.ticker))
+    if (values.direction != null) setDirection(String(values.direction))
+    if (values.rr != null) setRR(String(values.rr))
+    if (values.points != null) setPoints(String(values.points))
+    if (values.session != null) {
+      setSession(String(values.session))
+      setSessionManuallySet(true)
+    }
+    if (values.confluences != null) setConfluences(String(values.confluences))
+    if (values.confidence != null) setConfidence(String(values.confidence))
+    if (values.emotion != null) setEmotion(String(values.emotion))
+    if (values.followed_plan != null) setFollowedPlan(Boolean(values.followed_plan))
+    if (values.mistake_type != null) setMistakeType(String(values.mistake_type))
+    if (values.market_condition != null) setMarket(String(values.market_condition))
+    if (values.timeframe != null) setTimeframe(String(values.timeframe))
+    if (values.strategy != null) setStrategy(String(values.strategy))
+    if (values.contracts != null) setContracts(String(values.contracts))
+    if (values.trade_type != null) setTradeType(String(values.trade_type))
+    if (values.news_event != null) setNewsEvent(Boolean(values.news_event))
+  }
+
   async function handleCreateAccountSave(newAccount: CreateAccountSavePayload) {
     const {
       data: { user },
     } = await supabase.auth.getUser()
 
     if (!user) return
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("is_pro, subscription_status")
+      .eq("id", user.id)
+      .maybeSingle()
+    const userIsPro = isProActive(profile)
+
+    if (!userIsPro) {
+      const { data: existingAccounts, error: countErr } = await supabase
+        .from("accounts")
+        .select("id")
+        .eq("user_id", user.id)
+
+      if (countErr) {
+        console.error(countErr)
+        alert("Failed to verify account limit")
+        return
+      }
+
+      if ((existingAccounts || []).length >= 1) {
+        alert("Free plan allows only 1 account. Upgrade to Pro to create more.")
+        return
+      }
+    }
 
     const { data, error } = await supabase
       .from("accounts")
@@ -1085,15 +1205,21 @@ export default function InputTradeForm({
                         {formatMode(acc.mode)} • #{accountNumberLabel(acc)}
                       </div>
                     ))}
-                    <div
-                      onClick={() => {
-                        setShowCreateModal(true)
-                        setAccountDropdownOpen(false)
-                      }}
-                      className="px-3 py-2 hover:bg-[#1f2937] cursor-pointer text-sm text-green-400"
-                    >
-                      + Create New Account
-                    </div>
+                    {!accountFieldsLocked ? (
+                      <div
+                        onClick={() => {
+                          setShowCreateModal(true)
+                          setAccountDropdownOpen(false)
+                        }}
+                        className="px-3 py-2 hover:bg-[#1f2937] cursor-pointer text-sm text-green-400"
+                      >
+                        + Create New Account
+                      </div>
+                    ) : (
+                      <div className="px-3 py-2 text-sm text-amber-300/90">
+                        Upgrade to Pro to add more accounts
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -1176,15 +1302,21 @@ export default function InputTradeForm({
                         {formatMode(acc.mode)} • #{accountNumberLabel(acc)}
                       </div>
                     ))}
-                    <div
-                      onClick={() => {
-                        setShowCreateModal(true)
-                        setAccountDropdownOpen(false)
-                      }}
-                      className="px-3 py-2 hover:bg-[#1f2937] cursor-pointer text-sm text-green-400"
-                    >
-                      + Create New Account
-                    </div>
+                    {!accountFieldsLocked ? (
+                      <div
+                        onClick={() => {
+                          setShowCreateModal(true)
+                          setAccountDropdownOpen(false)
+                        }}
+                        className="px-3 py-2 hover:bg-[#1f2937] cursor-pointer text-sm text-green-400"
+                      >
+                        + Create New Account
+                      </div>
+                    ) : (
+                      <div className="px-3 py-2 text-sm text-amber-300/90">
+                        Upgrade to Pro to add more accounts
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -1406,13 +1538,6 @@ export default function InputTradeForm({
               className="w-full p-2 lg:p-2.5 h-24 lg:h-28 rounded bg-[#0f172a] border border-white/10"
             />
           )}
-
-          {accountControlsDisabled ? (
-            <p className="text-xs text-amber-400/90">
-              Free plan: account details are locked to your existing prop firm. Upgrade
-              to Pro for unlimited accounts.
-            </p>
-          ) : null}
 
           </div>
         </div>
@@ -1715,6 +1840,30 @@ export default function InputTradeForm({
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[110]">
       <div className="bg-[#0f172a] border border-white/10 rounded-xl p-6 w-[400px] space-y-4 max-h-[90vh] overflow-y-auto">
         <h2 className="text-lg font-semibold text-white">Input Settings</h2>
+        <div className="rounded-lg border border-white/10 bg-white/5 p-3">
+          <p className="mb-2 text-sm font-medium text-white">Presets</p>
+          <div className="flex gap-2">
+            <select
+              value={selectedPresetId}
+              onChange={(e) => applyPresetById(e.target.value)}
+              className="w-full p-2 rounded bg-[#0f172a] border border-white/10 text-white text-sm"
+            >
+              <option value="">None</option>
+              {presets.map((preset) => (
+                <option key={preset.id} value={preset.id}>
+                  {preset.name}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => setShowPresetFormModal(true)}
+              className="shrink-0 rounded bg-emerald-500/20 px-3 py-2 text-sm font-medium text-emerald-300 hover:bg-emerald-500/30"
+            >
+              + New Preset
+            </button>
+          </div>
+        </div>
         {Object.entries(inputSettings).map(([key, value]) => (
           <div key={key} className="flex items-center justify-between">
             <span className="text-sm text-gray-300 capitalize">
@@ -1808,6 +1957,15 @@ export default function InputTradeForm({
         </div>
         {settingsModal}
         {popupModal}
+        <PresetFormModal
+          open={showPresetFormModal}
+          onClose={() => setShowPresetFormModal(false)}
+          onSaved={(preset) => {
+            setPresets((prev) => [preset, ...prev])
+            setSelectedPresetId(String(preset.id))
+            void loadPresets()
+          }}
+        />
         <CreateAccountModal
           open={showCreateModal}
           onClose={() => setShowCreateModal(false)}
@@ -1842,6 +2000,15 @@ export default function InputTradeForm({
       {formBody}
       {settingsModal}
       {popupModal}
+      <PresetFormModal
+        open={showPresetFormModal}
+        onClose={() => setShowPresetFormModal(false)}
+        onSaved={(preset) => {
+          setPresets((prev) => [preset, ...prev])
+          setSelectedPresetId(String(preset.id))
+          void loadPresets()
+        }}
+      />
       <CreateAccountModal
         open={showCreateModal}
         onClose={() => setShowCreateModal(false)}
