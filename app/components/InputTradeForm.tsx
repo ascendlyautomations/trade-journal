@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
 import { ensureManualUserAccountRegistered } from "@/lib/ensureManualUserAccount"
 import { isProActive } from "@/lib/subscription"
-import { tradesInsertRowsPrivate } from "@/lib/csvTradeParsers"
+import { insertCsvTradesWithAccount } from "@/lib/insertCsvTradesWithAccount"
 import { getSessionFromDate } from "@/lib/getSession"
 import CreateAccountModal, {
   type Props as CreateAccountModalProps,
@@ -951,22 +951,18 @@ export default function InputTradeForm({
 
   async function handleCsvManualImport() {
     if (!selectedAccount) {
-      alert("Please select an account first")
+      alert("Please create or select an account before importing trades")
       return
     }
 
     try {
-      const finalTrades = parsedTrades.map((trade: any) => ({
-        ...trade,
-        account_name: selectedAccount.name,
-        account_size: selectedAccount.size,
-        account_id: selectedAccount.id,
+      const { error } = await insertCsvTradesWithAccount(supabase, parsedTrades, {
+        id: selectedAccount.id,
+        name: selectedAccount.name,
+        size: selectedAccount.size,
         mode: selectedAccount.mode,
-      }))
-
-      const rows = tradesInsertRowsPrivate(finalTrades)
-
-      const { error } = await supabase.from("trades").insert(rows)
+        category: selectedAccount.category ?? null,
+      })
 
       if (error) {
         console.error(error)

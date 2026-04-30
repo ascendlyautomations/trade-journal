@@ -2,8 +2,17 @@
 
 import { useEffect, useState } from "react"
 import CsvImportPanel from "@/app/components/CsvImportPanel"
+import TradeAccountPicker, {
+  type TradeAccountOption,
+} from "@/app/components/TradeAccountPicker"
+import CreateAccountModal, {
+  type Props as CreateAccountModalProps,
+} from "@/components/CreateAccountModal"
+import { supabase } from "@/lib/supabaseClient"
 
 const CSV_INPUT_ID = "post-setup-csv-import"
+
+type CreateAccountSavePayload = Parameters<CreateAccountModalProps["onSave"]>[0]
 
 type Props = {
   open: boolean
@@ -12,6 +21,9 @@ type Props = {
 
 export default function PostSetupImportModal({ open, onComplete }: Props) {
   const [entered, setEntered] = useState(false)
+  const [accounts, setAccounts] = useState<TradeAccountOption[]>([])
+  const [selectedAccount, setSelectedAccount] = useState<TradeAccountOption | null>(null)
+  const [showCreateModal, setShowCreateModal] = useState(false)
 
   useEffect(() => {
     if (!open) {
@@ -22,11 +34,104 @@ export default function PostSetupImportModal({ open, onComplete }: Props) {
     return () => window.cancelAnimationFrame(id)
   }, [open])
 
-  if (!open) return null
+  useEffect(() => {
+    if (!open) return
+
+    async function loadAccounts() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user?.id) return
+
+      const { data, error } = await supabase
+        .from("accounts")
+        .select("*")
+        .eq("user_id", user.id)
+
+      if (error) {
+        console.error(error)
+        return
+      }
+
+      const formatted = (data || []).map((acc) => ({
+        name: acc.name,
+        size: acc.account_size,
+        id: acc.id,
+        account_number: acc.account_number ?? null,
+        mode: acc.mode,
+        category: acc.category,
+      }))
+
+      setAccounts(formatted)
+    }
+
+    void loadAccounts()
+  }, [open])
 
   async function handleSkip() {
     await onComplete()
   }
+
+  async function handleCreateAccountSave(newAccount: CreateAccountSavePayload) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) return
+
+    const { data, error } = await supabase
+      .from("accounts")
+      .insert([
+        {
+          user_id: user.id,
+          name: newAccount.name,
+          account_size: newAccount.size,
+          account_number: newAccount.id,
+          category: newAccount.category,
+          mode: newAccount.mode,
+          consistency: newAccount.rules?.consistency ?? null,
+          max_drawdown: newAccount.rules?.maxDrawdown ?? null,
+          daily_drawdown: newAccount.rules?.dailyDrawdown ?? null,
+          profit_target: newAccount.rules?.profitTarget ?? null,
+          winning_days: newAccount.rules?.winningDays ?? null,
+        },
+      ])
+      .select()
+      .single()
+
+    if (error) {
+      console.error(error)
+      alert("Failed to create account")
+      return
+    }
+
+    if (!data) return
+
+    const row: TradeAccountOption = {
+      name: data.name,
+      size: data.account_size,
+      id: data.id,
+      account_number: data.account_number ?? null,
+      mode: data.mode,
+      category: data.category,
+    }
+
+    setAccounts((prev) => [...prev, row])
+    setSelectedAccount(row)
+    setShowCreateModal(false)
+  }
+
+  if (!open) return null
+
+  const csvAccount =
+    selectedAccount != null
+      ? {
+          id: selectedAccount.id,
+          name: selectedAccount.name,
+          size: selectedAccount.size,
+          mode: selectedAccount.mode,
+          category: selectedAccount.category ?? null,
+        }
+      : null
 
   return (
     <div
@@ -57,41 +162,57 @@ export default function PostSetupImportModal({ open, onComplete }: Props) {
             Already using another journal? Bring your data with you in seconds.
           </p>
 
+          <p className="mb-2 mt-6 text-xs font-medium uppercase tracking-wide text-gray-500">
+            Trading account
+          </p>
+          <TradeAccountPicker
+            accounts={accounts}
+            selectedAccount={selectedAccount}
+            onSelect={setSelectedAccount}
+            onOpenCreate={() => setShowCreateModal(true)}
+          />
+          {!selectedAccount ? (
+            <p className="mt-2 text-sm text-amber-200/90">
+              Please create or select an account before importing trades.
+            </p>
+          ) : null}
+
           <ol className="mt-6 list-decimal space-y-2 pl-5 text-sm leading-relaxed text-gray-300">
             <li>Export your trades as a CSV from your current platform</li>
             <li>Upload it here</li>
             <li>We&apos;ll organize everything automatically</li>
           </ol>
 
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-stretch">
-            <label
-              htmlFor={CSV_INPUT_ID}
-              className="flex flex-1 cursor-pointer items-center justify-center rounded-xl bg-gradient-to-r from-blue-500 to-emerald-500 px-4 py-3 text-center text-sm font-semibold text-white shadow-lg shadow-emerald-500/15 transition hover:scale-[1.02] hover:from-blue-600 hover:to-emerald-600 motion-reduce:hover:scale-100"
-            >
-              Import My Trades
-            </label>
-            <button
-              type="button"
-              onClick={() => void handleSkip()}
-              className="rounded-xl border border-white/20 bg-white/5 px-4 py-3 text-sm font-semibold text-gray-200 transition hover:bg-white/10 sm:min-w-[140px]"
-            >
-              Skip for Now
-            </button>
-          </div>
-
-          <div className="mt-8 border-t border-white/10 pt-6">
+          <div className="mt-6 border-t border-white/10 pt-6">
             <p className="mb-4 text-xs font-medium uppercase tracking-wide text-gray-500">
               CSV upload
             </p>
             <CsvImportPanel
               compact
               fileInputId={CSV_INPUT_ID}
+              selectedAccount={csvAccount}
+              requireSelectedAccount
               onImportSuccess={() => void onComplete()}
             />
           </div>
 
+          <div className="mt-6 flex justify-center">
+            <button
+              type="button"
+              onClick={() => void handleSkip()}
+              className="rounded-xl border border-white/20 bg-white/5 px-6 py-3 text-sm font-semibold text-gray-200 transition hover:bg-white/10"
+            >
+              Skip for Now
+            </button>
+          </div>
         </div>
       </div>
+
+      <CreateAccountModal
+        open={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onSave={(acc) => void handleCreateAccountSave(acc)}
+      />
     </div>
   )
 }

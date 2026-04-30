@@ -543,6 +543,16 @@ export default function Dashboard() {
   const [savingGearSettings, setSavingGearSettings] = useState(false)
   const [showPerformanceShare, setShowPerformanceShare] = useState(false)
   const didHydrateDashboardPrefs = useRef(false)
+  /** Same fetch as /trades — used only for filter dropdown labels (#account_number vs UUID). */
+  const [accountRows, setAccountRows] = useState<any[]>([])
+
+  const accountById = useMemo(() => {
+    const m: Record<string, any> = {}
+    accountRows.forEach((acc) => {
+      m[String(acc.id)] = acc
+    })
+    return m
+  }, [accountRows])
 
   function handleDashboardTimeframeChange(value: string) {
     setTimeFilter(value)
@@ -588,6 +598,12 @@ export default function Dashboard() {
 
       if (!mounted) return
       setUser(currentUser)
+
+      const { data: accountsData } = await supabase
+        .from("accounts")
+        .select("id, account_number, name, account_size, mode, category")
+        .eq("user_id", currentUser.id)
+      if (mounted) setAccountRows(accountsData || [])
 
       const { data: statsData } = await supabase
         .from("trades")
@@ -797,9 +813,13 @@ export default function Dashboard() {
         const size = String(t.account_size || "").trim()
         const id = String(t.account_id || "").trim()
         const value = `${accountName}|${size}|${id}`
-        const label = `${accountName} ${size} #${id}`
-          .trim()
+        const accRow = accountById[id]
+        const num = accRow?.account_number
+        const label = [accountName, size, num ? `• #${num}` : ""]
+          .filter((x) => x !== "")
+          .join(" ")
           .replace(/\s+/g, " ")
+          .trim()
         if (!accountMap.has(value)) {
           accountMap.set(value, {
             value,
@@ -1267,6 +1287,7 @@ const worstDay = dailyPnLs.length > 0
     selectedDate,
     customRangeStart,
     customRangeEnd,
+    accountById,
   ])
 
   // 🔥 LOADING STATE (FIXES GLITCH)

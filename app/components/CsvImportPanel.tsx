@@ -12,6 +12,10 @@ import {
   tradesInsertRowsPrivate,
 } from "@/lib/csvTradeParsers"
 import { ensureImportedCsvAccountRegistered } from "@/lib/ensureManualUserAccount"
+import {
+  type CsvSelectedAccount,
+  insertCsvTradesWithAccount,
+} from "@/lib/insertCsvTradesWithAccount"
 
 export type CsvImportPanelProps = {
   /** Smaller preview + less chrome (e.g. onboarding modal) */
@@ -20,12 +24,21 @@ export type CsvImportPanelProps = {
   onImportSuccess?: (info: { count: number; skipped: number }) => void
   /** Optional id so an external `<label htmlFor>` can trigger the file input */
   fileInputId?: string
+  /**
+   * When set, merged into each row before insert (same as `InputTradeForm` CSV import).
+   * Use with `requireSelectedAccount` in onboarding.
+   */
+  selectedAccount?: CsvSelectedAccount | null
+  /** If true, import is blocked until `selectedAccount` is set */
+  requireSelectedAccount?: boolean
 }
 
 export default function CsvImportPanel({
   compact = false,
   onImportSuccess,
   fileInputId,
+  selectedAccount = null,
+  requireSelectedAccount = false,
 }: CsvImportPanelProps) {
   const [parsed, setParsed] = useState<CsvRow[]>([])
   const [loading, setLoading] = useState(false)
@@ -47,6 +60,12 @@ export default function CsvImportPanel({
 
   const handleImport = async () => {
     if (parsed.length === 0) return
+
+    if (requireSelectedAccount && !selectedAccount) {
+      alert("Please create or select an account before importing trades")
+      return
+    }
+
     setLoading(true)
 
     const { data: userData } = await supabase.auth.getUser()
@@ -88,25 +107,32 @@ export default function CsvImportPanel({
       return
     }
 
-    const rowsToInsert = tradesInsertRowsPrivate(parsedTrades)
+    let error: { message?: string } | null = null
 
-    const { error: importAcctErr } = await ensureImportedCsvAccountRegistered(
-      supabase,
-      user.id
-    )
-    if (importAcctErr) {
-      console.error(importAcctErr)
-      alert("Could not register imported account row. Try again.")
-      setLoading(false)
-      return
+    if (selectedAccount) {
+      const res = await insertCsvTradesWithAccount(
+        supabase,
+        parsedTrades,
+        selectedAccount
+      )
+      error = res.error
+    } else {
+      const rowsToInsert = tradesInsertRowsPrivate(parsedTrades)
+
+      const { error: importAcctErr } = await ensureImportedCsvAccountRegistered(
+        supabase,
+        user.id
+      )
+      if (importAcctErr) {
+        console.error(importAcctErr)
+        alert("Could not register imported account row. Try again.")
+        setLoading(false)
+        return
+      }
+
+      const ins = await supabase.from("trades").insert(rowsToInsert)
+      error = ins.error
     }
-
-    // TEMP DEBUG: block all trade inserts — restore block below when done
-    console.log("🚫 INSERT BLOCKED HERE")
-    setLoading(false)
-    return
-    /*
-    const { error } = await supabase.from("trades").insert(rowsToInsert).select()
 
     if (error) {
       console.error("INSERT ERROR:", error)
@@ -134,7 +160,6 @@ export default function CsvImportPanel({
     }
 
     setLoading(false)
-    */
   }
 
   const isTradovateFormat = parsed.length > 0 && isTradovateCsvRow(parsed[0])
@@ -223,7 +248,9 @@ export default function CsvImportPanel({
         <button
           type="button"
           onClick={() => void handleImport()}
-          disabled={loading}
+          disabled={
+            loading || (requireSelectedAccount && !selectedAccount)
+          }
           className="w-full rounded-xl bg-emerald-500 px-4 py-2.5 font-semibold text-white transition hover:bg-emerald-600 disabled:opacity-60"
         >
           {loading ? "Importing..." : "Import trades"}

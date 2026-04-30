@@ -1085,13 +1085,25 @@ export function buildCleanCsvTrade(row: CsvRow, userId: string): CsvTradeInsert 
   throw new Error(res.reason)
 }
 
-/** CSV bulk rows: private + imported account type (never counts toward free-plan slots). */
-export function tradesInsertRowsPrivate<T extends Record<string, unknown>>(rows: T[]) {
+type TradesInsertRowsPrivateOptions = {
+  /**
+   * When true (default), forces `account_type: "imported"` (anonymous CSV / no selected account).
+   * When false, keeps `account_type` from each row (selected-account CSV import inherits eval/funded/live).
+   */
+  forceImportedAccountType?: boolean
+}
+
+/** CSV bulk rows: private; optionally forces imported account type for bulk anonymous imports. */
+export function tradesInsertRowsPrivate<T extends Record<string, unknown>>(
+  rows: T[],
+  options?: TradesInsertRowsPrivateOptions
+) {
   const importedAt = new Date().toISOString()
+  const forceImported = options?.forceImportedAccountType !== false
   return rows.map((row) => ({
     ...row,
     is_public: false,
-    account_type: "imported",
+    ...(forceImported ? { account_type: "imported" } : {}),
     created_at: importedAt,
   }))
 }
