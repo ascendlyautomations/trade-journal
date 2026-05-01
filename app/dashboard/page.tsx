@@ -8,6 +8,7 @@ import ProfileOnboarding, {
 } from "../components/ProfileOnboarding"
 import PostSetupImportModal from "../components/PostSetupImportModal"
 import PerformanceShareModal from "../components/PerformanceShareModal"
+import LockedFeature from "../components/LockedFeature"
 import { useEffect, useState, useMemo, useRef } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { isProActive } from "../../lib/subscription"
@@ -1820,6 +1821,8 @@ const worstDay = dailyPnLs.length > 0
     )
   }
 
+  const dashboardUserIsPro = isProActive(profile)
+
   return (
     <>
       <Navbar />
@@ -2310,6 +2313,8 @@ const worstDay = dailyPnLs.length > 0
           <div className="grid grid-cols-1 gap-4 md:gap-6 md:grid-cols-2">
             {showInsights ? (
             <div className="rounded-xl border border-white/10 bg-white/10 p-3 md:p-4 backdrop-blur-md">
+                {dashboardUserIsPro ? (
+                  <>
                 <h3 className="mb-2 text-xs md:text-sm text-gray-400">Performance Insights</h3>
                 <p className="mb-3 text-[11px] md:text-xs text-gray-500">
                   Data-driven highlights (min. 3 trades per session, symbol, or
@@ -2350,6 +2355,10 @@ const worstDay = dailyPnLs.length > 0
                     symbol, or direction bucket (with current filters).
                   </p>
                 )}
+                  </>
+                ) : (
+                  <LockedFeature title="Performance Insights" />
+                )}
             </div>
             ) : null}
 
@@ -2357,6 +2366,8 @@ const worstDay = dailyPnLs.length > 0
             <div
               className={`rounded-xl border border-white/10 bg-white/10 p-3 md:p-4 backdrop-blur-md ${!showInsights ? "md:col-span-2" : ""}`}
             >
+              {dashboardUserIsPro ? (
+                <>
               <h3 className="mb-2 text-xs md:text-sm text-gray-400">
                 Best Performing Setup
               </h3>
@@ -2391,6 +2402,10 @@ const worstDay = dailyPnLs.length > 0
                   trade type) to rank setups.
                 </p>
               )}
+                </>
+              ) : (
+                <LockedFeature title="Best Performing Setup" />
+              )}
             </div>
             ) : null}
           </div>
@@ -2400,6 +2415,8 @@ const worstDay = dailyPnLs.length > 0
           <div className="grid grid-cols-1 gap-4 md:gap-6 md:grid-cols-2">
             {showInsights ? (
             <div className="rounded-xl border border-white/10 bg-white/10 p-3 md:p-4 backdrop-blur-md">
+                {dashboardUserIsPro ? (
+                  <>
                 <h3 className="mb-2 text-xs md:text-sm text-gray-400">Advanced Edge</h3>
                 <p className="mb-3 text-[11px] md:text-xs text-gray-500">
                   Strongest <span className="text-gray-400">combined</span> setup
@@ -2422,11 +2439,17 @@ const worstDay = dailyPnLs.length > 0
                     session, symbol, and direction data.
                   </p>
                 )}
+                  </>
+                ) : (
+                  <LockedFeature title="Advanced Edge" />
+                )}
             </div>
             ) : null}
 
             {showWorstSetup ? (
             <div className="rounded-xl border border-white/10 bg-white/10 p-3 md:p-4 backdrop-blur-md">
+              {dashboardUserIsPro ? (
+                <>
               <h3 className="mb-2 text-xs md:text-sm text-gray-400">Risk Insights</h3>
               <p className="mb-3 text-[11px] md:text-xs text-gray-500">
                 Lowest-performing combined setup (same 3+ trade rule as Advanced Edge).
@@ -2438,11 +2461,17 @@ const worstDay = dailyPnLs.length > 0
                   No combined setup to rank yet, or filters removed too much data.
                 </p>
               )}
+                </>
+              ) : (
+                <LockedFeature title="Risk Insights" />
+              )}
             </div>
             ) : null}
 
             {showWarnings ? (
             <div className="rounded-xl border border-white/10 bg-white/10 p-3 md:p-4 backdrop-blur-md md:col-span-2">
+              {dashboardUserIsPro ? (
+                <>
               <h3 className="mb-2 text-xs md:text-sm text-gray-400">Behavior Warnings</h3>
               <p className="mb-3 text-[11px] md:text-xs text-gray-500">
                 Post–loss streak win rate (next 5 trades) and RR sample comparison.
@@ -2459,6 +2488,10 @@ const worstDay = dailyPnLs.length > 0
                 <p className="text-xs md:text-sm text-gray-400">
                   No behavioral flags for the current trade set.
                 </p>
+              )}
+                </>
+              ) : (
+                <LockedFeature title="Behavior Warnings" />
               )}
             </div>
             ) : null}
