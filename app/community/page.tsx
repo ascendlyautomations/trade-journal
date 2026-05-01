@@ -16,7 +16,7 @@ import { supabase } from "../../lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
 import { formatEST } from "@/lib/formatEST"
 import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
-import { handleLimitError } from "@/lib/limitErrorMessage"
+import { handleSupabaseError } from "@/lib/handleSupabaseError"
 
 type Room = {
   id: string
@@ -1010,7 +1010,7 @@ function CommunityContent() {
         10
       )
       if (limitReached) {
-        alert("Free plan allows 10 messages/comments per day.")
+        alert(handleSupabaseError({ message: "10 messages limit" }))
         return
       }
     }
@@ -1022,12 +1022,8 @@ function CommunityContent() {
       section_id: selectedSectionId,
     })
     if (error) {
-      const friendly = handleLimitError(error)
-      if (friendly) {
-        alert(friendly)
-      } else {
-        console.error("room_messages insert:", error)
-      }
+      console.error("room_messages insert:", error)
+      alert(handleSupabaseError(error))
       return
     }
 
@@ -1048,7 +1044,7 @@ function CommunityContent() {
         10
       )
       if (limitReached) {
-        alert("Free plan allows 10 messages/comments per day.")
+        alert(handleSupabaseError({ message: "10 messages limit" }))
         return
       }
     }
@@ -1079,12 +1075,8 @@ function CommunityContent() {
     })
 
     if (insertError) {
-      const friendly = handleLimitError(insertError)
-      if (friendly) {
-        alert(friendly)
-      } else {
-        console.error("room image message insert:", insertError)
-      }
+      console.error("room image message insert:", insertError)
+      alert(handleSupabaseError(insertError))
     }
   }
 
@@ -1122,7 +1114,7 @@ function CommunityContent() {
         10
       )
       if (limitReached) {
-        alert("Free plan allows 10 messages/comments per day.")
+        alert(handleSupabaseError({ message: "10 messages limit" }))
         return
       }
     }
@@ -1137,12 +1129,8 @@ function CommunityContent() {
     })
 
     if (error) {
-      const friendly = handleLimitError(error)
-      if (friendly) {
-        alert(friendly)
-      } else {
-        console.error("room trade message insert:", error)
-      }
+      console.error("room trade message insert:", error)
+      alert(handleSupabaseError(error))
       return
     }
 

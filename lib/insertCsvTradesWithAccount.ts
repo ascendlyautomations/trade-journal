@@ -10,13 +10,18 @@ export type CsvSelectedAccount = {
   category?: string | null
 }
 
+export type InsertCsvTradesWithAccountOptions = {
+  isInitialImport?: boolean
+}
+
 /**
  * CSV bulk insert with account fields — aligns with manual trade rows (`account_type` / `mode` from account).
  */
 export async function insertCsvTradesWithAccount(
   client: SupabaseClient,
   parsedTrades: any[],
-  selectedAccount: CsvSelectedAccount
+  selectedAccount: CsvSelectedAccount,
+  insertOptions?: InsertCsvTradesWithAccountOptions
 ) {
   const modeDisplay = String(selectedAccount.mode ?? "live").trim() || "live"
   const accountType = modeDisplay.toLowerCase()
@@ -35,6 +40,9 @@ export async function insertCsvTradesWithAccount(
 
   const rows = tradesInsertRowsPrivate(finalTrades, {
     forceImportedAccountType: false,
+    ...(typeof insertOptions?.isInitialImport === "boolean"
+      ? { isInitialImport: insertOptions.isInitialImport }
+      : {}),
   })
   return client.from("trades").insert(rows)
 }

@@ -7,7 +7,7 @@ import { ensureManualUserAccountRegistered } from "@/lib/ensureManualUserAccount
 import { isProActive } from "@/lib/subscription"
 import { insertCsvTradesWithAccount } from "@/lib/insertCsvTradesWithAccount"
 import { hasReachedRowLimit, last24hIso } from "@/lib/freePlanLimits"
-import { handleLimitError } from "@/lib/limitErrorMessage"
+import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import { getSessionFromDate } from "@/lib/getSession"
 import CreateAccountModal, {
   type Props as CreateAccountModalProps,
@@ -579,7 +579,7 @@ export default function InputTradeForm({
     } = await supabase.auth.getUser()
 
     if (!user?.id) {
-      setPopupMessage("Failed to save trade")
+      setPopupMessage("Please log in to save your trade.")
       setPopupType("error")
       setShowPopup(true)
       setSubmitting(false)
@@ -710,7 +710,7 @@ export default function InputTradeForm({
           .eq("id", user.id)
         if (lockErr) {
           console.error("locked account update:", lockErr)
-          setPopupMessage("Failed to save trade")
+          setPopupMessage(handleSupabaseError(lockErr))
           setPopupType("error")
           setShowPopup(true)
           setSubmitting(false)
@@ -745,7 +745,9 @@ export default function InputTradeForm({
           incomingName !== lockedName ||
           incomingNumber !== lockedNumber
         ) {
-          setPopupMessage("Failed to save trade")
+          setPopupMessage(
+            "Your free plan is locked to one account. Switch back to that account to save."
+          )
           setPopupType("error")
           setShowPopup(true)
           setSelectedAccount({
@@ -772,7 +774,7 @@ export default function InputTradeForm({
     })
 
     if (!ensured.ok) {
-      setPopupMessage("Failed to save trade")
+      setPopupMessage("Could not complete save. Please try again.")
       setPopupType("error")
       setShowPopup(true)
       setSubmitting(false)
@@ -844,7 +846,7 @@ export default function InputTradeForm({
 
       if (error) {
         console.error("UPDATE ERROR:", error)
-        setPopupMessage("Failed to save trade")
+        setPopupMessage(handleSupabaseError(error))
         setPopupType("error")
         setShowPopup(true)
         setSubmitting(false)
@@ -889,14 +891,12 @@ export default function InputTradeForm({
           { onConflict: "trade_id" }
         )
         if (postErr) {
-          const friendly = handleLimitError(postErr)
-          if (friendly) {
-            setPopupMessage(friendly)
-            setPopupType("error")
-            setShowPopup(true)
-          } else {
-            console.error("posts upsert:", postErr)
-          }
+          console.error("posts upsert:", postErr)
+          setPopupMessage(handleSupabaseError(postErr))
+          setPopupType("error")
+          setShowPopup(true)
+          setSubmitting(false)
+          return
         }
       } else {
         const { error: delErr } = await supabase
@@ -977,11 +977,8 @@ export default function InputTradeForm({
       .single()
 
     if (error) {
-      const friendly = handleLimitError(error)
-      if (!friendly) {
-        console.error("Trade insert error:", error)
-      }
-      setPopupMessage(friendly || "Failed to save trade")
+      console.error("Trade insert error:", error)
+      setPopupMessage(handleSupabaseError(error))
       setPopupType("error")
       setShowPopup(true)
       setSubmitting(false)
@@ -1017,14 +1014,12 @@ export default function InputTradeForm({
         },
       ])
       if (postError) {
-        const friendly = handleLimitError(postError)
-        if (friendly) {
-          setPopupMessage(friendly)
-          setPopupType("error")
-          setShowPopup(true)
-        } else {
-          console.error("Post insert error:", postError)
-        }
+        console.error("Post insert error:", postError)
+        setPopupMessage(handleSupabaseError(postError))
+        setPopupType("error")
+        setShowPopup(true)
+        setSubmitting(false)
+        return
       }
     }
 
@@ -1096,7 +1091,7 @@ export default function InputTradeForm({
     } = await supabase.auth.getUser()
 
     if (!user?.id) {
-      setPopupMessage("Failed to save trade")
+      setPopupMessage("Please log in to save your trade.")
       setPopupType("error")
       setShowPopup(true)
       return
@@ -1110,7 +1105,9 @@ export default function InputTradeForm({
 
     if (profileErr || !profile) {
       console.error("Profile fetch failed:", profileErr)
-      setPopupMessage("Failed to save trade")
+      setPopupMessage(
+        profileErr ? handleSupabaseError(profileErr) : "Something went wrong"
+      )
       setPopupType("error")
       setShowPopup(true)
       return
@@ -1168,7 +1165,7 @@ export default function InputTradeForm({
 
       if (error) {
         console.error(error)
-        alert("Import failed")
+        alert(handleSupabaseError(error))
         return
       }
 
@@ -1186,7 +1183,7 @@ export default function InputTradeForm({
       setSelectedAccount(null)
     } catch (err) {
       console.error(err)
-      alert("Something went wrong")
+      alert(handleSupabaseError(err))
     }
   }
 
@@ -1240,7 +1237,7 @@ export default function InputTradeForm({
 
       if (countErr) {
         console.error(countErr)
-        alert("Failed to verify account limit")
+        alert(handleSupabaseError(countErr))
         return
       }
 
@@ -1273,7 +1270,7 @@ export default function InputTradeForm({
 
     if (error) {
       console.error(error)
-      alert("Failed to create account")
+      alert(handleSupabaseError(error))
       return
     }
 

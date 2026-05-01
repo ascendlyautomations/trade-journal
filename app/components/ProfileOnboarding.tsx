@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabaseClient"
 import { uploadAvatarFile } from "@/lib/avatarUpload"
@@ -39,6 +39,10 @@ type ProfileOnboardingProps = {
   initialStartedTrading?: string | null
   initialAvatarUrl?: string | null
   onComplete: (patch: Record<string, unknown>) => void
+  /**
+   * When true, do not redirect to profile after save (parent handles next step, e.g. CSV modal).
+   */
+  suppressPostSaveRedirect?: boolean
 }
 
 export default function ProfileOnboarding({
@@ -49,6 +53,7 @@ export default function ProfileOnboarding({
   initialStartedTrading = null,
   initialAvatarUrl = null,
   onComplete,
+  suppressPostSaveRedirect = false,
 }: ProfileOnboardingProps) {
   const router = useRouter()
   const [username, setUsername] = useState(
@@ -67,6 +72,17 @@ export default function ProfileOnboarding({
   )
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const startedTradingInputRef = useRef<HTMLInputElement>(null)
+
+  function openStartedTradingPicker() {
+    const el = startedTradingInputRef.current
+    if (!el) return
+    try {
+      el.showPicker()
+    } catch {
+      el.focus()
+    }
+  }
 
   function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0]
@@ -121,8 +137,10 @@ export default function ProfileOnboarding({
 
     setTimeout(() => {
       setSaving(false)
-      router.push(`/profile/${userId}`)
-      router.refresh()
+      if (!suppressPostSaveRedirect) {
+        router.push(`/profile/${userId}`)
+        router.refresh()
+      }
     }, 300)
   }
 
@@ -131,15 +149,16 @@ export default function ProfileOnboarding({
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-lg px-4 py-8"
+      className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/80 backdrop-blur-lg px-4 py-8"
       role="dialog"
       aria-modal="true"
       aria-labelledby="onboarding-title"
     >
       <form
         onSubmit={handleSubmit}
-        className="w-full max-w-md max-h-[min(90vh,720px)] overflow-y-auto rounded-2xl border border-white/10 bg-white/10 p-8 shadow-2xl backdrop-blur-xl"
+        className="flex max-h-[min(90vh,720px)] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/10 p-8 shadow-2xl backdrop-blur-xl"
       >
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">
         <h2
           id="onboarding-title"
           className="mb-2 text-center text-xl font-semibold text-white"
@@ -210,20 +229,29 @@ export default function ProfileOnboarding({
           value={tradingStyle}
           onChange={(e) => setTradingStyle(e.target.value)}
         />
+        </div>
 
+        <div className="shrink-0 pt-1">
         <label className="mb-1 block text-xs font-medium text-gray-300">
           Started Trading
         </label>
         <p className="mb-2 text-xs text-gray-500">
           Select date you began trading
         </p>
-        <input
-          type="date"
-          value={startedTrading}
-          onChange={(e) => setStartedTrading(e.target.value)}
-          className="mb-6 w-full rounded-xl border border-white/10 bg-white/10 px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-400 [color-scheme:dark]"
-          style={{ colorScheme: "dark" }}
-        />
+        <div className="mb-6 w-full">
+          <input
+            ref={startedTradingInputRef}
+            type="date"
+            value={startedTrading}
+            onChange={(e) => setStartedTrading(e.target.value)}
+            onClick={(e) => {
+              e.preventDefault()
+              openStartedTradingPicker()
+            }}
+            className="w-full cursor-pointer rounded-xl border border-white/10 bg-white/10 px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-400 [color-scheme:dark]"
+            style={{ colorScheme: "dark" }}
+          />
+        </div>
 
         {error ? (
           <p className="mb-4 text-center text-sm text-red-400">{error}</p>
@@ -236,6 +264,7 @@ export default function ProfileOnboarding({
         >
           {saving ? "Saving…" : "Save & continue"}
         </button>
+        </div>
       </form>
     </div>
   )

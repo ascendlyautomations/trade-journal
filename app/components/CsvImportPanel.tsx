@@ -17,7 +17,7 @@ import {
   insertCsvTradesWithAccount,
 } from "@/lib/insertCsvTradesWithAccount"
 import { last24hIso } from "@/lib/freePlanLimits"
-import { handleLimitError } from "@/lib/limitErrorMessage"
+import { handleSupabaseError } from "@/lib/handleSupabaseError"
 
 export type CsvImportPanelProps = {
   /** Smaller preview + less chrome (e.g. onboarding modal) */
@@ -79,7 +79,7 @@ export default function CsvImportPanel({
 
     const { data: profile, error: profileErr } = await supabase
       .from("profiles")
-      .select("is_pro")
+      .select("is_pro, has_used_initial_import")
       .eq("id", user.id)
       .single()
 
@@ -89,6 +89,8 @@ export default function CsvImportPanel({
       setLoading(false)
       return
     }
+
+    const hasUsedInitialImport = profile.has_used_initial_import === true
 
     const { parsedTrades, summary, rowResults } = buildTradesFromParsedCsv(parsed, user.id)
 
@@ -102,26 +104,30 @@ export default function CsvImportPanel({
 
     let tradesToInsert = parsedTrades
     if (!profile.is_pro) {
-      const { data: existingTrades, error: existingErr } = await supabase
-        .from("trades")
-        .select("id")
-        .eq("user_id", user.id)
-        .gte("created_at", last24hIso())
+      if (!hasUsedInitialImport) {
+        tradesToInsert = parsedTrades
+      } else {
+        const { data: existingTrades, error: existingErr } = await supabase
+          .from("trades")
+          .select("id")
+          .eq("user_id", user.id)
+          .gte("created_at", last24hIso())
 
-      if (existingErr) {
-        console.error("trade count check failed:", existingErr)
-        alert("Could not verify daily trade limit. Please try again.")
-        setLoading(false)
-        return
-      }
+        if (existingErr) {
+          console.error("trade count check failed:", existingErr)
+          alert("Could not verify daily trade limit. Please try again.")
+          setLoading(false)
+          return
+        }
 
-      const remaining = 3 - (existingTrades?.length ?? 0)
-      if (remaining <= 0) {
-        alert("You've reached your daily trade limit. Upgrade to Pro.")
-        setLoading(false)
-        return
+        const remaining = 3 - (existingTrades?.length ?? 0)
+        if (remaining <= 0) {
+          alert("You've reached your daily trade limit. Upgrade to Pro.")
+          setLoading(false)
+          return
+        }
+        tradesToInsert = parsedTrades.slice(0, remaining)
       }
-      tradesToInsert = parsedTrades.slice(0, remaining)
     }
 
     if (!tradesToInsert.length) {
@@ -130,17 +136,22 @@ export default function CsvImportPanel({
       return
     }
 
+    const isInitialImportOnRows = !hasUsedInitialImport
+
     let error: { message?: string; details?: string; hint?: string } | null = null
 
     if (selectedAccount) {
       const res = await insertCsvTradesWithAccount(
         supabase,
         tradesToInsert,
-        selectedAccount
+        selectedAccount,
+        { isInitialImport: isInitialImportOnRows }
       )
       error = res.error
     } else {
-      const rowsToInsert = tradesInsertRowsPrivate(tradesToInsert)
+      const rowsToInsert = tradesInsertRowsPrivate(tradesToInsert, {
+        isInitialImport: isInitialImportOnRows,
+      })
 
       const { error: importAcctErr } = await ensureImportedCsvAccountRegistered(
         supabase,
@@ -158,14 +169,19 @@ export default function CsvImportPanel({
     }
 
     if (error) {
-      const friendly = handleLimitError(error)
-      if (friendly) {
-        alert(friendly)
-      } else {
-        console.error("INSERT ERROR:", error)
-        alert(error.message || "Import failed")
-      }
+      console.error("INSERT ERROR:", error)
+      alert(handleSupabaseError(error))
     } else {
+      if (!hasUsedInitialImport) {
+        const { error: initialImportFlagErr } = await supabase
+          .from("profiles")
+          .update({ has_used_initial_import: true })
+          .eq("id", user.id)
+        if (initialImportFlagErr) {
+          console.error("mark has_used_initial_import:", initialImportFlagErr)
+        }
+      }
+
       const skipped = summary.failed
       const errLines = rowResults
         .filter((r): r is { ok: false; rowNumber: number; reason: string } => !r.ok)

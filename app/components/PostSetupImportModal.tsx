@@ -169,7 +169,7 @@ export default function PostSetupImportModal({ open, onComplete }: Props) {
 
   return (
     <div
-      className={`fixed inset-0 z-[102] flex items-center justify-center px-4 py-8 transition-opacity duration-300 motion-reduce:transition-none ${
+      className={`fixed inset-0 z-[1100] flex items-center justify-center px-4 py-8 transition-opacity duration-300 motion-reduce:transition-none ${
         entered ? "bg-black/75 opacity-100 backdrop-blur-md" : "bg-black/75 opacity-0 backdrop-blur-md"
       }`}
       role="presentation"
@@ -237,7 +237,7 @@ export default function PostSetupImportModal({ open, onComplete }: Props) {
               onClick={() => void handleSkip()}
               className="rounded-xl border border-white/20 bg-white/5 px-6 py-3 text-sm font-semibold text-gray-200 transition hover:bg-white/10"
             >
-              Skip for Now
+              Skip for now
             </button>
           </div>
         </div>

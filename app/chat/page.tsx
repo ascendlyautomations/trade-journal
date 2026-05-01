@@ -6,7 +6,7 @@ import { useEffect, useState, useRef } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
 import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
-import { handleLimitError } from "@/lib/limitErrorMessage"
+import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import { useRouter } from "next/navigation"
 
 export default function ChatPage() {
@@ -137,7 +137,7 @@ export default function ChatPage() {
         10
       )
       if (limitReached) {
-        alert("Free plan allows 10 messages/comments per day.")
+        alert(handleSupabaseError({ message: "10 messages limit" }))
         return
       }
     }
@@ -175,12 +175,8 @@ export default function ChatPage() {
       channel
     })
     if (sendErr) {
-      const friendly = handleLimitError(sendErr)
-      if (friendly) {
-        alert(friendly)
-      } else {
-        console.error("chat sendMessage insert:", sendErr)
-      }
+      console.error("chat sendMessage insert:", sendErr)
+      alert(handleSupabaseError(sendErr))
       return
     }
 

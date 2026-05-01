@@ -6,7 +6,7 @@ import ProfileOnboarding, {
   ONBOARDING_FLAG,
   profileNeedsUsername,
 } from "../components/ProfileOnboarding"
-import OnboardingModal from "../components/OnboardingModal"
+import PostSetupImportModal from "../components/PostSetupImportModal"
 import PerformanceShareModal from "../components/PerformanceShareModal"
 import { useEffect, useState, useMemo, useRef } from "react"
 import { supabase } from "../../lib/supabaseClient"
@@ -517,7 +517,7 @@ function analyzeTradingHours(trades: any[]): TradingHoursSummary | null {
 
 export default function Dashboard() {
   const [showOnboarding, setShowOnboarding] = useState(false)
-  const [showOnboardingModal, setShowOnboardingModal] = useState(false)
+  const [showImportModal, setShowImportModal] = useState(false)
   const [trades, setTrades] = useState<any[]>([])
   const [accountFilter, setAccountFilter] = useState("all")
   const [accountTypeFilter, setAccountTypeFilter] = useState("all")
@@ -672,10 +672,10 @@ export default function Dashboard() {
     if (loading || !profile || !user) return
     if (showOnboarding) return
     if (profile.onboarding_completed !== false) {
-      setShowOnboardingModal(false)
+      setShowImportModal(false)
       return
     }
-    setShowOnboardingModal(true)
+    setShowImportModal(true)
   }, [loading, profile, user, showOnboarding])
 
   async function completeCsvOnboarding() {
@@ -686,7 +686,7 @@ export default function Dashboard() {
       .eq("id", user.id)
     if (error) console.error("completeCsvOnboarding:", error)
     setProfile((p: any) => (p ? { ...p, onboarding_completed: true } : p))
-    setShowOnboardingModal(false)
+    setShowImportModal(false)
   }
 
   useEffect(() => {
@@ -1832,14 +1832,19 @@ const worstDay = dailyPnLs.length > 0
           initialTradingStyle={profile.trading_style}
           initialStartedTrading={profile.started_trading}
           initialAvatarUrl={profile.avatar_url}
+          suppressPostSaveRedirect
           onComplete={(patch) => {
             setProfile((p: any) => (p ? { ...p, ...patch } : p))
             setShowOnboarding(false)
+            setShowImportModal(true)
           }}
         />
       ) : null}
 
-      <OnboardingModal open={showOnboardingModal} onComplete={() => void completeCsvOnboarding()} />
+      <PostSetupImportModal
+        open={showImportModal}
+        onComplete={() => void completeCsvOnboarding()}
+      />
 
       <div className="w-full text-white px-3 pb-3 pt-0 md:px-10 md:pb-10">
 

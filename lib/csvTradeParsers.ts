@@ -1091,6 +1091,11 @@ type TradesInsertRowsPrivateOptions = {
    * When false, keeps `account_type` from each row (selected-account CSV import inherits eval/funded/live).
    */
   forceImportedAccountType?: boolean
+  /**
+   * When set, sets `is_initial_import` on each insert row (first unlimited CSV batch vs later imports).
+   * When omitted, defaults to `true` for backward compatibility.
+   */
+  isInitialImport?: boolean
 }
 
 /** CSV bulk rows: private; optionally forces imported account type for bulk anonymous imports. */
@@ -1100,9 +1105,12 @@ export function tradesInsertRowsPrivate<T extends Record<string, unknown>>(
 ) {
   const importedAt = new Date().toISOString()
   const forceImported = options?.forceImportedAccountType !== false
+  const isInitialImport =
+    typeof options?.isInitialImport === "boolean" ? options.isInitialImport : true
   return rows.map((row) => ({
     ...row,
     is_public: false,
+    is_initial_import: isInitialImport,
     ...(forceImported ? { account_type: "imported" } : {}),
     created_at: importedAt,
   }))

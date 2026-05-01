@@ -11,7 +11,7 @@ import {
 } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
-import { handleLimitError } from "@/lib/limitErrorMessage"
+import { handleSupabaseError } from "@/lib/handleSupabaseError"
 
 type TradeSocialContextValue = {
   tradeId: string
@@ -242,7 +242,7 @@ export function TradeSocialProvider({
         10
       )
       if (limitReached) {
-        alert("Free plan allows 10 messages/comments per day.")
+        alert(handleSupabaseError({ message: "10 messages limit" }))
         return
       }
     }
@@ -263,12 +263,8 @@ export function TradeSocialProvider({
       .single()
 
     if (error) {
-      const friendly = handleLimitError(error)
-      if (friendly) {
-        alert(friendly)
-      } else {
-        console.error("Trade comment error:", error)
-      }
+      console.error("Trade comment error:", error)
+      alert(handleSupabaseError(error))
       return
     }
 

@@ -8,6 +8,7 @@ import {
   sendTradeToConversations,
   type ShareConversationRow,
 } from "@/lib/shareToConversations"
+import { handleSupabaseError } from "@/lib/handleSupabaseError"
 
 export type ShareToConversationsModalProps = {
   open: boolean
@@ -97,12 +98,14 @@ export default function ShareToConversationsModal({
           tradeId,
           content: msg,
         })
-        if (error) alert(error.message || "Could not send")
+        if (error) {
+          alert(handleSupabaseError(error))
+          return
+        }
       } else if (imageDataUrlPromise) {
         const dataUrl = await imageDataUrlPromise()
         if (!dataUrl) {
           alert("Could not capture image.")
-          setSending(false)
           return
         }
         const { error } = await sendImageDataUrlToConversations(supabase, {
@@ -111,7 +114,10 @@ export default function ShareToConversationsModal({
           dataUrl,
           content: shareMessage.trim() || "",
         })
-        if (error) alert(error.message || "Could not send")
+        if (error) {
+          alert(handleSupabaseError(error))
+          return
+        }
       }
 
       onClose()

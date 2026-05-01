@@ -34,6 +34,7 @@ import { formatPnlCurrency } from "../../../lib/formatMoney"
 import { formatDateOnly, formatTimeOnly } from "@/lib/formatDate"
 import { formatEST } from "@/lib/formatEST"
 import { createUserRoom } from "@/lib/createUserRoom"
+import { handleSupabaseError } from "@/lib/handleSupabaseError"
 
 function postImageSrc(imageUrl: string | null | undefined): string | null {
   const raw = imageUrl != null ? String(imageUrl).trim() : ""
@@ -1303,7 +1304,7 @@ export default function ProfilePage() {
 
     if (error) {
       console.error(error)
-      alert(error.message)
+      alert(handleSupabaseError(error))
       return
     }
 

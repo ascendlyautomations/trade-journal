@@ -8,7 +8,7 @@ import { compressImage } from "@/lib/compressImage"
 import { fetchShareConversations } from "@/lib/shareToConversations"
 import { formatEST } from "@/lib/formatEST"
 import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
-import { handleLimitError } from "@/lib/limitErrorMessage"
+import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import Navbar from "../components/Navbar"
 import {
   PostInteractionsComments,
@@ -244,7 +244,7 @@ export default function FeedPage() {
 
       if (insertError) {
         console.error(insertError)
-        alert(insertError.message)
+        alert(handleSupabaseError(insertError))
         return
       }
 
@@ -645,7 +645,7 @@ export default function FeedPage() {
         10
       )
       if (limitReached) {
-        alert("Free plan allows 10 messages/comments per day.")
+        alert(handleSupabaseError({ message: "10 messages limit" }))
         return
       }
     }
@@ -665,12 +665,8 @@ export default function FeedPage() {
     setCommentSubmitting((s) => ({ ...s, [pid]: false }))
 
     if (error) {
-      const friendly = handleLimitError(error)
-      if (friendly) {
-        alert(friendly)
-      } else {
-        console.error("Comment insert error:", error)
-      }
+      console.error("Comment insert error:", error)
+      alert(handleSupabaseError(error))
       return
     }
 
@@ -729,7 +725,7 @@ export default function FeedPage() {
         10
       )
       if (limitReached) {
-        alert("Free plan allows 10 messages/comments per day.")
+        alert(handleSupabaseError({ message: "10 messages limit" }))
         return
       }
     }
@@ -746,12 +742,9 @@ export default function FeedPage() {
       })
 
       if (error) {
-        const friendly = handleLimitError(error)
-        if (friendly) {
-          alert(friendly)
-          return
-        }
         console.error("Share post error:", error)
+        alert(handleSupabaseError(error))
+        return
       }
     }
 

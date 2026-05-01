@@ -21,6 +21,7 @@ import { formatDateOnly, formatTimeOnly } from "@/lib/formatDate"
 import { formatEST } from "@/lib/formatEST"
 import ShareTradeButton from "@/app/components/ShareTradeButton"
 import ShareToConversationsModal from "@/app/components/ShareToConversationsModal"
+import PostSetupImportModal from "../components/PostSetupImportModal"
 
 function formatMoney(value: unknown): string {
   if (value === null || value === undefined) return "-"
@@ -91,6 +92,7 @@ export default function TradesPage() {
   const [authUserId, setAuthUserId] = useState<string | null>(null)
   const [gateProfile, setGateProfile] = useState<any | null>(null)
   const [showOnboarding, setShowOnboarding] = useState(false)
+  const [showImportModal, setShowImportModal] = useState(false)
   const [showPerformanceShare, setShowPerformanceShare] = useState(false)
   const [selectedTrade, setSelectedTrade] = useState<any>(null)
   const [isSendModalOpen, setIsSendModalOpen] = useState(false)
@@ -351,12 +353,25 @@ export default function TradesPage() {
           initialTradingStyle={gateProfile.trading_style}
           initialStartedTrading={gateProfile.started_trading}
           initialAvatarUrl={gateProfile.avatar_url}
+          suppressPostSaveRedirect
           onComplete={(patch) => {
             setGateProfile((p: any) => (p ? { ...p, ...patch } : p))
             setShowOnboarding(false)
+            setShowImportModal(true)
           }}
         />
       ) : null}
+
+      <PostSetupImportModal
+        open={showImportModal}
+        onComplete={async () => {
+          setShowImportModal(false)
+          if (authUserId) {
+            router.push(`/profile/${authUserId}`)
+            router.refresh()
+          }
+        }}
+      />
 
       <div className="w-full text-white px-2 pb-3 pt-0 md:px-4 md:pb-10">
 

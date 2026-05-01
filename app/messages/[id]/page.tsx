@@ -7,7 +7,7 @@ import { useEffect, useState, useRef, type ChangeEvent } from "react"
 import { supabase } from "../../../lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
 import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
-import { handleLimitError } from "@/lib/limitErrorMessage"
+import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import { useParams, useRouter } from "next/navigation"
 
 function tradeScreenshotSrc(url: string | null | undefined): string | null {
@@ -829,7 +829,7 @@ export default function DMPage() {
         10
       )
       if (limitReached) {
-        alert("Free plan allows 10 messages/comments per day.")
+        alert(handleSupabaseError({ message: "10 messages limit" }))
         return
       }
     }
@@ -857,12 +857,8 @@ export default function DMPage() {
       image_url: imageUrl,
     })
     if (sendErr) {
-      const friendly = handleLimitError(sendErr)
-      if (friendly) {
-        alert(friendly)
-      } else {
-        console.error("sendMessage insert:", sendErr)
-      }
+      console.error("sendMessage insert:", sendErr)
+      alert(handleSupabaseError(sendErr))
       return
     }
 
@@ -908,7 +904,7 @@ export default function DMPage() {
         10
       )
       if (limitReached) {
-        alert("Free plan allows 10 messages/comments per day.")
+        alert(handleSupabaseError({ message: "10 messages limit" }))
         return
       }
     }
@@ -921,12 +917,8 @@ export default function DMPage() {
       content: "Shared a trade",
     })
     if (tradeSendErr) {
-      const friendly = handleLimitError(tradeSendErr)
-      if (friendly) {
-        alert(friendly)
-      } else {
-        console.error("handleSendTrade insert:", tradeSendErr)
-      }
+      console.error("handleSendTrade insert:", tradeSendErr)
+      alert(handleSupabaseError(tradeSendErr))
       return
     }
 
