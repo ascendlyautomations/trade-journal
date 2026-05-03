@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect, useCallback } from "react"
+import { useState, useRef, useEffect, useCallback, useMemo } from "react"
 import { supabase } from "@/lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
 import { ensureManualUserAccountRegistered } from "@/lib/ensureManualUserAccount"
@@ -12,14 +12,8 @@ import { getSessionFromDate } from "@/lib/getSession"
 import CreateAccountModal, {
   type Props as CreateAccountModalProps,
 } from "@/components/CreateAccountModal"
-import PresetFormModal from "./PresetFormModal"
 
 type CreateAccountSavePayload = Parameters<CreateAccountModalProps["onSave"]>[0]
-type TradePreset = {
-  id: string
-  name: string
-  values: Record<string, any>
-}
 
 /** Display token after `#` — human account number when present, else shortened UUID. */
 function accountNumberLabel(acc: {
@@ -170,15 +164,15 @@ export default function InputTradeForm({
   const [accountDropdownOpen, setAccountDropdownOpen] = useState(false)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showAccountWarning, setShowAccountWarning] = useState(false)
-  const [presets, setPresets] = useState<TradePreset[]>([])
-  const [selectedPresetId, setSelectedPresetId] = useState("")
-  const [showPresetFormModal, setShowPresetFormModal] = useState(false)
 
   const [submitting, setSubmitting] = useState(false)
   const [confidence, setConfidence] = useState("")
   const [psychologyNotes, setPsychologyNotes] = useState("")
   const [tradeType, setTradeType] = useState("")
   const [showSettings, setShowSettings] = useState(false)
+  const [showAllAccounts, setShowAllAccounts] = useState(false)
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null)
+  const [editingAccount, setEditingAccount] = useState<any | null>(null)
   const [popupMessage, setPopupMessage] = useState("")
   const [popupType, setPopupType] = useState<"success" | "error">("success")
   const [showPopup, setShowPopup] = useState(false)
@@ -354,62 +348,100 @@ export default function InputTradeForm({
     void refreshPlanAndAccountLock()
   }, [refreshPlanAndAccountLock, existingTrade?.id])
 
-  useEffect(() => {
-    async function loadAccounts() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-
-      if (!user?.id) return
-
-      const { data, error } = await supabase
-        .from("accounts")
-        .select("*")
-        .eq("user_id", user.id)
-
-      if (error) {
-        console.error(error)
-        return
-      }
-
-      const formatted = (data || []).map((acc) => ({
-        name: acc.name,
-        size: acc.account_size,
-        id: acc.id,
-        account_number: acc.account_number ?? null,
-        mode: acc.mode,
-        category: acc.category,
-      }))
-
-      setAccounts(formatted)
-    }
-
-    void loadAccounts()
-  }, [])
-
-  const loadPresets = useCallback(async () => {
+  const loadAccounts = useCallback(async () => {
     const {
       data: { user },
     } = await supabase.auth.getUser()
+
     if (!user?.id) return
 
     const { data, error } = await supabase
-      .from("presets")
-      .select("id, name, values")
+      .from("accounts")
+      .select("*")
       .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
 
     if (error) {
-      console.error("preset load:", error)
+      console.error(error)
       return
     }
 
-    setPresets((data || []) as TradePreset[])
+    const formatted = (data || []).map((acc) => ({
+      name: acc.name,
+      size: acc.account_size,
+      id: acc.id,
+      account_number: acc.account_number ?? null,
+      mode: acc.mode,
+      category: acc.category,
+      is_active: acc.is_active !== false,
+      note: acc.note ?? "",
+    }))
+
+    setAccounts(formatted)
+  }, [])
+
+  const updateNote = useCallback(async (accountId: string, note: string) => {
+    const { error } = await supabase
+      .from("accounts")
+      .update({ note: note || null })
+      .eq("id", accountId)
+
+    if (error) {
+      console.error(error)
+      alert(handleSupabaseError(error))
+      return false
+    }
+    return true
   }, [])
 
   useEffect(() => {
-    void loadPresets()
-  }, [loadPresets])
+    void loadAccounts()
+  }, [loadAccounts])
+
+  useEffect(() => {
+    if (!showSettings) return
+    void loadAccounts()
+  }, [showSettings, loadAccounts])
+
+  useEffect(() => {
+    if (showSettings) return
+    setShowAllAccounts(false)
+    setOpenMenuId(null)
+    setEditingAccount(null)
+  }, [showSettings])
+
+  useEffect(() => {
+    if (!openMenuId) return
+    function handlePointerDown(e: MouseEvent) {
+      const t = e.target as HTMLElement
+      if (t.closest("[data-account-settings-menu]")) return
+      setOpenMenuId(null)
+    }
+    document.addEventListener("mousedown", handlePointerDown)
+    return () => document.removeEventListener("mousedown", handlePointerDown)
+  }, [openMenuId])
+
+  const activeAccounts = useMemo(
+    () => accounts.filter((a) => a.is_active !== false),
+    [accounts]
+  )
+
+  const sortedAccountsForSettings = useMemo(
+    () =>
+      [...accounts].sort((a, b) => {
+        const aActive = a.is_active !== false
+        const bActive = b.is_active !== false
+        if (aActive === bActive) return 0
+        return aActive ? -1 : 1
+      }),
+    [accounts]
+  )
+
+  useEffect(() => {
+    if (!selectedAccount?.id) return
+    if (selectedAccount.is_active === false) {
+      setSelectedAccount(null)
+    }
+  }, [selectedAccount])
 
   useEffect(() => {
     if (showPopup) {
@@ -1187,32 +1219,36 @@ export default function InputTradeForm({
     }
   }
 
-  function applyPresetById(presetId: string) {
-    setSelectedPresetId(presetId)
-    if (!presetId) return
-    const preset = presets.find((p) => p.id === presetId)
-    if (!preset) return
-    const values = preset.values || {}
+  async function toggleAccount(account: { id: string; is_active?: boolean }) {
+    const currentlyActive = account.is_active !== false
+    const nextActive = !currentlyActive
 
-    if (values.ticker != null) setTicker(String(values.ticker))
-    if (values.direction != null) setDirection(String(values.direction))
-    if (values.rr != null) setRR(String(values.rr))
-    if (values.points != null) setPoints(String(values.points))
-    if (values.session != null) {
-      setSession(String(values.session))
-      setSessionManuallySet(true)
+    const { error } = await supabase
+      .from("accounts")
+      .update({ is_active: nextActive })
+      .eq("id", account.id)
+
+    if (error) {
+      console.error(error)
+      alert(handleSupabaseError(error))
+      return
     }
-    if (values.confluences != null) setConfluences(String(values.confluences))
-    if (values.confidence != null) setConfidence(String(values.confidence))
-    if (values.emotion != null) setEmotion(String(values.emotion))
-    if (values.followed_plan != null) setFollowedPlan(Boolean(values.followed_plan))
-    if (values.mistake_type != null) setMistakeType(String(values.mistake_type))
-    if (values.market_condition != null) setMarket(String(values.market_condition))
-    if (values.timeframe != null) setTimeframe(String(values.timeframe))
-    if (values.strategy != null) setStrategy(String(values.strategy))
-    if (values.contracts != null) setContracts(String(values.contracts))
-    if (values.trade_type != null) setTradeType(String(values.trade_type))
-    if (values.news_event != null) setNewsEvent(Boolean(values.news_event))
+
+    setAccounts((prev) =>
+      prev.map((a) =>
+        String(a.id) === String(account.id)
+          ? { ...a, is_active: nextActive }
+          : a
+      )
+    )
+
+    if (selectedAccount && String(selectedAccount.id) === String(account.id)) {
+      if (!nextActive) {
+        setSelectedAccount(null)
+      } else {
+        setSelectedAccount({ ...selectedAccount, is_active: true })
+      }
+    }
   }
 
   async function handleCreateAccountSave(newAccount: CreateAccountSavePayload) {
@@ -1257,6 +1293,7 @@ export default function InputTradeForm({
           account_number: newAccount.id,
           category: newAccount.category,
           mode: newAccount.mode,
+          is_active: true,
 
           consistency: newAccount.rules?.consistency ?? null,
           max_drawdown: newAccount.rules?.maxDrawdown ?? null,
@@ -1285,6 +1322,8 @@ export default function InputTradeForm({
         account_number: data.account_number ?? null,
         mode: data.mode,
         category: data.category,
+        is_active: data.is_active !== false,
+        note: data.note ?? "",
       },
     ])
 
@@ -1295,6 +1334,8 @@ export default function InputTradeForm({
       account_number: data.account_number ?? null,
       mode: data.mode,
       category: data.category,
+      is_active: data.is_active !== false,
+      note: data.note ?? "",
     })
 
     setShowCreateModal(false)
@@ -1332,7 +1373,7 @@ export default function InputTradeForm({
                 </div>
                 {accountDropdownOpen && (
                   <div className="absolute z-50 mt-1 w-full bg-[#0f172a] border border-white/10 rounded shadow-lg max-h-60 overflow-y-auto">
-                    {accounts.map((acc) => (
+                    {activeAccounts.map((acc) => (
                       <div
                         key={`${acc.name}-${acc.id}-${acc.mode}`}
                         onClick={() => {
@@ -1429,7 +1470,7 @@ export default function InputTradeForm({
                 </div>
                 {accountDropdownOpen && (
                   <div className="absolute z-50 mt-1 w-full bg-[#0f172a] border border-white/10 rounded shadow-lg max-h-60 overflow-y-auto">
-                    {accounts.map((acc) => (
+                    {activeAccounts.map((acc) => (
                       <div
                         key={`${acc.name}-${acc.id}-${acc.mode}`}
                         onClick={() => {
@@ -1976,33 +2017,152 @@ export default function InputTradeForm({
     </>
   )
 
+  const visibleAccountsInSettings = showAllAccounts
+    ? sortedAccountsForSettings
+    : sortedAccountsForSettings.slice(0, 3)
+
+  function toggleMenu(id: string) {
+    setOpenMenuId((prev) => (prev === id ? null : id))
+  }
+
+  function openNoteEditor(account: any) {
+    setOpenMenuId(null)
+    setEditingAccount({ ...account, note: account.note ?? "" })
+  }
+
+  async function saveNote(account: { id: string; note?: string }) {
+    const noteVal = account.note ?? ""
+    const ok = await updateNote(String(account.id), noteVal)
+    if (!ok) return
+    setAccounts((prev) =>
+      prev.map((a) =>
+        String(a.id) === String(account.id) ? { ...a, note: noteVal } : a
+      )
+    )
+    if (selectedAccount && String(selectedAccount.id) === String(account.id)) {
+      setSelectedAccount({ ...selectedAccount, note: noteVal })
+    }
+    setEditingAccount(null)
+  }
+
   const settingsModal = showSettings && (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[110]">
-      <div className="bg-[#0f172a] border border-white/10 rounded-xl p-6 w-[400px] space-y-4 max-h-[90vh] overflow-y-auto">
+      <div className="bg-[#0f172a] border border-white/10 rounded-xl p-6 w-[min(440px,92vw)] space-y-4 max-h-[90vh] overflow-y-auto">
         <h2 className="text-lg font-semibold text-white">Input Settings</h2>
-        <div className="rounded-lg border border-white/10 bg-white/5 p-3">
-          <p className="mb-2 text-sm font-medium text-white">Presets</p>
-          <div className="flex gap-2">
-            <select
-              value={selectedPresetId}
-              onChange={(e) => applyPresetById(e.target.value)}
-              className="w-full p-2 rounded bg-[#0f172a] border border-white/10 text-white text-sm"
-            >
-              <option value="">None</option>
-              {presets.map((preset) => (
-                <option key={preset.id} value={preset.id}>
-                  {preset.name}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={() => setShowPresetFormModal(true)}
-              className="shrink-0 rounded bg-emerald-500/20 px-3 py-2 text-sm font-medium text-emerald-300 hover:bg-emerald-500/30"
-            >
-              + New Preset
-            </button>
-          </div>
+        <div className="rounded-lg border border-white/10 bg-white/5 p-3 space-y-2">
+          <p className="text-sm font-medium text-white">Accounts</p>
+          <p className="text-xs text-gray-500">
+            Inactive accounts stay linked to trades but are hidden from the account picker.
+          </p>
+          {accounts.length === 0 ? (
+            <p className="text-sm text-gray-500">No accounts yet.</p>
+          ) : (
+            <>
+              {visibleAccountsInSettings.map((account) => {
+                const sizeDisplay =
+                  account.size != null && String(account.size).trim() !== ""
+                    ? `$${formatAccountSize(account.size)}`
+                    : "—"
+                return (
+                  <div
+                    key={String(account.id)}
+                    className="relative rounded-lg border border-white/10 bg-white/[0.03] p-3"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <span className="block truncate text-sm text-white">
+                          {account.name} • {sizeDisplay}
+                        </span>
+                        {account.note?.trim() ? (
+                          <p className="mt-1 truncate text-xs text-gray-400">
+                            {account.note.trim()}
+                          </p>
+                        ) : null}
+                      </div>
+                      <div className="flex shrink-0 items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => void toggleAccount(account)}
+                          className={`rounded px-3 py-1 text-xs font-medium ${
+                            account.is_active !== false
+                              ? "bg-green-500/20 text-green-300"
+                              : "bg-red-500/20 text-red-300"
+                          }`}
+                        >
+                          {account.is_active !== false ? "Active" : "Inactive"}
+                        </button>
+                        <div
+                          className="relative"
+                          data-account-settings-menu
+                        >
+                          <button
+                            type="button"
+                            aria-label="Account options"
+                            onClick={() => toggleMenu(String(account.id))}
+                            className="rounded px-1.5 py-0.5 text-lg leading-none text-gray-400 hover:bg-white/10 hover:text-white"
+                          >
+                            ⋯
+                          </button>
+                          {openMenuId === String(account.id) ? (
+                            <div className="absolute right-0 top-full z-[120] mt-1 w-44 rounded-lg border border-white/10 bg-[#0b1f3a] p-1.5 shadow-lg">
+                              <button
+                                type="button"
+                                onClick={() => openNoteEditor(account)}
+                                className="w-full rounded px-2 py-1.5 text-left text-sm text-white hover:bg-white/10"
+                              >
+                                Add / Edit Note
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                    {editingAccount &&
+                    String(editingAccount.id) === String(account.id) ? (
+                      <div className="mt-3 space-y-2 rounded border border-white/10 bg-white/[0.04] p-3">
+                        <input
+                          value={editingAccount.note ?? ""}
+                          onChange={(e) =>
+                            setEditingAccount({
+                              ...editingAccount,
+                              note: e.target.value,
+                            })
+                          }
+                          placeholder="Note (e.g. blown, passed...)"
+                          className="w-full rounded border border-white/10 bg-white/5 px-2 py-1.5 text-sm text-white placeholder:text-gray-500"
+                        />
+                        <div className="flex flex-wrap items-center gap-3">
+                          <button
+                            type="button"
+                            onClick={() => void saveNote(editingAccount)}
+                            className="text-sm font-medium text-blue-400 hover:text-blue-300"
+                          >
+                            Save
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingAccount(null)}
+                            className="text-sm text-gray-400 hover:text-gray-300"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                )
+              })}
+              {sortedAccountsForSettings.length > 3 ? (
+                <button
+                  type="button"
+                  onClick={() => setShowAllAccounts(!showAllAccounts)}
+                  className="mt-2 text-sm text-blue-400 hover:text-blue-300"
+                >
+                  {showAllAccounts ? "Show Less" : "Show All Accounts"}
+                </button>
+              ) : null}
+            </>
+          )}
         </div>
         {Object.entries(inputSettings).map(([key, value]) => (
           <div key={key} className="flex items-center justify-between">
@@ -2097,15 +2257,6 @@ export default function InputTradeForm({
         </div>
         {settingsModal}
         {popupModal}
-        <PresetFormModal
-          open={showPresetFormModal}
-          onClose={() => setShowPresetFormModal(false)}
-          onSaved={(preset) => {
-            setPresets((prev) => [preset, ...prev])
-            setSelectedPresetId(String(preset.id))
-            void loadPresets()
-          }}
-        />
         <CreateAccountModal
           open={showCreateModal}
           onClose={() => setShowCreateModal(false)}
@@ -2140,15 +2291,6 @@ export default function InputTradeForm({
       {formBody}
       {settingsModal}
       {popupModal}
-      <PresetFormModal
-        open={showPresetFormModal}
-        onClose={() => setShowPresetFormModal(false)}
-        onSaved={(preset) => {
-          setPresets((prev) => [preset, ...prev])
-          setSelectedPresetId(String(preset.id))
-          void loadPresets()
-        }}
-      />
       <CreateAccountModal
         open={showCreateModal}
         onClose={() => setShowCreateModal(false)}
