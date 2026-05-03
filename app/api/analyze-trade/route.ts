@@ -45,7 +45,9 @@ export async function POST(req: Request) {
   }
   aiCallByUser.set(user.id, Date.now())
 
-  const { trade, messages } = await req.json()
+  const body = await req.json()
+  console.log("AI BACKEND INPUT:", body)
+  const { trade, messages } = body
   const tradeId = trade?.id
   if (!tradeId) {
     return NextResponse.json({ error: "Missing trade id" }, { status: 400 })
@@ -91,83 +93,97 @@ export async function POST(req: Request) {
     ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/screenshots/${existingTrade.image_url}`
     : null
 
+  const prompt = `
+You are a strict trading performance coach.
+
+You must analyze this trade using ONLY the data provided.
+Do NOT assume anything that is not explicitly given.
+
+Be critical, direct, and specific. Avoid generic praise.
+
+---
+
+TRADE DATA:
+
+P&L: ${trade.pnl}
+RR: ${trade.rr}
+Direction: ${trade.direction}
+
+Entry Price: ${trade.entry_price}
+Exit Price: ${trade.exit_price}
+
+Trader Notes:
+${trade.notes || "None provided"}
+
+Top Confluences:
+${trade.confluences || trade.top_confluences || "None provided"}
+
+Mistakes:
+${trade.mistakes || "None provided"}
+
+Psychology:
+${trade.psychology || trade.psychology_notes || "None provided"}
+
+---
+
+RULES:
+
+* If notes are empty → explicitly say the trade lacks context
+* If mistakes are empty → question whether the trader reviewed the trade properly
+* Do NOT assume strategy (e.g. Fibonacci, breakout) unless stated
+* Do NOT praise without explanation
+* If RR is high → evaluate whether it was skill or luck
+* If trade is profitable → still identify flaws
+
+---
+
+OUTPUT FORMAT:
+
+1. EXECUTION
+   Was the entry and exit actually justified based on the trader's notes?
+
+2. RISK MANAGEMENT
+   Was the RR realistic and planned, or just outcome-based?
+
+3. PSYCHOLOGY
+   What does the trader's input reveal about discipline or emotion?
+
+4. WHAT YOU DID WRONG
+   Be direct. Identify real issues.
+
+5. WHAT TO IMPROVE
+   Give specific, actionable improvements.
+
+6. FINAL VERDICT
+   Short, blunt summary (1–2 sentences max).
+
+---
+
+Be concise. Be honest. Be critical.
+`
+
   const response = await openai.chat.completions.create({
     model: "gpt-4o",
     messages: [
       {
         role: "system",
-        content: `
-You are an elite trading performance analyst.
-
-You specialize in:
-- futures trading (NQ, ES, MNQ)
-- risk management
-- trade execution
-- trader psychology
-- consistency and discipline
-
-Your job is to analyze a trader's executed trade and give direct, actionable feedback.
-
-Give a structured breakdown:
-
-1. EXECUTION QUALITY
-- Was entry logical?
-- Was exit optimal or premature?
-- Any signs of chasing or hesitation?
-
-2. RISK MANAGEMENT
-- Was the trade size appropriate?
-- Was the loss controlled properly?
-- Was RR acceptable?
-
-3. PSYCHOLOGY
-- What does this trade suggest about the trader’s mindset?
-- Any signs of fear, greed, revenge trading, hesitation?
-
-4. WHAT WAS DONE WELL
-- Highlight at least one positive behavior
-
-5. WHAT TO IMPROVE
-- Give specific, actionable improvements
-
-6. FINAL VERDICT
-- 1–2 sentence blunt summary (like a coach)
-
-STYLE:
-- Be direct, not generic
-- Avoid vague advice like "manage risk better"
-- Speak like a trading coach reviewing a real trade
-- Keep it concise but insightful
-`
+        content:
+          "Follow the user message: use only supplied trade fields, obey the rules and numbered output format.",
       },
       {
         role: "user",
         content: [
           {
             type: "text",
-            text: `
-TRADE DATA:
-
-- Symbol: ${trade.symbol ?? trade.ticker ?? "Unknown"}
-- Direction: ${trade.direction ?? "Unknown"}
-- Entry Price: ${trade.entry_price ?? "N/A"}
-- Exit Price: ${trade.exit_price ?? "N/A"}
-- PnL: ${trade.pnl ?? "N/A"}
-- Risk Reward (RR): ${trade.rr ?? "N/A"}
-- Contracts: ${trade.contracts ?? "N/A"}
-- Session: ${trade.session ?? "N/A"}
-- Entry Time: ${trade.entry_time ?? "N/A"}
-- Exit Time: ${trade.exit_time ?? "N/A"}
-- Notes: ${trade.notes || "None"}
-`
+            text: prompt,
           },
           ...(imageUrl
-            ? [{ type: "image_url", image_url: { url: imageUrl } }]
-            : [])
-        ]
+            ? [{ type: "image_url" as const, image_url: { url: imageUrl } }]
+            : []),
+        ],
       },
-      ...(messages || [])
-    ]
+      ...(messages || []),
+    ],
   })
 
   const aiResult = response.choices[0].message.content

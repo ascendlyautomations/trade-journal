@@ -1805,32 +1805,32 @@ export default function ProfilePage() {
                     • {getExperience(profile.started_trading) || "N/A"}
                   </p>
 
-                  <div className="mt-2 flex justify-center gap-6 text-sm sm:hidden md:text-base">
-                    <div className="text-center">
-                      <p className="font-semibold tabular-nums text-gray-200">
+                  <div className="mt-4 flex w-full items-center justify-between px-4 text-center text-sm md:hidden md:text-base">
+                    <div className="flex min-h-[44px] flex-1 flex-col items-center justify-center">
+                      <span className="text-[15px] font-semibold tabular-nums text-white">
                         {statsVisible ? totalTrades : "—"}
-                      </p>
-                      <p className="text-xs text-gray-400">Trades</p>
+                      </span>
+                      <span className="text-[11px] text-gray-400">Trades</span>
                     </div>
                     <button
                       type="button"
                       onClick={() => openFollowersModal()}
-                      className="relative z-10 flex min-h-[44px] min-w-[44px] cursor-pointer flex-col items-center justify-center rounded-md px-2 py-1 active:scale-95"
+                      className="relative z-10 flex min-h-[44px] flex-1 cursor-pointer flex-col items-center justify-center rounded-md px-2 py-1 active:scale-95"
                     >
-                      <p className="font-semibold tabular-nums text-gray-200">
+                      <span className="text-[15px] font-semibold tabular-nums text-white">
                         {followersCount}
-                      </p>
-                      <p className="text-xs text-gray-400">Followers</p>
+                      </span>
+                      <span className="text-[11px] text-gray-400">Followers</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => openFollowingModal()}
-                      className="relative z-10 flex min-h-[44px] min-w-[44px] cursor-pointer flex-col items-center justify-center rounded-md px-2 py-1 active:scale-95"
+                      className="relative z-10 flex min-h-[44px] flex-1 cursor-pointer flex-col items-center justify-center rounded-md px-2 py-1 active:scale-95"
                     >
-                      <p className="font-semibold tabular-nums text-gray-200">
+                      <span className="text-[15px] font-semibold tabular-nums text-white">
                         {followingCount}
-                      </p>
-                      <p className="text-xs text-gray-400">Following</p>
+                      </span>
+                      <span className="text-[11px] text-gray-400">Following</span>
                     </button>
                   </div>
 

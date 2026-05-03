@@ -11,16 +11,14 @@ import { getCurrentAdminCheckResult } from "../../lib/adminUsers"
 export default function Navbar() {
   const { user, profile, loading } = useUserProfile()
 
-  const [activeMenu, setActiveMenu] = useState<string | null>(null)
-  const [accountMenuOpen, setAccountMenuOpen] = useState(false)
   const [isOpen, setIsOpen] = useState(false)
   const [openSection, setOpenSection] = useState<string | null>(null)
+  const [activeMenu, setActiveMenu] = useState<string | null>(null)
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false)
   const [unreadMessagesCount, setUnreadMessagesCount] = useState(0)
   const [unreadCount, setUnreadCount] = useState(0)
   const [isAdmin, setIsAdmin] = useState(false)
   const [isReady, setIsReady] = useState(false)
-  const [notificationsOpen, setNotificationsOpen] = useState(false)
-  const [messagesOpen, setMessagesOpen] = useState(false)
   const [hasFetchedNotifications, setHasFetchedNotifications] = useState(false)
   const [hasFetchedMessages, setHasFetchedMessages] = useState(false)
   const [hasFetchedAdmin, setHasFetchedAdmin] = useState(false)
@@ -35,7 +33,7 @@ export default function Navbar() {
   const navRef = useRef<HTMLDivElement>(null)
   const badgeText = (count: number) => (count > 99 ? "99+" : String(count))
 
-  // CLOSE ON OUTSIDE CLICK (nav + profile menu)
+  // CLOSE ON OUTSIDE CLICK (nav + slide menu + desktop dropdowns)
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       const el = e.target as HTMLElement | null
@@ -136,18 +134,16 @@ export default function Navbar() {
     }
   }, [fetchUnread])
 
+  const toggleSection = (section: string) => {
+    setOpenSection((prev) => (prev === section ? null : section))
+  }
+
   function toggleMenu(menu: string) {
     setAccountMenuOpen(false)
     setActiveMenu(activeMenu === menu ? null : menu)
   }
 
-  const toggleSection = (section: string) => {
-    setOpenSection((prev) => (prev === section ? null : section))
-  }
-
   const handleToggleNotifications = async () => {
-    setNotificationsOpen((prev) => !prev)
-
     if (!hasFetchedNotifications) {
       await fetchUnread()
       setHasFetchedNotifications(true)
@@ -155,8 +151,6 @@ export default function Navbar() {
   }
 
   const handleToggleMessages = async () => {
-    setMessagesOpen((prev) => !prev)
-
     if (!hasFetchedMessages) {
       await fetchUnreadMessages()
       setHasFetchedMessages(true)
@@ -186,6 +180,8 @@ export default function Navbar() {
   useEffect(() => {
     setIsOpen(false)
     setOpenSection(null)
+    setActiveMenu(null)
+    setAccountMenuOpen(false)
   }, [pathname])
 
   useEffect(() => {
@@ -259,10 +255,10 @@ export default function Navbar() {
           ) : null}
 
           {!isHomePage && user ? (
-            <div className="hidden md:flex items-center gap-3 text-sm">
+            <div className="hidden min-w-0 items-center gap-3 text-sm md:flex">
               <Link
                 href="/app"
-                className={`px-2 py-1 rounded transition ${
+                className={`shrink-0 rounded px-2 py-1 transition ${
                   isActive("/app")
                     ? "bg-blue-500/20 text-blue-300"
                     : "text-gray-300 hover:text-white"
@@ -270,10 +266,9 @@ export default function Navbar() {
               >
                 Input Trade
               </Link>
-
               <Link
                 href="/dashboard"
-                className={`px-2 py-1 rounded transition ${
+                className={`shrink-0 rounded px-2 py-1 transition ${
                   isActive("/dashboard")
                     ? "bg-blue-500/20 text-blue-300"
                     : "text-gray-300 hover:text-white"
@@ -281,10 +276,9 @@ export default function Navbar() {
               >
                 Dashboard
               </Link>
-
               <Link
                 href="/trades"
-                className={`px-2 py-1 rounded transition ${
+                className={`shrink-0 rounded px-2 py-1 transition ${
                   isActive("/trades")
                     ? "bg-blue-500/20 text-blue-300"
                     : "text-gray-300 hover:text-white"
@@ -292,11 +286,10 @@ export default function Navbar() {
               >
                 Trades
               </Link>
-
               {profile?.id ? (
                 <Link
                   href={`/profile/${profile.id}`}
-                  className={`px-2 py-1 rounded transition ${
+                  className={`shrink-0 rounded px-2 py-1 transition ${
                     isGroupActive(["/profile"])
                       ? "bg-blue-500/20 text-blue-300"
                       : "text-gray-300 hover:text-white"
@@ -305,12 +298,13 @@ export default function Navbar() {
                   Profile
                 </Link>
               ) : (
-                <span className="text-gray-500">Profile</span>
+                <span className="shrink-0 rounded px-2 py-1 text-gray-500">
+                  Profile
+                </span>
               )}
-
               <Link
                 href="/messages"
-                className={`inline-flex items-center gap-2 px-2 py-1 rounded transition ${
+                className={`inline-flex shrink-0 items-center gap-2 rounded px-2 py-1 transition ${
                   isActive("/messages")
                     ? "bg-blue-500/20 text-blue-300"
                     : "text-gray-300 hover:text-white"
@@ -321,7 +315,7 @@ export default function Navbar() {
               >
                 Messages
                 {unreadMessagesCount > 0 ? (
-                  <span className="bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full tabular-nums">
+                  <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-xs tabular-nums text-white">
                     {unreadMessagesCount > 9 ? "9+" : unreadMessagesCount}
                   </span>
                 ) : null}
@@ -331,7 +325,7 @@ export default function Navbar() {
                 <button
                   type="button"
                   onClick={() => toggleMenu("analytics")}
-                  className={`px-2 py-1 rounded transition ${
+                  className={`shrink-0 rounded px-2 py-1 transition ${
                     isGroupActive([
                       "/analytics",
                       "/backtest",
@@ -346,7 +340,7 @@ export default function Navbar() {
                   Analytics ▾
                 </button>
                 {activeMenu === "analytics" ? (
-                  <div className="absolute top-full mt-2 w-56 bg-[#1e293b] border border-white/10 rounded shadow-lg z-[9999]">
+                  <div className="absolute top-full z-[9999] mt-2 w-56 rounded border border-white/10 bg-[#1e293b] shadow-lg">
                     {analyticsLinks.map((item) =>
                       item.proOnly && !isProActive(profile) ? (
                         <div
@@ -360,10 +354,10 @@ export default function Navbar() {
                         <Link
                           key={item.href}
                           href={item.href}
-                          className={`flex w-full items-center justify-between gap-2 px-3 py-2 rounded ${
+                          className={`flex w-full items-center justify-between gap-2 rounded px-3 py-2 ${
                             isActive(item.href)
                               ? "bg-blue-500/20 text-blue-300"
-                              : "hover:bg-white/10 text-gray-300"
+                              : "text-gray-300 hover:bg-white/10"
                           }`}
                         >
                           {analyticsLinkLabel(item)}
@@ -378,8 +372,14 @@ export default function Navbar() {
                 <button
                   type="button"
                   onClick={() => toggleMenu("community")}
-                  className={`px-2 py-1 rounded transition ${
-                    isGroupActive(["/community", "/feed", "/trade-rooms", "/leaderboard", "/explore"])
+                  className={`shrink-0 rounded px-2 py-1 transition ${
+                    isGroupActive([
+                      "/community",
+                      "/feed",
+                      "/trade-rooms",
+                      "/leaderboard",
+                      "/explore",
+                    ])
                       ? "bg-blue-500/20 text-blue-300"
                       : "text-gray-300 hover:text-white"
                   }`}
@@ -387,15 +387,15 @@ export default function Navbar() {
                   Community ▾
                 </button>
                 {activeMenu === "community" ? (
-                  <div className="absolute top-full mt-2 w-56 bg-[#1e293b] border border-white/10 rounded shadow-lg z-[9999]">
+                  <div className="absolute top-full z-[9999] mt-2 w-56 rounded border border-white/10 bg-[#1e293b] shadow-lg">
                     {communityLinks.map((item) => (
                       <Link
                         key={item.href}
                         href={item.href}
-                        className={`block px-3 py-2 rounded ${
+                        className={`block rounded px-3 py-2 ${
                           isActive(item.href)
                             ? "bg-blue-500/20 text-blue-300"
-                            : "hover:bg-white/10 text-gray-300"
+                            : "text-gray-300 hover:bg-white/10"
                         }`}
                       >
                         {item.label}
@@ -409,7 +409,7 @@ export default function Navbar() {
                 <button
                   type="button"
                   onClick={() => toggleMenu("affiliate")}
-                  className={`px-2 py-1 rounded transition ${
+                  className={`shrink-0 rounded px-2 py-1 transition ${
                     isGroupActive(["/affiliate", "/payouts"])
                       ? "bg-blue-500/20 text-blue-300"
                       : "text-gray-300 hover:text-white"
@@ -418,15 +418,15 @@ export default function Navbar() {
                   Affiliate ▾
                 </button>
                 {activeMenu === "affiliate" ? (
-                  <div className="absolute top-full mt-2 w-56 bg-[#1e293b] border border-white/10 rounded shadow-lg z-[9999]">
+                  <div className="absolute top-full z-[9999] mt-2 w-56 rounded border border-white/10 bg-[#1e293b] shadow-lg">
                     {affiliateLinks.map((item) => (
                       <Link
                         key={item.href}
                         href={item.href}
-                        className={`block px-3 py-2 rounded ${
+                        className={`block rounded px-3 py-2 ${
                           isActive(item.href)
                             ? "bg-blue-500/20 text-blue-300"
-                            : "hover:bg-white/10 text-gray-300"
+                            : "text-gray-300 hover:bg-white/10"
                         }`}
                       >
                         {item.label}
@@ -441,42 +441,11 @@ export default function Navbar() {
 
         {/* RIGHT */}
         <div className="flex shrink-0 items-center gap-3 md:gap-4">
-        {isHomePage ? (
-          user ? (
-            profile?.id ? (
-              <Link
-                href={`/profile/${profile.id}`}
-                className="shrink-0 rounded border border-white/20 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10"
-              >
-                Profile
-              </Link>
-            ) : (
-              <span className="shrink-0 rounded border border-white/10 px-4 py-2 text-sm text-gray-500">
-                Profile
-              </span>
-            )
-          ) : (
-            <Link
-              href="/login"
-              className="shrink-0 rounded bg-blue-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-600"
-            >
-              Login
-            </Link>
-          )
-        ) : !user ? (
-          <div className="flex items-center gap-3 shrink-0">
-            <Link href="/faq" className="md:hidden text-sm text-gray-200 hover:text-blue-400 transition">
-              FAQ
-            </Link>
-            <button type="button" onClick={() => router.push("/login")} className="border px-4 py-2 rounded shrink-0">
-              Login
-            </button>
-          </div>
-        ) : (
-          <div className="flex items-center justify-end gap-2 shrink-0">
+        {user ? (
+          <>
             <button
               type="button"
-              className="md:hidden text-white text-2xl leading-none px-1 py-1"
+              className="text-2xl leading-none text-white md:hidden px-1 py-1"
               aria-expanded={isOpen}
               aria-label={isOpen ? "Close menu" : "Open menu"}
               onClick={() => {
@@ -492,7 +461,7 @@ export default function Navbar() {
               ☰
             </button>
 
-            <div className="hidden md:flex items-center gap-3 shrink-0">
+            <div className="hidden items-center gap-3 md:flex">
               {isAdmin ? (
                 <Link href="/admin" className="text-sm hover:text-blue-400">
                   Admin
@@ -500,7 +469,7 @@ export default function Navbar() {
               ) : null}
 
               <div
-                className="relative mr-2 cursor-pointer shrink-0"
+                className="relative mr-2 shrink-0 cursor-pointer"
                 role="button"
                 tabIndex={0}
                 onClick={() => {
@@ -519,45 +488,45 @@ export default function Navbar() {
                   }
                 }}
               >
-                <div className="text-white text-xl" aria-hidden>
+                <div className="text-xl text-white" aria-hidden>
                   🔔
                 </div>
                 {unreadCount > 0 ? (
-                  <span className="absolute -top-1 -right-2 bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full tabular-nums min-w-[1.25rem] text-center">
+                  <span className="absolute -right-2 -top-1 min-w-[1.25rem] rounded-full bg-red-500 px-1.5 py-0.5 text-center text-xs tabular-nums text-white">
                     {badgeText(unreadCount)}
                   </span>
                 ) : null}
               </div>
 
-              <div className="relative profile-menu">
+              <div className="profile-menu relative">
                 <button
                   type="button"
                   onClick={() => {
                     void handleToggleAccountMenu()
                   }}
-                  className="flex items-center gap-2 border px-3 py-1 rounded"
+                  className="flex items-center gap-2 rounded border px-3 py-1"
                 >
                   {isReady ? (
-                    <img src={profile?.avatar_url} className="w-8 h-8 rounded-full" alt="" />
+                    <img src={profile?.avatar_url} className="h-8 w-8 rounded-full" alt="" />
                   ) : (
-                    <div className="w-8 h-8 rounded-full bg-white/10 animate-pulse" aria-hidden />
+                    <div className="h-8 w-8 animate-pulse rounded-full bg-white/10" aria-hidden />
                   )}
                   {isReady ? (
                     <span>{profile?.username}</span>
                   ) : (
-                    <div className="w-20 h-4 bg-white/10 rounded animate-pulse" />
+                    <div className="h-4 w-20 animate-pulse rounded bg-white/10" />
                   )}
                 </button>
 
                 {accountMenuOpen ? (
-                  <div className="absolute right-0 top-full mt-2 w-48 bg-[#1e293b] border border-gray-600 rounded-lg shadow-lg z-50">
+                  <div className="absolute right-0 top-full z-50 mt-2 w-48 rounded-lg border border-gray-600 bg-[#1e293b] shadow-lg">
                     <button
                       type="button"
                       onClick={() => {
                         setAccountMenuOpen(false)
                         router.push("/settings")
                       }}
-                      className="px-4 py-2 hover:bg-white/10 w-full text-left text-sm"
+                      className="w-full px-4 py-2 text-left text-sm hover:bg-white/10"
                     >
                       Settings
                     </button>
@@ -567,7 +536,7 @@ export default function Navbar() {
                         setAccountMenuOpen(false)
                         router.push("/feedback")
                       }}
-                      className="px-4 py-2 hover:bg-white/10 w-full text-left text-sm"
+                      className="w-full px-4 py-2 text-left text-sm hover:bg-white/10"
                     >
                       Feedback
                     </button>
@@ -577,7 +546,7 @@ export default function Navbar() {
                         setAccountMenuOpen(false)
                         router.push("/support")
                       }}
-                      className="px-4 py-2 hover:bg-white/10 w-full text-left text-sm"
+                      className="w-full px-4 py-2 text-left text-sm hover:bg-white/10"
                     >
                       Support
                     </button>
@@ -589,7 +558,7 @@ export default function Navbar() {
                         await supabase.auth.signOut()
                         router.push("/")
                       }}
-                      className="px-4 py-2 text-red-400 hover:bg-red-500/10 w-full text-left text-sm"
+                      className="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-red-500/10"
                     >
                       Sign Out
                     </button>
@@ -597,18 +566,34 @@ export default function Navbar() {
                 ) : null}
               </div>
             </div>
+          </>
+        ) : isHomePage ? (
+          <Link
+            href="/login"
+            className="shrink-0 rounded bg-blue-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-600"
+          >
+            Login
+          </Link>
+        ) : (
+          <div className="flex shrink-0 items-center gap-3">
+            <Link href="/faq" className="md:hidden text-sm text-gray-200 hover:text-blue-400 transition">
+              FAQ
+            </Link>
+            <button type="button" onClick={() => router.push("/login")} className="border px-4 py-2 rounded shrink-0">
+              Login
+            </button>
           </div>
         )}
         </div>
         </div>
       </div>
 
-      {isOpen && user && !isHomePage ? (
-        <div className="w-full border-t border-white/5 bg-[#0b1f3a] md:hidden">
-          <div className="flex w-full flex-col gap-3 px-4 pb-4 pt-2 text-sm text-white md:px-6">
+      {isOpen && user ? (
+        <div className="max-h-[calc(100vh-4rem)] w-full overflow-y-auto border-t border-white/5 bg-[#0b1f3a] md:hidden">
+          <div className="flex w-full flex-col gap-2 px-4 pb-3 pt-1.5 text-sm text-white md:px-6">
           <Link
             href="/app"
-            className={`px-2 py-1 rounded transition ${
+            className={`rounded-lg px-3 py-2 transition ${
               isActive("/app")
                 ? "bg-blue-500/20 text-blue-300"
                 : "text-gray-300 hover:text-white"
@@ -620,7 +605,7 @@ export default function Navbar() {
 
           <Link
             href="/dashboard"
-            className={`px-2 py-1 rounded transition ${
+            className={`rounded-lg px-3 py-2 transition ${
               isActive("/dashboard")
                 ? "bg-blue-500/20 text-blue-300"
                 : "text-gray-300 hover:text-white"
@@ -632,7 +617,7 @@ export default function Navbar() {
 
           <Link
             href="/trades"
-            className={`px-2 py-1 rounded transition ${
+            className={`rounded-lg px-3 py-2 transition ${
               isActive("/trades")
                 ? "bg-blue-500/20 text-blue-300"
                 : "text-gray-300 hover:text-white"
@@ -645,7 +630,7 @@ export default function Navbar() {
           {profile?.id ? (
             <Link
               href={`/profile/${profile.id}`}
-              className={`px-2 py-1 rounded transition ${
+              className={`rounded-lg px-3 py-2 transition ${
                 isGroupActive(["/profile"])
                   ? "bg-blue-500/20 text-blue-300"
                   : "text-gray-300 hover:text-white"
@@ -655,12 +640,12 @@ export default function Navbar() {
               Profile
             </Link>
           ) : (
-            <span className="py-2 text-gray-500">Profile</span>
+            <span className="rounded-lg px-3 py-2 text-gray-500">Profile</span>
           )}
 
           <Link
             href="/messages"
-            className={`flex items-center justify-between px-2 py-1 rounded transition ${
+            className={`flex items-center justify-between rounded-lg px-3 py-2 transition ${
               isActive("/messages")
                 ? "bg-blue-500/20 text-blue-300"
                 : "text-gray-300 hover:text-white"
@@ -681,7 +666,7 @@ export default function Navbar() {
           <div>
             <button
               type="button"
-              className={`w-full flex justify-between items-center px-2 py-1 rounded transition ${
+              className={`flex w-full items-center justify-between rounded-lg px-3 py-2 transition ${
                 isGroupActive([
                   "/analytics",
                   "/backtest",
@@ -698,12 +683,12 @@ export default function Navbar() {
               <span className="text-gray-400 tabular-nums">{openSection === "analytics" ? "−" : "+"}</span>
             </button>
             {openSection === "analytics" ? (
-              <div className="pl-4 mt-2 space-y-2 text-sm">
+              <div className="mt-1.5 space-y-1 pl-3 text-sm">
                 {analyticsLinks.map((item) =>
                   item.proOnly && !isProActive(profile) ? (
                     <span
                       key={item.label}
-                      className="flex w-full items-center justify-between gap-2 px-3 py-2 text-gray-400"
+                      className="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-1.5 text-gray-400"
                     >
                       {analyticsLinkLabel(item)}
                       <span className="shrink-0">🔒</span>
@@ -712,7 +697,7 @@ export default function Navbar() {
                     <Link
                       key={item.href}
                       href={item.href}
-                      className={`flex w-full items-center justify-between gap-2 px-3 py-2 rounded ${
+                      className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-1.5 ${
                         isActive(item.href)
                           ? "bg-blue-500/20 text-blue-300"
                           : "hover:bg-white/10 text-gray-300"
@@ -730,7 +715,7 @@ export default function Navbar() {
           <div>
             <button
               type="button"
-              className={`w-full flex justify-between items-center px-2 py-1 rounded transition ${
+              className={`flex w-full items-center justify-between rounded-lg px-3 py-2 transition ${
                 isGroupActive(["/community", "/feed", "/trade-rooms", "/leaderboard", "/explore"])
                   ? "bg-blue-500/20 text-blue-300"
                   : "text-gray-300 hover:text-white"
@@ -741,12 +726,12 @@ export default function Navbar() {
               <span className="text-gray-400 tabular-nums">{openSection === "community" ? "−" : "+"}</span>
             </button>
             {openSection === "community" ? (
-              <div className="pl-4 mt-2 space-y-2 text-sm">
+              <div className="mt-1.5 space-y-1 pl-3 text-sm">
                 {communityLinks.map((item) => (
                   <Link
                     key={item.href}
                     href={item.href}
-                    className={`block px-3 py-2 rounded ${
+                    className={`block rounded-lg px-3 py-1.5 ${
                       isActive(item.href)
                         ? "bg-blue-500/20 text-blue-300"
                         : "hover:bg-white/10 text-gray-300"
@@ -763,7 +748,7 @@ export default function Navbar() {
           <div>
             <button
               type="button"
-              className={`w-full flex justify-between items-center px-2 py-1 rounded transition ${
+              className={`flex w-full items-center justify-between rounded-lg px-3 py-2 transition ${
                 isGroupActive(["/affiliate", "/payouts"])
                   ? "bg-blue-500/20 text-blue-300"
                   : "text-gray-300 hover:text-white"
@@ -774,12 +759,12 @@ export default function Navbar() {
               <span className="text-gray-400 tabular-nums">{openSection === "affiliate" ? "−" : "+"}</span>
             </button>
             {openSection === "affiliate" ? (
-              <div className="pl-4 mt-2 space-y-2 text-sm">
+              <div className="mt-1.5 space-y-1 pl-3 text-sm">
                 {affiliateLinks.map((item) => (
                   <Link
                     key={item.href}
                     href={item.href}
-                    className={`block px-3 py-2 rounded ${
+                    className={`block rounded-lg px-3 py-1.5 ${
                       isActive(item.href)
                         ? "bg-blue-500/20 text-blue-300"
                         : "hover:bg-white/10 text-gray-300"
@@ -793,31 +778,45 @@ export default function Navbar() {
             ) : null}
           </div>
 
-          <div className="flex flex-col gap-2 border-t border-white/5 pt-2">
+          <div className="flex flex-col gap-1 border-t border-white/5 pt-1.5">
             {isAdmin ? (
-              <Link href="/admin" className="py-2 text-white hover:text-blue-400" onClick={closeMobile}>
+              <Link
+                href="/admin"
+                className="rounded-lg px-3 py-2 text-white hover:text-blue-400"
+                onClick={closeMobile}
+              >
                 Admin
               </Link>
             ) : null}
 
-            <Link href="/settings" className="py-2 text-white hover:text-blue-400" onClick={closeMobile}>
+            <Link
+              href="/settings"
+              className="rounded-lg px-3 py-2 text-white hover:text-blue-400"
+              onClick={closeMobile}
+            >
               Settings
             </Link>
-            <Link href="/feedback" className="py-2 text-white hover:text-blue-400" onClick={closeMobile}>
+            <Link
+              href="/feedback"
+              className="rounded-lg px-3 py-2 text-white hover:text-blue-400"
+              onClick={closeMobile}
+            >
               Feedback
             </Link>
-            <Link href="/support" className="py-2 text-white hover:text-blue-400" onClick={closeMobile}>
+            <Link
+              href="/support"
+              className="rounded-lg px-3 py-2 text-white hover:text-blue-400"
+              onClick={closeMobile}
+            >
               Support
             </Link>
 
             <button
               type="button"
-              className="w-full flex items-center justify-between py-2 text-left text-white hover:text-blue-400"
+              className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-white hover:text-blue-400"
               onClick={() => {
                 void handleToggleNotifications()
                 closeMobile()
-                setAccountMenuOpen(false)
-                setActiveMenu(null)
                 router.push("/notifications")
               }}
             >
@@ -831,7 +830,7 @@ export default function Navbar() {
 
             <button
               type="button"
-              className="w-full py-2 text-left text-red-400 hover:text-red-300 text-sm"
+              className="w-full rounded-lg px-3 py-2 text-left text-sm text-red-400 hover:text-red-300"
               onClick={async () => {
                 closeMobile()
                 await supabase.auth.signOut()

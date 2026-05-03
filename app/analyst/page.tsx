@@ -89,6 +89,7 @@ export default function AnalystPage() {
   async function analyzeTrade(trade: any) {
     if (!isProActive(profile)) return
 
+    setMessages([])
     setSelectedTrade(trade)
 
     if (trade.ai_feedback) {
@@ -96,13 +97,33 @@ export default function AnalystPage() {
       return
     }
 
-    setMessages([])
     setLoading(true)
 
     const {
       data: { session },
     } = await supabase.auth.getSession()
     console.log("AI TOKEN:", session?.access_token)
+
+    const pnl = trade?.pnl
+    const rr = trade?.rr
+    const notes = trade?.notes
+    const confluences = trade?.confluences ?? trade?.top_confluences
+    const mistakes = trade?.mistakes
+    const psychology = trade?.psychology ?? trade?.psychology_notes
+    const entry_price = trade?.entry_price
+    const exit_price = trade?.exit_price
+    const direction = trade?.direction
+    console.log("AI INPUT:", {
+      pnl,
+      rr,
+      notes,
+      confluences,
+      mistakes,
+      psychology,
+      entry_price,
+      exit_price,
+      direction,
+    })
 
     const res = await fetch("/api/analyze-trade", {
       method: "POST",
@@ -130,12 +151,16 @@ export default function AnalystPage() {
       return
     }
 
-    setMessages([
-      {
-        role: "assistant",
-        content: data?.reply || data?.error || "AI unavailable",
-      },
-    ])
+    const reply = data?.reply || data?.error || "AI unavailable"
+    setMessages([{ role: "assistant", content: reply }])
+    setTrades((prev) =>
+      prev.map((t) =>
+        String(t.id) === String(trade.id) ? { ...t, ai_feedback: reply } : t
+      )
+    )
+    setSelectedTrade((s) =>
+      s && String(s.id) === String(trade.id) ? { ...s, ai_feedback: reply } : s
+    )
     setLoading(false)
   }
 
@@ -153,6 +178,28 @@ export default function AnalystPage() {
       data: { session },
     } = await supabase.auth.getSession()
     console.log("AI TOKEN:", session?.access_token)
+
+    const t = selectedTrade
+    const pnl = t?.pnl
+    const rr = t?.rr
+    const notes = t?.notes
+    const confluences = t?.confluences ?? t?.top_confluences
+    const mistakes = t?.mistakes
+    const psychology = t?.psychology ?? t?.psychology_notes
+    const entry_price = t?.entry_price
+    const exit_price = t?.exit_price
+    const direction = t?.direction
+    console.log("AI INPUT:", {
+      pnl,
+      rr,
+      notes,
+      confluences,
+      mistakes,
+      psychology,
+      entry_price,
+      exit_price,
+      direction,
+    })
 
     const res = await fetch("/api/analyze-trade", {
       method: "POST",
@@ -183,10 +230,19 @@ export default function AnalystPage() {
       return
     }
 
-    setMessages([
-      ...newMessages,
-      { role: "assistant", content: data.reply },
-    ])
+    setMessages([...newMessages, { role: "assistant", content: data.reply }])
+    setTrades((prev) =>
+      prev.map((t) =>
+        String(t.id) === String(selectedTrade.id)
+          ? { ...t, ai_feedback: data.reply }
+          : t
+      )
+    )
+    setSelectedTrade((s) =>
+      s && String(s.id) === String(selectedTrade.id)
+        ? { ...s, ai_feedback: data.reply }
+        : s
+    )
 
     setLoading(false)
   }
@@ -261,25 +317,12 @@ export default function AnalystPage() {
                       </p>
 
                       {trade.ai_feedback && (
-                        <p className="mt-1 text-xs text-emerald-400">Analyzed</p>
+                        <span className="mt-1 inline-block text-xs text-green-400">
+                          Analyzed
+                        </span>
                       )}
                     </div>
                   </div>
-
-                  {trade.ai_feedback ? (
-                    <div className="mt-2 rounded-lg border border-blue-400/20 bg-blue-500/10 p-3">
-                      <p className="mb-1 text-sm font-medium text-blue-300">
-                        AI Analysis
-                      </p>
-                      <p className="text-sm text-gray-300">
-                        {trade.ai_feedback}
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="mt-2 text-xs italic text-gray-500">
-                      No AI analysis yet
-                    </div>
-                  )}
                 </div>
               ))}
             </div>
