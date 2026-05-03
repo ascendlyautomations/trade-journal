@@ -607,7 +607,11 @@ export default function ProfilePage() {
   const router = useRouter()
   const rawId = params.id
   const profileId =
-    typeof rawId === "string" ? rawId : Array.isArray(rawId) ? rawId[0] : undefined
+    typeof rawId === "string"
+      ? rawId.trim() || undefined
+      : Array.isArray(rawId)
+        ? rawId[0]?.trim() || undefined
+        : undefined
 
   const [profile, setProfile] = useState<any>(null)
   const [trades, setTrades] = useState<any[]>([])
@@ -615,6 +619,10 @@ export default function ProfilePage() {
   const [page, setPage] = useState(0)
   const [hasMore, setHasMore] = useState(true)
   const [loading, setLoading] = useState(true)
+  /** Set when profile row fails to load (wrong env, RLS, missing row, or network). */
+  const [lastProfileFetchError, setLastProfileFetchError] = useState<string | null>(
+    null
+  )
   const [followersCount, setFollowersCount] = useState(0)
   const [followingCount, setFollowingCount] = useState(0)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
@@ -962,15 +970,53 @@ export default function ProfilePage() {
   }, [showCreatePost, editingPost, selectedAchievementImage, selectedTradeDetail, selectedPostDetail])
 
   async function fetchProfile(forProfileId: string) {
+    const id = forProfileId.trim()
+    const devProfileDebug =
+      process.env.NODE_ENV === "development" ||
+      process.env.NEXT_PUBLIC_PROFILE_FETCH_DEBUG === "1"
+
+    if (devProfileDebug) {
+      console.log("SUPABASE URL:", process.env.NEXT_PUBLIC_SUPABASE_URL)
+      console.log("FETCHING PROFILE ID:", id)
+    }
+
+    setLastProfileFetchError(null)
+
     const { data: sessionData } = await supabase.auth.getSession()
     const uid = sessionData?.session?.user?.id ?? null
     setCurrentUserId(uid)
 
+    if (devProfileDebug) {
+      const listProbe = await supabase.from("profiles").select("*").limit(50)
+      console.log("PROFILE DEBUG (list up to 50 rows):", {
+        rowCount: listProbe.data?.length ?? 0,
+        error: listProbe.error,
+        sampleIds: listProbe.data?.slice(0, 5).map((r: { id: string }) => r.id),
+      })
+    }
+
     const { data: prof, error } = await supabase
       .from("profiles")
       .select("*")
-      .eq("id", forProfileId)
-      .single()
+      .eq("id", id)
+      .maybeSingle()
+
+    if (devProfileDebug) {
+      console.log("PROFILE DATA:", prof)
+      console.log("ERROR:", error)
+    }
+
+    if (error) {
+      setLastProfileFetchError(
+        [error.message, (error as { code?: string }).code]
+          .filter(Boolean)
+          .join(" ")
+      )
+    } else if (!prof) {
+      setLastProfileFetchError(
+        "No row returned (missing id in this DB, or RLS hid the row)."
+      )
+    }
 
     if (!prof || error) {
       setProfile(null)
@@ -1643,6 +1689,31 @@ export default function ProfilePage() {
   }
 
   if (!profile) {
+    const showFetchDebug =
+      process.env.NODE_ENV === "development" ||
+      process.env.NEXT_PUBLIC_PROFILE_FETCH_DEBUG === "1"
+
+    if (showFetchDebug) {
+      return (
+        <>
+          <Navbar />
+          <div className="mx-auto max-w-lg px-4 py-8 text-center text-red-400">
+            <div>Profile not found (debug)</div>
+            {lastProfileFetchError ? (
+              <p className="mt-3 text-left text-xs font-mono text-red-300/90 whitespace-pre-wrap break-all">
+                {lastProfileFetchError}
+              </p>
+            ) : null}
+            <p className="mt-3 text-xs text-gray-500">
+              Compare NEXT_PUBLIC_SUPABASE_URL with production. If the list probe
+              in the console shows rows but this id returns nothing, suspect RLS
+              or a UUID that exists only in the other project.
+            </p>
+          </div>
+        </>
+      )
+    }
+
     return (
       <>
         <Navbar />

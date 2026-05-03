@@ -24,6 +24,8 @@ type Room = {
   description?: string | null
   slug?: string | null
   image_url?: string | null
+  /** If present from API joins, used as sidebar avatar fallback after image_url */
+  avatar_url?: string | null
   owner_user_id?: string | null
   show_on_profile?: boolean | null
 }
@@ -32,6 +34,8 @@ type RoomMessage = {
   id: string
   room_id: string
   user_id: string
+  /** JSON array of user ids who have read this message (same pattern as `messages.seen_by`) */
+  seen_by?: unknown
   pinned?: boolean | null
   section_id?: string | null
   type?: string | null
@@ -70,6 +74,102 @@ function tradeImageSrc(imageUrl: string | null | undefined): string | null {
   return `${base}/storage/v1/object/public/screenshots/${raw}`
 }
 
+function normalizeRoomMessageSeenBy(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return []
+  return raw.map((x) => String(x)).filter(Boolean)
+}
+
+function roomMessageIsUnreadForUser(
+  msg: { user_id: string; seen_by?: unknown },
+  userId: string
+): boolean {
+  if (msg.user_id === userId) return false
+  const seen = normalizeRoomMessageSeenBy(msg.seen_by)
+  return !seen.includes(userId)
+}
+
+/** Per-room unread: true if any message from others lacks current user in seen_by. */
+async function fetchUnreadByRoomIds(
+  roomIds: string[],
+  userId: string
+): Promise<Record<string, boolean>> {
+  const unread: Record<string, boolean> = {}
+  if (roomIds.length === 0) return unread
+
+  const { data, error } = await supabase
+    .from("room_messages")
+    .select("room_id, user_id, seen_by")
+    .in("room_id", roomIds)
+    .neq("user_id", userId)
+
+  if (error) {
+    console.error("fetchUnreadByRoomIds:", error)
+    return unread
+  }
+
+  for (const row of data ?? []) {
+    if (roomMessageIsUnreadForUser(row, userId)) {
+      unread[String(row.room_id)] = true
+    }
+  }
+  return unread
+}
+
+async function markAllRoomMessagesSeenForUser(roomId: string, userId: string) {
+  const { data, error } = await supabase
+    .from("room_messages")
+    .select("id, user_id, seen_by")
+    .eq("room_id", roomId)
+    .neq("user_id", userId)
+
+  if (error) {
+    console.error("markAllRoomMessagesSeenForUser read:", error)
+    return
+  }
+
+  const pending = (data ?? []).filter(
+    (row) => !normalizeRoomMessageSeenBy(row.seen_by).includes(userId)
+  )
+
+  await Promise.all(
+    pending.map((row) => {
+      const next = [...normalizeRoomMessageSeenBy(row.seen_by), userId]
+      return supabase.from("room_messages").update({ seen_by: next }).eq("id", row.id)
+    })
+  )
+}
+
+/** Cache key: room + active section + section id layout (so channel / section changes miss cache correctly). */
+function buildRoomMessagesCacheKey(
+  roomId: string,
+  sectionsList: { id: string; name?: string | null }[],
+  activeSectionId: string | null
+): string {
+  const sectionSig = sectionsList.map((s) => String(s.id)).join(",")
+  return `${roomId}::${activeSectionId ?? "null"}::${sectionSig}`
+}
+
+async function appendSelfToSeenByForRoomMessage(
+  messageId: string,
+  userId: string
+) {
+  const { data, error } = await supabase
+    .from("room_messages")
+    .select("seen_by, user_id")
+    .eq("id", messageId)
+    .maybeSingle()
+
+  if (error || !data || data.user_id === userId) return
+
+  const seen = normalizeRoomMessageSeenBy(data.seen_by)
+  if (seen.includes(userId)) return
+
+  await supabase
+    .from("room_messages")
+    .update({ seen_by: [...seen, userId] })
+    .eq("id", messageId)
+}
+
 function CommunityContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -81,6 +181,9 @@ function CommunityContent() {
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null)
   const [messages, setMessages] = useState<RoomMessage[]>([])
   const [pinnedMessages, setPinnedMessages] = useState<RoomMessage[]>([])
+  const [messagesByRoom, setMessagesByRoom] = useState<
+    Record<string, { pinned: RoomMessage[]; main: RoomMessage[] }>
+  >({})
   const [loadingRooms, setLoadingRooms] = useState(true)
   const [loadingMessages, setLoadingMessages] = useState(false)
   const [draft, setDraft] = useState("")
@@ -101,6 +204,11 @@ function CommunityContent() {
   const [inviteTargetRoom, setInviteTargetRoom] = useState<Room | null>(null)
   const [showRoomSettings, setShowRoomSettings] = useState(false)
   const [showInviteModal, setShowInviteModal] = useState(false)
+  const [roomJoinToast, setRoomJoinToast] = useState<string | null>(null)
+  /** room id → has at least one unread message (others’ messages not in seen_by) */
+  const [unreadByRoomId, setUnreadByRoomId] = useState<Record<string, boolean>>(
+    {}
+  )
   const [showCreateSectionModal, setShowCreateSectionModal] = useState(false)
   const [newSectionName, setNewSectionName] = useState("")
   const [newSectionAllowChat, setNewSectionAllowChat] = useState(true)
@@ -108,17 +216,112 @@ function CommunityContent() {
   const [editSectionName, setEditSectionName] = useState("")
   const [editAllowChat, setEditAllowChat] = useState(true)
   const typingChannelRef = useRef<any>(null)
+  const joinRoomToastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  )
   const messagesScrollRef = useRef<HTMLDivElement | null>(null)
   const sectionFilterRef = useRef<{ len: number; id: string | null }>({
     len: 0,
     id: null,
   })
   const sectionsRef = useRef(sections)
+  const roomIdsForUnreadRef = useRef<string[]>([])
+  const messagesByRoomRef = useRef<
+    Record<string, { pinned: RoomMessage[]; main: RoomMessage[] }>
+  >({})
+  const roomMessagesFetchGenRef = useRef(0)
+
+  messagesByRoomRef.current = messagesByRoom
 
   const selectedRoom = useMemo(
     () => rooms.find((r) => r.id === selectedRoomId) ?? null,
     [rooms, selectedRoomId]
   )
+
+  /** Owner’s room(s) first; does not change fetch order in state, only sidebar display. */
+  const sortedSidebarRooms = useMemo(() => {
+    const uid = user?.id
+    if (!uid || rooms.length === 0) return rooms
+    const ownedRooms = rooms.filter((r) => r.owner_user_id === uid)
+    const otherRooms = rooms.filter((r) => r.owner_user_id !== uid)
+    if (ownedRooms.length === 0) return rooms
+    return [...ownedRooms, ...otherRooms]
+  }, [rooms, user?.id])
+
+  const needsJoin = useMemo(() => {
+    if (!inviteTargetRoom || !selectedRoomId) return false
+    return (
+      inviteTargetRoom.id === selectedRoomId &&
+      !rooms.some((r) => r.id === selectedRoomId)
+    )
+  }, [inviteTargetRoom, selectedRoomId, rooms])
+
+  const userIdRef = useRef<string | null>(null)
+  const needsJoinRef = useRef(false)
+  const usernameRef = useRef("")
+  userIdRef.current = user?.id ?? null
+  needsJoinRef.current = needsJoin
+  usernameRef.current = username
+
+  useEffect(() => {
+    roomIdsForUnreadRef.current = rooms.map((r) => r.id)
+  }, [rooms])
+
+  useEffect(() => {
+    if (!user?.id || rooms.length === 0) {
+      setUnreadByRoomId({})
+      return
+    }
+    const roomIds = rooms.map((r) => r.id)
+    let cancelled = false
+    void (async () => {
+      const next = await fetchUnreadByRoomIds(roomIds, user.id)
+      if (!cancelled) setUnreadByRoomId(next)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [rooms, user?.id])
+
+  useEffect(() => {
+    if (!selectedRoomId || !user?.id || needsJoin || loadingMessages) return
+    const roomIds = roomIdsForUnreadRef.current
+    let cancelled = false
+    void (async () => {
+      await markAllRoomMessagesSeenForUser(selectedRoomId, user.id)
+      if (cancelled) return
+      const next = await fetchUnreadByRoomIds(roomIds, user.id)
+      if (!cancelled) setUnreadByRoomId(next)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [selectedRoomId, user?.id, loadingMessages, needsJoin])
+
+  useEffect(() => {
+    if (!user?.id) return
+
+    const refreshUnread = () => {
+      const ids = roomIdsForUnreadRef.current
+      if (ids.length === 0) return
+      void (async () => {
+        const next = await fetchUnreadByRoomIds(ids, user.id)
+        setUnreadByRoomId(next)
+      })()
+    }
+
+    const onVis = () => {
+      if (document.visibilityState === "visible") refreshUnread()
+    }
+
+    document.addEventListener("visibilitychange", onVis)
+    const intervalId = window.setInterval(refreshUnread, 45000)
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVis)
+      window.clearInterval(intervalId)
+    }
+  }, [user?.id])
 
   const inviteRoomKey = useMemo(() => {
     if (!selectedRoom) return ""
@@ -136,14 +339,6 @@ function CommunityContent() {
     typeof window !== "undefined"
       ? `${window.location.origin}/trade-rooms?room=${selectedRoom?.slug ?? ""}`
       : ""
-
-  const needsJoin = useMemo(() => {
-    if (!inviteTargetRoom || !selectedRoomId) return false
-    return (
-      inviteTargetRoom.id === selectedRoomId &&
-      !rooms.some((r) => r.id === selectedRoomId)
-    )
-  }, [inviteTargetRoom, selectedRoomId, rooms])
 
   const currentSection = useMemo(
     () => sections.find((s) => s.id === selectedSectionId) ?? null,
@@ -263,8 +458,30 @@ function CommunityContent() {
   async function fetchRoomMessages(
     roomId: string,
     sectionsList: { id: string; name?: string | null }[],
-    activeSectionId: string | null
+    activeSectionId: string | null,
+    options?: { bypassCache?: boolean }
   ) {
+    const cacheKey = buildRoomMessagesCacheKey(
+      roomId,
+      sectionsList,
+      activeSectionId
+    )
+
+    const loadGen = ++roomMessagesFetchGenRef.current
+
+    if (!options?.bypassCache) {
+      const cached = messagesByRoomRef.current[cacheKey]
+      if (cached) {
+        if (loadGen !== roomMessagesFetchGenRef.current) return
+        setPinnedMessages(cached.pinned)
+        setMessages(cached.main)
+        setLoadingMessages(false)
+        return
+      }
+    }
+
+    if (loadGen !== roomMessagesFetchGenRef.current) return
+
     setLoadingMessages(true)
 
     const selectShape = `
@@ -286,8 +503,8 @@ function CommunityContent() {
       .from("room_messages")
       .select(selectShape)
       .eq("pinned", true)
-      .order("pinned", { ascending: false })
-      .order("created_at", { ascending: true })
+      .order("created_at", { ascending: false })
+      .limit(100)
 
     pinnedQ = applySectionFiltersToQuery(
       pinnedQ,
@@ -300,8 +517,8 @@ function CommunityContent() {
       .from("room_messages")
       .select(selectShape)
       .eq("pinned", false)
-      .order("pinned", { ascending: false })
-      .order("created_at", { ascending: true })
+      .order("created_at", { ascending: false })
+      .limit(100)
 
     mainQ = applySectionFiltersToQuery(
       mainQ,
@@ -312,15 +529,22 @@ function CommunityContent() {
 
     const [pinnedRes, mainRes] = await Promise.all([pinnedQ, mainQ])
 
+    if (loadGen !== roomMessagesFetchGenRef.current) {
+      setLoadingMessages(false)
+      return
+    }
+
     if (pinnedRes.error) {
       console.error(
         "room_messages pinned fetch:",
         JSON.stringify(pinnedRes.error, null, 2)
       )
-      setPinnedMessages([])
-    } else {
-      setPinnedMessages((pinnedRes.data || []) as RoomMessage[])
     }
+
+    const pinnedData = pinnedRes.error
+      ? []
+      : (((pinnedRes.data || []) as RoomMessage[]).slice().reverse() as RoomMessage[])
+    setPinnedMessages(pinnedData)
 
     if (mainRes.error) {
       console.error(
@@ -333,7 +557,14 @@ function CommunityContent() {
       return
     }
 
-    setMessages((mainRes.data || []) as RoomMessage[])
+    const mainData = ((mainRes.data || []) as RoomMessage[]).slice().reverse()
+    setMessages(mainData)
+
+    setMessagesByRoom((prev) => ({
+      ...prev,
+      [cacheKey]: { pinned: pinnedData, main: mainData },
+    }))
+
     setLoadingMessages(false)
   }
 
@@ -352,7 +583,9 @@ function CommunityContent() {
     }
 
     if (selectedRoomId) {
-      await fetchRoomMessages(selectedRoomId, sections, selectedSectionId)
+      await fetchRoomMessages(selectedRoomId, sections, selectedSectionId, {
+        bypassCache: true,
+      })
     }
   }
 
@@ -382,7 +615,9 @@ function CommunityContent() {
   async function refetchSections() {
     if (!selectedRoomId) return
     const { list, activeSectionId } = await loadSections(selectedRoomId)
-    await fetchRoomMessages(selectedRoomId, list, activeSectionId)
+    await fetchRoomMessages(selectedRoomId, list, activeSectionId, {
+      bypassCache: true,
+    })
   }
 
   async function handleAddSection() {
@@ -592,20 +827,56 @@ function CommunityContent() {
 
     if (!authUser) return
 
-    const { error } = await supabase.from("room_members").insert({
-      room_id: roomId,
-      user_id: authUser.id,
-    })
+    const { data: existing } = await supabase
+      .from("room_members")
+      .select("id, left_at")
+      .eq("room_id", roomId)
+      .eq("user_id", authUser.id)
+      .maybeSingle()
 
-    if (error) {
-      console.error("joinRoom:", error)
-      return
+    const alreadyActive =
+      existing != null && existing.left_at == null
+
+    if (!existing) {
+      const { error } = await supabase.from("room_members").insert({
+        room_id: roomId,
+        user_id: authUser.id,
+      })
+
+      if (error && error.code !== "23505") {
+        console.error("joinRoom error:", error)
+        alert("Failed to join room")
+        return
+      }
+    } else if (!alreadyActive) {
+      const { error } = await supabase
+        .from("room_members")
+        .update({ left_at: null })
+        .eq("room_id", roomId)
+        .eq("user_id", authUser.id)
+
+      if (error) {
+        console.error("joinRoom reactivate:", error)
+        alert("Failed to join room")
+        return
+      }
     }
 
     const nextRooms = await loadMemberRooms(authUser.id)
     setRooms(nextRooms)
     setInviteTargetRoom(null)
     setSelectedRoomId(roomId)
+
+    if (alreadyActive) {
+      if (joinRoomToastTimeoutRef.current) {
+        clearTimeout(joinRoomToastTimeoutRef.current)
+      }
+      setRoomJoinToast("You're already in this room")
+      joinRoomToastTimeoutRef.current = setTimeout(() => {
+        setRoomJoinToast(null)
+        joinRoomToastTimeoutRef.current = null
+      }, 4000)
+    }
   }
 
   async function handleLeaveRoom() {
@@ -617,10 +888,9 @@ function CommunityContent() {
 
     const { error } = await supabase
       .from("room_members")
-      .update({ left_at: new Date().toISOString() })
+      .delete()
       .eq("room_id", selectedRoomId)
       .eq("user_id", authUser.id)
-      .is("left_at", null)
 
     if (error) {
       console.error("handleLeaveRoom:", error)
@@ -781,23 +1051,25 @@ function CommunityContent() {
   }, [selectedRoomId, needsJoin])
 
   useEffect(() => {
-    if (!selectedRoomId || !user?.id || needsJoin) {
+    if (!selectedRoomId || needsJoin || !user?.id) {
       setActiveUsers([])
       return
     }
 
     let cancelled = false
+    const roomId = selectedRoomId
 
     const updatePresenceAndCount = async () => {
+      if (needsJoinRef.current || !userIdRef.current) return
+
       const payload = {
-        room_id: selectedRoom?.id,
-        user_id: user?.id,
+        room_id: roomId,
+        user_id: userIdRef.current,
         last_seen: new Date().toISOString(),
       }
 
       console.log("Presence payload:", payload)
 
-      // Prevent invalid calls
       if (!payload.room_id || !payload.user_id) {
         console.warn("Skipping presence update: missing IDs", payload)
         return
@@ -829,7 +1101,7 @@ function CommunityContent() {
           )
         `
         )
-        .eq("room_id", selectedRoomId)
+        .eq("room_id", roomId)
         .gt("last_seen", threshold)
 
       if (error) {
@@ -853,7 +1125,7 @@ function CommunityContent() {
       cancelled = true
       window.clearInterval(intervalId)
     }
-  }, [selectedRoomId, user?.id, needsJoin])
+  }, [selectedRoomId, needsJoin, user?.id])
 
   useEffect(() => {
     if (!selectedRoomId || needsJoin) return
@@ -878,6 +1150,7 @@ function CommunityContent() {
             id,
             room_id,
             user_id,
+            seen_by,
             pinned,
             section_id,
             type,
@@ -924,7 +1197,8 @@ function CommunityContent() {
           void fetchRoomMessages(
             selectedRoomId,
             sectionsRef.current,
-            sectionFilterRef.current.id
+            sectionFilterRef.current.id,
+            { bypassCache: true }
           )
           return
         }
@@ -933,6 +1207,31 @@ function CommunityContent() {
           if (prev.some((m) => m.id === data.id)) return prev
           return [...prev, row]
         })
+
+        const cacheKey = buildRoomMessagesCacheKey(
+          selectedRoomId,
+          sectionsRef.current,
+          sectionFilterRef.current.id
+        )
+        setMessagesByRoom((prev) => {
+          const entry = prev[cacheKey]
+          if (!entry) return prev
+          if (entry.main.some((m) => m.id === row.id)) return prev
+          return {
+            ...prev,
+            [cacheKey]: { pinned: entry.pinned, main: [...entry.main, row] },
+          }
+        })
+
+        const viewerId = userIdRef.current
+        if (viewerId && row.user_id !== viewerId) {
+          await appendSelfToSeenByForRoomMessage(id, viewerId)
+          const next = await fetchUnreadByRoomIds(
+            roomIdsForUnreadRef.current,
+            viewerId
+          )
+          setUnreadByRoomId(next)
+        }
       }
     )
     channel.subscribe()
@@ -943,7 +1242,7 @@ function CommunityContent() {
   }, [selectedRoomId, needsJoin])
 
   useEffect(() => {
-    if (!selectedRoomId || !user?.id || needsJoin) {
+    if (!selectedRoomId || needsJoin || !user?.id) {
       setTypingUsers([])
       return
     }
@@ -953,7 +1252,7 @@ function CommunityContent() {
 
     channel.on("broadcast", { event: "typing" }, (payload: any) => {
       const typingUser = payload?.payload?.user
-      if (!typingUser || typingUser === username) return
+      if (!typingUser || typingUser === usernameRef.current) return
 
       setTypingUsers((prev) => {
         if (prev.includes(typingUser)) return prev
@@ -974,7 +1273,7 @@ function CommunityContent() {
       }
       setTypingUsers([])
     }
-  }, [selectedRoomId, user?.id, username, needsJoin])
+  }, [selectedRoomId, needsJoin, user?.id])
 
   // Match Messages (`app/messages/[id]/page.tsx`): scroll only the messages
   // overflow container — never scrollIntoView on inner content, or mobile Safari
@@ -1140,6 +1439,14 @@ function CommunityContent() {
   return (
     <>
       <Navbar />
+      {roomJoinToast ? (
+        <div
+          role="status"
+          className="fixed bottom-6 left-1/2 z-[100] max-w-[min(90vw,24rem)] -translate-x-1/2 rounded-lg border border-emerald-500/35 bg-emerald-950/95 px-4 py-2.5 text-center text-sm text-emerald-100 shadow-lg"
+        >
+          {roomJoinToast}
+        </div>
+      ) : null}
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white px-4 py-2">
         <div className="mx-auto flex w-full max-w-6xl flex-col overflow-visible rounded-2xl border border-white/10 bg-black/25 md:h-[calc(100vh-90px)] md:flex-row md:overflow-hidden">
           <aside className="shrink-0 border-b border-white/10 bg-[#0b1220]/80 md:w-72 md:border-b-0 md:border-r">
@@ -1189,8 +1496,27 @@ function CommunityContent() {
                   ) : rooms.length === 0 ? (
                     <p className="px-2 py-3 text-sm text-gray-400">No rooms found.</p>
                   ) : (
-                    rooms.map((room) => {
+                    sortedSidebarRooms.map((room) => {
                       const selected = room.id === selectedRoomId
+                      const isOwnRoom =
+                        user?.id != null && room.owner_user_id === user.id
+                      const itemClass =
+                        `mb-1 flex min-h-[44px] w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm transition ` +
+                        (isOwnRoom
+                          ? selected
+                            ? `border border-blue-400/40 bg-blue-500/25 font-semibold text-blue-100`
+                            : `border border-blue-400/30 bg-blue-500/10 font-semibold text-blue-300 hover:bg-blue-500/15`
+                          : selected
+                            ? `bg-blue-500/25 text-blue-100`
+                            : `text-gray-200 hover:bg-white/10`)
+                      const sidebarAvatarSrc =
+                        [room.image_url, room.avatar_url]
+                          .map((v) =>
+                            v != null && String(v).trim() !== ""
+                              ? String(v).trim()
+                              : ""
+                          )
+                          .find(Boolean) || "/default-avatar.png"
                       return (
                         <button
                           key={room.id}
@@ -1199,14 +1525,26 @@ function CommunityContent() {
                             setSelectedRoomId(room.id)
                             setMobileRoomsOpen(false)
                           }}
-                          className={`mb-1 flex min-h-[44px] w-full items-center rounded-lg px-3 py-2 text-left text-sm transition ${
-                            selected
-                              ? "bg-blue-500/25 text-blue-100"
-                              : "text-gray-200 hover:bg-white/10"
-                          }`}
+                          className={itemClass}
                         >
-                          <div className="flex min-w-0 items-center gap-2">
-                            <span className="truncate">{room.name || "Room"}</span>
+                          <img
+                            src={sidebarAvatarSrc}
+                            alt="room avatar"
+                            className="h-8 w-8 shrink-0 rounded-full object-cover"
+                            onError={(e) => {
+                              e.currentTarget.src = "/default-avatar.png"
+                            }}
+                          />
+                          <div className="flex min-w-0 flex-1 items-center">
+                            <span className="min-w-0 flex-1 truncate">
+                              {room.name || "Room"}
+                            </span>
+                            {unreadByRoomId[room.id] ? (
+                              <span
+                                className="ml-2 h-2 w-2 shrink-0 rounded-full bg-blue-400"
+                                aria-label="Unread messages"
+                              />
+                            ) : null}
                           </div>
                         </button>
                       )

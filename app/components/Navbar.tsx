@@ -198,13 +198,29 @@ export default function Navbar() {
     label: string
     href: string
     proOnly?: boolean
+    beta?: boolean
   }[] = [
     { label: "Backtest Stats", href: "/backtest" },
     { label: "Calendar", href: "/calendar" },
-    { label: "PropFirm Mode", href: "/analytics/propfirm" },
     { label: "Achievements", href: "/achievements" },
-    { label: "AI Analysis", href: "/analyst", proOnly: true },
+    { label: "PropFirm Mode", href: "/analytics/propfirm", beta: true },
+    { label: "AI Analysis", href: "/analyst", proOnly: true, beta: true },
   ]
+
+  const betaBadge = (
+    <span className="shrink-0 text-[10px] px-2 py-[2px] rounded bg-yellow-500/20 text-yellow-300 border border-yellow-400/30">
+      BETA
+    </span>
+  )
+
+  function analyticsLinkLabel(item: { label: string; beta?: boolean }) {
+    return (
+      <div className="flex min-w-0 flex-1 items-center gap-2">
+        <span className="truncate">{item.label}</span>
+        {item.beta ? betaBadge : null}
+      </div>
+    )
+  }
 
   const communityLinks: { label: string; href: string }[] = [
     { label: "Feed", href: "/feed" },
@@ -333,20 +349,24 @@ export default function Navbar() {
                   <div className="absolute top-full mt-2 w-56 bg-[#1e293b] border border-white/10 rounded shadow-lg z-[9999]">
                     {analyticsLinks.map((item) =>
                       item.proOnly && !isProActive(profile) ? (
-                        <div key={item.label} className="px-4 py-2 text-gray-400">
-                          {item.label} 🔒
+                        <div
+                          key={item.label}
+                          className="flex w-full items-center justify-between gap-2 px-4 py-2 text-gray-400"
+                        >
+                          {analyticsLinkLabel(item)}
+                          <span className="shrink-0">🔒</span>
                         </div>
                       ) : (
                         <Link
                           key={item.href}
                           href={item.href}
-                          className={`block px-3 py-2 rounded ${
+                          className={`flex w-full items-center justify-between gap-2 px-3 py-2 rounded ${
                             isActive(item.href)
                               ? "bg-blue-500/20 text-blue-300"
                               : "hover:bg-white/10 text-gray-300"
                           }`}
                         >
-                          {item.label}
+                          {analyticsLinkLabel(item)}
                         </Link>
                       )
                     )}
@@ -681,21 +701,25 @@ export default function Navbar() {
               <div className="pl-4 mt-2 space-y-2 text-sm">
                 {analyticsLinks.map((item) =>
                   item.proOnly && !isProActive(profile) ? (
-                    <span key={item.label} className="block text-gray-400">
-                      {item.label} 🔒
+                    <span
+                      key={item.label}
+                      className="flex w-full items-center justify-between gap-2 px-3 py-2 text-gray-400"
+                    >
+                      {analyticsLinkLabel(item)}
+                      <span className="shrink-0">🔒</span>
                     </span>
                   ) : (
                     <Link
                       key={item.href}
                       href={item.href}
-                      className={`block px-3 py-2 rounded ${
+                      className={`flex w-full items-center justify-between gap-2 px-3 py-2 rounded ${
                         isActive(item.href)
                           ? "bg-blue-500/20 text-blue-300"
                           : "hover:bg-white/10 text-gray-300"
                       }`}
                       onClick={closeMobile}
                     >
-                      {item.label}
+                      {analyticsLinkLabel(item)}
                     </Link>
                   )
                 )}
