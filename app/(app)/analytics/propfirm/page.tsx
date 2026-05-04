@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { supabase } from "@/lib/supabaseClient"
 import { isProActive } from "@/lib/subscription"
 
@@ -44,6 +44,171 @@ const getTradingDay = (trade: TradeForDay) => {
   const da = String(d.getDate()).padStart(2, "0")
 
   return `${y}-${m}-${da}`
+}
+
+/** Parse `accounts.account_size` (number or strings like "50K", "50,000") to dollars. */
+function parseAccountSizeToNumber(account: { account_size?: unknown }): number {
+  const raw = account?.account_size
+  if (raw == null || raw === "") return 0
+  if (typeof raw === "number" && Number.isFinite(raw)) return raw
+  const s = String(raw).trim().replace(/,/g, "")
+  const k = /^([\d.]+)\s*k$/i.exec(s)
+  if (k) {
+    const n = Number(k[1])
+    return Number.isFinite(n) ? n * 1000 : 0
+  }
+  const n = Number(s)
+  return Number.isFinite(n) ? n : 0
+}
+
+export type TrailingDrawdownResult = {
+  currentBalance: number
+  peakBalance: number
+  drawdownFloor: number
+  distanceToDD: number
+  /** Largest (peak − balance) observed after any trade (for “max DD used” vs limit). */
+  maxDrawdownUsed: number
+  /** True if at any point after a trade, balance fell below the trailing drawdown floor. */
+  breachedTrailingDD: boolean
+}
+
+export type ConsistencyRuleResult = {
+  biggestWin: number
+  totalProfit: number
+  allowedMax: number
+  isConsistent: boolean
+  ruleActive: boolean
+}
+
+/** Drop duplicate trade rows (same `id`) so PnL is not double-counted. */
+function dedupeTradesById(trades: any[]): any[] {
+  const seen = new Set<string>()
+  const out: any[] = []
+  for (const t of trades) {
+    const id = t?.id
+    if (id != null && id !== "") {
+      const key = String(id)
+      if (seen.has(key)) continue
+      seen.add(key)
+    }
+    out.push(t)
+  }
+  return out
+}
+
+/**
+ * Trailing drawdown: drawdown floor moves **only** when equity makes a **new** peak
+ * (`drawdownFloor = peakBalance - maxDrawdown` at that moment only). Floor never
+ * moves on losses; peak never decreases.
+ */
+export function computeTrailingDrawdown(
+  trades: any[],
+  startingBalance: number,
+  maxDrawdown: number
+): TrailingDrawdownResult {
+  const maxDd = Number(maxDrawdown) || 0
+
+  const uniqueTrades = dedupeTradesById(trades)
+  const tradesSorted = [...uniqueTrades].sort(
+    (a, b) => +new Date(a.created_at) - +new Date(b.created_at)
+  )
+
+  console.log("STARTING VALUES:", {
+    startingBalance,
+    maxDrawdown: maxDd,
+    trades: tradesSorted.map((t) => ({
+      pnl: t.pnl,
+      created_at: t.created_at,
+    })),
+  })
+
+  let balance = startingBalance
+  let peakBalance = startingBalance
+  let drawdownFloor = startingBalance - maxDd
+  let maxDrawdownUsed = 0
+  let breachedTrailingDD = false
+
+  for (const trade of tradesSorted) {
+    const pnl = parseFloat(String(trade.pnl ?? "")) || 0
+
+    console.log("TRADE STEP:", {
+      pnl: trade.pnl,
+      balanceBefore: balance,
+      balanceAfter: balance + pnl,
+      peakBefore: peakBalance,
+    })
+
+    balance += pnl
+
+    if (balance > peakBalance) {
+      peakBalance = balance
+      drawdownFloor = peakBalance - maxDd
+    }
+
+    console.log("AFTER UPDATE:", {
+      balance,
+      peakBalance,
+      drawdownFloor,
+    })
+
+    const ddFromPeak = peakBalance - balance
+    if (ddFromPeak > maxDrawdownUsed) {
+      maxDrawdownUsed = ddFromPeak
+    }
+
+    if (maxDd > 0 && balance < drawdownFloor) {
+      breachedTrailingDD = true
+    }
+  }
+
+  const distanceToDD = balance - drawdownFloor
+
+  return {
+    currentBalance: balance,
+    peakBalance,
+    drawdownFloor,
+    distanceToDD,
+    maxDrawdownUsed,
+    breachedTrailingDD,
+  }
+}
+
+/** `consistency_percent` from account rules (DB column `consistency`). */
+export function computeConsistencyRule(
+  trades: any[],
+  consistencyPercent: number
+): ConsistencyRuleResult {
+  const pct = Number(consistencyPercent)
+  const ruleActive = Number.isFinite(pct) && pct > 0
+
+  const winningTrades = trades.filter((t) => Number(t.pnl) > 0)
+  const totalProfit = winningTrades.reduce(
+    (sum, t) => sum + Number(t.pnl || 0),
+    0
+  )
+  const biggestWin =
+    winningTrades.length > 0
+      ? Math.max(...winningTrades.map((t) => Number(t.pnl || 0)))
+      : 0
+
+  const allowedMax = ruleActive ? totalProfit * (pct / 100) : 0
+  const isConsistent = !ruleActive || biggestWin <= allowedMax
+
+  return {
+    biggestWin,
+    totalProfit,
+    allowedMax,
+    isConsistent,
+    ruleActive,
+  }
+}
+
+function formatUsd(n: number) {
+  const sign = n < 0 ? "-" : ""
+  return `${sign}$${Math.abs(n).toLocaleString("en-US", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  })}`
 }
 
 export default function PropFirmPage() {
@@ -176,6 +341,40 @@ export default function PropFirmPage() {
     loadTrades()
   }, [selectedAccount, planChecked, hasProAccess])
 
+  const startingBalance = useMemo(() => {
+    if (!selectedAccount) return 0
+    return parseAccountSizeToNumber(selectedAccount)
+  }, [selectedAccount])
+
+  const trailingMetrics = useMemo((): TrailingDrawdownResult => {
+    if (!selectedAccount) {
+      return {
+        currentBalance: 0,
+        peakBalance: 0,
+        drawdownFloor: 0,
+        distanceToDD: 0,
+        maxDrawdownUsed: 0,
+        breachedTrailingDD: false,
+      }
+    }
+    const maxDd = Number(selectedAccount.max_drawdown) || 0
+    return computeTrailingDrawdown(trades, startingBalance, maxDd)
+  }, [trades, selectedAccount, startingBalance])
+
+  const consistencyMetrics = useMemo((): ConsistencyRuleResult => {
+    if (!selectedAccount) {
+      return {
+        biggestWin: 0,
+        totalProfit: 0,
+        allowedMax: 0,
+        isConsistent: true,
+        ruleActive: false,
+      }
+    }
+    const pct = Number(selectedAccount.consistency) || 0
+    return computeConsistencyRule(trades, pct)
+  }, [trades, selectedAccount])
+
   if (!planChecked) {
     return <div className="mx-auto max-w-6xl p-6 text-gray-400">Loading...</div>
   }
@@ -197,26 +396,7 @@ export default function PropFirmPage() {
 
   const totalPnL = filteredTrades.reduce((sum, t) => sum + (t.pnl || 0), 0)
 
-  let runningDaily = 0
-  let peakDaily = 0
-  let maxDrawdown = 0
-
-  const sortedDayKeys = Object.keys(dailyPnLMap).sort()
-  sortedDayKeys.forEach((dayKey) => {
-    runningDaily += dailyPnLMap[dayKey]
-
-    if (runningDaily > peakDaily) {
-      peakDaily = runningDaily
-    }
-
-    const dd = runningDaily - peakDaily
-
-    if (dd < maxDrawdown) {
-      maxDrawdown = dd
-    }
-  })
-
-  const drawdownUsed = Math.abs(maxDrawdown)
+  const drawdownUsed = trailingMetrics.maxDrawdownUsed
 
   const progressPercent = selectedAccount?.profit_target
     ? Math.min((totalPnL / selectedAccount.profit_target) * 100, 100)
@@ -228,8 +408,11 @@ export default function PropFirmPage() {
   const isPassed =
     selectedAccount && totalPnL >= selectedAccount.profit_target
 
+  const maxDdLimit = Number(selectedAccount?.max_drawdown) || 0
   const isFailed =
-    selectedAccount && drawdownUsed > selectedAccount.max_drawdown
+    selectedAccount &&
+    maxDdLimit > 0 &&
+    (trailingMetrics.breachedTrailingDD || trailingMetrics.distanceToDD < 0)
 
   const status = isFailed
     ? "FAILED"
@@ -237,9 +420,20 @@ export default function PropFirmPage() {
       ? "PASSED"
       : "IN PROGRESS"
 
-  const ddPercent = selectedAccount?.max_drawdown
-    ? Math.min((drawdownUsed / selectedAccount.max_drawdown) * 100, 100)
-    : 0
+  const ddPercent =
+    maxDdLimit > 0 ? Math.min((drawdownUsed / maxDdLimit) * 100, 100) : 0
+
+  const distanceToDD = trailingMetrics.distanceToDD
+  const distanceDanger =
+    maxDdLimit > 0 &&
+    distanceToDD >= 0 &&
+    distanceToDD < 0.2 * maxDdLimit
+  const distanceClassName =
+    maxDdLimit <= 0
+      ? "text-gray-400"
+      : distanceToDD < 0 || distanceDanger
+        ? "text-red-400"
+        : "text-green-400"
 
   const formatAccount = (acc: any) => {
     if (!acc) return "None"
@@ -308,6 +502,13 @@ export default function PropFirmPage() {
 
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
+              <span>Account size (starting balance)</span>
+              <span>
+                {startingBalance > 0 ? formatUsd(startingBalance) : "—"}
+              </span>
+            </div>
+
+            <div className="flex justify-between">
               <span>Consistency</span>
               <span>{selectedAccount.consistency || 0}%</span>
             </div>
@@ -354,7 +555,32 @@ export default function PropFirmPage() {
 
             <div className="flex justify-between">
               <span>Max Drawdown Used</span>
-              <span className="text-red-400">${drawdownUsed}</span>
+              <span
+                className={
+                  maxDdLimit > 0 && drawdownUsed > maxDdLimit
+                    ? "text-red-400"
+                    : "text-gray-200"
+                }
+              >
+                {formatUsd(drawdownUsed)}
+              </span>
+            </div>
+
+            <div className="flex justify-between">
+              <span>Drawdown Floor</span>
+              <span>{formatUsd(trailingMetrics.drawdownFloor)}</span>
+            </div>
+
+            <div className="flex justify-between">
+              <span>Current Balance</span>
+              <span>{formatUsd(trailingMetrics.currentBalance)}</span>
+            </div>
+
+            <div className="flex justify-between">
+              <span>Distance to DD</span>
+              <span className={distanceClassName}>
+                {formatUsd(distanceToDD)}
+              </span>
             </div>
 
             <div className="flex justify-between">
@@ -367,6 +593,39 @@ export default function PropFirmPage() {
               <span className={todayPnL >= 0 ? "text-green-400" : "text-red-400"}>
                 ${todayPnL.toFixed(2)}
               </span>
+            </div>
+
+            <div className="mt-3 border-t border-white/10 pt-3">
+              <p className="mb-2 font-medium text-gray-300">
+                Consistency Rule
+              </p>
+              <div className="flex justify-between">
+                <span>Biggest Trade</span>
+                <span>{formatUsd(consistencyMetrics.biggestWin)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Allowed Max</span>
+                <span>
+                  {consistencyMetrics.ruleActive
+                    ? formatUsd(consistencyMetrics.allowedMax)
+                    : "—"}
+                </span>
+              </div>
+              <p
+                className={
+                  !consistencyMetrics.ruleActive
+                    ? "mt-2 text-gray-400"
+                    : consistencyMetrics.isConsistent
+                      ? "mt-2 text-green-400"
+                      : "mt-2 text-red-400"
+                }
+              >
+                {!consistencyMetrics.ruleActive
+                  ? "Set consistency % in account rules to track."
+                  : consistencyMetrics.isConsistent
+                    ? "✔ Consistent"
+                    : "✖ Not Consistent"}
+              </p>
             </div>
           </div>
 
@@ -388,9 +647,13 @@ export default function PropFirmPage() {
             </div>
           </div>
 
-          {selectedAccount && drawdownUsed > selectedAccount.max_drawdown && (
-            <div className="mt-4 text-sm text-red-400">⚠️ Max drawdown exceeded</div>
-          )}
+          {selectedAccount &&
+            maxDdLimit > 0 &&
+            trailingMetrics.breachedTrailingDD && (
+              <div className="mt-4 text-sm text-red-400">
+                ⚠️ Trailing max drawdown breached (balance below drawdown floor)
+              </div>
+            )}
 
           {selectedAccount &&
             worstDailyLossUsed > selectedAccount.daily_drawdown && (
@@ -408,13 +671,13 @@ export default function PropFirmPage() {
           <div className="space-y-2 text-sm">
             <div
               className={
-                drawdownUsed > selectedAccount.max_drawdown
+                maxDdLimit > 0 && trailingMetrics.breachedTrailingDD
                   ? "text-red-400"
                   : "text-green-400"
               }
             >
-              {drawdownUsed > selectedAccount.max_drawdown ? "❌" : "✔"} Max
-              Drawdown
+              {maxDdLimit > 0 && trailingMetrics.breachedTrailingDD ? "❌" : "✔"}{" "}
+              Max Drawdown
             </div>
 
             <div
@@ -437,6 +700,23 @@ export default function PropFirmPage() {
             >
               {winningDays >= selectedAccount.winning_days ? "✔" : "⚠"} Winning
               Days
+            </div>
+
+            <div
+              className={
+                !consistencyMetrics.ruleActive
+                  ? "text-gray-400"
+                  : consistencyMetrics.isConsistent
+                    ? "text-green-400"
+                    : "text-red-400"
+              }
+            >
+              {!consistencyMetrics.ruleActive
+                ? "—"
+                : consistencyMetrics.isConsistent
+                  ? "✔"
+                  : "✖"}{" "}
+              Consistency
             </div>
           </div>
         </div>
