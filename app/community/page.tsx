@@ -1530,6 +1530,8 @@ function CommunityContent() {
                           <img
                             src={sidebarAvatarSrc}
                             alt="room avatar"
+                            loading="lazy"
+                            decoding="async"
                             className="h-8 w-8 shrink-0 rounded-full object-cover"
                             onError={(e) => {
                               e.currentTarget.src = "/default-avatar.png"
@@ -1566,6 +1568,8 @@ function CommunityContent() {
                     "/default-avatar.png"
                   }
                   alt="Room Avatar"
+                  loading="lazy"
+                  decoding="async"
                   className="h-12 w-12 shrink-0 rounded-full object-cover"
                 />
 
@@ -1639,6 +1643,8 @@ function CommunityContent() {
                         src={u.profiles?.avatar_url || "/default-avatar.png"}
                         className="h-8 w-8 rounded-full border-2 border-[#0B1120] object-cover"
                         alt=""
+                        loading="lazy"
+                        decoding="async"
                       />
                     ))}
                   </div>
@@ -1847,6 +1853,8 @@ function CommunityContent() {
                           src={msg.profiles?.avatar_url || "/default-avatar.png"}
                           className="h-6 w-6 shrink-0 rounded-full"
                           alt=""
+                          loading="lazy"
+                          decoding="async"
                         />
                         <span className="text-sm font-semibold">
                           {msg.profiles?.username || "User"}
@@ -1875,6 +1883,8 @@ function CommunityContent() {
                             src={msg.image_url || ""}
                             className="mt-1 max-w-xs rounded"
                             alt=""
+                            loading="lazy"
+                            decoding="async"
                           />
                         ) : msg.type === "trade" && msg.trades ? (
                           <div className="mt-1 rounded bg-white/5 p-2 max-w-xs">
@@ -1883,6 +1893,8 @@ function CommunityContent() {
                                 src={tradeImageSrc(msg.trades.image_url) || ""}
                                 className="rounded"
                                 alt=""
+                                loading="lazy"
+                                decoding="async"
                               />
                             ) : null}
                             <p className="mt-1 text-xs">
@@ -1928,6 +1940,8 @@ function CommunityContent() {
                                   src={msg.image_url || ""}
                                   className="mt-1 max-h-24 rounded"
                                   alt=""
+                                  loading="lazy"
+                                  decoding="async"
                                 />
                               ) : msg.type === "trade" && msg.trades ? (
                                 <span>

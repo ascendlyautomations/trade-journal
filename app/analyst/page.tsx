@@ -382,6 +382,8 @@ export default function AnalystPage() {
                       src={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/screenshots/${selectedTrade.image_url}`}
                       className="mb-4 max-h-48 rounded border border-white/10 object-cover"
                       alt=""
+                      loading="lazy"
+                      decoding="async"
                     />
                   )}
 

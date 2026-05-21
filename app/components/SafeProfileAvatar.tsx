@@ -50,6 +50,8 @@ export function SafeProfileAvatar({
       <img
         src={displaySrc}
         alt={alt}
+        loading="lazy"
+        decoding="async"
         className="h-full w-full object-cover"
         onError={onError}
       />

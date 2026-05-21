@@ -842,6 +842,8 @@ export default function FeedPage() {
                       <img
                         src={u.avatar_url}
                         alt=""
+                        loading="lazy"
+                        decoding="async"
                         className="w-16 h-16 rounded-full object-cover border-2 border-emerald-400 ring-2 ring-emerald-400/30"
                       />
                     ) : (
@@ -900,6 +902,8 @@ export default function FeedPage() {
                     <img
                       src={post.profiles.avatar_url}
                       alt=""
+                      loading="lazy"
+                      decoding="async"
                       className="w-10 h-10 rounded-full object-cover ring-2 ring-white/10 shrink-0"
                     />
                   ) : (
@@ -919,6 +923,8 @@ export default function FeedPage() {
                     <img
                       src={imageSrc}
                       alt=""
+                      loading="lazy"
+                      decoding="async"
                       className="w-full max-h-[400px] object-cover block"
                     />
                   </div>
@@ -1082,6 +1088,8 @@ export default function FeedPage() {
               <img
                 src={currentStory.image_url}
                 alt=""
+                loading="lazy"
+                decoding="async"
                 className="max-w-full max-h-full object-contain block"
                 draggable={false}
               />
@@ -1134,6 +1142,8 @@ export default function FeedPage() {
                     : `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/screenshots/${selectedPost.image_url}`
                 }
                 alt=""
+                loading="lazy"
+                decoding="async"
                 className="w-full max-h-[400px] rounded-lg object-cover"
               />
             ) : null}
@@ -1264,6 +1274,8 @@ export default function FeedPage() {
                   src={postImageSrc(sharePost.image_url) || ""}
                   className="w-full h-40 object-cover rounded"
                   alt=""
+                  loading="lazy"
+                  decoding="async"
                 />
               ) : null}
             </div>
@@ -1296,6 +1308,8 @@ export default function FeedPage() {
                       src={conv.avatar_url || "/default-avatar.png"}
                       className="w-8 h-8 rounded-full object-cover"
                       alt=""
+                      loading="lazy"
+                      decoding="async"
                     />
                     <span>{conv.name || (conv.is_group ? "Group Chat" : "Chat")}</span>
                   </button>

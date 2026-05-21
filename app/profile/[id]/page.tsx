@@ -233,6 +233,8 @@ function TradeCard({
           <img
             src={profile.avatar_url || "/default-avatar.png"}
             alt=""
+            loading="lazy"
+            decoding="async"
             className="h-10 w-10 shrink-0 rounded-full object-cover ring-2 ring-white/10"
             onError={(e) => {
               e.currentTarget.src = "/default-avatar.png"
@@ -325,6 +327,8 @@ function TradeCard({
           <img
             src={imageSrc}
             alt=""
+            loading="lazy"
+            decoding="async"
             className="block max-h-[400px] w-full object-cover"
           />
         </div>
@@ -427,6 +431,8 @@ function PostCard({
           <img
             src={profile.avatar_url || "/default-avatar.png"}
             alt=""
+            loading="lazy"
+            decoding="async"
             className="h-10 w-10 rounded-full object-cover ring-2 ring-white/10"
             onError={(e) => {
               e.currentTarget.src = "/default-avatar.png"
@@ -509,6 +515,8 @@ function PostCard({
           <img
             src={imgSrc}
             alt=""
+            loading="lazy"
+            decoding="async"
             className="block max-h-[400px] w-full object-cover"
             onError={(e) => {
               e.currentTarget.style.display = "none"
@@ -2525,6 +2533,8 @@ export default function ProfilePage() {
             <img
               src={selectedAchievementImage.src}
               alt={selectedAchievementImage.title}
+              loading="lazy"
+              decoding="async"
               className="max-h-[75vh] w-full rounded-xl border border-white/10 object-contain bg-black/30"
             />
             {selectedAchievementImage.description ? (
@@ -2732,6 +2742,8 @@ export default function ProfilePage() {
                     <img
                       src={u.avatar_url || "/default-avatar.png"}
                       alt=""
+                      loading="lazy"
+                      decoding="async"
                       onError={(e) => {
                         e.currentTarget.src = "/default-avatar.png"
                       }}
@@ -2781,6 +2793,8 @@ export default function ProfilePage() {
                     <img
                       src={u.avatar_url || "/default-avatar.png"}
                       alt=""
+                      loading="lazy"
+                      decoding="async"
                       onError={(e) => {
                         e.currentTarget.src = "/default-avatar.png"
                       }}

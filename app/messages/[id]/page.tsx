@@ -201,6 +201,8 @@ function TradeMessageBubble({
             <img
               src={imgSrc}
               alt=""
+              loading="lazy"
+              decoding="async"
               className="mb-3 h-32 w-full rounded-lg border border-gray-700 object-cover"
             />
           ) : null}
@@ -373,6 +375,8 @@ function PostMessageBubble({
             <img
               src={imageSrc}
               alt=""
+              loading="lazy"
+              decoding="async"
               className="mb-3 h-32 w-full rounded-lg border border-gray-700 object-cover"
             />
           ) : null}
@@ -1117,6 +1121,9 @@ export default function DMPage() {
                   src={
                     conversation.avatar_url || "/group-default.png"
                   }
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
                   onError={(e) => {
                     e.currentTarget.src = "/group-default.png"
                   }}
@@ -1308,6 +1315,8 @@ export default function DMPage() {
                                 src={message.image_url}
                                 className="mt-2 rounded-lg max-h-64"
                                 alt=""
+                                loading="lazy"
+                                decoding="async"
                               />
                             ) : null}
                           </>
@@ -1332,6 +1341,8 @@ export default function DMPage() {
                   src={previewUrl}
                   className="w-24 h-24 object-cover rounded-lg border border-white/10"
                   alt="Selected preview"
+                  loading="lazy"
+                  decoding="async"
                 />
 
                 <button
@@ -1401,6 +1412,9 @@ export default function DMPage() {
                     ? URL.createObjectURL(groupImage)
                     : conversation?.avatar_url || "/group-default.png"
                 }
+                alt=""
+                loading="lazy"
+                decoding="async"
                 onError={(e) => {
                   e.currentTarget.src = "/group-default.png"
                 }}
@@ -1436,6 +1450,9 @@ export default function DMPage() {
                   >
                     <img
                       src={m.profiles?.avatar_url || "/default-avatar.png"}
+                      alt=""
+                      loading="lazy"
+                      decoding="async"
                       className="w-6 h-6 rounded-full"
                     />
                     <span className="text-white text-sm">
@@ -1522,6 +1539,8 @@ export default function DMPage() {
                     <img
                       src={u.avatar_url || "/default-avatar.png"}
                       alt=""
+                      loading="lazy"
+                      decoding="async"
                       className="h-8 w-8 shrink-0 rounded-full object-cover"
                     />
                     <span className="text-left text-sm text-white">
@@ -1599,6 +1618,8 @@ export default function DMPage() {
                       <img
                         src={modalImg}
                         alt=""
+                        loading="lazy"
+                        decoding="async"
                         className="mb-3 max-h-64 w-full rounded-lg border border-gray-700 object-contain"
                       />
                     ) : null}
@@ -1654,6 +1675,8 @@ export default function DMPage() {
                       <img
                         src={imageSrc}
                         alt=""
+                        loading="lazy"
+                        decoding="async"
                         className="mb-3 max-h-64 w-full rounded-lg border border-gray-700 object-contain"
                       />
                     ) : null}

@@ -170,6 +170,8 @@ export default function ShareToConversationsModal({
                   src={conv.avatar_url || "/default-avatar.png"}
                   className="h-8 w-8 rounded-full object-cover"
                   alt=""
+                  loading="lazy"
+                  decoding="async"
                 />
                 <span>{conv.name || (conv.is_group ? "Group Chat" : "Chat")}</span>
               </button>

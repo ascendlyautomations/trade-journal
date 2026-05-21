@@ -127,6 +127,8 @@ export default function TradeDetailPage() {
                 <img
                   src={imgSrc}
                   alt=""
+                  loading="lazy"
+                  decoding="async"
                   className="w-full max-h-[400px] object-cover block"
                 />
               </div>

@@ -133,6 +133,9 @@ export default function ExplorePage() {
                   >
                     <img
                       src={user.avatar_url || "/default-avatar.png"}
+                      alt=""
+                      loading="lazy"
+                      decoding="async"
                       className="w-8 h-8 rounded-full object-cover"
                     />
                     <div>

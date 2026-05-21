@@ -136,6 +136,8 @@ export function PostInteractionsComments({
                 src={c.profiles?.avatar_url || "/default-avatar.png"}
                 className="w-8 h-8 rounded-full object-cover shrink-0"
                 alt="avatar"
+                loading="lazy"
+                decoding="async"
               />
               <div className="min-w-0">
                 <p className="text-xs text-gray-400">{c.profiles?.username || "User"}</p>

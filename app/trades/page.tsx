@@ -839,6 +839,9 @@ export default function TradesPage() {
     ? trade.image_url
     : `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/screenshots/${trade.image_url}`
 }
+                        alt=""
+                        loading="lazy"
+                        decoding="async"
                         className="w-full mt-4 rounded-lg border border-white/10 cursor-pointer"
                         onClick={() =>
                           setSelectedImage(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/screenshots/${trade.image_url}`)
@@ -877,7 +880,13 @@ export default function TradesPage() {
               className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center"
               onClick={() => setSelectedImage(null)}
             >
-              <img src={selectedImage} className="max-w-[90%] max-h-[90%] rounded-lg" />
+              <img
+                src={selectedImage}
+                alt=""
+                loading="lazy"
+                decoding="async"
+                className="max-w-[90%] max-h-[90%] rounded-lg"
+              />
             </div>
           )}
 

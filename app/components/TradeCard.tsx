@@ -299,6 +299,8 @@ export default function TradeCard({
         <img
           src={screenshotUrl}
           alt=""
+          loading="lazy"
+          decoding="async"
           className="mt-4 w-full cursor-pointer rounded-lg border border-white/10"
           onClick={() => onImageClick?.(screenshotUrl)}
         />

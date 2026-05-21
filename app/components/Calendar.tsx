@@ -343,6 +343,8 @@ export default function Calendar({
                       <img
                         src={img}
                         alt=""
+                        loading="lazy"
+                        decoding="async"
                         className="h-16 w-16 shrink-0 rounded-lg border border-white/10 object-cover sm:h-20 sm:w-20"
                       />
                     ) : null}
@@ -431,6 +433,8 @@ export default function Calendar({
                     <img
                       src={img}
                       alt=""
+                      loading="lazy"
+                      decoding="async"
                       className="mb-3 max-h-48 w-full rounded-lg border border-white/10 object-contain"
                     />
                   ) : null}

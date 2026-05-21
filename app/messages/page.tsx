@@ -711,6 +711,9 @@ export default function MessagesPage() {
                     {c.avatar_url ? (
                       <img
                         src={c.avatar_url}
+                        alt=""
+                        loading="lazy"
+                        decoding="async"
                         className="w-10 h-10 rounded-full object-cover hover:scale-105 transition"
                       />
                     ) : (
@@ -798,6 +801,8 @@ export default function MessagesPage() {
                     <img
                       src={u.avatar_url || "/default-avatar.png"}
                       alt=""
+                      loading="lazy"
+                      decoding="async"
                       className="h-8 w-8 shrink-0 rounded-full object-cover hover:scale-105 transition"
                     />
                     <div className="flex flex-col text-left">
@@ -895,6 +900,8 @@ export default function MessagesPage() {
                     <img
                       src={u.avatar_url || "/default-avatar.png"}
                       alt=""
+                      loading="lazy"
+                      decoding="async"
                       className="h-8 w-8 shrink-0 rounded-full object-cover hover:scale-105 transition"
                     />
                     <div className="flex flex-col text-left">

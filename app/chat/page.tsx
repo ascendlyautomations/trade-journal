@@ -336,7 +336,13 @@ export default function ChatPage() {
                     {msg.content && <p className="mt-1 break-words">{msg.content}</p>}
 
                     {msg.image_url && (
-                      <img src={msg.image_url} className="mt-3 max-h-64 rounded-lg" />
+                      <img
+                        src={msg.image_url}
+                        alt=""
+                        loading="lazy"
+                        decoding="async"
+                        className="mt-3 max-h-64 rounded-lg"
+                      />
                     )}
 
                     <div className="mt-2 flex gap-4 text-sm">

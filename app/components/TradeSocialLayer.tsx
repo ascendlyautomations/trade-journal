@@ -403,6 +403,8 @@ export function TradeSocialCommentsSection({
                 <img
                   src={String(av).trim()}
                   alt=""
+                  loading="lazy"
+                  decoding="async"
                   className="w-6 h-6 rounded-full object-cover shrink-0"
                 />
               ) : (
