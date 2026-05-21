@@ -18,6 +18,7 @@ import {
 } from "@/lib/insertCsvTradesWithAccount"
 import { last24hIso } from "@/lib/freePlanLimits"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
+import { useToast } from "@/app/components/ui"
 
 export type CsvImportPanelProps = {
   /** Smaller preview + less chrome (e.g. onboarding modal) */
@@ -42,6 +43,7 @@ export default function CsvImportPanel({
   selectedAccount = null,
   requireSelectedAccount = false,
 }: CsvImportPanelProps) {
+  const toast = useToast()
   const [parsed, setParsed] = useState<CsvRow[]>([])
   const [loading, setLoading] = useState(false)
   const handleFile = (file: File) => {
@@ -196,7 +198,7 @@ export default function CsvImportPanel({
       }
       if (skipped) msg += ` ${skipped} row(s) skipped.`
       if (errLines) msg += `\n\n${errLines}`
-      alert(msg)
+      toast.success(msg, 6000)
       setParsed([])
       onImportSuccess?.({ count: importedCount, skipped })
     }

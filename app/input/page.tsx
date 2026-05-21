@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import Navbar from "../components/Navbar"
+import { Button, Modal, cn } from "@/app/components/ui"
 
 export default function InputPage() {
   const [ticker, setTicker] = useState("")
@@ -134,38 +135,38 @@ export default function InputPage() {
             className="w-full p-3 bg-[#0f172a] border border-white/10 rounded"
           />
 
-          <button
-            type="submit"
-            className="w-full bg-emerald-500 hover:bg-emerald-600 py-3 rounded font-semibold"
-          >
+          <Button type="submit" variant="accent" size="lg" fullWidth disabled={loading}>
             {loading ? "Saving..." : "Save Trade"}
-          </button>
+          </Button>
 
         </form>
 
       </div>
-      {showPopup && (
-        <div className="fixed inset-0 flex items-center justify-center z-50">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
-          <div
-            className={`relative w-full max-w-sm rounded-xl border px-6 py-5 text-center shadow-xl ${
-              popupType === "success" ? "border-green-500 bg-green-900/20" : "border-red-500 bg-red-900/20"
-            }`}
-          >
-            <p className={`text-sm font-medium ${popupType === "success" ? "text-green-400" : "text-red-400"}`}>
-              {popupMessage}
-            </p>
-
-            <button
-              type="button"
-              onClick={() => setShowPopup(false)}
-              className="mt-4 text-xs text-gray-400 hover:underline"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
+      <Modal
+        open={showPopup}
+        onClose={() => setShowPopup(false)}
+        size="sm"
+        panelClassName={cn(
+          "text-center",
+          popupType === "success"
+            ? "border-green-500 bg-green-900/20"
+            : "border-red-500 bg-red-900/20"
+        )}
+        footer={
+          <Button variant="ghost" size="sm" onClick={() => setShowPopup(false)}>
+            Close
+          </Button>
+        }
+      >
+        <p
+          className={cn(
+            "text-sm font-medium",
+            popupType === "success" ? "text-green-400" : "text-red-400"
+          )}
+        >
+          {popupMessage}
+        </p>
+      </Modal>
     </>
   )
 }

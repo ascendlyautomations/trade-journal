@@ -6,8 +6,10 @@ import Navbar from "../components/Navbar"
 import { useRouter } from "next/navigation"
 import InputTradeForm from "../components/InputTradeForm"
 import { formatEST } from "@/lib/formatEST"
+import { useToast } from "@/app/components/ui"
 
 export default function ReviewPage() {
+  const toast = useToast()
   const [trades, setTrades] = useState<any[]>([])
   const [editingTrade, setEditingTrade] = useState<any | null>(null)
   const [showApproveAllConfirm, setShowApproveAllConfirm] = useState(false)
@@ -53,11 +55,11 @@ export default function ReviewPage() {
 
     if (error) {
       console.error("Approve all failed:", error)
-      alert("Failed to approve all imported trades.")
+      toast.error("Failed to approve all imported trades.")
     } else {
       setShowApproveAllConfirm(false)
       await fetchTrades()
-      alert("All pending imported trades were approved.")
+      toast.success("All pending imported trades were approved.")
     }
     setBulkApproving(false)
   }

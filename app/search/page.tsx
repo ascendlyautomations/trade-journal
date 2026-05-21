@@ -1,6 +1,7 @@
 "use client"
 
 import Navbar from "../components/Navbar"
+import { Card, EmptyState } from "@/app/components/ui"
 import { useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { useRouter } from "next/navigation"
@@ -59,24 +60,39 @@ export default function SearchPage() {
             className="w-full p-3 mb-6 bg-black border border-white/10 rounded focus:outline-none focus:border-emerald-400"
           />
 
-          {loading && <p className="text-gray-400">Searching...</p>}
+          {loading ? <p className="text-gray-400">Searching...</p> : null}
 
-          <div className="space-y-2">
+          {!loading && search.trim() && users.length === 0 ? (
+            <EmptyState
+              title="No users found"
+              description="Try a different username."
+            />
+          ) : null}
 
-            {users.map((u, i) => (
-              <div
-                key={i}
-                onClick={() => {
-                  console.log("Navigating to profile:", u.id)
-                  router.push(`/profile/${u.id}`)
-                }}
-                className="p-3 bg-white/5 border border-white/10 rounded cursor-pointer hover:bg-white/10"
-              >
-                @{u.username}
-              </div>
-            ))}
+          {!loading && !search.trim() ? (
+            <EmptyState
+              title="Search traders"
+              description="Enter a username to find profiles."
+              className="py-8"
+            />
+          ) : null}
 
-          </div>
+          {users.length > 0 ? (
+            <div className="space-y-2">
+              {users.map((u) => (
+                <Card
+                  key={u.id}
+                  padding="sm"
+                  interactive
+                  onClick={() => {
+                    router.push(`/profile/${u.id}`)
+                  }}
+                >
+                  @{u.username}
+                </Card>
+              ))}
+            </div>
+          ) : null}
 
         </div>
 

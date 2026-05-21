@@ -1,4 +1,5 @@
 import Link from "next/link"
+import { buttonVariants, Card, cn } from "@/app/components/ui"
 
 type LockedFeatureProps = {
   title: string
@@ -7,21 +8,24 @@ type LockedFeatureProps = {
 
 export default function LockedFeature({ title, className = "" }: LockedFeatureProps) {
   return (
-    <div
-      className={`flex min-h-[220px] h-full w-full flex-col items-center justify-center rounded-xl border border-white/10 bg-[#0b1f3a] p-6 text-center ${className}`}
+    <Card
+      variant="solid"
+      padding="lg"
+      className={cn(
+        "flex min-h-[220px] h-full w-full flex-col items-center justify-center bg-[#0b1f3a] text-center",
+        className
+      )}
     >
-      <h3 className="mb-2 text-lg font-semibold text-white">
-        🔒 {title}
-      </h3>
+      <h3 className="mb-2 text-lg font-semibold text-white">🔒 {title}</h3>
       <p className="mb-4 max-w-sm text-sm text-gray-400">
         Upgrade to Pro to unlock this feature
       </p>
       <Link
         href="/pricing"
-        className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600"
+        className={buttonVariants({ variant: "primary", size: "md" })}
       >
         Upgrade to Pro
       </Link>
-    </div>
+    </Card>
   )
 }

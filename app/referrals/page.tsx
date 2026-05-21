@@ -5,6 +5,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import Navbar from "../components/Navbar"
 import { supabase } from "../../lib/supabaseClient"
+import { useToast } from "@/app/components/ui"
 
 type ProfileRow = {
   id: string
@@ -43,6 +44,7 @@ function statusClass(status: string | null | undefined): string {
 }
 
 export default function ReferralsPage() {
+  const toast = useToast()
   const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [profile, setProfile] = useState<ProfileRow | null>(null)
@@ -145,7 +147,7 @@ export default function ReferralsPage() {
       window.setTimeout(() => setCopyDone(false), 2000)
     } catch (e) {
       console.error(e)
-      alert("Could not copy link")
+      toast.error("Could not copy link")
     }
   }
 

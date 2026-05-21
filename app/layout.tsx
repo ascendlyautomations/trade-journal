@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import BannedAccountShell from "./components/BannedAccountShell";
+import BannedAccountShell from "./components/BannedAccountShell"
+import ToastRoot from "./components/ToastRoot"
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -31,11 +32,13 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="flex flex-col">
-        <BannedAccountShell>
-          <div className="w-full flex flex-col pt-16">
-            {children}
-          </div>
-        </BannedAccountShell>
+        <ToastRoot>
+          <BannedAccountShell>
+            <div className="w-full flex flex-col pt-16">
+              {children}
+            </div>
+          </BannedAccountShell>
+        </ToastRoot>
       </body>
     </html>
   );

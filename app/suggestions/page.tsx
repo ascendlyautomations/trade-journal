@@ -4,26 +4,26 @@ import { useState } from "react"
 import Navbar from "../components/Navbar"
 import { supabase } from "../../lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
+import { useToast } from "@/app/components/ui"
 
 export default function SuggestionsPage() {
+  const toast = useToast()
   const [note, setNote] = useState("")
   const [image, setImage] = useState<File | null>(null)
   const [loading, setLoading] = useState(false)
-  const [success, setSuccess] = useState("")
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!note.trim() || !image) return
 
     setLoading(true)
-    setSuccess("")
 
     const {
       data: { user },
     } = await supabase.auth.getUser()
 
     if (!user) {
-      alert("Please log in first.")
+      toast.error("Please log in first.")
       setLoading(false)
       return
     }
@@ -39,7 +39,7 @@ export default function SuggestionsPage() {
       .upload(fileName, uploadFile)
 
     if (uploadError) {
-      alert(uploadError.message)
+      toast.error(uploadError.message)
       setLoading(false)
       return
     }
@@ -55,14 +55,14 @@ export default function SuggestionsPage() {
     })
 
     if (insertError) {
-      alert(insertError.message)
+      toast.error(insertError.message)
       setLoading(false)
       return
     }
 
     setNote("")
     setImage(null)
-    setSuccess("Feedback submitted 🚀")
+    toast.success("Feedback submitted")
     setLoading(false)
   }
 
@@ -99,10 +99,6 @@ export default function SuggestionsPage() {
               rows={5}
               className="mb-6 w-full resize-none rounded-xl border border-white/10 bg-white/10 px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400"
             />
-
-            {success ? (
-              <p className="mb-4 text-sm text-emerald-300">{success}</p>
-            ) : null}
 
             <button
               type="submit"
