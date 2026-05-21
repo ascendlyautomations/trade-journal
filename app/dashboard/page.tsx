@@ -4,6 +4,9 @@ import Navbar from "../components/Navbar"
 import DashboardFilters from "../components/dashboard/DashboardFilters"
 import DashboardHeader from "../components/dashboard/DashboardHeader"
 import DashboardStatsGrid from "../components/dashboard/DashboardStatsGrid"
+import DashboardEquityCurve from "../components/dashboard/DashboardEquityCurve"
+import DashboardWeekdayChart from "../components/dashboard/DashboardWeekdayChart"
+import DashboardSessionChart from "../components/dashboard/DashboardSessionChart"
 import type {
   DashboardGearPersistedPrefs,
   GearDraftState,
@@ -31,20 +34,6 @@ import {
   getTradingWeekday,
   resolveTradingTimeSourceForKey,
 } from "@/lib/formatDate"
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  Tooltip,
-  Legend,
-  CartesianGrid,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell
-} from "recharts"
-
 const DASHBOARD_GEAR_PREFS_KEY = "tradetrax_dashboard_prefs_v1"
 
 function loadDashboardGearPrefs(): Partial<DashboardGearPersistedPrefs> | null {
@@ -1471,193 +1460,18 @@ const worstDay = dailyPnLs.length > 0
   )
 
   const pnlByWeekdaySection = (
-    <div className="flex min-h-[300px] h-full flex-col rounded-xl border border-white/10 bg-white/10 p-3 md:p-4 backdrop-blur-md">
-      <h2 className="mb-3 text-sm md:text-base font-semibold text-blue-300">
-        P&amp;L by Weekday
-      </h2>
-      <div className="w-full overflow-hidden">
-      <ResponsiveContainer width="100%" height={280}>
-        <LineChart
-          data={weekdayData}
-          margin={{ top: 10, right: 20, left: 20, bottom: 20 }}
-        >
-          <CartesianGrid stroke="#334155" />
-          <XAxis
-            dataKey="day"
-            stroke="#94a3b8"
-            tick={{ fill: "#94a3b8", fontSize: 12 }}
-          />
-          <YAxis
-            stroke="#94a3b8"
-            tick={{ fill: "#94a3b8", fontSize: 12 }}
-            tickFormatter={(value) =>
-              Number(value) < 0
-                ? `-$${Math.abs(Number(value)).toLocaleString()}`
-                : `$${Number(value).toLocaleString()}`
-            }
-          />
-          <Tooltip
-            formatter={(value) =>
-              Number(value) < 0
-                ? `-$${Math.abs(Number(value)).toLocaleString(undefined, {
-                    minimumFractionDigits: 2,
-                  })}`
-                : `$${Number(value).toLocaleString(undefined, {
-                    minimumFractionDigits: 2,
-                  })}`
-            }
-            labelFormatter={(label) => `${label}`}
-          />
-          <Line type="monotone" dataKey="pnl" stroke="#38bdf8" strokeWidth={2} dot={{ r: 4, fill: "#38bdf8" }} />
-        </LineChart>
-      </ResponsiveContainer>
-      </div>
-    </div>
+    <DashboardWeekdayChart data={weekdayData} />
   )
 
   const sessionPerformanceSection = (
-    <div className="flex min-h-[300px] h-full flex-col rounded-xl border border-white/10 bg-white/10 p-3 md:p-4 backdrop-blur-md">
-      <h2 className="mb-3 text-sm md:text-base font-semibold text-blue-300">
-        Session Performance
-      </h2>
-      <div className="flex flex-1 flex-col gap-4">
-        <div className="flex min-h-[240px] flex-col">
-          <p className="mb-2 text-xs md:text-sm text-gray-400">Trades by Session</p>
-          <div className="min-h-0 flex-1 w-full overflow-hidden">
-            <ResponsiveContainer width="100%" height={240}>
-              <PieChart>
-                <Pie
-                  data={sessionPieData}
-                  dataKey="value"
-                  nameKey="name"
-                  cx="50%"
-                  cy="50%"
-                  outerRadius={88}
-                  label={({ name, value }) => `${name}: ${value}`}
-                >
-                  {sessionPieData.map((entry, index) => (
-                    <Cell
-                      key={`cell-${entry.name}`}
-                      fill={["#60a5fa", "#34d399", "#c084fc"][index % 3]}
-                    />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-        <div className="flex flex-col">
-          <p className="mb-2 text-xs md:text-sm text-gray-400">Session breakdown</p>
-          <div className="grid grid-cols-3 gap-2 md:gap-3">
-            {(["London", "NY", "Asia"] as const).map((name) => {
-              const s = sessionBuckets[name]
-              const wr = s.totalTrades ? (s.wins / s.totalTrades) * 100 : 0
-              const titleColor =
-                name === "London"
-                  ? "text-blue-300"
-                  : name === "NY"
-                    ? "text-emerald-400"
-                    : "text-purple-300"
-              return (
-                <div
-                  key={name}
-                  className="rounded-lg border border-white/10 bg-white/5 p-2 md:p-3 text-center text-xs md:text-sm"
-                >
-                  <p className={`mb-2 font-semibold ${titleColor}`}>{name}</p>
-                  <p className="text-gray-300">
-                    <span className="text-gray-400">Trades:</span>{" "}
-                    {formatNumber(s.totalTrades)}
-                  </p>
-                  <p className="text-gray-300">
-                    <span className="text-gray-400">Win rate:</span> {wr.toFixed(1)}%
-                  </p>
-                  <p
-                    className={`mt-1 text-sm md:text-lg font-semibold tabular-nums ${
-                      s.totalPnL >= 0 ? "text-green-400" : "text-red-400"
-                    }`}
-                  >
-                    {formatCurrency(s.totalPnL)}
-                  </p>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      </div>
-    </div>
+    <DashboardSessionChart
+      sessionPieData={sessionPieData}
+      sessionBuckets={sessionBuckets}
+    />
   )
 
   const mobileEquityChartSlot = (
-    <div className="col-span-2 block md:hidden overflow-visible rounded-xl border border-white/10 bg-white/10 p-3 backdrop-blur-md">
-      <h2 className="mb-3 text-sm font-semibold text-blue-300">Equity Curve</h2>
-      <div className="h-[240px] w-full">
-        <ResponsiveContainer width="100%" height={240}>
-          <LineChart
-            data={equityDrawdownChartData}
-            margin={{ top: 10, right: 12, left: 12, bottom: 20 }}
-          >
-            <CartesianGrid stroke="#334155" />
-            <XAxis
-              dataKey="date"
-              stroke="#94a3b8"
-              tick={{ fill: "#94a3b8", fontSize: 11 }}
-              tickFormatter={(value) => {
-                const d = new Date(String(value))
-                if (Number.isNaN(d.getTime())) return String(value).slice(0, 10)
-                return `${d.getMonth() + 1}/${d.getDate()}`
-              }}
-              interval="preserveStartEnd"
-              minTickGap={24}
-              angle={-25}
-              textAnchor="end"
-              height={48}
-            />
-            <YAxis
-              stroke="#94a3b8"
-              tick={{ fill: "#94a3b8", fontSize: 11 }}
-              tickFormatter={(value) =>
-                Number(value) < 0
-                  ? `-$${Math.abs(Number(value)).toLocaleString(undefined, {
-                      minimumFractionDigits: 0,
-                      maximumFractionDigits: 0,
-                    })}`
-                  : `$${Number(value).toLocaleString(undefined, {
-                      minimumFractionDigits: 0,
-                      maximumFractionDigits: 0,
-                    })}`
-              }
-            />
-            <Tooltip
-              formatter={(value) => {
-                const n = Number(value)
-                const formatted =
-                  n < 0 ? `-$${Math.abs(n).toLocaleString()}` : `$${n.toLocaleString()}`
-                return [formatted, "Equity"]
-              }}
-              labelFormatter={(label) => {
-                const s = String(label)
-                return formatEST(s) || s
-              }}
-              contentStyle={{
-                backgroundColor: "#0f172a",
-                border: "1px solid rgba(255,255,255,0.1)",
-                borderRadius: "8px",
-              }}
-              labelStyle={{ color: "#94a3b8" }}
-            />
-            <Line
-              type="monotone"
-              dataKey="equity"
-              name="Equity"
-              stroke="#22c55e"
-              strokeWidth={2}
-              dot={false}
-            />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
-    </div>
+    <DashboardEquityCurve variant="mobile" data={equityDrawdownChartData} />
   )
 
   const dashboardUserIsPro = isProActive(profile)
@@ -1754,135 +1568,14 @@ const worstDay = dailyPnLs.length > 0
     {/* RIGHT: CHARTS */}
     <div className="space-y-4 md:space-y-6 overflow-visible lg:col-span-2">
       {showEquity ? (
-        <div className="hidden md:block overflow-visible rounded-xl border border-white/10 bg-white/10 p-3 md:p-4 backdrop-blur-md">
-          <h2 className="text-sm md:text-base font-semibold mb-3 text-blue-300">
-            Equity Curve
-          </h2>
-
-          <div className="w-full h-[300px]">
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart
-              data={equityDrawdownChartData}
-              margin={{ top: 10, right: 20, left: 20, bottom: 20 }}
-            >
-              <CartesianGrid stroke="#334155" />
-              <XAxis
-                dataKey="date"
-                stroke="#94a3b8"
-                tick={{ fill: "#94a3b8", fontSize: 12 }}
-                tickFormatter={(value) => {
-                  const d = new Date(String(value))
-                  if (Number.isNaN(d.getTime())) return String(value).slice(0, 10)
-                  return `${d.getMonth() + 1}/${d.getDate()}`
-                }}
-                interval="preserveStartEnd"
-                minTickGap={24}
-                angle={-25}
-                textAnchor="end"
-                height={48}
-              />
-              <YAxis
-                stroke="#94a3b8"
-                tick={{ fill: "#94a3b8", fontSize: 12 }}
-                tickFormatter={(value) =>
-                  Number(value) < 0
-                    ? `-$${Math.abs(Number(value)).toLocaleString(undefined, {
-                        minimumFractionDigits: 0,
-                        maximumFractionDigits: 0,
-                      })}`
-                    : `$${Number(value).toLocaleString(undefined, {
-                        minimumFractionDigits: 0,
-                        maximumFractionDigits: 0,
-                      })}`
-                }
-              />
-              <Tooltip
-                formatter={(value) => {
-                  const n = Number(value)
-                  const formatted =
-                    n < 0
-                      ? `-$${Math.abs(n).toLocaleString()}`
-                      : `$${n.toLocaleString()}`
-                  return [formatted, "Equity"]
-                }}
-                labelFormatter={(label) => {
-                  const s = String(label)
-                  return formatEST(s) || s
-                }}
-                contentStyle={{
-                  backgroundColor: "#0f172a",
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  borderRadius: "8px",
-                }}
-                labelStyle={{ color: "#94a3b8" }}
-              />
-              <Legend
-                wrapperStyle={{ paddingTop: 8 }}
-                formatter={(value) => (
-                  <span className="text-gray-300 text-xs">{value}</span>
-                )}
-              />
-              <Line
-                type="monotone"
-                dataKey="equity"
-                name="Equity"
-                stroke="#22c55e"
-                strokeWidth={2}
-                dot={false}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-          </div>
-
-          <div className="flex flex-wrap gap-3 mt-4">
-            <div
-              className={`px-3 py-2 rounded-lg text-sm font-medium backdrop-blur-md transition-all duration-200 hover:scale-[1.03] ${
-                profitFactor >= 1
-                  ? "text-green-400 bg-green-500/10 border border-green-500/20"
-                  : "text-red-400 bg-red-500/10 border border-red-500/20"
-              }`}
-            >
-              Profit Factor: {profitFactor.toFixed(2)}
-            </div>
-
-            <div
-              className={`px-3 py-2 rounded-lg text-sm font-medium backdrop-blur-md transition-all duration-200 hover:scale-[1.03] ${
-                currentStreak > 0
-                  ? "text-green-400 bg-green-500/10 border border-green-500/20"
-                  : "text-red-400 bg-red-500/10 border border-red-500/20"
-              }`}
-            >
-              Streak:{" "}
-              {currentStreak > 0
-                ? `${currentStreak} Wins`
-                : `${Math.abs(currentStreak)} Losses`}
-            </div>
-
-            <div
-              className={`px-3 py-2 rounded-lg text-sm font-medium backdrop-blur-md transition-all duration-200 hover:scale-[1.03] ${
-                avgDay > 0
-                  ? "text-green-400 bg-green-500/10 border border-green-500/20"
-                  : avgDay < 0
-                    ? "text-red-400 bg-red-500/10 border border-red-500/20"
-                    : "text-gray-300 bg-white/10 border border-white/10"
-              }`}
-            >
-              Avg Day: {formatCurrency(avgDay)}
-            </div>
-
-            <div
-              className={`px-3 py-2 rounded-lg text-sm font-medium backdrop-blur-md transition-all duration-200 hover:scale-[1.03] ${
-                consistency >= 60
-                  ? "text-green-400 bg-green-500/10 border border-green-500/20"
-                  : consistency >= 30
-                    ? "text-yellow-400 bg-yellow-500/10 border border-yellow-500/20"
-                    : "text-red-400 bg-red-500/10 border border-red-500/20"
-              }`}
-            >
-              Consistency: {consistency.toFixed(0)}%
-            </div>
-          </div>
-        </div>
+        <DashboardEquityCurve
+          variant="desktop"
+          data={equityDrawdownChartData}
+          profitFactor={profitFactor}
+          currentStreak={currentStreak}
+          avgDay={avgDay}
+          consistency={consistency}
+        />
       ) : null}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
