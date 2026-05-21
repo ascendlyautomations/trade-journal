@@ -548,41 +548,22 @@ export default function Dashboard() {
         .eq("user_id", currentUser.id)
       if (mounted) setAccountRows(accountsData || [])
 
-      const { data: statsData } = await supabase
-        .from("trades")
-        .select("pnl, rr")
-        .eq("user_id", currentUser.id);
-
-      const totalPnL =
-        statsData?.reduce((sum, t) => sum + (t.pnl || 0), 0) || 0;
-
-      const totalTrades = statsData?.length || 0;
-
-      const wins =
-        statsData?.filter((t) => (t.pnl || 0) > 0).length || 0;
-
-      const winRate =
-        totalTrades > 0 ? (wins / totalTrades) * 100 : 0;
-
-      const avgRR =
-        statsData && statsData.length > 0
-          ? statsData.reduce((sum, t) => sum + (t.rr || 0), 0) /
-            statsData.length
-          : 0;
-
-      // ✅ fetch trades ONLY for this user (huge speed boost)
+      // Columns used by dashboard filters, analytics useMemo, recent trades, and performance share pool
       const { data: trades } = await supabase
         .from("trades")
-        .select("*")
+        .select(
+          "id, created_at, date, pnl, rr, entry_time, exit_time, account_name, account_size, account_id, mode, account_type, session, ticker, direction, strategy, trade_type, is_public, public_description"
+        )
         .eq("user_id", currentUser.id)
         .order("date", { ascending: false })
 
       if (mounted && trades) setTrades(trades)
 
-      // ✅ fetch user settings/profile
       const { data: profileData } = await supabase
         .from("profiles")
-        .select("*")
+        .select(
+          "id, username, bio, trading_style, started_trading, avatar_url, onboarding_completed, max_drawdown_limit, is_pro, subscription_status, referral_code"
+        )
         .eq("id", currentUser.id)
         .single()
 
