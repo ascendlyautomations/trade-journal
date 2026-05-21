@@ -4,6 +4,8 @@ import Navbar from "../components/Navbar"
 import { useEffect, useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { useRouter } from "next/navigation"
+import { formatPnlCurrency } from "@/lib/formatMoney"
+import { pnlTextClassName } from "@/lib/formatDisplay"
 
 export default function ExplorePage() {
   const [users, setUsers] = useState<any[]>([])
@@ -163,8 +165,8 @@ export default function ExplorePage() {
                       className="bg-white/5 border border-white/10 p-4 rounded-xl cursor-pointer hover:bg-white/10"
                     >
                       <p className="font-semibold">@{u.username}</p>
-                      <p className={`text-sm ${u.pnl >= 0 ? "text-green-400" : "text-red-400"}`}>
-                        ${u.pnl.toLocaleString()}
+                      <p className={`text-sm ${pnlTextClassName(u.pnl, { variant: "green" })}`}>
+                        {formatPnlCurrency(Number(u.pnl))}
                       </p>
                     </div>
                   ))}

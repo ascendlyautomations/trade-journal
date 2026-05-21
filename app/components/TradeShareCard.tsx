@@ -2,36 +2,14 @@
 
 import { forwardRef } from "react"
 import { formatEST } from "@/lib/formatEST"
+import { formatMoneyUnknown } from "@/lib/formatDisplay"
+import { tradeScreenshotPublicUrl } from "@/lib/storagePublicUrl"
 
 export type TradeShareCardProps = {
   trade: any
   /** For html-to-image: target this id with `document.getElementById` */
   exportId?: string
   profile?: { referral_code?: string | null } | null
-}
-
-function resolveScreenshotUrl(trade: any): string | null {
-  const raw = trade?.image_url != null ? String(trade.image_url).trim() : ""
-  if (!raw) return null
-  if (raw.startsWith("http")) return raw
-  const base = process.env.NEXT_PUBLIC_SUPABASE_URL
-  if (!base) return null
-  return `${base}/storage/v1/object/public/screenshots/${raw}`
-}
-
-function formatMoney(value: unknown): string {
-  if (value === null || value === undefined) return "—"
-  const number = Number(value)
-  if (Number.isNaN(number)) return "—"
-  return number < 0
-    ? `-$${Math.abs(number).toLocaleString(undefined, {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      })}`
-    : `$${number.toLocaleString(undefined, {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      })}`
 }
 
 function formatNumber(value: unknown): string {
@@ -58,7 +36,7 @@ function directionLabel(trade: any): string {
 /** Responsive export card — premium glass layout */
 const TradeShareCard = forwardRef<HTMLDivElement, TradeShareCardProps>(
   function TradeShareCard({ trade, exportId, profile }, ref) {
-    const screenshotUrl = resolveScreenshotUrl(trade)
+    const screenshotUrl = tradeScreenshotPublicUrl(trade?.image_url)
     const pnl = Number(trade.pnl)
     const hasPnl = Number.isFinite(pnl)
     const positive = hasPnl && pnl >= 0
@@ -174,7 +152,7 @@ const TradeShareCard = forwardRef<HTMLDivElement, TradeShareCardProps>(
                     : "text-red-400/90"
               }`}
             >
-              {formatMoney(trade.pnl)}
+              {formatMoneyUnknown(trade.pnl, { empty: "—" })}
             </h1>
             </div>
 

@@ -8,58 +8,12 @@ import {
 } from "@/lib/tradeDisplayFormat"
 import { formatDateOnly, formatTimeOnly } from "@/lib/formatDate"
 import { formatEST } from "@/lib/formatEST"
-
-function formatMoney(value: unknown): string {
-  if (value === null || value === undefined) return "-"
-  const number = Number(value)
-  if (Number.isNaN(number)) return "-"
-  return number < 0
-    ? `-$${Math.abs(number).toLocaleString(undefined, {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      })}`
-    : `$${number.toLocaleString(undefined, {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      })}`
-}
-
-function formatNumber(value: unknown): string {
-  if (value === null || value === undefined) return "-"
-  const number = Number(value)
-  if (Number.isNaN(number)) return "-"
-  return number.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })
-}
-
-function getDuration(
-  start: string | null | undefined,
-  end: string | null | undefined
-) {
-  if (!start || !end) return null
-
-  const diff = +new Date(String(end)) - +new Date(String(start))
-  if (!Number.isFinite(diff) || diff <= 0) return null
-
-  const totalSeconds = Math.floor(diff / 1000)
-
-  const hours = Math.floor(totalSeconds / 3600)
-  const minutes = Math.floor((totalSeconds % 3600) / 60)
-  const seconds = totalSeconds % 60
-
-  // under 1 minute → force 0m
-  if (hours === 0 && minutes === 0) {
-    return "0m"
-  }
-
-  if (hours === 0) {
-    return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`
-  }
-
-  return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`
-}
+import {
+  formatMoneyUnknown,
+  formatNumberUnknown,
+  getDurationFromTimes,
+} from "@/lib/formatDisplay"
+import { tradeScreenshotPublicUrl } from "@/lib/storagePublicUrl"
 
 export type TradeCardProps = {
   trade: any
@@ -90,7 +44,7 @@ export default function TradeCard({
   const exitRaw = trade.exit_time
   const entry = entryRaw ? formatTimeOnly(entryRaw) : null
   const exit = exitRaw ? formatTimeOnly(exitRaw) : null
-  const duration = getDuration(entryRaw, exitRaw)
+  const duration = getDurationFromTimes(entryRaw, exitRaw)
 
   if (process.env.NODE_ENV === "development") {
     console.log("TRADE TIMES FINAL:", { entryRaw, exitRaw, entry, exit, duration })
@@ -116,14 +70,7 @@ export default function TradeCard({
 
   const accountDisplay = `${trade.account_name ?? ""} ${trade.account_size ?? ""}`.trim()
 
-  const base = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const screenshotUrl = trade.image_url
-    ? trade.image_url.startsWith("http")
-      ? trade.image_url
-      : base
-        ? `${base}/storage/v1/object/public/screenshots/${trade.image_url}`
-        : null
-    : null
+  const screenshotUrl = tradeScreenshotPublicUrl(trade.image_url)
 
   return (
     <div className="relative rounded-xl border border-white/10 bg-white/5 p-7 shadow backdrop-blur-md transition-all duration-200 hover:scale-[1.02] hover:border-white/20">
@@ -192,16 +139,16 @@ export default function TradeCard({
                   : "bg-red-500/20 text-red-400"
               }`}
             >
-              {formatMoney(trade.pnl)}
+              {formatMoneyUnknown(trade.pnl)}
             </div>
 
             <div className="mt-2 flex flex-wrap gap-2">
               <span className="rounded bg-white/10 px-2 py-1 text-xs">
-                RR: {formatNumber(trade.rr)}
+                RR: {formatNumberUnknown(trade.rr)}
               </span>
 
               <span className="rounded bg-white/10 px-2 py-1 text-xs">
-                Pts: {formatNumber(trade.points)}
+                Pts: {formatNumberUnknown(trade.points)}
               </span>
             </div>
             <p className="text-sm">

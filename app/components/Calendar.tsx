@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react"
 import { formatPnlCurrency, formatPnlWholeDollars } from "../../lib/formatMoney"
+import { tradeScreenshotPublicUrl } from "@/lib/storagePublicUrl"
 import { formatEST } from "@/lib/formatEST"
 import {
   getTradingDayKey,
@@ -38,15 +39,6 @@ type CalendarProps = {
   trades: TradeLike[]
   showAccountFilter?: boolean
   showControls?: boolean
-}
-
-function tradeImageSrc(imageUrl: string | null | undefined): string | null {
-  const raw = imageUrl != null ? String(imageUrl).trim() : ""
-  if (!raw) return null
-  if (raw.startsWith("http")) return raw
-  const base = process.env.NEXT_PUBLIC_SUPABASE_URL
-  if (!base) return null
-  return `${base}/storage/v1/object/public/screenshots/${raw}`
 }
 
 export default function Calendar({
@@ -324,7 +316,7 @@ export default function Calendar({
 
             <div className="mt-3 space-y-3">
               {sortedDayTrades.map((trade) => {
-                const img = tradeImageSrc(trade.image_url)
+                const img = tradeScreenshotPublicUrl(trade.image_url)
                 const pnl = Number(trade.pnl) || 0
                 const modeLower = String(trade.mode ?? "").toLowerCase().trim()
                 const accountLine = `${trade.account_name ?? ""} ${trade.account_size ?? ""}`.trim()
@@ -423,7 +415,7 @@ export default function Calendar({
               </button>
             </div>
             {(() => {
-              const img = tradeImageSrc(selectedTrade.image_url)
+              const img = tradeScreenshotPublicUrl(selectedTrade.image_url)
               const pnl = Number(selectedTrade.pnl) || 0
               const modeLower = String(selectedTrade.mode ?? "")
                 .toLowerCase()
