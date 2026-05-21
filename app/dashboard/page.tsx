@@ -1,6 +1,7 @@
 "use client"
 
 import Navbar from "../components/Navbar"
+import DashboardFilters from "../components/dashboard/DashboardFilters"
 import DashboardHeader from "../components/dashboard/DashboardHeader"
 import type {
   DashboardGearPersistedPrefs,
@@ -1623,35 +1624,39 @@ const worstDay = dailyPnLs.length > 0
 
       <div className="w-full text-white px-3 pb-3 pt-0 md:px-10 md:pb-10">
 
-        <DashboardHeader
-          accounts={accounts}
-          accountFilter={accountFilter}
-          onAccountChange={setAccountFilter}
-          accountTypeFilter={accountTypeFilter}
-          onAccountTypeChange={setAccountTypeFilter}
-          timeframe={timeFilter}
-          onTimeframeChange={handleDashboardTimeframeChange}
-          customRangeStart={customRangeStart}
-          customRangeEnd={customRangeEnd}
-          onCustomRangeApply={handleDashboardCustomRangeApply}
-          selectedDate={selectedDate}
-          onSelectedDateChange={setSelectedDate}
-          showPublicOnly={showPublicOnly}
-          onTogglePublicOnly={() => setShowPublicOnly(!showPublicOnly)}
-          onOpenPerformanceShare={() => setShowPerformanceShare(true)}
-          isPro={isPro}
-          showFreePlanAccountBanner={showFreePlanAccountBanner}
-          showControls={showControls}
-          onToggleShowControls={() => setShowControls((prev) => !prev)}
-          gearDraft={gearDraft}
-          setGearDraft={setGearDraft}
-          ddInputFocused={ddInputFocused}
-          setDdInputFocused={setDdInputFocused}
-          savingGearSettings={savingGearSettings}
-          hasUser={Boolean(user)}
-          onSaveGear={() => void saveDashboardGearPanel()}
-          onCancelGear={cancelDashboardGearPanel}
-        />
+        <div className="relative z-50 mx-auto w-full max-w-[1600px] px-4 md:px-6">
+          <DashboardFilters
+            accounts={accounts}
+            accountFilter={accountFilter}
+            onAccountChange={setAccountFilter}
+            accountTypeFilter={accountTypeFilter}
+            onAccountTypeChange={setAccountTypeFilter}
+            timeframe={timeFilter}
+            onTimeframeChange={handleDashboardTimeframeChange}
+            customRangeStart={customRangeStart}
+            customRangeEnd={customRangeEnd}
+            onCustomRangeApply={handleDashboardCustomRangeApply}
+            selectedDate={selectedDate}
+            onSelectedDateChange={setSelectedDate}
+            showPublicOnly={showPublicOnly}
+            onTogglePublicOnly={() => setShowPublicOnly(!showPublicOnly)}
+            onOpenPerformanceShare={() => setShowPerformanceShare(true)}
+            showControls={showControls}
+            onToggleShowControls={() => setShowControls((prev) => !prev)}
+            gearDraft={gearDraft}
+            setGearDraft={setGearDraft}
+            ddInputFocused={ddInputFocused}
+            setDdInputFocused={setDdInputFocused}
+            savingGearSettings={savingGearSettings}
+            hasUser={Boolean(user)}
+            onSaveGear={() => void saveDashboardGearPanel()}
+            onCancelGear={cancelDashboardGearPanel}
+          />
+          <DashboardHeader
+            isPro={isPro}
+            showFreePlanAccountBanner={showFreePlanAccountBanner}
+          />
+        </div>
 
           <div className="relative z-0 mx-auto w-full max-w-[1600px] px-4 md:px-6 flex flex-col gap-6 md:gap-8 overflow-visible">
 
