@@ -1,46 +1,40 @@
 "use client"
 
-import Link from "next/link"
 import type { ChangeEvent } from "react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
-import { fetchShareConversations } from "@/lib/shareToConversations"
-import { formatEST } from "@/lib/formatEST"
 import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import Navbar from "../components/Navbar"
+import FeedLoadMoreFooter from "../components/feed/FeedLoadMoreFooter"
+import FeedModeToggle from "../components/feed/FeedModeToggle"
 import FeedPostList from "../components/feed/FeedPostList"
+import FeedPostOverlays from "../components/feed/FeedPostOverlays"
+import FeedStoriesBar, { type StoryBarProfile } from "../components/feed/FeedStoriesBar"
+import FeedStoryViewer from "../components/feed/FeedStoryViewer"
 import {
   EMPTY_COMMENTS,
   EMPTY_LIKE_META,
 } from "../components/feed/FeedPostCard"
 import {
-  getModeStyles,
-  postImageSrc,
-  postPublicDescription,
-  postTradeJoin,
+  FEED_COMMENT_INSERT_SELECT,
+  FEED_COMMENTS_SELECT,
+  FEED_POSTS_SELECT,
+  FEED_STORIES_SELECT,
+  buildFeedPostsIndex,
 } from "../components/feed/feedPostHelpers"
-import {
-  PostInteractionsComments,
-  PostInteractionsEngagement,
-} from "../components/PostInteractions"
 
 const STORY_WINDOW_MS = 24 * 60 * 60 * 1000
 /** Auto-advance each slide (Instagram-style). */
 const STORY_SLIDE_MS = 7000
+const EMPTY_STORY_LIST: StoryRow[] = []
 
 type StoryRow = {
   id: string
   user_id: string
   image_url: string
   created_at: string
-}
-
-type StoryBarProfile = {
-  id: string
-  username?: string | null
-  avatar_url?: string | null
 }
 
 /** Trade owner for notifications (not always same as post author). */
@@ -64,17 +58,11 @@ export default function FeedPage() {
   const hasMoreRef = useRef(true)
   const [user, setUser] = useState<any>(null)
   const [mode, setMode] = useState<"global" | "following">("following")
-  const [openComments, setOpenComments] = useState<Record<string, boolean>>({})
   const [likesByPost, setLikesByPost] = useState<Record<string, LikeMeta>>({})
   const [commentsByPost, setCommentsByPost] = useState<Record<string, any[]>>({})
   const [commentSubmitting, setCommentSubmitting] = useState<Record<string, boolean>>({})
-  const [modalCommentDraft, setModalCommentDraft] = useState("")
-  const [selectedPost, setSelectedPost] = useState<any>(null)
-  const [sharePost, setSharePost] = useState<any>(null)
-  const [shareMessage, setShareMessage] = useState("")
-  const [shareConversations, setShareConversations] = useState<any[]>([])
-  const [selectedConversations, setSelectedConversations] = useState<string[]>([])
-  const [shareLoading, setShareLoading] = useState(false)
+  const [selectedPostId, setSelectedPostId] = useState<string | null>(null)
+  const [sharePostId, setSharePostId] = useState<string | null>(null)
   const [storiesByUser, setStoriesByUser] = useState<Record<string, StoryRow[]>>(
     {}
   )
@@ -85,11 +73,19 @@ export default function FeedPage() {
   const likesByPostRef = useRef(likesByPost)
   likesByPostRef.current = likesByPost
   const draftSyncRef = useRef<Record<string, string>>({})
+  const openCommentsRef = useRef<Record<string, boolean>>({})
 
-  const currentStories = activeStoryUser
-    ? (storiesByUser[activeStoryUser] ?? [])
-    : []
-  const currentStory = currentStories[currentStoryIndex]
+  const currentStories = useMemo(
+    () =>
+      activeStoryUser
+        ? storiesByUser[activeStoryUser] ?? EMPTY_STORY_LIST
+        : EMPTY_STORY_LIST,
+    [activeStoryUser, storiesByUser]
+  )
+  const currentStory = useMemo(
+    () => currentStories[currentStoryIndex] ?? null,
+    [currentStories, currentStoryIndex]
+  )
 
   useEffect(() => {
     fetchUser()
@@ -115,7 +111,7 @@ export default function FeedPage() {
 
     const { data: stories, error: storiesErr } = await supabase
       .from("stories")
-      .select("*")
+      .select(FEED_STORIES_SELECT)
       .in("user_id", storyUserIds)
       .order("created_at", { ascending: false })
 
@@ -240,6 +236,11 @@ export default function FeedPage() {
     setCurrentStoryIndex(0)
   }, [])
 
+  const handleCloseStoryViewer = useCallback(() => {
+    setActiveStoryUser(null)
+    setCurrentStoryIndex(0)
+  }, [])
+
   const nextStory = useCallback(() => {
     const list = activeStoryUser
       ? (storiesByUser[activeStoryUser] ?? [])
@@ -327,7 +328,7 @@ export default function FeedPage() {
   }, [activeStoryUser])
 
   useEffect(() => {
-    if (selectedPost || activeStoryUser) {
+    if (selectedPostId || activeStoryUser) {
       document.body.style.overflow = "hidden"
       return () => {
         document.body.style.overflow = ""
@@ -335,7 +336,7 @@ export default function FeedPage() {
     }
     document.body.style.overflow = ""
     return undefined
-  }, [selectedPost, activeStoryUser])
+  }, [selectedPostId, activeStoryUser])
 
   async function fetchUser() {
     const { data } = await supabase.auth.getSession()
@@ -361,12 +362,12 @@ export default function FeedPage() {
       supabase.from("likes").select("post_id, user_id").in("post_id", ids),
       supabase
         .from("comments")
-        .select("*, profiles(username, avatar_url)")
+        .select(FEED_COMMENTS_SELECT)
         .in("post_id", ids)
         .order("created_at", { ascending: true }),
       supabase
         .from("likes")
-        .select("*", { count: "exact", head: true })
+        .select("post_id", { count: "exact", head: true })
         .in("post_id", ids),
     ])
     void likesExactCount
@@ -419,9 +420,7 @@ export default function FeedPage() {
       if (mode === "global") {
         const { data, error } = await supabase
           .from("posts")
-          .select(
-            "*, profiles(id, username, avatar_url), trades(public_description, user_id, ticker, direction, account_type, points)"
-          )
+          .select(FEED_POSTS_SELECT)
           .order("created_at", { ascending: false })
           .range(from, to)
 
@@ -460,9 +459,7 @@ export default function FeedPage() {
 
         const { data, error } = await supabase
           .from("posts")
-          .select(
-            "*, profiles(id, username, avatar_url), trades(public_description, user_id, ticker, direction, account_type, points)"
-          )
+          .select(FEED_POSTS_SELECT)
           .in("user_id", ids)
           .order("created_at", { ascending: false })
           .range(from, to)
@@ -523,32 +520,20 @@ export default function FeedPage() {
     return () => window.removeEventListener("scroll", handleScroll)
   }, [loadPosts])
 
-  useEffect(() => {
-    if (!sharePost || !user?.id) return
-
-    const loadShareConversations = async () => {
-      setShareLoading(true)
-      const list = await fetchShareConversations(supabase, user.id)
-      setShareConversations(list)
-      setShareLoading(false)
-    }
-
-    void loadShareConversations()
-  }, [sharePost, user?.id])
-
   const handleSelectPost = useCallback((post: any) => {
-    setSelectedPost(post)
+    setSelectedPostId(String(post.id))
   }, [])
 
   const handleSharePost = useCallback((post: any) => {
-    setSharePost(post)
+    setSharePostId(String(post.id))
   }, [])
 
-  const handleToggleComments = useCallback((postId: string) => {
-    setOpenComments((prev) => ({
-      ...prev,
-      [postId]: !prev[postId],
-    }))
+  const handleCloseDetailModal = useCallback(() => {
+    setSelectedPostId(null)
+  }, [])
+
+  const handleCloseShareOverlay = useCallback(() => {
+    setSharePostId(null)
   }, [])
 
   const toggleLike = useCallback(
@@ -575,11 +560,6 @@ export default function FeedPage() {
           ...prev,
           [pid]: { count: newCount, liked: false },
         }))
-        setSelectedPost((prev: any) =>
-          prev && String(prev.id) === pid
-            ? { ...prev, likesCount: newCount }
-            : prev
-        )
       } else {
         const { error } = await supabase.from("likes").insert({
           post_id: pid,
@@ -596,11 +576,6 @@ export default function FeedPage() {
           ...prev,
           [pid]: { count: newCount, liked: true },
         }))
-        setSelectedPost((prev: any) =>
-          prev && String(prev.id) === pid
-            ? { ...prev, likesCount: newCount }
-            : prev
-        )
 
         const notifyUserId = postTradeOwnerUserId(post)
         const tradeId = post.trade_id
@@ -655,7 +630,7 @@ export default function FeedPage() {
           user_id: user.id,
           content: trimmed,
         })
-        .select("*, profiles(username, avatar_url)")
+        .select(FEED_COMMENT_INSERT_SELECT)
         .single()
 
       setCommentSubmitting((s) => ({ ...s, [pid]: false }))
@@ -701,103 +676,35 @@ export default function FeedPage() {
     [user]
   )
 
-  const handleModalCommentChange = useCallback((postId: string, value: string) => {
-    setModalCommentDraft(value)
-    draftSyncRef.current[postId] = value
-  }, [])
-
-  const handleModalSubmitComment = useCallback(
-    async (post: any) => {
-      const ok = await submitComment(post, modalCommentDraft)
-      if (ok) {
-        setModalCommentDraft("")
-        draftSyncRef.current[String(post.id)] = ""
-      }
-    },
-    [modalCommentDraft, submitComment]
-  )
-
-  useEffect(() => {
-    const pid = selectedPost ? String(selectedPost.id) : null
-    if (pid) {
-      setModalCommentDraft(draftSyncRef.current[pid] ?? "")
-    } else {
-      setModalCommentDraft("")
-    }
-  }, [selectedPost])
-
-  const toggleConversation = (id: string) => {
-    setSelectedConversations((prev) =>
-      prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]
-    )
-  }
-
-  const handleSendPost = async () => {
-    if (!sharePost || selectedConversations.length === 0) return
-
-    const {
-      data: { user: authUser },
-    } = await supabase.auth.getUser()
-
-    if (!authUser?.id) return
-
-    const userIsPro = await isUserPro(supabase as any, authUser.id)
-    if (!userIsPro) {
-      const limitReached = await reachedMessagesCommentsLimit(
-        supabase as any,
-        authUser.id,
-        10
-      )
-      if (limitReached) {
-        alert(handleSupabaseError({ message: "10 messages limit" }))
-        return
-      }
-    }
-
-    const content = shareMessage.trim() || "Shared a post"
-
-    for (const conversationId of selectedConversations) {
-      const { error } = await supabase.from("messages").insert({
-        conversation_id: conversationId,
-        sender_id: authUser.id,
-        type: "post",
-        post_id: sharePost.id,
-        content,
-      })
-
-      if (error) {
-        console.error("Share post error:", error)
-        alert(handleSupabaseError(error))
-        return
-      }
-    }
-
-    setSharePost(null)
-    setShareMessage("")
-    setSelectedConversations([])
-  }
-
-  const modalPid = selectedPost ? String(selectedPost.id) : null
-  const modalComments = modalPid
-    ? commentsByPost[modalPid] ?? []
-    : []
-  const modalPublicDesc = selectedPost
-    ? postPublicDescription(selectedPost)
-    : null
-  const modalTradeJoin = selectedPost ? postTradeJoin(selectedPost) : null
-  const modalTicker =
-    modalTradeJoin?.ticker != null ? String(modalTradeJoin.ticker) : "—"
-  const modalDir =
-    modalTradeJoin?.direction != null ? String(modalTradeJoin.direction) : "—"
-  const modalAcctNorm = String(modalTradeJoin?.account_type ?? "")
-    .trim()
-    .toLowerCase()
-  const modalPnl = selectedPost ? Number(selectedPost.pnl) : NaN
-  const modalPnlPositive = !Number.isNaN(modalPnl) && modalPnl >= 0
-  const uniquePosts = useMemo(
-    () => Array.from(new Map(posts.map((p) => [p.id, p])).values()),
+  const { uniquePosts, postsById } = useMemo(
+    () => buildFeedPostsIndex(posts),
     [posts]
   )
+
+  const selectedPost = useMemo(
+    () => (selectedPostId ? postsById.get(selectedPostId) ?? null : null),
+    [selectedPostId, postsById]
+  )
+
+  const sharePost = useMemo(
+    () => (sharePostId ? postsById.get(sharePostId) ?? null : null),
+    [sharePostId, postsById]
+  )
+
+  const selectedPostComments = useMemo(() => {
+    if (!selectedPostId) return EMPTY_COMMENTS
+    return commentsByPost[selectedPostId] ?? EMPTY_COMMENTS
+  }, [selectedPostId, commentsByPost])
+
+  const selectedPostLikeMeta = useMemo(() => {
+    if (!selectedPostId) return EMPTY_LIKE_META
+    return likesByPost[selectedPostId] ?? EMPTY_LIKE_META
+  }, [selectedPostId, likesByPost])
+
+  const selectedPostCommentSubmitting = useMemo(() => {
+    if (!selectedPostId) return false
+    return !!commentSubmitting[selectedPostId]
+  }, [selectedPostId, commentSubmitting])
 
   return (
     <div className="w-full text-white">
@@ -805,386 +712,70 @@ export default function FeedPage() {
 
       <div className="flex justify-center px-4 py-6 sm:py-8 pb-10">
         <div className="w-full max-w-xl space-y-6">
-          <div className="flex justify-center mb-4">
-            <div className="flex gap-1 sm:gap-2 bg-white/5 p-1 rounded-xl border border-white/10">
-              <button
-                type="button"
-                onClick={() => setMode("following")}
-                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                  mode === "following"
-                    ? "bg-green-500 text-white shadow-sm"
-                    : "text-gray-400 hover:text-gray-200"
-                }`}
-              >
-                Following
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setMode("global")}
-                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                  mode === "global"
-                    ? "bg-green-500 text-white shadow-sm"
-                    : "text-gray-400 hover:text-gray-200"
-                }`}
-              >
-                Global
-              </button>
-            </div>
-          </div>
+          <FeedModeToggle mode={mode} onModeChange={setMode} />
 
           {mode === "following" && user ? (
-            <>
-              <input
-                id="storyUploadInput"
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => void handleStoryUpload(e)}
-              />
-              <div className="flex items-center gap-4 overflow-x-auto pb-3 mb-4">
-                <button
-                  type="button"
-                  onClick={() =>
-                    document.getElementById("storyUploadInput")?.click()
-                  }
-                  className="flex flex-col items-center shrink-0 cursor-pointer text-left"
-                >
-                  <div className="w-16 h-16 rounded-full bg-green-500 flex items-center justify-center text-2xl text-white font-light leading-none hover:bg-green-600 transition-colors">
-                    +
-                  </div>
-                  <p className="text-xs mt-1 text-gray-300">Add</p>
-                </button>
-
-                {users.map((u) => (
-                  <button
-                    key={u.id}
-                    type="button"
-                    onClick={() => openStory(u.id)}
-                    className="flex flex-col items-center shrink-0 cursor-pointer text-left"
-                  >
-                    {u.avatar_url ? (
-                      <img
-                        src={u.avatar_url}
-                        alt=""
-                        loading="lazy"
-                        decoding="async"
-                        className="w-16 h-16 rounded-full object-cover border-2 border-emerald-400 ring-2 ring-emerald-400/30"
-                      />
-                    ) : (
-                      <div
-                        className="w-16 h-16 rounded-full border-2 border-emerald-400 bg-gradient-to-br from-blue-500/40 to-emerald-500/40"
-                        aria-hidden
-                      />
-                    )}
-                    <p className="text-xs mt-1 max-w-[4.5rem] truncate text-center text-gray-200">
-                      {u.username?.trim() || "User"}
-                    </p>
-                  </button>
-                ))}
-              </div>
-            </>
+            <FeedStoriesBar
+              users={users}
+              onStoryUpload={handleStoryUpload}
+              onOpenStory={openStory}
+            />
           ) : null}
 
-          {/* POSTS */}
           <FeedPostList
             posts={uniquePosts}
             user={user}
             likesByPost={likesByPost}
             commentsByPost={commentsByPost}
-            openComments={openComments}
             commentSubmitting={commentSubmitting}
             draftSyncRef={draftSyncRef}
+            openCommentsRef={openCommentsRef}
+            activeDetailPostId={selectedPostId}
             onSelectPost={handleSelectPost}
             onToggleLike={toggleLike}
-            onToggleComments={handleToggleComments}
             onSubmitComment={submitComment}
             onSharePost={handleSharePost}
           />
 
-          {loading && <p className="mt-4 text-center text-gray-400">Loading...</p>}
-
-          {hasMore && !loading && (
-            <div className="mt-4 flex justify-center">
-              <button
-                type="button"
-                onClick={() => void loadPosts()}
-                className="rounded bg-green-500 px-4 py-2 text-white"
-              >
-                View More
-              </button>
-            </div>
-          )}
+          <FeedLoadMoreFooter
+            loading={loading}
+            hasMore={hasMore}
+            onLoadMore={loadPosts}
+          />
         </div>
       </div>
 
-      {activeStoryUser && currentStory && (
-        <div
-          className="fixed inset-0 z-[9999] bg-black flex items-center justify-center"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Stories"
-        >
-          <div
-            className="relative w-[400px] h-[700px] bg-black rounded-2xl overflow-hidden flex items-center justify-center"
-            style={{ margin: 0, padding: 0 }}
-          >
-            <button
-              type="button"
-              aria-label="Close stories"
-              onClick={() => {
-                setActiveStoryUser(null)
-                setCurrentStoryIndex(0)
-              }}
-              className="absolute right-3 top-3 z-[10000] rounded-full bg-black/70 px-3 py-1 text-xs text-white hover:bg-black/90"
-            >
-              Esc
-            </button>
+      {activeStoryUser && currentStory ? (
+        <FeedStoryViewer
+          activeStoryUser={activeStoryUser}
+          users={users}
+          currentStories={currentStories}
+          currentStoryIndex={currentStoryIndex}
+          currentStory={currentStory}
+          onClose={handleCloseStoryViewer}
+          onPrev={prevStory}
+          onNext={nextStory}
+        />
+      ) : null}
 
-            <div className="absolute left-3 top-3 z-[10000] text-sm text-white">
-              {users.find((u) => u.id === activeStoryUser)?.username}
-            </div>
-
-            <div className="absolute top-2 left-2 right-2 flex gap-1 z-[10000]">
-              {currentStories.map((s, i) => (
-                <div
-                  key={s.id}
-                  className={`h-[3px] flex-1 rounded ${
-                    i <= currentStoryIndex ? "bg-zinc-200" : "bg-zinc-500/40"
-                  }`}
-                />
-              ))}
-            </div>
-
-            <div className="absolute inset-0 z-0 flex h-full w-full items-center justify-center bg-black">
-              <img
-                src={currentStory.image_url}
-                alt=""
-                loading="lazy"
-                decoding="async"
-                className="max-w-full max-h-full object-contain block"
-                draggable={false}
-              />
-            </div>
-
-            <button
-              type="button"
-              aria-label="Previous story"
-              onClick={prevStory}
-              className="absolute left-2 top-1/2 z-[10000] -translate-y-1/2 rounded-full bg-black/40 px-3 py-1 text-3xl text-white transition hover:scale-110"
-            >
-              ‹
-            </button>
-
-            <button
-              type="button"
-              aria-label="Next story"
-              onClick={nextStory}
-              className="absolute right-2 top-1/2 z-[10000] -translate-y-1/2 rounded-full bg-black/40 px-3 py-1 text-3xl text-white transition hover:scale-110"
-            >
-              ›
-            </button>
-          </div>
-        </div>
-      )}
-
-      {selectedPost && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
-          onClick={() => setSelectedPost(null)}
-        >
-          <div
-            className="relative w-full max-w-2xl rounded-xl bg-[#0f172a] p-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              type="button"
-              onClick={() => setSelectedPost(null)}
-              className="absolute right-2 top-2 text-xl text-white"
-              aria-label="Close"
-            >
-              ✕
-            </button>
-
-            {selectedPost.image_url ? (
-              <img
-                src={
-                  String(selectedPost.image_url).startsWith("http")
-                    ? selectedPost.image_url
-                    : `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/screenshots/${selectedPost.image_url}`
-                }
-                alt=""
-                loading="lazy"
-                decoding="async"
-                className="w-full max-h-[400px] rounded-lg object-cover"
-              />
-            ) : null}
-
-            {modalPid ? (
-              <>
-                <div className="mt-3 border-t border-white/10 pt-3">
-                  <div className="min-w-0">
-                  <PostInteractionsEngagement
-                    post={selectedPost}
-                    user={user}
-                    comments={modalComments}
-                    likeMeta={likesByPost[modalPid] ?? EMPTY_LIKE_META}
-                    commentsOpen={!!openComments[modalPid]}
-                    commentValue={modalCommentDraft}
-                    commentSubmitting={!!commentSubmitting[modalPid]}
-                    onToggleLike={toggleLike}
-                    onToggleComments={handleToggleComments}
-                    onCommentChange={handleModalCommentChange}
-                    onSubmitComment={handleModalSubmitComment}
-                    onSharePost={handleSharePost}
-                  />
-                  </div>
-                </div>
-
-                <div className="mt-3 space-y-3 text-sm">
-                  <div className="mt-2 flex items-center justify-between gap-3">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <div
-                        className={`shrink-0 text-lg font-semibold tabular-nums ${
-                          modalPnlPositive ? "text-emerald-400" : "text-red-400"
-                        }`}
-                      >
-                        {Number.isNaN(modalPnl)
-                          ? "—"
-                          : `${modalPnlPositive ? "+" : ""}$${modalPnl}`}
-                      </div>
-
-                      <div className="flex min-w-0 items-center gap-2 text-sm font-medium text-white">
-                        <span className="truncate">
-                          {modalTicker} • {modalDir}
-                        </span>
-                        {modalAcctNorm ? (
-                          <span
-                            className={`px-2 py-0.5 text-xs rounded-full ${getModeStyles(modalAcctNorm)}`}
-                          >
-                            {modalAcctNorm}
-                          </span>
-                        ) : null}
-                      </div>
-                    </div>
-
-                    <div className="flex shrink-0 items-center gap-2 text-sm text-gray-300">
-                      {selectedPost.rr != null && selectedPost.rr !== "" ? (
-                        <span className="tabular-nums">RR {selectedPost.rr}</span>
-                      ) : null}
-                      {selectedPost.points !== null && selectedPost.points !== undefined ? (
-                        <span className="rounded-md bg-white/10 px-2 py-0.5 text-gray-200">
-                          {selectedPost.points} pts
-                        </span>
-                      ) : null}
-                    </div>
-                  </div>
-
-                  {modalPublicDesc ? (
-                    <p className="text-white text-sm leading-relaxed">{modalPublicDesc}</p>
-                  ) : null}
-
-                  <p className="text-xs text-white/40">
-                    {formatEST(selectedPost.created_at)}
-                  </p>
-                </div>
-
-                <PostInteractionsComments
-                  post={selectedPost}
-                  user={user}
-                  comments={modalComments}
-                  likeMeta={likesByPost[modalPid] ?? EMPTY_LIKE_META}
-                  commentsOpen={!!openComments[modalPid]}
-                  commentValue={modalCommentDraft}
-                  commentSubmitting={!!commentSubmitting[modalPid]}
-                  onToggleLike={toggleLike}
-                  onToggleComments={handleToggleComments}
-                  onCommentChange={handleModalCommentChange}
-                  onSubmitComment={handleModalSubmitComment}
-                  onSharePost={handleSharePost}
-                  className="mt-3"
-                />
-              </>
-            ) : null}
-
-          </div>
-        </div>
-      )}
-
-      {sharePost ? (
-        <div
-          className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
-          onClick={() => {
-            setSharePost(null)
-            setShareMessage("")
-            setSelectedConversations([])
-          }}
-        >
-          <div
-            className="w-full max-w-[400px] rounded-xl border border-white/10 bg-[#0f172a] p-4 text-white"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 className="text-lg font-semibold mb-3">Send Post</h2>
-
-            <div className="mb-3">
-              {postImageSrc(sharePost.image_url) ? (
-                <img
-                  src={postImageSrc(sharePost.image_url) || ""}
-                  className="w-full h-40 object-cover rounded"
-                  alt=""
-                  loading="lazy"
-                  decoding="async"
-                />
-              ) : null}
-            </div>
-
-            <textarea
-              placeholder="Add a message..."
-              value={shareMessage}
-              onChange={(e) => setShareMessage(e.target.value)}
-              className="w-full p-2 bg-white/5 rounded mb-3"
-            />
-
-            {shareLoading ? (
-              <p className="text-sm text-gray-400">Loading chats...</p>
-            ) : shareConversations.length === 0 ? (
-              <p className="text-sm text-gray-400">No chats found.</p>
-            ) : (
-              <div className="max-h-40 overflow-y-auto space-y-2">
-                {shareConversations.map((conv) => (
-                  <button
-                    key={conv.id}
-                    type="button"
-                    onClick={() => toggleConversation(conv.id)}
-                    className={`w-full flex items-center gap-3 p-2 rounded cursor-pointer text-left ${
-                      selectedConversations.includes(conv.id)
-                        ? "bg-blue-500/20"
-                        : "hover:bg-white/10"
-                    }`}
-                  >
-                    <img
-                      src={conv.avatar_url || "/default-avatar.png"}
-                      className="w-8 h-8 rounded-full object-cover"
-                      alt=""
-                      loading="lazy"
-                      decoding="async"
-                    />
-                    <span>{conv.name || (conv.is_group ? "Group Chat" : "Chat")}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-
-            <button
-              type="button"
-              onClick={() => void handleSendPost()}
-              disabled={selectedConversations.length === 0}
-              className="w-full mt-3 bg-blue-600 hover:bg-blue-700 p-2 rounded disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Send
-            </button>
-          </div>
-        </div>
+      {selectedPostId || sharePostId ? (
+        <FeedPostOverlays
+          selectedPostId={selectedPostId}
+          selectedPost={selectedPost}
+          sharePostId={sharePostId}
+          sharePost={sharePost}
+          user={user}
+          selectedPostComments={selectedPostComments}
+          selectedPostLikeMeta={selectedPostLikeMeta}
+          selectedPostCommentSubmitting={selectedPostCommentSubmitting}
+          draftSyncRef={draftSyncRef}
+          openCommentsRef={openCommentsRef}
+          onCloseDetailModal={handleCloseDetailModal}
+          onCloseShareOverlay={handleCloseShareOverlay}
+          onToggleLike={toggleLike}
+          onSubmitComment={submitComment}
+          onSharePost={handleSharePost}
+        />
       ) : null}
     </div>
   )

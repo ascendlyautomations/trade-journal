@@ -11,7 +11,7 @@ type FeedPostActionsProps = {
   likeMeta: FeedLikeMeta
   commentsOpen: boolean
   onToggleLike: (post: any) => void
-  onToggleComments: (postId: string) => void
+  onToggleComments: () => void
   onSharePost: (post: any) => void
 }
 
@@ -35,7 +35,7 @@ function FeedPostActions({
           likeMeta={likeMeta}
           commentsOpen={commentsOpen}
           onToggleLike={onToggleLike}
-          onToggleComments={onToggleComments}
+          onToggleComments={(_postId) => onToggleComments()}
           onSharePost={onSharePost}
           stopPropagation
         />

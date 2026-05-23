@@ -1,7 +1,6 @@
 "use client"
 
-import { memo, useCallback, useMemo, type MutableRefObject } from "react"
-import Link from "next/link"
+import { memo, useCallback, useEffect, useMemo, useState, type MutableRefObject } from "react"
 import { formatEST } from "@/lib/formatEST"
 import {
   getModeStyles,
@@ -10,7 +9,10 @@ import {
   postTradeJoin,
 } from "./feedPostHelpers"
 import FeedPostActions from "./FeedPostActions"
+import FeedPostBody from "./FeedPostBody"
 import FeedCommentsSection from "./FeedCommentsSection"
+import FeedPostHeader from "./FeedPostHeader"
+import FeedPostScreenshot from "./FeedPostScreenshot"
 
 export type FeedLikeMeta = { count: number; liked: boolean }
 
@@ -22,12 +24,12 @@ export type FeedPostCardProps = {
   user: any
   likeMeta?: FeedLikeMeta
   comments?: any[]
-  commentsOpen: boolean
   commentSubmitting: boolean
   draftSyncRef?: MutableRefObject<Record<string, string>>
+  openCommentsRef?: MutableRefObject<Record<string, boolean>>
+  detailOpen?: boolean
   onSelectPost: (post: any) => void
   onToggleLike: (post: any) => void
-  onToggleComments: (postId: string) => void
   onSubmitComment: (post: any, text: string) => Promise<boolean>
   onSharePost: (post: any) => void
 }
@@ -37,15 +39,36 @@ function FeedPostCard({
   user,
   likeMeta = EMPTY_LIKE_META,
   comments = EMPTY_COMMENTS,
-  commentsOpen,
   commentSubmitting,
   draftSyncRef,
+  openCommentsRef,
+  detailOpen = false,
   onSelectPost,
   onToggleLike,
-  onToggleComments,
   onSubmitComment,
   onSharePost,
 }: FeedPostCardProps) {
+  const pid = String(post.id)
+  const [commentsOpen, setCommentsOpen] = useState(
+    () => !!openCommentsRef?.current[pid]
+  )
+
+  const handleToggleComments = useCallback(() => {
+    setCommentsOpen((prev) => {
+      const next = !prev
+      if (openCommentsRef) {
+        openCommentsRef.current[pid] = next
+      }
+      return next
+    })
+  }, [openCommentsRef, pid])
+
+  useEffect(() => {
+    if (!detailOpen && openCommentsRef) {
+      setCommentsOpen(!!openCommentsRef.current[pid])
+    }
+  }, [detailOpen, openCommentsRef, pid])
+
   const handleArticleClick = useCallback(() => {
     onSelectPost(post)
   }, [onSelectPost, post])
@@ -61,13 +84,30 @@ function FeedPostCard({
   )
 
   const imageSrc = useMemo(() => postImageSrc(post.image_url), [post.image_url])
+  const avatarUrl = useMemo(() => {
+    const raw = post.profiles?.avatar_url
+    if (raw == null) return null
+    const trimmed = String(raw).trim()
+    return trimmed !== "" ? trimmed : null
+  }, [post.profiles?.avatar_url])
+  const profileUsername = post.profiles?.username || "User"
   const tradeRow = useMemo(() => postTradeJoin(post), [post.trades])
   const publicDesc = useMemo(() => postPublicDescription(post), [post.trades])
   const pnl = useMemo(() => Number(post.pnl), [post.pnl])
   const pnlPositive = !Number.isNaN(pnl) && pnl >= 0
-  const tickerLabel = tradeRow?.ticker != null ? String(tradeRow.ticker) : "—"
-  const dirLabel = tradeRow?.direction != null ? String(tradeRow.direction) : "—"
-  const accountTypeNorm = String(tradeRow?.account_type ?? "").trim().toLowerCase()
+  const tradeDisplay = useMemo(() => {
+    const accountTypeNorm = String(tradeRow?.account_type ?? "").trim().toLowerCase()
+    return {
+      tickerLabel: tradeRow?.ticker != null ? String(tradeRow.ticker) : "—",
+      dirLabel: tradeRow?.direction != null ? String(tradeRow.direction) : "—",
+      accountTypeNorm,
+      accountTypeStyles: accountTypeNorm ? getModeStyles(accountTypeNorm) : "",
+    }
+  }, [tradeRow])
+  const createdAtLabel = useMemo(
+    () => formatEST(post.created_at),
+    [post.created_at]
+  )
 
   return (
     <article
@@ -77,41 +117,13 @@ function FeedPostCard({
       onKeyDown={handleArticleKeyDown}
       className="bg-white/5 border border-white/10 rounded-xl overflow-hidden shadow-lg shadow-black/20 cursor-pointer transition-all duration-200 hover:border-white/20 hover:shadow-xl hover:bg-white/[0.07]"
     >
-      <Link
-        href={`/profile/${post.user_id}`}
-        onClick={(e) => e.stopPropagation()}
-        className="flex items-center gap-3 p-4 border-b border-white/5 hover:bg-white/5 transition-colors"
-      >
-        {post.profiles?.avatar_url ? (
-          <img
-            src={post.profiles.avatar_url}
-            alt=""
-            loading="lazy"
-            decoding="async"
-            className="w-10 h-10 rounded-full object-cover ring-2 ring-white/10 shrink-0"
-          />
-        ) : (
-          <div
-            className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500/40 to-emerald-500/40 ring-2 ring-white/10 shrink-0"
-            aria-hidden
-          />
-        )}
-        <span className="font-semibold text-sm sm:text-base truncate text-white">
-          {post.profiles?.username || "User"}
-        </span>
-      </Link>
+      <FeedPostHeader
+        userId={post.user_id}
+        avatarUrl={avatarUrl}
+        username={profileUsername}
+      />
 
-      {imageSrc ? (
-        <div className="w-full bg-black/30">
-          <img
-            src={imageSrc}
-            alt=""
-            loading="lazy"
-            decoding="async"
-            className="w-full max-h-[400px] object-cover block"
-          />
-        </div>
-      ) : null}
+      <FeedPostScreenshot imageSrc={imageSrc} />
 
       <FeedPostActions
         post={post}
@@ -120,67 +132,33 @@ function FeedPostCard({
         likeMeta={likeMeta}
         commentsOpen={commentsOpen}
         onToggleLike={onToggleLike}
-        onToggleComments={onToggleComments}
+        onToggleComments={handleToggleComments}
         onSharePost={onSharePost}
       />
 
-      <div className="space-y-3 px-4 pb-3">
-        <div className="mt-2 flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-3">
-            <div
-              className={`shrink-0 text-lg font-semibold tabular-nums ${
-                pnlPositive ? "text-emerald-400" : "text-red-400"
-              }`}
-            >
-              {Number.isNaN(pnl) ? "—" : `${pnlPositive ? "+" : ""}$${pnl}`}
-            </div>
-
-            <div className="flex min-w-0 items-center gap-2 text-sm font-medium text-white">
-              <span className="truncate">
-                {tickerLabel} • {dirLabel}
-              </span>
-              {accountTypeNorm ? (
-                <span
-                  className={`px-2 py-0.5 text-xs rounded-full ${getModeStyles(accountTypeNorm)}`}
-                >
-                  {accountTypeNorm}
-                </span>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="flex shrink-0 items-center gap-2 text-sm text-gray-300">
-            {post.rr != null && post.rr !== "" ? (
-              <span className="tabular-nums">RR {post.rr}</span>
-            ) : null}
-            {post.points !== null && post.points !== undefined ? (
-              <span className="rounded-md bg-white/10 px-2 py-0.5 text-gray-200">
-                {post.points} pts
-              </span>
-            ) : null}
-          </div>
-        </div>
-
-        {publicDesc ? (
-          <p className="px-1 text-sm leading-relaxed text-white">{publicDesc}</p>
-        ) : null}
-
-        <p className="text-xs text-white/40">{formatEST(post.created_at)}</p>
-      </div>
-
-      <FeedCommentsSection
-        post={post}
-        user={user}
-        comments={comments}
-        likeMeta={likeMeta}
-        commentsOpen={commentsOpen}
-        commentSubmitting={commentSubmitting}
-        draftSyncRef={draftSyncRef}
-        onToggleLike={onToggleLike}
-        onToggleComments={onToggleComments}
-        onSubmitComment={onSubmitComment}
-        onSharePost={onSharePost}
+      <FeedPostBody
+        pnl={pnl}
+        pnlPositive={pnlPositive}
+        tickerLabel={tradeDisplay.tickerLabel}
+        dirLabel={tradeDisplay.dirLabel}
+        accountTypeNorm={tradeDisplay.accountTypeNorm}
+        accountTypeStyles={tradeDisplay.accountTypeStyles}
+        rr={post.rr}
+        points={tradeRow?.points}
+        publicDesc={publicDesc}
+        createdAtLabel={createdAtLabel}
       />
+
+      {commentsOpen && !detailOpen ? (
+        <FeedCommentsSection
+          post={post}
+          user={user}
+          comments={comments}
+          commentSubmitting={commentSubmitting}
+          draftSyncRef={draftSyncRef}
+          onSubmitComment={onSubmitComment}
+        />
+      ) : null}
     </article>
   )
 }

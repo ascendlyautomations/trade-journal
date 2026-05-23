@@ -12,12 +12,12 @@ type FeedPostListProps = {
   user: any
   likesByPost: Record<string, FeedLikeMeta>
   commentsByPost: Record<string, any[]>
-  openComments: Record<string, boolean>
   commentSubmitting: Record<string, boolean>
   draftSyncRef: MutableRefObject<Record<string, string>>
+  openCommentsRef: MutableRefObject<Record<string, boolean>>
+  activeDetailPostId?: string | null
   onSelectPost: (post: any) => void
   onToggleLike: (post: any) => void
-  onToggleComments: (postId: string) => void
   onSubmitComment: (post: any, text: string) => Promise<boolean>
   onSharePost: (post: any) => void
 }
@@ -27,12 +27,12 @@ function FeedPostList({
   user,
   likesByPost,
   commentsByPost,
-  openComments,
   commentSubmitting,
   draftSyncRef,
+  openCommentsRef,
+  activeDetailPostId = null,
   onSelectPost,
   onToggleLike,
-  onToggleComments,
   onSubmitComment,
   onSharePost,
 }: FeedPostListProps) {
@@ -42,17 +42,17 @@ function FeedPostList({
         const pid = String(post.id)
         return (
           <FeedPostCard
-            key={post.id}
+            key={pid}
             post={post}
             user={user}
             likeMeta={likesByPost[pid] ?? EMPTY_LIKE_META}
             comments={commentsByPost[pid] ?? EMPTY_COMMENTS}
-            commentsOpen={!!openComments[pid]}
             commentSubmitting={!!commentSubmitting[pid]}
             draftSyncRef={draftSyncRef}
+            openCommentsRef={openCommentsRef}
+            detailOpen={activeDetailPostId === pid}
             onSelectPost={onSelectPost}
             onToggleLike={onToggleLike}
-            onToggleComments={onToggleComments}
             onSubmitComment={onSubmitComment}
             onSharePost={onSharePost}
           />

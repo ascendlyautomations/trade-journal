@@ -1,35 +1,25 @@
 "use client"
 
-import { useCallback, useRef, useState, type MutableRefObject } from "react"
-import { PostInteractionsComments } from "@/app/components/PostInteractions"
-import type { FeedLikeMeta } from "./FeedPostCard"
+import { memo, useCallback, useRef, useState, type MutableRefObject } from "react"
+import FeedCommentComposer from "./FeedCommentComposer"
+import FeedCommentList from "./FeedCommentList"
 
 type FeedCommentsSectionProps = {
   post: any
   user: any
   comments: any[]
-  likeMeta: FeedLikeMeta
-  commentsOpen: boolean
   commentSubmitting: boolean
   draftSyncRef?: MutableRefObject<Record<string, string>>
-  onToggleLike: (post: any) => void
-  onToggleComments: (postId: string) => void
   onSubmitComment: (post: any, text: string) => Promise<boolean>
-  onSharePost: (post: any) => void
 }
 
 function FeedCommentsSection({
   post,
   user,
   comments,
-  likeMeta,
-  commentsOpen,
   commentSubmitting,
   draftSyncRef,
-  onToggleLike,
-  onToggleComments,
   onSubmitComment,
-  onSharePost,
 }: FeedCommentsSectionProps) {
   const pid = String(post.id)
   const [commentDraft, setCommentDraft] = useState(
@@ -63,24 +53,29 @@ function FeedCommentsSection({
     [draftSyncRef, onSubmitComment, pid]
   )
 
+  const stopPropagation = useCallback((e: React.SyntheticEvent) => {
+    e.stopPropagation()
+  }, [])
+
   return (
-    <PostInteractionsComments
-      post={post}
-      user={user}
-      comments={comments}
-      likeMeta={likeMeta}
-      commentsOpen={commentsOpen}
-      commentValue={commentDraft}
-      commentSubmitting={commentSubmitting}
-      onToggleLike={onToggleLike}
-      onToggleComments={onToggleComments}
-      onCommentChange={handleCommentChange}
-      onSubmitComment={handleSubmitComment}
-      onSharePost={onSharePost}
-      stopPropagation
-      className="px-4 pb-4 mt-2"
-    />
+    <div
+      className="space-y-3 border-t border-white/10 pt-3 px-4 pb-4 mt-2"
+      onClick={stopPropagation}
+      onKeyDown={stopPropagation}
+    >
+      <FeedCommentList comments={comments} />
+      {user ? (
+        <FeedCommentComposer
+          post={post}
+          user={user}
+          commentValue={commentDraft}
+          commentSubmitting={commentSubmitting}
+          onCommentChange={handleCommentChange}
+          onSubmitComment={handleSubmitComment}
+        />
+      ) : null}
+    </div>
   )
 }
 
-export default FeedCommentsSection
+export default memo(FeedCommentsSection)

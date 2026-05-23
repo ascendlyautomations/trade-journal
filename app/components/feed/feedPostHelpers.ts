@@ -1,3 +1,18 @@
+/** Columns used by feed post cards, modal, and share overlay. */
+export const FEED_POSTS_SELECT =
+  "id, user_id, trade_id, created_at, pnl, rr, image_url, profiles(username, avatar_url), trades(public_description, user_id, ticker, direction, account_type, points)"
+
+/** Columns used by feed comment threads. */
+export const FEED_COMMENTS_SELECT =
+  "id, post_id, content, profiles(username, avatar_url)"
+
+/** Returned row shape after posting a comment. */
+export const FEED_COMMENT_INSERT_SELECT =
+  "id, post_id, content, profiles(username, avatar_url)"
+
+/** Columns used by the stories bar and viewer. */
+export const FEED_STORIES_SELECT = "id, user_id, image_url, created_at"
+
 export function postImageSrc(imageUrl: string | null | undefined): string | null {
   const raw = imageUrl != null ? String(imageUrl).trim() : ""
   if (!raw) return null
@@ -30,4 +45,19 @@ export function getModeStyles(mode: string | null | undefined): string {
   if (m === "eval") return "bg-yellow-500/20 text-yellow-300"
   if (m === "live") return "bg-blue-500/20 text-blue-300"
   return "bg-white/10 text-gray-300"
+}
+
+/** Deduped feed posts plus id lookup in a single pass. */
+export function buildFeedPostsIndex(posts: any[]): {
+  postsById: Map<string, any>
+  uniquePosts: any[]
+} {
+  const postsById = new Map<string, any>()
+  for (const p of posts) {
+    postsById.set(String(p.id), p)
+  }
+  return {
+    postsById,
+    uniquePosts: Array.from(postsById.values()),
+  }
 }
