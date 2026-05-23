@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import type { ChangeEvent } from "react"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
 import { fetchShareConversations } from "@/lib/shareToConversations"
@@ -10,19 +10,21 @@ import { formatEST } from "@/lib/formatEST"
 import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import Navbar from "../components/Navbar"
+import FeedPostList from "../components/feed/FeedPostList"
+import {
+  EMPTY_COMMENTS,
+  EMPTY_LIKE_META,
+} from "../components/feed/FeedPostCard"
+import {
+  getModeStyles,
+  postImageSrc,
+  postPublicDescription,
+  postTradeJoin,
+} from "../components/feed/feedPostHelpers"
 import {
   PostInteractionsComments,
   PostInteractionsEngagement,
 } from "../components/PostInteractions"
-
-function postImageSrc(imageUrl: string | null | undefined): string | null {
-  const raw = imageUrl != null ? String(imageUrl).trim() : ""
-  if (!raw) return null
-  if (raw.startsWith("http")) return raw
-  const base = process.env.NEXT_PUBLIC_SUPABASE_URL
-  if (!base) return null
-  return `${base}/storage/v1/object/public/screenshots/${raw}`
-}
 
 const STORY_WINDOW_MS = 24 * 60 * 60 * 1000
 /** Auto-advance each slide (Instagram-style). */
@@ -41,16 +43,6 @@ type StoryBarProfile = {
   avatar_url?: string | null
 }
 
-function postPublicDescription(post: any): string | null {
-  const t = post?.trades
-  if (!t) return null
-  const row = Array.isArray(t) ? t[0] : t
-  const raw = row?.public_description
-  if (raw == null) return null
-  const s = String(raw).trim()
-  return s !== "" ? s : null
-}
-
 /** Trade owner for notifications (not always same as post author). */
 function postTradeOwnerUserId(post: any): string | null | undefined {
   const t = post?.trades
@@ -58,21 +50,6 @@ function postTradeOwnerUserId(post: any): string | null | undefined {
   const fromTrade = row?.user_id
   if (fromTrade != null && String(fromTrade).trim() !== "") return String(fromTrade)
   return post?.user_id ?? null
-}
-
-function postTradeJoin(post: any) {
-  const t = post?.trades
-  if (!t) return null
-  return Array.isArray(t) ? t[0] : t
-}
-
-function getModeStyles(mode: string | null | undefined): string {
-  if (!mode) return ""
-  const m = mode.toLowerCase()
-  if (m === "funded") return "bg-green-500/20 text-green-300"
-  if (m === "eval") return "bg-yellow-500/20 text-yellow-300"
-  if (m === "live") return "bg-blue-500/20 text-blue-300"
-  return "bg-white/10 text-gray-300"
 }
 
 type LikeMeta = { count: number; liked: boolean }
@@ -90,8 +67,8 @@ export default function FeedPage() {
   const [openComments, setOpenComments] = useState<Record<string, boolean>>({})
   const [likesByPost, setLikesByPost] = useState<Record<string, LikeMeta>>({})
   const [commentsByPost, setCommentsByPost] = useState<Record<string, any[]>>({})
-  const [commentDraft, setCommentDraft] = useState<Record<string, string>>({})
   const [commentSubmitting, setCommentSubmitting] = useState<Record<string, boolean>>({})
+  const [modalCommentDraft, setModalCommentDraft] = useState("")
   const [selectedPost, setSelectedPost] = useState<any>(null)
   const [sharePost, setSharePost] = useState<any>(null)
   const [shareMessage, setShareMessage] = useState("")
@@ -104,6 +81,10 @@ export default function FeedPage() {
   const [users, setUsers] = useState<StoryBarProfile[]>([])
   const [activeStoryUser, setActiveStoryUser] = useState<string | null>(null)
   const [currentStoryIndex, setCurrentStoryIndex] = useState(0)
+
+  const likesByPostRef = useRef(likesByPost)
+  likesByPostRef.current = likesByPost
+  const draftSyncRef = useRef<Record<string, string>>({})
 
   const currentStories = activeStoryUser
     ? (storiesByUser[activeStoryUser] ?? [])
@@ -555,61 +536,146 @@ export default function FeedPage() {
     void loadShareConversations()
   }, [sharePost, user?.id])
 
-  async function toggleLike(post: any) {
-    if (!user) return
+  const handleSelectPost = useCallback((post: any) => {
+    setSelectedPost(post)
+  }, [])
 
-    const pid = String(post.id)
-    const meta = likesByPost[pid] || { count: 0, liked: false }
+  const handleSharePost = useCallback((post: any) => {
+    setSharePost(post)
+  }, [])
 
-    if (meta.liked) {
-      const { error } = await supabase
-        .from("likes")
-        .delete()
-        .eq("post_id", pid)
-        .eq("user_id", user.id)
+  const handleToggleComments = useCallback((postId: string) => {
+    setOpenComments((prev) => ({
+      ...prev,
+      [postId]: !prev[postId],
+    }))
+  }, [])
 
-      if (error) {
-        console.error("Unlike error:", error)
-        return
+  const toggleLike = useCallback(
+    async (post: any) => {
+      if (!user) return
+
+      const pid = String(post.id)
+      const meta = likesByPostRef.current[pid] ?? EMPTY_LIKE_META
+
+      if (meta.liked) {
+        const { error } = await supabase
+          .from("likes")
+          .delete()
+          .eq("post_id", pid)
+          .eq("user_id", user.id)
+
+        if (error) {
+          console.error("Unlike error:", error)
+          return
+        }
+
+        const newCount = Math.max(0, meta.count - 1)
+        setLikesByPost((prev) => ({
+          ...prev,
+          [pid]: { count: newCount, liked: false },
+        }))
+        setSelectedPost((prev: any) =>
+          prev && String(prev.id) === pid
+            ? { ...prev, likesCount: newCount }
+            : prev
+        )
+      } else {
+        const { error } = await supabase.from("likes").insert({
+          post_id: pid,
+          user_id: user.id,
+        })
+
+        if (error) {
+          console.error("Like error:", error)
+          return
+        }
+
+        const newCount = meta.count + 1
+        setLikesByPost((prev) => ({
+          ...prev,
+          [pid]: { count: newCount, liked: true },
+        }))
+        setSelectedPost((prev: any) =>
+          prev && String(prev.id) === pid
+            ? { ...prev, likesCount: newCount }
+            : prev
+        )
+
+        const notifyUserId = postTradeOwnerUserId(post)
+        const tradeId = post.trade_id
+        if (tradeId && notifyUserId && notifyUserId !== user.id) {
+          const { error: nErr } = await supabase.from("notifications").insert({
+            user_id: notifyUserId,
+            sender_id: user.id,
+            type: "like",
+            trade_id: tradeId,
+          })
+          if (nErr) {
+            console.error("Notification error:", nErr?.message, nErr)
+          } else {
+            window.dispatchEvent(new CustomEvent("notification-update"))
+            window.dispatchEvent(
+              new CustomEvent("tj-unread-notifications-refresh")
+            )
+          }
+        }
+      }
+    },
+    [user]
+  )
+
+  const submitComment = useCallback(
+    async (post: any, text: string) => {
+      if (!user) return false
+
+      const pid = String(post.id)
+      const trimmed = (text || "").trim()
+      if (!trimmed) return false
+
+      const userIsPro = await isUserPro(supabase as any, user.id)
+      if (!userIsPro) {
+        const limitReached = await reachedMessagesCommentsLimit(
+          supabase as any,
+          user.id,
+          10
+        )
+        if (limitReached) {
+          alert(handleSupabaseError({ message: "10 messages limit" }))
+          return false
+        }
       }
 
-      const newCount = Math.max(0, meta.count - 1)
-      setLikesByPost((prev) => ({
-        ...prev,
-        [pid]: { count: newCount, liked: false },
-      }))
-      setPosts((prev) =>
-        prev.map((p) =>
-          String(p.id) === pid ? { ...p, likesCount: newCount } : p
-        )
-      )
-      setSelectedPost((prev: any) =>
-        prev && String(prev.id) === pid ? { ...prev, likesCount: newCount } : prev
-      )
-    } else {
-      const { error } = await supabase.from("likes").insert({
-        post_id: pid,
-        user_id: user.id,
+      setCommentSubmitting((s) => ({ ...s, [pid]: true }))
+
+      const { data: newRow, error } = await supabase
+        .from("comments")
+        .insert({
+          post_id: pid,
+          user_id: user.id,
+          content: trimmed,
+        })
+        .select("*, profiles(username, avatar_url)")
+        .single()
+
+      setCommentSubmitting((s) => ({ ...s, [pid]: false }))
+
+      if (error) {
+        console.error("Comment insert error:", error)
+        alert(handleSupabaseError(error))
+        return false
+      }
+
+      setCommentsByPost((prev) => {
+        const currentComments = prev[pid] ?? EMPTY_COMMENTS
+        const nextComments = currentComments.some((c: any) => c.id === newRow.id)
+          ? currentComments
+          : [...currentComments, newRow]
+        return {
+          ...prev,
+          [pid]: nextComments,
+        }
       })
-
-      if (error) {
-        console.error("Like error:", error)
-        return
-      }
-
-      const newCount = meta.count + 1
-      setLikesByPost((prev) => ({
-        ...prev,
-        [pid]: { count: newCount, liked: true },
-      }))
-      setPosts((prev) =>
-        prev.map((p) =>
-          String(p.id) === pid ? { ...p, likesCount: newCount } : p
-        )
-      )
-      setSelectedPost((prev: any) =>
-        prev && String(prev.id) === pid ? { ...prev, likesCount: newCount } : prev
-      )
 
       const notifyUserId = postTradeOwnerUserId(post)
       const tradeId = post.trade_id
@@ -617,90 +683,48 @@ export default function FeedPage() {
         const { error: nErr } = await supabase.from("notifications").insert({
           user_id: notifyUserId,
           sender_id: user.id,
-          type: "like",
+          type: "comment",
           trade_id: tradeId,
         })
         if (nErr) {
           console.error("Notification error:", nErr?.message, nErr)
         } else {
           window.dispatchEvent(new CustomEvent("notification-update"))
-          window.dispatchEvent(new CustomEvent("tj-unread-notifications-refresh"))
+          window.dispatchEvent(
+            new CustomEvent("tj-unread-notifications-refresh")
+          )
         }
       }
-    }
-  }
 
-  async function submitComment(post: any) {
-    if (!user) return
+      return true
+    },
+    [user]
+  )
 
-    const pid = String(post.id)
-    const text = (commentDraft[pid] || "").trim()
-    if (!text) return
+  const handleModalCommentChange = useCallback((postId: string, value: string) => {
+    setModalCommentDraft(value)
+    draftSyncRef.current[postId] = value
+  }, [])
 
-    const userIsPro = await isUserPro(supabase as any, user.id)
-    if (!userIsPro) {
-      const limitReached = await reachedMessagesCommentsLimit(
-        supabase as any,
-        user.id,
-        10
-      )
-      if (limitReached) {
-        alert(handleSupabaseError({ message: "10 messages limit" }))
-        return
+  const handleModalSubmitComment = useCallback(
+    async (post: any) => {
+      const ok = await submitComment(post, modalCommentDraft)
+      if (ok) {
+        setModalCommentDraft("")
+        draftSyncRef.current[String(post.id)] = ""
       }
+    },
+    [modalCommentDraft, submitComment]
+  )
+
+  useEffect(() => {
+    const pid = selectedPost ? String(selectedPost.id) : null
+    if (pid) {
+      setModalCommentDraft(draftSyncRef.current[pid] ?? "")
+    } else {
+      setModalCommentDraft("")
     }
-
-    setCommentSubmitting((s) => ({ ...s, [pid]: true }))
-
-    const { data: newRow, error } = await supabase
-      .from("comments")
-      .insert({
-        post_id: pid,
-        user_id: user.id,
-        content: text,
-      })
-      .select("*, profiles(username, avatar_url)")
-      .single()
-
-    setCommentSubmitting((s) => ({ ...s, [pid]: false }))
-
-    if (error) {
-      console.error("Comment insert error:", error)
-      alert(handleSupabaseError(error))
-      return
-    }
-
-    const currentComments = commentsByPost[pid] || []
-    const nextComments = currentComments.some((c: any) => c.id === newRow.id)
-      ? currentComments
-      : [...currentComments, newRow]
-    updateComments(pid, nextComments)
-    setCommentDraft((d) => ({ ...d, [pid]: "" }))
-
-    const notifyUserId = postTradeOwnerUserId(post)
-    const tradeId = post.trade_id
-    if (tradeId && notifyUserId && notifyUserId !== user.id) {
-      const { error: nErr } = await supabase.from("notifications").insert({
-        user_id: notifyUserId,
-        sender_id: user.id,
-        type: "comment",
-        trade_id: tradeId,
-      })
-      if (nErr) {
-        console.error("Notification error:", nErr?.message, nErr)
-      } else {
-        window.dispatchEvent(new CustomEvent("notification-update"))
-        window.dispatchEvent(new CustomEvent("tj-unread-notifications-refresh"))
-      }
-    }
-  }
-
-  const updateComments = (postId: string, newComments: any[]) => {
-    setCommentsByPost((prev) => ({
-      ...prev,
-      [postId]: newComments,
-    }))
-  }
+  }, [selectedPost])
 
   const toggleConversation = (id: string) => {
     setSelectedConversations((prev) =>
@@ -770,8 +794,9 @@ export default function FeedPage() {
     .toLowerCase()
   const modalPnl = selectedPost ? Number(selectedPost.pnl) : NaN
   const modalPnlPositive = !Number.isNaN(modalPnl) && modalPnl >= 0
-  const uniquePosts = Array.from(
-    new Map(posts.map((p) => [p.id, p])).values()
+  const uniquePosts = useMemo(
+    () => Array.from(new Map(posts.map((p) => [p.id, p])).values()),
+    [posts]
   )
 
   return (
@@ -862,173 +887,20 @@ export default function FeedPage() {
           ) : null}
 
           {/* POSTS */}
-          {uniquePosts.map((post) => {
-            const imageSrc = postImageSrc(post.image_url)
-            const pnl = Number(post.pnl)
-            const pnlPositive = !Number.isNaN(pnl) && pnl >= 0
-            const pid = String(post.id)
-            const likeMeta = likesByPost[pid] || { count: 0, liked: false }
-            const comments = commentsByPost[pid] || []
-            const publicDesc = postPublicDescription(post)
-            const tradeRow = postTradeJoin(post)
-            const tickerLabel = tradeRow?.ticker != null ? String(tradeRow.ticker) : "—"
-            const dirLabel =
-              tradeRow?.direction != null ? String(tradeRow.direction) : "—"
-            const accountTypeNorm = String(tradeRow?.account_type ?? "")
-              .trim()
-              .toLowerCase()
-
-            return (
-              <article
-                key={post.id}
-                role="button"
-                tabIndex={0}
-                onClick={() => setSelectedPost(post)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault()
-                    setSelectedPost(post)
-                  }
-                }}
-                className="bg-white/5 border border-white/10 rounded-xl overflow-hidden shadow-lg shadow-black/20 cursor-pointer transition-all duration-200 hover:border-white/20 hover:shadow-xl hover:bg-white/[0.07]"
-              >
-                {/* HEADER */}
-                <Link
-                  href={`/profile/${post.user_id}`}
-                  onClick={(e) => e.stopPropagation()}
-                  className="flex items-center gap-3 p-4 border-b border-white/5 hover:bg-white/5 transition-colors"
-                >
-                  {post.profiles?.avatar_url ? (
-                    <img
-                      src={post.profiles.avatar_url}
-                      alt=""
-                      loading="lazy"
-                      decoding="async"
-                      className="w-10 h-10 rounded-full object-cover ring-2 ring-white/10 shrink-0"
-                    />
-                  ) : (
-                    <div
-                      className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500/40 to-emerald-500/40 ring-2 ring-white/10 shrink-0"
-                      aria-hidden
-                    />
-                  )}
-                  <span className="font-semibold text-sm sm:text-base truncate text-white">
-                    {post.profiles?.username || "User"}
-                  </span>
-                </Link>
-
-                {/* IMAGE — only when we have a resolvable path/URL */}
-                {imageSrc ? (
-                  <div className="w-full bg-black/30">
-                    <img
-                      src={imageSrc}
-                      alt=""
-                      loading="lazy"
-                      decoding="async"
-                      className="w-full max-h-[400px] object-cover block"
-                    />
-                  </div>
-                ) : null}
-
-                <div className="border-t border-white/10 px-4 py-2">
-                  <div className="min-w-0">
-                  <PostInteractionsEngagement
-                    post={post}
-                    user={user}
-                    comments={comments}
-                    likeMeta={likeMeta}
-                    commentsOpen={!!openComments[pid]}
-                    commentValue={commentDraft[pid] || ""}
-                    commentSubmitting={!!commentSubmitting[pid]}
-                    onToggleLike={toggleLike}
-                    onToggleComments={(postId) =>
-                      setOpenComments((prev) => ({
-                        ...prev,
-                        [postId]: !prev[postId],
-                      }))
-                    }
-                    onCommentChange={(postId, value) =>
-                      setCommentDraft((d) => ({ ...d, [postId]: value }))
-                    }
-                    onSubmitComment={submitComment}
-                    onSharePost={setSharePost}
-                    stopPropagation
-                  />
-                  </div>
-                </div>
-
-                <div className="space-y-3 px-4 pb-3">
-                  <div className="mt-2 flex items-center justify-between gap-3">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <div
-                        className={`shrink-0 text-lg font-semibold tabular-nums ${
-                          pnlPositive ? "text-emerald-400" : "text-red-400"
-                        }`}
-                      >
-                        {Number.isNaN(pnl) ? "—" : `${pnlPositive ? "+" : ""}$${pnl}`}
-                      </div>
-
-                      <div className="flex min-w-0 items-center gap-2 text-sm font-medium text-white">
-                        <span className="truncate">
-                          {tickerLabel} • {dirLabel}
-                        </span>
-                        {accountTypeNorm ? (
-                          <span
-                            className={`px-2 py-0.5 text-xs rounded-full ${getModeStyles(accountTypeNorm)}`}
-                          >
-                            {accountTypeNorm}
-                          </span>
-                        ) : null}
-                      </div>
-                    </div>
-
-                    <div className="flex shrink-0 items-center gap-2 text-sm text-gray-300">
-                      {post.rr != null && post.rr !== "" ? (
-                        <span className="tabular-nums">RR {post.rr}</span>
-                      ) : null}
-                      {post.points !== null && post.points !== undefined ? (
-                        <span className="rounded-md bg-white/10 px-2 py-0.5 text-gray-200">
-                          {post.points} pts
-                        </span>
-                      ) : null}
-                    </div>
-                  </div>
-
-                  {publicDesc ? (
-                    <p className="px-1 text-sm leading-relaxed text-white">{publicDesc}</p>
-                  ) : null}
-
-                  <p className="text-xs text-white/40">
-                    {formatEST(post.created_at)}
-                  </p>
-                </div>
-
-                <PostInteractionsComments
-                  post={post}
-                  user={user}
-                  comments={comments}
-                  likeMeta={likeMeta}
-                  commentsOpen={!!openComments[pid]}
-                  commentValue={commentDraft[pid] || ""}
-                  commentSubmitting={!!commentSubmitting[pid]}
-                  onToggleLike={toggleLike}
-                  onToggleComments={(postId) =>
-                    setOpenComments((prev) => ({
-                      ...prev,
-                      [postId]: !prev[postId],
-                    }))
-                  }
-                  onCommentChange={(postId, value) =>
-                    setCommentDraft((d) => ({ ...d, [postId]: value }))
-                  }
-                  onSubmitComment={submitComment}
-                  onSharePost={setSharePost}
-                  stopPropagation
-                  className="px-4 pb-4 mt-2"
-                />
-              </article>
-            )
-          })}
+          <FeedPostList
+            posts={uniquePosts}
+            user={user}
+            likesByPost={likesByPost}
+            commentsByPost={commentsByPost}
+            openComments={openComments}
+            commentSubmitting={commentSubmitting}
+            draftSyncRef={draftSyncRef}
+            onSelectPost={handleSelectPost}
+            onToggleLike={toggleLike}
+            onToggleComments={handleToggleComments}
+            onSubmitComment={submitComment}
+            onSharePost={handleSharePost}
+          />
 
           {loading && <p className="mt-4 text-center text-gray-400">Loading...</p>}
 
@@ -1156,22 +1028,15 @@ export default function FeedPage() {
                     post={selectedPost}
                     user={user}
                     comments={modalComments}
-                    likeMeta={likesByPost[modalPid] || { count: 0, liked: false }}
+                    likeMeta={likesByPost[modalPid] ?? EMPTY_LIKE_META}
                     commentsOpen={!!openComments[modalPid]}
-                    commentValue={commentDraft[modalPid] || ""}
+                    commentValue={modalCommentDraft}
                     commentSubmitting={!!commentSubmitting[modalPid]}
                     onToggleLike={toggleLike}
-                    onToggleComments={(postId) =>
-                      setOpenComments((prev) => ({
-                        ...prev,
-                        [postId]: !prev[postId],
-                      }))
-                    }
-                    onCommentChange={(postId, value) =>
-                      setCommentDraft((d) => ({ ...d, [postId]: value }))
-                    }
-                    onSubmitComment={submitComment}
-                    onSharePost={setSharePost}
+                    onToggleComments={handleToggleComments}
+                    onCommentChange={handleModalCommentChange}
+                    onSubmitComment={handleModalSubmitComment}
+                    onSharePost={handleSharePost}
                   />
                   </div>
                 </div>
@@ -1228,22 +1093,15 @@ export default function FeedPage() {
                   post={selectedPost}
                   user={user}
                   comments={modalComments}
-                  likeMeta={likesByPost[modalPid] || { count: 0, liked: false }}
+                  likeMeta={likesByPost[modalPid] ?? EMPTY_LIKE_META}
                   commentsOpen={!!openComments[modalPid]}
-                  commentValue={commentDraft[modalPid] || ""}
+                  commentValue={modalCommentDraft}
                   commentSubmitting={!!commentSubmitting[modalPid]}
                   onToggleLike={toggleLike}
-                  onToggleComments={(postId) =>
-                    setOpenComments((prev) => ({
-                      ...prev,
-                      [postId]: !prev[postId],
-                    }))
-                  }
-                  onCommentChange={(postId, value) =>
-                    setCommentDraft((d) => ({ ...d, [postId]: value }))
-                  }
-                  onSubmitComment={submitComment}
-                  onSharePost={setSharePost}
+                  onToggleComments={handleToggleComments}
+                  onCommentChange={handleModalCommentChange}
+                  onSubmitComment={handleModalSubmitComment}
+                  onSharePost={handleSharePost}
                   className="mt-3"
                 />
               </>
