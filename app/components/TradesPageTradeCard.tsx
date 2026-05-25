@@ -1,0 +1,407 @@
+"use client"
+
+import { memo, useMemo } from "react"
+import ShareTradeButton from "@/app/components/ShareTradeButton"
+import {
+  formatTradeClockTime,
+  formatTradePrice,
+  getTradeDurationDisplay,
+} from "@/lib/tradeDisplayFormat"
+import { formatDateOnly, formatTimeOnly } from "@/lib/formatDate"
+import { formatEST } from "@/lib/formatEST"
+
+function formatMoney(value: unknown): string {
+  if (value === null || value === undefined) return "-"
+  const number = Number(value)
+  if (Number.isNaN(number)) return "-"
+  return number < 0
+    ? `-$${Math.abs(number).toLocaleString(undefined, {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })}`
+    : `$${number.toLocaleString(undefined, {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })}`
+}
+
+function formatNumber(value: unknown): string {
+  if (value === null || value === undefined) return "-"
+  const number = Number(value)
+  if (Number.isNaN(number)) return "-"
+  return number.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+}
+
+function getDuration(
+  start: string | null | undefined,
+  end: string | null | undefined
+) {
+  if (!start || !end) return null
+
+  const diff = +new Date(String(end)) - +new Date(String(start))
+  if (!Number.isFinite(diff) || diff <= 0) return null
+
+  const totalSeconds = Math.floor(diff / 1000)
+
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+
+  if (hours === 0 && minutes === 0) {
+    return "0m"
+  }
+
+  if (hours === 0) {
+    return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`
+  }
+
+  return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`
+}
+
+export type TradesPageTradeCardProps = {
+  trade: any
+  showAdvanced: boolean
+  accountRow?: any | null
+  shareProfile?: { referral_code?: string | null } | null
+  onEdit: (trade: any) => void
+  onDelete: (tradeId: string) => void
+  onSendClick: (trade: any) => void
+  onImageClick: (imageUrl: string) => void
+}
+
+function TradesPageTradeCard({
+  trade,
+  showAdvanced,
+  accountRow = null,
+  shareProfile = null,
+  onEdit,
+  onDelete,
+  onSendClick,
+  onImageClick,
+}: TradesPageTradeCardProps) {
+  const entryPrice = trade.entry_price ?? trade.entry ?? null
+  const exitPrice = trade.exit_price ?? trade.exit ?? null
+  const entryRaw = trade.entry_time
+  const exitRaw = trade.exit_time
+
+  const entry = entryRaw ? formatTimeOnly(entryRaw) : null
+  const exit = exitRaw ? formatTimeOnly(exitRaw) : null
+  const duration = getDuration(entryRaw, exitRaw)
+  const durationDisplay = getTradeDurationDisplay(
+    trade.duration_text,
+    trade.duration_seconds
+  )
+  const showDuration = durationDisplay !== null
+
+  const acctLower = String(trade.mode ?? trade.account_type ?? "")
+    .toLowerCase()
+    .trim()
+  const hasAccountLine = useMemo(
+    () =>
+      !!(
+        String(trade.account_name || "").trim() ||
+        String(trade.account_size || "").trim() ||
+        accountRow?.account_number
+      ),
+    [trade.account_name, trade.account_size, accountRow?.account_number]
+  )
+
+  const imageSrc = useMemo(() => {
+    if (!trade.image_url) return null
+    return trade.image_url.startsWith("http")
+      ? trade.image_url
+      : `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/screenshots/${trade.image_url}`
+  }, [trade.image_url])
+
+  const imageLightboxUrl = useMemo(() => {
+    if (!trade.image_url) return null
+    return `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/screenshots/${trade.image_url}`
+  }, [trade.image_url])
+
+  if (process.env.NODE_ENV !== "production" && showAdvanced) {
+    console.debug("[trades-page-duration-ui]", {
+      tradeId: trade?.id ?? null,
+      imported: String(trade?.account_type ?? "").toLowerCase() === "imported",
+      durationText: trade?.duration_text ?? null,
+      durationSeconds: trade?.duration_seconds ?? null,
+      omittedFromUi: !showDuration,
+    })
+  }
+
+  const hasPsychology =
+    (trade.confidence != null && trade.confidence !== "") ||
+    (trade.emotion != null && String(trade.emotion).trim() !== "") ||
+    trade.followed_plan != null ||
+    (trade.mistake_type != null && String(trade.mistake_type).trim() !== "") ||
+    (trade.market_condition != null &&
+      String(trade.market_condition).trim() !== "") ||
+    (trade.timeframe != null && String(trade.timeframe).trim() !== "") ||
+    trade.news_event != null ||
+    (trade.trade_type != null && String(trade.trade_type).trim() !== "") ||
+    (trade.psychology_notes != null &&
+      String(trade.psychology_notes).trim() !== "")
+
+  return (
+    <div className="relative w-full bg-white/5 border border-white/10 backdrop-blur-md px-2 py-3 md:px-4 rounded-xl shadow hover:scale-[1.02] hover:border-white/20 transition-all duration-200">
+      <div className="absolute top-3 right-3 flex items-center gap-1">
+        <button
+          onClick={() => onEdit({ ...trade })}
+          className="flex items-center justify-center rounded-md bg-white/10 px-3 py-1 text-sm text-white transition hover:bg-white/20"
+          type="button"
+        >
+          Edit
+        </button>
+        <ShareTradeButton
+          trade={trade}
+          variant="icon"
+          profile={shareProfile}
+          className="flex items-center justify-center rounded-md bg-white/10 px-3 py-1.5 text-sm text-white transition hover:bg-white/20"
+          onSendClick={() => onSendClick(trade)}
+        />
+        <button
+          onClick={() => onDelete(String(trade.id))}
+          className="text-white hover:text-red-400 text-xl transition leading-none"
+          type="button"
+          aria-label="Delete trade"
+        >
+          🗑
+        </button>
+      </div>
+
+      <div className="flex flex-col md:flex-row gap-2.5">
+        <div className="flex-1">
+          <div className="space-y-1 text-base text-gray-200">
+            <h2 className="text-lg font-semibold flex items-center gap-2 flex-wrap">
+              {trade.ticker} •{" "}
+              {trade.direction ||
+                (trade.exit_price && trade.entry_price
+                  ? trade.exit_price > trade.entry_price
+                    ? "Long"
+                    : "Short"
+                  : "Unknown")}
+              {trade.is_public ? (
+                <span className="text-xs font-normal text-green-400 ml-2">
+                  Public
+                </span>
+              ) : null}
+            </h2>
+
+            <p className="text-xs text-gray-400">
+              {formatDateOnly(
+                trade.entry_time || trade.created_at || undefined
+              )}
+              {entry ? ` • ${entry}` : ""}
+              {exit ? ` – ${exit}` : ""}
+              {duration ? ` (${duration})` : ""}
+            </p>
+
+            <div
+              className={`inline-block px-3 py-1 rounded-lg text-lg font-bold mt-1 ${
+                (Number(trade.pnl) || 0) >= 0
+                  ? "bg-green-500/20 text-green-400"
+                  : "bg-red-500/20 text-red-400"
+              }`}
+            >
+              {formatMoney(trade.pnl)}
+            </div>
+
+            <div className="flex gap-2 mt-2 flex-wrap">
+              <span className="bg-white/10 px-2 py-1 rounded text-xs">
+                RR: {formatNumber(trade.rr)}
+              </span>
+
+              <span className="bg-white/10 px-2 py-1 rounded text-xs">
+                Pts: {formatNumber(trade.points)}
+              </span>
+            </div>
+
+            <p className="text-sm">
+              <span className="text-gray-400">Contracts:</span>{" "}
+              {trade.contracts != null
+                ? Number(trade.contracts).toLocaleString()
+                : "-"}
+            </p>
+            <p className="text-sm">
+              <span className="text-gray-400">Session:</span> {trade.session}
+            </p>
+
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              {trade.mode !== "backtest" && trade.account_type ? (
+                <span
+                  className={`px-2 py-0.5 text-xs rounded-full font-medium ${
+                    acctLower === "funded"
+                      ? "bg-green-500/20 text-green-400"
+                      : acctLower === "eval"
+                        ? "bg-yellow-500/20 text-yellow-400"
+                        : acctLower === "live"
+                          ? "bg-blue-500/20 text-blue-400"
+                          : acctLower === "backtest"
+                            ? "bg-indigo-500/20 text-indigo-300"
+                            : "bg-gray-500/20 text-gray-400"
+                  }`}
+                >
+                  {trade.account_type}
+                </span>
+              ) : null}
+
+              {acctLower === "backtest" ? (
+                <span className="rounded bg-blue-500 px-2 py-1 text-xs text-white">
+                  Backtest
+                </span>
+              ) : null}
+
+              {hasAccountLine ? (
+                <div className="flex items-center gap-2 text-sm text-gray-300">
+                  <span>
+                    {trade.account_name} {trade.account_size}
+                  </span>
+                  {accountRow?.account_number ? (
+                    <span className="opacity-70">
+                      • #{accountRow.account_number}
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {!trade.account_type && !hasAccountLine ? (
+                <span className="text-xs text-gray-500">—</span>
+              ) : null}
+            </div>
+
+            {trade.public_description ? (
+              <div className="mt-2 px-0">
+                <p className="text-sm text-gray-300">
+                  <span className="text-gray-400">Public Description:</span>{" "}
+                  {trade.public_description}
+                </p>
+              </div>
+            ) : null}
+
+            {trade.strategy ? (
+              <p className="text-xs text-gray-400">
+                Strategy: {trade.strategy}
+              </p>
+            ) : null}
+
+            <p className="text-sm">
+              <span className="text-gray-400">Notes:</span> {trade.notes || "-"}
+            </p>
+
+            {showAdvanced ? (
+              <div className="mt-3 text-sm text-gray-300 space-y-1 border-t border-white/10 pt-3">
+                <p className="text-sm">
+                  <span className="text-gray-400">Entry:</span>{" "}
+                  {formatTradePrice(entryPrice)}
+                </p>
+                <p className="text-sm">
+                  <span className="text-gray-400">Exit:</span>{" "}
+                  {formatTradePrice(exitPrice)}
+                </p>
+                <p className="text-sm">
+                  <span className="text-gray-400">Entry Time:</span>{" "}
+                  {formatTradeClockTime(trade.entry_time, {
+                    sameDayAs: trade.created_at,
+                  })}
+                </p>
+                <p className="text-sm">
+                  <span className="text-gray-400">Exit Time:</span>{" "}
+                  {formatTradeClockTime(trade.exit_time, {
+                    sameDayAs: trade.created_at,
+                  })}
+                </p>
+                {showDuration ? (
+                  <p className="text-sm">
+                    <span className="text-gray-400">Duration:</span>{" "}
+                    {durationDisplay}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        </div>
+
+        {hasPsychology ? (
+          <div className="md:w-[250px] border-t md:border-t-0 md:border-l border-white/10 pt-3 md:pt-0 md:pl-4 shrink-0 space-y-1">
+            <p className="text-sm text-gray-400 mb-2">Psychology</p>
+            {trade.confidence != null && trade.confidence !== "" ? (
+              <p className="text-sm text-gray-300">
+                <span className="text-gray-400">Confidence:</span>{" "}
+                {trade.confidence}
+              </p>
+            ) : null}
+            {trade.emotion != null && String(trade.emotion).trim() !== "" ? (
+              <p className="text-sm text-gray-300">
+                <span className="text-gray-400">Emotion:</span> {trade.emotion}
+              </p>
+            ) : null}
+            {trade.followed_plan != null ? (
+              <p className="text-sm text-gray-300">
+                <span className="text-gray-400">Followed Plan:</span>{" "}
+                {trade.followed_plan ? "Yes" : "No"}
+              </p>
+            ) : null}
+            {trade.mistake_type != null &&
+            String(trade.mistake_type).trim() !== "" ? (
+              <p className="text-sm text-gray-300">
+                <span className="text-gray-400">Mistake:</span>{" "}
+                {trade.mistake_type}
+              </p>
+            ) : null}
+            {trade.market_condition != null &&
+            String(trade.market_condition).trim() !== "" ? (
+              <p className="text-sm text-gray-300">
+                <span className="text-gray-400">Market:</span>{" "}
+                {trade.market_condition}
+              </p>
+            ) : null}
+            {trade.timeframe != null && String(trade.timeframe).trim() !== "" ? (
+              <p className="text-sm text-gray-300">
+                <span className="text-gray-400">Timeframe:</span>{" "}
+                {trade.timeframe}
+              </p>
+            ) : null}
+            {trade.news_event != null ? (
+              <p className="text-sm text-gray-300">
+                <span className="text-gray-400">News:</span>{" "}
+                {trade.news_event ? "Yes" : "No"}
+              </p>
+            ) : null}
+            {trade.trade_type != null &&
+            String(trade.trade_type).trim() !== "" ? (
+              <p className="text-sm text-gray-300">
+                <span className="text-gray-400">Type:</span> {trade.trade_type}
+              </p>
+            ) : null}
+            {trade.psychology_notes != null &&
+            String(trade.psychology_notes).trim() !== "" ? (
+              <p className="text-sm text-gray-300 mt-2">
+                <span className="text-gray-400">Psych Notes:</span>{" "}
+                {trade.psychology_notes}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+
+      {imageSrc ? (
+        <img
+          src={imageSrc}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          className="w-full mt-4 rounded-lg border border-white/10 cursor-pointer"
+          onClick={() => imageLightboxUrl && onImageClick(imageLightboxUrl)}
+        />
+      ) : null}
+
+      {trade.created_at ? (
+        <p className="text-xs text-gray-400 mt-3">{formatEST(trade.created_at)}</p>
+      ) : null}
+    </div>
+  )
+}
+
+export default memo(TradesPageTradeCard)
