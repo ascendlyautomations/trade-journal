@@ -1,6 +1,15 @@
 "use client"
 
 import { useEffect, useMemo, useState, type ReactNode } from "react"
+import {
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts"
 import { supabase } from "@/lib/supabaseClient"
 import {
   computePropfirmAccountMetrics,
@@ -25,10 +34,105 @@ type PropfirmAccount = PropfirmAccountRules & {
   winning_days?: number | string | null
 }
 
+type EquityCurvePoint = {
+  date: string
+  balance: number
+  pnl: number
+}
+
 function PropfirmPageShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100">
-      <div className="w-full px-2 pb-6 pt-3 text-white md:px-4 md:pb-10">{children}</div>
+      <div className="w-full px-2 pb-6 pt-6 text-white md:px-4 md:pb-10 md:pt-8">{children}</div>
+    </div>
+  )
+}
+
+function PropfirmEquityCurve({
+  data,
+  startingBalance,
+}: {
+  data: EquityCurvePoint[]
+  startingBalance: number
+}) {
+  const yAxisDomain =
+    startingBalance > 0
+      ? [startingBalance * 0.92, startingBalance * 1.3]
+      : undefined
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-[#0f172a]/95 p-4 shadow-lg shadow-black/10">
+      <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-white">Equity Curve</h2>
+          <p className="text-sm text-gray-400">
+            Account balance progression by trading day
+          </p>
+        </div>
+      </div>
+
+      {data.length > 1 ? (
+        <div className="h-[260px] w-full overflow-hidden sm:h-[320px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart
+              data={data}
+              margin={{ top: 8, right: 12, left: 8, bottom: 18 }}
+            >
+              <CartesianGrid stroke="#334155" strokeDasharray="3 3" />
+              <XAxis
+                dataKey="date"
+                stroke="#94a3b8"
+                tick={{ fill: "#94a3b8", fontSize: 11 }}
+                tickFormatter={(value) => {
+                  const label = String(value)
+                  if (label === "Start") return label
+                  const d = new Date(`${label}T12:00:00Z`)
+                  if (Number.isNaN(d.getTime())) return label
+                  return `${d.getUTCMonth() + 1}/${d.getUTCDate()}`
+                }}
+                interval="preserveStartEnd"
+                minTickGap={20}
+              />
+              <YAxis
+                stroke="#94a3b8"
+                tick={{ fill: "#94a3b8", fontSize: 11 }}
+                tickFormatter={(value) => formatPropfirmUsd(Number(value))}
+                width={72}
+                domain={yAxisDomain}
+                allowDataOverflow
+              />
+              <Tooltip
+                formatter={(value, name) => {
+                  if (name === "Balance") {
+                    return [formatPropfirmUsd(Number(value)), "Balance"]
+                  }
+                  return [formatPropfirmUsd(Number(value)), "Day P&L"]
+                }}
+                labelFormatter={(label) => `Day: ${String(label)}`}
+                contentStyle={{
+                  backgroundColor: "#0f172a",
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  borderRadius: "10px",
+                }}
+                labelStyle={{ color: "#94a3b8" }}
+              />
+              <Line
+                type="monotone"
+                dataKey="balance"
+                name="Balance"
+                stroke="#22c55e"
+                strokeWidth={2.5}
+                dot={data.length <= 12 ? { r: 3, fill: "#22c55e" } : false}
+                activeDot={{ r: 5 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      ) : (
+        <div className="flex min-h-[180px] items-center justify-center rounded-lg border border-dashed border-white/10 bg-white/[0.03] text-center text-sm text-gray-400">
+          Add trades to this prop firm account to build an equity curve.
+        </div>
+      )}
     </div>
   )
 }
@@ -82,6 +186,21 @@ export default function PropFirmPage() {
     () => formatPropfirmAccountLabel(selectedAccount),
     [selectedAccount]
   )
+  const equityCurveData = useMemo(() => {
+    if (!selectedAccount || startingBalance <= 0) return []
+
+    let balance = startingBalance
+    const points: EquityCurvePoint[] = [
+      { date: "Start", balance, pnl: 0 },
+    ]
+
+    for (const [date, pnl] of dailyRows) {
+      balance += pnl
+      points.push({ date, balance, pnl })
+    }
+
+    return points
+  }, [dailyRows, selectedAccount, startingBalance])
 
   useEffect(() => {
     async function checkPlan() {
@@ -203,51 +322,126 @@ export default function PropFirmPage() {
 
   return (
     <PropfirmPageShell>
-      <div className="mx-auto max-w-6xl space-y-6">
-        <h1 className="text-2xl font-semibold">Prop Firm Mode</h1>
+      <div className="mx-auto max-w-6xl space-y-5 md:space-y-6">
+        <div className="rounded-2xl border border-white/10 bg-white/10 p-4 shadow-xl shadow-black/10 backdrop-blur-md md:p-5">
+          <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-300/80">
+                Prop Firm Analytics
+              </p>
+              <h1 className="mt-1 text-2xl font-semibold text-white md:text-3xl">
+                Prop Firm Mode
+              </h1>
+              <p className="mt-2 text-sm text-gray-400">
+                Track rule progress, drawdown room, and account balance from one
+                stabilized view.
+              </p>
+            </div>
 
-        <div className="text-lg font-semibold">
-          Status:{" "}
-          <span
-            className={
-              status === "PASSED"
-                ? "text-green-400"
-                : status === "FAILED"
-                  ? "text-red-400"
-                  : "text-yellow-400"
-            }
-          >
-            {status}
-          </span>
+            <div
+              className={`inline-flex w-fit rounded-full border px-3 py-1 text-sm font-semibold ${
+                status === "PASSED"
+                  ? "border-green-500/30 bg-green-500/10 text-green-400"
+                  : status === "FAILED"
+                    ? "border-red-500/30 bg-red-500/10 text-red-400"
+                    : "border-yellow-500/30 bg-yellow-500/10 text-yellow-400"
+              }`}
+            >
+              {status}
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-3 md:grid-cols-[minmax(0,420px)_1fr] md:items-center">
+            <select
+              value={
+                selectedAccount?.id != null ? String(selectedAccount.id) : ""
+              }
+              onChange={(e) => {
+                const selected = accounts.find(
+                  (a) => String(a.id) === e.target.value
+                )
+                setSelectedAccount(selected ?? null)
+              }}
+              className="w-full rounded-lg border border-white/10 bg-[#0f172a] p-2.5 text-sm"
+            >
+              <option value="">Select Account</option>
+              {accounts.map((acc) => (
+                <option key={acc.id} value={String(acc.id)}>
+                  {acc.name} •{" "}
+                  {acc.account_size == null ? "" : String(acc.account_size)} •{" "}
+                  {acc.mode}
+                </option>
+              ))}
+            </select>
+
+            <p className="text-sm text-gray-400 md:text-right">
+              Selected:{" "}
+              <span className="font-medium text-gray-200">
+                {selectedAccountLabel}
+              </span>
+            </p>
+          </div>
         </div>
 
-        <select
-          value={
-            selectedAccount?.id != null ? String(selectedAccount.id) : ""
-          }
-          onChange={(e) => {
-            const selected = accounts.find(
-              (a) => String(a.id) === e.target.value
-            )
-            setSelectedAccount(selected ?? null)
-          }}
-          className="mb-6 w-full max-w-md rounded border border-white/10 bg-[#0f172a] p-2"
-        >
-          <option value="">Select Account</option>
-          {accounts.map((acc) => (
-            <option key={acc.id} value={String(acc.id)}>
-              {acc.name} •{" "}
-              {acc.account_size == null ? "" : String(acc.account_size)} •{" "}
-              {acc.mode}
-            </option>
-          ))}
-        </select>
-
-        <p className="text-sm text-gray-400">
-          Selected: {selectedAccountLabel}
-        </p>
-
         {loadingTrades && <p className="text-sm text-gray-400">Loading...</p>}
+
+        {selectedAccount && (
+          <div className="rounded-xl border border-white/10 bg-[#0f172a] p-4">
+            <h2 className="mb-3 text-lg">Rule Status</h2>
+
+            <div className="space-y-2 text-sm">
+              <div
+                className={
+                  maxDdLimit > 0 && trailingMetrics.breachedTrailingDD
+                    ? "text-red-400"
+                    : "text-green-400"
+                }
+              >
+                {maxDdLimit > 0 && trailingMetrics.breachedTrailingDD ? "❌" : "✔"}{" "}
+                Max Drawdown
+              </div>
+
+              <div
+                className={
+                  dailyDrawdownBreached
+                    ? "text-red-400"
+                    : "text-green-400"
+                }
+              >
+                {dailyDrawdownBreached ? "❌" : "✔"}{" "}
+                Daily Drawdown
+              </div>
+
+              <div
+                className={
+                  winningDaysTargetMet
+                    ? "text-green-400"
+                    : "text-yellow-400"
+                }
+              >
+                {winningDaysTargetMet ? "✔" : "⚠"} Winning
+                Days
+              </div>
+
+              <div
+                className={
+                  !consistencyMetrics.ruleActive
+                    ? "text-gray-400"
+                    : consistencyMetrics.isConsistent
+                      ? "text-green-400"
+                      : "text-red-400"
+                }
+              >
+                {!consistencyMetrics.ruleActive
+                  ? "—"
+                  : consistencyMetrics.isConsistent
+                    ? "✔"
+                    : "✖"}{" "}
+                Consistency
+              </div>
+            </div>
+          </div>
+        )}
 
         {selectedAccount && (
           <div className="mb-6 rounded-xl border border-white/10 bg-[#0f172a] p-4">
@@ -416,81 +610,59 @@ export default function PropFirmPage() {
         )}
 
         {selectedAccount && (
-          <div className="mt-6 rounded-xl border border-white/10 bg-[#0f172a] p-4">
-            <h2 className="mb-3 text-lg">Rule Status</h2>
-
-            <div className="space-y-2 text-sm">
-              <div
-                className={
-                  maxDdLimit > 0 && trailingMetrics.breachedTrailingDD
-                    ? "text-red-400"
-                    : "text-green-400"
-                }
-              >
-                {maxDdLimit > 0 && trailingMetrics.breachedTrailingDD ? "❌" : "✔"}{" "}
-                Max Drawdown
-              </div>
-
-              <div
-                className={
-                  dailyDrawdownBreached
-                    ? "text-red-400"
-                    : "text-green-400"
-                }
-              >
-                {dailyDrawdownBreached ? "❌" : "✔"}{" "}
-                Daily Drawdown
-              </div>
-
-              <div
-                className={
-                  winningDaysTargetMet
-                    ? "text-green-400"
-                    : "text-yellow-400"
-                }
-              >
-                {winningDaysTargetMet ? "✔" : "⚠"} Winning
-                Days
-              </div>
-
-              <div
-                className={
-                  !consistencyMetrics.ruleActive
-                    ? "text-gray-400"
-                    : consistencyMetrics.isConsistent
-                      ? "text-green-400"
-                      : "text-red-400"
-                }
-              >
-                {!consistencyMetrics.ruleActive
-                  ? "—"
-                  : consistencyMetrics.isConsistent
-                    ? "✔"
-                    : "✖"}{" "}
-                Consistency
-              </div>
-            </div>
-          </div>
+          <PropfirmEquityCurve
+            data={equityCurveData}
+            startingBalance={startingBalance}
+          />
         )}
 
-        <div className="mt-6 rounded-xl border border-white/10 bg-[#0f172a] p-4">
-          <h2 className="mb-3 text-lg">Daily Performance</h2>
+        <div className="rounded-xl border border-white/10 bg-[#0f172a]/95 p-4 shadow-lg shadow-black/10">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-white">
+                Daily Performance
+              </h2>
+              <p className="text-sm text-gray-400">
+                Aggregated by trading day
+              </p>
+            </div>
+            <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-gray-300">
+              {dailyRows.length} days
+            </span>
+          </div>
 
-          <div className="space-y-2 text-sm">
-            {dailyRows.map(([date, pnl]) => (
-              <div key={date} className="flex justify-between">
-                <span>{date}</span>
-                <span className={pnl >= 0 ? "text-green-400" : "text-red-400"}>
-                  ${pnl.toFixed(2)}
-                </span>
+          <div className="max-h-72 space-y-2 overflow-y-auto pr-1 text-sm">
+            {dailyRows.length > 0 ? (
+              dailyRows.map(([date, pnl]) => (
+                <div
+                  key={date}
+                  className="flex items-center justify-between rounded-lg border border-white/5 bg-white/[0.03] px-3 py-2"
+                >
+                  <span className="font-medium text-gray-300">{date}</span>
+                  <span
+                    className={
+                      pnl >= 0
+                        ? "font-semibold text-green-400"
+                        : "font-semibold text-red-400"
+                    }
+                  >
+                    ${pnl.toFixed(2)}
+                  </span>
+                </div>
+              ))
+            ) : (
+              <div className="rounded-lg border border-dashed border-white/10 bg-white/[0.03] px-3 py-6 text-center text-gray-400">
+                No daily performance yet.
               </div>
-            ))}
+            )}
           </div>
         </div>
 
-        <div className="text-gray-400">
-          Select a prop firm account to view progress
-        </div>
+        {!selectedAccount ? (
+          <div className="text-gray-400">
+            Select a prop firm account to view progress
+          </div>
+        ) : null}
       </div>
     </PropfirmPageShell>
   )
