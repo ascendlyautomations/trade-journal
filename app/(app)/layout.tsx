@@ -1,5 +1,15 @@
 import Navbar from "../components/Navbar"
 
+/**
+ * Persistent authenticated app shell (route group — URLs unchanged).
+ *
+ * Shared Navbar routes: /dashboard, /trades, /feed, /messages, /analytics/propfirm
+ *
+ * Contract:
+ * - Root layout (`app/layout.tsx`) provides `pt-16` for the fixed Navbar — do not duplicate here.
+ * - Render Navbar only in this layout; pages in this group must not import Navbar.
+ * - Pages own their background/padding wrappers; no shared gradient shell at this level.
+ */
 export default function AppShellLayout({
   children,
 }: Readonly<{
@@ -8,11 +18,7 @@ export default function AppShellLayout({
   return (
     <>
       <Navbar />
-      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100">
-        <div className="w-full px-2 pb-6 pt-3 text-white md:px-4 md:pb-10">
-          {children}
-        </div>
-      </div>
+      {children}
     </>
   )
 }

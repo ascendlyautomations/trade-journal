@@ -2,28 +2,27 @@
 
 import type { ChangeEvent } from "react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { supabase } from "../../lib/supabaseClient"
+import { supabase } from "../../../lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
 import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
-import Navbar from "../components/Navbar"
-import FeedLoadMoreFooter from "../components/feed/FeedLoadMoreFooter"
-import FeedModeToggle from "../components/feed/FeedModeToggle"
-import FeedPostList from "../components/feed/FeedPostList"
-import FeedPostOverlays from "../components/feed/FeedPostOverlays"
-import FeedStoriesBar, { type StoryBarProfile } from "../components/feed/FeedStoriesBar"
-import FeedStoryViewer from "../components/feed/FeedStoryViewer"
+import FeedLoadMoreFooter from "../../components/feed/FeedLoadMoreFooter"
+import FeedModeToggle from "../../components/feed/FeedModeToggle"
+import FeedPostList from "../../components/feed/FeedPostList"
+import FeedPostOverlays from "../../components/feed/FeedPostOverlays"
+import FeedStoriesBar, { type StoryBarProfile } from "../../components/feed/FeedStoriesBar"
+import FeedStoryViewer from "../../components/feed/FeedStoryViewer"
 import {
   EMPTY_COMMENTS,
   EMPTY_LIKE_META,
-} from "../components/feed/FeedPostCard"
+} from "../../components/feed/FeedPostCard"
 import {
   FEED_COMMENT_INSERT_SELECT,
   FEED_COMMENTS_SELECT,
   FEED_POSTS_SELECT,
   FEED_STORIES_SELECT,
   buildFeedPostsIndex,
-} from "../components/feed/feedPostHelpers"
+} from "../../components/feed/feedPostHelpers"
 
 const STORY_WINDOW_MS = 24 * 60 * 60 * 1000
 /** Auto-advance each slide (Instagram-style). */
@@ -708,8 +707,6 @@ export default function FeedPage() {
 
   return (
     <div className="w-full text-white">
-      <Navbar />
-
       <div className="flex justify-center px-4 py-6 sm:py-8 pb-10">
         <div className="w-full max-w-xl space-y-6">
           <FeedModeToggle mode={mode} onModeChange={setMode} />

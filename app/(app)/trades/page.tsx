@@ -1,17 +1,16 @@
 "use client"
 
-import Navbar from "../components/Navbar"
 import ProfileOnboarding, {
   ONBOARDING_FLAG,
   profileNeedsUsername,
-} from "../components/ProfileOnboarding"
+} from "../../components/ProfileOnboarding"
 import { filterTradesForPerformanceSharePool } from "@/lib/performanceShare"
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { supabase } from "../../lib/supabaseClient"
+import { supabase } from "../../../lib/supabaseClient"
 import { useRouter } from "next/navigation"
-import PostSetupImportModal from "../components/PostSetupImportModal"
-import TradesPageMainContent from "../components/TradesPageMainContent"
-import TradesPageOverlays from "../components/TradesPageOverlays"
+import PostSetupImportModal from "../../components/PostSetupImportModal"
+import TradesPageMainContent from "../../components/TradesPageMainContent"
+import TradesPageOverlays from "../../components/TradesPageOverlays"
 
 export default function TradesPage() {
   const [trades, setTrades] = useState<any[]>([])
@@ -329,8 +328,6 @@ export default function TradesPage() {
 
   return (
     <>
-      <Navbar />
-
       {showOnboarding && authUserId && gateProfile ? (
         <ProfileOnboarding
           userId={authUserId}

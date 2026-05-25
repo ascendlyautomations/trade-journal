@@ -10,6 +10,8 @@ import { getCurrentAdminCheckResult } from "../../lib/adminUsers"
 
 export default function Navbar() {
   const { user, profile, loading } = useUserProfile()
+  const profileRouteId = profile?.id ?? user?.id ?? null
+  const profileChromePending = !!user && loading && !profile
 
   const [isOpen, setIsOpen] = useState(false)
   const [openSection, setOpenSection] = useState<string | null>(null)
@@ -18,7 +20,6 @@ export default function Navbar() {
   const [unreadMessagesCount, setUnreadMessagesCount] = useState(0)
   const [unreadCount, setUnreadCount] = useState(0)
   const [isAdmin, setIsAdmin] = useState(false)
-  const [isReady, setIsReady] = useState(false)
   const [hasFetchedNotifications, setHasFetchedNotifications] = useState(false)
   const [hasFetchedMessages, setHasFetchedMessages] = useState(false)
   const [hasFetchedAdmin, setHasFetchedAdmin] = useState(false)
@@ -56,7 +57,7 @@ export default function Navbar() {
     return () => document.removeEventListener("mousedown", handleClickOutside)
   }, [])
 
-  async function fetchUnreadMessages() {
+  const fetchUnreadMessages = useCallback(async () => {
     if (!user?.id) return
     const { count } = await supabase
       .from("direct_messages")
@@ -65,7 +66,7 @@ export default function Navbar() {
       .eq("is_read", false)
 
     setUnreadMessagesCount(count ?? 0)
-  }
+  }, [user])
 
   const fetchUnread = useCallback(async () => {
     if (!user?.id) return
@@ -134,6 +135,26 @@ export default function Navbar() {
     }
   }, [fetchUnread])
 
+  useEffect(() => {
+    if (!user?.id) return
+
+    let cancelled = false
+
+    void (async () => {
+      await fetchUnread()
+      if (!cancelled) setHasFetchedNotifications(true)
+    })()
+
+    void (async () => {
+      await fetchUnreadMessages()
+      if (!cancelled) setHasFetchedMessages(true)
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [user?.id, fetchUnread, fetchUnreadMessages])
+
   const toggleSection = (section: string) => {
     setOpenSection((prev) => (prev === section ? null : section))
   }
@@ -183,12 +204,6 @@ export default function Navbar() {
     setActiveMenu(null)
     setAccountMenuOpen(false)
   }, [pathname])
-
-  useEffect(() => {
-    if (!loading) {
-      setIsReady(true)
-    }
-  }, [loading])
 
   const analyticsLinks: {
     label: string
@@ -286,9 +301,9 @@ export default function Navbar() {
               >
                 Trades
               </Link>
-              {profile?.id ? (
+              {profileRouteId ? (
                 <Link
-                  href={`/profile/${profile.id}`}
+                  href={`/profile/${profileRouteId}`}
                   className={`shrink-0 rounded px-2 py-1 transition ${
                     isGroupActive(["/profile"])
                       ? "bg-blue-500/20 text-blue-300"
@@ -506,13 +521,13 @@ export default function Navbar() {
                   }}
                   className="flex items-center gap-2 rounded border px-3 py-1"
                 >
-                  {isReady ? (
+                  {!profileChromePending ? (
                     <img src={profile?.avatar_url} className="h-8 w-8 rounded-full" alt="" />
                   ) : (
                     <div className="h-8 w-8 animate-pulse rounded-full bg-white/10" aria-hidden />
                   )}
-                  {isReady ? (
-                    <span>{profile?.username}</span>
+                  {!profileChromePending ? (
+                    <span>{profile?.username ?? user?.email?.split("@")[0]}</span>
                   ) : (
                     <div className="h-4 w-20 animate-pulse rounded bg-white/10" />
                   )}
@@ -627,9 +642,9 @@ export default function Navbar() {
             Trades
           </Link>
 
-          {profile?.id ? (
+          {profileRouteId ? (
             <Link
-              href={`/profile/${profile.id}`}
+              href={`/profile/${profileRouteId}`}
               className={`rounded-lg px-3 py-2 transition ${
                 isGroupActive(["/profile"])
                   ? "bg-blue-500/20 text-blue-300"

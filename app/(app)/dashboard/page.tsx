@@ -1,30 +1,29 @@
 "use client"
 
-import Navbar from "../components/Navbar"
-import DashboardFilters from "../components/dashboard/DashboardFilters"
-import DashboardHeader from "../components/dashboard/DashboardHeader"
-import DashboardStatsGrid from "../components/dashboard/DashboardStatsGrid"
-import DashboardEquityCurve from "../components/dashboard/DashboardEquityCurve"
-import DashboardWeekdayChart from "../components/dashboard/DashboardWeekdayChart"
-import DashboardSessionChart from "../components/dashboard/DashboardSessionChart"
+import DashboardFilters from "../../components/dashboard/DashboardFilters"
+import DashboardHeader from "../../components/dashboard/DashboardHeader"
+import DashboardStatsGrid from "../../components/dashboard/DashboardStatsGrid"
+import DashboardEquityCurve from "../../components/dashboard/DashboardEquityCurve"
+import DashboardWeekdayChart from "../../components/dashboard/DashboardWeekdayChart"
+import DashboardSessionChart from "../../components/dashboard/DashboardSessionChart"
 import type {
   DashboardGearPersistedPrefs,
   GearDraftState,
-} from "../components/dashboard/dashboardGearTypes"
+} from "../../components/dashboard/dashboardGearTypes"
 import {
   finalizeDrawdownLimitInput,
   sanitizeDrawdownLimitInput,
-} from "../components/dashboard/dashboardGearUtils"
+} from "../../components/dashboard/dashboardGearUtils"
 import ProfileOnboarding, {
   ONBOARDING_FLAG,
   profileNeedsUsername,
-} from "../components/ProfileOnboarding"
-import PostSetupImportModal from "../components/PostSetupImportModal"
-import PerformanceShareModal from "../components/PerformanceShareModal"
-import LockedFeature from "../components/LockedFeature"
+} from "../../components/ProfileOnboarding"
+import PostSetupImportModal from "../../components/PostSetupImportModal"
+import PerformanceShareModal from "../../components/PerformanceShareModal"
+import LockedFeature from "../../components/LockedFeature"
 import { useEffect, useState, useMemo, useRef } from "react"
-import { supabase } from "../../lib/supabaseClient"
-import { isProActive } from "../../lib/subscription"
+import { supabase } from "../../../lib/supabaseClient"
+import { isProActive } from "../../../lib/subscription"
 import { filterTradesForPerformanceSharePool } from "@/lib/performanceShare"
 import { formatEST } from "@/lib/formatEST"
 import { formatCurrency } from "@/lib/formatCurrency"
@@ -1235,12 +1234,9 @@ const worstDay = dailyPnLs.length > 0
 
   if (loading) {
     return (
-      <>
-        <Navbar />
-        <div className="w-full flex items-center justify-center text-white">
-          Loading Dashboard...
-        </div>
-      </>
+      <div className="w-full flex items-center justify-center text-white">
+        Loading Dashboard...
+      </div>
     )
   }
 
@@ -1459,8 +1455,6 @@ const worstDay = dailyPnLs.length > 0
 
   return (
     <>
-      <Navbar />
-
       {showOnboarding && user && profile ? (
         <ProfileOnboarding
           userId={user.id}

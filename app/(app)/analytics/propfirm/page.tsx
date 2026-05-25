@@ -1,8 +1,17 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, type ReactNode } from "react"
 import { supabase } from "@/lib/supabaseClient"
 import { isProActive } from "@/lib/subscription"
+
+function PropfirmPageShell({ children }: { children: ReactNode }) {
+  // Page-owned gradient shell (propfirm-specific inner padding).
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100">
+      <div className="w-full px-2 pb-6 pt-3 text-white md:px-4 md:pb-10">{children}</div>
+    </div>
+  )
+}
 
 type TradeForDay = {
   trade_date?: string | null
@@ -376,21 +385,27 @@ export default function PropFirmPage() {
   }, [trades, selectedAccount])
 
   if (!planChecked) {
-    return <div className="mx-auto max-w-6xl p-6 text-gray-400">Loading...</div>
+    return (
+      <PropfirmPageShell>
+        <div className="mx-auto max-w-6xl p-6 text-gray-400">Loading...</div>
+      </PropfirmPageShell>
+    )
   }
 
   if (!hasProAccess) {
     return (
-      <div className="mx-auto max-w-6xl p-6">
-        <div className="rounded-xl border border-white/10 bg-[#0f172a] p-6 text-center">
-          <h1 className="text-2xl font-semibold text-white">
-            Prop Firm Analytics is a Pro feature
-          </h1>
-          <p className="mt-2 text-sm text-gray-400">
-            Upgrade to Pro to unlock prop firm performance tracking.
-          </p>
+      <PropfirmPageShell>
+        <div className="mx-auto max-w-6xl p-6">
+          <div className="rounded-xl border border-white/10 bg-[#0f172a] p-6 text-center">
+            <h1 className="text-2xl font-semibold text-white">
+              Prop Firm Analytics is a Pro feature
+            </h1>
+            <p className="mt-2 text-sm text-gray-400">
+              Upgrade to Pro to unlock prop firm performance tracking.
+            </p>
+          </div>
         </div>
-      </div>
+      </PropfirmPageShell>
     )
   }
 
@@ -451,7 +466,8 @@ export default function PropFirmPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
+    <PropfirmPageShell>
+      <div className="mx-auto max-w-6xl space-y-6">
       <h1 className="text-2xl font-semibold">Prop Firm Mode</h1>
 
       <div className="text-lg font-semibold">
@@ -741,6 +757,7 @@ export default function PropFirmPage() {
         Select a prop firm account to view progress
       </div>
       <div className="hidden">{accounts.length + filteredTrades.length}</div>
-    </div>
+      </div>
+    </PropfirmPageShell>
   )
 }

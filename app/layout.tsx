@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import BannedAccountShell from "./components/BannedAccountShell"
 import ToastRoot from "./components/ToastRoot"
+import { UserProfileProvider } from "@/lib/UserProfileProvider"
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -33,11 +34,14 @@ export default function RootLayout({
     >
       <body className="flex flex-col">
         <ToastRoot>
-          <BannedAccountShell>
-            <div className="w-full flex flex-col pt-16">
-              {children}
-            </div>
-          </BannedAccountShell>
+          <UserProfileProvider>
+            <BannedAccountShell>
+              {/* pt-16: fixed Navbar offset (AppShell + page-level). Login uses -mt-16. */}
+              <div className="w-full flex flex-col pt-16">
+                {children}
+              </div>
+            </BannedAccountShell>
+          </UserProfileProvider>
         </ToastRoot>
       </body>
     </html>
