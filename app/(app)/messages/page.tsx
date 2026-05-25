@@ -1,8 +1,9 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { supabase } from "../../../lib/supabaseClient"
 import { useRouter } from "next/navigation"
+import MessagesConversationList from "../../components/messages/MessagesConversationList"
 
 function sortConversationsDesc(list: any[]) {
   return [...list].sort(
@@ -16,6 +17,48 @@ function sortConversationsDesc(list: any[]) {
       )
     }
   )
+}
+
+function normalizeSeenBy(raw: unknown): string[] {
+  if (Array.isArray(raw)) return raw.map(String)
+  if (typeof raw === "string") {
+    try {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) return parsed.map(String)
+    } catch {
+      return []
+    }
+  }
+  return []
+}
+
+function previewFromMessage(row: {
+  content?: string | null
+  image_url?: string | null
+  type?: string | null
+  deleted_for_everyone?: boolean | null
+  is_system?: boolean | null
+}): string {
+  if (row.deleted_for_everyone) return "Message deleted"
+  if (row.content?.trim()) return row.content.trim()
+  if (row.image_url) return "Image"
+  if (row.type === "trade") return "Shared a trade"
+  if (row.type === "post") return "Shared a post"
+  return "New message"
+}
+
+function countUnreadFromRows(
+  rows: { seen_by: unknown; sender_id: string | null }[] | null | undefined,
+  userId: string
+): number {
+  let count = 0
+  for (const m of rows || []) {
+    if (!m.sender_id || m.sender_id === userId) continue
+    const seen = normalizeSeenBy(m.seen_by)
+    if (seen.includes(userId)) continue
+    count += 1
+  }
+  return count
 }
 
 export default function MessagesPage() {
@@ -38,19 +81,11 @@ export default function MessagesPage() {
   const [openConvoMenuId, setOpenConvoMenuId] = useState<string | null>(null)
 
   const router = useRouter()
-
-  function normalizeSeenBy(raw: unknown): string[] {
-    if (Array.isArray(raw)) return raw.map(String)
-    if (typeof raw === "string") {
-      try {
-        const parsed = JSON.parse(raw)
-        if (Array.isArray(parsed)) return parsed.map(String)
-      } catch {
-        return []
-      }
-    }
-    return []
-  }
+  const userIdRef = useRef<string | null>(null)
+  const conversationIdsRef = useRef<Set<string>>(new Set())
+  const unreadRefreshTimersRef = useRef<
+    Record<string, ReturnType<typeof setTimeout>>
+  >({})
 
   function mergeNewConversation(prev: any[], newConversation: any) {
     if (prev.some((c) => c.id === newConversation.id)) return prev
@@ -108,6 +143,22 @@ export default function MessagesPage() {
 
     void fetchUsers()
   }, [dmSearchQuery, showDMModal, user?.id])
+
+  const fetchAllUsers = useCallback(async (currentUserId: string) => {
+    const { data } = await supabase
+      .from("profiles")
+      .select("id, username, name, avatar_url")
+      .neq("id", currentUserId)
+      .order("username", { ascending: true })
+      .limit(100)
+
+    setAllUsers(data || [])
+  }, [])
+
+  useEffect(() => {
+    if (!user?.id || (!showGroupModal && !showDMModal)) return
+    void fetchAllUsers(user.id)
+  }, [showGroupModal, showDMModal, user?.id, fetchAllUsers])
 
   useEffect(() => {
     init()
@@ -235,20 +286,6 @@ export default function MessagesPage() {
     void markMessageNotificationsRead(user.id, "page-open")
   }, [user?.id, markMessageNotificationsRead])
 
-  async function openConversation(conversationId: string) {
-    if (user?.id) {
-      await markConversationRead(user.id, conversationId)
-      await markMessageNotificationsRead(user.id, "chat-open")
-      await fetchConversations(user.id)
-      setConversations((prev) =>
-        prev.map((c) =>
-          c.id === conversationId ? { ...c, unreadCount: 0 } : c
-        )
-      )
-    }
-    router.push(`/messages/${conversationId}`)
-  }
-
   useEffect(() => {
     const handler = (e: Event) => {
       const ce = e as CustomEvent<{
@@ -289,7 +326,6 @@ export default function MessagesPage() {
     setUser(user)
 
     await fetchConversations(user.id)
-    await fetchAllUsers(user.id)
     setLoading(false)
   }
 
@@ -317,74 +353,99 @@ export default function MessagesPage() {
 
     const convoIds = rows.map((p: any) => p.conversation_id)
 
+    const { data: participantRows } = await supabase
+      .from("conversation_participants")
+      .select(`
+        conversation_id,
+        user_id,
+        profiles (id, username, avatar_url, name)
+      `)
+      .in("conversation_id", convoIds)
+
+    const participantsByConvo = new Map<string, any[]>()
+    for (const row of participantRows || []) {
+      const cid = row.conversation_id as string
+      const list = participantsByConvo.get(cid) || []
+      list.push(row)
+      participantsByConvo.set(cid, list)
+    }
+
     const { data: msgRows } = await supabase
       .from("messages")
       .select("conversation_id, seen_by, sender_id")
       .in("conversation_id", convoIds)
+      .not("sender_id", "is", null)
+      .neq("sender_id", userId)
+      .not("seen_by", "cs", JSON.stringify([userId]))
 
     const unreadByConvo: Record<string, number> = {}
     for (const cid of convoIds) unreadByConvo[cid] = 0
     for (const m of msgRows || []) {
       const cid = m.conversation_id as string
       if (!m.sender_id || m.sender_id === userId) continue
-      const seen = Array.isArray(m.seen_by) ? m.seen_by : []
+      const seen = normalizeSeenBy(m.seen_by)
       if (seen.includes(userId)) continue
       unreadByConvo[cid] = (unreadByConvo[cid] || 0) + 1
     }
 
-    const convoData = await Promise.all(
-      convoIds.map(async (convoId) => {
-        const convoRow = rows.find((r: any) => r.conversation_id === convoId)
-        const convoMeta = Array.isArray(convoRow?.conversations)
-          ? convoRow?.conversations?.[0]
-          : convoRow?.conversations
+    const convoData = convoIds.map((convoId) => {
+      const convoRow = rows.find((r: any) => r.conversation_id === convoId)
+      const convoMeta = Array.isArray(convoRow?.conversations)
+        ? convoRow?.conversations?.[0]
+        : convoRow?.conversations
 
-        const { data: participants } = await supabase
-          .from("conversation_participants")
-          .select(`
-            user_id,
-            profiles (id, username, avatar_url, name)
-          `)
-          .eq("conversation_id", convoId)
+      const participants = participantsByConvo.get(convoId) || []
+      const otherUser = participants.find((u: any) => u.user_id !== userId)
+      const rawProfile = otherUser?.profiles
+      const profile = Array.isArray(rawProfile) ? rawProfile[0] : rawProfile
 
-        const otherUser = participants?.find((u: any) => u.user_id !== userId)
-        const rawProfile = otherUser?.profiles
-        const profile = Array.isArray(rawProfile) ? rawProfile[0] : rawProfile
+      const isGroup = convoMeta?.is_group === true
+      const displayName = isGroup
+        ? convoMeta?.name || "Group Chat"
+        : profile?.username || "user"
 
-        const { data: messages } = await supabase
-          .from("messages")
-          .select("content, created_at")
-          .eq("conversation_id", convoId)
-          .order("created_at", { ascending: false })
-          .limit(1)
+      return {
+        id: convoId,
+        is_group: isGroup,
+        is_pinned: convoMeta?.is_pinned === true,
+        name: convoMeta?.name || null,
+        displayName,
+        username: profile?.username || "user",
+        avatar_url: isGroup
+          ? convoMeta?.avatar_url ?? null
+          : profile?.avatar_url ?? null,
+        participants,
+        lastMessage: convoMeta?.last_message || "No messages yet",
+        last_message_at: convoMeta?.last_message_at || null,
+        unreadCount: unreadByConvo[convoId] ?? 0,
+      }
+    })
 
-        const isGroup = convoMeta?.is_group === true
-        const displayName = isGroup
-          ? convoMeta?.name || "Group Chat"
-          : profile?.username || "user"
-
-        return {
-          id: convoId,
-          is_group: isGroup,
-          is_pinned: convoMeta?.is_pinned === true,
-          name: convoMeta?.name || null,
-          displayName,
-          username: profile?.username || "user",
-          avatar_url: isGroup
-            ? convoMeta?.avatar_url ?? null
-            : profile?.avatar_url ?? null,
-          participants: participants || [],
-          lastMessage:
-            convoMeta?.last_message || messages?.[0]?.content || "No messages yet",
-          last_message_at:
-            convoMeta?.last_message_at || messages?.[0]?.created_at || null,
-          unreadCount: unreadByConvo[convoId] ?? 0,
-        }
-      })
-    )
-
-    setConversations(sortConversationsDesc(convoData || []))
+    setConversations(sortConversationsDesc(convoData))
   }, [])
+
+  const fetchUnreadCountForConversation = useCallback(
+    async (userId: string, conversationId: string) => {
+      const { data: msgRows } = await supabase
+        .from("messages")
+        .select("seen_by, sender_id")
+        .eq("conversation_id", conversationId)
+        .not("sender_id", "is", null)
+        .neq("sender_id", userId)
+        .not("seen_by", "cs", JSON.stringify([userId]))
+
+      return countUnreadFromRows(msgRows, userId)
+    },
+    []
+  )
+
+  useEffect(() => {
+    userIdRef.current = user?.id ?? null
+  }, [user?.id])
+
+  useEffect(() => {
+    conversationIdsRef.current = new Set(conversations.map((c) => String(c.id)))
+  }, [conversations])
 
   useEffect(() => {
     if (!user?.id) return
@@ -398,8 +459,49 @@ export default function MessagesPage() {
         schema: "public",
         table: "messages",
       },
-      () => {
-        void fetchConversations(user.id)
+      (payload) => {
+        const row = payload.new as {
+          conversation_id?: string
+          sender_id?: string | null
+          content?: string | null
+          image_url?: string | null
+          type?: string | null
+          created_at?: string | null
+          seen_by?: unknown
+          deleted_for_everyone?: boolean | null
+          is_system?: boolean | null
+        }
+        const uid = userIdRef.current
+        const convoId = row?.conversation_id
+        if (!uid || !convoId) return
+
+        if (!conversationIdsRef.current.has(convoId)) {
+          void fetchConversations(uid)
+          return
+        }
+
+        setConversations((prev) => {
+          if (!prev.some((c) => c.id === convoId)) return prev
+
+          const preview = previewFromMessage(row)
+          const createdAt = row.created_at ?? new Date().toISOString()
+          const fromOther = !!row.sender_id && row.sender_id !== uid
+          const isUnread =
+            fromOther && !normalizeSeenBy(row.seen_by).includes(uid)
+
+          const updated = prev.map((c) => {
+            if (c.id !== convoId) return c
+            return {
+              ...c,
+              lastMessage: preview,
+              last_message_at: createdAt,
+              unreadCount: isUnread
+                ? (c.unreadCount ?? 0) + 1
+                : c.unreadCount ?? 0,
+            }
+          })
+          return sortConversationsDesc(updated)
+        })
       }
     )
 
@@ -410,28 +512,116 @@ export default function MessagesPage() {
         schema: "public",
         table: "messages",
       },
-      () => {
-        void fetchConversations(user.id)
+      (payload) => {
+        const row = payload.new as {
+          conversation_id?: string
+          seen_by?: unknown
+        }
+        const oldRow = payload.old as { seen_by?: unknown } | undefined
+        const uid = userIdRef.current
+        const convoId = row?.conversation_id
+        if (!uid || !convoId) return
+        if (!conversationIdsRef.current.has(convoId)) return
+
+        const seenChanged =
+          JSON.stringify(normalizeSeenBy(oldRow?.seen_by)) !==
+          JSON.stringify(normalizeSeenBy(row.seen_by))
+        if (!seenChanged) return
+
+        const scheduleUnreadRefresh = () => {
+          const existing = unreadRefreshTimersRef.current[convoId]
+          if (existing) clearTimeout(existing)
+          unreadRefreshTimersRef.current[convoId] = setTimeout(() => {
+            delete unreadRefreshTimersRef.current[convoId]
+            void (async () => {
+              const count = await fetchUnreadCountForConversation(uid, convoId)
+              setConversations((prev) =>
+                prev.map((c) =>
+                  c.id === convoId ? { ...c, unreadCount: count } : c
+                )
+              )
+            })()
+          }, 200)
+        }
+
+        scheduleUnreadRefresh()
       }
     )
 
     channel.subscribe()
 
     return () => {
+      Object.values(unreadRefreshTimersRef.current).forEach(clearTimeout)
+      unreadRefreshTimersRef.current = {}
       void supabase.removeChannel(channel)
     }
-  }, [user?.id, fetchConversations])
+  }, [user?.id, fetchConversations, fetchUnreadCountForConversation])
 
-  async function fetchAllUsers(currentUserId: string) {
-    const { data } = await supabase
-      .from("profiles")
-      .select("id, username, name, avatar_url")
-      .neq("id", currentUserId)
-      .order("username", { ascending: true })
-      .limit(100)
+  const openConversation = useCallback(
+    async (conversationId: string) => {
+      if (user?.id) {
+        await markConversationRead(user.id, conversationId)
+        await markMessageNotificationsRead(user.id, "chat-open")
+        await fetchConversations(user.id)
+        setConversations((prev) =>
+          prev.map((c) =>
+            c.id === conversationId ? { ...c, unreadCount: 0 } : c
+          )
+        )
+      }
+      router.push(`/messages/${conversationId}`)
+    },
+    [
+      user?.id,
+      markConversationRead,
+      markMessageNotificationsRead,
+      fetchConversations,
+      router,
+    ]
+  )
 
-    setAllUsers(data || [])
-  }
+  const handleOpenConversation = useCallback(
+    (conversationId: string) => {
+      void openConversation(conversationId)
+    },
+    [openConversation]
+  )
+
+  const handleToggleConvoMenu = useCallback((conversationId: string) => {
+    setOpenConvoMenuId((prev) => (prev === conversationId ? null : conversationId))
+  }, [])
+
+  const handleDeleteConversation = useCallback(
+    async (conversationId: string) => {
+      if (!confirm("Delete this chat?")) return
+      if (!user) return
+
+      await supabase
+        .from("conversation_participants")
+        .delete()
+        .eq("conversation_id", conversationId)
+        .eq("user_id", user.id)
+
+      setConversations((prev) => prev.filter((c) => c.id !== conversationId))
+      setOpenConvoMenuId(null)
+    },
+    [user]
+  )
+
+  const handlePinConversation = useCallback(
+    async (conversationId: string, currentState: boolean) => {
+      await supabase
+        .from("conversations")
+        .update({ is_pinned: !currentState })
+        .eq("id", conversationId)
+
+      if (user?.id) {
+        await fetchConversations(user.id)
+      }
+      setOpenConvoMenuId(null)
+    },
+    [user?.id, fetchConversations]
+  )
 
   async function createGroupChat() {
     if (!user || groupSelectedUsers.length === 0 || !groupName.trim()) return
@@ -585,35 +775,13 @@ export default function MessagesPage() {
     router.push(`/messages/${convo.id}`)
   }
 
-  const filteredConversations = conversations.filter((c) =>
-    (c.displayName || c.username).toLowerCase().includes(search.toLowerCase())
-  )
-
-  async function handleDeleteChat(conversationId: string) {
-    if (!confirm("Delete this chat?")) return
-    if (!user) return
-
-    await supabase
-      .from("conversation_participants")
-      .delete()
-      .eq("conversation_id", conversationId)
-      .eq("user_id", user.id)
-
-    setConversations((prev) => prev.filter((c) => c.id !== conversationId))
-    setOpenConvoMenuId(null)
-  }
-
-  async function togglePinChat(conversationId: string, currentState: boolean) {
-    await supabase
-      .from("conversations")
-      .update({ is_pinned: !currentState })
-      .eq("id", conversationId)
-
-    if (user?.id) {
-      await fetchConversations(user.id)
-    }
-    setOpenConvoMenuId(null)
-  }
+  const filteredConversations = useMemo(() => {
+    const query = search.trim().toLowerCase()
+    if (!query) return conversations
+    return conversations.filter((c) =>
+      (c.displayName || c.username).toLowerCase().includes(query)
+    )
+  }, [conversations, search])
 
   return (
     <>
@@ -655,92 +823,14 @@ export default function MessagesPage() {
           ) : filteredConversations.length === 0 ? (
             <p className="text-gray-400">No conversations found</p>
           ) : (
-            <div className="space-y-3">
-
-              {filteredConversations.map((c) => (
-                <div
-                  key={c.id}
-                  onClick={() => void openConversation(c.id)}
-                  className="relative bg-white/5 border border-white/10 p-4 rounded-xl cursor-pointer hover:bg-white/10 transition"
-                >
-                  <button
-                    type="button"
-                    aria-label="Conversation options"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setOpenConvoMenuId(
-                        openConvoMenuId === c.id ? null : c.id
-                      )
-                    }}
-                    className="absolute right-3 top-3 z-10 px-2 py-1 rounded bg-black/40 hover:bg-black/60 text-sm text-white cursor-pointer"
-                  >
-                    ⋯
-                  </button>
-                  {openConvoMenuId === c.id ? (
-                    <div
-                      className="absolute right-3 top-10 z-20 w-40 rounded-lg border border-white/10 bg-[#0f172a] py-1 shadow-lg"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          void togglePinChat(c.id, c.is_pinned === true)
-                        }}
-                        className="w-full px-3 py-2 text-left text-sm text-white hover:bg-[#1f2937] cursor-pointer"
-                      >
-                        {c.is_pinned ? "Unpin Chat" : "Pin Chat"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleDeleteChat(c.id)
-                        }}
-                        className="w-full px-3 py-2 text-left text-sm text-white hover:bg-white/10 cursor-pointer"
-                      >
-                        Delete Chat
-                      </button>
-                    </div>
-                  ) : null}
-                  <div className="flex items-center gap-3 pr-10">
-
-                    {c.avatar_url ? (
-                      <img
-                        src={c.avatar_url}
-                        alt=""
-                        loading="lazy"
-                        decoding="async"
-                        className="w-10 h-10 rounded-full object-cover hover:scale-105 transition"
-                      />
-                    ) : (
-                      <div className="w-10 h-10 rounded-full bg-gray-600" />
-                    )}
-
-                    <div className="min-w-0 flex-1">
-                      <p className="text-emerald-400 font-semibold">
-                        {c.is_group ? c.name || c.displayName : `@${c.username}`}
-                        {c.is_pinned ? (
-                          <span className="ml-2 text-xs text-yellow-400">📌</span>
-                        ) : null}
-                      </p>
-
-                      <p className="text-sm text-gray-400 truncate">
-                        {c.lastMessage}
-                      </p>
-                    </div>
-
-                    {c.unreadCount > 0 ? (
-                      <span className="ml-auto shrink-0 bg-red-500 text-white text-xs px-2 py-1 rounded-full tabular-nums">
-                        {c.unreadCount > 9 ? "9+" : c.unreadCount}
-                      </span>
-                    ) : null}
-
-                  </div>
-                </div>
-              ))}
-
-            </div>
+            <MessagesConversationList
+              conversations={filteredConversations}
+              openConvoMenuId={openConvoMenuId}
+              onOpen={handleOpenConversation}
+              onToggleMenu={handleToggleConvoMenu}
+              onPin={handlePinConversation}
+              onDelete={handleDeleteConversation}
+            />
           )}
 
         </div>

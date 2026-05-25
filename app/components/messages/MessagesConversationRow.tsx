@@ -1,0 +1,115 @@
+"use client"
+
+import { memo } from "react"
+
+export type MessagesConversationRowProps = {
+  conversationId: string
+  isGroup: boolean
+  isPinned: boolean
+  groupName: string | null
+  displayName: string
+  username: string
+  lastMessage: string
+  avatarUrl: string | null
+  unreadCount: number
+  isMenuOpen: boolean
+  onOpen: (conversationId: string) => void
+  onToggleMenu: (conversationId: string) => void
+  onPin: (conversationId: string, isPinned: boolean) => void
+  onDelete: (conversationId: string) => void
+}
+
+function MessagesConversationRow({
+  conversationId,
+  isGroup,
+  isPinned,
+  groupName,
+  displayName,
+  username,
+  lastMessage,
+  avatarUrl,
+  unreadCount,
+  isMenuOpen,
+  onOpen,
+  onToggleMenu,
+  onPin,
+  onDelete,
+}: MessagesConversationRowProps) {
+  return (
+    <div
+      onClick={() => onOpen(conversationId)}
+      className="relative bg-white/5 border border-white/10 p-4 rounded-xl cursor-pointer hover:bg-white/10 transition"
+    >
+      <button
+        type="button"
+        aria-label="Conversation options"
+        onClick={(e) => {
+          e.stopPropagation()
+          onToggleMenu(conversationId)
+        }}
+        className="absolute right-3 top-3 z-10 px-2 py-1 rounded bg-black/40 hover:bg-black/60 text-sm text-white cursor-pointer"
+      >
+        ⋯
+      </button>
+      {isMenuOpen ? (
+        <div
+          className="absolute right-3 top-10 z-20 w-40 rounded-lg border border-white/10 bg-[#0f172a] py-1 shadow-lg"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onPin(conversationId, isPinned)
+            }}
+            className="w-full px-3 py-2 text-left text-sm text-white hover:bg-[#1f2937] cursor-pointer"
+          >
+            {isPinned ? "Unpin Chat" : "Pin Chat"}
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onDelete(conversationId)
+            }}
+            className="w-full px-3 py-2 text-left text-sm text-white hover:bg-white/10 cursor-pointer"
+          >
+            Delete Chat
+          </button>
+        </div>
+      ) : null}
+      <div className="flex items-center gap-3 pr-10">
+        {avatarUrl ? (
+          <img
+            src={avatarUrl}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            className="w-10 h-10 rounded-full object-cover hover:scale-105 transition"
+          />
+        ) : (
+          <div className="w-10 h-10 rounded-full bg-gray-600" />
+        )}
+
+        <div className="min-w-0 flex-1">
+          <p className="text-emerald-400 font-semibold">
+            {isGroup ? groupName || displayName : `@${username}`}
+            {isPinned ? (
+              <span className="ml-2 text-xs text-yellow-400">📌</span>
+            ) : null}
+          </p>
+
+          <p className="text-sm text-gray-400 truncate">{lastMessage}</p>
+        </div>
+
+        {unreadCount > 0 ? (
+          <span className="ml-auto shrink-0 bg-red-500 text-white text-xs px-2 py-1 rounded-full tabular-nums">
+            {unreadCount > 9 ? "9+" : unreadCount}
+          </span>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
+export default memo(MessagesConversationRow)

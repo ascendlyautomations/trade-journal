@@ -1,6 +1,6 @@
 const EST_TIMEZONE = "America/New_York"
 
-export { formatEST } from "./formatEST"
+export { formatEST } from "./formatEST.ts"
 
 function parseDateLike(value: string | Date | null | undefined): Date | null {
   if (!value) return null

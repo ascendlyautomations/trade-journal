@@ -1,0 +1,62 @@
+"use client"
+
+import { memo } from "react"
+import MessagesConversationRow, {
+  type MessagesConversationRowProps,
+} from "./MessagesConversationRow"
+
+export type MessagesConversationListItem = {
+  id: string
+  is_group: boolean
+  is_pinned: boolean
+  name: string | null
+  displayName: string
+  username: string
+  lastMessage: string
+  avatar_url: string | null
+  unreadCount: number
+}
+
+type MessagesConversationListProps = {
+  conversations: MessagesConversationListItem[]
+  openConvoMenuId: string | null
+  onOpen: MessagesConversationRowProps["onOpen"]
+  onToggleMenu: MessagesConversationRowProps["onToggleMenu"]
+  onPin: MessagesConversationRowProps["onPin"]
+  onDelete: MessagesConversationRowProps["onDelete"]
+}
+
+function MessagesConversationList({
+  conversations,
+  openConvoMenuId,
+  onOpen,
+  onToggleMenu,
+  onPin,
+  onDelete,
+}: MessagesConversationListProps) {
+  return (
+    <div className="space-y-3">
+      {conversations.map((c) => (
+        <MessagesConversationRow
+          key={c.id}
+          conversationId={c.id}
+          isGroup={c.is_group === true}
+          isPinned={c.is_pinned === true}
+          groupName={c.name}
+          displayName={c.displayName}
+          username={c.username}
+          lastMessage={c.lastMessage}
+          avatarUrl={c.avatar_url}
+          unreadCount={c.unreadCount ?? 0}
+          isMenuOpen={openConvoMenuId === c.id}
+          onOpen={onOpen}
+          onToggleMenu={onToggleMenu}
+          onPin={onPin}
+          onDelete={onDelete}
+        />
+      ))}
+    </div>
+  )
+}
+
+export default memo(MessagesConversationList)
