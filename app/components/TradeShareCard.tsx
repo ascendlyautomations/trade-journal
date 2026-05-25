@@ -1,7 +1,6 @@
 "use client"
 
 import { forwardRef } from "react"
-import { formatEST } from "@/lib/formatEST"
 import { formatMoneyUnknown } from "@/lib/formatDisplay"
 import { tradeScreenshotPublicUrl } from "@/lib/storagePublicUrl"
 
@@ -12,13 +11,13 @@ export type TradeShareCardProps = {
   profile?: { referral_code?: string | null } | null
 }
 
-function formatNumber(value: unknown): string {
+function formatNumber(value: unknown, digits = 2): string {
   if (value === null || value === undefined) return "—"
   const number = Number(value)
   if (Number.isNaN(number)) return "—"
   return number.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
   })
 }
 
@@ -33,7 +32,54 @@ function directionLabel(trade: any): string {
   )
 }
 
-/** Responsive export card — premium glass layout */
+function formatMode(value: unknown): string {
+  const raw = String(value ?? "").trim()
+  if (!raw) return "—"
+  return raw
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ")
+}
+
+function accountLabel(trade: any): string {
+  const name = String(trade.account_name ?? "").trim()
+  const size = String(trade.account_size ?? "").trim()
+  const label = [name, size].filter(Boolean).join(" ")
+  return label || formatMode(trade.mode ?? trade.account_type)
+}
+
+function parseDateLike(value: unknown): Date | null {
+  if (value === null || value === undefined || value === "") return null
+  const raw = String(value).trim()
+  if (!raw) return null
+
+  const parsed = new Date(raw)
+  if (!Number.isNaN(parsed.getTime())) return parsed
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const dateOnly = new Date(`${raw}T12:00:00Z`)
+    if (!Number.isNaN(dateOnly.getTime())) return dateOnly
+  }
+
+  return null
+}
+
+function formatShareDateTime(value: unknown): string {
+  const date = parseDateLike(value)
+  if (!date) return "—"
+  return date.toLocaleString("en-US", {
+    timeZone: "America/New_York",
+    month: "numeric",
+    day: "numeric",
+    year: "2-digit",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  })
+}
+
+/** Responsive export card — premium blue TradeTraxs layout. */
 const TradeShareCard = forwardRef<HTMLDivElement, TradeShareCardProps>(
   function TradeShareCard({ trade, exportId, profile }, ref) {
     const screenshotUrl = tradeScreenshotPublicUrl(trade?.image_url)
@@ -64,10 +110,20 @@ const TradeShareCard = forwardRef<HTMLDivElement, TradeShareCardProps>(
         ? formatNumber(trade.points)
         : "—"
 
-    const dateStr =
-      trade.created_at != null
-        ? formatEST(trade.created_at)
-        : ""
+    const rr = formatNumber(trade.rr)
+    const account = accountLabel(trade)
+    const entryDisplay = formatShareDateTime(
+      trade.entry_time ?? trade.date ?? trade.trade_date
+    )
+    const exitDisplay = formatShareDateTime(trade.exit_time)
+    const timeRange =
+      entryDisplay !== "—" && exitDisplay !== "—"
+        ? `${entryDisplay} → ${exitDisplay}`
+        : entryDisplay !== "—"
+          ? entryDisplay
+          : exitDisplay !== "—"
+            ? exitDisplay
+            : "—"
 
     const codeTrim =
       profile?.referral_code != null &&
@@ -76,116 +132,154 @@ const TradeShareCard = forwardRef<HTMLDivElement, TradeShareCardProps>(
         : null
 
     return (
-      <div className="mx-auto box-border w-full max-w-[640px] border border-red-500">
+      <div className="mx-auto box-border w-full max-w-[430px]">
         <div
           ref={ref}
           id={exportId}
-          className="w-full overflow-hidden rounded-3xl bg-gradient-to-br from-[#0b1a2a] via-[#123c4a] to-[#1c7f6e] shadow-2xl"
+          className="relative w-full overflow-hidden rounded-[28px] border border-cyan-300/20 bg-gradient-to-br from-[#061427] via-[#0b2d55] to-[#0f7ea8] shadow-2xl"
           style={{
             fontFamily:
               'ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif',
           }}
         >
-          <div className="w-full pt-4">
-            <div className="w-full h-[240px] px-2">
-              <div className="relative flex h-full w-full flex-col overflow-hidden rounded-2xl bg-[#0b1a2a]/60 p-2 backdrop-blur-sm">
+          <div className="pointer-events-none absolute -right-20 -top-20 h-44 w-44 rounded-full bg-cyan-400/25 blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-16 -left-20 h-48 w-48 rounded-full bg-blue-500/20 blur-3xl" />
+
+          <div className="relative p-4 pb-0">
+            <div className="relative h-[176px] w-full overflow-hidden rounded-2xl border border-cyan-300/20 bg-[#07152a]/70 shadow-inner shadow-black/30">
               {screenshotUrl ? (
                 <>
                   {/* eslint-disable-next-line @next/next/no-img-element -- intentional for html-to-image capture */}
                   <img
-                    alt=""
+                    alt="Trade screenshot"
                     src={screenshotUrl}
                     crossOrigin="anonymous"
-                    className="absolute inset-0 h-full w-full rounded-xl object-cover"
+                    className="h-full w-full object-cover"
                   />
-                  <div className="pointer-events-none absolute inset-0 rounded-xl bg-gradient-to-t from-[#0b1a2a]/85 via-transparent to-transparent" />
+                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#061427]/80 via-transparent to-transparent" />
                 </>
               ) : (
-                <div className="flex flex-1 flex-col items-center justify-center gap-2 px-4 text-center">
-                  <span className="text-sm font-medium text-gray-300">
+                <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center">
+                  <span className="text-sm font-semibold text-cyan-100">
                     No screenshot
                   </span>
-                  <span className="text-xs text-gray-500">
+                  <span className="max-w-[240px] text-xs text-blue-100/60">
                     Attach a chart capture to show here
                   </span>
                 </div>
               )}
-              </div>
             </div>
           </div>
 
-          <div className="flex flex-col px-8 py-6">
-            <div className="mt-3 flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-xs tracking-widest text-gray-400">TRADE</p>
-              <h2 className="text-3xl font-bold leading-tight text-white">
-                {trade.ticker ?? "—"}
-              </h2>
-            </div>
-            {codeTrim ? (
-              <div className="shrink-0 rounded-full border border-emerald-400/20 bg-emerald-500/20 px-3 py-1 text-xs text-emerald-400">
-                CODE: {codeTrim}
+          <div className="relative flex flex-col px-6 pb-5 pt-5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-cyan-200/70">
+                  Trade Recap
+                </p>
+                <h2 className="mt-1 truncate text-4xl font-black leading-none tracking-tight text-white">
+                  {trade.ticker ?? "—"}
+                </h2>
               </div>
-            ) : (
               <span
-                className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium uppercase tracking-wide ${
+                className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-bold uppercase tracking-wide ${
                   longShort === "long"
-                    ? "border border-emerald-400/20 bg-emerald-500/15 text-emerald-400"
+                    ? "border border-emerald-300/30 bg-emerald-400/15 text-emerald-200"
                     : longShort === "short"
-                      ? "border border-red-400/20 bg-red-500/15 text-red-400"
-                      : "border border-white/10 bg-white/5 text-gray-400"
+                      ? "border border-red-300/30 bg-red-400/15 text-red-200"
+                      : "border border-cyan-300/20 bg-cyan-300/10 text-cyan-100"
                 }`}
               >
                 {dir}
               </span>
-            )}
             </div>
 
-            <div className="mt-4">
-            <p className="text-xs tracking-wide text-gray-400">P&amp;L</p>
-            <h1
-              className={`mt-1 text-4xl font-extrabold tabular-nums tracking-tight leading-tight md:text-5xl ${
-                !hasPnl
-                  ? "text-gray-400"
-                  : positive
-                    ? "text-emerald-400"
-                    : "text-red-400/90"
-              }`}
-            >
-              {formatMoneyUnknown(trade.pnl, { empty: "—" })}
-            </h1>
+            <div className="mt-4 rounded-2xl border border-cyan-300/15 bg-[#031022]/45 px-4 py-4">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-blue-100/60">
+                Profit / Loss
+              </p>
+              <h1
+                className={`mt-1 text-5xl font-black leading-none tabular-nums tracking-tight ${
+                  !hasPnl
+                    ? "text-gray-300"
+                    : positive
+                      ? "text-emerald-300"
+                      : "text-red-300"
+                }`}
+              >
+                {formatMoneyUnknown(trade.pnl, { empty: "—" })}
+              </h1>
             </div>
 
-            <div className="mt-4 grid grid-cols-2 gap-6">
-            <div className="rounded-xl border border-white/10 bg-white/5 p-6">
-              <p className="text-xs tracking-wide text-gray-400">CONTRACTS</p>
-              <p className="mt-1 text-lg font-semibold tabular-nums text-white">
-                {contracts}
-              </p>
-            </div>
-            <div className="rounded-xl border border-white/10 bg-white/5 p-6">
-              <p className="text-xs tracking-wide text-gray-400">POINTS</p>
-              <p className="mt-1 text-lg font-semibold tabular-nums text-white">
-                {points}
-              </p>
-            </div>
-            <div className="col-span-2 rounded-xl border border-white/10 bg-white/5 p-6">
-              <p className="text-xs tracking-wide text-gray-400">RR</p>
-              <p className="mt-1 text-lg font-semibold tabular-nums text-white">
-                {formatNumber(trade.rr)}
-              </p>
-            </div>
-            <div className="col-span-2 rounded-xl border border-white/10 bg-white/5 p-6">
-              <p className="text-xs tracking-wide text-gray-400">SESSION</p>
-              <p className="mt-1 text-lg font-medium leading-snug text-white">
-                {session}
-              </p>
-            </div>
+            <div className="mt-4 grid grid-cols-3 gap-2">
+              {[
+                ["RR", rr],
+                ["Points", points],
+                ["Contracts", contracts],
+              ].map(([label, value]) => (
+                <div
+                  key={label}
+                  className="rounded-xl border border-cyan-300/10 bg-white/[0.06] px-3 py-3 text-center"
+                >
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-100/55">
+                    {label}
+                  </p>
+                  <p className="mt-1 text-base font-bold tabular-nums text-white">
+                    {value}
+                  </p>
+                </div>
+              ))}
             </div>
 
-            {dateStr ? (
-              <div className="mt-4 text-center text-sm text-gray-400">{dateStr}</div>
-            ) : null}
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <div className="rounded-xl border border-cyan-300/10 bg-white/[0.05] px-3 py-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-100/55">
+                  Session
+                </p>
+                <p className="mt-1 truncate text-sm font-semibold text-white">
+                  {session}
+                </p>
+              </div>
+              <div className="rounded-xl border border-cyan-300/10 bg-white/[0.05] px-3 py-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-100/55">
+                  Account
+                </p>
+                <p className="mt-1 truncate text-sm font-semibold text-white">
+                  {account}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-3 rounded-xl border border-cyan-300/10 bg-[#031022]/40 px-3 py-3">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-100/55">
+                Entry / Exit
+              </p>
+              <p className="mt-1 text-sm font-medium leading-snug text-cyan-50">
+                {timeRange}
+              </p>
+            </div>
+
+            <div className="mt-5 flex items-center justify-between border-t border-cyan-300/15 pt-4">
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-cyan-300/30 bg-cyan-300/15 text-xs font-black text-cyan-100">
+                  TT
+                </div>
+                <div>
+                  <p className="text-sm font-black leading-none tracking-tight text-white">
+                    TradeTraxs
+                  </p>
+                  <p className="mt-0.5 text-[9px] uppercase tracking-[0.22em] text-cyan-100/55">
+                    Journal. Review. Improve.
+                  </p>
+                </div>
+              </div>
+
+              {codeTrim ? (
+                <div className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2.5 py-1 text-[10px] font-semibold text-cyan-100">
+                  CODE {codeTrim}
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
       </div>
