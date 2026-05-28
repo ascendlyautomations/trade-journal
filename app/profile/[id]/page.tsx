@@ -143,6 +143,9 @@ function TradeCard({
   const accountTypeNorm = String(trade.account_type ?? "").trim().toLowerCase()
   const rr =
     trade.rr != null && trade.rr !== "" ? trade.rr : "—"
+  const pnlLabel = Number.isFinite(pnl)
+    ? `${pnl >= 0 ? "+" : ""}${formatMoney(pnl)}`
+    : "—"
   const desc = trade.public_description
     ? String(trade.public_description).trim()
     : ""
@@ -155,50 +158,50 @@ function TradeCard({
 
   const tradeDetails = (
     <>
-      <div className="flex items-center gap-2 flex-wrap text-sm text-gray-100">
-        <span>
-          <span className="font-medium text-white">{ticker}</span>
-          {" - "}
-          <span>{direction}</span>
-        </span>
-        {accountTypeNorm ? (
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm text-gray-100">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span
-            className={`
-        px-2 py-0.5 text-xs rounded-full font-medium
-        ${
-          accountTypeNorm === "funded"
-            ? "bg-green-500/20 text-green-400 border border-green-400/30"
-            : accountTypeNorm === "eval"
-              ? "bg-yellow-500/20 text-yellow-300 border border-yellow-400/30"
-              : accountTypeNorm === "live"
-                ? "bg-blue-500/20 text-blue-300 border border-blue-400/30"
-                : "bg-white/10 text-white/60"
-        }
-      `}
+            className={
+              `shrink-0 text-base font-bold tabular-nums ${
+                Number.isFinite(pnl)
+                  ? pnl >= 0
+                    ? "text-emerald-400"
+                    : "text-red-400"
+                  : "text-gray-400"
+              }`
+            }
           >
-            {accountTypeNorm.toUpperCase()}
+            {pnlLabel}
           </span>
-        ) : null}
+
+          <span className="min-w-0 truncate font-medium text-white">
+            {ticker} · {direction}
+          </span>
+
+          {accountTypeNorm ? (
+            <span
+              className={`
+          px-2 py-0.5 text-xs rounded-full font-medium
+          ${
+            accountTypeNorm === "funded"
+              ? "bg-green-500/20 text-green-400 border border-green-400/30"
+              : accountTypeNorm === "eval"
+                ? "bg-yellow-500/20 text-yellow-300 border border-yellow-400/30"
+                : accountTypeNorm === "live"
+                  ? "bg-blue-500/20 text-blue-300 border border-blue-400/30"
+                  : "bg-white/10 text-white/60"
+          }
+        `}
+            >
+              {accountTypeNorm.toUpperCase()}
+            </span>
+          ) : null}
+        </div>
+        <span className="shrink-0 text-gray-300 tabular-nums">RR {rr}</span>
       </div>
       {desc ? (
         <p className="px-1 text-sm leading-relaxed text-white">{desc}</p>
       ) : null}
-      <div className="flex items-center justify-between gap-4 text-sm">
-        <span
-          className={
-            `font-semibold tabular-nums ${
-              Number.isFinite(pnl)
-                ? pnl >= 0
-                  ? "text-emerald-400"
-                  : "text-red-400"
-                : "text-gray-400"
-            }`
-          }
-        >
-          {Number.isFinite(pnl) ? formatMoney(pnl) : "—"}
-        </span>
-        <span className="shrink-0 text-gray-300 tabular-nums">RR {rr}</span>
-      </div>
       <p className="text-xs text-gray-400">
         {formatDateOnly(trade.entry_time || trade.created_at || undefined)}
         {entry ? ` • ${entry}` : ""}
