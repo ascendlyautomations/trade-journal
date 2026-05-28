@@ -1880,7 +1880,7 @@ export default function ProfilePage() {
                             <div className="flex items-center gap-2">
                               <button
                                 type="button"
-                                onClick={() => router.push("/settings?tab=profile")}
+                                onClick={() => router.push("/settings#profile")}
                                 className="rounded-md bg-gray-600 px-2 py-1 text-xs text-gray-100 hover:bg-gray-500 md:bg-white/10 md:px-3 md:text-sm md:hover:bg-white/20"
                               >
                                 Settings

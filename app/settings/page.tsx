@@ -3,7 +3,7 @@
 import Navbar from "../components/Navbar"
 import AffiliateApplyModal from "../components/AffiliateApplyModal"
 import { useEffect, useState } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter } from "next/navigation"
 import { supabase } from "../../lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
 import { getMembershipStatus } from "@/lib/getMembershipStatus"
@@ -77,7 +77,6 @@ const TABS: {
 
 export default function SettingsPage() {
   const router = useRouter()
-  const searchParams = useSearchParams()
   const [activeTab, setActiveTab] = useState<TabId>("account")
 
   const [user, setUser] = useState<User | null>(null)
@@ -121,9 +120,8 @@ export default function SettingsPage() {
   }, [])
 
   useEffect(() => {
-    const requested = String(searchParams.get("tab") ?? "")
-      .toLowerCase()
-      .trim()
+    if (typeof window === "undefined") return
+    const requested = window.location.hash.replace("#", "").toLowerCase().trim()
     if (
       requested === "profile" ||
       requested === "affiliate" ||
@@ -132,7 +130,7 @@ export default function SettingsPage() {
     ) {
       setActiveTab(requested)
     }
-  }, [searchParams])
+  }, [])
 
   useEffect(() => {
     if (loading) return
