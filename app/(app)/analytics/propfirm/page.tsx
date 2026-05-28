@@ -20,6 +20,7 @@ import {
   type TrailingDrawdownResult,
 } from "@/lib/propfirmMetrics"
 import { isProActive } from "@/lib/subscription"
+import { formatPnlCurrency } from "@/lib/formatMoney"
 
 const PROPFIRM_ACCOUNT_FIELDS =
   "id,name,account_size,mode,consistency,max_drawdown,daily_drawdown,profit_target,winning_days"
@@ -728,7 +729,10 @@ export default function PropFirmPage() {
                         : "font-semibold text-red-400"
                     }
                   >
-                    ${pnl.toFixed(2)}
+                    {formatPnlCurrency(pnl, {
+                      minimumFractionDigits: 0,
+                      maximumFractionDigits: 2,
+                    })}
                   </span>
                 </div>
               ))

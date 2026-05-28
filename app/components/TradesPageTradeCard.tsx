@@ -9,31 +9,7 @@ import {
 } from "@/lib/tradeDisplayFormat"
 import { formatDateOnly, formatTimeOnly } from "@/lib/formatDate"
 import { formatEST } from "@/lib/formatEST"
-
-function formatMoney(value: unknown): string {
-  if (value === null || value === undefined) return "-"
-  const number = Number(value)
-  if (Number.isNaN(number)) return "-"
-  return number < 0
-    ? `-$${Math.abs(number).toLocaleString(undefined, {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      })}`
-    : `$${number.toLocaleString(undefined, {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      })}`
-}
-
-function formatNumber(value: unknown): string {
-  if (value === null || value === undefined) return "-"
-  const number = Number(value)
-  if (Number.isNaN(number)) return "-"
-  return number.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })
-}
+import { formatMoneyUnknown, formatNumberUnknown } from "@/lib/formatDisplay"
 
 function getDuration(
   start: string | null | undefined,
@@ -205,16 +181,16 @@ function TradesPageTradeCard({
                   : "bg-red-500/20 text-red-400"
               }`}
             >
-              {formatMoney(trade.pnl)}
+              {formatMoneyUnknown(trade.pnl)}
             </div>
 
             <div className="flex gap-2 mt-2 flex-wrap">
               <span className="bg-white/10 px-2 py-1 rounded text-xs">
-                RR: {formatNumber(trade.rr)}
+                RR: {formatNumberUnknown(trade.rr)}
               </span>
 
               <span className="bg-white/10 px-2 py-1 rounded text-xs">
-                Pts: {formatNumber(trade.points)}
+                Pts: {formatNumberUnknown(trade.points)}
               </span>
             </div>
 

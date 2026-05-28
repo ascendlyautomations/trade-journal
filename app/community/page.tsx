@@ -17,6 +17,7 @@ import { compressImage } from "@/lib/compressImage"
 import { formatEST } from "@/lib/formatEST"
 import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
+import { formatMoneyUnknown, formatRR } from "@/lib/formatDisplay"
 
 type Room = {
   id: string
@@ -1898,7 +1899,8 @@ function CommunityContent() {
                               />
                             ) : null}
                             <p className="mt-1 text-xs">
-                              PnL: {msg.trades.pnl ?? "—"} | RR: {msg.trades.rr ?? "—"}
+                              PnL: {formatMoneyUnknown(msg.trades.pnl, { empty: "—" })} | RR:{" "}
+                              {formatRR(msg.trades.rr)}
                             </p>
                           </div>
                         ) : (
@@ -2265,8 +2267,7 @@ function CommunityContent() {
                       {trade.ticker || "Trade"} {trade.direction ? `• ${trade.direction}` : ""}
                     </p>
                     <p className="text-xs text-gray-400">
-                      PnL {trade.pnl != null && trade.pnl !== "" ? `$${trade.pnl}` : "—"} • RR{" "}
-                      {trade.rr ?? "—"}
+                      PnL {formatMoneyUnknown(trade.pnl, { empty: "—" })} • RR {formatRR(trade.rr)}
                     </p>
                   </button>
                 ))

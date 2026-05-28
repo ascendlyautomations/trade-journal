@@ -25,9 +25,36 @@ export function formatNumberUnknown(value: unknown, empty = "-"): string {
   const number = Number(value)
   if (Number.isNaN(number)) return empty
   return number.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
+    minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   })
+}
+
+export function formatDecimal(value: number, maxFractionDigits = 2): string {
+  if (!Number.isFinite(value)) return "—"
+  return value.toLocaleString(undefined, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: maxFractionDigits,
+  })
+}
+
+export function formatRR(value: unknown, empty = "—"): string {
+  return formatNumberUnknown(value, empty)
+}
+
+export function formatPoints(value: unknown, empty = "—"): string {
+  return formatNumberUnknown(value, empty)
+}
+
+export function formatSignedPnlDisplay(value: unknown, empty = "—"): string {
+  if (value === null || value === undefined) return empty
+  const number = Number(value)
+  if (!Number.isFinite(number)) return empty
+  const formatted = formatPnlCurrency(number, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  })
+  return number > 0 ? `+${formatted}` : formatted
 }
 
 /**

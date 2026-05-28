@@ -12,6 +12,7 @@ import {
 } from "recharts"
 import { formatEST } from "@/lib/formatEST"
 import { formatCurrency } from "@/lib/formatCurrency"
+import { formatDecimal } from "@/lib/formatDisplay"
 
 export type EquityChartPoint = {
   date: string
@@ -198,7 +199,7 @@ export default function DashboardEquityCurve({
               : "text-red-400 bg-red-500/10 border border-red-500/20"
           }`}
         >
-          Profit Factor: {profitFactor.toFixed(2)}
+          Profit Factor: {formatDecimal(profitFactor)}
         </div>
 
         <div

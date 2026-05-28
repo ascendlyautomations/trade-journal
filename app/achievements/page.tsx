@@ -20,6 +20,7 @@ type AchievementFormState = {
   achievement_type: string
   title: string
   description: string
+  payout_amount: string
   achieved_at: string
   image_url: string | null
   is_public: boolean
@@ -30,6 +31,7 @@ const EMPTY_FORM: AchievementFormState = {
   achievement_type: "payout",
   title: "",
   description: "",
+  payout_amount: "",
   achieved_at: "",
   image_url: null,
   is_public: true,
@@ -149,6 +151,10 @@ export default function AchievementsPage() {
       achievement_type: normalizeAchievementType(a.achievement_type),
       title: a.title || "",
       description: a.description || "",
+      payout_amount:
+        a.value_numeric != null && Number.isFinite(Number(a.value_numeric))
+          ? String(a.value_numeric)
+          : "",
       achieved_at: a.achieved_at ? String(a.achieved_at).slice(0, 10) : "",
       image_url: a.image_url || null,
       is_public: !!a.is_public,
@@ -194,6 +200,16 @@ export default function AchievementsPage() {
 
   async function saveAchievement() {
     if (!userId || !form.title.trim() || !form.achievement_type.trim()) return
+    const normalizedType = normalizeAchievementType(form.achievement_type)
+    const payoutAmount =
+      normalizedType === "payout" ? Number(form.payout_amount) : null
+    if (
+      normalizedType === "payout" &&
+      (!Number.isFinite(payoutAmount) || (payoutAmount as number) <= 0)
+    ) {
+      setError("Please enter a valid payout amount.")
+      return
+    }
     setBusy(true)
     setError(null)
 
@@ -236,14 +252,21 @@ export default function AchievementsPage() {
 
     const payload = {
       user_id: userId,
-      achievement_type: normalizeAchievementType(form.achievement_type),
+      achievement_type: normalizedType,
       title: form.title.trim(),
       description: form.description.trim() || null,
       badge_key: badgeKeyFromType(form.achievement_type),
       category: categoryFromType(form.achievement_type),
       tier: null,
-      value_numeric: null,
-      value_text: null,
+      value_numeric: normalizedType === "payout" ? payoutAmount : null,
+      value_text:
+        normalizedType === "payout" && payoutAmount != null
+          ? `+$${Math.abs(payoutAmount).toLocaleString(undefined, {
+              minimumFractionDigits: 0,
+              maximumFractionDigits: 2,
+            })}`
+          : null,
+      currency: normalizedType === "payout" ? "USD" : null,
       account_type: null,
       account_name: null,
       account_size: null,
@@ -438,6 +461,22 @@ export default function AchievementsPage() {
                   className="mt-1.5 h-11 w-full rounded-lg border border-white/15 bg-[#0a1329] px-3 text-sm text-white placeholder:text-slate-500 outline-none transition focus:border-blue-400/60 focus:ring-2 focus:ring-blue-500/20"
                 />
               </label>
+              {normalizeAchievementType(form.achievement_type) === "payout" ? (
+                <label className="text-xs text-gray-300">
+                  Payout Amount (USD)
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={form.payout_amount}
+                    onChange={(e) =>
+                      setForm((prev) => ({ ...prev, payout_amount: e.target.value }))
+                    }
+                    placeholder="3500"
+                    className="mt-1.5 h-11 w-full rounded-lg border border-white/15 bg-[#0a1329] px-3 text-sm text-white placeholder:text-slate-500 outline-none transition focus:border-blue-400/60 focus:ring-2 focus:ring-blue-500/20"
+                  />
+                </label>
+              ) : null}
               <label className="text-xs text-gray-300">
                 Achieved Date
                 <div ref={calendarWrapperRef} className="relative calendar-wrapper">

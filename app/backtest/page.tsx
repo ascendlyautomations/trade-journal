@@ -9,6 +9,8 @@ import TradeCard from "@/components/TradeCard"
 import Calendar from "@/components/Calendar"
 import InputTradeForm from "../components/InputTradeForm"
 import PerformanceShareModal from "../components/PerformanceShareModal"
+import { formatPnlCurrency } from "@/lib/formatMoney"
+import { formatRR } from "@/lib/formatDisplay"
 
 type BacktestTrade = Record<string, unknown> & {
   id: string
@@ -203,13 +205,16 @@ export default function BacktestPage() {
             <div className="rounded-xl bg-gradient-to-br from-purple-500/20 to-purple-600/10 p-4">
               <p className="text-sm text-gray-400">Total PnL</p>
               <p className="text-xl font-bold text-white">
-                ${totalPnL.toFixed(2)}
+                {formatPnlCurrency(totalPnL, {
+                  minimumFractionDigits: 0,
+                  maximumFractionDigits: 2,
+                })}
               </p>
             </div>
 
             <div className="rounded-xl bg-gradient-to-br from-yellow-500/20 to-yellow-600/10 p-4">
               <p className="text-sm text-gray-400">Avg RR</p>
-              <p className="text-xl font-bold text-white">{avgRR.toFixed(2)}</p>
+              <p className="text-xl font-bold text-white">{formatRR(avgRR)}</p>
             </div>
           </div>
 
@@ -257,10 +262,14 @@ export default function BacktestPage() {
                     Win Rate: {((stratWins / total) * 100).toFixed(1)}%
                   </p>
                   <p className="text-sm text-gray-300">
-                    PnL: ${pnl.toFixed(2)}
+                    PnL:{" "}
+                    {formatPnlCurrency(pnl, {
+                      minimumFractionDigits: 0,
+                      maximumFractionDigits: 2,
+                    })}
                   </p>
                   <p className="text-xs text-gray-400">
-                    Avg RR: {stratAvgRR.toFixed(2)}
+                    Avg RR: {formatRR(stratAvgRR)}
                   </p>
                 </div>
               )

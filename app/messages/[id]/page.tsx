@@ -9,6 +9,12 @@ import { compressImage } from "@/lib/compressImage"
 import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import { useParams, useRouter } from "next/navigation"
+import {
+  formatMoneyUnknown,
+  formatPoints,
+  formatRR,
+  formatSignedPnlDisplay,
+} from "@/lib/formatDisplay"
 
 function tradeScreenshotSrc(url: string | null | undefined): string | null {
   const raw = url != null ? String(url).trim() : ""
@@ -180,15 +186,13 @@ function TradeMessageBubble({
                 pnlNonNeg ? "text-green-400" : "text-red-400"
               }`}
             >
-              {Number.isNaN(pnlNum)
-                ? `$${trade.pnl}`
-                : `${pnlNonNeg ? "+" : "-"}$${Math.abs(pnlNum)}`}
+              {formatSignedPnlDisplay(trade.pnl)}
             </div>
           </div>
 
           <div className="mb-3 flex justify-between text-xs text-gray-400">
-            <span>RR: {trade.rr}</span>
-            <span>Points: {trade.points ?? "—"}</span>
+            <span>RR: {formatRR(trade.rr)}</span>
+            <span>Points: {formatPoints(trade.points)}</span>
           </div>
 
           {trade.public_description && (
@@ -383,10 +387,10 @@ function PostMessageBubble({
 
           <div className="flex justify-between text-xs">
             <span className={isWin ? "text-emerald-400" : "text-red-400"}>
-              {Number.isNaN(pnl) ? "—" : `${isWin ? "+" : ""}$${pnl}`}
+              {formatSignedPnlDisplay(pnl)}
             </span>
             <span className="text-gray-400">
-              RR {post.rr != null && post.rr !== "" ? post.rr : "—"}
+              RR {formatRR(post.rr)}
             </span>
           </div>
         </div>
@@ -1605,14 +1609,12 @@ export default function DMPage() {
                           win ? "text-green-400" : "text-red-400"
                         }`}
                       >
-                        {Number.isNaN(p)
-                          ? `$${t.pnl}`
-                          : `${win ? "+" : "-"}$${Math.abs(p)}`}
+                        {formatSignedPnlDisplay(t.pnl)}
                       </div>
                     </div>
                     <div className="mb-3 flex justify-between text-xs text-gray-400">
-                      <span>RR: {t.rr}</span>
-                      <span>Points: {t.points ?? "—"}</span>
+                      <span>RR: {formatRR(t.rr)}</span>
+                      <span>Points: {formatPoints(t.points)}</span>
                     </div>
                     {modalImg ? (
                       <img
@@ -1682,10 +1684,10 @@ export default function DMPage() {
                     ) : null}
                     <div className="flex justify-between text-sm">
                       <span className={isWin ? "text-emerald-400" : "text-red-400"}>
-                        {Number.isNaN(pnl) ? "—" : `${isWin ? "+" : ""}$${pnl}`}
+                        {formatSignedPnlDisplay(pnl)}
                       </span>
                       <span className="text-gray-300">
-                        RR {p.rr != null && p.rr !== "" ? p.rr : "—"}
+                        RR {formatRR(p.rr)}
                       </span>
                     </div>
                   </div>
@@ -1737,7 +1739,7 @@ export default function DMPage() {
                       {trade.ticker} • {trade.direction}
                     </p>
                     <p className="text-sm text-gray-400">
-                      ${trade.pnl} • RR {trade.rr}
+                      {formatMoneyUnknown(trade.pnl, { empty: "—" })} • RR {formatRR(trade.rr)}
                     </p>
                   </div>
                 ))

@@ -6,6 +6,7 @@ import {
   badgeIconForKey,
   formatAchievementDate,
   formatAchievementValue,
+  normalizeAchievementType,
   tierClassName,
 } from "../../lib/achievements"
 
@@ -37,13 +38,18 @@ export default function AchievementCard({
 }: AchievementCardProps) {
   const imageSrc = achievementImageSrc(achievement.image_url)
   const valueText = formatAchievementValue(achievement)
+  const isPayout = normalizeAchievementType(achievement.achievement_type) === "payout"
+  const headerLabel =
+    isPayout && valueText
+      ? `${achievementTypeLabel(achievement.achievement_type)} • ${valueText}`
+      : achievementTypeLabel(achievement.achievement_type)
 
   return (
     <article className={`rounded-xl border p-4 ${tierClassName(achievement.tier ?? null)}`}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="text-[11px] uppercase tracking-wide text-blue-200/80">
-            {achievementTypeLabel(achievement.achievement_type)}
+            {headerLabel}
           </p>
           <h3 className="truncate text-sm font-semibold text-white">{achievement.title}</h3>
           {featured ? (
@@ -61,7 +67,7 @@ export default function AchievementCard({
         </p>
       ) : null}
 
-      {featured || valueText ? (
+      {(featured || valueText) && !(isPayout && valueText) ? (
         <p className="mt-1 text-xs text-emerald-300">{valueText || "Achievement unlocked"}</p>
       ) : null}
 

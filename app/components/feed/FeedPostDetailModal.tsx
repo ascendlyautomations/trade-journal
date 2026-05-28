@@ -3,6 +3,11 @@
 import { useCallback, useEffect, useMemo, useState, type MutableRefObject } from "react"
 import { PostInteractionsEngagement } from "@/app/components/PostInteractions"
 import { formatEST } from "@/lib/formatEST"
+import {
+  formatPoints,
+  formatRR,
+  formatSignedPnlDisplay,
+} from "@/lib/formatDisplay"
 import FeedCommentsSection from "./FeedCommentsSection"
 import FeedPostScreenshot from "./FeedPostScreenshot"
 import {
@@ -136,9 +141,7 @@ export default function FeedPostDetailModal({
                   modalPostDetails.pnlPositive ? "text-emerald-400" : "text-red-400"
                 }`}
               >
-                {!Number.isNaN(modalPostDetails.pnl)
-                  ? `${modalPostDetails.pnlPositive ? "+" : ""}$${modalPostDetails.pnl}`
-                  : "—"}
+                {formatSignedPnlDisplay(modalPostDetails.pnl)}
               </div>
 
               <div className="flex min-w-0 items-center gap-2 text-sm font-medium text-white">
@@ -157,12 +160,12 @@ export default function FeedPostDetailModal({
 
             <div className="flex shrink-0 items-center gap-2 text-sm text-gray-300">
               {post.rr != null && post.rr !== "" ? (
-                <span className="tabular-nums">RR {post.rr}</span>
+                <span className="tabular-nums">RR {formatRR(post.rr)}</span>
               ) : null}
               {modalPostDetails.points !== null &&
               modalPostDetails.points !== undefined ? (
                 <span className="rounded-md bg-white/10 px-2 py-0.5 text-gray-200">
-                  {modalPostDetails.points} pts
+                  {formatPoints(modalPostDetails.points)} pts
                 </span>
               ) : null}
             </div>

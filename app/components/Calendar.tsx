@@ -4,6 +4,7 @@ import { useMemo, useState } from "react"
 import { formatPnlCurrency, formatPnlWholeDollars } from "../../lib/formatMoney"
 import { tradeScreenshotPublicUrl } from "@/lib/storagePublicUrl"
 import { formatEST } from "@/lib/formatEST"
+import { formatPoints, formatRR } from "@/lib/formatDisplay"
 import {
   getTradingDayKey,
   resolveTradingTimeSourceForKey,
@@ -358,10 +359,10 @@ export default function Calendar({
                       </p>
                       <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-gray-400">
                         {trade.rr != null && trade.rr !== "" ? (
-                          <span>RR: {trade.rr}</span>
+                          <span>RR: {formatRR(trade.rr)}</span>
                         ) : null}
                         {trade.points != null && trade.points !== "" ? (
-                          <span>Pts: {trade.points}</span>
+                          <span>Pts: {formatPoints(trade.points)}</span>
                         ) : null}
                         {trade.session ? <span>{trade.session}</span> : null}
                         {modeLower === "backtest" ? (
@@ -447,11 +448,11 @@ export default function Calendar({
                   </p>
                   <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-400">
                     {selectedTrade.rr != null && selectedTrade.rr !== "" ? (
-                      <span>RR: {selectedTrade.rr}</span>
+                      <span>RR: {formatRR(selectedTrade.rr)}</span>
                     ) : null}
                     {selectedTrade.points != null &&
                     selectedTrade.points !== "" ? (
-                      <span>Pts: {selectedTrade.points}</span>
+                      <span>Pts: {formatPoints(selectedTrade.points)}</span>
                     ) : null}
                     {selectedTrade.session ? (
                       <span>{selectedTrade.session}</span>

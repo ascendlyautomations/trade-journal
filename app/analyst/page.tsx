@@ -6,6 +6,7 @@ import { useEffect, useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { isProActive } from "../../lib/subscription"
 import { formatEST } from "@/lib/formatEST"
+import { formatRR } from "@/lib/formatDisplay"
 
 export default function AnalystPage() {
   const [trades, setTrades] = useState<any[]>([])
@@ -310,7 +311,7 @@ export default function AnalystPage() {
                       </p>
 
                       <p className="text-xs text-gray-400">
-                        RR: {trade.rr ?? "-"}
+                        RR: {formatRR(trade.rr, "-")}
                         {trade.contracts != null
                           ? ` • Contracts: ${trade.contracts}`
                           : ""}

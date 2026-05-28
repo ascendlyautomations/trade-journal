@@ -3,31 +3,7 @@
 import { memo, type Dispatch, type SetStateAction } from "react"
 import TradeFilterBar from "./TradeFilterBar"
 import TradesPageTradeCard from "./TradesPageTradeCard"
-
-function formatMoney(value: unknown): string {
-  if (value === null || value === undefined) return "-"
-  const number = Number(value)
-  if (Number.isNaN(number)) return "-"
-  return number < 0
-    ? `-$${Math.abs(number).toLocaleString(undefined, {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      })}`
-    : `$${number.toLocaleString(undefined, {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      })}`
-}
-
-function formatNumber(value: unknown): string {
-  if (value === null || value === undefined) return "-"
-  const number = Number(value)
-  if (Number.isNaN(number)) return "-"
-  return number.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })
-}
+import { formatMoneyUnknown, formatRR } from "@/lib/formatDisplay"
 
 type TradeStats = {
   totalTrades: number
@@ -274,10 +250,10 @@ function TradesPageMainContent({
         <Stat title="Win %" value={`${tradeStats.winRate.toFixed(1)}%`} />
         <Stat
           title="P&L"
-          value={formatMoney(tradeStats.totalPnL)}
+          value={formatMoneyUnknown(tradeStats.totalPnL)}
           positive={tradeStats.totalPnL >= 0}
         />
-        <Stat title="Avg RR" value={formatNumber(tradeStats.avgRR)} />
+        <Stat title="Avg RR" value={formatRR(tradeStats.avgRR)} />
       </div>
 
       <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-4">

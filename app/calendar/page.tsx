@@ -7,6 +7,7 @@ import {
   resolveTradingTimeSourceForKey,
   toDateKey,
 } from "@/lib/formatDate"
+import { formatDecimal, formatRR } from "@/lib/formatDisplay"
 import { useEffect, useMemo, useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
 export default function CalendarPage() {
@@ -459,7 +460,7 @@ export default function CalendarPage() {
                       </p>
                       <p>Total Trades: {selectedDayStats.totalTradesForDay}</p>
                       <p>Win Rate: {selectedDayStats.winRateForDay.toFixed(1)}%</p>
-                      <p>Avg RR: {selectedDayStats.avgRRForDay.toFixed(2)}</p>
+                      <p>Avg RR: {formatRR(selectedDayStats.avgRRForDay)}</p>
                       <p>Winning Trades: {selectedDayStats.winningTrades}</p>
                       <p>Losing Trades: {selectedDayStats.losingTrades}</p>
                       <p className={selectedDayStats.bestTradeForDay >= 0 ? "text-emerald-400" : "text-red-400"}>
@@ -469,7 +470,7 @@ export default function CalendarPage() {
                         Worst Trade: {formatPNL(selectedDayStats.worstTradeForDay)}
                       </p>
                       <p>Avg Win: {formatPNL(selectedDayStats.avgWinForDay)}</p>
-                      <p>Total Points: {selectedDayStats.totalPointsForDay.toFixed(1)}</p>
+                      <p>Total Points: {formatDecimal(selectedDayStats.totalPointsForDay, 2)}</p>
                     </div>
                   )}
                 </>

@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react"
 import { formatCurrency } from "@/lib/formatCurrency"
+import { formatRR } from "@/lib/formatDisplay"
 
 function formatNumber(value: number) {
   if (value === null || value === undefined) return "-"
@@ -119,7 +120,7 @@ export default function DashboardStatsGrid({
       <div className="grid grid-cols-2 gap-3 md:gap-3">
         <Stat title="Trades" value={formatNumber(totalTrades)} />
         <Stat title="Win %" value={`${winRate.toFixed(1)}%`} />
-        <Stat title="Avg RR" value={avgRR.toFixed(2)} />
+        <Stat title="Avg RR" value={formatRR(avgRR)} />
         <Stat
           title="P&L"
           value={formatCurrency(totalPnL)}

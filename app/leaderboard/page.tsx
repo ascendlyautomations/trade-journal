@@ -19,6 +19,7 @@ import {
   type TradeForLeaderboard,
 } from "../../lib/leaderboardChart"
 import { formatPnlCurrency } from "../../lib/formatMoney"
+import { formatRR } from "@/lib/formatDisplay"
 
 type TooltipPayload = {
   name?: string
@@ -167,7 +168,7 @@ export default function Leaderboard() {
               Avg RR:{" "}
               {todayStats.yourAvgRR === null
                 ? "—"
-                : todayStats.yourAvgRR.toFixed(2)}
+                : formatRR(todayStats.yourAvgRR)}
             </div>
             <div>
               Percentile: Top{" "}
@@ -185,7 +186,7 @@ export default function Leaderboard() {
               Avg RR:{" "}
               {todayStats.globalAvgRR === null
                 ? "—"
-                : todayStats.globalAvgRR.toFixed(2)}
+                : formatRR(todayStats.globalAvgRR)}
             </div>
             <div>Total Trades: {todayStats.globalTradeCount}</div>
           </div>

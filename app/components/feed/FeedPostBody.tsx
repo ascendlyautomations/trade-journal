@@ -1,6 +1,11 @@
 "use client"
 
 import { memo } from "react"
+import {
+  formatPoints,
+  formatRR,
+  formatSignedPnlDisplay,
+} from "@/lib/formatDisplay"
 
 type FeedPostBodyProps = {
   pnl: number
@@ -36,7 +41,7 @@ function FeedPostBody({
               pnlPositive ? "text-emerald-400" : "text-red-400"
             }`}
           >
-            {Number.isNaN(pnl) ? "—" : `${pnlPositive ? "+" : ""}$${pnl}`}
+            {formatSignedPnlDisplay(pnl)}
           </div>
 
           <div className="flex min-w-0 items-center gap-2 text-sm font-medium text-white">
@@ -55,11 +60,11 @@ function FeedPostBody({
 
         <div className="flex shrink-0 items-center gap-2 text-sm text-gray-300">
           {rr != null && rr !== "" ? (
-            <span className="tabular-nums">RR {rr}</span>
+            <span className="tabular-nums">RR {formatRR(rr)}</span>
           ) : null}
           {points !== null && points !== undefined ? (
             <span className="rounded-md bg-white/10 px-2 py-0.5 text-gray-200">
-              {points} pts
+              {formatPoints(points)} pts
             </span>
           ) : null}
         </div>

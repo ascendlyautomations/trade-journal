@@ -27,6 +27,7 @@ import { isProActive } from "../../../lib/subscription"
 import { filterTradesForPerformanceSharePool } from "@/lib/performanceShare"
 import { formatEST } from "@/lib/formatEST"
 import { formatCurrency } from "@/lib/formatCurrency"
+import { formatRR } from "@/lib/formatDisplay"
 import {
   getTradingDayKey,
   getTradingSession,
@@ -1396,7 +1397,7 @@ const worstDay = dailyPnLs.length > 0
                   <p className="text-xs text-gray-400">
                     RR{" "}
                     {trade.rr != null && trade.rr !== ""
-                      ? trade.rr
+                      ? formatRR(trade.rr)
                       : "—"}
                   </p>
                   <p className="text-xs text-gray-500">
@@ -1596,7 +1597,7 @@ const worstDay = dailyPnLs.length > 0
               >
                 {formatCurrency(row.totalPnL)}
               </td>
-              <td className="py-2 text-center">{row.avgRR.toFixed(2)}</td>
+              <td className="py-2 text-center">{formatRR(row.avgRR)}</td>
             </tr>
           ))}
         </tbody>

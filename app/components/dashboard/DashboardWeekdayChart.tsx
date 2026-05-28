@@ -9,6 +9,7 @@ import {
   CartesianGrid,
   ResponsiveContainer,
 } from "recharts"
+import { formatPnlCurrency } from "@/lib/formatMoney"
 
 export type WeekdayChartPoint = {
   day: string
@@ -48,13 +49,10 @@ export default function DashboardWeekdayChart({ data }: DashboardWeekdayChartPro
             />
             <Tooltip
               formatter={(value) =>
-                Number(value) < 0
-                  ? `-$${Math.abs(Number(value)).toLocaleString(undefined, {
-                      minimumFractionDigits: 2,
-                    })}`
-                  : `$${Number(value).toLocaleString(undefined, {
-                      minimumFractionDigits: 2,
-                    })}`
+                formatPnlCurrency(Number(value), {
+                  minimumFractionDigits: 0,
+                  maximumFractionDigits: 2,
+                })
               }
               labelFormatter={(label) => `${label}`}
             />

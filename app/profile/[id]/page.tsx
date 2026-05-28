@@ -31,6 +31,7 @@ import {
   formatAchievementDate,
 } from "../../../lib/achievements"
 import { formatPnlCurrency } from "../../../lib/formatMoney"
+import { formatRR } from "@/lib/formatDisplay"
 import { formatDateOnly, formatTimeOnly } from "@/lib/formatDate"
 import { formatEST } from "@/lib/formatEST"
 import { createUserRoom } from "@/lib/createUserRoom"
@@ -142,7 +143,7 @@ function TradeCard({
   const ticker = trade.ticker ?? "—"
   const accountTypeNorm = String(trade.account_type ?? "").trim().toLowerCase()
   const rr =
-    trade.rr != null && trade.rr !== "" ? trade.rr : "—"
+    trade.rr != null && trade.rr !== "" ? formatRR(trade.rr) : "—"
   const pnlLabel = Number.isFinite(pnl)
     ? `${pnl >= 0 ? "+" : ""}${formatMoney(pnl)}`
     : "—"
@@ -1629,33 +1630,38 @@ export default function ProfilePage() {
     return modeStr === m || typeStr === m
   })
 
+  // Public/profile analytics intentionally exclude backtest-mode trades.
+  const analyticsTrades = filteredTrades.filter((trade) => {
+    const modeStr = String(trade.mode ?? "").trim().toLowerCase()
+    const typeStr = String(trade.account_type ?? "").trim().toLowerCase()
+    return modeStr !== "backtest" && typeStr !== "backtest"
+  })
+
+  const profileOverviewTrades = allTrades.filter((trade) => {
+    const modeStr = String(trade.mode ?? "").trim().toLowerCase()
+    const typeStr = String(trade.account_type ?? "").trim().toLowerCase()
+    return modeStr !== "backtest" && typeStr !== "backtest"
+  })
+
   const statsVisible = canViewTrades
 
-  const totalTrades = canViewTrades ? filteredTrades.length : 0
-  const wins = canViewTrades ? filteredTrades.filter((t) => t.pnl > 0).length : 0
+  const totalTrades = canViewTrades ? analyticsTrades.length : 0
+  const wins = canViewTrades ? analyticsTrades.filter((t) => t.pnl > 0).length : 0
   const totalPnL = canViewTrades
-    ? filteredTrades.reduce((sum, t) => sum + (t.pnl || 0), 0)
-    : 0
-  const winRate =
-    canViewTrades && totalTrades ? (wins / totalTrades) * 100 : 0
-  const avgRR =
-    canViewTrades && totalTrades
-      ? filteredTrades.reduce((sum, t) => sum + (Number(t.rr) || 0), 0) /
-        totalTrades
-      : 0
-
-  const biggestWin = filteredTrades.length
-    ? Math.max(...filteredTrades.map((t) => t.pnl || 0))
+    ? analyticsTrades.reduce((sum, t) => sum + (t.pnl || 0), 0)
     : 0
 
-  const biggestLoss = filteredTrades.length
-    ? Math.min(...filteredTrades.map((t) => t.pnl || 0))
+  const biggestWin = analyticsTrades.length
+    ? Math.max(...analyticsTrades.map((t) => t.pnl || 0))
     : 0
 
-  const longTrades = filteredTrades.filter((t) => t.direction === "Long").length
-  const shortTrades = filteredTrades.filter((t) => t.direction === "Short").length
+  const biggestLoss = analyticsTrades.length
+    ? Math.min(...analyticsTrades.map((t) => t.pnl || 0))
+    : 0
 
-  const equityData = filteredTrades
+  const longTrades = analyticsTrades.filter((t) => t.direction === "Long").length
+
+  const equityData = analyticsTrades
     .slice()
     .reverse()
     .reduce(
@@ -1672,6 +1678,93 @@ export default function ProfilePage() {
 
   const currentEquity =
     equityData.length > 0 ? equityData[equityData.length - 1].equity : 0
+
+  const overviewTotalTrades = statsVisible ? profileOverviewTrades.length : 0
+  const overviewWins = statsVisible
+    ? profileOverviewTrades.filter((t) => (Number(t.pnl) || 0) > 0).length
+    : 0
+  const overviewWinRate =
+    statsVisible && overviewTotalTrades ? (overviewWins / overviewTotalTrades) * 100 : 0
+  const overviewTotalPnL = statsVisible
+    ? profileOverviewTrades.reduce((sum, t) => sum + (Number(t.pnl) || 0), 0)
+    : 0
+  const overviewAvgRR =
+    statsVisible && overviewTotalTrades
+      ? profileOverviewTrades.reduce((sum, t) => sum + (Number(t.rr) || 0), 0) /
+        overviewTotalTrades
+      : 0
+  const overviewPayoutTotal = statsVisible
+    ? achievements
+        .filter((a) =>
+          String(a.achievement_type ?? "").trim().toLowerCase().includes("payout")
+        )
+        .reduce((sum, a) => sum + (Number(a.value_numeric) || 0), 0)
+    : 0
+  const currentStreakLabel = (() => {
+    if (!statsVisible || profileOverviewTrades.length === 0) return "—"
+    const ordered = [...profileOverviewTrades].sort(
+      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    )
+    let streak = 0
+    let sign: 1 | -1 | 0 = 0
+    for (const trade of ordered) {
+      const pnl = Number(trade.pnl) || 0
+      const nextSign: 1 | -1 | 0 = pnl > 0 ? 1 : pnl < 0 ? -1 : 0
+      if (nextSign === 0) {
+        streak = 0
+        sign = 0
+        continue
+      }
+      if (nextSign === sign) {
+        streak += 1
+      } else {
+        sign = nextSign
+        streak = 1
+      }
+    }
+    if (sign === 1 && streak > 0) return `W${streak}`
+    if (sign === -1 && streak > 0) return `L${streak}`
+    return "—"
+  })()
+  const grossWins = analyticsTrades.reduce((sum, t) => {
+    const pnl = Number(t.pnl) || 0
+    return pnl > 0 ? sum + pnl : sum
+  }, 0)
+  const grossLosses = analyticsTrades.reduce((sum, t) => {
+    const pnl = Number(t.pnl) || 0
+    return pnl < 0 ? sum + pnl : sum
+  }, 0)
+  const profitFactor =
+    statsVisible && grossLosses < 0 ? grossWins / Math.abs(grossLosses) : null
+  const avgWinner = wins > 0 ? grossWins / wins : null
+  const lossCount = canViewTrades ? analyticsTrades.filter((t) => (Number(t.pnl) || 0) < 0).length : 0
+  const avgLoser = lossCount > 0 ? grossLosses / lossCount : null
+  const profitPerTrade = totalTrades > 0 ? totalPnL / totalTrades : null
+  const { maxWinStreak, maxLossStreak } = (() => {
+    const ordered = [...analyticsTrades].sort(
+      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    )
+    let currentWin = 0
+    let currentLoss = 0
+    let maxWin = 0
+    let maxLoss = 0
+    for (const trade of ordered) {
+      const pnl = Number(trade.pnl) || 0
+      if (pnl > 0) {
+        currentWin += 1
+        currentLoss = 0
+      } else if (pnl < 0) {
+        currentLoss += 1
+        currentWin = 0
+      } else {
+        currentWin = 0
+        currentLoss = 0
+      }
+      if (currentWin > maxWin) maxWin = currentWin
+      if (currentLoss > maxLoss) maxLoss = currentLoss
+    }
+    return { maxWinStreak: maxWin, maxLossStreak: maxLoss }
+  })()
 
   function formatCurrency(value: number) {
     return `${value < 0 ? "-" : ""}$${Math.abs(value).toLocaleString()}`
@@ -1964,41 +2057,58 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          <div className="hidden grid-cols-2 gap-3 md:grid md:grid-cols-4 md:gap-4">
-            <div className="rounded-lg border border-white/10 bg-white/5 p-3 text-center">
-              <p className="text-lg font-semibold tabular-nums text-white">
-                {statsVisible ? totalTrades : "—"}
-              </p>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6 md:gap-4">
+            <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-center">
               <p className="text-xs text-gray-400">Trades</p>
-            </div>
-
-            <div className="rounded-lg border border-white/10 bg-white/5 p-3 text-center">
               <p className="text-lg font-semibold tabular-nums text-white">
-                {statsVisible ? `${winRate.toFixed(0)}%` : "—"}
+                {statsVisible ? overviewTotalTrades : "—"}
               </p>
-              <p className="text-xs text-gray-400">Win %</p>
             </div>
-
-            <div className="rounded-lg border border-white/10 bg-white/5 p-3 text-center">
+            <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-center">
+              <p className="text-xs text-gray-400">Win %</p>
+              <p className="text-lg font-semibold tabular-nums text-white">
+                {statsVisible ? `${overviewWinRate.toFixed(1)}%` : "—"}
+              </p>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-center">
+              <p className="text-xs text-gray-400">Net P&amp;L</p>
               <p
                 className={`text-lg font-semibold tabular-nums ${
                   !statsVisible
                     ? "text-white"
-                    : totalPnL >= 0
-                    ? "text-emerald-400"
-                    : "text-red-400"
+                    : overviewTotalPnL >= 0
+                      ? "text-emerald-400"
+                      : "text-red-400"
                 }`}
               >
-                {statsVisible ? formatMoney(totalPnL) : "—"}
+                {statsVisible ? formatMoney(overviewTotalPnL) : "—"}
               </p>
-              <p className="text-xs text-gray-400">P&amp;L</p>
             </div>
-
-            <div className="rounded-lg border border-white/10 bg-white/5 p-3 text-center">
-              <p className="text-lg font-semibold tabular-nums text-white">
-                {statsVisible ? avgRR.toFixed(2) : "—"}
+            <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-center">
+              <p className="text-xs text-gray-400">Payout Total</p>
+              <p className="text-lg font-semibold tabular-nums text-emerald-400">
+                {statsVisible ? formatMoney(overviewPayoutTotal) : "—"}
               </p>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-center">
               <p className="text-xs text-gray-400">Avg RR</p>
+              <p className="text-lg font-semibold tabular-nums text-white">
+                {statsVisible ? formatRR(overviewAvgRR) : "—"}
+              </p>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-center">
+              <p className="text-xs text-gray-400">Streak</p>
+              <p
+                className={`text-lg font-semibold tabular-nums ${
+                  currentStreakLabel.startsWith("W")
+                    ? "text-emerald-400"
+                    : currentStreakLabel.startsWith("L")
+                      ? "text-red-400"
+                      : "text-white"
+                }`}
+              >
+                {currentStreakLabel}
+              </p>
             </div>
           </div>
 
@@ -2202,7 +2312,6 @@ export default function ProfilePage() {
                             { id: "eval", label: "Eval" },
                             { id: "funded", label: "Funded" },
                             { id: "live", label: "Live" },
-                            { id: "backtest", label: "Backtest" },
                           ] as const
                         ).map(({ id, label }) => (
                           <button
@@ -2229,17 +2338,35 @@ export default function ProfilePage() {
                     ) : null}
 
                     <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-                      <Stat title="Trades" value={totalTrades} />
-
-                      <Stat title="Win %" value={`${winRate.toFixed(1)}%`} />
-
                       <Stat
-                        title="Total P&L"
-                        value={formatCurrency(totalPnL)}
-                        positive={totalPnL >= 0}
+                        title="Profit Factor"
+                        value={
+                          statsVisible
+                            ? profitFactor == null
+                              ? "—"
+                              : profitFactor.toLocaleString(undefined, {
+                                  minimumFractionDigits: 0,
+                                  maximumFractionDigits: 2,
+                                })
+                            : "—"
+                        }
+                        positive={profitFactor != null ? profitFactor >= 1 : undefined}
                       />
-
-                      <Stat title="Avg RR" value={avgRR.toFixed(2)} />
+                      <Stat
+                        title="Avg Winner"
+                        value={statsVisible && avgWinner != null ? formatCurrency(avgWinner) : "—"}
+                        positive
+                      />
+                      <Stat
+                        title="Avg Loser"
+                        value={statsVisible && avgLoser != null ? formatCurrency(avgLoser) : "—"}
+                        positive={false}
+                      />
+                      <Stat
+                        title="Profit / Trade"
+                        value={statsVisible && profitPerTrade != null ? formatCurrency(profitPerTrade) : "—"}
+                        positive={profitPerTrade != null ? profitPerTrade >= 0 : undefined}
+                      />
                     </div>
 
                     <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
@@ -2259,12 +2386,14 @@ export default function ProfilePage() {
 
                       <div className="rounded-xl border border-white/10 bg-white/5 p-4">
                         <p className="text-sm text-gray-400">Long Trades</p>
-                        <p className="font-semibold">{longTrades}</p>
+                        <p className="font-semibold tabular-nums">{longTrades}</p>
                       </div>
 
                       <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                        <p className="text-sm text-gray-400">Short Trades</p>
-                        <p className="font-semibold">{shortTrades}</p>
+                        <p className="text-sm text-gray-400">Largest Streaks</p>
+                        <p className="font-semibold tabular-nums">
+                          W{maxWinStreak} / L{maxLossStreak}
+                        </p>
                       </div>
                     </div>
 
