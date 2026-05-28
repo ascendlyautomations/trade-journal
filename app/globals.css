@@ -91,3 +91,12 @@ input[type="date"]:hover::-webkit-calendar-picker-indicator,
 input[type="time"]:hover::-webkit-calendar-picker-indicator {
   opacity: 1;
 }
+
+/* Keep modal timeframe date picker affordance anchored inside its input. */
+.tt-timeframe-date::-webkit-calendar-picker-indicator {
+  opacity: 1;
+  position: static;
+  width: 20px;
+  height: 20px;
+  margin-left: 8px;
+}

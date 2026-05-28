@@ -154,8 +154,17 @@ export default function AffiliateDashboard() {
   useLayoutEffect(() => {
     if (typeof window === "undefined") return
     const p = new URLSearchParams(window.location.search)
-    if (p.get("connect") === "return" || p.get("setup") === "return") {
+    const openApply = p.get("apply") === "true"
+    const returningFromStripe =
+      p.get("connect") === "return" || p.get("setup") === "return"
+
+    if (returningFromStripe) {
       setReturnFromStripe(true)
+    }
+    if (openApply) {
+      setShowAffiliateModal(true)
+    }
+    if (returningFromStripe || openApply) {
       window.history.replaceState({}, "", "/affiliate")
     }
   }, [])

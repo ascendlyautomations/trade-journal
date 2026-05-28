@@ -562,7 +562,7 @@ export default function Dashboard() {
       const { data: profileData } = await supabase
         .from("profiles")
         .select(
-          "id, username, bio, trading_style, started_trading, avatar_url, onboarding_completed, max_drawdown_limit, is_pro, subscription_status, referral_code"
+          "id, username, bio, trading_style, primary_market, started_trading, avatar_url, onboarding_completed, max_drawdown_limit, is_pro, subscription_status, referral_code"
         )
         .eq("id", currentUser.id)
         .single()
@@ -1462,6 +1462,7 @@ const worstDay = dailyPnLs.length > 0
           initialUsername={profile.username}
           initialBio={profile.bio}
           initialTradingStyle={profile.trading_style}
+          initialPrimaryMarket={profile.primary_market}
           initialStartedTrading={profile.started_trading}
           initialAvatarUrl={profile.avatar_url}
           suppressPostSaveRedirect

@@ -242,7 +242,8 @@ export default function Navbar() {
 
   const affiliateLinks: { label: string; href: string }[] = [
     { label: "Affiliate Dashboard", href: "/affiliate" },
-    { label: "Payouts", href: "/payouts" },
+    { label: "Affiliate Payouts", href: "/payouts" },
+    { label: "Become an Affiliate", href: "/affiliate?apply=true" },
   ]
 
   const closeMobile = () => {

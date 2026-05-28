@@ -111,6 +111,14 @@ export default function TradeFilterBar({
   const timeframeButtonLabel =
     selectedTimeframe === "All" ? "Timeframe" : selectedTimeframe
 
+  function openNativeDatePicker(input: HTMLInputElement) {
+    try {
+      input.showPicker()
+    } catch {
+      input.focus()
+    }
+  }
+
   return (
     <>
       <div
@@ -321,12 +329,13 @@ export default function TradeFilterBar({
               <input
                 type="date"
                 value={startDate}
+                onFocus={(e) => openNativeDatePicker(e.currentTarget)}
                 onChange={(e) => {
                   const v = e.target.value
                   setStartDate(v)
                   setEndDate(v)
                 }}
-                className="w-full bg-white/10 rounded-lg px-3 py-2 text-white text-sm [color-scheme:dark]"
+                className="tt-timeframe-date h-11 w-full min-w-0 cursor-pointer rounded-xl border border-blue-400/20 bg-[#0b2345] px-3 py-2 text-sm text-white shadow-inner shadow-black/20 transition hover:border-blue-300/40 focus:border-emerald-400/60 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 [color-scheme:dark]"
               />
 
               <button
@@ -348,18 +357,20 @@ export default function TradeFilterBar({
             <div className="mt-5">
               <p className="text-sm text-white/60 mb-2">Custom Range</p>
 
-              <div className="flex gap-2">
+              <div className="flex items-center gap-2 overflow-hidden">
                 <input
                   type="date"
                   value={startDate}
+                  onFocus={(e) => openNativeDatePicker(e.currentTarget)}
                   onChange={(e) => setStartDate(e.target.value)}
-                  className="w-full bg-white/10 rounded-lg px-3 py-2 text-white text-sm [color-scheme:dark]"
+                  className="tt-timeframe-date h-11 w-full min-w-0 cursor-pointer rounded-xl border border-blue-400/20 bg-[#0b2345] px-3 py-2 text-sm text-white shadow-inner shadow-black/20 transition hover:border-blue-300/40 focus:border-emerald-400/60 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 [color-scheme:dark]"
                 />
                 <input
                   type="date"
                   value={endDate}
+                  onFocus={(e) => openNativeDatePicker(e.currentTarget)}
                   onChange={(e) => setEndDate(e.target.value)}
-                  className="w-full bg-white/10 rounded-lg px-3 py-2 text-white text-sm [color-scheme:dark]"
+                  className="tt-timeframe-date h-11 w-full min-w-0 cursor-pointer rounded-xl border border-blue-400/20 bg-[#0b2345] px-3 py-2 text-sm text-white shadow-inner shadow-black/20 transition hover:border-blue-300/40 focus:border-emerald-400/60 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 [color-scheme:dark]"
                 />
               </div>
 

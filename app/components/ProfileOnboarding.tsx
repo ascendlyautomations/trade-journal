@@ -36,6 +36,7 @@ type ProfileOnboardingProps = {
   initialUsername?: string | null
   initialBio?: string | null
   initialTradingStyle?: string | null
+  initialPrimaryMarket?: string | null
   initialStartedTrading?: string | null
   initialAvatarUrl?: string | null
   onComplete: (patch: Record<string, unknown>) => void
@@ -50,6 +51,7 @@ export default function ProfileOnboarding({
   initialUsername = "",
   initialBio = "",
   initialTradingStyle = "",
+  initialPrimaryMarket = "",
   initialStartedTrading = null,
   initialAvatarUrl = null,
   onComplete,
@@ -62,6 +64,9 @@ export default function ProfileOnboarding({
   const [bio, setBio] = useState(initialBio ? String(initialBio) : "")
   const [tradingStyle, setTradingStyle] = useState(
     initialTradingStyle ? String(initialTradingStyle) : ""
+  )
+  const [primaryMarket, setPrimaryMarket] = useState(
+    initialPrimaryMarket ? String(initialPrimaryMarket) : ""
   )
   const [startedTrading, setStartedTrading] = useState(
     sliceDateInput(initialStartedTrading)
@@ -115,6 +120,7 @@ export default function ProfileOnboarding({
         username: u,
         bio: bio.trim() || null,
         trading_style: tradingStyle.trim() || null,
+        primary_market: primaryMarket.trim() || null,
         started_trading: startedTrading.trim() || null,
         avatar_url: avatarUrl,
       })
@@ -131,6 +137,7 @@ export default function ProfileOnboarding({
       username: u,
       bio: bio.trim() || null,
       trading_style: tradingStyle.trim() || null,
+      primary_market: primaryMarket.trim() || null,
       started_trading: startedTrading.trim() || null,
       avatar_url: avatarUrl,
     })
@@ -228,6 +235,17 @@ export default function ProfileOnboarding({
           className={`${inputClass} mb-4`}
           value={tradingStyle}
           onChange={(e) => setTradingStyle(e.target.value)}
+        />
+
+        <label className="mb-1 block text-xs font-medium text-gray-300">
+          Primary Market
+        </label>
+        <input
+          type="text"
+          placeholder="e.g. NQ, ES, Gold, BTC, EUR/USD"
+          className={`${inputClass} mb-4`}
+          value={primaryMarket}
+          onChange={(e) => setPrimaryMarket(e.target.value)}
         />
         </div>
 

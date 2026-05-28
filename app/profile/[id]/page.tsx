@@ -1765,6 +1765,24 @@ export default function ProfilePage() {
     }
     return { maxWinStreak: maxWin, maxLossStreak: maxLoss }
   })()
+  const sessionCounts = analyticsTrades.reduce<Record<string, number>>((acc, trade) => {
+    const raw = String(trade.session ?? "").toLowerCase().trim()
+    let label: "NY" | "London" | "Asia" | null = null
+    if (raw.includes("ny") || raw.includes("new york")) label = "NY"
+    else if (raw.includes("london") || raw.includes("ldn") || raw.includes("uk")) label = "London"
+    else if (raw.includes("asia") || raw.includes("asian") || raw.includes("tokyo")) label = "Asia"
+    if (!label) return acc
+    acc[label] = (acc[label] || 0) + 1
+    return acc
+  }, {})
+  const sessionTotal = Object.values(sessionCounts).reduce((sum, count) => sum + count, 0)
+  const sessionBreakdown = (["NY", "London", "Asia"] as const)
+    .map((label) => {
+      const count = sessionCounts[label] || 0
+      const pct = sessionTotal > 0 ? (count / sessionTotal) * 100 : 0
+      return { label, count, pct }
+    })
+    .filter((row) => row.count > 0)
 
   function formatCurrency(value: number) {
     return `${value < 0 ? "-" : ""}$${Math.abs(value).toLocaleString()}`
@@ -1862,7 +1880,7 @@ export default function ProfilePage() {
                             <div className="flex items-center gap-2">
                               <button
                                 type="button"
-                                onClick={() => router.push("/settings")}
+                                onClick={() => router.push("/settings?tab=profile")}
                                 className="rounded-md bg-gray-600 px-2 py-1 text-xs text-gray-100 hover:bg-gray-500 md:bg-white/10 md:px-3 md:text-sm md:hover:bg-white/20"
                               >
                                 Settings
@@ -1906,6 +1924,9 @@ export default function ProfilePage() {
                     {profile.trading_style ||
                       profile.trading_model ||
                       "—"}{" "}
+                    {profile.primary_market
+                      ? ` • ${String(profile.primary_market).trim()}`
+                      : ""}
                     • {getExperience(profile.started_trading) || "N/A"}
                   </p>
 
@@ -2395,6 +2416,39 @@ export default function ProfilePage() {
                           W{maxWinStreak} / L{maxLossStreak}
                         </p>
                       </div>
+                    </div>
+
+                    <div className="rounded-xl border border-white/10 bg-white/5 p-4 md:p-5">
+                      <div className="mb-3 flex items-center justify-between">
+                        <h3 className="text-base font-semibold text-white">Trading Sessions</h3>
+                        <p className="text-xs text-gray-400">
+                          {sessionTotal > 0 ? `${sessionTotal} trades tagged` : "No session data"}
+                        </p>
+                      </div>
+                      {sessionBreakdown.length === 0 ? (
+                        <p className="text-sm text-gray-400">
+                          Add session tags to trades to unlock this breakdown.
+                        </p>
+                      ) : (
+                        <div className="space-y-2.5">
+                          {sessionBreakdown.map((row) => (
+                            <div key={row.label} className="space-y-1">
+                              <div className="flex items-center justify-between text-sm">
+                                <span className="font-medium text-gray-200">{row.label}</span>
+                                <span className="tabular-nums text-gray-300">
+                                  {row.pct.toFixed(0)}%
+                                </span>
+                              </div>
+                              <div className="h-2 overflow-hidden rounded-full bg-white/10">
+                                <div
+                                  className="h-full rounded-full bg-gradient-to-r from-blue-500 to-emerald-400"
+                                  style={{ width: `${Math.max(4, Math.round(row.pct))}%` }}
+                                />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
 
                     <div className="rounded-xl border border-white/10 bg-white/5 p-4 md:p-6">

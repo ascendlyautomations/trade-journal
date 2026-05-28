@@ -3,7 +3,7 @@
 import Navbar from "../components/Navbar"
 import AffiliateApplyModal from "../components/AffiliateApplyModal"
 import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { supabase } from "../../lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
 import { getMembershipStatus } from "@/lib/getMembershipStatus"
@@ -77,6 +77,7 @@ const TABS: {
 
 export default function SettingsPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [activeTab, setActiveTab] = useState<TabId>("account")
 
   const [user, setUser] = useState<User | null>(null)
@@ -110,6 +111,7 @@ export default function SettingsPage() {
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
 
   const [tradingStyle, setTradingStyle] = useState("")
+  const [primaryMarket, setPrimaryMarket] = useState("")
   const [startedTrading, setStartedTrading] = useState("")
   const [tradingModel, setTradingModel] = useState("")
   const [maxDrawdown, setMaxDrawdown] = useState("")
@@ -117,6 +119,20 @@ export default function SettingsPage() {
   useEffect(() => {
     void init()
   }, [])
+
+  useEffect(() => {
+    const requested = String(searchParams.get("tab") ?? "")
+      .toLowerCase()
+      .trim()
+    if (
+      requested === "profile" ||
+      requested === "affiliate" ||
+      requested === "account" ||
+      requested === "subscription"
+    ) {
+      setActiveTab(requested)
+    }
+  }, [searchParams])
 
   useEffect(() => {
     if (loading) return
@@ -156,6 +172,7 @@ export default function SettingsPage() {
       setTradingStyle(
         (data.trading_style as string) || (data.trading_model as string) || ""
       )
+      setPrimaryMarket((data.primary_market as string) || "")
       setTradingModel((data.trading_model as string) || "")
       setStartedTrading(sliceDateInput(data.started_trading))
       const raw = data.max_drawdown_limit
@@ -278,6 +295,7 @@ export default function SettingsPage() {
         bio,
         avatar_url: avatarUrl,
         trading_style: tradingStyle,
+        primary_market: primaryMarket.trim() || null,
         trading_model: tradingModel || tradingStyle || null,
         started_trading: startedTrading.trim() || null,
       })
@@ -307,6 +325,7 @@ export default function SettingsPage() {
             bio,
             avatar_url: avatarUrl,
             trading_style: tradingStyle,
+            primary_market: primaryMarket.trim() || null,
             trading_model: tradingModel || tradingStyle || null,
             started_trading: startedTrading.trim() || null,
           }
@@ -816,6 +835,18 @@ export default function SettingsPage() {
                       setTradingStyle(e.target.value)
                     }}
                     placeholder="e.g. ICT, scalping, swing"
+                    className="w-full rounded-xl border border-white/10 bg-black/30 p-3 placeholder:text-gray-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-sm text-gray-400">
+                    Primary Market
+                  </label>
+                  <input
+                    value={primaryMarket}
+                    onChange={(e) => setPrimaryMarket(e.target.value)}
+                    placeholder="e.g. NQ, ES, Gold, BTC, EUR/USD"
                     className="w-full rounded-xl border border-white/10 bg-black/30 p-3 placeholder:text-gray-500"
                   />
                 </div>
