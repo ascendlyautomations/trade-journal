@@ -19,6 +19,7 @@ import {
   type AffiliateConnectRow,
 } from "@/lib/affiliateStripeConnect"
 import { createUserRoom } from "@/lib/createUserRoom"
+import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 
 type TabId = "profile" | "affiliate" | "account" | "subscription"
 
@@ -90,9 +91,7 @@ export default function SettingsPage() {
   const [confirmText, setConfirmText] = useState("")
   const [manageLoading, setManageLoading] = useState(false)
   const [checkoutLoading, setCheckoutLoading] = useState(false)
-  const [popupMessage, setPopupMessage] = useState("")
-  const [popupType, setPopupType] = useState<"success" | "error">("success")
-  const [showPopup, setShowPopup] = useState(false)
+  const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const [profile, setProfile] = useState<Record<string, unknown> | null>(null)
   const [newPassword, setNewPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
@@ -145,13 +144,6 @@ export default function SettingsPage() {
     })
     return () => window.cancelAnimationFrame(id)
   }, [loading])
-
-  useEffect(() => {
-    if (showPopup) {
-      const timer = setTimeout(() => setShowPopup(false), 2500)
-      return () => clearTimeout(timer)
-    }
-  }, [showPopup])
 
   async function fetchProfile(userId: string) {
     const { data } = await supabase
@@ -303,13 +295,9 @@ export default function SettingsPage() {
 
     if (error) {
       if (error.code === "23505" && isProfilesUsernameConflict(error)) {
-        setPopupMessage("Something went wrong")
-        setPopupType("error")
-        setShowPopup(true)
+        showPopup({ type: "error", message: "Something went wrong" })
       } else {
-        setPopupMessage("Something went wrong")
-        setPopupType("error")
-        setShowPopup(true)
+        showPopup({ type: "error", message: "Something went wrong" })
       }
       return
     }
@@ -330,9 +318,7 @@ export default function SettingsPage() {
         : p
     )
     setAvatarFile(null)
-    setPopupMessage("Profile updated successfully")
-    setPopupType("success")
-    setShowPopup(true)
+    showPopup({ type: "success", message: "Profile updated successfully" })
   }
 
   async function saveDrawdownLimit() {
@@ -341,9 +327,7 @@ export default function SettingsPage() {
     const t = maxDrawdown.trim()
     const n = t === "" ? null : Number(t)
     if (t !== "" && (!Number.isFinite(n) || n === null || n < 0)) {
-      setPopupMessage("Something went wrong")
-      setPopupType("error")
-      setShowPopup(true)
+      showPopup({ type: "error", message: "Something went wrong" })
       return
     }
 
@@ -355,16 +339,12 @@ export default function SettingsPage() {
     setSavingDrawdownLimit(false)
 
     if (error) {
-      setPopupMessage("Something went wrong")
-      setPopupType("error")
-      setShowPopup(true)
+      showPopup({ type: "error", message: "Something went wrong" })
       return
     }
 
     setProfile((p) => (p ? { ...p, max_drawdown_limit: n } : p))
-    setPopupMessage("Limit saved successfully")
-    setPopupType("success")
-    setShowPopup(true)
+    showPopup({ type: "success", message: "Limit saved successfully" })
   }
 
   async function saveAccountPrivacyTab() {
@@ -381,9 +361,7 @@ export default function SettingsPage() {
     setSavingAccountPrivacy(false)
 
     if (error) {
-      setPopupMessage("Something went wrong")
-      setPopupType("error")
-      setShowPopup(true)
+      showPopup({ type: "error", message: "Something went wrong" })
       return
     }
 
@@ -396,24 +374,18 @@ export default function SettingsPage() {
           }
         : p
     )
-    setPopupMessage("Profile updated successfully")
-    setPopupType("success")
-    setShowPopup(true)
+    showPopup({ type: "success", message: "Profile updated successfully" })
   }
 
   async function updatePassword() {
     if (!user) return
 
     if (newPassword.length < 6) {
-      setPopupMessage("Something went wrong")
-      setPopupType("error")
-      setShowPopup(true)
+      showPopup({ type: "error", message: "Something went wrong" })
       return
     }
     if (newPassword !== confirmPassword) {
-      setPopupMessage("Something went wrong")
-      setPopupType("error")
-      setShowPopup(true)
+      showPopup({ type: "error", message: "Something went wrong" })
       return
     }
 
@@ -424,17 +396,13 @@ export default function SettingsPage() {
     setSavingPassword(false)
 
     if (error) {
-      setPopupMessage("Something went wrong")
-      setPopupType("error")
-      setShowPopup(true)
+      showPopup({ type: "error", message: "Something went wrong" })
       return
     }
 
     setNewPassword("")
     setConfirmPassword("")
-    setPopupMessage("Password updated successfully")
-    setPopupType("success")
-    setShowPopup(true)
+    showPopup({ type: "success", message: "Password updated successfully" })
   }
 
   async function handleDeleteAccount() {
@@ -575,30 +543,22 @@ export default function SettingsPage() {
       if (!res.ok) {
         console.error("Settings checkout failed:", { status: res.status, data })
         if (res.status === 401) {
-          setPopupMessage("Something went wrong")
-          setPopupType("error")
-          setShowPopup(true)
+          showPopup({ type: "error", message: "Something went wrong" })
           router.push("/login?next=checkout")
           return
         }
-        setPopupMessage("Something went wrong")
-        setPopupType("error")
-        setShowPopup(true)
+        showPopup({ type: "error", message: "Something went wrong" })
         return
       }
 
       if (data.url) {
         window.location.href = data.url as string
       } else {
-        setPopupMessage("Something went wrong")
-        setPopupType("error")
-        setShowPopup(true)
+        showPopup({ type: "error", message: "Something went wrong" })
       }
     } catch (e) {
       console.error(e)
-      setPopupMessage("Something went wrong")
-      setPopupType("error")
-      setShowPopup(true)
+      showPopup({ type: "error", message: "Something went wrong" })
     } finally {
       setCheckoutLoading(false)
     }
@@ -611,9 +571,7 @@ export default function SettingsPage() {
     try {
       const token = await getAccessToken()
       if (!token) {
-        setPopupMessage("Something went wrong")
-        setPopupType("error")
-        setShowPopup(true)
+        showPopup({ type: "error", message: "Something went wrong" })
         router.push("/login")
         return
       }
@@ -631,30 +589,22 @@ export default function SettingsPage() {
       if (!res.ok) {
         console.error("Settings portal failed:", { status: res.status, data })
         if (res.status === 401) {
-          setPopupMessage("Something went wrong")
-          setPopupType("error")
-          setShowPopup(true)
+          showPopup({ type: "error", message: "Something went wrong" })
           router.push("/login")
           return
         }
-        setPopupMessage("Something went wrong")
-        setPopupType("error")
-        setShowPopup(true)
+        showPopup({ type: "error", message: "Something went wrong" })
         return
       }
 
       if (data.url) {
         window.location.href = data.url as string
       } else {
-        setPopupMessage("Something went wrong")
-        setPopupType("error")
-        setShowPopup(true)
+        showPopup({ type: "error", message: "Something went wrong" })
       }
     } catch (e) {
       console.error(e)
-      setPopupMessage("Something went wrong")
-      setPopupType("error")
-      setShowPopup(true)
+      showPopup({ type: "error", message: "Something went wrong" })
     } finally {
       setManageLoading(false)
     }
@@ -697,14 +647,10 @@ export default function SettingsPage() {
     if (!referralLink) return
     try {
       await navigator.clipboard.writeText(referralLink)
-      setPopupMessage("Copied!")
-      setPopupType("success")
-      setShowPopup(true)
+      showPopup({ type: "success", message: "Copied!" })
     } catch (err) {
       console.error("Copy failed", err)
-      setPopupMessage("Something went wrong")
-      setPopupType("error")
-      setShowPopup(true)
+      showPopup({ type: "error", message: "Something went wrong" })
     }
   }
 
@@ -1319,27 +1265,7 @@ export default function SettingsPage() {
           </div>
         </div>
       )}
-      {showPopup && (
-        <div className="fixed inset-0 flex items-center justify-center z-50">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
-          <div
-            className={`relative w-full max-w-sm rounded-xl border px-6 py-5 text-center shadow-xl ${
-              popupType === "success" ? "border-green-500 bg-green-900/20" : "border-red-500 bg-red-900/20"
-            }`}
-          >
-            <p className={`text-sm font-medium ${popupType === "success" ? "text-green-400" : "text-red-400"}`}>
-              {popupMessage}
-            </p>
-            <button
-              type="button"
-              onClick={() => setShowPopup(false)}
-              className="mt-4 text-xs text-gray-400 hover:underline"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
+      <FeedbackModal {...feedbackModalProps} />
     </>
   )
 }
