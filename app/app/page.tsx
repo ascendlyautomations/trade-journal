@@ -7,6 +7,14 @@ import Papa from "papaparse"
 import { supabase } from "../../lib/supabaseClient"
 import { buildTradesFromParsedCsv, stripBom } from "@/lib/csvTradeParsers"
 import {
+  detectCsvBrokerHint,
+  isCsvFormatUnrecognized,
+} from "@/lib/csvBrokerHint"
+import {
+  buildCsvImportDiagnostics,
+  type CsvImportDiagnostics,
+} from "@/lib/csvImportDiagnostics"
+import {
   INPUT_TRADE_PAGE_TITLE_CLASSNAME,
   INPUT_TRADE_PAGE_TITLE_ROW_CLASSNAME,
 } from "@/lib/inputTradePageTitle"
@@ -15,6 +23,9 @@ export default function Home() {
   const [loading, setLoading] = useState(false)
   const [reviewCount, setReviewCount] = useState(0)
   const [parsedTrades, setParsedTrades] = useState<any[]>([])
+  const [csvUnrecognized, setCsvUnrecognized] = useState(false)
+  const [csvBrokerHint, setCsvBrokerHint] = useState<string | null>(null)
+  const [csvDiagnostics, setCsvDiagnostics] = useState<CsvImportDiagnostics | null>(null)
 
   const csvInputRef = useRef<HTMLInputElement>(null)
 
@@ -64,11 +75,15 @@ export default function Home() {
       skipEmptyLines: true,
       transformHeader: (h: string) => stripBom(String(h).trim()),
       complete: (results: any) => {
-        const parsed = buildTradesFromParsedCsv(results.data, user.id)
+        const rows = (results.data || []).filter(
+          (r: Record<string, unknown>) =>
+            r && typeof r === "object" && Object.keys(r).length > 0
+        )
+        const parsed = buildTradesFromParsedCsv(rows, user.id)
 
         setParsedTrades(parsed.parsedTrades)
-
-        console.log("SET PARSED TRADES:", parsed.parsedTrades.length)
+        setCsvUnrecognized(isCsvFormatUnrecognized(parsed.summary))
+        setCsvBrokerHint(detectCsvBrokerHint(rows))
 
         setLoading(false)
       },
@@ -116,8 +131,14 @@ export default function Home() {
             reviewCount={reviewCount}
             csvLoading={loading}
             parsedTrades={parsedTrades}
+            csvUnrecognized={csvUnrecognized}
+            csvBrokerHint={csvBrokerHint}
+            csvDiagnostics={csvDiagnostics}
             onParsedTradesClear={() => {
               setParsedTrades([])
+              setCsvUnrecognized(false)
+              setCsvBrokerHint(null)
+              setCsvDiagnostics(null)
               fetchReviewCount()
             }}
           />

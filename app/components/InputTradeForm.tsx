@@ -12,6 +12,9 @@ import { getSessionFromDate } from "@/lib/getSession"
 import CreateAccountModal, {
   type Props as CreateAccountModalProps,
 } from "@/components/CreateAccountModal"
+import CsvImportUnsupportedBanner from "@/app/components/CsvImportUnsupportedBanner"
+import CsvImportDiagnosticsPanel from "@/app/components/CsvImportDiagnosticsPanel"
+import type { CsvImportDiagnostics } from "@/lib/csvImportDiagnostics"
 
 type CreateAccountSavePayload = Parameters<CreateAccountModalProps["onSave"]>[0]
 
@@ -49,6 +52,10 @@ export type InputTradeFormProps = {
   parsedTrades?: any[]
   /** Called after successful CSV import so parent can clear `parsedTrades` */
   onParsedTradesClear?: () => void
+  /** Parent detected zero parseable rows from an uploaded CSV */
+  csvUnrecognized?: boolean
+  csvBrokerHint?: string | null
+  csvDiagnostics?: CsvImportDiagnostics | null
 }
 
 function getESTDate() {
@@ -154,6 +161,9 @@ export default function InputTradeForm({
   reviewCount = 0,
   csvLoading = false,
   parsedTrades = [],
+  csvUnrecognized = false,
+  csvBrokerHint = null,
+  csvDiagnostics = null,
   onParsedTradesClear,
 }: InputTradeFormProps) {
   const isEditMode = Boolean(existingTrade?.id)
@@ -1561,6 +1571,14 @@ export default function InputTradeForm({
           {selectedAccount.category}
         </div>
       )}
+
+      {csvUnrecognized && parsedTrades.length === 0 ? (
+        <CsvImportUnsupportedBanner brokerHint={csvBrokerHint} className="mb-4" />
+      ) : null}
+
+      {csvDiagnostics ? (
+        <CsvImportDiagnosticsPanel diagnostics={csvDiagnostics} className="mb-4" />
+      ) : null}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="p-4 rounded-xl bg-[#0b1220]/60 border border-white/5">

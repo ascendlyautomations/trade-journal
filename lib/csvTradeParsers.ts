@@ -70,11 +70,16 @@ function buildHeaderAliasMap(): Map<string, LogicalField> {
       "date",
       "trade date",
       "entry date",
+      "exit date",
       "close date",
       "closed date",
       "open date",
       "exec date",
       "execution date",
+      "timestamp",
+      "fill time",
+      "execution time",
+      "order time",
     ],
     symbol: [
       "symbol",
@@ -83,6 +88,9 @@ function buildHeaderAliasMap(): Map<string, LogicalField> {
       "contract",
       "underlying",
       "product",
+      "market",
+      "security",
+      "asset",
     ],
     direction: [
       "direction",
@@ -93,6 +101,9 @@ function buildHeaderAliasMap(): Map<string, LogicalField> {
       "type",
       "long short",
       "order side",
+      "trade type",
+      "order action",
+      "position type",
     ],
     entry_price: [
       "entry price",
@@ -118,19 +129,27 @@ function buildHeaderAliasMap(): Map<string, LogicalField> {
       "p l",
       "p  l", // extra space from headers like "P  L" after non-alnum strip
       "profit",
-      "net pnl",
-      "net p l", // e.g. "Net P&L" → normalizeHeaderKey
-      "gross p l",
-      "gross pnl",
+      "net profit",
       "realized pnl",
       "realized p l",
+      "realized profit",
+      "net pnl",
+      "net p l", // e.g. "Net P&L" → normalizeHeaderKey
+      "gross pnl",
+      "gross p l",
+      "gross profit",
+      "trade pnl",
+      "result",
+      "net result",
       "gain",
-      "net profit",
+      "gain loss",
+      "profitusd",
       "net",
       "pl",
     ],
     contracts: [
       "contracts",
+      "contract size",
       "executions",
       "qty",
       "quantity",
@@ -138,6 +157,7 @@ function buildHeaderAliasMap(): Map<string, LogicalField> {
       "volume",
       "lots",
       "shares",
+      "units",
       "position size",
     ],
     points: ["points", "net points", "tick gain", "ticks"],
@@ -150,7 +170,7 @@ function buildHeaderAliasMap(): Map<string, LogicalField> {
       "reward ratio",
       "realized rr",
     ],
-    session: ["session", "trading session", "market session"],
+    session: ["session", "market session", "trading session"],
     account_type: ["account type", "acct type"],
     mode: ["mode", "account mode", "trading mode"],
     account_name: [
@@ -159,19 +179,47 @@ function buildHeaderAliasMap(): Map<string, LogicalField> {
       "firm",
       "broker",
       "prop firm",
+      "prop account",
+      "funded account",
       "workspace",
+      "login",
     ],
     strategy: ["strategy", "setup", "playbook", "system"],
-    account_id: ["account id", "acct id", "account number", "acct", "account #"],
+    account_id: [
+      "account id",
+      "acct id",
+      "account number",
+      "acct",
+      "account #",
+    ],
     account_size: ["account size", "eval size", "funded size", "acct size"],
-    commission: ["commission", "commissions", "comm", "broker commission"],
-    fees: ["fees", "fee", "exchange fee", "platform fee"],
+    commission: [
+      "commission",
+      "commissions",
+      "comm",
+      "broker commission",
+      "transaction cost",
+    ],
+    fees: [
+      "fees",
+      "fee",
+      "exchange fee",
+      "exchange fees",
+      "broker fees",
+      "platform fee",
+    ],
     swap: ["swap", "swap fee", "overnight fee", "financing"],
     notes: ["notes", "comment", "description", "remarks"],
     entryTime: [
       "entry time",
       "entrytime",
+      "entered at",
+      "enteredat",
+      "entered_at",
       "open time",
+      "open datetime",
+      "opendatetime",
+      "start time",
       "time in",
       "entry timestamp",
       "in time",
@@ -179,7 +227,13 @@ function buildHeaderAliasMap(): Map<string, LogicalField> {
     exitTime: [
       "exit time",
       "exittime",
+      "exited at",
+      "exitedat",
+      "exited_at",
       "close time",
+      "close datetime",
+      "closedatetime",
+      "end time",
       "time out",
       "exit timestamp",
       "out time",
@@ -198,6 +252,10 @@ function buildHeaderAliasMap(): Map<string, LogicalField> {
     }
   }
   return map
+}
+
+export function resolveCsvHeaderField(rawHeader: string): LogicalField | null {
+  return HEADER_ALIAS_TO_FIELD.get(normalizeHeaderKey(rawHeader)) ?? null
 }
 
 export function stripBom(s: string): string {
@@ -324,8 +382,11 @@ export function combineTradeDateAndTime(
 export function normalizeDirection(raw: string): "Long" | "Short" | null {
   const s = String(raw).trim().toLowerCase()
   if (!s) return null
-  if (/^(long|buy|b|l|cover buy|buy to open|bot)$/i.test(s)) return "Long"
-  if (/^(short|sell|s|ss|sell short|sold short|sl)$/i.test(s)) return "Short"
+  if (/^(long|buy|b|l|cover buy|buy to open|bot|bull)$/i.test(s)) return "Long"
+  if (/^(short|sell|s|ss|sell short|sold short|sl|bear)$/i.test(s)) return "Short"
+  if (/^buy\s*\/\s*sell$/i.test(s)) return null
+  if (/\bbuy\b/.test(s) && !/\bsell\b/.test(s)) return "Long"
+  if (/\bsell\b/.test(s) && !/\bbuy\b/.test(s)) return "Short"
   if (s === "long" || s.includes("long")) return "Long"
   if (s === "short" || s.includes("short")) return "Short"
   return null
@@ -696,7 +757,7 @@ function parseTradeZellaRow(
   return { ok: true, rowNumber, trade }
 }
 
-function getCellByAliases(row: CsvRow, aliases: readonly string[]): string | null {
+export function getCellByAliases(row: CsvRow, aliases: readonly string[]): string | null {
   const normalizedToRaw = new Map<string, string>()
   for (const key of Object.keys(row)) normalizedToRaw.set(normalizeHeaderKey(key), key)
   for (const alias of aliases) {
@@ -834,9 +895,185 @@ function parseTradovateRowSafe(
   }
 }
 
+/** Entry timestamp columns for Entered/Exited-shaped exports (NinjaTrader-style, etc.). */
+const ENTERED_AT_ALIASES = [
+  "EnteredAt",
+  "entered at",
+  "entered_at",
+  "entry time",
+  "EntryTime",
+  "entrytime",
+  "open time",
+  "Open Time",
+  "OpenDateTime",
+  "open datetime",
+  "start time",
+  "Start Time",
+] as const
+
+const EXITED_AT_ALIASES = [
+  "ExitedAt",
+  "exited at",
+  "exited_at",
+  "exit time",
+  "ExitTime",
+  "exittime",
+  "close time",
+  "Close Time",
+  "CloseDateTime",
+  "close datetime",
+  "end time",
+  "End Time",
+] as const
+
+const ENTERED_EXITED_ENTRY_PRICE_ALIASES = [
+  "EntryPrice",
+  "entry price",
+  "entry",
+  "avg entry",
+  "open price",
+] as const
+
+const ENTERED_EXITED_EXIT_PRICE_ALIASES = [
+  "ExitPrice",
+  "exit price",
+  "exit",
+  "avg exit",
+  "close price",
+] as const
+
+const ENTERED_EXITED_PNL_ALIASES = [
+  "PnL",
+  "pnl",
+  "p&l",
+  "p/l",
+  "profit",
+  "net pnl",
+  "realized pnl",
+  "net profit",
+  "result",
+  "net result",
+] as const
+
+const ENTERED_EXITED_SIZE_ALIASES = [
+  "Size",
+  "size",
+  "qty",
+  "quantity",
+  "contracts",
+  "position size",
+  "lots",
+] as const
+
+const ENTERED_EXITED_SYMBOL_ALIASES = [
+  "ContractName",
+  "contract name",
+  "contract",
+  "symbol",
+  "ticker",
+  "instrument",
+  "product",
+] as const
+
+const ENTERED_EXITED_DIRECTION_ALIASES = [
+  "Type",
+  "type",
+  "direction",
+  "side",
+  "trade type",
+  "position type",
+  "order side",
+] as const
+
+const TRADOVATE_HEADER_ALIASES = [
+  "buyPrice",
+  "buy price",
+  "entry price",
+  "entry",
+  "sellPrice",
+  "sell price",
+  "exit price",
+  "exit",
+  "qty",
+  "quantity",
+  "contracts",
+  "size",
+  "symbol",
+  "ticker",
+  "contract",
+  "pnl",
+  "p&l",
+  "p/l",
+  "realized pnl",
+  "net pnl",
+  "boughtTimestamp",
+  "bought timestamp",
+  "entry time",
+  "soldTimestamp",
+  "sold timestamp",
+  "exit time",
+  "side",
+  "direction",
+  "action",
+  "duration",
+  "trade duration",
+  "hold time",
+  "time in trade",
+  "hold",
+] as const
+
+function normalizedHeaderAliasSet(aliases: readonly string[]): Set<string> {
+  return new Set(aliases.map((a) => normalizeHeaderKey(a)))
+}
+
+const TRADOVATE_RECOGNIZED_HEADERS = normalizedHeaderAliasSet(TRADOVATE_HEADER_ALIASES)
+
+const TRADEZELLA_RECOGNIZED_HEADERS = new Set(
+  Object.values(TRADEZELLA_FIELD_ALIASES).flatMap((aliases) =>
+    aliases.map((a) => a.toLowerCase().trim())
+  )
+)
+
+const ENTERED_EXITED_RECOGNIZED_HEADERS = normalizedHeaderAliasSet([
+  ...ENTERED_AT_ALIASES,
+  ...EXITED_AT_ALIASES,
+  ...ENTERED_EXITED_ENTRY_PRICE_ALIASES,
+  ...ENTERED_EXITED_EXIT_PRICE_ALIASES,
+  ...ENTERED_EXITED_PNL_ALIASES,
+  ...ENTERED_EXITED_SIZE_ALIASES,
+  ...ENTERED_EXITED_SYMBOL_ALIASES,
+  ...ENTERED_EXITED_DIRECTION_ALIASES,
+])
+
+export type CsvFileFormat = "tradovate" | "tradezella" | "entered_exited" | "flexible"
+
+export function detectCsvFileFormat(firstRow: CsvRow): CsvFileFormat {
+  if (isTradovateCsvRow(firstRow)) return "tradovate"
+  if (isTradeZellaShapedRow(normalizeRowKeysForTradeZella(firstRow))) return "tradezella"
+  if (isEnteredExitedFormatRow(firstRow)) return "entered_exited"
+  return "flexible"
+}
+
+export function isRecognizedCsvHeader(
+  rawHeader: string,
+  format: CsvFileFormat
+): boolean {
+  if (resolveCsvHeaderField(rawHeader)) return true
+  const nk = normalizeHeaderKey(rawHeader)
+  if (format === "tradovate" && TRADOVATE_RECOGNIZED_HEADERS.has(nk)) return true
+  if (format === "tradezella") {
+    const zKey = stripBom(rawHeader).toLowerCase().trim()
+    if (TRADEZELLA_RECOGNIZED_HEADERS.has(zKey)) return true
+  }
+  if (format === "entered_exited" && ENTERED_EXITED_RECOGNIZED_HEADERS.has(nk)) {
+    return true
+  }
+  return false
+}
+
 function isEnteredExitedFormatRow(row: CsvRow): boolean {
-  const entered = row.EnteredAt?.trim()
-  const exited = row.ExitedAt?.trim()
+  const entered = getCellByAliases(row, ENTERED_AT_ALIASES)
+  const exited = getCellByAliases(row, EXITED_AT_ALIASES)
   return Boolean(entered && exited)
 }
 
@@ -845,33 +1082,64 @@ function parseEnteredExitedFormatRow(
   userId: string,
   rowNumber: number
 ): CsvParseRowResult {
-  const entry = row.EnteredAt ? new Date(row.EnteredAt) : null
-  const exit = row.ExitedAt ? new Date(row.ExitedAt) : null
+  const enteredRaw = getCellByAliases(row, ENTERED_AT_ALIASES)
+  const exitedRaw = getCellByAliases(row, EXITED_AT_ALIASES)
+  const entry = enteredRaw ? new Date(enteredRaw) : null
+  const exit = exitedRaw ? new Date(exitedRaw) : null
 
   if (!entry || Number.isNaN(entry.getTime())) {
-    return { ok: false, rowNumber, reason: `Invalid EnteredAt: "${row.EnteredAt ?? ""}"` }
+    return {
+      ok: false,
+      rowNumber,
+      reason: `Invalid entry time: "${enteredRaw ?? ""}"`,
+    }
   }
   if (!exit || Number.isNaN(exit.getTime())) {
-    return { ok: false, rowNumber, reason: `Invalid ExitedAt: "${row.ExitedAt ?? ""}"` }
+    return {
+      ok: false,
+      rowNumber,
+      reason: `Invalid exit time: "${exitedRaw ?? ""}"`,
+    }
   }
 
-  const entryPrice = parseFloat(String(row.EntryPrice ?? "").trim())
-  const exitPrice = parseFloat(String(row.ExitPrice ?? "").trim())
-  const pnlParsed = parseFloat(String(row.PnL ?? "").trim())
-  const contractsParsed = parseInt(String(row.Size ?? "").trim(), 10)
+  const entryPriceRaw = getCellByAliases(row, ENTERED_EXITED_ENTRY_PRICE_ALIASES)
+  const exitPriceRaw = getCellByAliases(row, ENTERED_EXITED_EXIT_PRICE_ALIASES)
+  const pnlRaw = getCellByAliases(row, ENTERED_EXITED_PNL_ALIASES)
+  const sizeRaw = getCellByAliases(row, ENTERED_EXITED_SIZE_ALIASES)
 
-  const contractName = String(row.ContractName ?? "").trim()
+  const entryPrice =
+    entryPriceRaw != null ? parseCsvNumeric(entryPriceRaw) : null
+  const exitPrice = exitPriceRaw != null ? parseCsvNumeric(exitPriceRaw) : null
+  const pnlParsed = pnlRaw != null ? parseCsvNumeric(pnlRaw) : null
+  const contractsParsed =
+    sizeRaw != null ? parseCsvNumeric(sizeRaw) : null
+
+  const contractName = getCellByAliases(row, ENTERED_EXITED_SYMBOL_ALIASES) ?? ""
   const normalizedTicker = normalizeFuturesSymbol(contractName)
+
+  const typeRaw = getCellByAliases(row, ENTERED_EXITED_DIRECTION_ALIASES)
+  const directionFromType = typeRaw ? normalizeDirection(typeRaw) : null
+  const direction: "Long" | "Short" =
+    directionFromType ??
+    (entryPrice != null && exitPrice != null
+      ? exitPrice > entryPrice
+        ? "Long"
+        : "Short"
+      : "Short")
 
   const trade: CsvTradeInsert = {
     user_id: userId,
     ticker: normalizedTicker || contractName || "",
-    direction: row.Type?.toLowerCase() === "long" ? "Long" : "Short",
-    entry_price: Number.isFinite(entryPrice) ? entryPrice : 0,
-    exit_price: Number.isFinite(exitPrice) ? exitPrice : 0,
-    pnl: Number.isFinite(pnlParsed) ? pnlParsed : 0,
+    direction,
+    entry_price: entryPrice ?? 0,
+    exit_price: exitPrice ?? 0,
+    pnl: pnlParsed ?? 0,
     contracts:
-      Number.isFinite(contractsParsed) && contractsParsed > 0 ? contractsParsed : 1,
+      contractsParsed != null &&
+      Number.isFinite(contractsParsed) &&
+      contractsParsed > 0
+        ? Math.max(1, Math.round(contractsParsed))
+        : 1,
     entry_time: entry.toISOString(),
     exit_time: exit.toISOString(),
     date: entry.toISOString(),

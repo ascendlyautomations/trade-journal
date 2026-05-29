@@ -19,6 +19,16 @@ import {
 import { last24hIso } from "@/lib/freePlanLimits"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import { useToast } from "@/app/components/ui"
+import CsvImportUnsupportedBanner from "@/app/components/CsvImportUnsupportedBanner"
+import {
+  detectCsvBrokerHint,
+  isCsvFormatUnrecognized,
+} from "@/lib/csvBrokerHint"
+import {
+  buildCsvImportDiagnostics,
+  type CsvImportDiagnostics,
+} from "@/lib/csvImportDiagnostics"
+import CsvImportDiagnosticsPanel from "@/app/components/CsvImportDiagnosticsPanel"
 
 export type CsvImportPanelProps = {
   /** Smaller preview + less chrome (e.g. onboarding modal) */
@@ -46,6 +56,21 @@ export default function CsvImportPanel({
   const toast = useToast()
   const [parsed, setParsed] = useState<CsvRow[]>([])
   const [loading, setLoading] = useState(false)
+  const [unrecognized, setUnrecognized] = useState(false)
+  const [brokerHint, setBrokerHint] = useState<string | null>(null)
+  const [diagnostics, setDiagnostics] = useState<CsvImportDiagnostics | null>(null)
+
+  function applyParsePreview(rows: CsvRow[]) {
+    const hint = detectCsvBrokerHint(rows)
+    setBrokerHint(hint)
+    const preview = buildTradesFromParsedCsv(
+      rows,
+      "00000000-0000-0000-0000-000000000000"
+    )
+    setUnrecognized(isCsvFormatUnrecognized(preview.summary))
+    setDiagnostics(buildCsvImportDiagnostics(rows, preview))
+  }
+
   const handleFile = (file: File) => {
     Papa.parse<CsvRow>(file, {
       header: true,
@@ -57,6 +82,13 @@ export default function CsvImportPanel({
           (r) => r && typeof r === "object" && Object.keys(r).length > 0
         )
         setParsed(filtered)
+        if (filtered.length === 0) {
+          setUnrecognized(false)
+          setBrokerHint(null)
+          setDiagnostics(null)
+          return
+        }
+        applyParsePreview(filtered)
       },
     })
   }
@@ -94,14 +126,22 @@ export default function CsvImportPanel({
 
     const hasUsedInitialImport = profile.has_used_initial_import === true
 
-    const { parsedTrades, summary, rowResults } = buildTradesFromParsedCsv(parsed, user.id)
+    const parseResult = buildTradesFromParsedCsv(parsed, user.id)
+    const { parsedTrades, summary, rowResults } = parseResult
 
     if (!parsedTrades.length) {
-      alert(
-        `Nothing to import: ${summary.failed} of ${summary.total} row(s) failed validation. Check console for details.`
-      )
+      setUnrecognized(isCsvFormatUnrecognized(summary))
+      setBrokerHint(detectCsvBrokerHint(parsed))
+      setDiagnostics(buildCsvImportDiagnostics(parsed, parseResult))
       setLoading(false)
       return
+    }
+
+    setUnrecognized(false)
+    if (summary.failed > 0) {
+      setDiagnostics(buildCsvImportDiagnostics(parsed, parseResult))
+    } else {
+      setDiagnostics(null)
     }
 
     let tradesToInsert = parsedTrades
@@ -200,6 +240,9 @@ export default function CsvImportPanel({
       if (errLines) msg += `\n\n${errLines}`
       toast.success(msg, 6000)
       setParsed([])
+      setUnrecognized(false)
+      setBrokerHint(null)
+      setDiagnostics(null)
       onImportSuccess?.({ count: importedCount, skipped })
     }
 
@@ -210,6 +253,14 @@ export default function CsvImportPanel({
 
   return (
     <div className={compact ? "space-y-3" : "space-y-4"}>
+      {unrecognized ? (
+        <CsvImportUnsupportedBanner brokerHint={brokerHint} />
+      ) : null}
+
+      {diagnostics ? (
+        <CsvImportDiagnosticsPanel diagnostics={diagnostics} compact={compact} />
+      ) : null}
+
       <input
         id={fileInputId}
         type="file"
