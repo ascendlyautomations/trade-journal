@@ -1077,6 +1077,35 @@ function isEnteredExitedFormatRow(row: CsvRow): boolean {
   return Boolean(entered && exited)
 }
 
+/**
+ * Entered/Exited path: full timestamps parse as-is; time-only cells (e.g. 09:30)
+ * combine with a trade Date column when present (TopStep-style exports).
+ */
+function parseEnteredExitedInstant(
+  timeRaw: string,
+  tradeDateRaw: string | null | undefined
+): Date | null {
+  const trimmed = timeRaw.trim()
+  if (!trimmed) return null
+
+  const direct = new Date(trimmed)
+  if (!Number.isNaN(direct.getTime())) {
+    return direct
+  }
+
+  const datePart = tradeDateRaw?.trim()
+  if (!datePart) return null
+
+  const dateIso = parseFlexibleTradeDate(datePart)
+  if (!dateIso) return null
+
+  const merged = combineTradeDateAndTime(dateIso, trimmed)
+  if (!merged) return null
+
+  const combined = new Date(merged)
+  return Number.isNaN(combined.getTime()) ? null : combined
+}
+
 function parseEnteredExitedFormatRow(
   row: CsvRow,
   userId: string,
@@ -1084,8 +1113,12 @@ function parseEnteredExitedFormatRow(
 ): CsvParseRowResult {
   const enteredRaw = getCellByAliases(row, ENTERED_AT_ALIASES)
   const exitedRaw = getCellByAliases(row, EXITED_AT_ALIASES)
-  const entry = enteredRaw ? new Date(enteredRaw) : null
-  const exit = exitedRaw ? new Date(exitedRaw) : null
+  const tradeDateRaw = mapCsvHeadersToFields(row).date ?? null
+
+  const entry =
+    enteredRaw != null ? parseEnteredExitedInstant(enteredRaw, tradeDateRaw) : null
+  const exit =
+    exitedRaw != null ? parseEnteredExitedInstant(exitedRaw, tradeDateRaw) : null
 
   if (!entry || Number.isNaN(entry.getTime())) {
     return {
