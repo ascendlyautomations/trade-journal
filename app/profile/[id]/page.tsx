@@ -36,6 +36,7 @@ import { formatDateOnly, formatTimeOnly } from "@/lib/formatDate"
 import { formatEST } from "@/lib/formatEST"
 import { createUserRoom } from "@/lib/createUserRoom"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
+import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 
 function postImageSrc(imageUrl: string | null | undefined): string | null {
   const raw = imageUrl != null ? String(imageUrl).trim() : ""
@@ -613,6 +614,7 @@ function PostCard({
 }
 
 export default function ProfilePage() {
+  const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const PAGE_SIZE = 5
 
   const params = useParams()
@@ -742,13 +744,13 @@ export default function ProfilePage() {
 
       if (uploadError) {
         console.error(uploadError)
-        alert(uploadError.message)
+        showPopup({ type: "error", message: uploadError.message })
         return
       }
 
       const base = process.env.NEXT_PUBLIC_SUPABASE_URL
       if (!base) {
-        alert("Missing NEXT_PUBLIC_SUPABASE_URL")
+        showPopup({ type: "error", message: "Missing NEXT_PUBLIC_SUPABASE_URL" })
         return
       }
 
@@ -761,14 +763,14 @@ export default function ProfilePage() {
 
       if (insertError) {
         console.error(insertError)
-        alert(insertError.message)
+        showPopup({ type: "error", message: insertError.message })
         return
       }
 
-      alert("Story uploaded!")
+      showPopup({ type: "success", message: "Story uploaded!" })
       await loadFollowingStories()
     },
-    [currentUserId, loadFollowingStories]
+    [currentUserId, loadFollowingStories, showPopup]
   )
 
   const fetchTrades = async (forProfileId: string, reset = false) => {
@@ -1321,7 +1323,7 @@ export default function ProfilePage() {
 
     const text = postContent.trim()
     if (!text && !postImage) {
-      alert("Add some text or an image.")
+      showPopup({ type: "warning", message: "Add some text or an image." })
       return
     }
 
@@ -1341,7 +1343,7 @@ export default function ProfilePage() {
 
       if (upErr) {
         console.error(upErr)
-        alert(upErr.message)
+        showPopup({ type: "error", message: upErr.message })
         setCreatingPost(false)
         return
       }
@@ -1362,7 +1364,7 @@ export default function ProfilePage() {
 
     if (error) {
       console.error(error)
-      alert(handleSupabaseError(error))
+      showPopup({ type: "error", message: handleSupabaseError(error) })
       return
     }
 
@@ -1852,6 +1854,7 @@ export default function ProfilePage() {
   return (
     <>
       <Navbar />
+      <FeedbackModal {...feedbackModalProps} />
 
       <div className="w-full text-gray-100">
         <div className="mx-auto max-w-5xl space-y-4 px-4 py-6 sm:px-6 lg:px-8">

@@ -23,6 +23,7 @@ import {
   FEED_STORIES_SELECT,
   buildFeedPostsIndex,
 } from "../../components/feed/feedPostHelpers"
+import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 
 const STORY_WINDOW_MS = 24 * 60 * 60 * 1000
 /** Auto-advance each slide (Instagram-style). */
@@ -48,6 +49,7 @@ function postTradeOwnerUserId(post: any): string | null | undefined {
 type LikeMeta = { count: number; liked: boolean }
 
 export default function FeedPage() {
+  const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const [posts, setPosts] = useState<any[]>([])
   const [page, setPage] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -201,13 +203,13 @@ export default function FeedPage() {
 
       if (uploadError) {
         console.error(uploadError)
-        alert(uploadError.message)
+        showPopup({ type: "error", message: uploadError.message })
         return
       }
 
       const base = process.env.NEXT_PUBLIC_SUPABASE_URL
       if (!base) {
-        alert("Missing NEXT_PUBLIC_SUPABASE_URL")
+        showPopup({ type: "error", message: "Missing NEXT_PUBLIC_SUPABASE_URL" })
         return
       }
 
@@ -220,14 +222,14 @@ export default function FeedPage() {
 
       if (insertError) {
         console.error(insertError)
-        alert(handleSupabaseError(insertError))
+        showPopup({ type: "error", message: handleSupabaseError(insertError) })
         return
       }
 
-      alert("Story uploaded!")
+      showPopup({ type: "success", message: "Story uploaded!" })
       await loadFollowingStories()
     },
-    [user, loadFollowingStories]
+    [user, loadFollowingStories, showPopup]
   )
 
   const openStory = useCallback((userId: string) => {
@@ -615,7 +617,10 @@ export default function FeedPage() {
           10
         )
         if (limitReached) {
-          alert(handleSupabaseError({ message: "10 messages limit" }))
+          showPopup({
+            type: "warning",
+            message: handleSupabaseError({ message: "10 messages limit" }),
+          })
           return false
         }
       }
@@ -636,7 +641,7 @@ export default function FeedPage() {
 
       if (error) {
         console.error("Comment insert error:", error)
-        alert(handleSupabaseError(error))
+        showPopup({ type: "error", message: handleSupabaseError(error) })
         return false
       }
 
@@ -672,7 +677,7 @@ export default function FeedPage() {
 
       return true
     },
-    [user]
+    [user, showPopup]
   )
 
   const { uniquePosts, postsById } = useMemo(
@@ -707,6 +712,7 @@ export default function FeedPage() {
 
   return (
     <div className="w-full text-white">
+      <FeedbackModal {...feedbackModalProps} />
       <div className="flex justify-center px-4 py-6 sm:py-8 pb-10">
         <div className="w-full max-w-xl space-y-6">
           <FeedModeToggle mode={mode} onModeChange={setMode} />

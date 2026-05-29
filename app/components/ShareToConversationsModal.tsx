@@ -9,6 +9,7 @@ import {
   type ShareConversationRow,
 } from "@/lib/shareToConversations"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
+import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 
 export type ShareToConversationsModalProps = {
   open: boolean
@@ -30,6 +31,7 @@ export default function ShareToConversationsModal({
   imageDataUrlPromise,
   captionPlaceholder = "Add a message…",
 }: ShareToConversationsModalProps) {
+  const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const [shareMessage, setShareMessage] = useState("")
   const [shareConversations, setShareConversations] = useState<
     ShareConversationRow[]
@@ -99,13 +101,13 @@ export default function ShareToConversationsModal({
           content: msg,
         })
         if (error) {
-          alert(handleSupabaseError(error))
+          showPopup({ type: "error", message: handleSupabaseError(error) })
           return
         }
       } else if (imageDataUrlPromise) {
         const dataUrl = await imageDataUrlPromise()
         if (!dataUrl) {
-          alert("Could not capture image.")
+          showPopup({ type: "error", message: "Could not capture image." })
           return
         }
         const { error } = await sendImageDataUrlToConversations(supabase, {
@@ -115,7 +117,7 @@ export default function ShareToConversationsModal({
           content: shareMessage.trim() || "",
         })
         if (error) {
-          alert(handleSupabaseError(error))
+          showPopup({ type: "error", message: handleSupabaseError(error) })
           return
         }
       }
@@ -129,7 +131,9 @@ export default function ShareToConversationsModal({
   if (!open) return null
 
   return (
-    <div
+    <>
+      <FeedbackModal {...feedbackModalProps} />
+      <div
       className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm"
       onClick={onClose}
       role="presentation"
@@ -199,5 +203,6 @@ export default function ShareToConversationsModal({
         </button>
       </div>
     </div>
+    </>
   )
 }

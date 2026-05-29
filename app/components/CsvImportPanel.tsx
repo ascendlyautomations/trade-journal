@@ -18,7 +18,7 @@ import {
 } from "@/lib/insertCsvTradesWithAccount"
 import { last24hIso } from "@/lib/freePlanLimits"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
-import { useToast } from "@/app/components/ui"
+import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import CsvImportUnsupportedBanner from "@/app/components/CsvImportUnsupportedBanner"
 import {
   detectCsvBrokerHint,
@@ -53,7 +53,7 @@ export default function CsvImportPanel({
   selectedAccount = null,
   requireSelectedAccount = false,
 }: CsvImportPanelProps) {
-  const toast = useToast()
+  const { showPopup, feedbackModalProps } = useFeedbackPopup({ autoDismissMs: 6000 })
   const [parsed, setParsed] = useState<CsvRow[]>([])
   const [loading, setLoading] = useState(false)
   const [unrecognized, setUnrecognized] = useState(false)
@@ -97,7 +97,10 @@ export default function CsvImportPanel({
     if (parsed.length === 0) return
 
     if (requireSelectedAccount && !selectedAccount) {
-      alert("Please create or select an account before importing trades")
+      showPopup({
+        type: "error",
+        message: "Please create or select an account before importing trades",
+      })
       return
     }
 
@@ -106,7 +109,7 @@ export default function CsvImportPanel({
     const { data: userData } = await supabase.auth.getUser()
     const user = userData.user
     if (!user) {
-      alert("Please log in first")
+      showPopup({ type: "error", message: "Please log in first" })
       setLoading(false)
       return
     }
@@ -119,7 +122,7 @@ export default function CsvImportPanel({
 
     if (profileErr || !profile) {
       console.error("Profile fetch failed:", profileErr)
-      alert("Could not verify account. Try again.")
+      showPopup({ type: "error", message: "Could not verify account. Try again." })
       setLoading(false)
       return
     }
@@ -157,14 +160,20 @@ export default function CsvImportPanel({
 
         if (existingErr) {
           console.error("trade count check failed:", existingErr)
-          alert("Could not verify daily trade limit. Please try again.")
+          showPopup({
+            type: "error",
+            message: "Could not verify daily trade limit. Please try again.",
+          })
           setLoading(false)
           return
         }
 
         const remaining = 3 - (existingTrades?.length ?? 0)
         if (remaining <= 0) {
-          alert("You've reached your daily trade limit. Upgrade to Pro.")
+          showPopup({
+            type: "error",
+            message: "You've reached your daily trade limit. Upgrade to Pro.",
+          })
           setLoading(false)
           return
         }
@@ -173,7 +182,10 @@ export default function CsvImportPanel({
     }
 
     if (!tradesToInsert.length) {
-      alert("You've reached your daily trade limit. Upgrade to Pro.")
+      showPopup({
+        type: "error",
+        message: "You've reached your daily trade limit. Upgrade to Pro.",
+      })
       setLoading(false)
       return
     }
@@ -201,7 +213,10 @@ export default function CsvImportPanel({
       )
       if (importAcctErr) {
         console.error(importAcctErr)
-        alert("Could not register imported account row. Try again.")
+        showPopup({
+          type: "error",
+          message: "Could not register imported account row. Try again.",
+        })
         setLoading(false)
         return
       }
@@ -212,7 +227,7 @@ export default function CsvImportPanel({
 
     if (error) {
       console.error("INSERT ERROR:", error)
-      alert(handleSupabaseError(error))
+      showPopup({ type: "error", message: handleSupabaseError(error) })
     } else {
       if (!hasUsedInitialImport) {
         const { error: initialImportFlagErr } = await supabase
@@ -238,7 +253,7 @@ export default function CsvImportPanel({
       }
       if (skipped) msg += ` ${skipped} row(s) skipped.`
       if (errLines) msg += `\n\n${errLines}`
-      toast.success(msg, 6000)
+      showPopup({ type: "success", message: msg })
       setParsed([])
       setUnrecognized(false)
       setBrokerHint(null)
@@ -253,6 +268,7 @@ export default function CsvImportPanel({
 
   return (
     <div className={compact ? "space-y-3" : "space-y-4"}>
+      <FeedbackModal {...feedbackModalProps} />
       {unrecognized ? (
         <CsvImportUnsupportedBanner brokerHint={brokerHint} />
       ) : null}

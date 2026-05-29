@@ -18,6 +18,7 @@ import { formatEST } from "@/lib/formatEST"
 import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import { formatMoneyUnknown, formatRR } from "@/lib/formatDisplay"
+import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 
 type Room = {
   id: string
@@ -172,6 +173,7 @@ async function appendSelfToSeenByForRoomMessage(
 }
 
 function CommunityContent() {
+  const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const router = useRouter()
   const searchParams = useSearchParams()
   const roomParam = searchParams.get("room")
@@ -205,7 +207,6 @@ function CommunityContent() {
   const [inviteTargetRoom, setInviteTargetRoom] = useState<Room | null>(null)
   const [showRoomSettings, setShowRoomSettings] = useState(false)
   const [showInviteModal, setShowInviteModal] = useState(false)
-  const [roomJoinToast, setRoomJoinToast] = useState<string | null>(null)
   /** room id → has at least one unread message (others’ messages not in seen_by) */
   const [unreadByRoomId, setUnreadByRoomId] = useState<Record<string, boolean>>(
     {}
@@ -217,9 +218,6 @@ function CommunityContent() {
   const [editSectionName, setEditSectionName] = useState("")
   const [editAllowChat, setEditAllowChat] = useState(true)
   const typingChannelRef = useRef<any>(null)
-  const joinRoomToastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null
-  )
   const messagesScrollRef = useRef<HTMLDivElement | null>(null)
   const sectionFilterRef = useRef<{ len: number; id: string | null }>({
     len: 0,
@@ -623,7 +621,7 @@ function CommunityContent() {
 
   async function handleAddSection() {
     if (sections.length >= 5) {
-      alert("Max 5 pages allowed")
+      showPopup({ type: "warning", message: "Max 5 pages allowed" })
       return
     }
     if (!selectedRoomId) return
@@ -650,7 +648,7 @@ function CommunityContent() {
 
   async function handleDeleteSection(sectionId: string) {
     if (sections.length <= 1) {
-      alert("You must have at least 1 page")
+      showPopup({ type: "warning", message: "You must have at least 1 page" })
       return
     }
 
@@ -672,7 +670,7 @@ function CommunityContent() {
     if (!trimmed || !selectedRoomId) return
 
     if (sections.length >= 5) {
-      alert("Max 5 pages allowed")
+      showPopup({ type: "warning", message: "Max 5 pages allowed" })
       return
     }
 
@@ -698,7 +696,7 @@ function CommunityContent() {
       setShowCreateSectionModal(false)
     } catch (err) {
       console.error(err)
-      alert("Failed to create channel")
+      showPopup({ type: "error", message: "Failed to create channel" })
     }
   }
 
@@ -707,7 +705,7 @@ function CommunityContent() {
 
     const trimmed = editSectionName.trim()
     if (!trimmed) {
-      alert("Channel name cannot be empty")
+      showPopup({ type: "error", message: "Channel name cannot be empty" })
       return
     }
 
@@ -737,7 +735,7 @@ function CommunityContent() {
       setEditingSection(null)
     } catch (err) {
       console.error(err)
-      alert("Failed to update channel")
+      showPopup({ type: "error", message: "Failed to update channel" })
     }
   }
 
@@ -846,7 +844,7 @@ function CommunityContent() {
 
       if (error && error.code !== "23505") {
         console.error("joinRoom error:", error)
-        alert("Failed to join room")
+        showPopup({ type: "error", message: "Failed to join room" })
         return
       }
     } else if (!alreadyActive) {
@@ -858,7 +856,7 @@ function CommunityContent() {
 
       if (error) {
         console.error("joinRoom reactivate:", error)
-        alert("Failed to join room")
+        showPopup({ type: "error", message: "Failed to join room" })
         return
       }
     }
@@ -869,14 +867,10 @@ function CommunityContent() {
     setSelectedRoomId(roomId)
 
     if (alreadyActive) {
-      if (joinRoomToastTimeoutRef.current) {
-        clearTimeout(joinRoomToastTimeoutRef.current)
-      }
-      setRoomJoinToast("You're already in this room")
-      joinRoomToastTimeoutRef.current = setTimeout(() => {
-        setRoomJoinToast(null)
-        joinRoomToastTimeoutRef.current = null
-      }, 4000)
+      showPopup({
+        type: "warning",
+        message: "You're already in this room",
+      })
     }
   }
 
@@ -1310,7 +1304,10 @@ function CommunityContent() {
         10
       )
       if (limitReached) {
-        alert(handleSupabaseError({ message: "10 messages limit" }))
+        showPopup({
+          type: "warning",
+          message: handleSupabaseError({ message: "10 messages limit" }),
+        })
         return
       }
     }
@@ -1323,7 +1320,7 @@ function CommunityContent() {
     })
     if (error) {
       console.error("room_messages insert:", error)
-      alert(handleSupabaseError(error))
+      showPopup({ type: "error", message: handleSupabaseError(error) })
       return
     }
 
@@ -1344,7 +1341,10 @@ function CommunityContent() {
         10
       )
       if (limitReached) {
-        alert(handleSupabaseError({ message: "10 messages limit" }))
+        showPopup({
+          type: "warning",
+          message: handleSupabaseError({ message: "10 messages limit" }),
+        })
         return
       }
     }
@@ -1376,7 +1376,7 @@ function CommunityContent() {
 
     if (insertError) {
       console.error("room image message insert:", insertError)
-      alert(handleSupabaseError(insertError))
+      showPopup({ type: "error", message: handleSupabaseError(insertError) })
     }
   }
 
@@ -1414,7 +1414,10 @@ function CommunityContent() {
         10
       )
       if (limitReached) {
-        alert(handleSupabaseError({ message: "10 messages limit" }))
+        showPopup({
+          type: "warning",
+          message: handleSupabaseError({ message: "10 messages limit" }),
+        })
         return
       }
     }
@@ -1430,7 +1433,7 @@ function CommunityContent() {
 
     if (error) {
       console.error("room trade message insert:", error)
-      alert(handleSupabaseError(error))
+      showPopup({ type: "error", message: handleSupabaseError(error) })
       return
     }
 
@@ -1440,14 +1443,7 @@ function CommunityContent() {
   return (
     <>
       <Navbar />
-      {roomJoinToast ? (
-        <div
-          role="status"
-          className="fixed bottom-6 left-1/2 z-[100] max-w-[min(90vw,24rem)] -translate-x-1/2 rounded-lg border border-emerald-500/35 bg-emerald-950/95 px-4 py-2.5 text-center text-sm text-emerald-100 shadow-lg"
-        >
-          {roomJoinToast}
-        </div>
-      ) : null}
+      <FeedbackModal {...feedbackModalProps} />
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white px-4 py-2">
         <div className="mx-auto flex w-full max-w-6xl flex-col overflow-visible rounded-2xl border border-white/10 bg-black/25 md:h-[calc(100vh-90px)] md:flex-row md:overflow-hidden">
           <aside className="shrink-0 border-b border-white/10 bg-[#0b1220]/80 md:w-72 md:border-b-0 md:border-r">

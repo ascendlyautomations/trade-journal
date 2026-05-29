@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { useState } from "react"
 import PublicNavbar from "../components/PublicNavbar"
 import { supabase } from "@/lib/supabaseClient"
+import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 
 const freeFeatures = [
   "Track your trades",
@@ -45,6 +46,7 @@ function CheckIcon({ bright = false }: { bright?: boolean }) {
 }
 
 export default function PricingPage() {
+  const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const router = useRouter()
   const [checkoutLoading, setCheckoutLoading] = useState(false)
 
@@ -56,7 +58,7 @@ export default function PricingPage() {
       } = await supabase.auth.getUser()
 
       if (!user) {
-        alert("Please log in first")
+        showPopup({ type: "info", message: "Please log in first" })
         return
       }
 
@@ -79,11 +81,11 @@ export default function PricingPage() {
       if (data.url) {
         window.location.href = data.url
       } else {
-        alert(data.error || "Checkout failed")
+        showPopup({ type: "error", message: data.error || "Checkout failed" })
       }
     } catch (e) {
       console.error("Checkout error:", e)
-      alert("Checkout failed")
+      showPopup({ type: "error", message: "Checkout failed" })
     } finally {
       setCheckoutLoading(false)
     }
@@ -92,6 +94,7 @@ export default function PricingPage() {
   return (
     <>
       <PublicNavbar />
+      <FeedbackModal {...feedbackModalProps} />
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 py-14 text-white sm:px-6 sm:py-20">
         <div className="mx-auto flex max-w-5xl flex-col items-center">
           {/* Top section */}

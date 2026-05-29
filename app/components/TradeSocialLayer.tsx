@@ -12,6 +12,7 @@ import {
 import { supabase } from "../../lib/supabaseClient"
 import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
+import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 
 type TradeSocialContextValue = {
   tradeId: string
@@ -51,6 +52,7 @@ export function TradeSocialProvider({
   tradeOwnerUserId,
   children,
 }: TradeSocialProviderProps) {
+  const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const [likes, setLikes] = useState(0)
   const [liked, setLiked] = useState(false)
   const [comments, setComments] = useState<any[]>([])
@@ -242,7 +244,10 @@ export function TradeSocialProvider({
         10
       )
       if (limitReached) {
-        alert(handleSupabaseError({ message: "10 messages limit" }))
+        showPopup({
+          type: "warning",
+          message: handleSupabaseError({ message: "10 messages limit" }),
+        })
         return
       }
     }
@@ -264,7 +269,7 @@ export function TradeSocialProvider({
 
     if (error) {
       console.error("Trade comment error:", error)
-      alert(handleSupabaseError(error))
+      showPopup({ type: "error", message: handleSupabaseError(error) })
       return
     }
 
@@ -291,7 +296,7 @@ export function TradeSocialProvider({
       window.dispatchEvent(new CustomEvent("notification-update"))
       window.dispatchEvent(new CustomEvent("tj-unread-notifications-refresh"))
     }
-  }, [resolvedId, currentUserId, newComment, tradeOwnerUserId])
+  }, [resolvedId, currentUserId, newComment, tradeOwnerUserId, showPopup])
 
   const value = useMemo<TradeSocialContextValue | null>(() => {
     if (!resolvedId) return null
@@ -325,7 +330,10 @@ export function TradeSocialProvider({
   if (!resolvedId || !value) return null
 
   return (
-    <TradeSocialContext.Provider value={value}>{children}</TradeSocialContext.Provider>
+    <TradeSocialContext.Provider value={value}>
+      {children}
+      <FeedbackModal {...feedbackModalProps} />
+    </TradeSocialContext.Provider>
   )
 }
 

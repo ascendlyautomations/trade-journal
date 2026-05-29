@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabaseClient"
 import { fetchShareConversations } from "@/lib/shareToConversations"
 import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
+import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import FeedPostScreenshot from "./FeedPostScreenshot"
 import { postImageSrc } from "./feedPostHelpers"
 
@@ -19,6 +20,7 @@ export default function FeedSharePostOverlay({
   user,
   onClose,
 }: FeedSharePostOverlayProps) {
+  const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const [shareMessage, setShareMessage] = useState("")
   const [shareConversations, setShareConversations] = useState<any[]>([])
   const [selectedConversations, setSelectedConversations] = useState<string[]>([])
@@ -75,7 +77,10 @@ export default function FeedSharePostOverlay({
         10
       )
       if (limitReached) {
-        alert(handleSupabaseError({ message: "10 messages limit" }))
+        showPopup({
+          type: "warning",
+          message: handleSupabaseError({ message: "10 messages limit" }),
+        })
         return
       }
     }
@@ -93,20 +98,22 @@ export default function FeedSharePostOverlay({
 
       if (error) {
         console.error("Share post error:", error)
-        alert(handleSupabaseError(error))
+        showPopup({ type: "error", message: handleSupabaseError(error) })
         return
       }
     }
 
     onClose()
-  }, [onClose, post.id, selectedConversations, shareMessage])
+  }, [onClose, post.id, selectedConversations, shareMessage, showPopup])
 
   const stopPropagation = useCallback((e: React.MouseEvent) => {
     e.stopPropagation()
   }, [])
 
   return (
-    <div
+    <>
+      <FeedbackModal {...feedbackModalProps} />
+      <div
       className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
       onClick={handleClose}
     >
@@ -171,5 +178,6 @@ export default function FeedSharePostOverlay({
         </button>
       </div>
     </div>
+    </>
   )
 }

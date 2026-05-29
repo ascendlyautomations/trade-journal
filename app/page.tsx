@@ -19,6 +19,7 @@ import {
   LANDING_TITLE_GRADIENT,
   useLandingReveal,
 } from "@/lib/landingPageUi"
+import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 
 const PRICING_FREE_FEATURES = [
   "Track your trades",
@@ -60,6 +61,7 @@ const HOW_STEPS = [
 ] as const
 
 export default function LandingPage() {
+  const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const router = useRouter()
   const [checkoutLoading, setCheckoutLoading] = useState(false)
   const howItWorks = useLandingReveal()
@@ -155,7 +157,10 @@ export default function LandingPage() {
       }
     } catch (err) {
       console.error("Checkout error:", err)
-      alert("Checkout failed. Please try again.")
+      showPopup({
+        type: "error",
+        message: "Checkout failed. Please try again.",
+      })
     } finally {
       setCheckoutLoading(false)
     }
@@ -164,6 +169,7 @@ export default function LandingPage() {
   return (
     <>
       <PublicNavbar />
+      <FeedbackModal {...feedbackModalProps} />
       <AIAssistant />
 
       {/* Landing shell: cinematic bg (z-0) + overlay (z-1) + content (z-10) */}

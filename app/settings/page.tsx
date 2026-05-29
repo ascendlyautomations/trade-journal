@@ -427,7 +427,7 @@ export default function SettingsPage() {
       window.location.href = "/login"
     } catch (err) {
       console.error(err)
-      alert("Failed to delete account")
+      showPopup({ type: "error", message: "Failed to delete account" })
     } finally {
       setDeleting(false)
     }
@@ -459,7 +459,7 @@ export default function SettingsPage() {
       window.URL.revokeObjectURL(url)
     } catch (err) {
       console.error(err)
-      alert("Failed to export data")
+      showPopup({ type: "error", message: "Failed to export data" })
     }
   }
 
@@ -480,7 +480,7 @@ export default function SettingsPage() {
         .maybeSingle()
 
       if (existing) {
-        alert("You already have a Trade Room")
+        showPopup({ type: "warning", message: "You already have a Trade Room" })
         return
       }
 
@@ -497,7 +497,7 @@ export default function SettingsPage() {
           : ""
 
       if (!slug) {
-        alert("Trade Room created!")
+        showPopup({ type: "success", message: "Trade Room created!" })
         return
       }
 
@@ -506,7 +506,7 @@ export default function SettingsPage() {
       )
     } catch (err) {
       console.error(err)
-      alert("Failed to create room")
+      showPopup({ type: "error", message: "Failed to create room" })
     } finally {
       setCreatingRoom(false)
     }

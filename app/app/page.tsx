@@ -18,8 +18,10 @@ import {
   INPUT_TRADE_PAGE_TITLE_CLASSNAME,
   INPUT_TRADE_PAGE_TITLE_ROW_CLASSNAME,
 } from "@/lib/inputTradePageTitle"
+import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 
 export default function Home() {
+  const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const [loading, setLoading] = useState(false)
   const [reviewCount, setReviewCount] = useState(0)
   const [parsedTrades, setParsedTrades] = useState<any[]>([])
@@ -44,7 +46,7 @@ export default function Home() {
     } = await supabase.auth.getUser()
 
     if (!user?.id) {
-      alert("Please log in first")
+      showPopup({ type: "info", message: "Please log in first" })
       setLoading(false)
       return
     }
@@ -57,7 +59,7 @@ export default function Home() {
 
     if (profileErr || !profile) {
       console.error("Profile fetch failed:", profileErr)
-      alert("Could not verify account. Try again.")
+      showPopup({ type: "error", message: "Could not verify account. Try again." })
       setLoading(false)
       return
     }
@@ -65,7 +67,11 @@ export default function Home() {
     console.log("CSV CHECK:", profile)
 
     if (!profile.is_pro && profile.has_used_csv_import) {
-      alert("Free plan includes one CSV import only. Upgrade to import more.")
+      showPopup({
+        type: "warning",
+        message:
+          "Free plan includes one CSV import only. Upgrade to import more.",
+      })
       setLoading(false)
       return
     }
@@ -108,6 +114,7 @@ export default function Home() {
   return (
     <>
       <Navbar />
+      <FeedbackModal {...feedbackModalProps} />
 
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100">
         <div className="pt-3 px-6 pb-6 max-w-8xl mx-auto">

@@ -10,6 +10,7 @@ import CreateAccountModal, {
 } from "@/components/CreateAccountModal"
 import { supabase } from "@/lib/supabaseClient"
 import { isProActive } from "@/lib/subscription"
+import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 
 const CSV_INPUT_ID = "post-setup-csv-import"
 
@@ -21,6 +22,7 @@ type Props = {
 }
 
 export default function PostSetupImportModal({ open, onComplete }: Props) {
+  const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const [entered, setEntered] = useState(false)
   const [accounts, setAccounts] = useState<TradeAccountOption[]>([])
   const [selectedAccount, setSelectedAccount] = useState<TradeAccountOption | null>(null)
@@ -101,12 +103,16 @@ export default function PostSetupImportModal({ open, onComplete }: Props) {
         .eq("user_id", user.id)
       if (countErr) {
         console.error(countErr)
-        alert("Failed to verify account limit")
+        showPopup({ type: "error", message: "Failed to verify account limit" })
         return
       }
       if ((existingAccounts || []).length >= 1) {
         setCanCreateMoreAccounts(false)
-        alert("Free plan allows only 1 account. Upgrade to Pro to create more.")
+        showPopup({
+          type: "warning",
+          message:
+            "Free plan allows only 1 account. Upgrade to Pro to create more.",
+        })
         return
       }
     }
@@ -133,7 +139,7 @@ export default function PostSetupImportModal({ open, onComplete }: Props) {
 
     if (error) {
       console.error(error)
-      alert("Failed to create account")
+      showPopup({ type: "error", message: "Failed to create account" })
       return
     }
 
@@ -168,7 +174,9 @@ export default function PostSetupImportModal({ open, onComplete }: Props) {
       : null
 
   return (
-    <div
+    <>
+      <FeedbackModal {...feedbackModalProps} />
+      <div
       className={`fixed inset-0 z-[1100] flex items-center justify-center px-4 py-8 transition-opacity duration-300 motion-reduce:transition-none ${
         entered ? "bg-black/75 opacity-100 backdrop-blur-md" : "bg-black/75 opacity-0 backdrop-blur-md"
       }`}
@@ -249,5 +257,6 @@ export default function PostSetupImportModal({ open, onComplete }: Props) {
         onSave={(acc) => void handleCreateAccountSave(acc)}
       />
     </div>
+    </>
   )
 }

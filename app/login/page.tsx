@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabaseClient"
 import { isProfilesUsernameConflict } from "@/lib/profileUsername"
 import { useRouter } from "next/navigation"
 import { ONBOARDING_FLAG } from "../components/ProfileOnboarding"
+import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
@@ -17,8 +18,7 @@ export default function LoginPage() {
   const [resetEmail, setResetEmail] = useState("")
   const [resetMessage, setResetMessage] = useState("")
   const [loadingReset, setLoadingReset] = useState(false)
-  const [popupMessage, setPopupMessage] = useState("")
-  const [showPopup, setShowPopup] = useState(false)
+  const { showPopup, feedbackModalProps } = useFeedbackPopup({ autoDismissMs: 3000 })
 
   const router = useRouter()
 
@@ -104,13 +104,6 @@ export default function LoginPage() {
     }
   }, [])
 
-  useEffect(() => {
-    if (showPopup) {
-      const timer = setTimeout(() => setShowPopup(false), 3000)
-      return () => clearTimeout(timer)
-    }
-  }, [showPopup])
-
   async function handleSignUp(e: React.MouseEvent<HTMLButtonElement>) {
     console.log("Signup clicked")
     e.preventDefault()
@@ -127,7 +120,7 @@ export default function LoginPage() {
         .trim()
         .replace(/[^a-z0-9_]/g, "")
       if (!cleanUsername.length) {
-        alert("Please enter a username")
+        showPopup({ type: "error", message: "Please enter a username" })
         return
       }
 
@@ -139,12 +132,12 @@ export default function LoginPage() {
 
       if (usernameLookupErr) {
         console.error("Username lookup:", usernameLookupErr)
-        alert("Could not validate username. Try again.")
+        showPopup({ type: "error", message: "Could not validate username. Try again." })
         return
       }
 
       if (existingUser) {
-        alert("Username already in use")
+        showPopup({ type: "error", message: "Username already in use" })
         return
       }
 
@@ -162,7 +155,7 @@ export default function LoginPage() {
 
       if (authError) {
         if (/already registered/i.test(authError.message || "")) {
-          alert(authError.message)
+          showPopup({ type: "error", message: authError.message })
           return
         }
         console.error(
@@ -177,7 +170,7 @@ export default function LoginPage() {
             2
           )
         )
-        alert(authError.message)
+        showPopup({ type: "error", message: authError.message })
         return
       }
 
@@ -186,7 +179,10 @@ export default function LoginPage() {
       console.log("SIGNUP USER:", user)
 
       if (!user) {
-        alert("Check your email to confirm your account before continuing.")
+        showPopup({
+          type: "info",
+          message: "Check your email to confirm your account before continuing.",
+        })
         return
       }
 
@@ -213,11 +209,11 @@ export default function LoginPage() {
 
       if (profileError) {
         if (profileError.code === "23505" && isProfilesUsernameConflict(profileError)) {
-          alert("Username already in use")
+          showPopup({ type: "error", message: "Username already in use" })
           return
         }
         console.error("PROFILE INSERT ERROR:", profileError)
-        alert("Error creating profile")
+        showPopup({ type: "error", message: "Error creating profile" })
         return
       }
 
@@ -235,7 +231,10 @@ export default function LoginPage() {
           return
         } catch (e) {
           console.error("Checkout after signup failed:", e)
-          alert("Signed up, but checkout failed. Please try again from Pricing.")
+          showPopup({
+            type: "error",
+            message: "Signed up, but checkout failed. Please try again from Pricing.",
+          })
         }
       }
 
@@ -251,7 +250,7 @@ export default function LoginPage() {
           2
         )
       )
-      alert("Something went wrong during signup")
+      showPopup({ type: "error", message: "Something went wrong during signup" })
     } finally {
       setLoading(false)
     }
@@ -267,10 +266,9 @@ export default function LoginPage() {
     })
 
     if (error) {
-      setPopupMessage("Incorrect email or password")
+      showPopup({ type: "error", message: "Incorrect email or password" })
       setEmail("")
       setPassword("")
-      setShowPopup(true)
       setLoading(false)
       return
     }
@@ -287,7 +285,10 @@ export default function LoginPage() {
           return
         } catch (e) {
           console.error("Checkout after login failed:", e)
-          alert("Logged in, but checkout failed. Please try again from Pricing.")
+          showPopup({
+            type: "error",
+            message: "Logged in, but checkout failed. Please try again from Pricing.",
+          })
           setLoading(false)
           return
         }
@@ -339,13 +340,15 @@ export default function LoginPage() {
     if (error) {
       console.error("Reset error:", error)
       setResetMessage("Error sending reset email")
-      setPopupMessage("Error sending reset email")
+      showPopup({ type: "error", message: "Error sending reset email" })
     } else {
       setResetMessage("Check your email for instructions to reset your password")
-      setPopupMessage("Check your email for instructions to reset your password")
+      showPopup({
+        type: "success",
+        message: "Check your email for instructions to reset your password",
+      })
       setResetEmail("")
     }
-    setShowPopup(true)
     setLoadingReset(false)
   }
 
@@ -524,18 +527,7 @@ export default function LoginPage() {
         )}
       </div>
     </div>
-    {showPopup && (
-      <div className="fixed left-1/2 top-1/2 z-50 w-full max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-lg border border-white/10 bg-black/80 px-4 py-3 shadow-lg">
-        <p className="text-sm text-white">{popupMessage}</p>
-        <button
-          type="button"
-          onClick={() => setShowPopup(false)}
-          className="mt-1 text-xs text-blue-400 hover:underline"
-        >
-          Close
-        </button>
-      </div>
-    )}
+    <FeedbackModal {...feedbackModalProps} />
   </div>
 )
 }

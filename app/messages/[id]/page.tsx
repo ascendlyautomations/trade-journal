@@ -8,6 +8,7 @@ import { supabase } from "../../../lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
 import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
+import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { useParams, useRouter } from "next/navigation"
 import {
   formatMoneyUnknown,
@@ -400,6 +401,7 @@ function PostMessageBubble({
 }
 
 export default function DMPage() {
+  const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const params = useParams()
   const router = useRouter()
   const id = params.id as string
@@ -837,7 +839,10 @@ export default function DMPage() {
         10
       )
       if (limitReached) {
-        alert(handleSupabaseError({ message: "10 messages limit" }))
+        showPopup({
+          type: "warning",
+          message: handleSupabaseError({ message: "10 messages limit" }),
+        })
         return
       }
     }
@@ -866,7 +871,7 @@ export default function DMPage() {
     })
     if (sendErr) {
       console.error("sendMessage insert:", sendErr)
-      alert(handleSupabaseError(sendErr))
+      showPopup({ type: "error", message: handleSupabaseError(sendErr) })
       return
     }
 
@@ -912,7 +917,10 @@ export default function DMPage() {
         10
       )
       if (limitReached) {
-        alert(handleSupabaseError({ message: "10 messages limit" }))
+        showPopup({
+          type: "warning",
+          message: handleSupabaseError({ message: "10 messages limit" }),
+        })
         return
       }
     }
@@ -926,7 +934,7 @@ export default function DMPage() {
     })
     if (tradeSendErr) {
       console.error("handleSendTrade insert:", tradeSendErr)
-      alert(handleSupabaseError(tradeSendErr))
+      showPopup({ type: "error", message: handleSupabaseError(tradeSendErr) })
       return
     }
 
@@ -1104,6 +1112,7 @@ export default function DMPage() {
   return (
     <>
       <Navbar />
+      <FeedbackModal {...feedbackModalProps} />
 
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] flex justify-center text-white px-4 pb-4 mt-0 pt-2 w-full overflow-hidden">
 

@@ -7,9 +7,11 @@ import { supabase } from "../../lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
 import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
+import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { useRouter } from "next/navigation"
 
 export default function ChatPage() {
+  const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const [messages, setMessages] = useState<any[]>([])
   const [globalMessages, setGlobalMessages] = useState<any[]>([])
   const [input, setInput] = useState("")
@@ -137,7 +139,10 @@ export default function ChatPage() {
         10
       )
       if (limitReached) {
-        alert(handleSupabaseError({ message: "10 messages limit" }))
+        showPopup({
+          type: "warning",
+          message: handleSupabaseError({ message: "10 messages limit" }),
+        })
         return
       }
     }
@@ -176,7 +181,7 @@ export default function ChatPage() {
     })
     if (sendErr) {
       console.error("chat sendMessage insert:", sendErr)
-      alert(handleSupabaseError(sendErr))
+      showPopup({ type: "error", message: handleSupabaseError(sendErr) })
       return
     }
 
@@ -229,6 +234,7 @@ export default function ChatPage() {
   return (
     <>
       <Navbar />
+      <FeedbackModal {...feedbackModalProps} />
 
       <div className="h-screen w-full flex flex-col md:flex-row overflow-hidden">
         {/* SIDEBAR (ROOM LIST) */}
