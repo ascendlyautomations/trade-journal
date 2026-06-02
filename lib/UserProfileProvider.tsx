@@ -12,6 +12,7 @@ import {
   type ReactNode,
   type SetStateAction,
 } from "react"
+import type { AuthChangeEvent } from "@supabase/supabase-js"
 import { supabase } from "./supabaseClient"
 
 type UserProfileContextValue = {
@@ -22,6 +23,11 @@ type UserProfileContextValue = {
 }
 
 const UserProfileContext = createContext<UserProfileContextValue | null>(null)
+
+const AUTH_SYNC_EVENTS: AuthChangeEvent[] = [
+  "INITIAL_SESSION",
+  "SIGNED_IN",
+]
 
 export function UserProfileProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<any>(null)
@@ -34,27 +40,45 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let mounted = true
+    let loadGeneration = 0
 
-    async function init() {
+    const removeProfileChannel = () => {
+      const ch = channelRef.current
+      channelRef.current = null
+      if (ch) {
+        void supabase.removeChannel(ch)
+      }
+    }
+
+    const clearAuthState = () => {
+      loadGeneration += 1
+      removeProfileChannel()
+      if (!mounted) return
+      setUser(null)
+      setProfile(null)
+      setLoading(false)
+    }
+
+    async function loadSessionAndProfile() {
+      const generation = ++loadGeneration
+
       if (!profileRef.current) {
         setLoading(true)
       }
 
-      if (channelRef.current) {
-        void supabase.removeChannel(channelRef.current)
-        channelRef.current = null
-      }
+      removeProfileChannel()
 
-      // ✅ FIX: use getSession instead of getUser (prevents lock error)
+      // use getSession instead of getUser (prevents lock error)
       const { data } = await supabase.auth.getSession()
       const sessionUser = data?.session?.user
 
-      if (!mounted) return
+      if (!mounted || generation !== loadGeneration) return
 
       setUser(sessionUser || null)
 
       if (!sessionUser) {
-        if (mounted) setLoading(false)
+        setProfile(null)
+        setLoading(false)
         return
       }
 
@@ -64,7 +88,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
         .eq("id", sessionUser.id)
         .single()
 
-      if (!mounted) return
+      if (!mounted || generation !== loadGeneration) return
 
       setProfile(profileData || null)
 
@@ -82,12 +106,12 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
           filter: `id=eq.${sessionUser.id}`,
         },
         (payload) => {
-          if (!mounted) return
+          if (!mounted || generation !== loadGeneration) return
           setProfile(payload.new)
         }
       )
 
-      if (!mounted) {
+      if (!mounted || generation !== loadGeneration) {
         void supabase.removeChannel(ch)
         channelRef.current = null
         return
@@ -95,18 +119,31 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
 
       ch.subscribe()
 
-      if (mounted) setLoading(false)
+      if (mounted && generation === loadGeneration) {
+        setLoading(false)
+      }
     }
 
-    void init()
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event) => {
+      if (!mounted) return
+
+      if (event === "SIGNED_OUT") {
+        clearAuthState()
+        return
+      }
+
+      if (AUTH_SYNC_EVENTS.includes(event)) {
+        void loadSessionAndProfile()
+      }
+    })
 
     return () => {
       mounted = false
-      const ch = channelRef.current
-      channelRef.current = null
-      if (ch) {
-        void supabase.removeChannel(ch)
-      }
+      loadGeneration += 1
+      subscription.unsubscribe()
+      removeProfileChannel()
     }
   }, [realtimeTopicSuffix])
 
