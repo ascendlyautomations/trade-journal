@@ -12,7 +12,7 @@ import {
   type ReactNode,
   type SetStateAction,
 } from "react"
-import type { AuthChangeEvent } from "@supabase/supabase-js"
+import type { AuthChangeEvent, Session } from "@supabase/supabase-js"
 import { supabase } from "./supabaseClient"
 
 type UserProfileContextValue = {
@@ -59,7 +59,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
       setLoading(false)
     }
 
-    async function loadSessionAndProfile() {
+    async function applyAuthSession(session: Session | null) {
       const generation = ++loadGeneration
 
       if (!profileRef.current) {
@@ -68,13 +68,11 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
 
       removeProfileChannel()
 
-      // use getSession instead of getUser (prevents lock error)
-      const { data } = await supabase.auth.getSession()
-      const sessionUser = data?.session?.user
+      const sessionUser = session?.user ?? null
 
       if (!mounted || generation !== loadGeneration) return
 
-      setUser(sessionUser || null)
+      setUser(sessionUser)
 
       if (!sessionUser) {
         setProfile(null)
@@ -126,7 +124,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return
 
       if (event === "SIGNED_OUT") {
@@ -135,7 +133,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
       }
 
       if (AUTH_SYNC_EVENTS.includes(event)) {
-        void loadSessionAndProfile()
+        void applyAuthSession(session)
       }
     })
 

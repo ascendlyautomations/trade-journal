@@ -22,6 +22,14 @@ export default function LoginPage() {
 
   const router = useRouter()
 
+  function handleBack() {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back()
+    } else {
+      router.push("/")
+    }
+  }
+
   const shouldStartCheckout = () => {
     if (typeof window === "undefined") return false
     return new URLSearchParams(window.location.search).get("next") === "checkout"
@@ -364,6 +372,16 @@ export default function LoginPage() {
 
     {/* 🔥 DARK OVERLAY (IMPORTANT FOR READABILITY) */}
     <div className="absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
+
+    <button
+      type="button"
+      onClick={handleBack}
+      className="absolute left-4 top-4 z-20 inline-flex min-h-[44px] items-center gap-2 rounded-lg border border-white/10 bg-white/10 px-3 py-2 text-sm font-medium text-gray-200 backdrop-blur-md transition hover:bg-white/15 hover:text-white md:left-6 md:top-6 md:px-4"
+      aria-label="Go back"
+    >
+      <span aria-hidden="true">←</span>
+      Back
+    </button>
 
     {/* 🔥 CONTENT */}
     <div className="relative z-10 w-full max-w-6xl flex flex-col md:flex-row items-center justify-between px-6">
