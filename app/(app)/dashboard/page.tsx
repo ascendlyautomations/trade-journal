@@ -14,10 +14,7 @@ import {
   finalizeDrawdownLimitInput,
   sanitizeDrawdownLimitInput,
 } from "../../components/dashboard/dashboardGearUtils"
-import ProfileOnboarding, {
-  ONBOARDING_FLAG,
-  profileNeedsUsername,
-} from "../../components/ProfileOnboarding"
+import ProfileOnboarding from "../../components/ProfileOnboarding"
 import PostSetupImportModal from "../../components/PostSetupImportModal"
 import PerformanceShareModal from "../../components/PerformanceShareModal"
 import LockedFeature from "../../components/LockedFeature"
@@ -460,6 +457,7 @@ function analyzeTradingHours(trades: any[]): TradingHoursSummary | null {
 
 export default function Dashboard() {
   const [showOnboarding, setShowOnboarding] = useState(false)
+  const [profileOnboardingDone, setProfileOnboardingDone] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
   const [trades, setTrades] = useState<any[]>([])
   const [accountFilter, setAccountFilter] = useState("all")
@@ -559,6 +557,42 @@ export default function Dashboard() {
 
       if (mounted && trades) setTrades(trades)
 
+      const { data: existingProfile } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("id", currentUser.id)
+
+      if (!existingProfile || existingProfile.length === 0) {
+        const referralCode =
+          typeof window !== "undefined"
+            ? localStorage.getItem("referral_code")
+            : null
+
+        const generateReferralCode = () =>
+          Math.random().toString(36).substring(2, 8).toUpperCase()
+
+        const { error: profileUpsertErr } = await supabase.from("profiles").upsert(
+          {
+            id: currentUser.id,
+            username:
+              currentUser.user_metadata?.email?.split("@")[0] ||
+              currentUser.email ||
+              `user_${currentUser.id.slice(0, 6)}`,
+            name: currentUser.user_metadata?.full_name || "",
+            is_pro: false,
+            subscription_status: "inactive",
+            created_at: new Date().toISOString(),
+            referral_code: generateReferralCode(),
+            referred_by: referralCode || null,
+          },
+          { onConflict: "id", ignoreDuplicates: true }
+        )
+
+        if (profileUpsertErr) {
+          console.error("dashboard ensureProfile:", profileUpsertErr)
+        }
+      }
+
       const { data: profileData } = await supabase
         .from("profiles")
         .select(
@@ -581,26 +615,22 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (loading || !profile || !user) return
-    let fromSignup = false
-    try {
-      fromSignup = sessionStorage.getItem(ONBOARDING_FLAG) === "1"
-    } catch {
-      /* ignore */
-    }
-    if (fromSignup || profileNeedsUsername(profile.username)) {
-      setShowOnboarding(true)
-    }
-  }, [loading, profile, user])
+    if (profile.onboarding_completed === true) return
+    if (profileOnboardingDone) return
+    setShowOnboarding(true)
+  }, [loading, profile, user, profileOnboardingDone])
 
   useEffect(() => {
     if (loading || !profile || !user) return
-    if (showOnboarding) return
-    if (profile.onboarding_completed !== false) {
+    if (profile.onboarding_completed === true) {
       setShowImportModal(false)
       return
     }
-    setShowImportModal(true)
-  }, [loading, profile, user, showOnboarding])
+    if (showOnboarding) return
+    if (profileOnboardingDone) {
+      setShowImportModal(true)
+    }
+  }, [loading, profile, user, showOnboarding, profileOnboardingDone])
 
   async function completeCsvOnboarding() {
     if (!user?.id) return
@@ -1468,6 +1498,7 @@ const worstDay = dailyPnLs.length > 0
           suppressPostSaveRedirect
           onComplete={(patch) => {
             setProfile((p: any) => (p ? { ...p, ...patch } : p))
+            setProfileOnboardingDone(true)
             setShowOnboarding(false)
             setShowImportModal(true)
           }}

@@ -4,7 +4,6 @@ import { useState, useEffect } from "react"
 import { supabase } from "@/lib/supabaseClient"
 import { isProfilesUsernameConflict } from "@/lib/profileUsername"
 import { useRouter } from "next/navigation"
-import { ONBOARDING_FLAG } from "../components/ProfileOnboarding"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 
 export default function LoginPage() {
@@ -227,12 +226,6 @@ export default function LoginPage() {
 
       console.log("✅ PROFILE CREATED")
 
-      try {
-        sessionStorage.setItem(ONBOARDING_FLAG, "1")
-      } catch {
-        /* ignore private mode */
-      }
-
       if (shouldStartCheckout()) {
         try {
           await startCheckoutAfterAuth(user.id)
@@ -301,34 +294,14 @@ export default function LoginPage() {
           return
         }
       }
-
-      const { data: prof } = await supabase
-        .from("profiles")
-        .select("username")
-        .eq("id", user.id)
-        .maybeSingle()
-
-      const missingUsername =
-        !prof?.username || String(prof.username).trim() === ""
-
-      if (missingUsername) {
-        try {
-          sessionStorage.setItem(ONBOARDING_FLAG, "1")
-        } catch {
-          /* ignore */
-        }
-        router.push("/dashboard")
-        setLoading(false)
-        return
-      }
     }
 
-    router.push("/trades")
+    router.push("/dashboard")
     setLoading(false)
   }
 
   const handleGoogleLogin = async () => {
-    const redirectPath = shouldStartCheckout() ? "/login?next=checkout" : "/trades"
+    const redirectPath = shouldStartCheckout() ? "/login?next=checkout" : "/dashboard"
     await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
