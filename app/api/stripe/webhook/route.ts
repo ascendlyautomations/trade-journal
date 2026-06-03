@@ -578,46 +578,80 @@ export async function POST(req: Request) {
             event.type
           )
         } else {
-          console.log("🔄 Subscription update received:", {
-            status: subscription.status,
-            cancel_at_period_end: subscription.cancel_at_period_end,
-            trial_end: subscription.trial_end,
-            current_period_end: subscription.current_period_end,
-          })
-
-          const updatePayload: any = {
-            subscription_status: subscription.status,
-            cancel_at_period_end: subscription.cancel_at_period_end ?? false,
-          }
-
-          // Handle trial end
-          if (subscription.trial_end) {
-            updatePayload.trial_end = new Date(subscription.trial_end * 1000)
-          }
-
-          // Handle period end (important for canceling users)
-          if (subscription.current_period_end) {
-            updatePayload.current_period_end = new Date(
-              subscription.current_period_end * 1000
-            )
-          }
-
-          // If still in trial, ensure current_period_end is set correctly
-          if (!subscription.current_period_end && subscription.trial_end) {
-            updatePayload.current_period_end = new Date(
-              subscription.trial_end * 1000
-            )
-          }
-
-          const { error } = await supabase
+          const { data: profile, error: findErr } = await supabase
             .from("profiles")
-            .update(updatePayload)
+            .select("id")
             .eq("stripe_customer_id", customerId)
+            .maybeSingle()
 
-          if (error) {
-            console.error("❌ Failed to update subscription:", error)
+          if (findErr) {
+            console.error(
+              "❌ subscription sync: profile lookup error:",
+              findErr,
+              { customerId, eventType: event.type }
+            )
+          } else if (!profile?.id) {
+            console.error(
+              "❌ No profile found for stripe_customer_id (subscription sync):",
+              customerId
+            )
           } else {
-            console.log("✅ Subscription synced successfully")
+            const updatePayload: Record<string, unknown> = {
+              subscription_status: subscription.status,
+              cancel_at_period_end: subscription.cancel_at_period_end ?? false,
+            }
+
+            // Handle trial end
+            if (subscription.trial_end) {
+              updatePayload.trial_end = new Date(subscription.trial_end * 1000)
+            }
+
+            // Handle period end (important for canceling users)
+            if (subscription.current_period_end) {
+              updatePayload.current_period_end = new Date(
+                subscription.current_period_end * 1000
+              )
+            }
+
+            // If still in trial, ensure current_period_end is set correctly
+            if (!subscription.current_period_end && subscription.trial_end) {
+              updatePayload.current_period_end = new Date(
+                subscription.trial_end * 1000
+              )
+            }
+
+            console.log("[subscription sync] applying update:", {
+              customerId,
+              profileId: profile.id,
+              status: subscription.status,
+              cancel_at_period_end: subscription.cancel_at_period_end,
+              cancel_at: subscription.cancel_at ?? null,
+              updatePayload,
+            })
+
+            const { data: updatedRows, error: upErr } = await supabase
+              .from("profiles")
+              .update(updatePayload)
+              .eq("id", profile.id)
+              .select("id")
+
+            if (upErr) {
+              console.error("❌ Failed to update subscription:", upErr, {
+                customerId,
+                profileId: profile.id,
+              })
+            } else if (!updatedRows?.length) {
+              console.error(
+                "❌ subscription sync: 0 rows updated",
+                { customerId, profileId: profile.id }
+              )
+            } else {
+              console.log("✅ Subscription synced successfully", {
+                customerId,
+                profileId: profile.id,
+                rowsUpdated: updatedRows.length,
+              })
+            }
           }
         }
       } catch (err) {
