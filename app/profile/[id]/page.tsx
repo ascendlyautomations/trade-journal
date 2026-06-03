@@ -2208,9 +2208,7 @@ export default function ProfilePage() {
               <div className="mt-4 w-full pb-8">
                 {sortedTrades.length === 0 ? (
                   <p className="text-center text-sm text-gray-400">
-                    {currentUserId === profile.id
-                      ? "No trades yet."
-                      : "No trades yet."}
+                    No public trades yet.
                   </p>
                 ) : (
                   <div className="grid grid-cols-1 gap-x-6 gap-y-8 md:grid-cols-2">

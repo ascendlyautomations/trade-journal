@@ -18,7 +18,7 @@ import ProfileOnboarding from "../../components/ProfileOnboarding"
 import PostSetupImportModal from "../../components/PostSetupImportModal"
 import PerformanceShareModal from "../../components/PerformanceShareModal"
 import LockedFeature from "../../components/LockedFeature"
-import { useEffect, useState, useMemo, useRef } from "react"
+import { useCallback, useEffect, useState, useMemo, useRef } from "react"
 import { supabase } from "../../../lib/supabaseClient"
 import { isProActive } from "../../../lib/subscription"
 import { filterTradesForPerformanceSharePool } from "@/lib/performanceShare"
@@ -522,96 +522,87 @@ export default function Dashboard() {
   )
 
   // 🔥 SAFE DATA FETCH (FIXES YOUR ERROR)
-  useEffect(() => {
-    let mounted = true
+  const refreshDashboardData = useCallback(async () => {
+    setLoading(true)
 
-    async function fetchData() {
-      setLoading(true)
+    const { data: sessionData } = await supabase.auth.getSession()
+    const currentUser = sessionData?.session?.user
 
-      // ✅ get session ONCE (fix lock error)
-      const { data: sessionData } = await supabase.auth.getSession()
-      const currentUser = sessionData?.session?.user
-
-      if (!currentUser) {
-        setLoading(false)
-        return
-      }
-
-      if (!mounted) return
-      setUser(currentUser)
-
-      const { data: accountsData } = await supabase
-        .from("accounts")
-        .select("id, account_number, name, account_size, mode, category")
-        .eq("user_id", currentUser.id)
-      if (mounted) setAccountRows(accountsData || [])
-
-      // Columns used by dashboard filters, analytics useMemo, recent trades, and performance share pool
-      const { data: trades } = await supabase
-        .from("trades")
-        .select(
-          "id, created_at, date, pnl, rr, entry_time, exit_time, account_name, account_size, account_id, mode, account_type, session, ticker, direction, strategy, trade_type, is_public, public_description"
-        )
-        .eq("user_id", currentUser.id)
-        .order("date", { ascending: false })
-
-      if (mounted && trades) setTrades(trades)
-
-      const { data: existingProfile } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("id", currentUser.id)
-
-      if (!existingProfile || existingProfile.length === 0) {
-        const referralCode =
-          typeof window !== "undefined"
-            ? localStorage.getItem("referral_code")
-            : null
-
-        const generateReferralCode = () =>
-          Math.random().toString(36).substring(2, 8).toUpperCase()
-
-        const { error: profileUpsertErr } = await supabase.from("profiles").upsert(
-          {
-            id: currentUser.id,
-            username:
-              currentUser.user_metadata?.email?.split("@")[0] ||
-              currentUser.email ||
-              `user_${currentUser.id.slice(0, 6)}`,
-            name: currentUser.user_metadata?.full_name || "",
-            is_pro: false,
-            subscription_status: "inactive",
-            created_at: new Date().toISOString(),
-            referral_code: generateReferralCode(),
-            referred_by: referralCode || null,
-          },
-          { onConflict: "id", ignoreDuplicates: true }
-        )
-
-        if (profileUpsertErr) {
-          console.error("dashboard ensureProfile:", profileUpsertErr)
-        }
-      }
-
-      const { data: profileData } = await supabase
-        .from("profiles")
-        .select(
-          "id, username, bio, trading_style, primary_market, started_trading, avatar_url, onboarding_completed, max_drawdown_limit, is_pro, subscription_status, referral_code"
-        )
-        .eq("id", currentUser.id)
-        .single()
-
-      if (mounted && profileData) setProfile(profileData)
-
+    if (!currentUser) {
       setLoading(false)
+      return
     }
 
-    fetchData()
+    setUser(currentUser)
 
-    return () => {
-      mounted = false
+    const { data: accountsData } = await supabase
+      .from("accounts")
+      .select("id, account_number, name, account_size, mode, category")
+      .eq("user_id", currentUser.id)
+    setAccountRows(accountsData || [])
+
+    const { data: trades } = await supabase
+      .from("trades")
+      .select(
+        "id, created_at, date, pnl, rr, entry_time, exit_time, account_name, account_size, account_id, mode, account_type, session, ticker, direction, strategy, trade_type, is_public, public_description"
+      )
+      .eq("user_id", currentUser.id)
+      .order("date", { ascending: false })
+
+    if (trades) setTrades(trades)
+
+    const { data: existingProfile } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("id", currentUser.id)
+
+    if (!existingProfile || existingProfile.length === 0) {
+      const referralCode =
+        typeof window !== "undefined"
+          ? localStorage.getItem("referral_code")
+          : null
+
+      const generateReferralCode = () =>
+        Math.random().toString(36).substring(2, 8).toUpperCase()
+
+      const { error: profileUpsertErr } = await supabase.from("profiles").upsert(
+        {
+          id: currentUser.id,
+          username:
+            currentUser.user_metadata?.email?.split("@")[0] ||
+            currentUser.email ||
+            `user_${currentUser.id.slice(0, 6)}`,
+          name: currentUser.user_metadata?.full_name || "",
+          is_pro: false,
+          subscription_status: "inactive",
+          created_at: new Date().toISOString(),
+          referral_code: generateReferralCode(),
+          referred_by: referralCode || null,
+        },
+        { onConflict: "id", ignoreDuplicates: true }
+      )
+
+      if (profileUpsertErr) {
+        console.error("dashboard ensureProfile:", profileUpsertErr)
+      }
     }
+
+    const { data: profileData } = await supabase
+      .from("profiles")
+      .select(
+        "id, username, bio, trading_style, primary_market, started_trading, avatar_url, onboarding_completed, max_drawdown_limit, is_pro, subscription_status, referral_code"
+      )
+      .eq("id", currentUser.id)
+      .single()
+
+    if (profileData) setProfile(profileData)
+
+    setLoading(false)
   }, [])
+
+  useEffect(() => {
+    void refreshDashboardData()
+  }, [refreshDashboardData])
 
   useEffect(() => {
     if (loading || !profile || !user) return
@@ -641,6 +632,7 @@ export default function Dashboard() {
     if (error) console.error("completeCsvOnboarding:", error)
     setProfile((p: any) => (p ? { ...p, onboarding_completed: true } : p))
     setShowImportModal(false)
+    await refreshDashboardData()
   }
 
   useEffect(() => {

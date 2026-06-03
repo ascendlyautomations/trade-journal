@@ -2,7 +2,12 @@
 
 import { useState, useEffect } from "react"
 import { supabase } from "@/lib/supabaseClient"
-import { isProfilesUsernameConflict } from "@/lib/profileUsername"
+import {
+  isProfilesUsernameConflict,
+  normalizeProfileUsername,
+  sanitizeUsernameInputForTyping,
+  USERNAME_FORMAT_HINT,
+} from "@/lib/profileUsername"
 import { useRouter } from "next/navigation"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 
@@ -122,10 +127,7 @@ export default function LoginPage() {
           ? localStorage.getItem("referral_code")
           : null
 
-      const cleanUsername = (username ?? "")
-        .toLowerCase()
-        .trim()
-        .replace(/[^a-z0-9_]/g, "")
+      const cleanUsername = normalizeProfileUsername(username ?? "")
       if (!cleanUsername.length) {
         showPopup({ type: "error", message: "Please enter a username" })
         return
@@ -435,15 +437,10 @@ export default function LoginPage() {
                 className="w-full px-4 py-3 rounded-xl bg-white/10 border border-white/10 focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder-gray-400"
                 value={username}
                 onChange={(e) => {
-                  let value = e.target.value
-                  value = value.toLowerCase()
-                  value = value.replace(/[^a-z0-9_]/g, "")
-                  setUsername(value)
+                  setUsername(sanitizeUsernameInputForTyping(e.target.value))
                 }}
               />
-              <p className="text-xs text-white/50 mt-1">
-                Only lowercase letters, numbers, and underscores allowed
-              </p>
+              <p className="text-xs text-white/50 mt-1">{USERNAME_FORMAT_HINT}</p>
             </div>
           </>
         )}

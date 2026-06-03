@@ -4,6 +4,13 @@ import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabaseClient"
 import { uploadAvatarFile } from "@/lib/avatarUpload"
+import {
+  isProfilesUsernameConflict,
+  normalizeProfileUsername,
+  sanitizeUsernameInputForTyping,
+  USERNAME_FORMAT_HINT,
+  validateProfileUsernameNotEmpty,
+} from "@/lib/profileUsername"
 
 export const ONBOARDING_FLAG = "tt_onboarding"
 
@@ -60,8 +67,10 @@ export default function ProfileOnboarding({
   suppressPostSaveRedirect = false,
 }: ProfileOnboardingProps) {
   const router = useRouter()
-  const [username, setUsername] = useState(
-    initialUsername ? String(initialUsername) : ""
+  const [username, setUsername] = useState(() =>
+    sanitizeUsernameInputForTyping(
+      initialUsername ? String(initialUsername) : ""
+    )
   )
   const [name, setName] = useState(initialName ? String(initialName) : "")
   const [bio, setBio] = useState(initialBio ? String(initialBio) : "")
@@ -150,7 +159,11 @@ export default function ProfileOnboarding({
 
     if (upErr) {
       setSaving(false)
-      setError(upErr.message)
+      if (isProfilesUsernameConflict(upErr)) {
+        setError("Username already in use")
+      } else {
+        setError(upErr.message)
+      }
       return
     }
 
@@ -232,11 +245,14 @@ export default function ProfileOnboarding({
           type="text"
           required
           autoComplete="username"
-          placeholder="Username"
-          className={`${inputClass} mb-4`}
+          placeholder="username (lowercase only)"
+          className={`${inputClass} mb-1`}
           value={username}
-          onChange={(e) => setUsername(e.target.value)}
+          onChange={(e) =>
+            setUsername(sanitizeUsernameInputForTyping(e.target.value))
+          }
         />
+        <p className="mb-4 text-xs text-gray-500">{USERNAME_FORMAT_HINT}</p>
 
         <label className="mb-1 block text-xs font-medium text-gray-300">
           Full Name
