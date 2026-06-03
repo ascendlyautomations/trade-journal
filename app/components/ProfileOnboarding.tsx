@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabaseClient"
 import { uploadAvatarFile } from "@/lib/avatarUpload"
@@ -34,6 +34,7 @@ function sliceDateInput(raw: unknown): string {
 type ProfileOnboardingProps = {
   userId: string
   initialUsername?: string | null
+  initialName?: string | null
   initialBio?: string | null
   initialTradingStyle?: string | null
   initialPrimaryMarket?: string | null
@@ -49,6 +50,7 @@ type ProfileOnboardingProps = {
 export default function ProfileOnboarding({
   userId,
   initialUsername = "",
+  initialName = "",
   initialBio = "",
   initialTradingStyle = "",
   initialPrimaryMarket = "",
@@ -61,6 +63,7 @@ export default function ProfileOnboarding({
   const [username, setUsername] = useState(
     initialUsername ? String(initialUsername) : ""
   )
+  const [name, setName] = useState(initialName ? String(initialName) : "")
   const [bio, setBio] = useState(initialBio ? String(initialBio) : "")
   const [tradingStyle, setTradingStyle] = useState(
     initialTradingStyle ? String(initialTradingStyle) : ""
@@ -78,6 +81,24 @@ export default function ProfileOnboarding({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const startedTradingInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (initialName != null && String(initialName).trim() !== "") return
+    let cancelled = false
+    void (async () => {
+      const { data } = await supabase
+        .from("profiles")
+        .select("name")
+        .eq("id", userId)
+        .maybeSingle()
+      if (!cancelled && data?.name != null) {
+        setName(String(data.name).trim())
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [userId, initialName])
 
   function openStartedTradingPicker() {
     const el = startedTradingInputRef.current
@@ -118,6 +139,7 @@ export default function ProfileOnboarding({
       .from("profiles")
       .update({
         username: u,
+        name: name.trim() || null,
         bio: bio.trim() || null,
         trading_style: tradingStyle.trim() || null,
         primary_market: primaryMarket.trim() || null,
@@ -135,6 +157,7 @@ export default function ProfileOnboarding({
     clearOnboardingFlag()
     onComplete({
       username: u,
+      name: name.trim() || null,
       bio: bio.trim() || null,
       trading_style: tradingStyle.trim() || null,
       primary_market: primaryMarket.trim() || null,
@@ -216,6 +239,18 @@ export default function ProfileOnboarding({
         />
 
         <label className="mb-1 block text-xs font-medium text-gray-300">
+          Full Name
+        </label>
+        <input
+          type="text"
+          autoComplete="name"
+          placeholder="Full name"
+          className={`${inputClass} mb-4`}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+
+        <label className="mb-1 block text-xs font-medium text-gray-300">
           Bio
         </label>
         <textarea
@@ -247,16 +282,14 @@ export default function ProfileOnboarding({
           value={primaryMarket}
           onChange={(e) => setPrimaryMarket(e.target.value)}
         />
-        </div>
 
-        <div className="shrink-0 pt-1">
         <label className="mb-1 block text-xs font-medium text-gray-300">
           Started Trading
         </label>
         <p className="mb-2 text-xs text-gray-500">
           Select date you began trading
         </p>
-        <div className="mb-6 w-full">
+        <div className="mb-2 w-full">
           <input
             ref={startedTradingInputRef}
             type="date"
@@ -270,7 +303,9 @@ export default function ProfileOnboarding({
             style={{ colorScheme: "dark" }}
           />
         </div>
+        </div>
 
+        <div className="shrink-0 pt-1">
         {error ? (
           <p className="mb-4 text-center text-sm text-red-400">{error}</p>
         ) : null}
