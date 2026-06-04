@@ -8,7 +8,11 @@ export const runtime = "nodejs"
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string)
 const STRIPE_PRICE_ID =
   process.env.STRIPE_PRICE_ID || "price_1TOWLoFtHxLxKCWEtD6AhvDl"
-const TRIAL_DAYS = 14
+let TRIAL_DAYS = Number(process.env.STRIPE_TRIAL_DAYS ?? 14)
+if (Number.isNaN(TRIAL_DAYS) || TRIAL_DAYS < 0) {
+  TRIAL_DAYS = 14
+}
+console.log("[Stripe] Trial days:", TRIAL_DAYS)
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
