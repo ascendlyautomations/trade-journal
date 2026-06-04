@@ -25,7 +25,7 @@ import {
 import { createUserRoom } from "@/lib/createUserRoom"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 
-type TabId = "profile" | "affiliate" | "account" | "subscription"
+type TabId = "profile" | "affiliate" | "account" | "subscription" | "rules"
 
 function sliceDateInput(raw: unknown): string {
   if (raw == null || raw === "") return ""
@@ -63,7 +63,7 @@ const TABS: {
   {
     id: "account",
     label: "Account",
-    description: "Login, security, and privacy",
+    description: "Login, security, and data",
   },
   {
     id: "subscription",
@@ -74,6 +74,11 @@ const TABS: {
     id: "profile",
     label: "Profile",
     description: "Public profile and trading style",
+  },
+  {
+    id: "rules",
+    label: "Trading Rules",
+    description: "Dashboard risk and drawdown limits",
   },
   {
     id: "affiliate",
@@ -139,7 +144,8 @@ export default function SettingsPage() {
       requested === "profile" ||
       requested === "affiliate" ||
       requested === "account" ||
-      requested === "subscription"
+      requested === "subscription" ||
+      requested === "rules"
     ) {
       setActiveTab(requested)
     }
@@ -149,7 +155,7 @@ export default function SettingsPage() {
     if (loading) return
     if (typeof window === "undefined") return
     if (window.location.hash !== "#dashboard-risk") return
-    setActiveTab("account")
+    setActiveTab("rules")
     const id = window.requestAnimationFrame(() => {
       document.getElementById("dashboard-risk")?.scrollIntoView({
         behavior: "smooth",
@@ -741,52 +747,130 @@ export default function SettingsPage() {
 
             {activeTab === "profile" && (
               <div className="space-y-6 rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm">
-                <div className="flex flex-wrap items-center gap-4">
-                  <div className="h-16 w-16 shrink-0 overflow-hidden rounded-full bg-gray-700">
-                    {avatarPreview ? (
-                      <img
-                        src={avatarPreview}
-                        alt=""
-                        className="h-full w-full object-cover"
-                        onError={(e) => {
-                          e.currentTarget.src = "/default-avatar.png"
-                        }}
-                      />
-                    ) : null}
-                  </div>
+                <div>
+                  <label
+                    htmlFor="settings-display-name"
+                    className="mb-1 block text-sm text-gray-400"
+                  >
+                    Display name
+                  </label>
                   <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0]
-                      if (!file) return
-                      setAvatarFile(file)
-                      setAvatarPreview(URL.createObjectURL(file))
-                    }}
-                    className="max-w-full text-sm text-gray-300 file:mr-2 file:rounded-lg file:border-0 file:bg-white/10 file:px-3 file:py-2 file:text-sm file:text-gray-100 hover:file:bg-white/20"
+                    id="settings-display-name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="How your name appears on TradeTraxs"
+                    className="w-full rounded-xl border border-white/10 bg-black/30 p-3 placeholder:text-gray-500"
                   />
                 </div>
 
-                <input
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="Username"
-                  className="w-full rounded-xl border border-white/10 bg-black/30 p-3 placeholder:text-gray-500"
-                />
+                <div>
+                  <label
+                    htmlFor="settings-username"
+                    className="mb-1 block text-sm text-gray-400"
+                  >
+                    Username
+                  </label>
+                  <input
+                    id="settings-username"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="username"
+                    autoComplete="username"
+                    className="w-full rounded-xl border border-white/10 bg-black/30 p-3 placeholder:text-gray-500"
+                  />
+                </div>
 
-                <textarea
-                  value={bio}
-                  onChange={(e) => setBio(e.target.value)}
-                  placeholder="Bio"
-                  rows={4}
-                  className="w-full rounded-xl border border-white/10 bg-black/30 p-3 placeholder:text-gray-500"
-                />
+                <div
+                  className="flex flex-col gap-3 rounded-xl border border-white/10 bg-black/20 p-4 sm:flex-row sm:items-center sm:justify-between"
+                  aria-labelledby="settings-private-profile-label"
+                >
+                  <div>
+                    <p
+                      id="settings-private-profile-label"
+                      className="font-medium text-white"
+                    >
+                      Private profile
+                    </p>
+                    <p className="text-xs text-gray-400">
+                      Only followers can view your full profile
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsPrivate(!isPrivate)}
+                    aria-pressed={isPrivate}
+                    className={`shrink-0 rounded-lg px-4 py-2 text-sm font-medium transition ${
+                      isPrivate
+                        ? "bg-emerald-500 text-white"
+                        : "bg-white/10 text-white"
+                    }`}
+                  >
+                    {isPrivate ? "On" : "Off"}
+                  </button>
+                </div>
 
                 <div>
-                  <label className="mb-1 block text-sm text-gray-400">
+                  <span
+                    id="settings-avatar-label"
+                    className="mb-2 block text-sm text-gray-400"
+                  >
+                    Profile picture
+                  </span>
+                  <div
+                    className="flex flex-wrap items-center gap-4"
+                    aria-labelledby="settings-avatar-label"
+                  >
+                    <div className="h-16 w-16 shrink-0 overflow-hidden rounded-full bg-gray-700">
+                      {avatarPreview ? (
+                        <img
+                          src={avatarPreview}
+                          alt=""
+                          className="h-full w-full object-cover"
+                          onError={(e) => {
+                            e.currentTarget.src = "/default-avatar.png"
+                          }}
+                        />
+                      ) : null}
+                    </div>
+                    <input
+                      id="settings-avatar"
+                      type="file"
+                      accept="image/*"
+                      aria-labelledby="settings-avatar-label"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        if (!file) return
+                        setAvatarFile(file)
+                        setAvatarPreview(URL.createObjectURL(file))
+                      }}
+                      className="max-w-full text-sm text-gray-300 file:mr-2 file:rounded-lg file:border-0 file:bg-white/10 file:px-3 file:py-2 file:text-sm file:text-gray-100 hover:file:bg-white/20"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label htmlFor="settings-bio" className="mb-1 block text-sm text-gray-400">
+                    Bio
+                  </label>
+                  <textarea
+                    id="settings-bio"
+                    value={bio}
+                    onChange={(e) => setBio(e.target.value)}
+                    placeholder="Tell others about your trading"
+                    rows={4}
+                    className="w-full rounded-xl border border-white/10 bg-black/30 p-3 placeholder:text-gray-500"
+                  />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="settings-trading-style"
+                    className="mb-1 block text-sm text-gray-400"
+                  >
                     Trading style
                   </label>
                   <input
+                    id="settings-trading-style"
                     value={tradingModel}
                     onChange={(e) => {
                       setTradingModel(e.target.value)
@@ -798,10 +882,14 @@ export default function SettingsPage() {
                 </div>
 
                 <div>
-                  <label className="mb-1 block text-sm text-gray-400">
-                    Primary Market
+                  <label
+                    htmlFor="settings-primary-market"
+                    className="mb-1 block text-sm text-gray-400"
+                  >
+                    Primary market
                   </label>
                   <input
+                    id="settings-primary-market"
                     value={primaryMarket}
                     onChange={(e) => setPrimaryMarket(e.target.value)}
                     placeholder="e.g. NQ, ES, Gold, BTC, EUR/USD"
@@ -810,10 +898,14 @@ export default function SettingsPage() {
                 </div>
 
                 <div>
-                  <label className="mb-1 block text-sm text-gray-400">
-                    Started Trading Date
+                  <label
+                    htmlFor="settings-started-trading"
+                    className="mb-1 block text-sm text-gray-400"
+                  >
+                    Started trading date
                   </label>
                   <input
+                    id="settings-started-trading"
                     type="date"
                     value={startedTrading}
                     onChange={(e) => setStartedTrading(e.target.value)}
@@ -821,14 +913,24 @@ export default function SettingsPage() {
                   />
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => void saveProfileTab()}
-                  disabled={savingProfile}
-                  className="w-full rounded-xl bg-gradient-to-r from-blue-500 to-emerald-500 py-3 font-semibold disabled:opacity-50"
-                >
-                  {savingProfile ? "Saving…" : "Save profile"}
-                </button>
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={() => void saveAccountPrivacyTab()}
+                    disabled={savingAccountPrivacy}
+                    className="w-full rounded-xl bg-white/10 py-3 font-semibold hover:bg-white/15 disabled:opacity-50 sm:flex-1"
+                  >
+                    {savingAccountPrivacy ? "Saving…" : "Save display & privacy"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void saveProfileTab()}
+                    disabled={savingProfile}
+                    className="w-full rounded-xl bg-gradient-to-r from-blue-500 to-emerald-500 py-3 font-semibold disabled:opacity-50 sm:flex-1"
+                  >
+                    {savingProfile ? "Saving…" : "Save profile"}
+                  </button>
+                </div>
               </div>
             )}
             {activeTab === "affiliate" && (
@@ -972,8 +1074,13 @@ export default function SettingsPage() {
                     Email tied to your TradeTraxs account
                   </p>
                   <div className="mt-4">
-                    <label className="text-xs text-gray-500">Email</label>
-                    <p className="mt-1 break-all rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-white">
+                    <label htmlFor="settings-email" className="text-xs text-gray-500">
+                      Email
+                    </label>
+                    <p
+                      id="settings-email"
+                      className="mt-1 break-all rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-white"
+                    >
                       {user?.email ?? "—"}
                     </p>
                   </div>
@@ -981,46 +1088,87 @@ export default function SettingsPage() {
 
                 <section className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm">
                   <h3 className="text-sm font-semibold uppercase tracking-wide text-blue-300">
-                    Display & privacy
+                    Change password
                   </h3>
                   <p className="mt-1 text-sm text-gray-400">
-                    How your name appears and who can view your profile
+                    Choose a strong password you have not used elsewhere
                   </p>
-                  <input
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="Display name"
-                    className="mt-4 w-full rounded-xl border border-white/10 bg-black/30 p-3 placeholder:text-gray-500"
-                  />
-                  <div className="mt-4 flex flex-col gap-3 rounded-xl border border-white/10 bg-black/20 p-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <p className="font-medium text-white">Private profile</p>
-                      <p className="text-xs text-gray-400">
-                        Only followers can view your full profile
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setIsPrivate(!isPrivate)}
-                      className={`shrink-0 rounded-lg px-4 py-2 text-sm font-medium transition ${
-                        isPrivate
-                          ? "bg-emerald-500 text-white"
-                          : "bg-white/10 text-white"
-                      }`}
+                  <div className="mt-4">
+                    <label
+                      htmlFor="settings-new-password"
+                      className="mb-1 block text-sm text-gray-400"
                     >
-                      {isPrivate ? "On" : "Off"}
-                    </button>
+                      New password
+                    </label>
+                    <input
+                      id="settings-new-password"
+                      type="password"
+                      autoComplete="new-password"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Enter new password"
+                      className="w-full rounded-xl border border-white/10 bg-black/30 p-3 placeholder:text-gray-500"
+                    />
+                  </div>
+                  <div className="mt-4">
+                    <label
+                      htmlFor="settings-confirm-password"
+                      className="mb-1 block text-sm text-gray-400"
+                    >
+                      Confirm password
+                    </label>
+                    <input
+                      id="settings-confirm-password"
+                      type="password"
+                      autoComplete="new-password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Confirm new password"
+                      className="w-full rounded-xl border border-white/10 bg-black/30 p-3 placeholder:text-gray-500"
+                    />
                   </div>
                   <button
                     type="button"
-                    onClick={() => void saveAccountPrivacyTab()}
-                    disabled={savingAccountPrivacy}
-                    className="mt-4 w-full rounded-xl bg-white/10 py-3 font-semibold hover:bg-white/15 disabled:opacity-50"
+                    onClick={() => void updatePassword()}
+                    disabled={savingPassword}
+                    className="mt-4 w-full rounded-xl bg-gradient-to-r from-blue-500 to-emerald-500 py-3 font-semibold disabled:opacity-50"
                   >
-                    {savingAccountPrivacy ? "Saving…" : "Save display & privacy"}
+                    {savingPassword ? "Updating…" : "Update password"}
                   </button>
                 </section>
 
+                <section className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm">
+                  <h3 className="text-sm font-semibold uppercase tracking-wide text-blue-300">
+                    Data & account
+                  </h3>
+                  <p className="mt-1 text-sm text-gray-400">
+                    Export your data or permanently delete your account
+                  </p>
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    <button
+                      type="button"
+                      onClick={() => void handleExportData()}
+                      className="rounded-lg bg-blue-500/10 px-4 py-2 text-blue-400 hover:bg-blue-500/20"
+                    >
+                      Export My Data (CSV)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setConfirmText("")
+                        setShowDeleteConfirm(true)
+                      }}
+                      className="rounded-lg bg-red-500/10 px-5 py-2 text-red-400 hover:bg-red-500/20"
+                    >
+                      Delete Account
+                    </button>
+                  </div>
+                </section>
+              </div>
+            )}
+
+            {activeTab === "rules" && (
+              <div className="space-y-8">
                 <section
                   id="dashboard-risk"
                   className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm"
@@ -1079,60 +1227,6 @@ export default function SettingsPage() {
                       className="shrink-0 rounded-lg bg-white/10 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-white/15 disabled:opacity-50 sm:mb-0"
                     >
                       {savingDrawdownLimit ? "Saving…" : "Save limit"}
-                    </button>
-                  </div>
-                </section>
-
-                <section className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm">
-                  <h3 className="text-sm font-semibold uppercase tracking-wide text-blue-300">
-                    Change password
-                  </h3>
-                  <p className="mt-1 text-sm text-gray-400">
-                    Choose a strong password you have not used elsewhere
-                  </p>
-                  <input
-                    type="password"
-                    autoComplete="new-password"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="New password"
-                    className="mt-4 w-full rounded-xl border border-white/10 bg-black/30 p-3 placeholder:text-gray-500"
-                  />
-                  <input
-                    type="password"
-                    autoComplete="new-password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="Confirm password"
-                    className="mt-4 w-full rounded-xl border border-white/10 bg-black/30 p-3 placeholder:text-gray-500"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => void updatePassword()}
-                    disabled={savingPassword}
-                    className="mt-4 w-full rounded-xl bg-gradient-to-r from-blue-500 to-emerald-500 py-3 font-semibold disabled:opacity-50"
-                  >
-                    {savingPassword ? "Updating…" : "Update password"}
-                  </button>
-
-                  <div className="mt-6 flex gap-3">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setConfirmText("")
-                        setShowDeleteConfirm(true)
-                      }}
-                      className="rounded-lg bg-red-500/10 px-5 py-2 text-red-400 hover:bg-red-500/20"
-                    >
-                      Delete Account
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => void handleExportData()}
-                      className="rounded-lg bg-blue-500/10 px-4 py-2 text-blue-400 hover:bg-blue-500/20"
-                    >
-                      Export My Data (CSV)
                     </button>
                   </div>
                 </section>
