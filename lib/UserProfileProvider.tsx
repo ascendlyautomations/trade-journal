@@ -145,6 +145,38 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
     }
   }, [realtimeTopicSuffix])
 
+  useEffect(() => {
+    let cancelled = false
+
+    async function refetchProfileAfterCheckout() {
+      if (typeof window === "undefined") return
+      const params = new URLSearchParams(window.location.search)
+      if (params.get("checkout") !== "success") return
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+      const userId = session?.user?.id
+      if (!userId || cancelled) return
+
+      const { data: profileData } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", userId)
+        .single()
+
+      if (!cancelled && profileData) {
+        setProfile(profileData)
+      }
+    }
+
+    void refetchProfileAfterCheckout()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   const value = useMemo(
     () => ({ user, profile, loading, setProfile }),
     [user, profile, loading]

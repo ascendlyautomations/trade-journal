@@ -605,6 +605,13 @@ export default function Dashboard() {
   }, [refreshDashboardData])
 
   useEffect(() => {
+    if (typeof window === "undefined") return
+    const params = new URLSearchParams(window.location.search)
+    if (params.get("checkout") !== "success") return
+    void refreshDashboardData()
+  }, [refreshDashboardData])
+
+  useEffect(() => {
     if (loading || !profile || !user) return
     if (profile.onboarding_completed === true) return
     if (profileOnboardingDone) return

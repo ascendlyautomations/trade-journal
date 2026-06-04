@@ -120,6 +120,14 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (typeof window === "undefined") return
+    const params = new URLSearchParams(window.location.search)
+    if (params.get("checkout") !== "success") return
+    if (!user?.id) return
+    void fetchProfile(user.id)
+  }, [user?.id])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
     const requested = window.location.hash.replace("#", "").toLowerCase().trim()
     if (
       requested === "profile" ||
@@ -1131,7 +1139,7 @@ export default function SettingsPage() {
                   <div className="rounded-xl border border-white/10 bg-black/20 p-4">
                     <p className="text-xs text-gray-500">Plan name</p>
                     <p className="mt-1 font-semibold text-white">
-                      {profile?.is_pro === true
+                      {isProActive(profile)
                         ? "TraxPro ($16.99/month)"
                         : "Free Plan"}
                     </p>
@@ -1140,6 +1148,9 @@ export default function SettingsPage() {
                   <div className="rounded-xl border border-white/10 bg-black/20 p-4">
                     <p className="text-xs text-gray-500">Status</p>
                     <p className="text-sm text-gray-400">
+                      Billing: {isProActive(profile) ? "Pro" : "Free"}
+                    </p>
+                    <p className="mt-1 text-sm text-gray-400">
                       Membership: {getMembershipStatus(profile)}
                     </p>
                   </div>
@@ -1160,19 +1171,19 @@ export default function SettingsPage() {
                     <li className="flex items-center justify-between gap-4 text-sm text-gray-200">
                       <span>Full Dashboard</span>
                       <span aria-hidden>
-                        {profile?.is_pro === true ? "✅" : "❌"}
+                        {isProActive(profile) ? "✅" : "❌"}
                       </span>
                     </li>
                     <li className="flex items-center justify-between gap-4 text-sm text-gray-200">
                       <span>AI Analyst</span>
                       <span aria-hidden>
-                        {profile?.is_pro === true ? "✅" : "❌"}
+                        {isProActive(profile) ? "✅" : "❌"}
                       </span>
                     </li>
                     <li className="flex items-center justify-between gap-4 text-sm text-gray-200">
                       <span>Multiple Accounts</span>
                       <span aria-hidden>
-                        {profile?.is_pro === true ? "✅" : "❌"}
+                        {isProActive(profile) ? "✅" : "❌"}
                       </span>
                     </li>
                   </ul>

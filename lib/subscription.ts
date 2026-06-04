@@ -1,5 +1,5 @@
 /**
- * Pro access: `profiles.is_pro` (manual/admin) or active Stripe subscription.
+ * Pro access: `profiles.is_pro` (manual/admin) or active/trialing Stripe subscription.
  */
 export function isProActive(
   profile: {
@@ -8,5 +8,6 @@ export function isProActive(
   } | null | undefined
 ): boolean {
   if (profile?.is_pro === true) return true
-  return profile?.subscription_status === "active"
+  const status = String(profile?.subscription_status ?? "").toLowerCase().trim()
+  return status === "active" || status === "trialing"
 }
