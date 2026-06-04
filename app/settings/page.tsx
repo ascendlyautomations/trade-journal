@@ -6,7 +6,13 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "../../lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
-import { getMembershipStatus } from "@/lib/getMembershipStatus"
+import {
+  formatSubscriptionDateTime,
+  getMembershipStatus,
+  shouldShowCancellationInfo,
+  shouldShowRenewalInfo,
+  shouldShowTrialInfo,
+} from "@/lib/getMembershipStatus"
 import { isProActive } from "../../lib/subscription"
 import { isProfilesUsernameConflict } from "@/lib/profileUsername"
 import type { User } from "@supabase/supabase-js"
@@ -30,23 +36,6 @@ function sliceDateInput(raw: unknown): string {
   const d = new Date(s)
   if (Number.isNaN(d.getTime())) return ""
   return d.toISOString().slice(0, 10)
-}
-
-function subscriptionStatusClass(statusRaw: unknown): string {
-  const s = String(statusRaw ?? "")
-    .toLowerCase()
-    .trim()
-  if (s === "active") return "text-emerald-400"
-  if (s === "trialing") return "text-amber-400"
-  if (s === "canceled" || s === "cancelled") return "text-red-400"
-  if (s === "inactive") return "text-gray-400"
-  return "text-gray-300"
-}
-
-function formatStripeCustomerId(id: unknown): string {
-  if (id == null || id === "") return "—"
-  const s = String(id)
-  return s.length > 10 ? `${s.slice(0, 10)}...` : s
 }
 
 const TABS: {
@@ -1140,26 +1129,48 @@ export default function SettingsPage() {
                     <p className="text-xs text-gray-500">Plan name</p>
                     <p className="mt-1 font-semibold text-white">
                       {isProActive(profile)
-                        ? "TraxPro ($16.99/month)"
+                        ? "Traxs Pro ($23.99 / 4 weeks)"
                         : "Free Plan"}
                     </p>
                   </div>
 
-                  <div className="rounded-xl border border-white/10 bg-black/20 p-4">
-                    <p className="text-xs text-gray-500">Status</p>
-                    <p className="text-sm text-gray-400">
-                      Billing: {isProActive(profile) ? "Pro" : "Free"}
-                    </p>
-                    <p className="mt-1 text-sm text-gray-400">
-                      Membership: {getMembershipStatus(profile)}
-                    </p>
-                  </div>
+                  <div className="rounded-xl border border-white/10 bg-black/20 p-4 space-y-3">
+                    <div>
+                      <p className="text-xs text-gray-500">Status</p>
+                      <p className="mt-1 text-sm text-gray-400">
+                        Billing: {isProActive(profile) ? "Pro" : "Free"}
+                      </p>
+                      <p className="mt-1 text-sm text-gray-400">
+                        Membership: {getMembershipStatus(profile)}
+                      </p>
+                    </div>
 
-                  <div className="rounded-xl border border-white/10 bg-black/20 p-4">
-                    <p className="text-xs text-gray-500">Customer ID</p>
-                    <p className="mt-1 font-mono text-sm text-gray-200">
-                      {formatStripeCustomerId(profile?.stripe_customer_id)}
-                    </p>
+                    {shouldShowTrialInfo(profile) ? (
+                      <div className="border-t border-white/10 pt-3">
+                        <p className="text-xs text-gray-500">Trial Ends</p>
+                        <p className="mt-1 text-sm font-medium text-amber-200">
+                          {formatSubscriptionDateTime(profile?.trial_end)}
+                        </p>
+                      </div>
+                    ) : null}
+
+                    {shouldShowRenewalInfo(profile) ? (
+                      <div className="border-t border-white/10 pt-3">
+                        <p className="text-xs text-gray-500">Renews On</p>
+                        <p className="mt-1 text-sm font-medium text-emerald-200">
+                          {formatSubscriptionDateTime(profile?.current_period_end)}
+                        </p>
+                      </div>
+                    ) : null}
+
+                    {shouldShowCancellationInfo(profile) ? (
+                      <div className="border-t border-white/10 pt-3">
+                        <p className="text-xs text-gray-500">Cancels On</p>
+                        <p className="mt-1 text-sm font-medium text-red-200">
+                          {formatSubscriptionDateTime(profile?.current_period_end)}
+                        </p>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
 
