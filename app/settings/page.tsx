@@ -9,8 +9,6 @@ import { compressImage } from "@/lib/compressImage"
 import {
   formatSubscriptionDateTime,
   getMembershipStatus,
-  shouldShowCancellationInfo,
-  shouldShowRenewalInfo,
   shouldShowTrialInfo,
 } from "@/lib/getMembershipStatus"
 import { isProActive } from "../../lib/subscription"
@@ -36,6 +34,25 @@ function sliceDateInput(raw: unknown): string {
   const d = new Date(s)
   if (Number.isNaN(d.getTime())) return ""
   return d.toISOString().slice(0, 10)
+}
+
+function profileDateExists(raw: unknown): boolean {
+  if (raw == null || raw === "") return false
+  return !Number.isNaN(new Date(String(raw)).getTime())
+}
+
+function shouldShowRenewsOn(profile: Record<string, unknown> | null): boolean {
+  if (!profile) return false
+  const status = String(profile.subscription_status ?? "").toLowerCase().trim()
+  if (status !== "active") return false
+  if (profile.cancel_at_period_end === true) return false
+  return profileDateExists(profile.current_period_end)
+}
+
+function shouldShowCancelsOn(profile: Record<string, unknown> | null): boolean {
+  if (!profile) return false
+  if (profile.cancel_at_period_end !== true) return false
+  return profileDateExists(profile.current_period_end)
 }
 
 const TABS: {
@@ -1154,7 +1171,7 @@ export default function SettingsPage() {
                       </div>
                     ) : null}
 
-                    {shouldShowRenewalInfo(profile) ? (
+                    {shouldShowRenewsOn(profile) ? (
                       <div className="border-t border-white/10 pt-3">
                         <p className="text-xs text-gray-500">Renews On</p>
                         <p className="mt-1 text-sm font-medium text-emerald-200">
@@ -1163,7 +1180,7 @@ export default function SettingsPage() {
                       </div>
                     ) : null}
 
-                    {shouldShowCancellationInfo(profile) ? (
+                    {shouldShowCancelsOn(profile) ? (
                       <div className="border-t border-white/10 pt-3">
                         <p className="text-xs text-gray-500">Cancels On</p>
                         <p className="mt-1 text-sm font-medium text-red-200">
