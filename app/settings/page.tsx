@@ -33,6 +33,7 @@ import {
 } from "@/lib/affiliateStripeConnect"
 import { createUserRoom } from "@/lib/createUserRoom"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
+import TradingAccountsSettingsSection from "@/app/components/TradingAccountsSettingsSection"
 
 type TabId = "profile" | "affiliate" | "account" | "subscription" | "rules"
 
@@ -1277,6 +1278,11 @@ export default function SettingsPage() {
                     </button>
                   </div>
                 </section>
+
+                <TradingAccountsSettingsSection
+                  userId={user?.id}
+                  isPro={isProActive(profile)}
+                />
               </div>
             )}
 
