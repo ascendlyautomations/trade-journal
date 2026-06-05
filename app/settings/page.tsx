@@ -12,7 +12,16 @@ import {
   shouldShowTrialInfo,
 } from "@/lib/getMembershipStatus"
 import { isProActive } from "../../lib/subscription"
-import { isProfilesUsernameConflict } from "@/lib/profileUsername"
+import {
+  canChangeProfileUsername,
+  isProfilesUsernameConflict,
+  MAX_PROFILE_USERNAME_CHANGES,
+  normalizeProfileUsername,
+  profileUsernamesEqual,
+  sanitizeUsernameInputForTyping,
+  usernameChangesRemaining,
+  validateProfileUsernameNotEmpty,
+} from "@/lib/profileUsername"
 import type { User } from "@supabase/supabase-js"
 import AffiliatePayoutSetupCard from "@/app/components/AffiliatePayoutSetupCard"
 import { supabaseBearerHeaders } from "@/lib/supabaseBearerFetch"
@@ -95,7 +104,6 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true)
   const [savingProfile, setSavingProfile] = useState(false)
   const [savingDrawdownLimit, setSavingDrawdownLimit] = useState(false)
-  const [savingAccountPrivacy, setSavingAccountPrivacy] = useState(false)
   const [savingPassword, setSavingPassword] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -296,38 +304,98 @@ export default function SettingsPage() {
       if (uploaded) avatarUrl = uploaded
     }
 
-    const cleanUsername = username.toLowerCase().trim()
+    const cleanUsername = normalizeProfileUsername(username)
+    const emptyUsernameError = validateProfileUsernameNotEmpty(cleanUsername)
+    if (emptyUsernameError) {
+      setSavingProfile(false)
+      showPopup({ type: "error", message: emptyUsernameError })
+      return
+    }
+
+    const currentUsername = normalizeProfileUsername(
+      String(profile?.username ?? "")
+    )
+    const usernameChanged = !profileUsernamesEqual(
+      currentUsername,
+      cleanUsername
+    )
+    const changeCount = Number(profile?.username_change_count ?? 0)
+
+    if (usernameChanged && !canChangeProfileUsername(changeCount)) {
+      setSavingProfile(false)
+      showPopup({
+        type: "error",
+        message: "Maximum username changes reached.",
+      })
+      return
+    }
+
+    if (usernameChanged) {
+      const { data: existingUser, error: usernameLookupErr } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("username", cleanUsername)
+        .neq("id", user.id)
+        .maybeSingle()
+
+      if (usernameLookupErr) {
+        setSavingProfile(false)
+        showPopup({ type: "error", message: "Something went wrong" })
+        return
+      }
+
+      if (existingUser) {
+        setSavingProfile(false)
+        showPopup({ type: "error", message: "Username already in use" })
+        return
+      }
+    }
+
+    const updatePayload: Record<string, unknown> = {
+      name: name.trim() || null,
+      is_private: isPrivate,
+      bio,
+      avatar_url: avatarUrl,
+      trading_style: tradingStyle,
+      primary_market: primaryMarket.trim() || null,
+      trading_model: tradingModel || tradingStyle || null,
+      started_trading: startedTrading.trim() || null,
+    }
+
+    if (usernameChanged) {
+      updatePayload.username = cleanUsername
+      updatePayload.username_change_count = changeCount + 1
+    } else if (cleanUsername !== String(profile?.username ?? "")) {
+      updatePayload.username = cleanUsername
+    }
 
     const { error } = await supabase
       .from("profiles")
-      .update({
-        username: cleanUsername,
-        bio,
-        avatar_url: avatarUrl,
-        trading_style: tradingStyle,
-        primary_market: primaryMarket.trim() || null,
-        trading_model: tradingModel || tradingStyle || null,
-        started_trading: startedTrading.trim() || null,
-      })
+      .update(updatePayload)
       .eq("id", user.id)
 
     setSavingProfile(false)
 
     if (error) {
       if (error.code === "23505" && isProfilesUsernameConflict(error)) {
-        showPopup({ type: "error", message: "Something went wrong" })
+        showPopup({ type: "error", message: "Username already in use" })
       } else {
         showPopup({ type: "error", message: "Something went wrong" })
       }
       return
     }
 
+    const nextChangeCount = usernameChanged ? changeCount + 1 : changeCount
+
     setUsername(cleanUsername)
     setProfile((p) =>
       p
         ? {
             ...p,
+            name: name.trim() || null,
+            is_private: isPrivate,
             username: cleanUsername,
+            username_change_count: nextChangeCount,
             bio,
             avatar_url: avatarUrl,
             trading_style: tradingStyle,
@@ -365,36 +433,6 @@ export default function SettingsPage() {
 
     setProfile((p) => (p ? { ...p, max_drawdown_limit: n } : p))
     showPopup({ type: "success", message: "Limit saved successfully" })
-  }
-
-  async function saveAccountPrivacyTab() {
-    if (!user) return
-
-    setSavingAccountPrivacy(true)
-    const { error } = await supabase
-      .from("profiles")
-      .update({
-        name: name.trim() || null,
-        is_private: isPrivate,
-      })
-      .eq("id", user.id)
-    setSavingAccountPrivacy(false)
-
-    if (error) {
-      showPopup({ type: "error", message: "Something went wrong" })
-      return
-    }
-
-    setProfile((p) =>
-      p
-        ? {
-            ...p,
-            name: name.trim() || null,
-            is_private: isPrivate,
-          }
-        : p
-    )
-    showPopup({ type: "success", message: "Profile updated successfully" })
   }
 
   async function updatePassword() {
@@ -642,6 +680,10 @@ export default function SettingsPage() {
 
   const referralCount = Number(profile?.referral_count ?? 0)
   const COMMISSION_RATE = 0.18
+  const usernameChangeCount = Number(profile?.username_change_count ?? 0)
+  const remainingUsernameChanges = usernameChangesRemaining(usernameChangeCount)
+  const atUsernameChangeLimit =
+    usernameChangeCount >= MAX_PROFILE_USERNAME_CHANGES
   const PLAN_PRICE = 15.99
   const earnings = referralCount * PLAN_PRICE * COMMISSION_RATE
 
@@ -748,68 +790,6 @@ export default function SettingsPage() {
             {activeTab === "profile" && (
               <div className="space-y-6 rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm">
                 <div>
-                  <label
-                    htmlFor="settings-display-name"
-                    className="mb-1 block text-sm text-gray-400"
-                  >
-                    Display name
-                  </label>
-                  <input
-                    id="settings-display-name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="How your name appears on TradeTraxs"
-                    className="w-full rounded-xl border border-white/10 bg-black/30 p-3 placeholder:text-gray-500"
-                  />
-                </div>
-
-                <div>
-                  <label
-                    htmlFor="settings-username"
-                    className="mb-1 block text-sm text-gray-400"
-                  >
-                    Username
-                  </label>
-                  <input
-                    id="settings-username"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    placeholder="username"
-                    autoComplete="username"
-                    className="w-full rounded-xl border border-white/10 bg-black/30 p-3 placeholder:text-gray-500"
-                  />
-                </div>
-
-                <div
-                  className="flex flex-col gap-3 rounded-xl border border-white/10 bg-black/20 p-4 sm:flex-row sm:items-center sm:justify-between"
-                  aria-labelledby="settings-private-profile-label"
-                >
-                  <div>
-                    <p
-                      id="settings-private-profile-label"
-                      className="font-medium text-white"
-                    >
-                      Private profile
-                    </p>
-                    <p className="text-xs text-gray-400">
-                      Only followers can view your full profile
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setIsPrivate(!isPrivate)}
-                    aria-pressed={isPrivate}
-                    className={`shrink-0 rounded-lg px-4 py-2 text-sm font-medium transition ${
-                      isPrivate
-                        ? "bg-emerald-500 text-white"
-                        : "bg-white/10 text-white"
-                    }`}
-                  >
-                    {isPrivate ? "On" : "Off"}
-                  </button>
-                </div>
-
-                <div>
                   <span
                     id="settings-avatar-label"
                     className="mb-2 block text-sm text-gray-400"
@@ -846,6 +826,83 @@ export default function SettingsPage() {
                       className="max-w-full text-sm text-gray-300 file:mr-2 file:rounded-lg file:border-0 file:bg-white/10 file:px-3 file:py-2 file:text-sm file:text-gray-100 hover:file:bg-white/20"
                     />
                   </div>
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="settings-display-name"
+                    className="mb-1 block text-sm text-gray-400"
+                  >
+                    Display name
+                  </label>
+                  <input
+                    id="settings-display-name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="How your name appears on TradeTraxs"
+                    className="w-full rounded-xl border border-white/10 bg-black/30 p-3 placeholder:text-gray-500"
+                  />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="settings-username"
+                    className="mb-1 block text-sm text-gray-400"
+                  >
+                    Username
+                  </label>
+                  <input
+                    id="settings-username"
+                    value={username}
+                    onChange={(e) =>
+                      setUsername(sanitizeUsernameInputForTyping(e.target.value))
+                    }
+                    placeholder="username"
+                    autoComplete="username"
+                    disabled={atUsernameChangeLimit}
+                    className="w-full rounded-xl border border-white/10 bg-black/30 p-3 placeholder:text-gray-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  />
+                  <p className="mt-2 text-xs text-gray-400">
+                    You may change your username up to 2 times.
+                  </p>
+                  {atUsernameChangeLimit ? (
+                    <p className="mt-1 text-xs text-amber-400/90">
+                      Maximum username changes reached.
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-xs text-gray-400">
+                      Remaining changes: {remainingUsernameChanges}
+                    </p>
+                  )}
+                </div>
+
+                <div
+                  className="flex flex-col gap-3 rounded-xl border border-white/10 bg-black/20 p-4 sm:flex-row sm:items-center sm:justify-between"
+                  aria-labelledby="settings-private-profile-label"
+                >
+                  <div>
+                    <p
+                      id="settings-private-profile-label"
+                      className="font-medium text-white"
+                    >
+                      Private profile
+                    </p>
+                    <p className="text-xs text-gray-400">
+                      Only followers can view your full profile
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsPrivate(!isPrivate)}
+                    aria-pressed={isPrivate}
+                    className={`shrink-0 rounded-lg px-4 py-2 text-sm font-medium transition ${
+                      isPrivate
+                        ? "bg-emerald-500 text-white"
+                        : "bg-white/10 text-white"
+                    }`}
+                  >
+                    {isPrivate ? "On" : "Off"}
+                  </button>
                 </div>
 
                 <div>
@@ -913,24 +970,14 @@ export default function SettingsPage() {
                   />
                 </div>
 
-                <div className="flex flex-col gap-3 sm:flex-row">
-                  <button
-                    type="button"
-                    onClick={() => void saveAccountPrivacyTab()}
-                    disabled={savingAccountPrivacy}
-                    className="w-full rounded-xl bg-white/10 py-3 font-semibold hover:bg-white/15 disabled:opacity-50 sm:flex-1"
-                  >
-                    {savingAccountPrivacy ? "Saving…" : "Save display & privacy"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void saveProfileTab()}
-                    disabled={savingProfile}
-                    className="w-full rounded-xl bg-gradient-to-r from-blue-500 to-emerald-500 py-3 font-semibold disabled:opacity-50 sm:flex-1"
-                  >
-                    {savingProfile ? "Saving…" : "Save profile"}
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => void saveProfileTab()}
+                  disabled={savingProfile}
+                  className="w-full rounded-xl bg-gradient-to-r from-blue-500 to-emerald-500 py-3 font-semibold disabled:opacity-50"
+                >
+                  {savingProfile ? "Saving…" : "Save Profile"}
+                </button>
               </div>
             )}
             {activeTab === "affiliate" && (

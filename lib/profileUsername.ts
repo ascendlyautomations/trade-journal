@@ -1,6 +1,25 @@
 export const USERNAME_FORMAT_HINT =
   "Only lowercase letters, numbers, and underscores allowed"
 
+/** Maximum username edits allowed from Settings after account creation. */
+export const MAX_PROFILE_USERNAME_CHANGES = 2
+
+export function usernameChangesRemaining(changeCount: number): number {
+  const n = Number.isFinite(changeCount) ? changeCount : 0
+  return Math.max(0, MAX_PROFILE_USERNAME_CHANGES - n)
+}
+
+export function canChangeProfileUsername(changeCount: number): boolean {
+  return usernameChangesRemaining(changeCount) > 0
+}
+
+export function profileUsernamesEqual(
+  a: string | null | undefined,
+  b: string | null | undefined
+): boolean {
+  return normalizeProfileUsername(a ?? "") === normalizeProfileUsername(b ?? "")
+}
+
 const INVALID_USERNAME_CHARS = /[^a-z0-9_]/g
 
 /** While typing: lowercase and strip invalid characters (no trim). */
