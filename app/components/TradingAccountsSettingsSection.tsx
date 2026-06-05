@@ -14,10 +14,21 @@ import {
   insertTradingAccount,
   loadTradingAccounts,
   setTradingAccountActive,
-  sortTradingAccountsForManagement,
   tradingAccountDisplayTitle,
+  updateTradingAccountNote,
   type TradingAccountListItem,
 } from "@/lib/tradingAccounts"
+
+const ACCOUNTS_PAGE_SIZE = 5
+
+function sortAccountsForDisplay(
+  accounts: TradingAccountListItem[]
+): TradingAccountListItem[] {
+  return [...accounts].sort((a, b) => {
+    if (a.is_active !== b.is_active) return a.is_active ? -1 : 1
+    return a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
+  })
+}
 
 type CreateAccountSavePayload = Parameters<CreateAccountModalProps["onSave"]>[0]
 
@@ -36,13 +47,34 @@ export default function TradingAccountsSettingsSection({
   const [togglingId, setTogglingId] = useState<string | null>(null)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [creating, setCreating] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [page, setPage] = useState(0)
+  const [editingAccount, setEditingAccount] =
+    useState<TradingAccountListItem | null>(null)
+  const [savingNoteId, setSavingNoteId] = useState<string | null>(null)
 
   const canCreateMore = isPro || accounts.length < 1
 
-  const sortedAccounts = useMemo(
-    () => sortTradingAccountsForManagement(accounts),
-    [accounts]
+  const filteredAccounts = useMemo(() => {
+    const sorted = sortAccountsForDisplay(accounts)
+    const q = searchQuery.trim().toLowerCase()
+    if (!q) return sorted
+    return sorted.filter((a) => a.name.toLowerCase().includes(q))
+  }, [accounts, searchQuery])
+
+  const pageCount = Math.max(1, Math.ceil(filteredAccounts.length / ACCOUNTS_PAGE_SIZE))
+  const safePage = Math.min(page, pageCount - 1)
+  const pageStart = safePage * ACCOUNTS_PAGE_SIZE
+  const paginatedAccounts = filteredAccounts.slice(
+    pageStart,
+    pageStart + ACCOUNTS_PAGE_SIZE
   )
+  const rangeStart = filteredAccounts.length === 0 ? 0 : pageStart + 1
+  const rangeEnd = Math.min(pageStart + ACCOUNTS_PAGE_SIZE, filteredAccounts.length)
+
+  useEffect(() => {
+    setPage(0)
+  }, [searchQuery])
 
   const refreshAccounts = useCallback(async () => {
     if (!userId) return
@@ -125,6 +157,34 @@ export default function TradingAccountsSettingsSection({
     showPopup({ type: "success", message: "Account created" })
   }
 
+  function openNoteEditor(account: TradingAccountListItem) {
+    setEditingAccount({ ...account, note: account.note ?? "" })
+  }
+
+  async function saveNote(account: TradingAccountListItem) {
+    const noteVal = account.note ?? ""
+    setSavingNoteId(account.id)
+    const { error } = await updateTradingAccountNote(
+      supabase,
+      account.id,
+      noteVal
+    )
+    setSavingNoteId(null)
+
+    if (error) {
+      console.error(error)
+      showPopup({ type: "error", message: "Something went wrong" })
+      return
+    }
+
+    setAccounts((prev) =>
+      prev.map((a) =>
+        a.id === account.id ? { ...a, note: noteVal } : a
+      )
+    )
+    setEditingAccount(null)
+  }
+
   return (
     <>
       <section className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm">
@@ -141,62 +201,171 @@ export default function TradingAccountsSettingsSection({
         ) : accounts.length === 0 ? (
           <p className="mt-4 text-sm text-gray-500">No accounts yet.</p>
         ) : (
-          <ul className="mt-4 space-y-3">
-            {sortedAccounts.map((account) => {
-              const modeLabel = formatTradingAccountMode(account.mode)
-              const isActive = account.is_active
-              const busy = togglingId === account.id
+          <>
+            <label className="mt-4 block">
+              <span className="sr-only">Search accounts</span>
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search accounts..."
+                className="w-full rounded-xl border border-white/10 bg-black/30 p-3 text-sm text-white placeholder:text-gray-500"
+              />
+            </label>
 
-              return (
-                <li
-                  key={account.id}
-                  className="rounded-xl border border-white/10 bg-black/20 p-4"
-                >
-                  <p className="font-medium text-white">
-                    {tradingAccountDisplayTitle(account)}
-                  </p>
-                  <dl className="mt-2 space-y-1 text-sm text-gray-400">
-                    <div className="flex gap-2">
-                      <dt className="shrink-0 text-gray-500">Category:</dt>
-                      <dd>{account.category || "Personal"}</dd>
-                    </div>
-                    {modeLabel ? (
-                      <div className="flex gap-2">
-                        <dt className="shrink-0 text-gray-500">Mode:</dt>
-                        <dd>{modeLabel}</dd>
-                      </div>
-                    ) : null}
-                    <div className="flex gap-2">
-                      <dt className="shrink-0 text-gray-500">Status:</dt>
-                      <dd
-                        className={
-                          isActive ? "text-emerald-300" : "text-red-300/90"
-                        }
+            {filteredAccounts.length === 0 ? (
+              <p className="mt-4 text-sm text-gray-500">
+                No accounts match your search.
+              </p>
+            ) : (
+              <>
+                <ul className="mt-4 space-y-3">
+                  {paginatedAccounts.map((account) => {
+                    const modeLabel = formatTradingAccountMode(account.mode)
+                    const isActive = account.is_active
+                    const busy = togglingId === account.id
+                    const isEditingNote =
+                      editingAccount?.id === account.id
+                    const noteText = account.note?.trim() ?? ""
+                    const savingNote = savingNoteId === account.id
+
+                    return (
+                      <li
+                        key={account.id}
+                        className="rounded-xl border border-white/10 bg-black/20 p-4"
                       >
-                        {isActive ? "Active" : "Inactive"}
-                      </dd>
-                    </div>
-                  </dl>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void handleToggleActive(account)}
-                    className={`mt-3 rounded-lg px-3 py-1.5 text-xs font-medium transition disabled:opacity-50 ${
-                      isActive
-                        ? "bg-red-500/15 text-red-200 hover:bg-red-500/25"
-                        : "bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25"
-                    }`}
-                  >
-                    {busy
-                      ? "Updating…"
-                      : isActive
-                        ? "Deactivate Account"
-                        : "Activate Account"}
-                  </button>
-                </li>
-              )
-            })}
-          </ul>
+                        <p className="font-medium text-white">
+                          {tradingAccountDisplayTitle(account)}
+                        </p>
+                        <dl className="mt-2 space-y-1 text-sm text-gray-400">
+                          <div className="flex gap-2">
+                            <dt className="shrink-0 text-gray-500">Category:</dt>
+                            <dd>{account.category || "Personal"}</dd>
+                          </div>
+                          {modeLabel ? (
+                            <div className="flex gap-2">
+                              <dt className="shrink-0 text-gray-500">Mode:</dt>
+                              <dd>{modeLabel}</dd>
+                            </div>
+                          ) : null}
+                          <div className="flex gap-2">
+                            <dt className="shrink-0 text-gray-500">Status:</dt>
+                            <dd
+                              className={
+                                isActive ? "text-emerald-300" : "text-red-300/90"
+                              }
+                            >
+                              {isActive ? "Active" : "Inactive"}
+                            </dd>
+                          </div>
+                        </dl>
+
+                        {isEditingNote ? (
+                          <div className="mt-3 space-y-2 rounded-lg border border-white/10 bg-white/[0.04] p-3">
+                            <input
+                              value={editingAccount.note ?? ""}
+                              onChange={(e) =>
+                                setEditingAccount({
+                                  ...editingAccount,
+                                  note: e.target.value,
+                                })
+                              }
+                              placeholder="Note (e.g. blown, passed...)"
+                              className="w-full rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-sm text-white placeholder:text-gray-500"
+                            />
+                            <div className="flex flex-wrap items-center gap-3">
+                              <button
+                                type="button"
+                                disabled={savingNote}
+                                onClick={() => void saveNote(editingAccount)}
+                                className="text-sm font-medium text-blue-400 hover:text-blue-300 disabled:opacity-50"
+                              >
+                                {savingNote ? "Saving…" : "Save"}
+                              </button>
+                              <button
+                                type="button"
+                                disabled={savingNote}
+                                onClick={() => setEditingAccount(null)}
+                                className="text-sm text-gray-400 hover:text-gray-300 disabled:opacity-50"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            {noteText ? (
+                              <div className="mt-3 text-sm text-gray-400">
+                                <span className="text-gray-500">Note:</span>
+                                <p className="mt-1 whitespace-pre-wrap text-gray-300">
+                                  {noteText}
+                                </p>
+                              </div>
+                            ) : null}
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => openNoteEditor(account)}
+                                className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-blue-300 transition hover:bg-white/10"
+                              >
+                                {noteText ? "Edit Note" : "Add Note"}
+                              </button>
+                              <button
+                                type="button"
+                                disabled={busy}
+                                onClick={() => void handleToggleActive(account)}
+                                className={`rounded-lg px-3 py-1.5 text-xs font-medium transition disabled:opacity-50 ${
+                                  isActive
+                                    ? "bg-red-500/15 text-red-200 hover:bg-red-500/25"
+                                    : "bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25"
+                                }`}
+                              >
+                                {busy
+                                  ? "Updating…"
+                                  : isActive
+                                    ? "Deactivate Account"
+                                    : "Activate Account"}
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </li>
+                    )
+                  })}
+                </ul>
+
+                <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm text-gray-400">
+                    Showing {rangeStart}–{rangeEnd} of {filteredAccounts.length}
+                    <span className="text-gray-500">
+                      {" "}
+                      · Page {safePage + 1} of {pageCount}
+                    </span>
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPage((p) => Math.max(0, p - 1))}
+                      disabled={safePage === 0}
+                      className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Previous
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setPage((p) => Math.min(pageCount - 1, p + 1))
+                      }
+                      disabled={safePage >= pageCount - 1}
+                      className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </>
         )}
 
         <div className="mt-4">

@@ -57,7 +57,8 @@ export default function DashboardSessionChart({
                   cx="50%"
                   cy="50%"
                   outerRadius={88}
-                  label={({ name, value }) => `${name}: ${value}`}
+                  label={false}
+                  labelLine={false}
                 >
                   {sessionPieData.map((entry, index) => (
                     <Cell

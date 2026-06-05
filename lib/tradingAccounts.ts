@@ -185,3 +185,21 @@ export async function setTradingAccountActive(
 
   return { error: null }
 }
+
+/** Mirrors InputTradeForm `updateNote` — `accounts.note`, empty string → null. */
+export async function updateTradingAccountNote(
+  client: SupabaseClient,
+  accountId: string,
+  note: string
+): Promise<{ error: Error | null }> {
+  const { error } = await client
+    .from("accounts")
+    .update({ note: note || null })
+    .eq("id", accountId)
+
+  if (error) {
+    return { error: new Error(error.message) }
+  }
+
+  return { error: null }
+}

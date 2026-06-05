@@ -12,6 +12,8 @@ import type {
 } from "../../components/dashboard/dashboardGearTypes"
 import {
   finalizeDrawdownLimitInput,
+  sanitizeDashboardAccountFilter,
+  sanitizeHydratedDashboardFilters,
   sanitizeDrawdownLimitInput,
 } from "../../components/dashboard/dashboardGearUtils"
 import ProfileOnboarding from "../../components/ProfileOnboarding"
@@ -685,19 +687,22 @@ export default function Dashboard() {
     didHydrateDashboardPrefs.current = true
     const p = loadDashboardGearPrefs()
     if (!p) return
-    const tf = p.timeFilter
-    if (tf === "all" || tf === "daily" || tf === "weekly" || tf === "monthly") {
-      setTimeFilter(tf)
-    }
-    if (typeof p.accountFilter === "string") setAccountFilter(p.accountFilter)
-    if (
-      p.accountTypeFilter === "all" ||
-      p.accountTypeFilter === "funded" ||
-      p.accountTypeFilter === "eval" ||
-      p.accountTypeFilter === "live"
-    ) {
-      setAccountTypeFilter(p.accountTypeFilter)
-    }
+
+    const {
+      timeFilter: hydratedTimeFilter,
+      accountFilter: hydratedAccountFilter,
+      accountTypeFilter: hydratedAccountTypeFilter,
+    } = sanitizeHydratedDashboardFilters({ prefs: p, trades })
+
+    setTimeFilter(hydratedTimeFilter)
+    setAccountFilter(hydratedAccountFilter)
+    setAccountTypeFilter(hydratedAccountTypeFilter)
+
+    const filtersChanged =
+      hydratedTimeFilter !== p.timeFilter ||
+      hydratedAccountFilter !== p.accountFilter ||
+      hydratedAccountTypeFilter !== p.accountTypeFilter
+
     if (typeof p.showPublicOnly === "boolean") setShowPublicOnly(p.showPublicOnly)
     if (typeof p.showEquity === "boolean") setShowEquity(p.showEquity)
     if (typeof p.showDrawdown === "boolean") setShowDrawdown(p.showDrawdown)
@@ -706,7 +711,24 @@ export default function Dashboard() {
     if (typeof p.showBestSetup === "boolean") setShowBestSetup(p.showBestSetup)
     if (typeof p.showWorstSetup === "boolean") setShowWorstSetup(p.showWorstSetup)
     if (typeof p.showWarnings === "boolean") setShowWarnings(p.showWarnings)
-  }, [loading])
+
+    if (filtersChanged) {
+      saveDashboardGearPrefs({
+        timeFilter: hydratedTimeFilter,
+        accountFilter: hydratedAccountFilter,
+        accountTypeFilter: hydratedAccountTypeFilter,
+        showPublicOnly:
+          typeof p.showPublicOnly === "boolean" ? p.showPublicOnly : false,
+        showEquity: typeof p.showEquity === "boolean" ? p.showEquity : true,
+        showDrawdown: typeof p.showDrawdown === "boolean" ? p.showDrawdown : true,
+        showInsights: typeof p.showInsights === "boolean" ? p.showInsights : true,
+        showSessions: typeof p.showSessions === "boolean" ? p.showSessions : true,
+        showBestSetup: typeof p.showBestSetup === "boolean" ? p.showBestSetup : true,
+        showWorstSetup: typeof p.showWorstSetup === "boolean" ? p.showWorstSetup : true,
+        showWarnings: typeof p.showWarnings === "boolean" ? p.showWarnings : true,
+      })
+    }
+  }, [loading, trades])
 
   function formatNumber(value: number) {
     if (value === null || value === undefined) return "-"
@@ -1347,10 +1369,10 @@ const worstDay = dailyPnLs.length > 0
       return
     }
 
-    let nextAccount = gearDraft.accountFilter
-    if (nextAccount !== "all" && !accounts.some((a) => a.value === nextAccount)) {
-      nextAccount = "all"
-    }
+    const nextAccount = sanitizeDashboardAccountFilter(
+      gearDraft.accountFilter,
+      accounts
+    )
 
     setTimeFilter(gearDraft.timeFilter)
     setAccountFilter(nextAccount)
