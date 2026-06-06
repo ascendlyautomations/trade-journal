@@ -43,13 +43,15 @@ function buildSubscriptionProfileUpdatePayload(
     updatePayload.trial_end = new Date(subscription.trial_end * 1000)
   }
 
-  if (subscription.current_period_end) {
-    updatePayload.current_period_end = new Date(
-      subscription.current_period_end * 1000
-    )
-  }
+  const itemPeriodEnd = subscription.items?.data?.[0]?.current_period_end
+  const legacyPeriodEnd = (
+    subscription as Stripe.Subscription & { current_period_end?: number | null }
+  ).current_period_end
+  const periodEnd = itemPeriodEnd ?? legacyPeriodEnd ?? null
 
-  if (!subscription.current_period_end && subscription.trial_end) {
+  if (periodEnd) {
+    updatePayload.current_period_end = new Date(periodEnd * 1000)
+  } else if (subscription.trial_end && subscription.status !== "active") {
     updatePayload.current_period_end = new Date(subscription.trial_end * 1000)
   }
 
