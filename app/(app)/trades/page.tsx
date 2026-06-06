@@ -316,15 +316,15 @@ export default function TradesPage() {
   )
 
   const tradeStats = useMemo(() => {
-    const totalTrades = trades.length
-    const wins = trades.filter((t) => t.pnl > 0)
+    const totalTrades = visibleTrades.length
+    const wins = visibleTrades.filter((t) => t.pnl > 0)
     const winRate = totalTrades ? (wins.length / totalTrades) * 100 : 0
-    const totalPnL = trades.reduce((sum, t) => sum + (t.pnl || 0), 0)
+    const totalPnL = visibleTrades.reduce((sum, t) => sum + (t.pnl || 0), 0)
     const avgRR =
-      trades.reduce((sum, t) => sum + (Number(t.rr) || 0), 0) /
-      (trades.length || 1)
+      visibleTrades.reduce((sum, t) => sum + (Number(t.rr) || 0), 0) /
+      (totalTrades || 1)
     return { totalTrades, winRate, totalPnL, avgRR }
-  }, [trades])
+  }, [visibleTrades])
 
   return (
     <>

@@ -236,10 +236,6 @@ function TradesPageMainContent({
         />
       </div>
 
-      <p className="mb-1 mt-1 text-xs text-gray-400 px-2 md:px-0 md:mt-0">
-        All-time stats
-      </p>
-
       <div className="w-full grid grid-cols-2 md:grid-cols-4 gap-2 mb-3 px-1 mt-0 md:px-0">
         <Stat
           title="Trades"
