@@ -11,6 +11,8 @@ import {
   USERNAME_FORMAT_HINT,
   validateProfileUsernameNotEmpty,
 } from "@/lib/profileUsername"
+import { TRADER_TYPE_OPTIONS, normalizeTraderType } from "@/lib/traderType"
+import CustomSelect from "@/app/components/CustomSelect"
 
 export const ONBOARDING_FLAG = "tt_onboarding"
 
@@ -44,6 +46,7 @@ type ProfileOnboardingProps = {
   initialName?: string | null
   initialBio?: string | null
   initialTradingStyle?: string | null
+  initialTraderType?: string | null
   initialPrimaryMarket?: string | null
   initialStartedTrading?: string | null
   initialAvatarUrl?: string | null
@@ -60,6 +63,7 @@ export default function ProfileOnboarding({
   initialName = "",
   initialBio = "",
   initialTradingStyle = "",
+  initialTraderType = "",
   initialPrimaryMarket = "",
   initialStartedTrading = null,
   initialAvatarUrl = null,
@@ -76,6 +80,9 @@ export default function ProfileOnboarding({
   const [bio, setBio] = useState(initialBio ? String(initialBio) : "")
   const [tradingStyle, setTradingStyle] = useState(
     initialTradingStyle ? String(initialTradingStyle) : ""
+  )
+  const [traderType, setTraderType] = useState(() =>
+    normalizeTraderType(initialTraderType)
   )
   const [primaryMarket, setPrimaryMarket] = useState(
     initialPrimaryMarket ? String(initialPrimaryMarket) : ""
@@ -151,6 +158,7 @@ export default function ProfileOnboarding({
         name: name.trim() || null,
         bio: bio.trim() || null,
         trading_style: tradingStyle.trim() || null,
+        trader_type: traderType.trim() || null,
         primary_market: primaryMarket.trim() || null,
         started_trading: startedTrading.trim() || null,
         avatar_url: avatarUrl,
@@ -173,6 +181,7 @@ export default function ProfileOnboarding({
       name: name.trim() || null,
       bio: bio.trim() || null,
       trading_style: tradingStyle.trim() || null,
+      trader_type: traderType.trim() || null,
       primary_market: primaryMarket.trim() || null,
       started_trading: startedTrading.trim() || null,
       avatar_url: avatarUrl,
@@ -188,20 +197,20 @@ export default function ProfileOnboarding({
   }
 
   const inputClass =
-    "w-full px-4 py-3 rounded-xl bg-white/10 border border-white/10 focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder-gray-400 text-white"
+    "w-full min-w-0 px-4 py-3 rounded-xl bg-white/10 border border-white/10 focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder-gray-400 text-white"
 
   return (
     <div
-      className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/80 backdrop-blur-lg px-4 py-8"
+      className="fixed inset-0 z-[1000] flex items-center justify-center overflow-x-hidden bg-black/80 backdrop-blur-lg px-4 py-8"
       role="dialog"
       aria-modal="true"
       aria-labelledby="onboarding-title"
     >
       <form
         onSubmit={handleSubmit}
-        className="flex max-h-[min(90vh,720px)] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/10 p-8 shadow-2xl backdrop-blur-xl"
+        className="flex max-h-[min(90vh,720px)] w-full min-w-0 max-w-xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/10 p-6 shadow-2xl backdrop-blur-xl sm:p-8"
       >
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">
+        <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain">
         <h2
           id="onboarding-title"
           className="mb-2 text-center text-xl font-semibold text-white"
@@ -289,6 +298,21 @@ export default function ProfileOnboarding({
         />
 
         <label className="mb-1 block text-xs font-medium text-gray-300">
+          Trader Type
+        </label>
+        <div className="mb-4">
+          <CustomSelect
+            value={traderType}
+            onChange={(value) => setTraderType(normalizeTraderType(value))}
+            placeholder="Select trader type (optional)"
+            options={TRADER_TYPE_OPTIONS.map((option) => ({
+              label: option,
+              value: option,
+            }))}
+          />
+        </div>
+
+        <label className="mb-1 block text-xs font-medium text-gray-300">
           Primary Market
         </label>
         <input
@@ -305,18 +329,14 @@ export default function ProfileOnboarding({
         <p className="mb-2 text-xs text-gray-500">
           Select date you began trading
         </p>
-        <div className="mb-2 w-full">
+        <div className="mb-4 w-full min-w-0">
           <input
             ref={startedTradingInputRef}
             type="date"
             value={startedTrading}
             onChange={(e) => setStartedTrading(e.target.value)}
-            onClick={(e) => {
-              e.preventDefault()
-              openStartedTradingPicker()
-            }}
-            className="w-full cursor-pointer rounded-xl border border-white/10 bg-white/10 px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-400 [color-scheme:dark]"
-            style={{ colorScheme: "dark" }}
+            onFocus={openStartedTradingPicker}
+            className="tt-timeframe-date w-full min-w-0 cursor-pointer rounded-xl border border-white/10 bg-[#0f172a] px-3 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-400 [color-scheme:dark]"
           />
         </div>
         </div>

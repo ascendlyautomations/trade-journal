@@ -177,20 +177,20 @@ export default function PostSetupImportModal({ open, onComplete }: Props) {
     <>
       <FeedbackModal {...feedbackModalProps} />
       <div
-      className={`fixed inset-0 z-[1100] flex items-center justify-center px-4 py-8 transition-opacity duration-300 motion-reduce:transition-none ${
+      className={`fixed inset-0 z-[1100] flex items-center justify-center overflow-x-hidden px-4 py-8 transition-opacity duration-300 motion-reduce:transition-none ${
         entered ? "bg-black/75 opacity-100 backdrop-blur-md" : "bg-black/75 opacity-0 backdrop-blur-md"
       }`}
       role="presentation"
     >
       <div
-        className={`relative w-full max-w-lg transform transition-all duration-300 ease-out motion-reduce:transition-none motion-reduce:transform-none ${
+        className={`relative w-full min-w-0 max-w-xl transform transition-all duration-300 ease-out motion-reduce:transition-none motion-reduce:transform-none ${
           entered ? "translate-y-0 scale-100 opacity-100" : "translate-y-3 scale-[0.98] opacity-0"
         }`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="post-setup-import-title"
       >
-        <div className="max-h-[min(90vh,760px)] overflow-y-auto rounded-2xl border border-white/15 bg-[#0f172a]/95 p-6 shadow-2xl backdrop-blur-xl md:p-8">
+        <div className="max-h-[min(90vh,760px)] overflow-x-hidden overflow-y-auto rounded-2xl border border-white/15 bg-[#0f172a]/95 p-6 shadow-2xl backdrop-blur-xl md:p-8">
           <h2
             id="post-setup-import-title"
             className="text-center text-xl font-semibold tracking-tight text-white md:text-2xl"

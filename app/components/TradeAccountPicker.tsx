@@ -73,8 +73,8 @@ export default function TradeAccountPicker({
   }, [])
 
   return (
-    <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
-      <div className="relative flex-1 trade-account-picker">
+    <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-stretch">
+      <div className="relative min-w-0 flex-1 trade-account-picker">
         <button
           type="button"
           onClick={() => setOpen(!open)}
@@ -142,7 +142,7 @@ export default function TradeAccountPicker({
         type="button"
         onClick={onOpenCreate}
         disabled={disableCreate}
-        className="shrink-0 rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-4 py-2.5 text-sm font-medium text-emerald-200 transition hover:bg-emerald-500/25"
+        className="shrink-0 rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-4 py-2.5 text-sm font-medium text-emerald-200 transition hover:bg-emerald-500/25 disabled:cursor-not-allowed whitespace-normal text-center sm:whitespace-nowrap"
       >
         {disableCreate ? "Upgrade to Pro to add more accounts" : "+ Create Account"}
       </button>

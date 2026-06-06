@@ -49,15 +49,16 @@ export default function CustomSelect({
             setOpen((prev) => !prev)
           }
         }}
-        className="w-full rounded p-2 bg-[#0f172a] border border-white/10 cursor-pointer"
+        className="flex w-full cursor-pointer items-center justify-between rounded-xl border border-white/10 bg-[#0f172a] px-4 py-3 text-sm"
       >
         <span className={selected ? "text-white" : "text-gray-400"}>
           {selected?.label ?? placeholder}
         </span>
+        <span className="ml-2 shrink-0 text-gray-400">▾</span>
       </div>
 
       {open ? (
-        <div className="absolute z-50 mt-1 w-full rounded bg-[#0f172a] border border-white/10 overflow-hidden">
+        <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-xl border border-white/10 bg-[#0f172a] shadow-lg">
           {options.map((opt) => (
             <button
               key={opt.value}
@@ -66,7 +67,7 @@ export default function CustomSelect({
                 onChange(opt.value)
                 setOpen(false)
               }}
-              className="w-full text-left p-2 hover:bg-[#1f2937]"
+              className="w-full px-4 py-2.5 text-left text-sm text-white hover:bg-[#1f2937]"
             >
               {opt.label}
             </button>

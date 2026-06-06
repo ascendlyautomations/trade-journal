@@ -211,11 +211,11 @@ export default function Navbar() {
     proOnly?: boolean
     beta?: boolean
   }[] = [
-    { label: "Backtest Stats", href: "/backtest" },
     { label: "Calendar", href: "/calendar" },
     { label: "Achievements", href: "/achievements" },
-    { label: "PropFirm Mode", href: "/analytics/propfirm", beta: true },
-    { label: "AI Analysis", href: "/analyst", proOnly: true, beta: true },
+    { label: "Prop Firm Mode", href: "/analytics/propfirm", proOnly: true },
+    { label: "AI Analyst", href: "/analyst", proOnly: true },
+    { label: "Backtest Stats", href: "/backtest", proOnly: true },
   ]
 
   const betaBadge = (

@@ -6,6 +6,7 @@ import type { ChangeEvent } from "react"
 import { useCallback, useEffect, useState } from "react"
 import { supabase } from "../../../lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
+import { normalizeTraderType } from "@/lib/traderType"
 import { useParams, useRouter } from "next/navigation"
 import {
   LineChart,
@@ -72,6 +73,26 @@ function getExperience(startDate: string | null | undefined) {
   const remainingMonths = months % 12
 
   return `${years}y ${remainingMonths}m`
+}
+
+function formatProfileMetadataLine(profile: {
+  trading_style?: string | null
+  trading_model?: string | null
+  trader_type?: string | null
+  primary_market?: string | null
+  started_trading?: string | null
+}) {
+  const parts: string[] = [
+    profile.trading_style?.trim() ||
+      profile.trading_model?.trim() ||
+      "—",
+  ]
+  const traderType = normalizeTraderType(profile.trader_type)
+  if (traderType) parts.push(traderType)
+  const market = profile.primary_market?.trim()
+  if (market) parts.push(market)
+  parts.push(getExperience(profile.started_trading) || "N/A")
+  return parts.join(" • ")
 }
 
 function formatMoney(v: number) {
@@ -1872,128 +1893,98 @@ export default function ProfilePage() {
                   />
 
                   <div className="flex min-w-0 w-full flex-1 flex-col justify-center text-center sm:text-left">
-                    <div className="flex flex-col items-center gap-2 sm:block">
-                      <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start sm:gap-3">
-                        <div className="flex items-center justify-center gap-2 sm:justify-start">
-                          <h2 className="text-lg font-semibold text-white md:text-xl">
-                            {profile.name || profile.username || "User"}
-                          </h2>
+                    <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start sm:gap-3">
+                      <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
+                        <h2 className="text-lg font-semibold text-white md:text-xl">
+                          {profile.name || profile.username || "User"}
+                        </h2>
 
-                          {currentUserId === profile.id && (
-                            <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => router.push("/settings#profile")}
-                                className="rounded-md bg-gray-600 px-2 py-1 text-xs text-gray-100 hover:bg-gray-500 md:bg-white/10 md:px-3 md:text-sm md:hover:bg-white/20"
-                              >
-                                Settings
-                              </button>
-                            </div>
-                          )}
-                        </div>
+                        {profile.username ? (
+                          <>
+                            <span className="text-gray-500">|</span>
+                            <span className="text-sm text-gray-400">
+                              {profile.username}
+                            </span>
+                          </>
+                        ) : null}
 
-                        {currentUserId && currentUserId !== profile.id && (
-                          <div className="flex w-full flex-wrap items-center justify-center gap-2 sm:w-auto sm:justify-start">
+                        {currentUserId === profile.id && (
+                          <div className="flex items-center gap-2">
                             <button
                               type="button"
-                              onClick={handleFollowToggle}
-                              disabled={followBusy}
-                              className={`rounded-md px-3 py-1 text-sm font-medium text-white disabled:opacity-50 ${
-                                isFollowing
-                                  ? "bg-red-500 hover:bg-red-600"
-                                  : "bg-blue-500 hover:bg-blue-600"
-                              }`}
+                              onClick={() => router.push("/settings#profile")}
+                              className="rounded-md bg-gray-600 px-2 py-1 text-xs text-gray-100 hover:bg-gray-500 md:bg-white/10 md:px-3 md:text-sm md:hover:bg-white/20"
                             >
-                              {isFollowing ? "Unfollow" : "Follow"}
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={handleMessage}
-                              disabled={messageBusy}
-                              className="rounded-md border border-white/10 bg-white/10 px-3 py-1 text-sm text-gray-100 hover:bg-white/20 disabled:opacity-50"
-                            >
-                              Message
+                              Settings
                             </button>
                           </div>
                         )}
                       </div>
 
+                      {currentUserId && currentUserId !== profile.id && (
+                        <div className="flex w-full flex-wrap items-center justify-center gap-2 sm:w-auto sm:justify-start">
+                          <button
+                            type="button"
+                            onClick={handleFollowToggle}
+                            disabled={followBusy}
+                            className={`rounded-md px-3 py-1 text-sm font-medium text-white disabled:opacity-50 ${
+                              isFollowing
+                                ? "bg-red-500 hover:bg-red-600"
+                                : "bg-blue-500 hover:bg-blue-600"
+                            }`}
+                          >
+                            {isFollowing ? "Unfollow" : "Follow"}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={handleMessage}
+                            disabled={messageBusy}
+                            className="rounded-md border border-white/10 bg-white/10 px-3 py-1 text-sm text-gray-100 hover:bg-white/20 disabled:opacity-50"
+                          >
+                            Message
+                          </button>
+                        </div>
+                      )}
                     </div>
 
-                  <p className="mt-1 text-sm text-gray-400">{profile.username}</p>
-
-                  <p className="mt-1 text-sm text-gray-400">
-                    {profile.trading_style ||
-                      profile.trading_model ||
-                      "—"}{" "}
-                    {profile.primary_market
-                      ? ` • ${String(profile.primary_market).trim()}`
-                      : ""}
-                    • {getExperience(profile.started_trading) || "N/A"}
-                  </p>
-
-                  <div className="mt-4 flex w-full items-center justify-between px-4 text-center text-sm md:hidden md:text-base">
-                    <div className="flex min-h-[44px] flex-1 flex-col items-center justify-center">
-                      <span className="text-[15px] font-semibold tabular-nums text-white">
-                        {statsVisible ? totalTrades : "—"}
+                    <p className="mt-1 flex flex-wrap items-center justify-center gap-1 text-sm text-gray-400 sm:justify-start">
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        onClick={openFollowersModal}
+                        onKeyDown={(e) =>
+                          e.key === "Enter" && openFollowersModal()
+                        }
+                        className="cursor-pointer tabular-nums hover:text-white"
+                      >
+                        <span className="font-semibold text-gray-200">
+                          {followersCount}
+                        </span>{" "}
+                        Followers
                       </span>
-                      <span className="text-[11px] text-gray-400">Trades</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => openFollowersModal()}
-                      className="relative z-10 flex min-h-[44px] flex-1 cursor-pointer flex-col items-center justify-center rounded-md px-2 py-1 active:scale-95"
-                    >
-                      <span className="text-[15px] font-semibold tabular-nums text-white">
-                        {followersCount}
+                      <span aria-hidden="true">•</span>
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        onClick={openFollowingModal}
+                        onKeyDown={(e) =>
+                          e.key === "Enter" && openFollowingModal()
+                        }
+                        className="cursor-pointer tabular-nums hover:text-white"
+                      >
+                        <span className="font-semibold text-gray-200">
+                          {followingCount}
+                        </span>{" "}
+                        Following
                       </span>
-                      <span className="text-[11px] text-gray-400">Followers</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => openFollowingModal()}
-                      className="relative z-10 flex min-h-[44px] flex-1 cursor-pointer flex-col items-center justify-center rounded-md px-2 py-1 active:scale-95"
-                    >
-                      <span className="text-[15px] font-semibold tabular-nums text-white">
-                        {followingCount}
-                      </span>
-                      <span className="text-[11px] text-gray-400">Following</span>
-                    </button>
-                  </div>
+                    </p>
 
-                  <div className="mt-2 hidden flex-wrap items-center justify-center gap-4 text-sm text-gray-400 sm:flex sm:justify-start">
-                    <span
-                      role="button"
-                      tabIndex={0}
-                      onClick={openFollowersModal}
-                      onKeyDown={(e) =>
-                        e.key === "Enter" && openFollowersModal()
-                      }
-                      className="cursor-pointer tabular-nums hover:text-white"
-                    >
-                      <span className="font-semibold text-gray-200">
-                        {followersCount}
-                      </span>{" "}
-                      Followers
-                    </span>
-                    <span
-                      role="button"
-                      tabIndex={0}
-                      onClick={openFollowingModal}
-                      onKeyDown={(e) =>
-                        e.key === "Enter" && openFollowingModal()
-                      }
-                      className="cursor-pointer tabular-nums hover:text-white"
-                    >
-                      <span className="font-semibold text-gray-200">
-                        {followingCount}
-                      </span>{" "}
-                      Following
-                    </span>
-                  </div>
+                    <p className="mt-1 text-sm text-gray-400">
+                      {formatProfileMetadataLine(profile)}
+                    </p>
 
-                  <p className="mt-2 px-4 text-sm leading-relaxed text-gray-300 md:px-0">
+                    <p className="mt-2 px-4 text-sm leading-relaxed text-gray-300 md:px-0">
                     {profile.bio || "No bio yet"}
                   </p>
 

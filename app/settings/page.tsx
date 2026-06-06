@@ -22,6 +22,7 @@ import {
   usernameChangesRemaining,
   validateProfileUsernameNotEmpty,
 } from "@/lib/profileUsername"
+import { TRADER_TYPE_OPTIONS, normalizeTraderType } from "@/lib/traderType"
 import type { User } from "@supabase/supabase-js"
 import AffiliatePayoutSetupCard from "@/app/components/AffiliatePayoutSetupCard"
 import { supabaseBearerHeaders } from "@/lib/supabaseBearerFetch"
@@ -129,6 +130,7 @@ export default function SettingsPage() {
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
 
   const [tradingStyle, setTradingStyle] = useState("")
+  const [traderType, setTraderType] = useState("")
   const [primaryMarket, setPrimaryMarket] = useState("")
   const [startedTrading, setStartedTrading] = useState("")
   const [tradingModel, setTradingModel] = useState("")
@@ -191,6 +193,7 @@ export default function SettingsPage() {
       setTradingStyle(
         (data.trading_style as string) || (data.trading_model as string) || ""
       )
+      setTraderType(normalizeTraderType(data.trader_type))
       setPrimaryMarket((data.primary_market as string) || "")
       setTradingModel((data.trading_model as string) || "")
       setStartedTrading(sliceDateInput(data.started_trading))
@@ -358,6 +361,7 @@ export default function SettingsPage() {
       bio,
       avatar_url: avatarUrl,
       trading_style: tradingStyle,
+      trader_type: traderType.trim() || null,
       primary_market: primaryMarket.trim() || null,
       trading_model: tradingModel || tradingStyle || null,
       started_trading: startedTrading.trim() || null,
@@ -400,6 +404,7 @@ export default function SettingsPage() {
             bio,
             avatar_url: avatarUrl,
             trading_style: tradingStyle,
+            trader_type: traderType.trim() || null,
             primary_market: primaryMarket.trim() || null,
             trading_model: tradingModel || tradingStyle || null,
             started_trading: startedTrading.trim() || null,
@@ -937,6 +942,30 @@ export default function SettingsPage() {
                     placeholder="e.g. ICT, scalping, swing"
                     className="w-full rounded-xl border border-white/10 bg-black/30 p-3 placeholder:text-gray-500"
                   />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="settings-trader-type"
+                    className="mb-1 block text-sm text-gray-400"
+                  >
+                    Trader Type
+                  </label>
+                  <select
+                    id="settings-trader-type"
+                    value={traderType}
+                    onChange={(e) =>
+                      setTraderType(normalizeTraderType(e.target.value))
+                    }
+                    className="w-full rounded-xl border border-white/10 bg-black/30 p-3 text-white"
+                  >
+                    <option value="">Select trader type (optional)</option>
+                    {TRADER_TYPE_OPTIONS.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>

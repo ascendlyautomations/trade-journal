@@ -334,6 +334,7 @@ export default function TradesPage() {
           initialUsername={gateProfile.username}
           initialBio={gateProfile.bio}
           initialTradingStyle={gateProfile.trading_style}
+          initialTraderType={gateProfile.trader_type}
           initialPrimaryMarket={gateProfile.primary_market}
           initialStartedTrading={gateProfile.started_trading}
           initialAvatarUrl={gateProfile.avatar_url}

@@ -1669,16 +1669,24 @@ function CommunityContent() {
                     link.
                   </p>
 
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="mb-2 block w-full max-w-xs text-sm text-gray-400 file:mr-2 file:rounded-md file:border-0 file:bg-white/10 file:px-2 file:py-1 file:text-gray-200"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0]
-                      e.target.value = ""
-                      if (file) void handleRoomImageUpload(file)
-                    }}
-                  />
+                  <div className="mb-3">
+                    <p className="mb-1 text-sm font-medium text-gray-300">
+                      Trade Room Picture
+                    </p>
+                    <label className="inline-flex cursor-pointer items-center rounded-md border border-white/10 bg-white/10 px-3 py-2 text-sm font-medium text-gray-200 transition hover:bg-white/15">
+                      Choose Trade Room Picture
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="sr-only"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0]
+                          e.target.value = ""
+                          if (file) void handleRoomImageUpload(file)
+                        }}
+                      />
+                    </label>
+                  </div>
 
                   <input
                     type="text"
@@ -1740,9 +1748,9 @@ function CommunityContent() {
                         `/trade-rooms?room=${encodeURIComponent(inviteRoomKey)}`
                       )
                     }}
-                    className="mt-3 text-xs text-gray-400 hover:text-white"
+                    className="mt-3 rounded-md bg-green-500/20 px-3 py-1 text-sm text-green-200 hover:bg-green-500/30"
                   >
-                    Done setting up
+                    Finish Setting Up
                   </button>
                 </div>
               </div>
@@ -2167,16 +2175,24 @@ function CommunityContent() {
               placeholder="Room name"
             />
 
-            <input
-              type="file"
-              accept="image/*"
-              className="mb-3 block w-full text-sm text-gray-400 file:mr-2 file:rounded-md file:border-0 file:bg-white/10 file:px-2 file:py-1 file:text-gray-200"
-              onChange={(e) => {
-                const file = e.target.files?.[0]
-                e.target.value = ""
-                if (file) void handleRoomImageUpload(file)
-              }}
-            />
+            <div className="mb-3">
+              <p className="mb-1 text-sm font-medium text-gray-300">
+                Trade Room Picture
+              </p>
+              <label className="inline-flex cursor-pointer items-center rounded-md border border-white/10 bg-white/10 px-3 py-2 text-sm font-medium text-gray-200 transition hover:bg-white/15">
+                Choose New Picture
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="sr-only"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    e.target.value = ""
+                    if (file) void handleRoomImageUpload(file)
+                  }}
+                />
+              </label>
+            </div>
 
             <label className="mt-3 flex items-center gap-2 text-sm text-gray-300">
               <input
