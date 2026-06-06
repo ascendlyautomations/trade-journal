@@ -31,6 +31,106 @@ function stripeCustomerId(
   return "deleted" in customer && customer.deleted ? null : customer.id
 }
 
+function buildSubscriptionProfileUpdatePayload(
+  subscription: Stripe.Subscription
+): Record<string, unknown> {
+  const updatePayload: Record<string, unknown> = {
+    subscription_status: subscription.status,
+    cancel_at_period_end: subscription.cancel_at_period_end ?? false,
+  }
+
+  if (subscription.trial_end) {
+    updatePayload.trial_end = new Date(subscription.trial_end * 1000)
+  }
+
+  if (subscription.current_period_end) {
+    updatePayload.current_period_end = new Date(
+      subscription.current_period_end * 1000
+    )
+  }
+
+  if (!subscription.current_period_end && subscription.trial_end) {
+    updatePayload.current_period_end = new Date(subscription.trial_end * 1000)
+  }
+
+  return updatePayload
+}
+
+async function syncSubscriptionToProfile(params: {
+  supabase: SupabaseClient
+  subscription: Stripe.Subscription
+  logContext: string
+}): Promise<boolean> {
+  const { supabase, subscription, logContext } = params
+  const customerId = stripeCustomerId(subscription.customer)
+
+  if (!customerId) {
+    console.log(`❌ subscription sync (${logContext}): missing customer id`)
+    return false
+  }
+
+  const { data: profile, error: findErr } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("stripe_customer_id", customerId)
+    .maybeSingle()
+
+  if (findErr) {
+    console.error(`❌ subscription sync (${logContext}): profile lookup error:`, findErr, {
+      customerId,
+    })
+    return false
+  }
+
+  if (!profile?.id) {
+    console.error(
+      `❌ No profile found for stripe_customer_id (${logContext}):`,
+      customerId
+    )
+    return false
+  }
+
+  const updatePayload = buildSubscriptionProfileUpdatePayload(subscription)
+
+  console.log(`[subscription sync] (${logContext}) applying update:`, {
+    customerId,
+    profileId: profile.id,
+    status: subscription.status,
+    cancel_at_period_end: subscription.cancel_at_period_end,
+    cancel_at: subscription.cancel_at ?? null,
+    updatePayload,
+  })
+
+  const { data: updatedRows, error: upErr } = await supabase
+    .from("profiles")
+    .update(updatePayload)
+    .eq("id", profile.id)
+    .select("id")
+
+  if (upErr) {
+    console.error(`❌ Failed to update subscription (${logContext}):`, upErr, {
+      customerId,
+      profileId: profile.id,
+    })
+    return false
+  }
+
+  if (!updatedRows?.length) {
+    console.error(`❌ subscription sync (${logContext}): 0 rows updated`, {
+      customerId,
+      profileId: profile.id,
+    })
+    return false
+  }
+
+  console.log(`✅ Subscription synced successfully (${logContext})`, {
+    customerId,
+    profileId: profile.id,
+    rowsUpdated: updatedRows.length,
+  })
+  return true
+}
+
 /**
  * When the customer enters a promotion code in Checkout, attribute affiliate
  * (referred_by + referral_count) — no auto-applied codes at session create.
@@ -405,18 +505,27 @@ export async function POST(req: Request) {
         console.log("[invoice.paid] paying user:", payingUser.id)
 
         try {
-          const { error: proErr } = await supabase
-            .from("profiles")
-            .update(SUBSCRIPTION_ACTIVE)
-            .eq("id", payingUser.id as string)
-
-          if (proErr) {
-            console.error("Pro refresh failed (invoice.paid)", proErr)
+          if (subscriptionId) {
+            const subscription = await stripe.subscriptions.retrieve(subscriptionId)
+            await syncSubscriptionToProfile({
+              supabase,
+              subscription,
+              logContext: "invoice.paid",
+            })
           } else {
-            console.log("[invoice.paid] Pro subscription_status refreshed")
+            const { error: proErr } = await supabase
+              .from("profiles")
+              .update(SUBSCRIPTION_ACTIVE)
+              .eq("id", payingUser.id as string)
+
+            if (proErr) {
+              console.error("Pro refresh failed (invoice.paid)", proErr)
+            } else {
+              console.log("[invoice.paid] Pro subscription_status refreshed")
+            }
           }
         } catch (e) {
-          console.error("[invoice.paid] Pro refresh crash:", e)
+          console.error("[invoice.paid] subscription sync crash:", e)
         }
 
         //----------------------------------------
@@ -570,90 +679,11 @@ export async function POST(req: Request) {
     ) {
       try {
         const subscription = event.data.object as Stripe.Subscription
-        const customerId = stripeCustomerId(subscription.customer)
-
-        if (!customerId) {
-          console.log(
-            "❌ subscription sync: missing customer id",
-            event.type
-          )
-        } else {
-          const { data: profile, error: findErr } = await supabase
-            .from("profiles")
-            .select("id")
-            .eq("stripe_customer_id", customerId)
-            .maybeSingle()
-
-          if (findErr) {
-            console.error(
-              "❌ subscription sync: profile lookup error:",
-              findErr,
-              { customerId, eventType: event.type }
-            )
-          } else if (!profile?.id) {
-            console.error(
-              "❌ No profile found for stripe_customer_id (subscription sync):",
-              customerId
-            )
-          } else {
-            const updatePayload: Record<string, unknown> = {
-              subscription_status: subscription.status,
-              cancel_at_period_end: subscription.cancel_at_period_end ?? false,
-            }
-
-            // Handle trial end
-            if (subscription.trial_end) {
-              updatePayload.trial_end = new Date(subscription.trial_end * 1000)
-            }
-
-            // Handle period end (important for canceling users)
-            if (subscription.current_period_end) {
-              updatePayload.current_period_end = new Date(
-                subscription.current_period_end * 1000
-              )
-            }
-
-            // If still in trial, ensure current_period_end is set correctly
-            if (!subscription.current_period_end && subscription.trial_end) {
-              updatePayload.current_period_end = new Date(
-                subscription.trial_end * 1000
-              )
-            }
-
-            console.log("[subscription sync] applying update:", {
-              customerId,
-              profileId: profile.id,
-              status: subscription.status,
-              cancel_at_period_end: subscription.cancel_at_period_end,
-              cancel_at: subscription.cancel_at ?? null,
-              updatePayload,
-            })
-
-            const { data: updatedRows, error: upErr } = await supabase
-              .from("profiles")
-              .update(updatePayload)
-              .eq("id", profile.id)
-              .select("id")
-
-            if (upErr) {
-              console.error("❌ Failed to update subscription:", upErr, {
-                customerId,
-                profileId: profile.id,
-              })
-            } else if (!updatedRows?.length) {
-              console.error(
-                "❌ subscription sync: 0 rows updated",
-                { customerId, profileId: profile.id }
-              )
-            } else {
-              console.log("✅ Subscription synced successfully", {
-                customerId,
-                profileId: profile.id,
-                rowsUpdated: updatedRows.length,
-              })
-            }
-          }
-        }
+        await syncSubscriptionToProfile({
+          supabase,
+          subscription,
+          logContext: event.type,
+        })
       } catch (err) {
         console.error("❌ subscription sync handler error:", err)
       }
