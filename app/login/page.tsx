@@ -11,6 +11,19 @@ import {
 import { useRouter } from "next/navigation"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 
+function getSafeNextPath(): string | null {
+  if (typeof window === "undefined") return null
+  const raw = new URLSearchParams(window.location.search).get("next")
+  if (!raw || raw === "checkout") return null
+  try {
+    const path = decodeURIComponent(raw)
+    if (!path.startsWith("/") || path.startsWith("//")) return null
+    return path
+  } catch {
+    return null
+  }
+}
+
 export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -115,6 +128,28 @@ export default function LoginPage() {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    if (shouldStartCheckout()) return
+
+    let cancelled = false
+    const run = async () => {
+      const next = getSafeNextPath()
+      if (!next) return
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user || cancelled) return
+      router.replace(next)
+    }
+
+    void run()
+    return () => {
+      cancelled = true
+    }
+  }, [router])
 
   async function handleSignUp(e: React.MouseEvent<HTMLButtonElement>) {
     console.log("Signup clicked")
@@ -241,7 +276,7 @@ export default function LoginPage() {
         }
       }
 
-      router.push("/dashboard")
+      router.push(getSafeNextPath() ?? "/dashboard")
     } catch (err) {
       console.error(
         "ERROR:",
@@ -298,12 +333,18 @@ export default function LoginPage() {
       }
     }
 
-    router.push("/dashboard")
+    router.push(getSafeNextPath() ?? "/dashboard")
     setLoading(false)
   }
 
   const handleGoogleLogin = async () => {
-    const redirectPath = shouldStartCheckout() ? "/login?next=checkout" : "/dashboard"
+    let redirectPath = "/dashboard"
+    if (shouldStartCheckout()) {
+      redirectPath = "/login?next=checkout"
+    } else {
+      const next = getSafeNextPath()
+      if (next) redirectPath = next
+    }
     await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {

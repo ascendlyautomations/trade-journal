@@ -1351,7 +1351,8 @@ function CommunityContent() {
       } = await supabase.auth.getUser()
 
       if (!authUser) {
-        router.push("/login")
+        const returnPath = `/trade-rooms${window.location.search}`
+        router.push(`/login?next=${encodeURIComponent(returnPath)}`)
         return
       }
       setUser(authUser)
