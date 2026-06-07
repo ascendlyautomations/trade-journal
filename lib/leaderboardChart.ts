@@ -3,13 +3,23 @@
  * Used by app/leaderboard/page.tsx — keep logic here, not scattered in JSX.
  */
 
-export type LeaderboardView = "7D" | "30D" | "90D" | "YTD" | "ALL"
+export type LeaderboardView = "7D" | "30D" | "90D" | "YTD" | "ALL" | "Custom"
+
+export type LeaderboardCustomRange = {
+  startDate: string
+  endDate: string
+}
+
+/** Matches dashboard / trades account-type filter values. */
+export type LeaderboardAccountTypeFilter = "all" | "funded" | "eval" | "live"
 
 export type TradeForLeaderboard = {
   user_id: string
   pnl?: number | string | null
   rr?: number | string | null
   created_at: string
+  account_type?: string | null
+  mode?: string | null
 }
 
 export type LeaderboardChartRow = {
@@ -34,6 +44,22 @@ export type LeaderboardTodayStats = {
   globalAvgRR: number | null
   globalTradeCount: number
   percentileTopPct: string
+}
+
+export type LeaderboardRankedTrader = {
+  rank: number
+  userId: string
+  totalPnl: number
+  tradeCount: number
+  avgRR: number | null
+}
+
+export type LeaderboardYourRank = {
+  rank: number
+  totalTraders: number
+  percentileTopPct: string
+  totalPnl: number
+  tradeCount: number
 }
 
 const NY = "America/New_York"
@@ -138,15 +164,58 @@ function emptyWindowStats(): LeaderboardTodayStats {
   }
 }
 
+/** Default custom range: last 30 days through today (NY calendar). */
+export function getDefaultLeaderboardCustomRange(
+  now: Date = new Date()
+): LeaderboardCustomRange {
+  const endDate = formatDateNY(now.toISOString())
+  return {
+    startDate: addDaysYmd(endDate, -30),
+    endDate,
+  }
+}
+
+/** Client-side account-type filter (same field resolution as dashboard / trades). */
+export function filterTradesForLeaderboardAccountType(
+  trades: TradeForLeaderboard[],
+  accountTypeFilter: LeaderboardAccountTypeFilter
+): TradeForLeaderboard[] {
+  if (accountTypeFilter === "all") return trades
+
+  const selectedAcct = accountTypeFilter.toLowerCase().trim()
+  return trades.filter((trade) => {
+    const tradeMode = String(trade.mode ?? trade.account_type ?? "")
+      .toLowerCase()
+      .trim()
+    return tradeMode === selectedAcct
+  })
+}
+
 /** Client-side performance window filter (runs on Phase 1 paginated dataset). */
 export function filterTradesForLeaderboardWindow(
   trades: TradeForLeaderboard[],
   view: LeaderboardView,
-  now: Date = new Date()
+  now: Date = new Date(),
+  customRange?: LeaderboardCustomRange
 ): TradeForLeaderboard[] {
   const valid = trades.filter((t) => t?.created_at && t.user_id)
 
   if (view === "ALL") return valid
+
+  if (view === "Custom") {
+    const startDate = customRange?.startDate?.trim() ?? ""
+    const endDate = customRange?.endDate?.trim() ?? ""
+    if (!startDate || !endDate || ymdCompare(startDate, endDate) > 0) {
+      return []
+    }
+
+    const startMs = new Date(`${startDate}T00:00:00`).getTime()
+    const endMs = new Date(`${endDate}T23:59:59.999`).getTime()
+    return valid.filter((t) => {
+      const ms = new Date(t.created_at).getTime()
+      return ms >= startMs && ms <= endMs
+    })
+  }
 
   if (view === "YTD") {
     const todayYmd = formatDateNY(now.toISOString())
@@ -156,16 +225,26 @@ export function filterTradesForLeaderboardWindow(
     )
   }
 
-  const days = view === "7D" ? 7 : view === "30D" ? 30 : 90
-  const cutoffMs = now.getTime() - days * DAY_MS
-  return valid.filter((t) => new Date(t.created_at).getTime() >= cutoffMs)
+  if (view === "7D" || view === "30D" || view === "90D") {
+    const days = view === "7D" ? 7 : view === "30D" ? 30 : 90
+    const cutoffMs = now.getTime() - days * DAY_MS
+    return valid.filter((t) => new Date(t.created_at).getTime() >= cutoffMs)
+  }
+
+  return valid
 }
 
 function getChartWindowStartYmd(
   view: LeaderboardView,
-  now: Date
+  now: Date,
+  customRange?: LeaderboardCustomRange
 ): string | null {
   if (view === "ALL") return null
+
+  if (view === "Custom") {
+    const startDate = customRange?.startDate?.trim()
+    return startDate || null
+  }
 
   const todayYmd = formatDateNY(now.toISOString())
 
@@ -173,14 +252,93 @@ function getChartWindowStartYmd(
     return `${parseYmd(todayYmd).y}-01-01`
   }
 
-  const days = view === "7D" ? 7 : view === "30D" ? 30 : 90
-  return formatDateNY(new Date(now.getTime() - days * DAY_MS).toISOString())
+  if (view === "7D" || view === "30D" || view === "90D") {
+    const days = view === "7D" ? 7 : view === "30D" ? 30 : 90
+    return formatDateNY(new Date(now.getTime() - days * DAY_MS).toISOString())
+  }
+
+  return null
+}
+
+function getChartWindowEndYmd(
+  view: LeaderboardView,
+  now: Date,
+  customRange?: LeaderboardCustomRange
+): string {
+  if (view === "Custom") {
+    const endDate = customRange?.endDate?.trim()
+    if (endDate) return endDate
+  }
+  return formatDateNY(now.toISOString())
 }
 
 type UserAgg = { pnl: number; rr: number; count: number }
 
 function emptyUserMap(): Record<string, UserAgg> {
   return {}
+}
+
+const LEADERBOARD_RANK_LIMIT = 25
+
+/** Rank traders by total P&L within a pre-filtered performance window. */
+export function buildLeaderboardRankings(
+  windowTrades: TradeForLeaderboard[],
+  limit = LEADERBOARD_RANK_LIMIT
+): LeaderboardRankedTrader[] {
+  const byUser: Record<string, TradeForLeaderboard[]> = {}
+
+  for (const t of windowTrades) {
+    if (!t.user_id) continue
+    if (!byUser[t.user_id]) byUser[t.user_id] = []
+    byUser[t.user_id].push(t)
+  }
+
+  const rows = Object.entries(byUser).map(([userId, userTrades]) => ({
+    userId,
+    totalPnl: userTrades.reduce((sum, t) => sum + num(t.pnl), 0),
+    tradeCount: userTrades.length,
+    avgRR: averageValidRR(userTrades),
+  }))
+
+  rows.sort((a, b) => b.totalPnl - a.totalPnl)
+
+  return rows.slice(0, limit).map((row, index) => ({
+    rank: index + 1,
+    userId: row.userId,
+    totalPnl: row.totalPnl,
+    tradeCount: row.tradeCount,
+    avgRR: row.avgRR,
+  }))
+}
+
+/** Logged-in user's rank within the full filtered window (not top-25 capped). */
+export function buildLeaderboardYourRank(
+  windowTrades: TradeForLeaderboard[],
+  userId: string | null
+): LeaderboardYourRank | null {
+  if (!userId) return null
+
+  const allRanked = buildLeaderboardRankings(
+    windowTrades,
+    Number.POSITIVE_INFINITY
+  )
+  if (allRanked.length === 0) return null
+
+  const userRow = allRanked.find((row) => row.userId === userId)
+  if (!userRow) return null
+
+  const percentileTopPct = (
+    (userRow.rank / allRanked.length) *
+    100
+  ).toFixed(1)
+
+  return {
+    rank: userRow.rank,
+    totalTraders: allRanked.length,
+    percentileTopPct,
+    totalPnl: userRow.totalPnl,
+    tradeCount: userRow.tradeCount,
+  }
 }
 
 /**
@@ -192,15 +350,28 @@ function emptyUserMap(): Record<string, UserAgg> {
 export function buildLeaderboardChartData(
   trades: TradeForLeaderboard[],
   view: LeaderboardView,
-  userId: string | null
+  userId: string | null,
+  customRange?: LeaderboardCustomRange,
+  accountTypeFilter: LeaderboardAccountTypeFilter = "all"
 ): {
   chartData: LeaderboardChartRow[]
   todayStats: LeaderboardTodayStats
+  rankedTraders: LeaderboardRankedTrader[]
+  yourRank: LeaderboardYourRank | null
   hasData: boolean
 } {
   const now = new Date()
   const todayYmd = formatDateNY(now.toISOString())
-  const windowTrades = filterTradesForLeaderboardWindow(trades, view, now)
+  const accountFilteredTrades = filterTradesForLeaderboardAccountType(
+    trades,
+    accountTypeFilter
+  )
+  const windowTrades = filterTradesForLeaderboardWindow(
+    accountFilteredTrades,
+    view,
+    now,
+    customRange
+  )
 
   if (windowTrades.length === 0) {
     return {
@@ -209,6 +380,8 @@ export function buildLeaderboardChartData(
         ...emptyWindowStats(),
         percentileTopPct: userId ? "0.0" : "—",
       },
+      rankedTraders: [],
+      yourRank: null,
       hasData: false,
     }
   }
@@ -233,13 +406,17 @@ export function buildLeaderboardChartData(
     if (ymdCompare(ymd, minTradeYmd) < 0) minTradeYmd = ymd
   }
 
-  const windowStartYmd = getChartWindowStartYmd(view, now)
+  const windowStartYmd = getChartWindowStartYmd(view, now, customRange)
+  const chartEndYmd = getChartWindowEndYmd(view, now, customRange)
   const chartStartYmd =
     windowStartYmd && ymdCompare(windowStartYmd, minTradeYmd) > 0
       ? windowStartYmd
       : minTradeYmd
 
-  const bucketSequence = enumerateDailyBucketIds(chartStartYmd, todayYmd)
+  const bucketSequence = enumerateDailyBucketIds(
+    chartStartYmd,
+    ymdCompare(chartEndYmd, chartStartYmd) >= 0 ? chartEndYmd : chartStartYmd
+  )
 
   const chartData: LeaderboardChartRow[] = bucketSequence.map(
     ({ bucketId, sortKey }) => {
@@ -326,6 +503,8 @@ export function buildLeaderboardChartData(
       globalTradeCount,
       percentileTopPct,
     },
+    rankedTraders: buildLeaderboardRankings(windowTrades),
+    yourRank: buildLeaderboardYourRank(windowTrades, userId),
     hasData: true,
   }
 }
