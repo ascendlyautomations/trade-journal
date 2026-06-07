@@ -88,6 +88,26 @@ type RoomBanManage = {
   } | null
 }
 
+type MemberActionConfirm =
+  | { kind: "remove"; userId: string }
+  | { kind: "ban"; userId: string }
+  | { kind: "unban"; banId: string }
+
+type DeleteSectionConfirm = {
+  sectionId: string
+  sectionName: string
+  messageCount: number
+}
+
+function ActionSpinner({ className = "border-current" }: { className?: string }) {
+  return (
+    <span
+      className={`inline-block h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-t-transparent ${className}`}
+      aria-hidden
+    />
+  )
+}
+
 function tradeImageSrc(imageUrl: string | null | undefined): string | null {
   const raw = imageUrl != null ? String(imageUrl).trim() : ""
   if (!raw) return null
@@ -235,6 +255,11 @@ function CommunityContent() {
   const [removingMemberId, setRemovingMemberId] = useState<string | null>(null)
   const [banningMemberId, setBanningMemberId] = useState<string | null>(null)
   const [unbanningBanId, setUnbanningBanId] = useState<string | null>(null)
+  const [memberActionConfirm, setMemberActionConfirm] =
+    useState<MemberActionConfirm | null>(null)
+  const [deleteSectionConfirm, setDeleteSectionConfirm] =
+    useState<DeleteSectionConfirm | null>(null)
+  const [deletingSectionId, setDeletingSectionId] = useState<string | null>(null)
   const [showInviteModal, setShowInviteModal] = useState(false)
   /** room id → has at least one unread message (others’ messages not in seen_by) */
   const [unreadByRoomId, setUnreadByRoomId] = useState<Record<string, boolean>>(
@@ -303,6 +328,11 @@ function CommunityContent() {
       return username.includes(q) || name.includes(q)
     })
   }, [bannedUsers, memberSearchQuery])
+
+  const memberActionBusy =
+    removingMemberId !== null ||
+    banningMemberId !== null ||
+    unbanningBanId !== null
 
   const userIdRef = useRef<string | null>(null)
   const needsJoinRef = useRef(false)
@@ -508,6 +538,51 @@ function CommunityContent() {
     return next
   }
 
+  function sectionMessageFilter(
+    q: any,
+    roomId: string,
+    sectionId: string,
+    sectionName?: string | null
+  ) {
+    let next = q.eq("room_id", roomId)
+    const nameLower = String(sectionName ?? "")
+      .trim()
+      .toLowerCase()
+    if (nameLower === "general") {
+      next = next.or(`section_id.eq.${sectionId},section_id.is.null`)
+    } else {
+      next = next.eq("section_id", sectionId)
+    }
+    return next
+  }
+
+  async function countSectionMessages(
+    roomId: string,
+    sectionId: string,
+    sectionName?: string | null
+  ) {
+    let q = supabase
+      .from("room_messages")
+      .select("*", { count: "exact", head: true })
+    q = sectionMessageFilter(q, roomId, sectionId, sectionName)
+    const { count, error } = await q
+    if (error) {
+      console.error("countSectionMessages:", error)
+      return { count: 0, error }
+    }
+    return { count: count ?? 0, error: null }
+  }
+
+  async function deleteSectionMessages(
+    roomId: string,
+    sectionId: string,
+    sectionName?: string | null
+  ) {
+    let q = supabase.from("room_messages").delete()
+    q = sectionMessageFilter(q, roomId, sectionId, sectionName)
+    return q
+  }
+
   async function fetchRoomMessages(
     roomId: string,
     sectionsList: { id: string; name?: string | null }[],
@@ -700,23 +775,105 @@ function CommunityContent() {
     await refetchSections()
   }
 
-  async function handleDeleteSection(sectionId: string) {
-    if (sections.length <= 1) {
+  async function executeDeleteSection(sectionId: string) {
+    if (!selectedRoomId || sections.length <= 1) {
       showPopup({ type: "warning", message: "You must have at least 1 page" })
       return
     }
 
-    const { error } = await supabase
+    const section = sections.find((s) => s.id === sectionId)
+    if (!section) return
+
+    setDeletingSectionId(sectionId)
+
+    const { error: messagesError } = await deleteSectionMessages(
+      selectedRoomId,
+      sectionId,
+      section.name
+    )
+
+    if (messagesError) {
+      setDeletingSectionId(null)
+      console.error("executeDeleteSection messages:", messagesError)
+      showPopup({ type: "error", message: "Failed to delete channel messages" })
+      return
+    }
+
+    const { error: sectionError } = await supabase
       .from("room_sections")
       .delete()
       .eq("id", sectionId)
 
-    if (error) {
-      console.error(error)
+    setDeletingSectionId(null)
+
+    if (sectionError) {
+      console.error("executeDeleteSection section:", sectionError)
+      showPopup({ type: "error", message: "Failed to delete channel" })
       return
     }
 
+    showPopup({ type: "success", message: "Channel deleted" })
+    if (editingSection?.id === sectionId) {
+      setEditingSection(null)
+    }
     await refetchSections()
+  }
+
+  function openChannelSettings(section: {
+    id: string
+    name?: string | null
+    allow_members_chat?: boolean
+  }) {
+    setEditingSection(section)
+    setEditSectionName(section.name ?? "")
+    setEditAllowChat(section.allow_members_chat !== false)
+  }
+
+  function requestDeleteFromChannelSettings() {
+    if (!editingSection || deletingSectionId) return
+    const sectionId = editingSection.id
+    setEditingSection(null)
+    void promptDeleteSection(sectionId)
+  }
+
+  async function promptDeleteSection(sectionId: string) {
+    if (sections.length <= 1) {
+      showPopup({ type: "warning", message: "You must have at least 1 page" })
+      return
+    }
+    if (!selectedRoomId) return
+
+    const section = sections.find((s) => s.id === sectionId)
+    if (!section) return
+
+    const { count, error } = await countSectionMessages(
+      selectedRoomId,
+      sectionId,
+      section.name
+    )
+
+    if (error) {
+      showPopup({ type: "error", message: "Failed to check channel messages" })
+      return
+    }
+
+    if (count > 0) {
+      setDeleteSectionConfirm({
+        sectionId,
+        sectionName: String(section.name ?? "Channel"),
+        messageCount: count,
+      })
+      return
+    }
+
+    await executeDeleteSection(sectionId)
+  }
+
+  async function handleDeleteSectionConfirm() {
+    if (!deleteSectionConfirm || deletingSectionId) return
+    const { sectionId } = deleteSectionConfirm
+    setDeleteSectionConfirm(null)
+    await executeDeleteSection(sectionId)
   }
 
   async function handleCreateSection() {
@@ -787,6 +944,7 @@ function CommunityContent() {
       )
 
       setEditingSection(null)
+      showPopup({ type: "success", message: "Channel saved" })
     } catch (err) {
       console.error(err)
       showPopup({ type: "error", message: "Failed to update channel" })
@@ -892,11 +1050,6 @@ function CommunityContent() {
     }
 
     if (bansResult.error) {
-      console.error(
-        "loadBannedUsers full error",
-        JSON.stringify(bansResult.error, null, 2)
-      )
-      console.log("room_bans result", bansResult)
       console.error("loadBannedUsers:", bansResult.error)
       setBannedUsers([])
     } else {
@@ -997,6 +1150,32 @@ function CommunityContent() {
 
     showPopup({ type: "success", message: "User unbanned" })
     await loadManageMembers(selectedRoomId)
+  }
+
+  async function handleMemberActionConfirm() {
+    if (!memberActionConfirm || memberActionBusy) return
+
+    const action = memberActionConfirm
+
+    if (action.kind === "remove") {
+      await handleRemoveMember(action.userId)
+    } else if (action.kind === "ban") {
+      await handleBanMember(action.userId)
+    } else {
+      await handleUnbanMember(action.banId)
+    }
+
+    setMemberActionConfirm(null)
+  }
+
+  function memberActionConfirmCopy(confirm: MemberActionConfirm): string {
+    if (confirm.kind === "remove") {
+      return "Remove this member from the room?"
+    }
+    if (confirm.kind === "ban") {
+      return "Ban this member from the room? They will not be able to rejoin until unbanned."
+    }
+    return "Allow this user to join the room again?"
   }
 
   async function loadMemberRooms(userId: string): Promise<Room[]> {
@@ -2034,12 +2213,10 @@ function CommunityContent() {
                         {isOwner ? (
                           <button
                             type="button"
-                            aria-label="Edit channel"
+                            aria-label="Channel settings"
                             onClick={(e) => {
                               e.stopPropagation()
-                              setEditingSection(section)
-                              setEditSectionName(section.name ?? "")
-                              setEditAllowChat(section.allow_members_chat !== false)
+                              openChannelSettings(section)
                             }}
                             className="shrink-0 px-2 py-2 text-xs text-gray-500 hover:text-white"
                           >
@@ -2290,49 +2467,60 @@ function CommunityContent() {
       {editingSection ? (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-          onClick={() => setEditingSection(null)}
+          onClick={() => {
+            if (deletingSectionId) return
+            setEditingSection(null)
+          }}
           role="presentation"
         >
           <div
-            className="w-[350px] rounded-lg bg-[#0b1f3a] p-6 text-white shadow-xl"
+            className="w-full max-w-[400px] rounded-lg bg-[#0b1f3a] p-6 text-white shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="mb-3 text-lg font-semibold">Edit Channel</h2>
+            <h2 className="mb-3 text-lg font-semibold">Channel Settings</h2>
 
-            <input
-              type="text"
-              value={editSectionName}
-              onChange={(e) => setEditSectionName(e.target.value)}
-              className="mb-3 w-full rounded border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-gray-500"
-              placeholder="Channel name"
-            />
-
-            <label className="mb-4 flex cursor-pointer items-center gap-2 text-sm text-gray-300">
+            <div className="border-t border-white/10 pt-4">
+              <p className="mb-1 text-sm font-medium text-gray-300">
+                Channel Name
+              </p>
               <input
-                type="checkbox"
-                className="rounded border-white/20 bg-black/30"
-                checked={editAllowChat}
-                onChange={(e) => setEditAllowChat(e.target.checked)}
+                type="text"
+                value={editSectionName}
+                onChange={(e) => setEditSectionName(e.target.value)}
+                className="mb-3 w-full rounded border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-gray-500"
+                placeholder="Channel name"
               />
-              Allow members to chat
-            </label>
 
-            <div className="flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setEditingSection(null)}
-                className="text-sm text-gray-400 hover:text-white"
-              >
-                Cancel
-              </button>
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-300">
+                <input
+                  type="checkbox"
+                  className="rounded border-white/20 bg-black/30"
+                  checked={editAllowChat}
+                  onChange={(e) => setEditAllowChat(e.target.checked)}
+                />
+                Members can chat
+              </label>
+            </div>
 
+            <div className="mt-4 space-y-2 border-t border-white/10 pt-4">
               <button
                 type="button"
                 onClick={() => void handleSaveSectionEdit()}
-                className="rounded bg-green-500/20 px-4 py-2 text-sm text-green-100 hover:bg-green-500/30"
+                className="w-full rounded bg-green-500/20 px-4 py-2 text-sm text-green-100 hover:bg-green-500/30"
               >
-                Save
+                Save Changes
               </button>
+
+              {sections.length > 1 ? (
+                <button
+                  type="button"
+                  disabled={deletingSectionId != null}
+                  onClick={() => requestDeleteFromChannelSettings()}
+                  className="w-full rounded bg-red-500/10 px-4 py-2 text-sm text-red-400 hover:bg-red-500/20 disabled:opacity-50"
+                >
+                  Delete Channel
+                </button>
+              ) : null}
             </div>
           </div>
         </div>
@@ -2383,11 +2571,14 @@ function CommunityContent() {
       {showManageMembers && isOwner && selectedRoomId ? (
         <div
           className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
-          onClick={() => setShowManageMembers(false)}
+          onClick={() => {
+            if (memberActionBusy || memberActionConfirm) return
+            setShowManageMembers(false)
+          }}
           role="presentation"
         >
           <div
-            className="flex w-full max-w-[400px] max-h-[min(85svh,560px)] flex-col rounded-lg bg-[#0b1f3a] p-6 text-white shadow-xl"
+            className="relative flex w-full max-w-[400px] max-h-[min(85svh,560px)] flex-col rounded-lg bg-[#0b1f3a] p-6 text-white shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <h2 className="mb-3 shrink-0 text-lg font-semibold">Manage Members</h2>
@@ -2408,7 +2599,7 @@ function CommunityContent() {
                   {filteredManageMembers.length === 0 ? (
                     <p className="py-4 text-sm text-gray-400">
                       {manageMembers.length === 0
-                        ? "No active members."
+                        ? "No members found."
                         : "No members match your search."}
                     </p>
                   ) : (
@@ -2453,23 +2644,43 @@ function CommunityContent() {
                               <div className="flex shrink-0 items-center gap-1">
                                 <button
                                   type="button"
-                                  disabled={isBanning || isRemoving}
+                                  disabled={memberActionBusy}
                                   onClick={() =>
-                                    void handleBanMember(member.user_id)
+                                    setMemberActionConfirm({
+                                      kind: "ban",
+                                      userId: member.user_id,
+                                    })
                                   }
-                                  className="rounded bg-orange-500/10 px-2 py-1 text-xs text-orange-400 hover:bg-orange-500/20 disabled:opacity-50"
+                                  className="inline-flex items-center gap-1 rounded bg-orange-500/10 px-2 py-1 text-xs text-orange-400 hover:bg-orange-500/20 disabled:opacity-50"
                                 >
-                                  {isBanning ? "Banning..." : "Ban"}
+                                  {isBanning ? (
+                                    <>
+                                      <ActionSpinner className="border-orange-400" />
+                                      Banning...
+                                    </>
+                                  ) : (
+                                    "Ban"
+                                  )}
                                 </button>
                                 <button
                                   type="button"
-                                  disabled={isRemoving || isBanning}
+                                  disabled={memberActionBusy}
                                   onClick={() =>
-                                    void handleRemoveMember(member.user_id)
+                                    setMemberActionConfirm({
+                                      kind: "remove",
+                                      userId: member.user_id,
+                                    })
                                   }
-                                  className="rounded bg-red-500/10 px-2 py-1 text-xs text-red-400 hover:bg-red-500/20 disabled:opacity-50"
+                                  className="inline-flex items-center gap-1 rounded bg-red-500/10 px-2 py-1 text-xs text-red-400 hover:bg-red-500/20 disabled:opacity-50"
                                 >
-                                  {isRemoving ? "Removing..." : "Remove"}
+                                  {isRemoving ? (
+                                    <>
+                                      <ActionSpinner className="border-red-400" />
+                                      Removing...
+                                    </>
+                                  ) : (
+                                    "Remove"
+                                  )}
                                 </button>
                               </div>
                             )}
@@ -2523,11 +2734,23 @@ function CommunityContent() {
                               </div>
                               <button
                                 type="button"
-                                disabled={isUnbanning}
-                                onClick={() => void handleUnbanMember(ban.id)}
-                                className="shrink-0 rounded bg-green-500/10 px-2 py-1 text-xs text-green-400 hover:bg-green-500/20 disabled:opacity-50"
+                                disabled={memberActionBusy}
+                                onClick={() =>
+                                  setMemberActionConfirm({
+                                    kind: "unban",
+                                    banId: ban.id,
+                                  })
+                                }
+                                className="inline-flex shrink-0 items-center gap-1 rounded bg-green-500/10 px-2 py-1 text-xs text-green-400 hover:bg-green-500/20 disabled:opacity-50"
                               >
-                                {isUnbanning ? "Unbanning..." : "Unban"}
+                                {isUnbanning ? (
+                                  <>
+                                    <ActionSpinner className="border-green-400" />
+                                    Unbanning...
+                                  </>
+                                ) : (
+                                  "Unban"
+                                )}
                               </button>
                             </div>
                           )
@@ -2542,12 +2765,61 @@ function CommunityContent() {
             <div className="mt-4 flex shrink-0 justify-end">
               <button
                 type="button"
+                disabled={memberActionBusy || memberActionConfirm != null}
                 onClick={() => setShowManageMembers(false)}
-                className="text-sm text-gray-400 hover:text-white"
+                className="text-sm text-gray-400 hover:text-white disabled:opacity-50"
               >
                 Close
               </button>
             </div>
+
+            {memberActionConfirm ? (
+              <div
+                className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-black/60 p-4"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="w-full max-w-[320px] rounded-lg border border-white/10 bg-[#0b1f3a] p-5 shadow-xl">
+                  <p className="mb-4 text-sm text-gray-200">
+                    {memberActionConfirmCopy(memberActionConfirm)}
+                  </p>
+                  <div className="flex justify-end gap-3">
+                    <button
+                      type="button"
+                      disabled={memberActionBusy}
+                      onClick={() => setMemberActionConfirm(null)}
+                      className="text-sm text-gray-400 hover:text-white disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      disabled={memberActionBusy}
+                      onClick={() => void handleMemberActionConfirm()}
+                      className={
+                        memberActionConfirm.kind === "unban"
+                          ? "inline-flex items-center gap-1.5 rounded bg-green-500/20 px-3 py-1.5 text-sm text-green-100 hover:bg-green-500/30 disabled:opacity-50"
+                          : memberActionConfirm.kind === "ban"
+                            ? "inline-flex items-center gap-1.5 rounded bg-orange-500/20 px-3 py-1.5 text-sm text-orange-100 hover:bg-orange-500/30 disabled:opacity-50"
+                            : "inline-flex items-center gap-1.5 rounded bg-red-500/20 px-3 py-1.5 text-sm text-red-100 hover:bg-red-500/30 disabled:opacity-50"
+                      }
+                    >
+                      {memberActionBusy ? (
+                        <>
+                          <ActionSpinner />
+                          Confirming...
+                        </>
+                      ) : memberActionConfirm.kind === "unban" ? (
+                        "Unban"
+                      ) : memberActionConfirm.kind === "ban" ? (
+                        "Ban"
+                      ) : (
+                        "Remove"
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}
@@ -2555,11 +2827,14 @@ function CommunityContent() {
       {showRoomSettings && isOwner && selectedRoomId ? (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-          onClick={() => setShowRoomSettings(false)}
+          onClick={() => {
+            if (deletingSectionId || deleteSectionConfirm) return
+            setShowRoomSettings(false)
+          }}
           role="presentation"
         >
           <div
-            className="w-full max-w-[400px] rounded-lg bg-[#0b1f3a] p-6 text-white shadow-xl"
+            className="relative w-full max-w-[400px] rounded-lg bg-[#0b1f3a] p-6 text-white shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <h2 className="mb-3 text-lg font-semibold">Room Settings</h2>
@@ -2623,10 +2898,11 @@ function CommunityContent() {
 
                     <button
                       type="button"
-                      onClick={() => void handleDeleteSection(section.id)}
-                      className="text-red-400 hover:text-red-500"
+                      disabled={deletingSectionId != null}
+                      onClick={() => void promptDeleteSection(section.id)}
+                      className="text-red-400 hover:text-red-500 disabled:opacity-50"
                     >
-                      🗑
+                      {deletingSectionId === section.id ? "…" : "🗑"}
                     </button>
                   </div>
                 ))}
@@ -2652,10 +2928,61 @@ function CommunityContent() {
 
               <button
                 type="button"
+                disabled={deletingSectionId != null || deleteSectionConfirm != null}
                 onClick={() => setShowRoomSettings(false)}
-                className="text-sm text-gray-400 hover:text-white"
+                className="text-sm text-gray-400 hover:text-white disabled:opacity-50"
               >
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {deleteSectionConfirm ? (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4"
+          onClick={() => {
+            if (deletingSectionId) return
+            setDeleteSectionConfirm(null)
+          }}
+          role="presentation"
+        >
+          <div
+            className="w-full max-w-[320px] rounded-lg border border-white/10 bg-[#0b1f3a] p-5 text-white shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="mb-4 text-sm text-gray-200">
+              This channel contains {deleteSectionConfirm.messageCount} message
+              {deleteSectionConfirm.messageCount === 1 ? "" : "s"}.
+              <br />
+              <br />
+              Deleting this channel will permanently remove all messages inside
+              it.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                disabled={deletingSectionId != null}
+                onClick={() => setDeleteSectionConfirm(null)}
+                className="text-sm text-gray-400 hover:text-white disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={deletingSectionId != null}
+                onClick={() => void handleDeleteSectionConfirm()}
+                className="inline-flex items-center gap-1.5 rounded bg-red-500/20 px-3 py-1.5 text-sm text-red-100 hover:bg-red-500/30 disabled:opacity-50"
+              >
+                {deletingSectionId ? (
+                  <>
+                    <ActionSpinner />
+                    Deleting...
+                  </>
+                ) : (
+                  "Delete Channel"
+                )}
               </button>
             </div>
           </div>
