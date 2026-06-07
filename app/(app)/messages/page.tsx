@@ -785,15 +785,15 @@ export default function MessagesPage() {
 
   return (
     <>
-      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white px-6 pb-6 pt-0">
+      <div className="flex h-[calc(100dvh-4rem)] min-h-0 flex-col overflow-hidden bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white px-6 pb-6 pt-0">
 
-        <div className="max-w-3xl mx-auto">
+        <div className="mx-auto flex h-full min-h-0 w-full max-w-3xl flex-col">
 
-          <h1 className="text-2xl font-semibold mb-4">
+          <h1 className="mb-4 shrink-0 text-2xl font-semibold">
             Messages
           </h1>
 
-          <div className="mt-2 mb-4 flex justify-start gap-2 md:mt-3">
+          <div className="mt-2 mb-4 flex shrink-0 justify-start gap-2 md:mt-3">
             
             <button
               type="button"
@@ -815,23 +815,25 @@ export default function MessagesPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search conversations..."
-            className="w-full mb-6 p-3 bg-black border border-white/10 rounded focus:outline-none focus:border-emerald-400"
+            className="mb-6 w-full shrink-0 rounded border border-white/10 bg-black p-3 focus:border-emerald-400 focus:outline-none"
           />
 
-          {loading ? (
-            <p className="text-gray-400">Loading...</p>
-          ) : filteredConversations.length === 0 ? (
-            <p className="text-gray-400">No conversations found</p>
-          ) : (
-            <MessagesConversationList
-              conversations={filteredConversations}
-              openConvoMenuId={openConvoMenuId}
-              onOpen={handleOpenConversation}
-              onToggleMenu={handleToggleConvoMenu}
-              onPin={handlePinConversation}
-              onDelete={handleDeleteConversation}
-            />
-          )}
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {loading ? (
+              <p className="text-gray-400">Loading...</p>
+            ) : filteredConversations.length === 0 ? (
+              <p className="text-gray-400">No conversations found</p>
+            ) : (
+              <MessagesConversationList
+                conversations={filteredConversations}
+                openConvoMenuId={openConvoMenuId}
+                onOpen={handleOpenConversation}
+                onToggleMenu={handleToggleConvoMenu}
+                onPin={handlePinConversation}
+                onDelete={handleDeleteConversation}
+              />
+            )}
+          </div>
 
         </div>
 

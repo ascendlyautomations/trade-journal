@@ -1114,9 +1114,9 @@ export default function DMPage() {
       <Navbar />
       <FeedbackModal {...feedbackModalProps} />
 
-      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] flex justify-center text-white px-4 pb-4 mt-0 pt-2 w-full overflow-hidden">
+      <div className="flex h-[calc(100dvh-4rem)] min-h-0 w-full flex-col overflow-hidden bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 pb-4 pt-2 text-white">
 
-        <div className="w-full max-w-3xl h-[calc(100vh-80px)] bg-black/30 border border-white/10 rounded-xl flex flex-col overflow-hidden">
+        <div className="mx-auto flex h-full min-h-0 w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-white/10 bg-black/30">
 
           {/* HEADER */}
           <div className="shrink-0 flex items-center justify-between px-3 py-2 border-b border-white/10 md:p-4 md:justify-start md:gap-3">

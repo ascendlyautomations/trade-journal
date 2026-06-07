@@ -98,7 +98,7 @@ function TradesPageMainContent({
 
   return (
     <>
-      <div className="w-full px-2 md:px-4 mt-2.5 mb-1.5">
+      <div className="w-full mt-2.5 mb-1.5">
         <TradeFilterBar
           variant="trades"
           fullWidth
@@ -236,7 +236,7 @@ function TradesPageMainContent({
         />
       </div>
 
-      <div className="w-full grid grid-cols-2 md:grid-cols-4 gap-2 mb-3 px-1 mt-0 md:px-0">
+      <div className="w-full grid grid-cols-2 md:grid-cols-4 gap-2 mb-3 mt-0">
         <Stat
           title="Trades"
           value={tradeStats.totalTrades.toLocaleString(undefined, {
