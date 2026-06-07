@@ -67,6 +67,27 @@ type ActivePresence = {
   } | null
 }
 
+type RoomMemberManage = {
+  user_id: string
+  profiles?: {
+    id?: string
+    username?: string | null
+    name?: string | null
+    avatar_url?: string | null
+  } | null
+}
+
+type RoomBanManage = {
+  id: string
+  user_id: string
+  profiles?: {
+    id?: string
+    username?: string | null
+    name?: string | null
+    avatar_url?: string | null
+  } | null
+}
+
 function tradeImageSrc(imageUrl: string | null | undefined): string | null {
   const raw = imageUrl != null ? String(imageUrl).trim() : ""
   if (!raw) return null
@@ -206,6 +227,14 @@ function CommunityContent() {
   const [roomImage, setRoomImage] = useState<string | null>(null)
   const [inviteTargetRoom, setInviteTargetRoom] = useState<Room | null>(null)
   const [showRoomSettings, setShowRoomSettings] = useState(false)
+  const [showManageMembers, setShowManageMembers] = useState(false)
+  const [memberSearchQuery, setMemberSearchQuery] = useState("")
+  const [manageMembers, setManageMembers] = useState<RoomMemberManage[]>([])
+  const [bannedUsers, setBannedUsers] = useState<RoomBanManage[]>([])
+  const [loadingManageMembers, setLoadingManageMembers] = useState(false)
+  const [removingMemberId, setRemovingMemberId] = useState<string | null>(null)
+  const [banningMemberId, setBanningMemberId] = useState<string | null>(null)
+  const [unbanningBanId, setUnbanningBanId] = useState<string | null>(null)
   const [showInviteModal, setShowInviteModal] = useState(false)
   /** room id → has at least one unread message (others’ messages not in seen_by) */
   const [unreadByRoomId, setUnreadByRoomId] = useState<Record<string, boolean>>(
@@ -254,6 +283,26 @@ function CommunityContent() {
       !rooms.some((r) => r.id === selectedRoomId)
     )
   }, [inviteTargetRoom, selectedRoomId, rooms])
+
+  const filteredManageMembers = useMemo(() => {
+    const q = memberSearchQuery.trim().toLowerCase()
+    if (!q) return manageMembers
+    return manageMembers.filter((m) => {
+      const username = String(m.profiles?.username ?? "").toLowerCase()
+      const name = String(m.profiles?.name ?? "").toLowerCase()
+      return username.includes(q) || name.includes(q)
+    })
+  }, [manageMembers, memberSearchQuery])
+
+  const filteredBannedUsers = useMemo(() => {
+    const q = memberSearchQuery.trim().toLowerCase()
+    if (!q) return bannedUsers
+    return bannedUsers.filter((b) => {
+      const username = String(b.profiles?.username ?? "").toLowerCase()
+      const name = String(b.profiles?.name ?? "").toLowerCase()
+      return username.includes(q) || name.includes(q)
+    })
+  }, [bannedUsers, memberSearchQuery])
 
   const userIdRef = useRef<string | null>(null)
   const needsJoinRef = useRef(false)
@@ -424,6 +473,11 @@ function CommunityContent() {
 
     void loadMemberStats(selectedRoomId)
   }, [selectedRoomId])
+
+  useEffect(() => {
+    if (!showManageMembers || !selectedRoomId || !isOwner) return
+    void loadManageMembers(selectedRoomId)
+  }, [showManageMembers, selectedRoomId, isOwner])
 
   function applySectionFiltersToQuery(
     q: any,
@@ -781,6 +835,168 @@ function CommunityContent() {
 
     setActiveMembers(active || 0)
     setLeftMembers((total || 0) - (active || 0))
+  }
+
+  async function loadManageMembers(roomId: string) {
+    setLoadingManageMembers(true)
+
+    const [membersResult, bansResult] = await Promise.all([
+      supabase
+        .from("room_members")
+        .select(
+          `
+          user_id,
+          profiles (
+            id,
+            username,
+            name,
+            avatar_url
+          )
+        `
+        )
+        .eq("room_id", roomId)
+        .is("left_at", null),
+      supabase
+        .from("room_bans")
+        .select(
+          `
+          id,
+          user_id,
+          profiles!room_bans_user_id_fkey (
+            id,
+            username,
+            name,
+            avatar_url
+          )
+        `
+        )
+        .eq("room_id", roomId)
+        .order("created_at", { ascending: false }),
+    ])
+
+    if (membersResult.error) {
+      console.error("loadManageMembers:", membersResult.error)
+      showPopup({ type: "error", message: "Failed to load members" })
+      setManageMembers([])
+    } else {
+      const sorted = [...(membersResult.data ?? [])].sort((a, b) => {
+        const aName = String(
+          (a as RoomMemberManage).profiles?.username ?? ""
+        ).toLowerCase()
+        const bName = String(
+          (b as RoomMemberManage).profiles?.username ?? ""
+        ).toLowerCase()
+        return aName.localeCompare(bName)
+      })
+      setManageMembers(sorted as RoomMemberManage[])
+    }
+
+    if (bansResult.error) {
+      console.error(
+        "loadBannedUsers full error",
+        JSON.stringify(bansResult.error, null, 2)
+      )
+      console.log("room_bans result", bansResult)
+      console.error("loadBannedUsers:", bansResult.error)
+      setBannedUsers([])
+    } else {
+      setBannedUsers((bansResult.data ?? []) as RoomBanManage[])
+    }
+
+    setLoadingManageMembers(false)
+  }
+
+  async function softRemoveMember(roomId: string, targetUserId: string) {
+    return supabase
+      .from("room_members")
+      .update({ left_at: new Date().toISOString() })
+      .eq("room_id", roomId)
+      .eq("user_id", targetUserId)
+      .is("left_at", null)
+  }
+
+  async function handleRemoveMember(targetUserId: string) {
+    if (!selectedRoomId || !user?.id) return
+    if (targetUserId === user.id) return
+
+    setRemovingMemberId(targetUserId)
+
+    const { error } = await softRemoveMember(selectedRoomId, targetUserId)
+
+    setRemovingMemberId(null)
+
+    if (error) {
+      console.error("handleRemoveMember:", error)
+      showPopup({ type: "error", message: "Failed to remove member" })
+      return
+    }
+
+    showPopup({ type: "success", message: "Member removed" })
+    await loadManageMembers(selectedRoomId)
+    await loadMemberStats(selectedRoomId)
+  }
+
+  async function handleBanMember(targetUserId: string) {
+    if (!selectedRoomId || !user?.id) return
+    if (targetUserId === user.id) return
+
+    setBanningMemberId(targetUserId)
+
+    const { error: banError } = await supabase.from("room_bans").insert({
+      room_id: selectedRoomId,
+      user_id: targetUserId,
+      banned_by: user.id,
+    })
+
+    if (banError && banError.code !== "23505") {
+      setBanningMemberId(null)
+      console.error("handleBanMember:", banError)
+      showPopup({ type: "error", message: "Failed to ban member" })
+      return
+    }
+
+    const { error: removeError } = await softRemoveMember(
+      selectedRoomId,
+      targetUserId
+    )
+
+    setBanningMemberId(null)
+
+    if (removeError) {
+      console.error("handleBanMember remove:", removeError)
+      showPopup({
+        type: "warning",
+        message: "User banned but failed to remove membership",
+      })
+    } else {
+      showPopup({ type: "success", message: "Member banned" })
+    }
+
+    await loadManageMembers(selectedRoomId)
+    await loadMemberStats(selectedRoomId)
+  }
+
+  async function handleUnbanMember(banId: string) {
+    if (!selectedRoomId) return
+
+    setUnbanningBanId(banId)
+
+    const { error } = await supabase
+      .from("room_bans")
+      .delete()
+      .eq("id", banId)
+      .eq("room_id", selectedRoomId)
+
+    setUnbanningBanId(null)
+
+    if (error) {
+      console.error("handleUnbanMember:", error)
+      showPopup({ type: "error", message: "Failed to unban user" })
+      return
+    }
+
+    showPopup({ type: "success", message: "User unbanned" })
+    await loadManageMembers(selectedRoomId)
   }
 
   async function loadMemberRooms(userId: string): Promise<Room[]> {
@@ -2164,6 +2380,178 @@ function CommunityContent() {
         </div>
       ) : null}
 
+      {showManageMembers && isOwner && selectedRoomId ? (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setShowManageMembers(false)}
+          role="presentation"
+        >
+          <div
+            className="flex w-full max-w-[400px] max-h-[min(85svh,560px)] flex-col rounded-lg bg-[#0b1f3a] p-6 text-white shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="mb-3 shrink-0 text-lg font-semibold">Manage Members</h2>
+
+            <input
+              type="text"
+              value={memberSearchQuery}
+              onChange={(e) => setMemberSearchQuery(e.target.value)}
+              className="mb-3 w-full shrink-0 rounded border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-gray-500"
+              placeholder="Search members"
+            />
+
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              {loadingManageMembers ? (
+                <p className="py-4 text-sm text-gray-400">Loading members...</p>
+              ) : (
+                <>
+                  {filteredManageMembers.length === 0 ? (
+                    <p className="py-4 text-sm text-gray-400">
+                      {manageMembers.length === 0
+                        ? "No active members."
+                        : "No members match your search."}
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {filteredManageMembers.map((member) => {
+                        const isSelf = member.user_id === user?.id
+                        const displayName = member.profiles?.name?.trim()
+                        const username = member.profiles?.username?.trim()
+                        const avatarSrc =
+                          member.profiles?.avatar_url?.trim() ||
+                          "/default-avatar.png"
+                        const isRemoving = removingMemberId === member.user_id
+                        const isBanning = banningMemberId === member.user_id
+
+                        return (
+                          <div
+                            key={member.user_id}
+                            className="flex items-center gap-3 rounded-lg bg-white/5 p-2"
+                          >
+                            <img
+                              src={avatarSrc}
+                              alt=""
+                              className="h-9 w-9 shrink-0 rounded-full object-cover"
+                              loading="lazy"
+                              decoding="async"
+                            />
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-medium text-white">
+                                {username || "User"}
+                              </p>
+                              {displayName ? (
+                                <p className="truncate text-xs text-gray-400">
+                                  {displayName}
+                                </p>
+                              ) : null}
+                            </div>
+                            {isSelf ? (
+                              <span className="shrink-0 text-xs text-gray-500">
+                                Owner
+                              </span>
+                            ) : (
+                              <div className="flex shrink-0 items-center gap-1">
+                                <button
+                                  type="button"
+                                  disabled={isBanning || isRemoving}
+                                  onClick={() =>
+                                    void handleBanMember(member.user_id)
+                                  }
+                                  className="rounded bg-orange-500/10 px-2 py-1 text-xs text-orange-400 hover:bg-orange-500/20 disabled:opacity-50"
+                                >
+                                  {isBanning ? "Banning..." : "Ban"}
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={isRemoving || isBanning}
+                                  onClick={() =>
+                                    void handleRemoveMember(member.user_id)
+                                  }
+                                  className="rounded bg-red-500/10 px-2 py-1 text-xs text-red-400 hover:bg-red-500/20 disabled:opacity-50"
+                                >
+                                  {isRemoving ? "Removing..." : "Remove"}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+
+                  <div className="mt-4 border-t border-white/10 pt-4">
+                    <p className="mb-2 text-sm font-medium text-gray-300">
+                      Banned Users
+                    </p>
+                    {filteredBannedUsers.length === 0 ? (
+                      <p className="py-2 text-sm text-gray-400">
+                        {bannedUsers.length === 0
+                          ? "No banned users."
+                          : "No banned users match your search."}
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {filteredBannedUsers.map((ban) => {
+                          const displayName = ban.profiles?.name?.trim()
+                          const username = ban.profiles?.username?.trim()
+                          const avatarSrc =
+                            ban.profiles?.avatar_url?.trim() ||
+                            "/default-avatar.png"
+                          const isUnbanning = unbanningBanId === ban.id
+
+                          return (
+                            <div
+                              key={ban.id}
+                              className="flex items-center gap-3 rounded-lg bg-white/5 p-2"
+                            >
+                              <img
+                                src={avatarSrc}
+                                alt=""
+                                className="h-9 w-9 shrink-0 rounded-full object-cover"
+                                loading="lazy"
+                                decoding="async"
+                              />
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-sm font-medium text-white">
+                                  {username || "User"}
+                                </p>
+                                {displayName ? (
+                                  <p className="truncate text-xs text-gray-400">
+                                    {displayName}
+                                  </p>
+                                ) : null}
+                              </div>
+                              <button
+                                type="button"
+                                disabled={isUnbanning}
+                                onClick={() => void handleUnbanMember(ban.id)}
+                                className="shrink-0 rounded bg-green-500/10 px-2 py-1 text-xs text-green-400 hover:bg-green-500/20 disabled:opacity-50"
+                              >
+                                {isUnbanning ? "Unbanning..." : "Unban"}
+                              </button>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="mt-4 flex shrink-0 justify-end">
+              <button
+                type="button"
+                onClick={() => setShowManageMembers(false)}
+                className="text-sm text-gray-400 hover:text-white"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {showRoomSettings && isOwner && selectedRoomId ? (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
@@ -2211,6 +2599,17 @@ function CommunityContent() {
               />
               Show on my profile
             </label>
+
+            <button
+              type="button"
+              onClick={() => {
+                setMemberSearchQuery("")
+                setShowManageMembers(true)
+              }}
+              className="mt-3 w-full rounded-lg border border-white/10 bg-white/5 py-2 text-sm text-gray-200 hover:bg-white/10"
+            >
+              Manage Members
+            </button>
 
             <div className="mt-4 border-t border-white/10 pt-4">
               <p className="mb-2 text-sm font-medium text-gray-300">Pages</p>
