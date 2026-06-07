@@ -540,7 +540,7 @@ export default function Navbar() {
                       type="button"
                       onClick={() => {
                         setAccountMenuOpen(false)
-                        router.push("/settings")
+                        router.push("/settings#account")
                       }}
                       className="w-full px-4 py-2 text-left text-sm hover:bg-white/10"
                     >
@@ -806,7 +806,7 @@ export default function Navbar() {
             ) : null}
 
             <Link
-              href="/settings"
+              href="/settings#account"
               className="rounded-lg px-3 py-2 text-white hover:text-blue-400"
               onClick={closeMobile}
             >

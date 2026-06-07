@@ -539,7 +539,7 @@ export default function Dashboard() {
 
     const { data: accountsData } = await supabase
       .from("accounts")
-      .select("id, account_number, name, account_size, mode, category")
+      .select("id, account_number, name, account_size, mode, category, is_active")
       .eq("user_id", currentUser.id)
     setAccountRows(accountsData || [])
 
@@ -787,8 +787,9 @@ export default function Dashboard() {
         const accountName = String(t.account_name || "").trim()
         const size = String(t.account_size || "").trim()
         const id = String(t.account_id || "").trim()
-        const value = `${accountName}|${size}|${id}`
         const accRow = accountById[id]
+        if (accRow?.is_active === false) return
+        const value = `${accountName}|${size}|${id}`
         const num = accRow?.account_number
         const label = [accountName, size, num ? `• #${num}` : ""]
           .filter((x) => x !== "")
@@ -1264,6 +1265,13 @@ const worstDay = dailyPnLs.length > 0
     customRangeEnd,
     accountById,
   ])
+
+  useEffect(() => {
+    if (accountFilter === "all") return
+    if (!accounts.some((a) => a.value === accountFilter)) {
+      setAccountFilter("all")
+    }
+  }, [accounts, accountFilter])
 
   // 🔥 LOADING STATE (FIXES GLITCH)
   const isPro = isProActive(profile)

@@ -330,8 +330,8 @@ export default function Leaderboard() {
                 className={LEADERBOARD_SELECT_CLASS}
               >
                 <option value="all">All Accounts</option>
-                <option value="funded">Funded</option>
                 <option value="live">Live</option>
+                <option value="funded">Funded</option>
                 <option value="eval">Eval</option>
               </select>
             </div>

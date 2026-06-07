@@ -35,8 +35,34 @@ import {
 import { createUserRoom } from "@/lib/createUserRoom"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import TradingAccountsSettingsSection from "@/app/components/TradingAccountsSettingsSection"
+import { useScrollPageTopOnMount } from "@/lib/useScrollPageTopOnMount"
 
-type TabId = "profile" | "affiliate" | "account" | "subscription" | "rules"
+type TabId =
+  | "profile"
+  | "affiliate"
+  | "account"
+  | "subscription"
+  | "trading-accounts"
+
+function resolveSettingsTabFromHash(hash: string): TabId | null {
+  const requested = hash.replace("#", "").toLowerCase().trim()
+  if (
+    requested === "profile" ||
+    requested === "affiliate" ||
+    requested === "account" ||
+    requested === "subscription"
+  ) {
+    return requested
+  }
+  if (
+    requested === "trading-accounts" ||
+    requested === "rules" ||
+    requested === "dashboard-risk"
+  ) {
+    return "trading-accounts"
+  }
+  return null
+}
 
 function sliceDateInput(raw: unknown): string {
   if (raw == null || raw === "") return ""
@@ -87,9 +113,9 @@ const TABS: {
     description: "Public profile and trading style",
   },
   {
-    id: "rules",
-    label: "Trading Rules",
-    description: "Dashboard risk and drawdown limits",
+    id: "trading-accounts",
+    label: "Trading Accounts",
+    description: "Manage active accounts and account types",
   },
   {
     id: "affiliate",
@@ -100,12 +126,12 @@ const TABS: {
 
 export default function SettingsPage() {
   const router = useRouter()
+  useScrollPageTopOnMount()
   const [activeTab, setActiveTab] = useState<TabId>("account")
 
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [savingProfile, setSavingProfile] = useState(false)
-  const [savingDrawdownLimit, setSavingDrawdownLimit] = useState(false)
   const [savingPassword, setSavingPassword] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -134,7 +160,6 @@ export default function SettingsPage() {
   const [primaryMarket, setPrimaryMarket] = useState("")
   const [startedTrading, setStartedTrading] = useState("")
   const [tradingModel, setTradingModel] = useState("")
-  const [maxDrawdown, setMaxDrawdown] = useState("")
 
   useEffect(() => {
     void init()
@@ -150,31 +175,16 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (typeof window === "undefined") return
-    const requested = window.location.hash.replace("#", "").toLowerCase().trim()
-    if (
-      requested === "profile" ||
-      requested === "affiliate" ||
-      requested === "account" ||
-      requested === "subscription" ||
-      requested === "rules"
-    ) {
-      setActiveTab(requested)
-    }
-  }, [])
 
-  useEffect(() => {
-    if (loading) return
-    if (typeof window === "undefined") return
-    if (window.location.hash !== "#dashboard-risk") return
-    setActiveTab("rules")
-    const id = window.requestAnimationFrame(() => {
-      document.getElementById("dashboard-risk")?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      })
-    })
-    return () => window.cancelAnimationFrame(id)
-  }, [loading])
+    function syncTabFromHash() {
+      const tab = resolveSettingsTabFromHash(window.location.hash)
+      setActiveTab(tab ?? "account")
+    }
+
+    syncTabFromHash()
+    window.addEventListener("hashchange", syncTabFromHash)
+    return () => window.removeEventListener("hashchange", syncTabFromHash)
+  }, [])
 
   async function fetchProfile(userId: string) {
     const { data } = await supabase
@@ -197,10 +207,6 @@ export default function SettingsPage() {
       setPrimaryMarket((data.primary_market as string) || "")
       setTradingModel((data.trading_model as string) || "")
       setStartedTrading(sliceDateInput(data.started_trading))
-      const raw = data.max_drawdown_limit
-      setMaxDrawdown(
-        raw != null && raw !== "" ? String(raw) : ""
-      )
     }
 
     return data ?? null
@@ -413,32 +419,6 @@ export default function SettingsPage() {
     )
     setAvatarFile(null)
     showPopup({ type: "success", message: "Profile updated successfully" })
-  }
-
-  async function saveDrawdownLimit() {
-    if (!user) return
-
-    const t = maxDrawdown.trim()
-    const n = t === "" ? null : Number(t)
-    if (t !== "" && (!Number.isFinite(n) || n === null || n < 0)) {
-      showPopup({ type: "error", message: "Something went wrong" })
-      return
-    }
-
-    setSavingDrawdownLimit(true)
-    const { error } = await supabase
-      .from("profiles")
-      .update({ max_drawdown_limit: n })
-      .eq("id", user.id)
-    setSavingDrawdownLimit(false)
-
-    if (error) {
-      showPopup({ type: "error", message: "Something went wrong" })
-      return
-    }
-
-    setProfile((p) => (p ? { ...p, max_drawdown_limit: n } : p))
-    showPopup({ type: "success", message: "Limit saved successfully" })
   }
 
   async function updatePassword() {
@@ -1244,75 +1224,11 @@ export default function SettingsPage() {
               </div>
             )}
 
-            {activeTab === "rules" && (
-              <div className="space-y-8">
-                <section
-                  id="dashboard-risk"
-                  className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm"
-                >
-                  <div className="flex items-center gap-2">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="18"
-                      height="18"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      className="shrink-0 text-blue-300"
-                      aria-hidden
-                    >
-                      <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
-                      <circle cx="12" cy="12" r="3" />
-                    </svg>
-                    <h3 className="text-sm font-semibold uppercase tracking-wide text-blue-300">
-                      Dashboard & risk
-                    </h3>
-                  </div>
-                  <p className="mt-1 text-sm text-gray-400">
-                    Controls how drawdown warnings appear on your dashboard (same as the gear
-                    menu).
-                  </p>
-                  <div className="mt-4 flex flex-col gap-3 rounded-xl border border-white/10 bg-black/20 p-4 sm:flex-row sm:items-end sm:justify-between">
-                    <div className="min-w-0 flex-1">
-                      <label
-                        htmlFor="max-drawdown-limit"
-                        className="text-sm font-medium text-white"
-                      >
-                        Max drawdown limit
-                      </label>
-                      <p className="mt-1 text-xs text-gray-500">
-                        Optional cap from your equity peak. Leave blank to clear.
-                      </p>
-                      <input
-                        id="max-drawdown-limit"
-                        type="number"
-                        min={0}
-                        step="0.01"
-                        placeholder="Max drawdown ($)"
-                        value={maxDrawdown}
-                        onChange={(e) => setMaxDrawdown(e.target.value)}
-                        className="mt-3 w-full rounded-xl border border-white/10 bg-black/30 p-3 placeholder:text-gray-500"
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => void saveDrawdownLimit()}
-                      disabled={savingDrawdownLimit}
-                      className="shrink-0 rounded-lg bg-white/10 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-white/15 disabled:opacity-50 sm:mb-0"
-                    >
-                      {savingDrawdownLimit ? "Saving…" : "Save limit"}
-                    </button>
-                  </div>
-                </section>
-
-                <TradingAccountsSettingsSection
-                  userId={user?.id}
-                  isPro={isProActive(profile)}
-                />
-              </div>
+            {activeTab === "trading-accounts" && (
+              <TradingAccountsSettingsSection
+                userId={user?.id}
+                isPro={isProActive(profile)}
+              />
             )}
 
             {activeTab === "subscription" && (

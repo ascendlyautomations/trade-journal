@@ -2,6 +2,9 @@
 
 import type { ReactNode } from "react"
 import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
+
+const MANAGE_ACCOUNTS_VALUE = "__manage_accounts__"
 
 const TF_LABEL_FROM_VALUE: Record<string, string> = {
   all: "All",
@@ -78,6 +81,7 @@ export default function TradeFilterBar({
   mobileThreeRowLayout = false,
   fullWidth = false,
 }: TradeFilterBarProps) {
+  const router = useRouter()
   const isTradesVariant = _variant === "trades"
   const [timeframeOpen, setTimeframeOpen] = useState(false)
   const [selectedTimeframe, setSelectedTimeframe] = useState("All")
@@ -119,6 +123,36 @@ export default function TradeFilterBar({
     }
   }
 
+  function handleAccountFilterChange(value: string) {
+    if (value === MANAGE_ACCOUNTS_VALUE) {
+      router.push("/settings#trading-accounts")
+      return
+    }
+    onAccountChange(value)
+  }
+
+  const accountSelectClassName =
+    "h-[34px] min-w-0 rounded-md border border-white/10 bg-[#0f172a] px-3 py-1 text-sm text-white hover:bg-[#1e293b] focus:outline-none focus:ring-2 focus:ring-blue-500 md:w-auto md:shrink-0"
+
+  function renderAccountSelect(className: string) {
+    return (
+      <select
+        value={accountFilter}
+        onChange={(e) => handleAccountFilterChange(e.target.value)}
+        className={className}
+      >
+        <option value="all">All Accounts</option>
+        {accounts.map((acc) => (
+          <option key={acc.value} value={acc.value}>
+            {acc.label}
+          </option>
+        ))}
+        <option disabled>────────────────────</option>
+        <option value={MANAGE_ACCOUNTS_VALUE}>Manage Accounts →</option>
+      </select>
+    )
+  }
+
   return (
     <>
       <div
@@ -137,18 +171,7 @@ export default function TradeFilterBar({
             <div className="flex justify-center md:justify-start">{leading}</div>
 
             <div className="w-full md:w-auto">
-              <select
-                value={accountFilter}
-                onChange={(e) => onAccountChange(e.target.value)}
-                className="h-[34px] w-full min-w-0 rounded-md border border-white/10 bg-[#0f172a] px-3 py-1 text-sm text-white hover:bg-[#1e293b] focus:outline-none focus:ring-2 focus:ring-blue-500 md:w-auto md:shrink-0"
-              >
-                <option value="all">All Accounts</option>
-                {accounts.map((acc) => (
-                  <option key={acc.value} value={acc.value}>
-                    {acc.label}
-                  </option>
-                ))}
-              </select>
+              {renderAccountSelect(`${accountSelectClassName} w-full`)}
             </div>
 
             <div className="flex w-full gap-2 md:w-auto md:items-center">
@@ -159,9 +182,9 @@ export default function TradeFilterBar({
                   className="h-[34px] w-full min-w-0 rounded-md border border-white/10 bg-[#0f172a] px-2 py-1 text-sm text-white hover:bg-[#1e293b] focus:outline-none focus:ring-2 focus:ring-blue-500 md:w-auto md:shrink-0 md:px-3"
                 >
                   <option value="all">All Modes</option>
+                  <option value="live">Live</option>
                   <option value="funded">Funded</option>
                   <option value="eval">Eval</option>
-                  <option value="live">Live</option>
                 </select>
               </div>
               <div className="flex-1 md:flex-none">
@@ -189,20 +212,7 @@ export default function TradeFilterBar({
           >
             {leading}
 
-            <select
-              value={accountFilter}
-              onChange={(e) => onAccountChange(e.target.value)}
-              className={`h-[34px] min-w-0 rounded-md border border-white/10 bg-[#0f172a] px-3 py-1 text-sm text-white hover:bg-[#1e293b] focus:outline-none focus:ring-2 focus:ring-blue-500 md:w-auto md:shrink-0 ${
-                mobileThreeRowLayout ? "w-full" : "w-full"
-              }`}
-            >
-              <option value="all">All Accounts</option>
-              {accounts.map((acc) => (
-                <option key={acc.value} value={acc.value}>
-                  {acc.label}
-                </option>
-              ))}
-            </select>
+            {renderAccountSelect(`${accountSelectClassName} w-full`)}
 
             {settingsNextToModes || publicNextToModes ? (
               <div
@@ -221,9 +231,9 @@ export default function TradeFilterBar({
                     className="h-[34px] w-full min-w-0 rounded-md border border-white/10 bg-[#0f172a] px-2 py-1 text-sm text-white hover:bg-[#1e293b] focus:outline-none focus:ring-2 focus:ring-blue-500 md:w-auto md:shrink-0 md:px-3"
                   >
                     <option value="all">All Modes</option>
+                    <option value="live">Live</option>
                     <option value="funded">Funded</option>
                     <option value="eval">Eval</option>
-                    <option value="live">Live</option>
                   </select>
                 </div>
                 {publicNextToModes ? (
@@ -252,9 +262,9 @@ export default function TradeFilterBar({
                 className="h-[34px] shrink-0 rounded-md border border-white/10 bg-[#0f172a] px-3 py-1 text-sm text-white hover:bg-[#1e293b] focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="all">All Modes</option>
+                <option value="live">Live</option>
                 <option value="funded">Funded</option>
                 <option value="eval">Eval</option>
-                <option value="live">Live</option>
               </select>
             )}
 

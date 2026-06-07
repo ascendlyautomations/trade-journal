@@ -133,7 +133,7 @@ export default function TradesPage() {
 
     const { data: accountsData } = await supabase
       .from("accounts")
-      .select("id, account_number, name, account_size, mode, category")
+      .select("id, account_number, name, account_size, mode, category, is_active")
       .eq("user_id", user.id)
     setAccountRows(accountsData || [])
 
@@ -236,8 +236,9 @@ export default function TradesPage() {
         const accountName = String(t.account_name || "").trim()
         const size = String(t.account_size || "").trim()
         const id = String(t.account_id || "").trim()
-        const value = `${accountName}|${size}|${id}`
         const accRow = accountById[id]
+        if (accRow?.is_active === false) return
+        const value = `${accountName}|${size}|${id}`
         const num = accRow?.account_number
         const label = [accountName, size, num ? `• #${num}` : ""]
           .filter((x) => x !== "")
@@ -254,6 +255,13 @@ export default function TradesPage() {
       })
     return Array.from(accountFilterMap.values())
   }, [trades, accountById])
+
+  useEffect(() => {
+    if (accountFilter === "all") return
+    if (!accounts.some((a) => a.value === accountFilter)) {
+      setAccountFilter("all")
+    }
+  }, [accounts, accountFilter])
 
   const tradesForPerformanceSharePool = useMemo(
     () =>

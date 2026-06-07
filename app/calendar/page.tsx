@@ -10,7 +10,9 @@ import {
 import { formatDecimal, formatRR } from "@/lib/formatDisplay"
 import { useEffect, useMemo, useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
+import { useScrollPageTopOnMount } from "@/lib/useScrollPageTopOnMount"
 export default function CalendarPage() {
+  useScrollPageTopOnMount()
   const [trades, setTrades] = useState<any[]>([])
   const [shareProfile, setShareProfile] = useState<{
     referral_code?: string | null
