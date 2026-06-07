@@ -59,7 +59,7 @@ function LeaderboardTooltip({
 export default function Leaderboard() {
   const [trades, setTrades] = useState<TradeForLeaderboard[]>([])
   const [userId, setUserId] = useState<string | null>(null)
-  const [view, setView] = useState<LeaderboardView>("daily")
+  const [view, setView] = useState<LeaderboardView>("7D")
 
   useEffect(() => {
     fetchData()
@@ -72,17 +72,61 @@ export default function Leaderboard() {
 
     if (user) setUserId(user.id)
 
-    const { data } = await supabase
-      .from("trades")
-      .select("user_id, pnl, rr, created_at")
+    const PAGE_SIZE = 1000
+    const allTrades: TradeForLeaderboard[] = []
+    let from = 0
 
-    if (data) setTrades(data as TradeForLeaderboard[])
+    while (true) {
+      const to = from + PAGE_SIZE - 1
+      const { data, error } = await supabase
+        .from("trades")
+        .select("user_id, pnl, rr, created_at")
+        .order("created_at", { ascending: true })
+        .range(from, to)
+
+      if (error) {
+        console.error("[leaderboard] trade fetch error:", error)
+        break
+      }
+
+      const batch = (data || []) as TradeForLeaderboard[]
+      allTrades.push(...batch)
+
+      if (batch.length < PAGE_SIZE) break
+      from += PAGE_SIZE
+    }
+
+    setTrades(allTrades)
+
+    if (allTrades.length > 0) {
+      const earliest = allTrades[0]?.created_at
+      const latest = allTrades[allTrades.length - 1]?.created_at
+      console.log("[leaderboard] fetch", {
+        totalTradesFetched: allTrades.length,
+        earliestCreatedAt: earliest,
+        latestCreatedAt: latest,
+      })
+    } else {
+      console.log("[leaderboard] fetch", { totalTradesFetched: 0 })
+    }
   }
 
-  const { chartData, todayStats } = useMemo(
+  const { chartData, todayStats, hasData } = useMemo(
     () => buildLeaderboardChartData(trades, view, userId),
     [trades, view, userId]
   )
+
+  useEffect(() => {
+    console.log("[leaderboard] render", {
+      selectedView: view,
+      chartDataLength: chartData.length,
+      hasData,
+      totalTradesFetched: trades.length,
+      earliestCreatedAt: trades[0]?.created_at ?? null,
+      latestCreatedAt:
+        trades.length > 0 ? trades[trades.length - 1]?.created_at ?? null : null,
+    })
+  }, [trades, view, chartData.length, hasData])
 
   const yAxisTickFormatter = useCallback((v: number) => {
     return formatPnlCurrency(Number(v), {
@@ -106,9 +150,11 @@ export default function Leaderboard() {
             onChange={(e) => setView(e.target.value as LeaderboardView)}
             className="bg-[#1e293b] border border-white/10 px-4 py-2 rounded"
           >
-            <option value="daily">Daily</option>
-            <option value="weekly">Weekly</option>
-            <option value="monthly">Monthly</option>
+            <option value="7D">7D</option>
+            <option value="30D">30D</option>
+            <option value="90D">90D</option>
+            <option value="YTD">YTD</option>
+            <option value="ALL">ALL</option>
           </select>
         </div>
 
@@ -119,6 +165,11 @@ export default function Leaderboard() {
             </h2>
 
             <ResponsiveContainer width="100%" height={400}>
+              {!hasData ? (
+                <div className="flex h-full items-center justify-center text-gray-400">
+                  No leaderboard data available for this timeframe.
+                </div>
+              ) : (
               <LineChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
                 <XAxis dataKey="label" stroke="#94a3b8" />
@@ -156,12 +207,19 @@ export default function Leaderboard() {
                   dot={false}
                 />
               </LineChart>
+              )}
             </ResponsiveContainer>
           </div>
 
           <div className="bg-white/5 border border-white/10 rounded-xl p-6 backdrop-blur-md space-y-4">
             <h2 className="text-lg font-semibold text-blue-300">Your Stats</h2>
 
+            {!hasData ? (
+              <p className="text-gray-400">
+                No leaderboard data available for this timeframe.
+              </p>
+            ) : (
+              <>
             <div>Trades ({view}): {todayStats.yourTradeCount}</div>
             <div>Avg P&L: {formatPnlCurrency(todayStats.yourAvgPnl)}</div>
             <div>
@@ -189,6 +247,8 @@ export default function Leaderboard() {
                 : formatRR(todayStats.globalAvgRR)}
             </div>
             <div>Total Trades: {todayStats.globalTradeCount}</div>
+              </>
+            )}
           </div>
         </div>
       </div>

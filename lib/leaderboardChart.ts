@@ -1,9 +1,9 @@
 /**
- * Leaderboard chart pipeline: EST-aligned buckets, stable sorting, aligned series.
+ * Leaderboard chart pipeline: performance windows, daily chart buckets (NY calendar).
  * Used by app/leaderboard/page.tsx — keep logic here, not scattered in JSX.
  */
 
-export type LeaderboardView = "daily" | "weekly" | "monthly"
+export type LeaderboardView = "7D" | "30D" | "90D" | "YTD" | "ALL"
 
 export type TradeForLeaderboard = {
   user_id: string
@@ -37,6 +37,7 @@ export type LeaderboardTodayStats = {
 }
 
 const NY = "America/New_York"
+const DAY_MS = 24 * 60 * 60 * 1000
 
 function num(v: number | string | null | undefined): number {
   const n = Number(v)
@@ -95,116 +96,85 @@ function ymdCompare(a: string, b: string): number {
   return a.localeCompare(b)
 }
 
-/** Week start Sunday (0), matching prior leaderboard behavior, on NY wall calendar. */
-function weekStartYmd(ymd: string): string {
-  const { y, m, day } = parseYmd(ymd)
-  const t = Date.UTC(y, m - 1, day, 12, 0, 0)
-  const dow = new Date(t).getUTCDay()
-  return addDaysYmd(ymd, -dow)
-}
-
-function monthKeyFromYmd(ymd: string): string {
-  const { y, m } = parseYmd(ymd)
-  return `${y}-${String(m).padStart(2, "0")}`
-}
-
-function parseMonthKey(key: string): { y: number; m: number } {
-  const [y, m] = key.split("-").map(Number)
-  return { y, m }
-}
-
-function addOneMonth(y: number, m: number): { y: number; m: number } {
-  let mm = m + 1
-  let yy = y
-  if (mm > 12) {
-    mm = 1
-    yy += 1
-  }
-  return { y: yy, m: mm }
-}
-
-function monthKeyCompare(a: string, b: string): number {
-  return a.localeCompare(b)
-}
-
-function getTradeBucketId(
-  createdAtIso: string,
-  view: LeaderboardView
-): { bucketId: string; sortKey: number } {
+function getDailyBucketId(createdAtIso: string): {
+  bucketId: string
+  sortKey: number
+} {
   const ymdNY = formatDateNY(createdAtIso)
-
-  if (view === "daily") {
-    const { y, m, day } = parseYmd(ymdNY)
-    return { bucketId: ymdNY, sortKey: y * 10000 + m * 100 + day }
-  }
-
-  if (view === "weekly") {
-    const ws = weekStartYmd(ymdNY)
-    const { y, m, day } = parseYmd(ws)
-    return { bucketId: `W:${ws}`, sortKey: y * 10000 + m * 100 + day }
-  }
-
-  const mk = monthKeyFromYmd(ymdNY)
-  const { y, m } = parseMonthKey(mk)
-  return { bucketId: `M:${mk}`, sortKey: y * 100 + m }
+  const { y, m, day } = parseYmd(ymdNY)
+  return { bucketId: ymdNY, sortKey: y * 10000 + m * 100 + day }
 }
 
-function labelForBucket(bucketId: string, view: LeaderboardView): string {
-  if (view === "daily") {
-    const { y, m, day } = parseYmd(bucketId)
-    return `${m}/${day}/${y}`
-  }
-  if (view === "weekly") {
-    const ws = bucketId.startsWith("W:") ? bucketId.slice(2) : bucketId
-    const { y, m, day } = parseYmd(ws)
-    return `Week ${m}/${day}/${y}`
-  }
-  const mk = bucketId.startsWith("M:") ? bucketId.slice(2) : bucketId
-  const { y, m } = parseMonthKey(mk)
-  return `${m}/${y}`
+function labelForDailyBucket(bucketId: string): string {
+  const { y, m, day } = parseYmd(bucketId)
+  return `${m}/${day}/${y}`
 }
 
-/** All bucket ids from min trade day through today (NY), inclusive. */
-function enumerateBucketIds(
-  view: LeaderboardView,
+/** All daily bucket ids from min trade day through end (NY), inclusive. */
+function enumerateDailyBucketIds(
   minYmdNY: string,
   endYmdNY: string
 ): { bucketId: string; sortKey: number }[] {
   const out: { bucketId: string; sortKey: number }[] = []
-
-  if (view === "daily") {
-    let cur = minYmdNY
-    while (ymdCompare(cur, endYmdNY) <= 0) {
-      const { y, m, day } = parseYmd(cur)
-      const sortKey = y * 10000 + m * 100 + day
-      out.push({ bucketId: cur, sortKey })
-      cur = addDaysYmd(cur, 1)
-    }
-    return out
-  }
-
-  if (view === "weekly") {
-    let curWs = weekStartYmd(minYmdNY)
-    const endWs = weekStartYmd(endYmdNY)
-    while (ymdCompare(curWs, endWs) <= 0) {
-      const { y, m, day } = parseYmd(curWs)
-      const sortKey = y * 10000 + m * 100 + day
-      out.push({ bucketId: `W:${curWs}`, sortKey })
-      curWs = addDaysYmd(curWs, 7)
-    }
-    return out
-  }
-
-  let { y, m } = parseMonthKey(monthKeyFromYmd(minYmdNY))
-  const endMk = monthKeyFromYmd(endYmdNY)
-  while (true) {
-    const mk = `${y}-${String(m).padStart(2, "0")}`
-    if (monthKeyCompare(mk, endMk) > 0) break
-    const bucketId = `M:${mk}`
-    out.push({ bucketId, sortKey: y * 100 + m })
-    ;({ y, m } = addOneMonth(y, m))
+  let cur = minYmdNY
+  while (ymdCompare(cur, endYmdNY) <= 0) {
+    const { y, m, day } = parseYmd(cur)
+    const sortKey = y * 10000 + m * 100 + day
+    out.push({ bucketId: cur, sortKey })
+    cur = addDaysYmd(cur, 1)
   }
   return out
+}
+
+function emptyWindowStats(): LeaderboardTodayStats {
+  return {
+    yourTradeCount: 0,
+    yourAvgPnl: 0,
+    yourAvgRR: null,
+    globalAvgPnl: 0,
+    globalAvgRR: null,
+    globalTradeCount: 0,
+    percentileTopPct: "0.0",
+  }
+}
+
+/** Client-side performance window filter (runs on Phase 1 paginated dataset). */
+export function filterTradesForLeaderboardWindow(
+  trades: TradeForLeaderboard[],
+  view: LeaderboardView,
+  now: Date = new Date()
+): TradeForLeaderboard[] {
+  const valid = trades.filter((t) => t?.created_at && t.user_id)
+
+  if (view === "ALL") return valid
+
+  if (view === "YTD") {
+    const todayYmd = formatDateNY(now.toISOString())
+    const ytdStart = `${parseYmd(todayYmd).y}-01-01`
+    return valid.filter(
+      (t) => ymdCompare(formatDateNY(t.created_at), ytdStart) >= 0
+    )
+  }
+
+  const days = view === "7D" ? 7 : view === "30D" ? 30 : 90
+  const cutoffMs = now.getTime() - days * DAY_MS
+  return valid.filter((t) => new Date(t.created_at).getTime() >= cutoffMs)
+}
+
+function getChartWindowStartYmd(
+  view: LeaderboardView,
+  now: Date
+): string | null {
+  if (view === "ALL") return null
+
+  const todayYmd = formatDateNY(now.toISOString())
+
+  if (view === "YTD") {
+    return `${parseYmd(todayYmd).y}-01-01`
+  }
+
+  const days = view === "7D" ? 7 : view === "30D" ? 30 : 90
+  return formatDateNY(new Date(now.getTime() - days * DAY_MS).toISOString())
 }
 
 type UserAgg = { pnl: number; rr: number; count: number }
@@ -214,29 +184,39 @@ function emptyUserMap(): Record<string, UserAgg> {
 }
 
 /**
- * Build chart rows + today stats from raw trades.
- * - Buckets use America/New_York calendar (same idea as dashboard EST helpers).
- * - One code path for bucket ids (no double toEST / mismatched getKey).
- * - Timeline includes every bucket from earliest trade date through today (NY).
- * - Missing user in a bucket => you: 0 for that period (continuous line).
- * - Average is mean of **each user's total PnL in that bucket** (users with ≥1 trade there only).
+ * Build chart rows + sidebar stats from raw trades.
+ * - Trades filtered by selected performance window before aggregation.
+ * - Chart uses daily NY buckets within the window.
+ * - Sidebar stats cover the full selected window (not a single calendar bucket).
  */
 export function buildLeaderboardChartData(
   trades: TradeForLeaderboard[],
   view: LeaderboardView,
   userId: string | null
-): { chartData: LeaderboardChartRow[]; todayStats: LeaderboardTodayStats } {
-  const todayYmd = formatDateNY(new Date().toISOString())
-  const { bucketId: todayBucketId } = getTradeBucketId(
-    new Date().toISOString(),
-    view
-  )
+): {
+  chartData: LeaderboardChartRow[]
+  todayStats: LeaderboardTodayStats
+  hasData: boolean
+} {
+  const now = new Date()
+  const todayYmd = formatDateNY(now.toISOString())
+  const windowTrades = filterTradesForLeaderboardWindow(trades, view, now)
+
+  if (windowTrades.length === 0) {
+    return {
+      chartData: [],
+      todayStats: {
+        ...emptyWindowStats(),
+        percentileTopPct: userId ? "0.0" : "—",
+      },
+      hasData: false,
+    }
+  }
 
   const byBucket: Record<string, Record<string, UserAgg>> = {}
 
-  for (const t of trades) {
-    if (!t?.created_at || !t.user_id) continue
-    const { bucketId } = getTradeBucketId(t.created_at, view)
+  for (const t of windowTrades) {
+    const { bucketId } = getDailyBucketId(t.created_at)
     if (!byBucket[bucketId]) byBucket[bucketId] = emptyUserMap()
     const m = byBucket[bucketId]
     if (!m[t.user_id]) {
@@ -247,14 +227,19 @@ export function buildLeaderboardChartData(
     m[t.user_id].count += 1
   }
 
-  let minYmd = todayYmd
-  for (const t of trades) {
-    if (!t?.created_at) continue
+  let minTradeYmd = todayYmd
+  for (const t of windowTrades) {
     const ymd = formatDateNY(t.created_at)
-    if (ymdCompare(ymd, minYmd) < 0) minYmd = ymd
+    if (ymdCompare(ymd, minTradeYmd) < 0) minTradeYmd = ymd
   }
 
-  const bucketSequence = enumerateBucketIds(view, minYmd, todayYmd)
+  const windowStartYmd = getChartWindowStartYmd(view, now)
+  const chartStartYmd =
+    windowStartYmd && ymdCompare(windowStartYmd, minTradeYmd) > 0
+      ? windowStartYmd
+      : minTradeYmd
+
+  const bucketSequence = enumerateDailyBucketIds(chartStartYmd, todayYmd)
 
   const chartData: LeaderboardChartRow[] = bucketSequence.map(
     ({ bucketId, sortKey }) => {
@@ -272,7 +257,7 @@ export function buildLeaderboardChartData(
 
       return {
         bucketId,
-        label: labelForBucket(bucketId, view),
+        label: labelForDailyBucket(bucketId),
         sortKey,
         average,
         best,
@@ -282,47 +267,42 @@ export function buildLeaderboardChartData(
     }
   )
 
-  const yourTrades = trades.filter((t) => t.user_id === userId)
-  const inToday = yourTrades.filter((t) => {
-    const { bucketId } = getTradeBucketId(t.created_at, view)
-    return bucketId === todayBucketId
-  })
+  const yourTrades = userId
+    ? windowTrades.filter((t) => t.user_id === userId)
+    : []
 
-  const globalToday = trades.filter((t) => {
-    const { bucketId } = getTradeBucketId(t.created_at, view)
-    return bucketId === todayBucketId
-  })
-
-  const yourTradeCount = inToday.length
+  const yourTradeCount = yourTrades.length
   const yourAvgPnl =
     yourTradeCount > 0
-      ? inToday.reduce((s, t) => s + num(t.pnl), 0) / yourTradeCount
+      ? yourTrades.reduce((s, t) => s + num(t.pnl), 0) / yourTradeCount
       : 0
-  const yourAvgRR = averageValidRR(inToday)
+  const yourAvgRR = averageValidRR(yourTrades)
 
-  const globalTradeCount = globalToday.length
+  const globalTradeCount = windowTrades.length
   const globalAvgPnl =
     globalTradeCount > 0
-      ? globalToday.reduce((s, t) => s + num(t.pnl), 0) / globalTradeCount
+      ? windowTrades.reduce((s, t) => s + num(t.pnl), 0) / globalTradeCount
       : 0
-  const globalAvgRR = averageValidRR(globalToday)
+  const globalAvgRR = averageValidRR(windowTrades)
 
-  const todayMap = byBucket[todayBucketId] || emptyUserMap()
+  const userTotals: Record<string, number> = {}
+  for (const t of windowTrades) {
+    userTotals[t.user_id] = (userTotals[t.user_id] || 0) + num(t.pnl)
+  }
 
-  const yourTotal = inToday.reduce((s, t) => s + num(t.pnl), 0)
+  const yourTotal = userId ? userTotals[userId] || 0 : 0
 
   /**
-   * "Top X%": fraction of *other* traders in this bucket whose period P&L sum
-   * is strictly below yours (same bucket, same view). Self excluded from the
-   * pool so solo traders do not read as 0%.
+   * "Top X%": fraction of *other* traders whose window P&L sum is strictly
+   * below yours. Self excluded from the pool.
    */
   let percentileTopPct = "0.0"
   if (!userId) {
     percentileTopPct = "—"
   } else {
-    const peerPnls = Object.entries(todayMap)
-      .filter(([uid, u]) => uid !== userId && u.count > 0)
-      .map(([, u]) => u.pnl)
+    const peerPnls = Object.entries(userTotals)
+      .filter(([uid]) => uid !== userId)
+      .map(([, pnl]) => pnl)
 
     if (peerPnls.length === 0) {
       percentileTopPct = yourTradeCount > 0 ? "100.0" : "0.0"
@@ -346,5 +326,6 @@ export function buildLeaderboardChartData(
       globalTradeCount,
       percentileTopPct,
     },
+    hasData: true,
   }
 }
