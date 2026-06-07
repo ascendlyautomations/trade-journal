@@ -881,16 +881,25 @@ function CommunityContent() {
 
     if (!authUser || !selectedRoomId) return
 
+    const leftRoomId = selectedRoomId
+
     const { error } = await supabase
       .from("room_members")
-      .delete()
-      .eq("room_id", selectedRoomId)
+      .update({ left_at: new Date().toISOString() })
+      .eq("room_id", leftRoomId)
       .eq("user_id", authUser.id)
+      .is("left_at", null)
 
     if (error) {
       console.error("handleLeaveRoom:", error)
       return
     }
+
+    setRooms((prev) => prev.filter((r) => r.id !== leftRoomId))
+    setSelectedRoomId(null)
+
+    const nextRooms = await loadMemberRooms(authUser.id)
+    setRooms(nextRooms)
 
     setActiveMembers((prev) => Math.max(0, prev - 1))
     setLeftMembers((prev) => prev + 1)
