@@ -215,7 +215,7 @@ export default function Navbar() {
     { label: "Achievements", href: "/achievements" },
     { label: "Prop Firm Mode", href: "/analytics/propfirm", proOnly: true },
     { label: "AI Analyst", href: "/analyst", proOnly: true },
-    { label: "Backtest Stats", href: "/backtest", proOnly: true },
+    { label: "Backtest Lab", href: "/backtest", proOnly: true },
   ]
 
   const betaBadge = (

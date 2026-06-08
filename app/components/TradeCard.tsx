@@ -33,10 +33,6 @@ export default function TradeCard({
   onImageClick,
   shareProfile = null,
 }: TradeCardProps) {
-  console.log("REAL TRADE CARD RENDERED")
-
-  console.log("FINAL TRADE CHECK:", trade)
-
   const entryPrice = trade.entry_price ?? trade.entry ?? null
   const exitPrice = trade.exit_price ?? trade.exit ?? null
 
@@ -109,19 +105,6 @@ export default function TradeCard({
                     : "Short"
                   : "Unknown")}
             </h2>
-
-            <p className="text-red-400 text-xs">
-              RAW ENTRY: {String(trade.entry_time)}
-            </p>
-            <p className="text-red-400 text-xs">
-              RAW EXIT: {String(trade.exit_time)}
-            </p>
-            <p className="text-yellow-400 text-xs">
-              TEST ENTRY: {new Date(trade.entry_time).toString()}
-            </p>
-            <p className="text-yellow-400 text-xs">
-              TEST EXIT: {new Date(trade.exit_time).toString()}
-            </p>
 
             <p className="text-xs text-gray-400">
               {formatDateOnly(

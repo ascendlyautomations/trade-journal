@@ -149,7 +149,7 @@ export default function PublicNavbar() {
                     : "hover:bg-white/10 text-gray-300"
                 }`}
               >
-                Backtest Stats
+                Backtest Lab
               </Link>
               <Link
                 href="/calendar"

@@ -1,6 +1,7 @@
 "use client"
 import Navbar from "../components/Navbar"
-import TradeCard from "../components/TradeCard"
+import TradesPageTradeCard from "../components/TradesPageTradeCard"
+import TradesPageOverlays from "../components/TradesPageOverlays"
 import { formatEST } from "@/lib/formatEST"
 import {
   getTradingDayKey,
@@ -22,6 +23,10 @@ export default function CalendarPage() {
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [selectedTrades, setSelectedTrades] = useState<any[]>([])
+  const [selectedImage, setSelectedImage] = useState<string | null>(null)
+  const [editingTrade, setEditingTrade] = useState<any | null>(null)
+  const [sendTradeId, setSendTradeId] = useState<string | null>(null)
+  const [accountRows, setAccountRows] = useState<any[]>([])
 
   useEffect(() => {
     fetchTrades()
@@ -41,12 +46,56 @@ export default function CalendarPage() {
       .maybeSingle()
     setShareProfile(profileRow ?? null)
 
+    const [{ data }, { data: accountsData }] = await Promise.all([
+      supabase.from("trades").select("*").eq("user_id", user.id),
+      supabase
+        .from("accounts")
+        .select("id, account_number, name, account_size, mode, category, is_active")
+        .eq("user_id", user.id),
+    ])
+
+    if (data) setTrades(data)
+    setAccountRows(accountsData || [])
+  }
+
+  const accountById = useMemo(() => {
+    const m: Record<string, any> = {}
+    accountRows.forEach((acc) => {
+      m[String(acc.id)] = acc
+    })
+    return m
+  }, [accountRows])
+
+  async function handleTradeFormSaved() {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) return
+
     const { data } = await supabase
       .from("trades")
       .select("*")
       .eq("user_id", user.id)
 
-    if (data) setTrades(data)
+    if (!data) return
+    setTrades(data)
+
+    if (selectedDate) {
+      const list = data.filter((trade) => {
+        const resolved = resolveTradingTimeSourceForKey(trade)
+        if (!resolved) return false
+        return getTradingDayKey(resolved) === selectedDate
+      })
+      setSelectedTrades(list)
+    }
+    setEditingTrade(null)
+  }
+
+  async function handleDeleteTrade(id: string) {
+    if (!confirm("Delete this trade?")) return
+    await supabase.from("trades").delete().eq("id", id)
+    setTrades((prev) => prev.filter((t) => String(t.id) !== id))
+    setSelectedTrades((prev) => prev.filter((t) => String(t.id) !== id))
   }
 
   function formatPNL(value: number) {
@@ -503,9 +552,15 @@ export default function CalendarPage() {
                   <div className="flex w-full flex-col gap-3">
                     {selectedTrades.map((trade) => (
                       <div key={trade.id} className="w-full min-w-0">
-                        <TradeCard
+                        <TradesPageTradeCard
                           trade={trade}
+                          showAdvanced={false}
+                          accountRow={accountById[String(trade.account_id ?? "")]}
                           shareProfile={shareProfile}
+                          onEdit={(t) => setEditingTrade({ ...t })}
+                          onDelete={handleDeleteTrade}
+                          onSendClick={(t) => setSendTradeId(String(t.id))}
+                          onImageClick={setSelectedImage}
                         />
                       </div>
                     ))}
@@ -521,6 +576,19 @@ export default function CalendarPage() {
         </div>
 
       </div>
+      <TradesPageOverlays
+        selectedImage={selectedImage}
+        editingTrade={editingTrade}
+        showPerformanceShare={false}
+        sendTradeId={sendTradeId}
+        tradesForPerformanceSharePool={[]}
+        gateProfile={null}
+        onCloseImageLightbox={() => setSelectedImage(null)}
+        onCloseEditForm={() => setEditingTrade(null)}
+        onTradeFormSaved={() => void handleTradeFormSaved()}
+        onClosePerformanceShare={() => {}}
+        onCloseSendModal={() => setSendTradeId(null)}
+      />
     </>
   )
 }

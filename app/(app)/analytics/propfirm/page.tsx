@@ -19,8 +19,42 @@ import {
   type PropfirmTrade,
   type TrailingDrawdownResult,
 } from "@/lib/propfirmMetrics"
+import LockedFeature from "@/app/components/LockedFeature"
 import { isProActive } from "@/lib/subscription"
 import { formatPnlCurrency } from "@/lib/formatMoney"
+
+const SECTION_PANEL =
+  "rounded-xl border border-white/10 bg-white/10 p-2.5 backdrop-blur-md md:p-3"
+
+const SELECT_CLASS =
+  "h-[34px] w-full rounded-md border border-white/10 bg-[#0f172a] px-3 py-1 text-sm text-white hover:bg-[#1e293b] focus:outline-none focus:ring-2 focus:ring-blue-500"
+
+function PropfirmStat({
+  title,
+  value,
+  positive,
+  valueClassName,
+}: {
+  title: string
+  value: string
+  positive?: boolean
+  valueClassName?: string
+}) {
+  let color = valueClassName ?? "text-white"
+  if (positive === true) color = "text-green-400"
+  if (positive === false) color = "text-red-400"
+
+  return (
+    <div className="flex min-h-[72px] w-full flex-col items-center justify-center rounded-xl border border-white/10 bg-white/10 p-2.5 text-center backdrop-blur-md md:p-3">
+      <p className="mb-1 text-xs md:text-sm text-gray-400">{title}</p>
+      <span
+        className={`block font-semibold text-base leading-tight whitespace-nowrap tabular-nums md:text-lg lg:text-xl ${color}`}
+      >
+        {value}
+      </span>
+    </div>
+  )
+}
 
 const PROPFIRM_ACCOUNT_FIELDS =
   "id,name,account_size,mode,consistency,max_drawdown,daily_drawdown,profit_target,winning_days"
@@ -43,8 +77,10 @@ type EquityCurvePoint = {
 
 function PropfirmPageShell({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100">
-      <div className="w-full px-2 pb-4 pt-3 text-white md:px-4 md:pb-6 md:pt-4">{children}</div>
+    <div className="w-full text-white px-2 pb-3 pt-0 md:px-4 md:pb-10">
+      <div className="relative z-0 mx-auto mt-2.5 flex w-full max-w-[1600px] flex-col gap-3 px-1 md:gap-4 md:px-6">
+        {children}
+      </div>
     </div>
   )
 }
@@ -75,10 +111,10 @@ function PropfirmEquityCurve({
   })()
 
   return (
-    <div className="rounded-xl border border-white/10 bg-[#0f172a]/95 p-3 shadow-lg shadow-black/10">
-      <div className="mb-2 flex flex-col gap-0.5 sm:flex-row sm:items-end sm:justify-between">
+    <div className={SECTION_PANEL}>
+      <div className="mb-1.5 flex flex-col gap-0.5 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 className="text-base font-semibold text-white">Equity Curve</h2>
+          <h2 className="mb-1 text-sm font-semibold text-blue-300">Equity Curve</h2>
           <p className="text-xs text-gray-400">
             Account balance progression by trading day
           </p>
@@ -143,7 +179,7 @@ function PropfirmEquityCurve({
           </ResponsiveContainer>
         </div>
       ) : (
-        <div className="flex min-h-[140px] items-center justify-center rounded-lg border border-dashed border-white/10 bg-white/[0.03] text-center text-sm text-gray-400">
+        <div className="flex min-h-[140px] items-center justify-center rounded-lg border border-dashed border-white/10 bg-white/5 text-center text-sm text-gray-400">
           Add trades to this prop firm account to build an equity curve.
         </div>
       )}
@@ -297,7 +333,7 @@ export default function PropFirmPage() {
   if (!planChecked) {
     return (
       <PropfirmPageShell>
-        <div className="mx-auto max-w-6xl p-6 text-gray-400">Loading...</div>
+        <p className="text-sm text-gray-400">Loading...</p>
       </PropfirmPageShell>
     )
   }
@@ -305,16 +341,7 @@ export default function PropFirmPage() {
   if (!hasProAccess) {
     return (
       <PropfirmPageShell>
-        <div className="mx-auto max-w-6xl p-6">
-          <div className="rounded-xl border border-white/10 bg-[#0f172a] p-6 text-center">
-            <h1 className="text-2xl font-semibold text-white">
-              Prop Firm Analytics is a Pro feature
-            </h1>
-            <p className="mt-2 text-sm text-gray-400">
-              Upgrade to Pro to unlock prop firm performance tracking.
-            </p>
-          </div>
-        </div>
+        <LockedFeature title="Prop Firm Mode" className="mx-auto max-w-lg" />
       </PropfirmPageShell>
     )
   }
@@ -337,14 +364,13 @@ export default function PropFirmPage() {
 
   return (
     <PropfirmPageShell>
-      <div className="mx-auto max-w-6xl space-y-2.5 md:space-y-3">
-        <div className="rounded-2xl border border-white/10 bg-white/10 p-3 shadow-xl shadow-black/10 backdrop-blur-md md:p-4">
-          <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+        <div className={SECTION_PANEL}>
+          <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-300/80">
-                Prop Firm Analytics
+              <p className="text-xs font-semibold uppercase tracking-wide text-blue-300">
+                Analytics
               </p>
-              <h1 className="mt-0.5 text-2xl font-semibold text-white md:text-3xl">
+              <h1 className="mt-0.5 bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-2xl font-semibold text-transparent md:text-3xl">
                 Prop Firm Mode
               </h1>
               <p className="mt-1 text-sm text-gray-400">
@@ -366,7 +392,7 @@ export default function PropFirmPage() {
             </div>
           </div>
 
-          <div className="mt-3 grid gap-2 md:grid-cols-[minmax(0,420px)_1fr] md:items-center">
+          <div className="mt-2 grid gap-2 md:grid-cols-[minmax(0,420px)_1fr] md:items-center">
             <select
               value={
                 selectedAccount?.id != null ? String(selectedAccount.id) : ""
@@ -377,7 +403,7 @@ export default function PropFirmPage() {
                 )
                 setSelectedAccount(selected ?? null)
               }}
-              className="w-full rounded-lg border border-white/10 bg-[#0f172a] p-2 text-sm"
+              className={SELECT_CLASS}
             >
               <option value="">Select Account</option>
               {accounts.map((acc) => (
@@ -402,49 +428,27 @@ export default function PropFirmPage() {
 
         {selectedAccount && (
           <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-            <div className="rounded-xl border border-white/10 bg-[#0f172a]/95 p-2.5 shadow-lg shadow-black/10">
-              <p className="text-xs uppercase tracking-wide text-gray-400">
-                Total P&amp;L
-              </p>
-              <p
-                className={`mt-1 text-xl font-bold tabular-nums ${
-                  totalPnL >= 0 ? "text-green-400" : "text-red-400"
-                }`}
-              >
-                {formatPropfirmUsd(totalPnL)}
-              </p>
-            </div>
-
-            <div className="rounded-xl border border-white/10 bg-[#0f172a]/95 p-2.5 shadow-lg shadow-black/10">
-              <p className="text-xs uppercase tracking-wide text-gray-400">
-                Current Balance
-              </p>
-              <p className="mt-1 text-xl font-bold tabular-nums text-white">
-                {formatPropfirmUsd(trailingMetrics.currentBalance)}
-              </p>
-            </div>
-
-            <div className="rounded-xl border border-white/10 bg-[#0f172a]/95 p-2.5 shadow-lg shadow-black/10">
-              <p className="text-xs uppercase tracking-wide text-gray-400">
-                Distance to DD
-              </p>
-              <p className={`mt-1 text-xl font-bold tabular-nums ${distanceClassName}`}>
-                {formatPropfirmUsd(distanceToDD)}
-              </p>
-            </div>
-
-            <div className="rounded-xl border border-white/10 bg-[#0f172a]/95 p-2.5 shadow-lg shadow-black/10">
-              <p className="text-xs uppercase tracking-wide text-gray-400">
-                Winning Days
-              </p>
-              <p
-                className={`mt-1 text-xl font-bold tabular-nums ${
-                  winningDaysTargetMet ? "text-green-400" : "text-yellow-400"
-                }`}
-              >
-                {winningDays}/{Number(selectedAccount.winning_days) || 0}
-              </p>
-            </div>
+            <PropfirmStat
+              title="Total P&L"
+              value={formatPropfirmUsd(totalPnL)}
+              positive={totalPnL >= 0}
+            />
+            <PropfirmStat
+              title="Current Balance"
+              value={formatPropfirmUsd(trailingMetrics.currentBalance)}
+            />
+            <PropfirmStat
+              title="Distance to DD"
+              value={formatPropfirmUsd(distanceToDD)}
+              valueClassName={distanceClassName}
+            />
+            <PropfirmStat
+              title="Winning Days"
+              value={`${winningDays}/${Number(selectedAccount.winning_days) || 0}`}
+              valueClassName={
+                winningDaysTargetMet ? "text-green-400" : "text-yellow-400"
+              }
+            />
           </div>
         )}
 
@@ -456,9 +460,9 @@ export default function PropFirmPage() {
         )}
 
         {selectedAccount && (
-          <div className="rounded-xl border border-white/10 bg-[#0f172a]/95 p-3 shadow-lg shadow-black/10">
-            <div className="mb-2 flex items-center justify-between">
-              <h2 className="text-base font-semibold text-white">Rule Status</h2>
+          <div className={SECTION_PANEL}>
+            <div className="mb-1.5 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-blue-300">Rule Status</h2>
               <span className="text-xs uppercase tracking-wide text-gray-500">
                 Evaluation
               </span>
@@ -466,7 +470,7 @@ export default function PropFirmPage() {
 
             <div className="grid gap-1.5 text-sm sm:grid-cols-2">
               <div
-                className={`flex items-center gap-2 rounded-lg border border-white/5 bg-white/[0.03] px-2.5 py-1.5 ${
+                className={`flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 ${
                   maxDdLimit > 0 && trailingMetrics.breachedTrailingDD
                     ? "text-red-400"
                     : "text-green-400"
@@ -479,7 +483,7 @@ export default function PropFirmPage() {
               </div>
 
               <div
-                className={`flex items-center gap-2 rounded-lg border border-white/5 bg-white/[0.03] px-2.5 py-1.5 ${
+                className={`flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 ${
                   dailyDrawdownBreached
                     ? "text-red-400"
                     : "text-green-400"
@@ -490,7 +494,7 @@ export default function PropFirmPage() {
               </div>
 
               <div
-                className={`flex items-center gap-2 rounded-lg border border-white/5 bg-white/[0.03] px-2.5 py-1.5 ${
+                className={`flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 ${
                   winningDaysTargetMet
                     ? "text-green-400"
                     : "text-yellow-400"
@@ -501,7 +505,7 @@ export default function PropFirmPage() {
               </div>
 
               <div
-                className={`flex items-center gap-2 rounded-lg border border-white/5 bg-white/[0.03] px-2.5 py-1.5 ${
+                className={`flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 ${
                   !consistencyMetrics.ruleActive
                     ? "text-gray-400"
                     : consistencyMetrics.isConsistent
@@ -523,8 +527,8 @@ export default function PropFirmPage() {
         )}
 
         {selectedAccount && (
-          <div className="rounded-xl border border-white/10 bg-[#0f172a]/90 p-2.5 md:p-3">
-            <h2 className="mb-1.5 text-base font-semibold text-white">
+          <div className={SECTION_PANEL}>
+            <h2 className="mb-1.5 text-sm font-semibold text-blue-300">
               Account Rules
             </h2>
 
@@ -575,8 +579,8 @@ export default function PropFirmPage() {
         )}
 
         {selectedAccount && (
-          <div className="rounded-xl border border-white/10 bg-[#0f172a]/95 p-3">
-            <h2 className="mb-2 text-base font-semibold text-white">
+          <div className={SECTION_PANEL}>
+            <h2 className="mb-1.5 text-sm font-semibold text-blue-300">
               Progress
             </h2>
 
@@ -654,7 +658,7 @@ export default function PropFirmPage() {
               </div>
             </div>
 
-            <div className="mt-3 space-y-2">
+            <div className="mt-2 space-y-1.5">
               <div>
                 <div className="mb-1 flex justify-between text-xs text-gray-400">
                   <span>Profit target</span>
@@ -699,10 +703,10 @@ export default function PropFirmPage() {
           </div>
         )}
 
-        <div className="rounded-xl border border-white/10 bg-[#0f172a]/95 p-2.5 shadow-lg shadow-black/10 md:p-3">
+        <div className={SECTION_PANEL}>
           <div className="mb-1.5 flex items-center justify-between gap-2">
             <div>
-              <h2 className="text-base font-semibold text-white">
+              <h2 className="text-sm font-semibold text-blue-300">
                 Daily Performance
               </h2>
               <p className="text-xs text-gray-400">
@@ -719,7 +723,7 @@ export default function PropFirmPage() {
               dailyRows.map(([date, pnl]) => (
                 <div
                   key={date}
-                  className="flex items-center justify-between rounded-lg border border-white/5 bg-white/[0.03] px-2.5 py-1"
+                  className="flex items-center justify-between rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5"
                 >
                   <span className="font-medium text-gray-300">{date}</span>
                   <span
@@ -737,7 +741,7 @@ export default function PropFirmPage() {
                 </div>
               ))
             ) : (
-              <div className="rounded-lg border border-dashed border-white/10 bg-white/[0.03] px-3 py-4 text-center text-gray-400">
+              <div className="rounded-lg border border-dashed border-white/10 bg-white/5 px-3 py-4 text-center text-sm text-gray-400">
                 No daily performance yet.
               </div>
             )}
@@ -745,11 +749,10 @@ export default function PropFirmPage() {
         </div>
 
         {!selectedAccount ? (
-          <div className="text-gray-400">
+          <p className="text-center text-sm text-gray-400">
             Select a prop firm account to view progress
-          </div>
+          </p>
         ) : null}
-      </div>
     </PropfirmPageShell>
   )
 }
