@@ -1,7 +1,8 @@
 "use client"
 
 import type { ChangeEvent } from "react"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useSearchParams } from "next/navigation"
 import { supabase } from "../../../lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
 import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
@@ -49,6 +50,15 @@ function postTradeOwnerUserId(post: any): string | null | undefined {
 type LikeMeta = { count: number; liked: boolean }
 
 export default function FeedPage() {
+  return (
+    <Suspense fallback={<div className="py-10 text-center text-sm text-gray-400">Loading feed…</div>}>
+      <FeedPageContent />
+    </Suspense>
+  )
+}
+
+function FeedPageContent() {
+  const searchParams = useSearchParams()
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const [posts, setPosts] = useState<any[]>([])
   const [page, setPage] = useState(0)
@@ -580,12 +590,13 @@ export default function FeedPage() {
 
         const notifyUserId = postTradeOwnerUserId(post)
         const tradeId = post.trade_id
-        if (tradeId && notifyUserId && notifyUserId !== user.id) {
+        if (notifyUserId && notifyUserId !== user.id) {
           const { error: nErr } = await supabase.from("notifications").insert({
             user_id: notifyUserId,
             sender_id: user.id,
             type: "like",
-            trade_id: tradeId,
+            post_id: pid,
+            trade_id: tradeId ?? null,
           })
           if (nErr) {
             console.error("Notification error:", nErr?.message, nErr)
@@ -658,12 +669,14 @@ export default function FeedPage() {
 
       const notifyUserId = postTradeOwnerUserId(post)
       const tradeId = post.trade_id
-      if (tradeId && notifyUserId && notifyUserId !== user.id) {
+      if (notifyUserId && notifyUserId !== user.id) {
         const { error: nErr } = await supabase.from("notifications").insert({
           user_id: notifyUserId,
           sender_id: user.id,
           type: "comment",
-          trade_id: tradeId,
+          post_id: pid,
+          trade_id: tradeId ?? null,
+          content: trimmed.slice(0, 200),
         })
         if (nErr) {
           console.error("Notification error:", nErr?.message, nErr)
@@ -709,6 +722,14 @@ export default function FeedPage() {
     if (!selectedPostId) return false
     return !!commentSubmitting[selectedPostId]
   }, [selectedPostId, commentSubmitting])
+
+  useEffect(() => {
+    const postId = searchParams.get("post")?.trim()
+    if (!postId || posts.length === 0) return
+    if (postsById.has(postId)) {
+      setSelectedPostId(postId)
+    }
+  }, [searchParams, posts.length, postsById])
 
   return (
     <div className="w-full text-white">

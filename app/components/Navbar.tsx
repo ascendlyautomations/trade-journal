@@ -75,13 +75,13 @@ export default function Navbar() {
       .from("notifications")
       .select("*", { count: "exact", head: true })
       .eq("user_id", user.id)
-      .eq("type", "message")
       .eq("read", false)
+      .in("type", ["like", "comment", "room_join", "message", "follow"])
 
     if (error) {
       console.error("[navbar] unread notifications fetch failed", {
         query:
-          "notifications select count where user_id = currentUser and type = message and read = false",
+          "notifications select count where user_id = currentUser and read = false (like, comment, room_join, message, follow)",
         userId: user.id,
         message: error.message,
         details: error.details,

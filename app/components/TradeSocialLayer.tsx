@@ -286,6 +286,7 @@ export function TradeSocialProvider({
         sender_id: currentUserId,
         type: "comment",
         trade_id: resolvedId,
+        content: newComment.trim().slice(0, 200),
       })
 
       if (nErr) {

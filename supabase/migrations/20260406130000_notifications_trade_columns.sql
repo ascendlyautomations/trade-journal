@@ -12,6 +12,9 @@ create table if not exists public.notifications (
 );
 
 alter table public.notifications
+  add column if not exists post_id uuid;
+
+alter table public.notifications
   add column if not exists content text;
 
 alter table public.notifications
@@ -19,3 +22,18 @@ alter table public.notifications
 
 alter table public.notifications
   add column if not exists read boolean not null default false;
+
+-- Legacy installs used `message` for body text.
+update public.notifications
+set content = message
+where content is null
+  and message is not null
+  and btrim(message) <> '';
+
+-- Backfill post_id from trade-linked posts when possible.
+update public.notifications n
+set post_id = p.id
+from public.posts p
+where n.post_id is null
+  and n.trade_id is not null
+  and p.trade_id = n.trade_id;

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type MouseEvent } from "react"
 import { supabase } from "@/lib/supabaseClient"
+import { createFollowNotification } from "@/lib/createFollowNotification"
 
 type FollowButtonProps = {
   targetUserId: string
@@ -73,12 +74,18 @@ export default function FollowButton({
       setIsFollowing(false)
       onFollowingChange?.(targetUserId, false)
     } else {
-      await supabase.from("followers").insert({
+      const { error } = await supabase.from("followers").insert({
         follower_id: currentUserId,
         following_id: targetUserId,
       })
+      if (error) {
+        console.error("[follow] insert failed", error.message, error)
+        setBusy(false)
+        return
+      }
       setIsFollowing(true)
       onFollowingChange?.(targetUserId, true)
+      await createFollowNotification(supabase, currentUserId, targetUserId)
     }
 
     setBusy(false)

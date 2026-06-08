@@ -1266,6 +1266,36 @@ function CommunityContent() {
         type: "warning",
         message: "You're already in this room",
       })
+    } else {
+      const { data: roomRow } = await supabase
+        .from("rooms")
+        .select("owner_user_id, name, slug")
+        .eq("id", roomId)
+        .maybeSingle()
+
+      if (
+        roomRow?.owner_user_id &&
+        roomRow.owner_user_id !== authUser.id
+      ) {
+        const { error: notifyErr } = await supabase.from("notifications").insert({
+          user_id: roomRow.owner_user_id,
+          sender_id: authUser.id,
+          type: "room_join",
+          content: JSON.stringify({
+            room_slug: roomRow.slug ?? null,
+            room_name: roomRow.name ?? null,
+          }),
+        })
+
+        if (notifyErr) {
+          console.error("room join notification error:", notifyErr)
+        } else {
+          window.dispatchEvent(new CustomEvent("notification-update"))
+          window.dispatchEvent(
+            new CustomEvent("tj-unread-notifications-refresh")
+          )
+        }
+      }
     }
   }
 

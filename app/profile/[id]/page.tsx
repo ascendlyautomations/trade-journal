@@ -3,11 +3,18 @@
 import Navbar from "../../components/Navbar"
 import AchievementCard from "../../components/AchievementCard"
 import type { ChangeEvent } from "react"
-import { useCallback, useEffect, useState } from "react"
+import { Suspense, useCallback, useEffect, useRef, useState } from "react"
 import { supabase } from "../../../lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
 import { normalizeTraderType } from "@/lib/traderType"
-import { useParams, useRouter } from "next/navigation"
+import { useParams, useRouter, useSearchParams } from "next/navigation"
+import FeedPostDetailModal from "../../components/feed/FeedPostDetailModal"
+import { EMPTY_LIKE_META } from "../../components/feed/FeedPostCard"
+import {
+  FEED_COMMENT_INSERT_SELECT,
+  FEED_COMMENTS_SELECT,
+  FEED_POSTS_SELECT,
+} from "../../components/feed/feedPostHelpers"
 import {
   LineChart,
   Line,
@@ -36,6 +43,7 @@ import { formatRR } from "@/lib/formatDisplay"
 import { formatDateOnly, formatTimeOnly } from "@/lib/formatDate"
 import { formatEST } from "@/lib/formatEST"
 import { createUserRoom } from "@/lib/createUserRoom"
+import { createFollowNotification } from "@/lib/createFollowNotification"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 
@@ -634,12 +642,22 @@ function PostCard({
   )
 }
 
-export default function ProfilePage() {
+function scrollToProfileTarget(elementId: string) {
+  requestAnimationFrame(() => {
+    document.getElementById(elementId)?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    })
+  })
+}
+
+function ProfilePageContent() {
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const PAGE_SIZE = 5
 
   const params = useParams()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const rawId = params.id
   const profileId =
     typeof rawId === "string"
@@ -674,6 +692,7 @@ export default function ProfilePage() {
   const [followersModalUsers, setFollowersModalUsers] = useState<any[]>([])
   const [followingModalUsers, setFollowingModalUsers] = useState<any[]>([])
   const [wallPosts, setWallPosts] = useState<any[]>([])
+  const [wallPostsReady, setWallPostsReady] = useState(false)
   const [activeTab, setActiveTab] = useState<
     "trades" | "posts" | "calendar" | "stats" | "achievements"
   >(
@@ -710,6 +729,14 @@ export default function ProfilePage() {
     achievedAt: string | null
     description: string | null
   } | null>(null)
+  const [feedDeepLinkPost, setFeedDeepLinkPost] = useState<any | null>(null)
+  const [feedDeepLinkLikeMeta, setFeedDeepLinkLikeMeta] = useState(EMPTY_LIKE_META)
+  const [feedDeepLinkComments, setFeedDeepLinkComments] = useState<any[]>([])
+  const [feedDeepLinkCommentSubmitting, setFeedDeepLinkCommentSubmitting] =
+    useState(false)
+  const feedDraftSyncRef = useRef<Record<string, string>>({})
+  const feedOpenCommentsRef = useRef<Record<string, boolean>>({})
+  const deepLinkHandledRef = useRef<string | null>(null)
 
   /** Profile Stats equity chart: Recharts props tuned below ~sm breakpoint. */
   const [equityChartNarrow, setEquityChartNarrow] = useState(false)
@@ -845,6 +872,7 @@ export default function ProfilePage() {
     setLoading(true)
 
     fetchProfile(profileId)
+    deepLinkHandledRef.current = null
   }, [profileId])
 
   useEffect(() => {
@@ -854,10 +882,12 @@ export default function ProfilePage() {
   useEffect(() => {
     if (!profile?.id) {
       setWallPosts([])
+      setWallPostsReady(true)
       return
     }
 
     let cancelled = false
+    setWallPostsReady(false)
 
     async function fetchWallPosts() {
       const { data, error } = await supabase
@@ -870,9 +900,11 @@ export default function ProfilePage() {
       if (error) {
         console.error("profile_posts fetch:", error)
         setWallPosts([])
+        setWallPostsReady(true)
         return
       }
       setWallPosts(data || [])
+      setWallPostsReady(true)
     }
 
     void fetchWallPosts()
@@ -971,7 +1003,8 @@ export default function ProfilePage() {
       editingPost ||
       selectedAchievementImage ||
       selectedTradeDetail ||
-      selectedPostDetail
+      selectedPostDetail ||
+      feedDeepLinkPost
     ) {
       document.body.style.overflow = "hidden"
       return () => {
@@ -980,7 +1013,14 @@ export default function ProfilePage() {
     }
     document.body.style.overflow = ""
     return undefined
-  }, [showCreatePost, editingPost, selectedAchievementImage, selectedTradeDetail, selectedPostDetail])
+  }, [
+    showCreatePost,
+    editingPost,
+    selectedAchievementImage,
+    selectedTradeDetail,
+    selectedPostDetail,
+    feedDeepLinkPost,
+  ])
 
   useEffect(() => {
     if (
@@ -988,7 +1028,8 @@ export default function ProfilePage() {
       !editingPost &&
       !selectedAchievementImage &&
       !selectedTradeDetail &&
-      !selectedPostDetail
+      !selectedPostDetail &&
+      !feedDeepLinkPost
     )
       return
     function onKey(e: KeyboardEvent) {
@@ -998,11 +1039,12 @@ export default function ProfilePage() {
         setSelectedAchievementImage(null)
         setSelectedTradeDetail(null)
         setSelectedPostDetail(null)
+        setFeedDeepLinkPost(null)
       }
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [showCreatePost, editingPost, selectedAchievementImage, selectedTradeDetail, selectedPostDetail])
+  }, [showCreatePost, editingPost, selectedAchievementImage, selectedTradeDetail, selectedPostDetail, feedDeepLinkPost])
 
   async function fetchProfile(forProfileId: string) {
     const id = forProfileId.trim()
@@ -1141,12 +1183,19 @@ export default function ProfilePage() {
         setHasMore(false)
       }
     } else {
-      await supabase.from("followers").insert({
+      const { error } = await supabase.from("followers").insert({
         follower_id: currentUserId,
         following_id: profile.id,
       })
 
+      if (error) {
+        console.error("[follow] insert failed", error.message, error)
+        setFollowBusy(false)
+        return
+      }
+
       setIsFollowing(true)
+      await createFollowNotification(supabase, currentUserId, profile.id)
       if (profile.is_private === true && profileId) {
         setPage(0)
         setHasMore(true)
@@ -1634,6 +1683,229 @@ export default function ProfilePage() {
     (profile.is_private !== true ||
       currentUserId === profile.id ||
       isFollowing)
+
+  const clearProfileQueryParams = useCallback(() => {
+    if (!profileId) return
+    router.replace(`/profile/${profileId}`, { scroll: false })
+  }, [profileId, router])
+
+  const loadFeedPostEngagement = useCallback(
+    async (postId: string, openComments = false) => {
+      const [{ data: likesRows }, { data: commentsRows }] = await Promise.all([
+        supabase.from("likes").select("post_id, user_id").eq("post_id", postId),
+        supabase
+          .from("comments")
+          .select(FEED_COMMENTS_SELECT)
+          .eq("post_id", postId)
+          .order("created_at", { ascending: true }),
+      ])
+
+      let count = 0
+      let liked = false
+      for (const row of likesRows || []) {
+        count += 1
+        if (currentUserId && row.user_id === currentUserId) liked = true
+      }
+
+      setFeedDeepLinkLikeMeta({ count, liked })
+      setFeedDeepLinkComments(commentsRows || [])
+      if (openComments) {
+        feedOpenCommentsRef.current[postId] = true
+      }
+    },
+    [currentUserId]
+  )
+
+  const openFeedPostDeepLink = useCallback(
+    async (postId: string, openComments = false) => {
+      const { data: feedPost, error } = await supabase
+        .from("posts")
+        .select(FEED_POSTS_SELECT)
+        .eq("id", postId)
+        .maybeSingle()
+
+      if (error || !feedPost) {
+        clearProfileQueryParams()
+        return
+      }
+
+      const tradeJoin = feedPost?.trades
+      const tradeRow = tradeJoin
+        ? Array.isArray(tradeJoin)
+          ? tradeJoin[0]
+          : tradeJoin
+        : null
+      const ownerId = tradeRow?.user_id ?? feedPost.user_id
+      if (ownerId && profile?.id && String(ownerId) !== String(profile.id)) {
+        clearProfileQueryParams()
+        return
+      }
+
+      await loadFeedPostEngagement(postId, openComments)
+      setFeedDeepLinkPost(feedPost)
+      clearProfileQueryParams()
+    },
+    [clearProfileQueryParams, loadFeedPostEngagement, profile?.id]
+  )
+
+  const openTradeDeepLink = useCallback(
+    async (tradeId: string) => {
+      if (!profile?.id || !canViewTrades) {
+        clearProfileQueryParams()
+        return
+      }
+
+      setActiveTab("trades")
+
+      let trade =
+        trades.find((row) => String(row.id) === tradeId) ??
+        allTrades.find((row) => String(row.id) === tradeId)
+
+      if (!trade) {
+        const { data, error } = await supabase
+          .from("trades")
+          .select("*")
+          .eq("id", tradeId)
+          .eq("user_id", profile.id)
+          .eq("is_public", true)
+          .maybeSingle()
+
+        if (error || !data) {
+          clearProfileQueryParams()
+          return
+        }
+        trade = data
+        setTrades((prev) =>
+          prev.some((row) => String(row.id) === tradeId)
+            ? prev
+            : [data, ...prev]
+        )
+      }
+
+      setSelectedTradeDetail({ ...trade, currentUserId })
+      scrollToProfileTarget(`trade-${tradeId}`)
+      clearProfileQueryParams()
+    },
+    [
+      allTrades,
+      canViewTrades,
+      clearProfileQueryParams,
+      currentUserId,
+      profile?.id,
+      trades,
+    ]
+  )
+
+  const openProfilePostDeepLink = useCallback(
+    (postId: string) => {
+      const wallPost = wallPosts.find((row) => String(row.id) === postId)
+      if (!wallPost) return false
+
+      setActiveTab("posts")
+      setSelectedPostDetail(wallPost)
+      scrollToProfileTarget(`post-${postId}`)
+      clearProfileQueryParams()
+      return true
+    },
+    [clearProfileQueryParams, wallPosts]
+  )
+
+  useEffect(() => {
+    if (!profile?.id || loading) return
+    if (searchParams.get("post")?.trim() && !wallPostsReady) return
+
+    const postParam = searchParams.get("post")?.trim()
+    const tradeParam = searchParams.get("trade")?.trim()
+    const openComments = searchParams.get("comments") === "1"
+    const key = postParam
+      ? `post:${postParam}:${openComments ? "1" : "0"}`
+      : tradeParam
+        ? `trade:${tradeParam}`
+        : null
+
+    if (!key || deepLinkHandledRef.current === key) return
+    deepLinkHandledRef.current = key
+
+    void (async () => {
+      if (postParam) {
+        if (!openProfilePostDeepLink(postParam)) {
+          await openFeedPostDeepLink(postParam, openComments)
+        }
+        return
+      }
+
+      if (tradeParam) {
+        await openTradeDeepLink(tradeParam)
+      }
+    })()
+  }, [
+    loading,
+    openFeedPostDeepLink,
+    openProfilePostDeepLink,
+    openTradeDeepLink,
+    profile?.id,
+    searchParams,
+    wallPostsReady,
+  ])
+
+  const toggleFeedDeepLinkLike = useCallback(
+    async (post: any) => {
+      if (!currentUserId) return
+      const pid = String(post.id)
+      const meta = feedDeepLinkLikeMeta
+
+      if (meta.liked) {
+        const { error } = await supabase
+          .from("likes")
+          .delete()
+          .eq("post_id", pid)
+          .eq("user_id", currentUserId)
+        if (error) return
+        setFeedDeepLinkLikeMeta({
+          count: Math.max(0, meta.count - 1),
+          liked: false,
+        })
+        return
+      }
+
+      const { error } = await supabase
+        .from("likes")
+        .insert({ post_id: pid, user_id: currentUserId })
+      if (error) return
+      setFeedDeepLinkLikeMeta({ count: meta.count + 1, liked: true })
+    },
+    [currentUserId, feedDeepLinkLikeMeta]
+  )
+
+  const submitFeedDeepLinkComment = useCallback(
+    async (post: any, text: string) => {
+      if (!currentUserId) return false
+      const pid = String(post.id)
+      const trimmed = (text || "").trim()
+      if (!trimmed) return false
+
+      setFeedDeepLinkCommentSubmitting(true)
+      const { data, error } = await supabase
+        .from("comments")
+        .insert({
+          post_id: pid,
+          user_id: currentUserId,
+          content: trimmed,
+        })
+        .select(FEED_COMMENT_INSERT_SELECT)
+        .single()
+      setFeedDeepLinkCommentSubmitting(false)
+
+      if (error) {
+        console.error(error)
+        return false
+      }
+
+      setFeedDeepLinkComments((prev) => [...prev, data])
+      return true
+    },
+    [currentUserId]
+  )
 
   const sortedTrades = [...trades].sort((a, b) => {
     if (a.is_pinned && !b.is_pinned) return -1
@@ -2204,6 +2476,7 @@ export default function ProfilePage() {
                 ) : (
                   <div className="grid grid-cols-1 gap-x-6 gap-y-8 md:grid-cols-2">
                     {sortedTrades.map((trade) => (
+                      <div key={trade.id} id={`trade-${trade.id}`}>
                       <TradeCard
                         key={trade.id}
                         trade={{ ...trade, currentUserId }}
@@ -2228,6 +2501,7 @@ export default function ProfilePage() {
                           setSelectedTradeDetail({ ...trade, currentUserId })
                         }
                       />
+                      </div>
                     ))}
                   </div>
                 )}
@@ -2256,6 +2530,7 @@ export default function ProfilePage() {
                     {sortedPosts.map((post) => {
                       const key = String(post.id)
                       return (
+                        <div key={post.id} id={`post-${key}`}>
                         <PostCard
                           key={post.id}
                           post={post}
@@ -2289,6 +2564,7 @@ export default function ProfilePage() {
                           commentSubmitting={!!commentSubmitting[key]}
                           onOpenDetail={() => setSelectedPostDetail(post)}
                         />
+                        </div>
                       )
                     })}
                   </div>
@@ -2836,6 +3112,22 @@ export default function ProfilePage() {
         </div>
       ) : null}
 
+      {feedDeepLinkPost ? (
+        <FeedPostDetailModal
+          post={feedDeepLinkPost}
+          user={currentUserId ? { id: currentUserId } : null}
+          comments={feedDeepLinkComments}
+          likeMeta={feedDeepLinkLikeMeta}
+          commentSubmitting={feedDeepLinkCommentSubmitting}
+          draftSyncRef={feedDraftSyncRef}
+          openCommentsRef={feedOpenCommentsRef}
+          onClose={() => setFeedDeepLinkPost(null)}
+          onToggleLike={toggleFeedDeepLinkLike}
+          onSubmitComment={submitFeedDeepLinkComment}
+          onSharePost={() => {}}
+        />
+      ) : null}
+
       {editingPost ? (
         <div
           className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 p-4 backdrop-blur-md"
@@ -2996,6 +3288,23 @@ export default function ProfilePage() {
       )}
 
     </>
+  )
+}
+
+export default function ProfilePage() {
+  return (
+    <Suspense
+      fallback={
+        <>
+          <Navbar />
+          <div className="flex min-h-[50vh] items-center justify-center text-sm text-gray-400">
+            Loading profile…
+          </div>
+        </>
+      }
+    >
+      <ProfilePageContent />
+    </Suspense>
   )
 }
 
