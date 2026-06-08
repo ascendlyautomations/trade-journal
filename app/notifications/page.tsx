@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation"
 import { supabase } from "../../lib/supabaseClient"
 import Navbar from "../components/Navbar"
 import EmptyState from "../components/ui/EmptyState"
+import Modal from "../components/ui/Modal"
+import { clearAllNotifications, dismissNotifications } from "@/lib/followNotifications"
 import { formatEST } from "@/lib/formatEST"
 import {
   buildNotificationListItems,
@@ -41,7 +43,7 @@ type SupabaseErrorShape = {
 }
 
 function logNotificationsQueryError(
-  action: "fetch" | "mark read" | "mark all read",
+  action: "fetch" | "mark read" | "mark all read" | "clear all" | "dismiss",
   error: SupabaseErrorShape | null,
   meta: { userId: string | null; columns?: string }
 ) {
@@ -83,6 +85,8 @@ function NotificationCard({
   timestamp,
   avatarUrl,
   onClick,
+  onDismiss,
+  dismissing,
 }: {
   unread: boolean
   title: string
@@ -90,25 +94,18 @@ function NotificationCard({
   timestamp: string
   avatarUrl?: string | null
   onClick: () => void
+  onDismiss: () => void
+  dismissing?: boolean
 }) {
   return (
     <div
-      role="button"
-      tabIndex={0}
-      onClick={onClick}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault()
-          onClick()
-        }
-      }}
-      className={`cursor-pointer rounded-xl border p-3 transition ${
+      className={`rounded-xl border p-3 transition ${
         unread
-          ? "border-blue-400/40 bg-white/10 ring-1 ring-blue-400/30 hover:bg-white/[0.12]"
-          : "border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/[0.07]"
+          ? "border-blue-400/40 bg-white/10 ring-1 ring-blue-400/30"
+          : "border-white/10 bg-white/5"
       }`}
     >
-      <div className="flex items-start gap-3">
+      <div className="flex items-start gap-2 sm:gap-3">
         {avatarUrl != null ? (
           <div className="relative shrink-0">
             <img
@@ -134,7 +131,18 @@ function NotificationCard({
         ) : (
           <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-transparent" />
         )}
-        <div className="min-w-0 flex-1 space-y-1">
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={onClick}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault()
+              onClick()
+            }
+          }}
+          className="min-w-0 flex-1 cursor-pointer space-y-1 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50"
+        >
           <p
             className={`text-sm ${unread ? "font-semibold text-white" : "text-gray-200"}`}
           >
@@ -145,6 +153,18 @@ function NotificationCard({
             {timeAgo(timestamp)}
           </p>
         </div>
+        <button
+          type="button"
+          disabled={dismissing}
+          onClick={(e) => {
+            e.stopPropagation()
+            onDismiss()
+          }}
+          className="shrink-0 rounded-md p-1.5 text-gray-400 transition hover:bg-white/10 hover:text-white disabled:opacity-40"
+          aria-label="Dismiss notification"
+        >
+          ✕
+        </button>
       </div>
     </div>
   )
@@ -159,6 +179,9 @@ export default function NotificationsPage() {
   )
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [showClearConfirm, setShowClearConfirm] = useState(false)
+  const [clearing, setClearing] = useState(false)
+  const [dismissingIds, setDismissingIds] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     let cancelled = false
@@ -296,6 +319,40 @@ export default function NotificationsPage() {
     window.dispatchEvent(new CustomEvent("tj-unread-notifications-refresh"))
   }
 
+  async function clearAll() {
+    if (!userId || clearing) return
+    setClearing(true)
+
+    const ok = await clearAllNotifications(supabase)
+    if (!ok) {
+      setClearing(false)
+      return
+    }
+
+    setNotifications([])
+    setSendersById({})
+    setShowClearConfirm(false)
+    setClearing(false)
+  }
+
+  async function dismissIds(ids: string[]) {
+    if (!userId || ids.length === 0) return
+
+    const idSet = new Set(ids)
+    setDismissingIds((prev) => new Set([...prev, ...ids]))
+
+    const ok = await dismissNotifications(supabase, ids)
+    setDismissingIds((prev) => {
+      const next = new Set(prev)
+      for (const id of ids) next.delete(id)
+      return next
+    })
+
+    if (!ok) return
+
+    setNotifications((prev) => prev.filter((row) => !idSet.has(row.id)))
+  }
+
   function renderItem(item: NotificationListItem) {
     const unread = itemIsUnread(item)
     const timestamp = itemCreatedAt(item)
@@ -313,6 +370,8 @@ export default function NotificationsPage() {
           unread={unread}
           title={title}
           timestamp={timestamp}
+          dismissing={item.notificationIds.some((id) => dismissingIds.has(id))}
+          onDismiss={() => void dismissIds(item.notificationIds)}
           onClick={() => {
             void markIdsRead(item.notificationIds)
             router.push(href)
@@ -352,6 +411,8 @@ export default function NotificationsPage() {
         body={body}
         timestamp={timestamp}
         avatarUrl={n.type === "follow" ? sender?.avatar_url : undefined}
+        dismissing={dismissingIds.has(n.id)}
+        onDismiss={() => void dismissIds([n.id])}
         onClick={() => {
           void markIdsRead([n.id])
           router.push(href)
@@ -393,14 +454,25 @@ export default function NotificationsPage() {
             </p>
           </div>
 
-          {unreadCount > 0 ? (
-            <button
-              type="button"
-              onClick={() => void markAllAsRead()}
-              className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-gray-200 transition hover:bg-white/10"
-            >
-              Mark all as read
-            </button>
+          {hasAnyItems ? (
+            <div className="flex flex-wrap gap-2">
+              {unreadCount > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => void markAllAsRead()}
+                  className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-gray-200 transition hover:bg-white/10"
+                >
+                  Mark all as read
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => setShowClearConfirm(true)}
+                className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-gray-200 transition hover:bg-white/10"
+              >
+                Clear all notifications
+              </button>
+            </div>
           ) : null}
 
           {!hasAnyItems ? (
@@ -437,6 +509,39 @@ export default function NotificationsPage() {
           )}
         </div>
       </div>
+
+      <Modal
+        open={showClearConfirm}
+        onClose={() => {
+          if (!clearing) setShowClearConfirm(false)
+        }}
+        title="Clear all notifications"
+        size="sm"
+        footer={
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              disabled={clearing}
+              onClick={() => setShowClearConfirm(false)}
+              className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm text-gray-200 transition hover:bg-white/10 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={clearing}
+              onClick={() => void clearAll()}
+              className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-red-500 disabled:opacity-50"
+            >
+              {clearing ? "Clearing…" : "Clear"}
+            </button>
+          </div>
+        }
+      >
+        <p className="text-sm text-gray-300">
+          Are you sure you want to clear all notifications? This cannot be undone.
+        </p>
+      </Modal>
     </>
   )
 }

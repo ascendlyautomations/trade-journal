@@ -3,6 +3,7 @@
 import { useEffect, useState, type MouseEvent } from "react"
 import { supabase } from "@/lib/supabaseClient"
 import { createFollowNotification } from "@/lib/createFollowNotification"
+import { removeFollowNotification } from "@/lib/followNotifications"
 
 type FollowButtonProps = {
   targetUserId: string
@@ -66,13 +67,19 @@ export default function FollowButton({
     setBusy(true)
 
     if (isFollowing) {
-      await supabase
+      const { error } = await supabase
         .from("followers")
         .delete()
         .eq("follower_id", currentUserId)
         .eq("following_id", targetUserId)
+      if (error) {
+        console.error("[follow] delete failed", error.message, error)
+        setBusy(false)
+        return
+      }
       setIsFollowing(false)
       onFollowingChange?.(targetUserId, false)
+      await removeFollowNotification(supabase, currentUserId, targetUserId)
     } else {
       const { error } = await supabase.from("followers").insert({
         follower_id: currentUserId,

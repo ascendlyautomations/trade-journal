@@ -52,3 +52,36 @@ export async function POST(req: Request) {
 
   return Response.json({ ok: true })
 }
+
+export async function DELETE(req: Request) {
+  const user = await getRouteUser(req)
+  if (!user) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  let followingId: string | undefined
+  try {
+    const body = (await req.json()) as { followingId?: string }
+    followingId = body.followingId?.trim()
+  } catch {
+    return Response.json({ error: "Invalid JSON body" }, { status: 400 })
+  }
+
+  if (!followingId || followingId === user.id) {
+    return Response.json({ error: "Invalid followingId" }, { status: 400 })
+  }
+
+  const { error: deleteErr } = await supabaseServiceRole
+    .from("notifications")
+    .delete()
+    .eq("user_id", followingId)
+    .eq("sender_id", user.id)
+    .eq("type", "follow")
+
+  if (deleteErr) {
+    console.error("[api/notifications/follow] delete failed", deleteErr)
+    return Response.json({ error: deleteErr.message }, { status: 500 })
+  }
+
+  return Response.json({ ok: true })
+}

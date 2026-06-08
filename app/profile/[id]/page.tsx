@@ -44,6 +44,7 @@ import { formatDateOnly, formatTimeOnly } from "@/lib/formatDate"
 import { formatEST } from "@/lib/formatEST"
 import { createUserRoom } from "@/lib/createUserRoom"
 import { createFollowNotification } from "@/lib/createFollowNotification"
+import { removeFollowNotification } from "@/lib/followNotifications"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 
@@ -1170,13 +1171,20 @@ function ProfilePageContent() {
     setFollowBusy(true)
 
     if (isFollowing) {
-      await supabase
+      const { error } = await supabase
         .from("followers")
         .delete()
         .eq("follower_id", currentUserId)
         .eq("following_id", profile.id)
 
+      if (error) {
+        console.error("[follow] delete failed", error.message, error)
+        setFollowBusy(false)
+        return
+      }
+
       setIsFollowing(false)
+      await removeFollowNotification(supabase, currentUserId, profile.id)
       if (profile.is_private === true) {
         setTrades([])
         setPage(0)
