@@ -201,12 +201,8 @@ export function parseRoomJoinContent(
   }
 }
 
-export function formatRoomJoinMessage(
-  username: string,
-  roomName: string | null | undefined
-): string {
-  const room = roomName?.trim() || "your trade room"
-  return `${username} joined ${room}`
+export function formatRoomJoinMessage(username: string): string {
+  return `${username} joined your room`
 }
 
 export function formatFollowMessage(username: string): string {

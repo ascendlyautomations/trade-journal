@@ -20,7 +20,6 @@ import {
   groupItemsByTimeSection,
   itemCreatedAt,
   itemIsUnread,
-  parseRoomJoinContent,
   senderDisplayName,
   type NotificationListItem,
   type NotificationRecord,
@@ -391,8 +390,7 @@ export default function NotificationsPage() {
       title = `${senderName} commented on your post`
       body = commentPreview(n.content)
     } else if (n.type === "room_join") {
-      const meta = parseRoomJoinContent(n.content)
-      title = formatRoomJoinMessage(senderName, meta.room_name)
+      title = formatRoomJoinMessage(senderName)
     } else if (n.type === "message") {
       title = "New message"
       body =
@@ -410,7 +408,11 @@ export default function NotificationsPage() {
         title={title}
         body={body}
         timestamp={timestamp}
-        avatarUrl={n.type === "follow" ? sender?.avatar_url : undefined}
+        avatarUrl={
+          n.type === "follow" || n.type === "room_join"
+            ? sender?.avatar_url
+            : undefined
+        }
         dismissing={dismissingIds.has(n.id)}
         onDismiss={() => void dismissIds([n.id])}
         onClick={() => {

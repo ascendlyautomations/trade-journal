@@ -47,6 +47,13 @@ import { createFollowNotification } from "@/lib/createFollowNotification"
 import { removeFollowNotification } from "@/lib/followNotifications"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
+import StoryComposeModal from "../../components/feed/StoryComposeModal"
+import { publishStory } from "@/lib/publishStory"
+import {
+  createStoryPreviewUrl,
+  prepareStoryImageFile,
+  revokeStoryPreviewUrl,
+} from "@/lib/storyComposeHelpers"
 
 function postImageSrc(imageUrl: string | null | undefined): string | null {
   const raw = imageUrl != null ? String(imageUrl).trim() : ""
@@ -55,6 +62,12 @@ function postImageSrc(imageUrl: string | null | undefined): string | null {
   const base = process.env.NEXT_PUBLIC_SUPABASE_URL
   if (!base) return null
   return `${base}/storage/v1/object/public/screenshots/${raw}`
+}
+
+function formatPostFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
 function profileWallImageSrc(imageUrl: string | null | undefined): string | null {
@@ -700,8 +713,17 @@ function ProfilePageContent() {
     "trades"
   )
   const [showCreatePost, setShowCreatePost] = useState(false)
+  const [storyComposeOpen, setStoryComposeOpen] = useState(false)
+  const [pendingStoryFile, setPendingStoryFile] = useState<File | null>(null)
+  const [pendingStoryPreviewUrl, setPendingStoryPreviewUrl] = useState<
+    string | null
+  >(null)
+  const [postingStory, setPostingStory] = useState(false)
   const [postContent, setPostContent] = useState("")
   const [postImage, setPostImage] = useState<File | null>(null)
+  const [postImagePreviewUrl, setPostImagePreviewUrl] = useState<string | null>(
+    null
+  )
   const [creatingPost, setCreatingPost] = useState(false)
   const [openCommentsState, setOpenComments] = useState<
     Record<string, boolean>
@@ -771,56 +793,81 @@ function ProfilePageContent() {
     }
   }, [currentUserId])
 
+  useEffect(() => {
+    if (!postImage) {
+      setPostImagePreviewUrl(null)
+      return
+    }
+
+    const url = createStoryPreviewUrl(postImage)
+    setPostImagePreviewUrl(url)
+
+    return () => {
+      revokeStoryPreviewUrl(url)
+    }
+  }, [postImage])
+
   /** Feed refreshes the story bar here; profile has no story strip. */
   const loadFollowingStories = useCallback(async () => {}, [])
 
-  const handleStoryUpload = useCallback(
+  useEffect(() => {
+    return () => {
+      revokeStoryPreviewUrl(pendingStoryPreviewUrl)
+    }
+  }, [pendingStoryPreviewUrl])
+
+  const closeStoryCompose = useCallback(() => {
+    revokeStoryPreviewUrl(pendingStoryPreviewUrl)
+    setPendingStoryPreviewUrl(null)
+    setPendingStoryFile(null)
+    setStoryComposeOpen(false)
+  }, [pendingStoryPreviewUrl])
+
+  const setStoryDraft = useCallback(
+    async (file: File) => {
+      const prepared = await prepareStoryImageFile(file)
+      revokeStoryPreviewUrl(pendingStoryPreviewUrl)
+      setPendingStoryFile(prepared)
+      setPendingStoryPreviewUrl(createStoryPreviewUrl(prepared))
+      setStoryComposeOpen(true)
+    },
+    [pendingStoryPreviewUrl]
+  )
+
+  const handleStoryFileSelect = useCallback(
     async (e: ChangeEvent<HTMLInputElement>) => {
       const input = e.target
       const file = input.files?.[0]
       input.value = ""
       if (!file || !currentUserId) return
-
-      let uploadFile: File = file
-      if (file.type?.startsWith("image/")) {
-        uploadFile = await compressImage(file)
-      }
-      const fileName = `${currentUserId}/${Date.now()}-${uploadFile.name}`
-
-      const { error: uploadError } = await supabase.storage
-        .from("stories")
-        .upload(fileName, uploadFile, { upsert: true })
-
-      if (uploadError) {
-        console.error(uploadError)
-        showPopup({ type: "error", message: uploadError.message })
-        return
-      }
-
-      const base = process.env.NEXT_PUBLIC_SUPABASE_URL
-      if (!base) {
-        showPopup({ type: "error", message: "Missing NEXT_PUBLIC_SUPABASE_URL" })
-        return
-      }
-
-      const publicUrl = `${base}/storage/v1/object/public/stories/${fileName}`
-
-      const { error: insertError } = await supabase.from("stories").insert({
-        user_id: currentUserId,
-        image_url: publicUrl,
-      })
-
-      if (insertError) {
-        console.error(insertError)
-        showPopup({ type: "error", message: insertError.message })
-        return
-      }
-
-      showPopup({ type: "success", message: "Story uploaded!" })
-      await loadFollowingStories()
+      await setStoryDraft(file)
     },
-    [currentUserId, loadFollowingStories, showPopup]
+    [currentUserId, setStoryDraft]
   )
+
+  const handlePostStory = useCallback(async () => {
+    if (!pendingStoryFile || !currentUserId || postingStory) return
+    setPostingStory(true)
+
+    const result = await publishStory(supabase, currentUserId, pendingStoryFile)
+    setPostingStory(false)
+
+    if (!result.ok) {
+      showPopup({ type: "error", message: result.message })
+      return
+    }
+
+    showPopup({ type: "success", message: "Story uploaded!" })
+    closeStoryCompose()
+    await loadFollowingStories()
+  }, [
+    pendingStoryFile,
+    currentUserId,
+    postingStory,
+    showPopup,
+    closeStoryCompose,
+    loadFollowingStories,
+  ])
 
   const fetchTrades = async (forProfileId: string, reset = false) => {
     const from = reset ? 0 : page * PAGE_SIZE
@@ -2156,6 +2203,25 @@ function ProfilePageContent() {
     <>
       <Navbar />
       <FeedbackModal {...feedbackModalProps} />
+      {currentUserId === profile?.id ? (
+        <StoryComposeModal
+          open={storyComposeOpen}
+          posting={postingStory}
+          profile={
+            profile
+              ? {
+                  id: currentUserId,
+                  username: profile.username,
+                  avatar_url: profile.avatar_url,
+                }
+              : null
+          }
+          previewUrl={pendingStoryPreviewUrl}
+          onClose={closeStoryCompose}
+          onPost={() => void handlePostStory()}
+          onReplaceImage={(file) => void setStoryDraft(file)}
+        />
+      ) : null}
 
       <div className="w-full text-gray-100">
         <div className="mx-auto max-w-5xl space-y-4 px-4 py-6 sm:px-6 lg:px-8">
@@ -2326,7 +2392,7 @@ function ProfilePageContent() {
                     type="file"
                     accept="image/*"
                     className="hidden"
-                    onChange={(e) => void handleStoryUpload(e)}
+                    onChange={(e) => void handleStoryFileSelect(e)}
                   />
                   <div className="mt-0 flex w-full shrink-0 justify-center gap-2 sm:mt-0 sm:w-auto sm:justify-end sm:pt-1 md:w-auto">
                     <button
@@ -2939,6 +3005,21 @@ function ProfilePageContent() {
                 rows={4}
                 className="mb-3 w-full resize-none rounded-lg border border-white/10 bg-[#020617] p-2 text-sm text-white placeholder:text-gray-500"
               />
+
+              {postImagePreviewUrl ? (
+                <div className="mb-3 flex flex-col items-center">
+                  <img
+                    src={postImagePreviewUrl}
+                    alt="Selected image preview"
+                    className="max-h-48 w-full rounded-xl border border-white/10 bg-black/30 object-contain"
+                  />
+                  {postImage ? (
+                    <p className="mt-1.5 text-xs text-gray-500">
+                      {formatPostFileSize(postImage.size)}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
 
               <input
                 type="file"

@@ -1,102 +1,279 @@
 "use client"
 
-import { memo, useMemo } from "react"
+import { memo, useMemo, useRef } from "react"
 import type { StoryBarProfile } from "./FeedStoriesBar"
+import StoryFrame from "./StoryFrame"
 
 type StorySlide = {
   id: string
   image_url: string
+  created_at: string
 }
 
 type FeedStoryViewerProps = {
   activeStoryUser: string
   users: StoryBarProfile[]
+  storiesByUser: Record<string, StorySlide[]>
   currentStories: StorySlide[]
   currentStoryIndex: number
   currentStory: StorySlide
+  canGoPrevSlide: boolean
+  canGoNextSlide: boolean
+  canGoPrevUser: boolean
+  canGoNextUser: boolean
   onClose: () => void
-  onPrev: () => void
-  onNext: () => void
+  onPrevSlide: () => void
+  onNextSlide: () => void
+  onPrevUser: () => void
+  onNextUser: () => void
+}
+
+const SWIPE_THRESHOLD_PX = 48
+
+function ChevronLeftIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      aria-hidden
+    >
+      <path d="M15 18l-6-6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+function ChevronRightIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      aria-hidden
+    >
+      <path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+const userNavButtonClass =
+  "flex shrink-0 items-center gap-1.5 rounded-full border border-white/15 bg-black/55 px-3 py-2 text-sm font-medium text-white shadow-lg shadow-black/40 backdrop-blur-sm transition duration-200 hover:scale-[1.02] hover:border-white/30 hover:bg-white/15 active:scale-95 disabled:pointer-events-none disabled:opacity-30 md:px-4 md:py-2.5"
+
+function NeighborStoryPreview({
+  profile,
+  coverUrl,
+  onClick,
+  side,
+}: {
+  profile: StoryBarProfile
+  coverUrl: string | null
+  onClick: () => void
+  side: "prev" | "next"
+}) {
+  const username = profile.username?.trim() || "User"
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={`View ${username}'s story`}
+      className={`group relative hidden h-[520px] w-[100px] shrink-0 overflow-hidden rounded-xl border border-white/10 opacity-60 transition duration-300 hover:opacity-80 md:block lg:h-[580px] lg:w-[120px] ${
+        side === "prev" ? "origin-right scale-[0.88]" : "origin-left scale-[0.88]"
+      }`}
+    >
+      {coverUrl ? (
+        <img
+          src={coverUrl}
+          alt=""
+          className="h-full w-full object-cover brightness-75 transition group-hover:brightness-90"
+          draggable={false}
+        />
+      ) : (
+        <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-blue-900/40 to-emerald-900/40" />
+      )}
+      <div className="absolute inset-0 bg-black/35" />
+      <p className="absolute bottom-3 left-0 right-0 truncate px-2 text-center text-[11px] font-medium text-white/90">
+        {username}
+      </p>
+    </button>
+  )
 }
 
 function FeedStoryViewer({
   activeStoryUser,
   users,
-  currentStories,
-  currentStoryIndex,
+  storiesByUser,
   currentStory,
+  canGoPrevSlide,
+  canGoNextSlide,
+  canGoPrevUser,
+  canGoNextUser,
   onClose,
-  onPrev,
-  onNext,
+  onPrevSlide,
+  onNextSlide,
+  onPrevUser,
+  onNextUser,
 }: FeedStoryViewerProps) {
-  const activeStoryUsername = useMemo(() => {
-    const profile = users.find((u) => u.id === activeStoryUser)
-    return profile?.username?.trim() || "User"
-  }, [activeStoryUser, users])
+  const touchStartX = useRef<number | null>(null)
+  const touchStartY = useRef<number | null>(null)
+
+  const activeProfile = useMemo(
+    () => users.find((u) => u.id === activeStoryUser),
+    [activeStoryUser, users]
+  )
+
+  const activeUserIndex = useMemo(
+    () => users.findIndex((u) => u.id === activeStoryUser),
+    [activeStoryUser, users]
+  )
+
+  const prevProfile = activeUserIndex > 0 ? users[activeUserIndex - 1] : null
+  const nextProfile =
+    activeUserIndex >= 0 && activeUserIndex < users.length - 1
+      ? users[activeUserIndex + 1]
+      : null
+
+  const prevCoverUrl =
+    prevProfile != null
+      ? (storiesByUser[prevProfile.id]?.[0]?.image_url ?? null)
+      : null
+  const nextCoverUrl =
+    nextProfile != null
+      ? (storiesByUser[nextProfile.id]?.[0]?.image_url ?? null)
+      : null
+
+  function handleTouchStart(e: React.TouchEvent) {
+    touchStartX.current = e.touches[0]?.clientX ?? null
+    touchStartY.current = e.touches[0]?.clientY ?? null
+  }
+
+  function handleTouchEnd(e: React.TouchEvent) {
+    const startX = touchStartX.current
+    const startY = touchStartY.current
+    touchStartX.current = null
+    touchStartY.current = null
+
+    if (startX == null || startY == null) return
+
+    const endX = e.changedTouches[0]?.clientX ?? startX
+    const endY = e.changedTouches[0]?.clientY ?? startY
+    const deltaX = endX - startX
+    const deltaY = endY - startY
+
+    if (Math.abs(deltaX) < SWIPE_THRESHOLD_PX) return
+    if (Math.abs(deltaY) > Math.abs(deltaX)) return
+
+    if (deltaX < 0) {
+      if (canGoNextSlide) onNextSlide()
+      else if (canGoNextUser) onNextUser()
+    } else if (canGoPrevSlide) {
+      onPrevSlide()
+    } else if (canGoPrevUser) {
+      onPrevUser()
+    }
+  }
+
+  if (!activeProfile) return null
 
   return (
     <div
-      className="fixed inset-0 z-[9999] bg-black flex items-center justify-center"
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/95 px-2 md:px-6"
       role="dialog"
       aria-modal="true"
       aria-label="Stories"
     >
-      <div
-        className="relative w-[400px] h-[700px] bg-black rounded-2xl overflow-hidden flex items-center justify-center"
-        style={{ margin: 0, padding: 0 }}
+      <button
+        type="button"
+        aria-label="Previous user's story"
+        onClick={onPrevUser}
+        disabled={!canGoPrevUser}
+        className={`absolute left-2 top-1/2 z-[10003] -translate-y-1/2 md:left-4 ${userNavButtonClass}`}
       >
-        <button
-          type="button"
-          aria-label="Close stories"
-          onClick={onClose}
-          className="absolute right-3 top-3 z-[10000] rounded-full bg-black/70 px-3 py-1 text-xs text-white hover:bg-black/90"
-        >
-          Esc
-        </button>
+        <ChevronLeftIcon className="h-5 w-5" />
+        <span className="hidden sm:inline">Previous</span>
+      </button>
 
-        <div className="absolute left-3 top-3 z-[10000] text-sm text-white">
-          {activeStoryUsername}
-        </div>
+      <button
+        type="button"
+        aria-label="Next user's story"
+        onClick={onNextUser}
+        disabled={!canGoNextUser}
+        className={`absolute right-2 top-1/2 z-[10003] -translate-y-1/2 md:right-4 ${userNavButtonClass}`}
+      >
+        <span className="hidden sm:inline">Next</span>
+        <ChevronRightIcon className="h-5 w-5" />
+      </button>
 
-        <div className="absolute top-2 left-2 right-2 flex gap-1 z-[10000]">
-          {currentStories.map((s, i) => (
-            <div
-              key={s.id}
-              className={`h-[3px] flex-1 rounded ${
-                i <= currentStoryIndex ? "bg-zinc-200" : "bg-zinc-500/40"
-              }`}
-            />
-          ))}
-        </div>
-
-        <div className="absolute inset-0 z-0 flex h-full w-full items-center justify-center bg-black">
-          <img
-            src={currentStory.image_url}
-            alt=""
-            loading="lazy"
-            decoding="async"
-            className="max-w-full max-h-full object-contain block"
-            draggable={false}
+      <div className="flex max-w-[min(100vw,920px)] items-center justify-center gap-2 md:gap-4">
+        {prevProfile ? (
+          <NeighborStoryPreview
+            profile={prevProfile}
+            coverUrl={prevCoverUrl}
+            onClick={onPrevUser}
+            side="prev"
           />
-        </div>
+        ) : (
+          <div className="hidden w-[100px] shrink-0 md:block lg:w-[120px]" aria-hidden />
+        )}
 
-        <button
-          type="button"
-          aria-label="Previous story"
-          onClick={onPrev}
-          className="absolute left-2 top-1/2 z-[10000] -translate-y-1/2 rounded-full bg-black/40 px-3 py-1 text-3xl text-white transition hover:scale-110"
+        <StoryFrame
+          key={activeStoryUser}
+          profile={activeProfile}
+          imageUrl={currentStory.image_url}
+          imageKey={currentStory.id}
+          timestamp={currentStory.created_at}
+          className="relative h-[100dvh] w-full max-w-lg transition-opacity duration-300 sm:h-[700px] sm:w-[400px] sm:rounded-2xl sm:border sm:border-white/10"
+          headerRight={
+            <button
+              type="button"
+              aria-label="Close stories"
+              onClick={onClose}
+              className="rounded-full border border-white/10 bg-black/70 px-3 py-1 text-xs text-white transition hover:border-white/25 hover:bg-black/90"
+            >
+              Esc
+            </button>
+          }
         >
-          ‹
-        </button>
+          <div
+            className="absolute inset-0 z-[1]"
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+          >
+            <button
+              type="button"
+              aria-label="Previous slide"
+              onClick={() => {
+                if (canGoPrevSlide) onPrevSlide()
+                else if (canGoPrevUser) onPrevUser()
+              }}
+              className="absolute inset-y-0 left-0 w-[30%] cursor-pointer"
+            />
+            <button
+              type="button"
+              aria-label="Next slide"
+              onClick={() => {
+                if (canGoNextSlide) onNextSlide()
+                else if (canGoNextUser) onNextUser()
+              }}
+              className="absolute inset-y-0 right-0 w-[30%] cursor-pointer"
+            />
+          </div>
+        </StoryFrame>
 
-        <button
-          type="button"
-          aria-label="Next story"
-          onClick={onNext}
-          className="absolute right-2 top-1/2 z-[10000] -translate-y-1/2 rounded-full bg-black/40 px-3 py-1 text-3xl text-white transition hover:scale-110"
-        >
-          ›
-        </button>
+        {nextProfile ? (
+          <NeighborStoryPreview
+            profile={nextProfile}
+            coverUrl={nextCoverUrl}
+            onClick={onNextUser}
+            side="next"
+          />
+        ) : (
+          <div className="hidden w-[100px] shrink-0 md:block lg:w-[120px]" aria-hidden />
+        )}
       </div>
     </div>
   )

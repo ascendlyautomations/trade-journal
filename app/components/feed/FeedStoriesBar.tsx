@@ -1,7 +1,7 @@
 "use client"
 
 import type { ChangeEvent } from "react"
-import { memo } from "react"
+import { memo, useMemo } from "react"
 
 export type StoryBarProfile = {
   id: string
@@ -10,12 +10,127 @@ export type StoryBarProfile = {
 }
 
 type FeedStoriesBarProps = {
+  currentUser: StoryBarProfile | null
+  currentUserHasStory: boolean
   users: StoryBarProfile[]
   onStoryUpload: (e: ChangeEvent<HTMLInputElement>) => void
   onOpenStory: (userId: string) => void
 }
 
-function FeedStoriesBar({ users, onStoryUpload, onOpenStory }: FeedStoriesBarProps) {
+function openStoryUpload() {
+  document.getElementById("storyUploadInput")?.click()
+}
+
+function StoryPlusBadge({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-label="Add story"
+      onClick={(e) => {
+        e.stopPropagation()
+        onClick()
+      }}
+      className="absolute -bottom-0.5 -right-0.5 z-10 flex h-5 w-5 items-center justify-center rounded-full border-2 border-[#0f172a] bg-emerald-500 text-[13px] font-bold leading-none text-white shadow-md transition hover:bg-emerald-400 active:scale-95"
+    >
+      +
+    </button>
+  )
+}
+
+function StoryAvatar({
+  profile,
+  hasStoryRing,
+}: {
+  profile: StoryBarProfile
+  hasStoryRing: boolean
+}) {
+  const avatar = profile.avatar_url ? (
+    <img
+      src={profile.avatar_url}
+      alt=""
+      loading="lazy"
+      decoding="async"
+      className="h-full w-full rounded-full object-cover"
+      onError={(e) => {
+        e.currentTarget.src = "/default-avatar.png"
+      }}
+    />
+  ) : (
+    <div
+      className="h-full w-full rounded-full bg-gradient-to-br from-blue-500/40 to-emerald-500/40"
+      aria-hidden
+    />
+  )
+
+  if (hasStoryRing) {
+    return (
+      <div className="h-16 w-16 rounded-full border-2 border-emerald-400 p-[2px] ring-2 ring-emerald-400/30">
+        {avatar}
+      </div>
+    )
+  }
+
+  return (
+    <div className="h-16 w-16 overflow-hidden rounded-full ring-2 ring-white/15">
+      {avatar}
+    </div>
+  )
+}
+
+function MyStoryItem({
+  profile,
+  hasActiveStory,
+  onOpenStory,
+}: {
+  profile: StoryBarProfile
+  hasActiveStory: boolean
+  onOpenStory: (userId: string) => void
+}) {
+  function handleAvatarClick() {
+    if (hasActiveStory) {
+      onOpenStory(profile.id)
+      return
+    }
+    openStoryUpload()
+  }
+
+  return (
+    <div className="flex shrink-0 flex-col items-center text-left">
+      <div className="relative">
+        <button
+          type="button"
+          onClick={handleAvatarClick}
+          className="cursor-pointer rounded-full outline-none transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-emerald-400/60"
+          aria-label={hasActiveStory ? "View your story" : "Add story"}
+        >
+          <StoryAvatar profile={profile} hasStoryRing={hasActiveStory} />
+        </button>
+        <StoryPlusBadge onClick={openStoryUpload} />
+      </div>
+      <p className="mt-1 max-w-[4.5rem] truncate text-center text-xs text-gray-200">
+        {hasActiveStory
+          ? profile.username?.trim() || "Your story"
+          : "Add Story"}
+      </p>
+    </div>
+  )
+}
+
+function FeedStoriesBar({
+  currentUser,
+  currentUserHasStory,
+  users,
+  onStoryUpload,
+  onOpenStory,
+}: FeedStoriesBarProps) {
+  const otherUsers = useMemo(
+    () =>
+      currentUser
+        ? users.filter((u) => u.id !== currentUser.id)
+        : users,
+    [currentUser, users]
+  )
+
   return (
     <>
       <input
@@ -25,24 +140,21 @@ function FeedStoriesBar({ users, onStoryUpload, onOpenStory }: FeedStoriesBarPro
         className="hidden"
         onChange={(e) => void onStoryUpload(e)}
       />
-      <div className="flex items-center gap-4 overflow-x-auto pb-3 mb-4">
-        <button
-          type="button"
-          onClick={() => document.getElementById("storyUploadInput")?.click()}
-          className="flex flex-col items-center shrink-0 cursor-pointer text-left"
-        >
-          <div className="w-16 h-16 rounded-full bg-green-500 flex items-center justify-center text-2xl text-white font-light leading-none hover:bg-green-600 transition-colors">
-            +
-          </div>
-          <p className="text-xs mt-1 text-gray-300">Add</p>
-        </button>
+      <div className="mb-4 flex items-center gap-4 overflow-x-auto pb-3">
+        {currentUser ? (
+          <MyStoryItem
+            profile={currentUser}
+            hasActiveStory={currentUserHasStory}
+            onOpenStory={onOpenStory}
+          />
+        ) : null}
 
-        {users.map((u) => (
+        {otherUsers.map((u) => (
           <button
             key={u.id}
             type="button"
             onClick={() => onOpenStory(u.id)}
-            className="flex flex-col items-center shrink-0 cursor-pointer text-left"
+            className="flex shrink-0 cursor-pointer flex-col items-center text-left"
           >
             {u.avatar_url ? (
               <img
@@ -50,15 +162,15 @@ function FeedStoriesBar({ users, onStoryUpload, onOpenStory }: FeedStoriesBarPro
                 alt=""
                 loading="lazy"
                 decoding="async"
-                className="w-16 h-16 rounded-full object-cover border-2 border-emerald-400 ring-2 ring-emerald-400/30"
+                className="h-16 w-16 rounded-full border-2 border-emerald-400 object-cover ring-2 ring-emerald-400/30"
               />
             ) : (
               <div
-                className="w-16 h-16 rounded-full border-2 border-emerald-400 bg-gradient-to-br from-blue-500/40 to-emerald-500/40"
+                className="h-16 w-16 rounded-full border-2 border-emerald-400 bg-gradient-to-br from-blue-500/40 to-emerald-500/40 ring-2 ring-emerald-400/30"
                 aria-hidden
               />
             )}
-            <p className="text-xs mt-1 max-w-[4.5rem] truncate text-center text-gray-200">
+            <p className="mt-1 max-w-[4.5rem] truncate text-center text-xs text-gray-200">
               {u.username?.trim() || "User"}
             </p>
           </button>

@@ -4,7 +4,6 @@ import type { ChangeEvent } from "react"
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { supabase } from "../../../lib/supabaseClient"
-import { compressImage } from "@/lib/compressImage"
 import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import FeedLoadMoreFooter from "../../components/feed/FeedLoadMoreFooter"
@@ -13,6 +12,7 @@ import FeedPostList from "../../components/feed/FeedPostList"
 import FeedPostOverlays from "../../components/feed/FeedPostOverlays"
 import FeedStoriesBar, { type StoryBarProfile } from "../../components/feed/FeedStoriesBar"
 import FeedStoryViewer from "../../components/feed/FeedStoryViewer"
+import StoryComposeModal from "../../components/feed/StoryComposeModal"
 import {
   EMPTY_COMMENTS,
   EMPTY_LIKE_META,
@@ -25,6 +25,12 @@ import {
   buildFeedPostsIndex,
 } from "../../components/feed/feedPostHelpers"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
+import { publishStory } from "@/lib/publishStory"
+import {
+  createStoryPreviewUrl,
+  prepareStoryImageFile,
+  revokeStoryPreviewUrl,
+} from "@/lib/storyComposeHelpers"
 
 const STORY_WINDOW_MS = 24 * 60 * 60 * 1000
 /** Auto-advance each slide (Instagram-style). */
@@ -78,8 +84,16 @@ function FeedPageContent() {
     {}
   )
   const [users, setUsers] = useState<StoryBarProfile[]>([])
+  const [currentUserProfile, setCurrentUserProfile] =
+    useState<StoryBarProfile | null>(null)
   const [activeStoryUser, setActiveStoryUser] = useState<string | null>(null)
   const [currentStoryIndex, setCurrentStoryIndex] = useState(0)
+  const [storyComposeOpen, setStoryComposeOpen] = useState(false)
+  const [pendingStoryFile, setPendingStoryFile] = useState<File | null>(null)
+  const [pendingStoryPreviewUrl, setPendingStoryPreviewUrl] = useState<
+    string | null
+  >(null)
+  const [postingStory, setPostingStory] = useState(false)
 
   const likesByPostRef = useRef(likesByPost)
   likesByPostRef.current = likesByPost
@@ -98,12 +112,89 @@ function FeedPageContent() {
     [currentStories, currentStoryIndex]
   )
 
+  const currentUserHasStory = useMemo(
+    () =>
+      Boolean(
+        user?.id && (storiesByUser[user.id]?.length ?? 0) > 0
+      ),
+    [user?.id, storiesByUser]
+  )
+
+  const storyNavigation = useMemo(() => {
+    const list = activeStoryUser
+      ? (storiesByUser[activeStoryUser] ?? [])
+      : []
+    const userIds = users.map((u) => u.id)
+    const currentUserIndex = activeStoryUser
+      ? userIds.indexOf(activeStoryUser)
+      : -1
+
+    return {
+      canGoPrevSlide: currentStoryIndex > 0,
+      canGoNextSlide: currentStoryIndex < list.length - 1,
+      canGoPrevUser: currentUserIndex > 0,
+      canGoNextUser:
+        currentUserIndex >= 0 && currentUserIndex < userIds.length - 1,
+    }
+  }, [activeStoryUser, currentStoryIndex, storiesByUser, users])
+
   useEffect(() => {
     fetchUser()
   }, [])
 
+  useEffect(() => {
+    return () => {
+      revokeStoryPreviewUrl(pendingStoryPreviewUrl)
+    }
+  }, [pendingStoryPreviewUrl])
+
+  const closeStoryCompose = useCallback(() => {
+    revokeStoryPreviewUrl(pendingStoryPreviewUrl)
+    setPendingStoryPreviewUrl(null)
+    setPendingStoryFile(null)
+    setStoryComposeOpen(false)
+  }, [pendingStoryPreviewUrl])
+
+  const setStoryDraft = useCallback(
+    async (file: File) => {
+      const prepared = await prepareStoryImageFile(file)
+      revokeStoryPreviewUrl(pendingStoryPreviewUrl)
+      setPendingStoryFile(prepared)
+      setPendingStoryPreviewUrl(createStoryPreviewUrl(prepared))
+      setStoryComposeOpen(true)
+    },
+    [pendingStoryPreviewUrl]
+  )
+
+  const handleStoryFileSelect = useCallback(
+    async (e: ChangeEvent<HTMLInputElement>) => {
+      const input = e.target
+      const file = input.files?.[0]
+      input.value = ""
+      if (!file || !user?.id) return
+      await setStoryDraft(file)
+    },
+    [setStoryDraft, user?.id]
+  )
+
   const loadFollowingStories = useCallback(async () => {
     if (!user?.id) return
+
+    const { data: selfProfile, error: selfProfileErr } = await supabase
+      .from("profiles")
+      .select("id, username, avatar_url")
+      .eq("id", user.id)
+      .maybeSingle()
+
+    if (selfProfileErr) {
+      console.error("story bar self profile:", selfProfileErr)
+    }
+
+    setCurrentUserProfile(
+      selfProfile
+        ? (selfProfile as StoryBarProfile)
+        : { id: user.id, username: null, avatar_url: null }
+    )
 
     const { data: following } = await supabase
       .from("followers")
@@ -186,6 +277,7 @@ function FeedPageContent() {
     if (!user || mode !== "following") {
       setStoriesByUser({})
       setUsers([])
+      setCurrentUserProfile(null)
       setActiveStoryUser(null)
       setCurrentStoryIndex(0)
       return
@@ -194,53 +286,29 @@ function FeedPageContent() {
     void loadFollowingStories()
   }, [user, mode, loadFollowingStories])
 
-  const handleStoryUpload = useCallback(
-    async (e: ChangeEvent<HTMLInputElement>) => {
-      const input = e.target
-      const file = input.files?.[0]
-      input.value = ""
-      if (!file || !user?.id) return
+  const handlePostStory = useCallback(async () => {
+    if (!pendingStoryFile || !user?.id || postingStory) return
+    setPostingStory(true)
 
-      let uploadFile: File = file
-      if (file.type?.startsWith("image/")) {
-        uploadFile = await compressImage(file)
-      }
-      const fileName = `${user.id}/${Date.now()}-${uploadFile.name}`
+    const result = await publishStory(supabase, user.id, pendingStoryFile)
+    setPostingStory(false)
 
-      const { error: uploadError } = await supabase.storage
-        .from("stories")
-        .upload(fileName, uploadFile, { upsert: true })
+    if (!result.ok) {
+      showPopup({ type: "error", message: result.message })
+      return
+    }
 
-      if (uploadError) {
-        console.error(uploadError)
-        showPopup({ type: "error", message: uploadError.message })
-        return
-      }
-
-      const base = process.env.NEXT_PUBLIC_SUPABASE_URL
-      if (!base) {
-        showPopup({ type: "error", message: "Missing NEXT_PUBLIC_SUPABASE_URL" })
-        return
-      }
-
-      const publicUrl = `${base}/storage/v1/object/public/stories/${fileName}`
-
-      const { error: insertError } = await supabase.from("stories").insert({
-        user_id: user.id,
-        image_url: publicUrl,
-      })
-
-      if (insertError) {
-        console.error(insertError)
-        showPopup({ type: "error", message: handleSupabaseError(insertError) })
-        return
-      }
-
-      showPopup({ type: "success", message: "Story uploaded!" })
-      await loadFollowingStories()
-    },
-    [user, loadFollowingStories, showPopup]
-  )
+    showPopup({ type: "success", message: "Story uploaded!" })
+    closeStoryCompose()
+    await loadFollowingStories()
+  }, [
+    pendingStoryFile,
+    user?.id,
+    postingStory,
+    showPopup,
+    closeStoryCompose,
+    loadFollowingStories,
+  ])
 
   const openStory = useCallback((userId: string) => {
     setActiveStoryUser(userId)
@@ -252,6 +320,48 @@ function FeedPageContent() {
     setCurrentStoryIndex(0)
   }, [])
 
+  const nextSlide = useCallback(() => {
+    const list = activeStoryUser
+      ? (storiesByUser[activeStoryUser] ?? [])
+      : []
+
+    if (currentStoryIndex < list.length - 1) {
+      setCurrentStoryIndex((prev) => prev + 1)
+    }
+  }, [activeStoryUser, currentStoryIndex, storiesByUser])
+
+  const prevSlide = useCallback(() => {
+    if (currentStoryIndex > 0) {
+      setCurrentStoryIndex((prev) => prev - 1)
+    }
+  }, [currentStoryIndex])
+
+  const nextUser = useCallback(() => {
+    const userIds = users.map((u) => u.id)
+    const currentUserIndex = activeStoryUser
+      ? userIds.indexOf(activeStoryUser)
+      : -1
+
+    if (currentUserIndex >= 0 && currentUserIndex < userIds.length - 1) {
+      setActiveStoryUser(userIds[currentUserIndex + 1])
+      setCurrentStoryIndex(0)
+    }
+  }, [activeStoryUser, users])
+
+  const prevUser = useCallback(() => {
+    const userIds = users.map((u) => u.id)
+    const currentUserIndex = activeStoryUser
+      ? userIds.indexOf(activeStoryUser)
+      : -1
+
+    if (currentUserIndex > 0) {
+      const prevUserId = userIds[currentUserIndex - 1]
+      const prevUserStories = storiesByUser[prevUserId] ?? []
+      setActiveStoryUser(prevUserId)
+      setCurrentStoryIndex(Math.max(0, prevUserStories.length - 1))
+    }
+  }, [activeStoryUser, storiesByUser, users])
+
   const nextStory = useCallback(() => {
     const list = activeStoryUser
       ? (storiesByUser[activeStoryUser] ?? [])
@@ -262,44 +372,17 @@ function FeedPageContent() {
       return
     }
 
-    const userIds = users.map((u) => u.id)
-    const currentUserIndex = activeStoryUser
-      ? userIds.indexOf(activeStoryUser)
-      : -1
-
-    if (currentUserIndex >= 0 && currentUserIndex < userIds.length - 1) {
-      const nextUser = userIds[currentUserIndex + 1]
-      setActiveStoryUser(nextUser)
-      setCurrentStoryIndex(0)
-    } else {
-      setActiveStoryUser(null)
-      setCurrentStoryIndex(0)
-    }
-  }, [activeStoryUser, currentStoryIndex, storiesByUser, users])
+    nextUser()
+  }, [activeStoryUser, currentStoryIndex, storiesByUser, nextUser])
 
   const prevStory = useCallback(() => {
-    const list = activeStoryUser
-      ? (storiesByUser[activeStoryUser] ?? [])
-      : []
-
     if (currentStoryIndex > 0) {
       setCurrentStoryIndex((prev) => prev - 1)
       return
     }
 
-    const userIds = users.map((u) => u.id)
-    const currentUserIndex = activeStoryUser
-      ? userIds.indexOf(activeStoryUser)
-      : -1
-
-    if (currentUserIndex > 0) {
-      const prevUser = userIds[currentUserIndex - 1]
-      const prevUserStories = storiesByUser[prevUser] ?? []
-
-      setActiveStoryUser(prevUser)
-      setCurrentStoryIndex(Math.max(0, prevUserStories.length - 1))
-    }
-  }, [activeStoryUser, currentStoryIndex, storiesByUser, users])
+    prevUser()
+  }, [currentStoryIndex, prevUser])
 
   useEffect(() => {
     if (!activeStoryUser) return
@@ -318,13 +401,14 @@ function FeedPageContent() {
     if (!activeStoryUser) return
     const list = storiesByUser[activeStoryUser] ?? []
     if (list.length === 0) return
+    if (currentStoryIndex >= list.length - 1) return
 
     const timer = window.setTimeout(() => {
-      nextStory()
+      nextSlide()
     }, STORY_SLIDE_MS)
 
     return () => clearTimeout(timer)
-  }, [activeStoryUser, currentStoryIndex, storiesByUser, nextStory])
+  }, [activeStoryUser, currentStoryIndex, storiesByUser, nextSlide])
 
   useEffect(() => {
     if (!activeStoryUser) return
@@ -332,11 +416,20 @@ function FeedPageContent() {
       if (e.key === "Escape") {
         setActiveStoryUser(null)
         setCurrentStoryIndex(0)
+        return
+      }
+      if (e.key === "ArrowLeft") {
+        e.preventDefault()
+        prevStory()
+      }
+      if (e.key === "ArrowRight") {
+        e.preventDefault()
+        nextStory()
       }
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [activeStoryUser])
+  }, [activeStoryUser, nextStory, prevStory])
 
   useEffect(() => {
     if (selectedPostId || activeStoryUser) {
@@ -740,8 +833,10 @@ function FeedPageContent() {
 
           {mode === "following" && user ? (
             <FeedStoriesBar
+              currentUser={currentUserProfile}
+              currentUserHasStory={currentUserHasStory}
               users={users}
-              onStoryUpload={handleStoryUpload}
+              onStoryUpload={handleStoryFileSelect}
               onOpenStory={openStory}
             />
           ) : null}
@@ -773,12 +868,19 @@ function FeedPageContent() {
         <FeedStoryViewer
           activeStoryUser={activeStoryUser}
           users={users}
+          storiesByUser={storiesByUser}
           currentStories={currentStories}
           currentStoryIndex={currentStoryIndex}
           currentStory={currentStory}
+          canGoPrevSlide={storyNavigation.canGoPrevSlide}
+          canGoNextSlide={storyNavigation.canGoNextSlide}
+          canGoPrevUser={storyNavigation.canGoPrevUser}
+          canGoNextUser={storyNavigation.canGoNextUser}
           onClose={handleCloseStoryViewer}
-          onPrev={prevStory}
-          onNext={nextStory}
+          onPrevSlide={prevSlide}
+          onNextSlide={nextSlide}
+          onPrevUser={prevUser}
+          onNextUser={nextUser}
         />
       ) : null}
 
@@ -801,6 +903,16 @@ function FeedPageContent() {
           onSharePost={handleSharePost}
         />
       ) : null}
+
+      <StoryComposeModal
+        open={storyComposeOpen}
+        posting={postingStory}
+        profile={currentUserProfile}
+        previewUrl={pendingStoryPreviewUrl}
+        onClose={closeStoryCompose}
+        onPost={() => void handlePostStory()}
+        onReplaceImage={(file) => void setStoryDraft(file)}
+      />
     </div>
   )
 }
