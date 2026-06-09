@@ -9,6 +9,14 @@ import { insertCsvTradesWithAccount } from "@/lib/insertCsvTradesWithAccount"
 import { hasReachedRowLimit, last24hIso } from "@/lib/freePlanLimits"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import { getSessionFromDate } from "@/lib/getSession"
+import {
+  buildDateTime,
+  dateTimeFieldsFromTrade,
+  getESTDate,
+  getTradeFormDuration,
+  isExitBeforeEntry,
+  toTimeInputValue,
+} from "@/lib/inputTradeDateTime"
 import CreateAccountModal, {
   type Props as CreateAccountModalProps,
 } from "@/components/CreateAccountModal"
@@ -57,76 +65,6 @@ export type InputTradeFormProps = {
   csvUnrecognized?: boolean
   csvBrokerHint?: string | null
   csvDiagnostics?: CsvImportDiagnostics | null
-}
-
-function getESTDate() {
-  const now = new Date()
-  const est = new Date(
-    now.toLocaleString("en-US", { timeZone: "America/New_York" })
-  )
-  const y = est.getFullYear()
-  const m = String(est.getMonth() + 1).padStart(2, "0")
-  const d = String(est.getDate()).padStart(2, "0")
-  return `${y}-${m}-${d}`
-}
-
-function toTimeInputValue(raw: unknown): string {
-  if (raw == null || raw === "") return ""
-  const s = String(raw).trim()
-  if (/^\d{2}:\d{2}$/.test(s)) return s
-  if (/^\d{1,2}:\d{2}/.test(s)) {
-    const parts = s.slice(0, 5).split(":")
-    return `${String(Number(parts[0])).padStart(2, "0")}:${parts[1] || "00"}`
-  }
-  const d = new Date(s)
-  if (!Number.isNaN(d.getTime())) {
-    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`
-  }
-  return ""
-}
-
-/** Combine trade date (YYYY-MM-DD) + time input (HH:MM) into a full ISO datetime for DB. */
-function buildDateTime(
-  date: string | null | undefined,
-  time: string | null | undefined
-): string | null {
-  if (!date || !time) return null
-  const dateStr = String(date).trim()
-  const timeStr = String(time).trim()
-  if (!dateStr || !timeStr) return null
-  const parsed = new Date(`${dateStr} ${timeStr}`)
-  if (Number.isNaN(parsed.getTime())) return null
-  return parsed.toISOString()
-}
-
-function getDuration(start: string | null, end: string | null) {
-  if (!start || !end) return null
-
-  const diff = +new Date(end) - +new Date(start)
-  if (!Number.isFinite(diff) || diff <= 0) return null
-
-  const totalSeconds = Math.floor(diff / 1000)
-
-  const hours = Math.floor(totalSeconds / 3600)
-  const minutes = Math.floor((totalSeconds % 3600) / 60)
-  const seconds = totalSeconds % 60
-
-  // under 1 minute → force 0m
-  if (hours === 0 && minutes === 0) {
-    return "0m"
-  }
-
-  if (hours === 0) {
-    return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`
-  }
-
-  return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`
-}
-
-function tradeDateFromRow(t: any): string {
-  if (t?.created_at) return String(t.created_at).split("T")[0]
-  if (t?.date) return String(t.date).split("T")[0]
-  return getESTDate()
 }
 
 function formatAccountSize(size: any) {
@@ -280,7 +218,8 @@ export default function InputTradeForm({
     setter(cleaned)
   }
 
-  const [tradeDate, setTradeDate] = useState(getESTDate())
+  const [entryDate, setEntryDate] = useState(getESTDate())
+  const [exitDate, setExitDate] = useState(getESTDate())
   const [ticker, setTicker] = useState("")
   const [direction, setDirection] = useState("Long")
   const [pnl, setPnl] = useState("")
@@ -302,11 +241,9 @@ export default function InputTradeForm({
   const [contracts, setContracts] = useState("")
   const [entryTime, setEntryTime] = useState("")
   const [exitTime, setExitTime] = useState("")
-  const [entryTimeTouched, setEntryTimeTouched] = useState(false)
-  const [exitTimeTouched, setExitTimeTouched] = useState(false)
-
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const dateRef = useRef<HTMLInputElement>(null)
+  const entryDateRef = useRef<HTMLInputElement>(null)
+  const exitDateRef = useRef<HTMLInputElement>(null)
 
   const [planProfile, setPlanProfile] = useState<{
     is_pro?: boolean | null
@@ -490,7 +427,9 @@ export default function InputTradeForm({
     if (!existingTrade?.id) return
 
     const t = existingTrade
-    setTradeDate(tradeDateFromRow(t))
+    const dtFields = dateTimeFieldsFromTrade(t)
+    setEntryDate(dtFields.entryDate)
+    setExitDate(dtFields.exitDate)
     setTicker(t.ticker ?? "")
     setDirection(t.direction || "Long")
     setPnl(
@@ -547,10 +486,8 @@ export default function InputTradeForm({
     setContracts(
       t.contracts != null && t.contracts !== "" ? String(t.contracts) : ""
     )
-    setEntryTime(toTimeInputValue(t.entry_time))
-    setExitTime(toTimeInputValue(t.exit_time))
-    setEntryTimeTouched(false)
-    setExitTimeTouched(false)
+    setEntryTime(dtFields.entryTime)
+    setExitTime(dtFields.exitTime)
   }, [existingTrade])
 
   function resetCreateForm() {
@@ -579,7 +516,9 @@ export default function InputTradeForm({
     setTimeframe("")
     setPsychologyNotes("")
     setTradeType("")
-    setTradeDate(getESTDate())
+    const today = getESTDate()
+    setEntryDate(today)
+    setExitDate(today)
     setPostToFeed(false)
     setStrategy("")
   }
@@ -592,14 +531,16 @@ export default function InputTradeForm({
       return
     }
 
-    if (entryTime && exitTime) {
-      const entry = new Date(`1970-01-01T${entryTime}`)
-      const exit = new Date(`1970-01-01T${exitTime}`)
-
-      if (entry > exit) {
-        showPopup({ type: "error", message: "Entry time cannot be after exit time" })
-        return
-      }
+    if (
+      entryTime &&
+      exitTime &&
+      isExitBeforeEntry(entryDate, entryTime, exitDate, exitTime)
+    ) {
+      showPopup({
+        type: "error",
+        message: "Exit date and time must be after entry date and time",
+      })
+      return
     }
 
     const acct = selectedAccount
@@ -683,7 +624,7 @@ export default function InputTradeForm({
     const parsedContracts = Number.parseInt(contracts, 10)
     const contractsNum = Number.isFinite(parsedContracts) ? parsedContracts : 0
 
-    const entryTimeForSave = buildDateTime(tradeDate, entryTime)
+    const entryTimeForSave = buildDateTime(entryDate, entryTime)
     const autoDetectedSession = entryTimeForSave
       ? getSessionFromDate(entryTimeForSave)
       : null
@@ -832,13 +773,13 @@ export default function InputTradeForm({
           entryVal !== null && Number.isFinite(entryVal) ? entryVal : null,
         exit_price:
           exitVal !== null && Number.isFinite(exitVal) ? exitVal : null,
-        entry_time: entryTimeTouched
-          ? buildDateTime(tradeDate, entryTime)
+        entry_time: entryTime
+          ? buildDateTime(entryDate, entryTime)
           : existingTrade.entry_time ?? null,
-        exit_time: exitTimeTouched
-          ? buildDateTime(tradeDate, exitTime)
+        exit_time: exitTime
+          ? buildDateTime(exitDate, exitTime)
           : existingTrade.exit_time ?? null,
-        trade_date: tradeDate,
+        trade_date: entryDate,
         psychology_notes: psychologyVal,
         trade_type: tradeTypeToSave,
         confidence: confidence ? Number(confidence) : null,
@@ -939,7 +880,7 @@ export default function InputTradeForm({
       rr: rr ? Number(rr) : null,
     }
 
-    const selectedDate = tradeDate
+    const selectedDate = entryDate
     console.log("Saving trade_date:", selectedDate)
 
     const tradeData = {
@@ -966,8 +907,8 @@ export default function InputTradeForm({
       trade_date: selectedDate,
       entry_price: parsedTrade.entry_price,
       exit_price: parsedTrade.exit_price,
-      entry_time: buildDateTime(tradeDate, entryTime),
-      exit_time: buildDateTime(tradeDate, exitTime),
+      entry_time: buildDateTime(entryDate, entryTime),
+      exit_time: buildDateTime(exitDate, exitTime),
       psychology_notes: psychologyVal,
       trade_type: tradeTypeToSave,
       confidence: confidence ? Number(confidence) : null,
@@ -1310,9 +1251,20 @@ export default function InputTradeForm({
     setShowCreateModal(false)
   }
 
-  const entryDateTime = entryTime ? buildDateTime(tradeDate, entryTime) : null
-  const exitDateTime = exitTime ? buildDateTime(tradeDate, exitTime) : null
-  const duration = getDuration(entryDateTime, exitDateTime)
+  const entryDateTime = entryTime ? buildDateTime(entryDate, entryTime) : null
+  const exitDateTime = exitTime ? buildDateTime(exitDate, exitTime) : null
+  const duration = getTradeFormDuration(entryDateTime, exitDateTime)
+  const invalidTimeRange =
+    entryTime &&
+    exitTime &&
+    isExitBeforeEntry(entryDate, entryTime, exitDate, exitTime)
+
+  function handleEntryDateChange(nextEntryDate: string) {
+    setEntryDate((prevEntry) => {
+      setExitDate((prevExit) => (prevExit === prevEntry ? nextEntryDate : prevExit))
+      return nextEntryDate
+    })
+  }
 
   useEffect(() => {
     if (sessionManuallySet || !entryDateTime) return
@@ -1322,26 +1274,40 @@ export default function InputTradeForm({
     }
   }, [entryDateTime, session, sessionManuallySet])
 
+  const fieldLabelClass = "block text-xs text-gray-400 mb-1"
+
+  const tradeTimeframeOptions = [
+    "15s",
+    "30s",
+    "1m",
+    "5m",
+    "15m",
+    "30m",
+    "1hr",
+    "4hr",
+    "Custom",
+  ] as const
+
   const formBody = (
     <>
       <div className="mb-4">
         <div className="flex flex-col gap-3 md:hidden">
           <div className="flex items-center gap-2">
             {onUploadCsvClick ? (
-              <div className="relative flex-1 account-dropdown">
+              <div className="relative min-w-0 flex-1 account-dropdown">
                 <div
                   onClick={() => setAccountDropdownOpen(!accountDropdownOpen)}
-                  className="w-full p-2 rounded bg-[#0f172a] border border-white/10 text-white cursor-pointer flex justify-between items-center"
+                  className="w-full min-w-0 p-2 rounded bg-[#0f172a] border border-white/10 text-white cursor-pointer flex justify-between items-center gap-2"
                 >
-                  <span className="truncate">
+                  <span className="min-w-0 flex-1 truncate">
                     {selectedAccount
                       ? `${selectedAccount.name} • ${selectedAccount.size} • ${selectedAccount.category || "Personal"} • ${formatMode(selectedAccount.mode)} • #${accountNumberLabel(selectedAccount)}`
                       : "Select Account"}
                   </span>
-                  <span className="text-gray-400">▾</span>
+                  <span className="shrink-0 text-gray-400">▾</span>
                 </div>
                 {accountDropdownOpen && (
-                  <div className="absolute z-50 mt-1 w-full bg-[#0f172a] border border-white/10 rounded shadow-lg max-h-60 overflow-y-auto">
+                  <div className="absolute z-50 mt-1 w-full min-w-full bg-[#0f172a] border border-white/10 rounded shadow-lg max-h-60 overflow-y-auto">
                     {activeAccounts.map((acc) => (
                       <div
                         key={`${acc.name}-${acc.id}-${acc.mode}`}
@@ -1349,7 +1315,7 @@ export default function InputTradeForm({
                           setSelectedAccount(acc)
                           setAccountDropdownOpen(false)
                         }}
-                        className="px-3 py-2 hover:bg-[#1f2937] cursor-pointer text-sm text-white"
+                        className="px-3 py-2 hover:bg-[#1f2937] cursor-pointer text-sm text-white whitespace-normal break-words"
                       >
                         {acc.name} • {formatAccountSize(acc.size)} • {acc.category || "Personal"} •{" "}
                         {formatMode(acc.mode)} • #{accountNumberLabel(acc)}
@@ -1422,23 +1388,23 @@ export default function InputTradeForm({
           ) : null}
         </div>
 
-        <div className="hidden md:flex items-center w-full">
-          <div className="flex items-center gap-3 flex-wrap">
+        <div className="hidden md:flex items-center w-full gap-3 min-w-0">
+          <div className="flex min-w-0 flex-1 items-center gap-3 flex-wrap">
             {onUploadCsvClick ? (
-              <div className="relative w-[260px] account-dropdown">
+              <div className="relative w-full max-w-[410px] shrink-0 account-dropdown">
                 <div
                   onClick={() => setAccountDropdownOpen(!accountDropdownOpen)}
-                  className="w-full p-2 rounded bg-[#0f172a] border border-white/10 text-white cursor-pointer flex justify-between items-center"
+                  className="w-full min-w-0 p-2 rounded bg-[#0f172a] border border-white/10 text-white cursor-pointer flex justify-between items-center gap-2"
                 >
-                  <span className="truncate">
+                  <span className="min-w-0 flex-1 truncate">
                     {selectedAccount
                       ? `${selectedAccount.name} • ${selectedAccount.size} • ${selectedAccount.category || "Personal"} • ${formatMode(selectedAccount.mode)} • #${accountNumberLabel(selectedAccount)}`
                       : "Select Account"}
                   </span>
-                  <span className="text-gray-400">▾</span>
+                  <span className="shrink-0 text-gray-400">▾</span>
                 </div>
                 {accountDropdownOpen && (
-                  <div className="absolute z-50 mt-1 w-full bg-[#0f172a] border border-white/10 rounded shadow-lg max-h-60 overflow-y-auto">
+                  <div className="absolute z-50 mt-1 w-full min-w-full bg-[#0f172a] border border-white/10 rounded shadow-lg max-h-60 overflow-y-auto">
                     {activeAccounts.map((acc) => (
                       <div
                         key={`${acc.name}-${acc.id}-${acc.mode}`}
@@ -1446,7 +1412,7 @@ export default function InputTradeForm({
                           setSelectedAccount(acc)
                           setAccountDropdownOpen(false)
                         }}
-                        className="px-3 py-2 hover:bg-[#1f2937] cursor-pointer text-sm text-white"
+                        className="px-3 py-2 hover:bg-[#1f2937] cursor-pointer text-sm text-white whitespace-normal break-words"
                       >
                         {acc.name} • {formatAccountSize(acc.size)} • {acc.category || "Personal"} •{" "}
                         {formatMode(acc.mode)} • #{accountNumberLabel(acc)}
@@ -1524,13 +1490,6 @@ export default function InputTradeForm({
         </div>
       </div>
 
-      {selectedAccount && (
-        <div className="mb-4 px-4 py-2 rounded-lg bg-green-500/10 border border-green-500/20 text-green-400 text-sm">
-          Trading on: {selectedAccount.name} • {selectedAccount.size} •{" "}
-          {selectedAccount.category}
-        </div>
-      )}
-
       {csvUnrecognized && parsedTrades.length === 0 ? (
         <CsvImportUnsupportedBanner brokerHint={csvBrokerHint} className="mb-4" />
       ) : null}
@@ -1540,55 +1499,36 @@ export default function InputTradeForm({
       ) : null}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="p-4 rounded-xl bg-[#0b1220]/60 border border-white/5">
+        <div className="px-4 pb-4 pt-3 rounded-xl bg-[#0b1220]/60 border border-white/5">
           <h3 className="text-sm text-gray-400 mb-2">Trade</h3>
-          <div className="space-y-3">
-          <div
-            className="relative w-full cursor-pointer"
-            onClick={() =>
-              (
-                document.getElementById("trade-date") as HTMLInputElement | null
-              )?.showPicker?.()
-            }
-          >
-            <input
-              ref={dateRef}
-              id="trade-date"
-              type="date"
-              tabIndex={1}
-              value={tradeDate}
-              onChange={(e) => setTradeDate(e.target.value)}
-              className="w-full p-2 pr-10 rounded bg-[#0f172a] border border-white/10 text-white"
-            />
-            <div className="absolute right-3 top-1/2 -translate-y-1/2 text-white pointer-events-none">
-              📅
+          <div className="space-y-2">
+          <div>
+            <label className={fieldLabelClass}>P&amp;L</label>
+            <div className="relative w-full">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
+                $
+              </span>
+
+              <input
+                type="text"
+                tabIndex={1}
+                value={
+                  pnl === "-" ||
+                  pnl === "." ||
+                  pnl === "-." ||
+                  pnl.endsWith(".")
+                    ? pnl
+                    : formatCurrency(pnl)
+                }
+                onChange={(e) =>
+                  handleNumericInput(e.target.value, setPnl, {
+                    allowDecimal: true,
+                    allowNegative: true,
+                  })
+                }
+                className="w-full pl-8 pr-3 py-2 rounded bg-[#0f172a] border border-white/10 focus:border-green-500 outline-none"
+              />
             </div>
-          </div>
-
-          <div className="relative w-full">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
-              $
-            </span>
-
-            <input
-              type="text"
-              tabIndex={2}
-              value={
-                pnl === "-" ||
-                pnl === "." ||
-                pnl === "-." ||
-                pnl.endsWith(".")
-                  ? pnl
-                  : formatCurrency(pnl)
-              }
-              onChange={(e) =>
-                handleNumericInput(e.target.value, setPnl, {
-                  allowDecimal: true,
-                  allowNegative: true,
-                })
-              }
-              className="w-full pl-8 pr-3 py-2 rounded bg-[#0f172a] border border-white/10 focus:border-green-500 outline-none"
-            />
           </div>
           {decimalError && (
             <p className="text-red-400 text-xs mt-1">
@@ -1596,117 +1536,145 @@ export default function InputTradeForm({
             </p>
           )}
 
-          <input
-            type="text"
-            placeholder="Symbol / Ticker (e.g. MNQ, ES, AAPL)"
-            tabIndex={3}
-            value={ticker}
-            onChange={(e) => setTicker(e.target.value.toUpperCase())}
-            className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
-          />
-
-          <input
-            type="text"
-            placeholder="Strategy used (e.g. Breakout, Liquidity Sweep)"
-            tabIndex={4}
-            value={strategy}
-            onChange={(e) => setStrategy(e.target.value)}
-            className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
-          />
-
-          <select
-            tabIndex={5}
-            value={direction}
-            onChange={(e) => setDirection(e.target.value)}
-            className="w-full p-2 lg:p-2.5 rounded bg-[#0f172a] border border-white/10"
-          >
-            <option>Long</option>
-            <option>Short</option>
-          </select>
-
-          <select
-            tabIndex={6}
-            value={session}
-            onChange={(e) => {
-              setSessionManuallySet(true)
-              setSession(e.target.value)
-            }}
-            className="w-full p-2 lg:p-2.5 rounded bg-[#0f172a] border border-white/10"
-          >
-            <option value="NY">NY</option>
-            <option value="London">London</option>
-            <option value="Asia">Asia</option>
-            <option value="After">After</option>
-          </select>
-
-          {inputSettings.showRR && (
+          <div>
+            <label className={fieldLabelClass}>Symbol / Ticker</label>
             <input
-              placeholder="Risk Reward"
               type="text"
-              tabIndex={7}
-              value={rr}
-              onChange={(e) =>
-                handleNumericInput(e.target.value, setRR, { allowDecimal: true })
-              }
+              placeholder="e.g. MNQ, ES, AAPL"
+              tabIndex={2}
+              value={ticker}
+              onChange={(e) => setTicker(e.target.value.toUpperCase())}
               className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
             />
-          )}
+          </div>
 
-          {inputSettings.showPoints && (
+          <div>
+            <label className={fieldLabelClass}>Strategy Used</label>
             <input
-              placeholder="Points"
               type="text"
-              tabIndex={8}
-              value={
-                points === "-" ||
-                points === "." ||
-                points === "-." ||
-                points.endsWith(".")
-                  ? points
-                  : formatCurrency(points)
-              }
-              onChange={(e) =>
-                handleNumericInput(e.target.value, setPoints, {
-                  allowDecimal: true,
-                  allowNegative: true,
-                })
-              }
+              placeholder="e.g. Breakout, Liquidity Sweep"
+              tabIndex={3}
+              value={strategy}
+              onChange={(e) => setStrategy(e.target.value)}
               className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
             />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2">
+          <div>
+            <label className={fieldLabelClass}>Direction</label>
+            <select
+              tabIndex={4}
+              value={direction}
+              onChange={(e) => setDirection(e.target.value)}
+              className="w-full p-2 lg:p-2.5 rounded bg-[#0f172a] border border-white/10"
+            >
+              <option>Long</option>
+              <option>Short</option>
+            </select>
+          </div>
+
+          <div>
+            <label className={fieldLabelClass}>Session</label>
+            <select
+              tabIndex={5}
+              value={session}
+              onChange={(e) => {
+                setSessionManuallySet(true)
+                setSession(e.target.value)
+              }}
+              className="w-full p-2 lg:p-2.5 rounded bg-[#0f172a] border border-white/10"
+            >
+              <option value="NY">NY</option>
+              <option value="London">London</option>
+              <option value="Asia">Asia</option>
+              <option value="After">After</option>
+            </select>
+          </div>
+          </div>
+
+          {(inputSettings.showRR || inputSettings.showPoints) && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2">
+              {inputSettings.showRR && (
+                <div>
+                  <label className={fieldLabelClass}>Risk Reward</label>
+                  <input
+                    placeholder="e.g. 2.5"
+                    type="text"
+                    tabIndex={6}
+                    value={rr}
+                    onChange={(e) =>
+                      handleNumericInput(e.target.value, setRR, { allowDecimal: true })
+                    }
+                    className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
+                  />
+                </div>
+              )}
+              {inputSettings.showPoints && (
+                <div>
+                  <label className={fieldLabelClass}>Points</label>
+                  <input
+                    placeholder="e.g. 15.5"
+                    type="text"
+                    tabIndex={7}
+                    value={
+                      points === "-" ||
+                      points === "." ||
+                      points === "-." ||
+                      points.endsWith(".")
+                        ? points
+                        : formatCurrency(points)
+                    }
+                    onChange={(e) =>
+                      handleNumericInput(e.target.value, setPoints, {
+                        allowDecimal: true,
+                        allowNegative: true,
+                      })
+                    }
+                    className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
+                  />
+                </div>
+              )}
+            </div>
           )}
 
           {inputSettings.showContracts && (
-            <input
-              placeholder="Contracts"
-              type="text"
-              tabIndex={9}
-              value={formatWithCommas(contracts)}
-              onChange={(e) => handleNumericInput(e.target.value, setContracts)}
-              className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
-            />
+            <div>
+              <label className={fieldLabelClass}>Contracts</label>
+              <input
+                placeholder="e.g. 4"
+                type="text"
+                tabIndex={8}
+                value={formatWithCommas(contracts)}
+                onChange={(e) => handleNumericInput(e.target.value, setContracts)}
+                className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
+              />
+            </div>
           )}
 
-          <label className="text-gray-400 text-sm mb-1 block">Top Confluences</label>
           {inputSettings.showNotes && (
-            <textarea
-              placeholder="What confirmations led to this trade?"
-              tabIndex={10}
-              value={confluences}
-              onChange={(e) => setConfluences(e.target.value)}
-              className="w-full p-2 lg:p-2.5 h-24 lg:h-28 rounded bg-[#0f172a] border border-white/10"
-            />
+            <div>
+              <label className={fieldLabelClass}>Top Confluences</label>
+              <textarea
+                placeholder="What confirmations led to this trade?"
+                tabIndex={9}
+                value={confluences}
+                onChange={(e) => setConfluences(e.target.value)}
+                className="w-full p-2 lg:p-2.5 h-20 lg:h-24 rounded bg-[#0f172a] border border-white/10"
+              />
+            </div>
           )}
 
           </div>
         </div>
 
-        <div className="p-4 rounded-xl bg-[#0b1220]/60 border border-white/5">
+        <div className="px-4 pb-4 pt-3 rounded-xl bg-[#0b1220]/60 border border-white/5">
           <h3 className="text-sm text-gray-400 mb-2">Execution</h3>
-          <div className="space-y-3">
+          <div className="space-y-2">
           {inputSettings.showEntryExit && (
             <div className="space-y-2 mb-4">
               <div>
-                <label className="text-xs text-gray-400">Entry Price</label>
+                <label className={fieldLabelClass}>Entry Price</label>
                 <div className="relative w-full">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
                     $
@@ -1714,7 +1682,7 @@ export default function InputTradeForm({
 
                   <input
                     type="text"
-                    tabIndex={11}
+                    tabIndex={inputSettings.showNotes ? 10 : 9}
                     value={
                       entryPrice === "-" ||
                       entryPrice === "." ||
@@ -1733,7 +1701,7 @@ export default function InputTradeForm({
                 </div>
               </div>
               <div>
-                <label className="text-xs text-gray-400">Exit Price</label>
+                <label className={fieldLabelClass}>Exit Price</label>
                 <div className="relative w-full">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
                     $
@@ -1741,7 +1709,7 @@ export default function InputTradeForm({
 
                   <input
                     type="text"
-                    tabIndex={12}
+                    tabIndex={inputSettings.showNotes ? 11 : 10}
                     value={
                       exitPrice === "-" ||
                       exitPrice === "." ||
@@ -1759,83 +1727,125 @@ export default function InputTradeForm({
                   />
                 </div>
               </div>
-              <div>
-                <label className="text-xs text-gray-400">Entry Time</label>
-                <div
-                  className="relative w-full cursor-pointer"
-                  onClick={() =>
-                    (
-                      document.getElementById("entry-time") as HTMLInputElement | null
-                    )?.showPicker?.()
-                  }
-                >
-                  <input
-                    id="entry-time"
-                    type="time"
-                    tabIndex={13}
-                    value={entryTime}
-                    onChange={(e) => {
-                      setEntryTimeTouched(true)
-                      setEntryTime(e.target.value)
-                    }}
-                    className="w-full p-2 pr-10 rounded bg-[#0f172a] border border-white/10 text-white"
-                  />
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2 text-white pointer-events-none">
-                    🕒
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2">
+                <div>
+                  <label className={fieldLabelClass}>Entry Date</label>
+                  <div
+                    className="relative w-full cursor-pointer"
+                    onClick={() => entryDateRef.current?.showPicker?.()}
+                  >
+                    <input
+                      ref={entryDateRef}
+                      id="entry-date"
+                      type="date"
+                      tabIndex={inputSettings.showNotes ? 12 : 11}
+                      value={entryDate}
+                      onChange={(e) => handleEntryDateChange(e.target.value)}
+                      className="w-full p-2 pr-10 rounded bg-[#0f172a] border border-white/10 text-white"
+                    />
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-white pointer-events-none">
+                      📅
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <label className={fieldLabelClass}>Entry Time</label>
+                  <div
+                    className="relative w-full cursor-pointer"
+                    onClick={() =>
+                      (
+                        document.getElementById("entry-time") as HTMLInputElement | null
+                      )?.showPicker?.()
+                    }
+                  >
+                    <input
+                      id="entry-time"
+                      type="time"
+                      tabIndex={inputSettings.showNotes ? 13 : 12}
+                      value={entryTime}
+                      onChange={(e) => setEntryTime(e.target.value)}
+                      className="w-full p-2 pr-10 rounded bg-[#0f172a] border border-white/10 text-white"
+                    />
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-white pointer-events-none">
+                      🕒
+                    </div>
                   </div>
                 </div>
               </div>
-              <div>
-                <label className="text-xs text-gray-400">Exit Time</label>
-                <div
-                  className="relative w-full cursor-pointer"
-                  onClick={() =>
-                    (
-                      document.getElementById("exit-time") as HTMLInputElement | null
-                    )?.showPicker?.()
-                  }
-                >
-                  <input
-                    id="exit-time"
-                    type="time"
-                    tabIndex={14}
-                    value={exitTime}
-                    onChange={(e) => {
-                      setExitTimeTouched(true)
-                      setExitTime(e.target.value)
-                    }}
-                    className="w-full p-2 pr-10 rounded bg-[#0f172a] border border-white/10 text-white"
-                  />
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2 text-white pointer-events-none">
-                    🕒
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2">
+                <div>
+                  <label className={fieldLabelClass}>Exit Date</label>
+                  <div
+                    className="relative w-full cursor-pointer"
+                    onClick={() => exitDateRef.current?.showPicker?.()}
+                  >
+                    <input
+                      ref={exitDateRef}
+                      id="exit-date"
+                      type="date"
+                      tabIndex={inputSettings.showNotes ? 14 : 13}
+                      value={exitDate}
+                      onChange={(e) => setExitDate(e.target.value)}
+                      className="w-full p-2 pr-10 rounded bg-[#0f172a] border border-white/10 text-white"
+                    />
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-white pointer-events-none">
+                      📅
+                    </div>
                   </div>
                 </div>
-                {duration && (
-                  <p className="text-xs text-gray-400 mt-1">
-                    Duration: {duration}
-                  </p>
-                )}
-                {entryDateTime &&
-                  exitDateTime &&
-                  new Date(exitDateTime) <= new Date(entryDateTime) && (
-                    <p className="text-xs text-red-400 mt-1">
-                      Invalid time range
-                    </p>
-                  )}
+                <div>
+                  <label className={fieldLabelClass}>Exit Time</label>
+                  <div
+                    className="relative w-full cursor-pointer"
+                    onClick={() =>
+                      (
+                        document.getElementById("exit-time") as HTMLInputElement | null
+                      )?.showPicker?.()
+                    }
+                  >
+                    <input
+                      id="exit-time"
+                      type="time"
+                      tabIndex={inputSettings.showNotes ? 15 : 14}
+                      value={exitTime}
+                      onChange={(e) => setExitTime(e.target.value)}
+                      className="w-full p-2 pr-10 rounded bg-[#0f172a] border border-white/10 text-white"
+                    />
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-white pointer-events-none">
+                      🕒
+                    </div>
+                  </div>
+                </div>
               </div>
+              {duration && (
+                <p className="text-xs text-gray-400">
+                  Duration: {duration}
+                </p>
+              )}
+              {invalidTimeRange && (
+                <p className="text-xs text-red-400">
+                  Exit date and time must be after entry date and time
+                </p>
+              )}
             </div>
           )}
 
           <div className="mt-0">
-            <label className="text-gray-400 text-sm mb-1 block">
-              Public Description
-            </label>
+            <label className={fieldLabelClass}>Public Description</label>
             <textarea
-              tabIndex={15}
+              tabIndex={
+                inputSettings.showEntryExit
+                  ? inputSettings.showNotes
+                    ? 16
+                    : 15
+                  : inputSettings.showNotes
+                    ? 10
+                    : 9
+              }
               value={publicDescription}
               onChange={(e) => setPublicDescription(e.target.value)}
               placeholder="Insert public thoughts..."
-              className="w-full p-2 lg:p-2.5 rounded-lg bg-[#0f172a] text-white border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[96px] lg:min-h-[120px]"
+              className="w-full p-2 lg:p-2.5 rounded-lg bg-[#0f172a] text-white border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[80px] lg:min-h-[96px]"
             />
           </div>
 
@@ -1848,7 +1858,15 @@ export default function InputTradeForm({
             </div>
             <button
               type="button"
-              tabIndex={16}
+              tabIndex={
+                inputSettings.showEntryExit
+                  ? inputSettings.showNotes
+                    ? 17
+                    : 16
+                  : inputSettings.showNotes
+                    ? 11
+                    : 10
+              }
               onClick={() => void handlePublicToggle()}
               className={`
                 px-4 py-1.5 rounded-full text-xs font-medium
@@ -1866,100 +1884,190 @@ export default function InputTradeForm({
           </div>
         </div>
 
-        <div className="p-4 rounded-xl bg-[#0b1220]/60 border border-white/5">
+        <div className="px-4 pb-4 pt-3 rounded-xl bg-[#0b1220]/60 border border-white/5">
           <h3 className="text-sm text-gray-400 mb-2">Psychology</h3>
-          <div className="space-y-3">
-          <select
-            tabIndex={17}
-            value={confidence}
-            onChange={(e) => setConfidence(e.target.value)}
-            className="w-full p-2 lg:p-2.5 bg-[#0f172a] border border-white/10 rounded"
-          >
-            <option value="">Confidence (bad to great)</option>
-            <option>1</option>
-            <option>2</option>
-            <option>3</option>
-            <option>4</option>
-            <option>5</option>
-          </select>
-          <select
-            tabIndex={18}
-            value={emotion}
-            onChange={(e) => setEmotion(e.target.value)}
-            className="w-full p-2 lg:p-2.5 bg-[#0f172a] border border-white/10 rounded"
-          >
-            <option value="">Emotion</option>
-            <option value="Confident">Confident</option>
-            <option value="Calm">Calm</option>
-            <option value="Focused">Focused</option>
-            <option value="Fearful">Fearful</option>
-            <option value="FOMO">FOMO</option>
-            <option value="Overconfident">Overconfident</option>
-            <option value="Hesitant">Hesitant</option>
-            <option value="Frustrated">Frustrated</option>
-          </select>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              tabIndex={21}
-              checked={followedPlan}
-              onChange={(e) => setFollowedPlan(e.target.checked)}
+          <div className="space-y-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2">
+          <div>
+            <label className={fieldLabelClass}>Confidence</label>
+            <select
+              tabIndex={
+                inputSettings.showEntryExit
+                  ? inputSettings.showNotes
+                    ? 18
+                    : 17
+                  : inputSettings.showNotes
+                    ? 12
+                    : 11
+              }
+              value={confidence}
+              onChange={(e) => setConfidence(e.target.value)}
+              className="w-full p-2 lg:p-2.5 bg-[#0f172a] border border-white/10 rounded"
+            >
+              <option value="">Confidence Level</option>
+              <option value="1">1 - Bad</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5 - Good</option>
+            </select>
+          </div>
+          <div>
+            <label className={fieldLabelClass}>Timeframe</label>
+            <select
+              tabIndex={
+                inputSettings.showEntryExit
+                  ? inputSettings.showNotes
+                    ? 21
+                    : 20
+                  : inputSettings.showNotes
+                    ? 15
+                    : 14
+              }
+              value={timeframe}
+              onChange={(e) => setTimeframe(e.target.value)}
+              className="w-full p-2 lg:p-2.5 bg-[#0f172a] border border-white/10 rounded"
+            >
+              <option value="">Select timeframe</option>
+              {tradeTimeframeOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+              {timeframe &&
+                !(tradeTimeframeOptions as readonly string[]).includes(timeframe) && (
+                  <option value={timeframe}>{timeframe}</option>
+                )}
+            </select>
+          </div>
+          </div>
+          <div>
+            <label className={fieldLabelClass}>Emotion</label>
+            <select
+              tabIndex={
+                inputSettings.showEntryExit
+                  ? inputSettings.showNotes
+                    ? 19
+                    : 18
+                  : inputSettings.showNotes
+                    ? 13
+                    : 12
+              }
+              value={emotion}
+              onChange={(e) => setEmotion(e.target.value)}
+              className="w-full p-2 lg:p-2.5 bg-[#0f172a] border border-white/10 rounded"
+            >
+              <option value="">Select emotion</option>
+              <option value="Confident">Confident</option>
+              <option value="Calm">Calm</option>
+              <option value="Focused">Focused</option>
+              <option value="Fearful">Fearful</option>
+              <option value="FOMO">FOMO</option>
+              <option value="Overconfident">Overconfident</option>
+              <option value="Hesitant">Hesitant</option>
+              <option value="Frustrated">Frustrated</option>
+            </select>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-6">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                tabIndex={
+                  inputSettings.showEntryExit
+                    ? inputSettings.showNotes
+                      ? 22
+                      : 21
+                    : inputSettings.showNotes
+                      ? 16
+                      : 15
+                }
+                checked={followedPlan}
+                onChange={(e) => setFollowedPlan(e.target.checked)}
+              />
+              Followed Plan?
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                tabIndex={
+                  inputSettings.showEntryExit
+                    ? inputSettings.showNotes
+                      ? 23
+                      : 22
+                    : inputSettings.showNotes
+                      ? 17
+                      : 16
+                }
+                checked={newsEvent}
+                onChange={(e) => setNewsEvent(e.target.checked)}
+              />
+              News Event?
+            </label>
+          </div>
+          <div>
+            <label className={fieldLabelClass}>Market</label>
+            <select
+              tabIndex={
+                inputSettings.showEntryExit
+                  ? inputSettings.showNotes
+                    ? 20
+                    : 19
+                  : inputSettings.showNotes
+                    ? 14
+                    : 13
+              }
+              value={market}
+              onChange={(e) => setMarket(e.target.value)}
+              className="w-full p-2 lg:p-2.5 bg-[#0f172a] border border-white/10 rounded"
+            >
+              <option value="">Select market condition</option>
+              <option value="Trending">Trending</option>
+              <option value="Strong Trend">Strong Trend</option>
+              <option value="Ranging">Ranging</option>
+              <option value="Choppy">Choppy</option>
+              <option value="Low Volume">Low Volume</option>
+              <option value="High Volume">High Volume</option>
+              <option value="News Driven">News Driven</option>
+              <option value="Volatile">Volatile</option>
+            </select>
+          </div>
+          <div className="space-y-1">
+          <div>
+            <label className={fieldLabelClass}>Psychology Notes</label>
+            <textarea
+              placeholder="What were you thinking in the moment?"
+              tabIndex={
+                inputSettings.showEntryExit
+                  ? inputSettings.showNotes
+                    ? 24
+                    : 23
+                  : inputSettings.showNotes
+                    ? 18
+                    : 17
+              }
+              value={psychologyNotes}
+              onChange={(e) => setPsychologyNotes(e.target.value)}
+              className="w-full p-2 lg:p-2.5 h-20 lg:h-24 xl:h-28 rounded bg-[#0f172a] border border-white/10 text-white"
             />
-            Followed Plan?
-          </label>
-          <p className="text-sm text-gray-400 mt-0">Context</p>
-          <select
-            tabIndex={19}
-            value={market}
-            onChange={(e) => setMarket(e.target.value)}
-            className="w-full p-2 lg:p-2.5 bg-[#0f172a] border border-white/10 rounded"
-          >
-            <option value="">Market</option>
-            <option value="Trending">Trending</option>
-            <option value="Strong Trend">Strong Trend</option>
-            <option value="Ranging">Ranging</option>
-            <option value="Choppy">Choppy</option>
-            <option value="Low Volume">Low Volume</option>
-            <option value="High Volume">High Volume</option>
-            <option value="News Driven">News Driven</option>
-            <option value="Volatile">Volatile</option>
-          </select>
-          <select
-            tabIndex={20}
-            value={timeframe}
-            onChange={(e) => setTimeframe(e.target.value)}
-            className="w-full p-2 lg:p-2.5 bg-[#0f172a] border border-white/10 rounded"
-          >
-            <option value="">Timeframe</option>
-            <option>1m</option>
-            <option>5m</option>
-            <option>15m</option>
-          </select>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              tabIndex={22}
-              checked={newsEvent}
-              onChange={(e) => setNewsEvent(e.target.checked)}
-            />
-            News Event?
-          </label>
-          <p className="text-sm text-gray-400 mt-0">Psychology Notes</p>
-          <textarea
-            placeholder="What were you thinking in the moment?"
-            tabIndex={23}
-            value={psychologyNotes}
-            onChange={(e) => setPsychologyNotes(e.target.value)}
-            className="w-full p-2 lg:p-2.5 h-28 lg:h-36 xl:h-40 rounded bg-[#0f172a] border border-white/10 text-white"
-          />
+          </div>
 
-          <div
-            tabIndex={24}
-            onClick={handleClickUpload}
-            onDrop={handleDrop}
-            onDragOver={(e) => e.preventDefault()}
-            className="h-24 flex items-center justify-center border border-dashed border-white/10 rounded text-gray-400 text-sm"
-          >
+          <div>
+            <label className={fieldLabelClass}>Screenshot</label>
+            <div
+              tabIndex={
+                inputSettings.showEntryExit
+                  ? inputSettings.showNotes
+                    ? 25
+                    : 24
+                  : inputSettings.showNotes
+                    ? 19
+                    : 18
+              }
+              onClick={handleClickUpload}
+              onDrop={handleDrop}
+              onDragOver={(e) => e.preventDefault()}
+              className="h-24 flex items-center justify-center border border-dashed border-white/10 rounded text-gray-400 text-sm"
+            >
             {image ? (
               <p>{image.name}</p>
             ) : isEditMode && existingTrade?.image_url ? (
@@ -1978,10 +2086,20 @@ export default function InputTradeForm({
               }}
             />
           </div>
+          </div>
+          </div>
 
           <button
             type="button"
-            tabIndex={25}
+            tabIndex={
+              inputSettings.showEntryExit
+                ? inputSettings.showNotes
+                  ? 26
+                  : 25
+                : inputSettings.showNotes
+                  ? 20
+                  : 19
+            }
             disabled={submitting}
             onClick={() => void handleSubmit()}
             className="w-full py-3 text-lg font-semibold rounded bg-green-500 hover:bg-green-600 text-white"
