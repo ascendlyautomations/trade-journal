@@ -1,18 +1,14 @@
 "use client"
 
 import ShareTradeButton from "./ShareTradeButton"
+import TradeCardTimingBlock from "./TradeCardTimingBlock"
 import {
   formatTradeClockTime,
   formatTradePrice,
   getTradeDurationDisplay,
 } from "@/lib/tradeDisplayFormat"
-import { formatDateOnly, formatTimeOnly } from "@/lib/formatDate"
 import { formatEST } from "@/lib/formatEST"
-import {
-  formatMoneyUnknown,
-  formatNumberUnknown,
-  getDurationFromTimes,
-} from "@/lib/formatDisplay"
+import { formatMoneyUnknown, formatNumberUnknown } from "@/lib/formatDisplay"
 import { tradeScreenshotPublicUrl } from "@/lib/storagePublicUrl"
 
 export type TradeCardProps = {
@@ -38,17 +34,12 @@ export default function TradeCard({
 
   const entryRaw = trade.entry_time
   const exitRaw = trade.exit_time
-  const entry = entryRaw ? formatTimeOnly(entryRaw) : null
-  const exit = exitRaw ? formatTimeOnly(exitRaw) : null
-  const duration = getDurationFromTimes(entryRaw, exitRaw)
-
-  if (process.env.NODE_ENV === "development") {
-    console.log("TRADE TIMES FINAL:", { entryRaw, exitRaw, entry, exit, duration })
-  }
 
   const durationDisplay = getTradeDurationDisplay(
     trade.duration_text,
-    trade.duration_seconds
+    trade.duration_seconds,
+    entryRaw,
+    exitRaw
   )
   const showDuration = durationDisplay !== null
 
@@ -106,14 +97,7 @@ export default function TradeCard({
                   : "Unknown")}
             </h2>
 
-            <p className="text-xs text-gray-400">
-              {formatDateOnly(
-                trade.entry_time || trade.date || trade.created_at || undefined
-              )}
-              {entry ? ` • ${entry}` : ""}
-              {exit ? ` – ${exit}` : ""}
-              {duration ? ` (${duration})` : ""}
-            </p>
+            <TradeCardTimingBlock trade={trade} />
 
             <div
               className={`mt-1 inline-block rounded-lg px-3 py-1 text-lg font-bold ${

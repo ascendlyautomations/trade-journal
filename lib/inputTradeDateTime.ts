@@ -1,5 +1,7 @@
 /** Shared helpers for Input Trade entry/exit datetime fields. */
 
+import { formatHoldDurationFromTimes } from "./tradeTimingDisplay.ts"
+
 export function getESTDate(): string {
   const now = new Date()
   const est = new Date(
@@ -104,35 +106,7 @@ export function getTradeFormDuration(
   start: string | null,
   end: string | null
 ): string | null {
-  if (!start || !end) return null
-
-  const diff = +new Date(end) - +new Date(start)
-  if (!Number.isFinite(diff) || diff <= 0) return null
-
-  const totalSeconds = Math.floor(diff / 1000)
-  const hours = Math.floor(totalSeconds / 3600)
-  const minutes = Math.floor((totalSeconds % 3600) / 60)
-  const seconds = totalSeconds % 60
-
-  if (hours === 0 && minutes === 0) {
-    return "0m"
-  }
-
-  const days = Math.floor(hours / 24)
-  const remHours = hours % 24
-
-  if (days > 0) {
-    const parts: string[] = [`${days}d`]
-    if (remHours > 0) parts.push(`${remHours}h`)
-    if (minutes > 0) parts.push(`${minutes}m`)
-    return parts.join(" ")
-  }
-
-  if (hours === 0) {
-    return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`
-  }
-
-  return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`
+  return formatHoldDurationFromTimes(start, end)
 }
 
 export function isExitBeforeEntry(

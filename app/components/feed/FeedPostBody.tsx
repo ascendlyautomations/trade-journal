@@ -1,6 +1,7 @@
 "use client"
 
 import { memo } from "react"
+import TradeCardTimingBlock from "@/app/components/TradeCardTimingBlock"
 import {
   formatPoints,
   formatRR,
@@ -17,6 +18,7 @@ type FeedPostBodyProps = {
   rr: unknown
   points: unknown
   publicDesc: string | null
+  timingTrade: Record<string, unknown> | null
   createdAtLabel: string
 }
 
@@ -30,6 +32,7 @@ function FeedPostBody({
   rr,
   points,
   publicDesc,
+  timingTrade,
   createdAtLabel,
 }: FeedPostBodyProps) {
   return (
@@ -72,6 +75,12 @@ function FeedPostBody({
 
       {publicDesc ? (
         <p className="px-1 text-sm leading-relaxed text-white">{publicDesc}</p>
+      ) : null}
+
+      {timingTrade ? (
+        <div className="px-1">
+          <TradeCardTimingBlock trade={timingTrade} />
+        </div>
       ) : null}
 
       <p className="text-xs text-white/40">{createdAtLabel}</p>

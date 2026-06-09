@@ -7,15 +7,21 @@ type FeedPostHeaderProps = {
   userId: string
   avatarUrl: string | null
   username: string
+  preview?: boolean
 }
 
-function FeedPostHeader({ userId, avatarUrl, username }: FeedPostHeaderProps) {
-  return (
-    <Link
-      href={`/profile/${userId}`}
-      onClick={(e) => e.stopPropagation()}
-      className="flex items-center gap-3 p-4 border-b border-white/5 hover:bg-white/5 transition-colors"
-    >
+function FeedPostHeader({
+  userId,
+  avatarUrl,
+  username,
+  preview = false,
+}: FeedPostHeaderProps) {
+  const className =
+    "flex items-center gap-3 p-4 border-b border-white/5 transition-colors" +
+    (preview ? "" : " hover:bg-white/5")
+
+  const inner = (
+    <>
       {avatarUrl ? (
         <img
           src={avatarUrl}
@@ -33,6 +39,20 @@ function FeedPostHeader({ userId, avatarUrl, username }: FeedPostHeaderProps) {
       <span className="font-semibold text-sm sm:text-base truncate text-white">
         {username}
       </span>
+    </>
+  )
+
+  if (preview) {
+    return <div className={className}>{inner}</div>
+  }
+
+  return (
+    <Link
+      href={`/profile/${userId}`}
+      onClick={(e) => e.stopPropagation()}
+      className={className}
+    >
+      {inner}
     </Link>
   )
 }

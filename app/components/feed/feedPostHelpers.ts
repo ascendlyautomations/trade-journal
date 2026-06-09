@@ -1,6 +1,13 @@
 /** Columns used by feed post cards, modal, and share overlay. */
+import {
+  normalizeFeedAccountType,
+  resolveFeedTradeAccountType,
+} from "@/lib/feedAccountType"
+
+export { normalizeFeedAccountType, resolveFeedTradeAccountType }
+
 export const FEED_POSTS_SELECT =
-  "id, user_id, trade_id, created_at, pnl, rr, image_url, profiles(username, avatar_url), trades(public_description, user_id, ticker, direction, account_type, points)"
+  "id, user_id, trade_id, created_at, pnl, rr, image_url, profiles(username, avatar_url), trades(public_description, user_id, ticker, direction, account_type, points, entry_time, exit_time, entry_price, exit_price, trade_date, duration_seconds, duration_text)"
 
 /** Columns used by feed comment threads. */
 export const FEED_COMMENTS_SELECT =
@@ -16,7 +23,7 @@ export const FEED_STORIES_SELECT = "id, user_id, image_url, created_at"
 export function postImageSrc(imageUrl: string | null | undefined): string | null {
   const raw = imageUrl != null ? String(imageUrl).trim() : ""
   if (!raw) return null
-  if (raw.startsWith("http")) return raw
+  if (raw.startsWith("http") || raw.startsWith("blob:")) return raw
   const base = process.env.NEXT_PUBLIC_SUPABASE_URL
   if (!base) return null
   return `${base}/storage/v1/object/public/screenshots/${raw}`

@@ -2,40 +2,14 @@
 
 import { memo, useMemo } from "react"
 import ShareTradeButton from "@/app/components/ShareTradeButton"
+import TradeCardTimingBlock from "@/app/components/TradeCardTimingBlock"
 import {
   formatTradeClockTime,
   formatTradePrice,
   getTradeDurationDisplay,
 } from "@/lib/tradeDisplayFormat"
-import { formatDateOnly, formatTimeOnly } from "@/lib/formatDate"
 import { formatEST } from "@/lib/formatEST"
 import { formatMoneyUnknown, formatNumberUnknown } from "@/lib/formatDisplay"
-
-function getDuration(
-  start: string | null | undefined,
-  end: string | null | undefined
-) {
-  if (!start || !end) return null
-
-  const diff = +new Date(String(end)) - +new Date(String(start))
-  if (!Number.isFinite(diff) || diff <= 0) return null
-
-  const totalSeconds = Math.floor(diff / 1000)
-
-  const hours = Math.floor(totalSeconds / 3600)
-  const minutes = Math.floor((totalSeconds % 3600) / 60)
-  const seconds = totalSeconds % 60
-
-  if (hours === 0 && minutes === 0) {
-    return "0m"
-  }
-
-  if (hours === 0) {
-    return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`
-  }
-
-  return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`
-}
 
 export type TradesPageTradeCardProps = {
   trade: any
@@ -63,12 +37,11 @@ function TradesPageTradeCard({
   const entryRaw = trade.entry_time
   const exitRaw = trade.exit_time
 
-  const entry = entryRaw ? formatTimeOnly(entryRaw) : null
-  const exit = exitRaw ? formatTimeOnly(exitRaw) : null
-  const duration = getDuration(entryRaw, exitRaw)
   const durationDisplay = getTradeDurationDisplay(
     trade.duration_text,
-    trade.duration_seconds
+    trade.duration_seconds,
+    entryRaw,
+    exitRaw
   )
   const showDuration = durationDisplay !== null
 
@@ -165,14 +138,7 @@ function TradesPageTradeCard({
               ) : null}
             </h2>
 
-            <p className="text-xs text-gray-400">
-              {formatDateOnly(
-                trade.entry_time || trade.created_at || undefined
-              )}
-              {entry ? ` • ${entry}` : ""}
-              {exit ? ` – ${exit}` : ""}
-              {duration ? ` (${duration})` : ""}
-            </p>
+            <TradeCardTimingBlock trade={trade} />
 
             <div
               className={`inline-block px-3 py-1 rounded-lg text-lg font-bold mt-1 ${

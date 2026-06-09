@@ -1,4 +1,5 @@
 import { formatPnlCurrency, type PnlFormatOptions } from "./formatMoney"
+import { formatHoldDurationFromTimes } from "./tradeTimingDisplay.ts"
 
 export type FormatUnknownOptions = PnlFormatOptions & {
   /** Shown when value is null/undefined/NaN (TradeCard uses "-", share cards use "—"). */
@@ -64,25 +65,7 @@ export function getDurationFromTimes(
   start: string | null | undefined,
   end: string | null | undefined
 ): string | null {
-  if (!start || !end) return null
-
-  const diff = +new Date(String(end)) - +new Date(String(start))
-  if (!Number.isFinite(diff) || diff <= 0) return null
-
-  const totalSeconds = Math.floor(diff / 1000)
-  const hours = Math.floor(totalSeconds / 3600)
-  const minutes = Math.floor((totalSeconds % 3600) / 60)
-  const seconds = totalSeconds % 60
-
-  if (hours === 0 && minutes === 0) {
-    return "0m"
-  }
-
-  if (hours === 0) {
-    return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`
-  }
-
-  return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`
+  return formatHoldDurationFromTimes(start, end)
 }
 
 export function pnlIsPositive(value: unknown): boolean | null {

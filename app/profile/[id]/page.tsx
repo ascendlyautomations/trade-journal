@@ -40,7 +40,7 @@ import {
 } from "../../../lib/achievements"
 import { formatPnlCurrency } from "../../../lib/formatMoney"
 import { formatRR } from "@/lib/formatDisplay"
-import { formatDateOnly, formatTimeOnly } from "@/lib/formatDate"
+import TradeCardTimingBlock from "../../components/TradeCardTimingBlock"
 import { formatEST } from "@/lib/formatEST"
 import { createUserRoom } from "@/lib/createUserRoom"
 import { createFollowNotification } from "@/lib/createFollowNotification"
@@ -123,33 +123,6 @@ function formatMoney(v: number) {
     : `$${v.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
 }
 
-function getDuration(
-  start: string | null | undefined,
-  end: string | null | undefined
-) {
-  if (!start || !end) return null
-
-  const diff = +new Date(String(end)) - +new Date(String(start))
-  if (!Number.isFinite(diff) || diff <= 0) return null
-
-  const totalSeconds = Math.floor(diff / 1000)
-
-  const hours = Math.floor(totalSeconds / 3600)
-  const minutes = Math.floor((totalSeconds % 3600) / 60)
-  const seconds = totalSeconds % 60
-
-  // under 1 minute → force 0m
-  if (hours === 0 && minutes === 0) {
-    return "0m"
-  }
-
-  if (hours === 0) {
-    return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`
-  }
-
-  return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`
-}
-
 function TradeCard({
   trade,
   profile,
@@ -194,12 +167,6 @@ function TradeCard({
   const desc = trade.public_description
     ? String(trade.public_description).trim()
     : ""
-
-  const entryRaw = trade.entry_time
-  const exitRaw = trade.exit_time
-  const entry = entryRaw ? formatTimeOnly(entryRaw) : null
-  const exit = exitRaw ? formatTimeOnly(exitRaw) : null
-  const duration = getDuration(entryRaw, exitRaw)
 
   const tradeDetails = (
     <>
@@ -247,12 +214,7 @@ function TradeCard({
       {desc ? (
         <p className="px-1 text-sm leading-relaxed text-white">{desc}</p>
       ) : null}
-      <p className="text-xs text-gray-400">
-        {formatDateOnly(trade.entry_time || trade.created_at || undefined)}
-        {entry ? ` • ${entry}` : ""}
-        {exit ? ` – ${exit}` : ""}
-        {duration ? ` (${duration})` : ""}
-      </p>
+      <TradeCardTimingBlock trade={trade} />
     </>
   )
 

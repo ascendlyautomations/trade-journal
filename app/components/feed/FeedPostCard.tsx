@@ -4,6 +4,7 @@ import { memo, useCallback, useEffect, useMemo, useState, type MutableRefObject 
 import { formatEST } from "@/lib/formatEST"
 import {
   getModeStyles,
+  normalizeFeedAccountType,
   postImageSrc,
   postPublicDescription,
   postTradeJoin,
@@ -28,6 +29,8 @@ export type FeedPostCardProps = {
   draftSyncRef?: MutableRefObject<Record<string, string>>
   openCommentsRef?: MutableRefObject<Record<string, boolean>>
   detailOpen?: boolean
+  /** Read-only preview: no post detail navigation. */
+  preview?: boolean
   onSelectPost: (post: any) => void
   onToggleLike: (post: any) => void
   onSubmitComment: (post: any, text: string) => Promise<boolean>
@@ -43,6 +46,7 @@ function FeedPostCard({
   draftSyncRef,
   openCommentsRef,
   detailOpen = false,
+  preview = false,
   onSelectPost,
   onToggleLike,
   onSubmitComment,
@@ -96,7 +100,7 @@ function FeedPostCard({
   const pnl = useMemo(() => Number(post.pnl), [post.pnl])
   const pnlPositive = !Number.isNaN(pnl) && pnl >= 0
   const tradeDisplay = useMemo(() => {
-    const accountTypeNorm = String(tradeRow?.account_type ?? "").trim().toLowerCase()
+    const accountTypeNorm = normalizeFeedAccountType(tradeRow?.account_type)
     return {
       tickerLabel: tradeRow?.ticker != null ? String(tradeRow.ticker) : "—",
       dirLabel: tradeRow?.direction != null ? String(tradeRow.direction) : "—",
@@ -111,16 +115,21 @@ function FeedPostCard({
 
   return (
     <article
-      role="button"
-      tabIndex={0}
-      onClick={handleArticleClick}
-      onKeyDown={handleArticleKeyDown}
-      className="bg-white/5 border border-white/10 rounded-xl overflow-hidden shadow-lg shadow-black/20 cursor-pointer transition-all duration-200 hover:border-white/20 hover:shadow-xl hover:bg-white/[0.07]"
+      role={preview ? "article" : "button"}
+      tabIndex={preview ? undefined : 0}
+      onClick={preview ? undefined : handleArticleClick}
+      onKeyDown={preview ? undefined : handleArticleKeyDown}
+      className={
+        preview
+          ? "bg-white/5 border border-white/10 rounded-xl overflow-hidden shadow-lg shadow-black/20"
+          : "bg-white/5 border border-white/10 rounded-xl overflow-hidden shadow-lg shadow-black/20 cursor-pointer transition-all duration-200 hover:border-white/20 hover:shadow-xl hover:bg-white/[0.07]"
+      }
     >
       <FeedPostHeader
         userId={post.user_id}
         avatarUrl={avatarUrl}
         username={profileUsername}
+        preview={preview}
       />
 
       <FeedPostScreenshot imageSrc={imageSrc} />
@@ -146,6 +155,7 @@ function FeedPostCard({
         rr={post.rr}
         points={tradeRow?.points}
         publicDesc={publicDesc}
+        timingTrade={tradeRow}
         createdAtLabel={createdAtLabel}
       />
 

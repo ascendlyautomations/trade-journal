@@ -270,6 +270,31 @@ export default function Navbar() {
             </Link>
           ) : null}
 
+          {isHomePage && user ? (
+            <div className="hidden min-w-0 items-center gap-3 text-sm md:flex">
+              <Link
+                href="/faq"
+                className={`shrink-0 rounded px-2 py-1 transition ${
+                  isActive("/faq")
+                    ? "bg-blue-500/20 text-blue-300"
+                    : "text-gray-300 hover:text-white"
+                }`}
+              >
+                FAQ
+              </Link>
+              <Link
+                href="/pricing"
+                className={`shrink-0 rounded px-2 py-1 transition ${
+                  isActive("/pricing")
+                    ? "bg-blue-500/20 text-blue-300"
+                    : "text-gray-300 hover:text-white"
+                }`}
+              >
+                Pricing
+              </Link>
+            </div>
+          ) : null}
+
           {!isHomePage && user ? (
             <div className="hidden min-w-0 items-center gap-3 text-sm md:flex">
               <Link
@@ -459,6 +484,19 @@ export default function Navbar() {
         <div className="flex shrink-0 items-center gap-3 md:gap-4">
         {user ? (
           <>
+            {isHomePage ? (
+              <Link
+                href="/app"
+                className={`hidden shrink-0 rounded px-4 py-1.5 text-sm font-medium transition md:inline-flex ${
+                  isActive("/app")
+                    ? "bg-blue-500/20 text-blue-300"
+                    : "bg-blue-500 text-white hover:bg-blue-600"
+                }`}
+              >
+                Return to App
+              </Link>
+            ) : null}
+
             <button
               type="button"
               className="text-2xl leading-none text-white md:hidden px-1 py-1"
@@ -477,111 +515,113 @@ export default function Navbar() {
               ☰
             </button>
 
-            <div className="hidden items-center gap-3 md:flex">
-              {isAdmin ? (
-                <Link href="/admin" className="text-sm hover:text-blue-400">
-                  Admin
-                </Link>
-              ) : null}
+            {!isHomePage ? (
+              <div className="hidden items-center gap-3 md:flex">
+                {isAdmin ? (
+                  <Link href="/admin" className="text-sm hover:text-blue-400">
+                    Admin
+                  </Link>
+                ) : null}
 
-              <div
-                className="relative mr-2 shrink-0 cursor-pointer"
-                role="button"
-                tabIndex={0}
-                onClick={() => {
-                  void handleToggleNotifications()
-                  setAccountMenuOpen(false)
-                  setActiveMenu(null)
-                  router.push("/notifications")
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault()
+                <div
+                  className="relative mr-2 shrink-0 cursor-pointer"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => {
                     void handleToggleNotifications()
                     setAccountMenuOpen(false)
                     setActiveMenu(null)
                     router.push("/notifications")
-                  }
-                }}
-              >
-                <div className="text-xl text-white" aria-hidden>
-                  🔔
-                </div>
-                {unreadCount > 0 ? (
-                  <span className="absolute -right-2 -top-1 min-w-[1.25rem] rounded-full bg-red-500 px-1.5 py-0.5 text-center text-xs tabular-nums text-white">
-                    {badgeText(unreadCount)}
-                  </span>
-                ) : null}
-              </div>
-
-              <div className="profile-menu relative">
-                <button
-                  type="button"
-                  onClick={() => {
-                    void handleToggleAccountMenu()
                   }}
-                  className="flex items-center gap-2 rounded border px-3 py-1"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault()
+                      void handleToggleNotifications()
+                      setAccountMenuOpen(false)
+                      setActiveMenu(null)
+                      router.push("/notifications")
+                    }
+                  }}
                 >
-                  {!profileChromePending ? (
-                    <img src={profile?.avatar_url} className="h-8 w-8 rounded-full" alt="" />
-                  ) : (
-                    <div className="h-8 w-8 animate-pulse rounded-full bg-white/10" aria-hidden />
-                  )}
-                  {!profileChromePending ? (
-                    <span>{profile?.username ?? user?.email?.split("@")[0]}</span>
-                  ) : (
-                    <div className="h-4 w-20 animate-pulse rounded bg-white/10" />
-                  )}
-                </button>
-
-                {accountMenuOpen ? (
-                  <div className="absolute right-0 top-full z-50 mt-2 w-48 rounded-lg border border-gray-600 bg-[#1e293b] shadow-lg">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setAccountMenuOpen(false)
-                        router.push("/settings#account")
-                      }}
-                      className="w-full px-4 py-2 text-left text-sm hover:bg-white/10"
-                    >
-                      Settings
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setAccountMenuOpen(false)
-                        router.push("/feedback")
-                      }}
-                      className="w-full px-4 py-2 text-left text-sm hover:bg-white/10"
-                    >
-                      Feedback
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setAccountMenuOpen(false)
-                        router.push("/support")
-                      }}
-                      className="w-full px-4 py-2 text-left text-sm hover:bg-white/10"
-                    >
-                      Support
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        setAccountMenuOpen(false)
-                        await supabase.auth.signOut()
-                        router.push("/")
-                      }}
-                      className="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-red-500/10"
-                    >
-                      Sign Out
-                    </button>
+                  <div className="text-xl text-white" aria-hidden>
+                    🔔
                   </div>
-                ) : null}
+                  {unreadCount > 0 ? (
+                    <span className="absolute -right-2 -top-1 min-w-[1.25rem] rounded-full bg-red-500 px-1.5 py-0.5 text-center text-xs tabular-nums text-white">
+                      {badgeText(unreadCount)}
+                    </span>
+                  ) : null}
+                </div>
+
+                <div className="profile-menu relative">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void handleToggleAccountMenu()
+                    }}
+                    className="flex items-center gap-2 rounded border px-3 py-1"
+                  >
+                    {!profileChromePending ? (
+                      <img src={profile?.avatar_url} className="h-8 w-8 rounded-full" alt="" />
+                    ) : (
+                      <div className="h-8 w-8 animate-pulse rounded-full bg-white/10" aria-hidden />
+                    )}
+                    {!profileChromePending ? (
+                      <span>{profile?.username ?? user?.email?.split("@")[0]}</span>
+                    ) : (
+                      <div className="h-4 w-20 animate-pulse rounded bg-white/10" />
+                    )}
+                  </button>
+
+                  {accountMenuOpen ? (
+                    <div className="absolute right-0 top-full z-50 mt-2 w-48 rounded-lg border border-gray-600 bg-[#1e293b] shadow-lg">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAccountMenuOpen(false)
+                          router.push("/settings#account")
+                        }}
+                        className="w-full px-4 py-2 text-left text-sm hover:bg-white/10"
+                      >
+                        Settings
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAccountMenuOpen(false)
+                          router.push("/feedback")
+                        }}
+                        className="w-full px-4 py-2 text-left text-sm hover:bg-white/10"
+                      >
+                        Feedback
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAccountMenuOpen(false)
+                          router.push("/support")
+                        }}
+                        className="w-full px-4 py-2 text-left text-sm hover:bg-white/10"
+                      >
+                        Support
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          setAccountMenuOpen(false)
+                          await supabase.auth.signOut()
+                          router.push("/")
+                        }}
+                        className="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-red-500/10"
+                      >
+                        Sign Out
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
               </div>
-            </div>
+            ) : null}
           </>
         ) : isHomePage ? (
           <Link

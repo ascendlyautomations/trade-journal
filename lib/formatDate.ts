@@ -30,6 +30,36 @@ export function formatESTTime(dateString: string | null | undefined): string {
   })
 }
 
+/** Short date (M/D/YY) in America/New_York — trade card timing rows. */
+export function formatShortDateEST(
+  dateString: string | Date | null | undefined
+): string {
+  const d = parseDateLike(dateString)
+  if (!d) return ""
+  return d.toLocaleDateString("en-US", {
+    timeZone: EST_TIMEZONE,
+    month: "numeric",
+    day: "numeric",
+    year: "2-digit",
+  })
+}
+
+/** Short date + time (e.g. 6/2/26 10:15 AM) in America/New_York. */
+export function formatShortDateTimeEST(
+  dateString: string | Date | null | undefined
+): string {
+  const d = parseDateLike(dateString)
+  if (!d) return ""
+  const datePart = formatShortDateEST(dateString)
+  const timePart = d.toLocaleTimeString("en-US", {
+    timeZone: EST_TIMEZONE,
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  })
+  return `${datePart} ${timePart}`
+}
+
 /** Time of day only (no date) in the runtime’s local zone — for entry/exit segments next to a full date line. */
 export function formatTimeOnly(
   val: string | Date | null | undefined

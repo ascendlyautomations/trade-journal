@@ -23,6 +23,9 @@ import CreateAccountModal, {
 import CsvImportUnsupportedBanner from "@/app/components/CsvImportUnsupportedBanner"
 import CsvImportDiagnosticsPanel from "@/app/components/CsvImportDiagnosticsPanel"
 import type { CsvImportDiagnostics } from "@/lib/csvImportDiagnostics"
+import { buildCommunitySharePreviewPost } from "@/lib/buildCommunitySharePreviewPost"
+import CommunitySharePreviewModal from "@/app/components/CommunitySharePreviewModal"
+import { postImageSrc } from "@/app/components/feed/feedPostHelpers"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 
 type CreateAccountSavePayload = Parameters<CreateAccountModalProps["onSave"]>[0]
@@ -252,8 +255,15 @@ export default function InputTradeForm({
     locked_account_size?: string | null
     locked_account_name?: string | null
     locked_account_number?: string | null
+    username?: string | null
+    avatar_url?: string | null
   } | null>(null)
+  const [authUserId, setAuthUserId] = useState<string | null>(null)
   const [accountFieldsLocked, setAccountFieldsLocked] = useState(false)
+  const [communityPreviewOpen, setCommunityPreviewOpen] = useState(false)
+  const [screenshotPreviewUrl, setScreenshotPreviewUrl] = useState<string | null>(
+    null
+  )
 
   const csvLimitMessage =
     "Free plan includes 1 CSV import. Upgrade to Pro to import more trades."
@@ -264,13 +274,15 @@ export default function InputTradeForm({
     } = await supabase.auth.getUser()
     if (!user?.id) {
       setPlanProfile(null)
+      setAuthUserId(null)
       setAccountFieldsLocked(false)
       return
     }
+    setAuthUserId(user.id)
     const { data: prof } = await supabase
       .from("profiles")
       .select(
-        "is_pro, subscription_status, locked_account_type, locked_account_size, locked_account_name, locked_account_number"
+        "is_pro, subscription_status, locked_account_type, locked_account_size, locked_account_name, locked_account_number, username, avatar_url"
       )
       .eq("id", user.id)
       .maybeSingle()
@@ -293,6 +305,20 @@ export default function InputTradeForm({
   useEffect(() => {
     void refreshPlanAndAccountLock()
   }, [refreshPlanAndAccountLock, existingTrade?.id])
+
+  useEffect(() => {
+    if (!image) {
+      setScreenshotPreviewUrl(null)
+      return
+    }
+    const url = URL.createObjectURL(image)
+    setScreenshotPreviewUrl(url)
+    return () => URL.revokeObjectURL(url)
+  }, [image])
+
+  useEffect(() => {
+    if (!isPublic) setCommunityPreviewOpen(false)
+  }, [isPublic])
 
   const loadAccounts = useCallback(async () => {
     const {
@@ -860,6 +886,7 @@ export default function InputTradeForm({
       }
 
       void refreshPlanAndAccountLock()
+      setCommunityPreviewOpen(false)
       onSave?.()
       onClose?.()
       showPopup({ type: "success", message: "Trade saved successfully" })
@@ -969,6 +996,7 @@ export default function InputTradeForm({
     }
 
     void refreshPlanAndAccountLock()
+    setCommunityPreviewOpen(false)
     resetCreateForm()
     showPopup({ type: "success", message: "Trade saved successfully" })
     setSubmitting(false)
@@ -1275,6 +1303,75 @@ export default function InputTradeForm({
   }, [entryDateTime, session, sessionManuallySet])
 
   const fieldLabelClass = "block text-xs text-gray-400 mb-1"
+
+  const communityPreviewImageUrl = useMemo(() => {
+    if (screenshotPreviewUrl) return screenshotPreviewUrl
+    if (existingTrade?.image_url) {
+      return postImageSrc(existingTrade.image_url)
+    }
+    return null
+  }, [screenshotPreviewUrl, existingTrade?.image_url])
+
+  const communityPreviewPost = useMemo(() => {
+    if (!authUserId) return null
+    const previewEntryTime = entryTime
+      ? buildDateTime(entryDate, entryTime)
+      : null
+    const previewExitTime = exitTime
+      ? buildDateTime(exitDate, exitTime)
+      : null
+    return buildCommunitySharePreviewPost({
+      userId: authUserId,
+      username: String(planProfile?.username ?? "").trim() || "User",
+      avatarUrl: planProfile?.avatar_url ?? null,
+      pnl,
+      rr,
+      points,
+      ticker,
+      direction,
+      accountMode: selectedAccount?.mode,
+      accountType:
+        selectedAccount?.account_type ??
+        existingTrade?.account_type ??
+        existingTrade?.mode,
+      lockedAccountType: planProfile?.locked_account_type,
+      isPro,
+      publicDescription,
+      imageUrl: communityPreviewImageUrl,
+      entryTime: previewEntryTime,
+      exitTime: previewExitTime,
+      entryPrice: entryPrice.trim() === "" ? null : entryPrice,
+      exitPrice: exitPrice.trim() === "" ? null : exitPrice,
+      tradeDate: entryDate,
+    })
+  }, [
+    authUserId,
+    planProfile?.username,
+    planProfile?.avatar_url,
+    planProfile?.locked_account_type,
+    pnl,
+    rr,
+    points,
+    ticker,
+    direction,
+    selectedAccount,
+    existingTrade?.account_type,
+    existingTrade?.mode,
+    isPro,
+    publicDescription,
+    communityPreviewImageUrl,
+    entryDate,
+    entryTime,
+    exitDate,
+    exitTime,
+    entryPrice,
+    exitPrice,
+  ])
+
+  const communityPreviewUser = useMemo(
+    () => (authUserId ? { id: authUserId } : null),
+    [authUserId]
+  )
 
   const tradeTimeframeOptions = [
     "15s",
@@ -1881,6 +1978,17 @@ export default function InputTradeForm({
               {isPublic ? "Public" : "Private"}
             </button>
           </div>
+
+          {isPublic ? (
+            <button
+              type="button"
+              disabled={!communityPreviewPost}
+              onClick={() => setCommunityPreviewOpen(true)}
+              className="mt-2 w-full text-left text-sm font-medium text-emerald-400 transition hover:text-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Preview Community Post
+            </button>
+          ) : null}
           </div>
         </div>
 
@@ -2296,6 +2404,17 @@ export default function InputTradeForm({
   )
 
   const feedbackModal = <FeedbackModal {...feedbackModalProps} />
+  const communitySharePreviewModal = (
+    <CommunitySharePreviewModal
+      open={communityPreviewOpen}
+      onClose={() => setCommunityPreviewOpen(false)}
+      onPostTrade={() => void handleSubmit()}
+      submitting={submitting}
+      postTradeLabel={isEditMode ? "Save changes" : "Post Trade"}
+      post={communityPreviewPost}
+      user={communityPreviewUser}
+    />
+  )
 
   if (showAsModal) {
     return (
@@ -2332,6 +2451,7 @@ export default function InputTradeForm({
         </div>
         {settingsModal}
         {feedbackModal}
+        {communitySharePreviewModal}
         <CreateAccountModal
           open={showCreateModal}
           onClose={() => setShowCreateModal(false)}
@@ -2366,6 +2486,7 @@ export default function InputTradeForm({
       {formBody}
       {settingsModal}
       {feedbackModal}
+      {communitySharePreviewModal}
       <CreateAccountModal
         open={showCreateModal}
         onClose={() => setShowCreateModal(false)}

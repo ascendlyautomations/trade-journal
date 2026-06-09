@@ -1,4 +1,5 @@
 import { formatPnlCurrency } from "./formatMoney"
+import { formatHoldDurationFromTimes, formatHoldDurationSeconds } from "./tradeTimingDisplay.ts"
 
 /** Entry/exit price: always $X,XXX.XX (non-PnL semantics; still currency). */
 export function formatTradePrice(value: unknown): string {
@@ -52,21 +53,10 @@ export function formatTradeClockTime(
   return raw
 }
 
-/** Format duration_seconds for cards (e.g. 1h 2m, 4m 34s). */
+/** Format duration_seconds for cards (e.g. 2h 15m, 1d 2h). */
 export function formatDurationSeconds(seconds: unknown): string {
   if (!shouldDisplayDuration(seconds)) return "—"
-  const n = Math.floor(Number(seconds))
-  const h = Math.floor(n / 3600)
-  const m = Math.floor((n % 3600) / 60)
-  const s = n % 60
-
-  if (h > 0) {
-    return `${h}h ${String(m).padStart(2, "0")}m`
-  }
-  if (m > 0) {
-    return `${m}m ${s}s`
-  }
-  return `${s}s`
+  return formatHoldDurationSeconds(Math.floor(Number(seconds))) ?? "—"
 }
 
 export function shouldDisplayDuration(seconds: unknown): boolean {
@@ -77,11 +67,15 @@ export function shouldDisplayDuration(seconds: unknown): boolean {
 
 export function getTradeDurationDisplay(
   durationText: unknown,
-  durationSeconds: unknown
+  durationSeconds: unknown,
+  entryTime?: string | null,
+  exitTime?: string | null
 ): string | null {
   const rawText = durationText == null ? "" : String(durationText).trim()
   if (rawText) return rawText
-  if (!shouldDisplayDuration(durationSeconds)) return null
-  const formatted = formatDurationSeconds(durationSeconds)
-  return formatted === "—" ? null : formatted
+  if (shouldDisplayDuration(durationSeconds)) {
+    const formatted = formatDurationSeconds(durationSeconds)
+    return formatted === "—" ? null : formatted
+  }
+  return formatHoldDurationFromTimes(entryTime, exitTime)
 }

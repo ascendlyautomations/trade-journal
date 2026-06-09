@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, type MutableRefObject } from "react"
 import { PostInteractionsEngagement } from "@/app/components/PostInteractions"
+import TradeCardTimingBlock from "@/app/components/TradeCardTimingBlock"
 import { formatEST } from "@/lib/formatEST"
 import {
   formatPoints,
@@ -74,6 +75,7 @@ export default function FeedPostDetailModal({
       pnl,
       pnlPositive: !Number.isNaN(pnl) && pnl >= 0,
       points: tradeJoin?.points,
+      timingTrade: tradeJoin,
       createdAtLabel: formatEST(post.created_at),
     }
   }, [post])
@@ -175,6 +177,10 @@ export default function FeedPostDetailModal({
             <p className="text-white text-sm leading-relaxed">
               {modalPostDetails.publicDesc}
             </p>
+          ) : null}
+
+          {modalPostDetails.timingTrade ? (
+            <TradeCardTimingBlock trade={modalPostDetails.timingTrade} />
           ) : null}
 
           <p className="text-xs text-white/40">{modalPostDetails.createdAtLabel}</p>
