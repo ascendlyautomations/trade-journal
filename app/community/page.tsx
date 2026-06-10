@@ -1796,6 +1796,7 @@ function CommunityContent() {
         .from("trades")
         .select("id, image_url, pnl, rr, ticker, direction, created_at")
         .eq("user_id", user.id)
+        .eq("is_public", true)
         .order("created_at", { ascending: false })
         .limit(30)
 
@@ -2297,7 +2298,8 @@ function CommunityContent() {
                             loading="lazy"
                             decoding="async"
                           />
-                        ) : msg.type === "trade" && msg.trades ? (
+                        ) : msg.type === "trade" ? (
+                          msg.trades ? (
                           <div className="mt-1 rounded bg-white/5 p-2 max-w-xs">
                             {tradeImageSrc(msg.trades.image_url) ? (
                               <img
@@ -2313,6 +2315,11 @@ function CommunityContent() {
                               {formatRR(msg.trades.rr)}
                             </p>
                           </div>
+                          ) : (
+                            <p className="mt-1 text-xs italic text-gray-400">
+                              Trade unavailable or private.
+                            </p>
+                          )
                         ) : (
                           <p className="break-words text-sm text-white">{msg.content}</p>
                         )}
@@ -3005,7 +3012,9 @@ function CommunityContent() {
             <h3 className="text-lg font-semibold mb-3">Send Trade</h3>
             <div className="max-h-80 space-y-2 overflow-y-auto">
               {userTrades.length === 0 ? (
-                <p className="text-sm text-gray-400">No trades available.</p>
+                <p className="text-sm text-gray-400">
+                  No public trades available to share.
+                </p>
               ) : (
                 userTrades.map((trade) => (
                   <button

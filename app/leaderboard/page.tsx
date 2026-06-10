@@ -176,6 +176,7 @@ export default function Leaderboard() {
       const { data, error } = await supabase
         .from("trades")
         .select("user_id, pnl, rr, created_at, account_type, mode")
+        .eq("is_public", true)
         .order("created_at", { ascending: true })
         .range(from, to)
 

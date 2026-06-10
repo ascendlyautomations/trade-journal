@@ -957,11 +957,20 @@ function ProfilePageContent() {
     }
 
     let cancelled = false
+    const isOwner =
+      currentUserId != null && String(currentUserId) === String(profile.id)
+
     async function fetchAllTrades() {
-      const { data, error } = await supabase
+      let query = supabase
         .from("trades")
         .select("*")
         .eq("user_id", profile.id)
+
+      if (!isOwner) {
+        query = query.eq("is_public", true)
+      }
+
+      const { data, error } = await query
 
       if (cancelled) return
       if (error) {
@@ -976,7 +985,7 @@ function ProfilePageContent() {
     return () => {
       cancelled = true
     }
-  }, [profile?.id])
+  }, [profile?.id, currentUserId])
 
   useEffect(() => {
     if (!profile?.id) {
@@ -985,11 +994,20 @@ function ProfilePageContent() {
     }
 
     let cancelled = false
+    const isOwner =
+      currentUserId != null && String(currentUserId) === String(profile.id)
+
     async function fetchCalendarTrades() {
-      const { data, error } = await supabase
+      let query = supabase
         .from("trades")
         .select("id, created_at, pnl, ticker, direction")
         .eq("user_id", profile.id)
+
+      if (!isOwner) {
+        query = query.eq("is_public", true)
+      }
+
+      const { data, error } = await query
 
       if (cancelled) return
       if (error) {
@@ -1005,7 +1023,7 @@ function ProfilePageContent() {
     return () => {
       cancelled = true
     }
-  }, [profile?.id])
+  }, [profile?.id, currentUserId])
 
   useEffect(() => {
     if (

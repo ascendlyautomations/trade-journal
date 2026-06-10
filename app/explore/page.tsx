@@ -63,6 +63,7 @@ async function fetchTradesForWindow(
   let query = supabase
     .from("trades")
     .select("user_id, pnl, rr, created_at")
+    .eq("is_public", true)
     .order("created_at", { ascending: true })
     .limit(EXPLORE_TRADE_ROW_LIMIT)
 

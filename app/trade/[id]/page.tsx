@@ -39,7 +39,8 @@ export default function TradeDetailPage() {
         data: { session },
       } = await supabase.auth.getSession()
       if (cancelled) return
-      setUserId(session?.user?.id)
+      const sessionUserId = session?.user?.id
+      setUserId(sessionUserId)
 
       const { data, error } = await supabase
         .from("trades")
@@ -48,11 +49,22 @@ export default function TradeDetailPage() {
         .maybeSingle()
 
       if (cancelled) return
-      if (error) {
-        console.error("Trade fetch error:", error?.message, error)
+
+      let resolvedTrade: typeof data = data
+      if (resolvedTrade) {
+        const isOwner =
+          sessionUserId != null &&
+          String(resolvedTrade.user_id) === String(sessionUserId)
+        const isPublic = resolvedTrade.is_public === true
+        if (!isPublic && !isOwner) {
+          resolvedTrade = null
+        }
+      }
+
+      if (error && !resolvedTrade) {
         setTrade(null)
       } else {
-        setTrade(data)
+        setTrade(resolvedTrade)
       }
       setLoading(false)
     })()
@@ -94,7 +106,7 @@ export default function TradeDetailPage() {
         <Navbar />
         <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white p-6">
           <div className="max-w-xl mx-auto space-y-4 text-center">
-            <p className="text-gray-400">Trade not found.</p>
+            <p className="text-gray-400">This trade is unavailable.</p>
             <button
               type="button"
               onClick={() => router.push("/trades")}

@@ -65,20 +65,26 @@ function TradeMessageBubble({
   onOpenTrade: (trade: any) => void
 }) {
   const [trade, setTrade] = useState<any>(null)
+  const [tradeLoading, setTradeLoading] = useState(false)
 
   useEffect(() => {
-    if (!message.trade_id) return
+    if (!message.trade_id) {
+      setTrade(null)
+      setTradeLoading(false)
+      return
+    }
     let cancelled = false
+    setTradeLoading(true)
+    setTrade(null)
     ;(async () => {
       const { data } = await supabase
         .from("trades")
         .select("*")
         .eq("id", message.trade_id)
         .maybeSingle()
-      if (!cancelled && data) {
-        console.log("TRADE DATA:", data)
-        setTrade(data)
-      }
+      if (cancelled) return
+      setTrade(data ?? null)
+      setTradeLoading(false)
     })()
     return () => {
       cancelled = true
@@ -100,11 +106,21 @@ function TradeMessageBubble({
     )
   }
 
-  if (!trade) {
+  if (tradeLoading) {
     return (
       <div className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
         <div className="max-w-xs rounded-lg bg-[#1e293b] p-3 text-sm text-gray-400">
           Loading trade…
+        </div>
+      </div>
+    )
+  }
+
+  if (!trade) {
+    return (
+      <div className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
+        <div className="max-w-xs rounded-lg bg-[#1e293b] p-3 text-sm text-gray-400 italic">
+          Trade unavailable or private.
         </div>
       </div>
     )
@@ -624,6 +640,7 @@ export default function DMPage() {
         .from("trades")
         .select("*")
         .eq("user_id", user.id)
+        .eq("is_public", true)
         .order("created_at", { ascending: false })
 
       setTrades(data || [])
@@ -1728,7 +1745,9 @@ export default function DMPage() {
             </h2>
             <div className="max-h-80 space-y-2 overflow-y-auto">
               {trades.length === 0 ? (
-                <p className="text-sm text-gray-400">No trades yet.</p>
+                <p className="text-sm text-gray-400">
+                  No public trades available to share.
+                </p>
               ) : (
                 trades.map((trade) => (
                   <div
