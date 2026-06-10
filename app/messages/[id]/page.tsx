@@ -16,6 +16,13 @@ import {
   formatRR,
   formatSignedPnlDisplay,
 } from "@/lib/formatDisplay"
+import { isConversationParticipant } from "@/lib/conversationAccess"
+
+type ConversationPageAccess =
+  | "loading"
+  | "allowed"
+  | "unavailable"
+  | "unauthenticated"
 
 function tradeScreenshotSrc(url: string | null | undefined): string | null {
   const raw = url != null ? String(url).trim() : ""
@@ -447,6 +454,8 @@ export default function DMPage() {
   const [trades, setTrades] = useState<any[]>([])
   const [tradeModalTrade, setTradeModalTrade] = useState<any>(null)
   const [postModalPost, setPostModalPost] = useState<any>(null)
+  const [pageAccess, setPageAccess] =
+    useState<ConversationPageAccess>("loading")
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -515,7 +524,7 @@ export default function DMPage() {
   }
 
   useEffect(() => {
-    if (!activeConversationId) return
+    if (!activeConversationId || pageAccess !== "allowed") return
 
     const topic = `messages-${activeConversationId}`
     supabase.getChannels().forEach((c) => {
@@ -595,7 +604,7 @@ export default function DMPage() {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [activeConversationId])
+  }, [activeConversationId, pageAccess])
 
   useEffect(() => {
     scrollToBottom()
@@ -650,20 +659,40 @@ export default function DMPage() {
   }, [showTradePicker, user?.id])
 
   async function init() {
+    setPageAccess("loading")
+    setMessages([])
+    setConversation(null)
+    setParticipants([])
+    setOtherUser(null)
+
     const {
-      data: { user }
+      data: { user },
     } = await supabase.auth.getUser()
+
+    if (!user) {
+      setUser(null)
+      setPageAccess("unauthenticated")
+      router.push("/login")
+      return
+    }
 
     setUser(user)
 
-    if (user) {
-      await markMessageNotificationsRead(user.id)
-      await fetchConversationDetails(user.id)
-      await loadMessages(user.id)
+    const allowed = await isConversationParticipant(id, user.id)
+    if (!allowed) {
+      setPageAccess("unavailable")
+      return
     }
+
+    setPageAccess("allowed")
+    await markMessageNotificationsRead(user.id)
+    await fetchConversationDetails(user.id)
+    await loadMessages(user.id)
   }
 
   async function fetchConversationDetails(currentUserId: string) {
+    if (!(await isConversationParticipant(id, currentUserId))) return
+
     const { data: convo } = await supabase
       .from("conversations")
       .select("id, is_group, name, avatar_url")
@@ -696,6 +725,8 @@ export default function DMPage() {
   }
 
   async function loadMessages(currentUserId: string) {
+    if (!(await isConversationParticipant(id, currentUserId))) return
+
     const { data: fetched } = await supabase
       .from("messages")
       .select(
@@ -729,6 +760,8 @@ export default function DMPage() {
   }
 
   async function markMessagesSeen(currentUserId: string) {
+    if (pageAccess !== "allowed") return
+
     const { data } = await supabase
       .from("messages")
       .select("id, seen_by, sender_id")
@@ -777,9 +810,9 @@ export default function DMPage() {
   }
 
   useEffect(() => {
-    if (!user?.id || !id) return
+    if (!user?.id || !id || pageAccess !== "allowed") return
     void markMessagesSeen(user.id)
-  }, [id, user?.id])
+  }, [id, user?.id, pageAccess])
 
   function removeImage() {
     setSelectedFile(null)
@@ -798,6 +831,8 @@ export default function DMPage() {
   }
 
   async function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
+    if (pageAccess !== "allowed" || !user?.id) return
+
     const file = e.target.files?.[0]
     if (!file || !conversation?.id) return
 
@@ -845,7 +880,7 @@ export default function DMPage() {
   }
 
   async function sendMessage() {
-    if (!user) return
+    if (!user || pageAccess !== "allowed") return
     if (!input.trim() && !selectedFile) return
 
     const userIsPro = await isUserPro(supabase as any, user.id)
@@ -924,7 +959,7 @@ export default function DMPage() {
   }
 
   async function handleSendTrade(trade: any) {
-    if (!user) return
+    if (!user || pageAccess !== "allowed") return
 
     const userIsPro = await isUserPro(supabase as any, user.id)
     if (!userIsPro) {
@@ -982,6 +1017,7 @@ export default function DMPage() {
   }
 
   async function saveGroupSettings() {
+    if (!user || pageAccess !== "allowed") return
     if (!conversation?.id || !conversation?.is_group) return
     setSavingGroupSettings(true)
     setGroupSettingsSuccess("")
@@ -1010,7 +1046,7 @@ export default function DMPage() {
   }
 
   async function deleteForMe(message: any) {
-    if (!user) return
+    if (!user || pageAccess !== "allowed") return
     await supabase.from("message_deletions").insert({
       message_id: message.id,
       user_id: user.id
@@ -1028,7 +1064,8 @@ export default function DMPage() {
   }
 
   async function handleAddUsers() {
-    if (!user || !conversation?.id || selectedUsers.length === 0) return
+    if (!user || pageAccess !== "allowed") return
+    if (!conversation?.id || selectedUsers.length === 0) return
 
     const toAdd = [...selectedUsers]
     const inserts = toAdd.map((u) => ({
@@ -1063,7 +1100,8 @@ export default function DMPage() {
   }
 
   async function handleLeaveGroup() {
-    if (!user || !conversation?.id || !conversation?.is_group) return
+    if (!user || pageAccess !== "allowed") return
+    if (!conversation?.id || !conversation?.is_group) return
 
     const meRow = participants.find((p: any) => p.user_id === user.id)
     const rawProf = meRow?.profiles
@@ -1088,7 +1126,8 @@ export default function DMPage() {
   }
 
   async function deleteForEveryone(message: any) {
-    if (!user || message.sender_id !== user.id) return
+    if (!user || pageAccess !== "allowed") return
+    if (message.sender_id !== user.id) return
     await supabase
       .from("messages")
       .update({ deleted_for_everyone: true })
@@ -1131,6 +1170,30 @@ export default function DMPage() {
       <Navbar />
       <FeedbackModal {...feedbackModalProps} />
 
+      {pageAccess !== "allowed" ? (
+        <div className="flex h-[calc(100dvh-4rem)] min-h-0 w-full flex-col items-center justify-center gap-4 bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 text-white">
+          <button
+            type="button"
+            onClick={() => router.push("/messages")}
+            className="rounded-lg bg-white/10 px-4 py-2 text-sm hover:bg-white/20"
+          >
+            ← Back to messages
+          </button>
+          {pageAccess === "loading" ? (
+            <p className="text-gray-300">Loading conversation...</p>
+          ) : (
+            <>
+              <p className="text-lg font-semibold">
+                This conversation is unavailable.
+              </p>
+              <p className="max-w-md text-center text-sm text-gray-400">
+                You may not have access to this chat, or it no longer exists.
+              </p>
+            </>
+          )}
+        </div>
+      ) : (
+      <>
       <div className="flex h-[calc(100dvh-4rem)] min-h-0 w-full flex-col overflow-hidden bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 pb-4 pt-2 text-white">
 
         <div className="mx-auto flex h-full min-h-0 w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-white/10 bg-black/30">
@@ -1783,6 +1846,8 @@ export default function DMPage() {
           </div>
         </div>
       ) : null}
+      </>
+      )}
     </>
   )
 }

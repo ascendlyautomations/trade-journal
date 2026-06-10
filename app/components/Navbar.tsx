@@ -7,6 +7,7 @@ import { useRouter, usePathname } from "next/navigation"
 import { useUserProfile } from "../../lib/useUserProfile"
 import { isProActive } from "../../lib/subscription"
 import { getCurrentAdminCheckResult } from "../../lib/adminUsers"
+import { fetchTotalUnreadMessageCount } from "../../lib/messageUnread"
 
 export default function Navbar() {
   const { user, profile, loading } = useUserProfile()
@@ -59,13 +60,8 @@ export default function Navbar() {
 
   const fetchUnreadMessages = useCallback(async () => {
     if (!user?.id) return
-    const { count } = await supabase
-      .from("direct_messages")
-      .select("*", { count: "exact", head: true })
-      .eq("recipient_id", user.id)
-      .eq("is_read", false)
-
-    setUnreadMessagesCount(count ?? 0)
+    const count = await fetchTotalUnreadMessageCount(user.id)
+    setUnreadMessagesCount(count)
   }, [user])
 
   const fetchUnread = useCallback(async () => {

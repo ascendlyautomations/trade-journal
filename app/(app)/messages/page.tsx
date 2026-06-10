@@ -2,6 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { supabase } from "../../../lib/supabaseClient"
+import { isConversationParticipant } from "../../../lib/conversationAccess"
+import {
+  countUnreadFromRows,
+  fetchUnreadCountForConversation as fetchUnreadCountForConversationShared,
+  fetchUnreadMessageRows,
+  normalizeSeenBy,
+} from "../../../lib/messageUnread"
 import { useRouter } from "next/navigation"
 import MessagesConversationList from "../../components/messages/MessagesConversationList"
 
@@ -19,19 +26,6 @@ function sortConversationsDesc(list: any[]) {
   )
 }
 
-function normalizeSeenBy(raw: unknown): string[] {
-  if (Array.isArray(raw)) return raw.map(String)
-  if (typeof raw === "string") {
-    try {
-      const parsed = JSON.parse(raw)
-      if (Array.isArray(parsed)) return parsed.map(String)
-    } catch {
-      return []
-    }
-  }
-  return []
-}
-
 function previewFromMessage(row: {
   content?: string | null
   image_url?: string | null
@@ -45,20 +39,6 @@ function previewFromMessage(row: {
   if (row.type === "trade") return "Shared a trade"
   if (row.type === "post") return "Shared a post"
   return "New message"
-}
-
-function countUnreadFromRows(
-  rows: { seen_by: unknown; sender_id: string | null }[] | null | undefined,
-  userId: string
-): number {
-  let count = 0
-  for (const m of rows || []) {
-    if (!m.sender_id || m.sender_id === userId) continue
-    const seen = normalizeSeenBy(m.seen_by)
-    if (seen.includes(userId)) continue
-    count += 1
-  }
-  return count
 }
 
 export default function MessagesPage() {
@@ -370,13 +350,7 @@ export default function MessagesPage() {
       participantsByConvo.set(cid, list)
     }
 
-    const { data: msgRows } = await supabase
-      .from("messages")
-      .select("conversation_id, seen_by, sender_id")
-      .in("conversation_id", convoIds)
-      .not("sender_id", "is", null)
-      .neq("sender_id", userId)
-      .not("seen_by", "cs", JSON.stringify([userId]))
+    const msgRows = await fetchUnreadMessageRows(userId, convoIds)
 
     const unreadByConvo: Record<string, number> = {}
     for (const cid of convoIds) unreadByConvo[cid] = 0
@@ -425,17 +399,8 @@ export default function MessagesPage() {
   }, [])
 
   const fetchUnreadCountForConversation = useCallback(
-    async (userId: string, conversationId: string) => {
-      const { data: msgRows } = await supabase
-        .from("messages")
-        .select("seen_by, sender_id")
-        .eq("conversation_id", conversationId)
-        .not("sender_id", "is", null)
-        .neq("sender_id", userId)
-        .not("seen_by", "cs", JSON.stringify([userId]))
-
-      return countUnreadFromRows(msgRows, userId)
-    },
+    async (userId: string, conversationId: string) =>
+      fetchUnreadCountForConversationShared(userId, conversationId),
     []
   )
 
@@ -610,14 +575,20 @@ export default function MessagesPage() {
 
   const handlePinConversation = useCallback(
     async (conversationId: string, currentState: boolean) => {
+      if (!user?.id) return
+
+      const allowed = await isConversationParticipant(conversationId, user.id)
+      if (!allowed) {
+        setOpenConvoMenuId(null)
+        return
+      }
+
       await supabase
         .from("conversations")
         .update({ is_pinned: !currentState })
         .eq("id", conversationId)
 
-      if (user?.id) {
-        await fetchConversations(user.id)
-      }
+      await fetchConversations(user.id)
       setOpenConvoMenuId(null)
     },
     [user?.id, fetchConversations]
