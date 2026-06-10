@@ -172,6 +172,7 @@ function NotificationCard({
 export default function NotificationsPage() {
   const router = useRouter()
   const [userId, setUserId] = useState<string | null>(null)
+  const [ownerUsername, setOwnerUsername] = useState<string | null>(null)
   const [notifications, setNotifications] = useState<NotificationRecord[]>([])
   const [sendersById, setSendersById] = useState<Record<string, SenderProfile>>(
     {}
@@ -193,6 +194,16 @@ export default function NotificationsPage() {
         return
       }
       setUserId(data.user.id)
+
+      const { data: ownProfile } = await supabase
+        .from("profiles")
+        .select("username")
+        .eq("id", data.user.id)
+        .maybeSingle()
+
+      if (!cancelled) {
+        setOwnerUsername(ownProfile?.username ?? null)
+      }
     }
 
     void initUser()
@@ -355,7 +366,11 @@ export default function NotificationsPage() {
   function renderItem(item: NotificationListItem) {
     const unread = itemIsUnread(item)
     const timestamp = itemCreatedAt(item)
-    const href = getNotificationHref(item, userId ?? "")
+    const href = getNotificationHref(
+      item,
+      { id: userId ?? "", username: ownerUsername },
+      sendersById
+    )
 
     if (item.kind === "like_group") {
       const names = item.senderIds

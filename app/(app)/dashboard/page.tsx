@@ -33,6 +33,7 @@ import {
   getTradingWeekday,
   resolveTradingTimeSourceForKey,
 } from "@/lib/formatDate"
+import { normalizeProfileUsername } from "@/lib/profileUsername"
 const DASHBOARD_GEAR_PREFS_KEY = "tradetrax_dashboard_prefs_v1"
 
 function loadDashboardGearPrefs(): Partial<DashboardGearPersistedPrefs> | null {
@@ -567,12 +568,15 @@ export default function Dashboard() {
       const generateReferralCode = () =>
         Math.random().toString(36).substring(2, 8).toUpperCase()
 
+      const rawUsername =
+        currentUser.user_metadata?.email?.split("@")[0] ||
+        currentUser.email ||
+        `user_${currentUser.id.slice(0, 6)}`
       const { error: profileUpsertErr } = await supabase.from("profiles").upsert(
         {
           id: currentUser.id,
           username:
-            currentUser.user_metadata?.email?.split("@")[0] ||
-            currentUser.email ||
+            normalizeProfileUsername(rawUsername) ||
             `user_${currentUser.id.slice(0, 6)}`,
           name: currentUser.user_metadata?.full_name || "",
           is_pro: false,

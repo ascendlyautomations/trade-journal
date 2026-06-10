@@ -2,6 +2,7 @@ import Stripe from "stripe"
 import { createClient } from "@supabase/supabase-js"
 import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
+import { normalizeProfileUsername } from "@/lib/profileUsername"
 
 export const runtime = "nodejs"
 
@@ -92,10 +93,14 @@ export async function POST(req: Request) {
     let profile = initialProfile
 
     if (!profile) {
+      const rawUsername =
+        userEmail?.split("@")[0] || `user_${user.id.slice(0, 6)}`
       const { error: ensureErr } = await supabase.from("profiles").upsert(
         {
           id: user.id,
-          username: userEmail?.split("@")[0] || `user_${user.id.slice(0, 6)}`,
+          username:
+            normalizeProfileUsername(rawUsername) ||
+            `user_${user.id.slice(0, 6)}`,
           name: "",
           is_pro: false,
           subscription_status: "inactive",

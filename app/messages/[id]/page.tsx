@@ -17,6 +17,7 @@ import {
   formatSignedPnlDisplay,
 } from "@/lib/formatDisplay"
 import { isConversationParticipant } from "@/lib/conversationAccess"
+import { profilePath } from "@/lib/profileRoutes"
 
 type ConversationPageAccess =
   | "loading"
@@ -1537,7 +1538,7 @@ export default function DMPage() {
                     key={i}
                     onClick={() =>
                       m.profiles?.id &&
-                      router.push(`/profile/${m.profiles.id}`)
+                      router.push(profilePath(m.profiles))
                     }
                     className="flex items-center gap-2 bg-[#1e293b] px-3 py-2 rounded-lg cursor-pointer hover:bg-[#334155] transition"
                   >

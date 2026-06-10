@@ -54,6 +54,8 @@ import {
   prepareStoryImageFile,
   revokeStoryPreviewUrl,
 } from "@/lib/storyComposeHelpers"
+import { isProfileUuidSegment, profilePath } from "@/lib/profileRoutes"
+import { normalizeProfileUsername } from "@/lib/profileUsername"
 
 function postImageSrc(imageUrl: string | null | undefined): string | null {
   const raw = imageUrl != null ? String(imageUrl).trim() : ""
@@ -1074,15 +1076,16 @@ function ProfilePageContent() {
     return () => window.removeEventListener("keydown", onKey)
   }, [showCreatePost, editingPost, selectedAchievementImage, selectedTradeDetail, selectedPostDetail, feedDeepLinkPost])
 
-  async function fetchProfile(forProfileId: string) {
-    const id = forProfileId.trim()
+  async function fetchProfile(urlSegment: string) {
+    const segment = urlSegment.trim()
+    const lookupByUuid = isProfileUuidSegment(segment)
     const devProfileDebug =
       process.env.NODE_ENV === "development" ||
       process.env.NEXT_PUBLIC_PROFILE_FETCH_DEBUG === "1"
 
     if (devProfileDebug) {
       console.log("SUPABASE URL:", process.env.NEXT_PUBLIC_SUPABASE_URL)
-      console.log("FETCHING PROFILE ID:", id)
+      console.log("FETCHING PROFILE SEGMENT:", segment, { lookupByUuid })
     }
 
     setLastProfileFetchError(null)
@@ -1100,11 +1103,17 @@ function ProfilePageContent() {
       })
     }
 
-    const { data: prof, error } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", id)
-      .maybeSingle()
+    let profileQuery = supabase.from("profiles").select("*")
+    if (lookupByUuid) {
+      profileQuery = profileQuery.eq("id", segment)
+    } else {
+      profileQuery = profileQuery.eq(
+        "username",
+        normalizeProfileUsername(segment)
+      )
+    }
+
+    const { data: prof, error } = await profileQuery.maybeSingle()
 
     if (devProfileDebug) {
       console.log("PROFILE DATA:", prof)
@@ -1178,10 +1187,10 @@ function ProfilePageContent() {
 
     const isPrivateProfile = prof.is_private === true
     const canLoadTrades =
-      !isPrivateProfile || uid === forProfileId || following
+      !isPrivateProfile || uid === prof.id || following
 
     if (canLoadTrades) {
-      await fetchTrades(forProfileId, true)
+      await fetchTrades(prof.id, true)
     } else {
       setTrades([])
       setPage(0)
@@ -1189,6 +1198,12 @@ function ProfilePageContent() {
     }
 
     setLoading(false)
+
+    if (lookupByUuid && prof.username) {
+      const target = profilePath(prof)
+      const qs = searchParams.toString()
+      router.replace(qs ? `${target}?${qs}` : target, { scroll: false })
+    }
   }
 
   async function handleFollowToggle() {
@@ -1231,10 +1246,10 @@ function ProfilePageContent() {
 
       setIsFollowing(true)
       await createFollowNotification(supabase, currentUserId, profile.id)
-      if (profile.is_private === true && profileId) {
+      if (profile.is_private === true) {
         setPage(0)
         setHasMore(true)
-        await fetchTrades(profileId, true)
+        await fetchTrades(profile.id, true)
       }
     }
 
@@ -1720,9 +1735,9 @@ function ProfilePageContent() {
       isFollowing)
 
   const clearProfileQueryParams = useCallback(() => {
-    if (!profileId) return
-    router.replace(`/profile/${profileId}`, { scroll: false })
-  }, [profileId, router])
+    if (!profile) return
+    router.replace(profilePath(profile), { scroll: false })
+  }, [profile, router])
 
   const loadFeedPostEngagement = useCallback(
     async (postId: string, openComments = false) => {
@@ -3275,7 +3290,7 @@ function ProfilePageContent() {
                     className="flex cursor-pointer items-center gap-3 rounded-lg p-2 transition hover:bg-white/10"
                     onClick={() => {
                       closeFollowModals()
-                      router.push(`/profile/${u.id}`)
+                      router.push(profilePath(u))
                     }}
                   >
                     <img
@@ -3326,7 +3341,7 @@ function ProfilePageContent() {
                     className="flex cursor-pointer items-center gap-3 rounded-lg p-2 transition hover:bg-white/10"
                     onClick={() => {
                       closeFollowModals()
-                      router.push(`/profile/${u.id}`)
+                      router.push(profilePath(u))
                     }}
                   >
                     <img

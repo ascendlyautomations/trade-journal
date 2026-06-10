@@ -8,6 +8,8 @@ import { filterTradesForPerformanceSharePool } from "@/lib/performanceShare"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { supabase } from "../../../lib/supabaseClient"
 import { useRouter } from "next/navigation"
+import { profilePath } from "@/lib/profileRoutes"
+import { normalizeProfileUsername } from "@/lib/profileUsername"
 import PostSetupImportModal from "../../components/PostSetupImportModal"
 import TradesPageMainContent from "../../components/TradesPageMainContent"
 import TradesPageOverlays from "../../components/TradesPageOverlays"
@@ -96,14 +98,17 @@ export default function TradesPage() {
         return Math.random().toString(36).substring(2, 8).toUpperCase()
       }
 
+      const rawUsername =
+        user.user_metadata?.email?.split("@")[0] ||
+        user.email ||
+        `user_${user.id.slice(0, 6)}`
       const { error: profileUpsertErr } = await supabase
         .from("profiles")
         .upsert(
           {
             id: user.id,
             username:
-              user.user_metadata?.email?.split("@")[0] ||
-              user.email ||
+              normalizeProfileUsername(rawUsername) ||
               `user_${user.id.slice(0, 6)}`,
             name: user.user_metadata?.full_name || "",
             is_pro: false,
@@ -360,7 +365,12 @@ export default function TradesPage() {
         onComplete={async () => {
           setShowImportModal(false)
           if (authUserId) {
-            router.push(`/profile/${authUserId}`)
+            router.push(
+              profilePath({
+                id: authUserId,
+                username: gateProfile?.username,
+              })
+            )
             router.refresh()
           }
         }}

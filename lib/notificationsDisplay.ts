@@ -1,3 +1,5 @@
+import { profilePath } from "./profileRoutes"
+
 export type NotificationRecord = {
   id: string
   user_id: string
@@ -210,10 +212,10 @@ export function formatFollowMessage(username: string): string {
 }
 
 function profileContentHref(
-  ownerUserId: string,
+  owner: { id: string; username?: string | null },
   opts: { postId?: string | null; tradeId?: string | null; openComments?: boolean }
 ): string {
-  const base = `/profile/${ownerUserId}`
+  const base = profilePath(owner)
   if (opts.postId) {
     const params = new URLSearchParams({ post: opts.postId })
     if (opts.openComments) params.set("comments", "1")
@@ -227,10 +229,11 @@ function profileContentHref(
 
 export function getNotificationHref(
   item: NotificationListItem,
-  ownerUserId: string
+  owner: { id: string; username?: string | null },
+  sendersById: Record<string, SenderProfile> = {}
 ): string {
   if (item.kind === "like_group") {
-    return profileContentHref(ownerUserId, {
+    return profileContentHref(owner, {
       postId: item.post_id,
       tradeId: item.trade_id,
     })
@@ -238,7 +241,7 @@ export function getNotificationHref(
 
   const n = item.notification
   if (n.type === "comment") {
-    return profileContentHref(ownerUserId, {
+    return profileContentHref(owner, {
       postId: n.post_id,
       tradeId: n.trade_id,
       openComments: Boolean(n.post_id),
@@ -253,7 +256,8 @@ export function getNotificationHref(
   }
 
   if (n.type === "follow" && n.sender_id) {
-    return `/profile/${n.sender_id}`
+    const sender = sendersById[n.sender_id]
+    return profilePath({ id: n.sender_id, username: sender?.username })
   }
 
   if (n.type === "message") return "/messages"

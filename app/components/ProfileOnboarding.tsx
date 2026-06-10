@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
+import { profilePath } from "@/lib/profileRoutes"
 import { supabase } from "@/lib/supabaseClient"
 import { uploadAvatarFile } from "@/lib/avatarUpload"
 import {
@@ -137,9 +138,10 @@ export default function ProfileOnboarding({
     e.preventDefault()
     setError(null)
 
-    const u = username.trim()
-    if (!u) {
-      setError("Please choose a username.")
+    const u = normalizeProfileUsername(username)
+    const usernameErr = validateProfileUsernameNotEmpty(username)
+    if (usernameErr) {
+      setError(usernameErr)
       return
     }
 
@@ -190,7 +192,7 @@ export default function ProfileOnboarding({
     setTimeout(() => {
       setSaving(false)
       if (!suppressPostSaveRedirect) {
-        router.push(`/profile/${userId}`)
+        router.push(profilePath({ username: u, id: userId }))
         router.refresh()
       }
     }, 300)

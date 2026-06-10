@@ -8,10 +8,16 @@ import { useUserProfile } from "../../lib/useUserProfile"
 import { isProActive } from "../../lib/subscription"
 import { getCurrentAdminCheckResult } from "../../lib/adminUsers"
 import { fetchTotalUnreadMessageCount } from "../../lib/messageUnread"
+import { profilePath } from "../../lib/profileRoutes"
 
 export default function Navbar() {
   const { user, profile, loading } = useUserProfile()
-  const profileRouteId = profile?.id ?? user?.id ?? null
+  const profileHref =
+    profile != null
+      ? profilePath(profile)
+      : user?.id
+        ? profilePath({ id: user.id })
+        : null
   const profileChromePending = !!user && loading && !profile
 
   const [isOpen, setIsOpen] = useState(false)
@@ -323,9 +329,9 @@ export default function Navbar() {
               >
                 Trades
               </Link>
-              {profileRouteId ? (
+              {profileHref ? (
                 <Link
-                  href={`/profile/${profileRouteId}`}
+                  href={profileHref}
                   className={`shrink-0 rounded px-2 py-1 transition ${
                     isGroupActive(["/profile"])
                       ? "bg-blue-500/20 text-blue-300"
@@ -679,9 +685,9 @@ export default function Navbar() {
             Trades
           </Link>
 
-          {profileRouteId ? (
+          {profileHref ? (
             <Link
-              href={`/profile/${profileRouteId}`}
+              href={profileHref}
               className={`rounded-lg px-3 py-2 transition ${
                 isGroupActive(["/profile"])
                   ? "bg-blue-500/20 text-blue-300"

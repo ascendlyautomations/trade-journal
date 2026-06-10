@@ -2,6 +2,7 @@
 
 import { memo } from "react"
 import Link from "next/link"
+import { profilePath } from "@/lib/profileRoutes"
 
 type FeedPostHeaderProps = {
   userId: string
@@ -48,7 +49,7 @@ function FeedPostHeader({
 
   return (
     <Link
-      href={`/profile/${userId}`}
+      href={profilePath({ username, id: userId })}
       onClick={(e) => e.stopPropagation()}
       className={className}
     >

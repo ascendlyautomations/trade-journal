@@ -23,6 +23,7 @@ import {
 } from "../../lib/leaderboardChart"
 import { formatPnlCurrency } from "../../lib/formatMoney"
 import { formatRR, formatSignedPnlDisplay, pnlTextClassName } from "@/lib/formatDisplay"
+import { profilePath } from "@/lib/profileRoutes"
 
 type LeaderboardProfile = {
   id: string
@@ -276,9 +277,12 @@ export default function Leaderboard() {
 
   const goToProfile = useCallback(
     (profileUserId: string) => {
-      router.push(`/profile/${profileUserId}`)
+      const row = profilesById[profileUserId]
+      router.push(
+        profilePath({ id: profileUserId, username: row?.username })
+      )
     },
-    [router]
+    [router, profilesById]
   )
 
   useEffect(() => {

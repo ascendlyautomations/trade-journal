@@ -5,6 +5,7 @@ import { Card, EmptyState } from "@/app/components/ui"
 import { useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { useRouter } from "next/navigation"
+import { profilePath } from "@/lib/profileRoutes"
 
 export default function SearchPage() {
   const [search, setSearch] = useState("")
@@ -85,7 +86,7 @@ export default function SearchPage() {
                   padding="sm"
                   interactive
                   onClick={() => {
-                    router.push(`/profile/${u.id}`)
+                    router.push(profilePath(u))
                   }}
                 >
                   @{u.username}

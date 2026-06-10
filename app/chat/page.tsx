@@ -9,6 +9,7 @@ import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { useRouter } from "next/navigation"
+import { profilePath } from "@/lib/profileRoutes"
 
 export default function ChatPage() {
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
@@ -328,7 +329,14 @@ export default function ChatPage() {
                     {showName && (
                       <div className="mb-1 flex justify-between text-sm">
                         <span
-                          onClick={() => router.push(`/profile/${msg.profiles?.id}`)}
+                          onClick={() =>
+                            router.push(
+                              profilePath({
+                                id: msg.profiles?.id,
+                                username: msg.profiles?.username,
+                              })
+                            )
+                          }
                           className="cursor-pointer text-emerald-400 transition hover:underline"
                         >
                           {msg.profiles?.username || "user"}

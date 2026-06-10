@@ -28,6 +28,7 @@ import {
 } from "@/lib/exploreDiscover"
 import { formatPnlCurrency } from "@/lib/formatMoney"
 import { formatRR, formatSignedPnlDisplay, pnlTextClassName } from "@/lib/formatDisplay"
+import { profilePath } from "@/lib/profileRoutes"
 
 type EnrichedTopTrader = {
   userId: string
@@ -351,8 +352,8 @@ export default function ExplorePage() {
       .slice(0, EXPLORE_NEW_LIMIT)
   }, [profiles, currentUserId])
 
-  function goToProfile(userId: string) {
-    router.push(`/profile/${userId}`)
+  function goToProfile(user: { id: string; username?: string | null }) {
+    router.push(profilePath(user))
   }
 
   function handleFollowingChange(targetUserId: string, following: boolean) {
@@ -426,11 +427,11 @@ export default function ExplorePage() {
                       key={user.id}
                       role="button"
                       tabIndex={0}
-                      onClick={() => goToProfile(user.id)}
+                      onClick={() => goToProfile(user)}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") {
                           e.preventDefault()
-                          goToProfile(user.id)
+                          goToProfile(user)
                         }
                       }}
                       className="flex items-center justify-between gap-3 border-b border-white/5 px-3 py-2.5 transition last:border-b-0 hover:bg-white/5"
@@ -521,11 +522,19 @@ export default function ExplorePage() {
                               key={row.userId}
                               role="link"
                               tabIndex={0}
-                              onClick={() => goToProfile(row.userId)}
+                              onClick={() =>
+                                goToProfile({
+                                  id: row.userId,
+                                  username: row.profile?.username,
+                                })
+                              }
                               onKeyDown={(e) => {
                                 if (e.key === "Enter" || e.key === " ") {
                                   e.preventDefault()
-                                  goToProfile(row.userId)
+                                  goToProfile({
+                                    id: row.userId,
+                                    username: row.profile?.username,
+                                  })
                                 }
                               }}
                               className="cursor-pointer border-b border-white/5 transition hover:bg-white/5"
@@ -608,11 +617,11 @@ export default function ExplorePage() {
                           key={profile.id}
                           role="button"
                           tabIndex={0}
-                          onClick={() => goToProfile(profile.id)}
+                          onClick={() => goToProfile(profile)}
                           onKeyDown={(e) => {
                             if (e.key === "Enter" || e.key === " ") {
                               e.preventDefault()
-                              goToProfile(profile.id)
+                              goToProfile(profile)
                             }
                           }}
                           className="flex flex-col gap-2 rounded-xl border border-white/10 bg-white/5 p-3 transition hover:border-white/20 hover:bg-white/[0.07]"
@@ -680,11 +689,11 @@ export default function ExplorePage() {
                         key={profile.id}
                         role="button"
                         tabIndex={0}
-                        onClick={() => goToProfile(profile.id)}
+                        onClick={() => goToProfile(profile)}
                         onKeyDown={(e) => {
                           if (e.key === "Enter" || e.key === " ") {
                             e.preventDefault()
-                            goToProfile(profile.id)
+                            goToProfile(profile)
                           }
                         }}
                         className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 p-3 transition hover:border-white/20 hover:bg-white/[0.07]"
