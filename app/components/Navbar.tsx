@@ -8,6 +8,7 @@ import { useUserProfile } from "../../lib/useUserProfile"
 import { isProActive } from "../../lib/subscription"
 import { getCurrentAdminCheckResult } from "../../lib/adminUsers"
 import { fetchTotalUnreadMessageCount } from "../../lib/messageUnread"
+import { NOTIFICATION_ENGAGEMENT_TYPES } from "../../lib/notificationEngagementTypes"
 import { profilePath } from "../../lib/profileRoutes"
 
 export default function Navbar() {
@@ -78,12 +79,12 @@ export default function Navbar() {
       .select("*", { count: "exact", head: true })
       .eq("user_id", user.id)
       .eq("read", false)
-      .in("type", ["like", "comment", "room_join", "message", "follow"])
+      .in("type", [...NOTIFICATION_ENGAGEMENT_TYPES])
 
     if (error) {
       console.error("[navbar] unread notifications fetch failed", {
         query:
-          "notifications select count where user_id = currentUser and read = false (like, comment, room_join, message, follow)",
+          "notifications select count where user_id = currentUser and read = false (like, comment, room_join, follow)",
         userId: user.id,
         message: error.message,
         details: error.details,

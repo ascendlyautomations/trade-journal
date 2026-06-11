@@ -43,6 +43,8 @@ type TradeSocialProviderProps = {
   tradeId: string | null | undefined
   currentUserId: string | undefined
   tradeOwnerUserId?: string | null | undefined
+  /** Skip like/comment notification inserts (e.g. shared trades inside DMs). */
+  suppressNotifications?: boolean
   children: ReactNode
 }
 
@@ -50,6 +52,7 @@ export function TradeSocialProvider({
   tradeId,
   currentUserId,
   tradeOwnerUserId,
+  suppressNotifications = false,
   children,
 }: TradeSocialProviderProps) {
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
@@ -212,26 +215,30 @@ export function TradeSocialProvider({
       setLiked(true)
       setLikes((prev) => prev + 1)
 
-      const receiverId =
-        tradeOwnerUserId != null ? String(tradeOwnerUserId).trim() : ""
-      if (!receiverId || receiverId === currentUserId) return
+      if (!suppressNotifications) {
+        const receiverId =
+          tradeOwnerUserId != null ? String(tradeOwnerUserId).trim() : ""
+        if (receiverId && receiverId !== currentUserId) {
+          const { error: nErr } = await supabase.from("notifications").insert({
+            user_id: receiverId,
+            sender_id: currentUserId,
+            type: "like",
+            trade_id: resolvedId,
+          })
 
-      const { error: nErr } = await supabase.from("notifications").insert({
-        user_id: receiverId,
-        sender_id: currentUserId,
-        type: "like",
-        trade_id: resolvedId,
-      })
+          if (nErr) {
+            console.error("Notification error:", nErr?.message, nErr)
+            return
+          }
 
-      if (nErr) {
-        console.error("Notification error:", nErr?.message, nErr)
-        return
+          window.dispatchEvent(new CustomEvent("notification-update"))
+          window.dispatchEvent(
+            new CustomEvent("tj-unread-notifications-refresh")
+          )
+        }
       }
-
-      window.dispatchEvent(new CustomEvent("notification-update"))
-      window.dispatchEvent(new CustomEvent("tj-unread-notifications-refresh"))
     }
-  }, [resolvedId, currentUserId, tradeOwnerUserId])
+  }, [resolvedId, currentUserId, tradeOwnerUserId, suppressNotifications])
 
   const handleComment = useCallback(async () => {
     if (!resolvedId || !currentUserId || !newComment.trim()) return
@@ -277,27 +284,38 @@ export function TradeSocialProvider({
       setComments((prev) => [...prev, data])
       setNewComment("")
 
-      const receiverId =
-        tradeOwnerUserId != null ? String(tradeOwnerUserId).trim() : ""
-      if (!receiverId || receiverId === currentUserId) return
+      if (!suppressNotifications) {
+        const receiverId =
+          tradeOwnerUserId != null ? String(tradeOwnerUserId).trim() : ""
+        if (receiverId && receiverId !== currentUserId) {
+          const { error: nErr } = await supabase.from("notifications").insert({
+            user_id: receiverId,
+            sender_id: currentUserId,
+            type: "comment",
+            trade_id: resolvedId,
+            content: newComment.trim().slice(0, 200),
+          })
 
-      const { error: nErr } = await supabase.from("notifications").insert({
-        user_id: receiverId,
-        sender_id: currentUserId,
-        type: "comment",
-        trade_id: resolvedId,
-        content: newComment.trim().slice(0, 200),
-      })
+          if (nErr) {
+            console.error("Notification error:", nErr?.message, nErr)
+            return
+          }
 
-      if (nErr) {
-        console.error("Notification error:", nErr?.message, nErr)
-        return
+          window.dispatchEvent(new CustomEvent("notification-update"))
+          window.dispatchEvent(
+            new CustomEvent("tj-unread-notifications-refresh")
+          )
+        }
       }
-
-      window.dispatchEvent(new CustomEvent("notification-update"))
-      window.dispatchEvent(new CustomEvent("tj-unread-notifications-refresh"))
     }
-  }, [resolvedId, currentUserId, newComment, tradeOwnerUserId, showPopup])
+  }, [
+    resolvedId,
+    currentUserId,
+    newComment,
+    tradeOwnerUserId,
+    suppressNotifications,
+    showPopup,
+  ])
 
   const value = useMemo<TradeSocialContextValue | null>(() => {
     if (!resolvedId) return null
@@ -475,6 +493,7 @@ type TradeSocialLayerProps = {
   tradeId: string | null | undefined
   currentUserId: string | undefined
   tradeOwnerUserId?: string | null | undefined
+  suppressNotifications?: boolean
 }
 
 /** Default: engagement row immediately followed by comments panel (legacy stack). */
@@ -482,6 +501,7 @@ export default function TradeSocialLayer({
   tradeId,
   currentUserId,
   tradeOwnerUserId,
+  suppressNotifications = false,
 }: TradeSocialLayerProps) {
   if (!tradeId) return null
 
@@ -491,6 +511,7 @@ export default function TradeSocialLayer({
         tradeId={tradeId}
         currentUserId={currentUserId}
         tradeOwnerUserId={tradeOwnerUserId}
+        suppressNotifications={suppressNotifications}
       >
         <TradeSocialEngagementBar className="mt-3" />
         <TradeSocialCommentsSection />

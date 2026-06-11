@@ -116,9 +116,6 @@ function TradeMessageBubble({
   const imgSrc = trade ? tradeScreenshotSrc(trade.image_url) : null
   const pnlNum = trade != null ? Number(trade.pnl) : NaN
   const pnlNonNeg = !Number.isNaN(pnlNum) && pnlNum >= 0
-  const stageRaw = trade ? getTradeStageRaw(trade) : ""
-  const stageKey = stageRaw.toLowerCase()
-  const stageFooterText = stageRaw || "Trade"
 
   if (message.deleted_for_everyone) {
     return (
@@ -128,10 +125,15 @@ function TradeMessageBubble({
     )
   }
 
+  const tradeCardWidth =
+    "w-full min-w-[15rem] max-w-[min(100%,19.5rem)]"
+
   if (tradeLoading) {
     return (
       <div className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
-        <div className="max-w-xs rounded-lg bg-[#1e293b] p-3 text-sm text-gray-400">
+        <div
+          className={`${tradeCardWidth} rounded-lg bg-[#1e293b] p-3 text-sm text-gray-400`}
+        >
           Loading trade…
         </div>
       </div>
@@ -141,7 +143,9 @@ function TradeMessageBubble({
   if (!trade) {
     return (
       <div className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
-        <div className="max-w-xs rounded-lg bg-[#1e293b] p-3 text-sm text-gray-400 italic">
+        <div
+          className={`${tradeCardWidth} rounded-lg bg-[#1e293b] p-3 text-sm italic text-gray-400`}
+        >
           Trade unavailable or private.
         </div>
       </div>
@@ -151,10 +155,15 @@ function TradeMessageBubble({
   const isMine = message.sender_id === userId
 
   const menuOpen = activeMenuId === message.id
+  const directionRaw =
+    trade.direction != null ? String(trade.direction).trim() : ""
+  const directionLabel = directionRaw
+    ? directionRaw.charAt(0).toUpperCase() + directionRaw.slice(1).toLowerCase()
+    : ""
 
   return (
     <div className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
-      <div className="relative group inline-block max-w-[75%] overflow-visible">
+      <div className={`relative group inline-block ${tradeCardWidth} overflow-visible`}>
         <button
           type="button"
           onClick={(e) => {
@@ -210,35 +219,39 @@ function TradeMessageBubble({
               onOpenTrade(trade)
             }
           }}
-          className="cursor-pointer bg-gradient-to-br from-[#0f172a] to-[#1e293b] border border-gray-700 rounded-xl p-4 shadow-lg transition hover:scale-[1.02] hover:shadow-xl"
+          className="w-full cursor-pointer rounded-xl border border-gray-700/80 bg-gradient-to-br from-[#0f172a] to-[#1e293b] p-3.5 shadow-md transition hover:scale-[1.01] hover:shadow-lg"
         >
-          <div className="mb-2 flex items-center justify-between">
-            <div>
-              <p className="text-lg font-semibold text-white">
-                {trade.ticker}
-              </p>
-              <p className="text-xs text-gray-400">{trade.direction}</p>
-            </div>
-
-            <div
-              className={`text-sm font-semibold ${
-                pnlNonNeg ? "text-green-400" : "text-red-400"
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-lg font-bold tracking-tight text-white">
+              {trade.ticker}
+            </p>
+            <p
+              className={`shrink-0 text-base font-semibold tabular-nums ${
+                pnlNonNeg ? "text-emerald-400" : "text-red-400"
               }`}
             >
               {formatSignedPnlDisplay(trade.pnl)}
-            </div>
+            </p>
           </div>
 
-          <div className="mb-3 flex justify-between text-xs text-gray-400">
-            <span>RR: {formatRR(trade.rr)}</span>
-            <span>Points: {formatPoints(trade.points)}</span>
+          {directionLabel ? (
+            <p className="mt-1 text-xs font-medium text-gray-400">
+              {directionLabel}
+            </p>
+          ) : null}
+
+          <div className="mt-2 flex items-center justify-between gap-3 text-xs text-gray-400">
+            <span className="tabular-nums">RR: {formatRR(trade.rr)}</span>
+            <span className="tabular-nums">
+              Points: {formatPoints(trade.points)}
+            </span>
           </div>
 
-          {trade.public_description && (
-            <p className="text-gray-300 text-sm mt-2">
+          {trade.public_description ? (
+            <p className="mt-2 text-xs leading-snug text-gray-300">
               {trade.public_description}
             </p>
-          )}
+          ) : null}
 
           {imgSrc ? (
             <img
@@ -246,27 +259,13 @@ function TradeMessageBubble({
               alt=""
               loading="lazy"
               decoding="async"
-              className="mb-3 h-32 w-full rounded-lg border border-gray-700 object-cover"
+              className="mt-2 h-28 w-full rounded-lg border border-gray-700 object-cover"
             />
           ) : null}
 
-          <div className="flex items-center justify-between text-xs">
-            <span
-              className={`px-2 py-1 rounded-md text-xs font-medium ${
-                stageKey === "live"
-                  ? "bg-green-500/20 text-green-400"
-                  : stageKey === "funded"
-                    ? "bg-blue-500/20 text-blue-400"
-                    : stageKey === "eval"
-                      ? "bg-yellow-500/20 text-yellow-400"
-                      : "bg-gray-500/20 text-gray-400"
-              }`}
-            >
-              {stageFooterText}
-            </span>
-
-            <span className="text-gray-500">Shared Trade</span>
-          </div>
+          <p className="mt-2.5 border-t border-gray-700/40 pt-2 text-center text-[10px] font-medium uppercase tracking-wide text-gray-500">
+            Shared Trade
+          </p>
         </div>
 
         <div className="mt-3 max-w-full" onClick={(e) => e.stopPropagation()}>
@@ -274,6 +273,7 @@ function TradeMessageBubble({
             tradeId={trade.id}
             currentUserId={userId}
             tradeOwnerUserId={trade.user_id}
+            suppressNotifications
           />
         </div>
       </div>
@@ -1615,15 +1615,19 @@ export default function DMPage() {
                           </p>
                         ) : (
                           <>
-                            {message.content ? <p>{message.content}</p> : null}
                             {message.image_url ? (
                               <img
                                 src={message.image_url}
-                                className="mt-2 rounded-lg max-h-64"
+                                className="rounded-lg max-h-64"
                                 alt=""
                                 loading="lazy"
                                 decoding="async"
                               />
+                            ) : null}
+                            {message.content ? (
+                              <p className={message.image_url ? "mt-2" : undefined}>
+                                {message.content}
+                              </p>
                             ) : null}
                           </>
                         )}

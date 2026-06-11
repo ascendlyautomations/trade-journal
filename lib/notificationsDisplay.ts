@@ -260,8 +260,6 @@ export function getNotificationHref(
     return profilePath({ id: n.sender_id, username: sender?.username })
   }
 
-  if (n.type === "message") return "/messages"
-
   return "/notifications"
 }
 

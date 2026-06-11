@@ -1,6 +1,5 @@
 import { getRouteUser, supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
-
-const ENGAGEMENT_TYPES = ["like", "comment", "room_join", "message", "follow"]
+import { NOTIFICATION_ENGAGEMENT_TYPES } from "@/lib/notificationEngagementTypes"
 
 export async function DELETE(req: Request) {
   const user = await getRouteUser(req)
@@ -12,7 +11,7 @@ export async function DELETE(req: Request) {
     .from("notifications")
     .delete()
     .eq("user_id", user.id)
-    .in("type", ENGAGEMENT_TYPES)
+    .in("type", [...NOTIFICATION_ENGAGEMENT_TYPES])
 
   if (error) {
     console.error("[api/notifications/clear] delete failed", error)

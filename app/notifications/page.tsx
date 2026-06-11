@@ -9,6 +9,7 @@ import EmptyState from "../components/ui/EmptyState"
 import Modal from "../components/ui/Modal"
 import { clearAllNotifications, dismissNotifications } from "@/lib/followNotifications"
 import { formatEST } from "@/lib/formatEST"
+import { NOTIFICATION_ENGAGEMENT_TYPES } from "@/lib/notificationEngagementTypes"
 import {
   buildNotificationListItems,
   commentPreview,
@@ -32,7 +33,7 @@ const NOTIFICATIONS_TABLE = "notifications"
 const NOTIFICATION_SELECT =
   "id, user_id, sender_id, type, post_id, trade_id, content, read, created_at"
 
-const ENGAGEMENT_TYPES = ["like", "comment", "room_join", "message", "follow"] as const
+const ENGAGEMENT_TYPES = NOTIFICATION_ENGAGEMENT_TYPES
 
 type SupabaseErrorShape = {
   code?: string
@@ -406,12 +407,6 @@ export default function NotificationsPage() {
       body = commentPreview(n.content)
     } else if (n.type === "room_join") {
       title = formatRoomJoinMessage(senderName)
-    } else if (n.type === "message") {
-      title = "New message"
-      body =
-        n.content && n.content.trim() !== ""
-          ? n.content
-          : "You received a new message"
     } else if (n.type === "follow") {
       title = formatFollowMessage(senderName)
     }
