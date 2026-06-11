@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { compressImage } from "./compressImage"
+import { logSupabaseError } from "./logSupabaseError"
 
 export type ShareConversationRow = {
   id: string
@@ -105,15 +106,23 @@ export async function sendTradeToConversations(
   const lastMessageAt = new Date().toISOString()
 
   for (const conversationId of opts.conversationIds) {
-    const { error } = await supabase.from("messages").insert({
+    const payload = {
       conversation_id: conversationId,
       sender_id: opts.senderId,
       type: "trade",
       trade_id: opts.tradeId,
       content,
-    })
+      channel: null,
+    }
+    const { error } = await supabase.from("messages").insert(payload)
     if (error) {
-      console.error("sendTradeToConversations:", error)
+      logSupabaseError("sendTradeToConversations insert", error, {
+        table: "messages",
+        query: "insert",
+        payload,
+        userId: opts.senderId,
+        conversationId,
+      })
       return { error: new Error(error.message) }
     }
 
@@ -176,14 +185,22 @@ export async function sendImageDataUrlToConversations(
   const lastMessageAt = new Date().toISOString()
 
   for (const conversationId of opts.conversationIds) {
-    const { error } = await supabase.from("messages").insert({
+    const payload = {
       conversation_id: conversationId,
       sender_id: opts.senderId,
       content: content || null,
       image_url: imageUrl,
-    })
+      channel: null,
+    }
+    const { error } = await supabase.from("messages").insert(payload)
     if (error) {
-      console.error("sendImageDataUrlToConversations insert:", error)
+      logSupabaseError("sendImageDataUrlToConversations insert", error, {
+        table: "messages",
+        query: "insert",
+        payload,
+        userId: opts.senderId,
+        conversationId,
+      })
       return { error: new Error(error.message) }
     }
 

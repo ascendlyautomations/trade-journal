@@ -7,6 +7,7 @@ import { supabase } from "../../lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
 import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
+import { logSupabaseError } from "@/lib/logSupabaseError"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { useRouter } from "next/navigation"
 import { profilePath } from "@/lib/profileRoutes"
@@ -174,14 +175,21 @@ export default function ChatPage() {
 
     setMessages((prev) => [...prev, temp])
 
-    const { error: sendErr } = await supabase.from("messages").insert({
+    const sendPayload = {
       user_id: user.id,
       content: input,
       image_url: imageUrl,
-      channel
-    })
+      channel,
+    }
+    const { error: sendErr } = await supabase.from("messages").insert(sendPayload)
     if (sendErr) {
-      console.error("chat sendMessage insert:", sendErr)
+      logSupabaseError("chat sendMessage insert", sendErr, {
+        table: "messages",
+        query: "insert",
+        payload: sendPayload,
+        userId: user.id,
+        channel,
+      })
       showPopup({ type: "error", message: handleSupabaseError(sendErr) })
       return
     }

@@ -1,6 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { supabase } from "./supabaseClient"
 
+/** Client-generated id — avoids INSERT…RETURNING before participant rows exist (RLS SELECT). */
+export function newConversationId(): string {
+  return crypto.randomUUID()
+}
+
 /** True when userId is a row in conversation_participants for conversationId. */
 export async function isConversationParticipant(
   conversationId: string,

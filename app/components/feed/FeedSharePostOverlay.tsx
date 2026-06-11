@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabaseClient"
 import { fetchShareConversations } from "@/lib/shareToConversations"
 import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
+import { logSupabaseError } from "@/lib/logSupabaseError"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import FeedPostScreenshot from "./FeedPostScreenshot"
 import { postImageSrc } from "./feedPostHelpers"
@@ -88,16 +89,24 @@ export default function FeedSharePostOverlay({
     const content = shareMessage.trim() || "Shared a post"
 
     for (const conversationId of selectedConversations) {
-      const { error } = await supabase.from("messages").insert({
+      const payload = {
         conversation_id: conversationId,
         sender_id: authUser.id,
         type: "post",
         post_id: post.id,
         content,
-      })
+        channel: null,
+      }
+      const { error } = await supabase.from("messages").insert(payload)
 
       if (error) {
-        console.error("Share post error:", error)
+        logSupabaseError("FeedSharePostOverlay messages insert", error, {
+          table: "messages",
+          query: "insert",
+          payload,
+          userId: authUser.id,
+          conversationId,
+        })
         showPopup({ type: "error", message: handleSupabaseError(error) })
         return
       }

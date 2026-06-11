@@ -46,6 +46,8 @@ import { createUserRoom } from "@/lib/createUserRoom"
 import { createFollowNotification } from "@/lib/createFollowNotification"
 import { removeFollowNotification } from "@/lib/followNotifications"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
+import { logSupabaseError } from "@/lib/logSupabaseError"
+import { newConversationId } from "@/lib/conversationAccess"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import StoryComposeModal from "../../components/feed/StoryComposeModal"
 import { publishStory } from "@/lib/publishStory"
@@ -1310,30 +1312,44 @@ function ProfilePageContent() {
         return
       }
 
-      const { data: convo, error: convErr } = await supabase
+      const conversationId = newConversationId()
+      const dmConvoPayload = { id: conversationId }
+      const { error: convErr } = await supabase
         .from("conversations")
-        .insert({})
-        .select("id")
-        .single()
+        .insert(dmConvoPayload)
 
-      if (convErr || !convo?.id) {
-        console.error(convErr)
+      if (convErr) {
+        logSupabaseError("handleMessage conversations insert", convErr, {
+          table: "conversations",
+          query: "insert",
+          payload: dmConvoPayload,
+          userId: currentUserId,
+          otherUserId: profile.id,
+        })
         return
       }
 
+      const dmParticipantsPayload = [
+        { conversation_id: conversationId, user_id: currentUserId },
+        { conversation_id: conversationId, user_id: profile.id },
+      ]
       const { error: partErr } = await supabase
         .from("conversation_participants")
-        .insert([
-          { conversation_id: convo.id, user_id: currentUserId },
-          { conversation_id: convo.id, user_id: profile.id },
-        ])
+        .insert(dmParticipantsPayload)
 
       if (partErr) {
-        console.error(partErr)
+        logSupabaseError("handleMessage conversation_participants insert", partErr, {
+          table: "conversation_participants",
+          query: "insert",
+          payload: dmParticipantsPayload,
+          userId: currentUserId,
+          conversationId,
+          otherUserId: profile.id,
+        })
         return
       }
 
-      router.push(`/messages/${convo.id}`)
+      router.push(`/messages/${conversationId}`)
     } finally {
       setMessageBusy(false)
     }

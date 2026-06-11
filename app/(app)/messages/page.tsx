@@ -2,7 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { supabase } from "../../../lib/supabaseClient"
-import { isConversationParticipant } from "../../../lib/conversationAccess"
+import {
+  isConversationParticipant,
+  newConversationId,
+} from "../../../lib/conversationAccess"
+import { logSupabaseError } from "@/lib/logSupabaseError"
 import {
   countUnreadFromRows,
   fetchUnreadCountForConversation as fetchUnreadCountForConversationShared,
@@ -598,37 +602,55 @@ export default function MessagesPage() {
     if (!user || groupSelectedUsers.length === 0 || !groupName.trim()) return
 
     setCreatingGroup(true)
-    const { data: convo } = await supabase
+    const conversationId = newConversationId()
+    const convoPayload = {
+      id: conversationId,
+      is_group: true,
+      name: groupName.trim(),
+    }
+    const { error: convoErr } = await supabase
       .from("conversations")
-      .insert({
-        is_group: true,
-        name: groupName.trim()
-      })
-      .select()
-      .single()
+      .insert(convoPayload)
 
-    if (!convo?.id) {
+    if (convoErr) {
+      logSupabaseError("createGroupChat conversations insert", convoErr, {
+        table: "conversations",
+        query: "insert",
+        payload: convoPayload,
+        userId: user.id,
+      })
       setCreatingGroup(false)
       return
     }
 
     const participants = groupSelectedUsers.map((u) => ({
-      conversation_id: convo.id,
+      conversation_id: conversationId,
       user_id: u.id
     }))
 
     participants.push({
-      conversation_id: convo.id,
+      conversation_id: conversationId,
       user_id: user.id
     })
 
-    await supabase
+    const { error: participantsErr } = await supabase
       .from("conversation_participants")
       .insert(participants)
+    if (participantsErr) {
+      logSupabaseError("createGroupChat conversation_participants insert", participantsErr, {
+        table: "conversation_participants",
+        query: "insert",
+        payload: participants,
+        userId: user.id,
+        conversationId,
+      })
+      setCreatingGroup(false)
+      return
+    }
 
     const now = new Date().toISOString()
     const newConversation = {
-      id: convo.id,
+      id: conversationId,
       is_group: true,
       is_pinned: false,
       name: groupName.trim(),
@@ -649,7 +671,7 @@ export default function MessagesPage() {
     setGroupResults([])
     setGroupName("")
     setCreatingGroup(false)
-    router.push(`/messages/${convo.id}`)
+    router.push(`/messages/${conversationId}`)
   }
 
   async function findExistingDM(currentUserId: string, otherUserId: string) {
@@ -702,28 +724,49 @@ export default function MessagesPage() {
       return
     }
 
-    const { data: convo, error } = await supabase
+    const conversationId = newConversationId()
+    const dmConvoPayload = { id: conversationId, is_group: false }
+    const { error: convoErr } = await supabase
       .from("conversations")
-      .insert({ is_group: false })
-      .select()
-      .single()
+      .insert(dmConvoPayload)
 
-    if (error || !convo?.id) {
-      console.error("DM conversation create error:", error)
+    if (convoErr) {
+      logSupabaseError("startDMChat conversations insert", convoErr, {
+        table: "conversations",
+        query: "insert",
+        payload: dmConvoPayload,
+        userId: user.id,
+        otherUserId: selectedDmUserId,
+      })
       setCreatingDM(false)
       return
     }
 
-    await supabase.from("conversation_participants").insert([
-      { conversation_id: convo.id, user_id: user.id },
-      { conversation_id: convo.id, user_id: selectedDmUserId },
-    ])
+    const dmParticipantsPayload = [
+      { conversation_id: conversationId, user_id: user.id },
+      { conversation_id: conversationId, user_id: selectedDmUserId },
+    ]
+    const { error: participantsErr } = await supabase
+      .from("conversation_participants")
+      .insert(dmParticipantsPayload)
+    if (participantsErr) {
+      logSupabaseError("startDMChat conversation_participants insert", participantsErr, {
+        table: "conversation_participants",
+        query: "insert",
+        payload: dmParticipantsPayload,
+        userId: user.id,
+        conversationId,
+        otherUserId: selectedDmUserId,
+      })
+      setCreatingDM(false)
+      return
+    }
 
     const other =
       dmSelectedUsers[0] ?? allUsers.find((u) => u.id === selectedDmUserId)
     const now = new Date().toISOString()
     const newConversation = {
-      id: convo.id,
+      id: conversationId,
       is_group: false,
       is_pinned: false,
       name: null as string | null,
@@ -743,7 +786,7 @@ export default function MessagesPage() {
     setDmSearchQuery("")
     setDmResults([])
     setCreatingDM(false)
-    router.push(`/messages/${convo.id}`)
+    router.push(`/messages/${conversationId}`)
   }
 
   const filteredConversations = useMemo(() => {

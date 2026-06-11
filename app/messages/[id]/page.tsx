@@ -8,6 +8,7 @@ import { supabase } from "../../../lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
 import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
+import { logSupabaseError } from "@/lib/logSupabaseError"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { useParams, useRouter } from "next/navigation"
 import {
@@ -916,14 +917,21 @@ export default function DMPage() {
       imageUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/screenshots/${fileName}`
     }
 
-    const { error: sendErr } = await supabase.from("messages").insert({
+    const sendPayload = {
       conversation_id: id,
       sender_id: user.id,
       content: input || "",
       image_url: imageUrl,
-    })
+      channel: null,
+    }
+    const { error: sendErr } = await supabase.from("messages").insert(sendPayload)
     if (sendErr) {
-      console.error("sendMessage insert:", sendErr)
+      logSupabaseError("sendMessage insert", sendErr, {
+        table: "messages",
+        query: "insert",
+        payload: sendPayload,
+        userId: user.id,
+      })
       showPopup({ type: "error", message: handleSupabaseError(sendErr) })
       return
     }
@@ -978,15 +986,24 @@ export default function DMPage() {
       }
     }
 
-    const { error: tradeSendErr } = await supabase.from("messages").insert({
+    const tradeSendPayload = {
       conversation_id: activeConversationId,
       sender_id: user.id,
       type: "trade",
       trade_id: trade.id,
       content: "Shared a trade",
-    })
+      channel: null,
+    }
+    const { error: tradeSendErr } = await supabase
+      .from("messages")
+      .insert(tradeSendPayload)
     if (tradeSendErr) {
-      console.error("handleSendTrade insert:", tradeSendErr)
+      logSupabaseError("handleSendTrade insert", tradeSendErr, {
+        table: "messages",
+        query: "insert",
+        payload: tradeSendPayload,
+        userId: user.id,
+      })
       showPopup({ type: "error", message: handleSupabaseError(tradeSendErr) })
       return
     }
@@ -1074,19 +1091,44 @@ export default function DMPage() {
       user_id: u.id,
     }))
 
-    await supabase.from("conversation_participants").insert(inserts)
+    const { error: addParticipantsErr } = await supabase
+      .from("conversation_participants")
+      .insert(inserts)
+    if (addParticipantsErr) {
+      logSupabaseError("handleAddUsers conversation_participants insert", addParticipantsErr, {
+        table: "conversation_participants",
+        query: "insert",
+        payload: inserts,
+        userId: user.id,
+        conversationId: conversation.id,
+      })
+      return
+    }
 
     const meRow = participants.find((p: any) => p.user_id === user.id)
     const rawProf = meRow?.profiles
     const prof = Array.isArray(rawProf) ? rawProf[0] : rawProf
     const actorName = prof?.username || "Someone"
 
-    await supabase.from("messages").insert({
+    const systemAddPayload = {
       conversation_id: conversation.id,
       content: `${actorName} added ${toAdd.map((u) => u.username).join(", ")}`,
       sender_id: null,
       is_system: true,
-    })
+      channel: null,
+    }
+    const { error: systemAddErr } = await supabase
+      .from("messages")
+      .insert(systemAddPayload)
+    if (systemAddErr) {
+      logSupabaseError("handleAddUsers system message insert", systemAddErr, {
+        table: "messages",
+        query: "insert",
+        payload: systemAddPayload,
+        userId: user.id,
+        conversationId: conversation.id,
+      })
+    }
 
     setParticipants((prev) => [
       ...prev,
@@ -1109,18 +1151,32 @@ export default function DMPage() {
     const prof = Array.isArray(rawProf) ? rawProf[0] : rawProf
     const displayName = prof?.username || "Someone"
 
+    const leaveSystemPayload = {
+      conversation_id: conversation.id,
+      content: `${displayName} left the group`,
+      sender_id: null,
+      is_system: true,
+      channel: null,
+    }
+    const { error: leaveSystemErr } = await supabase
+      .from("messages")
+      .insert(leaveSystemPayload)
+    if (leaveSystemErr) {
+      logSupabaseError("handleLeaveGroup system message insert", leaveSystemErr, {
+        table: "messages",
+        query: "insert",
+        payload: leaveSystemPayload,
+        userId: user.id,
+        conversationId: conversation.id,
+      })
+      return
+    }
+
     await supabase
       .from("conversation_participants")
       .delete()
       .eq("conversation_id", conversation.id)
       .eq("user_id", user.id)
-
-    await supabase.from("messages").insert({
-      conversation_id: conversation.id,
-      content: `${displayName} left the group`,
-      sender_id: null,
-      is_system: true,
-    })
 
     setShowGroupSettings(false)
     router.push("/messages")
