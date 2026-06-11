@@ -525,6 +525,7 @@ function FeedPageContent() {
         const { data, error } = await supabase
           .from("posts")
           .select(FEED_POSTS_SELECT)
+          .neq("user_id", user.id)
           .order("created_at", { ascending: false })
           .range(from, to)
 
