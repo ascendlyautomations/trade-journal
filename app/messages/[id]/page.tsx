@@ -3,7 +3,13 @@
 import Navbar from "../../components/Navbar"
 import DmStyleComposer from "../../components/DmStyleComposer"
 import TradeSocialLayer from "../../components/TradeSocialLayer"
-import { useEffect, useState, useRef, type ChangeEvent } from "react"
+import {
+  useCallback,
+  useEffect,
+  useState,
+  useRef,
+  type ChangeEvent,
+} from "react"
 import { supabase } from "../../../lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
 import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
@@ -18,7 +24,14 @@ import {
   formatSignedPnlDisplay,
 } from "@/lib/formatDisplay"
 import { isConversationParticipant } from "@/lib/conversationAccess"
+import { ensureDmConversation } from "@/lib/dmConversation"
+import {
+  buildDmThreadPath,
+  isConversationUuidSegment,
+} from "@/lib/messageRoutes"
 import { profilePath } from "@/lib/profileRoutes"
+import { normalizeProfileUsername } from "@/lib/profileUsername"
+import { isTradeOwnedByUser } from "@/lib/tradeShareAccess"
 
 type ConversationPageAccess =
   | "loading"
@@ -425,12 +438,43 @@ function PostMessageBubble({
   )
 }
 
+type TypingMember = {
+  user_id: string
+  profiles?: { name?: string | null; username?: string | null } | null
+}
+
+function buildTypingIndicatorText(
+  typingUserIds: string[],
+  currentUserId: string | undefined,
+  members: TypingMember[],
+  isGroup: boolean
+): string {
+  const others = typingUserIds.filter((id) => id && id !== currentUserId)
+  if (others.length === 0) return ""
+
+  const labelFor = (userId: string): string | null => {
+    const member = members.find((m) => m.user_id === userId)
+    const prof = member?.profiles
+    const raw = (prof?.name || prof?.username || "").trim()
+    return raw || null
+  }
+
+  if (!isGroup || others.length === 1) {
+    const label = labelFor(others[0])
+    return label ? `${label} is typing...` : "Someone is typing..."
+  }
+
+  return "Multiple users are typing..."
+}
+
 export default function DMPage() {
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const params = useParams()
   const router = useRouter()
-  const id = params.id as string
-  const activeConversationId = id
+  const urlSegment = params.id as string
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(
+    null
+  )
 
   const [messages, setMessages] = useState<any[]>([])
   const [input, setInput] = useState("")
@@ -462,6 +506,9 @@ export default function DMPage() {
   const scrollRef = useRef<HTMLDivElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const userIdRef = useRef<string | null>(null)
+  const messagesChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(
+    null
+  )
 
   function normalizeSeenBy(raw: unknown): string[] {
     if (Array.isArray(raw)) return raw.map(String)
@@ -490,12 +537,12 @@ export default function DMPage() {
 
   useEffect(() => {
     init()
-  }, [id])
+  }, [urlSegment])
 
   async function markMessageNotificationsRead(currentUserId: string) {
     console.log("[messages/[id]] mark read start", {
       userId: currentUserId,
-      conversationId: id,
+      conversationId: activeConversationId,
       type: "message",
     })
 
@@ -510,7 +557,7 @@ export default function DMPage() {
     if (error) {
       console.error("[messages/[id]] mark read error:", {
         userId: currentUserId,
-        conversationId: id,
+        conversationId: activeConversationId,
         error,
       })
       return
@@ -518,7 +565,7 @@ export default function DMPage() {
 
     console.log("[messages/[id]] mark read success", {
       userId: currentUserId,
-      conversationId: id,
+      conversationId: activeConversationId,
       updated: count ?? data?.length ?? 0,
     })
 
@@ -535,7 +582,25 @@ export default function DMPage() {
       }
     })
 
-    const channel = supabase.channel(topic)
+    const channel = supabase.channel(topic, {
+      config: { broadcast: { self: false } },
+    })
+    messagesChannelRef.current = channel
+
+    channel.on("broadcast", { event: "typing" }, (payload) => {
+      const typingUserId = payload?.payload?.userId as string | undefined
+      const uid = userIdRef.current
+      if (!typingUserId || !uid || typingUserId === uid) return
+
+      setTypingUsers((prev) => {
+        if (prev.includes(typingUserId)) return prev
+        return [...prev, typingUserId]
+      })
+
+      window.setTimeout(() => {
+        setTypingUsers((prev) => prev.filter((id) => id !== typingUserId))
+      }, 2000)
+    })
 
     channel.on(
       "postgres_changes",
@@ -604,9 +669,28 @@ export default function DMPage() {
     channel.subscribe()
 
     return () => {
+      messagesChannelRef.current = null
+      setTypingUsers([])
       supabase.removeChannel(channel)
     }
   }, [activeConversationId, pageAccess])
+
+  useEffect(() => {
+    const participantIds = new Set(participants.map((p: any) => p.user_id))
+    setTypingUsers((prev) => prev.filter((id) => participantIds.has(id)))
+  }, [participants])
+
+  const sendTypingBroadcast = useCallback(() => {
+    const channel = messagesChannelRef.current
+    const uid = userIdRef.current
+    if (!channel || !uid) return
+
+    void channel.send({
+      type: "broadcast",
+      event: "typing",
+      payload: { userId: uid },
+    })
+  }, [])
 
   useEffect(() => {
     scrollToBottom()
@@ -651,7 +735,6 @@ export default function DMPage() {
         .from("trades")
         .select("*")
         .eq("user_id", user.id)
-        .eq("is_public", true)
         .order("created_at", { ascending: false })
 
       setTrades(data || [])
@@ -666,6 +749,7 @@ export default function DMPage() {
     setConversation(null)
     setParticipants([])
     setOtherUser(null)
+    setActiveConversationId(null)
 
     const {
       data: { user },
@@ -680,25 +764,78 @@ export default function DMPage() {
 
     setUser(user)
 
-    const allowed = await isConversationParticipant(id, user.id)
+    let conversationId: string | null = null
+
+    if (isConversationUuidSegment(urlSegment)) {
+      conversationId = urlSegment
+    } else {
+      const normalized = normalizeProfileUsername(urlSegment)
+      if (!normalized) {
+        setPageAccess("unavailable")
+        return
+      }
+
+      const { data: prof } = await supabase
+        .from("profiles")
+        .select("id, username")
+        .eq("username", normalized)
+        .maybeSingle()
+
+      if (!prof || prof.id === user.id) {
+        setPageAccess("unavailable")
+        return
+      }
+
+      const result = await ensureDmConversation(supabase, user.id, prof.id)
+      if (!result.ok) {
+        setPageAccess("unavailable")
+        return
+      }
+      conversationId = result.conversationId
+    }
+
+    const allowed = await isConversationParticipant(conversationId, user.id)
     if (!allowed) {
       setPageAccess("unavailable")
       return
     }
 
+    setActiveConversationId(conversationId)
     setPageAccess("allowed")
     await markMessageNotificationsRead(user.id)
-    await fetchConversationDetails(user.id)
-    await loadMessages(user.id)
+    const details = await fetchConversationDetails(user.id, conversationId)
+    await loadMessages(user.id, conversationId)
+
+    if (
+      isConversationUuidSegment(urlSegment) &&
+      details &&
+      !details.isGroup
+    ) {
+      const normalized = normalizeProfileUsername(
+        details.otherProfile?.username ?? ""
+      )
+      if (normalized) {
+        const target = buildDmThreadPath(normalized)
+        const currentPath = `/messages/${urlSegment}`
+        if (target !== currentPath) {
+          router.replace(target, { scroll: false })
+        }
+      }
+    }
   }
 
-  async function fetchConversationDetails(currentUserId: string) {
-    if (!(await isConversationParticipant(id, currentUserId))) return
+  async function fetchConversationDetails(
+    currentUserId: string,
+    conversationId: string
+  ) {
+    if (!(await isConversationParticipant(conversationId, currentUserId))) {
+      return null
+    }
 
     const { data: convo } = await supabase
       .from("conversations")
       .select("id, is_group, name, avatar_url")
-      .eq("id", id)
+      .eq("id", conversationId)
       .maybeSingle()
 
     setConversation(convo || null)
@@ -709,13 +846,20 @@ export default function DMPage() {
         user_id,
         profiles (id, username, avatar_url)
       `)
-      .eq("conversation_id", id)
+      .eq("conversation_id", conversationId)
 
     setParticipants(data || [])
 
     const other = data?.find((u: any) => u.user_id !== currentUserId)
+    const rawProfile = other?.profiles
+    const otherProfile = Array.isArray(rawProfile) ? rawProfile[0] : rawProfile
 
-    setOtherUser(other?.profiles || null)
+    setOtherUser(otherProfile || null)
+
+    return {
+      isGroup: convo?.is_group === true,
+      otherProfile: otherProfile ?? null,
+    }
   }
 
   function scrollToBottom() {
@@ -726,8 +870,8 @@ export default function DMPage() {
     }, 50)
   }
 
-  async function loadMessages(currentUserId: string) {
-    if (!(await isConversationParticipant(id, currentUserId))) return
+  async function loadMessages(currentUserId: string, conversationId: string) {
+    if (!(await isConversationParticipant(conversationId, currentUserId))) return
 
     const { data: fetched } = await supabase
       .from("messages")
@@ -740,7 +884,7 @@ export default function DMPage() {
         )
       `
       )
-      .eq("conversation_id", id)
+      .eq("conversation_id", conversationId)
       .order("created_at", { ascending: true })
 
     const { data: deleted } = await supabase
@@ -762,12 +906,12 @@ export default function DMPage() {
   }
 
   async function markMessagesSeen(currentUserId: string) {
-    if (pageAccess !== "allowed") return
+    if (pageAccess !== "allowed" || !activeConversationId) return
 
     const { data } = await supabase
       .from("messages")
       .select("id, seen_by, sender_id")
-      .eq("conversation_id", id)
+      .eq("conversation_id", activeConversationId)
 
     let updatedCount = 0
     for (const msg of data || []) {
@@ -791,7 +935,7 @@ export default function DMPage() {
     const { data: verifyRows, error: verifyErr } = await supabase
       .from("messages")
       .select("id, sender_id, seen_by")
-      .eq("conversation_id", id)
+      .eq("conversation_id", activeConversationId)
 
     if (verifyErr) {
       console.error("[messages/[id]] verify seen_by error:", verifyErr)
@@ -803,7 +947,7 @@ export default function DMPage() {
       })
       console.log("[messages/[id]] markMessagesSeen verify", {
         userId: currentUserId,
-        conversationId: id,
+        conversationId: activeConversationId,
         updatedCount,
         remainingUnreadCount: remainingUnread.length,
         remainingUnreadMessageIds: remainingUnread.map((r) => r.id),
@@ -812,9 +956,9 @@ export default function DMPage() {
   }
 
   useEffect(() => {
-    if (!user?.id || !id || pageAccess !== "allowed") return
+    if (!user?.id || !activeConversationId || pageAccess !== "allowed") return
     void markMessagesSeen(user.id)
-  }, [id, user?.id, pageAccess])
+  }, [activeConversationId, user?.id, pageAccess])
 
   function removeImage() {
     setSelectedFile(null)
@@ -882,7 +1026,7 @@ export default function DMPage() {
   }
 
   async function sendMessage() {
-    if (!user || pageAccess !== "allowed") return
+    if (!user || pageAccess !== "allowed" || !activeConversationId) return
     if (!input.trim() && !selectedFile) return
 
     const userIsPro = await isUserPro(supabase as any, user.id)
@@ -918,7 +1062,7 @@ export default function DMPage() {
     }
 
     const sendPayload = {
-      conversation_id: id,
+      conversation_id: activeConversationId,
       sender_id: user.id,
       content: input || "",
       image_url: imageUrl,
@@ -945,13 +1089,13 @@ export default function DMPage() {
         last_message: lastMsg,
         last_message_at: lastMessageAt
       })
-      .eq("id", id)
+      .eq("id", activeConversationId)
 
     if (typeof window !== "undefined") {
       window.dispatchEvent(
         new CustomEvent("tj-conversation-updated", {
           detail: {
-            conversationId: id,
+            conversationId: activeConversationId,
             last_message: lastMsg,
             last_message_at: lastMessageAt
           }
@@ -968,7 +1112,15 @@ export default function DMPage() {
   }
 
   async function handleSendTrade(trade: any) {
-    if (!user || pageAccess !== "allowed") return
+    if (!user || pageAccess !== "allowed" || !activeConversationId) return
+
+    if (!isTradeOwnedByUser(trade, user.id)) {
+      showPopup({
+        type: "error",
+        message: "You can only share trades you own.",
+      })
+      return
+    }
 
     const userIsPro = await isUserPro(supabase as any, user.id)
     if (!userIsPro) {
@@ -1017,13 +1169,13 @@ export default function DMPage() {
         last_message: lastMsg,
         last_message_at: lastMessageAt,
       })
-      .eq("id", id)
+      .eq("id", activeConversationId)
 
     if (typeof window !== "undefined") {
       window.dispatchEvent(
         new CustomEvent("tj-conversation-updated", {
           detail: {
-            conversationId: id,
+            conversationId: activeConversationId,
             last_message: lastMsg,
             last_message_at: lastMessageAt,
           },
@@ -1211,8 +1363,12 @@ export default function DMPage() {
   const filteredAddMemberUsers = allUsers.filter(
     (u) => !existingMemberIds.includes(u.id)
   )
-  const typingText =
-    typingUsers.length > 0 || isTyping ? "User is typing..." : ""
+  const typingText = buildTypingIndicatorText(
+    typingUsers,
+    user?.id,
+    members,
+    Boolean(conversation?.is_group)
+  )
   const lastMessage = messages[messages.length - 1]
   const allSeen =
     !!lastMessage &&
@@ -1509,7 +1665,10 @@ export default function DMPage() {
             value={input}
             onChange={(v) => {
               setInput(v)
-              if (!isTyping) setIsTyping(true)
+              if (!isTyping) {
+                setIsTyping(true)
+                sendTypingBroadcast()
+              }
             }}
             onSend={() => void sendMessage()}
             placeholder="Send message..."
@@ -1866,7 +2025,7 @@ export default function DMPage() {
             <div className="max-h-80 space-y-2 overflow-y-auto">
               {trades.length === 0 ? (
                 <p className="text-sm text-gray-400">
-                  No public trades available to share.
+                  No trades available to share.
                 </p>
               ) : (
                 trades.map((trade) => (

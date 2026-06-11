@@ -23,6 +23,7 @@ type MessagesConversationListProps = {
   onOpen: MessagesConversationRowProps["onOpen"]
   onToggleMenu: MessagesConversationRowProps["onToggleMenu"]
   onPin: MessagesConversationRowProps["onPin"]
+  onMarkUnread: MessagesConversationRowProps["onMarkUnread"]
   onDelete: MessagesConversationRowProps["onDelete"]
 }
 
@@ -32,6 +33,7 @@ function MessagesConversationList({
   onOpen,
   onToggleMenu,
   onPin,
+  onMarkUnread,
   onDelete,
 }: MessagesConversationListProps) {
   return (
@@ -52,6 +54,7 @@ function MessagesConversationList({
           onOpen={onOpen}
           onToggleMenu={onToggleMenu}
           onPin={onPin}
+          onMarkUnread={onMarkUnread}
           onDelete={onDelete}
         />
       ))}

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { compressImage } from "./compressImage"
 import { logSupabaseError } from "./logSupabaseError"
+import { assertSenderOwnsTrade } from "./tradeShareAccess"
 
 export type ShareConversationRow = {
   id: string
@@ -102,6 +103,15 @@ export async function sendTradeToConversations(
     content?: string
   }
 ): Promise<{ error: Error | null }> {
+  const ownership = await assertSenderOwnsTrade(
+    supabase,
+    opts.tradeId,
+    opts.senderId
+  )
+  if (!ownership.ok) {
+    return { error: ownership.error }
+  }
+
   const content = opts.content?.trim() || "Shared a trade"
   const lastMessageAt = new Date().toISOString()
 

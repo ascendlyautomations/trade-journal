@@ -50,16 +50,10 @@ export default function TradeDetailPage() {
 
       if (cancelled) return
 
-      let resolvedTrade: typeof data = data
-      if (resolvedTrade) {
-        const isOwner =
-          sessionUserId != null &&
-          String(resolvedTrade.user_id) === String(sessionUserId)
-        const isPublic = resolvedTrade.is_public === true
-        if (!isPublic && !isOwner) {
-          resolvedTrade = null
-        }
-      }
+      // RLS grants: owner (trades_select_own), public (trades_select_public),
+      // or shared in a conversation the viewer participates in
+      // (trades_select_shared_in_conversation).
+      const resolvedTrade = error ? null : data
 
       if (error && !resolvedTrade) {
         setTrade(null)

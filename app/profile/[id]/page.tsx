@@ -47,7 +47,8 @@ import { createFollowNotification } from "@/lib/createFollowNotification"
 import { removeFollowNotification } from "@/lib/followNotifications"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import { logSupabaseError } from "@/lib/logSupabaseError"
-import { newConversationId } from "@/lib/conversationAccess"
+import { ensureDmConversation } from "@/lib/dmConversation"
+import { dmThreadPath } from "@/lib/messageRoutes"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import StoryComposeModal from "../../components/feed/StoryComposeModal"
 import { publishStory } from "@/lib/publishStory"
@@ -1265,91 +1266,48 @@ function ProfilePageContent() {
     setFollowBusy(false)
   }
 
-  async function findExistingDmConversationId(
-    me: string,
-    them: string
-  ): Promise<string | null> {
-    const { data: mine } = await supabase
-      .from("conversation_participants")
-      .select("conversation_id")
-      .eq("user_id", me)
-
-    const ids = [...new Set(mine?.map((r) => r.conversation_id) ?? [])]
-    if (ids.length === 0) return null
-
-    const { data: rows } = await supabase
-      .from("conversation_participants")
-      .select("conversation_id, user_id")
-      .in("conversation_id", ids)
-
-    const byConvo = new Map<string, Set<string>>()
-    for (const row of rows ?? []) {
-      if (!byConvo.has(row.conversation_id)) {
-        byConvo.set(row.conversation_id, new Set())
-      }
-      byConvo.get(row.conversation_id)!.add(row.user_id)
-    }
-
-    for (const [cid, users] of byConvo) {
-      if (users.size === 2 && users.has(me) && users.has(them)) return cid
-    }
-
-    return null
-  }
-
   async function handleMessage() {
     if (!currentUserId || !profile || currentUserId === profile.id) return
 
     setMessageBusy(true)
     try {
-      const existingId = await findExistingDmConversationId(
+      const result = await ensureDmConversation(
+        supabase,
         currentUserId,
-        profile.id
+        profile.id,
+        { skipGroupFilter: true }
       )
 
-      if (existingId) {
-        router.push(`/messages/${existingId}`)
+      if (!result.ok) {
+        if (result.phase === "conversation") {
+          logSupabaseError("handleMessage conversations insert", result.error, {
+            table: "conversations",
+            query: "insert",
+            payload: { id: result.conversationId, is_group: false },
+            userId: currentUserId,
+            otherUserId: profile.id,
+          })
+        } else {
+          logSupabaseError(
+            "handleMessage conversation_participants insert",
+            result.error,
+            {
+              table: "conversation_participants",
+              query: "insert",
+              payload: [
+                { conversation_id: result.conversationId, user_id: currentUserId },
+                { conversation_id: result.conversationId, user_id: profile.id },
+              ],
+              userId: currentUserId,
+              conversationId: result.conversationId,
+              otherUserId: profile.id,
+            }
+          )
+        }
         return
       }
 
-      const conversationId = newConversationId()
-      const dmConvoPayload = { id: conversationId }
-      const { error: convErr } = await supabase
-        .from("conversations")
-        .insert(dmConvoPayload)
-
-      if (convErr) {
-        logSupabaseError("handleMessage conversations insert", convErr, {
-          table: "conversations",
-          query: "insert",
-          payload: dmConvoPayload,
-          userId: currentUserId,
-          otherUserId: profile.id,
-        })
-        return
-      }
-
-      const dmParticipantsPayload = [
-        { conversation_id: conversationId, user_id: currentUserId },
-        { conversation_id: conversationId, user_id: profile.id },
-      ]
-      const { error: partErr } = await supabase
-        .from("conversation_participants")
-        .insert(dmParticipantsPayload)
-
-      if (partErr) {
-        logSupabaseError("handleMessage conversation_participants insert", partErr, {
-          table: "conversation_participants",
-          query: "insert",
-          payload: dmParticipantsPayload,
-          userId: currentUserId,
-          conversationId,
-          otherUserId: profile.id,
-        })
-        return
-      }
-
-      router.push(`/messages/${conversationId}`)
+      router.push(dmThreadPath(profile))
     } finally {
       setMessageBusy(false)
     }

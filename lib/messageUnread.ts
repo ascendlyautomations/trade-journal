@@ -86,3 +86,59 @@ export async function fetchTotalUnreadMessageCount(
   const rows = await fetchUnreadMessageRows(userId, conversationIds, client)
   return countUnreadFromRows(rows, userId)
 }
+
+export type MarkConversationUnreadResult =
+  | { ok: true; messageId: string; unreadCount: number }
+  | { ok: false; reason: "no_message" | "error"; error?: unknown }
+
+/** Mark a conversation unread by removing the current user from seen_by on the latest inbound message only. */
+export async function markConversationUnread(
+  userId: string,
+  conversationId: string,
+  client: SupabaseClient = supabase
+): Promise<MarkConversationUnreadResult> {
+  const { data: rows, error: fetchErr } = await client
+    .from("messages")
+    .select("id, sender_id, seen_by, created_at")
+    .eq("conversation_id", conversationId)
+    .not("sender_id", "is", null)
+    .neq("sender_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+
+  if (fetchErr) {
+    console.error("[messageUnread] markConversationUnread fetch:", fetchErr)
+    return { ok: false, reason: "error", error: fetchErr }
+  }
+
+  const target = rows?.[0]
+  if (!target) {
+    return { ok: false, reason: "no_message" }
+  }
+
+  const seenBy = normalizeSeenBy(target.seen_by)
+  const nextSeenBy = seenBy.filter((id) => id !== userId)
+
+  const { error: updateErr } = await client
+    .from("messages")
+    .update({ seen_by: nextSeenBy })
+    .eq("id", target.id)
+
+  if (updateErr) {
+    console.error("[messageUnread] markConversationUnread update:", updateErr)
+    return { ok: false, reason: "error", error: updateErr }
+  }
+
+  const unreadCount = await fetchUnreadCountForConversation(
+    userId,
+    conversationId,
+    client
+  )
+
+  return { ok: true, messageId: target.id, unreadCount }
+}
+
+export function dispatchUnreadMessagesRefresh() {
+  if (typeof window === "undefined") return
+  window.dispatchEvent(new CustomEvent("tj-unread-messages-refresh"))
+}

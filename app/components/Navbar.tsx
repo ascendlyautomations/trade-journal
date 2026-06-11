@@ -138,6 +138,16 @@ export default function Navbar() {
   }, [fetchUnread])
 
   useEffect(() => {
+    const onMessagesRefresh = () => {
+      void fetchUnreadMessages()
+    }
+    window.addEventListener("tj-unread-messages-refresh", onMessagesRefresh)
+    return () => {
+      window.removeEventListener("tj-unread-messages-refresh", onMessagesRefresh)
+    }
+  }, [fetchUnreadMessages])
+
+  useEffect(() => {
     if (!user?.id) return
 
     let cancelled = false

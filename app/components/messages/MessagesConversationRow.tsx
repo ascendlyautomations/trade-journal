@@ -16,6 +16,7 @@ export type MessagesConversationRowProps = {
   onOpen: (conversationId: string) => void
   onToggleMenu: (conversationId: string) => void
   onPin: (conversationId: string, isPinned: boolean) => void
+  onMarkUnread: (conversationId: string) => void
   onDelete: (conversationId: string) => void
 }
 
@@ -33,6 +34,7 @@ function MessagesConversationRow({
   onOpen,
   onToggleMenu,
   onPin,
+  onMarkUnread,
   onDelete,
 }: MessagesConversationRowProps) {
   return (
@@ -65,6 +67,16 @@ function MessagesConversationRow({
             className="w-full px-3 py-2 text-left text-sm text-white hover:bg-[#1f2937] cursor-pointer"
           >
             {isPinned ? "Unpin Chat" : "Pin Chat"}
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onMarkUnread(conversationId)
+            }}
+            className="w-full px-3 py-2 text-left text-sm text-white hover:bg-[#1f2937] cursor-pointer"
+          >
+            Mark as Unread
           </button>
           <button
             type="button"

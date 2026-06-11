@@ -6,11 +6,16 @@ import {
   isConversationParticipant,
   newConversationId,
 } from "../../../lib/conversationAccess"
+import { ensureDmConversation } from "@/lib/dmConversation"
+import { buildDmThreadPath, groupThreadPath } from "@/lib/messageRoutes"
+import { normalizeProfileUsername } from "@/lib/profileUsername"
 import { logSupabaseError } from "@/lib/logSupabaseError"
 import {
   countUnreadFromRows,
+  dispatchUnreadMessagesRefresh,
   fetchUnreadCountForConversation as fetchUnreadCountForConversationShared,
   fetchUnreadMessageRows,
+  markConversationUnread,
   normalizeSeenBy,
 } from "../../../lib/messageUnread"
 import { useRouter } from "next/navigation"
@@ -332,7 +337,7 @@ export default function MessagesPage() {
 
     if (!rows || rows.length === 0) {
       setConversations([])
-      return
+      return []
     }
 
     const convoIds = rows.map((p: any) => p.conversation_id)
@@ -389,6 +394,7 @@ export default function MessagesPage() {
         name: convoMeta?.name || null,
         displayName,
         username: profile?.username || "user",
+        otherUserId: isGroup ? null : (profile?.id ?? otherUser?.user_id ?? null),
         avatar_url: isGroup
           ? convoMeta?.avatar_url ?? null
           : profile?.avatar_url ?? null,
@@ -399,7 +405,9 @@ export default function MessagesPage() {
       }
     })
 
-    setConversations(sortConversationsDesc(convoData))
+    const sorted = sortConversationsDesc(convoData)
+    setConversations(sorted)
+    return sorted
   }, [])
 
   const fetchUnreadCountForConversation = useCallback(
@@ -528,20 +536,33 @@ export default function MessagesPage() {
 
   const openConversation = useCallback(
     async (conversationId: string) => {
+      let list = conversations
+
       if (user?.id) {
         await markConversationRead(user.id, conversationId)
         await markMessageNotificationsRead(user.id, "chat-open")
-        await fetchConversations(user.id)
+        list = (await fetchConversations(user.id)) ?? list
         setConversations((prev) =>
           prev.map((c) =>
             c.id === conversationId ? { ...c, unreadCount: 0 } : c
           )
         )
       }
-      router.push(`/messages/${conversationId}`)
+
+      const item = list.find((c) => c.id === conversationId)
+      let path = groupThreadPath(conversationId)
+      if (item && !item.is_group) {
+        const normalized = normalizeProfileUsername(item.username ?? "")
+        path =
+          normalized && item.username !== "user"
+            ? buildDmThreadPath(normalized)
+            : groupThreadPath(conversationId)
+      }
+      router.push(path)
     },
     [
       user?.id,
+      conversations,
       markConversationRead,
       markMessageNotificationsRead,
       fetchConversations,
@@ -596,6 +617,51 @@ export default function MessagesPage() {
       setOpenConvoMenuId(null)
     },
     [user?.id, fetchConversations]
+  )
+
+  const handleMarkConversationUnread = useCallback(
+    async (conversationId: string) => {
+      if (!user?.id) return
+
+      setOpenConvoMenuId(null)
+
+      setConversations((prev) =>
+        prev.map((c) => {
+          if (c.id !== conversationId) return c
+          const current = c.unreadCount ?? 0
+          return {
+            ...c,
+            unreadCount: current === 0 ? 1 : current + 1,
+          }
+        })
+      )
+      dispatchUnreadMessagesRefresh()
+
+      const result = await markConversationUnread(user.id, conversationId)
+      if (!result.ok) {
+        const count = await fetchUnreadCountForConversation(
+          user.id,
+          conversationId
+        )
+        setConversations((prev) =>
+          prev.map((c) =>
+            c.id === conversationId ? { ...c, unreadCount: count } : c
+          )
+        )
+        dispatchUnreadMessagesRefresh()
+        return
+      }
+
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === conversationId
+            ? { ...c, unreadCount: result.unreadCount }
+            : c
+        )
+      )
+      dispatchUnreadMessagesRefresh()
+    },
+    [user?.id, fetchUnreadCountForConversation]
   )
 
   async function createGroupChat() {
@@ -671,40 +737,7 @@ export default function MessagesPage() {
     setGroupResults([])
     setGroupName("")
     setCreatingGroup(false)
-    router.push(`/messages/${conversationId}`)
-  }
-
-  async function findExistingDM(currentUserId: string, otherUserId: string) {
-    const { data: myRows } = await supabase
-      .from("conversation_participants")
-      .select("conversation_id")
-      .eq("user_id", currentUserId)
-
-    const ids = [...new Set(myRows?.map((r) => r.conversation_id) || [])]
-    for (const convoId of ids) {
-      const { data: meta } = await supabase
-        .from("conversations")
-        .select("id, is_group")
-        .eq("id", convoId)
-        .maybeSingle()
-
-      if (!meta || meta.is_group) continue
-
-      const { data: parts } = await supabase
-        .from("conversation_participants")
-        .select("user_id")
-        .eq("conversation_id", convoId)
-
-      const uidSet = new Set(parts?.map((p) => p.user_id))
-      if (
-        uidSet.size === 2 &&
-        uidSet.has(currentUserId) &&
-        uidSet.has(otherUserId)
-      ) {
-        return convoId as string
-      }
-    }
-    return null
+    router.push(groupThreadPath(conversationId))
   }
 
   async function startDMChat() {
@@ -712,81 +745,82 @@ export default function MessagesPage() {
     if (!user || !selectedDmUserId) return
 
     setCreatingDM(true)
-    const existingId = await findExistingDM(user.id, selectedDmUserId)
+    const result = await ensureDmConversation(
+      supabase,
+      user.id,
+      selectedDmUserId
+    )
 
-    if (existingId) {
-      setShowDMModal(false)
-      setDmSelectedUsers([])
-      setDmSearchQuery("")
-      setDmResults([])
+    if (!result.ok) {
+      if (result.phase === "conversation") {
+        logSupabaseError("startDMChat conversations insert", result.error, {
+          table: "conversations",
+          query: "insert",
+          payload: { id: result.conversationId, is_group: false },
+          userId: user.id,
+          otherUserId: selectedDmUserId,
+        })
+      } else {
+        logSupabaseError(
+          "startDMChat conversation_participants insert",
+          result.error,
+          {
+            table: "conversation_participants",
+            query: "insert",
+            payload: [
+              { conversation_id: result.conversationId, user_id: user.id },
+              {
+                conversation_id: result.conversationId,
+                user_id: selectedDmUserId,
+              },
+            ],
+            userId: user.id,
+            conversationId: result.conversationId,
+            otherUserId: selectedDmUserId,
+          }
+        )
+      }
       setCreatingDM(false)
-      router.push(`/messages/${existingId}`)
       return
     }
 
-    const conversationId = newConversationId()
-    const dmConvoPayload = { id: conversationId, is_group: false }
-    const { error: convoErr } = await supabase
-      .from("conversations")
-      .insert(dmConvoPayload)
+    const { conversationId } = result
 
-    if (convoErr) {
-      logSupabaseError("startDMChat conversations insert", convoErr, {
-        table: "conversations",
-        query: "insert",
-        payload: dmConvoPayload,
-        userId: user.id,
+    if (!result.existing) {
+      const other =
+        dmSelectedUsers[0] ?? allUsers.find((u) => u.id === selectedDmUserId)
+      const now = new Date().toISOString()
+      const newConversation = {
+        id: conversationId,
+        is_group: false,
+        is_pinned: false,
+        name: null as string | null,
+        displayName: other?.username || "user",
+        username: other?.username || "user",
         otherUserId: selectedDmUserId,
-      })
-      setCreatingDM(false)
-      return
-    }
+        avatar_url: other?.avatar_url ?? null,
+        participants: [],
+        lastMessage: "No messages yet",
+        last_message_at: now,
+        unreadCount: 0,
+      }
 
-    const dmParticipantsPayload = [
-      { conversation_id: conversationId, user_id: user.id },
-      { conversation_id: conversationId, user_id: selectedDmUserId },
-    ]
-    const { error: participantsErr } = await supabase
-      .from("conversation_participants")
-      .insert(dmParticipantsPayload)
-    if (participantsErr) {
-      logSupabaseError("startDMChat conversation_participants insert", participantsErr, {
-        table: "conversation_participants",
-        query: "insert",
-        payload: dmParticipantsPayload,
-        userId: user.id,
-        conversationId,
-        otherUserId: selectedDmUserId,
-      })
-      setCreatingDM(false)
-      return
+      setConversations((prev) => mergeNewConversation(prev, newConversation))
     }
-
-    const other =
-      dmSelectedUsers[0] ?? allUsers.find((u) => u.id === selectedDmUserId)
-    const now = new Date().toISOString()
-    const newConversation = {
-      id: conversationId,
-      is_group: false,
-      is_pinned: false,
-      name: null as string | null,
-      displayName: other?.username || "user",
-      username: other?.username || "user",
-      avatar_url: other?.avatar_url ?? null,
-      participants: [],
-      lastMessage: "No messages yet",
-      last_message_at: now,
-      unreadCount: 0,
-    }
-
-    setConversations((prev) => mergeNewConversation(prev, newConversation))
 
     setShowDMModal(false)
     setDmSelectedUsers([])
     setDmSearchQuery("")
     setDmResults([])
     setCreatingDM(false)
-    router.push(`/messages/${conversationId}`)
+    const other =
+      dmSelectedUsers[0] ?? allUsers.find((u) => u.id === selectedDmUserId)
+    const normalized = normalizeProfileUsername(other?.username ?? "")
+    router.push(
+      normalized
+        ? buildDmThreadPath(normalized)
+        : groupThreadPath(conversationId)
+    )
   }
 
   const filteredConversations = useMemo(() => {
@@ -844,6 +878,7 @@ export default function MessagesPage() {
                 onOpen={handleOpenConversation}
                 onToggleMenu={handleToggleConvoMenu}
                 onPin={handlePinConversation}
+                onMarkUnread={handleMarkConversationUnread}
                 onDelete={handleDeleteConversation}
               />
             )}
