@@ -1852,6 +1852,11 @@ function ProfilePageContent() {
 
   const openFeedPostDeepLink = useCallback(
     async (postId: string, openComments = false) => {
+      if (!profile?.id || !canViewTrades) {
+        clearProfileQueryParams()
+        return
+      }
+
       const { data: feedPost, error } = await supabase
         .from("posts")
         .select(FEED_POSTS_SELECT)
@@ -1879,7 +1884,7 @@ function ProfilePageContent() {
       setFeedDeepLinkPost(feedPost)
       clearProfileQueryParams()
     },
-    [clearProfileQueryParams, loadFeedPostEngagement, profile?.id]
+    [canViewTrades, clearProfileQueryParams, loadFeedPostEngagement, profile?.id]
   )
 
   const openTradeDeepLink = useCallback(

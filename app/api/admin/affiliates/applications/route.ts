@@ -1,4 +1,4 @@
-import { supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
+import { getRouteUser, supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
 
 export const runtime = "nodejs"
 
@@ -10,6 +10,21 @@ function parseStatus(v: string | null): TabStatus {
 }
 
 export async function GET(req: Request) {
+  const user = await getRouteUser(req)
+  if (!user?.id) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  const { data: adminRow } = await supabaseServiceRole
+    .from("admin_users")
+    .select("user_id")
+    .eq("user_id", user.id)
+    .maybeSingle()
+
+  if (!adminRow?.user_id) {
+    return Response.json({ error: "Forbidden" }, { status: 403 })
+  }
+
   const url = new URL(req.url)
   const status = parseStatus(url.searchParams.get("status")?.trim().toLowerCase() ?? null)
 

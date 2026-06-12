@@ -10,6 +10,7 @@ import {
 } from "@/lib/affiliateAdmin"
 import { getCurrentAdminCheckResult } from "@/lib/adminUsers"
 import { type AffiliateApplicationRow } from "@/lib/affiliateApplication"
+import { supabaseBearerHeaders } from "@/lib/supabaseBearerFetch"
 import { supabase } from "@/lib/supabaseClient"
 
 type TabId = "pending" | "approved" | "rejected"
@@ -94,7 +95,10 @@ export default function AdminAffiliateApplicationsPage() {
     try {
       const params = new URLSearchParams({ status: tab })
       const res = await fetch(`/api/admin/affiliates/applications?${params}`, {
-        credentials: "same-origin",
+        credentials: "include",
+        headers: {
+          ...(await supabaseBearerHeaders()),
+        },
       })
       const json = (await res.json()) as {
         applications?: unknown[]
@@ -225,7 +229,11 @@ export default function AdminAffiliateApplicationsPage() {
       try {
         const res = await fetch("/api/admin/affiliates/provision-connect", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            ...(await supabaseBearerHeaders()),
+          },
           body: JSON.stringify({ affiliateUserId: approvedUserId }),
         })
         if (!res.ok && process.env.NODE_ENV === "development") {
