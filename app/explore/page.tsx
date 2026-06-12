@@ -415,13 +415,13 @@ export default function ExplorePage() {
             </p>
           </div>
 
-          <section className={SECTION_PANEL}>
+          <section className={`${SECTION_PANEL} relative z-20 overflow-visible`}>
             <SectionHeading
               title="Search Traders"
               description="Find traders by username or display name."
             />
 
-            <div className="relative">
+            <div className="relative overflow-visible">
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -453,7 +453,7 @@ export default function ExplorePage() {
               ) : null}
 
               {results.length > 0 ? (
-                <div className="absolute z-50 mt-2 w-full overflow-hidden rounded-xl border border-white/10 bg-[#0f172a] shadow-lg">
+                <div className="absolute z-[100] mt-2 w-full overflow-hidden rounded-xl border border-white/10 bg-[#0f172a] shadow-xl">
                   {results.map((user) => (
                     <div
                       key={user.id}
@@ -493,7 +493,7 @@ export default function ExplorePage() {
             <p className="text-sm text-gray-400">Loading explore data…</p>
           ) : (
             <>
-              <section className={SECTION_PANEL}>
+              <section className={`${SECTION_PANEL} relative z-0`}>
                 <SectionHeading
                   title="Top Traders"
                   description="Highest P&L in the selected timeframe."

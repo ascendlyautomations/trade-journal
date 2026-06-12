@@ -18,6 +18,7 @@ import {
   buildLeaderboardChartData,
   getDefaultLeaderboardCustomRange,
   type LeaderboardAccountTypeFilter,
+  type LeaderboardChartRow,
   type LeaderboardView,
   type TradeForLeaderboard,
 } from "../../lib/leaderboardChart"
@@ -51,6 +52,30 @@ type TooltipPayload = {
   value?: number
   dataKey?: string | number
   color?: string
+  payload?: LeaderboardChartRow
+}
+
+function formatLeaderboardTooltipMetric(
+  dataKey: string | number | undefined,
+  value: number | undefined,
+  contributorCount: number
+): string {
+  const key = String(dataKey ?? "")
+
+  if (key === "you") {
+    return formatPnlCurrency(Number(value ?? 0), {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })
+  }
+
+  if (contributorCount === 0) return "N/A"
+  if (key === "worst" && contributorCount === 1) return "N/A"
+
+  return formatPnlCurrency(Number(value ?? 0), {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
 }
 
 function LeaderboardTooltip({
@@ -63,6 +88,9 @@ function LeaderboardTooltip({
   label?: string
 }) {
   if (!active || !payload?.length) return null
+
+  const contributorCount = payload[0]?.payload?.contributorCount ?? 0
+
   return (
     <div className="rounded border border-white/10 bg-[#0f172a] px-3 py-2 text-sm text-white shadow-lg">
       {label != null ? (
@@ -71,10 +99,11 @@ function LeaderboardTooltip({
       {payload.map((entry, i) => (
         <p key={String(entry.dataKey ?? i)} className="font-medium" style={{ color: entry.color }}>
           {entry.name ?? entry.dataKey}:{" "}
-          {formatPnlCurrency(Number(entry.value), {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          })}
+          {formatLeaderboardTooltipMetric(
+            entry.dataKey,
+            entry.value,
+            contributorCount
+          )}
         </p>
       ))}
     </div>

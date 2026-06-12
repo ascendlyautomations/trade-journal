@@ -32,6 +32,8 @@ export type LeaderboardChartRow = {
   best: number
   worst: number
   you: number
+  /** Unique traders with trades in this bucket (tooltip display only). */
+  contributorCount: number
 }
 
 export type LeaderboardTodayStats = {
@@ -440,6 +442,7 @@ export function buildLeaderboardChartData(
         best,
         worst,
         you,
+        contributorCount: pnls.length,
       }
     }
   )

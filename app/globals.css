@@ -4,6 +4,7 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --navbar-height: 4rem;
 }
 
 /* Tailwind theme mapping */

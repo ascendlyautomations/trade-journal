@@ -16,6 +16,9 @@ import { compressImage } from "@/lib/compressImage"
 import { normalizeTraderType } from "@/lib/traderType"
 import { useParams, useRouter, useSearchParams } from "next/navigation"
 import FeedPostDetailModal from "../../components/feed/FeedPostDetailModal"
+import DetailModalShell, {
+  scrollModalCommentsPane,
+} from "../../components/ui/DetailModalShell"
 import { EMPTY_LIKE_META } from "../../components/feed/FeedPostCard"
 import {
   FEED_COMMENT_INSERT_SELECT,
@@ -151,6 +154,7 @@ function TradeCard({
   onOpenComments,
   commentsExpanded = false,
   scrollToCommentsOnMount = false,
+  inDetailModal = false,
   disableOpen,
 }: {
   trade: any
@@ -169,8 +173,10 @@ function TradeCard({
   onOpenComments?: () => void
   commentsExpanded?: boolean
   scrollToCommentsOnMount?: boolean
+  inDetailModal?: boolean
   disableOpen?: boolean
 }) {
+  const commentsScrollRef = useRef<HTMLDivElement>(null)
   const imageSrc = postImageSrc(trade.image_url)
   const pnlRaw = Number(trade.pnl)
   const pnl = Number.isFinite(pnlRaw) ? pnlRaw : NaN
@@ -236,13 +242,17 @@ function TradeCard({
     </>
   )
 
-  return (
-    <article
-      className={`h-fit w-full overflow-hidden rounded-xl border border-white/10 bg-white/5 shadow-lg shadow-black/20 ${
+  const cardShellClass = inDetailModal
+    ? "flex min-h-0 flex-1 flex-col overflow-hidden bg-transparent"
+    : `h-fit w-full overflow-hidden rounded-xl border border-white/10 bg-white/5 shadow-lg shadow-black/20 ${
         onOpenDetail && !disableOpen
           ? "cursor-pointer transition-all duration-200 hover:border-white/20 hover:bg-white/[0.07] hover:shadow-xl"
           : ""
-      }`}
+      }`
+
+  return (
+    <article
+      className={cardShellClass}
       role={onOpenDetail && !disableOpen ? "button" : undefined}
       tabIndex={onOpenDetail && !disableOpen ? 0 : undefined}
       onClick={() => {
@@ -256,6 +266,13 @@ function TradeCard({
         }
       }}
     >
+      <div
+        className={
+          inDetailModal
+            ? "shrink-0"
+            : undefined
+        }
+      >
       <div className="flex items-center justify-between border-b border-white/5 px-4 py-3">
         <div className="flex min-w-0 items-center gap-3">
           <img
@@ -357,7 +374,9 @@ function TradeCard({
             alt=""
             loading="lazy"
             decoding="async"
-            className="block max-h-[400px] w-full object-cover"
+            className={`block w-full object-cover ${
+              inDetailModal ? "max-h-[22dvh]" : "max-h-[400px]"
+            }`}
           />
         </div>
       ) : (
@@ -365,9 +384,13 @@ function TradeCard({
           No screenshot
         </div>
       )}
+      </div>
 
       {showInteractions ? (
-        <div onKeyDown={(e) => e.stopPropagation()}>
+        <div
+          className={inDetailModal ? "flex min-h-0 flex-1 flex-col overflow-hidden" : undefined}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
           <TradeSocialProvider
             tradeId={trade.id}
             currentUserId={trade.currentUserId}
@@ -376,13 +399,34 @@ function TradeCard({
             onRequestComments={commentsExpanded ? undefined : onOpenComments}
             scrollToCommentsOnMount={scrollToCommentsOnMount}
           >
-            <div className="border-t border-white/10 px-4 py-2">
-              <TradeSocialEngagementBar />
-            </div>
-            <div className="space-y-3 px-4 pb-3">{tradeDetails}</div>
-            {commentsExpanded ? (
-              <TradeSocialCommentsSection className="px-4 pb-4" />
-            ) : null}
+            {inDetailModal ? (
+              <>
+                <div className="shrink-0">
+                  <div className="border-t border-white/10 px-4 py-2">
+                    <TradeSocialEngagementBar />
+                  </div>
+                  <div className="space-y-3 px-4 pb-3 pt-4">{tradeDetails}</div>
+                </div>
+                {commentsExpanded ? (
+                  <div className="flex min-h-0 flex-1 flex-col overflow-hidden border-t border-white/10">
+                    <TradeSocialCommentsSection
+                      className="px-4 pb-4"
+                      scrollContainerRef={commentsScrollRef}
+                    />
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <>
+                <div className="border-t border-white/10 px-4 py-2">
+                  <TradeSocialEngagementBar />
+                </div>
+                <div className="space-y-3 px-4 pb-3">{tradeDetails}</div>
+                {commentsExpanded ? (
+                  <TradeSocialCommentsSection className="px-4 pb-4" />
+                ) : null}
+              </>
+            )}
           </TradeSocialProvider>
         </div>
       ) : (
@@ -414,6 +458,7 @@ function PostCard({
   onCommentSubmit,
   commentSubmitting,
   onOpenDetail,
+  inDetailModal = false,
   disableOpen,
 }: {
   post: any
@@ -437,27 +482,91 @@ function PostCard({
   onCommentSubmit?: () => void
   commentSubmitting?: boolean
   onOpenDetail?: () => void
+  inDetailModal?: boolean
   disableOpen?: boolean
 }) {
+  const commentsScrollRef = useRef<HTMLDivElement>(null)
   const imgSrc = profileWallImageSrc(post.image_url)
 
   useEffect(() => {
     if (!showCommentsPanel || !scrollToCommentsOnMount) return
     requestAnimationFrame(() => {
+      if (inDetailModal) {
+        scrollModalCommentsPane(commentsScrollRef.current)
+        return
+      }
       const section = document.getElementById(`profile-post-comments-${post.id}`)
       section?.scrollIntoView({ behavior: "smooth", block: "nearest" })
       const input = section?.querySelector("input")
       if (input instanceof HTMLInputElement) input.focus()
     })
-  }, [post.id, scrollToCommentsOnMount, showCommentsPanel])
+  }, [inDetailModal, post.id, scrollToCommentsOnMount, showCommentsPanel])
 
-  return (
-    <article
-      className={`h-fit w-full overflow-hidden rounded-xl border border-white/10 bg-white/5 shadow-lg shadow-black/20 ${
+  const commentsList = (
+    <div className="space-y-1 text-sm text-gray-300">
+      {(comments || []).map((c: any) => (
+        <p key={c.id}>
+          <span className="font-medium text-white">
+            {c.profiles?.username || "User"}
+          </span>{" "}
+          {c.content}
+        </p>
+      ))}
+    </div>
+  )
+
+  const commentsComposer = (
+    <div className="flex gap-2">
+      <input
+        value={commentText || ""}
+        onChange={(e) => onCommentChange?.(e.target.value)}
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault()
+            onCommentSubmit?.()
+          }
+        }}
+        placeholder="Add a comment..."
+        className="flex-1 rounded-lg border border-white/10 bg-[#0f172a] px-3 py-2 text-sm text-white placeholder:text-gray-500"
+      />
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation()
+          onCommentSubmit?.()
+        }}
+        disabled={commentSubmitting || !(commentText || "").trim()}
+        className="rounded-lg bg-blue-500 px-3 py-2 text-sm text-white disabled:opacity-40"
+      >
+        Post
+      </button>
+    </div>
+  )
+
+  const commentsPanel = showCommentsPanel ? (
+    <div
+      id={`profile-post-comments-${post.id}`}
+      className="mt-3 space-y-3"
+    >
+      <div className="max-h-48 space-y-1 overflow-y-auto text-sm text-gray-300">
+        {commentsList}
+      </div>
+      {commentsComposer}
+    </div>
+  ) : null
+
+  const cardShellClass = inDetailModal
+    ? "flex min-h-0 flex-1 flex-col overflow-hidden bg-transparent"
+    : `h-fit w-full overflow-hidden rounded-xl border border-white/10 bg-white/5 shadow-lg shadow-black/20 ${
         onOpenDetail && !disableOpen
           ? "cursor-pointer transition-all duration-200 hover:border-white/20 hover:bg-white/[0.07] hover:shadow-xl"
           : ""
-      }`}
+      }`
+
+  return (
+    <article
+      className={cardShellClass}
       role={onOpenDetail && !disableOpen ? "button" : undefined}
       tabIndex={onOpenDetail && !disableOpen ? 0 : undefined}
       onClick={() => {
@@ -471,6 +580,7 @@ function PostCard({
         }
       }}
     >
+      <div className={inDetailModal ? "shrink-0" : undefined}>
       <div className="flex items-center justify-between gap-3 border-b border-white/5 p-4">
         <div className="flex min-w-0 items-center gap-3">
           <img
@@ -562,15 +672,18 @@ function PostCard({
             alt=""
             loading="lazy"
             decoding="async"
-            className="block max-h-[400px] w-full object-cover"
+            className={`block w-full object-cover ${
+              inDetailModal ? "max-h-[22dvh]" : "max-h-[400px]"
+            }`}
             onError={(e) => {
               e.currentTarget.style.display = "none"
             }}
           />
         </div>
       ) : null}
+      </div>
 
-      <div className="space-y-3 p-4">
+      <div className={`space-y-3 p-4 ${inDetailModal ? "shrink-0" : ""}`}>
         {post.content ? (
           <p className="px-1 text-sm leading-relaxed text-white">
             {post.content}
@@ -597,6 +710,11 @@ function PostCard({
               onClick={(e) => {
                 e.stopPropagation()
                 onOpenComments?.()
+                if (inDetailModal && showCommentsPanel) {
+                  requestAnimationFrame(() => {
+                    scrollModalCommentsPane(commentsScrollRef.current)
+                  })
+                }
               }}
               className="text-gray-300 hover:text-white"
               aria-label="View comments"
@@ -607,52 +725,24 @@ function PostCard({
           <p className="px-1 pt-2 text-sm font-medium text-white">
             {(likeMeta?.count ?? 0).toLocaleString()} likes
           </p>
-          {showCommentsPanel ? (
-            <div
-              id={`profile-post-comments-${post.id}`}
-              className="mt-3 space-y-3"
-            >
-              <div className="max-h-48 space-y-1 overflow-y-auto text-sm text-gray-300">
-                {(comments || []).map((c: any) => (
-                  <p key={c.id}>
-                    <span className="font-medium text-white">
-                      {c.profiles?.username || "User"}
-                    </span>{" "}
-                    {c.content}
-                  </p>
-                ))}
-              </div>
-              <div className="flex gap-2">
-                <input
-                  value={commentText || ""}
-                  onChange={(e) => onCommentChange?.(e.target.value)}
-                  onClick={(e) => e.stopPropagation()}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault()
-                      onCommentSubmit?.()
-                    }
-                  }}
-                  placeholder="Add a comment..."
-                  className="flex-1 rounded-lg border border-white/10 bg-[#0f172a] px-3 py-2 text-sm text-white placeholder:text-gray-500"
-                />
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onCommentSubmit?.()
-                  }}
-                  disabled={commentSubmitting || !(commentText || "").trim()}
-                  className="rounded-lg bg-blue-500 px-3 py-2 text-sm text-white disabled:opacity-40"
-                >
-                  Post
-                </button>
-              </div>
-            </div>
-          ) : null}
+          {!inDetailModal ? commentsPanel : null}
           </div>
         ) : null}
       </div>
+      {inDetailModal && showCommentsPanel ? (
+        <div
+          id={`profile-post-comments-${post.id}`}
+          className="flex min-h-0 flex-1 flex-col overflow-hidden border-t border-white/10"
+        >
+          <div
+            ref={commentsScrollRef}
+            className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pt-3"
+          >
+            {commentsList}
+          </div>
+          <div className="shrink-0 px-4 pb-4 pt-3">{commentsComposer}</div>
+        </div>
+      ) : null}
     </article>
   )
 }
@@ -3103,139 +3193,95 @@ function ProfilePageContent() {
       ) : null}
 
       {selectedTradeDetail ? (
-        <div
-          className="fixed inset-0 z-[205] flex items-center justify-center bg-black/75 p-3 backdrop-blur-md sm:p-4"
-          role="presentation"
-          onClick={() => {
+        <DetailModalShell
+          ariaLabel="Trade details"
+          title="Trade"
+          backdropClassName="bg-black/75 backdrop-blur-md"
+          onClose={() => {
             setSelectedTradeDetail(null)
             setTradeDetailFocusComments(false)
           }}
         >
-          <div
-            className="relative max-h-[92vh] w-full max-w-2xl overflow-y-auto"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Trade details"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              type="button"
-              onClick={() => {
-            setSelectedTradeDetail(null)
-            setTradeDetailFocusComments(false)
-          }}
-              className="absolute right-2 top-2 z-10 rounded-md bg-black/50 px-2 py-1 text-sm text-white hover:bg-black/70"
-              aria-label="Close trade details"
-            >
-              ✕
-            </button>
-            <TradeCard
-              trade={selectedTradeDetail}
-              profile={profile}
-              shareProfile={viewerShareProfile}
-              canManageTrade={currentUserId === profile.id}
-              menuOpen={openTradeMenuId === String(selectedTradeDetail.id)}
-              onMenuToggle={() =>
-                setOpenTradeMenuId((prev) =>
-                  prev === String(selectedTradeDetail.id)
-                    ? null
-                    : String(selectedTradeDetail.id)
-                )
-              }
-              onStartEditTrade={() => {
-                openEditTradeModal(selectedTradeDetail)
-                setOpenTradeMenuId(null)
-                setSelectedTradeDetail(null)
-              }}
-              onTogglePinTrade={() => void handlePinTrade(selectedTradeDetail)}
-              onSaveTrade={() => void handleSaveTrade(String(selectedTradeDetail.id))}
-              onDeleteTrade={() => void handleDeleteTrade(String(selectedTradeDetail.id))}
-              showInteractions={true}
-              commentsExpanded
-              scrollToCommentsOnMount={tradeDetailFocusComments}
-              disableOpen
-            />
-          </div>
-        </div>
+          <TradeCard
+            inDetailModal
+            trade={selectedTradeDetail}
+            profile={profile}
+            shareProfile={viewerShareProfile}
+            canManageTrade={currentUserId === profile.id}
+            menuOpen={openTradeMenuId === String(selectedTradeDetail.id)}
+            onMenuToggle={() =>
+              setOpenTradeMenuId((prev) =>
+                prev === String(selectedTradeDetail.id)
+                  ? null
+                  : String(selectedTradeDetail.id)
+              )
+            }
+            onStartEditTrade={() => {
+              openEditTradeModal(selectedTradeDetail)
+              setOpenTradeMenuId(null)
+              setSelectedTradeDetail(null)
+            }}
+            onTogglePinTrade={() => void handlePinTrade(selectedTradeDetail)}
+            onSaveTrade={() => void handleSaveTrade(String(selectedTradeDetail.id))}
+            onDeleteTrade={() => void handleDeleteTrade(String(selectedTradeDetail.id))}
+            showInteractions={true}
+            commentsExpanded
+            scrollToCommentsOnMount={tradeDetailFocusComments}
+            disableOpen
+          />
+        </DetailModalShell>
       ) : null}
 
       {selectedPostDetail ? (
-        <div
-          className="fixed inset-0 z-[205] flex items-center justify-center bg-black/75 p-3 backdrop-blur-md sm:p-4"
-          role="presentation"
-          onClick={() => {
+        <DetailModalShell
+          ariaLabel="Post details"
+          title="Post"
+          backdropClassName="bg-black/75 backdrop-blur-md"
+          onClose={() => {
             setSelectedPostDetail(null)
             setPostDetailFocusComments(false)
           }}
         >
-          <div
-            className="relative max-h-[92vh] w-full max-w-2xl overflow-y-auto"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Post details"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              type="button"
-              onClick={() => {
-            setSelectedPostDetail(null)
-            setPostDetailFocusComments(false)
-          }}
-              className="absolute right-2 top-2 z-10 rounded-md bg-black/50 px-2 py-1 text-sm text-white hover:bg-black/70"
-              aria-label="Close post details"
-            >
-              ✕
-            </button>
-            <PostCard
-              post={selectedPostDetail}
-              profile={profile}
-              canManagePost={currentUserId === profile.id}
-              menuOpen={openMenuId === String(selectedPostDetail.id)}
-              onMenuToggle={() =>
-                setOpenMenuId((prev) =>
-                  prev === String(selectedPostDetail.id)
-                    ? null
-                    : String(selectedPostDetail.id)
-                )
-              }
-              onStartEditPost={() => {
-                setEditingPost(selectedPostDetail)
-                setEditContent(selectedPostDetail.content || "")
-                setOpenMenuId(null)
-                setSelectedPostDetail(null)
-              }}
-              onTogglePinPost={() => void handlePinPost(selectedPostDetail)}
-              onSavePost={() => void handleSavePost(String(selectedPostDetail.id))}
-              onDeletePost={() => void handleDeletePost(String(selectedPostDetail.id))}
-              showInteractions={true}
-              onLike={() => void handleLike(String(selectedPostDetail.id), "post")}
-              showCommentsPanel
-              scrollToCommentsOnMount={postDetailFocusComments}
-              onOpenComments={() => {
-                setPostDetailFocusComments(true)
-                requestAnimationFrame(() => {
-                  document
-                    .getElementById(
-                      `profile-post-comments-${selectedPostDetail.id}`
-                    )
-                    ?.scrollIntoView({ behavior: "smooth", block: "nearest" })
-                })
-              }}
-              likeMeta={likesByPost[String(selectedPostDetail.id)] || { count: 0, liked: false }}
-              comments={commentsByPost[String(selectedPostDetail.id)] || []}
-              commentText={commentDraft[String(selectedPostDetail.id)] || ""}
-              onCommentChange={(value) =>
-                setCommentDraft((prev) => ({
-                  ...prev,
-                  [String(selectedPostDetail.id)]: value,
-                }))
-              }
-              onCommentSubmit={() => void submitComment(String(selectedPostDetail.id), "post")}
-              commentSubmitting={!!commentSubmitting[String(selectedPostDetail.id)]}
-              disableOpen
-            />
-          </div>
-        </div>
+          <PostCard
+            inDetailModal
+            post={selectedPostDetail}
+            profile={profile}
+            canManagePost={currentUserId === profile.id}
+            menuOpen={openMenuId === String(selectedPostDetail.id)}
+            onMenuToggle={() =>
+              setOpenMenuId((prev) =>
+                prev === String(selectedPostDetail.id)
+                  ? null
+                  : String(selectedPostDetail.id)
+              )
+            }
+            onStartEditPost={() => {
+              setEditingPost(selectedPostDetail)
+              setEditContent(selectedPostDetail.content || "")
+              setOpenMenuId(null)
+              setSelectedPostDetail(null)
+            }}
+            onTogglePinPost={() => void handlePinPost(selectedPostDetail)}
+            onSavePost={() => void handleSavePost(String(selectedPostDetail.id))}
+            onDeletePost={() => void handleDeletePost(String(selectedPostDetail.id))}
+            showInteractions={true}
+            onLike={() => void handleLike(String(selectedPostDetail.id), "post")}
+            showCommentsPanel
+            scrollToCommentsOnMount={postDetailFocusComments}
+            likeMeta={likesByPost[String(selectedPostDetail.id)] || { count: 0, liked: false }}
+            comments={commentsByPost[String(selectedPostDetail.id)] || []}
+            commentText={commentDraft[String(selectedPostDetail.id)] || ""}
+            onCommentChange={(value) =>
+              setCommentDraft((prev) => ({
+                ...prev,
+                [String(selectedPostDetail.id)]: value,
+              }))
+            }
+            onCommentSubmit={() => void submitComment(String(selectedPostDetail.id), "post")}
+            commentSubmitting={!!commentSubmitting[String(selectedPostDetail.id)]}
+            disableOpen
+          />
+        </DetailModalShell>
       ) : null}
 
       {feedDeepLinkPost ? (

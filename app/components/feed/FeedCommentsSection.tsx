@@ -1,6 +1,13 @@
 "use client"
 
-import { memo, useCallback, useRef, useState, type MutableRefObject } from "react"
+import {
+  memo,
+  useCallback,
+  useRef,
+  useState,
+  type MutableRefObject,
+  type RefObject,
+} from "react"
 import FeedCommentComposer from "./FeedCommentComposer"
 import FeedCommentList from "./FeedCommentList"
 
@@ -11,6 +18,8 @@ type FeedCommentsSectionProps = {
   commentSubmitting: boolean
   draftSyncRef?: MutableRefObject<Record<string, string>>
   onSubmitComment: (post: any, text: string) => Promise<boolean>
+  /** Scroll container for the comment list only (modal layout). */
+  listScrollRef?: RefObject<HTMLDivElement | null>
 }
 
 function FeedCommentsSection({
@@ -20,6 +29,7 @@ function FeedCommentsSection({
   commentSubmitting,
   draftSyncRef,
   onSubmitComment,
+  listScrollRef,
 }: FeedCommentsSectionProps) {
   const pid = String(post.id)
   const [commentDraft, setCommentDraft] = useState(
@@ -57,23 +67,43 @@ function FeedCommentsSection({
     e.stopPropagation()
   }, [])
 
+  const composer = user ? (
+    <FeedCommentComposer
+      post={post}
+      user={user}
+      commentValue={commentDraft}
+      commentSubmitting={commentSubmitting}
+      onCommentChange={handleCommentChange}
+      onSubmitComment={handleSubmitComment}
+    />
+  ) : null
+
+  if (listScrollRef) {
+    return (
+      <div
+        className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4 pt-3"
+        onClick={stopPropagation}
+        onKeyDown={stopPropagation}
+      >
+        <div
+          ref={listScrollRef}
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
+        >
+          <FeedCommentList comments={comments} />
+        </div>
+        {composer ? <div className="shrink-0 pt-3">{composer}</div> : null}
+      </div>
+    )
+  }
+
   return (
     <div
-      className="space-y-3 border-t border-white/10 pt-3 px-4 pb-4 mt-2"
+      className="mt-2 space-y-3 border-t border-white/10 px-4 pb-4 pt-3"
       onClick={stopPropagation}
       onKeyDown={stopPropagation}
     >
       <FeedCommentList comments={comments} />
-      {user ? (
-        <FeedCommentComposer
-          post={post}
-          user={user}
-          commentValue={commentDraft}
-          commentSubmitting={commentSubmitting}
-          onCommentChange={handleCommentChange}
-          onSubmitComment={handleSubmitComment}
-        />
-      ) : null}
+      {composer}
     </div>
   )
 }

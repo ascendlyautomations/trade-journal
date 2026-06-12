@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
   type ReactNode,
+  type RefObject,
 } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
@@ -453,8 +454,10 @@ export function TradeSocialEngagementBar({
 /** Comment list + composer; renders nothing when `showComments` is false. */
 export function TradeSocialCommentsSection({
   className = "",
+  scrollContainerRef,
 }: {
   className?: string
+  scrollContainerRef?: RefObject<HTMLDivElement | null>
 }) {
   const {
     tradeId,
@@ -473,26 +476,27 @@ export function TradeSocialCommentsSection({
   useEffect(() => {
     if (!scrollToCommentsOnMount || !commentsExpanded) return
     requestAnimationFrame(() => {
-      sectionRef.current?.scrollIntoView({
+      const container = scrollContainerRef?.current
+      const section = sectionRef.current
+      if (container) {
+        container.scrollTo({ top: container.scrollHeight, behavior: "smooth" })
+        const input = section?.querySelector("input")
+        if (input instanceof HTMLInputElement) input.focus()
+        return
+      }
+      section?.scrollIntoView({
         behavior: "smooth",
         block: "nearest",
       })
-      const input = sectionRef.current?.querySelector("input")
+      const input = section?.querySelector("input")
       if (input instanceof HTMLInputElement) input.focus()
     })
-  }, [commentsExpanded, scrollToCommentsOnMount, tradeId])
+  }, [commentsExpanded, scrollContainerRef, scrollToCommentsOnMount, tradeId])
 
   if (!showComments && !commentsExpanded) return null
 
-  return (
-    <div
-      id={`trade-comments-${tradeId}`}
-      ref={sectionRef}
-      className={`space-y-3 border-t border-white/10 mt-2 pt-3 ${className}`}
-      onClick={(e) => e.stopPropagation()}
-      onKeyDown={(e) => e.stopPropagation()}
-    >
-      <div className="space-y-2">
+  const commentList = (
+    <div className="space-y-2">
         {comments.map((c) => {
           const av = c.profiles?.avatar_url
           const hasAv =
@@ -520,11 +524,12 @@ export function TradeSocialCommentsSection({
             </div>
           )
         })}
-      </div>
+    </div>
+  )
 
-      {currentUserId ? (
+  const composer = currentUserId ? (
         <div
-          className="flex gap-2 mt-2"
+          className="mt-2 flex gap-2"
           onClick={(e) => e.stopPropagation()}
           onKeyDown={(e) => e.stopPropagation()}
         >
@@ -542,7 +547,7 @@ export function TradeSocialCommentsSection({
               }
             }}
             placeholder="Add a comment…"
-            className="flex-1 min-w-0 p-2 bg-[#1e293b] text-white rounded-lg border border-gray-600 text-sm placeholder:text-gray-500"
+            className="flex-1 min-w-0 rounded-lg border border-gray-600 bg-[#1e293b] p-2 text-sm text-white placeholder:text-gray-500"
           />
 
           <button
@@ -552,12 +557,43 @@ export function TradeSocialCommentsSection({
               e.stopPropagation()
               void handleComment()
             }}
-            className="bg-blue-500 px-3 rounded-lg text-white text-sm font-medium disabled:opacity-40 shrink-0"
+            className="shrink-0 rounded-lg bg-blue-500 px-3 text-sm font-medium text-white disabled:opacity-40"
           >
             Post
           </button>
         </div>
-      ) : null}
+      ) : null
+
+  if (scrollContainerRef) {
+    return (
+      <div
+        id={`trade-comments-${tradeId}`}
+        ref={sectionRef}
+        className={`flex min-h-0 flex-1 flex-col overflow-hidden ${className}`}
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
+      >
+        <div
+          ref={scrollContainerRef}
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
+        >
+          {commentList}
+        </div>
+        {composer ? <div className="shrink-0">{composer}</div> : null}
+      </div>
+    )
+  }
+
+  return (
+    <div
+      id={`trade-comments-${tradeId}`}
+      ref={sectionRef}
+      className={`mt-2 space-y-3 border-t border-white/10 pt-3 ${className}`}
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => e.stopPropagation()}
+    >
+      {commentList}
+      {composer}
     </div>
   )
 }
