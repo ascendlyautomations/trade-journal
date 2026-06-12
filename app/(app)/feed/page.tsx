@@ -522,12 +522,36 @@ function FeedPageContent() {
       let list: any[] = []
 
       if (mode === "global") {
-        const { data, error } = await supabase
+        const { data: following, error: followingError } = await supabase
+          .from("followers")
+          .select("following_id")
+          .eq("follower_id", user.id)
+
+        if (followingError) {
+          console.error(followingError)
+          loadingRef.current = false
+          setLoading(false)
+          return
+        }
+
+        const followingIds = following?.map((f) => f.following_id) || []
+
+        let globalQuery = supabase
           .from("posts")
           .select(FEED_POSTS_SELECT)
           .neq("user_id", user.id)
           .order("created_at", { ascending: false })
           .range(from, to)
+
+        if (followingIds.length > 0) {
+          globalQuery = globalQuery.not(
+            "user_id",
+            "in",
+            `(${followingIds.join(",")})`
+          )
+        }
+
+        const { data, error } = await globalQuery
 
         if (error) {
           console.error(error)
@@ -566,6 +590,7 @@ function FeedPageContent() {
           .from("posts")
           .select(FEED_POSTS_SELECT)
           .in("user_id", ids)
+          .neq("user_id", user.id)
           .order("created_at", { ascending: false })
           .range(from, to)
 
@@ -627,6 +652,12 @@ function FeedPageContent() {
 
   const handleSelectPost = useCallback((post: any) => {
     setSelectedPostId(String(post.id))
+  }, [])
+
+  const handleOpenPostComments = useCallback((post: any) => {
+    const pid = String(post.id)
+    openCommentsRef.current[pid] = true
+    setSelectedPostId(pid)
   }, [])
 
   const handleSharePost = useCallback((post: any) => {
@@ -849,9 +880,8 @@ function FeedPageContent() {
             commentsByPost={commentsByPost}
             commentSubmitting={commentSubmitting}
             draftSyncRef={draftSyncRef}
-            openCommentsRef={openCommentsRef}
-            activeDetailPostId={selectedPostId}
             onSelectPost={handleSelectPost}
+            onOpenComments={handleOpenPostComments}
             onToggleLike={toggleLike}
             onSubmitComment={submitComment}
             onSharePost={handleSharePost}

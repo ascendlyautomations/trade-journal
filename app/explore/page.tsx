@@ -41,9 +41,10 @@ type EnrichedTopTrader = {
 }
 
 const PROFILE_FIELDS =
-  "id, username, name, avatar_url, bio, created_at" as const
+  "id, username, name, avatar_url, bio, created_at, is_private" as const
 
-const SEARCH_PROFILE_FIELDS = "id, username, name, avatar_url" as const
+const SEARCH_PROFILE_FIELDS =
+  "id, username, name, avatar_url, is_private" as const
 
 const SEARCH_MIN_CHARS = 2
 
@@ -164,12 +165,14 @@ export default function ExplorePage() {
   const [loadingTopView, setLoadingTopView] = useState(false)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [followingIds, setFollowingIds] = useState<Set<string>>(new Set())
+  const [requestedIds, setRequestedIds] = useState<Set<string>>(new Set())
+  const [followsYouIds, setFollowsYouIds] = useState<Set<string>>(new Set())
   const [profiles, setProfiles] = useState<ExploreProfile[]>([])
   const [trades, setTrades] = useState<TradeForLeaderboard[]>([])
   const [topView, setTopView] = useState<ExploreTopView>("30D")
   const [search, setSearch] = useState("")
   const [results, setResults] = useState<
-    Pick<ExploreProfile, "id" | "username" | "name" | "avatar_url">[]
+    Pick<ExploreProfile, "id" | "username" | "name" | "avatar_url" | "is_private">[]
   >([])
   const [loadingSearch, setLoadingSearch] = useState(false)
   const [searchFinished, setSearchFinished] = useState(false)
@@ -269,7 +272,8 @@ export default function ExplorePage() {
 
     const profilePoolLimit = EXPLORE_NEW_LIMIT + EXPLORE_ACTIVE_LIMIT
 
-    const [profilesRes, followingRes] = await Promise.all([
+    const [profilesRes, followingRes, requestsRes, followsYouRes] =
+      await Promise.all([
       supabase
         .from("profiles")
         .select(PROFILE_FIELDS)
@@ -282,12 +286,31 @@ export default function ExplorePage() {
             .select("following_id")
             .eq("follower_id", user.id)
         : Promise.resolve({ data: null }),
+      user?.id
+        ? supabase
+            .from("follow_requests")
+            .select("target_id")
+            .eq("requester_id", user.id)
+            .eq("status", "pending")
+        : Promise.resolve({ data: null }),
+      user?.id
+        ? supabase
+            .from("followers")
+            .select("follower_id")
+            .eq("following_id", user.id)
+        : Promise.resolve({ data: null }),
     ])
 
     const pool = (profilesRes.data as ExploreProfile[]) || []
     setProfiles(pool)
     setFollowingIds(
       new Set((followingRes.data || []).map((row) => String(row.following_id)))
+    )
+    setRequestedIds(
+      new Set((requestsRes.data || []).map((row) => String(row.target_id)))
+    )
+    setFollowsYouIds(
+      new Set((followsYouRes.data || []).map((row) => String(row.follower_id)))
     )
 
     await loadTradesForView("30D", pool)
@@ -360,6 +383,15 @@ export default function ExplorePage() {
     setFollowingIds((prev) => {
       const next = new Set(prev)
       if (following) next.add(targetUserId)
+      else next.delete(targetUserId)
+      return next
+    })
+  }
+
+  function handleRequestedChange(targetUserId: string, requested: boolean) {
+    setRequestedIds((prev) => {
+      const next = new Set(prev)
+      if (requested) next.add(targetUserId)
       else next.delete(targetUserId)
       return next
     })
@@ -443,8 +475,12 @@ export default function ExplorePage() {
                       <FollowButton
                         targetUserId={user.id}
                         currentUserId={currentUserId}
+                        targetIsPrivate={user.is_private}
                         followingIds={followingIds}
+                        requestedIds={requestedIds}
+                        followsYouIds={followsYouIds}
                         onFollowingChange={handleFollowingChange}
+                        onRequestedChange={handleRequestedChange}
                       />
                     </div>
                   ))}
@@ -569,8 +605,12 @@ export default function ExplorePage() {
                                 <FollowButton
                                   targetUserId={row.userId}
                                   currentUserId={currentUserId}
+                                  targetIsPrivate={row.profile?.is_private}
                                   followingIds={followingIds}
+                                  requestedIds={requestedIds}
+                                  followsYouIds={followsYouIds}
                                   onFollowingChange={handleFollowingChange}
+                                  onRequestedChange={handleRequestedChange}
                                 />
                               </td>
                             </tr>
@@ -635,8 +675,12 @@ export default function ExplorePage() {
                             <FollowButton
                               targetUserId={profile.id}
                               currentUserId={currentUserId}
+                              targetIsPrivate={profile.is_private}
                               followingIds={followingIds}
+                              requestedIds={requestedIds}
+                              followsYouIds={followsYouIds}
                               onFollowingChange={handleFollowingChange}
+                              onRequestedChange={handleRequestedChange}
                             />
                           </div>
                           {summary && summary.tradeCount > 0 ? (
@@ -706,8 +750,12 @@ export default function ExplorePage() {
                         <FollowButton
                           targetUserId={profile.id}
                           currentUserId={currentUserId}
+                          targetIsPrivate={profile.is_private}
                           followingIds={followingIds}
+                          requestedIds={requestedIds}
+                          followsYouIds={followsYouIds}
                           onFollowingChange={handleFollowingChange}
+                          onRequestedChange={handleRequestedChange}
                         />
                       </div>
                     ))}

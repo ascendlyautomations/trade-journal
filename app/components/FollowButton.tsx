@@ -1,115 +1,216 @@
 "use client"
 
-import { useEffect, useState, type MouseEvent } from "react"
+import { useCallback, useEffect, useState, type MouseEvent } from "react"
 import { supabase } from "@/lib/supabaseClient"
-import { createFollowNotification } from "@/lib/createFollowNotification"
-import { removeFollowNotification } from "@/lib/followNotifications"
+import {
+  followButtonLabel,
+  followOrRequest,
+  followRelationshipTriggerLabel,
+  isMutualFollow,
+  loadFollowUiSnapshot,
+  unfollowOrCancelRequest,
+  type FollowUiState,
+} from "@/lib/followActions"
+import DropdownMenu, {
+  FOLLOW_RELATIONSHIP_FUTURE_MENU_ITEMS,
+} from "@/app/components/ui/DropdownMenu"
 
 type FollowButtonProps = {
   targetUserId: string
   currentUserId: string | null
+  targetIsPrivate?: boolean | null
   /** When provided, skips per-button follow lookup. */
   followingIds?: Set<string>
+  requestedIds?: Set<string>
+  /** Profile user ids that follow the current user (reverse edge). */
+  followsYouIds?: Set<string>
   onFollowingChange?: (targetUserId: string, following: boolean) => void
+  onRequestedChange?: (targetUserId: string, requested: boolean) => void
   className?: string
   stopPropagation?: boolean
 }
 
+function stateFromSets(
+  targetUserId: string,
+  followingIds?: Set<string>,
+  requestedIds?: Set<string>
+): FollowUiState | null {
+  if (followingIds || requestedIds) {
+    if (followingIds?.has(targetUserId)) return "following"
+    if (requestedIds?.has(targetUserId)) return "requested"
+    return "none"
+  }
+  return null
+}
+
+const FOLLOWING_BUTTON_CLASS =
+  "shrink-0 rounded-md bg-white/10 px-3 py-1 text-sm font-medium text-white transition hover:bg-white/20 disabled:opacity-50"
+const PRIMARY_BUTTON_CLASS =
+  "shrink-0 rounded-md bg-blue-500 px-3 py-1 text-sm font-medium text-white transition hover:bg-blue-600 disabled:opacity-50"
+
 export default function FollowButton({
   targetUserId,
   currentUserId,
+  targetIsPrivate = false,
   followingIds,
+  requestedIds,
+  followsYouIds,
   onFollowingChange,
+  onRequestedChange,
   className = "",
   stopPropagation = true,
 }: FollowButtonProps) {
-  const [isFollowing, setIsFollowing] = useState(
-    () => followingIds?.has(targetUserId) ?? false
+  const presetState = stateFromSets(targetUserId, followingIds, requestedIds)
+  const [followState, setFollowState] = useState<FollowUiState>(
+    presetState ?? "none"
+  )
+  const [followsYou, setFollowsYou] = useState(
+    () => followsYouIds?.has(targetUserId) ?? false
   )
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    if (followingIds) {
-      setIsFollowing(followingIds.has(targetUserId))
+    const fromSets = stateFromSets(targetUserId, followingIds, requestedIds)
+    if (fromSets != null) {
+      setFollowState(fromSets)
+      setFollowsYou(followsYouIds?.has(targetUserId) ?? false)
       return
     }
 
     if (!currentUserId || currentUserId === targetUserId) {
-      setIsFollowing(false)
+      setFollowState("none")
+      setFollowsYou(false)
       return
     }
 
     let cancelled = false
 
-    async function loadFollowState() {
-      const { data } = await supabase
-        .from("followers")
-        .select("following_id")
-        .eq("follower_id", currentUserId)
-        .eq("following_id", targetUserId)
-        .maybeSingle()
+    void (async () => {
+      const snapshot = await loadFollowUiSnapshot(
+        supabase,
+        currentUserId,
+        targetUserId
+      )
+      if (!cancelled) {
+        setFollowState(snapshot.state)
+        setFollowsYou(snapshot.followsYou)
+      }
+    })()
 
-      if (!cancelled) setIsFollowing(!!data)
-    }
-
-    void loadFollowState()
     return () => {
       cancelled = true
     }
-  }, [currentUserId, targetUserId, followingIds])
+  }, [currentUserId, targetUserId, followingIds, requestedIds, followsYouIds])
 
-  if (!currentUserId || currentUserId === targetUserId) return null
-
-  async function handleClick(e: MouseEvent<HTMLButtonElement>) {
-    if (stopPropagation) e.stopPropagation()
-    if (busy) return
+  const handleUnfollowOrCancel = useCallback(async () => {
+    if (!currentUserId || busy) return
 
     setBusy(true)
 
-    if (isFollowing) {
-      const { error } = await supabase
-        .from("followers")
-        .delete()
-        .eq("follower_id", currentUserId)
-        .eq("following_id", targetUserId)
-      if (error) {
-        console.error("[follow] delete failed", error.message, error)
-        setBusy(false)
-        return
-      }
-      setIsFollowing(false)
-      onFollowingChange?.(targetUserId, false)
-      await removeFollowNotification(supabase, currentUserId, targetUserId)
-    } else {
-      const { error } = await supabase.from("followers").insert({
-        follower_id: currentUserId,
-        following_id: targetUserId,
-      })
-      if (error) {
-        console.error("[follow] insert failed", error.message, error)
-        setBusy(false)
-        return
-      }
-      setIsFollowing(true)
-      onFollowingChange?.(targetUserId, true)
-      await createFollowNotification(supabase, currentUserId, targetUserId)
+    const result = await unfollowOrCancelRequest(
+      supabase,
+      currentUserId,
+      targetUserId,
+      followState === "requested" ? "requested" : "following"
+    )
+
+    if (!result.ok) {
+      console.error("[follow] unfollow/cancel failed", result.message)
+      setBusy(false)
+      return
     }
 
+    setFollowState(result.state)
+    onFollowingChange?.(targetUserId, false)
+    onRequestedChange?.(targetUserId, false)
+    setBusy(false)
+  }, [
+    busy,
+    currentUserId,
+    followState,
+    onFollowingChange,
+    onRequestedChange,
+    targetUserId,
+  ])
+
+  if (!currentUserId || currentUserId === targetUserId) return null
+
+  const mutual = isMutualFollow(followState, followsYou)
+  const relationshipLabel = followRelationshipTriggerLabel(followState, followsYou)
+
+  async function handlePrimaryClick(e: MouseEvent<HTMLButtonElement>) {
+    if (stopPropagation) e.stopPropagation()
+    if (busy || followState === "following") return
+
+    if (followState === "requested") {
+      await handleUnfollowOrCancel()
+      return
+    }
+
+    setBusy(true)
+
+    const result = await followOrRequest(supabase, currentUserId, {
+      id: targetUserId,
+      is_private: targetIsPrivate,
+    })
+
+    if (!result.ok) {
+      console.error("[follow] request failed", result.message)
+      setBusy(false)
+      return
+    }
+
+    setFollowState(result.state)
+    onFollowingChange?.(targetUserId, result.state === "following")
+    onRequestedChange?.(targetUserId, result.state === "requested")
     setBusy(false)
   }
+
+  if (followState === "following" && relationshipLabel) {
+    const statusLabel = mutual ? "Friends ✓" : "Following ✓"
+
+    return (
+      <DropdownMenu
+        disabled={busy}
+        stopPropagation={stopPropagation}
+        className={className}
+        trigger={
+          <span className={`${FOLLOWING_BUTTON_CLASS} inline-flex items-center gap-1`}>
+            <span>{relationshipLabel}</span>
+            <span className="text-[10px] opacity-80" aria-hidden>
+              ▼
+            </span>
+          </span>
+        }
+        items={[
+          {
+            id: "status",
+            label: statusLabel,
+            disabled: true,
+          },
+          {
+            id: "unfollow",
+            label: "Unfollow",
+            onSelect: () => void handleUnfollowOrCancel(),
+          },
+          ...FOLLOW_RELATIONSHIP_FUTURE_MENU_ITEMS,
+        ]}
+      />
+    )
+  }
+
+  const label = followButtonLabel(followState, followsYou)
+  const buttonClass =
+    followState === "requested" ? FOLLOWING_BUTTON_CLASS : PRIMARY_BUTTON_CLASS
 
   return (
     <button
       type="button"
-      onClick={handleClick}
+      onClick={handlePrimaryClick}
       disabled={busy}
-      className={`shrink-0 rounded-md px-3 py-1 text-sm font-medium text-white transition disabled:opacity-50 ${
-        isFollowing
-          ? "bg-white/10 hover:bg-white/20"
-          : "bg-blue-500 hover:bg-blue-600"
-      } ${className}`}
+      className={`${buttonClass} ${className}`}
     >
-      {isFollowing ? "Following" : "Follow"}
+      {label}
     </button>
   )
 }

@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react"
@@ -23,6 +24,9 @@ type TradeSocialContextValue = {
   comments: any[]
   showComments: boolean
   setShowComments: (open: boolean | ((prev: boolean) => boolean)) => void
+  commentsExpanded: boolean
+  onRequestComments?: () => void
+  scrollToCommentsOnMount: boolean
   newComment: string
   setNewComment: (value: string) => void
   handleLike: () => Promise<void>
@@ -45,6 +49,11 @@ type TradeSocialProviderProps = {
   tradeOwnerUserId?: string | null | undefined
   /** Skip like/comment notification inserts (e.g. shared trades inside DMs). */
   suppressNotifications?: boolean
+  /** Always show comments (detail modal). */
+  commentsExpanded?: boolean
+  /** Card list: open detail modal instead of inline comments. */
+  onRequestComments?: () => void
+  scrollToCommentsOnMount?: boolean
   children: ReactNode
 }
 
@@ -53,6 +62,9 @@ export function TradeSocialProvider({
   currentUserId,
   tradeOwnerUserId,
   suppressNotifications = false,
+  commentsExpanded = false,
+  onRequestComments,
+  scrollToCommentsOnMount = false,
   children,
 }: TradeSocialProviderProps) {
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
@@ -328,6 +340,9 @@ export function TradeSocialProvider({
       comments,
       showComments,
       setShowComments,
+      commentsExpanded,
+      onRequestComments,
+      scrollToCommentsOnMount,
       newComment,
       setNewComment,
       handleLike,
@@ -341,6 +356,9 @@ export function TradeSocialProvider({
     liked,
     comments,
     showComments,
+    commentsExpanded,
+    onRequestComments,
+    scrollToCommentsOnMount,
     newComment,
     handleLike,
     handleComment,
@@ -362,8 +380,43 @@ export function TradeSocialEngagementBar({
 }: {
   className?: string
 }) {
-  const { liked, likes, comments, showComments, setShowComments, handleLike, currentUserId } =
-    useTradeSocial()
+  const {
+    tradeId,
+    liked,
+    likes,
+    comments,
+    showComments,
+    commentsExpanded,
+    onRequestComments,
+    setShowComments,
+    handleLike,
+    currentUserId,
+  } = useTradeSocial()
+
+  const handleCommentClick = useCallback(() => {
+    if (onRequestComments) {
+      onRequestComments()
+      return
+    }
+    if (commentsExpanded) {
+      document.getElementById(`trade-comments-${tradeId}`)?.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+      })
+      const input = document.querySelector<HTMLInputElement>(
+        `#trade-comments-${tradeId} input`
+      )
+      input?.focus()
+      return
+    }
+    setShowComments(!showComments)
+  }, [
+    commentsExpanded,
+    onRequestComments,
+    setShowComments,
+    showComments,
+    tradeId,
+  ])
 
   return (
     <div className={`flex items-center gap-4 text-sm ${className}`}>
@@ -386,9 +439,10 @@ export function TradeSocialEngagementBar({
         type="button"
         onClick={(e) => {
           e.stopPropagation()
-          setShowComments(!showComments)
+          handleCommentClick()
         }}
         className="text-gray-400 hover:text-gray-200"
+        aria-label="View comments"
       >
         💬 {comments.length}
       </button>
@@ -403,7 +457,10 @@ export function TradeSocialCommentsSection({
   className?: string
 }) {
   const {
+    tradeId,
     showComments,
+    commentsExpanded,
+    scrollToCommentsOnMount,
     comments,
     newComment,
     setNewComment,
@@ -411,10 +468,26 @@ export function TradeSocialCommentsSection({
     currentUserId,
   } = useTradeSocial()
 
-  if (!showComments) return null
+  const sectionRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!scrollToCommentsOnMount || !commentsExpanded) return
+    requestAnimationFrame(() => {
+      sectionRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+      })
+      const input = sectionRef.current?.querySelector("input")
+      if (input instanceof HTMLInputElement) input.focus()
+    })
+  }, [commentsExpanded, scrollToCommentsOnMount, tradeId])
+
+  if (!showComments && !commentsExpanded) return null
 
   return (
     <div
+      id={`trade-comments-${tradeId}`}
+      ref={sectionRef}
       className={`space-y-3 border-t border-white/10 mt-2 pt-3 ${className}`}
       onClick={(e) => e.stopPropagation()}
       onKeyDown={(e) => e.stopPropagation()}

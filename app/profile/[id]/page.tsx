@@ -3,7 +3,14 @@
 import Navbar from "../../components/Navbar"
 import AchievementCard from "../../components/AchievementCard"
 import type { ChangeEvent } from "react"
-import { Suspense, useCallback, useEffect, useRef, useState } from "react"
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 import { supabase } from "../../../lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
 import { normalizeTraderType } from "@/lib/traderType"
@@ -43,8 +50,8 @@ import { formatRR } from "@/lib/formatDisplay"
 import TradeCardTimingBlock from "../../components/TradeCardTimingBlock"
 import { formatEST } from "@/lib/formatEST"
 import { createUserRoom } from "@/lib/createUserRoom"
-import { createFollowNotification } from "@/lib/createFollowNotification"
-import { removeFollowNotification } from "@/lib/followNotifications"
+import { loadFollowUiSnapshot } from "@/lib/followActions"
+import FollowButton from "../../components/FollowButton"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import { logSupabaseError } from "@/lib/logSupabaseError"
 import { ensureDmConversation } from "@/lib/dmConversation"
@@ -141,6 +148,9 @@ function TradeCard({
   onDeleteTrade,
   showInteractions,
   onOpenDetail,
+  onOpenComments,
+  commentsExpanded = false,
+  scrollToCommentsOnMount = false,
   disableOpen,
 }: {
   trade: any
@@ -156,6 +166,9 @@ function TradeCard({
   onDeleteTrade?: () => void
   showInteractions?: boolean
   onOpenDetail?: () => void
+  onOpenComments?: () => void
+  commentsExpanded?: boolean
+  scrollToCommentsOnMount?: boolean
   disableOpen?: boolean
 }) {
   const imageSrc = postImageSrc(trade.image_url)
@@ -359,12 +372,17 @@ function TradeCard({
             tradeId={trade.id}
             currentUserId={trade.currentUserId}
             tradeOwnerUserId={trade.user_id}
+            commentsExpanded={commentsExpanded}
+            onRequestComments={commentsExpanded ? undefined : onOpenComments}
+            scrollToCommentsOnMount={scrollToCommentsOnMount}
           >
             <div className="border-t border-white/10 px-4 py-2">
               <TradeSocialEngagementBar />
             </div>
             <div className="space-y-3 px-4 pb-3">{tradeDetails}</div>
-            <TradeSocialCommentsSection className="px-4 pb-4" />
+            {commentsExpanded ? (
+              <TradeSocialCommentsSection className="px-4 pb-4" />
+            ) : null}
           </TradeSocialProvider>
         </div>
       ) : (
@@ -386,8 +404,9 @@ function PostCard({
   onDeletePost,
   showInteractions,
   onLike,
-  onToggleComments,
-  commentsOpen,
+  onOpenComments,
+  showCommentsPanel,
+  scrollToCommentsOnMount,
   likeMeta,
   comments,
   commentText,
@@ -408,8 +427,9 @@ function PostCard({
   onDeletePost?: () => void
   showInteractions?: boolean
   onLike?: () => void
-  onToggleComments?: () => void
-  commentsOpen?: boolean
+  onOpenComments?: () => void
+  showCommentsPanel?: boolean
+  scrollToCommentsOnMount?: boolean
   likeMeta?: { count: number; liked: boolean }
   comments?: any[]
   commentText?: string
@@ -420,6 +440,16 @@ function PostCard({
   disableOpen?: boolean
 }) {
   const imgSrc = profileWallImageSrc(post.image_url)
+
+  useEffect(() => {
+    if (!showCommentsPanel || !scrollToCommentsOnMount) return
+    requestAnimationFrame(() => {
+      const section = document.getElementById(`profile-post-comments-${post.id}`)
+      section?.scrollIntoView({ behavior: "smooth", block: "nearest" })
+      const input = section?.querySelector("input")
+      if (input instanceof HTMLInputElement) input.focus()
+    })
+  }, [post.id, scrollToCommentsOnMount, showCommentsPanel])
 
   return (
     <article
@@ -566,9 +596,10 @@ function PostCard({
               type="button"
               onClick={(e) => {
                 e.stopPropagation()
-                onToggleComments?.()
+                onOpenComments?.()
               }}
               className="text-gray-300 hover:text-white"
+              aria-label="View comments"
             >
               💬 {comments?.length ?? 0}
             </button>
@@ -576,9 +607,12 @@ function PostCard({
           <p className="px-1 pt-2 text-sm font-medium text-white">
             {(likeMeta?.count ?? 0).toLocaleString()} likes
           </p>
-          {commentsOpen ? (
-            <div className="mt-3 space-y-3">
-              <div className="max-h-36 space-y-1 overflow-y-auto text-sm text-gray-300">
+          {showCommentsPanel ? (
+            <div
+              id={`profile-post-comments-${post.id}`}
+              className="mt-3 space-y-3"
+            >
+              <div className="max-h-48 space-y-1 overflow-y-auto text-sm text-gray-300">
                 {(comments || []).map((c: any) => (
                   <p key={c.id}>
                     <span className="font-medium text-white">
@@ -664,7 +698,8 @@ function ProfilePageContent() {
     referral_code?: string | null
   } | null>(null)
   const [isFollowing, setIsFollowing] = useState(false)
-  const [followBusy, setFollowBusy] = useState(false)
+  const [isRequested, setIsRequested] = useState(false)
+  const [followsYou, setFollowsYou] = useState(false)
   const [messageBusy, setMessageBusy] = useState(false)
   const [creatingRoom, setCreatingRoom] = useState(false)
   const [room, setRoom] = useState<any | null>(null)
@@ -692,9 +727,8 @@ function ProfilePageContent() {
     null
   )
   const [creatingPost, setCreatingPost] = useState(false)
-  const [openCommentsState, setOpenComments] = useState<
-    Record<string, boolean>
-  >({})
+  const [postDetailFocusComments, setPostDetailFocusComments] = useState(false)
+  const [tradeDetailFocusComments, setTradeDetailFocusComments] = useState(false)
   const [likesByPost, setLikesByPost] = useState<
     Record<string, { count: number; liked: boolean }>
   >({})
@@ -1144,24 +1178,26 @@ function ProfilePageContent() {
       setFollowersCount(0)
       setFollowingCount(0)
       setIsFollowing(false)
+      setIsRequested(false)
+      setFollowsYou(false)
       setLoading(false)
       return
     }
 
     let following = false
+    let requested = false
+    let profileFollowsYou = false
     if (uid && uid !== prof.id) {
-      const { data: followRow } = await supabase
-        .from("followers")
-        .select("*")
-        .eq("follower_id", uid)
-        .eq("following_id", prof.id)
-        .maybeSingle()
-
-      following = !!followRow
+      const snapshot = await loadFollowUiSnapshot(supabase, uid, prof.id)
+      following = snapshot.state === "following"
+      requested = snapshot.state === "requested"
+      profileFollowsYou = snapshot.followsYou
     }
 
     setProfile(prof)
     setIsFollowing(following)
+    setIsRequested(requested)
+    setFollowsYou(profileFollowsYou)
 
     const { data: roomRow, error: roomError } = await supabase
       .from("rooms")
@@ -1207,63 +1243,6 @@ function ProfilePageContent() {
       const qs = searchParams.toString()
       router.replace(qs ? `${target}?${qs}` : target, { scroll: false })
     }
-  }
-
-  async function handleFollowToggle() {
-    if (!currentUserId || !profile || currentUserId === profile.id || followBusy)
-      return
-
-    setFollowBusy(true)
-
-    if (isFollowing) {
-      const { error } = await supabase
-        .from("followers")
-        .delete()
-        .eq("follower_id", currentUserId)
-        .eq("following_id", profile.id)
-
-      if (error) {
-        console.error("[follow] delete failed", error.message, error)
-        setFollowBusy(false)
-        return
-      }
-
-      setIsFollowing(false)
-      await removeFollowNotification(supabase, currentUserId, profile.id)
-      if (profile.is_private === true) {
-        setTrades([])
-        setPage(0)
-        setHasMore(false)
-      }
-    } else {
-      const { error } = await supabase.from("followers").insert({
-        follower_id: currentUserId,
-        following_id: profile.id,
-      })
-
-      if (error) {
-        console.error("[follow] insert failed", error.message, error)
-        setFollowBusy(false)
-        return
-      }
-
-      setIsFollowing(true)
-      await createFollowNotification(supabase, currentUserId, profile.id)
-      if (profile.is_private === true) {
-        setPage(0)
-        setHasMore(true)
-        await fetchTrades(profile.id, true)
-      }
-    }
-
-    const { count: followersN } = await supabase
-      .from("followers")
-      .select("*", { count: "exact", head: true })
-      .eq("following_id", profile.id)
-
-    setFollowersCount(followersN ?? 0)
-
-    setFollowBusy(false)
   }
 
   async function handleMessage() {
@@ -1561,14 +1540,6 @@ function ProfilePageContent() {
     }))
   }
 
-  const openComments = (id: string, type: "post" | "trade") => {
-    const key = `${type}:${id}`
-    setOpenComments((prev) => ({
-      ...prev,
-      [key]: !prev[key],
-    }))
-  }
-
   async function submitComment(id: string, type: "post" | "trade") {
     if (!currentUserId || type !== "post") return
     const key = String(id)
@@ -1702,6 +1673,55 @@ function ProfilePageContent() {
     setOpenTradeMenuId(null)
   }
 
+  const emptyFollowSet = useMemo(() => new Set<string>(), [])
+
+  const profileFollowingIds = useMemo(() => {
+    if (!profile?.id || !isFollowing) return emptyFollowSet
+    return new Set([profile.id])
+  }, [profile?.id, isFollowing, emptyFollowSet])
+
+  const profileRequestedIds = useMemo(() => {
+    if (!profile?.id || !isRequested) return emptyFollowSet
+    return new Set([profile.id])
+  }, [profile?.id, isRequested, emptyFollowSet])
+
+  const profileFollowsYouIds = useMemo(() => {
+    if (!profile?.id || !followsYou) return emptyFollowSet
+    return new Set([profile.id])
+  }, [profile?.id, followsYou, emptyFollowSet])
+
+  const handleProfileFollowingChange = useCallback(
+    async (_targetId: string, following: boolean) => {
+      setIsFollowing(following)
+      if (!profile) return
+
+      if (!following && profile.is_private === true) {
+        setTrades([])
+        setPage(0)
+        setHasMore(false)
+      } else if (following && profile.is_private === true) {
+        setPage(0)
+        setHasMore(true)
+        await fetchTrades(profile.id, true)
+      }
+
+      const { count: followersN } = await supabase
+        .from("followers")
+        .select("*", { count: "exact", head: true })
+        .eq("following_id", profile.id)
+
+      setFollowersCount(followersN ?? 0)
+    },
+    [profile]
+  )
+
+  const handleProfileRequestedChange = useCallback(
+    (_targetId: string, requested: boolean) => {
+      setIsRequested(requested)
+    },
+    []
+  )
+
   const canViewTrades =
     !!profile &&
     (profile.is_private !== true ||
@@ -1821,13 +1841,13 @@ function ProfilePageContent() {
   )
 
   const openProfilePostDeepLink = useCallback(
-    (postId: string) => {
+    (postId: string, focusComments = false) => {
       const wallPost = wallPosts.find((row) => String(row.id) === postId)
       if (!wallPost) return false
 
       setActiveTab("posts")
+      setPostDetailFocusComments(focusComments)
       setSelectedPostDetail(wallPost)
-      scrollToProfileTarget(`post-${postId}`)
       clearProfileQueryParams()
       return true
     },
@@ -1852,7 +1872,7 @@ function ProfilePageContent() {
 
     void (async () => {
       if (postParam) {
-        if (!openProfilePostDeepLink(postParam)) {
+        if (!openProfilePostDeepLink(postParam, openComments)) {
           await openFeedPostDeepLink(postParam, openComments)
         }
         return
@@ -2253,18 +2273,17 @@ function ProfilePageContent() {
 
                       {currentUserId && currentUserId !== profile.id && (
                         <div className="flex w-full flex-wrap items-center justify-center gap-2 sm:w-auto sm:justify-start">
-                          <button
-                            type="button"
-                            onClick={handleFollowToggle}
-                            disabled={followBusy}
-                            className={`rounded-md px-3 py-1 text-sm font-medium text-white disabled:opacity-50 ${
-                              isFollowing
-                                ? "bg-red-500 hover:bg-red-600"
-                                : "bg-blue-500 hover:bg-blue-600"
-                            }`}
-                          >
-                            {isFollowing ? "Unfollow" : "Follow"}
-                          </button>
+                          <FollowButton
+                            targetUserId={profile.id}
+                            currentUserId={currentUserId}
+                            targetIsPrivate={profile.is_private}
+                            followingIds={profileFollowingIds}
+                            requestedIds={profileRequestedIds}
+                            followsYouIds={profileFollowsYouIds}
+                            onFollowingChange={handleProfileFollowingChange}
+                            onRequestedChange={handleProfileRequestedChange}
+                            stopPropagation={false}
+                          />
 
                           <button
                             type="button"
@@ -2555,9 +2574,14 @@ function ProfilePageContent() {
                         onSaveTrade={() => void handleSaveTrade(String(trade.id))}
                         onDeleteTrade={() => void handleDeleteTrade(String(trade.id))}
                         showInteractions={true}
-                        onOpenDetail={() =>
+                        onOpenDetail={() => {
+                          setTradeDetailFocusComments(false)
                           setSelectedTradeDetail({ ...trade, currentUserId })
-                        }
+                        }}
+                        onOpenComments={() => {
+                          setTradeDetailFocusComments(true)
+                          setSelectedTradeDetail({ ...trade, currentUserId })
+                        }}
                       />
                       </div>
                     ))}
@@ -2608,8 +2632,14 @@ function ProfilePageContent() {
                           onDeletePost={() => void handleDeletePost(key)}
                           showInteractions={true}
                           onLike={() => void handleLike(key, "post")}
-                          onToggleComments={() => openComments(key, "post")}
-                          commentsOpen={!!openCommentsState[`post:${key}`]}
+                          onOpenComments={() => {
+                            setPostDetailFocusComments(true)
+                            setSelectedPostDetail(post)
+                          }}
+                          onOpenDetail={() => {
+                            setPostDetailFocusComments(false)
+                            setSelectedPostDetail(post)
+                          }}
                           likeMeta={
                             likesByPost[key] || { count: 0, liked: false }
                           }
@@ -2620,7 +2650,6 @@ function ProfilePageContent() {
                           }
                           onCommentSubmit={() => void submitComment(key, "post")}
                           commentSubmitting={!!commentSubmitting[key]}
-                          onOpenDetail={() => setSelectedPostDetail(post)}
                         />
                         </div>
                       )
@@ -3077,7 +3106,10 @@ function ProfilePageContent() {
         <div
           className="fixed inset-0 z-[205] flex items-center justify-center bg-black/75 p-3 backdrop-blur-md sm:p-4"
           role="presentation"
-          onClick={() => setSelectedTradeDetail(null)}
+          onClick={() => {
+            setSelectedTradeDetail(null)
+            setTradeDetailFocusComments(false)
+          }}
         >
           <div
             className="relative max-h-[92vh] w-full max-w-2xl overflow-y-auto"
@@ -3088,7 +3120,10 @@ function ProfilePageContent() {
           >
             <button
               type="button"
-              onClick={() => setSelectedTradeDetail(null)}
+              onClick={() => {
+            setSelectedTradeDetail(null)
+            setTradeDetailFocusComments(false)
+          }}
               className="absolute right-2 top-2 z-10 rounded-md bg-black/50 px-2 py-1 text-sm text-white hover:bg-black/70"
               aria-label="Close trade details"
             >
@@ -3116,6 +3151,8 @@ function ProfilePageContent() {
               onSaveTrade={() => void handleSaveTrade(String(selectedTradeDetail.id))}
               onDeleteTrade={() => void handleDeleteTrade(String(selectedTradeDetail.id))}
               showInteractions={true}
+              commentsExpanded
+              scrollToCommentsOnMount={tradeDetailFocusComments}
               disableOpen
             />
           </div>
@@ -3126,7 +3163,10 @@ function ProfilePageContent() {
         <div
           className="fixed inset-0 z-[205] flex items-center justify-center bg-black/75 p-3 backdrop-blur-md sm:p-4"
           role="presentation"
-          onClick={() => setSelectedPostDetail(null)}
+          onClick={() => {
+            setSelectedPostDetail(null)
+            setPostDetailFocusComments(false)
+          }}
         >
           <div
             className="relative max-h-[92vh] w-full max-w-2xl overflow-y-auto"
@@ -3137,7 +3177,10 @@ function ProfilePageContent() {
           >
             <button
               type="button"
-              onClick={() => setSelectedPostDetail(null)}
+              onClick={() => {
+            setSelectedPostDetail(null)
+            setPostDetailFocusComments(false)
+          }}
               className="absolute right-2 top-2 z-10 rounded-md bg-black/50 px-2 py-1 text-sm text-white hover:bg-black/70"
               aria-label="Close post details"
             >
@@ -3166,8 +3209,18 @@ function ProfilePageContent() {
               onDeletePost={() => void handleDeletePost(String(selectedPostDetail.id))}
               showInteractions={true}
               onLike={() => void handleLike(String(selectedPostDetail.id), "post")}
-              onToggleComments={() => openComments(String(selectedPostDetail.id), "post")}
-              commentsOpen={!!openCommentsState[`post:${String(selectedPostDetail.id)}`]}
+              showCommentsPanel
+              scrollToCommentsOnMount={postDetailFocusComments}
+              onOpenComments={() => {
+                setPostDetailFocusComments(true)
+                requestAnimationFrame(() => {
+                  document
+                    .getElementById(
+                      `profile-post-comments-${selectedPostDetail.id}`
+                    )
+                    ?.scrollIntoView({ behavior: "smooth", block: "nearest" })
+                })
+              }}
               likeMeta={likesByPost[String(selectedPostDetail.id)] || { count: 0, liked: false }}
               comments={commentsByPost[String(selectedPostDetail.id)] || []}
               commentText={commentDraft[String(selectedPostDetail.id)] || ""}

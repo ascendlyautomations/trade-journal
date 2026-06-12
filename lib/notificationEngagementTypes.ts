@@ -4,6 +4,7 @@ export const NOTIFICATION_ENGAGEMENT_TYPES = [
   "comment",
   "room_join",
   "follow",
+  "follow_request",
 ] as const
 
 export type NotificationEngagementType =

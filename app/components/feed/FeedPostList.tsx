@@ -14,9 +14,8 @@ type FeedPostListProps = {
   commentsByPost: Record<string, any[]>
   commentSubmitting: Record<string, boolean>
   draftSyncRef: MutableRefObject<Record<string, string>>
-  openCommentsRef: MutableRefObject<Record<string, boolean>>
-  activeDetailPostId?: string | null
   onSelectPost: (post: any) => void
+  onOpenComments: (post: any) => void
   onToggleLike: (post: any) => void
   onSubmitComment: (post: any, text: string) => Promise<boolean>
   onSharePost: (post: any) => void
@@ -29,9 +28,8 @@ function FeedPostList({
   commentsByPost,
   commentSubmitting,
   draftSyncRef,
-  openCommentsRef,
-  activeDetailPostId = null,
   onSelectPost,
+  onOpenComments,
   onToggleLike,
   onSubmitComment,
   onSharePost,
@@ -49,9 +47,8 @@ function FeedPostList({
             comments={commentsByPost[pid] ?? EMPTY_COMMENTS}
             commentSubmitting={!!commentSubmitting[pid]}
             draftSyncRef={draftSyncRef}
-            openCommentsRef={openCommentsRef}
-            detailOpen={activeDetailPostId === pid}
             onSelectPost={onSelectPost}
+            onOpenComments={onOpenComments}
             onToggleLike={onToggleLike}
             onSubmitComment={onSubmitComment}
             onSharePost={onSharePost}

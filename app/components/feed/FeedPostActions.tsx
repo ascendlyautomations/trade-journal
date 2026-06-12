@@ -9,9 +9,8 @@ type FeedPostActionsProps = {
   user: any
   comments: any[]
   likeMeta: FeedLikeMeta
-  commentsOpen: boolean
   onToggleLike: (post: any) => void
-  onToggleComments: () => void
+  onOpenComments: () => void
   onSharePost: (post: any) => void
 }
 
@@ -20,9 +19,8 @@ function FeedPostActions({
   user,
   comments,
   likeMeta,
-  commentsOpen,
   onToggleLike,
-  onToggleComments,
+  onOpenComments,
   onSharePost,
 }: FeedPostActionsProps) {
   return (
@@ -33,9 +31,8 @@ function FeedPostActions({
           user={user}
           comments={comments}
           likeMeta={likeMeta}
-          commentsOpen={commentsOpen}
           onToggleLike={onToggleLike}
-          onToggleComments={(_postId) => onToggleComments()}
+          onOpenComments={(_postId) => onOpenComments()}
           onSharePost={onSharePost}
           stopPropagation
         />

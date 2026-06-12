@@ -10,11 +10,11 @@ type PostInteractionsBaseProps = {
   user: any
   comments: any[]
   likeMeta: LikeMeta
-  commentsOpen: boolean
-  commentValue: string
-  commentSubmitting: boolean
+  commentsOpen?: boolean
+  commentValue?: string
+  commentSubmitting?: boolean
   onToggleLike: (post: any) => void
-  onToggleComments: (postId: string) => void
+  onOpenComments: (postId: string) => void
   onCommentChange: (postId: string, value: string) => void
   onSubmitComment: (post: any) => void
   onSharePost?: (post: any) => void
@@ -35,9 +35,8 @@ export function PostInteractionsEngagement({
   user,
   comments,
   likeMeta,
-  commentsOpen,
   onToggleLike,
-  onToggleComments,
+  onOpenComments,
   onSharePost,
   stopPropagation = false,
   className = "",
@@ -65,10 +64,10 @@ export function PostInteractionsEngagement({
           type="button"
           onClick={(e) => {
             if (stopPropagation) e.stopPropagation()
-            onToggleComments(pid)
+            onOpenComments(pid)
           }}
           className="flex items-center justify-center w-9 h-9 rounded-lg bg-white/5 hover:bg-white/10 transition text-gray-300 hover:text-white"
-          aria-label={commentsOpen ? "Hide comments" : "View comments"}
+          aria-label="View comments"
         >
           <div className="flex items-center gap-1">
             <span aria-hidden>💬</span>
@@ -112,9 +111,9 @@ export function PostInteractionsComments({
   post,
   user,
   comments,
-  commentsOpen,
-  commentValue,
-  commentSubmitting,
+  commentsOpen = false,
+  commentValue = "",
+  commentSubmitting = false,
   onCommentChange,
   onSubmitComment,
   stopPropagation = false,
@@ -198,10 +197,12 @@ export function PostInteractionsComments({
 
 type PostInteractionsProps = PostInteractionsBaseProps & {
   className?: string
+  commentsOpen?: boolean
 }
 
 export default function PostInteractions({
   className = "",
+  commentsOpen = true,
   ...rest
 }: PostInteractionsProps) {
   const outerClass =
@@ -210,7 +211,7 @@ export default function PostInteractions({
   return (
     <div className={outerClass} {...guard(rest.stopPropagation ?? false)}>
       <PostInteractionsEngagement {...rest} />
-      <PostInteractionsComments {...rest} />
+      <PostInteractionsComments {...rest} commentsOpen={commentsOpen} />
     </div>
   )
 }

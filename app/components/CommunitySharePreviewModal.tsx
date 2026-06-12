@@ -88,9 +88,9 @@ export default function CommunitySharePreviewModal({
             likeMeta={EMPTY_LIKE_META}
             comments={EMPTY_COMMENTS}
             commentSubmitting={false}
-            detailOpen
             preview
             onSelectPost={() => {}}
+            onOpenComments={() => {}}
             onToggleLike={() => {}}
             onSubmitComment={async () => false}
             onSharePost={() => {}}

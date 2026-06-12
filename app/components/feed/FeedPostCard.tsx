@@ -1,6 +1,6 @@
 "use client"
 
-import { memo, useCallback, useEffect, useMemo, useState, type MutableRefObject } from "react"
+import { memo, useCallback, useMemo, type MutableRefObject } from "react"
 import { formatEST } from "@/lib/formatEST"
 import {
   getModeStyles,
@@ -11,7 +11,6 @@ import {
 } from "./feedPostHelpers"
 import FeedPostActions from "./FeedPostActions"
 import FeedPostBody from "./FeedPostBody"
-import FeedCommentsSection from "./FeedCommentsSection"
 import FeedPostHeader from "./FeedPostHeader"
 import FeedPostScreenshot from "./FeedPostScreenshot"
 
@@ -27,11 +26,10 @@ export type FeedPostCardProps = {
   comments?: any[]
   commentSubmitting: boolean
   draftSyncRef?: MutableRefObject<Record<string, string>>
-  openCommentsRef?: MutableRefObject<Record<string, boolean>>
-  detailOpen?: boolean
   /** Read-only preview: no post detail navigation. */
   preview?: boolean
   onSelectPost: (post: any) => void
+  onOpenComments: (post: any) => void
   onToggleLike: (post: any) => void
   onSubmitComment: (post: any, text: string) => Promise<boolean>
   onSharePost: (post: any) => void
@@ -42,36 +40,18 @@ function FeedPostCard({
   user,
   likeMeta = EMPTY_LIKE_META,
   comments = EMPTY_COMMENTS,
-  commentSubmitting,
-  draftSyncRef,
-  openCommentsRef,
-  detailOpen = false,
+  commentSubmitting: _commentSubmitting,
+  draftSyncRef: _draftSyncRef,
   preview = false,
   onSelectPost,
+  onOpenComments,
   onToggleLike,
-  onSubmitComment,
+  onSubmitComment: _onSubmitComment,
   onSharePost,
 }: FeedPostCardProps) {
-  const pid = String(post.id)
-  const [commentsOpen, setCommentsOpen] = useState(
-    () => !!openCommentsRef?.current[pid]
-  )
-
-  const handleToggleComments = useCallback(() => {
-    setCommentsOpen((prev) => {
-      const next = !prev
-      if (openCommentsRef) {
-        openCommentsRef.current[pid] = next
-      }
-      return next
-    })
-  }, [openCommentsRef, pid])
-
-  useEffect(() => {
-    if (!detailOpen && openCommentsRef) {
-      setCommentsOpen(!!openCommentsRef.current[pid])
-    }
-  }, [detailOpen, openCommentsRef, pid])
+  const handleOpenComments = useCallback(() => {
+    onOpenComments(post)
+  }, [onOpenComments, post])
 
   const handleArticleClick = useCallback(() => {
     onSelectPost(post)
@@ -139,9 +119,8 @@ function FeedPostCard({
         user={user}
         comments={comments}
         likeMeta={likeMeta}
-        commentsOpen={commentsOpen}
         onToggleLike={onToggleLike}
-        onToggleComments={handleToggleComments}
+        onOpenComments={handleOpenComments}
         onSharePost={onSharePost}
       />
 
@@ -158,17 +137,6 @@ function FeedPostCard({
         timingTrade={tradeRow}
         createdAtLabel={createdAtLabel}
       />
-
-      {commentsOpen && !detailOpen ? (
-        <FeedCommentsSection
-          post={post}
-          user={user}
-          comments={comments}
-          commentSubmitting={commentSubmitting}
-          draftSyncRef={draftSyncRef}
-          onSubmitComment={onSubmitComment}
-        />
-      ) : null}
     </article>
   )
 }

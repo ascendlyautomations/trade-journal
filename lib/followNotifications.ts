@@ -54,6 +54,36 @@ export async function removeFollowNotification(
   return true
 }
 
+/** Remove follow-request notification when the pending request is cancelled. */
+export async function removeFollowRequestNotification(
+  supabase: SupabaseClient,
+  requesterId: string,
+  targetId: string
+): Promise<boolean> {
+  if (!requesterId || !targetId || requesterId === targetId) return false
+
+  const res = await authFetch(supabase, "/api/notifications/follow-request", {
+    method: "DELETE",
+    body: JSON.stringify({ targetId }),
+  })
+
+  if (!res) return false
+
+  if (!res.ok) {
+    const body = await res.text()
+    console.error("[follow-request] notification remove failed", {
+      requesterId,
+      targetId,
+      status: res.status,
+      body,
+    })
+    return false
+  }
+
+  window.dispatchEvent(new CustomEvent("tj-unread-notifications-refresh"))
+  return true
+}
+
 /** Delete all engagement notifications for the signed-in user. */
 export async function clearAllNotifications(
   supabase: SupabaseClient

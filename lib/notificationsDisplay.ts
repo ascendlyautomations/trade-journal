@@ -60,6 +60,16 @@ export type FollowNotificationGroup = {
   totalFollows: number
 }
 
+export type FollowRequestNotificationGroup = {
+  kind: "follow_request_group"
+  key: string
+  notificationIds: string[]
+  read: boolean
+  latestAt: string
+  senderIds: string[]
+  totalRequests: number
+}
+
 export type RoomJoinNotificationItem = {
   kind: "room_join"
   notification: NotificationRecord
@@ -69,6 +79,7 @@ export type GroupedNotificationCard =
   | LikeNotificationGroup
   | CommentNotificationGroup
   | FollowNotificationGroup
+  | FollowRequestNotificationGroup
   | RoomJoinNotificationItem
 
 /** @deprecated Use GroupedNotificationCard */
@@ -190,6 +201,31 @@ export function formatCommentGroupTitle(
   return `${n} people commented on your ${noun}`
 }
 
+export function formatFollowRequestGroupMessage(
+  names: string[],
+  totalRequests: number
+): string {
+  const ordered = names.filter(Boolean)
+  if (totalRequests <= 0) return "Someone requested to follow you"
+  if (totalRequests === 1) {
+    return `${ordered[0] ?? "Someone"} requested to follow you`
+  }
+  if (totalRequests === 2) {
+    const second = ordered[1] ?? "someone else"
+    return `${ordered[0] ?? "Someone"} and ${second} requested to follow you`
+  }
+  if (ordered.length >= 2) {
+    const others = totalRequests - 2
+    return `${ordered[0]}, ${ordered[1]} and ${others} other${
+      others === 1 ? "" : "s"
+    } requested to follow you`
+  }
+  const others = totalRequests - 1
+  return `${ordered[0] ?? "Someone"} and ${others} other${
+    others === 1 ? "" : "s"
+  } requested to follow you`
+}
+
 export function formatFollowGroupMessage(
   names: string[],
   totalFollows: number
@@ -268,6 +304,43 @@ export function followRollingBucketKey(iso: string, now = Date.now()): number {
   return Math.floor(age / DAY_MS)
 }
 
+export function groupFollowRequestNotifications(
+  rows: NotificationRecord[],
+  now = Date.now()
+): FollowRequestNotificationGroup[] {
+  const byBucket = new Map<number, NotificationRecord[]>()
+
+  for (const row of rows) {
+    const bucket = followRollingBucketKey(row.created_at, now)
+    const list = byBucket.get(bucket) ?? []
+    list.push(row)
+    byBucket.set(bucket, list)
+  }
+
+  return Array.from(byBucket.entries()).map(([bucket, list]) => {
+    const sorted = [...list].sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    )
+    const latest = sorted[0]
+    const senderIds: string[] = []
+    for (const row of sorted) {
+      if (!row.sender_id || senderIds.includes(row.sender_id)) continue
+      senderIds.push(row.sender_id)
+    }
+
+    return {
+      kind: "follow_request_group",
+      key: `follow_request:bucket:${bucket}`,
+      notificationIds: sorted.map((row) => row.id),
+      read: sorted.every((row) => row.read),
+      latestAt: latest.created_at,
+      senderIds,
+      totalRequests: sorted.length,
+    }
+  })
+}
+
 export function groupFollowNotifications(
   rows: NotificationRecord[],
   now = Date.now()
@@ -312,12 +385,14 @@ export function buildGroupedNotificationCards(
   const likes = rows.filter((row) => row.type === "like")
   const comments = rows.filter((row) => row.type === "comment")
   const follows = rows.filter((row) => row.type === "follow")
+  const followRequests = rows.filter((row) => row.type === "follow_request")
   const roomJoins = rows.filter((row) => row.type === "room_join")
 
   const cards: GroupedNotificationCard[] = [
     ...groupLikeNotifications(likes),
     ...groupCommentNotifications(comments),
     ...groupFollowNotifications(follows, now),
+    ...groupFollowRequestNotifications(followRequests, now),
     ...roomJoins.map(
       (notification): RoomJoinNotificationItem => ({
         kind: "room_join",
@@ -345,7 +420,10 @@ export function filterGroupedCardsByTab(
     case "comments":
       return cards.filter((card) => card.kind === "comment_group")
     case "followers":
-      return cards.filter((card) => card.kind === "follow_group")
+      return cards.filter(
+        (card) =>
+          card.kind === "follow_group" || card.kind === "follow_request_group"
+      )
     default:
       return cards
   }
@@ -526,6 +604,15 @@ export function getGroupedNotificationHref(
   if (card.kind === "follow_group") {
     const base = profilePath(owner)
     return `${base}?followers=1`
+  }
+
+  if (card.kind === "follow_request_group") {
+    const senderId = card.senderIds[0]
+    if (senderId) {
+      const sender = sendersById[senderId]
+      return profilePath({ id: senderId, username: sender?.username })
+    }
+    return profilePath(owner)
   }
 
   const n = card.notification

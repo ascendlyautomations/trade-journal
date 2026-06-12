@@ -5,6 +5,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { supabase } from "../../lib/supabaseClient"
 import Navbar from "../components/Navbar"
+import FollowRequestsPanel from "../components/FollowRequestsPanel"
 import EmptyState from "../components/ui/EmptyState"
 import Modal from "../components/ui/Modal"
 import { clearAllNotifications, dismissNotifications } from "@/lib/followNotifications"
@@ -16,6 +17,7 @@ import {
   filterGroupedCardsByTab,
   formatCommentGroupTitle,
   formatFollowGroupMessage,
+  formatFollowRequestGroupMessage,
   formatLikeGroupMessage,
   formatRoomJoinMessage,
   getGroupedNotificationHref,
@@ -97,6 +99,7 @@ function cardStableKey(card: GroupedNotificationCard): string {
     case "comment_group":
       return `comment:${card.key}`
     case "follow_group":
+    case "follow_request_group":
       return card.key
     case "room_join":
       return `room_join:${card.notification.id}`
@@ -174,6 +177,35 @@ function GroupedNotificationCardView({
       .slice(0, 2)
       .map((id) => senderDisplayName(sendersById[id]))
     title = formatFollowGroupMessage(names, card.totalFollows)
+    expandedContent = (
+      <ul className="mt-2 space-y-1.5 border-t border-white/10 pt-2">
+        {card.senderIds.map((id) => {
+          const sender = sendersById[id]
+          return (
+            <li
+              key={id}
+              className="flex items-center gap-2 text-xs text-gray-200"
+            >
+              <img
+                src={sender?.avatar_url || "/default-avatar.png"}
+                alt=""
+                className="h-6 w-6 rounded-full object-cover ring-1 ring-white/10"
+                onError={(e) => {
+                  e.currentTarget.src = "/default-avatar.png"
+                }}
+              />
+              {senderDisplayName(sender)}
+            </li>
+          )
+        })}
+      </ul>
+    )
+  } else if (card.kind === "follow_request_group") {
+    expandable = true
+    const names = card.senderIds
+      .slice(0, 2)
+      .map((id) => senderDisplayName(sendersById[id]))
+    title = formatFollowRequestGroupMessage(names, card.totalRequests)
     expandedContent = (
       <ul className="mt-2 space-y-1.5 border-t border-white/10 pt-2">
         {card.senderIds.map((id) => {
@@ -283,7 +315,13 @@ function GroupedNotificationCardView({
               onClick={onNavigate}
               className="text-xs font-medium text-blue-300 hover:text-blue-200"
             >
-              View{card.kind === "follow_group" ? " followers" : ""} →
+              View
+              {card.kind === "follow_group"
+                ? " followers"
+                : card.kind === "follow_request_group"
+                  ? " profile"
+                  : ""}{" "}
+              →
             </button>
           ) : null}
         </div>
@@ -309,6 +347,7 @@ export default function NotificationsPage() {
   const router = useRouter()
   const [userId, setUserId] = useState<string | null>(null)
   const [ownerUsername, setOwnerUsername] = useState<string | null>(null)
+  const [ownerIsPrivate, setOwnerIsPrivate] = useState<boolean | null>(null)
   const [notifications, setNotifications] = useState<NotificationRecord[]>([])
   const [sendersById, setSendersById] = useState<Record<string, SenderProfile>>(
     {}
@@ -333,14 +372,28 @@ export default function NotificationsPage() {
       }
       setUserId(data.user.id)
 
-      const { data: ownProfile } = await supabase
+      const { data: ownProfile, error: profileError } = await supabase
         .from("profiles")
-        .select("username")
+        .select("username, is_private")
         .eq("id", data.user.id)
         .maybeSingle()
 
       if (!cancelled) {
         setOwnerUsername(ownProfile?.username ?? null)
+        setOwnerIsPrivate(ownProfile?.is_private === true)
+        console.info("[follow-requests] owner profile loaded", {
+          userId: data.user.id,
+          profileExists: Boolean(ownProfile),
+          is_private: ownProfile?.is_private ?? null,
+          profileError: profileError
+            ? {
+                code: profileError.code,
+                message: profileError.message,
+                details: profileError.details,
+                hint: profileError.hint,
+              }
+            : null,
+        })
       }
     }
 
@@ -425,10 +478,36 @@ export default function NotificationsPage() {
     [groupedCards]
   )
 
+  const showFollowRequestsPanel = Boolean(
+    userId &&
+      ownerIsPrivate === true &&
+      (activeTab === "all" || activeTab === "followers")
+  )
+
+  useEffect(() => {
+    console.info("[follow-requests] panel mount decision", {
+      userId,
+      profileIsPrivate: ownerIsPrivate,
+      activeTab,
+      mounted: showFollowRequestsPanel,
+      reason: !userId
+        ? "no_user"
+        : ownerIsPrivate === null
+          ? "profile_not_loaded"
+          : ownerIsPrivate === false
+            ? "not_private_account"
+            : activeTab !== "all" && activeTab !== "followers"
+              ? "tab_not_followers"
+              : "mounted",
+    })
+  }, [userId, ownerIsPrivate, activeTab, showFollowRequestsPanel])
+
   const tabCounts = useMemo(() => {
     const likes = groupedCards.filter((c) => c.kind === "like_group").length
     const comments = groupedCards.filter((c) => c.kind === "comment_group").length
-    const followers = groupedCards.filter((c) => c.kind === "follow_group").length
+    const followers = groupedCards.filter(
+      (c) => c.kind === "follow_group" || c.kind === "follow_request_group"
+    ).length
     return { all: groupedCards.length, likes, comments, followers }
   }, [groupedCards])
 
@@ -616,6 +695,14 @@ export default function NotificationsPage() {
               })}
             </div>
           </div>
+
+          {showFollowRequestsPanel && userId ? (
+            <FollowRequestsPanel
+              userId={userId}
+              isPrivate={ownerIsPrivate === true}
+              onResolved={() => void fetchNotifications()}
+            />
+          ) : null}
 
           {hasAnyItems ? (
             <div className="flex flex-wrap gap-2">
