@@ -31,12 +31,56 @@ export type LikeNotificationGroup = {
   totalLikes: number
 }
 
+export type CommentNotificationEntry = {
+  id: string
+  senderId: string | null
+  content: string | null
+  created_at: string
+}
+
+export type CommentNotificationGroup = {
+  kind: "comment_group"
+  key: string
+  post_id: string | null
+  trade_id: string | null
+  notificationIds: string[]
+  read: boolean
+  latestAt: string
+  comments: CommentNotificationEntry[]
+  totalComments: number
+}
+
+export type FollowNotificationGroup = {
+  kind: "follow_group"
+  key: string
+  notificationIds: string[]
+  read: boolean
+  latestAt: string
+  senderIds: string[]
+  totalFollows: number
+}
+
+export type RoomJoinNotificationItem = {
+  kind: "room_join"
+  notification: NotificationRecord
+}
+
+export type GroupedNotificationCard =
+  | LikeNotificationGroup
+  | CommentNotificationGroup
+  | FollowNotificationGroup
+  | RoomJoinNotificationItem
+
+/** @deprecated Use GroupedNotificationCard */
 export type SingleNotificationItem = {
   kind: "single"
   notification: NotificationRecord
 }
 
+/** @deprecated Use GroupedNotificationCard */
 export type NotificationListItem = LikeNotificationGroup | SingleNotificationItem
+
+export type NotificationCenterTab = "all" | "likes" | "comments" | "followers"
 
 export type TimeSection = "today" | "yesterday" | "earlier"
 
@@ -53,29 +97,43 @@ export function senderDisplayName(
   )
 }
 
+export type EngagementTarget = "post" | "trade"
+
+export function engagementTarget(
+  postId: string | null | undefined,
+  tradeId: string | null | undefined
+): EngagementTarget {
+  if (postId != null && String(postId).trim() !== "") return "post"
+  if (tradeId != null && String(tradeId).trim() !== "") return "trade"
+  return "post"
+}
+
 export function formatLikeGroupMessage(
   names: string[],
-  totalLikes: number
+  totalLikes: number,
+  postId?: string | null,
+  tradeId?: string | null
 ): string {
+  const noun = engagementTarget(postId, tradeId)
   const ordered = names.filter(Boolean)
-  if (totalLikes <= 0) return "Someone liked your post"
+  if (totalLikes <= 0) return `Someone liked your ${noun}`
   if (totalLikes === 1) {
-    return `${ordered[0] ?? "Someone"} liked your post`
+    return `${ordered[0] ?? "Someone"} liked your ${noun}`
   }
   if (totalLikes === 2) {
     const second = ordered[1] ?? "someone else"
-    return `${ordered[0] ?? "Someone"} and ${second} liked your post`
+    return `${ordered[0] ?? "Someone"} and ${second} liked your ${noun}`
   }
   if (ordered.length >= 2) {
     const others = totalLikes - 2
     return `${ordered[0]}, ${ordered[1]} and ${others} other${
       others === 1 ? "" : "s"
-    } liked your post`
+    } liked your ${noun}`
   }
   const others = totalLikes - 1
   return `${ordered[0] ?? "Someone"} and ${others} other${
     others === 1 ? "" : "s"
-  } liked your post`
+  } liked your ${noun}`
 }
 
 export function groupLikeNotifications(
@@ -120,6 +178,179 @@ export function groupLikeNotifications(
   })
 }
 
+export function formatCommentGroupTitle(
+  totalComments: number,
+  postId?: string | null,
+  tradeId?: string | null
+): string {
+  const noun = engagementTarget(postId, tradeId)
+  const n = Math.max(0, totalComments)
+  if (n === 0) return `Someone commented on your ${noun}`
+  if (n === 1) return `1 person commented on your ${noun}`
+  return `${n} people commented on your ${noun}`
+}
+
+export function formatFollowGroupMessage(
+  names: string[],
+  totalFollows: number
+): string {
+  const ordered = names.filter(Boolean)
+  if (totalFollows <= 0) return "Someone followed you"
+  if (totalFollows === 1) {
+    return `${ordered[0] ?? "Someone"} followed you`
+  }
+  if (totalFollows === 2) {
+    const second = ordered[1] ?? "someone else"
+    return `${ordered[0] ?? "Someone"} and ${second} followed you`
+  }
+  if (ordered.length >= 2) {
+    const others = totalFollows - 2
+    return `${ordered[0]}, ${ordered[1]} and ${others} other${
+      others === 1 ? "" : "s"
+    } followed you`
+  }
+  const others = totalFollows - 1
+  return `${ordered[0] ?? "Someone"} and ${others} other${
+    others === 1 ? "" : "s"
+  } followed you`
+}
+
+function engagementGroupKey(row: NotificationRecord): string {
+  if (row.post_id) return `post:${row.post_id}`
+  if (row.trade_id) return `trade:${row.trade_id}`
+  return `row:${row.id}`
+}
+
+export function groupCommentNotifications(
+  rows: NotificationRecord[]
+): CommentNotificationGroup[] {
+  const byKey = new Map<string, NotificationRecord[]>()
+
+  for (const row of rows) {
+    const key = engagementGroupKey(row)
+    const bucket = byKey.get(key) ?? []
+    bucket.push(row)
+    byKey.set(key, bucket)
+  }
+
+  return Array.from(byKey.entries()).map(([key, bucket]) => {
+    const sorted = [...bucket].sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    )
+    const latest = sorted[0]
+
+    return {
+      kind: "comment_group",
+      key,
+      post_id: latest.post_id,
+      trade_id: latest.trade_id,
+      notificationIds: sorted.map((row) => row.id),
+      read: sorted.every((row) => row.read),
+      latestAt: latest.created_at,
+      totalComments: sorted.length,
+      comments: sorted.map((row) => ({
+        id: row.id,
+        senderId: row.sender_id,
+        content: row.content,
+        created_at: row.created_at,
+      })),
+    }
+  })
+}
+
+/** Rolling 24h bucket index from now (0 = within last 24h). */
+export function followRollingBucketKey(iso: string, now = Date.now()): number {
+  const t = new Date(iso).getTime()
+  if (!Number.isFinite(t)) return Number.MAX_SAFE_INTEGER
+  const age = now - t
+  if (age < 0) return 0
+  return Math.floor(age / DAY_MS)
+}
+
+export function groupFollowNotifications(
+  rows: NotificationRecord[],
+  now = Date.now()
+): FollowNotificationGroup[] {
+  const byBucket = new Map<number, NotificationRecord[]>()
+
+  for (const row of rows) {
+    const bucket = followRollingBucketKey(row.created_at, now)
+    const list = byBucket.get(bucket) ?? []
+    list.push(row)
+    byBucket.set(bucket, list)
+  }
+
+  return Array.from(byBucket.entries()).map(([bucket, list]) => {
+    const sorted = [...list].sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    )
+    const latest = sorted[0]
+    const senderIds: string[] = []
+    for (const row of sorted) {
+      if (!row.sender_id || senderIds.includes(row.sender_id)) continue
+      senderIds.push(row.sender_id)
+    }
+
+    return {
+      kind: "follow_group",
+      key: `follow:bucket:${bucket}`,
+      notificationIds: sorted.map((row) => row.id),
+      read: sorted.every((row) => row.read),
+      latestAt: latest.created_at,
+      senderIds,
+      totalFollows: sorted.length,
+    }
+  })
+}
+
+export function buildGroupedNotificationCards(
+  rows: NotificationRecord[],
+  now = Date.now()
+): GroupedNotificationCard[] {
+  const likes = rows.filter((row) => row.type === "like")
+  const comments = rows.filter((row) => row.type === "comment")
+  const follows = rows.filter((row) => row.type === "follow")
+  const roomJoins = rows.filter((row) => row.type === "room_join")
+
+  const cards: GroupedNotificationCard[] = [
+    ...groupLikeNotifications(likes),
+    ...groupCommentNotifications(comments),
+    ...groupFollowNotifications(follows, now),
+    ...roomJoins.map(
+      (notification): RoomJoinNotificationItem => ({
+        kind: "room_join",
+        notification,
+      })
+    ),
+  ]
+
+  cards.sort((a, b) => {
+    const aTime = groupedCardCreatedAt(a)
+    const bTime = groupedCardCreatedAt(b)
+    return new Date(bTime).getTime() - new Date(aTime).getTime()
+  })
+
+  return cards
+}
+
+export function filterGroupedCardsByTab(
+  cards: GroupedNotificationCard[],
+  tab: NotificationCenterTab
+): GroupedNotificationCard[] {
+  switch (tab) {
+    case "likes":
+      return cards.filter((card) => card.kind === "like_group")
+    case "comments":
+      return cards.filter((card) => card.kind === "comment_group")
+    case "followers":
+      return cards.filter((card) => card.kind === "follow_group")
+    default:
+      return cards
+  }
+}
+
 export function buildNotificationListItems(
   rows: NotificationRecord[]
 ): NotificationListItem[] {
@@ -151,6 +382,44 @@ export function getNotificationTimeSection(
   return "earlier"
 }
 
+export function groupedCardCreatedAt(card: GroupedNotificationCard): string {
+  if (card.kind === "room_join") return card.notification.created_at
+  return card.latestAt
+}
+
+export function groupedCardIsUnread(card: GroupedNotificationCard): boolean {
+  if (card.kind === "room_join") return !card.notification.read
+  return !card.read
+}
+
+export function groupedCardNotificationIds(card: GroupedNotificationCard): string[] {
+  if (card.kind === "room_join") return [card.notification.id]
+  return card.notificationIds
+}
+
+export function groupCardsByTimeSection(cards: GroupedNotificationCard[]) {
+  const sections: Record<TimeSection, GroupedNotificationCard[]> = {
+    today: [],
+    yesterday: [],
+    earlier: [],
+  }
+
+  for (const card of cards) {
+    const createdAt = groupedCardCreatedAt(card)
+    sections[getNotificationTimeSection(createdAt)].push(card)
+  }
+
+  const sortByLatest = (a: GroupedNotificationCard, b: GroupedNotificationCard) =>
+    new Date(groupedCardCreatedAt(b)).getTime() -
+    new Date(groupedCardCreatedAt(a)).getTime()
+
+  sections.today.sort(sortByLatest)
+  sections.yesterday.sort(sortByLatest)
+  sections.earlier.sort(sortByLatest)
+
+  return sections
+}
+
 export function groupItemsByTimeSection(items: NotificationListItem[]) {
   const sections: Record<TimeSection, NotificationListItem[]> = {
     today: [],
@@ -179,9 +448,16 @@ export function groupItemsByTimeSection(items: NotificationListItem[]) {
   return sections
 }
 
-export function commentPreview(content: string | null | undefined): string {
+export function commentPreview(
+  content: string | null | undefined,
+  postId?: string | null,
+  tradeId?: string | null
+): string {
   const text = content?.trim() ?? ""
-  if (!text) return "New comment on your post"
+  if (!text) {
+    const noun = engagementTarget(postId, tradeId)
+    return `New comment on your ${noun}`
+  }
   if (text.length <= 120) return text
   return `${text.slice(0, 120).trim()}…`
 }
@@ -225,6 +501,42 @@ function profileContentHref(
     return `${base}?trade=${encodeURIComponent(opts.tradeId)}`
   }
   return base
+}
+
+export function getGroupedNotificationHref(
+  card: GroupedNotificationCard,
+  owner: { id: string; username?: string | null },
+  sendersById: Record<string, SenderProfile> = {}
+): string {
+  if (card.kind === "like_group") {
+    return profileContentHref(owner, {
+      postId: card.post_id,
+      tradeId: card.trade_id,
+    })
+  }
+
+  if (card.kind === "comment_group") {
+    return profileContentHref(owner, {
+      postId: card.post_id,
+      tradeId: card.trade_id,
+      openComments: Boolean(card.post_id),
+    })
+  }
+
+  if (card.kind === "follow_group") {
+    const base = profilePath(owner)
+    return `${base}?followers=1`
+  }
+
+  const n = card.notification
+  if (n.type === "room_join") {
+    const meta = parseRoomJoinContent(n.content)
+    const slug = meta.room_slug?.trim()
+    if (slug) return `/trade-rooms?room=${encodeURIComponent(slug)}`
+    return "/trade-rooms"
+  }
+
+  return "/notifications"
 }
 
 export function getNotificationHref(

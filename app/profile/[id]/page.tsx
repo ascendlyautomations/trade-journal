@@ -1872,6 +1872,21 @@ function ProfilePageContent() {
     wallPostsReady,
   ])
 
+  useEffect(() => {
+    if (!profile?.id || !currentUserId || loading) return
+    if (searchParams.get("followers") !== "1") return
+    if (String(profile.id) !== String(currentUserId)) return
+
+    void openFollowersModal()
+    clearProfileQueryParams()
+  }, [
+    clearProfileQueryParams,
+    currentUserId,
+    loading,
+    profile?.id,
+    searchParams,
+  ])
+
   const toggleFeedDeepLinkLike = useCallback(
     async (post: any) => {
       if (!currentUserId) return

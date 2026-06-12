@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { supabase } from "../../lib/supabaseClient"
@@ -11,18 +11,22 @@ import { clearAllNotifications, dismissNotifications } from "@/lib/followNotific
 import { formatEST } from "@/lib/formatEST"
 import { NOTIFICATION_ENGAGEMENT_TYPES } from "@/lib/notificationEngagementTypes"
 import {
-  buildNotificationListItems,
+  buildGroupedNotificationCards,
   commentPreview,
-  formatFollowMessage,
+  filterGroupedCardsByTab,
+  formatCommentGroupTitle,
+  formatFollowGroupMessage,
   formatLikeGroupMessage,
   formatRoomJoinMessage,
-  getNotificationHref,
+  getGroupedNotificationHref,
   getNotificationTimeSection,
-  groupItemsByTimeSection,
-  itemCreatedAt,
-  itemIsUnread,
+  groupCardsByTimeSection,
+  groupedCardCreatedAt,
+  groupedCardIsUnread,
+  groupedCardNotificationIds,
   senderDisplayName,
-  type NotificationListItem,
+  type GroupedNotificationCard,
+  type NotificationCenterTab,
   type NotificationRecord,
   type SenderProfile,
   type TimeSection,
@@ -34,6 +38,13 @@ const NOTIFICATION_SELECT =
   "id, user_id, sender_id, type, post_id, trade_id, content, read, created_at"
 
 const ENGAGEMENT_TYPES = NOTIFICATION_ENGAGEMENT_TYPES
+
+const TABS: { id: NotificationCenterTab; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "likes", label: "Likes" },
+  { id: "comments", label: "Comments" },
+  { id: "followers", label: "Followers" },
+]
 
 type SupabaseErrorShape = {
   code?: string
@@ -78,25 +89,122 @@ function timeAgo(ts: string): string {
   return `${Math.floor(s / 86400)}d ago`
 }
 
-function NotificationCard({
+/** React list key — must be unique across like/comment/follow/room_join cards. */
+function cardStableKey(card: GroupedNotificationCard): string {
+  switch (card.kind) {
+    case "like_group":
+      return `like:${card.key}`
+    case "comment_group":
+      return `comment:${card.key}`
+    case "follow_group":
+      return card.key
+    case "room_join":
+      return `room_join:${card.notification.id}`
+  }
+}
+
+function GroupedNotificationCardView({
+  card,
+  sendersById,
+  expanded,
+  onToggleExpand,
   unread,
-  title,
-  body,
   timestamp,
-  avatarUrl,
-  onClick,
-  onDismiss,
   dismissing,
+  onNavigate,
+  onDismiss,
 }: {
+  card: GroupedNotificationCard
+  sendersById: Record<string, SenderProfile>
+  expanded: boolean
+  onToggleExpand: () => void
   unread: boolean
-  title: string
-  body?: string | null
   timestamp: string
-  avatarUrl?: string | null
-  onClick: () => void
+  dismissing: boolean
+  onNavigate: () => void
   onDismiss: () => void
-  dismissing?: boolean
 }) {
+  let title = "New activity"
+  let expandable = false
+  let expandedContent: ReactNode = null
+  let avatarUrl: string | null | undefined
+
+  if (card.kind === "like_group") {
+    const names = card.senderIds
+      .slice(0, 2)
+      .map((id) => senderDisplayName(sendersById[id]))
+    title = formatLikeGroupMessage(
+      names,
+      card.totalLikes,
+      card.post_id,
+      card.trade_id
+    )
+  } else if (card.kind === "comment_group") {
+    expandable = true
+    title = formatCommentGroupTitle(
+      card.totalComments,
+      card.post_id,
+      card.trade_id
+    )
+    expandedContent = (
+      <ul className="mt-2 space-y-2 border-t border-white/10 pt-2">
+        {card.comments.map((entry) => {
+          const sender = entry.senderId
+            ? sendersById[entry.senderId]
+            : undefined
+          const name = senderDisplayName(sender)
+          const preview = commentPreview(
+            entry.content,
+            card.post_id,
+            card.trade_id
+          )
+          return (
+            <li key={entry.id} className="text-xs text-gray-300">
+              <span className="font-medium text-gray-200">{name}</span>
+              <span className="text-gray-500">: </span>
+              {preview}
+            </li>
+          )
+        })}
+      </ul>
+    )
+  } else if (card.kind === "follow_group") {
+    expandable = true
+    const names = card.senderIds
+      .slice(0, 2)
+      .map((id) => senderDisplayName(sendersById[id]))
+    title = formatFollowGroupMessage(names, card.totalFollows)
+    expandedContent = (
+      <ul className="mt-2 space-y-1.5 border-t border-white/10 pt-2">
+        {card.senderIds.map((id) => {
+          const sender = sendersById[id]
+          return (
+            <li
+              key={id}
+              className="flex items-center gap-2 text-xs text-gray-200"
+            >
+              <img
+                src={sender?.avatar_url || "/default-avatar.png"}
+                alt=""
+                className="h-6 w-6 rounded-full object-cover ring-1 ring-white/10"
+                onError={(e) => {
+                  e.currentTarget.src = "/default-avatar.png"
+                }}
+              />
+              {senderDisplayName(sender)}
+            </li>
+          )
+        })}
+      </ul>
+    )
+  } else if (card.kind === "room_join") {
+    const sender = card.notification.sender_id
+      ? sendersById[card.notification.sender_id]
+      : undefined
+    title = formatRoomJoinMessage(senderDisplayName(sender))
+    avatarUrl = sender?.avatar_url
+  }
+
   return (
     <div
       className={`rounded-xl border p-3 transition ${
@@ -131,28 +239,55 @@ function NotificationCard({
         ) : (
           <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-transparent" />
         )}
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={onClick}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault()
-              onClick()
-            }
-          }}
-          className="min-w-0 flex-1 cursor-pointer space-y-1 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50"
-        >
-          <p
-            className={`text-sm ${unread ? "font-semibold text-white" : "text-gray-200"}`}
-          >
-            {title}
-          </p>
-          {body ? <p className="text-xs text-gray-400">{body}</p> : null}
-          <p className="text-[11px] uppercase tracking-wide text-gray-500">
-            {timeAgo(timestamp)}
-          </p>
+
+        <div className="min-w-0 flex-1 space-y-1">
+          <div className="flex items-start gap-1">
+            <button
+              type="button"
+              onClick={onNavigate}
+              className="min-w-0 flex-1 rounded-lg text-left outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50"
+            >
+              <p
+                className={`text-sm ${unread ? "font-semibold text-white" : "text-gray-200"}`}
+              >
+                {title}
+              </p>
+              <p className="mt-1 text-[11px] uppercase tracking-wide text-gray-500">
+                {timeAgo(timestamp)}
+              </p>
+            </button>
+            {expandable ? (
+              <button
+                type="button"
+                onClick={onToggleExpand}
+                className="shrink-0 rounded-md p-1.5 text-gray-400 transition hover:bg-white/10 hover:text-white"
+                aria-expanded={expanded}
+                aria-label={expanded ? "Collapse" : "Expand"}
+              >
+                <span
+                  className={`inline-block text-xs transition-transform ${
+                    expanded ? "rotate-180" : ""
+                  }`}
+                >
+                  ▼
+                </span>
+              </button>
+            ) : null}
+          </div>
+
+          {expandable && expanded ? expandedContent : null}
+
+          {expandable ? (
+            <button
+              type="button"
+              onClick={onNavigate}
+              className="text-xs font-medium text-blue-300 hover:text-blue-200"
+            >
+              View{card.kind === "follow_group" ? " followers" : ""} →
+            </button>
+          ) : null}
         </div>
+
         <button
           type="button"
           disabled={dismissing}
@@ -183,6 +318,8 @@ export default function NotificationsPage() {
   const [showClearConfirm, setShowClearConfirm] = useState(false)
   const [clearing, setClearing] = useState(false)
   const [dismissingIds, setDismissingIds] = useState<Set<string>>(new Set())
+  const [activeTab, setActiveTab] = useState<NotificationCenterTab>("all")
+  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     let cancelled = false
@@ -268,20 +405,41 @@ export default function NotificationsPage() {
     void fetchNotifications()
   }, [userId, fetchNotifications])
 
-  const listItems = useMemo(
-    () => buildNotificationListItems(notifications),
+  const groupedCards = useMemo(
+    () => buildGroupedNotificationCards(notifications),
     [notifications]
   )
 
+  const tabCards = useMemo(
+    () => filterGroupedCardsByTab(groupedCards, activeTab),
+    [groupedCards, activeTab]
+  )
+
   const sections = useMemo(
-    () => groupItemsByTimeSection(listItems),
-    [listItems]
+    () => groupCardsByTimeSection(tabCards),
+    [tabCards]
   )
 
   const unreadCount = useMemo(
-    () => listItems.filter((item) => itemIsUnread(item)).length,
-    [listItems]
+    () => groupedCards.filter((card) => groupedCardIsUnread(card)).length,
+    [groupedCards]
   )
+
+  const tabCounts = useMemo(() => {
+    const likes = groupedCards.filter((c) => c.kind === "like_group").length
+    const comments = groupedCards.filter((c) => c.kind === "comment_group").length
+    const followers = groupedCards.filter((c) => c.kind === "follow_group").length
+    return { all: groupedCards.length, likes, comments, followers }
+  }, [groupedCards])
+
+  function toggleExpanded(key: string) {
+    setExpandedKeys((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
 
   async function markIdsRead(ids: string[]) {
     if (!userId || ids.length === 0) return
@@ -364,71 +522,30 @@ export default function NotificationsPage() {
     setNotifications((prev) => prev.filter((row) => !idSet.has(row.id)))
   }
 
-  function renderItem(item: NotificationListItem) {
-    const unread = itemIsUnread(item)
-    const timestamp = itemCreatedAt(item)
-    const href = getNotificationHref(
-      item,
+  function renderCard(card: GroupedNotificationCard) {
+    const key = cardStableKey(card)
+    const ids = groupedCardNotificationIds(card)
+    const href = getGroupedNotificationHref(
+      card,
       { id: userId ?? "", username: ownerUsername },
       sendersById
     )
 
-    if (item.kind === "like_group") {
-      const names = item.senderIds
-        .slice(0, 2)
-        .map((id) => senderDisplayName(sendersById[id]))
-      const title = formatLikeGroupMessage(names, item.totalLikes)
-
-      return (
-        <NotificationCard
-          key={item.key}
-          unread={unread}
-          title={title}
-          timestamp={timestamp}
-          dismissing={item.notificationIds.some((id) => dismissingIds.has(id))}
-          onDismiss={() => void dismissIds(item.notificationIds)}
-          onClick={() => {
-            void markIdsRead(item.notificationIds)
-            router.push(href)
-          }}
-        />
-      )
-    }
-
-    const n = item.notification
-    const sender = n.sender_id ? sendersById[n.sender_id] : undefined
-    const senderName = senderDisplayName(sender)
-
-    let title = "New activity"
-    let body: string | null = null
-
-    if (n.type === "comment") {
-      title = `${senderName} commented on your post`
-      body = commentPreview(n.content)
-    } else if (n.type === "room_join") {
-      title = formatRoomJoinMessage(senderName)
-    } else if (n.type === "follow") {
-      title = formatFollowMessage(senderName)
-    }
-
     return (
-      <NotificationCard
-        key={n.id}
-        unread={unread}
-        title={title}
-        body={body}
-        timestamp={timestamp}
-        avatarUrl={
-          n.type === "follow" || n.type === "room_join"
-            ? sender?.avatar_url
-            : undefined
-        }
-        dismissing={dismissingIds.has(n.id)}
-        onDismiss={() => void dismissIds([n.id])}
-        onClick={() => {
-          void markIdsRead([n.id])
+      <GroupedNotificationCardView
+        key={key}
+        card={card}
+        sendersById={sendersById}
+        expanded={expandedKeys.has(key)}
+        onToggleExpand={() => toggleExpanded(key)}
+        unread={groupedCardIsUnread(card)}
+        timestamp={groupedCardCreatedAt(card)}
+        dismissing={ids.some((id) => dismissingIds.has(id))}
+        onNavigate={() => {
+          void markIdsRead(ids)
           router.push(href)
         }}
+        onDismiss={() => void dismissIds(ids)}
       />
     )
   }
@@ -462,8 +579,42 @@ export default function NotificationsPage() {
               Notifications
             </h1>
             <p className="mt-1 text-sm text-gray-400">
-              Likes, comments, follows, and trade room activity.
+              Grouped likes, comments, follows, and trade room activity.
             </p>
+          </div>
+
+          <div className="-mx-1 overflow-x-auto px-1 scrollbar-thin">
+            <div
+              className="flex min-w-max gap-2 border-b border-white/10 pb-2"
+              role="tablist"
+              aria-label="Notification categories"
+            >
+              {TABS.map((tab) => {
+                const count = tabCounts[tab.id]
+                const selected = activeTab === tab.id
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={selected}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium transition ${
+                      selected
+                        ? "bg-blue-500/25 text-white ring-1 ring-blue-400/40"
+                        : "bg-white/5 text-gray-300 hover:bg-white/10 hover:text-white"
+                    }`}
+                  >
+                    {tab.label}
+                    {count > 0 ? (
+                      <span className="ml-1.5 tabular-nums text-xs opacity-70">
+                        {count}
+                      </span>
+                    ) : null}
+                  </button>
+                )
+              })}
+            </div>
           </div>
 
           {hasAnyItems ? (
@@ -489,18 +640,26 @@ export default function NotificationsPage() {
 
           {!hasAnyItems ? (
             <EmptyState
-              title="No notifications yet"
+              title={
+                activeTab === "all"
+                  ? "No notifications yet"
+                  : `No ${activeTab} notifications`
+              }
               description={
                 loadError ??
-                "When someone likes or comments on your posts, follows you, or joins your trade room, it will show up here."
+                (activeTab === "all"
+                  ? "When someone likes or comments on your posts or trades, follows you, or joins your trade room, it will show up here."
+                  : `Nothing in ${TABS.find((t) => t.id === activeTab)?.label ?? activeTab} right now.`)
               }
               action={
-                <Link
-                  href="/feed"
-                  className="text-sm font-medium text-blue-300 hover:text-blue-200"
-                >
-                  Browse the feed →
-                </Link>
+                activeTab === "all" ? (
+                  <Link
+                    href="/feed"
+                    className="text-sm font-medium text-blue-300 hover:text-blue-200"
+                  >
+                    Browse the feed →
+                  </Link>
+                ) : undefined
               }
               className="py-10"
             />
@@ -513,7 +672,7 @@ export default function NotificationsPage() {
                       {SECTION_LABELS[section]}
                     </h2>
                     <div className="space-y-2">
-                      {sections[section].map((item) => renderItem(item))}
+                      {sections[section].map((card) => renderCard(card))}
                     </div>
                   </section>
                 ) : null
