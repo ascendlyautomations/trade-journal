@@ -69,6 +69,11 @@ import {
 } from "@/lib/storyComposeHelpers"
 import { isProfileUuidSegment, profilePath } from "@/lib/profileRoutes"
 import { normalizeProfileUsername } from "@/lib/profileUsername"
+import { useUserProfile } from "@/lib/UserProfileProvider"
+
+/** Public profile columns only — never fetch billing, referral, or moderation fields here. */
+const PUBLIC_PROFILE_SELECT =
+  "id, username, name, bio, avatar_url, trading_style, trader_type, primary_market, started_trading, is_private, created_at" as const
 
 function postImageSrc(imageUrl: string | null | undefined): string | null {
   const raw = imageUrl != null ? String(imageUrl).trim() : ""
@@ -784,9 +789,11 @@ function ProfilePageContent() {
   const [followersCount, setFollowersCount] = useState(0)
   const [followingCount, setFollowingCount] = useState(0)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
-  const [viewerShareProfile, setViewerShareProfile] = useState<{
-    referral_code?: string | null
-  } | null>(null)
+  const { profile: viewerContextProfile } = useUserProfile()
+  const viewerShareProfile =
+    viewerContextProfile?.referral_code != null
+      ? { referral_code: viewerContextProfile.referral_code }
+      : null
   const [isFollowing, setIsFollowing] = useState(false)
   const [isRequested, setIsRequested] = useState(false)
   const [followsYou, setFollowsYou] = useState(false)
@@ -863,26 +870,6 @@ function ProfilePageContent() {
     mq.addEventListener("change", sync)
     return () => mq.removeEventListener("change", sync)
   }, [])
-
-  useEffect(() => {
-    if (!currentUserId) {
-      setViewerShareProfile(null)
-      return
-    }
-    let cancelled = false
-    async function load() {
-      const { data } = await supabase
-        .from("profiles")
-        .select("referral_code")
-        .eq("id", currentUserId)
-        .maybeSingle()
-      if (!cancelled) setViewerShareProfile(data ?? null)
-    }
-    void load()
-    return () => {
-      cancelled = true
-    }
-  }, [currentUserId])
 
   useEffect(() => {
     if (!postImage) {
@@ -1222,7 +1209,10 @@ function ProfilePageContent() {
     setCurrentUserId(uid)
 
     if (devProfileDebug) {
-      const listProbe = await supabase.from("profiles").select("*").limit(50)
+      const listProbe = await supabase
+        .from("profiles")
+        .select(PUBLIC_PROFILE_SELECT)
+        .limit(50)
       console.log("PROFILE DEBUG (list up to 50 rows):", {
         rowCount: listProbe.data?.length ?? 0,
         error: listProbe.error,
@@ -1230,7 +1220,7 @@ function ProfilePageContent() {
       })
     }
 
-    let profileQuery = supabase.from("profiles").select("*")
+    let profileQuery = supabase.from("profiles").select(PUBLIC_PROFILE_SELECT)
     if (lookupByUuid) {
       profileQuery = profileQuery.eq("id", segment)
     } else {

@@ -2,6 +2,7 @@
 
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useId,
@@ -15,11 +16,45 @@ import {
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js"
 import { supabase } from "./supabaseClient"
 
+/** Columns allowed in global client profile state — never load billing or moderation extras. */
+const USER_PROFILE_SELECT =
+  "id, username, avatar_url, is_pro, subscription_status, is_banned, banned_reason, referral_code" as const
+
+export type UserProfileSlice = {
+  id: string
+  username: string | null
+  avatar_url: string | null
+  is_pro: boolean | null
+  subscription_status: string | null
+  is_banned: boolean | null
+  banned_reason: string | null
+  referral_code: string | null
+}
+
+function pickUserProfileFields(row: unknown): UserProfileSlice | null {
+  if (!row || typeof row !== "object") return null
+  const o = row as Record<string, unknown>
+  const id = o.id
+  if (typeof id !== "string" || !id.trim()) return null
+
+  return {
+    id,
+    username: o.username != null ? String(o.username) : null,
+    avatar_url: o.avatar_url != null ? String(o.avatar_url) : null,
+    is_pro: typeof o.is_pro === "boolean" ? o.is_pro : null,
+    subscription_status:
+      o.subscription_status != null ? String(o.subscription_status) : null,
+    is_banned: typeof o.is_banned === "boolean" ? o.is_banned : null,
+    banned_reason: o.banned_reason != null ? String(o.banned_reason) : null,
+    referral_code: o.referral_code != null ? String(o.referral_code) : null,
+  }
+}
+
 type UserProfileContextValue = {
   user: any
-  profile: any
+  profile: UserProfileSlice | null
   loading: boolean
-  setProfile: Dispatch<SetStateAction<any>>
+  setProfile: Dispatch<SetStateAction<UserProfileSlice | null>>
 }
 
 const UserProfileContext = createContext<UserProfileContextValue | null>(null)
@@ -31,12 +66,23 @@ const AUTH_SYNC_EVENTS: AuthChangeEvent[] = [
 
 export function UserProfileProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<any>(null)
-  const [profile, setProfile] = useState<any>(null)
+  const [profile, setProfileState] = useState<UserProfileSlice | null>(null)
   const [loading, setLoading] = useState(true)
   const realtimeTopicSuffix = useId().replace(/:/g, "")
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
-  const profileRef = useRef<any>(null)
+  const profileRef = useRef<UserProfileSlice | null>(null)
   profileRef.current = profile
+
+  const setProfile = useCallback<Dispatch<SetStateAction<UserProfileSlice | null>>>(
+    (action) => {
+      setProfileState((prev) => {
+        const next = typeof action === "function" ? action(prev) : action
+        if (next == null) return null
+        return pickUserProfileFields(next)
+      })
+    },
+    []
+  )
 
   useEffect(() => {
     let mounted = true
@@ -55,7 +101,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
       removeProfileChannel()
       if (!mounted) return
       setUser(null)
-      setProfile(null)
+      setProfileState(null)
       setLoading(false)
     }
 
@@ -75,20 +121,20 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
       setUser(sessionUser)
 
       if (!sessionUser) {
-        setProfile(null)
+        setProfileState(null)
         setLoading(false)
         return
       }
 
       const { data: profileData } = await supabase
         .from("profiles")
-        .select("*")
+        .select(USER_PROFILE_SELECT)
         .eq("id", sessionUser.id)
         .single()
 
       if (!mounted || generation !== loadGeneration) return
 
-      setProfile(profileData || null)
+      setProfileState(pickUserProfileFields(profileData))
 
       // Realtime: create channel → register .on handlers → subscribe() last (required by supabase-js).
       const topic = `profile:${sessionUser.id}:${realtimeTopicSuffix}`
@@ -105,7 +151,8 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
         },
         (payload) => {
           if (!mounted || generation !== loadGeneration) return
-          setProfile(payload.new)
+          const picked = pickUserProfileFields(payload.new)
+          if (picked) setProfileState(picked)
         }
       )
 
@@ -161,12 +208,13 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
 
       const { data: profileData } = await supabase
         .from("profiles")
-        .select("*")
+        .select(USER_PROFILE_SELECT)
         .eq("id", userId)
         .single()
 
       if (!cancelled && profileData) {
-        setProfile(profileData)
+        const picked = pickUserProfileFields(profileData)
+        if (picked) setProfileState(picked)
       }
     }
 
@@ -179,7 +227,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo(
     () => ({ user, profile, loading, setProfile }),
-    [user, profile, loading]
+    [user, profile, loading, setProfile]
   )
 
   return (
