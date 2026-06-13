@@ -327,13 +327,14 @@ export default function AdminUsersPage() {
                     <th className="px-3 py-2">Pro</th>
                     <th className="px-3 py-2">Private</th>
                     <th className="px-3 py-2">Banned</th>
+                    <th className="px-3 py-2">Beta</th>
                     <th className="px-3 py-2">Referral</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
                   {!listLoading && rows.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-3 py-6 text-center text-gray-400">
+                      <td colSpan={8} className="px-3 py-6 text-center text-gray-400">
                         No users match these filters.
                       </td>
                     </tr>
@@ -366,6 +367,13 @@ export default function AdminUsersPage() {
                         <td className="px-3 py-2">{pro ? <span className="text-emerald-400">Yes</span> : <span className="text-gray-500">No</span>}</td>
                         <td className="px-3 py-2">{row.is_private ? "Yes" : "No"}</td>
                         <td className="px-3 py-2">{row.is_banned ? <span className="text-red-300">Yes</span> : "No"}</td>
+                        <td className="px-3 py-2">
+                          {row.is_beta_tester ? (
+                            <span className="text-amber-400">Yes</span>
+                          ) : (
+                            <span className="text-gray-500">No</span>
+                          )}
+                        </td>
                         <td className="max-w-[100px] truncate px-3 py-2 text-xs text-gray-400">{row.referral_code || "—"}</td>
                       </tr>
                     )
@@ -440,6 +448,12 @@ export default function AdminUsersPage() {
                 <dt className="text-gray-500">Banned</dt>
                 <dd className={selected.is_banned ? "text-red-300" : "text-gray-200"}>
                   {selected.is_banned ? "Yes" : "No"}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-2">
+                <dt className="text-gray-500">Beta tester</dt>
+                <dd className={selected.is_beta_tester ? "text-amber-400" : "text-gray-200"}>
+                  {selected.is_beta_tester ? "Yes" : "No"}
                 </dd>
               </div>
               <div className="flex justify-between gap-2">

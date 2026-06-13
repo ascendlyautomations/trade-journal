@@ -237,6 +237,7 @@ export default function LoginPage() {
         is_pro: false,
         subscription_status: "inactive",
         created_at: new Date().toISOString(),
+        referred_by: referralCode || null,
       }
 
       let profileError = (
