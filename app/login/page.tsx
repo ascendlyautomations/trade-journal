@@ -10,6 +10,7 @@ import {
 } from "@/lib/profileUsername"
 import { useRouter } from "next/navigation"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
+import { isBetaReferralRef } from "@/lib/betaReferralCode"
 
 function getSafeNextPath(): string | null {
   if (typeof window === "undefined") return null
@@ -35,6 +36,7 @@ export default function LoginPage() {
   const [resetEmail, setResetEmail] = useState("")
   const [resetMessage, setResetMessage] = useState("")
   const [loadingReset, setLoadingReset] = useState(false)
+  const [isBetaSignup, setIsBetaSignup] = useState(false)
   const { showPopup, feedbackModalProps } = useFeedbackPopup({ autoDismissMs: 3000 })
 
   const router = useRouter()
@@ -97,6 +99,10 @@ export default function LoginPage() {
       localStorage.setItem("referral_code", ref.trim())
     } catch {
       /* ignore */
+    }
+    if (isBetaReferralRef(ref)) {
+      setIsLogin(false)
+      setIsBetaSignup(true)
     }
   }, [])
 
@@ -450,6 +456,12 @@ export default function LoginPage() {
         <h2 className="text-xl font-semibold mb-6 text-center">
           {isLogin ? "Sign in to continue" : "Create your account"}
         </h2>
+
+        {isBetaSignup && !isLogin ? (
+          <p className="mb-6 text-center text-sm leading-relaxed text-amber-200/90">
+            Welcome to the TradeTraxs Beta. Create your account below to get started.
+          </p>
+        ) : null}
 
         <button
           type="button"
