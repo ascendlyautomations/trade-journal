@@ -17,6 +17,16 @@ export type AdminUserListRow = {
   full_count: number
 }
 
+function parseDirectoryCount(raw: Record<string, unknown>): number {
+  const v = raw.full_count ?? raw.total_count ?? raw.fullCount ?? raw.totalCount
+  if (typeof v === "number" && Number.isFinite(v)) return v
+  if (typeof v === "string" && v.trim() !== "") {
+    const n = Number(v)
+    if (Number.isFinite(n)) return n
+  }
+  return 0
+}
+
 export async function fetchAdminUserDirectory(
   supabase: SupabaseClient,
   input: {
@@ -82,11 +92,11 @@ export async function fetchAdminUserDirectory(
       is_banned: Boolean(o.is_banned),
       banned_reason: o.banned_reason != null ? String(o.banned_reason) : null,
       banned_at: o.banned_at != null ? String(o.banned_at) : null,
-      full_count: typeof o.full_count === "number" ? o.full_count : Number(o.full_count ?? 0),
+      full_count: parseDirectoryCount(o),
     }
   })
 
-  const total = rows[0]?.full_count ?? 0
+  const total = rows.length > 0 ? parseDirectoryCount(rowsRaw[0] as Record<string, unknown>) : 0
   return { rows, total, error: null }
 }
 

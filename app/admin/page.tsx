@@ -48,6 +48,7 @@ export default function AdminPage() {
   const [allowed, setAllowed] = useState(false)
   const [unviewedFeedbackCount, setUnviewedFeedbackCount] = useState<number>(0)
   const [unviewedSupportCount, setUnviewedSupportCount] = useState<number>(0)
+  const [openBugReportCount, setOpenBugReportCount] = useState<number>(0)
   const [affiliateApplicationCounts, setAffiliateApplicationCounts] =
     useState<AdminAffiliateApplicationCounts | null>(null)
   const [auditPreview, setAuditPreview] = useState<AdminAuditFeedItem[]>([])
@@ -100,6 +101,12 @@ export default function AdminPage() {
           .select("*", { count: "exact", head: true })
           .eq("viewed", false)
         if (!cancelled) setUnviewedSupportCount(supportUnviewed || 0)
+
+        const { count: openBugs } = await supabase
+          .from("bug_reports")
+          .select("*", { count: "exact", head: true })
+          .eq("status", "open")
+        if (!cancelled) setOpenBugReportCount(openBugs || 0)
 
         const { data: auditRows, error: auditErr } = await fetchAdminRecentAudit(supabase, 8)
         if (!cancelled) {
@@ -186,6 +193,17 @@ export default function AdminPage() {
               badge={
                 <span className="rounded bg-emerald-500 px-2 py-0.5 text-xs font-semibold text-white">
                   {unviewedFeedbackCount} unviewed
+                </span>
+              }
+            />
+            <AdminModuleCard
+              href="/admin/bug-reports"
+              title="Bug reports"
+              description="Beta tester bug submissions with screenshots and browser context."
+              variant="blue"
+              badge={
+                <span className="rounded bg-amber-500 px-2 py-0.5 text-xs font-semibold text-white tabular-nums">
+                  {openBugReportCount} open
                 </span>
               }
             />

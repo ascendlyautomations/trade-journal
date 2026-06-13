@@ -10,6 +10,7 @@ import { getCurrentAdminCheckResult } from "../../lib/adminUsers"
 import { fetchTotalUnreadMessageCount } from "../../lib/messageUnread"
 import { NOTIFICATION_ENGAGEMENT_TYPES } from "../../lib/notificationEngagementTypes"
 import { profilePath } from "../../lib/profileRoutes"
+import BugReportModal from "./BugReportModal"
 
 export default function Navbar() {
   const { user, profile, loading } = useUserProfile()
@@ -25,6 +26,7 @@ export default function Navbar() {
   const [openSection, setOpenSection] = useState<string | null>(null)
   const [activeMenu, setActiveMenu] = useState<string | null>(null)
   const [accountMenuOpen, setAccountMenuOpen] = useState(false)
+  const [bugReportOpen, setBugReportOpen] = useState(false)
   const [unreadMessagesCount, setUnreadMessagesCount] = useState(0)
   const [unreadCount, setUnreadCount] = useState(0)
   const [isAdmin, setIsAdmin] = useState(false)
@@ -602,21 +604,21 @@ export default function Navbar() {
                         type="button"
                         onClick={() => {
                           setAccountMenuOpen(false)
-                          router.push("/feedback")
+                          router.push("/help")
                         }}
                         className="w-full px-4 py-2 text-left text-sm hover:bg-white/10"
                       >
-                        Feedback
+                        Help Center
                       </button>
                       <button
                         type="button"
                         onClick={() => {
                           setAccountMenuOpen(false)
-                          router.push("/support")
+                          setBugReportOpen(true)
                         }}
                         className="w-full px-4 py-2 text-left text-sm hover:bg-white/10"
                       >
-                        Support
+                        Report bug
                       </button>
 
                       <button
@@ -866,19 +868,22 @@ export default function Navbar() {
               Settings
             </Link>
             <Link
-              href="/feedback"
+              href="/help"
               className="rounded-lg px-3 py-2 text-white hover:text-blue-400"
               onClick={closeMobile}
             >
-              Feedback
+              Help Center
             </Link>
-            <Link
-              href="/support"
-              className="rounded-lg px-3 py-2 text-white hover:text-blue-400"
-              onClick={closeMobile}
+            <button
+              type="button"
+              className="rounded-lg px-3 py-2 text-left text-white hover:text-blue-400"
+              onClick={() => {
+                closeMobile()
+                setBugReportOpen(true)
+              }}
             >
-              Support
-            </Link>
+              Report bug
+            </button>
 
             <button
               type="button"
@@ -912,6 +917,8 @@ export default function Navbar() {
           </div>
         </div>
       ) : null}
+
+      <BugReportModal open={bugReportOpen} onClose={() => setBugReportOpen(false)} />
     </div>
   )
 }
