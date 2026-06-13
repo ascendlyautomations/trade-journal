@@ -8,6 +8,10 @@ import { isProActive } from "@/lib/subscription"
 import { insertCsvTradesWithAccount } from "@/lib/insertCsvTradesWithAccount"
 import { hasReachedRowLimit, last24hIso } from "@/lib/freePlanLimits"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
+import {
+  mirrorAccountSettingsHasUsedCsvImport,
+  mirrorAccountSettingsLockedAccount,
+} from "@/lib/profileSplitMirrorWrites"
 import { getSessionFromDate } from "@/lib/getSession"
 import {
   buildDateTime,
@@ -692,20 +696,29 @@ export default function InputTradeForm({
       const incomingNumber = String(rowAcct.account_number ?? "").trim()
 
       if (!lockedType) {
+        const lockedAccountPatch = {
+          locked_account_type: incomingType || null,
+          locked_account_size: incomingSize || null,
+          locked_account_name: incomingName || null,
+          locked_account_number: incomingNumber || null,
+        }
         const { error: lockErr } = await supabase
           .from("profiles")
-          .update({
-            locked_account_type: incomingType || null,
-            locked_account_size: incomingSize || null,
-            locked_account_name: incomingName || null,
-            locked_account_number: incomingNumber || null,
-          })
+          .update(lockedAccountPatch)
           .eq("id", user.id)
         if (lockErr) {
           console.error("locked account update:", lockErr)
           showPopup({ type: "error", message: handleSupabaseError(lockErr) })
           setSubmitting(false)
           return
+        }
+        const { error: mirrorErr } = await mirrorAccountSettingsLockedAccount(
+          supabase,
+          user.id,
+          lockedAccountPatch
+        )
+        if (mirrorErr) {
+          console.error("mirror account_settings locked_account_*:", mirrorErr)
         }
       } else {
         const { data: lockedAccountMatch } = await supabase
@@ -1143,7 +1156,18 @@ export default function InputTradeForm({
           .from("profiles")
           .update({ has_used_csv_import: true })
           .eq("id", user.id)
-        if (flagErr) console.error("markProfileCsvImportUsed:", flagErr)
+        if (flagErr) {
+          console.error("markProfileCsvImportUsed:", flagErr)
+        } else {
+          const { error: mirrorErr } = await mirrorAccountSettingsHasUsedCsvImport(
+            supabase,
+            user.id,
+            true
+          )
+          if (mirrorErr) {
+            console.error("mirror account_settings.has_used_csv_import:", mirrorErr)
+          }
+        }
       }
 
       onParsedTradesClear?.()

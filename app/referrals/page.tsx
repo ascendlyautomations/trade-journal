@@ -108,7 +108,7 @@ export default function ReferralsPage() {
 
     const { data: refRows, error: refErr } = await supabase
       .from("profiles")
-      .select("*")
+      .select("id, username, subscription_status, created_at")
       .eq("referred_by", code)
 
     if (refErr) {

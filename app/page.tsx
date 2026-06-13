@@ -9,7 +9,6 @@ import LandingCommunitySection from "./components/LandingCommunitySection"
 import LandingTradingContentSection from "./components/LandingTradingContentSection"
 import LandingFeatureGridSection from "./components/LandingFeatureGridSection"
 import LandingFinalCtaSection from "./components/LandingFinalCtaSection"
-import AIAssistant from "@/app/components/AIAssistant"
 import { supabase } from "../lib/supabaseClient"
 import {
   LANDING_CARD_FULL,
@@ -170,7 +169,6 @@ export default function LandingPage() {
     <>
       <PublicNavbar />
       <FeedbackModal {...feedbackModalProps} />
-      <AIAssistant />
 
       {/* Landing shell: cinematic bg (z-0) + overlay (z-1) + content (z-10) */}
       <div className="relative min-h-screen overflow-hidden text-gray-100">

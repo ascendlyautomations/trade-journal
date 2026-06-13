@@ -2,6 +2,7 @@
 
 import Stripe from "stripe"
 import { createClient, type SupabaseClient } from "@supabase/supabase-js"
+import { mirrorBillingAccountsStripeCustomerId } from "@/lib/profileSplitMirrorWrites"
 
 export const runtime = "nodejs"
 
@@ -400,6 +401,20 @@ export async function POST(req: Request) {
               console.error("ERROR:", JSON.stringify(upErr, null, 2))
             } else {
               console.log("✅ checkout.session.completed: profile updated to active")
+              if (customerId) {
+                const { error: mirrorErr } =
+                  await mirrorBillingAccountsStripeCustomerId(
+                    supabase,
+                    userId,
+                    customerId
+                  )
+                if (mirrorErr) {
+                  console.error(
+                    "mirror billing_accounts.stripe_customer_id:",
+                    JSON.stringify(mirrorErr, null, 2)
+                  )
+                }
+              }
             }
           } catch (e) {
             console.error("❌ checkout profile update crash:", e)
@@ -477,7 +492,7 @@ export async function POST(req: Request) {
         for (let attempt = 0; attempt < 5; attempt++) {
           const { data, error: userError } = await supabase
             .from("profiles")
-            .select("*")
+            .select("id, referred_by")
             .eq("stripe_customer_id", customerId)
             .maybeSingle()
 
@@ -553,7 +568,7 @@ export async function POST(req: Request) {
 
         const { data: referrer, error: refError } = await supabase
           .from("profiles")
-          .select("*")
+          .select("id, referral_earnings")
           .eq("referral_code", referredBy)
           .maybeSingle()
 

@@ -1,7 +1,17 @@
 import OpenAI from "openai"
+import { getRouteUser } from "@/app/api/_lib/getRouteUser"
 
 export async function POST(req: Request) {
   try {
+    const user = await getRouteUser(req)
+    if (!user) {
+      console.warn("[api/ai-chat] unauthorized request", {
+        hasAuthorization: Boolean(req.headers.get("authorization")),
+        userAgent: req.headers.get("user-agent") ?? undefined,
+      })
+      return Response.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
     const apiKey = process.env.OPENAI_API_KEY
     if (!apiKey) {
       return Response.json(

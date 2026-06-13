@@ -29,6 +29,7 @@ import {
   type CsvImportDiagnostics,
 } from "@/lib/csvImportDiagnostics"
 import CsvImportDiagnosticsPanel from "@/app/components/CsvImportDiagnosticsPanel"
+import { mirrorAccountSettingsHasUsedInitialImport } from "@/lib/profileSplitMirrorWrites"
 
 export type CsvImportPanelProps = {
   /** Smaller preview + less chrome (e.g. onboarding modal) */
@@ -236,6 +237,15 @@ export default function CsvImportPanel({
           .eq("id", user.id)
         if (initialImportFlagErr) {
           console.error("mark has_used_initial_import:", initialImportFlagErr)
+        } else {
+          const { error: mirrorErr } = await mirrorAccountSettingsHasUsedInitialImport(
+            supabase,
+            user.id,
+            true
+          )
+          if (mirrorErr) {
+            console.error("mirror account_settings.has_used_initial_import:", mirrorErr)
+          }
         }
       }
 

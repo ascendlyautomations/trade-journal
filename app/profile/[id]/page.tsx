@@ -797,6 +797,15 @@ function ProfilePageContent() {
   const [isFollowing, setIsFollowing] = useState(false)
   const [isRequested, setIsRequested] = useState(false)
   const [followsYou, setFollowsYou] = useState(false)
+
+  const canViewTrades = useMemo(
+    () =>
+      !!profile &&
+      (profile.is_private !== true ||
+        currentUserId === profile.id ||
+        isFollowing),
+    [profile, currentUserId, isFollowing]
+  )
   const [messageBusy, setMessageBusy] = useState(false)
   const [creatingRoom, setCreatingRoom] = useState(false)
   const [room, setRoom] = useState<any | null>(null)
@@ -1067,7 +1076,7 @@ function ProfilePageContent() {
   }, [profile?.id, currentUserId])
 
   useEffect(() => {
-    if (!profile?.id) {
+    if (!profile?.id || !canViewTrades) {
       setAllTrades([])
       return
     }
@@ -1101,10 +1110,10 @@ function ProfilePageContent() {
     return () => {
       cancelled = true
     }
-  }, [profile?.id, currentUserId])
+  }, [profile?.id, currentUserId, canViewTrades])
 
   useEffect(() => {
-    if (!profile?.id) {
+    if (!profile?.id || !canViewTrades) {
       setCalendarTrades([])
       return
     }
@@ -1139,7 +1148,7 @@ function ProfilePageContent() {
     return () => {
       cancelled = true
     }
-  }, [profile?.id, currentUserId])
+  }, [profile?.id, currentUserId, canViewTrades])
 
   useEffect(() => {
     if (
@@ -1801,12 +1810,6 @@ function ProfilePageContent() {
     },
     []
   )
-
-  const canViewTrades =
-    !!profile &&
-    (profile.is_private !== true ||
-      currentUserId === profile.id ||
-      isFollowing)
 
   const clearProfileQueryParams = useCallback(() => {
     if (!profile) return
@@ -2746,11 +2749,20 @@ function ProfilePageContent() {
 
             {activeTab === "calendar" && (
               <div className="mt-4">
-                <Calendar
-                  trades={filteredTrades}
-                  showAccountFilter={false}
-                  showControls={false}
-                />
+                {!canViewTrades ? (
+                  <div className="rounded-xl border border-white/10 bg-white/5 p-6 py-16 text-center">
+                    <p className="text-lg text-gray-100">Private Profile</p>
+                    <p className="mt-2 text-sm text-gray-400">
+                      Follow this user to see their trades and stats.
+                    </p>
+                  </div>
+                ) : (
+                  <Calendar
+                    trades={filteredTrades}
+                    showAccountFilter={false}
+                    showControls={false}
+                  />
+                )}
               </div>
             )}
 

@@ -21,6 +21,10 @@ import PostSetupImportModal from "../../components/PostSetupImportModal"
 import PerformanceShareModal from "../../components/PerformanceShareModal"
 import LockedFeature from "../../components/LockedFeature"
 import { useCallback, useEffect, useState, useMemo, useRef } from "react"
+import {
+  mirrorAccountSettingsMaxDrawdownLimit,
+  mirrorAccountSettingsOnboardingCompleted,
+} from "@/lib/profileSplitMirrorWrites"
 import { supabase } from "../../../lib/supabaseClient"
 import { isProActive } from "../../../lib/subscription"
 import { filterTradesForPerformanceSharePool } from "@/lib/performanceShare"
@@ -642,7 +646,18 @@ export default function Dashboard() {
       .from("profiles")
       .update({ onboarding_completed: true })
       .eq("id", user.id)
-    if (error) console.error("completeCsvOnboarding:", error)
+    if (error) {
+      console.error("completeCsvOnboarding:", error)
+    } else {
+      const { error: mirrorErr } = await mirrorAccountSettingsOnboardingCompleted(
+        supabase,
+        user.id,
+        true
+      )
+      if (mirrorErr) {
+        console.error("mirror account_settings.onboarding_completed:", mirrorErr)
+      }
+    }
     setProfile((p: any) => (p ? { ...p, onboarding_completed: true } : p))
     setShowImportModal(false)
     await refreshDashboardData()
@@ -1379,6 +1394,15 @@ const worstDay = dailyPnLs.length > 0
     if (error) {
       alert(error.message)
       return
+    }
+
+    const { error: mirrorErr } = await mirrorAccountSettingsMaxDrawdownLimit(
+      supabase,
+      user.id,
+      n
+    )
+    if (mirrorErr) {
+      console.error("mirror account_settings.max_drawdown_limit:", mirrorErr)
     }
 
     const nextAccount = sanitizeDashboardAccountFilter(

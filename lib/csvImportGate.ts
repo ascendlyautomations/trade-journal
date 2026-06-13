@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { mirrorAccountSettingsHasUsedCsvImport } from "@/lib/profileSplitMirrorWrites"
 
 /** Free users may run CSV import only once until they upgrade to Pro. */
 export async function assertCsvImportAllowedForFreePlan(
@@ -27,5 +28,18 @@ export async function markProfileCsvImportUsed(
     .update({ has_used_csv_import: true })
     .eq("id", userId)
 
-  return { error: error ? new Error(error.message) : null }
+  if (error) {
+    return { error: new Error(error.message) }
+  }
+
+  const { error: mirrorErr } = await mirrorAccountSettingsHasUsedCsvImport(
+    supabase,
+    userId,
+    true
+  )
+  if (mirrorErr) {
+    console.error("mirror account_settings.has_used_csv_import:", mirrorErr)
+  }
+
+  return { error: null }
 }

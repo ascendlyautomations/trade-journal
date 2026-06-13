@@ -23,6 +23,10 @@ import {
   validateProfileUsernameNotEmpty,
 } from "@/lib/profileUsername"
 import { TRADER_TYPE_OPTIONS, normalizeTraderType } from "@/lib/traderType"
+import { mirrorAccountSettingsUsernameChangeCount } from "@/lib/profileSplitMirrorWrites"
+
+const SETTINGS_PROFILE_SELECT =
+  "id, name, username, bio, is_private, avatar_url, trading_style, trading_model, trader_type, primary_market, started_trading, username_change_count, referral_code, referral_count, is_pro, subscription_status, cancel_at_period_end, trial_end, current_period_end, stripe_customer_id" as const
 import type { User } from "@supabase/supabase-js"
 import AffiliatePayoutSetupCard from "@/app/components/AffiliatePayoutSetupCard"
 import { supabaseBearerHeaders } from "@/lib/supabaseBearerFetch"
@@ -189,7 +193,7 @@ export default function SettingsPage() {
   async function fetchProfile(userId: string) {
     const { data } = await supabase
       .from("profiles")
-      .select("*")
+      .select(SETTINGS_PROFILE_SELECT)
       .eq("id", userId)
       .single()
 
@@ -397,6 +401,17 @@ export default function SettingsPage() {
     }
 
     const nextChangeCount = usernameChanged ? changeCount + 1 : changeCount
+
+    if (usernameChanged) {
+      const { error: mirrorErr } = await mirrorAccountSettingsUsernameChangeCount(
+        supabase,
+        user.id,
+        nextChangeCount
+      )
+      if (mirrorErr) {
+        console.error("mirror account_settings.username_change_count:", mirrorErr)
+      }
+    }
 
     setUsername(cleanUsername)
     setProfile((p) =>

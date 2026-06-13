@@ -14,6 +14,9 @@ import PostSetupImportModal from "../../components/PostSetupImportModal"
 import TradesPageMainContent from "../../components/TradesPageMainContent"
 import TradesPageOverlays from "../../components/TradesPageOverlays"
 
+const TRADES_GATE_PROFILE_SELECT =
+  "username, bio, trading_style, trader_type, primary_market, started_trading, avatar_url, referral_code" as const
+
 export default function TradesPage() {
   const [trades, setTrades] = useState<any[]>([])
   const [resultFilter, setResultFilter] = useState<"all" | "wins" | "losses">("all")
@@ -83,7 +86,7 @@ export default function TradesPage() {
     // 🔥 CREATE PROFILE IF NEEDED (GOOGLE FIX)
     const { data: existingProfile } = await supabase
       .from("profiles")
-      .select("*")
+      .select("id")
       .eq("id", user.id)
 
     if (!existingProfile || existingProfile.length === 0) {
@@ -130,7 +133,7 @@ export default function TradesPage() {
 
     const { data: profRow } = await supabase
       .from("profiles")
-      .select("*")
+      .select(TRADES_GATE_PROFILE_SELECT)
       .eq("id", user.id)
       .maybeSingle()
 

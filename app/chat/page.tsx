@@ -95,7 +95,7 @@ export default function ChatPage() {
 
     const { data: prof } = await supabase
       .from("profiles")
-      .select("*")
+      .select("username")
       .eq("id", user.id)
       .single()
 

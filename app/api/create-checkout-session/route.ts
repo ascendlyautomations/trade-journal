@@ -2,6 +2,7 @@ import Stripe from "stripe"
 import { createClient } from "@supabase/supabase-js"
 import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
+import { mirrorBillingAccountsStripeCustomerId } from "@/lib/profileSplitMirrorWrites"
 import { normalizeProfileUsername } from "@/lib/profileUsername"
 
 export const runtime = "nodejs"
@@ -157,6 +158,17 @@ export async function POST(req: Request) {
           console.error("ERROR:", JSON.stringify(updateErr, null, 2))
         } else {
           console.log("✅ Saved stripe_customer_id to profile:", customerId)
+          const { error: mirrorErr } = await mirrorBillingAccountsStripeCustomerId(
+            supabase,
+            user.id,
+            customerId
+          )
+          if (mirrorErr) {
+            console.error(
+              "mirror billing_accounts.stripe_customer_id:",
+              JSON.stringify(mirrorErr, null, 2)
+            )
+          }
         }
       } catch (stripeErr) {
         console.error(
