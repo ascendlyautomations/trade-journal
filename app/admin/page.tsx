@@ -49,6 +49,7 @@ export default function AdminPage() {
   const [unviewedFeedbackCount, setUnviewedFeedbackCount] = useState<number>(0)
   const [unviewedSupportCount, setUnviewedSupportCount] = useState<number>(0)
   const [openBugReportCount, setOpenBugReportCount] = useState<number>(0)
+  const [openFeatureRequestCount, setOpenFeatureRequestCount] = useState<number>(0)
   const [affiliateApplicationCounts, setAffiliateApplicationCounts] =
     useState<AdminAffiliateApplicationCounts | null>(null)
   const [auditPreview, setAuditPreview] = useState<AdminAuditFeedItem[]>([])
@@ -107,6 +108,12 @@ export default function AdminPage() {
           .select("*", { count: "exact", head: true })
           .eq("status", "open")
         if (!cancelled) setOpenBugReportCount(openBugs || 0)
+
+        const { count: openFeatures } = await supabase
+          .from("feature_requests")
+          .select("*", { count: "exact", head: true })
+          .eq("status", "open")
+        if (!cancelled) setOpenFeatureRequestCount(openFeatures || 0)
 
         const { data: auditRows, error: auditErr } = await fetchAdminRecentAudit(supabase, 8)
         if (!cancelled) {
@@ -204,6 +211,17 @@ export default function AdminPage() {
               badge={
                 <span className="rounded bg-amber-500 px-2 py-0.5 text-xs font-semibold text-white tabular-nums">
                   {openBugReportCount} open
+                </span>
+              }
+            />
+            <AdminModuleCard
+              href="/admin/feature-requests"
+              title="Feature requests"
+              description="Beta tester feature ideas submitted from the Beta Hub."
+              variant="emerald"
+              badge={
+                <span className="rounded bg-amber-500 px-2 py-0.5 text-xs font-semibold text-white tabular-nums">
+                  {openFeatureRequestCount} open
                 </span>
               }
             />

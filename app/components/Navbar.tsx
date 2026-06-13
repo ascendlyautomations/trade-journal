@@ -568,6 +568,19 @@ export default function Navbar() {
                   ) : null}
                 </div>
 
+                {profile?.is_beta_tester ? (
+                  <Link
+                    href="/beta"
+                    className={`shrink-0 rounded border px-3 py-1.5 text-sm font-medium transition ${
+                      isActive("/beta")
+                        ? "border-yellow-400/50 bg-yellow-500/30 text-yellow-200"
+                        : "border-yellow-400/30 bg-yellow-500/20 text-yellow-300 hover:bg-yellow-500/30"
+                    }`}
+                  >
+                    Beta Hub
+                  </Link>
+                ) : null}
+
                 <div className="profile-menu relative">
                   <button
                     type="button"
@@ -610,6 +623,18 @@ export default function Navbar() {
                       >
                         Help Center
                       </button>
+                      {profile?.is_beta_tester ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAccountMenuOpen(false)
+                            router.push("/beta")
+                          }}
+                          className="w-full px-4 py-2 text-left text-sm hover:bg-white/10"
+                        >
+                          Beta Hub
+                        </button>
+                      ) : null}
                       <button
                         type="button"
                         onClick={() => {
@@ -733,6 +758,21 @@ export default function Navbar() {
               </span>
             ) : null}
           </Link>
+
+          {profile?.is_beta_tester ? (
+            <Link
+              href="/beta"
+              className={`flex items-center gap-2 rounded-lg px-3 py-2 transition ${
+                isActive("/beta")
+                  ? "border border-yellow-400/40 bg-yellow-500/25 text-yellow-200"
+                  : "border border-yellow-400/25 bg-yellow-500/15 text-yellow-300 hover:bg-yellow-500/25"
+              }`}
+              onClick={closeMobile}
+            >
+              <span>Beta Hub</span>
+              {betaBadge}
+            </Link>
+          ) : null}
 
           <div>
             <button

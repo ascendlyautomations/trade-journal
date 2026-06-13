@@ -18,7 +18,7 @@ import { supabase } from "./supabaseClient"
 
 /** Columns allowed in global client profile state — never load billing or moderation extras. */
 const USER_PROFILE_SELECT =
-  "id, username, avatar_url, is_pro, subscription_status, is_banned, banned_reason, referral_code" as const
+  "id, username, avatar_url, is_pro, subscription_status, is_banned, banned_reason, referral_code, is_beta_tester" as const
 
 export type UserProfileSlice = {
   id: string
@@ -29,6 +29,7 @@ export type UserProfileSlice = {
   is_banned: boolean | null
   banned_reason: string | null
   referral_code: string | null
+  is_beta_tester: boolean | null
 }
 
 function pickUserProfileFields(row: unknown): UserProfileSlice | null {
@@ -47,6 +48,7 @@ function pickUserProfileFields(row: unknown): UserProfileSlice | null {
     is_banned: typeof o.is_banned === "boolean" ? o.is_banned : null,
     banned_reason: o.banned_reason != null ? String(o.banned_reason) : null,
     referral_code: o.referral_code != null ? String(o.referral_code) : null,
+    is_beta_tester: typeof o.is_beta_tester === "boolean" ? o.is_beta_tester : null,
   }
 }
 
