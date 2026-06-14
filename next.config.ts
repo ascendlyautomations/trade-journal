@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
   typescript: {
@@ -33,4 +34,16 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+const sentryBuildOptions = {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  silent: !process.env.CI,
+  ...(process.env.SENTRY_AUTH_TOKEN
+    ? {
+        authToken: process.env.SENTRY_AUTH_TOKEN,
+        widenClientFileUpload: true,
+      }
+    : {}),
+};
+
+export default withSentryConfig(nextConfig, sentryBuildOptions);

@@ -20,6 +20,8 @@ import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import { formatMoneyUnknown, formatRR } from "@/lib/formatDisplay"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { createRoomJoinNotification } from "@/lib/createRoomJoinNotification"
+import { isCurrentUserAdmin } from "@/lib/adminUsers"
+import { isBetaAnnouncementsSection } from "@/lib/betaHub"
 
 type Room = {
   id: string
@@ -240,6 +242,7 @@ function CommunityContent() {
   const [sections, setSections] = useState<any[]>([])
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null)
   const [isOwner, setIsOwner] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
   const [activeMembers, setActiveMembers] = useState<number>(0)
   const [leftMembers, setLeftMembers] = useState<number>(0)
   const [showOnProfile, setShowOnProfile] = useState(true)
@@ -424,15 +427,23 @@ function CommunityContent() {
     [sections, selectedSectionId]
   )
 
+  const isBetaAnnouncementsLocked = useMemo(
+    () => isBetaAnnouncementsSection(selectedRoom?.slug, currentSection),
+    [selectedRoom?.slug, currentSection]
+  )
+
   const canPostInRoom = useMemo(() => {
     if (!selectedRoomId || needsJoin) return false
     if (isOwner) return true
+    if (isBetaAnnouncementsLocked) return isAdmin
     if (sections.length === 0) return true
     return currentSection?.allow_members_chat !== false
   }, [
     selectedRoomId,
     needsJoin,
     isOwner,
+    isAdmin,
+    isBetaAnnouncementsLocked,
     sections.length,
     currentSection?.allow_members_chat,
   ])
@@ -466,6 +477,14 @@ function CommunityContent() {
       id: selectedSectionId,
     }
   }, [sections.length, selectedSectionId])
+
+  useEffect(() => {
+    if (!user?.id) {
+      setIsAdmin(false)
+      return
+    }
+    void isCurrentUserAdmin().then(setIsAdmin)
+  }, [user?.id])
 
   useEffect(() => {
     async function checkOwner() {
@@ -1700,7 +1719,7 @@ function CommunityContent() {
   }, [selectedRoomId, username])
 
   async function sendMessage() {
-    if (!user?.id || !selectedRoomId) return
+    if (!user?.id || !selectedRoomId || !canPostInRoom) return
     const content = draft.trim()
     if (!content) return
 
@@ -1736,7 +1755,7 @@ function CommunityContent() {
   }
 
   async function handleImageUpload(e: ChangeEvent<HTMLInputElement>) {
-    if (!user?.id || !selectedRoomId) return
+    if (!user?.id || !selectedRoomId || !canPostInRoom) return
     const file = e.target.files?.[0]
     e.target.value = ""
     if (!file) return
@@ -1813,7 +1832,7 @@ function CommunityContent() {
   }, [selectTrade, user?.id])
 
   async function sendTradeMessage(trade: any) {
-    if (!user?.id || !selectedRoomId) return
+    if (!user?.id || !selectedRoomId || !canPostInRoom) return
 
     const userIsPro = await isUserPro(supabase as any, user.id)
     if (!userIsPro) {
@@ -2386,7 +2405,9 @@ function CommunityContent() {
                 !canPostInRoom &&
                 !isOwner ? (
                   <div className="p-3 text-sm text-gray-400">
-                    Only the room owner can post in this section.
+                    {isBetaAnnouncementsLocked
+                      ? "Only admins can post in this section."
+                      : "Only the room owner can post in this section."}
                   </div>
                 ) : (
                   <DmStyleComposer

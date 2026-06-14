@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import BannedAccountShell from "./components/BannedAccountShell"
+import SentryIdentifyUser from "./components/SentryIdentifyUser"
 import ToastRoot from "./components/ToastRoot"
 import { UserProfileProvider } from "@/lib/UserProfileProvider"
 
@@ -35,6 +36,7 @@ export default function RootLayout({
       <body className="flex flex-col">
         <ToastRoot>
           <UserProfileProvider>
+            <SentryIdentifyUser />
             <BannedAccountShell>
               {/* pt-16: fixed Navbar offset (AppShell + page-level). Login uses -mt-16. */}
               <div className="w-full flex flex-col pt-16">

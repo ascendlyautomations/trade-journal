@@ -2097,9 +2097,10 @@ function ProfilePageContent() {
     ? Math.max(...analyticsTrades.map((t) => t.pnl || 0))
     : 0
 
-  const biggestLoss = analyticsTrades.length
-    ? Math.min(...analyticsTrades.map((t) => t.pnl || 0))
-    : 0
+  const losingPnls = analyticsTrades
+    .map((t) => Number(t.pnl) || 0)
+    .filter((pnl) => pnl < 0)
+  const biggestLoss = losingPnls.length > 0 ? Math.min(...losingPnls) : null
 
   const longTrades = analyticsTrades.filter((t) => t.direction === "Long").length
 
@@ -2853,7 +2854,7 @@ function ProfilePageContent() {
                       <div className="rounded-xl border border-white/10 bg-white/5 p-4">
                         <p className="text-sm text-gray-400">Biggest Loss</p>
                         <p className="font-semibold text-red-400 tabular-nums">
-                          {formatPnlCurrency(biggestLoss)}
+                          {biggestLoss != null ? formatPnlCurrency(biggestLoss) : "—"}
                         </p>
                       </div>
 
