@@ -166,15 +166,6 @@ export default function AdminPage() {
               Admin Dashboard
             </h1>
             <p className="mt-1 text-sm text-gray-400">Choose a module. Queues and analytics open on dedicated pages.</p>
-            <button
-              type="button"
-              onClick={() => {
-                throw new Error("TradeTraxs Sentry Test")
-              }}
-              className="mt-3 rounded-lg border border-white/15 bg-white/5 px-4 py-2 text-sm font-medium text-gray-200 transition hover:border-white/25 hover:bg-white/10"
-            >
-              Test Sentry
-            </button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -233,6 +224,12 @@ export default function AdminPage() {
                   {openFeatureRequestCount} open
                 </span>
               }
+            />
+            <AdminModuleCard
+              href="/admin/beta"
+              title="Beta Dashboard"
+              description="Beta tester activity, participation, bug reports, and feature request metrics."
+              variant="blue"
             />
             <AdminModuleCard
               href="/admin/affiliates"
