@@ -19,6 +19,7 @@ import {
   INPUT_TRADE_PAGE_TITLE_ROW_CLASSNAME,
 } from "@/lib/inputTradePageTitle"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
+import { feedbackPresets } from "@/lib/feedbackPresets"
 
 export default function Home() {
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
@@ -67,11 +68,7 @@ export default function Home() {
     console.log("CSV CHECK:", profile)
 
     if (!profile.is_pro && profile.has_used_csv_import) {
-      showPopup({
-        type: "warning",
-        message:
-          "Free plan includes one CSV import only. Upgrade to import more.",
-      })
+      showPopup(feedbackPresets.csvImportUnavailable())
       setLoading(false)
       return
     }

@@ -38,6 +38,7 @@ import {
 } from "@/lib/affiliateStripeConnect"
 import { createUserRoom } from "@/lib/createUserRoom"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
+import { feedbackPresets, persistentError } from "@/lib/feedbackPresets"
 import TradingAccountsSettingsSection from "@/app/components/TradingAccountsSettingsSection"
 import { useScrollPageTopOnMount } from "@/lib/useScrollPageTopOnMount"
 
@@ -433,7 +434,7 @@ export default function SettingsPage() {
         : p
     )
     setAvatarFile(null)
-    showPopup({ type: "success", message: "Profile updated successfully" })
+    showPopup(feedbackPresets.profileSaveSuccess())
   }
 
   async function updatePassword() {
@@ -486,7 +487,9 @@ export default function SettingsPage() {
       window.location.href = "/login"
     } catch (err) {
       console.error(err)
-      showPopup({ type: "error", message: "Failed to delete account" })
+      showPopup(
+        persistentError("Delete Failed", "Failed to delete account.")
+      )
     } finally {
       setDeleting(false)
     }
@@ -518,7 +521,9 @@ export default function SettingsPage() {
       window.URL.revokeObjectURL(url)
     } catch (err) {
       console.error(err)
-      showPopup({ type: "error", message: "Failed to export data" })
+      showPopup(
+        persistentError("Export Failed", "Failed to export data.")
+      )
     }
   }
 

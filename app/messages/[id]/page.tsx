@@ -13,7 +13,7 @@ import {
 import { supabase } from "../../../lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
 import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
-import { handleSupabaseError } from "@/lib/handleSupabaseError"
+import { feedbackPresets } from "@/lib/feedbackPresets"
 import { logSupabaseError } from "@/lib/logSupabaseError"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import EmptyState from "@/app/components/ui/EmptyState"
@@ -1044,10 +1044,7 @@ export default function DMPage() {
         10
       )
       if (limitReached) {
-        showPopup({
-          type: "warning",
-          message: handleSupabaseError({ message: "10 messages limit" }),
-        })
+        showPopup(feedbackPresets.messageLimit())
         return
       }
     }
@@ -1137,10 +1134,7 @@ export default function DMPage() {
         10
       )
       if (limitReached) {
-        showPopup({
-          type: "warning",
-          message: handleSupabaseError({ message: "10 messages limit" }),
-        })
+        showPopup(feedbackPresets.messageLimit())
         return
       }
     }

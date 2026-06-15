@@ -17,7 +17,7 @@ import { supabase } from "../../lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
 import { formatEST } from "@/lib/formatEST"
 import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
-import { handleSupabaseError } from "@/lib/handleSupabaseError"
+import { feedbackPresets, persistentError } from "@/lib/feedbackPresets"
 import { formatMoneyUnknown, formatRR } from "@/lib/formatDisplay"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { createRoomJoinNotification } from "@/lib/createRoomJoinNotification"
@@ -816,7 +816,7 @@ function CommunityContent() {
     if (messagesError) {
       setDeletingSectionId(null)
       console.error("executeDeleteSection messages:", messagesError)
-      showPopup({ type: "error", message: "Failed to delete channel messages" })
+      showPopup(persistentError("Delete Failed", "Failed to delete channel messages"))
       return
     }
 
@@ -829,7 +829,7 @@ function CommunityContent() {
 
     if (sectionError) {
       console.error("executeDeleteSection section:", sectionError)
-      showPopup({ type: "error", message: "Failed to delete channel" })
+      showPopup(persistentError("Delete Failed", "Failed to delete channel"))
       return
     }
 
@@ -1101,7 +1101,7 @@ function CommunityContent() {
 
     if (error) {
       console.error("handleRemoveMember:", error)
-      showPopup({ type: "error", message: "Failed to remove member" })
+      showPopup(persistentError("Remove Failed", "Failed to remove member"))
       return
     }
 
@@ -1125,7 +1125,7 @@ function CommunityContent() {
     if (banError && banError.code !== "23505") {
       setBanningMemberId(null)
       console.error("handleBanMember:", banError)
-      showPopup({ type: "error", message: "Failed to ban member" })
+      showPopup(persistentError("Ban Failed", "Failed to ban member"))
       return
     }
 
@@ -1732,10 +1732,7 @@ function CommunityContent() {
         10
       )
       if (limitReached) {
-        showPopup({
-          type: "warning",
-          message: handleSupabaseError({ message: "10 messages limit" }),
-        })
+        showPopup(feedbackPresets.messageLimit())
         return
       }
     }
@@ -1769,10 +1766,7 @@ function CommunityContent() {
         10
       )
       if (limitReached) {
-        showPopup({
-          type: "warning",
-          message: handleSupabaseError({ message: "10 messages limit" }),
-        })
+        showPopup(feedbackPresets.messageLimit())
         return
       }
     }
@@ -1843,10 +1837,7 @@ function CommunityContent() {
         10
       )
       if (limitReached) {
-        showPopup({
-          type: "warning",
-          message: handleSupabaseError({ message: "10 messages limit" }),
-        })
+        showPopup(feedbackPresets.messageLimit())
         return
       }
     }

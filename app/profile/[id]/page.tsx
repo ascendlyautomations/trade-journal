@@ -58,6 +58,7 @@ import { createUserRoom } from "@/lib/createUserRoom"
 import { loadFollowUiSnapshot } from "@/lib/followActions"
 import FollowButton from "../../components/FollowButton"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
+import { feedbackPresets, persistentError } from "@/lib/feedbackPresets"
 import { logSupabaseError } from "@/lib/logSupabaseError"
 import { ensureDmConversation } from "@/lib/dmConversation"
 import { dmThreadPath } from "@/lib/messageRoutes"
@@ -1507,7 +1508,7 @@ function ProfilePageContent() {
 
       if (upErr) {
         console.error(upErr)
-        showPopup({ type: "error", message: upErr.message })
+        showPopup(persistentError("Post Failed", upErr.message))
         setCreatingPost(false)
         return
       }
@@ -1528,7 +1529,9 @@ function ProfilePageContent() {
 
     if (error) {
       console.error(error)
-      showPopup({ type: "error", message: handleSupabaseError(error) })
+      showPopup(
+        persistentError("Post Failed", handleSupabaseError(error))
+      )
       return
     }
 
@@ -1543,6 +1546,7 @@ function ProfilePageContent() {
       .order("created_at", { ascending: false })
 
     setWallPosts(data || [])
+    showPopup(feedbackPresets.postPublished())
   }
 
   const posts = wallPosts
@@ -1988,6 +1992,21 @@ function ProfilePageContent() {
     if (String(profile.id) !== String(currentUserId)) return
 
     void openFollowersModal()
+    clearProfileQueryParams()
+  }, [
+    clearProfileQueryParams,
+    currentUserId,
+    loading,
+    profile?.id,
+    searchParams,
+  ])
+
+  useEffect(() => {
+    if (!profile?.id || !currentUserId || loading) return
+    if (searchParams.get("createPost") !== "1") return
+    if (String(profile.id) !== String(currentUserId)) return
+
+    setShowCreatePost(true)
     clearProfileQueryParams()
   }, [
     clearProfileQueryParams,

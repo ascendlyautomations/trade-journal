@@ -2,6 +2,7 @@
 
 import DashboardFilters from "../../components/dashboard/DashboardFilters"
 import DashboardHeader from "../../components/dashboard/DashboardHeader"
+import GettingStartedChecklist from "../../components/dashboard/GettingStartedChecklist"
 import DashboardStatsGrid from "../../components/dashboard/DashboardStatsGrid"
 import DashboardEquityCurve from "../../components/dashboard/DashboardEquityCurve"
 import DashboardWeekdayChart from "../../components/dashboard/DashboardWeekdayChart"
@@ -40,6 +41,11 @@ import {
   resolveTradingTimeSourceForKey,
 } from "@/lib/formatDate"
 import { normalizeProfileUsername } from "@/lib/profileUsername"
+import {
+  computeGettingStartedProgress,
+  shouldShowGettingStartedCard,
+} from "@/lib/gettingStartedChecklist"
+import { fetchGettingStartedChecklistSignals } from "@/lib/gettingStartedChecklistSignals"
 const DASHBOARD_GEAR_PREFS_KEY = "tradetrax_dashboard_prefs_v1"
 
 function loadDashboardGearPrefs(): Partial<DashboardGearPersistedPrefs> | null {
@@ -495,6 +501,12 @@ export default function Dashboard() {
   const didHydrateDashboardPrefs = useRef(false)
   /** Same fetch as /trades — used only for filter dropdown labels (#account_number vs UUID). */
   const [accountRows, setAccountRows] = useState<any[]>([])
+  const [checklistSignals, setChecklistSignals] = useState({
+    profilePostCount: 0,
+    feedPostCount: 0,
+    followCount: 0,
+    joinedOtherRoom: false,
+  })
 
   const accountById = useMemo(() => {
     const m: Record<string, any> = {}
@@ -608,6 +620,10 @@ export default function Dashboard() {
       .single()
 
     if (profileData) setProfile(profileData)
+
+    setChecklistSignals(
+      await fetchGettingStartedChecklistSignals(supabase, currentUser.id)
+    )
 
     setLoading(false)
   }, [])
@@ -1313,6 +1329,33 @@ const worstDay = dailyPnLs.length > 0
     return keys.size >= 1
   }, [trades, isPro])
 
+  const gettingStartedProgress = useMemo(
+    () =>
+      computeGettingStartedProgress({
+        onboardingCompleted: profile?.onboarding_completed === true,
+        tradeCount: trades.length,
+        profilePostCount: checklistSignals.profilePostCount,
+        feedPostCount: checklistSignals.feedPostCount,
+        followCount: checklistSignals.followCount,
+        joinedOtherRoom: checklistSignals.joinedOtherRoom,
+      }),
+    [
+      profile?.onboarding_completed,
+      trades.length,
+      checklistSignals.profilePostCount,
+      checklistSignals.feedPostCount,
+      checklistSignals.followCount,
+      checklistSignals.joinedOtherRoom,
+    ]
+  )
+
+  const refreshChecklistSignals = useCallback(async () => {
+    if (!user?.id) return
+    setChecklistSignals(
+      await fetchGettingStartedChecklistSignals(supabase, user.id)
+    )
+  }, [user?.id])
+
   if (loading) {
     return (
       <div className="w-full flex items-center justify-center text-white">
@@ -1320,6 +1363,21 @@ const worstDay = dailyPnLs.length > 0
       </div>
     )
   }
+
+  const hasNoTrades = trades.length === 0
+
+  const showGettingStartedCard = shouldShowGettingStartedCard(
+    hasNoTrades,
+    gettingStartedProgress.allComplete
+  )
+
+  const gettingStartedSection = showGettingStartedCard ? (
+    <GettingStartedChecklist
+      progress={gettingStartedProgress}
+      profileId={user?.id ?? profile?.id}
+      onChecklistRefresh={() => void refreshChecklistSignals()}
+    />
+  ) : null
 
   const currentStreak =
     streakData?.currentType === "loss"
@@ -1597,34 +1655,36 @@ const worstDay = dailyPnLs.length > 0
       <div className="w-full text-white px-3 pb-3 pt-0 md:px-10 md:pb-10">
 
         <div className="relative z-50 mx-auto w-full max-w-[1600px] px-4 md:px-6">
-          <DashboardFilters
-            accounts={accounts}
-            accountFilter={accountFilter}
-            onAccountChange={setAccountFilter}
-            accountTypeFilter={accountTypeFilter}
-            onAccountTypeChange={setAccountTypeFilter}
-            timeframe={timeFilter}
-            onTimeframeChange={handleDashboardTimeframeChange}
-            customRangeStart={customRangeStart}
-            customRangeEnd={customRangeEnd}
-            onCustomRangeApply={handleDashboardCustomRangeApply}
-            selectedDate={selectedDate}
-            onSelectedDateChange={setSelectedDate}
-            showPublicOnly={showPublicOnly}
-            onTogglePublicOnly={() => setShowPublicOnly(!showPublicOnly)}
-            onOpenPerformanceShare={() => setShowPerformanceShare(true)}
-            showControls={showControls}
-            onToggleShowControls={() => setShowControls((prev) => !prev)}
-            gearDraft={gearDraft}
-            setGearDraft={setGearDraft}
-            ddInputFocused={ddInputFocused}
-            setDdInputFocused={setDdInputFocused}
-            savingGearSettings={savingGearSettings}
-            hasUser={Boolean(user)}
-            onSaveGear={() => void saveDashboardGearPanel()}
-            onCancelGear={cancelDashboardGearPanel}
-            showShareControls={totalTrades > 0}
-          />
+          {!hasNoTrades ? (
+            <DashboardFilters
+              accounts={accounts}
+              accountFilter={accountFilter}
+              onAccountChange={setAccountFilter}
+              accountTypeFilter={accountTypeFilter}
+              onAccountTypeChange={setAccountTypeFilter}
+              timeframe={timeFilter}
+              onTimeframeChange={handleDashboardTimeframeChange}
+              customRangeStart={customRangeStart}
+              customRangeEnd={customRangeEnd}
+              onCustomRangeApply={handleDashboardCustomRangeApply}
+              selectedDate={selectedDate}
+              onSelectedDateChange={setSelectedDate}
+              showPublicOnly={showPublicOnly}
+              onTogglePublicOnly={() => setShowPublicOnly(!showPublicOnly)}
+              onOpenPerformanceShare={() => setShowPerformanceShare(true)}
+              showControls={showControls}
+              onToggleShowControls={() => setShowControls((prev) => !prev)}
+              gearDraft={gearDraft}
+              setGearDraft={setGearDraft}
+              ddInputFocused={ddInputFocused}
+              setDdInputFocused={setDdInputFocused}
+              savingGearSettings={savingGearSettings}
+              hasUser={Boolean(user)}
+              onSaveGear={() => void saveDashboardGearPanel()}
+              onCancelGear={cancelDashboardGearPanel}
+              showShareControls={totalTrades > 0}
+            />
+          ) : null}
           <DashboardHeader
             isPro={isPro}
             showFreePlanAccountBanner={showFreePlanAccountBanner}
@@ -1633,43 +1693,63 @@ const worstDay = dailyPnLs.length > 0
 
           <div className="relative z-0 mx-auto w-full max-w-[1600px] px-4 md:px-6 flex flex-col gap-6 md:gap-8 overflow-visible">
 
-  {totalTrades === 0 ? (
-    <div className="rounded-xl border border-white/10 bg-white/5 p-6 backdrop-blur-md md:p-8">
-      <h2 className="bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-2xl font-semibold text-transparent md:text-3xl">
-        Welcome to TradeTraxs
-      </h2>
-      <p className="mt-3 text-base font-medium text-gray-100 md:text-lg">
-        Track every trade.
-        <br />
-        Discover your edge.
-        <br />
-        Improve your performance.
-      </p>
-      <p className="mt-3 max-w-2xl text-sm text-gray-400 md:text-base">
-        Get started by logging your first trade or importing your trading history.
-      </p>
-      <div className="mt-6 flex flex-wrap items-center gap-3">
-        <Link
-          href="/app"
-          className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600"
-        >
-          Add Trade
-        </Link>
-        <button
-          type="button"
-          onClick={() => setShowImportModal(true)}
-          className="rounded-lg border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/15"
-        >
-          Import CSV
-        </button>
+  {hasNoTrades ? (
+    <>
+      <div className="rounded-xl border border-white/10 bg-white/5 p-6 backdrop-blur-md md:p-8">
+        <h2 className="bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-2xl font-semibold text-transparent md:text-3xl">
+          Welcome to TradeTraxs
+        </h2>
+        <p className="mt-3 text-base font-medium text-gray-100 md:text-lg">
+          Track every trade.
+          <br />
+          Discover your edge.
+          <br />
+          Improve your performance.
+        </p>
+        <p className="mt-3 max-w-2xl text-sm text-gray-400 md:text-base">
+          Get started by logging your first trade or importing your trading history.
+        </p>
+        <div className="mt-6 flex flex-wrap items-center gap-3">
+          <Link
+            href="/app"
+            className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600"
+          >
+            Add Trade
+          </Link>
+          <button
+            type="button"
+            onClick={() => setShowImportModal(true)}
+            className="rounded-lg border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/15"
+          >
+            Import CSV
+          </button>
+        </div>
+        <div className="mt-8 border-t border-white/10 pt-6">
+          <p className="text-sm font-medium text-gray-300">
+            After your first trade you&apos;ll unlock:
+          </p>
+          <ul className="mt-3 space-y-2 text-sm text-gray-400">
+            <li>• Performance statistics</li>
+            <li>• Equity curve tracking</li>
+            <li>• Session &amp; weekday analysis</li>
+            <li>• Symbol performance insights</li>
+          </ul>
+        </div>
       </div>
-    </div>
-  ) : null}
-
-  {totalTrades === 0 ? (
-    recentTradesSection
+      {gettingStartedSection}
+    </>
+  ) : totalTrades === 0 ? (
+    <>
+      {gettingStartedSection}
+      <EmptyState
+        title="No trades match your filters"
+        description="Try adjusting your account, mode, timeframe, or date filters to see your trades."
+        className="rounded-xl border border-white/10 bg-white/5 py-12 backdrop-blur-md"
+      />
+    </>
   ) : (
     <>
+      {gettingStartedSection}
   {/* TOP: STATS + CHART */}
   <div className="grid overflow-visible lg:grid-cols-3 gap-4 md:gap-6">
 

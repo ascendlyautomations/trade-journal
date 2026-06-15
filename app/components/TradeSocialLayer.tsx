@@ -13,7 +13,7 @@ import {
 } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
-import { handleSupabaseError } from "@/lib/handleSupabaseError"
+import { feedbackPresets } from "@/lib/feedbackPresets"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 
 type TradeSocialContextValue = {
@@ -264,10 +264,7 @@ export function TradeSocialProvider({
         10
       )
       if (limitReached) {
-        showPopup({
-          type: "warning",
-          message: handleSupabaseError({ message: "10 messages limit" }),
-        })
+        showPopup(feedbackPresets.messageLimit())
         return
       }
     }

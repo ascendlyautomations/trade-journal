@@ -6,6 +6,7 @@ import { useState } from "react"
 import PublicNavbar from "../components/PublicNavbar"
 import { supabase } from "@/lib/supabaseClient"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
+import { feedbackPresets } from "@/lib/feedbackPresets"
 
 const freeFeatures = [
   "Track your trades",
@@ -81,11 +82,15 @@ export default function PricingPage() {
       if (data.url) {
         window.location.href = data.url
       } else {
-        showPopup({ type: "error", message: data.error || "Checkout failed" })
+        showPopup(
+          feedbackPresets.subscriptionCheckoutFailed(
+            data.error || "Checkout failed"
+          )
+        )
       }
     } catch (e) {
       console.error("Checkout error:", e)
-      showPopup({ type: "error", message: "Checkout failed" })
+      showPopup(feedbackPresets.subscriptionCheckoutFailed("Checkout failed"))
     } finally {
       setCheckoutLoading(false)
     }

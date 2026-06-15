@@ -11,6 +11,7 @@ import CreateAccountModal, {
 import { supabase } from "@/lib/supabaseClient"
 import { isProActive } from "@/lib/subscription"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
+import { feedbackPresets, persistentError } from "@/lib/feedbackPresets"
 
 const CSV_INPUT_ID = "post-setup-csv-import"
 
@@ -103,16 +104,17 @@ export default function PostSetupImportModal({ open, onComplete }: Props) {
         .eq("user_id", user.id)
       if (countErr) {
         console.error(countErr)
-        showPopup({ type: "error", message: "Failed to verify account limit" })
+        showPopup(
+          persistentError(
+            "Could Not Verify Limit",
+            "Failed to verify account limit."
+          )
+        )
         return
       }
       if ((existingAccounts || []).length >= 1) {
         setCanCreateMoreAccounts(false)
-        showPopup({
-          type: "warning",
-          message:
-            "Free plan allows only 1 account. Upgrade to Pro to create more.",
-        })
+        showPopup(feedbackPresets.accountLimit())
         return
       }
     }
@@ -139,7 +141,9 @@ export default function PostSetupImportModal({ open, onComplete }: Props) {
 
     if (error) {
       console.error(error)
-      showPopup({ type: "error", message: "Failed to create account" })
+      showPopup(
+        persistentError("Account Creation Failed", "Failed to create account.")
+      )
       return
     }
 

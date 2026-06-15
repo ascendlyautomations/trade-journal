@@ -6,7 +6,7 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { useSearchParams } from "next/navigation"
 import { supabase } from "../../../lib/supabaseClient"
 import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
-import { handleSupabaseError } from "@/lib/handleSupabaseError"
+import { feedbackPresets } from "@/lib/feedbackPresets"
 import FeedLoadMoreFooter from "../../components/feed/FeedLoadMoreFooter"
 import FeedModeToggle from "../../components/feed/FeedModeToggle"
 import FeedPostList from "../../components/feed/FeedPostList"
@@ -772,10 +772,7 @@ function FeedPageContent() {
           10
         )
         if (limitReached) {
-          showPopup({
-            type: "warning",
-            message: handleSupabaseError({ message: "10 messages limit" }),
-          })
+            showPopup(feedbackPresets.messageLimit())
           return false
         }
       }

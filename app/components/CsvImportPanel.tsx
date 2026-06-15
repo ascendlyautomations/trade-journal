@@ -16,11 +16,8 @@ import {
   type CsvSelectedAccount,
   insertCsvTradesWithAccount,
 } from "@/lib/insertCsvTradesWithAccount"
-import {
-  assessFreePlanTradeUpload,
-  freePlanCsvImportLimitExceededMessage,
-  FREE_PLAN_TRADE_LIMIT_REACHED,
-} from "@/lib/freePlanLimits"
+import { assessFreePlanTradeUpload } from "@/lib/freePlanLimits"
+import { feedbackPresets } from "@/lib/feedbackPresets"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import CsvImportUnsupportedBanner from "@/app/components/CsvImportUnsupportedBanner"
@@ -58,7 +55,7 @@ export default function CsvImportPanel({
   selectedAccount = null,
   requireSelectedAccount = false,
 }: CsvImportPanelProps) {
-  const { showPopup, feedbackModalProps } = useFeedbackPopup({ autoDismissMs: 6000 })
+  const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const [parsed, setParsed] = useState<CsvRow[]>([])
   const [loading, setLoading] = useState(false)
   const [unrecognized, setUnrecognized] = useState(false)
@@ -102,10 +99,11 @@ export default function CsvImportPanel({
     if (parsed.length === 0) return
 
     if (requireSelectedAccount && !selectedAccount) {
-      showPopup({
-        type: "error",
-        message: "Please create or select an account before importing trades",
-      })
+      showPopup(
+        feedbackPresets.importFailed(
+          "Please create or select an account before importing trades."
+        )
+      )
       return
     }
 
@@ -114,7 +112,7 @@ export default function CsvImportPanel({
     const { data: userData } = await supabase.auth.getUser()
     const user = userData.user
     if (!user) {
-      showPopup({ type: "error", message: "Please log in first" })
+      showPopup(feedbackPresets.importFailed("Please log in first."))
       setLoading(false)
       return
     }
@@ -127,7 +125,7 @@ export default function CsvImportPanel({
 
     if (profileErr || !profile) {
       console.error("Profile fetch failed:", profileErr)
-      showPopup({ type: "error", message: "Could not verify account. Try again." })
+      showPopup(feedbackPresets.importFailed("Could not verify account. Try again."))
       setLoading(false)
       return
     }
@@ -162,26 +160,18 @@ export default function CsvImportPanel({
           parsedTrades.length
         )
       } catch {
-        showPopup({
-          type: "error",
-          message: "Could not verify daily trade limit. Please try again.",
-          persist: true,
-        })
+        showPopup(feedbackPresets.importVerifyFailed())
         setLoading(false)
         return
       }
 
       if (!uploadCheck.allowed) {
-        const limitMsg = freePlanCsvImportLimitExceededMessage(
-          parsedTrades.length,
-          uploadCheck.remaining
+        showPopup(
+          feedbackPresets.csvImportLimitExceeded(
+            parsedTrades.length,
+            uploadCheck.remaining
+          )
         )
-        showPopup({
-          type: "error",
-          title: limitMsg.title,
-          message: limitMsg.description,
-          persist: true,
-        })
         setLoading(false)
         return
       }
@@ -190,12 +180,7 @@ export default function CsvImportPanel({
     }
 
     if (!tradesToInsert.length) {
-      showPopup({
-        type: "error",
-        title: FREE_PLAN_TRADE_LIMIT_REACHED.title,
-        message: FREE_PLAN_TRADE_LIMIT_REACHED.description,
-        persist: true,
-      })
+      showPopup(feedbackPresets.tradeLimitReached())
       setLoading(false)
       return
     }
@@ -223,10 +208,11 @@ export default function CsvImportPanel({
       )
       if (importAcctErr) {
         console.error(importAcctErr)
-        showPopup({
-          type: "error",
-          message: "Could not register imported account row. Try again.",
-        })
+        showPopup(
+          feedbackPresets.importFailed(
+            "Could not register imported account row. Try again."
+          )
+        )
         setLoading(false)
         return
       }
@@ -237,7 +223,7 @@ export default function CsvImportPanel({
 
     if (error) {
       console.error("INSERT ERROR:", error)
-      showPopup({ type: "error", message: handleSupabaseError(error) })
+      showPopup(feedbackPresets.importFailed(handleSupabaseError(error)))
     } else {
       if (!hasUsedInitialImport) {
         const { error: initialImportFlagErr } = await supabase
@@ -265,10 +251,10 @@ export default function CsvImportPanel({
         .map((r) => `Row ${r.rowNumber}: ${r.reason}`)
         .join("\n")
       const importedCount = tradesToInsert.length
-      let msg = `Trades imported successfully. They are private by default. You can make them public by editing a trade. (${importedCount} imported)`
-      if (skipped) msg += ` ${skipped} row(s) skipped.`
-      if (errLines) msg += `\n\n${errLines}`
-      showPopup({ type: "success", message: msg })
+      const successFeedback = feedbackPresets.importSuccess(importedCount, skipped)
+      let message = successFeedback.message as string
+      if (errLines) message += `\n\n${errLines}`
+      showPopup({ ...successFeedback, message })
       setParsed([])
       setUnrecognized(false)
       setBrokerHint(null)

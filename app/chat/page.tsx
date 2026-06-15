@@ -6,7 +6,7 @@ import { useEffect, useState, useRef } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
 import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
-import { handleSupabaseError } from "@/lib/handleSupabaseError"
+import { feedbackPresets } from "@/lib/feedbackPresets"
 import { logSupabaseError } from "@/lib/logSupabaseError"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { useRouter } from "next/navigation"
@@ -141,10 +141,7 @@ export default function ChatPage() {
         10
       )
       if (limitReached) {
-        showPopup({
-          type: "warning",
-          message: handleSupabaseError({ message: "10 messages limit" }),
-        })
+        showPopup(feedbackPresets.messageLimit())
         return
       }
     }

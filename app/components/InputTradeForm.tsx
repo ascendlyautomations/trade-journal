@@ -6,7 +6,8 @@ import { compressImage } from "@/lib/compressImage"
 import { ensureManualUserAccountRegistered } from "@/lib/ensureManualUserAccount"
 import { isProActive } from "@/lib/subscription"
 import { insertCsvTradesWithAccount } from "@/lib/insertCsvTradesWithAccount"
-import { hasReachedRowLimit, last24hIso, assessFreePlanTradeUpload, FREE_PLAN_TRADES_PER_24H, FREE_PLAN_TRADE_LIMIT_REACHED, freePlanCsvImportLimitExceededMessage } from "@/lib/freePlanLimits"
+import { hasReachedRowLimit, last24hIso, assessFreePlanTradeUpload, FREE_PLAN_TRADES_PER_24H } from "@/lib/freePlanLimits"
+import { feedbackPresets, persistentError } from "@/lib/feedbackPresets"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import {
   mirrorAccountSettingsHasUsedCsvImport,
@@ -269,8 +270,6 @@ export default function InputTradeForm({
     null
   )
 
-  const csvLimitMessage =
-    "Free plan includes 1 CSV import. Upgrade to Pro to import more trades."
 
   const refreshPlanAndAccountLock = useCallback(async () => {
     const {
@@ -363,7 +362,9 @@ export default function InputTradeForm({
 
     if (error) {
       console.error(error)
-      showPopup({ type: "error", message: handleSupabaseError(error) })
+      showPopup(
+        persistentError("Save Failed", handleSupabaseError(error))
+      )
       return false
     }
     return true
@@ -566,10 +567,12 @@ export default function InputTradeForm({
       exitTime &&
       isExitBeforeEntry(entryDate, entryTime, exitDate, exitTime)
     ) {
-      showPopup({
-        type: "error",
-        message: "Exit date and time must be after entry date and time",
-      })
+      showPopup(
+        persistentError(
+          "Invalid Trade Times",
+          "Exit date and time must be after entry date and time."
+        )
+      )
       return
     }
 
@@ -582,7 +585,9 @@ export default function InputTradeForm({
     } = await supabase.auth.getUser()
 
     if (!user?.id) {
-      showPopup({ type: "error", message: "Please log in to save your trade." })
+      showPopup(
+        persistentError("Sign In Required", "Please log in to save your trade.")
+      )
       setSubmitting(false)
       return
     }
@@ -607,12 +612,7 @@ export default function InputTradeForm({
         sinceIso,
       })
       if (tradeLimitReached) {
-        showPopup({
-          type: "error",
-          title: FREE_PLAN_TRADE_LIMIT_REACHED.title,
-          message: FREE_PLAN_TRADE_LIMIT_REACHED.description,
-          persist: true,
-        })
+        showPopup(feedbackPresets.tradeLimitReached())
         setSubmitting(false)
         return
       }
@@ -629,7 +629,7 @@ export default function InputTradeForm({
       })
       if (publicTradeLimitReached) {
         setIsPublic(false)
-        showPopup({ type: "error", message: "Free plan allows 1 public trade per day." })
+        showPopup(feedbackPresets.publicTradeLimit())
         setSubmitting(false)
         return
       }
@@ -713,7 +713,9 @@ export default function InputTradeForm({
           .eq("id", user.id)
         if (lockErr) {
           console.error("locked account update:", lockErr)
-          showPopup({ type: "error", message: handleSupabaseError(lockErr) })
+          showPopup(
+            persistentError("Save Failed", handleSupabaseError(lockErr))
+          )
           setSubmitting(false)
           return
         }
@@ -754,7 +756,7 @@ export default function InputTradeForm({
           incomingName !== lockedName ||
           incomingNumber !== lockedNumber
         ) {
-          showPopup({ type: "error", message: "Your free plan is locked to one account. Switch back to that account to save." })
+          showPopup(feedbackPresets.accountLocked())
           setSelectedAccount({
             name: lockedName,
             size: lockedSize,
@@ -779,7 +781,12 @@ export default function InputTradeForm({
     })
 
     if (!ensured.ok) {
-      showPopup({ type: "error", message: "Could not complete save. Please try again." })
+      showPopup(
+        persistentError(
+          "Save Failed",
+          "Could not complete save. Please try again."
+        )
+      )
       setSubmitting(false)
       return
     }
@@ -849,7 +856,9 @@ export default function InputTradeForm({
 
       if (error) {
         console.error("UPDATE ERROR:", error)
-        showPopup({ type: "error", message: handleSupabaseError(error) })
+        showPopup(
+        persistentError("Save Failed", handleSupabaseError(error))
+      )
         setSubmitting(false)
         return
       }
@@ -871,7 +880,7 @@ export default function InputTradeForm({
               sinceIso,
             })
             if (postLimitReached) {
-              showPopup({ type: "error", message: "Free plan allows 1 post per day. Upgrade to Pro." })
+              showPopup(feedbackPresets.postLimit())
               setSubmitting(false)
               return
             }
@@ -891,7 +900,9 @@ export default function InputTradeForm({
         )
         if (postErr) {
           console.error("posts upsert:", postErr)
-          showPopup({ type: "error", message: handleSupabaseError(postErr) })
+          showPopup(
+            persistentError("Post Failed", handleSupabaseError(postErr))
+          )
           setSubmitting(false)
           return
         }
@@ -907,7 +918,7 @@ export default function InputTradeForm({
       setCommunityPreviewOpen(false)
       onSave?.()
       onClose?.()
-      showPopup({ type: "success", message: "Trade saved successfully" })
+      showPopup(feedbackPresets.tradeSaveSuccess())
       setSubmitting(false)
       return
     }
@@ -974,7 +985,9 @@ export default function InputTradeForm({
 
     if (error) {
       console.error("Trade insert error:", error)
-      showPopup({ type: "error", message: handleSupabaseError(error) })
+      showPopup(
+        persistentError("Save Failed", handleSupabaseError(error))
+      )
       setSubmitting(false)
       return
     }
@@ -989,7 +1002,7 @@ export default function InputTradeForm({
           sinceIso,
         })
         if (postLimitReached) {
-          showPopup({ type: "error", message: "Free plan allows 1 post per day. Upgrade to Pro." })
+          showPopup(feedbackPresets.postLimit())
           setSubmitting(false)
           return
         }
@@ -1007,16 +1020,25 @@ export default function InputTradeForm({
       ])
       if (postError) {
         console.error("Post insert error:", postError)
-        showPopup({ type: "error", message: handleSupabaseError(postError) })
+        showPopup(
+          persistentError("Post Failed", handleSupabaseError(postError))
+        )
         setSubmitting(false)
         return
       }
+
+      void refreshPlanAndAccountLock()
+      setCommunityPreviewOpen(false)
+      resetCreateForm()
+      showPopup(feedbackPresets.postPublished())
+      setSubmitting(false)
+      return
     }
 
     void refreshPlanAndAccountLock()
     setCommunityPreviewOpen(false)
     resetCreateForm()
-    showPopup({ type: "success", message: "Trade saved successfully" })
+    showPopup(feedbackPresets.tradeSaveSuccess())
     setSubmitting(false)
   }
 
@@ -1051,7 +1073,7 @@ export default function InputTradeForm({
         extraEquals: { is_public: true },
       })
       if (publicTradeLimitReached) {
-        showPopup({ type: "error", message: "Free plan allows 1 public trade per day." })
+        showPopup(feedbackPresets.publicTradeLimit())
         setIsPublic(false)
         return
       }
@@ -1078,7 +1100,9 @@ export default function InputTradeForm({
     } = await supabase.auth.getUser()
 
     if (!user?.id) {
-      showPopup({ type: "error", message: "Please log in to save your trade." })
+      showPopup(
+        persistentError("Sign In Required", "Please log in to save your trade.")
+      )
       return
     }
 
@@ -1090,14 +1114,19 @@ export default function InputTradeForm({
 
     if (profileErr || !profile) {
       console.error("Profile fetch failed:", profileErr)
-      showPopup({ type: "error", message: profileErr ? handleSupabaseError(profileErr) : "Something went wrong" })
+      showPopup(
+        persistentError(
+          "Could Not Verify Account",
+          profileErr ? handleSupabaseError(profileErr) : "Something went wrong"
+        )
+      )
       return
     }
 
     console.log("CSV BLOCK CHECK:", profile)
 
     if (!profile.is_pro && profile.has_used_csv_import) {
-      showPopup({ type: "error", message: csvLimitMessage })
+      showPopup(feedbackPresets.csvSubscriptionLimit())
       return
     }
 
@@ -1106,10 +1135,11 @@ export default function InputTradeForm({
 
   async function handleCsvManualImport() {
     if (!selectedAccount) {
-      showPopup({
-        type: "error",
-        message: "Please create or select an account before importing trades",
-      })
+      showPopup(
+        feedbackPresets.importFailed(
+          "Please create or select an account before importing trades."
+        )
+      )
       return
     }
 
@@ -1118,7 +1148,7 @@ export default function InputTradeForm({
         data: { user },
       } = await supabase.auth.getUser()
       if (!user?.id) {
-        showPopup({ type: "error", message: "Please log in first" })
+        showPopup(feedbackPresets.importFailed("Please log in first."))
         return
       }
 
@@ -1129,11 +1159,11 @@ export default function InputTradeForm({
         .single()
       if (profileErr || !profile) {
         console.error("Profile fetch failed:", profileErr)
-        showPopup({ type: "error", message: "Could not verify account. Try again." })
+        showPopup(feedbackPresets.importFailed("Could not verify account. Try again."))
         return
       }
       if (!profile.is_pro && profile.has_used_csv_import) {
-        showPopup({ type: "error", message: csvLimitMessage, persist: true })
+        showPopup(feedbackPresets.csvSubscriptionLimit())
         return
       }
 
@@ -1145,25 +1175,17 @@ export default function InputTradeForm({
           parsedTrades.length
         )
       } catch {
-        showPopup({
-          type: "error",
-          message: "Could not verify daily trade limit. Please try again.",
-          persist: true,
-        })
+        showPopup(feedbackPresets.importVerifyFailed())
         return
       }
 
       if (!uploadCheck.allowed) {
-        const limitMsg = freePlanCsvImportLimitExceededMessage(
-          parsedTrades.length,
-          uploadCheck.remaining
+        showPopup(
+          feedbackPresets.csvImportLimitExceeded(
+            parsedTrades.length,
+            uploadCheck.remaining
+          )
         )
-        showPopup({
-          type: "error",
-          title: limitMsg.title,
-          message: limitMsg.description,
-          persist: true,
-        })
         return
       }
 
@@ -1177,14 +1199,11 @@ export default function InputTradeForm({
 
       if (error) {
         console.error(error)
-        showPopup({ type: "error", message: handleSupabaseError(error) })
+        showPopup(feedbackPresets.importFailed(handleSupabaseError(error)))
         return
       }
 
-      showPopup({
-        type: "success",
-        message: `Imported ${parsedTrades.length} trades`,
-      })
+      showPopup(feedbackPresets.importSuccess(parsedTrades.length))
 
       if (!profile.is_pro) {
         const { error: flagErr } = await supabase
@@ -1209,7 +1228,9 @@ export default function InputTradeForm({
       setSelectedAccount(null)
     } catch (err) {
       console.error(err)
-      showPopup({ type: "error", message: handleSupabaseError(err) })
+      showPopup(
+        persistentError("Import Failed", handleSupabaseError(err))
+      )
     }
   }
 
@@ -1224,7 +1245,9 @@ export default function InputTradeForm({
 
     if (error) {
       console.error(error)
-      showPopup({ type: "error", message: handleSupabaseError(error) })
+      showPopup(
+        persistentError("Save Failed", handleSupabaseError(error))
+      )
       return
     }
 
@@ -1267,15 +1290,14 @@ export default function InputTradeForm({
 
       if (countErr) {
         console.error(countErr)
-        showPopup({ type: "error", message: handleSupabaseError(countErr) })
+        showPopup(
+          persistentError("Account Check Failed", handleSupabaseError(countErr))
+        )
         return
       }
 
       if ((existingAccounts || []).length >= 1) {
-        showPopup({
-          type: "error",
-          message: "Free plan allows only 1 account. Upgrade to Pro to create more.",
-        })
+        showPopup(feedbackPresets.accountLimit())
         return
       }
     }
@@ -1304,7 +1326,9 @@ export default function InputTradeForm({
 
     if (error) {
       console.error(error)
-      showPopup({ type: "error", message: handleSupabaseError(error) })
+      showPopup(
+        persistentError("Save Failed", handleSupabaseError(error))
+      )
       return
     }
 

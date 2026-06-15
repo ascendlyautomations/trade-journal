@@ -5,6 +5,7 @@ import CreateAccountModal, {
   type Props as CreateAccountModalProps,
 } from "@/components/CreateAccountModal"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
+import { feedbackPresets } from "@/lib/feedbackPresets"
 import { supabase } from "@/lib/supabaseClient"
 import { isProActive } from "@/lib/subscription"
 import {
@@ -133,7 +134,7 @@ export default function TradingAccountsSettingsSection({
     const gate = await assertCanCreateTradingAccount(supabase, userId, profile)
     if (!gate.ok) {
       setCreating(false)
-      showPopup({ type: "error", message: gate.message })
+      showPopup(feedbackPresets.accountLimit())
       return
     }
 

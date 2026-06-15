@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { supabase } from "@/lib/supabaseClient"
 import { fetchShareConversations } from "@/lib/shareToConversations"
 import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
-import { handleSupabaseError } from "@/lib/handleSupabaseError"
+import { feedbackPresets } from "@/lib/feedbackPresets"
 import { logSupabaseError } from "@/lib/logSupabaseError"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import FeedPostScreenshot from "./FeedPostScreenshot"
@@ -78,10 +78,7 @@ export default function FeedSharePostOverlay({
         10
       )
       if (limitReached) {
-        showPopup({
-          type: "warning",
-          message: handleSupabaseError({ message: "10 messages limit" }),
-        })
+        showPopup(feedbackPresets.messageLimit())
         return
       }
     }

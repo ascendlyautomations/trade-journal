@@ -1,0 +1,117 @@
+import type { FeedbackPopupInput } from "@/app/components/ui/feedback-popup-types"
+import {
+  FREE_PLAN_TRADE_LIMIT_REACHED,
+  freePlanCsvImportLimitExceededMessage,
+} from "@/lib/freePlanLimits"
+import { FREE_PLAN_ACCOUNT_LIMIT_MESSAGE } from "@/lib/tradingAccounts"
+
+export function persistentError(
+  title: string,
+  message: string
+): FeedbackPopupInput {
+  return { type: "error", title, message, persist: true }
+}
+
+export function persistentWarning(
+  title: string,
+  message: string
+): FeedbackPopupInput {
+  return { type: "warning", title, message, persist: true }
+}
+
+export function persistentSuccess(
+  title: string,
+  message: string
+): FeedbackPopupInput {
+  return { type: "success", title, message, persist: true }
+}
+
+export const feedbackPresets = {
+  tradeLimitReached: (): FeedbackPopupInput =>
+    persistentError(
+      FREE_PLAN_TRADE_LIMIT_REACHED.title,
+      FREE_PLAN_TRADE_LIMIT_REACHED.description
+    ),
+
+  csvImportLimitExceeded: (
+    csvTradeCount: number,
+    remainingUploads: number
+  ): FeedbackPopupInput => {
+    const copy = freePlanCsvImportLimitExceededMessage(
+      csvTradeCount,
+      remainingUploads
+    )
+    return persistentError(copy.title, copy.description)
+  },
+
+  csvSubscriptionLimit: (): FeedbackPopupInput =>
+    persistentWarning(
+      "CSV Import Unavailable",
+      "Free plan includes 1 CSV import. Upgrade to Pro to import more trades."
+    ),
+
+  csvImportUnavailable: (): FeedbackPopupInput =>
+    persistentWarning(
+      "CSV Import Unavailable",
+      "Free plan includes one CSV import only. Upgrade to import more."
+    ),
+
+  publicTradeLimit: (): FeedbackPopupInput =>
+    persistentWarning(
+      "Public Trade Limit Reached",
+      "Free plan allows 1 public trade per 24 hours. Upgrade to Pro to share more."
+    ),
+
+  postLimit: (): FeedbackPopupInput =>
+    persistentWarning(
+      "Post Limit Reached",
+      "Free plan allows 1 post per 24 hours. Upgrade to Pro to post more."
+    ),
+
+  messageLimit: (): FeedbackPopupInput =>
+    persistentWarning(
+      "Message Limit Reached",
+      "Free plan allows 10 messages and comments per 24 hours. Upgrade to Pro."
+    ),
+
+  accountLimit: (): FeedbackPopupInput =>
+    persistentWarning("Account Limit Reached", FREE_PLAN_ACCOUNT_LIMIT_MESSAGE),
+
+  accountLocked: (): FeedbackPopupInput =>
+    persistentError(
+      "Account Locked",
+      "Your free plan is locked to one account. Switch back to that account to save."
+    ),
+
+  importFailed: (detail: string): FeedbackPopupInput =>
+    persistentError("Import Failed", detail),
+
+  importVerifyFailed: (): FeedbackPopupInput =>
+    persistentError(
+      "Could Not Verify Limit",
+      "Could not verify daily trade limit. Please try again."
+    ),
+
+  importSuccess: (importedCount: number, skipped = 0): FeedbackPopupInput => {
+    let message = `${importedCount} trade${importedCount === 1 ? "" : "s"} imported successfully. They are private by default — edit a trade to make it public.`
+    if (skipped > 0) {
+      message += ` ${skipped} row(s) were skipped.`
+    }
+    return persistentSuccess("Import Complete", message)
+  },
+
+  tradeSaveSuccess: (): FeedbackPopupInput =>
+    persistentSuccess("Trade Saved", "Your trade was saved successfully."),
+
+  profileSaveSuccess: (): FeedbackPopupInput =>
+    persistentSuccess("Profile Updated", "Your profile was saved successfully."),
+
+  postPublished: (): FeedbackPopupInput =>
+    persistentSuccess(
+      "Post Published",
+      "Your post is now visible on your profile and in the community feed."
+    ),
+
+  subscriptionCheckoutFailed: (detail: string): FeedbackPopupInput =>
+    persistentError("Checkout Failed", detail),
+}
