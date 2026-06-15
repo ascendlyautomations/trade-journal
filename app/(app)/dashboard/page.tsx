@@ -20,6 +20,8 @@ import ProfileOnboarding from "../../components/ProfileOnboarding"
 import PostSetupImportModal from "../../components/PostSetupImportModal"
 import PerformanceShareModal from "../../components/PerformanceShareModal"
 import LockedFeature from "../../components/LockedFeature"
+import EmptyState from "../../components/ui/EmptyState"
+import Link from "next/link"
 import { useCallback, useEffect, useState, useMemo, useRef } from "react"
 import {
   mirrorAccountSettingsMaxDrawdownLimit,
@@ -1444,19 +1446,37 @@ const worstDay = dailyPnLs.length > 0
     setShowControls(false)
   }
 
+  const recentTradesList = (filteredTrades || [])
+    .slice()
+    .sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    )
+    .slice(0, 5)
+
   const recentTradesSection = (
     <div className="h-full rounded-xl border border-white/10 bg-white/10 p-3 md:p-4">
       <h3 className="mb-2 text-xs md:text-sm text-gray-400">Recent Trades</h3>
 
       <div className="max-h-[28rem] space-y-3 overflow-y-auto pr-1">
-        {(filteredTrades || [])
-          .slice()
-          .sort(
-            (a, b) =>
-              new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-          )
-          .slice(0, 5)
-          .map((trade) => (
+        {recentTradesList.length === 0 ? (
+          <EmptyState
+            title="No recent trades"
+            description="Your latest trades will appear here once you log activity."
+            action={
+              trades.length === 0 ? (
+                <Link
+                  href="/app"
+                  className="text-sm font-medium text-blue-300 hover:text-blue-200"
+                >
+                  Add Trade →
+                </Link>
+              ) : undefined
+            }
+            className="py-6"
+          />
+        ) : (
+          recentTradesList.map((trade) => (
             <div
               key={trade.id}
               className="rounded-lg border border-white/10 bg-black/20 p-3 text-sm"
@@ -1519,24 +1539,30 @@ const worstDay = dailyPnLs.length > 0
                 <p className="mt-1 text-xs text-gray-400">Strategy: {trade.strategy}</p>
               ) : null}
             </div>
-          ))}
+          ))
+        )}
       </div>
     </div>
   )
 
   const pnlByWeekdaySection = (
-    <DashboardWeekdayChart data={weekdayData} />
+    <DashboardWeekdayChart data={weekdayData} totalTrades={totalTrades} />
   )
 
   const sessionPerformanceSection = (
     <DashboardSessionChart
       sessionPieData={sessionPieData}
       sessionBuckets={sessionBuckets}
+      totalTrades={totalTrades}
     />
   )
 
   const mobileEquityChartSlot = (
-    <DashboardEquityCurve variant="mobile" data={equityDrawdownChartData} />
+    <DashboardEquityCurve
+      variant="mobile"
+      data={equityDrawdownChartData}
+      totalTrades={totalTrades}
+    />
   )
 
   const dashboardUserIsPro = isProActive(profile)
@@ -1597,6 +1623,7 @@ const worstDay = dailyPnLs.length > 0
             hasUser={Boolean(user)}
             onSaveGear={() => void saveDashboardGearPanel()}
             onCancelGear={cancelDashboardGearPanel}
+            showShareControls={totalTrades > 0}
           />
           <DashboardHeader
             isPro={isPro}
@@ -1606,6 +1633,43 @@ const worstDay = dailyPnLs.length > 0
 
           <div className="relative z-0 mx-auto w-full max-w-[1600px] px-4 md:px-6 flex flex-col gap-6 md:gap-8 overflow-visible">
 
+  {totalTrades === 0 ? (
+    <div className="rounded-xl border border-white/10 bg-white/5 p-6 backdrop-blur-md md:p-8">
+      <h2 className="bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-2xl font-semibold text-transparent md:text-3xl">
+        Welcome to TradeTraxs
+      </h2>
+      <p className="mt-3 text-base font-medium text-gray-100 md:text-lg">
+        Track every trade.
+        <br />
+        Discover your edge.
+        <br />
+        Improve your performance.
+      </p>
+      <p className="mt-3 max-w-2xl text-sm text-gray-400 md:text-base">
+        Get started by logging your first trade or importing your trading history.
+      </p>
+      <div className="mt-6 flex flex-wrap items-center gap-3">
+        <Link
+          href="/app"
+          className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600"
+        >
+          Add Trade
+        </Link>
+        <button
+          type="button"
+          onClick={() => setShowImportModal(true)}
+          className="rounded-lg border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/15"
+        >
+          Import CSV
+        </button>
+      </div>
+    </div>
+  ) : null}
+
+  {totalTrades === 0 ? (
+    recentTradesSection
+  ) : (
+    <>
   {/* TOP: STATS + CHART */}
   <div className="grid overflow-visible lg:grid-cols-3 gap-4 md:gap-6">
 
@@ -1641,6 +1705,7 @@ const worstDay = dailyPnLs.length > 0
           currentStreak={currentStreak}
           avgDay={avgDay}
           consistency={consistency}
+          totalTrades={totalTrades}
         />
       ) : null}
 
@@ -1664,6 +1729,13 @@ const worstDay = dailyPnLs.length > 0
     <div className="h-full overflow-x-auto rounded-xl border border-white/10 bg-white/10 p-3 md:p-4 lg:col-span-2">
       <h3 className="mb-2 text-xs md:text-sm text-gray-400">Symbol Performance</h3>
 
+      {symbolPerformanceRows.length === 0 ? (
+        <EmptyState
+          title="Not Enough Data Yet"
+          description="Add more trades to unlock detailed analytics."
+          className="py-8"
+        />
+      ) : (
       <table className="w-full min-w-[520px] text-xs md:text-sm">
         <thead>
           <tr className="border-b border-white/10 text-gray-400">
@@ -1692,6 +1764,7 @@ const worstDay = dailyPnLs.length > 0
           ))}
         </tbody>
       </table>
+      )}
     </div>
 
     <div className="hidden md:block">{pnlByWeekdaySection}</div>
@@ -1886,6 +1959,9 @@ const worstDay = dailyPnLs.length > 0
             ) : null}
           </div>
           ) : null}
+
+    </>
+  )}
 
           </div>
       </div>

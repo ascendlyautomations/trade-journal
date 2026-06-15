@@ -338,7 +338,7 @@ export default function ProfileOnboarding({
             value={startedTrading}
             onChange={(e) => setStartedTrading(e.target.value)}
             onFocus={openStartedTradingPicker}
-            className="tt-timeframe-date w-full min-w-0 cursor-pointer rounded-xl border border-white/10 bg-[#0f172a] px-3 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-400 [color-scheme:dark]"
+            className={`${inputClass} tt-timeframe-date cursor-pointer text-sm [color-scheme:dark]`}
           />
         </div>
         </div>

@@ -1,6 +1,8 @@
 "use client"
 
+import Link from "next/link"
 import { memo, type Dispatch, type SetStateAction } from "react"
+import EmptyState from "./ui/EmptyState"
 import TradeFilterBar from "./TradeFilterBar"
 import TradesPageTradeCard from "./TradesPageTradeCard"
 import { formatMoneyUnknown, formatRR } from "@/lib/formatDisplay"
@@ -44,6 +46,7 @@ type TradesPageMainContentProps = {
   onSendTrade: (trade: any) => void
   onImageClick: (imageUrl: string) => void
   onLoadMore: () => void
+  onImportCsv: () => void
 }
 
 function Stat({ title, value, positive }: any) {
@@ -91,6 +94,7 @@ function TradesPageMainContent({
   onSendTrade,
   onImageClick,
   onLoadMore,
+  onImportCsv,
 }: TradesPageMainContentProps) {
   if (loading) {
     return <p className="text-center text-gray-400">Loading...</p>
@@ -253,19 +257,46 @@ function TradesPageMainContent({
       </div>
 
       <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-4">
-        {displayedTrades.map((trade) => (
-          <TradesPageTradeCard
-            key={trade.id}
-            trade={trade}
-            showAdvanced={showAdvanced}
-            accountRow={accountById[String(trade.account_id ?? "")]}
-            shareProfile={gateProfile}
-            onEdit={onEditTrade}
-            onDelete={onDeleteTrade}
-            onSendClick={onSendTrade}
-            onImageClick={onImageClick}
-          />
-        ))}
+        {displayedTrades.length === 0 ? (
+          <div className="md:col-span-2">
+            <EmptyState
+              title="No Trades Yet"
+              description="Start tracking your performance by logging your first trade."
+              action={
+                <div className="flex flex-wrap items-center justify-center gap-3">
+                  <Link
+                    href="/app"
+                    className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600"
+                  >
+                    Add Trade
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={onImportCsv}
+                    className="rounded-lg border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/15"
+                  >
+                    Import CSV
+                  </button>
+                </div>
+              }
+              className="py-10"
+            />
+          </div>
+        ) : (
+          displayedTrades.map((trade) => (
+            <TradesPageTradeCard
+              key={trade.id}
+              trade={trade}
+              showAdvanced={showAdvanced}
+              accountRow={accountById[String(trade.account_id ?? "")]}
+              shareProfile={gateProfile}
+              onEdit={onEditTrade}
+              onDelete={onDeleteTrade}
+              onSendClick={onSendTrade}
+              onImageClick={onImageClick}
+            />
+          ))
+        )}
       </div>
 
       {visibleCount < visibleTradesLength ? (

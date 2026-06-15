@@ -6,7 +6,7 @@ import { compressImage } from "@/lib/compressImage"
 import { ensureManualUserAccountRegistered } from "@/lib/ensureManualUserAccount"
 import { isProActive } from "@/lib/subscription"
 import { insertCsvTradesWithAccount } from "@/lib/insertCsvTradesWithAccount"
-import { hasReachedRowLimit, last24hIso } from "@/lib/freePlanLimits"
+import { hasReachedRowLimit, last24hIso, assessFreePlanTradeUpload, FREE_PLAN_TRADES_PER_24H, FREE_PLAN_TRADE_LIMIT_REACHED, freePlanCsvImportLimitExceededMessage } from "@/lib/freePlanLimits"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import {
   mirrorAccountSettingsHasUsedCsvImport,
@@ -603,11 +603,16 @@ export default function InputTradeForm({
         table: "trades",
         userColumn: "user_id",
         userId: user.id,
-        limit: 3,
+        limit: FREE_PLAN_TRADES_PER_24H,
         sinceIso,
       })
       if (tradeLimitReached) {
-        showPopup({ type: "error", message: "Free plan allows 3 trades per 24 hours. Upgrade to Pro." })
+        showPopup({
+          type: "error",
+          title: FREE_PLAN_TRADE_LIMIT_REACHED.title,
+          message: FREE_PLAN_TRADE_LIMIT_REACHED.description,
+          persist: true,
+        })
         setSubmitting(false)
         return
       }
@@ -1128,7 +1133,37 @@ export default function InputTradeForm({
         return
       }
       if (!profile.is_pro && profile.has_used_csv_import) {
-        showPopup({ type: "error", message: csvLimitMessage })
+        showPopup({ type: "error", message: csvLimitMessage, persist: true })
+        return
+      }
+
+      let uploadCheck
+      try {
+        uploadCheck = await assessFreePlanTradeUpload(
+          supabase,
+          user.id,
+          parsedTrades.length
+        )
+      } catch {
+        showPopup({
+          type: "error",
+          message: "Could not verify daily trade limit. Please try again.",
+          persist: true,
+        })
+        return
+      }
+
+      if (!uploadCheck.allowed) {
+        const limitMsg = freePlanCsvImportLimitExceededMessage(
+          parsedTrades.length,
+          uploadCheck.remaining
+        )
+        showPopup({
+          type: "error",
+          title: limitMsg.title,
+          message: limitMsg.description,
+          persist: true,
+        })
         return
       }
 

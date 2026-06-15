@@ -16,7 +16,11 @@ import {
   type CsvSelectedAccount,
   insertCsvTradesWithAccount,
 } from "@/lib/insertCsvTradesWithAccount"
-import { last24hIso } from "@/lib/freePlanLimits"
+import {
+  assessFreePlanTradeUpload,
+  freePlanCsvImportLimitExceededMessage,
+  FREE_PLAN_TRADE_LIMIT_REACHED,
+} from "@/lib/freePlanLimits"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import CsvImportUnsupportedBanner from "@/app/components/CsvImportUnsupportedBanner"
@@ -150,42 +154,47 @@ export default function CsvImportPanel({
 
     let tradesToInsert = parsedTrades
     if (!profile.is_pro) {
-      if (!hasUsedInitialImport) {
-        tradesToInsert = parsedTrades
-      } else {
-        const { data: existingTrades, error: existingErr } = await supabase
-          .from("trades")
-          .select("id")
-          .eq("user_id", user.id)
-          .gte("created_at", last24hIso())
-
-        if (existingErr) {
-          console.error("trade count check failed:", existingErr)
-          showPopup({
-            type: "error",
-            message: "Could not verify daily trade limit. Please try again.",
-          })
-          setLoading(false)
-          return
-        }
-
-        const remaining = 3 - (existingTrades?.length ?? 0)
-        if (remaining <= 0) {
-          showPopup({
-            type: "error",
-            message: "You've reached your daily trade limit. Upgrade to Pro.",
-          })
-          setLoading(false)
-          return
-        }
-        tradesToInsert = parsedTrades.slice(0, remaining)
+      let uploadCheck
+      try {
+        uploadCheck = await assessFreePlanTradeUpload(
+          supabase,
+          user.id,
+          parsedTrades.length
+        )
+      } catch {
+        showPopup({
+          type: "error",
+          message: "Could not verify daily trade limit. Please try again.",
+          persist: true,
+        })
+        setLoading(false)
+        return
       }
+
+      if (!uploadCheck.allowed) {
+        const limitMsg = freePlanCsvImportLimitExceededMessage(
+          parsedTrades.length,
+          uploadCheck.remaining
+        )
+        showPopup({
+          type: "error",
+          title: limitMsg.title,
+          message: limitMsg.description,
+          persist: true,
+        })
+        setLoading(false)
+        return
+      }
+
+      tradesToInsert = parsedTrades
     }
 
     if (!tradesToInsert.length) {
       showPopup({
         type: "error",
-        message: "You've reached your daily trade limit. Upgrade to Pro.",
+        title: FREE_PLAN_TRADE_LIMIT_REACHED.title,
+        message: FREE_PLAN_TRADE_LIMIT_REACHED.description,
+        persist: true,
       })
       setLoading(false)
       return
@@ -256,11 +265,7 @@ export default function CsvImportPanel({
         .map((r) => `Row ${r.rowNumber}: ${r.reason}`)
         .join("\n")
       const importedCount = tradesToInsert.length
-      const partialCount = parsedTrades.length - tradesToInsert.length
       let msg = `Trades imported successfully. They are private by default. You can make them public by editing a trade. (${importedCount} imported)`
-      if (partialCount > 0) {
-        msg = `Imported ${importedCount} trades. Upgrade to Pro to import more.`
-      }
       if (skipped) msg += ` ${skipped} row(s) skipped.`
       if (errLines) msg += `\n\n${errLines}`
       showPopup({ type: "success", message: msg })

@@ -1,6 +1,7 @@
 "use client"
 
 import type { ChangeEvent } from "react"
+import Link from "next/link"
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { supabase } from "../../../lib/supabaseClient"
@@ -25,6 +26,7 @@ import {
   buildFeedPostsIndex,
 } from "../../components/feed/feedPostHelpers"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
+import EmptyState from "@/app/components/ui/EmptyState"
 import { publishStory } from "@/lib/publishStory"
 import {
   createStoryPreviewUrl,
@@ -54,6 +56,8 @@ function postTradeOwnerUserId(post: any): string | null | undefined {
 }
 
 type LikeMeta = { count: number; liked: boolean }
+
+type FeedEmptyState = "following_nobody" | "no_posts"
 
 export default function FeedPage() {
   return (
@@ -94,6 +98,9 @@ function FeedPageContent() {
     string | null
   >(null)
   const [postingStory, setPostingStory] = useState(false)
+  const [feedEmptyState, setFeedEmptyState] = useState<FeedEmptyState | null>(
+    null
+  )
 
   const likesByPostRef = useRef(likesByPost)
   likesByPostRef.current = likesByPost
@@ -519,6 +526,10 @@ function FeedPageContent() {
       setLoading(true)
       loadingRef.current = true
 
+      if (currentPage === 0) {
+        setFeedEmptyState(null)
+      }
+
       let list: any[] = []
 
       if (mode === "global") {
@@ -581,6 +592,9 @@ function FeedPageContent() {
         if (ids.length === 0) {
           hasMoreRef.current = false
           setHasMore(false)
+          if (currentPage === 0) {
+            setFeedEmptyState("following_nobody")
+          }
           loadingRef.current = false
           setLoading(false)
           return
@@ -613,6 +627,10 @@ function FeedPageContent() {
 
       const { enriched, likesMap, commentsMap } = await loadEngagementForPosts(list, user)
 
+      if (currentPage === 0 && list.length === 0) {
+        setFeedEmptyState("no_posts")
+      }
+
       setPosts((prev) => [...prev, ...enriched])
       setLikesByPost((prev) => ({ ...prev, ...likesMap }))
       setCommentsByPost((prev) => ({ ...prev, ...commentsMap }))
@@ -630,6 +648,7 @@ function FeedPageContent() {
     setPosts([])
     setLikesByPost({})
     setCommentsByPost({})
+    setFeedEmptyState(null)
     setPage(0)
     setHasMore(true)
     setLoading(false)
@@ -873,19 +892,47 @@ function FeedPageContent() {
             />
           ) : null}
 
-          <FeedPostList
-            posts={uniquePosts}
-            user={user}
-            likesByPost={likesByPost}
-            commentsByPost={commentsByPost}
-            commentSubmitting={commentSubmitting}
-            draftSyncRef={draftSyncRef}
-            onSelectPost={handleSelectPost}
-            onOpenComments={handleOpenPostComments}
-            onToggleLike={toggleLike}
-            onSubmitComment={submitComment}
-            onSharePost={handleSharePost}
-          />
+          {!loading && uniquePosts.length === 0 && feedEmptyState ? (
+            <EmptyState
+              title={
+                feedEmptyState === "following_nobody"
+                  ? "You're not following anyone yet"
+                  : "No posts yet"
+              }
+              description={
+                feedEmptyState === "following_nobody"
+                  ? "Follow traders on Explore to see their posts and activity here."
+                  : mode === "following"
+                    ? "Posts from traders you follow will show up here when they share."
+                    : "The feed is quiet for now. Check back as traders post updates."
+              }
+              action={
+                feedEmptyState === "following_nobody" ? (
+                  <Link
+                    href="/explore"
+                    className="text-sm font-medium text-blue-300 hover:text-blue-200"
+                  >
+                    Explore traders →
+                  </Link>
+                ) : undefined
+              }
+              className="py-10"
+            />
+          ) : (
+            <FeedPostList
+              posts={uniquePosts}
+              user={user}
+              likesByPost={likesByPost}
+              commentsByPost={commentsByPost}
+              commentSubmitting={commentSubmitting}
+              draftSyncRef={draftSyncRef}
+              onSelectPost={handleSelectPost}
+              onOpenComments={handleOpenPostComments}
+              onToggleLike={toggleLike}
+              onSubmitComment={submitComment}
+              onSharePost={handleSharePost}
+            />
+          )}
 
           <FeedLoadMoreFooter
             loading={loading}

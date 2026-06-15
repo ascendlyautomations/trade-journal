@@ -239,6 +239,12 @@ export default function Navbar() {
     </span>
   )
 
+  const proBadge = (
+    <span className="shrink-0 text-[10px] font-medium tracking-wide text-amber-200/80">
+      🔒 PRO
+    </span>
+  )
+
   function analyticsLinkLabel(item: { label: string; beta?: boolean }) {
     return (
       <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -397,29 +403,22 @@ export default function Navbar() {
                 </button>
                 {activeMenu === "analytics" ? (
                   <div className="absolute top-full z-[9999] mt-2 w-56 rounded border border-white/10 bg-[#1e293b] shadow-lg">
-                    {analyticsLinks.map((item) =>
-                      item.proOnly && !isProActive(profile) ? (
-                        <div
-                          key={item.label}
-                          className="flex w-full items-center justify-between gap-2 px-4 py-2 text-gray-400"
-                        >
-                          {analyticsLinkLabel(item)}
-                          <span className="shrink-0">🔒</span>
-                        </div>
-                      ) : (
+                    {analyticsLinks.map((item) => (
                         <Link
                           key={item.href}
                           href={item.href}
                           className={`flex w-full items-center justify-between gap-2 rounded px-3 py-2 ${
                             isActive(item.href)
                               ? "bg-blue-500/20 text-blue-300"
-                              : "text-gray-300 hover:bg-white/10"
+                              : item.proOnly && !isProActive(profile)
+                                ? "text-gray-400 hover:bg-white/10"
+                                : "text-gray-300 hover:bg-white/10"
                           }`}
                         >
                           {analyticsLinkLabel(item)}
+                          {item.proOnly && !isProActive(profile) ? proBadge : null}
                         </Link>
-                      )
-                    )}
+                      ))}
                   </div>
                 ) : null}
               </div>
@@ -795,30 +794,23 @@ export default function Navbar() {
             </button>
             {openSection === "analytics" ? (
               <div className="mt-1.5 space-y-1 pl-3 text-sm">
-                {analyticsLinks.map((item) =>
-                  item.proOnly && !isProActive(profile) ? (
-                    <span
-                      key={item.label}
-                      className="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-1.5 text-gray-400"
-                    >
-                      {analyticsLinkLabel(item)}
-                      <span className="shrink-0">🔒</span>
-                    </span>
-                  ) : (
+                {analyticsLinks.map((item) => (
                     <Link
                       key={item.href}
                       href={item.href}
                       className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-1.5 ${
                         isActive(item.href)
                           ? "bg-blue-500/20 text-blue-300"
-                          : "hover:bg-white/10 text-gray-300"
+                          : item.proOnly && !isProActive(profile)
+                            ? "text-gray-400 hover:bg-white/10"
+                            : "hover:bg-white/10 text-gray-300"
                       }`}
                       onClick={closeMobile}
                     >
                       {analyticsLinkLabel(item)}
+                      {item.proOnly && !isProActive(profile) ? proBadge : null}
                     </Link>
-                  )
-                )}
+                  ))}
               </div>
             ) : null}
           </div>

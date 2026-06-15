@@ -1,5 +1,7 @@
 "use client"
+import Link from "next/link"
 import Navbar from "../components/Navbar"
+import EmptyState from "../components/ui/EmptyState"
 import TradesPageTradeCard from "../components/TradesPageTradeCard"
 import TradesPageOverlays from "../components/TradesPageOverlays"
 import { formatEST } from "@/lib/formatEST"
@@ -27,6 +29,7 @@ export default function CalendarPage() {
   const [editingTrade, setEditingTrade] = useState<any | null>(null)
   const [sendTradeId, setSendTradeId] = useState<string | null>(null)
   const [accountRows, setAccountRows] = useState<any[]>([])
+  const [tradesLoaded, setTradesLoaded] = useState(false)
 
   useEffect(() => {
     fetchTrades()
@@ -56,6 +59,7 @@ export default function CalendarPage() {
 
     if (data) setTrades(data)
     setAccountRows(accountsData || [])
+    setTradesLoaded(true)
   }
 
   const accountById = useMemo(() => {
@@ -356,6 +360,22 @@ export default function CalendarPage() {
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white py-6">
 
         <div className="max-w-7xl mx-auto w-full px-4">
+
+          {tradesLoaded && trades.length === 0 ? (
+            <EmptyState
+              title="No Trades Yet"
+              description="Start tracking your performance by logging your first trade."
+              action={
+                <Link
+                  href="/app"
+                  className="text-sm font-medium text-blue-300 hover:text-blue-200"
+                >
+                  Add Trade →
+                </Link>
+              }
+              className="mb-6 py-10"
+            />
+          ) : null}
 
           <div className="grid grid-cols-1 md:grid-cols-[2fr_1.4fr] gap-4 md:gap-8 items-start">
 

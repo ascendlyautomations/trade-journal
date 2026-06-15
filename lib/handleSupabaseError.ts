@@ -4,7 +4,7 @@ export function handleSupabaseError(error: unknown): string {
 
   const msg = String(e.message).toLowerCase()
 
-  if (msg.includes("3 trades")) {
+  if (msg.includes("3 trades") || msg.includes("5 trades")) {
     return "Free plan limit reached. Upgrade to Pro for unlimited trades."
   }
 

@@ -161,7 +161,9 @@ export default function DashboardStatsGrid({
             </p>
           </>
         ) : (
-          <p className="text-gray-500 text-xs md:text-sm">No data</p>
+          <p className="text-gray-500 text-xs md:text-sm">
+            Add more trades to unlock this metric.
+          </p>
         )}
       </div>
 
@@ -191,7 +193,9 @@ export default function DashboardStatsGrid({
             </div>
           </>
         ) : (
-          <p className="text-gray-500 text-xs md:text-sm">No data</p>
+          <p className="text-gray-500 text-xs md:text-sm">
+            Not enough trading history yet.
+          </p>
         )}
       </div>
 
@@ -203,7 +207,9 @@ export default function DashboardStatsGrid({
         <h3 className="mb-2 text-xs md:text-sm text-gray-400">Trading Hours</h3>
 
         {hourData === null ? (
-          <p className="text-gray-500 text-xs md:text-sm">No data</p>
+          <p className="text-gray-500 text-xs md:text-sm">
+            Track additional trades to view insights.
+          </p>
         ) : !hourData.hasValidTradingHoursData ? (
           <p className="text-white/60 text-sm">
             Add entry/exit times to unlock trading hour insights

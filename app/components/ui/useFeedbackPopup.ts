@@ -10,6 +10,8 @@ type FeedbackPopupState = {
   isOpen: boolean
   message: string
   type: FeedbackPopupType
+  title?: string
+  persist: boolean
 }
 
 export type UseFeedbackPopupOptions = {
@@ -23,6 +25,7 @@ export function useFeedbackPopup(options?: UseFeedbackPopupOptions) {
     isOpen: false,
     message: "",
     type: "success",
+    persist: false,
   })
 
   const closePopup = useCallback(() => {
@@ -34,19 +37,22 @@ export function useFeedbackPopup(options?: UseFeedbackPopupOptions) {
       isOpen: true,
       message: input.message,
       type: input.type ?? "success",
+      title: input.title,
+      persist: input.persist === true,
     })
   }, [])
 
   useEffect(() => {
-    if (!state.isOpen) return
+    if (!state.isOpen || state.persist) return
     const timer = setTimeout(closePopup, autoDismissMs)
     return () => clearTimeout(timer)
-  }, [state.isOpen, closePopup, autoDismissMs])
+  }, [state.isOpen, state.persist, closePopup, autoDismissMs])
 
   const feedbackModalProps: FeedbackModalProps = {
     isOpen: state.isOpen,
     message: state.message,
     type: state.type,
+    title: state.title,
     onClose: closePopup,
   }
 

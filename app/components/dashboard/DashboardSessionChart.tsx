@@ -7,6 +7,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts"
+import EmptyState from "@/app/components/ui/EmptyState"
 import { formatCurrency } from "@/lib/formatCurrency"
 
 function formatNumber(value: number) {
@@ -33,17 +34,28 @@ export type SessionBuckets = Record<
 export type DashboardSessionChartProps = {
   sessionPieData: SessionPiePoint[]
   sessionBuckets: SessionBuckets
+  totalTrades?: number
 }
 
 export default function DashboardSessionChart({
   sessionPieData,
   sessionBuckets,
+  totalTrades = 0,
 }: DashboardSessionChartProps) {
+  const showEmpty = totalTrades === 0
+
   return (
     <div className="flex min-h-[300px] h-full flex-col rounded-xl border border-white/10 bg-white/10 p-3 md:p-4 backdrop-blur-md">
       <h2 className="mb-3 text-sm md:text-base font-semibold text-blue-300">
         Session Performance
       </h2>
+      {showEmpty ? (
+        <EmptyState
+          title="Not Enough Data Yet"
+          description="Add more trades to unlock detailed analytics."
+          className="py-8"
+        />
+      ) : (
       <div className="flex flex-1 flex-col gap-4">
         <div className="flex min-h-[240px] flex-col">
           <p className="mb-2 text-xs md:text-sm text-gray-400">Trades by Session</p>
@@ -110,6 +122,7 @@ export default function DashboardSessionChart({
           </div>
         </div>
       </div>
+      )}
     </div>
   )
 }

@@ -21,6 +21,7 @@ export type FeedbackModalProps = {
   isOpen: boolean
   message: string
   type?: FeedbackPopupType
+  title?: string
   onClose: () => void
 }
 
@@ -29,6 +30,7 @@ export default function FeedbackModal({
   isOpen,
   message,
   type = "success",
+  title,
   onClose,
 }: FeedbackModalProps) {
   if (!isOpen) return null
@@ -42,6 +44,9 @@ export default function FeedbackModal({
           panelStyles[type]
         )}
       >
+        {title ? (
+          <h3 className="mb-2 text-base font-semibold text-white">{title}</h3>
+        ) : null}
         <p className={cn("text-sm font-medium", messageStyles[type])}>{message}</p>
         <button
           type="button"

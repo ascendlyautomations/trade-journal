@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useEffect, useMemo, useState, type ReactNode } from "react"
 import {
   CartesianGrid,
@@ -20,6 +21,7 @@ import {
   type TrailingDrawdownResult,
 } from "@/lib/propfirmMetrics"
 import LockedFeature from "@/app/components/LockedFeature"
+import EmptyState from "@/app/components/ui/EmptyState"
 import { isProActive } from "@/lib/subscription"
 import { formatPnlCurrency } from "@/lib/formatMoney"
 
@@ -179,9 +181,11 @@ function PropfirmEquityCurve({
           </ResponsiveContainer>
         </div>
       ) : (
-        <div className="flex min-h-[140px] items-center justify-center rounded-lg border border-dashed border-white/10 bg-white/5 text-center text-sm text-gray-400">
-          Add trades to this prop firm account to build an equity curve.
-        </div>
+        <EmptyState
+          title="Not Enough Data Yet"
+          description="Add more trades to unlock detailed analytics."
+          className="py-6"
+        />
       )}
     </div>
   )
@@ -213,6 +217,7 @@ export default function PropFirmPage() {
   const [planChecked, setPlanChecked] = useState(false)
   const [hasProAccess, setHasProAccess] = useState(false)
   const [accounts, setAccounts] = useState<PropfirmAccount[]>([])
+  const [accountsLoaded, setAccountsLoaded] = useState(false)
   const [selectedAccount, setSelectedAccount] =
     useState<PropfirmAccount | null>(null)
   const [trades, setTrades] = useState<PropfirmTrade[]>([])
@@ -280,7 +285,10 @@ export default function PropFirmPage() {
         data: { user },
       } = await supabase.auth.getUser()
 
-      if (!user) return
+      if (!user) {
+        setAccountsLoaded(true)
+        return
+      }
 
       const { data, error } = await supabase
         .from("accounts")
@@ -290,10 +298,12 @@ export default function PropFirmPage() {
 
       if (error) {
         console.error(error)
+        setAccountsLoaded(true)
         return
       }
 
       setAccounts(data || [])
+      setAccountsLoaded(true)
     }
 
     loadAccounts()
@@ -342,6 +352,26 @@ export default function PropFirmPage() {
     return (
       <PropfirmPageShell>
         <LockedFeature title="Prop Firm Mode" className="mx-auto max-w-lg" />
+      </PropfirmPageShell>
+    )
+  }
+
+  if (accountsLoaded && accounts.length === 0) {
+    return (
+      <PropfirmPageShell>
+        <EmptyState
+          title="No Prop Firm Accounts"
+          description="Create a prop firm account to track evaluation progress and rules."
+          action={
+            <Link
+              href="/settings#trading-accounts"
+              className="text-sm font-medium text-blue-300 hover:text-blue-200"
+            >
+              Create Prop Firm Account →
+            </Link>
+          }
+          className="py-10"
+        />
       </PropfirmPageShell>
     )
   }

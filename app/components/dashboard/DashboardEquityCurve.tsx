@@ -10,6 +10,7 @@ import {
   CartesianGrid,
   ResponsiveContainer,
 } from "recharts"
+import EmptyState from "@/app/components/ui/EmptyState"
 import { formatEST } from "@/lib/formatEST"
 import { formatCurrency } from "@/lib/formatCurrency"
 import { formatDecimal } from "@/lib/formatDisplay"
@@ -26,6 +27,17 @@ export type DashboardEquityCurveProps = {
   currentStreak?: number
   avgDay?: number
   consistency?: number
+  totalTrades?: number
+}
+
+function ChartEmptyState() {
+  return (
+    <EmptyState
+      title="Not Enough Data Yet"
+      description="Add more trades to unlock detailed analytics."
+      className="py-8"
+    />
+  )
 }
 
 export default function DashboardEquityCurve({
@@ -35,11 +47,17 @@ export default function DashboardEquityCurve({
   currentStreak = 0,
   avgDay = 0,
   consistency = 0,
+  totalTrades = 0,
 }: DashboardEquityCurveProps) {
+  const showEmpty = totalTrades === 0 || data.length === 0
+
   if (variant === "mobile") {
     return (
       <div className="col-span-2 block md:hidden overflow-visible rounded-xl border border-white/10 bg-white/10 p-3 backdrop-blur-md">
         <h2 className="mb-3 text-sm font-semibold text-blue-300">Equity Curve</h2>
+        {showEmpty ? (
+          <ChartEmptyState />
+        ) : (
         <div className="h-[240px] w-full">
           <ResponsiveContainer width="100%" height={240}>
             <LineChart
@@ -106,6 +124,7 @@ export default function DashboardEquityCurve({
             </LineChart>
           </ResponsiveContainer>
         </div>
+        )}
       </div>
     )
   }
@@ -116,6 +135,10 @@ export default function DashboardEquityCurve({
         Equity Curve
       </h2>
 
+      {showEmpty ? (
+        <ChartEmptyState />
+      ) : (
+      <>
       <div className="w-full h-[300px]">
         <ResponsiveContainer width="100%" height={300}>
           <LineChart
@@ -239,6 +262,8 @@ export default function DashboardEquityCurve({
           Consistency: {consistency.toFixed(0)}%
         </div>
       </div>
+      </>
+      )}
     </div>
   )
 }

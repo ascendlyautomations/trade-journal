@@ -414,6 +414,7 @@ export default function TradesPage() {
             onSendTrade={handleSendTrade}
             onImageClick={handleImageClick}
             onLoadMore={handleLoadMore}
+            onImportCsv={() => setShowImportModal(true)}
           />
         </div>
       </div>

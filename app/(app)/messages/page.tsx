@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import Link from "next/link"
 import { supabase } from "../../../lib/supabaseClient"
 import {
   isConversationParticipant,
@@ -20,6 +21,7 @@ import {
 } from "../../../lib/messageUnread"
 import { useRouter } from "next/navigation"
 import MessagesConversationList from "../../components/messages/MessagesConversationList"
+import EmptyState from "../../components/ui/EmptyState"
 
 function sortConversationsDesc(list: any[]) {
   return [...list].sort(
@@ -870,7 +872,27 @@ export default function MessagesPage() {
             {loading ? (
               <p className="text-gray-400">Loading...</p>
             ) : filteredConversations.length === 0 ? (
-              <p className="text-gray-400">No conversations found</p>
+              conversations.length === 0 ? (
+                <EmptyState
+                  title="No Conversations Yet"
+                  description="Start chatting with traders in the community."
+                  action={
+                    <Link
+                      href="/explore"
+                      className="text-sm font-medium text-blue-300 hover:text-blue-200"
+                    >
+                      Explore Traders →
+                    </Link>
+                  }
+                  className="py-10"
+                />
+              ) : (
+                <EmptyState
+                  title="No Conversations Found"
+                  description="Try adjusting your search."
+                  className="py-10"
+                />
+              )
             ) : (
               <MessagesConversationList
                 conversations={filteredConversations}

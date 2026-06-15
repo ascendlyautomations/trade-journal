@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import Navbar from "@/app/components/Navbar"
+import EmptyState from "@/app/components/ui/EmptyState"
 import { getCurrentAdminCheckResult } from "@/lib/adminUsers"
 import {
   FEATURE_REQUEST_STATUS_OPTIONS,
@@ -219,7 +220,19 @@ export default function AdminFeatureRequestsPage() {
             {listLoading ? (
               <p className="mt-4 text-sm text-gray-300">Loading requests...</p>
             ) : !rows.length ? (
-              <p className="mt-4 text-sm text-gray-300">No feature requests match these filters.</p>
+              statusFilter === "all" && !debouncedSearch.trim() ? (
+                <EmptyState
+                  title="No Feature Requests Yet"
+                  description="Beta testers haven't submitted any feature requests."
+                  className="mt-4 py-8"
+                />
+              ) : (
+                <EmptyState
+                  title="No Matching Requests"
+                  description="Try adjusting your filters."
+                  className="mt-4 py-8"
+                />
+              )
             ) : (
               <div className="mt-4 space-y-2">
                 {rows.map((row) => (

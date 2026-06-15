@@ -33,6 +33,8 @@ export type DashboardFiltersProps = {
   hasUser: boolean
   onSaveGear: () => void
   onCancelGear: () => void
+  /** When false, hides Public toggle and Share performance controls (zero-trade dashboard). */
+  showShareControls?: boolean
 }
 
 export default function DashboardFilters({
@@ -61,6 +63,7 @@ export default function DashboardFilters({
   hasUser,
   onSaveGear,
   onCancelGear,
+  showShareControls = true,
 }: DashboardFiltersProps) {
   const gearSettings = (
     <DashboardGearSettings
@@ -94,6 +97,7 @@ export default function DashboardFilters({
       selectedDate={selectedDate}
       onSelectedDateChange={onSelectedDateChange}
       publicNextToModes={
+        showShareControls ? (
         <button
           type="button"
           onClick={onTogglePublicOnly}
@@ -105,10 +109,12 @@ export default function DashboardFilters({
         >
           Public
         </button>
+        ) : null
       }
       settingsNextToModes={<div className="md:hidden">{gearSettings}</div>}
       trailing={
         <>
+          {showShareControls ? (
           <button
             type="button"
             onClick={onOpenPerformanceShare}
@@ -118,6 +124,8 @@ export default function DashboardFilters({
           >
             📤 Share
           </button>
+          ) : null}
+          {showShareControls ? (
           <button
             type="button"
             onClick={onTogglePublicOnly}
@@ -129,6 +137,8 @@ export default function DashboardFilters({
           >
             Public Trades
           </button>
+          ) : null}
+          {showShareControls ? (
           <button
             type="button"
             onClick={onOpenPerformanceShare}
@@ -138,6 +148,7 @@ export default function DashboardFilters({
           >
             📤 Share
           </button>
+          ) : null}
 
           <div className="hidden md:flex shrink-0 items-center justify-center">
             {gearSettings}

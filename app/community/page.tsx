@@ -11,6 +11,7 @@ import {
 } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Navbar from "../components/Navbar"
+import EmptyState from "../components/ui/EmptyState"
 import DmStyleComposer from "../components/DmStyleComposer"
 import { supabase } from "../../lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
@@ -2629,11 +2630,18 @@ function CommunityContent() {
               ) : (
                 <>
                   {filteredManageMembers.length === 0 ? (
-                    <p className="py-4 text-sm text-gray-400">
-                      {manageMembers.length === 0
-                        ? "No members found."
-                        : "No members match your search."}
-                    </p>
+                    manageMembers.length === 0 ? (
+                      <EmptyState
+                        title="No Members Yet"
+                        className="py-6"
+                      />
+                    ) : (
+                      <EmptyState
+                        title="No Members Found"
+                        description="Try adjusting your search."
+                        className="py-6"
+                      />
+                    )
                   ) : (
                     <div className="space-y-2">
                       {filteredManageMembers.map((member) => {

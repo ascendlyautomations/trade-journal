@@ -16,6 +16,7 @@ import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import { logSupabaseError } from "@/lib/logSupabaseError"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
+import EmptyState from "@/app/components/ui/EmptyState"
 import { useParams, useRouter } from "next/navigation"
 import {
   formatMoneyUnknown,
@@ -477,6 +478,7 @@ export default function DMPage() {
   )
 
   const [messages, setMessages] = useState<any[]>([])
+  const [messagesLoaded, setMessagesLoaded] = useState(false)
   const [input, setInput] = useState("")
   const [user, setUser] = useState<any>(null)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
@@ -746,6 +748,7 @@ export default function DMPage() {
   async function init() {
     setPageAccess("loading")
     setMessages([])
+    setMessagesLoaded(false)
     setConversation(null)
     setParticipants([])
     setOtherUser(null)
@@ -871,7 +874,10 @@ export default function DMPage() {
   }
 
   async function loadMessages(currentUserId: string, conversationId: string) {
-    if (!(await isConversationParticipant(conversationId, currentUserId))) return
+    if (!(await isConversationParticipant(conversationId, currentUserId))) {
+      setMessagesLoaded(true)
+      return
+    }
 
     const { data: fetched } = await supabase
       .from("messages")
@@ -903,6 +909,7 @@ export default function DMPage() {
           new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
       )
     )
+    setMessagesLoaded(true)
   }
 
   async function markMessagesSeen(currentUserId: string) {
@@ -1473,6 +1480,13 @@ export default function DMPage() {
             ref={scrollRef}
             className="min-h-0 flex-1 overflow-y-auto overflow-x-visible px-2 py-3 md:p-4"
           >
+            {messagesLoaded && messages.length === 0 ? (
+              <EmptyState
+                title="No Messages Yet"
+                description="Start the conversation."
+                className="py-10"
+              />
+            ) : null}
             {messages.map((message, i) => {
               if (message.is_system) {
                 return (

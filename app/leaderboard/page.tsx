@@ -4,6 +4,7 @@ import Navbar from "../components/Navbar"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "../../lib/supabaseClient"
+import { fetchLeaderboardTrades } from "../../lib/leaderboardFetch"
 import {
   LineChart,
   Line,
@@ -25,6 +26,7 @@ import {
 import { formatPnlCurrency } from "../../lib/formatMoney"
 import { formatRR, formatSignedPnlDisplay, pnlTextClassName } from "@/lib/formatDisplay"
 import { profilePath } from "@/lib/profileRoutes"
+import EmptyState from "../components/ui/EmptyState"
 
 type LeaderboardProfile = {
   id: string
@@ -38,6 +40,15 @@ const LEADERBOARD_SELECT_CLASS =
 
 const LEADERBOARD_DATE_INPUT_CLASS =
   "tt-timeframe-date h-11 w-full min-w-0 cursor-pointer rounded-xl border border-blue-400/20 bg-[#0b2345] px-3 py-2 text-sm text-white shadow-inner shadow-black/20 transition hover:border-blue-300/40 focus:border-emerald-400/60 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 [color-scheme:dark]"
+
+const LEADERBOARD_EMPTY_DESCRIPTION =
+  "There isn't enough leaderboard data for the selected timeframe."
+
+const LEADERBOARD_EMPTY_HINT = "Try another timeframe or account filter."
+
+function leaderboardEmptyDescription(): string {
+  return `${LEADERBOARD_EMPTY_DESCRIPTION} ${LEADERBOARD_EMPTY_HINT}`
+}
 
 function openNativeDatePicker(input: HTMLInputElement) {
   try {
@@ -96,6 +107,9 @@ function LeaderboardTooltip({
       {label != null ? (
         <p className="mb-1 border-b border-white/10 pb-1 text-gray-300">{label}</p>
       ) : null}
+      <p className="mb-1 text-gray-400">
+        Contributors: {contributorCount.toLocaleString()}
+      </p>
       {payload.map((entry, i) => (
         <p key={String(entry.dataKey ?? i)} className="font-medium" style={{ color: entry.color }}>
           {entry.name ?? entry.dataKey}:{" "}
@@ -197,30 +211,7 @@ export default function Leaderboard() {
 
     if (user) setUserId(user.id)
 
-    const PAGE_SIZE = 1000
-    const allTrades: TradeForLeaderboard[] = []
-    let from = 0
-
-    while (true) {
-      const to = from + PAGE_SIZE - 1
-      const { data, error } = await supabase
-        .from("trades")
-        .select("user_id, pnl, rr, created_at, account_type, mode")
-        .eq("is_public", true)
-        .order("created_at", { ascending: true })
-        .range(from, to)
-
-      if (error) {
-        console.error("[leaderboard] trade fetch error:", error)
-        break
-      }
-
-      const batch = (data || []) as TradeForLeaderboard[]
-      allTrades.push(...batch)
-
-      if (batch.length < PAGE_SIZE) break
-      from += PAGE_SIZE
-    }
+    const allTrades = await fetchLeaderboardTrades()
 
     setTrades(allTrades)
 
@@ -333,6 +324,11 @@ export default function Leaderboard() {
     })
   }, [])
 
+  const showChart =
+    !customRangeInvalid && hasData && chartData.length > 0
+
+  const showLeaderboardContent = !customRangeInvalid && hasData
+
   return (
     <>
       <Navbar />
@@ -404,13 +400,17 @@ export default function Leaderboard() {
 
           <div className="rounded-xl border border-white/10 bg-white/5 p-4 backdrop-blur-md md:p-5">
             {customRangeInvalid ? (
-              <p className="text-sm text-gray-400">
-                Adjust the date range to view leaderboard data.
-              </p>
-            ) : !hasData ? (
-              <p className="text-sm text-gray-400">
-                No leaderboard data available for this timeframe.
-              </p>
+              <EmptyState
+                title="Invalid Date Range"
+                description="Start date must be on or before end date. Adjust the range to view leaderboard data."
+                className="border-0 bg-transparent py-6"
+              />
+            ) : !showLeaderboardContent ? (
+              <EmptyState
+                title="No Leaderboard Data"
+                description={leaderboardEmptyDescription()}
+                className="border-0 bg-transparent py-6"
+              />
             ) : (
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3 md:gap-6">
                 <div className="md:border-r md:border-white/10 md:pr-6">
@@ -495,20 +495,27 @@ export default function Leaderboard() {
           </div>
 
           <div className="rounded-xl border border-white/10 bg-white/5 p-4 backdrop-blur-md md:p-6">
-            <h2 className="mb-3 text-lg font-semibold text-blue-300">
-              Performance Comparison
+            <h2 className="text-lg font-semibold text-blue-300">
+              Community Performance
             </h2>
+            <p className="mb-3 text-sm text-gray-400">
+              Performance comparison of traders with public profiles.
+            </p>
 
-            <ResponsiveContainer width="100%" height={360}>
-              {customRangeInvalid ? (
-                <div className="flex h-full items-center justify-center text-sm text-gray-400">
-                  Adjust the date range to view leaderboard data.
-                </div>
-              ) : !hasData ? (
-                <div className="flex h-full items-center justify-center text-sm text-gray-400">
-                  No leaderboard data available for this timeframe.
-                </div>
-              ) : (
+            {customRangeInvalid ? (
+              <EmptyState
+                title="Invalid Date Range"
+                description="Start date must be on or before end date. Adjust the range to view performance data."
+                className="border-0 bg-transparent py-10"
+              />
+            ) : !showChart ? (
+              <EmptyState
+                title="No Performance Data Available"
+                description={leaderboardEmptyDescription()}
+                className="border-0 bg-transparent py-10"
+              />
+            ) : (
+              <ResponsiveContainer width="100%" height={360}>
                 <LineChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
                   <XAxis dataKey="label" stroke="#94a3b8" />
@@ -546,8 +553,8 @@ export default function Leaderboard() {
                     dot={false}
                   />
                 </LineChart>
-              )}
-            </ResponsiveContainer>
+              </ResponsiveContainer>
+            )}
           </div>
 
           <div className="rounded-xl border border-white/10 bg-white/5 p-4 backdrop-blur-md md:p-6">
@@ -555,12 +562,16 @@ export default function Leaderboard() {
               Top Traders ({view})
             </h2>
 
-            {!hasData ? (
-              <p className="text-sm text-gray-400">
-                {customRangeInvalid
-                  ? "Adjust the date range to view leaderboard data."
-                  : "No leaderboard data available."}
-              </p>
+            {!showLeaderboardContent ? (
+              <EmptyState
+                title={customRangeInvalid ? "Invalid Date Range" : "No Traders Ranked"}
+                description={
+                  customRangeInvalid
+                    ? "Start date must be on or before end date. Adjust the range to view leaderboard data."
+                    : leaderboardEmptyDescription()
+                }
+                className="border-0 bg-transparent py-6"
+              />
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[32rem] text-left text-sm">

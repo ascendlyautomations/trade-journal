@@ -9,6 +9,7 @@ import {
   CartesianGrid,
   ResponsiveContainer,
 } from "recharts"
+import EmptyState from "@/app/components/ui/EmptyState"
 import { formatPnlCurrency } from "@/lib/formatMoney"
 
 export type WeekdayChartPoint = {
@@ -18,14 +19,27 @@ export type WeekdayChartPoint = {
 
 export type DashboardWeekdayChartProps = {
   data: WeekdayChartPoint[]
+  totalTrades?: number
 }
 
-export default function DashboardWeekdayChart({ data }: DashboardWeekdayChartProps) {
+export default function DashboardWeekdayChart({
+  data,
+  totalTrades = 0,
+}: DashboardWeekdayChartProps) {
+  const showEmpty = totalTrades === 0
+
   return (
     <div className="flex min-h-[300px] h-full flex-col rounded-xl border border-white/10 bg-white/10 p-3 md:p-4 backdrop-blur-md">
       <h2 className="mb-3 text-sm md:text-base font-semibold text-blue-300">
         P&amp;L by Weekday
       </h2>
+      {showEmpty ? (
+        <EmptyState
+          title="Not Enough Data Yet"
+          description="Add more trades to unlock detailed analytics."
+          className="py-8"
+        />
+      ) : (
       <div className="w-full overflow-hidden">
         <ResponsiveContainer width="100%" height={280}>
           <LineChart
@@ -66,6 +80,7 @@ export default function DashboardWeekdayChart({ data }: DashboardWeekdayChartPro
           </LineChart>
         </ResponsiveContainer>
       </div>
+      )}
     </div>
   )
 }

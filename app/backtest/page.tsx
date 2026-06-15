@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import { isProActive } from "@/lib/subscription"
 import Navbar from "../components/Navbar"
+import LockedFeature from "../components/LockedFeature"
 import TradeCard from "@/components/TradeCard"
 import Calendar from "@/components/Calendar"
 import InputTradeForm from "../components/InputTradeForm"
@@ -127,14 +128,7 @@ export default function BacktestPage() {
         <Navbar />
         <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100">
           <div className="mx-auto max-w-7xl px-6 pb-6 pt-6">
-            <div className="rounded-xl border border-white/10 bg-[#0f172a] p-6 text-center">
-              <h1 className="text-2xl font-semibold text-white">
-                Backtest stats is a Pro feature
-              </h1>
-              <p className="mt-2 text-sm text-gray-400">
-                Upgrade to Pro to unlock Backtest Lab analytics.
-              </p>
-            </div>
+            <LockedFeature title="Backtest Lab" className="mx-auto max-w-lg" />
           </div>
         </div>
       </>

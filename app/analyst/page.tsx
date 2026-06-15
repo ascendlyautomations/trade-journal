@@ -1,7 +1,7 @@
 "use client"
 
-import Link from "next/link"
 import Navbar from "../components/Navbar"
+import LockedFeature from "../components/LockedFeature"
 import { useEffect, useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { isProActive } from "../../lib/subscription"
@@ -262,16 +262,8 @@ export default function AnalystPage() {
         {!pageReady ? (
           <p className="text-center text-gray-400">Loading…</p>
         ) : !pro ? (
-          <div className="mx-auto max-w-lg rounded-xl border border-white/10 bg-black/30 p-6 text-center">
-            <p className="mb-2 text-gray-400">
-              AI Analyst is a Pro feature
-            </p>
-            <Link
-              href="/settings"
-              className="inline-block rounded bg-emerald-500 px-4 py-2 font-medium text-white hover:bg-emerald-600"
-            >
-              Upgrade to Pro
-            </Link>
+          <div className="mx-auto max-w-lg">
+            <LockedFeature title="AI Analyst" />
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">

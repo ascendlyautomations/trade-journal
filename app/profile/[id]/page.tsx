@@ -1,6 +1,8 @@
 "use client"
 
+import Link from "next/link"
 import Navbar from "../../components/Navbar"
+import EmptyState from "../../components/ui/EmptyState"
 import AchievementCard from "../../components/AchievementCard"
 import type { ChangeEvent } from "react"
 import {
@@ -2636,9 +2638,25 @@ function ProfilePageContent() {
             {activeTab === "trades" && (
               <div className="mt-4 w-full pb-8">
                 {sortedTrades.length === 0 ? (
-                  <p className="text-center text-sm text-gray-400">
-                    No public trades yet.
-                  </p>
+                  isOwnProfile ? (
+                    <EmptyState
+                      title="Share Your First Trade"
+                      description="Your public trading history will appear here."
+                      action={
+                        <Link
+                          href="/app"
+                          className="text-sm font-medium text-blue-300 hover:text-blue-200"
+                        >
+                          Add Trade →
+                        </Link>
+                      }
+                      className="py-10"
+                    />
+                  ) : (
+                    <p className="text-center text-sm text-gray-400">
+                      No public trades yet.
+                    </p>
+                  )
                 ) : (
                   <div className="grid grid-cols-1 gap-x-6 gap-y-8 md:grid-cols-2">
                     {sortedTrades.map((trade) => (
@@ -2693,9 +2711,25 @@ function ProfilePageContent() {
             {activeTab === "posts" && (
               <div className="mt-4 w-full pb-8">
                 {sortedPosts.length === 0 ? (
-                  <p className="text-center text-sm text-gray-400">
-                    No posts yet.
-                  </p>
+                  isOwnProfile ? (
+                    <EmptyState
+                      title="No Posts Yet"
+                      description="Share trades and updates with the community."
+                      action={
+                        <Link
+                          href="/app"
+                          className="text-sm font-medium text-blue-300 hover:text-blue-200"
+                        >
+                          Create Post →
+                        </Link>
+                      }
+                      className="py-10"
+                    />
+                  ) : (
+                    <p className="text-center text-sm text-gray-400">
+                      No posts yet.
+                    </p>
+                  )
                 ) : (
                   <div className="grid grid-cols-1 gap-x-6 gap-y-8 md:grid-cols-2">
                     {sortedPosts.map((post) => {
@@ -3377,7 +3411,15 @@ function ProfilePageContent() {
             <h2 className="mb-4 text-lg font-semibold text-gray-100">Followers</h2>
 
             {followersModalUsers.length === 0 ? (
-              <p className="text-sm text-gray-400">No followers yet.</p>
+              isOwnProfile ? (
+                <EmptyState
+                  title="No Followers Yet"
+                  description="Post consistently and engage with other traders to grow your audience."
+                  className="py-6"
+                />
+              ) : (
+                <p className="text-sm text-gray-400">No followers yet.</p>
+              )
             ) : (
               <div className="space-y-1">
                 {followersModalUsers.map((u) => (
@@ -3428,7 +3470,23 @@ function ProfilePageContent() {
             <h2 className="mb-4 text-lg font-semibold text-gray-100">Following</h2>
 
             {followingModalUsers.length === 0 ? (
-              <p className="text-sm text-gray-400">Not following anyone yet.</p>
+              isOwnProfile ? (
+                <EmptyState
+                  title="Not Following Anyone"
+                  description="Follow traders to customize your feed."
+                  action={
+                    <Link
+                      href="/explore"
+                      className="text-sm font-medium text-blue-300 hover:text-blue-200"
+                    >
+                      Explore Traders →
+                    </Link>
+                  }
+                  className="py-6"
+                />
+              ) : (
+                <p className="text-sm text-gray-400">Not following anyone yet.</p>
+              )
             ) : (
               <div className="space-y-1">
                 {followingModalUsers.map((u) => (

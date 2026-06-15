@@ -1,6 +1,7 @@
 /**
  * Leaderboard chart pipeline: performance windows, daily chart buckets (NY calendar).
- * Used by app/leaderboard/page.tsx — keep logic here, not scattered in JSX.
+ * Chart emits only days with trades (no zero-fill). Data source: public-profile users
+ * via leaderboard_trade_rows RPC (all trades, not is_public).
  */
 
 export type LeaderboardView = "7D" | "30D" | "90D" | "YTD" | "ALL" | "Custom"
@@ -136,22 +137,6 @@ function getDailyBucketId(createdAtIso: string): {
 function labelForDailyBucket(bucketId: string): string {
   const { y, m, day } = parseYmd(bucketId)
   return `${m}/${day}/${y}`
-}
-
-/** All daily bucket ids from min trade day through end (NY), inclusive. */
-function enumerateDailyBucketIds(
-  minYmdNY: string,
-  endYmdNY: string
-): { bucketId: string; sortKey: number }[] {
-  const out: { bucketId: string; sortKey: number }[] = []
-  let cur = minYmdNY
-  while (ymdCompare(cur, endYmdNY) <= 0) {
-    const { y, m, day } = parseYmd(cur)
-    const sortKey = y * 10000 + m * 100 + day
-    out.push({ bucketId: cur, sortKey })
-    cur = addDaysYmd(cur, 1)
-  }
-  return out
 }
 
 function emptyWindowStats(): LeaderboardTodayStats {
@@ -415,37 +400,44 @@ export function buildLeaderboardChartData(
       ? windowStartYmd
       : minTradeYmd
 
-  const bucketSequence = enumerateDailyBucketIds(
-    chartStartYmd,
+  const endYmd =
     ymdCompare(chartEndYmd, chartStartYmd) >= 0 ? chartEndYmd : chartStartYmd
-  )
 
-  const chartData: LeaderboardChartRow[] = bucketSequence.map(
-    ({ bucketId, sortKey }) => {
-      const userMap = byBucket[bucketId] || emptyUserMap()
-      const entries = Object.entries(userMap).filter(([, agg]) => agg.count > 0)
-      const pnls = entries.map(([, agg]) => agg.pnl)
+  /** Only days with at least one trade — skip zero-fill buckets. */
+  const activeBucketIds = Object.keys(byBucket)
+    .filter((bucketId) => {
+      if (ymdCompare(bucketId, chartStartYmd) < 0) return false
+      if (ymdCompare(bucketId, endYmd) > 0) return false
+      const userMap = byBucket[bucketId]
+      return Object.values(userMap).some((agg) => agg.count > 0)
+    })
+    .sort((a, b) => ymdCompare(a, b))
 
-      const average =
-        pnls.length > 0 ? pnls.reduce((a, b) => a + b, 0) / pnls.length : 0
-      const best = pnls.length > 0 ? Math.max(...pnls) : 0
-      const worst = pnls.length > 0 ? Math.min(...pnls) : 0
+  const chartData: LeaderboardChartRow[] = activeBucketIds.map((bucketId) => {
+    const userMap = byBucket[bucketId]
+    const entries = Object.entries(userMap).filter(([, agg]) => agg.count > 0)
+    const pnls = entries.map(([, agg]) => agg.pnl)
+    const { y, m, day } = parseYmd(bucketId)
+    const sortKey = y * 10000 + m * 100 + day
 
-      const youAgg = userId ? userMap[userId] : undefined
-      const you = youAgg && youAgg.count > 0 ? youAgg.pnl : 0
+    const average = pnls.reduce((a, b) => a + b, 0) / pnls.length
+    const best = Math.max(...pnls)
+    const worst = Math.min(...pnls)
 
-      return {
-        bucketId,
-        label: labelForDailyBucket(bucketId),
-        sortKey,
-        average,
-        best,
-        worst,
-        you,
-        contributorCount: pnls.length,
-      }
+    const youAgg = userId ? userMap[userId] : undefined
+    const you = youAgg && youAgg.count > 0 ? youAgg.pnl : 0
+
+    return {
+      bucketId,
+      label: labelForDailyBucket(bucketId),
+      sortKey,
+      average,
+      best,
+      worst,
+      you,
+      contributorCount: pnls.length,
     }
-  )
+  })
 
   const yourTrades = userId
     ? windowTrades.filter((t) => t.user_id === userId)
