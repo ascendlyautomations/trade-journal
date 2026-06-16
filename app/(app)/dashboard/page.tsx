@@ -2,6 +2,8 @@
 
 import DashboardFilters from "../../components/dashboard/DashboardFilters"
 import DashboardHeader from "../../components/dashboard/DashboardHeader"
+import BetaWelcomeCard from "../../components/dashboard/BetaWelcomeCard"
+import DashboardZeroTradeWelcomeHero from "../../components/dashboard/DashboardZeroTradeWelcomeHero"
 import GettingStartedChecklist from "../../components/dashboard/GettingStartedChecklist"
 import DashboardStatsGrid from "../../components/dashboard/DashboardStatsGrid"
 import DashboardEquityCurve from "../../components/dashboard/DashboardEquityCurve"
@@ -41,6 +43,11 @@ import {
   resolveTradingTimeSourceForKey,
 } from "@/lib/formatDate"
 import { normalizeProfileUsername } from "@/lib/profileUsername"
+import {
+  readBetaWelcomeSeen,
+  shouldShowBetaWelcomeCard,
+  writeBetaWelcomeSeen,
+} from "@/lib/betaWelcomeCard"
 import { readOnboardingCompleteDismissed, writeOnboardingCompleteDismissed } from "@/lib/gettingStartedSticky"
 import {
   dispatchGettingStartedSignalsRefresh,
@@ -482,6 +489,7 @@ export default function Dashboard() {
   } = useGettingStartedProgress()
   const [onboardingSectionDismissed, setOnboardingSectionDismissed] =
     useState(false)
+  const [betaWelcomeDismissed, setBetaWelcomeDismissed] = useState(false)
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [profileOnboardingDone, setProfileOnboardingDone] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
@@ -619,7 +627,7 @@ export default function Dashboard() {
     const { data: profileData } = await supabase
       .from("profiles")
       .select(
-        "id, username, bio, trading_style, primary_market, started_trading, avatar_url, onboarding_completed, max_drawdown_limit, is_pro, subscription_status, referral_code"
+        "id, username, bio, trading_style, primary_market, started_trading, avatar_url, onboarding_completed, max_drawdown_limit, is_pro, subscription_status, referral_code, is_beta_tester"
       )
       .eq("id", currentUser.id)
       .single()
@@ -638,9 +646,11 @@ export default function Dashboard() {
   useEffect(() => {
     if (!user?.id) {
       setOnboardingSectionDismissed(false)
+      setBetaWelcomeDismissed(false)
       return
     }
     setOnboardingSectionDismissed(readOnboardingCompleteDismissed(user.id))
+    setBetaWelcomeDismissed(readBetaWelcomeSeen(user.id))
   }, [user?.id])
 
   useEffect(() => {
@@ -1347,6 +1357,19 @@ const worstDay = dailyPnLs.length > 0
     setOnboardingSectionDismissed(true)
   }, [user?.id])
 
+  const handleDismissBetaWelcome = useCallback(() => {
+    if (!user?.id) return
+    writeBetaWelcomeSeen(user.id)
+    setBetaWelcomeDismissed(true)
+  }, [user?.id])
+
+  const showBetaWelcomeCard = shouldShowBetaWelcomeCard({
+    isBetaTester: profile?.is_beta_tester,
+    onboardingCompleted: profile?.onboarding_completed,
+    tradeCount: trades.length,
+    welcomeSeen: betaWelcomeDismissed,
+  })
+
   if (loading || (user?.id && !signalsReady)) {
     return (
       <div className="w-full flex items-center justify-center text-white">
@@ -1689,47 +1712,16 @@ const worstDay = dailyPnLs.length > 0
 
   {hasNoTrades ? (
     <>
-      <div className="rounded-xl border border-white/10 bg-white/5 p-6 backdrop-blur-md md:p-8">
-        <h2 className="bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-2xl font-semibold text-transparent md:text-3xl">
-          Welcome to TradeTraxs
-        </h2>
-        <p className="mt-3 text-base font-medium text-gray-100 md:text-lg">
-          Track every trade.
-          <br />
-          Discover your edge.
-          <br />
-          Improve your performance.
-        </p>
-        <p className="mt-3 max-w-2xl text-sm text-gray-400 md:text-base">
-          Get started by logging your first trade or importing your trading history.
-        </p>
-        <div className="mt-6 flex flex-wrap items-center gap-3">
-          <Link
-            href="/app"
-            className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600"
-          >
-            Add Trade
-          </Link>
-          <button
-            type="button"
-            onClick={() => setShowImportModal(true)}
-            className="rounded-lg border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/15"
-          >
-            Import CSV
-          </button>
-        </div>
-        <div className="mt-8 border-t border-white/10 pt-6">
-          <p className="text-sm font-medium text-gray-300">
-            After your first trade you&apos;ll unlock:
-          </p>
-          <ul className="mt-3 space-y-2 text-sm text-gray-400">
-            <li>• Performance statistics</li>
-            <li>• Equity curve tracking</li>
-            <li>• Session &amp; weekday analysis</li>
-            <li>• Symbol performance insights</li>
-          </ul>
-        </div>
-      </div>
+      {showBetaWelcomeCard ? (
+        <BetaWelcomeCard
+          onDismiss={handleDismissBetaWelcome}
+          onImportCsv={() => setShowImportModal(true)}
+        />
+      ) : (
+        <DashboardZeroTradeWelcomeHero
+          onImportCsv={() => setShowImportModal(true)}
+        />
+      )}
       {gettingStartedSection}
     </>
   ) : totalTrades === 0 ? (
