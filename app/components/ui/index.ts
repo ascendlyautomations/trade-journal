@@ -10,6 +10,12 @@ export { cn } from "./cn"
 export { default as Toast } from "./Toast"
 export { ToastProvider, useToast } from "./ToastProvider"
 export type { ToastInput, ToastItem, ToastType } from "./toast-types"
+export { default as ConfirmModal } from "./ConfirmModal"
+export type { ConfirmModalProps } from "./ConfirmModal"
+export {
+  useDeleteTradeConfirmation,
+  DELETE_TRADE_CONFIRM_COPY,
+} from "./useDeleteTradeConfirmation"
 export { default as FeedbackModal } from "./FeedbackModal"
 export type { FeedbackModalProps } from "./FeedbackModal"
 export { useFeedbackPopup } from "./useFeedbackPopup"

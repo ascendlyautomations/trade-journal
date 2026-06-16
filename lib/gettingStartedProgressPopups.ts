@@ -35,8 +35,14 @@ export function resolveGettingStartedProgressTransition(
   progress: GettingStartedProgress,
   userId: string
 ): ProgressPopupBatch {
-  const lastShown = readLastProgressPopupCount(userId) ?? 0
+  let lastShown = readLastProgressPopupCount(userId) ?? 0
   const { completedCount, allComplete } = progress
+
+  // Stale storage from prior sessions must not block future step popups.
+  if (lastShown > completedCount) {
+    lastShown = completedCount
+    writeLastProgressPopupCount(userId, lastShown)
+  }
 
   if (completedCount <= lastShown) {
     return { stepPopup: null, completionPopup: null }

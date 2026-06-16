@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import { isProActive } from "@/lib/subscription"
@@ -12,6 +12,7 @@ import InputTradeForm from "../components/InputTradeForm"
 import PerformanceShareModal from "../components/PerformanceShareModal"
 import { formatPnlCurrency } from "@/lib/formatMoney"
 import { formatRR } from "@/lib/formatDisplay"
+import { ConfirmModal, useDeleteTradeConfirmation } from "../components/ui"
 
 type BacktestTrade = Record<string, unknown> & {
   id: string
@@ -116,11 +117,13 @@ export default function BacktestPage() {
     strategyMap[name].push(t)
   })
 
-  async function deleteTrade(id: string) {
-    if (!confirm("Delete this backtest trade?")) return
+  const performDeleteTrade = useCallback(async (id: string) => {
     await supabase.from("trades").delete().eq("id", id)
     setTrades((prev) => prev.filter((t) => t.id !== id))
-  }
+  }, [])
+
+  const { requestDelete: deleteTrade, confirmModalProps } =
+    useDeleteTradeConfirmation(performDeleteTrade)
 
   if (proLocked) {
     return (
@@ -330,6 +333,7 @@ export default function BacktestPage() {
         subtitle="Backtest Lab · current strategy filter"
         profile={shareProfile}
       />
+      <ConfirmModal {...confirmModalProps} />
     </>
   )
 }

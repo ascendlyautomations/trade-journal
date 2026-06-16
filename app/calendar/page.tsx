@@ -11,9 +11,10 @@ import {
   toDateKey,
 } from "@/lib/formatDate"
 import { formatDecimal, formatRR } from "@/lib/formatDisplay"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, useCallback } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { useScrollPageTopOnMount } from "@/lib/useScrollPageTopOnMount"
+import { ConfirmModal, useDeleteTradeConfirmation } from "../components/ui"
 export default function CalendarPage() {
   useScrollPageTopOnMount()
   const [trades, setTrades] = useState<any[]>([])
@@ -95,12 +96,14 @@ export default function CalendarPage() {
     setEditingTrade(null)
   }
 
-  async function handleDeleteTrade(id: string) {
-    if (!confirm("Delete this trade?")) return
+  const performDeleteTrade = useCallback(async (id: string) => {
     await supabase.from("trades").delete().eq("id", id)
     setTrades((prev) => prev.filter((t) => String(t.id) !== id))
     setSelectedTrades((prev) => prev.filter((t) => String(t.id) !== id))
-  }
+  }, [])
+
+  const { requestDelete: handleDeleteTrade, confirmModalProps } =
+    useDeleteTradeConfirmation(performDeleteTrade)
 
   function formatPNL(value: number) {
     return `${value < 0 ? "-" : ""}$${Math.abs(value).toLocaleString()}`
@@ -609,6 +612,7 @@ export default function CalendarPage() {
         onClosePerformanceShare={() => {}}
         onCloseSendModal={() => setSendTradeId(null)}
       />
+      <ConfirmModal {...confirmModalProps} />
     </>
   )
 }

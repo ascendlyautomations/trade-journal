@@ -13,6 +13,7 @@ import { normalizeProfileUsername } from "@/lib/profileUsername"
 import PostSetupImportModal from "../../components/PostSetupImportModal"
 import TradesPageMainContent from "../../components/TradesPageMainContent"
 import TradesPageOverlays from "../../components/TradesPageOverlays"
+import { ConfirmModal, useDeleteTradeConfirmation } from "../../components/ui"
 
 const TRADES_GATE_PROFILE_SELECT =
   "username, bio, trading_style, trader_type, primary_market, started_trading, avatar_url, referral_code" as const
@@ -177,11 +178,13 @@ export default function TradesPage() {
     setEditingTrade({ ...trade })
   }, [])
 
-  const handleDeleteTrade = useCallback(async (id: string) => {
-    if (!confirm("Delete this trade?")) return
+  const performDeleteTrade = useCallback(async (id: string) => {
     await supabase.from("trades").delete().eq("id", id)
     setTrades((prev) => prev.filter((t) => t.id !== id))
   }, [])
+
+  const { requestDelete: handleDeleteTrade, confirmModalProps } =
+    useDeleteTradeConfirmation(performDeleteTrade)
 
   const handleSendTrade = useCallback((trade: any) => {
     setSendTradeId(String(trade.id))
@@ -447,6 +450,7 @@ export default function TradesPage() {
         />
       ) : null}
 
+      <ConfirmModal {...confirmModalProps} />
     </>
   )
 }

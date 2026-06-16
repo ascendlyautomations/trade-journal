@@ -9,10 +9,13 @@ import {
 } from "@/lib/tradeDisplayFormat"
 import { formatEST } from "@/lib/formatEST"
 import { formatMoneyUnknown, formatNumberUnknown } from "@/lib/formatDisplay"
+import { publicAccountBadgeFromTrade } from "@/lib/publicAccountPrivacy"
 import { tradeScreenshotPublicUrl } from "@/lib/storagePublicUrl"
 
 export type TradeCardProps = {
   trade: any
+  /** When false, only account-type badges are shown (no names, sizes, or IDs). */
+  showAccountIdentifiers?: boolean
   showAdvanced?: boolean
   onEdit?: () => void
   onDelete?: () => void
@@ -23,6 +26,7 @@ export type TradeCardProps = {
 
 export default function TradeCard({
   trade,
+  showAccountIdentifiers = true,
   showAdvanced = false,
   onEdit,
   onDelete,
@@ -55,7 +59,9 @@ export default function TradeCard({
 
   const modeLower = String(trade.mode ?? "").toLowerCase().trim()
 
-  const accountDisplay = `${trade.account_name ?? ""} ${trade.account_size ?? ""}`.trim()
+  const accountDisplay = showAccountIdentifiers
+    ? `${trade.account_name ?? ""} ${trade.account_size ?? ""}`.trim()
+    : (publicAccountBadgeFromTrade(trade) ?? "")
 
   const screenshotUrl = tradeScreenshotPublicUrl(trade.image_url)
 
@@ -134,7 +140,13 @@ export default function TradeCard({
                   Backtest
                 </span>
               ) : accountDisplay.length > 0 ? (
-                <p className="text-sm text-gray-400">{accountDisplay}</p>
+                showAccountIdentifiers ? (
+                  <p className="text-sm text-gray-400">{accountDisplay}</p>
+                ) : (
+                  <span className="rounded bg-white/10 px-2 py-1 text-xs text-gray-300">
+                    {accountDisplay}
+                  </span>
+                )
               ) : null}
             </div>
 

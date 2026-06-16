@@ -10,6 +10,7 @@ import {
   resolveTradingTimeSourceForKey,
   toDateKey,
 } from "@/lib/formatDate"
+import { publicAccountBadgeFromTrade } from "@/lib/publicAccountPrivacy"
 type TradeLike = {
   id: string | number
   created_at: string
@@ -40,12 +41,33 @@ type CalendarProps = {
   trades: TradeLike[]
   showAccountFilter?: boolean
   showControls?: boolean
+  /** When false, only account-type badges are shown (no names, sizes, or numbers). */
+  showAccountIdentifiers?: boolean
+}
+
+function accountContextLine(
+  trade: TradeLike,
+  showAccountIdentifiers: boolean
+): string | null {
+  const modeLower = String(trade.mode ?? "").toLowerCase().trim()
+  if (modeLower === "backtest") return null
+
+  if (!showAccountIdentifiers) {
+    return publicAccountBadgeFromTrade(trade)
+  }
+
+  const accountLine = `${trade.account_name ?? ""} ${trade.account_size ?? ""}`.trim()
+  if (trade.account_type && accountLine) {
+    return `${trade.account_type} · ${accountLine}`
+  }
+  return accountLine || null
 }
 
 export default function Calendar({
   trades,
   showAccountFilter = false,
   showControls = false,
+  showAccountIdentifiers = true,
 }: CalendarProps) {
   void showAccountFilter
   void showControls
@@ -320,11 +342,10 @@ export default function Calendar({
                 const img = tradeScreenshotPublicUrl(trade.image_url)
                 const pnl = Number(trade.pnl) || 0
                 const modeLower = String(trade.mode ?? "").toLowerCase().trim()
-                const accountLine = `${trade.account_name ?? ""} ${trade.account_size ?? ""}`.trim()
-                const accountLineWithType =
-                  trade.account_type && accountLine
-                    ? `${trade.account_type} · ${accountLine}`
-                    : accountLine || null
+                const accountLineWithType = accountContextLine(
+                  trade,
+                  showAccountIdentifiers
+                )
 
                 return (
                   <div
@@ -423,11 +444,10 @@ export default function Calendar({
               const modeLower = String(selectedTrade.mode ?? "")
                 .toLowerCase()
                 .trim()
-              const accountLine = `${selectedTrade.account_name ?? ""} ${selectedTrade.account_size ?? ""}`.trim()
-              const accountLineWithType =
-                selectedTrade.account_type && accountLine
-                  ? `${selectedTrade.account_type} · ${accountLine}`
-                  : accountLine || null
+              const accountLineWithType = accountContextLine(
+                selectedTrade,
+                showAccountIdentifiers
+              )
               return (
                 <>
                   {img ? (

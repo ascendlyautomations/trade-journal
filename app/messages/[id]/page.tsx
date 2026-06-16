@@ -24,6 +24,11 @@ import {
   formatRR,
   formatSignedPnlDisplay,
 } from "@/lib/formatDisplay"
+import {
+  PUBLIC_TRADE_SELECT,
+  publicAccountBadgeFromTrade,
+  sanitizeTradeForViewer,
+} from "@/lib/publicAccountPrivacy"
 import { isConversationParticipant } from "@/lib/conversationAccess"
 import { ensureDmConversation } from "@/lib/dmConversation"
 import {
@@ -59,6 +64,8 @@ function postScreenshotSrc(url: string | null | undefined): string | null {
 }
 
 function getTradeStageRaw(trade: any): string {
+  const badge = publicAccountBadgeFromTrade(trade)
+  if (badge) return badge
   const v =
     trade?.account_status ??
     trade?.account_stage ??
@@ -102,11 +109,29 @@ function TradeMessageBubble({
     ;(async () => {
       const { data } = await supabase
         .from("trades")
-        .select("*")
+        .select(PUBLIC_TRADE_SELECT)
         .eq("id", message.trade_id)
         .maybeSingle()
       if (cancelled) return
-      setTrade(data ?? null)
+
+      const isOwner =
+        userId != null && data?.user_id != null && data.user_id === userId
+
+      let resolved = data
+      if (isOwner) {
+        const { data: full } = await supabase
+          .from("trades")
+          .select("*")
+          .eq("id", message.trade_id)
+          .maybeSingle()
+        resolved = full ?? data
+      }
+
+      setTrade(
+        resolved
+          ? sanitizeTradeForViewer(resolved, { isOwner: !!isOwner })
+          : null
+      )
       setTradeLoading(false)
     })()
     return () => {

@@ -64,7 +64,7 @@ import { feedbackPresets, persistentError } from "@/lib/feedbackPresets"
 import { logSupabaseError } from "@/lib/logSupabaseError"
 import { ensureDmConversation } from "@/lib/dmConversation"
 import { dmThreadPath } from "@/lib/messageRoutes"
-import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
+import { ConfirmModal, FeedbackModal, useDeleteTradeConfirmation, useFeedbackPopup } from "@/app/components/ui"
 import StoryComposeModal from "../../components/feed/StoryComposeModal"
 import { publishStory } from "@/lib/publishStory"
 import {
@@ -76,6 +76,13 @@ import { isProfileUuidSegment, profilePath } from "@/lib/profileRoutes"
 import { normalizeProfileUsername } from "@/lib/profileUsername"
 import { useUserProfile } from "@/lib/UserProfileProvider"
 import { notifyGettingStartedChecklistMaybeCompleted } from "@/lib/gettingStartedProgressSync"
+import {
+  formatPublicAccountTypeLabel,
+  PUBLIC_TRADE_SELECT,
+  sanitizeTradeForViewer,
+  sanitizeTradesForViewer,
+  tradeSelectForViewer,
+} from "@/lib/publicAccountPrivacy"
 
 /** Public profile columns only — never fetch billing, referral, or moderation fields here. */
 const PUBLIC_PROFILE_SELECT =
@@ -242,7 +249,7 @@ function TradeCard({
           }
         `}
             >
-              {accountTypeNorm.toUpperCase()}
+              {formatPublicAccountTypeLabel(accountTypeNorm) ?? accountTypeNorm.toUpperCase()}
             </span>
           ) : null}
         </div>
@@ -825,6 +832,23 @@ function scrollToProfileTarget(elementId: string) {
   })
 }
 
+/** Append rows without duplicate ids (pagination races, deep links). */
+function mergeUniqueById<T extends { id: string | number }>(
+  existing: T[],
+  incoming: T[]
+): T[] {
+  if (!incoming.length) return existing
+  const seen = new Set(existing.map((row) => String(row.id)))
+  const merged = [...existing]
+  for (const row of incoming) {
+    const id = String(row.id)
+    if (seen.has(id)) continue
+    seen.add(id)
+    merged.push(row)
+  }
+  return merged
+}
+
 function ProfilePageContent() {
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const PAGE_SIZE = 5
@@ -844,6 +868,7 @@ function ProfilePageContent() {
   const [trades, setTrades] = useState<any[]>([])
   const [allTrades, setAllTrades] = useState<any[]>([])
   const [page, setPage] = useState(0)
+  const tradeFetchOffsetRef = useRef(0)
   const [hasMore, setHasMore] = useState(true)
   const [loading, setLoading] = useState(true)
   /** Set when profile row fails to load (wrong env, RLS, missing row, or network). */
@@ -1023,13 +1048,20 @@ function ProfilePageContent() {
     loadFollowingStories,
   ])
 
-  const fetchTrades = async (forProfileId: string, reset = false) => {
-    const from = reset ? 0 : page * PAGE_SIZE
+  const fetchTrades = async (
+    forProfileId: string,
+    reset = false,
+    viewerIsOwner?: boolean
+  ) => {
+    const isOwner =
+      viewerIsOwner ??
+      (currentUserId != null && String(currentUserId) === String(forProfileId))
+    const from = reset ? 0 : tradeFetchOffsetRef.current
     const to = from + PAGE_SIZE - 1
 
     const { data, error } = await supabase
       .from("trades")
-      .select("*")
+      .select(tradeSelectForViewer(isOwner))
       .eq("user_id", forProfileId)
       .eq("is_public", true)
       .order("created_at", { ascending: false })
@@ -1040,16 +1072,21 @@ function ProfilePageContent() {
       return
     }
 
+    const rows = sanitizeTradesForViewer(data || [], { isOwner })
+    const fetchedCount = (data || []).length
+
     if (reset) {
-      setTrades(data || [])
+      tradeFetchOffsetRef.current = fetchedCount
+      setTrades(rows)
       setPage(1)
-      setHasMore((data || []).length >= PAGE_SIZE)
+      setHasMore(fetchedCount >= PAGE_SIZE)
       return
     }
 
-    setTrades((prev) => [...prev, ...(data || [])])
+    tradeFetchOffsetRef.current += fetchedCount
+    setTrades((prev) => mergeUniqueById(prev, rows))
     setPage((prev) => prev + 1)
-    if (!data || data.length < PAGE_SIZE) {
+    if (fetchedCount < PAGE_SIZE) {
       setHasMore(false)
     }
   }
@@ -1058,6 +1095,7 @@ function ProfilePageContent() {
     if (!profileId) {
       setProfile(null)
       setTrades([])
+      tradeFetchOffsetRef.current = 0
       setPage(0)
       setHasMore(true)
       setLoading(false)
@@ -1068,6 +1106,7 @@ function ProfilePageContent() {
 
     setProfile(null)
     setTrades([])
+    tradeFetchOffsetRef.current = 0
     setPage(0)
     setHasMore(true)
     setWallPosts([])
@@ -1155,7 +1194,7 @@ function ProfilePageContent() {
     async function fetchAllTrades() {
       let query = supabase
         .from("trades")
-        .select("*")
+        .select(tradeSelectForViewer(isOwner))
         .eq("user_id", profile.id)
 
       if (!isOwner) {
@@ -1170,7 +1209,7 @@ function ProfilePageContent() {
         setAllTrades([])
         return
       }
-      setAllTrades(data || [])
+      setAllTrades(sanitizeTradesForViewer(data || [], { isOwner }))
     }
 
     void fetchAllTrades()
@@ -1329,6 +1368,7 @@ function ProfilePageContent() {
       setProfile(null)
       setRoom(null)
       setTrades([])
+      tradeFetchOffsetRef.current = 0
       setPage(0)
       setHasMore(false)
       setFollowersCount(0)
@@ -1387,9 +1427,11 @@ function ProfilePageContent() {
       !isPrivateProfile || uid === prof.id || following
 
     if (canLoadTrades) {
-      await fetchTrades(prof.id, true)
+      const isOwner = uid === prof.id
+      await fetchTrades(prof.id, true, isOwner)
     } else {
       setTrades([])
+      tradeFetchOffsetRef.current = 0
       setPage(0)
       setHasMore(false)
     }
@@ -1823,17 +1865,22 @@ function ProfilePageContent() {
     setOpenTradeMenuId(null)
   }
 
-  async function handleDeleteTrade(tradeId: string) {
-    const confirmDelete = window.confirm("Delete this trade?")
-    if (!confirmDelete) return
+  const performDeleteTrade = useCallback(async (tradeId: string) => {
     const { error } = await supabase.from("trades").delete().eq("id", tradeId)
     if (error) {
       console.error(error)
-      return
+      throw error
     }
     setTrades((prev) => prev.filter((t) => String(t.id) !== String(tradeId)))
+    setAllTrades((prev) => prev.filter((t) => String(t.id) !== String(tradeId)))
+    setSelectedTradeDetail((prev) =>
+      prev && String(prev.id) === String(tradeId) ? null : prev
+    )
     setOpenTradeMenuId(null)
-  }
+  }, [])
+
+  const { requestDelete: handleDeleteTrade, confirmModalProps: deleteTradeConfirmProps } =
+    useDeleteTradeConfirmation(performDeleteTrade)
 
   const emptyFollowSet = useMemo(() => new Set<string>(), [])
 
@@ -1859,9 +1906,11 @@ function ProfilePageContent() {
 
       if (!following && profile.is_private === true) {
         setTrades([])
+        tradeFetchOffsetRef.current = 0
         setPage(0)
         setHasMore(false)
       } else if (following && profile.is_private === true) {
+        tradeFetchOffsetRef.current = 0
         setPage(0)
         setHasMore(true)
         await fetchTrades(profile.id, true)
@@ -1967,9 +2016,11 @@ function ProfilePageContent() {
         allTrades.find((row) => String(row.id) === tradeId)
 
       if (!trade) {
+        const isOwner =
+          currentUserId != null && String(currentUserId) === String(profile.id)
         const { data, error } = await supabase
           .from("trades")
-          .select("*")
+          .select(isOwner ? "*" : PUBLIC_TRADE_SELECT)
           .eq("id", tradeId)
           .eq("user_id", profile.id)
           .eq("is_public", true)
@@ -1979,12 +2030,8 @@ function ProfilePageContent() {
           clearProfileQueryParams()
           return
         }
-        trade = data
-        setTrades((prev) =>
-          prev.some((row) => String(row.id) === tradeId)
-            ? prev
-            : [data, ...prev]
-        )
+        trade = sanitizeTradeForViewer(data, { isOwner }) as typeof data
+        setTrades((prev) => mergeUniqueById(prev, [trade]))
       }
 
       setSelectedTradeDetail({ ...trade, currentUserId })
@@ -2397,6 +2444,7 @@ function ProfilePageContent() {
     <>
       <Navbar />
       <FeedbackModal {...feedbackModalProps} />
+      <ConfirmModal {...deleteTradeConfirmProps} />
       {currentUserId === profile?.id ? (
         <StoryComposeModal
           open={storyComposeOpen}
@@ -2759,7 +2807,6 @@ function ProfilePageContent() {
                     {sortedTrades.map((trade) => (
                       <div key={trade.id} id={`trade-${trade.id}`}>
                       <TradeCard
-                        key={trade.id}
                         trade={{ ...trade, currentUserId }}
                         profile={profile}
                         shareProfile={viewerShareProfile}
@@ -2834,7 +2881,6 @@ function ProfilePageContent() {
                       return (
                         <div key={post.id} id={`post-${key}`}>
                         <PostCard
-                          key={post.id}
                           post={post}
                           profile={profile}
                           canManagePost={currentUserId === profile.id}
@@ -2893,6 +2939,7 @@ function ProfilePageContent() {
                     trades={filteredTrades}
                     showAccountFilter={false}
                     showControls={false}
+                    showAccountIdentifiers={isOwnProfile}
                   />
                 )}
               </div>
@@ -3172,7 +3219,9 @@ function ProfilePageContent() {
                       </div>
                     ) : null}
                     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                      {achievements.map((a) => {
+                      {achievements
+                        .filter((a) => !a.is_featured)
+                        .map((a) => {
                         return (
                         <AchievementCard
                           key={a.id}
@@ -3498,6 +3547,7 @@ function ProfilePageContent() {
           onClose={() => setEditingTrade(null)}
           onSave={() => {
             if (profile?.id) {
+              tradeFetchOffsetRef.current = 0
               setPage(0)
               setHasMore(true)
               void fetchTrades(profile.id, true)

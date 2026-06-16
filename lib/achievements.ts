@@ -63,6 +63,32 @@ export const ACHIEVEMENT_SELECT = `
   metadata
 `
 
+/** Public profile achievements — no account_name or account_size. */
+export const PUBLIC_ACHIEVEMENT_SELECT = `
+  id,
+  user_id,
+  achievement_type,
+  title,
+  description,
+  badge_key,
+  tier,
+  category,
+  value_numeric,
+  value_text,
+  currency,
+  account_type,
+  mode,
+  firm,
+  image_url,
+  achieved_at,
+  created_at,
+  updated_at,
+  is_featured,
+  is_public,
+  sort_order,
+  metadata
+`
+
 export function normalizeAchievementType(type: string | null): "payout" | "passed_eval" | "milestone" {
   const t = String(type || "").toLowerCase().trim()
   if (t === "payout" || t.includes("payout")) return "payout"
@@ -140,7 +166,7 @@ export async function fetchOwnAchievements(userId: string) {
 export async function fetchVisibleProfileAchievements(profileUserId: string) {
   return supabase
     .from("achievements")
-    .select(ACHIEVEMENT_SELECT)
+    .select(PUBLIC_ACHIEVEMENT_SELECT)
     .eq("user_id", profileUserId)
     .eq("is_public", true)
     .order("is_featured", { ascending: false })

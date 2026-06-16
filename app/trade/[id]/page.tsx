@@ -5,6 +5,10 @@ import { useParams, useRouter } from "next/navigation"
 import Navbar from "../../components/Navbar"
 import TradeSocialLayer from "../../components/TradeSocialLayer"
 import { supabase } from "../../../lib/supabaseClient"
+import {
+  PUBLIC_TRADE_SELECT,
+  sanitizeTradeForViewer,
+} from "@/lib/publicAccountPrivacy"
 
 function tradeScreenshotSrc(url: string | null | undefined): string | null {
   const raw = url != null ? String(url).trim() : ""
@@ -44,7 +48,7 @@ export default function TradeDetailPage() {
 
       const { data, error } = await supabase
         .from("trades")
-        .select("*")
+        .select(PUBLIC_TRADE_SELECT)
         .eq("id", tradeId)
         .maybeSingle()
 
@@ -53,7 +57,13 @@ export default function TradeDetailPage() {
       // RLS grants: owner (trades_select_own), public (trades_select_public),
       // or shared in a conversation the viewer participates in
       // (trades_select_shared_in_conversation).
-      const resolvedTrade = error ? null : data
+      const isOwner =
+        sessionUserId != null &&
+        data?.user_id != null &&
+        String(sessionUserId) === String(data.user_id)
+      const resolvedTrade = error
+        ? null
+        : sanitizeTradeForViewer(data, { isOwner })
 
       if (error && !resolvedTrade) {
         setTrade(null)

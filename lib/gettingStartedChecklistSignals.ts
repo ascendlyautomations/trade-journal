@@ -4,7 +4,6 @@ export type GettingStartedChecklistSignals = {
   onboardingCompleted: boolean
   tradeCount: number
   profilePostCount: number
-  feedPostCount: number
   followCount: number
   hasEverJoinedOtherRoom: boolean
   hasPublicTrade: boolean
@@ -20,7 +19,6 @@ export async function fetchGettingStartedChecklistSignals(
     profileRes,
     tradesRes,
     profilePostsRes,
-    feedPostsRes,
     followRes,
     roomMembersRes,
     publicTradesRes,
@@ -37,10 +35,6 @@ export async function fetchGettingStartedChecklistSignals(
       .eq("user_id", userId),
     supabase
       .from("profile_posts")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", userId),
-    supabase
-      .from("posts")
       .select("id", { count: "exact", head: true })
       .eq("user_id", userId),
     supabase
@@ -86,7 +80,6 @@ export async function fetchGettingStartedChecklistSignals(
     onboardingCompleted: profileRes.data?.onboarding_completed === true,
     tradeCount: tradesRes.count ?? 0,
     profilePostCount: profilePostsRes.count ?? 0,
-    feedPostCount: feedPostsRes.count ?? 0,
     followCount: followRes.count ?? 0,
     hasEverJoinedOtherRoom,
     hasPublicTrade: (publicTradesRes.count ?? 0) > 0,

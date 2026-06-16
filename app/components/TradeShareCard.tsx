@@ -2,6 +2,7 @@
 
 import { forwardRef } from "react"
 import { formatMoneyUnknown } from "@/lib/formatDisplay"
+import { publicAccountBadgeFromTrade } from "@/lib/publicAccountPrivacy"
 import { tradeScreenshotPublicUrl } from "@/lib/storagePublicUrl"
 
 export type TradeShareCardProps = {
@@ -32,21 +33,8 @@ function directionLabel(trade: any): string {
   )
 }
 
-function formatMode(value: unknown): string {
-  const raw = String(value ?? "").trim()
-  if (!raw) return "—"
-  return raw
-    .split(/[\s_-]+/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
-    .join(" ")
-}
-
-function accountLabel(trade: any): string {
-  const name = String(trade.account_name ?? "").trim()
-  const size = String(trade.account_size ?? "").trim()
-  const label = [name, size].filter(Boolean).join(" ")
-  return label || formatMode(trade.mode ?? trade.account_type)
+function publicAccountLabel(trade: any): string {
+  return publicAccountBadgeFromTrade(trade) ?? "—"
 }
 
 function parseDateLike(value: unknown): Date | null {
@@ -111,7 +99,7 @@ const TradeShareCard = forwardRef<HTMLDivElement, TradeShareCardProps>(
         : "—"
 
     const rr = formatNumber(trade.rr)
-    const account = accountLabel(trade)
+    const account = publicAccountLabel(trade)
     const entryDisplay = formatShareDateTime(
       trade.entry_time ?? trade.date ?? trade.trade_date
     )

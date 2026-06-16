@@ -11,6 +11,7 @@ import {
   type ReactNode,
 } from "react"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
+import type { FeedbackPopupInput } from "@/app/components/ui/feedback-popup-types"
 import { computeGettingStartedProgress } from "@/lib/gettingStartedChecklist"
 import {
   fetchGettingStartedChecklistSignals,
@@ -29,11 +30,27 @@ const EMPTY_SIGNALS: GettingStartedChecklistSignals = {
   onboardingCompleted: false,
   tradeCount: 0,
   profilePostCount: 0,
-  feedPostCount: 0,
   followCount: 0,
   hasEverJoinedOtherRoom: false,
   hasPublicTrade: false,
   firstPrivateTradeId: null,
+}
+
+function computeProgressFromSignals(
+  signals: GettingStartedChecklistSignals,
+  userId: string
+) {
+  const base = computeGettingStartedProgress({
+    onboardingCompleted: signals.onboardingCompleted,
+    tradeCount: signals.tradeCount,
+    profilePostCount: signals.profilePostCount,
+    followCount: signals.followCount,
+    hasEverJoinedOtherRoom: signals.hasEverJoinedOtherRoom,
+    hasPublicTrade: signals.hasPublicTrade,
+  })
+  return applyStickyGettingStartedProgress(base, userId, {
+    profilePostCount: signals.profilePostCount,
+  })
 }
 
 type GettingStartedProgressContextValue = {
@@ -56,44 +73,115 @@ export function GettingStartedProgressProvider({
   const [signals, setSignals] =
     useState<GettingStartedChecklistSignals>(EMPTY_SIGNALS)
   const [signalsReady, setSignalsReady] = useState(false)
-  const progressPopupsInitializedRef = useRef(false)
-  const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const refreshGenerationRef = useRef(0)
+  const userIdRef = useRef<string | null>(null)
+  const seedDoneForUserIdRef = useRef<string | null>(null)
+  const previousCompletedCountRef = useRef(0)
+  const pendingRefreshRef = useRef(false)
+  const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const showPopupRef = useRef(showPopup)
+  const prevMountedUserIdRef = useRef<string | null>(null)
+
+  userIdRef.current = user?.id ?? null
+  showPopupRef.current = showPopup
+
+  const applyProgressPopups = useCallback(
+    (
+      newProgress: ReturnType<typeof computeGettingStartedProgress>,
+      userId: string,
+      previousCompletedCount: number
+    ) => {
+      const popups: FeedbackPopupInput[] = []
+
+      if (seedDoneForUserIdRef.current !== userId) {
+        seedDoneForUserIdRef.current = userId
+        const completionPopup = seedGettingStartedProgressPopupsIfNeeded(
+          newProgress,
+          userId
+        )
+        if (completionPopup) popups.push(completionPopup)
+        previousCompletedCountRef.current = newProgress.completedCount
+        return popups
+      }
+
+      if (newProgress.completedCount > previousCompletedCount) {
+        const { stepPopup, completionPopup } =
+          resolveGettingStartedProgressTransition(newProgress, userId)
+        if (stepPopup) popups.push(stepPopup)
+        if (completionPopup) popups.push(completionPopup)
+      }
+
+      previousCompletedCountRef.current = newProgress.completedCount
+      return popups
+    },
+    []
+  )
 
   const refreshChecklistSignals = useCallback(async () => {
-    if (!user?.id) {
+    const userId = userIdRef.current
+    if (!userId) {
       setSignals(EMPTY_SIGNALS)
       setSignalsReady(false)
       return
     }
 
     const generation = ++refreshGenerationRef.current
-    const next = await fetchGettingStartedChecklistSignals(supabase, user.id)
+    const previousCompletedCount = previousCompletedCountRef.current
+    const next = await fetchGettingStartedChecklistSignals(supabase, userId)
     if (generation !== refreshGenerationRef.current) return
+
+    const newProgress = computeProgressFromSignals(next, userId)
 
     setSignals(next)
     setSignalsReady(true)
-  }, [user?.id])
+
+    const popups = applyProgressPopups(
+      newProgress,
+      userId,
+      previousCompletedCount
+    )
+    for (const popup of popups) {
+      showPopupRef.current(popup)
+    }
+  }, [applyProgressPopups])
 
   const scheduleRefreshChecklistSignals = useCallback(() => {
+    if (!userIdRef.current) {
+      pendingRefreshRef.current = true
+      return
+    }
     if (refreshTimeoutRef.current) {
       clearTimeout(refreshTimeoutRef.current)
     }
     refreshTimeoutRef.current = setTimeout(() => {
       refreshTimeoutRef.current = null
       void refreshChecklistSignals()
-    }, 150)
+    }, 250)
   }, [refreshChecklistSignals])
 
   useEffect(() => {
-    progressPopupsInitializedRef.current = false
-    if (!user?.id) {
+    const nextUserId = user?.id ?? null
+
+    if (nextUserId !== prevMountedUserIdRef.current) {
+      seedDoneForUserIdRef.current = null
+      previousCompletedCountRef.current = 0
+      pendingRefreshRef.current = false
+      prevMountedUserIdRef.current = nextUserId
+    }
+
+    if (!nextUserId) {
       setSignals(EMPTY_SIGNALS)
       setSignalsReady(false)
       return
     }
-    void refreshChecklistSignals()
-  }, [user?.id, refreshChecklistSignals])
+
+    void refreshChecklistSignals().then(() => {
+      if (pendingRefreshRef.current) {
+        pendingRefreshRef.current = false
+        scheduleRefreshChecklistSignals()
+      }
+    })
+  }, [user?.id, refreshChecklistSignals, scheduleRefreshChecklistSignals])
 
   useEffect(() => {
     return subscribeGettingStartedSignalsRefresh(scheduleRefreshChecklistSignals)
@@ -108,47 +196,18 @@ export function GettingStartedProgressProvider({
   }, [])
 
   const progress = useMemo(() => {
-    const base = computeGettingStartedProgress({
-      onboardingCompleted: signals.onboardingCompleted,
-      tradeCount: signals.tradeCount,
-      profilePostCount: signals.profilePostCount,
-      feedPostCount: signals.feedPostCount,
-      followCount: signals.followCount,
-      hasEverJoinedOtherRoom: signals.hasEverJoinedOtherRoom,
-      hasPublicTrade: signals.hasPublicTrade,
-    })
-    if (!user?.id) return base
-    return applyStickyGettingStartedProgress(base, user.id)
-  }, [user?.id, signals])
-
-  useEffect(() => {
-    if (!user?.id || !signalsReady) return
-    if (progressPopupsInitializedRef.current) return
-    progressPopupsInitializedRef.current = true
-
-    const completionPopup = seedGettingStartedProgressPopupsIfNeeded(
-      progress,
-      user.id
-    )
-    if (completionPopup) showPopup(completionPopup)
-  }, [user?.id, signalsReady, progress, showPopup])
-
-  useEffect(() => {
-    if (!user?.id || !signalsReady || !progressPopupsInitializedRef.current) {
-      return
+    if (!user?.id) {
+      return computeGettingStartedProgress({
+        onboardingCompleted: false,
+        tradeCount: 0,
+        profilePostCount: 0,
+        followCount: 0,
+        hasEverJoinedOtherRoom: false,
+        hasPublicTrade: false,
+      })
     }
-
-    const { stepPopup, completionPopup } =
-      resolveGettingStartedProgressTransition(progress, user.id)
-    if (stepPopup) showPopup(stepPopup)
-    if (completionPopup) showPopup(completionPopup)
-  }, [
-    user?.id,
-    signalsReady,
-    progress.completedCount,
-    progress.allComplete,
-    showPopup,
-  ])
+    return computeProgressFromSignals(signals, user.id)
+  }, [user?.id, signals])
 
   const value = useMemo(
     () => ({

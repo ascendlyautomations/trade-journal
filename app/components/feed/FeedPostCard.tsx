@@ -9,6 +9,7 @@ import {
   postPublicDescription,
   postTradeJoin,
 } from "./feedPostHelpers"
+import { formatPublicAccountTypeLabel } from "@/lib/publicAccountPrivacy"
 import FeedPostActions from "./FeedPostActions"
 import FeedPostBody from "./FeedPostBody"
 import FeedPostHeader from "./FeedPostHeader"
@@ -81,10 +82,12 @@ function FeedPostCard({
   const pnlPositive = !Number.isNaN(pnl) && pnl >= 0
   const tradeDisplay = useMemo(() => {
     const accountTypeNorm = normalizeFeedAccountType(tradeRow?.account_type)
+    const accountTypeLabel =
+      formatPublicAccountTypeLabel(accountTypeNorm) ?? accountTypeNorm
     return {
       tickerLabel: tradeRow?.ticker != null ? String(tradeRow.ticker) : "—",
       dirLabel: tradeRow?.direction != null ? String(tradeRow.direction) : "—",
-      accountTypeNorm,
+      accountTypeNorm: accountTypeLabel,
       accountTypeStyles: accountTypeNorm ? getModeStyles(accountTypeNorm) : "",
     }
   }, [tradeRow])

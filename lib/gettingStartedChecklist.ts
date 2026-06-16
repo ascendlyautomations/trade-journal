@@ -1,5 +1,3 @@
-import { shouldShowGettingStartedSection } from "@/lib/gettingStartedSticky"
-
 export type GettingStartedChecklistItemId =
   | "profile"
   | "trade"
@@ -17,8 +15,8 @@ export type GettingStartedChecklistItem = {
 export type GettingStartedSignals = {
   onboardingCompleted: boolean
   tradeCount: number
+  /** Profile wall posts (`profile_posts`) — not auto-generated trade feed rows. */
   profilePostCount: number
-  feedPostCount: number
   followCount: number
   /** Ever joined a room the user does not own (includes left memberships). */
   hasEverJoinedOtherRoom: boolean
@@ -105,9 +103,6 @@ export function writeGettingStartedCollapsedPreference(
 export function computeGettingStartedProgress(
   signals: GettingStartedSignals
 ): GettingStartedProgress {
-  const hasPost =
-    signals.profilePostCount > 0 || signals.feedPostCount > 0
-
   const items: GettingStartedChecklistItem[] = [
     {
       id: "profile",
@@ -122,7 +117,7 @@ export function computeGettingStartedProgress(
     {
       id: "post",
       label: "Create your first post",
-      complete: hasPost,
+      complete: signals.profilePostCount > 0,
     },
     {
       id: "follow",
@@ -150,5 +145,3 @@ export function computeGettingStartedProgress(
     allComplete: completedCount === TOTAL_ITEMS,
   }
 }
-
-export { shouldShowGettingStartedSection }

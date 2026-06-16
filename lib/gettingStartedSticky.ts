@@ -155,10 +155,17 @@ export function writeOnboardingCompletePopupShown(userId: string) {
 /** Merge server-derived completion with sticky local milestones (never uncheck). */
 export function applyStickyGettingStartedProgress(
   progress: GettingStartedProgress,
-  userId: string
+  userId: string,
+  options?: { profilePostCount?: number }
 ): GettingStartedProgress {
   const sticky = readStickyCompletedItemIds(userId)
   let stickyChanged = false
+
+  // Clear wrongly stickied "post" from when feed trade rows counted as posts.
+  if (options?.profilePostCount === 0 && sticky.has("post")) {
+    sticky.delete("post")
+    stickyChanged = true
+  }
 
   for (const item of progress.items) {
     if (item.complete && !sticky.has(item.id)) {
