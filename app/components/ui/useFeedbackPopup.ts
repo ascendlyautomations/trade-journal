@@ -12,6 +12,7 @@ type FeedbackPopupState = {
   type: FeedbackPopupType
   title?: string
   persist: boolean
+  dismissLabel?: string
 }
 
 export type UseFeedbackPopupOptions = {
@@ -33,12 +34,19 @@ export function useFeedbackPopup(options?: UseFeedbackPopupOptions) {
   }, [])
 
   const showPopup = useCallback((input: FeedbackPopupInput) => {
+    if (
+      process.env.NODE_ENV !== "production" &&
+      input.title === "Getting Started Progress"
+    ) {
+      console.log("[getting-started] useFeedbackPopup showPopup", input.title)
+    }
     setState({
       isOpen: true,
       message: input.message,
       type: input.type ?? "success",
       title: input.title,
       persist: input.persist === true,
+      dismissLabel: input.dismissLabel,
     })
   }, [])
 
@@ -53,6 +61,7 @@ export function useFeedbackPopup(options?: UseFeedbackPopupOptions) {
     message: state.message,
     type: state.type,
     title: state.title,
+    dismissLabel: state.dismissLabel,
     onClose: closePopup,
   }
 

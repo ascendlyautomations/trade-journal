@@ -145,3 +145,19 @@ export function computeGettingStartedProgress(
     allComplete: completedCount === TOTAL_ITEMS,
   }
 }
+
+/** Tasks that flipped incomplete → complete between two progress snapshots. */
+export function detectNewlyCompletedTasks(
+  previous: GettingStartedProgress | null,
+  next: GettingStartedProgress
+): GettingStartedChecklistItem[] {
+  if (!previous) return []
+  const newly: GettingStartedChecklistItem[] = []
+  for (const item of next.items) {
+    const prior = previous.items.find((row) => row.id === item.id)
+    if (item.complete && !prior?.complete) {
+      newly.push(item)
+    }
+  }
+  return newly
+}

@@ -1,6 +1,6 @@
 const assert = require("node:assert/strict")
 const { describe, it } = require("node:test")
-const { computeGettingStartedProgress } = require("./gettingStartedChecklist.ts")
+const { computeGettingStartedProgress, detectNewlyCompletedTasks } = require("./gettingStartedChecklist.ts")
 
 const EMPTY = {
   onboardingCompleted: false,
@@ -108,5 +108,14 @@ describe("computeGettingStartedProgress", () => {
       onboardingCompleted: true,
     })
     assert.equal(itemComplete(complete, "profile"), true)
+  })
+
+  it("detects newly completed tasks between snapshots", () => {
+    const before = computeGettingStartedProgress(EMPTY)
+    const after = computeGettingStartedProgress({ ...EMPTY, tradeCount: 1 })
+    const newly = detectNewlyCompletedTasks(before, after)
+    assert.equal(newly.length, 1)
+    assert.equal(newly[0].id, "trade")
+    assert.equal(newly[0].label, "Log your first trade")
   })
 })

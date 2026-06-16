@@ -18,6 +18,10 @@ export const GETTING_STARTED_PROGRESS_POPUP_COUNT_KEY =
 export const ONBOARDING_COMPLETE_POPUP_SHOWN_KEY =
   "tradetraxs_onboarding_complete_popup_shown_v1"
 
+/** Per-task progress popups already shown (never repeat on revisit). */
+export const GETTING_STARTED_PROGRESS_POPUP_TASK_IDS_KEY =
+  "tradetraxs_getting_started_progress_popup_task_ids_v1"
+
 const ALL_ITEM_IDS: GettingStartedChecklistItemId[] = [
   "profile",
   "trade",
@@ -150,6 +154,51 @@ export function writeOnboardingCompletePopupShown(userId: string) {
   } catch {
     /* ignore quota / private mode */
   }
+}
+
+export function readShownProgressPopupTaskIds(
+  userId: string
+): Set<GettingStartedChecklistItemId> {
+  if (typeof window === "undefined") return new Set()
+  try {
+    return parseStoredCompletedIds(
+      window.localStorage.getItem(
+        scopedKey(GETTING_STARTED_PROGRESS_POPUP_TASK_IDS_KEY, userId)
+      )
+    )
+  } catch {
+    return new Set()
+  }
+}
+
+export function writeShownProgressPopupTaskIds(
+  userId: string,
+  ids: Set<GettingStartedChecklistItemId>
+) {
+  if (typeof window === "undefined") return
+  try {
+    window.localStorage.setItem(
+      scopedKey(GETTING_STARTED_PROGRESS_POPUP_TASK_IDS_KEY, userId),
+      JSON.stringify([...ids])
+    )
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
+export function markProgressPopupShownForTasks(
+  userId: string,
+  taskIds: Iterable<GettingStartedChecklistItemId>
+) {
+  const shown = readShownProgressPopupTaskIds(userId)
+  let changed = false
+  for (const id of taskIds) {
+    if (!shown.has(id)) {
+      shown.add(id)
+      changed = true
+    }
+  }
+  if (changed) writeShownProgressPopupTaskIds(userId, shown)
 }
 
 /** Merge server-derived completion with sticky local milestones (never uncheck). */

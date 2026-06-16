@@ -23,6 +23,8 @@ export type FeedbackModalProps = {
   type?: FeedbackPopupType
   title?: string
   onClose: () => void
+  /** Primary dismiss button label (default "Close"). */
+  dismissLabel?: string
   /** Override stacking (e.g. z-[1200] above onboarding import modal). */
   overlayClassName?: string
 }
@@ -34,8 +36,17 @@ export default function FeedbackModal({
   type = "success",
   title,
   onClose,
+  dismissLabel = "Close",
   overlayClassName,
 }: FeedbackModalProps) {
+  if (
+    process.env.NODE_ENV !== "production" &&
+    isOpen &&
+    title === "Getting Started Progress"
+  ) {
+    console.log("[getting-started] FeedbackModal render", { isOpen, title })
+  }
+
   if (!isOpen) return null
 
   return (
@@ -55,13 +66,20 @@ export default function FeedbackModal({
         {title ? (
           <h3 className="mb-2 text-base font-semibold text-white">{title}</h3>
         ) : null}
-        <p className={cn("text-sm font-medium", messageStyles[type])}>{message}</p>
+        <p
+          className={cn(
+            "whitespace-pre-line text-sm font-medium",
+            messageStyles[type]
+          )}
+        >
+          {message}
+        </p>
         <button
           type="button"
           onClick={onClose}
-          className="mt-4 text-xs text-gray-400 hover:underline"
+          className="mt-4 rounded-lg border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-white hover:bg-white/15"
         >
-          Close
+          {dismissLabel}
         </button>
       </div>
     </div>

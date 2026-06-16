@@ -42,7 +42,10 @@ import {
 } from "@/lib/formatDate"
 import { normalizeProfileUsername } from "@/lib/profileUsername"
 import { readOnboardingCompleteDismissed, writeOnboardingCompleteDismissed } from "@/lib/gettingStartedSticky"
-import { dispatchGettingStartedSignalsRefresh } from "@/lib/gettingStartedProgressSync"
+import {
+  dispatchGettingStartedSignalsRefresh,
+  notifyGettingStartedChecklistMaybeCompleted,
+} from "@/lib/gettingStartedProgressSync"
 import { useGettingStartedProgress } from "@/lib/GettingStartedProgressProvider"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 const DASHBOARD_GEAR_PREFS_KEY = "tradetrax_dashboard_prefs_v1"
@@ -686,7 +689,7 @@ export default function Dashboard() {
     }
     setProfile((p: any) => (p ? { ...p, onboarding_completed: true } : p))
     setShowImportModal(false)
-    dispatchGettingStartedSignalsRefresh()
+    notifyGettingStartedChecklistMaybeCompleted()
     await refreshDashboardData()
   }
 

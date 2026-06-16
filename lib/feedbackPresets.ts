@@ -132,18 +132,22 @@ export const feedbackPresets = {
 
   gettingStartedProgress: (
     completedCount: number,
-    totalCount = 6
+    totalCount: number,
+    taskLabel: string
   ): FeedbackPopupInput =>
     persistentSuccess(
       "Getting Started Progress",
-      `${completedCount} / ${totalCount} Completed`
+      `${completedCount}/${totalCount} Complete\n\nCompleted:\n${taskLabel}`
     ),
 
-  onboardingComplete: (): FeedbackPopupInput =>
-    persistentSuccess(
-      "🎉 You Have Completed All Onboarding Tasks",
-      "Enjoy TradeTraxs!"
-    ),
+  onboardingComplete: (): FeedbackPopupInput => ({
+    type: "success",
+    title: "🎉 You Have Completed All Onboarding Tasks",
+    message:
+      "Congratulations!\n\nYou have completed all Getting Started tasks and are ready to get the most out of TradeTraxs.",
+    persist: true,
+    dismissLabel: "Continue Trading",
+  }),
 
   subscriptionCheckoutFailed: (detail: string): FeedbackPopupInput =>
     persistentError("Checkout Failed", detail),

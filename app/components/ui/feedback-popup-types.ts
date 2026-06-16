@@ -6,4 +6,6 @@ export type FeedbackPopupInput = {
   title?: string
   /** When true, modal stays open until the user dismisses it. */
   persist?: boolean
+  /** Primary dismiss button label (default "Close"). */
+  dismissLabel?: string
 }
