@@ -10,6 +10,7 @@ import {
 } from "@/lib/profileUsername"
 import { useRouter } from "next/navigation"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
+import AuthPasswordInput from "@/app/components/ui/AuthPasswordInput"
 import { isBetaReferralRef } from "@/lib/betaReferralCode"
 
 function getSafeNextPath(): string | null {
@@ -509,13 +510,12 @@ export default function LoginPage() {
             type="email"
             placeholder="Email"
             autoComplete="email"
-            className="w-full mb-4 px-4 py-3 rounded-xl bg-white/10 border border-white/10 focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder-gray-400"
+            className="w-full mb-4 px-4 py-3 rounded-xl bg-white/10 border border-white/10 text-white focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder-gray-400"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
 
-          <input
-            type="password"
+          <AuthPasswordInput
             placeholder="Password"
             autoComplete={isLogin ? "current-password" : "new-password"}
             className="w-full mb-6 px-4 py-3 rounded-xl bg-white/10 border border-white/10 focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder-gray-400"

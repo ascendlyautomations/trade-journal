@@ -22,6 +22,8 @@ import {
   isExitBeforeEntry,
   toTimeInputValue,
 } from "@/lib/inputTradeDateTime"
+import { tradeFormHasFutureDate, csvTradesHaveFutureDate, isDateAfterToday } from "@/lib/tradeDateValidation"
+import { notifyGettingStartedChecklistMaybeCompleted } from "@/lib/gettingStartedProgressSync"
 import CreateAccountModal, {
   type Props as CreateAccountModalProps,
 } from "@/components/CreateAccountModal"
@@ -52,6 +54,7 @@ function modeLabelFromDb(raw: string | null | undefined): string {
   if (s === "eval") return "Eval"
   if (s === "funded") return "Funded"
   if (s === "live") return "Live"
+  if (s === "sim") return "Sim"
   if (s === "backtest") return "Backtest"
   return "Live"
 }
@@ -94,6 +97,8 @@ function formatMode(mode: any) {
   if (m === "eval") return "Eval"
   if (m === "funded") return "Funded"
   if (m === "live") return "Live"
+  if (m === "sim") return "Sim"
+  if (m === "backtest") return "Backtest"
 
   return mode
 }
@@ -270,24 +275,20 @@ export default function InputTradeForm({
     null
   )
 
-
-  const refreshPlanAndAccountLock = useCallback(async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user?.id) {
+  const applyPlanAndAccountLock = useCallback(async (userId: string | null) => {
+    if (!userId) {
       setPlanProfile(null)
       setAuthUserId(null)
       setAccountFieldsLocked(false)
       return
     }
-    setAuthUserId(user.id)
+    setAuthUserId(userId)
     const { data: prof } = await supabase
       .from("profiles")
       .select(
         "is_pro, subscription_status, locked_account_type, locked_account_size, locked_account_name, locked_account_number, username, avatar_url"
       )
-      .eq("id", user.id)
+      .eq("id", userId)
       .maybeSingle()
     setPlanProfile(prof ?? null)
     if (isProActive(prof)) {
@@ -297,7 +298,7 @@ export default function InputTradeForm({
     const { data: rows } = await supabase
       .from("user_accounts")
       .select("account_type")
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
     const manualCount = (rows ?? []).filter(
       (t) =>
         String(t.account_type ?? "").toLowerCase().trim() !== "imported"
@@ -305,35 +306,11 @@ export default function InputTradeForm({
     setAccountFieldsLocked(manualCount >= 1)
   }, [])
 
-  useEffect(() => {
-    void refreshPlanAndAccountLock()
-  }, [refreshPlanAndAccountLock, existingTrade?.id])
-
-  useEffect(() => {
-    if (!image) {
-      setScreenshotPreviewUrl(null)
-      return
-    }
-    const url = URL.createObjectURL(image)
-    setScreenshotPreviewUrl(url)
-    return () => URL.revokeObjectURL(url)
-  }, [image])
-
-  useEffect(() => {
-    if (!isPublic) setCommunityPreviewOpen(false)
-  }, [isPublic])
-
-  const loadAccounts = useCallback(async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (!user?.id) return
-
+  const fetchAccountsForUser = useCallback(async (userId: string) => {
     const { data, error } = await supabase
       .from("accounts")
       .select("*")
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
 
     if (error) {
       console.error(error)
@@ -354,6 +331,57 @@ export default function InputTradeForm({
     setAccounts(formatted)
   }, [])
 
+  const refreshPlanAndAccountLock = useCallback(async () => {
+    if (authUserId) {
+      await applyPlanAndAccountLock(authUserId)
+      return
+    }
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    await applyPlanAndAccountLock(user?.id ?? null)
+  }, [applyPlanAndAccountLock, authUserId])
+
+  useEffect(() => {
+    let cancelled = false
+
+    void (async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      const userId = user?.id ?? null
+      if (cancelled) return
+
+      await Promise.all([
+        applyPlanAndAccountLock(userId),
+        userId ? fetchAccountsForUser(userId) : Promise.resolve(),
+      ])
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [applyPlanAndAccountLock, fetchAccountsForUser])
+
+  useEffect(() => {
+    if (!authUserId) return
+    void applyPlanAndAccountLock(authUserId)
+  }, [existingTrade?.id, authUserId, applyPlanAndAccountLock])
+
+  useEffect(() => {
+    if (!image) {
+      setScreenshotPreviewUrl(null)
+      return
+    }
+    const url = URL.createObjectURL(image)
+    setScreenshotPreviewUrl(url)
+    return () => URL.revokeObjectURL(url)
+  }, [image])
+
+  useEffect(() => {
+    if (!isPublic) setCommunityPreviewOpen(false)
+  }, [isPublic])
+
   const updateNote = useCallback(async (accountId: string, note: string) => {
     const { error } = await supabase
       .from("accounts")
@@ -371,13 +399,9 @@ export default function InputTradeForm({
   }, [])
 
   useEffect(() => {
-    void loadAccounts()
-  }, [loadAccounts])
-
-  useEffect(() => {
-    if (!showSettings) return
-    void loadAccounts()
-  }, [showSettings, loadAccounts])
+    if (!showSettings || !authUserId) return
+    void fetchAccountsForUser(authUserId)
+  }, [showSettings, authUserId, fetchAccountsForUser])
 
   useEffect(() => {
     if (showSettings) return
@@ -573,6 +597,11 @@ export default function InputTradeForm({
           "Exit date and time must be after entry date and time."
         )
       )
+      return
+    }
+
+    if (tradeFormHasFutureDate({ entryDate, exitDate })) {
+      showPopup(feedbackPresets.invalidTradeDate())
       return
     }
 
@@ -919,6 +948,7 @@ export default function InputTradeForm({
       onSave?.()
       onClose?.()
       showPopup(feedbackPresets.tradeSaveSuccess())
+      notifyGettingStartedChecklistMaybeCompleted()
       setSubmitting(false)
       return
     }
@@ -1031,6 +1061,7 @@ export default function InputTradeForm({
       setCommunityPreviewOpen(false)
       resetCreateForm()
       showPopup(feedbackPresets.postPublished())
+      notifyGettingStartedChecklistMaybeCompleted()
       setSubmitting(false)
       return
     }
@@ -1039,6 +1070,7 @@ export default function InputTradeForm({
     setCommunityPreviewOpen(false)
     resetCreateForm()
     showPopup(feedbackPresets.tradeSaveSuccess())
+    notifyGettingStartedChecklistMaybeCompleted()
     setSubmitting(false)
   }
 
@@ -1189,6 +1221,11 @@ export default function InputTradeForm({
         return
       }
 
+      if (csvTradesHaveFutureDate(parsedTrades)) {
+        showPopup(feedbackPresets.csvImportFutureTradeDate())
+        return
+      }
+
       const { error } = await insertCsvTradesWithAccount(supabase, parsedTrades, {
         id: selectedAccount.id,
         name: selectedAccount.name,
@@ -1204,6 +1241,7 @@ export default function InputTradeForm({
       }
 
       showPopup(feedbackPresets.importSuccess(parsedTrades.length))
+      notifyGettingStartedChecklistMaybeCompleted()
 
       if (!profile.is_pro) {
         const { error: flagErr } = await supabase
@@ -1370,11 +1408,23 @@ export default function InputTradeForm({
     exitTime &&
     isExitBeforeEntry(entryDate, entryTime, exitDate, exitTime)
 
+  const invalidFutureDate = tradeFormHasFutureDate({ entryDate, exitDate })
+
   function handleEntryDateChange(nextEntryDate: string) {
+    if (isDateAfterToday(nextEntryDate)) {
+      showPopup(feedbackPresets.invalidTradeDate())
+    }
     setEntryDate((prevEntry) => {
       setExitDate((prevExit) => (prevExit === prevEntry ? nextEntryDate : prevExit))
       return nextEntryDate
     })
+  }
+
+  function handleExitDateChange(nextExitDate: string) {
+    if (isDateAfterToday(nextExitDate)) {
+      showPopup(feedbackPresets.invalidTradeDate())
+    }
+    setExitDate(nextExitDate)
   }
 
   useEffect(() => {
@@ -1965,7 +2015,7 @@ export default function InputTradeForm({
                       type="date"
                       tabIndex={inputSettings.showNotes ? 14 : 13}
                       value={exitDate}
-                      onChange={(e) => setExitDate(e.target.value)}
+                      onChange={(e) => handleExitDateChange(e.target.value)}
                       className="w-full p-2 pr-10 rounded bg-[#0f172a] border border-white/10 text-white"
                     />
                     <div className="absolute right-3 top-1/2 -translate-y-1/2 text-white pointer-events-none">
@@ -2291,7 +2341,7 @@ export default function InputTradeForm({
                   ? 20
                   : 19
             }
-            disabled={submitting}
+            disabled={submitting || invalidFutureDate}
             onClick={() => void handleSubmit()}
             className="w-full py-3 text-lg font-semibold rounded bg-green-500 hover:bg-green-600 text-white"
           >
@@ -2493,6 +2543,7 @@ export default function InputTradeForm({
       onClose={() => setCommunityPreviewOpen(false)}
       onPostTrade={() => void handleSubmit()}
       submitting={submitting}
+      postTradeDisabled={invalidFutureDate}
       postTradeLabel={isEditMode ? "Save changes" : "Post Trade"}
       post={communityPreviewPost}
       user={communityPreviewUser}

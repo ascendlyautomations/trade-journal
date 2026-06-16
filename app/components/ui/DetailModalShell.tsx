@@ -16,6 +16,13 @@ type DetailModalShellProps = {
   comments?: ReactNode
   /** Full custom body (e.g. TradeCard with internal scroll split). */
   children?: ReactNode
+  /**
+   * `split`: wider dialog + two-column body on md+ (media left, panel right).
+   * Mobile remains stacked via `splitMedia` placed above `splitPanel`.
+   */
+  layout?: "default" | "split"
+  splitMedia?: ReactNode
+  splitPanel?: ReactNode
   zIndexClass?: string
   backdropClassName?: string
 }
@@ -27,6 +34,9 @@ export default function DetailModalShell({
   details,
   comments,
   children,
+  layout = "default",
+  splitMedia,
+  splitPanel,
   zIndexClass = "z-[9000]",
   backdropClassName = "bg-black/70",
 }: DetailModalShellProps) {
@@ -55,6 +65,43 @@ export default function DetailModalShell({
     e.stopPropagation()
   }, [])
 
+  const dialogWidthClass =
+    layout === "split"
+      ? "max-w-2xl md:max-w-5xl lg:max-w-6xl"
+      : "max-w-2xl"
+
+  const body =
+    layout === "split" && splitPanel != null ? (
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
+        {splitMedia ? (
+          <div className="hidden md:flex md:min-h-0 md:flex-1 md:items-center md:justify-center md:border-r md:border-white/10 md:bg-black/40 md:p-3">
+            {splitMedia}
+          </div>
+        ) : null}
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:w-[400px] md:shrink-0 lg:w-[420px]">
+          {splitMedia ? (
+            <div className="shrink-0 bg-black/30 md:hidden">{splitMedia}</div>
+          ) : null}
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            {splitPanel}
+          </div>
+        </div>
+      </div>
+    ) : children ? (
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{children}</div>
+    ) : (
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        {details ? (
+          <div className="shrink-0 overflow-hidden">{details}</div>
+        ) : null}
+        {comments ? (
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden border-t border-white/10">
+            {comments}
+          </div>
+        ) : null}
+      </div>
+    )
+
   return (
     <div
       className={`fixed inset-x-0 bottom-0 ${NAVBAR_HEIGHT_CLASS} flex flex-col overflow-hidden p-3 sm:p-4 ${backdropClassName} ${zIndexClass}`}
@@ -65,7 +112,7 @@ export default function DetailModalShell({
         role="dialog"
         aria-modal="true"
         aria-label={ariaLabel}
-        className="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col overflow-hidden rounded-xl bg-[#0f172a] shadow-xl"
+        className={`mx-auto flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-xl bg-[#0f172a] shadow-xl ${dialogWidthClass}`}
         style={{
           maxHeight: "calc(100dvh - var(--navbar-height, 4rem) - 1.5rem)",
         }}
@@ -85,22 +132,7 @@ export default function DetailModalShell({
           </button>
         </header>
 
-        {children ? (
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            {children}
-          </div>
-        ) : (
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            {details ? (
-              <div className="shrink-0 overflow-hidden">{details}</div>
-            ) : null}
-            {comments ? (
-              <div className="flex min-h-0 flex-1 flex-col overflow-hidden border-t border-white/10">
-                {comments}
-              </div>
-            ) : null}
-          </div>
-        )}
+        {body}
       </div>
     </div>
   )

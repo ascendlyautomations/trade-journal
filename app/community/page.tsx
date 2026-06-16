@@ -21,8 +21,10 @@ import { feedbackPresets, persistentError } from "@/lib/feedbackPresets"
 import { formatMoneyUnknown, formatRR } from "@/lib/formatDisplay"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { createRoomJoinNotification } from "@/lib/createRoomJoinNotification"
+import { notifyGettingStartedChecklistMaybeCompleted } from "@/lib/gettingStartedProgressSync"
 import { isCurrentUserAdmin } from "@/lib/adminUsers"
 import { isBetaAnnouncementsSection } from "@/lib/betaHub"
+import { isProfileUuidSegment } from "@/lib/profileRoutes"
 
 type Room = {
   id: string
@@ -411,7 +413,7 @@ function CommunityContent() {
     const rawSlug = selectedRoom.slug
     if (rawSlug != null && String(rawSlug).trim() !== "")
       return String(rawSlug)
-    return selectedRoom.name ? String(selectedRoom.name) : ""
+    return selectedRoom.id ? String(selectedRoom.id) : ""
   }, [selectedRoom])
 
   const inviteLinkDisplay = useMemo(() => {
@@ -1289,6 +1291,7 @@ function CommunityContent() {
       })
     } else {
       await createRoomJoinNotification(supabase, roomId)
+      notifyGettingStartedChecklistMaybeCompleted()
     }
   }
 
@@ -1408,7 +1411,7 @@ function CommunityContent() {
     const decoded = decodeURIComponent(roomParam.trim())
     const match =
       rooms.find((r) => r.slug === decoded || r.slug === roomParam) ||
-      rooms.find((r) => r.name === decoded || r.name === roomParam)
+      rooms.find((r) => r.id === decoded || r.id === roomParam)
 
     if (match) {
       setSelectedRoomId(match.id)
@@ -1419,21 +1422,25 @@ function CommunityContent() {
     let cancelled = false
 
     ;(async () => {
+      const roomSelect =
+        "id, name, description, slug, image_url, owner_user_id, show_on_profile" as const
+
       const { data: slugRow } = await supabase
         .from("rooms")
-        .select("id, name, description, slug, image_url, owner_user_id, show_on_profile")
+        .select(roomSelect)
         .eq("slug", decoded)
         .maybeSingle()
 
-      const row =
-        slugRow ??
-        (
-          await supabase
-            .from("rooms")
-            .select("id, name, description, slug, image_url, owner_user_id, show_on_profile")
-            .eq("name", decoded)
-            .maybeSingle()
-        ).data
+      let row = slugRow
+
+      if (!row && isProfileUuidSegment(decoded)) {
+        const { data: idRow } = await supabase
+          .from("rooms")
+          .select(roomSelect)
+          .eq("id", decoded)
+          .maybeSingle()
+        row = idRow
+      }
 
       if (cancelled) return
       if (!row) {
@@ -2190,7 +2197,7 @@ function CommunityContent() {
                   onClick={() => void joinRoom(inviteTargetRoom.id)}
                   className="rounded-lg bg-green-500/30 px-6 py-3 text-sm font-medium text-green-100 hover:bg-green-500/40"
                 >
-                  Join room
+                  Join This Trade Room
                 </button>
               </div>
             ) : (

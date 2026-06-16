@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { supabase } from "@/lib/supabaseClient"
+import AuthPasswordInput from "@/app/components/ui/AuthPasswordInput"
 
 export default function ResetPasswordPage() {
   const [password, setPassword] = useState("")
@@ -27,12 +28,11 @@ export default function ResetPasswordPage() {
       <div className="p-6 rounded-xl bg-black/40 border border-white/10 w-full max-w-md">
         <h1 className="text-xl mb-4 text-white">Set New Password</h1>
 
-        <input
-          type="password"
+        <AuthPasswordInput
           placeholder="New password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="w-full p-2 rounded bg-black/30 border border-white/10 text-white"
+          className="w-full p-2 rounded bg-black/30 border border-white/10"
         />
 
         <button

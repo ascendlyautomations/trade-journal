@@ -4,6 +4,7 @@ import { memo } from "react"
 import InputTradeForm from "./InputTradeForm"
 import PerformanceShareModal from "./PerformanceShareModal"
 import ShareToConversationsModal from "@/app/components/ShareToConversationsModal"
+import ImageLightbox from "@/app/components/ui/ImageLightbox"
 
 type TradesPageOverlaysProps = {
   selectedImage: string | null
@@ -34,20 +35,7 @@ function TradesPageOverlays({
 }: TradesPageOverlaysProps) {
   return (
     <>
-      {selectedImage ? (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center"
-          onClick={onCloseImageLightbox}
-        >
-          <img
-            src={selectedImage}
-            alt=""
-            loading="lazy"
-            decoding="async"
-            className="max-w-[90%] max-h-[90%] rounded-lg"
-          />
-        </div>
-      ) : null}
+      <ImageLightbox imageUrl={selectedImage} onClose={onCloseImageLightbox} />
 
       {editingTrade ? (
         <InputTradeForm

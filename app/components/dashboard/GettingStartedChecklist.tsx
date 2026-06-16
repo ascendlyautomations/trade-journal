@@ -2,9 +2,11 @@
 
 import Link from "next/link"
 import { useCallback, useEffect, useState } from "react"
+import HelpHint from "@/app/components/ui/HelpHint"
 import type { GettingStartedProgress } from "@/lib/gettingStartedChecklist"
 import {
   GETTING_STARTED_COLLAPSED_STORAGE_KEY,
+  GETTING_STARTED_ITEM_HELP,
   readGettingStartedCollapsedPreference,
   writeGettingStartedCollapsedPreference,
 } from "@/lib/gettingStartedChecklist"
@@ -13,14 +15,18 @@ import PopularTradeRoomsModal from "./PopularTradeRoomsModal"
 
 export type GettingStartedChecklistProps = {
   progress: GettingStartedProgress
+  userId: string
   profileId?: string
+  firstPrivateTradeId?: string | null
   onChecklistRefresh?: () => void
+  onDismissComplete?: () => void
 }
 
 function itemHref(
   id: GettingStartedProgress["items"][number]["id"],
-  profileId?: string
+  options: { profileId?: string; firstPrivateTradeId?: string | null }
 ): string | undefined {
+  const { profileId, firstPrivateTradeId } = options
   switch (id) {
     case "profile":
       return "/settings"
@@ -32,15 +38,91 @@ function itemHref(
         : undefined
     case "follow":
       return "/explore"
+    case "public":
+      if (firstPrivateTradeId) {
+        return `/trades?edit=${encodeURIComponent(firstPrivateTradeId)}`
+      }
+      return "/trades"
     default:
       return undefined
   }
 }
 
+function ChecklistItemRow({
+  item,
+  profileId,
+  firstPrivateTradeId,
+  onOpenPopularRooms,
+}: {
+  item: GettingStartedProgress["items"][number]
+  profileId?: string
+  firstPrivateTradeId?: string | null
+  onOpenPopularRooms: () => void
+}) {
+  const row = (
+    <span
+      className={`flex items-start gap-3 text-sm md:text-base ${
+        item.complete ? "text-gray-500" : "text-gray-200"
+      }`}
+    >
+      <span className="mt-0.5 shrink-0 text-base leading-none" aria-hidden>
+        {item.complete ? "☑" : "☐"}
+      </span>
+      <span className="flex min-w-0 flex-1 items-center gap-2">
+        <span
+          className={
+            item.complete ? "line-through" : "font-medium text-gray-100"
+          }
+        >
+          {item.label}
+        </span>
+        <HelpHint body={GETTING_STARTED_ITEM_HELP[item.id].body} />
+      </span>
+    </span>
+  )
+
+  if (item.complete) {
+    return <li key={item.id}>{row}</li>
+  }
+
+  if (item.id === "room") {
+    return (
+      <li key={item.id}>
+        <button
+          type="button"
+          onClick={onOpenPopularRooms}
+          className="block w-full rounded-lg text-left transition hover:bg-white/5 -mx-2 px-2 py-1"
+        >
+          {row}
+        </button>
+      </li>
+    )
+  }
+
+  const href = itemHref(item.id, { profileId, firstPrivateTradeId })
+  return (
+    <li key={item.id}>
+      {href ? (
+        <Link
+          href={href}
+          className="block rounded-lg transition hover:bg-white/5 -mx-2 px-2 py-1"
+        >
+          {row}
+        </Link>
+      ) : (
+        row
+      )}
+    </li>
+  )
+}
+
 export default function GettingStartedChecklist({
   progress,
+  userId,
   profileId,
+  firstPrivateTradeId,
   onChecklistRefresh,
+  onDismissComplete,
 }: GettingStartedChecklistProps) {
   const { items, completedCount, totalCount, allComplete } = progress
   const progressPct =
@@ -50,16 +132,16 @@ export default function GettingStartedChecklist({
   const [popularRoomsOpen, setPopularRoomsOpen] = useState(false)
 
   useEffect(() => {
-    setExpanded(!readGettingStartedCollapsedPreference())
-  }, [])
+    setExpanded(!readGettingStartedCollapsedPreference(userId))
+  }, [userId])
 
   const toggleExpanded = useCallback(() => {
     setExpanded((prev) => {
       const next = !prev
-      writeGettingStartedCollapsedPreference(!next)
+      writeGettingStartedCollapsedPreference(userId, !next)
       return next
     })
-  }, [])
+  }, [userId])
 
   return (
     <>
@@ -67,12 +149,22 @@ export default function GettingStartedChecklist({
         {allComplete ? (
           <>
             <h3 className="text-lg font-semibold text-white md:text-xl">
-              🎉 You&apos;re all set!
+              🎉 You Have Completed All Onboarding Tasks
             </h3>
+            <p className="mt-2 text-base font-medium text-gray-100 md:text-lg">
+              Enjoy TradeTraxs!
+            </p>
             <p className="mt-2 max-w-2xl text-sm text-gray-400 md:text-base">
               You&apos;re ready to track trades, share ideas, and grow with the
               community.
             </p>
+            <button
+              type="button"
+              onClick={onDismissComplete}
+              className="mt-6 rounded-lg border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/15"
+            >
+              Dismiss
+            </button>
           </>
         ) : (
           <>
@@ -116,65 +208,15 @@ export default function GettingStartedChecklist({
                 </div>
 
                 <ul className="mt-5 space-y-3">
-                  {items.map((item) => {
-                    const row = (
-                      <span
-                        className={`flex items-start gap-3 text-sm md:text-base ${
-                          item.complete ? "text-gray-500" : "text-gray-200"
-                        }`}
-                      >
-                        <span
-                          className="mt-0.5 shrink-0 text-base leading-none"
-                          aria-hidden
-                        >
-                          {item.complete ? "☑" : "☐"}
-                        </span>
-                        <span
-                          className={
-                            item.complete
-                              ? "line-through"
-                              : "font-medium text-gray-100"
-                          }
-                        >
-                          {item.label}
-                        </span>
-                      </span>
-                    )
-
-                    if (item.complete) {
-                      return <li key={item.id}>{row}</li>
-                    }
-
-                    if (item.id === "room") {
-                      return (
-                        <li key={item.id}>
-                          <button
-                            type="button"
-                            onClick={() => setPopularRoomsOpen(true)}
-                            className="block w-full rounded-lg text-left transition hover:bg-white/5 -mx-2 px-2 py-1"
-                          >
-                            {row}
-                          </button>
-                        </li>
-                      )
-                    }
-
-                    const href = itemHref(item.id, profileId)
-                    return (
-                      <li key={item.id}>
-                        {href ? (
-                          <Link
-                            href={href}
-                            className="block rounded-lg transition hover:bg-white/5 -mx-2 px-2 py-1"
-                          >
-                            {row}
-                          </Link>
-                        ) : (
-                          row
-                        )}
-                      </li>
-                    )
-                  })}
+                  {items.map((item) => (
+                    <ChecklistItemRow
+                      key={item.id}
+                      item={item}
+                      profileId={profileId}
+                      firstPrivateTradeId={firstPrivateTradeId}
+                      onOpenPopularRooms={() => setPopularRoomsOpen(true)}
+                    />
+                  ))}
                 </ul>
               </>
             ) : null}

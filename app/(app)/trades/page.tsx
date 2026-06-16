@@ -59,6 +59,18 @@ export default function TradesPage() {
   }, [timeframe, accountFilter, accountTypeFilter, resultFilter])
 
   useEffect(() => {
+    if (typeof window === "undefined" || loading || trades.length === 0) return
+
+    const editId = new URLSearchParams(window.location.search).get("edit")?.trim()
+    if (!editId) return
+
+    const trade = trades.find((t) => String(t.id) === editId)
+    if (trade) {
+      setEditingTrade({ ...trade })
+    }
+  }, [loading, trades])
+
+  useEffect(() => {
     if (loading || !gateProfile) return
     let fromSignup = false
     try {

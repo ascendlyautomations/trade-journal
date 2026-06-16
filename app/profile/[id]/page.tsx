@@ -21,6 +21,8 @@ import FeedPostDetailModal from "../../components/feed/FeedPostDetailModal"
 import DetailModalShell, {
   scrollModalCommentsPane,
 } from "../../components/ui/DetailModalShell"
+import DetailModalImage from "../../components/ui/DetailModalImage"
+import ImageLightbox from "../../components/ui/ImageLightbox"
 import { EMPTY_LIKE_META } from "../../components/feed/FeedPostCard"
 import {
   FEED_COMMENT_INSERT_SELECT,
@@ -73,6 +75,7 @@ import {
 import { isProfileUuidSegment, profilePath } from "@/lib/profileRoutes"
 import { normalizeProfileUsername } from "@/lib/profileUsername"
 import { useUserProfile } from "@/lib/UserProfileProvider"
+import { notifyGettingStartedChecklistMaybeCompleted } from "@/lib/gettingStartedProgressSync"
 
 /** Public profile columns only — never fetch billing, referral, or moderation fields here. */
 const PUBLIC_PROFILE_SELECT =
@@ -164,6 +167,7 @@ function TradeCard({
   scrollToCommentsOnMount = false,
   inDetailModal = false,
   disableOpen,
+  onImageClick,
 }: {
   trade: any
   profile: any
@@ -183,6 +187,7 @@ function TradeCard({
   scrollToCommentsOnMount?: boolean
   inDetailModal?: boolean
   disableOpen?: boolean
+  onImageClick?: (url: string) => void
 }) {
   const commentsScrollRef = useRef<HTMLDivElement>(null)
   const imageSrc = postImageSrc(trade.image_url)
@@ -251,67 +256,45 @@ function TradeCard({
   )
 
   const cardShellClass = inDetailModal
-    ? "flex min-h-0 flex-1 flex-col overflow-hidden bg-transparent"
+    ? "flex min-h-0 flex-1 flex-col overflow-hidden bg-transparent md:flex-row"
     : `h-fit w-full overflow-hidden rounded-xl border border-white/10 bg-white/5 shadow-lg shadow-black/20 ${
         onOpenDetail && !disableOpen
           ? "cursor-pointer transition-all duration-200 hover:border-white/20 hover:bg-white/[0.07] hover:shadow-xl"
           : ""
       }`
 
-  return (
-    <article
-      className={cardShellClass}
-      role={onOpenDetail && !disableOpen ? "button" : undefined}
-      tabIndex={onOpenDetail && !disableOpen ? 0 : undefined}
-      onClick={() => {
-        if (onOpenDetail && !disableOpen) onOpenDetail()
-      }}
-      onKeyDown={(e) => {
-        if (!onOpenDetail || disableOpen) return
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault()
-          onOpenDetail()
-        }
-      }}
-    >
-      <div
-        className={
-          inDetailModal
-            ? "shrink-0"
-            : undefined
-        }
-      >
-      <div className="flex items-center justify-between border-b border-white/5 px-4 py-3">
-        <div className="flex min-w-0 items-center gap-3">
-          <img
-            src={profile.avatar_url || "/default-avatar.png"}
-            alt=""
-            loading="lazy"
-            decoding="async"
-            className="h-10 w-10 shrink-0 rounded-full object-cover ring-2 ring-white/10"
-            onError={(e) => {
-              e.currentTarget.src = "/default-avatar.png"
-            }}
-          />
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-white">
-              {profile.username || "User"}
-            </p>
-            <p className="text-xs font-medium text-amber-400/90">
-              Trade {trade.is_pinned ? <span className="ml-2 text-yellow-400">📌</span> : null}
-            </p>
-          </div>
+  const tradeAuthorHeader = (
+    <div className="flex shrink-0 items-center justify-between border-b border-white/5 px-4 py-3">
+      <div className="flex min-w-0 items-center gap-3">
+        <img
+          src={profile.avatar_url || "/default-avatar.png"}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          className="h-10 w-10 shrink-0 rounded-full object-cover ring-2 ring-white/10"
+          onError={(e) => {
+            e.currentTarget.src = "/default-avatar.png"
+          }}
+        />
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-white">
+            {profile.username || "User"}
+          </p>
+          <p className="text-xs font-medium text-amber-400/90">
+            Trade {trade.is_pinned ? <span className="ml-2 text-yellow-400">📌</span> : null}
+          </p>
         </div>
-        <div className="flex shrink-0 items-center gap-1">
-          <div onClick={(e) => e.stopPropagation()}>
-            <ShareTradeButton
-              variant="icon"
-              trade={trade}
-              profile={shareProfile ?? null}
-              mode="message-only"
-            />
-          </div>
-          {canManageTrade ? (
+      </div>
+      <div className="flex shrink-0 items-center gap-1">
+        <div onClick={(e) => e.stopPropagation()}>
+          <ShareTradeButton
+            variant="icon"
+            trade={trade}
+            profile={shareProfile ?? null}
+            mode="message-only"
+          />
+        </div>
+        {canManageTrade ? (
           <div className="relative">
             <button
               type="button"
@@ -371,46 +354,47 @@ function TradeCard({
               </div>
             ) : null}
           </div>
-          ) : null}
-        </div>
+        ) : null}
       </div>
+    </div>
+  )
 
-      {imageSrc ? (
-        <div className="relative w-full bg-black/30">
-          <img
-            src={imageSrc}
-            alt=""
-            loading="lazy"
-            decoding="async"
-            className={`block w-full object-cover ${
-              inDetailModal ? "max-h-[22dvh]" : "max-h-[400px]"
-            }`}
-          />
-        </div>
-      ) : (
-        <div className="flex min-h-[80px] items-center justify-center bg-gradient-to-br from-white/5 to-white/[0.02] text-xs text-gray-500">
-          No screenshot
-        </div>
-      )}
-      </div>
+  const tradeImageBlock = imageSrc ? (
+    <DetailModalImage src={imageSrc} onClick={onImageClick} />
+  ) : (
+    <div className="flex min-h-[80px] w-full items-center justify-center bg-gradient-to-br from-white/5 to-white/[0.02] text-xs text-gray-500">
+      No screenshot
+    </div>
+  )
 
-      {showInteractions ? (
-        <div
-          className={inDetailModal ? "flex min-h-0 flex-1 flex-col overflow-hidden" : undefined}
-          onKeyDown={(e) => e.stopPropagation()}
-        >
-          <TradeSocialProvider
-            tradeId={trade.id}
-            currentUserId={trade.currentUserId}
-            tradeOwnerUserId={trade.user_id}
-            commentsExpanded={commentsExpanded}
-            onRequestComments={commentsExpanded ? undefined : onOpenComments}
-            scrollToCommentsOnMount={scrollToCommentsOnMount}
-          >
-            {inDetailModal ? (
-              <>
+  if (inDetailModal) {
+    return (
+      <article className={cardShellClass}>
+        {imageSrc ? (
+          <div className="hidden md:flex md:min-h-0 md:flex-1 md:items-center md:justify-center md:border-r md:border-white/10 md:bg-black/40 md:p-3">
+            {tradeImageBlock}
+          </div>
+        ) : null}
+
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:w-[400px] md:shrink-0 lg:w-[420px]">
+          {tradeAuthorHeader}
+          <div className="shrink-0 bg-black/30 md:hidden">{tradeImageBlock}</div>
+
+          {showInteractions ? (
+            <div
+              className="flex min-h-0 flex-1 flex-col overflow-hidden"
+              onKeyDown={(e) => e.stopPropagation()}
+            >
+              <TradeSocialProvider
+                tradeId={trade.id}
+                currentUserId={trade.currentUserId}
+                tradeOwnerUserId={trade.user_id}
+                commentsExpanded={commentsExpanded}
+                onRequestComments={commentsExpanded ? undefined : onOpenComments}
+                scrollToCommentsOnMount={scrollToCommentsOnMount}
+              >
                 <div className="shrink-0">
-                  <div className="border-t border-white/10 px-4 py-2">
+                  <div className="border-t border-white/10 px-4 py-2 md:border-t-0">
                     <TradeSocialEngagementBar />
                   </div>
                   <div className="space-y-3 px-4 pb-3 pt-4">{tradeDetails}</div>
@@ -423,18 +407,67 @@ function TradeCard({
                     />
                   </div>
                 ) : null}
-              </>
-            ) : (
-              <>
-                <div className="border-t border-white/10 px-4 py-2">
-                  <TradeSocialEngagementBar />
-                </div>
-                <div className="space-y-3 px-4 pb-3">{tradeDetails}</div>
-                {commentsExpanded ? (
-                  <TradeSocialCommentsSection className="px-4 pb-4" />
-                ) : null}
-              </>
-            )}
+              </TradeSocialProvider>
+            </div>
+          ) : (
+            <div className="space-y-3 p-4">{tradeDetails}</div>
+          )}
+        </div>
+      </article>
+    )
+  }
+
+  return (
+    <article
+      className={cardShellClass}
+      role={onOpenDetail && !disableOpen ? "button" : undefined}
+      tabIndex={onOpenDetail && !disableOpen ? 0 : undefined}
+      onClick={() => {
+        if (onOpenDetail && !disableOpen) onOpenDetail()
+      }}
+      onKeyDown={(e) => {
+        if (!onOpenDetail || disableOpen) return
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault()
+          onOpenDetail()
+        }
+      }}
+    >
+      {tradeAuthorHeader}
+
+      {imageSrc ? (
+        <div className="relative w-full bg-black/30">
+          <img
+            src={imageSrc}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            className="block w-full max-h-[400px] object-cover"
+          />
+        </div>
+      ) : (
+        <div className="flex min-h-[80px] items-center justify-center bg-gradient-to-br from-white/5 to-white/[0.02] text-xs text-gray-500">
+          No screenshot
+        </div>
+      )}
+
+      {showInteractions ? (
+        <div onKeyDown={(e) => e.stopPropagation()}>
+          <TradeSocialProvider
+            tradeId={trade.id}
+            currentUserId={trade.currentUserId}
+            tradeOwnerUserId={trade.user_id}
+            commentsExpanded={commentsExpanded}
+            onRequestComments={commentsExpanded ? undefined : onOpenComments}
+            scrollToCommentsOnMount={scrollToCommentsOnMount}
+          >
+            <div className="border-t border-white/10 px-4 py-2">
+              <TradeSocialEngagementBar />
+            </div>
+            <div className="space-y-3 px-4 pb-3">{tradeDetails}</div>
+            {commentsExpanded ? (
+              <TradeSocialCommentsSection className="px-4 pb-4" />
+            ) : null}
           </TradeSocialProvider>
         </div>
       ) : (
@@ -468,6 +501,7 @@ function PostCard({
   onOpenDetail,
   inDetailModal = false,
   disableOpen,
+  onImageClick,
 }: {
   post: any
   profile: any
@@ -492,6 +526,7 @@ function PostCard({
   onOpenDetail?: () => void
   inDetailModal?: boolean
   disableOpen?: boolean
+  onImageClick?: (url: string) => void
 }) {
   const commentsScrollRef = useRef<HTMLDivElement>(null)
   const imgSrc = profileWallImageSrc(post.image_url)
@@ -565,142 +600,112 @@ function PostCard({
   ) : null
 
   const cardShellClass = inDetailModal
-    ? "flex min-h-0 flex-1 flex-col overflow-hidden bg-transparent"
+    ? "flex min-h-0 flex-1 flex-col overflow-hidden bg-transparent md:flex-row"
     : `h-fit w-full overflow-hidden rounded-xl border border-white/10 bg-white/5 shadow-lg shadow-black/20 ${
         onOpenDetail && !disableOpen
           ? "cursor-pointer transition-all duration-200 hover:border-white/20 hover:bg-white/[0.07] hover:shadow-xl"
           : ""
       }`
 
-  return (
-    <article
-      className={cardShellClass}
-      role={onOpenDetail && !disableOpen ? "button" : undefined}
-      tabIndex={onOpenDetail && !disableOpen ? 0 : undefined}
-      onClick={() => {
-        if (onOpenDetail && !disableOpen) onOpenDetail()
-      }}
-      onKeyDown={(e) => {
-        if (!onOpenDetail || disableOpen) return
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault()
-          onOpenDetail()
-        }
-      }}
-    >
-      <div className={inDetailModal ? "shrink-0" : undefined}>
-      <div className="flex items-center justify-between gap-3 border-b border-white/5 p-4">
-        <div className="flex min-w-0 items-center gap-3">
-          <img
-            src={profile.avatar_url || "/default-avatar.png"}
-            alt=""
-            loading="lazy"
-            decoding="async"
-            className="h-10 w-10 rounded-full object-cover ring-2 ring-white/10"
-            onError={(e) => {
-              e.currentTarget.src = "/default-avatar.png"
-            }}
-          />
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-white">
-              {profile.username || "User"}
-            </p>
-            <p className="text-xs font-medium text-sky-400/90">
-              Post {post.is_pinned ? <span className="ml-2 text-yellow-400">📌</span> : null}
-            </p>
-          </div>
+  const postAuthorHeader = (
+    <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/5 p-4">
+      <div className="flex min-w-0 items-center gap-3">
+        <img
+          src={profile.avatar_url || "/default-avatar.png"}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          className="h-10 w-10 rounded-full object-cover ring-2 ring-white/10"
+          onError={(e) => {
+            e.currentTarget.src = "/default-avatar.png"
+          }}
+        />
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-white">
+            {profile.username || "User"}
+          </p>
+          <p className="text-xs font-medium text-sky-400/90">
+            Post {post.is_pinned ? <span className="ml-2 text-yellow-400">📌</span> : null}
+          </p>
         </div>
-        {canManagePost ? (
-          <div className="relative">
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation()
-                onMenuToggle?.()
-              }}
-              className="px-1 text-gray-400 hover:text-white"
-            >
-              •••
-            </button>
-            {menuOpen ? (
-              <div
-                className="absolute right-0 z-50 mt-2 w-40 rounded-lg border border-white/10 bg-[#020617] shadow-lg"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onStartEditPost?.()
-                  }}
-                  className="block w-full px-4 py-2 text-left text-sm hover:bg-white/10"
-                >
-                  Edit Post
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onTogglePinPost?.()
-                  }}
-                  className="block w-full px-4 py-2 text-left text-sm hover:bg-white/10"
-                >
-                  {post.is_pinned ? "Unpin Post" : "Pin Post"}
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onSavePost?.()
-                  }}
-                  className="block w-full px-4 py-2 text-left text-sm hover:bg-white/10"
-                >
-                  Save Post
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onDeletePost?.()
-                  }}
-                  className="block w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-white/10"
-                >
-                  Delete Post
-                </button>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
       </div>
-
-      {imgSrc ? (
-        <div className="w-full bg-black/30">
-          <img
-            src={imgSrc}
-            alt=""
-            loading="lazy"
-            decoding="async"
-            className={`block w-full object-cover ${
-              inDetailModal ? "max-h-[22dvh]" : "max-h-[400px]"
-            }`}
-            onError={(e) => {
-              e.currentTarget.style.display = "none"
+      {canManagePost ? (
+        <div className="relative">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onMenuToggle?.()
             }}
-          />
+            className="px-1 text-gray-400 hover:text-white"
+          >
+            •••
+          </button>
+          {menuOpen ? (
+            <div
+              className="absolute right-0 z-50 mt-2 w-40 rounded-lg border border-white/10 bg-[#020617] shadow-lg"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onStartEditPost?.()
+                }}
+                className="block w-full px-4 py-2 text-left text-sm hover:bg-white/10"
+              >
+                Edit Post
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onTogglePinPost?.()
+                }}
+                className="block w-full px-4 py-2 text-left text-sm hover:bg-white/10"
+              >
+                {post.is_pinned ? "Unpin Post" : "Pin Post"}
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onSavePost?.()
+                }}
+                className="block w-full px-4 py-2 text-left text-sm hover:bg-white/10"
+              >
+                Save Post
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onDeletePost?.()
+                }}
+                className="block w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-white/10"
+              >
+                Delete Post
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
-      </div>
+    </div>
+  )
 
-      <div className={`space-y-3 p-4 ${inDetailModal ? "shrink-0" : ""}`}>
-        {post.content ? (
-          <p className="px-1 text-sm leading-relaxed text-white">
-            {post.content}
-          </p>
-        ) : null}
+  const postImageBlock =
+    imgSrc != null ? (
+      <DetailModalImage src={imgSrc} onClick={onImageClick} />
+    ) : null
 
-        <p className="text-xs text-gray-400">{formatEST(post.created_at)}</p>
-        {showInteractions ? (
-          <div className="border-t border-white/10 pt-3">
+  const postContentBlock = (
+    <div className="shrink-0 space-y-3 p-4">
+      {post.content ? (
+        <p className="px-1 text-sm leading-relaxed text-white">{post.content}</p>
+      ) : null}
+      <p className="text-xs text-gray-400">{formatEST(post.created_at)}</p>
+      {showInteractions ? (
+        <div className="border-t border-white/10 pt-3">
           <div className="flex items-center gap-4 px-1 text-sm">
             <button
               type="button"
@@ -734,23 +739,79 @@ function PostCard({
             {(likeMeta?.count ?? 0).toLocaleString()} likes
           </p>
           {!inDetailModal ? commentsPanel : null}
-          </div>
-        ) : null}
-      </div>
-      {inDetailModal && showCommentsPanel ? (
-        <div
-          id={`profile-post-comments-${post.id}`}
-          className="flex min-h-0 flex-1 flex-col overflow-hidden border-t border-white/10"
-        >
-          <div
-            ref={commentsScrollRef}
-            className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pt-3"
-          >
-            {commentsList}
-          </div>
-          <div className="shrink-0 px-4 pb-4 pt-3">{commentsComposer}</div>
         </div>
       ) : null}
+    </div>
+  )
+
+  if (inDetailModal) {
+    return (
+      <article className={cardShellClass}>
+        {imgSrc ? (
+          <div className="hidden md:flex md:min-h-0 md:flex-1 md:items-center md:justify-center md:border-r md:border-white/10 md:bg-black/40 md:p-3">
+            {postImageBlock}
+          </div>
+        ) : null}
+
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:w-[400px] md:shrink-0 lg:w-[420px]">
+          {postAuthorHeader}
+          {imgSrc ? (
+            <div className="shrink-0 bg-black/30 md:hidden">{postImageBlock}</div>
+          ) : null}
+          {postContentBlock}
+          {showCommentsPanel ? (
+            <div
+              id={`profile-post-comments-${post.id}`}
+              className="flex min-h-0 flex-1 flex-col overflow-hidden border-t border-white/10"
+            >
+              <div
+                ref={commentsScrollRef}
+                className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pt-3"
+              >
+                {commentsList}
+              </div>
+              <div className="shrink-0 px-4 pb-4 pt-3">{commentsComposer}</div>
+            </div>
+          ) : null}
+        </div>
+      </article>
+    )
+  }
+
+  return (
+    <article
+      className={cardShellClass}
+      role={onOpenDetail && !disableOpen ? "button" : undefined}
+      tabIndex={onOpenDetail && !disableOpen ? 0 : undefined}
+      onClick={() => {
+        if (onOpenDetail && !disableOpen) onOpenDetail()
+      }}
+      onKeyDown={(e) => {
+        if (!onOpenDetail || disableOpen) return
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault()
+          onOpenDetail()
+        }
+      }}
+    >
+      {postAuthorHeader}
+
+      {imgSrc ? (
+        <div className="w-full bg-black/30">
+          <img
+            src={imgSrc}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            className="block w-full max-h-[400px] object-cover"
+            onError={(e) => {
+              e.currentTarget.style.display = "none"
+            }}
+          />
+        </div>
+      ) : null}
+
+      {postContentBlock}
     </article>
   )
 }
@@ -856,6 +917,9 @@ function ProfilePageContent() {
   const [achievements, setAchievements] = useState<Achievement[]>([])
   const [selectedTradeDetail, setSelectedTradeDetail] = useState<any | null>(null)
   const [selectedPostDetail, setSelectedPostDetail] = useState<any | null>(null)
+  const [screenshotLightboxUrl, setScreenshotLightboxUrl] = useState<string | null>(
+    null
+  )
   const [selectedAchievementImage, setSelectedAchievementImage] = useState<{
     src: string
     title: string
@@ -1301,7 +1365,9 @@ function ProfilePageContent() {
       console.error(roomError)
     }
 
-    setRoom(roomRow ?? null)
+    setRoom(
+      roomRow && roomRow.owner_user_id === prof.id ? roomRow : null
+    )
 
     const { count: followersN } = await supabase
       .from("followers")
@@ -1547,6 +1613,7 @@ function ProfilePageContent() {
 
     setWallPosts(data || [])
     showPopup(feedbackPresets.postPublished())
+    notifyGettingStartedChecklistMaybeCompleted()
   }
 
   const posts = wallPosts
@@ -2311,7 +2378,20 @@ function ProfilePageContent() {
   }
 
   const isOwnProfile = currentUserId === profile.id
-  const hasRoom = !!room
+  const ownedRoom =
+    room && room.owner_user_id === profile.id ? room : null
+  const hasRoom = !!ownedRoom
+  const profileRoomKey =
+    ownedRoom?.slug != null && String(ownedRoom.slug).trim() !== ""
+      ? String(ownedRoom.slug)
+      : ownedRoom?.id != null
+        ? String(ownedRoom.id)
+        : null
+  const canShowVisitorRoomCta =
+    canViewTrades &&
+    ownedRoom != null &&
+    ownedRoom.show_on_profile !== false &&
+    profileRoomKey != null
 
   return (
     <>
@@ -2455,7 +2535,7 @@ function ProfilePageContent() {
                           onClick={() =>
                             router.push(
                               `/trade-rooms?room=${encodeURIComponent(
-                                String(room.slug ?? room.id)
+                                profileRoomKey!
                               )}`
                             )
                           }
@@ -2476,16 +2556,14 @@ function ProfilePageContent() {
                         </button>
                       </div>
                     )
-                  ) : room &&
-                    room.show_on_profile !== false &&
-                    (room.slug || room.name) ? (
+                  ) : canShowVisitorRoomCta ? (
                     <div className="mt-3">
                       <button
                         type="button"
                         onClick={() =>
                           router.push(
                             `/trade-rooms?room=${encodeURIComponent(
-                              String(room.slug ?? room.name ?? room.id)
+                              profileRoomKey!
                             )}`
                           )
                         }
@@ -3257,10 +3335,12 @@ function ProfilePageContent() {
         <DetailModalShell
           ariaLabel="Trade details"
           title="Trade"
+          layout="split"
           backdropClassName="bg-black/75 backdrop-blur-md"
           onClose={() => {
             setSelectedTradeDetail(null)
             setTradeDetailFocusComments(false)
+            setScreenshotLightboxUrl(null)
           }}
         >
           <TradeCard
@@ -3289,6 +3369,7 @@ function ProfilePageContent() {
             commentsExpanded
             scrollToCommentsOnMount={tradeDetailFocusComments}
             disableOpen
+            onImageClick={setScreenshotLightboxUrl}
           />
         </DetailModalShell>
       ) : null}
@@ -3297,10 +3378,12 @@ function ProfilePageContent() {
         <DetailModalShell
           ariaLabel="Post details"
           title="Post"
+          layout="split"
           backdropClassName="bg-black/75 backdrop-blur-md"
           onClose={() => {
             setSelectedPostDetail(null)
             setPostDetailFocusComments(false)
+            setScreenshotLightboxUrl(null)
           }}
         >
           <PostCard
@@ -3341,6 +3424,7 @@ function ProfilePageContent() {
             onCommentSubmit={() => void submitComment(String(selectedPostDetail.id), "post")}
             commentSubmitting={!!commentSubmitting[String(selectedPostDetail.id)]}
             disableOpen
+            onImageClick={setScreenshotLightboxUrl}
           />
         </DetailModalShell>
       ) : null}
@@ -3360,6 +3444,11 @@ function ProfilePageContent() {
           onSharePost={() => {}}
         />
       ) : null}
+
+      <ImageLightbox
+        imageUrl={screenshotLightboxUrl}
+        onClose={() => setScreenshotLightboxUrl(null)}
+      />
 
       {editingPost ? (
         <div

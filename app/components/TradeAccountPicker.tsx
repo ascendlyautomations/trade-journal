@@ -38,6 +38,8 @@ function formatMode(mode: unknown) {
   if (m === "eval") return "Eval"
   if (m === "funded") return "Funded"
   if (m === "live") return "Live"
+  if (m === "sim") return "Sim"
+  if (m === "backtest") return "Backtest"
   return String(mode)
 }
 

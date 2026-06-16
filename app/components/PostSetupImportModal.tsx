@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import CsvImportPanel from "@/app/components/CsvImportPanel"
 import TradeAccountPicker, {
   type TradeAccountOption,
@@ -23,7 +23,8 @@ type Props = {
 }
 
 export default function PostSetupImportModal({ open, onComplete }: Props) {
-  const { showPopup, feedbackModalProps } = useFeedbackPopup()
+  const { showPopup, closePopup, feedbackModalProps } = useFeedbackPopup()
+  const importCompletePendingRef = useRef(false)
   const [entered, setEntered] = useState(false)
   const [accounts, setAccounts] = useState<TradeAccountOption[]>([])
   const [selectedAccount, setSelectedAccount] = useState<TradeAccountOption | null>(null)
@@ -83,6 +84,26 @@ export default function PostSetupImportModal({ open, onComplete }: Props) {
 
   async function handleSkip() {
     await onComplete()
+  }
+
+  const handleFeedbackClose = useCallback(() => {
+    closePopup()
+    if (importCompletePendingRef.current) {
+      importCompletePendingRef.current = false
+      void onComplete()
+    }
+  }, [closePopup, onComplete])
+
+  function handleImportSuccess(info: {
+    count: number
+    skipped: number
+    errorSummary?: string
+  }) {
+    const base = feedbackPresets.importSuccess(info.count, info.skipped)
+    let message = base.message as string
+    if (info.errorSummary) message += `\n\n${info.errorSummary}`
+    importCompletePendingRef.current = true
+    showPopup({ ...base, message })
   }
 
   async function handleCreateAccountSave(newAccount: CreateAccountSavePayload) {
@@ -179,7 +200,11 @@ export default function PostSetupImportModal({ open, onComplete }: Props) {
 
   return (
     <>
-      <FeedbackModal {...feedbackModalProps} />
+      <FeedbackModal
+        {...feedbackModalProps}
+        onClose={handleFeedbackClose}
+        overlayClassName="z-[1200]"
+      />
       <div
       className={`fixed inset-0 z-[1100] flex items-center justify-center overflow-x-hidden px-4 py-8 transition-opacity duration-300 motion-reduce:transition-none ${
         entered ? "bg-black/75 opacity-100 backdrop-blur-md" : "bg-black/75 opacity-0 backdrop-blur-md"
@@ -239,7 +264,8 @@ export default function PostSetupImportModal({ open, onComplete }: Props) {
               fileInputId={CSV_INPUT_ID}
               selectedAccount={csvAccount}
               requireSelectedAccount
-              onImportSuccess={() => void onComplete()}
+              delegateSuccessFeedback
+              onImportSuccess={handleImportSuccess}
             />
           </div>
 

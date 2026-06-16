@@ -92,6 +92,24 @@ export const feedbackPresets = {
       "Could not verify daily trade limit. Please try again."
     ),
 
+  invalidTradeDate: (): FeedbackPopupInput =>
+    persistentError(
+      "Invalid Trade Date",
+      "Please select a date that is today or earlier."
+    ),
+
+  csvImportFutureTradeDate: (): FeedbackPopupInput =>
+    persistentError(
+      "Invalid Trade Date",
+      "One or more trades contain a date in the future. Please correct the dates and try again."
+    ),
+
+  invalidStartedTradingDate: (): FeedbackPopupInput =>
+    persistentError(
+      "Invalid Started Trading Date",
+      "Please select a date that is today or earlier."
+    ),
+
   importSuccess: (importedCount: number, skipped = 0): FeedbackPopupInput => {
     let message = `${importedCount} trade${importedCount === 1 ? "" : "s"} imported successfully. They are private by default — edit a trade to make it public.`
     if (skipped > 0) {
@@ -110,6 +128,21 @@ export const feedbackPresets = {
     persistentSuccess(
       "Post Published",
       "Your post is now visible on your profile and in the community feed."
+    ),
+
+  gettingStartedProgress: (
+    completedCount: number,
+    totalCount = 6
+  ): FeedbackPopupInput =>
+    persistentSuccess(
+      "Getting Started Progress",
+      `${completedCount} / ${totalCount} Completed`
+    ),
+
+  onboardingComplete: (): FeedbackPopupInput =>
+    persistentSuccess(
+      "🎉 You Have Completed All Onboarding Tasks",
+      "Enjoy TradeTraxs!"
     ),
 
   subscriptionCheckoutFailed: (detail: string): FeedbackPopupInput =>

@@ -23,6 +23,8 @@ export type FeedbackModalProps = {
   type?: FeedbackPopupType
   title?: string
   onClose: () => void
+  /** Override stacking (e.g. z-[1200] above onboarding import modal). */
+  overlayClassName?: string
 }
 
 /** Centered TradeTraxs feedback popup (extracted from Settings). */
@@ -32,11 +34,17 @@ export default function FeedbackModal({
   type = "success",
   title,
   onClose,
+  overlayClassName,
 }: FeedbackModalProps) {
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center z-50">
+    <div
+      className={cn(
+        "fixed inset-0 z-50 flex items-center justify-center",
+        overlayClassName
+      )}
+    >
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
       <div
         className={cn(

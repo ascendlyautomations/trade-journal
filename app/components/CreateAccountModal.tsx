@@ -1,6 +1,20 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import {
+  ACCOUNT_SIZE_HELPER,
+  ACCOUNT_SIZE_PLACEHOLDER,
+  ACCOUNT_TYPES,
+  accountModeOptions,
+  accountNameHelperText,
+  accountNamePlaceholder,
+  defaultModeForAccountType,
+  formatAccountSizeInput,
+  parseAccountSizeInput,
+  resolveAccountModeForSave,
+  showsAccountModeSelector,
+  type AccountType,
+} from "@/lib/createAccountForm"
 
 export type PropFirmRules = {
   consistency: number | null
@@ -27,8 +41,8 @@ const emptyForm = {
   name: "",
   size: "",
   id: "",
-  mode: "Eval",
-  category: "Personal",
+  mode: "Live",
+  category: "Personal" as AccountType,
   consistency: "",
   maxDrawdown: "",
   dailyDrawdown: "",
@@ -39,22 +53,22 @@ const emptyForm = {
 const inputClass =
   "mt-1 w-full rounded-lg border border-white/10 bg-[#0f172a] p-2.5 text-white placeholder:text-gray-500 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
 
+const selectClass =
+  "mt-1 w-full rounded-lg border border-white/10 bg-[#0f172a] p-2.5 text-white focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
+
 function formatNumber(value: string | number) {
   if (!value) return ""
 
-  const num = typeof value === "number" ? value : Number(value.replace(/,/g, ""))
+  const num =
+    typeof value === "number" ? value : Number(value.replace(/,/g, ""))
   if (isNaN(num)) return ""
 
   return num.toLocaleString("en-US")
 }
 
 function handleNumberChange(value: string, setter: (val: string) => void) {
-  // remove commas
   const cleaned = value.replace(/,/g, "")
-
-  // allow only numbers
   if (!/^\d*$/.test(cleaned)) return
-
   setter(cleaned)
 }
 
@@ -66,8 +80,8 @@ export default function CreateAccountModal({
   const [name, setName] = useState("")
   const [size, setSize] = useState("")
   const [id, setId] = useState("")
-  const [mode, setMode] = useState("Eval")
-  const [category, setCategory] = useState("Personal")
+  const [mode, setMode] = useState("Live")
+  const [category, setCategory] = useState<AccountType>("Personal")
   const [consistency, setConsistency] = useState("")
   const [maxDrawdown, setMaxDrawdown] = useState("")
   const [dailyDrawdown, setDailyDrawdown] = useState("")
@@ -104,6 +118,11 @@ export default function CreateAccountModal({
     setWinningDays(emptyForm.winningDays)
   }
 
+  function handleCategoryChange(nextCategory: AccountType) {
+    setCategory(nextCategory)
+    setMode(defaultModeForAccountType(nextCategory))
+  }
+
   async function handleSave() {
     const parsedData = {
       consistency: consistency ? Number(consistency) : null,
@@ -115,10 +134,10 @@ export default function CreateAccountModal({
 
     await onSave({
       name: name.trim(),
-      size: size.trim(),
+      size: parseAccountSizeInput(size),
       id: id.trim(),
       category,
-      mode: category === "Prop Firm" ? mode : null,
+      mode: resolveAccountModeForSave(category, mode),
       rules: category === "Prop Firm" ? parsedData : null,
     })
   }
@@ -145,16 +164,19 @@ export default function CreateAccountModal({
 
         <div className="mt-5 space-y-4">
           <label className="block">
-            <span className="text-xs text-gray-400">Category</span>
+            <span className="text-xs text-gray-400">Account type</span>
             <select
               value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              className="mt-1 w-full p-2 rounded bg-[#0f172a] border border-white/10"
+              onChange={(e) =>
+                handleCategoryChange(e.target.value as AccountType)
+              }
+              className={selectClass}
             >
-              <option value="Personal">Personal</option>
-              <option value="Prop Firm">Prop Firm</option>
-              <option value="Broker">Broker</option>
-              <option value="Backtest">Backtest</option>
+              {ACCOUNT_TYPES.map((type) => (
+                <option key={type} value={type}>
+                  {type}
+                </option>
+              ))}
             </select>
           </label>
 
@@ -165,21 +187,31 @@ export default function CreateAccountModal({
               value={name}
               onChange={(e) => setName(e.target.value)}
               className={inputClass}
-              placeholder="e.g. Apex"
+              placeholder={accountNamePlaceholder(category)}
               autoComplete="off"
             />
+            <p className="mt-1 text-xs text-gray-500">
+              {accountNameHelperText(category)}
+            </p>
           </label>
 
           <label className="block">
             <span className="text-xs text-gray-400">Account size</span>
-            <input
-              type="text"
-              value={size}
-              onChange={(e) => setSize(e.target.value)}
-              className={inputClass}
-              placeholder="e.g. 50K"
-              autoComplete="off"
-            />
+            <div className="relative mt-1">
+              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">
+                $
+              </span>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={formatAccountSizeInput(size)}
+                onChange={(e) => handleNumberChange(e.target.value, setSize)}
+                className={`${inputClass} mt-0 pl-7`}
+                placeholder={ACCOUNT_SIZE_PLACEHOLDER}
+                autoComplete="off"
+              />
+            </div>
+            <p className="mt-1 text-xs text-gray-500">{ACCOUNT_SIZE_HELPER}</p>
           </label>
 
           <label className="block">
@@ -194,28 +226,35 @@ export default function CreateAccountModal({
             />
           </label>
 
+          {showsAccountModeSelector(category) ? (
+            <label className="block">
+              <span className="text-xs text-gray-400">Account mode</span>
+              <select
+                value={mode}
+                onChange={(e) => setMode(e.target.value)}
+                className={selectClass}
+              >
+                {accountModeOptions(category).map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+
           {category === "Prop Firm" && (
             <>
-              <label className="block">
-                <span className="text-xs text-gray-400">Mode</span>
-                <select
-                  value={mode}
-                  onChange={(e) => setMode(e.target.value)}
-                  className={inputClass}
-                >
-                  <option value="Eval">Eval</option>
-                  <option value="Funded">Funded</option>
-                </select>
-              </label>
-
               <div className="space-y-1">
                 <div className="text-xs text-gray-400">Consistency</div>
                 <div className="relative w-full">
                   <input
                     type="text"
                     value={formatNumber(consistency)}
-                    onChange={(e) => handleNumberChange(e.target.value, setConsistency)}
-                    className="w-full pr-8 pl-3 py-2 rounded bg-[#0f172a] border border-white/10 focus:border-green-500 outline-none"
+                    onChange={(e) =>
+                      handleNumberChange(e.target.value, setConsistency)
+                    }
+                    className="w-full pr-8 pl-3 py-2 rounded-lg bg-[#0f172a] border border-white/10 text-white focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
                     placeholder="Consistency"
                   />
 
@@ -235,8 +274,10 @@ export default function CreateAccountModal({
                   <input
                     type="text"
                     value={formatNumber(maxDrawdown)}
-                    onChange={(e) => handleNumberChange(e.target.value, setMaxDrawdown)}
-                    className="w-full pl-8 pr-3 py-2 rounded bg-[#0f172a] border border-white/10 focus:border-green-500 outline-none"
+                    onChange={(e) =>
+                      handleNumberChange(e.target.value, setMaxDrawdown)
+                    }
+                    className="w-full pl-8 pr-3 py-2 rounded-lg bg-[#0f172a] border border-white/10 text-white focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
                     placeholder="Max Drawdown"
                   />
                 </div>
@@ -252,8 +293,10 @@ export default function CreateAccountModal({
                   <input
                     type="text"
                     value={formatNumber(dailyDrawdown)}
-                    onChange={(e) => handleNumberChange(e.target.value, setDailyDrawdown)}
-                    className="w-full pl-8 pr-3 py-2 rounded bg-[#0f172a] border border-white/10 focus:border-green-500 outline-none"
+                    onChange={(e) =>
+                      handleNumberChange(e.target.value, setDailyDrawdown)
+                    }
+                    className="w-full pl-8 pr-3 py-2 rounded-lg bg-[#0f172a] border border-white/10 text-white focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
                     placeholder="Daily Drawdown"
                   />
                 </div>
@@ -269,8 +312,10 @@ export default function CreateAccountModal({
                   <input
                     type="text"
                     value={formatNumber(profitTarget)}
-                    onChange={(e) => handleNumberChange(e.target.value, setProfitTarget)}
-                    className="w-full pl-8 pr-3 py-2 rounded bg-[#0f172a] border border-white/10 focus:border-green-500 outline-none"
+                    onChange={(e) =>
+                      handleNumberChange(e.target.value, setProfitTarget)
+                    }
+                    className="w-full pl-8 pr-3 py-2 rounded-lg bg-[#0f172a] border border-white/10 text-white focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
                     placeholder="Profit Target"
                   />
                 </div>
@@ -282,8 +327,10 @@ export default function CreateAccountModal({
                   <input
                     type="text"
                     value={formatNumber(winningDays)}
-                    onChange={(e) => handleNumberChange(e.target.value, setWinningDays)}
-                    className="w-full px-3 py-2 rounded bg-[#0f172a] border border-white/10 focus:border-green-500 outline-none"
+                    onChange={(e) =>
+                      handleNumberChange(e.target.value, setWinningDays)
+                    }
+                    className="w-full px-3 py-2 rounded-lg bg-[#0f172a] border border-white/10 text-white focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
                     placeholder="Winning Days"
                   />
                 </div>

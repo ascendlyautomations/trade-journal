@@ -5,6 +5,7 @@ import BannedAccountShell from "./components/BannedAccountShell"
 import SentryIdentifyUser from "./components/SentryIdentifyUser"
 import ToastRoot from "./components/ToastRoot"
 import { UserProfileProvider } from "@/lib/UserProfileProvider"
+import { GettingStartedProgressProvider } from "@/lib/GettingStartedProgressProvider"
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -36,6 +37,7 @@ export default function RootLayout({
       <body className="flex flex-col">
         <ToastRoot>
           <UserProfileProvider>
+            <GettingStartedProgressProvider>
             <SentryIdentifyUser />
             <BannedAccountShell>
               {/* pt-16: fixed Navbar offset (AppShell + page-level). Login uses -mt-16. */}
@@ -43,6 +45,7 @@ export default function RootLayout({
                 {children}
               </div>
             </BannedAccountShell>
+            </GettingStartedProgressProvider>
           </UserProfileProvider>
         </ToastRoot>
       </body>

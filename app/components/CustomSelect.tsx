@@ -1,6 +1,12 @@
 "use client"
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react"
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type RefObject,
+} from "react"
 import { createPortal } from "react-dom"
 
 interface Option {
@@ -13,7 +19,17 @@ interface Props {
   onChange: (val: string) => void
   options: Option[]
   placeholder?: string
+  triggerClassName?: string
+  menuClassName?: string
+  /** Portal target; defaults to document.body. Use modal overlay for correct stacking. */
+  portalContainerRef?: RefObject<HTMLElement | null>
 }
+
+const DEFAULT_TRIGGER_CLASS =
+  "flex w-full cursor-pointer items-center justify-between rounded-xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+
+const DEFAULT_MENU_CLASS =
+  "fixed z-[1500] overflow-hidden rounded-xl border border-white/10 bg-[#3d4451] shadow-xl"
 
 type MenuPosition = {
   top: number
@@ -26,9 +42,13 @@ export default function CustomSelect({
   onChange,
   options,
   placeholder = "Select an option",
+  triggerClassName = DEFAULT_TRIGGER_CLASS,
+  menuClassName = DEFAULT_MENU_CLASS,
+  portalContainerRef,
 }: Props) {
   const [open, setOpen] = useState(false)
   const [menuPosition, setMenuPosition] = useState<MenuPosition | null>(null)
+  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null)
   const rootRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLDivElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -62,6 +82,12 @@ export default function CustomSelect({
     }
   }, [open])
 
+  useLayoutEffect(() => {
+    if (!open) return
+    const target = portalContainerRef?.current ?? document.body
+    setPortalTarget(target)
+  }, [open, portalContainerRef])
+
   useEffect(() => {
     function handleOutsideClick(event: MouseEvent) {
       const target = event.target as Node
@@ -80,7 +106,7 @@ export default function CustomSelect({
     open && menuPosition ? (
       <div
         ref={menuRef}
-        className="fixed z-[1100] overflow-hidden rounded-xl border border-white/10 bg-white/10 shadow-lg backdrop-blur-xl"
+        className={menuClassName}
         style={{
           top: menuPosition.top,
           left: menuPosition.left,
@@ -97,8 +123,8 @@ export default function CustomSelect({
                 onChange(opt.value)
                 setOpen(false)
               }}
-              className={`w-full px-4 py-2.5 text-left text-sm text-white focus:outline-none focus:bg-white/20 hover:bg-white/20 ${
-                isSelected ? "bg-white/15 font-medium" : ""
+              className={`w-full px-4 py-2.5 text-left text-sm text-white focus:outline-none focus:bg-white/10 hover:bg-white/10 ${
+                isSelected ? "bg-white/10 font-medium" : ""
               }`}
             >
               {opt.label}
@@ -121,7 +147,7 @@ export default function CustomSelect({
             setOpen((prev) => !prev)
           }
         }}
-        className="flex w-full cursor-pointer items-center justify-between rounded-xl border border-white/10 bg-white/10 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+        className={triggerClassName}
       >
         <span className={selected ? "text-white" : "text-gray-400"}>
           {selected?.label ?? placeholder}
@@ -129,9 +155,7 @@ export default function CustomSelect({
         <span className="ml-2 shrink-0 text-gray-400">▾</span>
       </div>
 
-      {typeof document !== "undefined" && menu
-        ? createPortal(menu, document.body)
-        : null}
+      {portalTarget && menu ? createPortal(menu, portalTarget) : null}
     </div>
   )
 }

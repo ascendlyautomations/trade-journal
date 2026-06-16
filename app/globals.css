@@ -111,6 +111,17 @@ input[type="time"]:hover::-webkit-calendar-picker-indicator {
   cursor: pointer;
 }
 
+/* Auth password fields — light text; hide browser-native reveal (styled via AuthPasswordInput). */
+.tt-auth-password {
+  color: #ffffff;
+  color-scheme: dark;
+}
+
+.tt-auth-password::-ms-reveal,
+.tt-auth-password::-ms-clear {
+  display: none;
+}
+
 @keyframes storyFadeIn {
   from {
     opacity: 0;

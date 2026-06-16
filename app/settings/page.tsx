@@ -38,7 +38,12 @@ import {
 } from "@/lib/affiliateStripeConnect"
 import { createUserRoom } from "@/lib/createUserRoom"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
+import AuthPasswordInput from "@/app/components/ui/AuthPasswordInput"
 import { feedbackPresets, persistentError } from "@/lib/feedbackPresets"
+import {
+  getLocalTodayDateInputValue,
+  isStartedTradingDateInFuture,
+} from "@/lib/tradeDateValidation"
 import TradingAccountsSettingsSection from "@/app/components/TradingAccountsSettingsSection"
 import { useScrollPageTopOnMount } from "@/lib/useScrollPageTopOnMount"
 
@@ -165,6 +170,16 @@ export default function SettingsPage() {
   const [primaryMarket, setPrimaryMarket] = useState("")
   const [startedTrading, setStartedTrading] = useState("")
   const [tradingModel, setTradingModel] = useState("")
+
+  const invalidStartedTradingDate = isStartedTradingDateInFuture(startedTrading)
+  const localTodayDate = getLocalTodayDateInputValue()
+
+  function handleStartedTradingChange(next: string) {
+    if (isStartedTradingDateInFuture(next)) {
+      showPopup(feedbackPresets.invalidStartedTradingDate())
+    }
+    setStartedTrading(next)
+  }
 
   useEffect(() => {
     void init()
@@ -310,6 +325,11 @@ export default function SettingsPage() {
 
   async function saveProfileTab() {
     if (!user) return
+
+    if (invalidStartedTradingDate) {
+      showPopup(feedbackPresets.invalidStartedTradingDate())
+      return
+    }
 
     setSavingProfile(true)
 
@@ -994,8 +1014,9 @@ export default function SettingsPage() {
                   <input
                     id="settings-started-trading"
                     type="date"
+                    max={localTodayDate}
                     value={startedTrading}
-                    onChange={(e) => setStartedTrading(e.target.value)}
+                    onChange={(e) => handleStartedTradingChange(e.target.value)}
                     className="w-full rounded-xl border border-white/10 bg-[#0f172a] p-3"
                   />
                 </div>
@@ -1003,7 +1024,7 @@ export default function SettingsPage() {
                 <button
                   type="button"
                   onClick={() => void saveProfileTab()}
-                  disabled={savingProfile}
+                  disabled={savingProfile || invalidStartedTradingDate}
                   className="w-full rounded-xl bg-gradient-to-r from-blue-500 to-emerald-500 py-3 font-semibold disabled:opacity-50"
                 >
                   {savingProfile ? "Saving…" : "Save Profile"}
@@ -1177,9 +1198,8 @@ export default function SettingsPage() {
                     >
                       New password
                     </label>
-                    <input
+                    <AuthPasswordInput
                       id="settings-new-password"
-                      type="password"
                       autoComplete="new-password"
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
@@ -1194,9 +1214,8 @@ export default function SettingsPage() {
                     >
                       Confirm password
                     </label>
-                    <input
+                    <AuthPasswordInput
                       id="settings-confirm-password"
-                      type="password"
                       autoComplete="new-password"
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}

@@ -11,6 +11,7 @@ type CommunitySharePreviewModalProps = {
   onClose: () => void
   onPostTrade: () => void
   submitting?: boolean
+  postTradeDisabled?: boolean
   postTradeLabel?: string
   post: Record<string, unknown> | null
   user: { id: string } | null
@@ -21,6 +22,7 @@ export default function CommunitySharePreviewModal({
   onClose,
   onPostTrade,
   submitting = false,
+  postTradeDisabled = false,
   postTradeLabel = "Post Trade",
   post,
   user,
@@ -108,7 +110,7 @@ export default function CommunitySharePreviewModal({
           </button>
           <button
             type="button"
-            disabled={submitting}
+            disabled={submitting || postTradeDisabled}
             onClick={onPostTrade}
             className="w-full rounded-lg bg-green-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
           >

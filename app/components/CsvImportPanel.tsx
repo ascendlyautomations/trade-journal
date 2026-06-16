@@ -31,12 +31,23 @@ import {
 } from "@/lib/csvImportDiagnostics"
 import CsvImportDiagnosticsPanel from "@/app/components/CsvImportDiagnosticsPanel"
 import { mirrorAccountSettingsHasUsedInitialImport } from "@/lib/profileSplitMirrorWrites"
+import { csvTradesHaveFutureDate } from "@/lib/tradeDateValidation"
+import { notifyGettingStartedChecklistMaybeCompleted } from "@/lib/gettingStartedProgressSync"
 
 export type CsvImportPanelProps = {
   /** Smaller preview + less chrome (e.g. onboarding modal) */
   compact?: boolean
   /** Called after trades are inserted successfully */
-  onImportSuccess?: (info: { count: number; skipped: number }) => void
+  onImportSuccess?: (info: {
+    count: number
+    skipped: number
+    errorSummary?: string
+  }) => void
+  /**
+   * When true, parent handles success feedback (e.g. onboarding modal that closes on complete).
+   * Errors still show via this panel's FeedbackModal.
+   */
+  delegateSuccessFeedback?: boolean
   /** Optional id so an external `<label htmlFor>` can trigger the file input */
   fileInputId?: string
   /**
@@ -51,6 +62,7 @@ export type CsvImportPanelProps = {
 export default function CsvImportPanel({
   compact = false,
   onImportSuccess,
+  delegateSuccessFeedback = false,
   fileInputId,
   selectedAccount = null,
   requireSelectedAccount = false,
@@ -139,6 +151,12 @@ export default function CsvImportPanel({
       setUnrecognized(isCsvFormatUnrecognized(summary))
       setBrokerHint(detectCsvBrokerHint(parsed))
       setDiagnostics(buildCsvImportDiagnostics(parsed, parseResult))
+      setLoading(false)
+      return
+    }
+
+    if (csvTradesHaveFutureDate(parsedTrades)) {
+      showPopup(feedbackPresets.csvImportFutureTradeDate())
       setLoading(false)
       return
     }
@@ -254,12 +272,21 @@ export default function CsvImportPanel({
       const successFeedback = feedbackPresets.importSuccess(importedCount, skipped)
       let message = successFeedback.message as string
       if (errLines) message += `\n\n${errLines}`
-      showPopup({ ...successFeedback, message })
+
+      if (!delegateSuccessFeedback) {
+        showPopup({ ...successFeedback, message })
+      }
+
       setParsed([])
       setUnrecognized(false)
       setBrokerHint(null)
       setDiagnostics(null)
-      onImportSuccess?.({ count: importedCount, skipped })
+      notifyGettingStartedChecklistMaybeCompleted()
+      onImportSuccess?.({
+        count: importedCount,
+        skipped,
+        errorSummary: errLines || undefined,
+      })
     }
 
     setLoading(false)

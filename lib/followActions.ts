@@ -2,6 +2,9 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import { createFollowNotification } from "@/lib/createFollowNotification"
 import { createFollowRequestNotification } from "@/lib/createFollowRequestNotification"
 import {
+  notifyGettingStartedChecklistMaybeCompleted,
+} from "@/lib/gettingStartedProgressSync"
+import {
   removeFollowNotification,
   removeFollowRequestNotification,
 } from "@/lib/followNotifications"
@@ -126,6 +129,7 @@ export async function followOrRequest(
   }
 
   await createFollowNotification(supabase, followerId, target.id)
+  notifyGettingStartedChecklistMaybeCompleted()
   return { ok: true, state: "following" }
 }
 

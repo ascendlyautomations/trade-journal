@@ -14,6 +14,12 @@ import {
 } from "@/lib/profileUsername"
 import { TRADER_TYPE_OPTIONS, normalizeTraderType } from "@/lib/traderType"
 import CustomSelect from "@/app/components/CustomSelect"
+import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
+import { feedbackPresets } from "@/lib/feedbackPresets"
+import {
+  getLocalTodayDateInputValue,
+  isStartedTradingDateInFuture,
+} from "@/lib/tradeDateValidation"
 
 export const ONBOARDING_FLAG = "tt_onboarding"
 
@@ -72,6 +78,7 @@ export default function ProfileOnboarding({
   suppressPostSaveRedirect = false,
 }: ProfileOnboardingProps) {
   const router = useRouter()
+  const { showPopup, ...feedbackModalProps } = useFeedbackPopup()
   const [username, setUsername] = useState(() =>
     sanitizeUsernameInputForTyping(
       initialUsername ? String(initialUsername) : ""
@@ -98,6 +105,7 @@ export default function ProfileOnboarding({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const startedTradingInputRef = useRef<HTMLInputElement>(null)
+  const overlayRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (initialName != null && String(initialName).trim() !== "") return
@@ -134,6 +142,16 @@ export default function ProfileOnboarding({
     setAvatarPreview(URL.createObjectURL(f))
   }
 
+  function handleStartedTradingChange(next: string) {
+    if (isStartedTradingDateInFuture(next)) {
+      showPopup(feedbackPresets.invalidStartedTradingDate())
+    }
+    setStartedTrading(next)
+  }
+
+  const invalidStartedTradingDate = isStartedTradingDateInFuture(startedTrading)
+  const localTodayDate = getLocalTodayDateInputValue()
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
@@ -142,6 +160,11 @@ export default function ProfileOnboarding({
     const usernameErr = validateProfileUsernameNotEmpty(username)
     if (usernameErr) {
       setError(usernameErr)
+      return
+    }
+
+    if (invalidStartedTradingDate) {
+      showPopup(feedbackPresets.invalidStartedTradingDate())
       return
     }
 
@@ -198,11 +221,21 @@ export default function ProfileOnboarding({
     }, 300)
   }
 
-  const inputClass =
-    "w-full min-w-0 px-4 py-3 rounded-xl bg-white/10 border border-white/10 focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder-gray-400 text-white"
+  const onboardingFieldClass =
+    "w-full min-w-0 rounded-xl border border-white/10 bg-white/10 text-white focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder-gray-400"
+
+  const inputClass = `${onboardingFieldClass} px-4 py-3`
+
+  const selectTriggerClass = `${onboardingFieldClass} flex cursor-pointer items-center justify-between px-4 py-3 text-sm`
+
+  const selectMenuClass =
+    "fixed z-50 overflow-hidden rounded-xl border border-white/10 bg-[#3d4451] shadow-xl"
 
   return (
+  <>
+    <FeedbackModal {...feedbackModalProps} />
     <div
+      ref={overlayRef}
       className="fixed inset-0 z-[1000] flex items-center justify-center overflow-x-hidden bg-black/80 backdrop-blur-lg px-4 py-8"
       role="dialog"
       aria-modal="true"
@@ -307,6 +340,9 @@ export default function ProfileOnboarding({
             value={traderType}
             onChange={(value) => setTraderType(normalizeTraderType(value))}
             placeholder="Select trader type (optional)"
+            triggerClassName={selectTriggerClass}
+            menuClassName={selectMenuClass}
+            portalContainerRef={overlayRef}
             options={TRADER_TYPE_OPTIONS.map((option) => ({
               label: option,
               value: option,
@@ -335,8 +371,9 @@ export default function ProfileOnboarding({
           <input
             ref={startedTradingInputRef}
             type="date"
+            max={localTodayDate}
             value={startedTrading}
-            onChange={(e) => setStartedTrading(e.target.value)}
+            onChange={(e) => handleStartedTradingChange(e.target.value)}
             onFocus={openStartedTradingPicker}
             className={`${inputClass} tt-timeframe-date cursor-pointer text-sm [color-scheme:dark]`}
           />
@@ -350,7 +387,7 @@ export default function ProfileOnboarding({
 
         <button
           type="submit"
-          disabled={saving}
+          disabled={saving || invalidStartedTradingDate}
           className="w-full rounded-xl bg-gradient-to-r from-blue-500 to-teal-400 py-3 font-semibold text-white transition hover:scale-[1.02] disabled:opacity-60 disabled:hover:scale-100"
         >
           {saving ? "Saving…" : "Save & continue"}
@@ -358,5 +395,6 @@ export default function ProfileOnboarding({
         </div>
       </form>
     </div>
+  </>
   )
 }

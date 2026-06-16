@@ -41,11 +41,10 @@ import {
   resolveTradingTimeSourceForKey,
 } from "@/lib/formatDate"
 import { normalizeProfileUsername } from "@/lib/profileUsername"
-import {
-  computeGettingStartedProgress,
-  shouldShowGettingStartedCard,
-} from "@/lib/gettingStartedChecklist"
-import { fetchGettingStartedChecklistSignals } from "@/lib/gettingStartedChecklistSignals"
+import { readOnboardingCompleteDismissed, writeOnboardingCompleteDismissed } from "@/lib/gettingStartedSticky"
+import { dispatchGettingStartedSignalsRefresh } from "@/lib/gettingStartedProgressSync"
+import { useGettingStartedProgress } from "@/lib/GettingStartedProgressProvider"
+import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 const DASHBOARD_GEAR_PREFS_KEY = "tradetrax_dashboard_prefs_v1"
 
 function loadDashboardGearPrefs(): Partial<DashboardGearPersistedPrefs> | null {
@@ -471,6 +470,15 @@ function analyzeTradingHours(trades: any[]): TradingHoursSummary | null {
 }
 
 export default function Dashboard() {
+  const { showPopup, feedbackModalProps } = useFeedbackPopup()
+  const {
+    progress: gettingStartedProgress,
+    signals: checklistSignals,
+    signalsReady,
+    refreshChecklistSignals,
+  } = useGettingStartedProgress()
+  const [onboardingSectionDismissed, setOnboardingSectionDismissed] =
+    useState(false)
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [profileOnboardingDone, setProfileOnboardingDone] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
@@ -501,12 +509,6 @@ export default function Dashboard() {
   const didHydrateDashboardPrefs = useRef(false)
   /** Same fetch as /trades — used only for filter dropdown labels (#account_number vs UUID). */
   const [accountRows, setAccountRows] = useState<any[]>([])
-  const [checklistSignals, setChecklistSignals] = useState({
-    profilePostCount: 0,
-    feedPostCount: 0,
-    followCount: 0,
-    joinedOtherRoom: false,
-  })
 
   const accountById = useMemo(() => {
     const m: Record<string, any> = {}
@@ -621,9 +623,7 @@ export default function Dashboard() {
 
     if (profileData) setProfile(profileData)
 
-    setChecklistSignals(
-      await fetchGettingStartedChecklistSignals(supabase, currentUser.id)
-    )
+    dispatchGettingStartedSignalsRefresh()
 
     setLoading(false)
   }, [])
@@ -631,6 +631,14 @@ export default function Dashboard() {
   useEffect(() => {
     void refreshDashboardData()
   }, [refreshDashboardData])
+
+  useEffect(() => {
+    if (!user?.id) {
+      setOnboardingSectionDismissed(false)
+      return
+    }
+    setOnboardingSectionDismissed(readOnboardingCompleteDismissed(user.id))
+  }, [user?.id])
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -678,6 +686,7 @@ export default function Dashboard() {
     }
     setProfile((p: any) => (p ? { ...p, onboarding_completed: true } : p))
     setShowImportModal(false)
+    dispatchGettingStartedSignalsRefresh()
     await refreshDashboardData()
   }
 
@@ -1329,34 +1338,13 @@ const worstDay = dailyPnLs.length > 0
     return keys.size >= 1
   }, [trades, isPro])
 
-  const gettingStartedProgress = useMemo(
-    () =>
-      computeGettingStartedProgress({
-        onboardingCompleted: profile?.onboarding_completed === true,
-        tradeCount: trades.length,
-        profilePostCount: checklistSignals.profilePostCount,
-        feedPostCount: checklistSignals.feedPostCount,
-        followCount: checklistSignals.followCount,
-        joinedOtherRoom: checklistSignals.joinedOtherRoom,
-      }),
-    [
-      profile?.onboarding_completed,
-      trades.length,
-      checklistSignals.profilePostCount,
-      checklistSignals.feedPostCount,
-      checklistSignals.followCount,
-      checklistSignals.joinedOtherRoom,
-    ]
-  )
-
-  const refreshChecklistSignals = useCallback(async () => {
+  const handleDismissOnboardingComplete = useCallback(() => {
     if (!user?.id) return
-    setChecklistSignals(
-      await fetchGettingStartedChecklistSignals(supabase, user.id)
-    )
+    writeOnboardingCompleteDismissed(user.id)
+    setOnboardingSectionDismissed(true)
   }, [user?.id])
 
-  if (loading) {
+  if (loading || (user?.id && !signalsReady)) {
     return (
       <div className="w-full flex items-center justify-center text-white">
         Loading Dashboard...
@@ -1366,16 +1354,18 @@ const worstDay = dailyPnLs.length > 0
 
   const hasNoTrades = trades.length === 0
 
-  const showGettingStartedCard = shouldShowGettingStartedCard(
-    hasNoTrades,
-    gettingStartedProgress.allComplete
-  )
+  const showOnboardingSection =
+    Boolean(user?.id) &&
+    (!gettingStartedProgress.allComplete || !onboardingSectionDismissed)
 
-  const gettingStartedSection = showGettingStartedCard ? (
+  const gettingStartedSection = showOnboardingSection ? (
     <GettingStartedChecklist
       progress={gettingStartedProgress}
+      userId={user.id}
       profileId={user?.id ?? profile?.id}
+      firstPrivateTradeId={checklistSignals.firstPrivateTradeId}
       onChecklistRefresh={() => void refreshChecklistSignals()}
+      onDismissComplete={handleDismissOnboardingComplete}
     />
   ) : null
 
@@ -1627,6 +1617,7 @@ const worstDay = dailyPnLs.length > 0
 
   return (
     <>
+      <FeedbackModal {...feedbackModalProps} />
       {showOnboarding && user && profile ? (
         <ProfileOnboarding
           userId={user.id}

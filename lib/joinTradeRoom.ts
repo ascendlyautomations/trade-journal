@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { createRoomJoinNotification } from "@/lib/createRoomJoinNotification"
+import { notifyGettingStartedChecklistMaybeCompleted } from "@/lib/gettingStartedProgressSync"
 
 export type JoinTradeRoomResult =
   | { ok: true; alreadyMember: boolean }
@@ -45,6 +46,7 @@ export async function joinTradeRoom(
 
   if (!alreadyActive) {
     await createRoomJoinNotification(supabase, roomId)
+    notifyGettingStartedChecklistMaybeCompleted()
   }
 
   return { ok: true, alreadyMember: alreadyActive }

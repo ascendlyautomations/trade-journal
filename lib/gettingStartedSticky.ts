@@ -1,0 +1,192 @@
+import type {
+  GettingStartedChecklistItemId,
+  GettingStartedProgress,
+} from "@/lib/gettingStartedChecklist"
+
+export const GETTING_STARTED_COMPLETED_STORAGE_KEY =
+  "tradetraxs_getting_started_completed_v1"
+
+/** User dismissed the 5/5 completion card — hide checklist forever. */
+export const ONBOARDING_COMPLETE_DISMISSED_STORAGE_KEY =
+  "tradetraxs_onboarding_complete_dismissed_v1"
+
+/** Last progress count acknowledged for step popups (1–4). */
+export const GETTING_STARTED_PROGRESS_POPUP_COUNT_KEY =
+  "tradetraxs_getting_started_progress_popup_count_v1"
+
+/** Final "Onboarding Complete" popup shown once. */
+export const ONBOARDING_COMPLETE_POPUP_SHOWN_KEY =
+  "tradetraxs_onboarding_complete_popup_shown_v1"
+
+const ALL_ITEM_IDS: GettingStartedChecklistItemId[] = [
+  "profile",
+  "trade",
+  "post",
+  "follow",
+  "room",
+  "public",
+]
+
+function scopedKey(base: string, userId: string): string {
+  return `${base}:${userId}`
+}
+
+function parseStoredCompletedIds(raw: string | null): Set<GettingStartedChecklistItemId> {
+  if (!raw) return new Set()
+  try {
+    const parsed = JSON.parse(raw) as unknown
+    if (!Array.isArray(parsed)) return new Set()
+    return new Set(
+      parsed.filter((id): id is GettingStartedChecklistItemId =>
+        ALL_ITEM_IDS.includes(id as GettingStartedChecklistItemId)
+      )
+    )
+  } catch {
+    return new Set()
+  }
+}
+
+export function readStickyCompletedItemIds(
+  userId: string
+): Set<GettingStartedChecklistItemId> {
+  if (typeof window === "undefined") return new Set()
+  try {
+    return parseStoredCompletedIds(
+      window.localStorage.getItem(
+        scopedKey(GETTING_STARTED_COMPLETED_STORAGE_KEY, userId)
+      )
+    )
+  } catch {
+    return new Set()
+  }
+}
+
+export function writeStickyCompletedItemIds(
+  userId: string,
+  ids: Set<GettingStartedChecklistItemId>
+) {
+  if (typeof window === "undefined") return
+  try {
+    window.localStorage.setItem(
+      scopedKey(GETTING_STARTED_COMPLETED_STORAGE_KEY, userId),
+      JSON.stringify([...ids])
+    )
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
+export function readOnboardingCompleteDismissed(userId: string): boolean {
+  if (typeof window === "undefined") return false
+  try {
+    return (
+      window.localStorage.getItem(
+        scopedKey(ONBOARDING_COMPLETE_DISMISSED_STORAGE_KEY, userId)
+      ) === "1"
+    )
+  } catch {
+    return false
+  }
+}
+
+export function writeOnboardingCompleteDismissed(userId: string) {
+  if (typeof window === "undefined") return
+  try {
+    window.localStorage.setItem(
+      scopedKey(ONBOARDING_COMPLETE_DISMISSED_STORAGE_KEY, userId),
+      "1"
+    )
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
+export function readLastProgressPopupCount(userId: string): number | null {
+  if (typeof window === "undefined") return null
+  try {
+    const raw = window.localStorage.getItem(
+      scopedKey(GETTING_STARTED_PROGRESS_POPUP_COUNT_KEY, userId)
+    )
+    if (raw === null) return null
+    const n = Number(raw)
+    return Number.isFinite(n) ? n : null
+  } catch {
+    return null
+  }
+}
+
+export function writeLastProgressPopupCount(userId: string, count: number) {
+  if (typeof window === "undefined") return
+  try {
+    window.localStorage.setItem(
+      scopedKey(GETTING_STARTED_PROGRESS_POPUP_COUNT_KEY, userId),
+      String(count)
+    )
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
+export function readOnboardingCompletePopupShown(userId: string): boolean {
+  if (typeof window === "undefined") return false
+  try {
+    return (
+      window.localStorage.getItem(
+        scopedKey(ONBOARDING_COMPLETE_POPUP_SHOWN_KEY, userId)
+      ) === "1"
+    )
+  } catch {
+    return false
+  }
+}
+
+export function writeOnboardingCompletePopupShown(userId: string) {
+  if (typeof window === "undefined") return
+  try {
+    window.localStorage.setItem(
+      scopedKey(ONBOARDING_COMPLETE_POPUP_SHOWN_KEY, userId),
+      "1"
+    )
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
+/** Merge server-derived completion with sticky local milestones (never uncheck). */
+export function applyStickyGettingStartedProgress(
+  progress: GettingStartedProgress,
+  userId: string
+): GettingStartedProgress {
+  const sticky = readStickyCompletedItemIds(userId)
+  let stickyChanged = false
+
+  for (const item of progress.items) {
+    if (item.complete && !sticky.has(item.id)) {
+      sticky.add(item.id)
+      stickyChanged = true
+    }
+  }
+
+  if (stickyChanged) {
+    writeStickyCompletedItemIds(userId, sticky)
+  }
+
+  const items = progress.items.map((item) => ({
+    ...item,
+    complete: item.complete || sticky.has(item.id),
+  }))
+
+  const completedCount = items.filter((item) => item.complete).length
+
+  return {
+    items,
+    completedCount,
+    totalCount: progress.totalCount,
+    allComplete: completedCount === progress.totalCount,
+  }
+}
+
+/** After 5/5 only — whether the user dismissed the completion card. */
+export function shouldShowGettingStartedSection(userId: string): boolean {
+  return !readOnboardingCompleteDismissed(userId)
+}
