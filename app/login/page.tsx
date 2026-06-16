@@ -412,17 +412,52 @@ export default function LoginPage() {
 
       {/* LEFT TEXT */}
       <div className="mb-10 md:mb-0 max-w-lg text-center md:text-left">
-        <p className="text-sm tracking-widest text-blue-300 mb-4">
-          WELCOME TO
-        </p>
+        {isBetaSignup ? (
+          <>
+            <h1 className="mb-5 text-3xl font-bold leading-tight bg-gradient-to-r from-amber-300 to-emerald-400 bg-clip-text text-transparent sm:text-4xl md:text-[2.5rem]">
+              🎉 Welcome to the TradeTraxs Beta!
+            </h1>
+            <div className="max-h-[min(52vh,520px)] space-y-3 overflow-y-auto pr-1 text-sm leading-relaxed text-gray-300 md:max-h-none md:overflow-visible md:text-base">
+              <p>
+                First off, thank you so much for being a beta tester for TradeTraxs.
+              </p>
+              <p>
+                The fact that you&apos;re here means a lot to me. I&apos;ve spent hundreds of hours
+                building this platform, and now I finally get to put it in the hands of real
+                traders.
+              </p>
+              <p>
+                As you use the app, please don&apos;t be afraid to tell me what you love, what you
+                hate, what&apos;s confusing, or what features you wish existed. Honest feedback is
+                the most valuable thing you can give me right now.
+              </p>
+              <p>
+                You have a real opportunity to help shape the future of TradeTraxs. Many of the
+                features and improvements added during beta will come directly from suggestions made
+                by traders like you.
+              </p>
+              <p>
+                Thank you again for taking the time to test the platform. I&apos;m excited to hear
+                your feedback and continue building something awesome together.
+              </p>
+              <p className="pt-1 font-medium text-amber-100/90">— Nick</p>
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="text-sm tracking-widest text-blue-300 mb-4">
+              WELCOME TO
+            </p>
 
-        <h1 className="text-5xl font-bold mb-4 bg-gradient-to-r from-blue-400 to-teal-300 bg-clip-text text-transparent">
-          TradeTrax
-        </h1>
+            <h1 className="text-5xl font-bold mb-4 bg-gradient-to-r from-blue-400 to-teal-300 bg-clip-text text-transparent">
+              TradeTrax
+            </h1>
 
-        <p className="text-lg text-gray-300">
-          Track. Analyze. Socialize. Dominate your trading.
-        </p>
+            <p className="text-lg text-gray-300">
+              Track. Analyze. Socialize. Dominate your trading.
+            </p>
+          </>
+        )}
       </div>
 
       {/* RIGHT LOGIN CARD */}
@@ -457,12 +492,6 @@ export default function LoginPage() {
         <h2 className="text-xl font-semibold mb-6 text-center">
           {isLogin ? "Sign in to continue" : "Create your account"}
         </h2>
-
-        {isBetaSignup && !isLogin ? (
-          <p className="mb-6 text-center text-sm leading-relaxed text-amber-200/90">
-            Welcome to the TradeTraxs Beta. Create your account below to get started.
-          </p>
-        ) : null}
 
         <button
           type="button"
