@@ -25,6 +25,12 @@ import { notifyGettingStartedChecklistMaybeCompleted } from "@/lib/gettingStarte
 import { isCurrentUserAdmin } from "@/lib/adminUsers"
 import { isBetaAnnouncementsSection } from "@/lib/betaHub"
 import { isProfileUuidSegment } from "@/lib/profileRoutes"
+import { canEditRoomMessage } from "@/lib/roomModeration"
+import RoomMessageActionsMenu from "../components/RoomMessageActionsMenu"
+import {
+  ProfileAvatarLink,
+  ProfileUsernameLink,
+} from "../components/ProfileLink"
 
 type Room = {
   id: string
@@ -267,6 +273,14 @@ function CommunityContent() {
   const [deleteSectionConfirm, setDeleteSectionConfirm] =
     useState<DeleteSectionConfirm | null>(null)
   const [deletingSectionId, setDeletingSectionId] = useState<string | null>(null)
+  const [activeMessageMenuId, setActiveMessageMenuId] = useState<string | null>(
+    null
+  )
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
+  const [editingMessageContent, setEditingMessageContent] = useState("")
+  const [deletingMessageId, setDeletingMessageId] = useState<string | null>(
+    null
+  )
   const [showInviteModal, setShowInviteModal] = useState(false)
   /** room id → has at least one unread message (others’ messages not in seen_by) */
   const [unreadByRoomId, setUnreadByRoomId] = useState<Record<string, boolean>>(
@@ -518,6 +532,12 @@ function CommunityContent() {
   }, [selectedRoomId])
 
   useEffect(() => {
+    setActiveMessageMenuId(null)
+    setEditingMessageId(null)
+    setEditingMessageContent("")
+  }, [selectedRoomId, selectedSectionId])
+
+  useEffect(() => {
     if (!selectedRoomId) {
       setActiveMembers(0)
       setLeftMembers(0)
@@ -738,6 +758,80 @@ function CommunityContent() {
         bypassCache: true,
       })
     }
+  }
+
+  function invalidateRoomMessagesCache() {
+    if (!selectedRoomId) return
+    const cacheKey = buildRoomMessagesCacheKey(
+      selectedRoomId,
+      sections,
+      selectedSectionId
+    )
+    setMessagesByRoom((prev) => {
+      if (!(cacheKey in prev)) return prev
+      const next = { ...prev }
+      delete next[cacheKey]
+      return next
+    })
+  }
+
+  function startEditMessage(msg: RoomMessage) {
+    setActiveMessageMenuId(null)
+    setEditingMessageId(msg.id)
+    setEditingMessageContent(msg.content ?? "")
+  }
+
+  function cancelEditMessage() {
+    setEditingMessageId(null)
+    setEditingMessageContent("")
+  }
+
+  async function handleSaveEditMessage(messageId: string) {
+    const trimmed = editingMessageContent.trim()
+    if (!trimmed) return
+
+    const { error } = await supabase
+      .from("room_messages")
+      .update({ content: trimmed })
+      .eq("id", messageId)
+
+    if (error) {
+      console.error("handleSaveEditMessage:", error)
+      return
+    }
+
+    const updater = (m: RoomMessage) =>
+      m.id === messageId ? { ...m, content: trimmed } : m
+
+    setMessages((prev) => prev.map(updater))
+    setPinnedMessages((prev) => prev.map(updater))
+    cancelEditMessage()
+    invalidateRoomMessagesCache()
+  }
+
+  async function handleDeleteMessage(messageId: string) {
+    setActiveMessageMenuId(null)
+    setDeletingMessageId(messageId)
+
+    const { error } = await supabase
+      .from("room_messages")
+      .delete()
+      .eq("id", messageId)
+
+    setDeletingMessageId(null)
+
+    if (error) {
+      console.error("handleDeleteMessage:", error)
+      return
+    }
+
+    if (editingMessageId === messageId) {
+      cancelEditMessage()
+    }
+
+    setMessages((prev) => prev.filter((m) => m.id !== messageId))
+    setPinnedMessages((prev) => prev.filter((m) => m.id !== messageId))
+    invalidateRoomMessagesCache()
   }
 
   async function loadSections(roomId: string) {
@@ -2062,13 +2156,12 @@ function CommunityContent() {
                 <div className="mt-2 flex items-center">
                   <div className="flex items-center space-x-[-8px]">
                     {activeUsers.slice(0, 3).map((u) => (
-                      <img
+                      <ProfileAvatarLink
                         key={u.user_id}
-                        src={u.profiles?.avatar_url || "/default-avatar.png"}
-                        className="h-8 w-8 rounded-full border-2 border-[#0B1120] object-cover"
-                        alt=""
-                        loading="lazy"
-                        decoding="async"
+                        userId={u.user_id}
+                        username={u.profiles?.username}
+                        src={u.profiles?.avatar_url}
+                        imgClassName="h-8 w-8 rounded-full border-2 border-[#0B1120] object-cover"
                       />
                     ))}
                   </div>
@@ -2277,18 +2370,19 @@ function CommunityContent() {
                   {messages.length > 0 ? (
                 <div className="space-y-3">
                   {messages.map((msg) => (
-                    <div key={msg.id} className="rounded-xl bg-white/5 p-3">
+                    <div key={msg.id} className="group relative rounded-xl bg-white/5 p-3">
                       <div className="mb-1 flex flex-wrap items-center gap-2">
-                        <img
-                          src={msg.profiles?.avatar_url || "/default-avatar.png"}
-                          className="h-6 w-6 shrink-0 rounded-full"
-                          alt=""
-                          loading="lazy"
-                          decoding="async"
+                        <ProfileAvatarLink
+                          userId={msg.user_id}
+                          username={msg.profiles?.username}
+                          src={msg.profiles?.avatar_url}
+                          imgClassName="h-6 w-6 shrink-0 rounded-full"
                         />
-                        <span className="text-sm font-semibold">
-                          {msg.profiles?.username || "User"}
-                        </span>
+                        <ProfileUsernameLink
+                          userId={msg.user_id}
+                          username={msg.profiles?.username}
+                          className="text-sm font-semibold"
+                        />
                         <span className="text-xs text-gray-400">
                           {formatEST(String(msg.created_at ?? ""))}
                         </span>
@@ -2305,6 +2399,16 @@ function CommunityContent() {
                             📌
                           </button>
                         ) : null}
+                        <RoomMessageActionsMenu
+                          message={msg}
+                          viewerUserId={user?.id}
+                          isRoomOwner={isOwner}
+                          activeMenuId={activeMessageMenuId}
+                          setActiveMenuId={setActiveMessageMenuId}
+                          onEdit={() => startEditMessage(msg)}
+                          onDelete={() => void handleDeleteMessage(msg.id)}
+                          deleting={deletingMessageId === msg.id}
+                        />
                       </div>
 
                       <div className="text-sm">
@@ -2338,6 +2442,37 @@ function CommunityContent() {
                               Trade unavailable or private.
                             </p>
                           )
+                        ) : editingMessageId === msg.id &&
+                          canEditRoomMessage(user?.id, msg) ? (
+                          <div className="space-y-2">
+                            <textarea
+                              value={editingMessageContent}
+                              onChange={(e) =>
+                                setEditingMessageContent(e.target.value)
+                              }
+                              rows={3}
+                              className="w-full rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm text-white"
+                            />
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  void handleSaveEditMessage(msg.id)
+                                }
+                                disabled={!editingMessageContent.trim()}
+                                className="rounded-md bg-green-600 px-3 py-1 text-xs text-white hover:bg-green-500 disabled:opacity-50"
+                              >
+                                Save
+                              </button>
+                              <button
+                                type="button"
+                                onClick={cancelEditMessage}
+                                className="rounded-md px-3 py-1 text-xs text-gray-400 hover:text-white"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
                         ) : (
                           <p className="break-words text-sm text-white">{msg.content}</p>
                         )}
@@ -2352,24 +2487,38 @@ function CommunityContent() {
 
                       <div className="space-y-2">
                         {pinnedMessages.map((msg) => (
-                          <div key={msg.id} className="rounded-lg bg-black/20 p-2">
+                          <div key={msg.id} className="group relative rounded-lg bg-black/20 p-2">
                             <div className="mb-1 flex items-center justify-between gap-2">
-                              <p className="text-xs text-gray-400">
-                                {msg.profiles?.username || "User"}
-                              </p>
-                              {isOwner ? (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    void handleTogglePin(msg.id, msg.pinned)
-                                  }
-                                  className={`shrink-0 text-xs ${
-                                    msg.pinned ? "text-yellow-400" : "text-gray-400"
-                                  }`}
-                                >
-                                  📌
-                                </button>
-                              ) : null}
+                              <ProfileUsernameLink
+                                userId={msg.user_id}
+                                username={msg.profiles?.username}
+                                className="text-xs text-gray-400"
+                              />
+                              <div className="flex shrink-0 items-center gap-1">
+                                {isOwner ? (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      void handleTogglePin(msg.id, msg.pinned)
+                                    }
+                                    className={`text-xs ${
+                                      msg.pinned ? "text-yellow-400" : "text-gray-400"
+                                    }`}
+                                  >
+                                    📌
+                                  </button>
+                                ) : null}
+                                <RoomMessageActionsMenu
+                                  message={msg}
+                                  viewerUserId={user?.id}
+                                  isRoomOwner={isOwner}
+                                  activeMenuId={activeMessageMenuId}
+                                  setActiveMenuId={setActiveMessageMenuId}
+                                  onEdit={() => startEditMessage(msg)}
+                                  onDelete={() => void handleDeleteMessage(msg.id)}
+                                  deleting={deletingMessageId === msg.id}
+                                />
+                              </div>
                             </div>
                             <div className="text-sm text-white">
                               {msg.type === "image" ? (
@@ -2385,6 +2534,37 @@ function CommunityContent() {
                                   Trade · {msg.trades.ticker ?? "—"} · PnL{" "}
                                   {msg.trades.pnl ?? "—"}
                                 </span>
+                              ) : editingMessageId === msg.id &&
+                                canEditRoomMessage(user?.id, msg) ? (
+                                <div className="space-y-2">
+                                  <textarea
+                                    value={editingMessageContent}
+                                    onChange={(e) =>
+                                      setEditingMessageContent(e.target.value)
+                                    }
+                                    rows={3}
+                                    className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white"
+                                  />
+                                  <div className="flex gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        void handleSaveEditMessage(msg.id)
+                                      }
+                                      disabled={!editingMessageContent.trim()}
+                                      className="rounded-md bg-green-600 px-3 py-1 text-xs text-white hover:bg-green-500 disabled:opacity-50"
+                                    >
+                                      Save
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={cancelEditMessage}
+                                      className="rounded-md px-3 py-1 text-xs text-gray-400 hover:text-white"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                </div>
                               ) : (
                                 <span className="break-words">{msg.content}</span>
                               )}
@@ -2657,17 +2837,18 @@ function CommunityContent() {
                             key={member.user_id}
                             className="flex items-center gap-3 rounded-lg bg-white/5 p-2"
                           >
-                            <img
+                            <ProfileAvatarLink
+                              userId={member.user_id}
+                              username={username}
                               src={avatarSrc}
-                              alt=""
-                              className="h-9 w-9 shrink-0 rounded-full object-cover"
-                              loading="lazy"
-                              decoding="async"
+                              imgClassName="h-9 w-9 shrink-0 rounded-full object-cover"
                             />
                             <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-medium text-white">
-                                {username || "User"}
-                              </p>
+                              <ProfileUsernameLink
+                                userId={member.user_id}
+                                username={username}
+                                className="block truncate text-sm font-medium text-white"
+                              />
                               {displayName ? (
                                 <p className="truncate text-xs text-gray-400">
                                   {displayName}
@@ -2753,17 +2934,18 @@ function CommunityContent() {
                               key={ban.id}
                               className="flex items-center gap-3 rounded-lg bg-white/5 p-2"
                             >
-                              <img
+                              <ProfileAvatarLink
+                                userId={ban.user_id}
+                                username={username}
                                 src={avatarSrc}
-                                alt=""
-                                className="h-9 w-9 shrink-0 rounded-full object-cover"
-                                loading="lazy"
-                                decoding="async"
+                                imgClassName="h-9 w-9 shrink-0 rounded-full object-cover"
                               />
                               <div className="min-w-0 flex-1">
-                                <p className="truncate text-sm font-medium text-white">
-                                  {username || "User"}
-                                </p>
+                                <ProfileUsernameLink
+                                  userId={ban.user_id}
+                                  username={username}
+                                  className="block truncate text-sm font-medium text-white"
+                                />
                                 {displayName ? (
                                   <p className="truncate text-xs text-gray-400">
                                     {displayName}

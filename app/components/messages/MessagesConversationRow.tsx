@@ -1,6 +1,10 @@
 "use client"
 
 import { memo } from "react"
+import {
+  ProfileAvatarLink,
+  ProfileUsernameLink,
+} from "@/app/components/ProfileLink"
 
 export type MessagesConversationRowProps = {
   conversationId: string
@@ -9,6 +13,7 @@ export type MessagesConversationRowProps = {
   groupName: string | null
   displayName: string
   username: string
+  profileUserId?: string | null
   lastMessage: string
   avatarUrl: string | null
   unreadCount: number
@@ -27,6 +32,7 @@ function MessagesConversationRow({
   groupName,
   displayName,
   username,
+  profileUserId,
   lastMessage,
   avatarUrl,
   unreadCount,
@@ -91,24 +97,57 @@ function MessagesConversationRow({
         </div>
       ) : null}
       <div className="flex items-center gap-3 pr-10">
-        {avatarUrl ? (
+        {!isGroup && profileUserId ? (
+          <ProfileAvatarLink
+            userId={profileUserId}
+            username={username}
+            src={avatarUrl}
+            stopPropagation
+            imgClassName="h-10 w-10 rounded-full object-cover transition hover:scale-105"
+          />
+        ) : avatarUrl ? (
           <img
             src={avatarUrl}
             alt=""
             loading="lazy"
             decoding="async"
-            className="w-10 h-10 rounded-full object-cover hover:scale-105 transition"
+            className="h-10 w-10 rounded-full object-cover transition hover:scale-105"
           />
         ) : (
-          <div className="w-10 h-10 rounded-full bg-gray-600" />
+          <div className="h-10 w-10 rounded-full bg-gray-600" />
         )}
 
         <div className="min-w-0 flex-1">
-          <p className="text-emerald-400 font-semibold">
-            {isGroup ? groupName || displayName : `@${username}`}
-            {isPinned ? (
-              <span className="ml-2 text-xs text-yellow-400">📌</span>
-            ) : null}
+          <p className="font-semibold text-emerald-400">
+            {isGroup ? (
+              <>
+                {groupName || displayName}
+                {isPinned ? (
+                  <span className="ml-2 text-xs text-yellow-400">📌</span>
+                ) : null}
+              </>
+            ) : profileUserId ? (
+              <>
+                <ProfileUsernameLink
+                  userId={profileUserId}
+                  username={username}
+                  stopPropagation
+                  className="hover:underline"
+                >
+                  @{username}
+                </ProfileUsernameLink>
+                {isPinned ? (
+                  <span className="ml-2 text-xs text-yellow-400">📌</span>
+                ) : null}
+              </>
+            ) : (
+              <>
+                @{username}
+                {isPinned ? (
+                  <span className="ml-2 text-xs text-yellow-400">📌</span>
+                ) : null}
+              </>
+            )}
           </p>
 
           <p className="text-sm text-gray-400 truncate">{lastMessage}</p>

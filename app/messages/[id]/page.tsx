@@ -36,6 +36,11 @@ import {
   isConversationUuidSegment,
 } from "@/lib/messageRoutes"
 import { profilePath } from "@/lib/profileRoutes"
+import {
+  ProfileAvatarLink,
+  ProfileLink,
+  ProfileUsernameLink,
+} from "@/app/components/ProfileLink"
 import { normalizeProfileUsername } from "@/lib/profileUsername"
 import { isTradeOwnedByUser } from "@/lib/tradeShareAccess"
 
@@ -434,9 +439,14 @@ function PostMessageBubble({
           ) : null}
 
           <div className="mb-2 flex items-center justify-between">
-            <p className="text-sm font-semibold text-white">
+            <ProfileUsernameLink
+              userId={String(post.user_id ?? post.profiles?.id ?? "")}
+              username={post.profiles?.username}
+              stopPropagation
+              className="text-sm font-semibold text-white hover:underline"
+            >
               @{post.profiles?.username || "User"}
-            </p>
+            </ProfileUsernameLink>
             <span className="text-xs text-gray-400">Shared Post</span>
           </div>
 
@@ -1463,11 +1473,21 @@ export default function DMPage() {
                 />
               ) : null}
               <div className="flex flex-col leading-tight">
-                <span className="text-sm font-semibold">
-                  {conversation?.is_group
-                    ? conversation?.name || "Group Chat"
-                    : title}
-                </span>
+                {conversation?.is_group ? (
+                  <span className="text-sm font-semibold">
+                    {conversation?.name || "Group Chat"}
+                  </span>
+                ) : otherUser?.id ? (
+                  <ProfileUsernameLink
+                    userId={otherUser.id}
+                    username={otherUser.username}
+                    className="text-sm font-semibold"
+                  >
+                    {title}
+                  </ProfileUsernameLink>
+                ) : (
+                  <span className="text-sm font-semibold">{title}</span>
+                )}
                 <span className="text-xs text-gray-400">
                   {conversation?.is_group
                     ? `Group Chat • ${memberCount} members`
@@ -1542,9 +1562,11 @@ export default function DMPage() {
                 return (
                   <div key={message.id} className={rowClass}>
                     {showName && profileUsername ? (
-                      <p className="text-xs text-gray-400 mb-1 ml-1">
-                        {profileUsername}
-                      </p>
+                      <ProfileUsernameLink
+                        userId={message.sender_id}
+                        username={profileUsername}
+                        className="mb-1 ml-1 inline-block text-xs text-gray-400 hover:text-gray-300"
+                      />
                     ) : null}
                     <TradeMessageBubble
                       message={message}
@@ -1564,9 +1586,11 @@ export default function DMPage() {
                 return (
                   <div key={message.id} className={rowClass}>
                     {showName && profileUsername ? (
-                      <p className="text-xs text-gray-400 mb-1 ml-1">
-                        {profileUsername}
-                      </p>
+                      <ProfileUsernameLink
+                        userId={message.sender_id}
+                        username={profileUsername}
+                        className="mb-1 ml-1 inline-block text-xs text-gray-400 hover:text-gray-300"
+                      />
                     ) : null}
                     <PostMessageBubble
                       message={message}
@@ -1587,9 +1611,11 @@ export default function DMPage() {
               return (
                 <div key={message.id} className={rowClass}>
                   {showName && profileUsername ? (
-                    <p className="text-xs text-gray-400 mb-1 ml-1">
-                      {profileUsername}
-                    </p>
+                    <ProfileUsernameLink
+                      userId={message.sender_id}
+                      username={profileUsername}
+                      className="mb-1 ml-1 inline-block text-xs text-gray-400 hover:text-gray-300"
+                    />
                   ) : null}
                   <div
                     className={`flex overflow-visible ${
@@ -1786,25 +1812,23 @@ export default function DMPage() {
 
               <div className="flex flex-wrap gap-3">
                 {members.map((m: any, i: number) => (
-                  <div
+                  <ProfileLink
                     key={i}
-                    onClick={() =>
-                      m.profiles?.id &&
-                      router.push(profilePath(m.profiles))
-                    }
-                    className="flex items-center gap-2 bg-[#1e293b] px-3 py-2 rounded-lg cursor-pointer hover:bg-[#334155] transition"
+                    userId={m.profiles?.id ?? m.user_id}
+                    username={m.profiles?.username}
+                    className="flex cursor-pointer items-center gap-2 rounded-lg bg-[#1e293b] px-3 py-2 transition hover:bg-[#334155]"
                   >
                     <img
                       src={m.profiles?.avatar_url || "/default-avatar.png"}
                       alt=""
                       loading="lazy"
                       decoding="async"
-                      className="w-6 h-6 rounded-full"
+                      className="h-6 w-6 rounded-full"
                     />
-                    <span className="text-white text-sm">
+                    <span className="text-sm text-white">
                       {m.profiles?.username}
                     </span>
-                  </div>
+                  </ProfileLink>
                 ))}
               </div>
 

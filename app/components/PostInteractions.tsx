@@ -1,5 +1,10 @@
 "use client"
 
+import {
+  ProfileAvatarLink,
+  ProfileUsernameLink,
+} from "@/app/components/ProfileLink"
+
 type LikeMeta = {
   count: number
   liked: boolean
@@ -129,18 +134,25 @@ export function PostInteractionsComments({
     >
       <div className="space-y-2">
         {comments.map((c: any) => {
+          const userId = String(c.user_id ?? "")
+          const username = c.profiles?.username
           return (
-            <div key={c.id} className="flex gap-2 items-start">
-              <img
-                src={c.profiles?.avatar_url || "/default-avatar.png"}
-                className="w-8 h-8 rounded-full object-cover shrink-0"
-                alt="avatar"
-                loading="lazy"
-                decoding="async"
+            <div key={c.id} className="flex items-start gap-2">
+              <ProfileAvatarLink
+                userId={userId}
+                username={username}
+                src={c.profiles?.avatar_url}
+                imgClassName="h-8 w-8 shrink-0 rounded-full object-cover"
+                stopPropagation={stopPropagation}
               />
               <div className="min-w-0">
-                <p className="text-xs text-gray-400">{c.profiles?.username || "User"}</p>
-                <p className="text-white text-sm break-words">{c.content}</p>
+                <ProfileUsernameLink
+                  userId={userId}
+                  username={username}
+                  className="text-xs text-gray-400"
+                  stopPropagation={stopPropagation}
+                />
+                <p className="break-words text-sm text-white">{c.content}</p>
               </div>
             </div>
           )

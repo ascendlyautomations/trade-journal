@@ -1,26 +1,34 @@
 "use client"
 
 import { memo } from "react"
+import {
+  ProfileAvatarLink,
+  ProfileUsernameLink,
+} from "@/app/components/ProfileLink"
 
 type FeedCommentItemProps = {
   comment: any
 }
 
 function FeedCommentItem({ comment }: FeedCommentItemProps) {
+  const userId = String(comment.user_id ?? "")
+  const username = comment.profiles?.username
+
   return (
-    <div className="flex gap-2 items-start">
-      <img
-        src={comment.profiles?.avatar_url || "/default-avatar.png"}
-        className="w-8 h-8 rounded-full object-cover shrink-0"
-        alt="avatar"
-        loading="lazy"
-        decoding="async"
+    <div className="flex items-start gap-2">
+      <ProfileAvatarLink
+        userId={userId}
+        username={username}
+        src={comment.profiles?.avatar_url}
+        imgClassName="h-8 w-8 shrink-0 rounded-full object-cover"
       />
       <div className="min-w-0">
-        <p className="text-xs text-gray-400">
-          {comment.profiles?.username || "User"}
-        </p>
-        <p className="text-white text-sm break-words">{comment.content}</p>
+        <ProfileUsernameLink
+          userId={userId}
+          username={username}
+          className="text-xs text-gray-400"
+        />
+        <p className="break-words text-sm text-white">{comment.content}</p>
       </div>
     </div>
   )

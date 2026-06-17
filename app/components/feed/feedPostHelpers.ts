@@ -11,11 +11,11 @@ export const FEED_POSTS_SELECT =
 
 /** Columns used by feed comment threads. */
 export const FEED_COMMENTS_SELECT =
-  "id, post_id, content, profiles(username, avatar_url)"
+  "id, post_id, user_id, content, profiles(username, avatar_url)"
 
 /** Returned row shape after posting a comment. */
 export const FEED_COMMENT_INSERT_SELECT =
-  "id, post_id, content, profiles(username, avatar_url)"
+  "id, post_id, user_id, content, profiles(username, avatar_url)"
 
 /** Columns used by the stories bar and viewer. */
 export const FEED_STORIES_SELECT = "id, user_id, image_url, created_at"

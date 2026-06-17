@@ -397,6 +397,9 @@ export default function MessagesPage() {
         displayName,
         username: profile?.username || "user",
         otherUserId: isGroup ? null : (profile?.id ?? otherUser?.user_id ?? null),
+        profileUserId: isGroup
+          ? null
+          : (profile?.id ?? otherUser?.user_id ?? null),
         avatar_url: isGroup
           ? convoMeta?.avatar_url ?? null
           : profile?.avatar_url ?? null,

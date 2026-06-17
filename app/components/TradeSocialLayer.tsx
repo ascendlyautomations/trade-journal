@@ -13,6 +13,11 @@ import {
 } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
+import {
+  ProfileAvatarLink,
+  ProfileLink,
+  ProfileUsernameLink,
+} from "@/app/components/ProfileLink"
 import { feedbackPresets } from "@/lib/feedbackPresets"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 
@@ -495,28 +500,39 @@ export function TradeSocialCommentsSection({
   const commentList = (
     <div className="space-y-2">
         {comments.map((c) => {
+          const userId = String(c.user_id ?? "")
+          const username = c.profiles?.username
           const av = c.profiles?.avatar_url
           const hasAv =
             av != null && String(av).trim() !== "" && String(av) !== "null"
           return (
-            <div key={c.id} className="flex gap-2 items-start">
+            <div key={c.id} className="flex items-start gap-2">
               {hasAv ? (
-                <img
+                <ProfileAvatarLink
+                  userId={userId}
+                  username={username}
                   src={String(av).trim()}
-                  alt=""
-                  loading="lazy"
-                  decoding="async"
-                  className="w-6 h-6 rounded-full object-cover shrink-0"
+                  imgClassName="h-6 w-6 shrink-0 rounded-full object-cover"
                 />
               ) : (
-                <div
-                  className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-500/40 to-emerald-500/40 shrink-0"
-                  aria-hidden
-                />
+                <ProfileLink
+                  userId={userId}
+                  username={username}
+                  className="inline-flex shrink-0 cursor-pointer transition hover:opacity-90"
+                >
+                  <div
+                    className="h-6 w-6 shrink-0 rounded-full bg-gradient-to-br from-blue-500/40 to-emerald-500/40"
+                    aria-hidden
+                  />
+                </ProfileLink>
               )}
               <div className="min-w-0">
-                <p className="text-xs text-gray-400">{c.profiles?.username || "User"}</p>
-                <p className="text-white text-sm break-words">{c.content}</p>
+                <ProfileUsernameLink
+                  userId={userId}
+                  username={username}
+                  className="text-xs text-gray-400"
+                />
+                <p className="break-words text-sm text-white">{c.content}</p>
               </div>
             </div>
           )

@@ -12,6 +12,7 @@ export type MessagesConversationListItem = {
   name: string | null
   displayName: string
   username: string
+  profileUserId?: string | null
   lastMessage: string
   avatar_url: string | null
   unreadCount: number
@@ -47,6 +48,7 @@ function MessagesConversationList({
           groupName={c.name}
           displayName={c.displayName}
           username={c.username}
+          profileUserId={c.profileUserId}
           lastMessage={c.lastMessage}
           avatarUrl={c.avatar_url}
           unreadCount={c.unreadCount ?? 0}

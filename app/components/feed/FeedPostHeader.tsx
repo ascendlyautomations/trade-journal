@@ -18,7 +18,7 @@ function FeedPostHeader({
   preview = false,
 }: FeedPostHeaderProps) {
   const className =
-    "flex items-center gap-3 p-4 border-b border-white/5 transition-colors" +
+    "flex cursor-pointer items-center gap-3 border-b border-white/5 p-4 transition-colors" +
     (preview ? "" : " hover:bg-white/5")
 
   const inner = (

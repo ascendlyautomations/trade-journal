@@ -73,6 +73,11 @@ import {
   revokeStoryPreviewUrl,
 } from "@/lib/storyComposeHelpers"
 import { isProfileUuidSegment, profilePath } from "@/lib/profileRoutes"
+import {
+  ProfileAvatarLink,
+  ProfileLink,
+  ProfileUsernameLink,
+} from "@/app/components/ProfileLink"
 import { normalizeProfileUsername } from "@/lib/profileUsername"
 import { useUserProfile } from "@/lib/UserProfileProvider"
 import { notifyGettingStartedChecklistMaybeCompleted } from "@/lib/gettingStartedProgressSync"
@@ -575,9 +580,11 @@ function PostCard({
     <div className="space-y-1 text-sm text-gray-300">
       {(comments || []).map((c: any) => (
         <p key={c.id}>
-          <span className="font-medium text-white">
-            {c.profiles?.username || "User"}
-          </span>{" "}
+          <ProfileUsernameLink
+            userId={String(c.user_id ?? "")}
+            username={c.profiles?.username}
+            className="inline font-medium text-white"
+          />{" "}
           {c.content}
         </p>
       ))}
@@ -3600,13 +3607,12 @@ function ProfilePageContent() {
             ) : (
               <div className="space-y-1">
                 {followersModalUsers.map((u) => (
-                  <div
+                  <ProfileLink
                     key={u.id}
+                    userId={u.id}
+                    username={u.username}
+                    onClick={closeFollowModals}
                     className="flex cursor-pointer items-center gap-3 rounded-lg p-2 transition hover:bg-white/10"
-                    onClick={() => {
-                      closeFollowModals()
-                      router.push(profilePath(u))
-                    }}
                   >
                     <img
                       src={u.avatar_url || "/default-avatar.png"}
@@ -3619,7 +3625,7 @@ function ProfilePageContent() {
                       className="h-8 w-8 rounded-full object-cover"
                     />
                     <span className="text-white">{u.username}</span>
-                  </div>
+                  </ProfileLink>
                 ))}
               </div>
             )}
@@ -3667,13 +3673,12 @@ function ProfilePageContent() {
             ) : (
               <div className="space-y-1">
                 {followingModalUsers.map((u) => (
-                  <div
+                  <ProfileLink
                     key={u.id}
+                    userId={u.id}
+                    username={u.username}
+                    onClick={closeFollowModals}
                     className="flex cursor-pointer items-center gap-3 rounded-lg p-2 transition hover:bg-white/10"
-                    onClick={() => {
-                      closeFollowModals()
-                      router.push(profilePath(u))
-                    }}
                   >
                     <img
                       src={u.avatar_url || "/default-avatar.png"}
@@ -3686,7 +3691,7 @@ function ProfilePageContent() {
                       className="h-8 w-8 rounded-full object-cover"
                     />
                     <span className="text-white">{u.username}</span>
-                  </div>
+                  </ProfileLink>
                 ))}
               </div>
             )}

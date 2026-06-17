@@ -3,6 +3,10 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import {
+  ProfileAvatarLink,
+  ProfileUsernameLink,
+} from "@/app/components/ProfileLink"
 import { supabase } from "../../lib/supabaseClient"
 import Navbar from "../components/Navbar"
 import FollowRequestsPanel from "../components/FollowRequestsPanel"
@@ -163,7 +167,17 @@ function GroupedNotificationCardView({
           )
           return (
             <li key={entry.id} className="text-xs text-gray-300">
-              <span className="font-medium text-gray-200">{name}</span>
+              {entry.senderId ? (
+                <ProfileUsernameLink
+                  userId={entry.senderId}
+                  username={sender?.username}
+                  className="font-medium text-gray-200"
+                >
+                  {name}
+                </ProfileUsernameLink>
+              ) : (
+                <span className="font-medium text-gray-200">{name}</span>
+              )}
               <span className="text-gray-500">: </span>
               {preview}
             </li>
@@ -186,15 +200,20 @@ function GroupedNotificationCardView({
               key={id}
               className="flex items-center gap-2 text-xs text-gray-200"
             >
-              <img
-                src={sender?.avatar_url || "/default-avatar.png"}
-                alt=""
-                className="h-6 w-6 rounded-full object-cover ring-1 ring-white/10"
-                onError={(e) => {
-                  e.currentTarget.src = "/default-avatar.png"
-                }}
+              <ProfileAvatarLink
+                userId={id}
+                username={sender?.username}
+                src={sender?.avatar_url}
+                stopPropagation
+                imgClassName="h-6 w-6 rounded-full object-cover ring-1 ring-white/10"
               />
-              {senderDisplayName(sender)}
+              <ProfileUsernameLink
+                userId={id}
+                username={sender?.username}
+                className="text-xs text-gray-200"
+              >
+                {senderDisplayName(sender)}
+              </ProfileUsernameLink>
             </li>
           )
         })}
@@ -215,15 +234,20 @@ function GroupedNotificationCardView({
               key={id}
               className="flex items-center gap-2 text-xs text-gray-200"
             >
-              <img
-                src={sender?.avatar_url || "/default-avatar.png"}
-                alt=""
-                className="h-6 w-6 rounded-full object-cover ring-1 ring-white/10"
-                onError={(e) => {
-                  e.currentTarget.src = "/default-avatar.png"
-                }}
+              <ProfileAvatarLink
+                userId={id}
+                username={sender?.username}
+                src={sender?.avatar_url}
+                stopPropagation
+                imgClassName="h-6 w-6 rounded-full object-cover ring-1 ring-white/10"
               />
-              {senderDisplayName(sender)}
+              <ProfileUsernameLink
+                userId={id}
+                username={sender?.username}
+                className="text-xs text-gray-200"
+              >
+                {senderDisplayName(sender)}
+              </ProfileUsernameLink>
             </li>
           )
         })}
@@ -246,7 +270,27 @@ function GroupedNotificationCardView({
       }`}
     >
       <div className="flex items-start gap-2 sm:gap-3">
-        {avatarUrl != null ? (
+        {avatarUrl != null && card.kind === "room_join" && card.notification.sender_id ? (
+          <div className="relative shrink-0">
+            <ProfileAvatarLink
+              userId={card.notification.sender_id}
+              username={
+                card.notification.sender_id
+                  ? sendersById[card.notification.sender_id]?.username
+                  : null
+              }
+              src={avatarUrl}
+              stopPropagation
+              imgClassName="h-9 w-9 rounded-full object-cover ring-2 ring-white/10"
+            />
+            {unread ? (
+              <span
+                className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-[#0f172a] bg-blue-400"
+                aria-hidden
+              />
+            ) : null}
+          </div>
+        ) : avatarUrl != null ? (
           <div className="relative shrink-0">
             <img
               src={avatarUrl || "/default-avatar.png"}
