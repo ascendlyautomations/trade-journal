@@ -34,6 +34,10 @@ import {
   GETTING_STARTED_INTRO_POPUP_TITLE,
   markGettingStartedIntroSeen,
 } from "@/lib/gettingStartedIntro"
+import {
+  ONBOARDING_COMPLETE_POPUP_TITLE,
+  markOnboardingCompletePopupSeen,
+} from "@/lib/gettingStartedOnboardingComplete"
 import { feedbackPresets } from "@/lib/feedbackPresets"
 import { useUserProfile } from "@/lib/UserProfileProvider"
 import { supabase } from "@/lib/supabaseClient"
@@ -41,6 +45,7 @@ import { supabase } from "@/lib/supabaseClient"
 const EMPTY_SIGNALS: GettingStartedChecklistSignals = {
   onboardingCompleted: false,
   hasSeenGettingStartedIntro: false,
+  hasSeenOnboardingCompletePopup: false,
   tradeCount: 0,
   profilePostCount: 0,
   followCount: 0,
@@ -106,6 +111,7 @@ export function GettingStartedProgressProvider({
   const popupOpenRef = useRef(false)
   const activePopupTitleRef = useRef<string | undefined>(undefined)
   const introPopupActiveRef = useRef(false)
+  const completionPopupActiveRef = useRef(false)
   const showPopupRef = useRef(showPopup)
   const closePopupRef = useRef(closePopup)
   const prevMountedUserIdRef = useRef<string | null>(null)
@@ -173,9 +179,17 @@ export function GettingStartedProgressProvider({
     const isIntroPopup =
       introPopupActiveRef.current ||
       closedTitle === GETTING_STARTED_INTRO_POPUP_TITLE
+    const isCompletionPopup =
+      completionPopupActiveRef.current ||
+      closedTitle === ONBOARDING_COMPLETE_POPUP_TITLE
     const userId = userIdRef.current
 
-    gsDebug("modal close", { closedTitle, isIntroPopup, userId: userId?.slice(0, 8) })
+    gsDebug("modal close", {
+      closedTitle,
+      isIntroPopup,
+      isCompletionPopup,
+      userId: userId?.slice(0, 8),
+    })
 
     closePopupRef.current()
     popupOpenRef.current = false
@@ -191,6 +205,24 @@ export function GettingStartedProgressProvider({
           signalsRef.current = {
             ...signalsRef.current,
             hasSeenGettingStartedIntro: true,
+          }
+        }
+      })()
+    }
+
+    if (isCompletionPopup && userId) {
+      completionPopupActiveRef.current = false
+      void (async () => {
+        const ok = await markOnboardingCompletePopupSeen(supabase, userId)
+        gsDebug("completion popup dismiss persisted", { ok })
+        if (ok) {
+          setSignals((prev) => ({
+            ...prev,
+            hasSeenOnboardingCompletePopup: true,
+          }))
+          signalsRef.current = {
+            ...signalsRef.current,
+            hasSeenOnboardingCompletePopup: true,
           }
         }
       })()
@@ -243,6 +275,7 @@ export function GettingStartedProgressProvider({
         tradeCount: next.tradeCount,
         completedCount: newRawProgress.completedCount,
         hasSeenGettingStartedIntro: next.hasSeenGettingStartedIntro,
+        hasSeenOnboardingCompletePopup: next.hasSeenOnboardingCompletePopup,
         onboardingCompleted: next.onboardingCompleted,
         completeIds: newRawProgress.items
           .filter((i) => i.complete)
@@ -259,13 +292,19 @@ export function GettingStartedProgressProvider({
           ? resolveGettingStartedProgressPopups(
               preFetchSnapshot,
               newRawProgress,
-              userId
+              userId,
+              next.hasSeenOnboardingCompletePopup
             )
-          : resolveBaselineProgressPopups(newRawProgress, userId)
+          : resolveBaselineProgressPopups(
+              newRawProgress,
+              userId,
+              next.hasSeenOnboardingCompletePopup
+            )
         : resolveGettingStartedProgressPopups(
             preFetchSnapshot,
             newRawProgress,
-            userId
+            userId,
+            next.hasSeenOnboardingCompletePopup
           )
 
       if (isBaselineFetch) {
@@ -274,7 +313,10 @@ export function GettingStartedProgressProvider({
       }
 
       const popups: FeedbackPopupInput[] = [...batch.stepPopups]
-      if (batch.completionPopup) popups.push(batch.completionPopup)
+      if (batch.completionPopup) {
+        completionPopupActiveRef.current = true
+        popups.push(batch.completionPopup)
+      }
 
       if (
         isBaselineFetch &&
@@ -292,6 +334,7 @@ export function GettingStartedProgressProvider({
       gsDebug("popup batch", {
         stepCount: batch.stepPopups.length,
         hasCompletion: Boolean(batch.completionPopup),
+        hasSeenOnboardingCompletePopup: next.hasSeenOnboardingCompletePopup,
         hasIntro:
           isBaselineFetch &&
           next.onboardingCompleted &&
@@ -311,6 +354,7 @@ export function GettingStartedProgressProvider({
       popupQueueRef.current = []
       popupOpenRef.current = false
       introPopupActiveRef.current = false
+      completionPopupActiveRef.current = false
       baselineResolvedRef.current = false
       prevMountedUserIdRef.current = nextUserId
       gsDebug("user changed, reset baseline", { userId: nextUserId })

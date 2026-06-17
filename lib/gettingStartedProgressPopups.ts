@@ -8,9 +8,7 @@ import { gsDebug } from "@/lib/gettingStartedDebug"
 import { feedbackPresets } from "@/lib/feedbackPresets"
 import {
   markProgressPopupShownForTasks,
-  readOnboardingCompletePopupShown,
   readShownProgressPopupTaskIds,
-  writeOnboardingCompletePopupShown,
 } from "@/lib/gettingStartedSticky"
 
 export type ProgressPopupBatch = {
@@ -35,7 +33,8 @@ function stepPopupForTask(
  */
 export function resolveBaselineProgressPopups(
   progress: GettingStartedProgress,
-  userId: string
+  userId: string,
+  hasSeenOnboardingCompletePopup: boolean
 ): ProgressPopupBatch {
   const alreadyComplete = progress.items
     .filter((item) => item.complete)
@@ -49,8 +48,7 @@ export function resolveBaselineProgressPopups(
     allComplete: progress.allComplete,
   })
 
-  if (progress.allComplete && !readOnboardingCompletePopupShown(userId)) {
-    writeOnboardingCompletePopupShown(userId)
+  if (progress.allComplete && !hasSeenOnboardingCompletePopup) {
     return {
       stepPopups: [],
       completionPopup: feedbackPresets.onboardingComplete(),
@@ -67,7 +65,8 @@ export function resolveBaselineProgressPopups(
 export function resolveGettingStartedProgressPopups(
   snapshot: GettingStartedProgress,
   progress: GettingStartedProgress,
-  userId: string
+  userId: string,
+  hasSeenOnboardingCompletePopup: boolean
 ): ProgressPopupBatch {
   const shown = readShownProgressPopupTaskIds(userId)
   const rawNewly = detectNewlyCompletedTasks(snapshot, progress)
@@ -93,12 +92,11 @@ export function resolveGettingStartedProgressPopups(
     return { stepPopups: [], completionPopup: null }
   }
 
-  if (progress.allComplete && !readOnboardingCompletePopupShown(userId)) {
+  if (progress.allComplete && !hasSeenOnboardingCompletePopup) {
     markProgressPopupShownForTasks(
       userId,
       newlyCompleted.map((item) => item.id)
     )
-    writeOnboardingCompletePopupShown(userId)
     return {
       stepPopups: [],
       completionPopup: feedbackPresets.onboardingComplete(),

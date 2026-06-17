@@ -14,10 +14,6 @@ export const ONBOARDING_COMPLETE_DISMISSED_STORAGE_KEY =
 export const GETTING_STARTED_PROGRESS_POPUP_COUNT_KEY =
   "tradetraxs_getting_started_progress_popup_count_v1"
 
-/** Final "Onboarding Complete" popup shown once. */
-export const ONBOARDING_COMPLETE_POPUP_SHOWN_KEY =
-  "tradetraxs_onboarding_complete_popup_shown_v1"
-
 /** Per-task progress popups already shown (never repeat on revisit). */
 export const GETTING_STARTED_PROGRESS_POPUP_TASK_IDS_KEY =
   "tradetraxs_getting_started_progress_popup_task_ids_v1"
@@ -125,31 +121,6 @@ export function writeLastProgressPopupCount(userId: string, count: number) {
     window.localStorage.setItem(
       scopedKey(GETTING_STARTED_PROGRESS_POPUP_COUNT_KEY, userId),
       String(count)
-    )
-  } catch {
-    /* ignore quota / private mode */
-  }
-}
-
-export function readOnboardingCompletePopupShown(userId: string): boolean {
-  if (typeof window === "undefined") return false
-  try {
-    return (
-      window.localStorage.getItem(
-        scopedKey(ONBOARDING_COMPLETE_POPUP_SHOWN_KEY, userId)
-      ) === "1"
-    )
-  } catch {
-    return false
-  }
-}
-
-export function writeOnboardingCompletePopupShown(userId: string) {
-  if (typeof window === "undefined") return
-  try {
-    window.localStorage.setItem(
-      scopedKey(ONBOARDING_COMPLETE_POPUP_SHOWN_KEY, userId),
-      "1"
     )
   } catch {
     /* ignore quota / private mode */

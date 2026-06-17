@@ -1,5 +1,6 @@
 import type { FeedbackPopupInput } from "@/app/components/ui/feedback-popup-types"
 import { GETTING_STARTED_INTRO_POPUP_TITLE } from "@/lib/gettingStartedIntro"
+import { ONBOARDING_COMPLETE_POPUP_TITLE } from "@/lib/gettingStartedOnboardingComplete"
 import {
   FREE_PLAN_TRADE_LIMIT_REACHED,
   freePlanCsvImportLimitExceededMessage,
@@ -152,7 +153,7 @@ export const feedbackPresets = {
 
   onboardingComplete: (): FeedbackPopupInput => ({
     type: "success",
-    title: "🎉 You Have Completed All Onboarding Tasks",
+    title: ONBOARDING_COMPLETE_POPUP_TITLE,
     message:
       "Congratulations!\n\nYou have completed all Getting Started tasks and are ready to get the most out of TradeTraxs.",
     persist: true,
