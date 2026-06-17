@@ -25,6 +25,7 @@ type Props = {
 export default function PostSetupImportModal({ open, onComplete }: Props) {
   const { showPopup, closePopup, feedbackModalProps } = useFeedbackPopup()
   const importCompletePendingRef = useRef(false)
+  const creatingAccountRef = useRef(false)
   const [entered, setEntered] = useState(false)
   const [accounts, setAccounts] = useState<TradeAccountOption[]>([])
   const [selectedAccount, setSelectedAccount] = useState<TradeAccountOption | null>(null)
@@ -107,6 +108,10 @@ export default function PostSetupImportModal({ open, onComplete }: Props) {
   }
 
   async function handleCreateAccountSave(newAccount: CreateAccountSavePayload) {
+    if (creatingAccountRef.current) return
+    creatingAccountRef.current = true
+
+    try {
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -183,6 +188,9 @@ export default function PostSetupImportModal({ open, onComplete }: Props) {
     setSelectedAccount(row)
     setCanCreateMoreAccounts(isProActive(profile))
     setShowCreateModal(false)
+    } finally {
+      creatingAccountRef.current = false
+    }
   }
 
   if (!open) return null

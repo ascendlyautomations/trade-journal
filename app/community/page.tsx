@@ -281,6 +281,9 @@ function CommunityContent() {
   const [deletingMessageId, setDeletingMessageId] = useState<string | null>(
     null
   )
+  const [joiningRoomId, setJoiningRoomId] = useState<string | null>(null)
+  const [sendingMessage, setSendingMessage] = useState(false)
+  const sendingMessageRef = useRef(false)
   const [showInviteModal, setShowInviteModal] = useState(false)
   /** room id → has at least one unread message (others’ messages not in seen_by) */
   const [unreadByRoomId, setUnreadByRoomId] = useState<Record<string, boolean>>(
@@ -1332,6 +1335,10 @@ function CommunityContent() {
   }
 
   async function joinRoom(roomId: string) {
+    if (joiningRoomId) return
+    setJoiningRoomId(roomId)
+
+    try {
     const {
       data: { user: authUser },
     } = await supabase.auth.getUser()
@@ -1386,6 +1393,9 @@ function CommunityContent() {
     } else {
       await createRoomJoinNotification(supabase, roomId)
       notifyGettingStartedChecklistMaybeCompleted()
+    }
+    } finally {
+      setJoiningRoomId(null)
     }
   }
 
@@ -1821,10 +1831,15 @@ function CommunityContent() {
   }, [selectedRoomId, username])
 
   async function sendMessage() {
+    if (sendingMessageRef.current || sendingMessage) return
     if (!user?.id || !selectedRoomId || !canPostInRoom) return
     const content = draft.trim()
     if (!content) return
 
+    sendingMessageRef.current = true
+    setSendingMessage(true)
+
+    try {
     const userIsPro = await isUserPro(supabase as any, user.id)
     if (!userIsPro) {
       const limitReached = await reachedMessagesCommentsLimit(
@@ -1851,6 +1866,10 @@ function CommunityContent() {
     }
 
     setDraft("")
+    } finally {
+      sendingMessageRef.current = false
+      setSendingMessage(false)
+    }
   }
 
   async function handleImageUpload(e: ChangeEvent<HTMLInputElement>) {
@@ -2288,9 +2307,12 @@ function CommunityContent() {
                 <button
                   type="button"
                   onClick={() => void joinRoom(inviteTargetRoom.id)}
-                  className="rounded-lg bg-green-500/30 px-6 py-3 text-sm font-medium text-green-100 hover:bg-green-500/40"
+                  disabled={joiningRoomId === inviteTargetRoom.id}
+                  className="rounded-lg bg-green-500/30 px-6 py-3 text-sm font-medium text-green-100 hover:bg-green-500/40 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Join This Trade Room
+                  {joiningRoomId === inviteTargetRoom.id
+                    ? "Joining…"
+                    : "Join This Trade Room"}
                 </button>
               </div>
             ) : (
@@ -2604,7 +2626,9 @@ function CommunityContent() {
                           : "Message room..."
                     }
                     textDisabled={!canPostInRoom}
-                    sendDisabled={!canPostInRoom || !draft.trim()}
+                    sendDisabled={
+                      !canPostInRoom || !draft.trim() || sendingMessage
+                    }
                     onImageChange={(e) => void handleImageUpload(e)}
                     imageDisabled={!canPostInRoom}
                     onTradeClick={() => setSelectTrade(true)}

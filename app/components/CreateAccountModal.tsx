@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
   ACCOUNT_SIZE_HELPER,
   ACCOUNT_SIZE_PLACEHOLDER,
@@ -87,6 +87,8 @@ export default function CreateAccountModal({
   const [dailyDrawdown, setDailyDrawdown] = useState("")
   const [profitTarget, setProfitTarget] = useState("")
   const [winningDays, setWinningDays] = useState("")
+  const [isSaving, setIsSaving] = useState(false)
+  const savingRef = useRef(false)
 
   useEffect(() => {
     if (!open) {
@@ -124,25 +126,37 @@ export default function CreateAccountModal({
   }
 
   async function handleSave() {
-    const parsedData = {
-      consistency: consistency ? Number(consistency) : null,
-      maxDrawdown: maxDrawdown ? Number(maxDrawdown) : null,
-      dailyDrawdown: dailyDrawdown ? Number(dailyDrawdown) : null,
-      profitTarget: profitTarget ? Number(profitTarget) : null,
-      winningDays: winningDays ? Number(winningDays) : null,
-    }
+    if (savingRef.current || isSaving) return
+    if (!name.trim()) return
 
-    await onSave({
-      name: name.trim(),
-      size: parseAccountSizeInput(size),
-      id: id.trim(),
-      category,
-      mode: resolveAccountModeForSave(category, mode),
-      rules: category === "Prop Firm" ? parsedData : null,
-    })
+    savingRef.current = true
+    setIsSaving(true)
+
+    try {
+      const parsedData = {
+        consistency: consistency ? Number(consistency) : null,
+        maxDrawdown: maxDrawdown ? Number(maxDrawdown) : null,
+        dailyDrawdown: dailyDrawdown ? Number(dailyDrawdown) : null,
+        profitTarget: profitTarget ? Number(profitTarget) : null,
+        winningDays: winningDays ? Number(winningDays) : null,
+      }
+
+      await onSave({
+        name: name.trim(),
+        size: parseAccountSizeInput(size),
+        id: id.trim(),
+        category,
+        mode: resolveAccountModeForSave(category, mode),
+        rules: category === "Prop Firm" ? parsedData : null,
+      })
+    } finally {
+      savingRef.current = false
+      setIsSaving(false)
+    }
   }
 
   function handleCancel() {
+    if (isSaving) return
     resetFields()
     onClose()
   }
@@ -343,16 +357,28 @@ export default function CreateAccountModal({
           <button
             type="button"
             onClick={handleCancel}
-            className="rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-medium text-gray-200 transition hover:bg-white/10"
+            disabled={isSaving}
+            className="rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-medium text-gray-200 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Cancel
           </button>
           <button
             type="button"
             onClick={() => void handleSave()}
-            className="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-500"
+            disabled={isSaving || !name.trim()}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Save account
+            {isSaving ? (
+              <>
+                <span
+                  className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent"
+                  aria-hidden
+                />
+                Saving…
+              </>
+            ) : (
+              "Save account"
+            )}
           </button>
         </div>
       </div>

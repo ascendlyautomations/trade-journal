@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
 import Papa from "papaparse"
 import { supabase } from "@/lib/supabaseClient"
 import {
@@ -73,6 +73,12 @@ export default function CsvImportPanel({
   const [unrecognized, setUnrecognized] = useState(false)
   const [brokerHint, setBrokerHint] = useState<string | null>(null)
   const [diagnostics, setDiagnostics] = useState<CsvImportDiagnostics | null>(null)
+  const importingRef = useRef(false)
+
+  function endImport() {
+    importingRef.current = false
+    setLoading(false)
+  }
 
   function applyParsePreview(rows: CsvRow[]) {
     const hint = detectCsvBrokerHint(rows)
@@ -109,6 +115,7 @@ export default function CsvImportPanel({
 
   const handleImport = async () => {
     if (parsed.length === 0) return
+    if (importingRef.current || loading) return
 
     if (requireSelectedAccount && !selectedAccount) {
       showPopup(
@@ -119,13 +126,14 @@ export default function CsvImportPanel({
       return
     }
 
+    importingRef.current = true
     setLoading(true)
 
     const { data: userData } = await supabase.auth.getUser()
     const user = userData.user
     if (!user) {
       showPopup(feedbackPresets.importFailed("Please log in first."))
-      setLoading(false)
+      endImport()
       return
     }
 
@@ -138,7 +146,7 @@ export default function CsvImportPanel({
     if (profileErr || !profile) {
       console.error("Profile fetch failed:", profileErr)
       showPopup(feedbackPresets.importFailed("Could not verify account. Try again."))
-      setLoading(false)
+      endImport()
       return
     }
 
@@ -151,13 +159,13 @@ export default function CsvImportPanel({
       setUnrecognized(isCsvFormatUnrecognized(summary))
       setBrokerHint(detectCsvBrokerHint(parsed))
       setDiagnostics(buildCsvImportDiagnostics(parsed, parseResult))
-      setLoading(false)
+      endImport()
       return
     }
 
     if (csvTradesHaveFutureDate(parsedTrades)) {
       showPopup(feedbackPresets.csvImportFutureTradeDate())
-      setLoading(false)
+      endImport()
       return
     }
 
@@ -179,7 +187,7 @@ export default function CsvImportPanel({
         )
       } catch {
         showPopup(feedbackPresets.importVerifyFailed())
-        setLoading(false)
+        endImport()
         return
       }
 
@@ -190,7 +198,7 @@ export default function CsvImportPanel({
             uploadCheck.remaining
           )
         )
-        setLoading(false)
+        endImport()
         return
       }
 
@@ -199,7 +207,7 @@ export default function CsvImportPanel({
 
     if (!tradesToInsert.length) {
       showPopup(feedbackPresets.tradeLimitReached())
-      setLoading(false)
+      endImport()
       return
     }
 
@@ -231,7 +239,7 @@ export default function CsvImportPanel({
             "Could not register imported account row. Try again."
           )
         )
-        setLoading(false)
+        endImport()
         return
       }
 
@@ -289,7 +297,7 @@ export default function CsvImportPanel({
       })
     }
 
-    setLoading(false)
+    endImport()
   }
 
   const isTradovateFormat = parsed.length > 0 && isTradovateCsvRow(parsed[0])

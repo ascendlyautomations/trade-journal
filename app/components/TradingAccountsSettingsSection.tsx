@@ -98,7 +98,7 @@ export default function TradingAccountsSettingsSection({
   }, [refreshAccounts])
 
   async function handleToggleActive(account: TradingAccountListItem) {
-    if (!userId) return
+    if (!userId || togglingId) return
     const nextActive = !account.is_active
     setTogglingId(account.id)
     const { error } = await setTradingAccountActive(
@@ -122,7 +122,7 @@ export default function TradingAccountsSettingsSection({
   }
 
   async function handleCreateAccountSave(newAccount: CreateAccountSavePayload) {
-    if (!userId) return
+    if (!userId || creating) return
 
     setCreating(true)
     const { data: profile } = await supabase
@@ -147,7 +147,13 @@ export default function TradingAccountsSettingsSection({
 
     if (error) {
       console.error(error)
-      showPopup({ type: "error", message: "Something went wrong" })
+      showPopup({
+        type: "error",
+        message:
+          error.message === "An account with this name already exists"
+            ? error.message
+            : "Something went wrong",
+      })
       return
     }
 
@@ -163,6 +169,7 @@ export default function TradingAccountsSettingsSection({
   }
 
   async function saveNote(account: TradingAccountListItem) {
+    if (savingNoteId) return
     const noteVal = account.note ?? ""
     setSavingNoteId(account.id)
     const { error } = await updateTradingAccountNote(

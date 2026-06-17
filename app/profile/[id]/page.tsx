@@ -273,15 +273,6 @@ function TradeCard({
       {desc ? (
         <p className="px-1 text-sm leading-relaxed text-white">{desc}</p>
       ) : null}
-      {trade.id && !inDetailModal ? (
-        <Link
-          href={`/trade/${trade.id}`}
-          className="px-1 text-xs font-medium text-blue-300 hover:text-blue-200"
-          onClick={(e) => e.stopPropagation()}
-        >
-          View public trade →
-        </Link>
-      ) : null}
       <TradeCardTimingBlock trade={trade} />
     </>
   )
@@ -520,6 +511,7 @@ function PostCard({
   onDeletePost,
   showInteractions,
   onLike,
+  likeBusy = false,
   onOpenComments,
   showCommentsPanel,
   scrollToCommentsOnMount,
@@ -545,6 +537,7 @@ function PostCard({
   onDeletePost?: () => void
   showInteractions?: boolean
   onLike?: () => void
+  likeBusy?: boolean
   onOpenComments?: () => void
   showCommentsPanel?: boolean
   scrollToCommentsOnMount?: boolean
@@ -600,7 +593,7 @@ function PostCard({
         onKeyDown={(e) => {
           if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault()
-            onCommentSubmit?.()
+            if (!commentSubmitting) onCommentSubmit?.()
           }
         }}
         placeholder="Add a comment..."
@@ -742,11 +735,12 @@ function PostCard({
           <div className="flex items-center gap-4 px-1 text-sm">
             <button
               type="button"
+              disabled={likeBusy}
               onClick={(e) => {
                 e.stopPropagation()
                 onLike?.()
               }}
-              className="flex items-center gap-1 text-gray-300 hover:text-white"
+              className="flex items-center gap-1 text-gray-300 hover:text-white disabled:opacity-50"
             >
               <span>{likeMeta?.liked ? "❤️" : "🤍"}</span>
               <span className="tabular-nums">{likeMeta?.count ?? 0}</span>
@@ -984,6 +978,14 @@ function ProfilePageContent() {
     useState(false)
   const feedDraftSyncRef = useRef<Record<string, string>>({})
   const feedOpenCommentsRef = useRef<Record<string, boolean>>({})
+  const creatingRoomRef = useRef(false)
+  const creatingPostRef = useRef(false)
+  const postingStoryRef = useRef(false)
+  const likeBusyRef = useRef<Set<string>>(new Set())
+  const commentSubmittingRef = useRef<Set<string>>(new Set())
+  const feedDeepLinkLikeBusyRef = useRef(false)
+  const feedDeepLinkCommentSubmittingRef = useRef(false)
+  const [likeBusyByPost, setLikeBusyByPost] = useState<Record<string, boolean>>({})
   const deepLinkHandledRef = useRef<string | null>(null)
 
   /** Profile Stats equity chart: Recharts props tuned below ~sm breakpoint. */
@@ -1051,20 +1053,27 @@ function ProfilePageContent() {
   )
 
   const handlePostStory = useCallback(async () => {
-    if (!pendingStoryFile || !currentUserId || postingStory) return
-    setPostingStory(true)
-
-    const result = await publishStory(supabase, currentUserId, pendingStoryFile)
-    setPostingStory(false)
-
-    if (!result.ok) {
-      showPopup({ type: "error", message: result.message })
+    if (!pendingStoryFile || !currentUserId || postingStoryRef.current || postingStory) {
       return
     }
+    postingStoryRef.current = true
+    setPostingStory(true)
 
-    showPopup({ type: "success", message: "Story uploaded!" })
-    closeStoryCompose()
-    await loadFollowingStories()
+    try {
+      const result = await publishStory(supabase, currentUserId, pendingStoryFile)
+
+      if (!result.ok) {
+        showPopup({ type: "error", message: result.message })
+        return
+      }
+
+      showPopup({ type: "success", message: "Story uploaded!" })
+      closeStoryCompose()
+      await loadFollowingStories()
+    } finally {
+      postingStoryRef.current = false
+      setPostingStory(false)
+    }
   }, [
     pendingStoryFile,
     currentUserId,
@@ -1519,6 +1528,8 @@ function ProfilePageContent() {
   }
 
   async function handleCreateRoom() {
+    if (creatingRoomRef.current || creatingRoom) return
+    creatingRoomRef.current = true
     setCreatingRoom(true)
 
     try {
@@ -1560,6 +1571,7 @@ function ProfilePageContent() {
     } catch (err) {
       console.error(err)
     } finally {
+      creatingRoomRef.current = false
       setCreatingRoom(false)
     }
   }
@@ -1619,6 +1631,7 @@ function ProfilePageContent() {
 
   async function handleCreatePost() {
     if (!currentUserId || !profile || currentUserId !== profile.id) return
+    if (creatingPostRef.current || creatingPost) return
 
     const text = postContent.trim()
     if (!text && !postImage) {
@@ -1626,7 +1639,10 @@ function ProfilePageContent() {
       return
     }
 
+    creatingPostRef.current = true
     setCreatingPost(true)
+
+    try {
     let imageUrl: string | null = null
 
     if (postImage) {
@@ -1643,7 +1659,6 @@ function ProfilePageContent() {
       if (upErr) {
         console.error(upErr)
         showPopup(persistentError("Post Failed", upErr.message))
-        setCreatingPost(false)
         return
       }
 
@@ -1658,8 +1673,6 @@ function ProfilePageContent() {
       content: text || null,
       image_url: imageUrl,
     })
-
-    setCreatingPost(false)
 
     if (error) {
       console.error(error)
@@ -1682,6 +1695,10 @@ function ProfilePageContent() {
     setWallPosts(data || [])
     showPopup(feedbackPresets.postPublished())
     notifyGettingStartedChecklistMaybeCompleted()
+    } finally {
+      creatingPostRef.current = false
+      setCreatingPost(false)
+    }
   }
 
   const posts = wallPosts
@@ -1746,6 +1763,12 @@ function ProfilePageContent() {
   async function handleLike(id: string, type: "post" | "trade") {
     if (!currentUserId || type !== "post") return
     const key = String(id)
+    if (likeBusyRef.current.has(key) || likeBusyByPost[key]) return
+
+    likeBusyRef.current.add(key)
+    setLikeBusyByPost((prev) => ({ ...prev, [key]: true }))
+
+    try {
     const meta = likesByPost[key] || { count: 0, liked: false }
     if (meta.liked) {
       const { error } = await supabase
@@ -1768,6 +1791,10 @@ function ProfilePageContent() {
       ...prev,
       [key]: { count: meta.count + 1, liked: true },
     }))
+    } finally {
+      likeBusyRef.current.delete(key)
+      setLikeBusyByPost((prev) => ({ ...prev, [key]: false }))
+    }
   }
 
   async function submitComment(id: string, type: "post" | "trade") {
@@ -1775,7 +1802,12 @@ function ProfilePageContent() {
     const key = String(id)
     const text = (commentDraft[key] || "").trim()
     if (!text) return
+    if (commentSubmittingRef.current.has(key) || commentSubmitting[key]) return
+
+    commentSubmittingRef.current.add(key)
     setCommentSubmitting((s) => ({ ...s, [key]: true }))
+
+    try {
     const { data, error } = await supabase
       .from("comments")
       .insert({
@@ -1785,10 +1817,13 @@ function ProfilePageContent() {
       })
       .select("*, profiles(username)")
       .single()
-    setCommentSubmitting((s) => ({ ...s, [key]: false }))
     if (error) return console.error(error)
     setCommentsByPost((prev) => ({ ...prev, [key]: [...(prev[key] || []), data] }))
     setCommentDraft((prev) => ({ ...prev, [key]: "" }))
+    } finally {
+      commentSubmittingRef.current.delete(key)
+      setCommentSubmitting((s) => ({ ...s, [key]: false }))
+    }
   }
 
   async function handleDeletePost(postId: string) {
@@ -2158,10 +2193,13 @@ function ProfilePageContent() {
 
   const toggleFeedDeepLinkLike = useCallback(
     async (post: any) => {
-      if (!currentUserId) return
+      if (!currentUserId || feedDeepLinkLikeBusyRef.current) return
       const pid = String(post.id)
       const meta = feedDeepLinkLikeMeta
 
+      feedDeepLinkLikeBusyRef.current = true
+
+      try {
       if (meta.liked) {
         const { error } = await supabase
           .from("likes")
@@ -2181,18 +2219,24 @@ function ProfilePageContent() {
         .insert({ post_id: pid, user_id: currentUserId })
       if (error) return
       setFeedDeepLinkLikeMeta({ count: meta.count + 1, liked: true })
+      } finally {
+        feedDeepLinkLikeBusyRef.current = false
+      }
     },
     [currentUserId, feedDeepLinkLikeMeta]
   )
 
   const submitFeedDeepLinkComment = useCallback(
     async (post: any, text: string) => {
-      if (!currentUserId) return false
+      if (!currentUserId || feedDeepLinkCommentSubmittingRef.current) return false
       const pid = String(post.id)
       const trimmed = (text || "").trim()
       if (!trimmed) return false
 
+      feedDeepLinkCommentSubmittingRef.current = true
       setFeedDeepLinkCommentSubmitting(true)
+
+      try {
       const { data, error } = await supabase
         .from("comments")
         .insert({
@@ -2202,7 +2246,6 @@ function ProfilePageContent() {
         })
         .select(FEED_COMMENT_INSERT_SELECT)
         .single()
-      setFeedDeepLinkCommentSubmitting(false)
 
       if (error) {
         console.error(error)
@@ -2211,6 +2254,10 @@ function ProfilePageContent() {
 
       setFeedDeepLinkComments((prev) => [...prev, data])
       return true
+      } finally {
+        feedDeepLinkCommentSubmittingRef.current = false
+        setFeedDeepLinkCommentSubmitting(false)
+      }
     },
     [currentUserId]
   )
@@ -2924,6 +2971,7 @@ function ProfilePageContent() {
                           onDeletePost={() => void handleDeletePost(key)}
                           showInteractions={true}
                           onLike={() => void handleLike(key, "post")}
+                          likeBusy={!!likeBusyByPost[key]}
                           onOpenComments={() => {
                             setPostDetailFocusComments(true)
                             setSelectedPostDetail(post)
@@ -3485,6 +3533,7 @@ function ProfilePageContent() {
             onDeletePost={() => void handleDeletePost(String(selectedPostDetail.id))}
             showInteractions={true}
             onLike={() => void handleLike(String(selectedPostDetail.id), "post")}
+            likeBusy={!!likeBusyByPost[String(selectedPostDetail.id)]}
             showCommentsPanel
             scrollToCommentsOnMount={postDetailFocusComments}
             likeMeta={likesByPost[String(selectedPostDetail.id)] || { count: 0, liked: false }}

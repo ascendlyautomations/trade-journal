@@ -1,49 +1,61 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { supabase } from "@/lib/supabaseClient"
 import AuthPasswordInput from "@/app/components/ui/AuthPasswordInput"
 
 export default function ResetPasswordPage() {
   const [password, setPassword] = useState("")
   const [message, setMessage] = useState("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const submittingRef = useRef(false)
 
   const updatePassword = async () => {
+    if (submittingRef.current || isSubmitting || !password.trim()) return
+
+    submittingRef.current = true
+    setIsSubmitting(true)
     setMessage("Updating...")
 
-    const { error } = await supabase.auth.updateUser({
-      password,
-    })
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password,
+      })
 
-    if (error) {
-      console.error("Update error:", error)
-      setMessage("Error updating password")
-    } else {
-      setMessage("Password updated successfully")
+      if (error) {
+        console.error("Update error:", error)
+        setMessage("Error updating password")
+      } else {
+        setMessage("Password updated successfully")
+      }
+    } finally {
+      submittingRef.current = false
+      setIsSubmitting(false)
     }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46]">
-      <div className="p-6 rounded-xl bg-black/40 border border-white/10 w-full max-w-md">
-        <h1 className="text-xl mb-4 text-white">Set New Password</h1>
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46]">
+      <div className="w-full max-w-md rounded-xl border border-white/10 bg-black/40 p-6">
+        <h1 className="mb-4 text-xl text-white">Set New Password</h1>
 
         <AuthPasswordInput
           placeholder="New password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="w-full p-2 rounded bg-black/30 border border-white/10"
+          className="w-full rounded border border-white/10 bg-black/30 p-2"
         />
 
         <button
           type="button"
-          onClick={updatePassword}
-          className="mt-3 w-full bg-green-500 hover:bg-green-600 text-white py-2 rounded"
+          onClick={() => void updatePassword()}
+          disabled={isSubmitting || !password.trim()}
+          className="mt-3 w-full rounded bg-green-500 py-2 text-white hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Update Password
+          {isSubmitting ? "Updating…" : "Update Password"}
         </button>
 
-        {message && <p className="text-sm mt-3 text-gray-300">{message}</p>}
+        {message ? <p className="mt-3 text-sm text-gray-300">{message}</p> : null}
       </div>
     </div>
   )

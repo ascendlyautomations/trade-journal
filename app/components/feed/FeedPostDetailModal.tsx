@@ -62,6 +62,8 @@ type FeedPostDetailModalProps = {
 
   likeMeta: FeedLikeMeta
 
+  likeBusy?: boolean
+
   commentSubmitting: boolean
 
   draftSyncRef: MutableRefObject<Record<string, string>>
@@ -89,6 +91,8 @@ export default function FeedPostDetailModal({
   comments,
 
   likeMeta,
+
+  likeBusy = false,
 
   commentSubmitting,
 
@@ -235,6 +239,8 @@ export default function FeedPostDetailModal({
           comments={comments}
 
           likeMeta={likeMeta}
+
+          likeBusy={likeBusy}
 
           onToggleLike={onToggleLike}
 

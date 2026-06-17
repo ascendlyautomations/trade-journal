@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState, type MouseEvent } from "react"
+import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react"
 import { supabase } from "@/lib/supabaseClient"
 import {
   followButtonLabel,
@@ -68,6 +68,7 @@ export default function FollowButton({
     () => followsYouIds?.has(targetUserId) ?? false
   )
   const [busy, setBusy] = useState(false)
+  const busyRef = useRef(false)
 
   useEffect(() => {
     const fromSets = stateFromSets(targetUserId, followingIds, requestedIds)
@@ -103,10 +104,12 @@ export default function FollowButton({
   }, [currentUserId, targetUserId, followingIds, requestedIds, followsYouIds])
 
   const handleUnfollowOrCancel = useCallback(async () => {
-    if (!currentUserId || busy) return
+    if (!currentUserId || busyRef.current || busy) return
 
+    busyRef.current = true
     setBusy(true)
 
+    try {
     const result = await unfollowOrCancelRequest(
       supabase,
       currentUserId,
@@ -116,14 +119,16 @@ export default function FollowButton({
 
     if (!result.ok) {
       console.error("[follow] unfollow/cancel failed", result.message)
-      setBusy(false)
       return
     }
 
     setFollowState(result.state)
     onFollowingChange?.(targetUserId, false)
     onRequestedChange?.(targetUserId, false)
-    setBusy(false)
+    } finally {
+      busyRef.current = false
+      setBusy(false)
+    }
   }, [
     busy,
     currentUserId,
@@ -140,15 +145,17 @@ export default function FollowButton({
 
   async function handlePrimaryClick(e: MouseEvent<HTMLButtonElement>) {
     if (stopPropagation) e.stopPropagation()
-    if (busy || followState === "following") return
+    if (busyRef.current || busy || followState === "following") return
 
     if (followState === "requested") {
       await handleUnfollowOrCancel()
       return
     }
 
+    busyRef.current = true
     setBusy(true)
 
+    try {
     const result = await followOrRequest(supabase, currentUserId, {
       id: targetUserId,
       is_private: targetIsPrivate,
@@ -156,14 +163,16 @@ export default function FollowButton({
 
     if (!result.ok) {
       console.error("[follow] request failed", result.message)
-      setBusy(false)
       return
     }
 
     setFollowState(result.state)
     onFollowingChange?.(targetUserId, result.state === "following")
     onRequestedChange?.(targetUserId, result.state === "requested")
-    setBusy(false)
+    } finally {
+      busyRef.current = false
+      setBusy(false)
+    }
   }
 
   if (followState === "following" && relationshipLabel) {

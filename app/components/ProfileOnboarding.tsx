@@ -103,6 +103,7 @@ export default function ProfileOnboarding({
     initialAvatarUrl
   )
   const [saving, setSaving] = useState(false)
+  const savingRef = useRef(false)
   const [error, setError] = useState<string | null>(null)
   const startedTradingInputRef = useRef<HTMLInputElement>(null)
   const overlayRef = useRef<HTMLDivElement>(null)
@@ -154,6 +155,7 @@ export default function ProfileOnboarding({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (savingRef.current || saving) return
     setError(null)
 
     const u = normalizeProfileUsername(username)
@@ -168,8 +170,10 @@ export default function ProfileOnboarding({
       return
     }
 
+    savingRef.current = true
     setSaving(true)
 
+    try {
     let avatarUrl: string | null = avatarPreview
     if (avatarFile) {
       const uploaded = await uploadAvatarFile(userId, avatarFile)
@@ -191,7 +195,6 @@ export default function ProfileOnboarding({
       .eq("id", userId)
 
     if (upErr) {
-      setSaving(false)
       if (isProfilesUsernameConflict(upErr)) {
         setError("Username already in use")
       } else {
@@ -213,12 +216,15 @@ export default function ProfileOnboarding({
     })
 
     setTimeout(() => {
-      setSaving(false)
       if (!suppressPostSaveRedirect) {
         router.push(profilePath({ username: u, id: userId }))
         router.refresh()
       }
     }, 300)
+    } finally {
+      savingRef.current = false
+      setSaving(false)
+    }
   }
 
   const onboardingFieldClass =

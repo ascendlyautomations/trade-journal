@@ -26,6 +26,7 @@ export default function BugReportModal({
 }: BugReportModalProps) {
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const submittingRef = useRef(false)
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
   const [severity, setSeverity] = useState<BugReportSeverity>("medium")
@@ -81,18 +82,19 @@ export default function BugReportModal({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (busy || success) return
+    if (submittingRef.current || busy || success) return
 
+    submittingRef.current = true
     setBusy(true)
     setError(null)
 
+    try {
     const {
       data: { user },
       error: authError,
     } = await supabase.auth.getUser()
 
     if (authError || !user) {
-      setBusy(false)
       onClose()
       router.push("/login")
       return
@@ -108,14 +110,16 @@ export default function BugReportModal({
     })
 
     if (!result.ok) {
-      setBusy(false)
       setError(result.message)
+      setBusy(false)
       return
     }
 
-    setBusy(true)
     setSuccess(true)
     onSubmitted?.()
+    } finally {
+      submittingRef.current = false
+    }
   }
 
   return (

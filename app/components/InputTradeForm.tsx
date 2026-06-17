@@ -128,6 +128,13 @@ export default function InputTradeForm({
   const [showAccountWarning, setShowAccountWarning] = useState(false)
 
   const [submitting, setSubmitting] = useState(false)
+  const submittingRef = useRef(false)
+  const [creatingAccount, setCreatingAccount] = useState(false)
+  const creatingAccountRef = useRef(false)
+  const [csvImporting, setCsvImporting] = useState(false)
+  const csvImportingRef = useRef(false)
+  const [togglingAccountId, setTogglingAccountId] = useState<string | null>(null)
+  const [savingNoteId, setSavingNoteId] = useState<string | null>(null)
   const [confidence, setConfidence] = useState("")
   const [psychologyNotes, setPsychologyNotes] = useState("")
   const [tradeType, setTradeType] = useState("")
@@ -136,6 +143,11 @@ export default function InputTradeForm({
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const [editingAccount, setEditingAccount] = useState<any | null>(null)
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
+
+  function releaseSubmit() {
+    submittingRef.current = false
+    setSubmitting(false)
+  }
 
   const [inputSettings, setInputSettings] = useState({
     showRR: true,
@@ -579,7 +591,7 @@ export default function InputTradeForm({
   }
 
   async function handleSubmit() {
-    if (submitting) return
+    if (submittingRef.current || submitting) return
 
     if (!selectedAccount) {
       setShowAccountWarning(true)
@@ -607,6 +619,7 @@ export default function InputTradeForm({
 
     const acct = selectedAccount
 
+    submittingRef.current = true
     setSubmitting(true)
 
     const {
@@ -617,7 +630,7 @@ export default function InputTradeForm({
       showPopup(
         persistentError("Sign In Required", "Please log in to save your trade.")
       )
-      setSubmitting(false)
+      releaseSubmit()
       return
     }
 
@@ -642,7 +655,7 @@ export default function InputTradeForm({
       })
       if (tradeLimitReached) {
         showPopup(feedbackPresets.tradeLimitReached())
-        setSubmitting(false)
+        releaseSubmit()
         return
       }
     }
@@ -659,7 +672,7 @@ export default function InputTradeForm({
       if (publicTradeLimitReached) {
         setIsPublic(false)
         showPopup(feedbackPresets.publicTradeLimit())
-        setSubmitting(false)
+        releaseSubmit()
         return
       }
     }
@@ -745,7 +758,7 @@ export default function InputTradeForm({
           showPopup(
             persistentError("Save Failed", handleSupabaseError(lockErr))
           )
-          setSubmitting(false)
+          releaseSubmit()
           return
         }
         const { error: mirrorErr } = await mirrorAccountSettingsLockedAccount(
@@ -816,7 +829,7 @@ export default function InputTradeForm({
           "Could not complete save. Please try again."
         )
       )
-      setSubmitting(false)
+      releaseSubmit()
       return
     }
 
@@ -888,7 +901,7 @@ export default function InputTradeForm({
         showPopup(
         persistentError("Save Failed", handleSupabaseError(error))
       )
-        setSubmitting(false)
+        releaseSubmit()
         return
       }
 
@@ -910,7 +923,7 @@ export default function InputTradeForm({
             })
             if (postLimitReached) {
               showPopup(feedbackPresets.postLimit())
-              setSubmitting(false)
+              releaseSubmit()
               return
             }
           }
@@ -932,7 +945,7 @@ export default function InputTradeForm({
           showPopup(
             persistentError("Post Failed", handleSupabaseError(postErr))
           )
-          setSubmitting(false)
+          releaseSubmit()
           return
         }
       } else {
@@ -949,7 +962,7 @@ export default function InputTradeForm({
       onClose?.()
       showPopup(feedbackPresets.tradeSaveSuccess())
       notifyGettingStartedChecklistMaybeCompleted()
-      setSubmitting(false)
+      releaseSubmit()
       return
     }
 
@@ -1018,7 +1031,7 @@ export default function InputTradeForm({
       showPopup(
         persistentError("Save Failed", handleSupabaseError(error))
       )
-      setSubmitting(false)
+      releaseSubmit()
       return
     }
 
@@ -1033,7 +1046,7 @@ export default function InputTradeForm({
         })
         if (postLimitReached) {
           showPopup(feedbackPresets.postLimit())
-          setSubmitting(false)
+          releaseSubmit()
           return
         }
       }
@@ -1053,7 +1066,7 @@ export default function InputTradeForm({
         showPopup(
           persistentError("Post Failed", handleSupabaseError(postError))
         )
-        setSubmitting(false)
+        releaseSubmit()
         return
       }
 
@@ -1062,7 +1075,7 @@ export default function InputTradeForm({
       resetCreateForm()
       showPopup(feedbackPresets.postPublished())
       notifyGettingStartedChecklistMaybeCompleted()
-      setSubmitting(false)
+      releaseSubmit()
       return
     }
 
@@ -1071,7 +1084,7 @@ export default function InputTradeForm({
     resetCreateForm()
     showPopup(feedbackPresets.tradeSaveSuccess())
     notifyGettingStartedChecklistMaybeCompleted()
-    setSubmitting(false)
+    releaseSubmit()
   }
 
   async function handlePublicToggle() {
@@ -1166,6 +1179,7 @@ export default function InputTradeForm({
   }
 
   async function handleCsvManualImport() {
+    if (csvImportingRef.current || csvImporting) return
     if (!selectedAccount) {
       showPopup(
         feedbackPresets.importFailed(
@@ -1174,6 +1188,9 @@ export default function InputTradeForm({
       )
       return
     }
+
+    csvImportingRef.current = true
+    setCsvImporting(true)
 
     try {
       const {
@@ -1269,10 +1286,15 @@ export default function InputTradeForm({
       showPopup(
         persistentError("Import Failed", handleSupabaseError(err))
       )
+    } finally {
+      csvImportingRef.current = false
+      setCsvImporting(false)
     }
   }
 
   async function toggleAccount(account: { id: string; is_active?: boolean }) {
+    if (togglingAccountId) return
+    setTogglingAccountId(account.id)
     const currentlyActive = account.is_active !== false
     const nextActive = !currentlyActive
 
@@ -1286,6 +1308,7 @@ export default function InputTradeForm({
       showPopup(
         persistentError("Save Failed", handleSupabaseError(error))
       )
+      setTogglingAccountId(null)
       return
     }
 
@@ -1304,9 +1327,16 @@ export default function InputTradeForm({
         setSelectedAccount({ ...selectedAccount, is_active: true })
       }
     }
+    setTogglingAccountId(null)
   }
 
   async function handleCreateAccountSave(newAccount: CreateAccountSavePayload) {
+    if (creatingAccountRef.current || creatingAccount) return
+
+    creatingAccountRef.current = true
+    setCreatingAccount(true)
+
+    try {
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -1398,6 +1428,10 @@ export default function InputTradeForm({
     })
 
     setShowCreateModal(false)
+    } finally {
+      creatingAccountRef.current = false
+      setCreatingAccount(false)
+    }
   }
 
   const entryDateTime = entryTime ? buildDateTime(entryDate, entryTime) : null
@@ -1606,14 +1640,16 @@ export default function InputTradeForm({
             <button
               type="button"
               onClick={() => void handleCsvManualImport()}
-              disabled={!selectedAccount}
-              className={`w-full px-4 py-2 rounded text-sm ${
+              disabled={!selectedAccount || csvImporting}
+              className={`w-full px-4 py-2 rounded text-sm disabled:cursor-not-allowed disabled:opacity-50 ${
                 selectedAccount
                   ? "bg-green-500/20 text-green-400"
                   : "bg-gray-700 text-gray-400 cursor-not-allowed"
               }`}
             >
-              Import {parsedTrades.length}
+              {csvImporting
+                ? "Importing…"
+                : `Import ${parsedTrades.length}`}
             </button>
           ) : null}
         </div>
@@ -1681,14 +1717,16 @@ export default function InputTradeForm({
               <button
                 type="button"
                 onClick={() => void handleCsvManualImport()}
-                disabled={!selectedAccount}
-                className={`ml-2 px-4 py-2 rounded ${
+                disabled={!selectedAccount || csvImporting}
+                className={`ml-2 px-4 py-2 rounded disabled:cursor-not-allowed disabled:opacity-50 ${
                   selectedAccount
                     ? "bg-green-500/20 text-green-400"
                     : "bg-gray-700 text-gray-400 cursor-not-allowed"
                 }`}
               >
-                Import {parsedTrades.length}
+                {csvImporting
+                  ? "Importing…"
+                  : `Import ${parsedTrades.length}`}
               </button>
             ) : null}
 
@@ -2367,8 +2405,11 @@ export default function InputTradeForm({
   }
 
   async function saveNote(account: { id: string; note?: string }) {
+    if (savingNoteId) return
     const noteVal = account.note ?? ""
+    setSavingNoteId(String(account.id))
     const ok = await updateNote(String(account.id), noteVal)
+    setSavingNoteId(null)
     if (!ok) return
     setAccounts((prev) =>
       prev.map((a) =>
@@ -2418,8 +2459,9 @@ export default function InputTradeForm({
                       <div className="flex shrink-0 items-center gap-3">
                         <button
                           type="button"
+                          disabled={togglingAccountId === String(account.id)}
                           onClick={() => void toggleAccount(account)}
-                          className={`rounded px-3 py-1 text-xs font-medium ${
+                          className={`rounded px-3 py-1 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50 ${
                             account.is_active !== false
                               ? "bg-green-500/20 text-green-300"
                               : "bg-red-500/20 text-red-300"
@@ -2470,15 +2512,23 @@ export default function InputTradeForm({
                         <div className="flex flex-wrap items-center gap-3">
                           <button
                             type="button"
+                            disabled={
+                              savingNoteId === String(editingAccount.id)
+                            }
                             onClick={() => void saveNote(editingAccount)}
-                            className="text-sm font-medium text-blue-400 hover:text-blue-300"
+                            className="text-sm font-medium text-blue-400 hover:text-blue-300 disabled:cursor-not-allowed disabled:opacity-50"
                           >
-                            Save
+                            {savingNoteId === String(editingAccount.id)
+                              ? "Saving…"
+                              : "Save"}
                           </button>
                           <button
                             type="button"
+                            disabled={
+                              savingNoteId === String(editingAccount.id)
+                            }
                             onClick={() => setEditingAccount(null)}
-                            className="text-sm text-gray-400 hover:text-gray-300"
+                            className="text-sm text-gray-400 hover:text-gray-300 disabled:cursor-not-allowed disabled:opacity-50"
                           >
                             Cancel
                           </button>

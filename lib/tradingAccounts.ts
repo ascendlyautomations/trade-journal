@@ -157,6 +157,12 @@ export async function insertTradingAccount(
     .single()
 
   if (error) {
+    if (error.code === "23505") {
+      return {
+        account: null,
+        error: new Error("An account with this name already exists"),
+      }
+    }
     return { account: null, error: new Error(error.message) }
   }
 

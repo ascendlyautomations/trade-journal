@@ -50,6 +50,7 @@ function FeedCommentsSection({
 
   const handleSubmitComment = useCallback(
     async (p: any) => {
+      if (commentSubmitting) return
       const text = commentDraftRef.current.trim()
       if (!text) return
       const ok = await onSubmitComment(p, text)
@@ -60,7 +61,7 @@ function FeedCommentsSection({
         }
       }
     },
-    [draftSyncRef, onSubmitComment, pid]
+    [commentSubmitting, draftSyncRef, onSubmitComment, pid]
   )
 
   const stopPropagation = useCallback((e: React.SyntheticEvent) => {

@@ -11,6 +11,7 @@ type FeedPostListProps = {
   posts: any[]
   user: any
   likesByPost: Record<string, FeedLikeMeta>
+  likeBusyByPost?: Record<string, boolean>
   commentsByPost: Record<string, any[]>
   commentSubmitting: Record<string, boolean>
   draftSyncRef: MutableRefObject<Record<string, string>>
@@ -25,6 +26,7 @@ function FeedPostList({
   posts,
   user,
   likesByPost,
+  likeBusyByPost = {},
   commentsByPost,
   commentSubmitting,
   draftSyncRef,
@@ -44,6 +46,7 @@ function FeedPostList({
             post={post}
             user={user}
             likeMeta={likesByPost[pid] ?? EMPTY_LIKE_META}
+            likeBusy={!!likeBusyByPost[pid]}
             comments={commentsByPost[pid] ?? EMPTY_COMMENTS}
             commentSubmitting={!!commentSubmitting[pid]}
             draftSyncRef={draftSyncRef}

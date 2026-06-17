@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 
 export type GettingStartedChecklistSignals = {
   onboardingCompleted: boolean
+  hasSeenGettingStartedIntro: boolean
   tradeCount: number
   profilePostCount: number
   followCount: number
@@ -26,7 +27,7 @@ export async function fetchGettingStartedChecklistSignals(
   ] = await Promise.all([
     supabase
       .from("profiles")
-      .select("onboarding_completed")
+      .select("onboarding_completed, has_seen_getting_started_intro")
       .eq("id", userId)
       .maybeSingle(),
     supabase
@@ -61,6 +62,14 @@ export async function fetchGettingStartedChecklistSignals(
       .maybeSingle(),
   ])
 
+  if (profileRes.error) {
+    console.error(
+      "fetchGettingStartedChecklistSignals profile:",
+      profileRes.error.message,
+      profileRes.error.code
+    )
+  }
+
   const hasEverJoinedOtherRoom = (roomMembersRes.data ?? []).some(
     (row: {
       rooms?:
@@ -78,6 +87,8 @@ export async function fetchGettingStartedChecklistSignals(
 
   return {
     onboardingCompleted: profileRes.data?.onboarding_completed === true,
+    hasSeenGettingStartedIntro:
+      profileRes.data?.has_seen_getting_started_intro === true,
     tradeCount: tradesRes.count ?? 0,
     profilePostCount: profilePostsRes.count ?? 0,
     followCount: followRes.count ?? 0,

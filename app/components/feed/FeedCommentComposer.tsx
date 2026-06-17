@@ -37,10 +37,10 @@ function FeedCommentComposer({
       e.stopPropagation()
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault()
-        onSubmitComment(post)
+        if (!commentSubmitting) onSubmitComment(post)
       }
     },
-    [onSubmitComment, post]
+    [commentSubmitting, onSubmitComment, post]
   )
 
   const handleSubmitClick = useCallback(

@@ -1,4 +1,5 @@
 import type { FeedbackPopupInput } from "@/app/components/ui/feedback-popup-types"
+import { GETTING_STARTED_INTRO_POPUP_TITLE } from "@/lib/gettingStartedIntro"
 import {
   FREE_PLAN_TRADE_LIMIT_REACHED,
   freePlanCsvImportLimitExceededMessage,
@@ -129,6 +130,15 @@ export const feedbackPresets = {
       "Post Published",
       "Your post is now visible on your profile and in the community feed."
     ),
+
+  gettingStartedIntro: (): FeedbackPopupInput => ({
+    type: "info",
+    title: GETTING_STARTED_INTRO_POPUP_TITLE,
+    message:
+      "Your dashboard includes a Getting Started checklist to help you set up TradeTraxs.\n\nComplete tasks like logging trades, following traders, and joining rooms — progress is saved to your account.",
+    persist: true,
+    dismissLabel: "Got it",
+  }),
 
   gettingStartedProgress: (
     completedCount: number,

@@ -13,6 +13,7 @@ type FeedPostOverlaysProps = {
   user: any
   selectedPostComments: any[]
   selectedPostLikeMeta: FeedLikeMeta
+  selectedPostLikeBusy?: boolean
   selectedPostCommentSubmitting: boolean
   draftSyncRef: MutableRefObject<Record<string, string>>
   openCommentsRef: MutableRefObject<Record<string, boolean>>
@@ -31,6 +32,7 @@ function FeedPostOverlays({
   user,
   selectedPostComments,
   selectedPostLikeMeta,
+  selectedPostLikeBusy = false,
   selectedPostCommentSubmitting,
   draftSyncRef,
   openCommentsRef,
@@ -49,6 +51,7 @@ function FeedPostOverlays({
           user={user}
           comments={selectedPostComments}
           likeMeta={selectedPostLikeMeta}
+          likeBusy={selectedPostLikeBusy}
           commentSubmitting={selectedPostCommentSubmitting}
           draftSyncRef={draftSyncRef}
           openCommentsRef={openCommentsRef}

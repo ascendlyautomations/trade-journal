@@ -9,6 +9,7 @@ type FeedPostActionsProps = {
   user: any
   comments: any[]
   likeMeta: FeedLikeMeta
+  likeBusy?: boolean
   onToggleLike: (post: any) => void
   onOpenComments: () => void
   onSharePost: (post: any) => void
@@ -19,6 +20,7 @@ function FeedPostActions({
   user,
   comments,
   likeMeta,
+  likeBusy = false,
   onToggleLike,
   onOpenComments,
   onSharePost,
@@ -31,6 +33,7 @@ function FeedPostActions({
           user={user}
           comments={comments}
           likeMeta={likeMeta}
+          likeBusy={likeBusy}
           onToggleLike={onToggleLike}
           onOpenComments={(_postId) => onOpenComments()}
           onSharePost={onSharePost}

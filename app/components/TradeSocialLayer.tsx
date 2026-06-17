@@ -35,6 +35,8 @@ type TradeSocialContextValue = {
   scrollToCommentsOnMount: boolean
   newComment: string
   setNewComment: (value: string) => void
+  likeBusy: boolean
+  commentSubmitting: boolean
   handleLike: () => Promise<void>
   handleComment: () => Promise<void>
 }
@@ -79,6 +81,10 @@ export function TradeSocialProvider({
   const [comments, setComments] = useState<any[]>([])
   const [showComments, setShowComments] = useState(false)
   const [newComment, setNewComment] = useState("")
+  const [likeBusy, setLikeBusy] = useState(false)
+  const likeBusyRef = useRef(false)
+  const [commentSubmitting, setCommentSubmitting] = useState(false)
+  const commentSubmittingRef = useRef(false)
 
   const resolvedId = tradeId != null ? String(tradeId).trim() : ""
 
@@ -196,8 +202,12 @@ export function TradeSocialProvider({
   }, [resolvedId, currentUserId])
 
   const handleLike = useCallback(async () => {
-    if (!resolvedId || !currentUserId) return
+    if (!resolvedId || !currentUserId || likeBusyRef.current || likeBusy) return
 
+    likeBusyRef.current = true
+    setLikeBusy(true)
+
+    try {
     const { data: existing } = await supabase
       .from("trade_likes")
       .select("id")
@@ -256,11 +266,27 @@ export function TradeSocialProvider({
         }
       }
     }
+    } finally {
+      likeBusyRef.current = false
+      setLikeBusy(false)
+    }
   }, [resolvedId, currentUserId, tradeOwnerUserId, suppressNotifications])
 
   const handleComment = useCallback(async () => {
-    if (!resolvedId || !currentUserId || !newComment.trim()) return
+    if (
+      !resolvedId ||
+      !currentUserId ||
+      !newComment.trim() ||
+      commentSubmittingRef.current ||
+      commentSubmitting
+    ) {
+      return
+    }
 
+    commentSubmittingRef.current = true
+    setCommentSubmitting(true)
+
+    try {
     const userIsPro = await isUserPro(supabase as any, currentUserId)
     if (!userIsPro) {
       const limitReached = await reachedMessagesCommentsLimit(
@@ -323,10 +349,15 @@ export function TradeSocialProvider({
         }
       }
     }
+    } finally {
+      commentSubmittingRef.current = false
+      setCommentSubmitting(false)
+    }
   }, [
     resolvedId,
     currentUserId,
     newComment,
+    commentSubmitting,
     tradeOwnerUserId,
     suppressNotifications,
     showPopup,
@@ -348,6 +379,8 @@ export function TradeSocialProvider({
       scrollToCommentsOnMount,
       newComment,
       setNewComment,
+      likeBusy,
+      commentSubmitting,
       handleLike,
       handleComment,
     }
@@ -363,6 +396,8 @@ export function TradeSocialProvider({
     onRequestComments,
     scrollToCommentsOnMount,
     newComment,
+    likeBusy,
+    commentSubmitting,
     handleLike,
     handleComment,
   ])
@@ -394,6 +429,7 @@ export function TradeSocialEngagementBar({
     setShowComments,
     handleLike,
     currentUserId,
+    likeBusy,
   } = useTradeSocial()
 
   const handleCommentClick = useCallback(() => {
@@ -425,7 +461,7 @@ export function TradeSocialEngagementBar({
     <div className={`flex items-center gap-4 text-sm ${className}`}>
       <button
         type="button"
-        disabled={!currentUserId}
+        disabled={!currentUserId || likeBusy}
         onClick={(e) => {
           e.stopPropagation()
           void handleLike()
@@ -471,6 +507,7 @@ export function TradeSocialCommentsSection({
     setNewComment,
     handleComment,
     currentUserId,
+    commentSubmitting,
   } = useTradeSocial()
 
   const sectionRef = useRef<HTMLDivElement>(null)
@@ -565,7 +602,7 @@ export function TradeSocialCommentsSection({
 
           <button
             type="button"
-            disabled={!newComment.trim()}
+            disabled={!newComment.trim() || commentSubmitting}
             onClick={(e) => {
               e.stopPropagation()
               void handleComment()

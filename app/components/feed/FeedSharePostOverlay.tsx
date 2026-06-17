@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { supabase } from "@/lib/supabaseClient"
 import { fetchShareConversations } from "@/lib/shareToConversations"
 import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
@@ -26,6 +26,8 @@ export default function FeedSharePostOverlay({
   const [shareConversations, setShareConversations] = useState<any[]>([])
   const [selectedConversations, setSelectedConversations] = useState<string[]>([])
   const [shareLoading, setShareLoading] = useState(false)
+  const [sending, setSending] = useState(false)
+  const sendingRef = useRef(false)
 
   const sharePostImageSrc = useMemo(
     () => postImageSrc(post.image_url),
@@ -63,7 +65,12 @@ export default function FeedSharePostOverlay({
 
   const handleSendPost = useCallback(async () => {
     if (selectedConversations.length === 0) return
+    if (sendingRef.current || sending) return
 
+    sendingRef.current = true
+    setSending(true)
+
+    try {
     const {
       data: { user: authUser },
     } = await supabase.auth.getUser()
@@ -110,7 +117,11 @@ export default function FeedSharePostOverlay({
     }
 
     onClose()
-  }, [onClose, post.id, selectedConversations, shareMessage, showPopup])
+    } finally {
+      sendingRef.current = false
+      setSending(false)
+    }
+  }, [onClose, post.id, selectedConversations, shareMessage, showPopup, sending])
 
   const stopPropagation = useCallback((e: React.MouseEvent) => {
     e.stopPropagation()
@@ -177,10 +188,10 @@ export default function FeedSharePostOverlay({
         <button
           type="button"
           onClick={() => void handleSendPost()}
-          disabled={selectedConversations.length === 0}
-          className="w-full mt-3 bg-blue-600 hover:bg-blue-700 p-2 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+          disabled={selectedConversations.length === 0 || sending}
+          className="mt-3 w-full rounded bg-blue-600 p-2 hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Send
+          {sending ? "Sending…" : "Send"}
         </button>
       </div>
     </div>

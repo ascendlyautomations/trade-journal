@@ -2,7 +2,7 @@
 
 import Navbar from "../components/Navbar"
 import AffiliateApplyModal from "../components/AffiliateApplyModal"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "../../lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
@@ -142,6 +142,7 @@ export default function SettingsPage() {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [savingProfile, setSavingProfile] = useState(false)
+  const savingProfileRef = useRef(false)
   const [savingPassword, setSavingPassword] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -324,14 +325,17 @@ export default function SettingsPage() {
   }
 
   async function saveProfileTab() {
-    if (!user) return
+    if (!user || savingProfileRef.current || savingProfile) return
 
     if (invalidStartedTradingDate) {
       showPopup(feedbackPresets.invalidStartedTradingDate())
       return
     }
 
+    savingProfileRef.current = true
     setSavingProfile(true)
+
+    try {
 
     let avatarUrl = avatarPreview
     if (avatarFile) {
@@ -342,7 +346,6 @@ export default function SettingsPage() {
     const cleanUsername = normalizeProfileUsername(username)
     const emptyUsernameError = validateProfileUsernameNotEmpty(cleanUsername)
     if (emptyUsernameError) {
-      setSavingProfile(false)
       showPopup({ type: "error", message: emptyUsernameError })
       return
     }
@@ -357,7 +360,6 @@ export default function SettingsPage() {
     const changeCount = Number(profile?.username_change_count ?? 0)
 
     if (usernameChanged && !canChangeProfileUsername(changeCount)) {
-      setSavingProfile(false)
       showPopup({
         type: "error",
         message: "Maximum username changes reached.",
@@ -374,13 +376,11 @@ export default function SettingsPage() {
         .maybeSingle()
 
       if (usernameLookupErr) {
-        setSavingProfile(false)
         showPopup({ type: "error", message: "Something went wrong" })
         return
       }
 
       if (existingUser) {
-        setSavingProfile(false)
         showPopup({ type: "error", message: "Username already in use" })
         return
       }
@@ -409,8 +409,6 @@ export default function SettingsPage() {
       .from("profiles")
       .update(updatePayload)
       .eq("id", user.id)
-
-    setSavingProfile(false)
 
     if (error) {
       if (error.code === "23505" && isProfilesUsernameConflict(error)) {
@@ -455,6 +453,10 @@ export default function SettingsPage() {
     )
     setAvatarFile(null)
     showPopup(feedbackPresets.profileSaveSuccess())
+    } finally {
+      savingProfileRef.current = false
+      setSavingProfile(false)
+    }
   }
 
   async function updatePassword() {

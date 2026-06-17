@@ -42,6 +42,12 @@ export async function submitFeatureRequest(
   })
 
   if (insertError) {
+    if (insertError.code === "23505") {
+      return {
+        ok: false,
+        message: "You already submitted a feature request with this title.",
+      }
+    }
     return { ok: false, message: insertError.message }
   }
 

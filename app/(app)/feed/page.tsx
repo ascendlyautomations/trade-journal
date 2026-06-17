@@ -106,6 +106,10 @@ function FeedPageContent() {
   likesByPostRef.current = likesByPost
   const draftSyncRef = useRef<Record<string, string>>({})
   const openCommentsRef = useRef<Record<string, boolean>>({})
+  const likeBusyRef = useRef<Set<string>>(new Set())
+  const commentSubmittingRef = useRef<Set<string>>(new Set())
+  const postingStoryRef = useRef(false)
+  const [likeBusyByPost, setLikeBusyByPost] = useState<Record<string, boolean>>({})
 
   const currentStories = useMemo(
     () =>
@@ -294,20 +298,27 @@ function FeedPageContent() {
   }, [user, mode, loadFollowingStories])
 
   const handlePostStory = useCallback(async () => {
-    if (!pendingStoryFile || !user?.id || postingStory) return
-    setPostingStory(true)
-
-    const result = await publishStory(supabase, user.id, pendingStoryFile)
-    setPostingStory(false)
-
-    if (!result.ok) {
-      showPopup({ type: "error", message: result.message })
+    if (!pendingStoryFile || !user?.id || postingStoryRef.current || postingStory) {
       return
     }
+    postingStoryRef.current = true
+    setPostingStory(true)
 
-    showPopup({ type: "success", message: "Story uploaded!" })
-    closeStoryCompose()
-    await loadFollowingStories()
+    try {
+      const result = await publishStory(supabase, user.id, pendingStoryFile)
+
+      if (!result.ok) {
+        showPopup({ type: "error", message: result.message })
+        return
+      }
+
+      showPopup({ type: "success", message: "Story uploaded!" })
+      closeStoryCompose()
+      await loadFollowingStories()
+    } finally {
+      postingStoryRef.current = false
+      setPostingStory(false)
+    }
   }, [
     pendingStoryFile,
     user?.id,
@@ -696,6 +707,12 @@ function FeedPageContent() {
       if (!user) return
 
       const pid = String(post.id)
+      if (likeBusyRef.current.has(pid)) return
+
+      likeBusyRef.current.add(pid)
+      setLikeBusyByPost((prev) => ({ ...prev, [pid]: true }))
+
+      try {
       const meta = likesByPostRef.current[pid] ?? EMPTY_LIKE_META
 
       if (meta.liked) {
@@ -752,6 +769,10 @@ function FeedPageContent() {
           }
         }
       }
+      } finally {
+        likeBusyRef.current.delete(pid)
+        setLikeBusyByPost((prev) => ({ ...prev, [pid]: false }))
+      }
     },
     [user]
   )
@@ -763,7 +784,12 @@ function FeedPageContent() {
       const pid = String(post.id)
       const trimmed = (text || "").trim()
       if (!trimmed) return false
+      if (commentSubmittingRef.current.has(pid)) return false
 
+      commentSubmittingRef.current.add(pid)
+      setCommentSubmitting((s) => ({ ...s, [pid]: true }))
+
+      try {
       const userIsPro = await isUserPro(supabase as any, user.id)
       if (!userIsPro) {
         const limitReached = await reachedMessagesCommentsLimit(
@@ -777,8 +803,6 @@ function FeedPageContent() {
         }
       }
 
-      setCommentSubmitting((s) => ({ ...s, [pid]: true }))
-
       const { data: newRow, error } = await supabase
         .from("comments")
         .insert({
@@ -788,8 +812,6 @@ function FeedPageContent() {
         })
         .select(FEED_COMMENT_INSERT_SELECT)
         .single()
-
-      setCommentSubmitting((s) => ({ ...s, [pid]: false }))
 
       if (error) {
         console.error("Comment insert error:", error)
@@ -830,6 +852,10 @@ function FeedPageContent() {
       }
 
       return true
+      } finally {
+        commentSubmittingRef.current.delete(pid)
+        setCommentSubmitting((s) => ({ ...s, [pid]: false }))
+      }
     },
     [user, showPopup]
   )
@@ -920,6 +946,7 @@ function FeedPageContent() {
               posts={uniquePosts}
               user={user}
               likesByPost={likesByPost}
+              likeBusyByPost={likeBusyByPost}
               commentsByPost={commentsByPost}
               commentSubmitting={commentSubmitting}
               draftSyncRef={draftSyncRef}
@@ -968,6 +995,9 @@ function FeedPageContent() {
           user={user}
           selectedPostComments={selectedPostComments}
           selectedPostLikeMeta={selectedPostLikeMeta}
+          selectedPostLikeBusy={
+            selectedPostId ? !!likeBusyByPost[selectedPostId] : false
+          }
           selectedPostCommentSubmitting={selectedPostCommentSubmitting}
           draftSyncRef={draftSyncRef}
           openCommentsRef={openCommentsRef}

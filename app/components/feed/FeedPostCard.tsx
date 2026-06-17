@@ -24,6 +24,7 @@ export type FeedPostCardProps = {
   post: any
   user: any
   likeMeta?: FeedLikeMeta
+  likeBusy?: boolean
   comments?: any[]
   commentSubmitting: boolean
   draftSyncRef?: MutableRefObject<Record<string, string>>
@@ -40,6 +41,7 @@ function FeedPostCard({
   post,
   user,
   likeMeta = EMPTY_LIKE_META,
+  likeBusy = false,
   comments = EMPTY_COMMENTS,
   commentSubmitting: _commentSubmitting,
   draftSyncRef: _draftSyncRef,
@@ -122,6 +124,7 @@ function FeedPostCard({
         user={user}
         comments={comments}
         likeMeta={likeMeta}
+        likeBusy={likeBusy}
         onToggleLike={onToggleLike}
         onOpenComments={handleOpenComments}
         onSharePost={onSharePost}

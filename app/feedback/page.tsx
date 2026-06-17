@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import Navbar from "../components/Navbar"
 import { supabase } from "../../lib/supabaseClient"
@@ -12,24 +12,26 @@ export default function FeedbackPage() {
   const [message, setMessage] = useState("")
   const [image, setImage] = useState<File | null>(null)
   const [loading, setLoading] = useState(false)
+  const submittingRef = useRef(false)
   const [success, setSuccess] = useState("")
   const [error, setError] = useState("")
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!message.trim()) return
+    if (!message.trim() || submittingRef.current || loading) return
 
+    submittingRef.current = true
     setLoading(true)
     setSuccess("")
     setError("")
 
+    try {
     const {
       data: { user },
       error: authError,
     } = await supabase.auth.getUser()
 
     if (authError || !user) {
-      setLoading(false)
       router.push("/login")
       return
     }
@@ -47,7 +49,6 @@ export default function FeedbackPage() {
 
       if (uploadError) {
         setError(uploadError.message)
-        setLoading(false)
         return
       }
 
@@ -68,7 +69,6 @@ export default function FeedbackPage() {
 
     if (insertError) {
       setError(insertError.message)
-      setLoading(false)
       return
     }
 
@@ -76,7 +76,10 @@ export default function FeedbackPage() {
     setMessage("")
     setImage(null)
     setSuccess("Feedback submitted. Thank you!")
-    setLoading(false)
+    } finally {
+      submittingRef.current = false
+      setLoading(false)
+    }
   }
 
   return (

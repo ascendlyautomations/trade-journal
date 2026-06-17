@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import Navbar from "@/app/components/Navbar"
 import BugReportModal from "@/app/components/BugReportModal"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
@@ -42,6 +42,7 @@ export default function BetaHubPage() {
   const [featureTitle, setFeatureTitle] = useState("")
   const [featureDescription, setFeatureDescription] = useState("")
   const [featureBusy, setFeatureBusy] = useState(false)
+  const featureSubmittingRef = useRef(false)
 
   useEffect(() => {
     let cancelled = false
@@ -79,14 +80,16 @@ export default function BetaHubPage() {
 
   async function handleFeatureSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!userId || featureBusy) return
+    if (!userId || featureSubmittingRef.current || featureBusy) return
 
+    featureSubmittingRef.current = true
     setFeatureBusy(true)
+
+    try {
     const result = await submitFeatureRequest(userId, {
       title: featureTitle,
       description: featureDescription,
     })
-    setFeatureBusy(false)
 
     if (!result.ok) {
       showPopup({ type: "error", message: result.message })
@@ -96,6 +99,10 @@ export default function BetaHubPage() {
     setFeatureTitle("")
     setFeatureDescription("")
     showPopup({ type: "success", message: "Feature request submitted. Thank you!" })
+    } finally {
+      featureSubmittingRef.current = false
+      setFeatureBusy(false)
+    }
   }
 
   function joinBetaDiscussion() {

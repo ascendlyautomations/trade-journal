@@ -4,6 +4,7 @@ import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 import { mirrorBillingAccountsStripeCustomerId } from "@/lib/profileSplitMirrorWrites"
 import { normalizeProfileUsername } from "@/lib/profileUsername"
+import { isProActive } from "@/lib/subscription"
 
 export const runtime = "nodejs"
 
@@ -79,7 +80,7 @@ export async function POST(req: Request) {
 
     const { data: initialProfile, error: profileError } = await supabase
       .from("profiles")
-      .select("id, stripe_customer_id")
+      .select("id, stripe_customer_id, is_pro, subscription_status")
       .eq("id", user.id)
       .maybeSingle()
 
@@ -92,6 +93,13 @@ export async function POST(req: Request) {
     }
 
     let profile = initialProfile
+
+    if (profile && isProActive(profile)) {
+      return Response.json(
+        { error: "You already have an active subscription." },
+        { status: 409 }
+      )
+    }
 
     if (!profile) {
       const rawUsername =

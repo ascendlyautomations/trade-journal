@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { supabase } from "@/lib/supabaseClient"
 import {
   isProfilesUsernameConflict,
@@ -37,6 +37,8 @@ export default function LoginPage() {
   const [resetEmail, setResetEmail] = useState("")
   const [resetMessage, setResetMessage] = useState("")
   const [loadingReset, setLoadingReset] = useState(false)
+  const [googleLoading, setGoogleLoading] = useState(false)
+  const checkoutInFlightRef = useRef(false)
   const [isBetaSignup, setIsBetaSignup] = useState(false)
   const { showPopup, feedbackModalProps } = useFeedbackPopup({ autoDismissMs: 3000 })
 
@@ -56,6 +58,10 @@ export default function LoginPage() {
   }
 
   async function startCheckoutAfterAuth(userId: string) {
+    if (checkoutInFlightRef.current) return
+    checkoutInFlightRef.current = true
+
+    try {
     const {
       data: { session },
     } = await supabase.auth.getSession()
@@ -90,6 +96,9 @@ export default function LoginPage() {
     }
 
     window.location.href = data.url
+    } finally {
+      checkoutInFlightRef.current = false
+    }
   }
 
   useEffect(() => {
@@ -161,6 +170,7 @@ export default function LoginPage() {
   async function handleSignUp(e: React.MouseEvent<HTMLButtonElement>) {
     console.log("Signup clicked")
     e.preventDefault()
+    if (loading) return
     setLoading(true)
 
     try {
@@ -304,6 +314,7 @@ export default function LoginPage() {
 
   const handleLogin = async () => {
     console.log("Login clicked")
+    if (loading) return
     setLoading(true)
 
     const { error } = await supabase.auth.signInWithPassword({
@@ -346,6 +357,10 @@ export default function LoginPage() {
   }
 
   const handleGoogleLogin = async () => {
+    if (googleLoading || loading) return
+    setGoogleLoading(true)
+
+    try {
     let redirectPath = "/dashboard"
     if (shouldStartCheckout()) {
       redirectPath = "/login?next=checkout"
@@ -359,10 +374,13 @@ export default function LoginPage() {
         redirectTo: `${location.origin}${redirectPath}`,
       },
     })
+    } finally {
+      setGoogleLoading(false)
+    }
   }
 
   const handleReset = async () => {
-    if (!resetEmail) return
+    if (!resetEmail || loadingReset) return
 
     setLoadingReset(true)
     const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
@@ -496,9 +514,10 @@ export default function LoginPage() {
         <button
           type="button"
           onClick={handleGoogleLogin}
-          className="w-full bg-white text-black py-3 rounded-xl mb-4 font-medium hover:scale-105 transition"
+          disabled={googleLoading || loading}
+          className="mb-4 w-full rounded-xl bg-white py-3 font-medium text-black transition hover:scale-105 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Continue with Google
+          {googleLoading ? "Redirecting…" : "Continue with Google"}
         </button>
 
         <div className="text-center text-gray-400 text-sm mb-4">or</div>

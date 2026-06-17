@@ -15,6 +15,7 @@ type PostInteractionsBaseProps = {
   user: any
   comments: any[]
   likeMeta: LikeMeta
+  likeBusy?: boolean
   commentsOpen?: boolean
   commentValue?: string
   commentSubmitting?: boolean
@@ -40,6 +41,7 @@ export function PostInteractionsEngagement({
   user,
   comments,
   likeMeta,
+  likeBusy = false,
   onToggleLike,
   onOpenComments,
   onSharePost,
@@ -56,7 +58,7 @@ export function PostInteractionsEngagement({
             if (stopPropagation) e.stopPropagation()
             onToggleLike(post)
           }}
-          disabled={!user}
+          disabled={!user || likeBusy}
           className="flex items-center justify-center w-9 h-9 rounded-lg bg-white/5 hover:bg-white/10 transition text-sm text-gray-300 hover:text-white disabled:opacity-50"
           aria-label={likeMeta.liked ? "Unlike" : "Like"}
         >
@@ -185,7 +187,7 @@ export function PostInteractionsComments({
               if (stopPropagation) e.stopPropagation()
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault()
-                onSubmitComment(post)
+                if (!commentSubmitting) onSubmitComment(post)
               }
             }}
             className="flex-1 min-w-0 p-2 bg-[#1e293b] text-white rounded-lg border border-gray-600 text-sm placeholder:text-gray-500"

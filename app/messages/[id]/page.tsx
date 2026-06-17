@@ -524,6 +524,8 @@ export default function DMPage() {
   const [participants, setParticipants] = useState<any[]>([])
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null)
   const [isTyping, setIsTyping] = useState(false)
+  const [sendingMessage, setSendingMessage] = useState(false)
+  const sendingMessageRef = useRef(false)
   const [typingUsers, setTypingUsers] = useState<string[]>([])
   const [showGroupSettings, setShowGroupSettings] = useState(false)
   const [groupName, setGroupName] = useState("")
@@ -1068,9 +1070,14 @@ export default function DMPage() {
   }
 
   async function sendMessage() {
+    if (sendingMessageRef.current || sendingMessage) return
     if (!user || pageAccess !== "allowed" || !activeConversationId) return
     if (!input.trim() && !selectedFile) return
 
+    sendingMessageRef.current = true
+    setSendingMessage(true)
+
+    try {
     const userIsPro = await isUserPro(supabase as any, user.id)
     if (!userIsPro) {
       const limitReached = await reachedMessagesCommentsLimit(
@@ -1148,9 +1155,14 @@ export default function DMPage() {
     setPreviewUrl(null)
     if (fileRef.current) fileRef.current.value = ""
     setIsTyping(false)
+    } finally {
+      sendingMessageRef.current = false
+      setSendingMessage(false)
+    }
   }
 
   async function handleSendTrade(trade: any) {
+    if (sendingMessageRef.current || sendingMessage) return
     if (!user || pageAccess !== "allowed" || !activeConversationId) return
 
     if (!isTradeOwnedByUser(trade, user.id)) {
@@ -1174,6 +1186,10 @@ export default function DMPage() {
       }
     }
 
+    sendingMessageRef.current = true
+    setSendingMessage(true)
+
+    try {
     const tradeSendPayload = {
       conversation_id: activeConversationId,
       sender_id: user.id,
@@ -1220,6 +1236,10 @@ export default function DMPage() {
     }
 
     setShowTradePicker(false)
+    } finally {
+      sendingMessageRef.current = false
+      setSendingMessage(false)
+    }
   }
 
   async function saveGroupSettings() {
@@ -1735,7 +1755,7 @@ export default function DMPage() {
             }}
             onSend={() => void sendMessage()}
             placeholder="Send message..."
-            sendDisabled={false}
+            sendDisabled={sendingMessage}
             onImageChange={handleImageChange}
             imageDisabled={false}
             fileInputRef={fileRef}
