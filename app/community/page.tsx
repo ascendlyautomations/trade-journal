@@ -12,6 +12,11 @@ import {
 import { useRouter, useSearchParams } from "next/navigation"
 import Navbar from "../components/Navbar"
 import EmptyState from "../components/ui/EmptyState"
+import {
+  SkeletonCommunityPage,
+  SkeletonLeaderboardRow,
+  SkeletonMessage,
+} from "../components/ui/skeletons"
 import DmStyleComposer from "../components/DmStyleComposer"
 import { supabase } from "../../lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
@@ -2029,7 +2034,14 @@ function CommunityContent() {
               <div className="min-h-0 overflow-hidden">
                 <div className="max-h-[min(50svh,280px)] overflow-y-auto p-2 md:max-h-none">
                   {loadingRooms ? (
-                    <p className="px-2 py-3 text-sm text-gray-400">Loading rooms...</p>
+                    <div className="space-y-1 px-1">
+                      {Array.from({ length: 5 }).map((_, i) => (
+                        <div key={i} className="flex items-center gap-3 rounded-lg px-3 py-2">
+                          <div className="h-8 w-8 shrink-0 animate-pulse rounded-full bg-white/10" />
+                          <div className="h-4 flex-1 max-w-[140px] animate-pulse rounded bg-white/10" />
+                        </div>
+                      ))}
+                    </div>
                   ) : rooms.length === 0 ? (
                     <p className="px-2 py-3 text-sm text-gray-400">No rooms found.</p>
                   ) : (
@@ -2383,7 +2395,11 @@ function CommunityContent() {
               {!selectedRoomId ? (
                 <p className="text-sm text-gray-400">Pick a room to start chatting.</p>
               ) : loadingMessages ? (
-                <p className="text-sm text-gray-400">Loading messages...</p>
+                <div className="space-y-3">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <SkeletonMessage key={i} />
+                  ))}
+                </div>
               ) : (
                 <>
                   {messages.length === 0 && pinnedMessages.length === 0 ? (
@@ -2828,7 +2844,11 @@ function CommunityContent() {
 
             <div className="min-h-0 flex-1 overflow-y-auto">
               {loadingManageMembers ? (
-                <p className="py-4 text-sm text-gray-400">Loading members...</p>
+                <div className="space-y-2">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <SkeletonLeaderboardRow key={i} className="rounded-lg bg-white/5 px-2" />
+                  ))}
+                </div>
               ) : (
                 <>
                   {filteredManageMembers.length === 0 ? (
@@ -3305,7 +3325,16 @@ export default function CommunityPage() {
   }, [])
 
   return (
-    <Suspense fallback={<div>Loading...</div>}>
+    <Suspense
+      fallback={
+        <>
+          <Navbar />
+          <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] p-4 text-white md:p-6">
+            <SkeletonCommunityPage />
+          </div>
+        </>
+      }
+    >
       <CommunityContent />
     </Suspense>
   )

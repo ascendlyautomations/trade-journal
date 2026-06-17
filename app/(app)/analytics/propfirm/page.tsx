@@ -22,6 +22,7 @@ import {
 } from "@/lib/propfirmMetrics"
 import LockedFeature from "@/app/components/LockedFeature"
 import EmptyState from "@/app/components/ui/EmptyState"
+import { SkeletonAnalyticsPage } from "@/app/components/ui/skeletons"
 import { isProActive } from "@/lib/subscription"
 import { formatPnlCurrency } from "@/lib/formatMoney"
 
@@ -343,7 +344,7 @@ export default function PropFirmPage() {
   if (!planChecked) {
     return (
       <PropfirmPageShell>
-        <p className="text-sm text-gray-400">Loading...</p>
+        <SkeletonAnalyticsPage />
       </PropfirmPageShell>
     )
   }
@@ -454,8 +455,10 @@ export default function PropFirmPage() {
           </div>
         </div>
 
-        {loadingTrades && <p className="text-sm text-gray-400">Loading...</p>}
-
+        {loadingTrades ? (
+          <SkeletonAnalyticsPage />
+        ) : (
+          <>
         {selectedAccount && (
           <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
             <PropfirmStat
@@ -783,6 +786,8 @@ export default function PropFirmPage() {
             Select a prop firm account to view progress
           </p>
         ) : null}
+          </>
+        )}
     </PropfirmPageShell>
   )
 }

@@ -27,6 +27,7 @@ import {
 } from "../../components/feed/feedPostHelpers"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import EmptyState from "@/app/components/ui/EmptyState"
+import { SkeletonFeedPage } from "@/app/components/ui/skeletons"
 import { publishStory } from "@/lib/publishStory"
 import {
   createStoryPreviewUrl,
@@ -61,7 +62,7 @@ type FeedEmptyState = "following_nobody" | "no_posts"
 
 export default function FeedPage() {
   return (
-    <Suspense fallback={<div className="py-10 text-center text-sm text-gray-400">Loading feed…</div>}>
+    <Suspense fallback={<SkeletonFeedPage />}>
       <FeedPageContent />
     </Suspense>
   )
@@ -78,6 +79,7 @@ function FeedPageContent() {
   const loadingRef = useRef(false)
   const hasMoreRef = useRef(true)
   const [user, setUser] = useState<any>(null)
+  const [authChecked, setAuthChecked] = useState(false)
   const [mode, setMode] = useState<"global" | "following">("following")
   const [likesByPost, setLikesByPost] = useState<Record<string, LikeMeta>>({})
   const [commentsByPost, setCommentsByPost] = useState<Record<string, any[]>>({})
@@ -463,6 +465,7 @@ function FeedPageContent() {
   async function fetchUser() {
     const { data } = await supabase.auth.getSession()
     setUser(data.session?.user)
+    setAuthChecked(true)
   }
 
   const loadEngagementForPosts = useCallback(async (postList: any[], currentUser: any) => {
@@ -662,7 +665,7 @@ function FeedPageContent() {
     setFeedEmptyState(null)
     setPage(0)
     setHasMore(true)
-    setLoading(false)
+    setLoading(true)
     pageRef.current = 0
     hasMoreRef.current = true
     loadingRef.current = false
@@ -915,7 +918,9 @@ function FeedPageContent() {
             />
           ) : null}
 
-          {!loading && uniquePosts.length === 0 && feedEmptyState ? (
+          {!authChecked || (loading && uniquePosts.length === 0) ? (
+            <SkeletonFeedPage count={3} />
+          ) : !loading && uniquePosts.length === 0 && feedEmptyState ? (
             <EmptyState
               title={
                 feedEmptyState === "following_nobody"
@@ -941,7 +946,7 @@ function FeedPageContent() {
               }
               className="py-10"
             />
-          ) : (
+          ) : uniquePosts.length > 0 ? (
             <FeedPostList
               posts={uniquePosts}
               user={user}
@@ -956,7 +961,7 @@ function FeedPageContent() {
               onSubmitComment={submitComment}
               onSharePost={handleSharePost}
             />
-          )}
+          ) : null}
 
           <FeedLoadMoreFooter
             loading={loading}

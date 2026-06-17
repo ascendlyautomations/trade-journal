@@ -1,5 +1,7 @@
 "use client"
 
+import { SkeletonSettingsPage } from "../components/ui/skeletons"
+
 import Navbar from "../components/Navbar"
 import AffiliateApplyModal from "../components/AffiliateApplyModal"
 import { useEffect, useRef, useState } from "react"
@@ -756,8 +758,8 @@ export default function SettingsPage() {
     return (
       <>
         <Navbar />
-        <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] p-6 text-center text-white">
-          Loading…
+        <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] p-6 text-white">
+          <SkeletonSettingsPage />
         </div>
       </>
     )

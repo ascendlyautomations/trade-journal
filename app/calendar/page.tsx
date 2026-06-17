@@ -2,6 +2,7 @@
 import Link from "next/link"
 import Navbar from "../components/Navbar"
 import EmptyState from "../components/ui/EmptyState"
+import { SkeletonCalendarPage } from "../components/ui/skeletons"
 import TradesPageTradeCard from "../components/TradesPageTradeCard"
 import TradesPageOverlays from "../components/TradesPageOverlays"
 import { formatEST } from "@/lib/formatEST"
@@ -364,7 +365,11 @@ export default function CalendarPage() {
 
         <div className="max-w-7xl mx-auto w-full px-4">
 
-          {tradesLoaded && trades.length === 0 ? (
+          {!tradesLoaded ? (
+            <SkeletonCalendarPage />
+          ) : (
+            <>
+          {trades.length === 0 ? (
             <EmptyState
               title="No Trades Yet"
               description="Start tracking your performance by logging your first trade."
@@ -595,6 +600,8 @@ export default function CalendarPage() {
           </div>
 
           </div>
+            </>
+          )}
 
         </div>
 

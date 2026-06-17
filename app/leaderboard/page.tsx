@@ -27,6 +27,7 @@ import { formatPnlCurrency } from "../../lib/formatMoney"
 import { formatRR, formatSignedPnlDisplay, pnlTextClassName } from "@/lib/formatDisplay"
 import { profilePath } from "@/lib/profileRoutes"
 import EmptyState from "../components/ui/EmptyState"
+import { SkeletonLeaderboardPage } from "../components/ui/skeletons"
 
 type LeaderboardProfile = {
   id: string
@@ -190,6 +191,7 @@ function LeaderboardTraderCell({
 
 export default function Leaderboard() {
   const [trades, setTrades] = useState<TradeForLeaderboard[]>([])
+  const [tradesLoading, setTradesLoading] = useState(true)
   const [userId, setUserId] = useState<string | null>(null)
   const [view, setView] = useState<LeaderboardView>("7D")
   const [accountTypeFilter, setAccountTypeFilter] =
@@ -208,26 +210,31 @@ export default function Leaderboard() {
   }, [])
 
   async function fetchData() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+    setTradesLoading(true)
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
 
-    if (user) setUserId(user.id)
+      if (user) setUserId(user.id)
 
-    const allTrades = await fetchLeaderboardTrades()
+      const allTrades = await fetchLeaderboardTrades()
 
-    setTrades(allTrades)
+      setTrades(allTrades)
 
-    if (allTrades.length > 0) {
-      const earliest = allTrades[0]?.created_at
-      const latest = allTrades[allTrades.length - 1]?.created_at
-      console.log("[leaderboard] fetch", {
-        totalTradesFetched: allTrades.length,
-        earliestCreatedAt: earliest,
-        latestCreatedAt: latest,
-      })
-    } else {
-      console.log("[leaderboard] fetch", { totalTradesFetched: 0 })
+      if (allTrades.length > 0) {
+        const earliest = allTrades[0]?.created_at
+        const latest = allTrades[allTrades.length - 1]?.created_at
+        console.log("[leaderboard] fetch", {
+          totalTradesFetched: allTrades.length,
+          earliestCreatedAt: earliest,
+          latestCreatedAt: latest,
+        })
+      } else {
+        console.log("[leaderboard] fetch", { totalTradesFetched: 0 })
+      }
+    } finally {
+      setTradesLoading(false)
     }
   }
 
@@ -318,9 +325,21 @@ export default function Leaderboard() {
   }, [])
 
   const showChart =
-    !customRangeInvalid && hasData && chartData.length > 0
+    !tradesLoading && !customRangeInvalid && hasData && chartData.length > 0
 
-  const showLeaderboardContent = !customRangeInvalid && hasData
+  const showLeaderboardContent =
+    !tradesLoading && !customRangeInvalid && hasData
+
+  if (tradesLoading) {
+    return (
+      <>
+        <Navbar />
+        <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100 px-4 py-6 md:px-8 md:py-8">
+          <SkeletonLeaderboardPage />
+        </div>
+      </>
+    )
+  }
 
   return (
     <>

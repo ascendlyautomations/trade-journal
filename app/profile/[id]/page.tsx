@@ -3,6 +3,7 @@
 import Link from "next/link"
 import Navbar from "../../components/Navbar"
 import EmptyState from "../../components/ui/EmptyState"
+import { SkeletonProfilePage } from "../../components/ui/skeletons"
 import AchievementCard from "../../components/AchievementCard"
 import type { ChangeEvent } from "react"
 import {
@@ -2454,9 +2455,7 @@ function ProfilePageContent() {
     return (
       <>
         <Navbar />
-        <div className="w-full flex items-center justify-center text-gray-400">
-          Loading profile...
-        </div>
+        <SkeletonProfilePage />
       </>
     )
   }
@@ -3766,9 +3765,7 @@ export default function ProfilePage() {
       fallback={
         <>
           <Navbar />
-          <div className="flex min-h-[50vh] items-center justify-center text-sm text-gray-400">
-            Loading profile…
-          </div>
+          <SkeletonProfilePage />
         </>
       }
     >

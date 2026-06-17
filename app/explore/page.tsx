@@ -4,6 +4,7 @@ import Link from "next/link"
 import Navbar from "../components/Navbar"
 import FollowButton from "../components/FollowButton"
 import EmptyState from "../components/ui/EmptyState"
+import { SkeletonExplorePage, SkeletonTraderCard } from "../components/ui/skeletons"
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import {
@@ -438,7 +439,11 @@ export default function ExplorePage() {
               ) : null}
 
               {loadingSearch ? (
-                <p className="mt-2 text-sm text-gray-400">Searching…</p>
+                <div className="mt-3 space-y-2">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <SkeletonTraderCard key={i} />
+                  ))}
+                </div>
               ) : null}
 
               {searchFinished && search.trim().length >= SEARCH_MIN_CHARS &&
@@ -481,7 +486,7 @@ export default function ExplorePage() {
           </section>
 
           {loading ? (
-            <p className="text-sm text-gray-400">Loading explore data…</p>
+            <SkeletonExplorePage />
           ) : (
             <>
               <section className={`${SECTION_PANEL} relative z-0`}>
@@ -507,7 +512,11 @@ export default function ExplorePage() {
                 />
 
                 {loadingTopView ? (
-                  <p className="text-sm text-gray-400">Updating rankings…</p>
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <SkeletonTraderCard key={i} />
+                    ))}
+                  </div>
                 ) : null}
 
                 {!loadingTopView && topTraders.length === 0 ? (

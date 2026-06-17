@@ -22,6 +22,7 @@ import PostSetupImportModal from "../../components/PostSetupImportModal"
 import PerformanceShareModal from "../../components/PerformanceShareModal"
 import LockedFeature from "../../components/LockedFeature"
 import EmptyState from "../../components/ui/EmptyState"
+import { SkeletonDashboardPage } from "../../components/ui/skeletons"
 import Link from "next/link"
 import { useCallback, useEffect, useState, useMemo, useRef } from "react"
 import {
@@ -1331,11 +1332,7 @@ const worstDay = dailyPnLs.length > 0
   }, [trades, isPro])
 
   if (loading || (user?.id && !signalsReady)) {
-    return (
-      <div className="w-full flex items-center justify-center text-white">
-        Loading Dashboard...
-      </div>
-    )
+    return <SkeletonDashboardPage />
   }
 
   const hasNoTrades = trades.length === 0

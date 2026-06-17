@@ -11,6 +11,7 @@ import { supabase } from "../../lib/supabaseClient"
 import Navbar from "../components/Navbar"
 import FollowRequestsPanel from "../components/FollowRequestsPanel"
 import EmptyState from "../components/ui/EmptyState"
+import { SkeletonNotificationsPage } from "../components/ui/skeletons"
 import Modal from "../components/ui/Modal"
 import { clearAllNotifications, dismissNotifications } from "@/lib/followNotifications"
 import { formatEST } from "@/lib/formatEST"
@@ -681,8 +682,10 @@ export default function NotificationsPage() {
     return (
       <>
         <Navbar />
-        <div className="flex min-h-[50vh] items-center justify-center text-sm text-gray-400">
-          Loading notifications…
+        <div className="w-full text-white px-2 pb-3 pt-0 md:px-4 md:pb-10">
+          <div className="relative z-0 mx-auto mt-2.5 flex w-full max-w-xl flex-col gap-3 px-1 md:gap-4 md:px-2">
+            <SkeletonNotificationsPage />
+          </div>
         </div>
       </>
     )
