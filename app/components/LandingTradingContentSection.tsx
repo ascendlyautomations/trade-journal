@@ -151,7 +151,7 @@ export default function LandingTradingContentSection() {
         </p>
         <div className="space-y-2 text-base leading-relaxed text-gray-400">
           <p>No feedback loop. No accountability. No idea how anyone else actually trades.</p>
-          <p className="text-gray-300">TradeTrax gives you the social layer serious journaling skipped.</p>
+          <p className="text-gray-300">TradeTraxs gives you the social layer serious journaling skipped.</p>
         </div>
       </div>
 

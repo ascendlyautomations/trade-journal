@@ -14,7 +14,7 @@ const HELP_OPTIONS = [
   {
     href: "/feedback",
     title: "Submit Feedback",
-    description: "Product ideas, improvements, and general suggestions for the TradeTrax team.",
+    description: "Product ideas, improvements, and general suggestions for the TradeTraxs team.",
     cta: "Send feedback",
   },
 ] as const

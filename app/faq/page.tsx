@@ -5,15 +5,15 @@ import PublicNavbar from "../components/PublicNavbar"
 
 const faqs = [
   {
-    q: "What is TradeTrax?",
-    a: "TradeTrax is a trading journal and social platform where you can track your trades, analyze your performance, and share trades with others.",
+    q: "What is TradeTraxs?",
+    a: "TradeTraxs is a trading journal and social platform where you can track your trades, analyze your performance, and share trades with others.",
   },
   {
     q: "Can I track multiple trading accounts?",
     a: "Yeah, you can track multiple accounts and separate your stats for each one.",
   },
   {
-    q: "What stats does TradeTrax show?",
+    q: "What stats does TradeTraxs show?",
     a: "You can see your P&L, win rate, risk-reward ratio, session performance, and more.",
   },
   {
@@ -25,7 +25,7 @@ const faqs = [
     a: "Yep, you can attach screenshots to every trade you log.",
   },
   {
-    q: "Does TradeTrax support funded accounts?",
+    q: "Does TradeTraxs support funded accounts?",
     a: "Yes, you can mark trades as Eval, Funded, or Live accounts.",
   },
   {
@@ -37,7 +37,7 @@ const faqs = [
     a: "Yeah, you can see how you rank compared to other traders.",
   },
   {
-    q: "Do I need to pay to use TradeTrax?",
+    q: "Do I need to pay to use TradeTraxs?",
     a: "There are free features, and premium features are available with a subscription.",
   },
   {
@@ -57,7 +57,7 @@ export default function FAQPage() {
           FAQ
         </h1>
         <p className="mb-10 text-center text-sm text-gray-400">
-          Quick answers about TradeTrax
+          Quick answers about TradeTraxs
         </p>
 
         <div className="mx-auto max-w-2xl space-y-3">

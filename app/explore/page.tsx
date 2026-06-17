@@ -5,7 +5,6 @@ import Navbar from "../components/Navbar"
 import FollowButton from "../components/FollowButton"
 import EmptyState from "../components/ui/EmptyState"
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
-import { useRouter } from "next/navigation"
 import { supabase } from "../../lib/supabaseClient"
 import {
   buildLeaderboardRankings,
@@ -109,8 +108,14 @@ function TraderIdentity({
 }) {
   const { displayName, username, avatarUrl } = getTraderDisplay(profile, userId)
 
+  const href = profilePath({ id: userId, username: profile?.username })
+
   return (
-    <div className="flex min-w-0 items-center gap-3">
+    <Link
+      href={href}
+      className="flex min-w-0 items-center gap-3 rounded-lg transition hover:opacity-90"
+      onClick={(e) => e.stopPropagation()}
+    >
       <img
         src={avatarUrl}
         alt=""
@@ -132,7 +137,7 @@ function TraderIdentity({
           <p className="mt-0.5 line-clamp-2 text-xs text-gray-400">{subtitle}</p>
         ) : null}
       </div>
-    </div>
+    </Link>
   )
 }
 
@@ -159,7 +164,6 @@ function SectionHeading({
 }
 
 export default function ExplorePage() {
-  const router = useRouter()
   const initialLoadDone = useRef(false)
   const [loading, setLoading] = useState(true)
   const [loadingTopView, setLoadingTopView] = useState(false)
@@ -375,10 +379,6 @@ export default function ExplorePage() {
       .slice(0, EXPLORE_NEW_LIMIT)
   }, [profiles, currentUserId])
 
-  function goToProfile(user: { id: string; username?: string | null }) {
-    router.push(profilePath(user))
-  }
-
   function handleFollowingChange(targetUserId: string, following: boolean) {
     setFollowingIds((prev) => {
       const next = new Set(prev)
@@ -457,15 +457,6 @@ export default function ExplorePage() {
                   {results.map((user) => (
                     <div
                       key={user.id}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => goToProfile(user)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault()
-                          goToProfile(user)
-                        }
-                      }}
                       className="flex items-center justify-between gap-3 border-b border-white/5 px-3 py-2.5 transition last:border-b-0 hover:bg-white/5"
                     >
                       <TraderIdentity
@@ -556,24 +547,7 @@ export default function ExplorePage() {
                           {topTraders.map((row, index) => (
                             <tr
                               key={row.userId}
-                              role="link"
-                              tabIndex={0}
-                              onClick={() =>
-                                goToProfile({
-                                  id: row.userId,
-                                  username: row.profile?.username,
-                                })
-                              }
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter" || e.key === " ") {
-                                  e.preventDefault()
-                                  goToProfile({
-                                    id: row.userId,
-                                    username: row.profile?.username,
-                                  })
-                                }
-                              }}
-                              className="cursor-pointer border-b border-white/5 transition hover:bg-white/5"
+                              className="border-b border-white/5 transition hover:bg-white/5"
                             >
                               <td className="px-2 py-2.5 font-semibold text-white">
                                 #{row.rank}
@@ -655,15 +629,6 @@ export default function ExplorePage() {
                       return (
                         <div
                           key={profile.id}
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => goToProfile(profile)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              e.preventDefault()
-                              goToProfile(profile)
-                            }
-                          }}
                           className="flex flex-col gap-2 rounded-xl border border-white/10 bg-white/5 p-3 transition hover:border-white/20 hover:bg-white/[0.07]"
                         >
                           <div className="flex items-start justify-between gap-2">
@@ -731,15 +696,6 @@ export default function ExplorePage() {
                     {newTraders.map((profile) => (
                       <div
                         key={profile.id}
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => goToProfile(profile)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault()
-                            goToProfile(profile)
-                          }
-                        }}
                         className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 p-3 transition hover:border-white/20 hover:bg-white/[0.07]"
                       >
                         <TraderIdentity

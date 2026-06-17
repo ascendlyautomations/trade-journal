@@ -1,8 +1,8 @@
 "use client"
 
+import Link from "next/link"
 import Navbar from "../components/Navbar"
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { useRouter } from "next/navigation"
 import { supabase } from "../../lib/supabaseClient"
 import { fetchLeaderboardTrades } from "../../lib/leaderboardFetch"
 import {
@@ -155,9 +155,13 @@ function LeaderboardTraderCell({
   isYou: boolean
 }) {
   const { displayName, username, avatarUrl } = getTraderDisplay(profile, userId)
+  const href = profilePath({ id: userId, username: profile?.username })
 
   return (
-    <div className="flex min-w-0 items-center gap-3">
+    <Link
+      href={href}
+      className="flex min-w-0 items-center gap-3 rounded-lg transition hover:opacity-90"
+    >
       <img
         src={avatarUrl}
         alt=""
@@ -180,12 +184,11 @@ function LeaderboardTraderCell({
           <p className="truncate text-xs text-gray-400">@{username}</p>
         ) : null}
       </div>
-    </div>
+    </Link>
   )
 }
 
 export default function Leaderboard() {
-  const router = useRouter()
   const [trades, setTrades] = useState<TradeForLeaderboard[]>([])
   const [userId, setUserId] = useState<string | null>(null)
   const [view, setView] = useState<LeaderboardView>("7D")
@@ -294,16 +297,6 @@ export default function Leaderboard() {
       cancelled = true
     }
   }, [rankedTraderIds])
-
-  const goToProfile = useCallback(
-    (profileUserId: string) => {
-      const row = profilesById[profileUserId]
-      router.push(
-        profilePath({ id: profileUserId, username: row?.username })
-      )
-    },
-    [router, profilesById]
-  )
 
   useEffect(() => {
     console.log("[leaderboard] render", {
@@ -588,16 +581,7 @@ export default function Leaderboard() {
                     {rankedTraders.map((row) => (
                       <tr
                         key={row.userId}
-                        role="link"
-                        tabIndex={0}
-                        onClick={() => goToProfile(row.userId)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault()
-                            goToProfile(row.userId)
-                          }
-                        }}
-                        className={`cursor-pointer border-b border-white/5 transition hover:bg-white/10 ${
+                        className={`border-b border-white/5 transition hover:bg-white/10 ${
                           row.userId === userId ? "bg-white/5" : ""
                         }`}
                       >

@@ -34,7 +34,7 @@ export default function BannedPage() {
         <div className="mx-auto max-w-lg rounded-2xl border border-red-500/30 bg-red-950/40 p-8 text-center shadow-2xl backdrop-blur-xl">
           <h1 className="text-2xl font-semibold text-red-200">Account restricted</h1>
           <p className="mt-3 text-sm text-gray-200">
-            This TradeTrax account has been suspended. If you believe this is a mistake, contact support.
+            This TradeTraxs account has been suspended. If you believe this is a mistake, contact support.
           </p>
           {reason ? (
             <p className="mt-4 rounded-lg border border-white/10 bg-black/30 p-3 text-left text-sm text-gray-300">

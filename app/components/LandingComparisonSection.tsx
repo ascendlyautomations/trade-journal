@@ -132,7 +132,7 @@ export default function LandingComparisonSection() {
           id="compare-heading"
           className="text-4xl font-extrabold tracking-tight text-white drop-shadow-lg"
         >
-          How TradeTrax Compares to Leading Trading Journals
+          How TradeTraxs Compares to Leading Trading Journals
         </h2>
         <p className="text-base leading-relaxed text-gray-400">
           A fair comparison of core features across popular platforms.
@@ -152,7 +152,7 @@ export default function LandingComparisonSection() {
                 scope="col"
                 className="min-w-[100px] border-l border-white/10 bg-white/10 px-3 py-3.5 text-center text-xs font-semibold text-emerald-300 shadow-[inset_0_0_24px_rgba(16,185,129,0.07)] md:px-4 md:py-4 md:text-sm"
               >
-                TradeTrax
+                TradeTraxs
               </th>
               <th
                 scope="col"

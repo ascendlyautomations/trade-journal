@@ -230,9 +230,19 @@ function TradeCard({
             {pnlLabel}
           </span>
 
-          <span className="min-w-0 truncate font-medium text-white">
-            {ticker} · {direction}
-          </span>
+          {trade.id ? (
+            <Link
+              href={`/trade/${trade.id}`}
+              className="min-w-0 truncate font-medium text-white hover:text-blue-200"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {ticker} · {direction}
+            </Link>
+          ) : (
+            <span className="min-w-0 truncate font-medium text-white">
+              {ticker} · {direction}
+            </span>
+          )}
 
           {accountTypeNorm ? (
             <span
@@ -257,6 +267,15 @@ function TradeCard({
       </div>
       {desc ? (
         <p className="px-1 text-sm leading-relaxed text-white">{desc}</p>
+      ) : null}
+      {trade.id && !inDetailModal ? (
+        <Link
+          href={`/trade/${trade.id}`}
+          className="px-1 text-xs font-medium text-blue-300 hover:text-blue-200"
+          onClick={(e) => e.stopPropagation()}
+        >
+          View public trade →
+        </Link>
       ) : null}
       <TradeCardTimingBlock trade={trade} />
     </>

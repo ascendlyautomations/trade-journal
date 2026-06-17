@@ -138,7 +138,7 @@ export default function BugReportModal({
               Report a bug
             </h2>
             <p className="mt-1 text-sm text-gray-400">
-              Help us improve TradeTrax during beta. Page and browser details are captured
+              Help us improve TradeTraxs during beta. Page and browser details are captured
               automatically.
             </p>
           </div>

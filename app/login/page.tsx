@@ -450,7 +450,7 @@ export default function LoginPage() {
             </p>
 
             <h1 className="text-5xl font-bold mb-4 bg-gradient-to-r from-blue-400 to-teal-300 bg-clip-text text-transparent">
-              TradeTrax
+              TradeTraxs
             </h1>
 
             <p className="text-lg text-gray-300">

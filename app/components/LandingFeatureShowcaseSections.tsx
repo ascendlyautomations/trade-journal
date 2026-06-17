@@ -182,25 +182,25 @@ function FeatureSplitSection({ block }: { block: ShowcaseBlock }) {
             {block.id === "showcase-trade-input" ? (
               <ShowcaseFeatureImage
                 src="/images/trade-input.png"
-                alt="Trade entry and import options in TradeTrax"
+                alt="Trade entry and import options in TradeTraxs"
                 objectPositionClass="object-top"
               />
             ) : block.id === "showcase-trade-review" ? (
               <ShowcaseFeatureImage
                 src="/images/trade-history.png"
-                alt="Trade history with screenshots and notes in TradeTrax"
+                alt="Trade history with screenshots and notes in TradeTraxs"
                 objectPositionClass="object-center"
               />
             ) : block.id === "showcase-messaging" ? (
               <ShowcaseFeatureImage
                 src="/images/messaging-ui-v2.png"
-                alt="Messaging and trade discussions in TradeTrax"
+                alt="Messaging and trade discussions in TradeTraxs"
                 objectPositionClass="object-right"
               />
             ) : block.id === "showcase-dashboard" ? (
               <ShowcaseFeatureImage
                 src="/images/dashboard.png"
-                alt="Trading dashboard with analytics in TradeTrax"
+                alt="Trading dashboard with analytics in TradeTraxs"
                 objectPositionClass="object-center"
               />
             ) : (

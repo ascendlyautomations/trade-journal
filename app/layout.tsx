@@ -6,6 +6,12 @@ import SentryIdentifyUser from "./components/SentryIdentifyUser"
 import ToastRoot from "./components/ToastRoot"
 import { UserProfileProvider } from "@/lib/UserProfileProvider"
 import { GettingStartedProgressProvider } from "@/lib/GettingStartedProgressProvider"
+import {
+  DEFAULT_OG_IMAGE_PATH,
+  DEFAULT_SITE_DESCRIPTION,
+  SITE_NAME,
+  SITE_URL,
+} from "@/lib/site"
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -17,12 +23,33 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata = {
+export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: {
-    default: "TradeTraxs",
-    template: "%s | TradeTraxs",
+    default: SITE_NAME,
+    template: `%s | ${SITE_NAME}`,
   },
-  description: "Track your trades like a pro",
+  description: DEFAULT_SITE_DESCRIPTION,
+  openGraph: {
+    type: "website",
+    locale: "en_US",
+    siteName: SITE_NAME,
+    title: SITE_NAME,
+    description: DEFAULT_SITE_DESCRIPTION,
+    url: SITE_URL,
+    images: [
+      {
+        url: DEFAULT_OG_IMAGE_PATH,
+        alt: SITE_NAME,
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: SITE_NAME,
+    description: DEFAULT_SITE_DESCRIPTION,
+    images: [DEFAULT_OG_IMAGE_PATH],
+  },
 }
 export default function RootLayout({
   children,
