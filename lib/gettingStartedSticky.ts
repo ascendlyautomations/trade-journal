@@ -6,10 +6,6 @@ import type {
 export const GETTING_STARTED_COMPLETED_STORAGE_KEY =
   "tradetraxs_getting_started_completed_v1"
 
-/** User dismissed the 5/5 completion card — hide checklist forever. */
-export const ONBOARDING_COMPLETE_DISMISSED_STORAGE_KEY =
-  "tradetraxs_onboarding_complete_dismissed_v1"
-
 /** Last progress count acknowledged for step popups (1–4). */
 export const GETTING_STARTED_PROGRESS_POPUP_COUNT_KEY =
   "tradetraxs_getting_started_progress_popup_count_v1"
@@ -70,31 +66,6 @@ export function writeStickyCompletedItemIds(
     window.localStorage.setItem(
       scopedKey(GETTING_STARTED_COMPLETED_STORAGE_KEY, userId),
       JSON.stringify([...ids])
-    )
-  } catch {
-    /* ignore quota / private mode */
-  }
-}
-
-export function readOnboardingCompleteDismissed(userId: string): boolean {
-  if (typeof window === "undefined") return false
-  try {
-    return (
-      window.localStorage.getItem(
-        scopedKey(ONBOARDING_COMPLETE_DISMISSED_STORAGE_KEY, userId)
-      ) === "1"
-    )
-  } catch {
-    return false
-  }
-}
-
-export function writeOnboardingCompleteDismissed(userId: string) {
-  if (typeof window === "undefined") return
-  try {
-    window.localStorage.setItem(
-      scopedKey(ONBOARDING_COMPLETE_DISMISSED_STORAGE_KEY, userId),
-      "1"
     )
   } catch {
     /* ignore quota / private mode */
@@ -211,9 +182,4 @@ export function applyStickyGettingStartedProgress(
     totalCount: progress.totalCount,
     allComplete: completedCount === progress.totalCount,
   }
-}
-
-/** After 5/5 only — whether the user dismissed the completion card. */
-export function shouldShowGettingStartedSection(userId: string): boolean {
-  return !readOnboardingCompleteDismissed(userId)
 }

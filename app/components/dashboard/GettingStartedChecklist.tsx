@@ -19,7 +19,6 @@ export type GettingStartedChecklistProps = {
   profileId?: string
   firstPrivateTradeId?: string | null
   onChecklistRefresh?: () => void
-  onDismissComplete?: () => void
 }
 
 function itemHref(
@@ -122,9 +121,8 @@ export default function GettingStartedChecklist({
   profileId,
   firstPrivateTradeId,
   onChecklistRefresh,
-  onDismissComplete,
 }: GettingStartedChecklistProps) {
-  const { items, completedCount, totalCount, allComplete } = progress
+  const { items, completedCount, totalCount } = progress
   const progressPct =
     totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0
 
@@ -146,82 +144,58 @@ export default function GettingStartedChecklist({
   return (
     <>
       <div className="rounded-xl border border-white/10 bg-white/5 p-6 backdrop-blur-md md:p-8">
-        {allComplete ? (
-          <>
-            <h3 className="text-lg font-semibold text-white md:text-xl">
-              🎉 You Have Completed All Onboarding Tasks
-            </h3>
-            <p className="mt-2 text-base font-medium text-gray-100 md:text-lg">
-              Enjoy TradeTraxs!
+        <button
+          type="button"
+          onClick={toggleExpanded}
+          className="flex w-full items-center justify-between gap-3 text-left"
+          aria-expanded={expanded}
+        >
+          <h3 className="text-lg font-semibold text-white md:text-xl">
+            Getting Started
+          </h3>
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-medium tabular-nums text-gray-300">
+              {completedCount} / {totalCount} Complete
             </p>
-            <p className="mt-2 max-w-2xl text-sm text-gray-400 md:text-base">
-              You&apos;re ready to track trades, share ideas, and grow with the
-              community.
-            </p>
-            <button
-              type="button"
-              onClick={onDismissComplete}
-              className="mt-6 rounded-lg border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/15"
+            <span
+              className="text-sm text-gray-400"
+              aria-hidden
+              title={expanded ? "Collapse" : "Expand"}
             >
-              Dismiss
-            </button>
-          </>
-        ) : (
+              {expanded ? "▼" : "▶"}
+            </span>
+          </div>
+        </button>
+
+        {expanded ? (
           <>
-            <button
-              type="button"
-              onClick={toggleExpanded}
-              className="flex w-full items-center justify-between gap-3 text-left"
-              aria-expanded={expanded}
+            <div
+              className="mt-4 h-2 overflow-hidden rounded-full bg-white/10"
+              role="progressbar"
+              aria-valuenow={completedCount}
+              aria-valuemin={0}
+              aria-valuemax={totalCount}
+              aria-label={`Getting started progress: ${completedCount} of ${totalCount} complete`}
             >
-              <h3 className="text-lg font-semibold text-white md:text-xl">
-                Getting Started
-              </h3>
-              <div className="flex items-center gap-2">
-                <p className="text-sm font-medium tabular-nums text-gray-300">
-                  {completedCount} / {totalCount} Complete
-                </p>
-                <span
-                  className="text-sm text-gray-400"
-                  aria-hidden
-                  title={expanded ? "Collapse" : "Expand"}
-                >
-                  {expanded ? "▼" : "▶"}
-                </span>
-              </div>
-            </button>
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-blue-500 to-emerald-500 transition-[width] duration-300"
+                style={{ width: `${progressPct}%` }}
+              />
+            </div>
 
-            {expanded ? (
-              <>
-                <div
-                  className="mt-4 h-2 overflow-hidden rounded-full bg-white/10"
-                  role="progressbar"
-                  aria-valuenow={completedCount}
-                  aria-valuemin={0}
-                  aria-valuemax={totalCount}
-                  aria-label={`Getting started progress: ${completedCount} of ${totalCount} complete`}
-                >
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-blue-500 to-emerald-500 transition-[width] duration-300"
-                    style={{ width: `${progressPct}%` }}
-                  />
-                </div>
-
-                <ul className="mt-5 space-y-3">
-                  {items.map((item) => (
-                    <ChecklistItemRow
-                      key={item.id}
-                      item={item}
-                      profileId={profileId}
-                      firstPrivateTradeId={firstPrivateTradeId}
-                      onOpenPopularRooms={() => setPopularRoomsOpen(true)}
-                    />
-                  ))}
-                </ul>
-              </>
-            ) : null}
+            <ul className="mt-5 space-y-3">
+              {items.map((item) => (
+                <ChecklistItemRow
+                  key={item.id}
+                  item={item}
+                  profileId={profileId}
+                  firstPrivateTradeId={firstPrivateTradeId}
+                  onOpenPopularRooms={() => setPopularRoomsOpen(true)}
+                />
+              ))}
+            </ul>
           </>
-        )}
+        ) : null}
       </div>
 
       <PopularTradeRoomsModal

@@ -41,7 +41,6 @@ import {
   resolveTradingTimeSourceForKey,
 } from "@/lib/formatDate"
 import { normalizeProfileUsername } from "@/lib/profileUsername"
-import { readOnboardingCompleteDismissed, writeOnboardingCompleteDismissed } from "@/lib/gettingStartedSticky"
 import {
   dispatchGettingStartedSignalsRefresh,
   notifyGettingStartedChecklistMaybeCompleted,
@@ -480,8 +479,6 @@ export default function Dashboard() {
     signalsReady,
     refreshChecklistSignals,
   } = useGettingStartedProgress()
-  const [onboardingSectionDismissed, setOnboardingSectionDismissed] =
-    useState(false)
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [profileOnboardingDone, setProfileOnboardingDone] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
@@ -634,14 +631,6 @@ export default function Dashboard() {
   useEffect(() => {
     void refreshDashboardData()
   }, [refreshDashboardData])
-
-  useEffect(() => {
-    if (!user?.id) {
-      setOnboardingSectionDismissed(false)
-      return
-    }
-    setOnboardingSectionDismissed(readOnboardingCompleteDismissed(user.id))
-  }, [user?.id])
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -1341,12 +1330,6 @@ const worstDay = dailyPnLs.length > 0
     return keys.size >= 1
   }, [trades, isPro])
 
-  const handleDismissOnboardingComplete = useCallback(() => {
-    if (!user?.id) return
-    writeOnboardingCompleteDismissed(user.id)
-    setOnboardingSectionDismissed(true)
-  }, [user?.id])
-
   if (loading || (user?.id && !signalsReady)) {
     return (
       <div className="w-full flex items-center justify-center text-white">
@@ -1359,7 +1342,8 @@ const worstDay = dailyPnLs.length > 0
 
   const showOnboardingSection =
     Boolean(user?.id) &&
-    (!gettingStartedProgress.allComplete || !onboardingSectionDismissed)
+    !checklistSignals.hasSeenOnboardingCompletePopup &&
+    !gettingStartedProgress.allComplete
 
   const gettingStartedSection = showOnboardingSection ? (
     <GettingStartedChecklist
@@ -1368,7 +1352,6 @@ const worstDay = dailyPnLs.length > 0
       profileId={user?.id ?? profile?.id}
       firstPrivateTradeId={checklistSignals.firstPrivateTradeId}
       onChecklistRefresh={() => void refreshChecklistSignals()}
-      onDismissComplete={handleDismissOnboardingComplete}
     />
   ) : null
 
