@@ -22,6 +22,7 @@ import FeedPostDetailModal from "../../components/feed/FeedPostDetailModal"
 import DetailModalShell, {
   scrollModalCommentsPane,
 } from "../../components/ui/DetailModalShell"
+import DropdownMenu from "@/app/components/ui/DropdownMenu"
 import DetailModalImage from "../../components/ui/DetailModalImage"
 import ImageLightbox from "../../components/ui/ImageLightbox"
 import { EMPTY_LIKE_META } from "../../components/feed/FeedPostCard"
@@ -52,6 +53,7 @@ import {
   fetchOwnAchievements,
   fetchVisibleProfileAchievements,
   formatAchievementDate,
+  sumPayoutAchievementTotals,
 } from "../../../lib/achievements"
 import { formatPnlCurrency } from "../../../lib/formatMoney"
 import { formatRR } from "@/lib/formatDisplay"
@@ -167,11 +169,8 @@ function TradeCard({
   profile,
   shareProfile,
   canManageTrade,
-  menuOpen,
-  onMenuToggle,
   onStartEditTrade,
   onTogglePinTrade,
-  onSaveTrade,
   onDeleteTrade,
   showInteractions,
   onOpenDetail,
@@ -187,11 +186,8 @@ function TradeCard({
   /** Logged-in viewer profile (referral_code for share PNG) */
   shareProfile?: { referral_code?: string | null } | null
   canManageTrade?: boolean
-  menuOpen?: boolean
-  onMenuToggle?: () => void
   onStartEditTrade?: () => void
   onTogglePinTrade?: () => void
-  onSaveTrade?: () => void
   onDeleteTrade?: () => void
   showInteractions?: boolean
   onOpenDetail?: () => void
@@ -318,64 +314,32 @@ function TradeCard({
           />
         </div>
         {canManageTrade ? (
-          <div className="relative">
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation()
-                onMenuToggle?.()
-              }}
-              className="px-1 text-gray-400 hover:text-white"
-            >
-              •••
-            </button>
-            {menuOpen ? (
-              <div
-                className="absolute right-0 z-50 mt-2 w-40 rounded-lg border border-white/10 bg-[#020617] shadow-lg"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onStartEditTrade?.()
-                  }}
-                  className="block w-full px-4 py-2 text-left text-sm hover:bg-white/10"
-                >
-                  Edit Trade
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onTogglePinTrade?.()
-                  }}
-                  className="block w-full px-4 py-2 text-left text-sm hover:bg-white/10"
-                >
-                  {trade.is_pinned ? "Unpin Trade" : "Pin Trade"}
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onSaveTrade?.()
-                  }}
-                  className="block w-full px-4 py-2 text-left text-sm hover:bg-white/10"
-                >
-                  Save Trade
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onDeleteTrade?.()
-                  }}
-                  className="block w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-white/10"
-                >
-                  Delete Trade
-                </button>
-              </div>
-            ) : null}
+          <div onClick={(e) => e.stopPropagation()}>
+            <DropdownMenu
+              stopPropagation
+              menuClassName="z-[9100]"
+              trigger={
+                <span className="px-1 text-gray-400 hover:text-white">•••</span>
+              }
+              items={[
+                {
+                  id: "edit",
+                  label: "Edit Trade",
+                  onSelect: () => onStartEditTrade?.(),
+                },
+                {
+                  id: "pin",
+                  label: trade.is_pinned ? "Unpin Trade" : "Pin Trade",
+                  onSelect: () => onTogglePinTrade?.(),
+                },
+                {
+                  id: "delete",
+                  label: "Delete Trade",
+                  variant: "danger",
+                  onSelect: () => onDeleteTrade?.(),
+                },
+              ]}
+            />
           </div>
         ) : null}
       </div>
@@ -954,7 +918,6 @@ function ProfilePageContent() {
     Record<string, boolean>
   >({})
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
-  const [openTradeMenuId, setOpenTradeMenuId] = useState<string | null>(null)
   const [editingPost, setEditingPost] = useState<any | null>(null)
   const [editContent, setEditContent] = useState("")
   const [editingTrade, setEditingTrade] = useState<any | null>(null)
@@ -1192,13 +1155,14 @@ function ProfilePageContent() {
   }, [profile?.id])
 
   useEffect(() => {
-    if (!profile?.id || !currentUserId) {
+    if (!profile?.id) {
       setAchievements([])
       return
     }
     let cancelled = false
     async function fetchProfileAchievements() {
-      const isOwner = currentUserId === profile.id
+      const isOwner =
+        currentUserId != null && String(currentUserId) === String(profile.id)
       const query = isOwner
         ? await fetchOwnAchievements(profile.id)
         : await fetchVisibleProfileAchievements(profile.id)
@@ -1755,7 +1719,6 @@ function ProfilePageContent() {
   useEffect(() => {
     const handleClick = () => {
       setOpenMenuId(null)
-      setOpenTradeMenuId(null)
     }
     window.addEventListener("click", handleClick)
     return () => window.removeEventListener("click", handleClick)
@@ -1914,17 +1877,6 @@ function ProfilePageContent() {
         String(t.id) === String(trade.id) ? { ...t, is_pinned: !t.is_pinned } : t
       )
     )
-    setOpenTradeMenuId(null)
-  }
-
-  async function handleSaveTrade(tradeId: string) {
-    if (!currentUserId) return
-    const { error } = await supabase.from("saved_trades").insert({
-      user_id: currentUserId,
-      trade_id: tradeId,
-    })
-    if (error) console.error(error)
-    setOpenTradeMenuId(null)
   }
 
   const performDeleteTrade = useCallback(async (tradeId: string) => {
@@ -1938,7 +1890,6 @@ function ProfilePageContent() {
     setSelectedTradeDetail((prev) =>
       prev && String(prev.id) === String(tradeId) ? null : prev
     )
-    setOpenTradeMenuId(null)
   }, [])
 
   const { requestDelete: handleDeleteTrade, confirmModalProps: deleteTradeConfirmProps } =
@@ -2346,11 +2297,7 @@ function ProfilePageContent() {
         overviewTotalTrades
       : 0
   const overviewPayoutTotal = statsVisible
-    ? achievements
-        .filter((a) =>
-          String(a.achievement_type ?? "").trim().toLowerCase().includes("payout")
-        )
-        .reduce((sum, a) => sum + (Number(a.value_numeric) || 0), 0)
+    ? sumPayoutAchievementTotals(achievements)
     : 0
   const currentStreakLabel = (() => {
     if (!statsVisible || profileOverviewTrades.length === 0) return "—"
@@ -2883,18 +2830,10 @@ function ProfilePageContent() {
                         profile={profile}
                         shareProfile={viewerShareProfile}
                         canManageTrade={currentUserId === profile.id}
-                        menuOpen={openTradeMenuId === String(trade.id)}
-                        onMenuToggle={() =>
-                          setOpenTradeMenuId((prev) =>
-                            prev === String(trade.id) ? null : String(trade.id)
-                          )
-                        }
                         onStartEditTrade={() => {
                           openEditTradeModal(trade)
-                          setOpenTradeMenuId(null)
                         }}
                         onTogglePinTrade={() => void handlePinTrade(trade)}
-                        onSaveTrade={() => void handleSaveTrade(String(trade.id))}
                         onDeleteTrade={() => void handleDeleteTrade(String(trade.id))}
                         showInteractions={true}
                         onOpenDetail={() => {
@@ -3471,21 +3410,11 @@ function ProfilePageContent() {
             profile={profile}
             shareProfile={viewerShareProfile}
             canManageTrade={currentUserId === profile.id}
-            menuOpen={openTradeMenuId === String(selectedTradeDetail.id)}
-            onMenuToggle={() =>
-              setOpenTradeMenuId((prev) =>
-                prev === String(selectedTradeDetail.id)
-                  ? null
-                  : String(selectedTradeDetail.id)
-              )
-            }
             onStartEditTrade={() => {
               openEditTradeModal(selectedTradeDetail)
-              setOpenTradeMenuId(null)
               setSelectedTradeDetail(null)
             }}
             onTogglePinTrade={() => void handlePinTrade(selectedTradeDetail)}
-            onSaveTrade={() => void handleSaveTrade(String(selectedTradeDetail.id))}
             onDeleteTrade={() => void handleDeleteTrade(String(selectedTradeDetail.id))}
             showInteractions={true}
             commentsExpanded

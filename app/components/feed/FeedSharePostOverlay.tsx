@@ -2,10 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { supabase } from "@/lib/supabaseClient"
-import { fetchShareConversations } from "@/lib/shareToConversations"
+import { fetchShareConversations, sendPostToConversations } from "@/lib/shareToConversations"
 import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
 import { feedbackPresets } from "@/lib/feedbackPresets"
-import { logSupabaseError } from "@/lib/logSupabaseError"
+import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import FeedPostScreenshot from "./FeedPostScreenshot"
 import { postImageSrc } from "./feedPostHelpers"
@@ -92,28 +92,16 @@ export default function FeedSharePostOverlay({
 
     const content = shareMessage.trim() || "Shared a post"
 
-    for (const conversationId of selectedConversations) {
-      const payload = {
-        conversation_id: conversationId,
-        sender_id: authUser.id,
-        type: "post",
-        post_id: post.id,
-        content,
-        channel: null,
-      }
-      const { error } = await supabase.from("messages").insert(payload)
+    const { error } = await sendPostToConversations(supabase, {
+      senderId: authUser.id,
+      conversationIds: selectedConversations,
+      postId: post.id,
+      content,
+    })
 
-      if (error) {
-        logSupabaseError("FeedSharePostOverlay messages insert", error, {
-          table: "messages",
-          query: "insert",
-          payload,
-          userId: authUser.id,
-          conversationId,
-        })
-        showPopup({ type: "error", message: handleSupabaseError(error) })
-        return
-      }
+    if (error) {
+      showPopup({ type: "error", message: handleSupabaseError(error) })
+      return
     }
 
     onClose()

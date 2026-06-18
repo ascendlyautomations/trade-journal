@@ -209,6 +209,78 @@ export function SkeletonChecklist({ className }: { className?: string }) {
   )
 }
 
+export function SkeletonTradesFilterBar({ className }: { className?: string }) {
+  return (
+    <div
+      className={cn(
+        "flex flex-wrap items-center justify-center gap-2 md:justify-start md:gap-3",
+        className
+      )}
+    >
+      <Skeleton className="h-8 w-28 rounded-full" />
+      <Skeleton className="h-8 w-28 rounded-full" />
+      <Skeleton className="h-[34px] w-36 rounded-md" />
+      <Skeleton className="h-[34px] w-32 rounded-md" />
+      <Skeleton className="h-[34px] w-28 rounded-md" />
+      <Skeleton className="h-[34px] w-24 rounded-md" />
+      <Skeleton className="h-10 flex-1 rounded md:h-[34px] md:w-28 md:flex-none" />
+      <Skeleton className="h-10 w-20 rounded md:h-[34px] md:w-24" />
+      <Skeleton className="h-10 w-10 rounded md:h-[34px] md:w-10" />
+    </div>
+  )
+}
+
+export function SkeletonTradesPageTradeCard({ className }: { className?: string }) {
+  return (
+    <SkeletonCard
+      className={cn(
+        "px-2 py-3 md:px-4",
+        className
+      )}
+    >
+      <div className="flex flex-col gap-3 md:flex-row md:gap-2.5">
+        <div className="min-w-0 flex-1 space-y-3">
+          <div className="space-y-2 pr-16">
+            <Skeleton className="h-5 w-36" />
+            <Skeleton className="h-3 w-44" />
+            <Skeleton className="h-3 w-32" />
+          </div>
+          <Skeleton className="h-8 w-24 rounded-lg" />
+          <div className="flex flex-wrap gap-2">
+            <Skeleton className="h-6 w-14 rounded" />
+            <Skeleton className="h-6 w-14 rounded" />
+          </div>
+          <Skeleton className="h-3 w-28" />
+          <Skeleton className="h-3 w-24" />
+        </div>
+        <Skeleton className="h-32 w-full shrink-0 rounded-lg md:h-28 md:w-36" />
+      </div>
+    </SkeletonCard>
+  )
+}
+
+export function SkeletonTradesPageContent({ tradeCount = 6 }: { tradeCount?: number }) {
+  return (
+    <div aria-busy="true" aria-label="Loading trades">
+      <div className="w-full mt-2.5 mb-1.5">
+        <SkeletonTradesFilterBar />
+      </div>
+
+      <div className="w-full grid grid-cols-2 md:grid-cols-4 gap-2 mb-3 mt-0">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <SkeletonStatsCard key={i} />
+        ))}
+      </div>
+
+      <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-4">
+        {Array.from({ length: tradeCount }).map((_, i) => (
+          <SkeletonTradesPageTradeCard key={i} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export function SkeletonDashboardPage() {
   return (
     <div className="w-full px-3 pb-3 pt-0 text-white md:px-10 md:pb-10">

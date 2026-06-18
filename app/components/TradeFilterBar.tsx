@@ -6,6 +6,15 @@ import { useRouter } from "next/navigation"
 
 const MANAGE_ACCOUNTS_VALUE = "__manage_accounts__"
 
+/** Shared with account pickers — same destination as the filter bar action. */
+export const MANAGE_ACCOUNTS_SETTINGS_HREF = "/settings#trading-accounts" as const
+
+export function navigateToManageAccounts(
+  router: ReturnType<typeof useRouter>
+) {
+  router.push(MANAGE_ACCOUNTS_SETTINGS_HREF)
+}
+
 const TF_LABEL_FROM_VALUE: Record<string, string> = {
   all: "All",
   daily: "Daily",
@@ -125,7 +134,7 @@ export default function TradeFilterBar({
 
   function handleAccountFilterChange(value: string) {
     if (value === MANAGE_ACCOUNTS_VALUE) {
-      router.push("/settings#trading-accounts")
+      navigateToManageAccounts(router)
       return
     }
     onAccountChange(value)
@@ -148,7 +157,7 @@ export default function TradeFilterBar({
           </option>
         ))}
         <option disabled>────────────────────</option>
-        <option value={MANAGE_ACCOUNTS_VALUE}>Manage Accounts →</option>
+        <option value={MANAGE_ACCOUNTS_VALUE}>⚙️ Manage Accounts</option>
       </select>
     )
   }

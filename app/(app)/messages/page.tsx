@@ -19,6 +19,14 @@ import {
   markConversationUnread,
   normalizeSeenBy,
 } from "../../../lib/messageUnread"
+import {
+  applyInboxPatchesToConversations,
+  CONVERSATION_UPDATED_EVENT,
+  INBOX_PATCHES_STORAGE_KEY,
+  mergeConversationInboxFields,
+  previewFromMessage,
+  readInboxPatches,
+} from "@/lib/conversationInboxSync"
 import { useRouter } from "next/navigation"
 import MessagesConversationList from "../../components/messages/MessagesConversationList"
 import EmptyState from "../../components/ui/EmptyState"
@@ -35,21 +43,6 @@ function sortConversationsDesc(list: any[]) {
       )
     }
   )
-}
-
-function previewFromMessage(row: {
-  content?: string | null
-  image_url?: string | null
-  type?: string | null
-  deleted_for_everyone?: boolean | null
-  is_system?: boolean | null
-}): string {
-  if (row.deleted_for_everyone) return "Message deleted"
-  if (row.content?.trim()) return row.content.trim()
-  if (row.image_url) return "Image"
-  if (row.type === "trade") return "Shared a trade"
-  if (row.type === "post") return "Shared a post"
-  return "New message"
 }
 
 export default function MessagesPage() {
@@ -290,18 +283,42 @@ export default function MessagesPage() {
         if (!prev.some((c) => c.id === conversationId)) return prev
         const updated = prev.map((c) =>
           c.id === conversationId
-            ? {
-                ...c,
-                lastMessage: last_message ?? c.lastMessage,
-                last_message_at: last_message_at ?? c.last_message_at
-              }
+            ? mergeConversationInboxFields(c, {
+                last_message,
+                last_message_at,
+              })
             : c
         )
         return sortConversationsDesc(updated)
       })
     }
-    window.addEventListener("tj-conversation-updated", handler)
-    return () => window.removeEventListener("tj-conversation-updated", handler)
+    window.addEventListener(CONVERSATION_UPDATED_EVENT, handler)
+    return () => window.removeEventListener(CONVERSATION_UPDATED_EVENT, handler)
+  }, [])
+
+  useEffect(() => {
+    function applyStoredPatches() {
+      const patches = readInboxPatches()
+      if (Object.keys(patches).length === 0) return
+      setConversations((prev) =>
+        sortConversationsDesc(applyInboxPatchesToConversations(prev, patches))
+      )
+    }
+
+    function onStorage(event: StorageEvent) {
+      if (event.key === INBOX_PATCHES_STORAGE_KEY) applyStoredPatches()
+    }
+
+    function onVisibilityChange() {
+      if (document.visibilityState === "visible") applyStoredPatches()
+    }
+
+    window.addEventListener("storage", onStorage)
+    document.addEventListener("visibilitychange", onVisibilityChange)
+    return () => {
+      window.removeEventListener("storage", onStorage)
+      document.removeEventListener("visibilitychange", onVisibilityChange)
+    }
   }, [])
 
   async function init() {
@@ -410,7 +427,9 @@ export default function MessagesPage() {
       }
     })
 
-    const sorted = sortConversationsDesc(convoData)
+    const sorted = sortConversationsDesc(
+      applyInboxPatchesToConversations(convoData)
+    )
     setConversations(sorted)
     return sorted
   }, [])
@@ -473,10 +492,13 @@ export default function MessagesPage() {
 
           const updated = prev.map((c) => {
             if (c.id !== convoId) return c
-            return {
-              ...c,
-              lastMessage: preview,
+            const merged = mergeConversationInboxFields(c, {
+              last_message: preview,
               last_message_at: createdAt,
+            })
+            if (merged === c) return c
+            return {
+              ...merged,
               unreadCount: isUnread
                 ? (c.unreadCount ?? 0) + 1
                 : c.unreadCount ?? 0,

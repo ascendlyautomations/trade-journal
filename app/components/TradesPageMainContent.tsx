@@ -5,6 +5,7 @@ import { memo, type Dispatch, type SetStateAction } from "react"
 import EmptyState from "./ui/EmptyState"
 import TradeFilterBar from "./TradeFilterBar"
 import TradesPageTradeCard from "./TradesPageTradeCard"
+import { SkeletonTradesPageContent } from "./ui/skeletons"
 import { formatMoneyUnknown, formatRR } from "@/lib/formatDisplay"
 
 type TradeStats = {
@@ -97,7 +98,7 @@ function TradesPageMainContent({
   onImportCsv,
 }: TradesPageMainContentProps) {
   if (loading) {
-    return <p className="text-center text-gray-400">Loading...</p>
+    return <SkeletonTradesPageContent tradeCount={6} />
   }
 
   return (

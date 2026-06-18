@@ -112,7 +112,7 @@ export default function DetailModalShell({
         role="dialog"
         aria-modal="true"
         aria-label={ariaLabel}
-        className={`mx-auto flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-xl bg-[#0f172a] shadow-xl ${dialogWidthClass}`}
+        className={`mx-auto flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-xl bg-[#0f172a] text-gray-100 shadow-xl ${dialogWidthClass}`}
         style={{
           maxHeight: "calc(100dvh - var(--navbar-height, 4rem) - 1.5rem)",
         }}

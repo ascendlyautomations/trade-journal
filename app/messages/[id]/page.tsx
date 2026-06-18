@@ -32,6 +32,11 @@ import {
 import { isConversationParticipant } from "@/lib/conversationAccess"
 import { ensureDmConversation } from "@/lib/dmConversation"
 import {
+  dispatchConversationInboxPatch,
+  previewFromMessage,
+  updateConversationPreview,
+} from "@/lib/conversationInboxSync"
+import {
   buildDmThreadPath,
   isConversationUuidSegment,
 } from "@/lib/messageRoutes"
@@ -1126,28 +1131,21 @@ export default function DMPage() {
       return
     }
 
-    const lastMsg = input || (imageUrl ? "Image" : "")
-    const lastMessageAt = new Date().toISOString()
+    const preview = previewFromMessage({
+      content: input || null,
+      image_url: imageUrl,
+    })
+    const lastMessageAt = await updateConversationPreview(
+      supabase,
+      activeConversationId,
+      preview
+    )
 
-    await supabase
-      .from("conversations")
-      .update({
-        last_message: lastMsg,
-        last_message_at: lastMessageAt
-      })
-      .eq("id", activeConversationId)
-
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(
-        new CustomEvent("tj-conversation-updated", {
-          detail: {
-            conversationId: activeConversationId,
-            last_message: lastMsg,
-            last_message_at: lastMessageAt
-          }
-        })
-      )
-    }
+    dispatchConversationInboxPatch({
+      conversationId: activeConversationId,
+      last_message: preview,
+      last_message_at: lastMessageAt,
+    })
 
     setInput("")
     setSelectedFile(null)
@@ -1213,27 +1211,18 @@ export default function DMPage() {
     }
 
     const lastMsg = "Shared a trade"
-    const lastMessageAt = new Date().toISOString()
+    const lastMessageAt = await updateConversationPreview(
+      supabase,
+      activeConversationId,
+      previewFromMessage({ content: lastMsg, type: "trade" }),
+      undefined
+    )
 
-    await supabase
-      .from("conversations")
-      .update({
-        last_message: lastMsg,
-        last_message_at: lastMessageAt,
-      })
-      .eq("id", activeConversationId)
-
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(
-        new CustomEvent("tj-conversation-updated", {
-          detail: {
-            conversationId: activeConversationId,
-            last_message: lastMsg,
-            last_message_at: lastMessageAt,
-          },
-        })
-      )
-    }
+    dispatchConversationInboxPatch({
+      conversationId: activeConversationId,
+      last_message: lastMsg,
+      last_message_at: lastMessageAt,
+    })
 
     setShowTradePicker(false)
     } finally {

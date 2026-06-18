@@ -27,6 +27,7 @@ import { notifyGettingStartedChecklistMaybeCompleted } from "@/lib/gettingStarte
 import CreateAccountModal, {
   type Props as CreateAccountModalProps,
 } from "@/components/CreateAccountModal"
+import TradeAccountPicker from "@/app/components/TradeAccountPicker"
 import CsvImportUnsupportedBanner from "@/app/components/CsvImportUnsupportedBanner"
 import CsvImportDiagnosticsPanel from "@/app/components/CsvImportDiagnosticsPanel"
 import type { CsvImportDiagnostics } from "@/lib/csvImportDiagnostics"
@@ -36,18 +37,6 @@ import { postImageSrc } from "@/app/components/feed/feedPostHelpers"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 
 type CreateAccountSavePayload = Parameters<CreateAccountModalProps["onSave"]>[0]
-
-/** Display token after `#` — human account number when present, else shortened UUID. */
-function accountNumberLabel(acc: {
-  account_number?: string | null
-  id?: string | null
-}): string {
-  const num = String(acc.account_number ?? "").trim()
-  if (num) return num
-  const id = String(acc.id ?? "").trim()
-  if (!id) return "—"
-  return id.length > 14 ? `${id.slice(0, 8)}…` : id
-}
 
 function modeLabelFromDb(raw: string | null | undefined): string {
   const s = String(raw ?? "").toLowerCase().trim()
@@ -89,20 +78,6 @@ function formatAccountSize(size: any) {
   return size
 }
 
-function formatMode(mode: any) {
-  if (!mode) return "Live"
-
-  const m = String(mode).toLowerCase()
-
-  if (m === "eval") return "Eval"
-  if (m === "funded") return "Funded"
-  if (m === "live") return "Live"
-  if (m === "sim") return "Sim"
-  if (m === "backtest") return "Backtest"
-
-  return mode
-}
-
 export default function InputTradeForm({
   existingTrade,
   onSave,
@@ -123,7 +98,6 @@ export default function InputTradeForm({
 
   const [accounts, setAccounts] = useState<any[]>([])
   const [selectedAccount, setSelectedAccount] = useState<any | null>(null)
-  const [accountDropdownOpen, setAccountDropdownOpen] = useState(false)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showAccountWarning, setShowAccountWarning] = useState(false)
 
@@ -455,18 +429,6 @@ export default function InputTradeForm({
       setSelectedAccount(null)
     }
   }, [selectedAccount])
-
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      const target = e.target as HTMLElement
-      if (!target.closest(".account-dropdown")) {
-        setAccountDropdownOpen(false)
-      }
-    }
-
-    document.addEventListener("mousedown", handleClickOutside)
-    return () => document.removeEventListener("mousedown", handleClickOutside)
-  }, [])
 
   const effectiveModeLower = String(
     selectedAccount?.mode ??
@@ -1558,51 +1520,15 @@ export default function InputTradeForm({
         <div className="flex flex-col gap-3 md:hidden">
           <div className="flex items-center gap-2">
             {onUploadCsvClick ? (
-              <div className="relative min-w-0 flex-1 account-dropdown">
-                <div
-                  onClick={() => setAccountDropdownOpen(!accountDropdownOpen)}
-                  className="w-full min-w-0 p-2 rounded bg-[#0f172a] border border-white/10 text-white cursor-pointer flex justify-between items-center gap-2"
-                >
-                  <span className="min-w-0 flex-1 truncate">
-                    {selectedAccount
-                      ? `${selectedAccount.name} • ${selectedAccount.size} • ${selectedAccount.category || "Personal"} • ${formatMode(selectedAccount.mode)} • #${accountNumberLabel(selectedAccount)}`
-                      : "Select Account"}
-                  </span>
-                  <span className="shrink-0 text-gray-400">▾</span>
-                </div>
-                {accountDropdownOpen && (
-                  <div className="absolute z-50 mt-1 w-full min-w-full bg-[#0f172a] border border-white/10 rounded shadow-lg max-h-60 overflow-y-auto">
-                    {activeAccounts.map((acc) => (
-                      <div
-                        key={`${acc.name}-${acc.id}-${acc.mode}`}
-                        onClick={() => {
-                          setSelectedAccount(acc)
-                          setAccountDropdownOpen(false)
-                        }}
-                        className="px-3 py-2 hover:bg-[#1f2937] cursor-pointer text-sm text-white whitespace-normal break-words"
-                      >
-                        {acc.name} • {formatAccountSize(acc.size)} • {acc.category || "Personal"} •{" "}
-                        {formatMode(acc.mode)} • #{accountNumberLabel(acc)}
-                      </div>
-                    ))}
-                    {!accountFieldsLocked ? (
-                      <div
-                        onClick={() => {
-                          setShowCreateModal(true)
-                          setAccountDropdownOpen(false)
-                        }}
-                        className="px-3 py-2 hover:bg-[#1f2937] cursor-pointer text-sm text-green-400"
-                      >
-                        + Create New Account
-                      </div>
-                    ) : (
-                      <div className="px-3 py-2 text-sm text-amber-300/90">
-                        Upgrade to Pro to add more accounts
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
+              <TradeAccountPicker
+                className="min-w-0 flex-1"
+                accounts={activeAccounts}
+                selectedAccount={selectedAccount}
+                onSelect={setSelectedAccount}
+                onOpenCreate={() => setShowCreateModal(true)}
+                disableCreate={accountFieldsLocked}
+                showExternalCreateButton={false}
+              />
             ) : null}
             <button
               type="button"
@@ -1657,51 +1583,15 @@ export default function InputTradeForm({
         <div className="hidden md:flex items-center w-full gap-3 min-w-0">
           <div className="flex min-w-0 flex-1 items-center gap-3 flex-wrap">
             {onUploadCsvClick ? (
-              <div className="relative w-full max-w-[410px] shrink-0 account-dropdown">
-                <div
-                  onClick={() => setAccountDropdownOpen(!accountDropdownOpen)}
-                  className="w-full min-w-0 p-2 rounded bg-[#0f172a] border border-white/10 text-white cursor-pointer flex justify-between items-center gap-2"
-                >
-                  <span className="min-w-0 flex-1 truncate">
-                    {selectedAccount
-                      ? `${selectedAccount.name} • ${selectedAccount.size} • ${selectedAccount.category || "Personal"} • ${formatMode(selectedAccount.mode)} • #${accountNumberLabel(selectedAccount)}`
-                      : "Select Account"}
-                  </span>
-                  <span className="shrink-0 text-gray-400">▾</span>
-                </div>
-                {accountDropdownOpen && (
-                  <div className="absolute z-50 mt-1 w-full min-w-full bg-[#0f172a] border border-white/10 rounded shadow-lg max-h-60 overflow-y-auto">
-                    {activeAccounts.map((acc) => (
-                      <div
-                        key={`${acc.name}-${acc.id}-${acc.mode}`}
-                        onClick={() => {
-                          setSelectedAccount(acc)
-                          setAccountDropdownOpen(false)
-                        }}
-                        className="px-3 py-2 hover:bg-[#1f2937] cursor-pointer text-sm text-white whitespace-normal break-words"
-                      >
-                        {acc.name} • {formatAccountSize(acc.size)} • {acc.category || "Personal"} •{" "}
-                        {formatMode(acc.mode)} • #{accountNumberLabel(acc)}
-                      </div>
-                    ))}
-                    {!accountFieldsLocked ? (
-                      <div
-                        onClick={() => {
-                          setShowCreateModal(true)
-                          setAccountDropdownOpen(false)
-                        }}
-                        className="px-3 py-2 hover:bg-[#1f2937] cursor-pointer text-sm text-green-400"
-                      >
-                        + Create New Account
-                      </div>
-                    ) : (
-                      <div className="px-3 py-2 text-sm text-amber-300/90">
-                        Upgrade to Pro to add more accounts
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
+              <TradeAccountPicker
+                className="w-full max-w-[410px] shrink-0"
+                accounts={activeAccounts}
+                selectedAccount={selectedAccount}
+                onSelect={setSelectedAccount}
+                onOpenCreate={() => setShowCreateModal(true)}
+                disableCreate={accountFieldsLocked}
+                showExternalCreateButton={false}
+              />
             ) : null}
 
             <button

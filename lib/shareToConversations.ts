@@ -2,6 +2,11 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import { compressImage } from "./compressImage"
 import { logSupabaseError } from "./logSupabaseError"
 import { assertSenderOwnsTrade } from "./tradeShareAccess"
+import {
+  dispatchConversationInboxPatch,
+  previewFromMessage,
+  updateConversationPreview,
+} from "./conversationInboxSync"
 
 export type ShareConversationRow = {
   id: string
@@ -80,17 +85,47 @@ export async function fetchShareConversations(
   })
 }
 
-function notifyConversationUpdated(
+async function syncConversationAfterSend(
+  supabase: SupabaseClient,
   conversationId: string,
-  last_message: string,
-  last_message_at: string
+  preview: string,
+  lastMessageAt: string
 ) {
-  if (typeof window === "undefined") return
-  window.dispatchEvent(
-    new CustomEvent("tj-conversation-updated", {
-      detail: { conversationId, last_message, last_message_at },
+  await updateConversationPreview(supabase, conversationId, preview, lastMessageAt)
+  dispatchConversationInboxPatch({
+    conversationId,
+    last_message: preview,
+    last_message_at: lastMessageAt,
+  })
+}
+
+async function insertShareMessage(
+  supabase: SupabaseClient,
+  payload: Record<string, unknown>,
+  logContext: { label: string; userId: string; conversationId: string }
+): Promise<{ createdAt: string | null; error: Error | null }> {
+  const { data, error } = await supabase
+    .from("messages")
+    .insert(payload)
+    .select("created_at")
+    .single()
+
+  if (error) {
+    logSupabaseError(`${logContext.label} insert`, error, {
+      table: "messages",
+      query: "insert",
+      payload,
+      userId: logContext.userId,
+      conversationId: logContext.conversationId,
     })
-  )
+    return { createdAt: null, error: new Error(error.message) }
+  }
+
+  return {
+    createdAt:
+      data?.created_at != null ? String(data.created_at) : new Date().toISOString(),
+    error: null,
+  }
 }
 
 /** Same insert shape as `handleSendTrade` in `app/messages/[id]/page.tsx`. */
@@ -113,7 +148,6 @@ export async function sendTradeToConversations(
   }
 
   const content = opts.content?.trim() || "Shared a trade"
-  const lastMessageAt = new Date().toISOString()
 
   for (const conversationId of opts.conversationIds) {
     const payload = {
@@ -124,27 +158,61 @@ export async function sendTradeToConversations(
       content,
       channel: null,
     }
-    const { error } = await supabase.from("messages").insert(payload)
-    if (error) {
-      logSupabaseError("sendTradeToConversations insert", error, {
-        table: "messages",
-        query: "insert",
-        payload,
-        userId: opts.senderId,
-        conversationId,
-      })
-      return { error: new Error(error.message) }
+    const { createdAt, error } = await insertShareMessage(supabase, payload, {
+      label: "sendTradeToConversations",
+      userId: opts.senderId,
+      conversationId,
+    })
+    if (error || !createdAt) {
+      return { error: error ?? new Error("Message insert failed") }
     }
 
-    await supabase
-      .from("conversations")
-      .update({
-        last_message: content,
-        last_message_at: lastMessageAt,
-      })
-      .eq("id", conversationId)
+    await syncConversationAfterSend(
+      supabase,
+      conversationId,
+      previewFromMessage({ content, type: "trade" }),
+      createdAt
+    )
+  }
 
-    notifyConversationUpdated(conversationId, content, lastMessageAt)
+  return { error: null }
+}
+
+export async function sendPostToConversations(
+  supabase: SupabaseClient,
+  opts: {
+    senderId: string
+    conversationIds: string[]
+    postId: string
+    content?: string
+  }
+): Promise<{ error: Error | null }> {
+  const content = opts.content?.trim() || "Shared a post"
+
+  for (const conversationId of opts.conversationIds) {
+    const payload = {
+      conversation_id: conversationId,
+      sender_id: opts.senderId,
+      type: "post",
+      post_id: opts.postId,
+      content,
+      channel: null,
+    }
+    const { createdAt, error } = await insertShareMessage(supabase, payload, {
+      label: "sendPostToConversations",
+      userId: opts.senderId,
+      conversationId,
+    })
+    if (error || !createdAt) {
+      return { error: error ?? new Error("Message insert failed") }
+    }
+
+    await syncConversationAfterSend(
+      supabase,
+      conversationId,
+      previewFromMessage({ content, type: "post" }),
+      createdAt
+    )
   }
 
   return { error: null }
@@ -192,7 +260,6 @@ export async function sendImageDataUrlToConversations(
 
   const content = opts.content?.trim() || ""
   const lastMsg = content || "Image"
-  const lastMessageAt = new Date().toISOString()
 
   for (const conversationId of opts.conversationIds) {
     const payload = {
@@ -202,27 +269,21 @@ export async function sendImageDataUrlToConversations(
       image_url: imageUrl,
       channel: null,
     }
-    const { error } = await supabase.from("messages").insert(payload)
-    if (error) {
-      logSupabaseError("sendImageDataUrlToConversations insert", error, {
-        table: "messages",
-        query: "insert",
-        payload,
-        userId: opts.senderId,
-        conversationId,
-      })
-      return { error: new Error(error.message) }
+    const { createdAt, error } = await insertShareMessage(supabase, payload, {
+      label: "sendImageDataUrlToConversations",
+      userId: opts.senderId,
+      conversationId,
+    })
+    if (error || !createdAt) {
+      return { error: error ?? new Error("Message insert failed") }
     }
 
-    await supabase
-      .from("conversations")
-      .update({
-        last_message: lastMsg,
-        last_message_at: lastMessageAt,
-      })
-      .eq("id", conversationId)
-
-    notifyConversationUpdated(conversationId, lastMsg, lastMessageAt)
+    await syncConversationAfterSend(
+      supabase,
+      conversationId,
+      previewFromMessage({ content, image_url: imageUrl }),
+      createdAt
+    )
   }
 
   return { error: null }

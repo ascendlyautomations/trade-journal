@@ -153,6 +153,74 @@ export function formatAchievementValue(a: Achievement): string | null {
   return numeric.toLocaleString()
 }
 
+export function isPayoutAchievementType(type: string | null | undefined): boolean {
+  return String(type ?? "")
+    .trim()
+    .toLowerCase()
+    .includes("payout")
+}
+
+type PayoutAchievementSumInput = {
+  achievement_type: string | null
+  value_numeric: number | null
+}
+
+/** Sum payout achievement values — matches profile overview “Payout Total”. */
+export function sumPayoutAchievementTotals(
+  achievements: PayoutAchievementSumInput[]
+): number {
+  return achievements
+    .filter((a) => isPayoutAchievementType(a.achievement_type))
+    .reduce((sum, a) => sum + (Number(a.value_numeric) || 0), 0)
+}
+
+export type PayoutAchievementRow = {
+  user_id: string
+  achievement_type: string | null
+  value_numeric: number | null
+}
+
+export function buildPayoutTotalsByUserId(
+  rows: PayoutAchievementRow[]
+): Record<string, number> {
+  const grouped = new Map<string, PayoutAchievementSumInput[]>()
+
+  for (const row of rows) {
+    const userId = String(row.user_id ?? "").trim()
+    if (!userId) continue
+    const list = grouped.get(userId) ?? []
+    list.push(row)
+    grouped.set(userId, list)
+  }
+
+  const totals: Record<string, number> = {}
+  for (const [userId, list] of grouped) {
+    totals[userId] = sumPayoutAchievementTotals(list)
+  }
+  return totals
+}
+
+/** Public payout totals for explore / discovery (RLS: is_public only for others). */
+export async function fetchPublicPayoutTotalsByUserId(
+  userIds: string[]
+): Promise<Record<string, number>> {
+  const uniqueIds = [...new Set(userIds.map((id) => String(id).trim()).filter(Boolean))]
+  if (uniqueIds.length === 0) return {}
+
+  const { data, error } = await supabase
+    .from("achievements")
+    .select("user_id, achievement_type, value_numeric")
+    .in("user_id", uniqueIds)
+    .eq("is_public", true)
+
+  if (error) {
+    console.error("[achievements] fetchPublicPayoutTotalsByUserId:", error)
+    return {}
+  }
+
+  return buildPayoutTotalsByUserId((data || []) as PayoutAchievementRow[])
+}
+
 export async function fetchOwnAchievements(userId: string) {
   return supabase
     .from("achievements")
