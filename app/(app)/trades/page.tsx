@@ -190,6 +190,13 @@ export default function TradesPage() {
     setSendTradeId(String(trade.id))
   }, [])
 
+  const handleAnalyzeTrade = useCallback(
+    (trade: any) => {
+      router.push(`/analyst?trade=${encodeURIComponent(String(trade.id))}`)
+    },
+    [router]
+  )
+
   const handleImageClick = useCallback((url: string) => {
     setSelectedImage(url)
   }, [])
@@ -427,6 +434,7 @@ export default function TradesPage() {
             onEditTrade={handleEditTrade}
             onDeleteTrade={handleDeleteTrade}
             onSendTrade={handleSendTrade}
+            onAnalyzeTrade={handleAnalyzeTrade}
             onImageClick={handleImageClick}
             onLoadMore={handleLoadMore}
             onImportCsv={() => setShowImportModal(true)}

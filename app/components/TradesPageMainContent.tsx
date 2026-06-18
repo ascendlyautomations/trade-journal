@@ -45,6 +45,7 @@ type TradesPageMainContentProps = {
   onEditTrade: (trade: any) => void
   onDeleteTrade: (tradeId: string) => void
   onSendTrade: (trade: any) => void
+  onAnalyzeTrade?: (trade: any) => void
   onImageClick: (imageUrl: string) => void
   onLoadMore: () => void
   onImportCsv: () => void
@@ -93,6 +94,7 @@ function TradesPageMainContent({
   onEditTrade,
   onDeleteTrade,
   onSendTrade,
+  onAnalyzeTrade,
   onImageClick,
   onLoadMore,
   onImportCsv,
@@ -294,6 +296,7 @@ function TradesPageMainContent({
               onEdit={onEditTrade}
               onDelete={onDeleteTrade}
               onSendClick={onSendTrade}
+              onAnalyze={onAnalyzeTrade}
               onImageClick={onImageClick}
             />
           ))

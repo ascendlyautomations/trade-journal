@@ -2,13 +2,72 @@
 
 import Navbar from "../components/Navbar"
 import LockedFeature from "../components/LockedFeature"
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState, Suspense } from "react"
+import { useSearchParams } from "next/navigation"
 import { supabase } from "../../lib/supabaseClient"
 import { isProActive } from "../../lib/subscription"
 import { formatEST } from "@/lib/formatEST"
 import { formatRR } from "@/lib/formatDisplay"
 
+type AnalyzeTradeApiPayload = {
+  reply?: string
+  error?: string
+}
+
+async function parseAnalyzeTradeResponse(res: Response): Promise<{
+  ok: boolean
+  data: AnalyzeTradeApiPayload | null
+}> {
+  const text = await res.text()
+
+  if (!text.trim()) {
+    return {
+      ok: false,
+      data: {
+        error: res.ok
+          ? "Analysis returned an empty response. Please try again."
+          : "Analysis is temporarily unavailable. Please try again.",
+      },
+    }
+  }
+
+  try {
+    return { ok: res.ok, data: JSON.parse(text) as AnalyzeTradeApiPayload }
+  } catch {
+    return {
+      ok: false,
+      data: {
+        error: "Analysis returned an invalid response. Please try again.",
+      },
+    }
+  }
+}
+
+function analyzeTradeErrorMessage(
+  data: AnalyzeTradeApiPayload | null,
+  fallback: string
+) {
+  return data?.reply?.trim() || data?.error?.trim() || fallback
+}
+
 export default function AnalystPage() {
+  return (
+    <Suspense
+      fallback={
+        <>
+          <Navbar />
+          <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100 p-10">
+            <p className="text-center text-gray-400">Loading…</p>
+          </div>
+        </>
+      }
+    >
+      <AnalystPageContent />
+    </Suspense>
+  )
+}
+
+function AnalystPageContent() {
   const [trades, setTrades] = useState<any[]>([])
   const [selectedTrade, setSelectedTrade] = useState<any>(null)
   const [profile, setProfile] = useState<{
@@ -19,7 +78,9 @@ export default function AnalystPage() {
   const [messages, setMessages] = useState<any[]>([])
   const [input, setInput] = useState("")
   const [loading, setLoading] = useState(false)
+  const [tradePanelExpanded, setTradePanelExpanded] = useState(true)
   const [pageReady, setPageReady] = useState(false)
+  const searchParams = useSearchParams()
 
   useEffect(() => {
     void fetchTrades()
@@ -87,18 +148,69 @@ export default function AnalystPage() {
     return `${val < 0 ? "-" : ""}$${Math.abs(val).toLocaleString()}`
   }
 
-  async function analyzeTrade(trade: any) {
-    if (!isProActive(profile)) return
+  function tradeScreenshotUrl(trade: any) {
+    if (!trade?.image_url) return null
+    if (String(trade.image_url).startsWith("http")) return trade.image_url
+    return `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/screenshots/${trade.image_url}`
+  }
 
-    setMessages([])
-    setSelectedTrade(trade)
+  function formatTradeSummaryDate(createdAt: string) {
+    const date = new Date(createdAt)
+    if (Number.isNaN(date.getTime())) return "—"
+    return date.toLocaleDateString("en-US", {
+      month: "numeric",
+      day: "numeric",
+      year: "2-digit",
+    })
+  }
 
-    if (trade.ai_feedback) {
-      setMessages([{ role: "assistant", content: trade.ai_feedback }])
-      return
+  function formatPnlSummary(val: number) {
+    const formatted = formatCurrency(val)
+    if (val > 0) return `+${formatted}`
+    return formatted
+  }
+
+  function selectedTradeSummaryLine(trade: any) {
+    const direction = trade.direction || "—"
+    return `${trade.ticker} ${direction} • ${formatPnlSummary(trade.pnl)} • ${formatTradeSummaryDate(trade.created_at)}`
+  }
+
+  const selectTradeForReview = useCallback(
+    (trade: any) => {
+      if (!isProActive(profile)) return
+
+      setSelectedTrade(trade)
+      setInput("")
+      if (trade.ai_feedback) {
+        setMessages([{ role: "assistant", content: trade.ai_feedback }])
+        setTradePanelExpanded(false)
+      } else {
+        setMessages([])
+        setTradePanelExpanded(true)
+      }
+    },
+    [profile]
+  )
+
+  useEffect(() => {
+    if (!pageReady || trades.length === 0) return
+
+    const tradeId = searchParams.get("trade")?.trim()
+    if (!tradeId) return
+
+    const trade = trades.find((t) => String(t.id) === tradeId)
+    if (trade && String(selectedTrade?.id) !== tradeId) {
+      selectTradeForReview(trade)
     }
+  }, [pageReady, trades, searchParams, selectedTrade?.id, selectTradeForReview])
 
+  async function runTradeAnalysis() {
+    if (!selectedTrade || !isProActive(profile) || loading) return
+    if (selectedTrade.ai_feedback) return
+
+    const trade = selectedTrade
     setLoading(true)
+    setTradePanelExpanded(false)
 
     const {
       data: { session },
@@ -138,21 +250,19 @@ export default function AnalystPage() {
       }),
     })
 
-    let data = null
+    const { ok, data } = await parseAnalyzeTradeResponse(res)
 
-    try {
-      data = await res.json()
-    } catch (err) {
-      console.error("AI JSON PARSE ERROR:", err)
-    }
-
-    if (!res.ok) {
-      console.error("AI ERROR RESPONSE:", data)
+    if (!ok || !data?.reply) {
+      const errorMessage = analyzeTradeErrorMessage(
+        data,
+        "We couldn't complete the analysis. Please try again."
+      )
+      setMessages([{ role: "assistant", content: errorMessage }])
       setLoading(false)
       return
     }
 
-    const reply = data?.reply || data?.error || "AI unavailable"
+    const reply = data.reply
     setMessages([{ role: "assistant", content: reply }])
     setTrades((prev) =>
       prev.map((t) =>
@@ -214,17 +324,17 @@ export default function AnalystPage() {
       }),
     })
 
-    const data = await res.json()
+    const { ok, data } = await parseAnalyzeTradeResponse(res)
 
-    if (!res.ok) {
+    if (!ok || !data?.reply) {
       setMessages([
         ...newMessages,
         {
           role: "assistant",
-          content:
-            data.reply ||
-            data.error ||
-            "AI Analyst is a Pro feature. Upgrade to continue.",
+          content: analyzeTradeErrorMessage(
+            data,
+            "We couldn't complete the analysis. Please try again."
+          ),
         },
       ])
       setLoading(false)
@@ -271,7 +381,7 @@ export default function AnalystPage() {
               {trades.map((trade) => (
                 <div
                   key={trade.id}
-                  onClick={() => void analyzeTrade(trade)}
+                  onClick={() => selectTradeForReview(trade)}
                   className={`mb-3 cursor-pointer rounded border p-4 ${
                     selectedTrade?.id === trade.id
                       ? "border-emerald-400 bg-white/10"
@@ -327,94 +437,208 @@ export default function AnalystPage() {
 
               {selectedTrade && (
                 <>
-                  <div className="mb-4 space-y-1 text-sm">
-                    <p className="text-lg font-semibold">
-                      {selectedTrade.ticker} • {selectedTrade.direction}
-                    </p>
-
-                    <p
-                      className={
-                        selectedTrade.pnl >= 0
-                          ? "text-green-400"
-                          : "text-red-400"
-                      }
-                    >
-                      {formatCurrency(selectedTrade.pnl)}
-                    </p>
-
-                    <p>
-                      {formatEST(selectedTrade.created_at)} •{" "}
-                      {selectedTrade.session}
-                    </p>
-
-                    <p className="text-gray-400">
-                      {selectedTrade.account_type}{" "}
-                      {selectedTrade.account_size} ({selectedTrade.account_id})
-                    </p>
-
-                    {selectedTrade.entry_price && (
-                      <p>
-                        Entry: {selectedTrade.entry_price} → Exit:{" "}
-                        {selectedTrade.exit_price}
-                      </p>
-                    )}
-
-                    {selectedTrade.contracts != null && (
-                      <p>Contracts: {selectedTrade.contracts}</p>
-                    )}
-
-                    {selectedTrade.notes && (
-                      <p className="italic text-gray-400">
-                        {selectedTrade.notes}
-                      </p>
-                    )}
-                  </div>
-
-                  {selectedTrade.image_url && (
-                    <img
-                      src={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/screenshots/${selectedTrade.image_url}`}
-                      className="mb-4 max-h-48 rounded border border-white/10 object-cover"
-                      alt=""
-                      loading="lazy"
-                      decoding="async"
-                    />
-                  )}
-
-                  <div className="mb-4 flex-1 space-y-4 overflow-y-auto">
-                    {messages.map((msg, i) => (
-                      <div
-                        key={i}
-                        className={`max-w-[80%] rounded p-3 ${
-                          msg.role === "user"
-                            ? "ml-auto bg-blue-500"
-                            : "bg-white/10"
-                        }`}
-                      >
-                        <div className="whitespace-pre-wrap text-sm">
-                          {msg.content}
-                        </div>
-                      </div>
-                    ))}
-
-                    {loading && <p className="text-gray-400">Analyzing...</p>}
-                  </div>
-
-                  <div className="flex gap-2">
-                    <input
-                      value={input}
-                      onChange={(e) => setInput(e.target.value)}
-                      placeholder="Ask about this trade..."
-                      className="flex-1 rounded border border-white/10 bg-[#0f172a] p-2"
-                    />
-
+                  <div className="mb-4 shrink-0 rounded-xl border border-white/10 bg-[#0f172a]/60 p-4">
                     <button
                       type="button"
-                      onClick={() => void sendMessage()}
-                      className="rounded bg-emerald-500 px-4"
+                      onClick={() => setTradePanelExpanded((expanded) => !expanded)}
+                      className="flex w-full items-start justify-between gap-3 text-left"
+                      aria-expanded={tradePanelExpanded}
                     >
-                      Send
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
+                          Selected Trade{" "}
+                          <span className="normal-case tracking-normal text-gray-500">
+                            {tradePanelExpanded
+                              ? "(Click to Collapse)"
+                              : "(Click to Expand)"}
+                          </span>
+                        </p>
+                        {!tradePanelExpanded ? (
+                          <p className="mt-1 truncate text-sm font-semibold text-gray-100">
+                            {selectedTradeSummaryLine(selectedTrade)}
+                          </p>
+                        ) : null}
+                      </div>
+                      <span
+                        className="shrink-0 text-sm text-gray-400"
+                        aria-hidden
+                      >
+                        {tradePanelExpanded ? "▲" : "▼"}
+                      </span>
                     </button>
+
+                    {tradePanelExpanded ? (
+                      <>
+                        <p className="mt-3 text-lg font-semibold">
+                          {selectedTrade.ticker}{" "}
+                          {selectedTrade.direction || "—"}
+                        </p>
+                        <p
+                          className={`mt-1 text-xl font-bold ${
+                            selectedTrade.pnl >= 0
+                              ? "text-green-400"
+                              : "text-red-400"
+                          }`}
+                        >
+                          {formatCurrency(selectedTrade.pnl)}
+                        </p>
+                        <p className="mt-1 text-sm text-gray-400">
+                          {formatEST(selectedTrade.created_at)}
+                          {selectedTrade.session
+                            ? ` • ${selectedTrade.session}`
+                            : ""}
+                        </p>
+
+                        <div className="mt-3 space-y-1 border-t border-white/10 pt-3 text-sm">
+                          <p className="text-gray-400">
+                            {selectedTrade.account_type}{" "}
+                            {selectedTrade.account_size}
+                            {selectedTrade.account_id
+                              ? ` (${selectedTrade.account_id})`
+                              : ""}
+                          </p>
+
+                          {(selectedTrade.entry_price != null ||
+                            selectedTrade.exit_price != null) && (
+                            <p>
+                              <span className="text-gray-400">Entry:</span>{" "}
+                              {selectedTrade.entry_price ?? "—"} →{" "}
+                              <span className="text-gray-400">Exit:</span>{" "}
+                              {selectedTrade.exit_price ?? "—"}
+                            </p>
+                          )}
+
+                          {selectedTrade.contracts != null && (
+                            <p>
+                              <span className="text-gray-400">Contracts:</span>{" "}
+                              {selectedTrade.contracts}
+                            </p>
+                          )}
+
+                          <p>
+                            <span className="text-gray-400">RR:</span>{" "}
+                            {formatRR(selectedTrade.rr, "—")}
+                          </p>
+
+                          {selectedTrade.notes ? (
+                            <p>
+                              <span className="text-gray-400">Notes:</span>{" "}
+                              <span className="italic text-gray-300">
+                                {selectedTrade.notes}
+                              </span>
+                            </p>
+                          ) : null}
+
+                          {(selectedTrade.confluences ??
+                            selectedTrade.top_confluences) ? (
+                            <p>
+                              <span className="text-gray-400">Confluences:</span>{" "}
+                              {Array.isArray(
+                                selectedTrade.confluences ??
+                                  selectedTrade.top_confluences
+                              )
+                                ? (
+                                    selectedTrade.confluences ??
+                                    selectedTrade.top_confluences
+                                  ).join(", ")
+                                : String(
+                                    selectedTrade.confluences ??
+                                      selectedTrade.top_confluences
+                                  )}
+                            </p>
+                          ) : null}
+
+                          {selectedTrade.mistakes ? (
+                            <p>
+                              <span className="text-gray-400">Mistakes:</span>{" "}
+                              {Array.isArray(selectedTrade.mistakes)
+                                ? selectedTrade.mistakes.join(", ")
+                                : String(selectedTrade.mistakes)}
+                            </p>
+                          ) : null}
+
+                          {(selectedTrade.psychology ??
+                            selectedTrade.psychology_notes) ? (
+                            <p>
+                              <span className="text-gray-400">Psychology:</span>{" "}
+                              {selectedTrade.psychology ??
+                                selectedTrade.psychology_notes}
+                            </p>
+                          ) : null}
+                        </div>
+
+                        {tradeScreenshotUrl(selectedTrade) ? (
+                          <img
+                            src={tradeScreenshotUrl(selectedTrade)!}
+                            className="mt-3 max-h-48 w-full rounded border border-white/10 object-cover"
+                            alt=""
+                            loading="lazy"
+                            decoding="async"
+                          />
+                        ) : null}
+                      </>
+                    ) : null}
                   </div>
+
+                  {!selectedTrade.ai_feedback && messages.length === 0 && (
+                    <div className="mb-4 shrink-0 rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-4 text-center">
+                      <p className="mb-3 text-sm text-gray-300">
+                        Ready for Analysis
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => void runTradeAnalysis()}
+                        disabled={loading}
+                        className="rounded-lg bg-emerald-500 px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {loading ? "Analyzing…" : "Analyze Trade"}
+                      </button>
+                    </div>
+                  )}
+
+                  {(messages.length > 0 || loading) && (
+                    <div className="mb-4 flex min-h-0 flex-1 flex-col space-y-4 overflow-y-auto">
+                      {messages.map((msg, i) => (
+                        <div
+                          key={i}
+                          className={`max-w-[95%] rounded p-3 ${
+                            msg.role === "user"
+                              ? "ml-auto bg-blue-500"
+                              : "bg-white/10"
+                          }`}
+                        >
+                          <div className="whitespace-pre-wrap text-sm leading-relaxed md:text-base">
+                            {msg.content}
+                          </div>
+                        </div>
+                      ))}
+
+                      {loading && (
+                        <p className="text-gray-400">Analyzing...</p>
+                      )}
+                    </div>
+                  )}
+
+                  {messages.length > 0 && (
+                    <div className="flex shrink-0 gap-2">
+                      <input
+                        value={input}
+                        onChange={(e) => setInput(e.target.value)}
+                        placeholder="Ask about this trade..."
+                        className="flex-1 rounded border border-white/10 bg-[#0f172a] p-2"
+                        disabled={loading}
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() => void sendMessage()}
+                        disabled={loading}
+                        className="rounded bg-emerald-500 px-4 disabled:opacity-60"
+                      >
+                        Send
+                      </button>
+                    </div>
+                  )}
                 </>
               )}
             </div>
