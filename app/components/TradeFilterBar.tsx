@@ -132,6 +132,9 @@ export default function TradeFilterBar({
     }
   }
 
+  const accountSelectClassName =
+    "h-[34px] min-w-0 rounded-md border border-white/10 bg-[#0f172a] px-3 py-1 text-sm text-white hover:bg-[#1e293b] focus:outline-none focus:ring-2 focus:ring-blue-500 md:w-auto md:shrink-0"
+
   function handleAccountFilterChange(value: string) {
     if (value === MANAGE_ACCOUNTS_VALUE) {
       navigateToManageAccounts(router)
@@ -139,9 +142,6 @@ export default function TradeFilterBar({
     }
     onAccountChange(value)
   }
-
-  const accountSelectClassName =
-    "h-[34px] min-w-0 rounded-md border border-white/10 bg-[#0f172a] px-3 py-1 text-sm text-white hover:bg-[#1e293b] focus:outline-none focus:ring-2 focus:ring-blue-500 md:w-auto md:shrink-0"
 
   function renderAccountSelect(className: string) {
     return (

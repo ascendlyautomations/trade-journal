@@ -242,7 +242,7 @@ export default function ProfileOnboarding({
     <FeedbackModal {...feedbackModalProps} />
     <div
       ref={overlayRef}
-      className="fixed inset-0 z-[1000] flex items-start justify-center overflow-x-hidden bg-black/80 backdrop-blur-lg px-4 pb-8 pt-[calc(4rem+1rem)] md:items-center md:py-8"
+      className="fixed inset-0 z-[1000] flex items-start justify-center overflow-x-hidden bg-black/80 backdrop-blur-lg px-4 pb-8 pt-[calc(4rem+1rem+6px)] md:items-center md:py-8"
       role="dialog"
       aria-modal="true"
       aria-labelledby="onboarding-title"

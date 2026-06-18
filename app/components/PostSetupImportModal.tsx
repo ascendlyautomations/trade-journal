@@ -214,7 +214,7 @@ export default function PostSetupImportModal({ open, onComplete }: Props) {
         overlayClassName="z-[1200]"
       />
       <div
-      className={`fixed inset-0 z-[1100] flex items-start justify-center overflow-x-hidden px-4 pb-8 pt-[calc(4rem+1rem)] transition-opacity duration-300 motion-reduce:transition-none md:items-center md:py-8 ${
+      className={`fixed inset-0 z-[1100] flex items-start justify-center overflow-x-hidden px-4 pb-8 pt-[calc(4rem+1rem+6px)] transition-opacity duration-300 motion-reduce:transition-none md:items-center md:py-8 ${
         entered ? "bg-black/75 opacity-100 backdrop-blur-md" : "bg-black/75 opacity-0 backdrop-blur-md"
       }`}
       role="presentation"
@@ -250,6 +250,7 @@ export default function PostSetupImportModal({ open, onComplete }: Props) {
             onSelect={setSelectedAccount}
             onOpenCreate={() => setShowCreateModal(true)}
             disableCreate={!canCreateMoreAccounts}
+            hideManageAccounts
           />
           {!selectedAccount ? (
             <p className="mt-2 text-sm text-amber-200/90">

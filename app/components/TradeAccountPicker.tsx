@@ -4,6 +4,12 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { navigateToManageAccounts } from "./TradeFilterBar"
 import { safeAccountNumberLabel } from "@/lib/tradeAccountDisplay"
+import {
+  ACCOUNT_DROPDOWN_DIVIDER_CLASS,
+  ACCOUNT_DROPDOWN_ITEM_CLASS,
+  ACCOUNT_DROPDOWN_MANAGE_CLASS,
+  ACCOUNT_DROPDOWN_PANEL_CLASS,
+} from "@/lib/accountDropdownStyles"
 
 /** Mirrors `InputTradeForm` account row shape after `accounts` fetch. */
 export type TradeAccountOption = {
@@ -50,6 +56,8 @@ type Props = {
   disableCreate?: boolean
   /** Side “+ Create Account” button; off on Input Trade compact rows. */
   showExternalCreateButton?: boolean
+  /** Hide settings link (e.g. onboarding account creation). */
+  hideManageAccounts?: boolean
   className?: string
 }
 
@@ -60,6 +68,7 @@ export default function TradeAccountPicker({
   onOpenCreate,
   disableCreate = false,
   showExternalCreateButton = true,
+  hideManageAccounts = false,
   className = "",
 }: Props) {
   const router = useRouter()
@@ -99,8 +108,11 @@ export default function TradeAccountPicker({
           <span className="shrink-0 text-gray-400">▾</span>
         </button>
         {open ? (
-          <div className="absolute z-[110] mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-white/10 bg-[#0f172a] shadow-lg">
-            {accounts.map((acc) => (
+          <div className={ACCOUNT_DROPDOWN_PANEL_CLASS}>
+            {accounts.map((acc, index) => {
+              const isLastBeforeFooter =
+                index === accounts.length - 1 && !hideManageAccounts
+              return (
               <div
                 key={String(acc.id)}
                 role="button"
@@ -116,33 +128,38 @@ export default function TradeAccountPicker({
                     setOpen(false)
                   }
                 }}
-                className="cursor-pointer px-3 py-2 text-sm text-white hover:bg-[#1f2937]"
+                className={
+                  isLastBeforeFooter
+                    ? "cursor-pointer px-3 pt-2 pb-0 text-sm text-white hover:bg-[#1f2937]"
+                    : ACCOUNT_DROPDOWN_ITEM_CLASS
+                }
               >
                 {acc.name} • {formatAccountSize(acc.size)} • {acc.category || "Personal"} •{" "}
                 {formatMode(acc.mode)}
                 {accountNumberSuffix(acc)}
               </div>
-            ))}
-            <div
-              className="pointer-events-none select-none px-3 py-1.5 text-xs text-gray-500"
-              aria-hidden="true"
-            >
-              ────────────────────
-            </div>
-            <div
-              role="button"
-              tabIndex={0}
-              onClick={handleManageAccounts}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault()
-                  handleManageAccounts()
-                }
-              }}
-              className="cursor-pointer px-3 py-2 text-sm text-white hover:bg-[#1f2937]"
-            >
-              ⚙️ Manage Accounts
-            </div>
+            )})}
+            {!hideManageAccounts ? (
+              <>
+                <div className={ACCOUNT_DROPDOWN_DIVIDER_CLASS} aria-hidden="true">
+                  ────────────────────
+                </div>
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={handleManageAccounts}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault()
+                      handleManageAccounts()
+                    }
+                  }}
+                  className={ACCOUNT_DROPDOWN_MANAGE_CLASS}
+                >
+                  ⚙️ Manage Accounts
+                </div>
+              </>
+            ) : null}
             {!disableCreate ? (
               <div
                 role="button"

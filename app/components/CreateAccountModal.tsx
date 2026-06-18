@@ -166,9 +166,9 @@ export default function CreateAccountModal({
 
   return (
     <div
-      className={`fixed inset-0 z-[100] flex bg-black/60 p-4 backdrop-blur-sm ${
+      className={`fixed inset-0 z-[100] flex justify-center bg-black/60 p-4 backdrop-blur-sm ${
         belowNavbarOnMobile
-          ? "items-start pt-[calc(4rem+1rem)] md:items-center md:pt-4"
+          ? "items-start pt-[calc(4rem+1rem+6px)] md:items-center md:pt-4"
           : "items-center"
       }`}
     >
