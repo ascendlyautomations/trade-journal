@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { compressImage } from "./compressImage"
+import { ensureDmConversation } from "./dmConversation"
 import { logSupabaseError } from "./logSupabaseError"
 import { assertSenderOwnsTrade } from "./tradeShareAccess"
 import {
@@ -13,6 +14,9 @@ export type ShareConversationRow = {
   name: string
   avatar_url: string
   is_group: boolean
+  last_message_at?: string | null
+  /** DM counterpart — used to exclude from user search. */
+  other_user_id?: string | null
 }
 
 /** Same query shape as `app/feed/page.tsx` share-to-DM loader. */
@@ -44,6 +48,7 @@ export async function fetchShareConversations(
       is_group,
       name,
       avatar_url,
+      last_message_at,
       participants:conversation_participants(
         user_id,
         profiles (
@@ -61,7 +66,7 @@ export async function fetchShareConversations(
     return []
   }
 
-  return (rows || []).map((conv: any) => {
+  const mapped = (rows || []).map((conv: any) => {
     const participants = Array.isArray(conv.participants) ? conv.participants : []
     const otherUser = participants.find((p: any) => p.user_id !== userId)
     const otherProfileRaw = otherUser?.profiles
@@ -81,8 +86,39 @@ export async function fetchShareConversations(
       name: displayName,
       is_group: conv.is_group === true,
       avatar_url: displayAvatar,
+      last_message_at: conv.last_message_at ?? null,
+      other_user_id: conv.is_group ? null : otherUser?.user_id ?? null,
     }
   })
+
+  return mapped.sort(
+    (a, b) =>
+      new Date(b.last_message_at || 0).getTime() -
+      new Date(a.last_message_at || 0).getTime()
+  )
+}
+
+/** Resolve conversation ids from existing chats and/or new DM targets. */
+export async function resolveShareRecipientConversationIds(
+  supabase: SupabaseClient,
+  senderId: string,
+  conversationIds: string[],
+  userIds: string[]
+): Promise<{ conversationIds: string[]; error: Error | null }> {
+  const resolved = new Set(conversationIds)
+
+  for (const otherUserId of userIds) {
+    const result = await ensureDmConversation(supabase, senderId, otherUserId)
+    if (!result.ok) {
+      return {
+        conversationIds: [],
+        error: new Error(result.error.message),
+      }
+    }
+    resolved.add(result.conversationId)
+  }
+
+  return { conversationIds: [...resolved], error: null }
 }
 
 async function syncConversationAfterSend(

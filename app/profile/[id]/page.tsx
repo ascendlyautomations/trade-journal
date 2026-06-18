@@ -46,6 +46,7 @@ import {
   TradeSocialCommentsSection,
 } from "../../components/TradeSocialLayer"
 import ShareTradeButton from "../../components/ShareTradeButton"
+import ShareToConversationsModal from "../../components/ShareToConversationsModal"
 import InputTradeForm from "../../components/InputTradeForm"
 import Calendar from "../../components/Calendar"
 import {
@@ -490,6 +491,7 @@ function PostCard({
   inDetailModal = false,
   disableOpen,
   onImageClick,
+  onSharePost,
 }: {
   post: any
   profile: any
@@ -516,6 +518,7 @@ function PostCard({
   inDetailModal?: boolean
   disableOpen?: boolean
   onImageClick?: (url: string) => void
+  onSharePost?: (post: any) => void
 }) {
   const commentsScrollRef = useRef<HTMLDivElement>(null)
   const imgSrc = profileWallImageSrc(post.image_url)
@@ -726,6 +729,33 @@ function PostCard({
             >
               💬 {comments?.length ?? 0}
             </button>
+            {onSharePost ? (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onSharePost(post)
+                }}
+                className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/5 text-gray-300 transition hover:bg-white/10 hover:text-white"
+                aria-label="Share post"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-4 w-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  aria-hidden
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 16V4m0 0l-4 4m4-4l4 4M4 20h16"
+                  />
+                </svg>
+              </button>
+            ) : null}
           </div>
           <p className="px-1 pt-2 text-sm font-medium text-white">
             {(likeMeta?.count ?? 0).toLocaleString()} likes
@@ -936,6 +966,7 @@ function ProfilePageContent() {
     description: string | null
   } | null>(null)
   const [feedDeepLinkPost, setFeedDeepLinkPost] = useState<any | null>(null)
+  const [sharePost, setSharePost] = useState<any | null>(null)
   const [feedDeepLinkLikeMeta, setFeedDeepLinkLikeMeta] = useState(EMPTY_LIKE_META)
   const [feedDeepLinkComments, setFeedDeepLinkComments] = useState<any[]>([])
   const [feedDeepLinkCommentSubmitting, setFeedDeepLinkCommentSubmitting] =
@@ -1263,7 +1294,8 @@ function ProfilePageContent() {
       selectedAchievementImage ||
       selectedTradeDetail ||
       selectedPostDetail ||
-      feedDeepLinkPost
+      feedDeepLinkPost ||
+      sharePost
     ) {
       document.body.style.overflow = "hidden"
       return () => {
@@ -1279,6 +1311,7 @@ function ProfilePageContent() {
     selectedTradeDetail,
     selectedPostDetail,
     feedDeepLinkPost,
+    sharePost,
   ])
 
   useEffect(() => {
@@ -1288,7 +1321,8 @@ function ProfilePageContent() {
       !selectedAchievementImage &&
       !selectedTradeDetail &&
       !selectedPostDetail &&
-      !feedDeepLinkPost
+      !feedDeepLinkPost &&
+      !sharePost
     )
       return
     function onKey(e: KeyboardEvent) {
@@ -1299,11 +1333,12 @@ function ProfilePageContent() {
         setSelectedTradeDetail(null)
         setSelectedPostDetail(null)
         setFeedDeepLinkPost(null)
+        setSharePost(null)
       }
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [showCreatePost, editingPost, selectedAchievementImage, selectedTradeDetail, selectedPostDetail, feedDeepLinkPost])
+  }, [showCreatePost, editingPost, selectedAchievementImage, selectedTradeDetail, selectedPostDetail, feedDeepLinkPost, sharePost])
 
   async function fetchProfile(urlSegment: string) {
     const segment = urlSegment.trim()
@@ -1845,6 +1880,10 @@ function ProfilePageContent() {
       )
     )
     setOpenMenuId(null)
+  }
+
+  function handleSharePost(post: any) {
+    setSharePost(post)
   }
 
   async function handleSavePost(postId: string) {
@@ -2928,6 +2967,9 @@ function ProfilePageContent() {
                           }
                           onCommentSubmit={() => void submitComment(key, "post")}
                           commentSubmitting={!!commentSubmitting[key]}
+                          onSharePost={
+                            currentUserId ? handleSharePost : undefined
+                          }
                         />
                         </div>
                       )
@@ -3477,6 +3519,7 @@ function ProfilePageContent() {
             commentSubmitting={!!commentSubmitting[String(selectedPostDetail.id)]}
             disableOpen
             onImageClick={setScreenshotLightboxUrl}
+            onSharePost={currentUserId ? handleSharePost : undefined}
           />
         </DetailModalShell>
       ) : null}
@@ -3493,7 +3536,7 @@ function ProfilePageContent() {
           onClose={() => setFeedDeepLinkPost(null)}
           onToggleLike={toggleFeedDeepLinkLike}
           onSubmitComment={submitFeedDeepLinkComment}
-          onSharePost={() => {}}
+          onSharePost={currentUserId ? handleSharePost : undefined}
         />
       ) : null}
 
@@ -3501,6 +3544,18 @@ function ProfilePageContent() {
         imageUrl={screenshotLightboxUrl}
         onClose={() => setScreenshotLightboxUrl(null)}
       />
+
+      {sharePost ? (
+        <ShareToConversationsModal
+          open
+          onClose={() => setSharePost(null)}
+          title="Send Post"
+          postId={String(sharePost.id)}
+          post={sharePost}
+          captionPlaceholder="Add a message..."
+          showCancel={false}
+        />
+      ) : null}
 
       {editingPost ? (
         <div

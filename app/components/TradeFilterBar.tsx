@@ -1,7 +1,6 @@
 "use client"
 
-import type { ReactNode } from "react"
-import { useEffect, useState } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
 
 const MANAGE_ACCOUNTS_VALUE = "__manage_accounts__"

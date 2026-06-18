@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import PerformanceShareCard from "./PerformanceShareCard"
 import ShareToConversationsModal from "./ShareToConversationsModal"
-import { captureShareCardElementToPng } from "@/lib/shareImageCapture"
 import {
   type PerformanceWindow,
   buildEquityCurveFromTrades,

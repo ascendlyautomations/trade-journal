@@ -92,7 +92,7 @@ export default function ShareTradeButton({
         disabled={busy}
         title={variant === "icon" ? "Share trade" : undefined}
         aria-label={variant === "icon" ? "Share trade" : undefined}
-        onClick={() => setIsOpen(true)}
+        onClick={handleClick}
         className={
           className.trim() ||
           "p-1 rounded-lg bg-blue-500/20 hover:bg-blue-500/30 transition"

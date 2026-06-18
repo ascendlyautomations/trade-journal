@@ -10,7 +10,6 @@ import {
 import { ensureDmConversation } from "@/lib/dmConversation"
 import { buildDmThreadPath, groupThreadPath } from "@/lib/messageRoutes"
 import { normalizeProfileUsername } from "@/lib/profileUsername"
-import { logSupabaseError } from "@/lib/logSupabaseError"
 import {
   countUnreadFromRows,
   dispatchUnreadMessagesRefresh,

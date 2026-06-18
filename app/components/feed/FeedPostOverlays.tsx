@@ -2,7 +2,7 @@
 
 import { memo, type MutableRefObject } from "react"
 import FeedPostDetailModal from "./FeedPostDetailModal"
-import FeedSharePostOverlay from "./FeedSharePostOverlay"
+import ShareToConversationsModal from "@/app/components/ShareToConversationsModal"
 import type { FeedLikeMeta } from "./FeedPostCard"
 
 type FeedPostOverlaysProps = {
@@ -63,11 +63,15 @@ function FeedPostOverlays({
       ) : null}
 
       {sharePost ? (
-        <FeedSharePostOverlay
+        <ShareToConversationsModal
           key={sharePostId ?? undefined}
-          post={sharePost}
-          user={user}
+          open
           onClose={onCloseShareOverlay}
+          title="Send Post"
+          postId={String(sharePost.id)}
+          post={sharePost}
+          captionPlaceholder="Add a message..."
+          showCancel={false}
         />
       ) : null}
     </>

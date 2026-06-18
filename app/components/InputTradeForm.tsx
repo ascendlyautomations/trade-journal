@@ -2499,7 +2499,7 @@ export default function InputTradeForm({
           role="presentation"
         >
           <div
-            className="w-full max-w-md md:max-w-4xl xl:max-w-7xl mx-auto rounded-xl p-4 md:p-6 lg:p-7 bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100 shadow-xl max-h-[92vh] overflow-y-auto my-auto"
+            className="w-full max-w-md md:max-w-4xl xl:max-w-7xl mx-auto rounded-xl p-4 md:p-6 lg:p-7 bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100 shadow-xl max-h-[92vh] overflow-y-auto my-auto translate-y-5"
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal="true"
