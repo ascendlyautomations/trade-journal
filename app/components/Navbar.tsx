@@ -11,6 +11,7 @@ import { fetchTotalUnreadMessageCount } from "../../lib/messageUnread"
 import { NOTIFICATION_ENGAGEMENT_TYPES } from "../../lib/notificationEngagementTypes"
 import { profilePath } from "../../lib/profileRoutes"
 import BugReportModal from "./BugReportModal"
+import GettingStartedMobileEntry from "./GettingStartedMobileEntry"
 
 export default function Navbar() {
   const { user, profile, loading } = useUserProfile()
@@ -511,6 +512,8 @@ export default function Navbar() {
               </Link>
             ) : null}
 
+            <GettingStartedMobileEntry />
+
             <button
               type="button"
               className="text-2xl leading-none text-white md:hidden px-1 py-1"
@@ -589,7 +592,11 @@ export default function Navbar() {
                     className="flex items-center gap-2 rounded border px-3 py-1"
                   >
                     {!profileChromePending ? (
-                      <img src={profile?.avatar_url} className="h-8 w-8 rounded-full" alt="" />
+                      <img
+                        src={profile?.avatar_url || "/default-avatar.png"}
+                        className="h-8 w-8 rounded-full"
+                        alt=""
+                      />
                     ) : (
                       <div className="h-8 w-8 animate-pulse rounded-full bg-white/10" aria-hidden />
                     )}

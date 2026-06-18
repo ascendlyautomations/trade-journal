@@ -214,7 +214,7 @@ export default function PostSetupImportModal({ open, onComplete }: Props) {
         overlayClassName="z-[1200]"
       />
       <div
-      className={`fixed inset-0 z-[1100] flex items-center justify-center overflow-x-hidden px-4 py-8 transition-opacity duration-300 motion-reduce:transition-none ${
+      className={`fixed inset-0 z-[1100] flex items-start justify-center overflow-x-hidden px-4 pb-8 pt-[calc(4rem+1rem)] transition-opacity duration-300 motion-reduce:transition-none md:items-center md:py-8 ${
         entered ? "bg-black/75 opacity-100 backdrop-blur-md" : "bg-black/75 opacity-0 backdrop-blur-md"
       }`}
       role="presentation"
@@ -293,6 +293,7 @@ export default function PostSetupImportModal({ open, onComplete }: Props) {
         open={showCreateModal}
         onClose={() => setShowCreateModal(false)}
         onSave={(acc) => void handleCreateAccountSave(acc)}
+        belowNavbarOnMobile
       />
     </div>
     </>

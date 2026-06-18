@@ -46,6 +46,7 @@ import {
   dispatchGettingStartedSignalsRefresh,
   notifyGettingStartedChecklistMaybeCompleted,
 } from "@/lib/gettingStartedProgressSync"
+import { shouldShowGettingStartedChecklist } from "@/lib/gettingStartedChecklist"
 import { useGettingStartedProgress } from "@/lib/GettingStartedProgressProvider"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 const DASHBOARD_GEAR_PREFS_KEY = "tradetrax_dashboard_prefs_v1"
@@ -1338,19 +1339,24 @@ const worstDay = dailyPnLs.length > 0
   const hasNoTrades = trades.length === 0
 
   const showOnboardingSection =
-    Boolean(user?.id) &&
-    !checklistSignals.hasSeenOnboardingCompletePopup &&
-    !gettingStartedProgress.allComplete
+    shouldShowGettingStartedChecklist(user?.id, {
+      hasSeenOnboardingCompletePopup:
+        checklistSignals.hasSeenOnboardingCompletePopup,
+      allComplete: gettingStartedProgress.allComplete,
+    })
 
-  const gettingStartedSection = showOnboardingSection ? (
-    <GettingStartedChecklist
-      progress={gettingStartedProgress}
-      userId={user.id}
-      profileId={user?.id ?? profile?.id}
-      firstPrivateTradeId={checklistSignals.firstPrivateTradeId}
-      onChecklistRefresh={() => void refreshChecklistSignals()}
-    />
-  ) : null
+  const gettingStartedSection =
+    showOnboardingSection && user?.id ? (
+      <div className="hidden md:block">
+        <GettingStartedChecklist
+          progress={gettingStartedProgress}
+          userId={user.id}
+          profileId={user.id ?? profile?.id}
+          firstPrivateTradeId={checklistSignals.firstPrivateTradeId}
+          onChecklistRefresh={() => void refreshChecklistSignals()}
+        />
+      </div>
+    ) : null
 
   const currentStreak =
     streakData?.currentType === "loss"

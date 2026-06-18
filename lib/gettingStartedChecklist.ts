@@ -100,6 +100,21 @@ export function writeGettingStartedCollapsedPreference(
   }
 }
 
+/** Whether the getting-started checklist should be offered (inline or mobile entry). */
+export function shouldShowGettingStartedChecklist(
+  userId: string | null | undefined,
+  options: {
+    hasSeenOnboardingCompletePopup: boolean
+    allComplete: boolean
+  }
+): boolean {
+  return Boolean(
+    userId &&
+      !options.hasSeenOnboardingCompletePopup &&
+      !options.allComplete
+  )
+}
+
 export function computeGettingStartedProgress(
   signals: GettingStartedSignals
 ): GettingStartedProgress {

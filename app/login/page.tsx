@@ -418,11 +418,11 @@ export default function LoginPage() {
     <button
       type="button"
       onClick={handleBack}
-      className="absolute left-4 top-4 z-20 inline-flex min-h-[44px] items-center gap-2 rounded-lg border border-white/10 bg-white/10 px-3 py-2 text-sm font-medium text-gray-200 backdrop-blur-md transition hover:bg-white/15 hover:text-white md:left-6 md:top-6 md:px-4"
+      className="absolute left-3 top-3 z-20 inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/10 text-base leading-none text-gray-200 backdrop-blur-md transition hover:bg-white/15 hover:text-white md:left-6 md:top-6 md:h-auto md:min-h-[44px] md:w-auto md:gap-2 md:px-4 md:py-2 md:text-sm md:font-medium"
       aria-label="Go back"
     >
       <span aria-hidden="true">←</span>
-      Back
+      <span className="hidden md:inline">Back</span>
     </button>
 
     {/* 🔥 CONTENT */}

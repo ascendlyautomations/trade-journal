@@ -101,23 +101,95 @@ function TradesPageTradeCard({
     (trade.psychology_notes != null &&
       String(trade.psychology_notes).trim() !== "")
 
+  const tradeDirection =
+    trade.direction ||
+    (trade.exit_price && trade.entry_price
+      ? trade.exit_price > trade.entry_price
+        ? "Long"
+        : "Short"
+      : "Unknown")
+
+  const tradeTitle = (
+    <>
+      {trade.ticker} • {tradeDirection}
+      {trade.is_public ? (
+        <span className="text-xs font-normal text-green-400 md:ml-2">
+          Public
+        </span>
+      ) : null}
+    </>
+  )
+
+  const renderActionButtons = (compact: boolean) => (
+    <>
+      <button
+        onClick={() => onEdit({ ...trade })}
+        className={
+          compact
+            ? "flex items-center justify-center rounded-md bg-white/10 px-1.5 py-0.5 text-[11px] font-medium text-white transition hover:bg-white/20"
+            : "flex items-center justify-center rounded-md bg-white/10 px-3 py-1 text-sm text-white transition hover:bg-white/20"
+        }
+        type="button"
+      >
+        Edit
+      </button>
+      {onAnalyze ? (
+        <button
+          onClick={() => onAnalyze(trade)}
+          className={
+            compact
+              ? "flex items-center justify-center rounded-md bg-white/10 px-1.5 py-0.5 text-[11px] font-medium text-white transition hover:bg-white/20"
+              : "flex items-center justify-center rounded-md bg-white/10 px-3 py-1 text-sm text-white transition hover:bg-white/20"
+          }
+          type="button"
+          aria-label="Analyze trade"
+        >
+          {compact ? "AI" : "Analyze"}
+        </button>
+      ) : null}
+      <ShareTradeButton
+        trade={trade}
+        variant="icon"
+        profile={shareProfile}
+        className={
+          compact
+            ? "flex items-center justify-center rounded-md bg-white/10 px-1.5 py-0.5 text-[11px] text-white transition hover:bg-white/20"
+            : "flex items-center justify-center rounded-md bg-white/10 px-3 py-1.5 text-sm text-white transition hover:bg-white/20"
+        }
+        onSendClick={() => onSendClick(trade)}
+      />
+      <button
+        onClick={() => onDelete(String(trade.id))}
+        className={
+          compact
+            ? "flex items-center justify-center rounded-md bg-white/10 px-1.5 py-0.5 text-sm text-white transition hover:bg-white/20 hover:text-red-400 leading-none"
+            : "text-white hover:text-red-400 text-xl transition leading-none"
+        }
+        type="button"
+        aria-label="Delete trade"
+      >
+        🗑
+      </button>
+    </>
+  )
+
   return (
     <div className="w-full bg-white/5 border border-white/10 backdrop-blur-md px-2 py-3 md:px-4 rounded-xl shadow hover:scale-[1.02] hover:border-white/20 transition-all duration-200">
       <div className="flex flex-col gap-2.5 md:flex-row">
         <div className="min-w-0 flex-1 space-y-1 text-base text-gray-200">
-          <h2 className="text-lg font-semibold flex items-center gap-2 flex-wrap">
-            {trade.ticker} •{" "}
-            {trade.direction ||
-              (trade.exit_price && trade.entry_price
-                ? trade.exit_price > trade.entry_price
-                  ? "Long"
-                  : "Short"
-                : "Unknown")}
-            {trade.is_public ? (
-              <span className="text-xs font-normal text-green-400 ml-2">
-                Public
+          <div className="flex items-center justify-between gap-1.5 md:hidden">
+            <h2 className="min-w-0 flex-1 text-lg font-semibold leading-tight">
+              <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                {tradeTitle}
               </span>
-            ) : null}
+            </h2>
+            <div className="flex shrink-0 items-center gap-0.5">
+              {renderActionButtons(true)}
+            </div>
+          </div>
+
+          <h2 className="hidden text-lg font-semibold md:flex md:items-center md:gap-2 md:flex-wrap">
+            {tradeTitle}
           </h2>
 
           <TradeCardTimingBlock trade={trade} />
@@ -244,39 +316,15 @@ function TradesPageTradeCard({
           ) : null}
         </div>
 
-        <div className="flex shrink-0 flex-col border-t border-white/10 pt-3 md:w-[250px] md:border-l md:border-t-0 md:pl-4 md:pt-0">
-          <div className="flex flex-wrap items-center justify-end gap-1">
-            <button
-              onClick={() => onEdit({ ...trade })}
-              className="flex items-center justify-center rounded-md bg-white/10 px-3 py-1 text-sm text-white transition hover:bg-white/20"
-              type="button"
-            >
-              Edit
-            </button>
-            {onAnalyze ? (
-              <button
-                onClick={() => onAnalyze(trade)}
-                className="flex items-center justify-center rounded-md bg-white/10 px-3 py-1 text-sm text-white transition hover:bg-white/20"
-                type="button"
-              >
-                Analyze
-              </button>
-            ) : null}
-            <ShareTradeButton
-              trade={trade}
-              variant="icon"
-              profile={shareProfile}
-              className="flex items-center justify-center rounded-md bg-white/10 px-3 py-1.5 text-sm text-white transition hover:bg-white/20"
-              onSendClick={() => onSendClick(trade)}
-            />
-            <button
-              onClick={() => onDelete(String(trade.id))}
-              className="text-white hover:text-red-400 text-xl transition leading-none"
-              type="button"
-              aria-label="Delete trade"
-            >
-              🗑
-            </button>
+        <div
+          className={`flex shrink-0 flex-col md:w-[250px] md:border-l md:border-white/10 md:pl-4 md:pt-0 ${
+            hasPsychology
+              ? "border-t border-white/10 pt-3 md:border-t-0"
+              : "hidden md:flex"
+          }`}
+        >
+          <div className="hidden flex-wrap items-center justify-end gap-1 md:flex">
+            {renderActionButtons(false)}
           </div>
 
           {hasPsychology ? (

@@ -19,6 +19,11 @@ export type GettingStartedChecklistProps = {
   profileId?: string
   firstPrivateTradeId?: string | null
   onChecklistRefresh?: () => void
+  /** When true, always show tasks (no collapse toggle). Used in mobile drawer. */
+  alwaysExpanded?: boolean
+  /** When true, omit outer card chrome (parent supplies container). */
+  embedded?: boolean
+  className?: string
 }
 
 function itemHref(
@@ -121,6 +126,9 @@ export default function GettingStartedChecklist({
   profileId,
   firstPrivateTradeId,
   onChecklistRefresh,
+  alwaysExpanded = false,
+  embedded = false,
+  className = "",
 }: GettingStartedChecklistProps) {
   const { items, completedCount, totalCount } = progress
   const progressPct =
@@ -130,44 +138,66 @@ export default function GettingStartedChecklist({
   const [popularRoomsOpen, setPopularRoomsOpen] = useState(false)
 
   useEffect(() => {
+    if (alwaysExpanded) {
+      setExpanded(true)
+      return
+    }
     setExpanded(!readGettingStartedCollapsedPreference(userId))
-  }, [userId])
+  }, [userId, alwaysExpanded])
 
   const toggleExpanded = useCallback(() => {
+    if (alwaysExpanded) return
     setExpanded((prev) => {
       const next = !prev
       writeGettingStartedCollapsedPreference(userId, !next)
       return next
     })
-  }, [userId])
+  }, [userId, alwaysExpanded])
+
+  const isExpanded = alwaysExpanded || expanded
+
+  const shellClass = embedded
+    ? className
+    : `rounded-xl border border-white/10 bg-white/5 p-6 backdrop-blur-md md:p-8 ${className}`
+
+  const header = alwaysExpanded ? (
+    <div className="flex w-full items-center justify-between gap-3">
+      <h3 className="text-lg font-semibold text-white">Getting Started</h3>
+      <p className="text-sm font-medium tabular-nums text-gray-300">
+        {completedCount} / {totalCount} Complete
+      </p>
+    </div>
+  ) : (
+    <button
+      type="button"
+      onClick={toggleExpanded}
+      className="flex w-full items-center justify-between gap-3 text-left"
+      aria-expanded={isExpanded}
+    >
+      <h3 className="text-lg font-semibold text-white md:text-xl">
+        Getting Started
+      </h3>
+      <div className="flex items-center gap-2">
+        <p className="text-sm font-medium tabular-nums text-gray-300">
+          {completedCount} / {totalCount} Complete
+        </p>
+        <span
+          className="text-sm text-gray-400"
+          aria-hidden
+          title={isExpanded ? "Collapse" : "Expand"}
+        >
+          {isExpanded ? "▼" : "▶"}
+        </span>
+      </div>
+    </button>
+  )
 
   return (
     <>
-      <div className="rounded-xl border border-white/10 bg-white/5 p-6 backdrop-blur-md md:p-8">
-        <button
-          type="button"
-          onClick={toggleExpanded}
-          className="flex w-full items-center justify-between gap-3 text-left"
-          aria-expanded={expanded}
-        >
-          <h3 className="text-lg font-semibold text-white md:text-xl">
-            Getting Started
-          </h3>
-          <div className="flex items-center gap-2">
-            <p className="text-sm font-medium tabular-nums text-gray-300">
-              {completedCount} / {totalCount} Complete
-            </p>
-            <span
-              className="text-sm text-gray-400"
-              aria-hidden
-              title={expanded ? "Collapse" : "Expand"}
-            >
-              {expanded ? "▼" : "▶"}
-            </span>
-          </div>
-        </button>
+      <div className={shellClass}>
+        {header}
 
-        {expanded ? (
+        {isExpanded ? (
           <>
             <div
               className="mt-4 h-2 overflow-hidden rounded-full bg-white/10"

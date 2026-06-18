@@ -35,6 +35,8 @@ export interface Props {
     mode: string | null
     rules: PropFirmRules | null
   }) => void | Promise<void>
+  /** Offset below fixed navbar on mobile (onboarding setup flows). */
+  belowNavbarOnMobile?: boolean
 }
 
 const emptyForm = {
@@ -76,6 +78,7 @@ export default function CreateAccountModal({
   open,
   onClose,
   onSave,
+  belowNavbarOnMobile = false,
 }: Props) {
   const [name, setName] = useState("")
   const [size, setSize] = useState("")
@@ -162,7 +165,13 @@ export default function CreateAccountModal({
   }
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+    <div
+      className={`fixed inset-0 z-[100] flex bg-black/60 p-4 backdrop-blur-sm ${
+        belowNavbarOnMobile
+          ? "items-start pt-[calc(4rem+1rem)] md:items-center md:pt-4"
+          : "items-center"
+      }`}
+    >
       <div
         className="w-full max-w-lg sm:max-w-xl rounded-2xl border border-white/10 bg-[#152238] p-6 text-gray-100 shadow-2xl max-h-[min(90vh,720px)] overflow-y-auto"
         role="dialog"
