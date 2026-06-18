@@ -13,6 +13,7 @@ export type ModalProps = {
   size?: "sm" | "md" | "lg"
   className?: string
   panelClassName?: string
+  backdropClassName?: string
 }
 
 const sizeClasses = {
@@ -30,6 +31,7 @@ export default function Modal({
   size = "md",
   className,
   panelClassName,
+  backdropClassName,
 }: ModalProps) {
   useEffect(() => {
     if (!open) return
@@ -52,7 +54,10 @@ export default function Modal({
       onClick={onClose}
     >
       <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        className={cn(
+          "absolute inset-0 bg-black/50 backdrop-blur-sm",
+          backdropClassName
+        )}
         aria-hidden
       />
       <div

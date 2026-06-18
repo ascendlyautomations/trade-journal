@@ -8,6 +8,10 @@ import { supabase } from "../../lib/supabaseClient"
 import { isProActive } from "../../lib/subscription"
 import { formatEST } from "@/lib/formatEST"
 import { formatRR } from "@/lib/formatDisplay"
+import {
+  formatTradeAccountDisplay,
+  safeAccountNumberLabel,
+} from "@/lib/tradeAccountDisplay"
 
 type AnalyzeTradeApiPayload = {
   reply?: string
@@ -399,7 +403,7 @@ function AnalystPageContent() {
                       </p>
 
                       <p className="text-xs text-gray-500">
-                        {trade.account_type} {trade.account_size}
+                        {formatTradeAccountDisplay(trade) || "—"}
                       </p>
                     </div>
 
@@ -491,11 +495,7 @@ function AnalystPageContent() {
 
                         <div className="mt-3 space-y-1 border-t border-white/10 pt-3 text-sm">
                           <p className="text-gray-400">
-                            {selectedTrade.account_type}{" "}
-                            {selectedTrade.account_size}
-                            {selectedTrade.account_id
-                              ? ` (${selectedTrade.account_id})`
-                              : ""}
+                            {formatTradeAccountDisplay(selectedTrade) || "—"}
                           </p>
 
                           {(selectedTrade.entry_price != null ||

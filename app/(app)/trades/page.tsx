@@ -207,7 +207,15 @@ export default function TradesPage() {
 
   const handleCloseEditForm = useCallback(() => {
     setEditingTrade(null)
-  }, [])
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href)
+      if (url.searchParams.has("edit")) {
+        url.searchParams.delete("edit")
+        const next = url.search ? `${url.pathname}${url.search}` : url.pathname
+        router.replace(next, { scroll: false })
+      }
+    }
+  }, [router])
 
   const handleClosePerformanceShare = useCallback(() => {
     setShowPerformanceShare(false)

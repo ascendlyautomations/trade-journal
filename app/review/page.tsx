@@ -31,7 +31,7 @@ export default function ReviewPage() {
       .from("trades")
       .select("*")
       .eq("user_id", user?.id)
-      .in("account_type", ["imported", "Imported"])
+      .eq("is_initial_import", true)
       .eq("reviewed", false)
       .order("created_at", { ascending: true })
 
@@ -50,7 +50,7 @@ export default function ReviewPage() {
       .from("trades")
       .update({ reviewed: true })
       .eq("user_id", user.id)
-      .in("account_type", ["imported", "Imported"])
+      .eq("is_initial_import", true)
       .eq("reviewed", false)
 
     if (error) {

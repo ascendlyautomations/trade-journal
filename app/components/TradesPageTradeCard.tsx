@@ -10,6 +10,7 @@ import {
 } from "@/lib/tradeDisplayFormat"
 import { formatEST } from "@/lib/formatEST"
 import { formatMoneyUnknown, formatNumberUnknown } from "@/lib/formatDisplay"
+import { safeAccountNumberLabel } from "@/lib/tradeAccountDisplay"
 
 export type TradesPageTradeCardProps = {
   trade: any
@@ -50,14 +51,19 @@ function TradesPageTradeCard({
   const acctLower = String(trade.mode ?? trade.account_type ?? "")
     .toLowerCase()
     .trim()
+  const accountNumberDisplay = useMemo(
+    () => safeAccountNumberLabel(accountRow?.account_number),
+    [accountRow?.account_number]
+  )
+
   const hasAccountLine = useMemo(
     () =>
       !!(
         String(trade.account_name || "").trim() ||
         String(trade.account_size || "").trim() ||
-        accountRow?.account_number
+        accountRow?.account_number && accountNumberDisplay
       ),
-    [trade.account_name, trade.account_size, accountRow?.account_number]
+    [trade.account_name, trade.account_size, accountRow?.account_number, accountNumberDisplay]
   )
 
   const imageSrc = useMemo(() => {
@@ -176,9 +182,9 @@ function TradesPageTradeCard({
                 <span>
                   {trade.account_name} {trade.account_size}
                 </span>
-                {accountRow?.account_number ? (
+                {accountNumberDisplay ? (
                   <span className="opacity-70">
-                    • #{accountRow.account_number}
+                    • #{accountNumberDisplay}
                   </span>
                 ) : null}
               </div>

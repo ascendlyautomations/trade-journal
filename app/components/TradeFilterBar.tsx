@@ -7,6 +7,7 @@ const MANAGE_ACCOUNTS_VALUE = "__manage_accounts__"
 
 /** Shared with account pickers — same destination as the filter bar action. */
 export const MANAGE_ACCOUNTS_SETTINGS_HREF = "/settings#trading-accounts" as const
+export { MANAGE_ACCOUNTS_VALUE }
 
 export function navigateToManageAccounts(
   router: ReturnType<typeof useRouter>

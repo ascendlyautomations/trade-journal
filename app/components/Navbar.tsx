@@ -622,18 +622,6 @@ export default function Navbar() {
                       >
                         Help Center
                       </button>
-                      {profile?.is_beta_tester ? (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setAccountMenuOpen(false)
-                            router.push("/beta")
-                          }}
-                          className="w-full px-4 py-2 text-left text-sm hover:bg-white/10"
-                        >
-                          Beta Hub
-                        </button>
-                      ) : null}
                       <button
                         type="button"
                         onClick={() => {

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { navigateToManageAccounts } from "./TradeFilterBar"
+import { safeAccountNumberLabel } from "@/lib/tradeAccountDisplay"
 
 /** Mirrors `InputTradeForm` account row shape after `accounts` fetch. */
 export type TradeAccountOption = {
@@ -14,15 +15,11 @@ export type TradeAccountOption = {
   category?: string | null
 }
 
-function accountNumberLabel(acc: {
+function accountNumberSuffix(acc: {
   account_number?: string | null
-  id?: string | null
 }): string {
-  const num = String(acc.account_number ?? "").trim()
-  if (num) return num
-  const id = String(acc.id ?? "").trim()
-  if (!id) return "—"
-  return id.length > 14 ? `${id.slice(0, 8)}…` : id
+  const num = safeAccountNumberLabel(acc.account_number)
+  return num ? ` • #${num}` : ""
 }
 
 function formatAccountSize(size: unknown) {
@@ -96,7 +93,7 @@ export default function TradeAccountPicker({
         >
           <span className="truncate">
             {selectedAccount
-              ? `${selectedAccount.name} • ${selectedAccount.size} • ${selectedAccount.category || "Personal"} • ${formatMode(selectedAccount.mode)} • #${accountNumberLabel(selectedAccount)}`
+              ? `${selectedAccount.name} • ${selectedAccount.size} • ${selectedAccount.category || "Personal"} • ${formatMode(selectedAccount.mode)}${accountNumberSuffix(selectedAccount)}`
               : "Select Account"}
           </span>
           <span className="shrink-0 text-gray-400">▾</span>
@@ -122,7 +119,8 @@ export default function TradeAccountPicker({
                 className="cursor-pointer px-3 py-2 text-sm text-white hover:bg-[#1f2937]"
               >
                 {acc.name} • {formatAccountSize(acc.size)} • {acc.category || "Personal"} •{" "}
-                {formatMode(acc.mode)} • #{accountNumberLabel(acc)}
+                {formatMode(acc.mode)}
+                {accountNumberSuffix(acc)}
               </div>
             ))}
             <div

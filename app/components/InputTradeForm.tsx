@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect, useCallback, useMemo } from "react"
+import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
 import { ensureManualUserAccountRegistered } from "@/lib/ensureManualUserAccount"
@@ -24,6 +25,7 @@ import {
 } from "@/lib/inputTradeDateTime"
 import { tradeFormHasFutureDate, csvTradesHaveFutureDate, isDateAfterToday } from "@/lib/tradeDateValidation"
 import { notifyGettingStartedChecklistMaybeCompleted } from "@/lib/gettingStartedProgressSync"
+import { profilePath } from "@/lib/profileRoutes"
 import CreateAccountModal, {
   type Props as CreateAccountModalProps,
 } from "@/components/CreateAccountModal"
@@ -93,6 +95,7 @@ export default function InputTradeForm({
   csvDiagnostics = null,
   onParsedTradesClear,
 }: InputTradeFormProps) {
+  const router = useRouter()
   const isEditMode = Boolean(existingTrade?.id)
   const showAsModal = isEditMode && Boolean(onClose)
 
@@ -796,6 +799,16 @@ export default function InputTradeForm({
     }
 
     if (isEditMode && existingTrade?.id) {
+      let redirectToProfileAfterFirstPublic = false
+      if (isPublic && existingTrade.is_public !== true) {
+        const { count: publicTradeCount } = await supabase
+          .from("trades")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", user.id)
+          .eq("is_public", true)
+        redirectToProfileAfterFirstPublic = (publicTradeCount ?? 0) === 0
+      }
+
       const prevImg = existingTrade.image_url ?? null
       const imageUrlOut = screenshotUrl ?? prevImg
 
@@ -846,10 +859,10 @@ export default function InputTradeForm({
         timeframe: timeframe || null,
         is_public: isPublic,
       }
-      const importedUnreviewed =
-        ["imported"].includes(String(existingTrade.account_type ?? "").toLowerCase()) &&
+      const csvReviewPending =
+        existingTrade.is_initial_import === true &&
         existingTrade.reviewed === false
-      if (forceMarkReviewedOnSave || importedUnreviewed) {
+      if (forceMarkReviewedOnSave || csvReviewPending) {
         updateRow.reviewed = true
       }
 
@@ -924,6 +937,19 @@ export default function InputTradeForm({
       onClose?.()
       showPopup(feedbackPresets.tradeSaveSuccess())
       notifyGettingStartedChecklistMaybeCompleted()
+      if (redirectToProfileAfterFirstPublic) {
+        const { data: navProfile } = await supabase
+          .from("profiles")
+          .select("username")
+          .eq("id", user.id)
+          .maybeSingle()
+        router.push(
+          `${profilePath({
+            id: user.id,
+            username: navProfile?.username,
+          })}?trade=${encodeURIComponent(String(existingTrade.id))}`
+        )
+      }
       releaseSubmit()
       return
     }

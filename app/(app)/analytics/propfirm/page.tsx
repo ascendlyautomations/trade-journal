@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { useEffect, useMemo, useState, type ReactNode } from "react"
 import {
   CartesianGrid,
@@ -25,6 +26,10 @@ import EmptyState from "@/app/components/ui/EmptyState"
 import { SkeletonAnalyticsPage } from "@/app/components/ui/skeletons"
 import { isProActive } from "@/lib/subscription"
 import { formatPnlCurrency } from "@/lib/formatMoney"
+import {
+  MANAGE_ACCOUNTS_VALUE,
+  navigateToManageAccounts,
+} from "@/app/components/TradeFilterBar"
 
 const SECTION_PANEL =
   "rounded-xl border border-white/10 bg-white/10 p-2.5 backdrop-blur-md md:p-3"
@@ -215,6 +220,7 @@ function formatPropfirmAccountLabel(acc: PropfirmAccount | null) {
 }
 
 export default function PropFirmPage() {
+  const router = useRouter()
   const [planChecked, setPlanChecked] = useState(false)
   const [hasProAccess, setHasProAccess] = useState(false)
   const [accounts, setAccounts] = useState<PropfirmAccount[]>([])
@@ -429,8 +435,13 @@ export default function PropFirmPage() {
                 selectedAccount?.id != null ? String(selectedAccount.id) : ""
               }
               onChange={(e) => {
+                const value = e.target.value
+                if (value === MANAGE_ACCOUNTS_VALUE) {
+                  navigateToManageAccounts(router)
+                  return
+                }
                 const selected = accounts.find(
-                  (a) => String(a.id) === e.target.value
+                  (a) => String(a.id) === value
                 )
                 setSelectedAccount(selected ?? null)
               }}
@@ -444,6 +455,8 @@ export default function PropFirmPage() {
                   {acc.mode}
                 </option>
               ))}
+              <option disabled>────────────────────</option>
+              <option value={MANAGE_ACCOUNTS_VALUE}>⚙️ Manage Accounts</option>
             </select>
 
             <p className="text-sm text-gray-400 md:text-right">

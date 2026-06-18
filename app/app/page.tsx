@@ -102,7 +102,7 @@ export default function Home() {
       .from("trades")
       .select("*", { count: "exact", head: true })
       .eq("user_id", user?.id)
-      .in("account_type", ["imported", "Imported"])
+      .eq("is_initial_import", true)
       .eq("reviewed", false)
 
     setReviewCount(count || 0)
