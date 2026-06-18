@@ -753,21 +753,6 @@ export default function Navbar() {
             ) : null}
           </Link>
 
-          {profile?.is_beta_tester ? (
-            <Link
-              href="/beta"
-              className={`flex items-center gap-2 rounded-lg px-3 py-2 transition ${
-                isActive("/beta")
-                  ? "border border-yellow-400/40 bg-yellow-500/25 text-yellow-200"
-                  : "border border-yellow-400/25 bg-yellow-500/15 text-yellow-300 hover:bg-yellow-500/25"
-              }`}
-              onClick={closeMobile}
-            >
-              <span>Beta Hub</span>
-              {betaBadge}
-            </Link>
-          ) : null}
-
           <div>
             <button
               type="button"
@@ -875,6 +860,21 @@ export default function Navbar() {
               </div>
             ) : null}
           </div>
+
+          {profile?.is_beta_tester ? (
+            <Link
+              href="/beta"
+              className={`flex items-center gap-2 rounded-lg px-3 py-2 transition ${
+                isActive("/beta")
+                  ? "border border-yellow-400/40 bg-yellow-500/25 text-yellow-200"
+                  : "border border-yellow-400/25 bg-yellow-500/15 text-yellow-300 hover:bg-yellow-500/25"
+              }`}
+              onClick={closeMobile}
+            >
+              <span>Beta Hub</span>
+              {betaBadge}
+            </Link>
+          ) : null}
 
           <div className="flex flex-col gap-1 border-t border-white/5 pt-1.5">
             {isAdmin ? (
