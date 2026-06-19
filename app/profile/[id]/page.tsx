@@ -981,11 +981,8 @@ function ProfilePageContent() {
         : undefined
 
   const [profile, setProfile] = useState<any>(null)
-  const [trades, setTrades] = useState<any[]>([])
   const [allTrades, setAllTrades] = useState<any[]>([])
-  const [page, setPage] = useState(0)
-  const tradeFetchOffsetRef = useRef(0)
-  const [hasMore, setHasMore] = useState(true)
+  const [visibleTradeCount, setVisibleTradeCount] = useState(PAGE_SIZE)
   const [loading, setLoading] = useState(true)
   /** Set when profile row fails to load (wrong env, RLS, missing row, or network). */
   const [lastProfileFetchError, setLastProfileFetchError] = useState<string | null>(
@@ -1052,7 +1049,6 @@ function ProfilePageContent() {
   const [editingPost, setEditingPost] = useState<any | null>(null)
   const [editContent, setEditContent] = useState("")
   const [editingTrade, setEditingTrade] = useState<any | null>(null)
-  const [calendarTrades, setCalendarTrades] = useState<any[]>([])
   const [selectedMode, setSelectedMode] = useState("all")
   const [achievements, setAchievements] = useState<Achievement[]>([])
   const [selectedTradeDetail, setSelectedTradeDetail] = useState<any | null>(null)
@@ -1179,56 +1175,56 @@ function ProfilePageContent() {
     loadFollowingStories,
   ])
 
-  const fetchTrades = async (
-    forProfileId: string,
-    reset = false,
-    viewerIsOwner?: boolean
-  ) => {
-    const isOwner =
-      viewerIsOwner ??
-      (currentUserId != null && String(currentUserId) === String(forProfileId))
-    const from = reset ? 0 : tradeFetchOffsetRef.current
-    const to = from + PAGE_SIZE - 1
+  const fetchTradesForProfile = useCallback(
+    async (forProfileId: string, viewerIsOwner?: boolean) => {
+      const isOwner =
+        viewerIsOwner ??
+        (currentUserId != null && String(currentUserId) === String(forProfileId))
 
-    const { data, error } = await supabase
-      .from("trades")
-      .select(tradeSelectForViewer(isOwner))
-      .eq("user_id", forProfileId)
-      .eq("is_public", true)
-      .order("created_at", { ascending: false })
-      .range(from, to)
+      let query = supabase
+        .from("trades")
+        .select(tradeSelectForViewer(isOwner))
+        .eq("user_id", forProfileId)
 
-    if (error) {
-      console.error("Trade fetch error FULL:", JSON.stringify(error, null, 2))
-      return
-    }
+      if (!isOwner) {
+        query = query.eq("is_public", true)
+      }
 
-    const rows = sanitizeTradesForViewer(data || [], { isOwner })
-    const fetchedCount = (data || []).length
+      const { data, error } = await query
 
-    if (reset) {
-      tradeFetchOffsetRef.current = fetchedCount
-      setTrades(rows)
-      setPage(1)
-      setHasMore(fetchedCount >= PAGE_SIZE)
-      return
-    }
+      if (error) {
+        console.error("all trades fetch:", error)
+        return []
+      }
 
-    tradeFetchOffsetRef.current += fetchedCount
-    setTrades((prev) => mergeUniqueById(prev, rows))
-    setPage((prev) => prev + 1)
-    if (fetchedCount < PAGE_SIZE) {
-      setHasMore(false)
-    }
-  }
+      return sanitizeTradesForViewer(data || [], { isOwner })
+    },
+    [currentUserId]
+  )
+
+  const publicTradesByDate = useMemo(
+    () =>
+      allTrades
+        .filter((trade) => trade.is_public === true)
+        .sort(
+          (a, b) =>
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        ),
+    [allTrades]
+  )
+
+  const trades = useMemo(
+    () => publicTradesByDate.slice(0, visibleTradeCount),
+    [publicTradesByDate, visibleTradeCount]
+  )
+
+  const hasMore = visibleTradeCount < publicTradesByDate.length
 
   useEffect(() => {
     if (!profileId) {
       setProfile(null)
-      setTrades([])
-      tradeFetchOffsetRef.current = 0
-      setPage(0)
-      setHasMore(true)
+      setAllTrades([])
+      setVisibleTradeCount(PAGE_SIZE)
       setLoading(false)
       return
     }
@@ -1236,10 +1232,8 @@ function ProfilePageContent() {
     console.log("ProfileId from URL:", profileId)
 
     setProfile(null)
-    setTrades([])
-    tradeFetchOffsetRef.current = 0
-    setPage(0)
-    setHasMore(true)
+    setAllTrades([])
+    setVisibleTradeCount(PAGE_SIZE)
     setWallPosts([])
     setLoading(true)
 
@@ -1248,8 +1242,27 @@ function ProfilePageContent() {
   }, [profileId])
 
   useEffect(() => {
-    console.log("Trades:", trades)
-  }, [trades])
+    if (!profile?.id || !canViewTrades) {
+      setAllTrades([])
+      setVisibleTradeCount(PAGE_SIZE)
+      return
+    }
+
+    let cancelled = false
+
+    void (async () => {
+      const rows = await fetchTradesForProfile(profile.id)
+      if (!cancelled) setAllTrades(rows)
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [profile?.id, canViewTrades, fetchTradesForProfile])
+
+  useEffect(() => {
+    setVisibleTradeCount(PAGE_SIZE)
+  }, [profile?.id])
 
   useEffect(() => {
     if (!profile?.id) {
@@ -1312,81 +1325,6 @@ function ProfilePageContent() {
       cancelled = true
     }
   }, [profile?.id, currentUserId])
-
-  useEffect(() => {
-    if (!profile?.id || !canViewTrades) {
-      setAllTrades([])
-      return
-    }
-
-    let cancelled = false
-    const isOwner =
-      currentUserId != null && String(currentUserId) === String(profile.id)
-
-    async function fetchAllTrades() {
-      let query = supabase
-        .from("trades")
-        .select(tradeSelectForViewer(isOwner))
-        .eq("user_id", profile.id)
-
-      if (!isOwner) {
-        query = query.eq("is_public", true)
-      }
-
-      const { data, error } = await query
-
-      if (cancelled) return
-      if (error) {
-        console.error("all trades fetch:", error)
-        setAllTrades([])
-        return
-      }
-      setAllTrades(sanitizeTradesForViewer(data || [], { isOwner }))
-    }
-
-    void fetchAllTrades()
-    return () => {
-      cancelled = true
-    }
-  }, [profile?.id, currentUserId, canViewTrades])
-
-  useEffect(() => {
-    if (!profile?.id || !canViewTrades) {
-      setCalendarTrades([])
-      return
-    }
-
-    let cancelled = false
-    const isOwner =
-      currentUserId != null && String(currentUserId) === String(profile.id)
-
-    async function fetchCalendarTrades() {
-      let query = supabase
-        .from("trades")
-        .select("id, created_at, pnl, ticker, direction")
-        .eq("user_id", profile.id)
-
-      if (!isOwner) {
-        query = query.eq("is_public", true)
-      }
-
-      const { data, error } = await query
-
-      if (cancelled) return
-      if (error) {
-        console.error("calendar trades fetch:", error)
-        setCalendarTrades([])
-        return
-      }
-
-      setCalendarTrades(data || [])
-    }
-
-    void fetchCalendarTrades()
-    return () => {
-      cancelled = true
-    }
-  }, [profile?.id, currentUserId, canViewTrades])
 
   useEffect(() => {
     if (
@@ -1503,10 +1441,8 @@ function ProfilePageContent() {
     if (!prof || error) {
       setProfile(null)
       setRoom(null)
-      setTrades([])
-      tradeFetchOffsetRef.current = 0
-      setPage(0)
-      setHasMore(false)
+      setAllTrades([])
+      setVisibleTradeCount(PAGE_SIZE)
       setFollowersCount(0)
       setFollowingCount(0)
       setIsFollowing(false)
@@ -1557,20 +1493,6 @@ function ProfilePageContent() {
 
     setFollowersCount(followersN ?? 0)
     setFollowingCount(followingN ?? 0)
-
-    const isPrivateProfile = prof.is_private === true
-    const canLoadTrades =
-      !isPrivateProfile || uid === prof.id || following
-
-    if (canLoadTrades) {
-      const isOwner = uid === prof.id
-      await fetchTrades(prof.id, true, isOwner)
-    } else {
-      setTrades([])
-      tradeFetchOffsetRef.current = 0
-      setPage(0)
-      setHasMore(false)
-    }
 
     setLoading(false)
 
@@ -2012,7 +1934,7 @@ function ProfilePageContent() {
       return
     }
 
-    setTrades((prev) =>
+    setAllTrades((prev) =>
       prev.map((t) =>
         String(t.id) === String(trade.id) ? { ...t, is_pinned: !t.is_pinned } : t
       )
@@ -2025,7 +1947,6 @@ function ProfilePageContent() {
       console.error(error)
       throw error
     }
-    setTrades((prev) => prev.filter((t) => String(t.id) !== String(tradeId)))
     setAllTrades((prev) => prev.filter((t) => String(t.id) !== String(tradeId)))
     setSelectedTradeDetail((prev) =>
       prev && String(prev.id) === String(tradeId) ? null : prev
@@ -2058,15 +1979,10 @@ function ProfilePageContent() {
       if (!profile) return
 
       if (!following && profile.is_private === true) {
-        setTrades([])
-        tradeFetchOffsetRef.current = 0
-        setPage(0)
-        setHasMore(false)
+        setAllTrades([])
+        setVisibleTradeCount(PAGE_SIZE)
       } else if (following && profile.is_private === true) {
-        tradeFetchOffsetRef.current = 0
-        setPage(0)
-        setHasMore(true)
-        await fetchTrades(profile.id, true)
+        setVisibleTradeCount(PAGE_SIZE)
       }
 
       const { count: followersN } = await supabase
@@ -2184,7 +2100,7 @@ function ProfilePageContent() {
           return
         }
         trade = sanitizeTradeForViewer(data, { isOwner }) as typeof data
-        setTrades((prev) => mergeUniqueById(prev, [trade]))
+        setAllTrades((prev) => mergeUniqueById(prev, [trade]))
       }
 
       setSelectedTradeDetail({ ...trade, currentUserId })
@@ -2996,7 +2912,7 @@ function ProfilePageContent() {
                   <button
                     type="button"
                     onClick={() => {
-                      if (profile?.id) void fetchTrades(profile.id)
+                      setVisibleTradeCount((count) => count + PAGE_SIZE)
                     }}
                     className="mt-4 w-full rounded bg-white/10 py-2 hover:bg-white/20"
                   >
@@ -3711,10 +3627,8 @@ function ProfilePageContent() {
           onClose={() => setEditingTrade(null)}
           onSave={() => {
             if (profile?.id) {
-              tradeFetchOffsetRef.current = 0
-              setPage(0)
-              setHasMore(true)
-              void fetchTrades(profile.id, true)
+              setVisibleTradeCount(PAGE_SIZE)
+              void fetchTradesForProfile(profile.id).then(setAllTrades)
             }
             setEditingTrade(null)
           }}

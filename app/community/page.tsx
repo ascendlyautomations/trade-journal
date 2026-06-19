@@ -23,6 +23,7 @@ import { compressImage } from "@/lib/compressImage"
 import { formatEST } from "@/lib/formatEST"
 import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
 import { feedbackPresets, persistentError } from "@/lib/feedbackPresets"
+import { useUserProfile } from "@/lib/UserProfileProvider"
 import { formatMoneyUnknown, formatRR } from "@/lib/formatDisplay"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
@@ -235,10 +236,10 @@ function CommunityContent() {
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { user, profile, loading: profileLoading } = useUserProfile()
+  const username = profile?.username?.trim() || "User"
   const roomParam = searchParams.get("room")
   const setupMode = searchParams.get("setup") === "true"
-  const [user, setUser] = useState<any>(null)
-  const [username, setUsername] = useState("User")
   const [rooms, setRooms] = useState<Room[]>([])
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null)
   const [messages, setMessages] = useState<RoomMessage[]>([])
@@ -527,16 +528,7 @@ function CommunityContent() {
 
   useEffect(() => {
     async function checkOwner() {
-      if (!selectedRoomId) {
-        setIsOwner(false)
-        return
-      }
-
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-
-      if (!user) {
+      if (!selectedRoomId || !user?.id) {
         setIsOwner(false)
         return
       }
@@ -551,7 +543,7 @@ function CommunityContent() {
     }
 
     void checkOwner()
-  }, [selectedRoomId])
+  }, [selectedRoomId, user?.id])
 
   useEffect(() => {
     setActiveMessageMenuId(null)
@@ -1358,11 +1350,9 @@ function CommunityContent() {
     setJoiningRoomId(roomId)
 
     try {
-    const {
-      data: { user: authUser },
-    } = await supabase.auth.getUser()
+    const authUser = user
 
-    if (!authUser) return
+    if (!authUser?.id) return
 
     const { data: existing } = await supabase
       .from("room_members")
@@ -1419,11 +1409,9 @@ function CommunityContent() {
   }
 
   async function handleLeaveRoom() {
-    const {
-      data: { user: authUser },
-    } = await supabase.auth.getUser()
+    const authUser = user
 
-    if (!authUser || !selectedRoomId) return
+    if (!authUser?.id || !selectedRoomId) return
 
     const leftRoomId = selectedRoomId
 
@@ -1494,28 +1482,16 @@ function CommunityContent() {
   }
 
   useEffect(() => {
-    const init = async () => {
-      const {
-        data: { user: authUser },
-      } = await supabase.auth.getUser()
+    if (profileLoading) return
 
-      if (!authUser) {
+    const init = async () => {
+      if (!user?.id) {
         const returnPath = `/trade-rooms${window.location.search}`
         router.push(`/login?next=${encodeURIComponent(returnPath)}`)
         return
       }
-      setUser(authUser)
 
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("username")
-        .eq("id", authUser.id)
-        .maybeSingle()
-      if (profile?.username) {
-        setUsername(profile.username)
-      }
-
-      const nextRooms = await loadMemberRooms(authUser.id)
+      const nextRooms = await loadMemberRooms(user.id)
       setRooms(nextRooms)
       setLoadingRooms(false)
 
@@ -1526,7 +1502,7 @@ function CommunityContent() {
     }
 
     void init()
-  }, [router, searchParams])
+  }, [profileLoading, user?.id, router, searchParams])
 
   useEffect(() => {
     if (!roomParam || loadingRooms) return

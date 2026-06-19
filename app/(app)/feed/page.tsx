@@ -34,6 +34,7 @@ import {
   prepareStoryImageFile,
   revokeStoryPreviewUrl,
 } from "@/lib/storyComposeHelpers"
+import { useUserProfile } from "@/lib/UserProfileProvider"
 
 const STORY_WINDOW_MS = 24 * 60 * 60 * 1000
 /** Auto-advance each slide (Instagram-style). */
@@ -71,6 +72,8 @@ export default function FeedPage() {
 function FeedPageContent() {
   const searchParams = useSearchParams()
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
+  const { user, profile, loading: profileLoading } = useUserProfile()
+  const authChecked = !profileLoading
   const [posts, setPosts] = useState<any[]>([])
   const [page, setPage] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -78,8 +81,6 @@ function FeedPageContent() {
   const pageRef = useRef(0)
   const loadingRef = useRef(false)
   const hasMoreRef = useRef(true)
-  const [user, setUser] = useState<any>(null)
-  const [authChecked, setAuthChecked] = useState(false)
   const [mode, setMode] = useState<"global" | "following">("following")
   const [likesByPost, setLikesByPost] = useState<Record<string, LikeMeta>>({})
   const [commentsByPost, setCommentsByPost] = useState<Record<string, any[]>>({})
@@ -152,10 +153,6 @@ function FeedPageContent() {
   }, [activeStoryUser, currentStoryIndex, storiesByUser, users])
 
   useEffect(() => {
-    fetchUser()
-  }, [])
-
-  useEffect(() => {
     return () => {
       revokeStoryPreviewUrl(pendingStoryPreviewUrl)
     }
@@ -193,19 +190,13 @@ function FeedPageContent() {
   const loadFollowingStories = useCallback(async () => {
     if (!user?.id) return
 
-    const { data: selfProfile, error: selfProfileErr } = await supabase
-      .from("profiles")
-      .select("id, username, avatar_url")
-      .eq("id", user.id)
-      .maybeSingle()
-
-    if (selfProfileErr) {
-      console.error("story bar self profile:", selfProfileErr)
-    }
-
     setCurrentUserProfile(
-      selfProfile
-        ? (selfProfile as StoryBarProfile)
+      profile
+        ? {
+            id: profile.id,
+            username: profile.username,
+            avatar_url: profile.avatar_url,
+          }
         : { id: user.id, username: null, avatar_url: null }
     )
 
@@ -284,9 +275,10 @@ function FeedPageContent() {
 
     setStoriesByUser(storiesByUserMap)
     setUsers(list)
-  }, [user])
+  }, [user, profile])
 
   useEffect(() => {
+    if (profileLoading) return
     if (!user || mode !== "following") {
       setStoriesByUser({})
       setUsers([])
@@ -297,7 +289,7 @@ function FeedPageContent() {
     }
 
     void loadFollowingStories()
-  }, [user, mode, loadFollowingStories])
+  }, [profileLoading, user, mode, loadFollowingStories])
 
   const handlePostStory = useCallback(async () => {
     if (!pendingStoryFile || !user?.id || postingStoryRef.current || postingStory) {
@@ -461,12 +453,6 @@ function FeedPageContent() {
     document.body.style.overflow = ""
     return undefined
   }, [selectedPostId, activeStoryUser])
-
-  async function fetchUser() {
-    const { data } = await supabase.auth.getSession()
-    setUser(data.session?.user)
-    setAuthChecked(true)
-  }
 
   const loadEngagementForPosts = useCallback(async (postList: any[], currentUser: any) => {
     if (!postList.length) {
@@ -658,6 +644,7 @@ function FeedPageContent() {
   )
 
   useEffect(() => {
+    if (profileLoading) return
     if (!user) return
     setPosts([])
     setLikesByPost({})
@@ -670,7 +657,7 @@ function FeedPageContent() {
     hasMoreRef.current = true
     loadingRef.current = false
     void loadPosts(0)
-  }, [user, mode, loadPosts])
+  }, [profileLoading, user, mode, loadPosts])
 
   useEffect(() => {
     const handleScroll = () => {

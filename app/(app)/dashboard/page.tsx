@@ -32,6 +32,7 @@ import {
 import { supabase } from "../../../lib/supabaseClient"
 import { isProActive } from "../../../lib/subscription"
 import { filterTradesForPerformanceSharePool } from "@/lib/performanceShare"
+import { excludeBacktestTrades } from "@/lib/tradeModeFilters"
 import { formatEST } from "@/lib/formatEST"
 import { formatCurrency } from "@/lib/formatCurrency"
 import { formatRR } from "@/lib/formatDisplay"
@@ -48,6 +49,7 @@ import {
 } from "@/lib/gettingStartedProgressSync"
 import { shouldShowGettingStartedChecklist } from "@/lib/gettingStartedChecklist"
 import { useGettingStartedProgress } from "@/lib/GettingStartedProgressProvider"
+import { useUserProfile } from "@/lib/UserProfileProvider"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 const DASHBOARD_GEAR_PREFS_KEY = "tradetrax_dashboard_prefs_v1"
 
@@ -481,6 +483,13 @@ export default function Dashboard() {
     signalsReady,
     refreshChecklistSignals,
   } = useGettingStartedProgress()
+  const {
+    user,
+    profile,
+    loading: profileLoading,
+    setProfile,
+    refreshProfile,
+  } = useUserProfile()
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [profileOnboardingDone, setProfileOnboardingDone] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
@@ -492,8 +501,6 @@ export default function Dashboard() {
   const [customRangeEnd, setCustomRangeEnd] = useState("")
   const [selectedDate, setSelectedDate] = useState("")
   const [showPublicOnly, setShowPublicOnly] = useState(false)
-  const [user, setUser] = useState<any>(null)
-  const [profile, setProfile] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [showControls, setShowControls] = useState(false)
   const [showEquity, setShowEquity] = useState(true)
@@ -520,6 +527,11 @@ export default function Dashboard() {
     return m
   }, [accountRows])
 
+  const tradesExcludingBacktest = useMemo(
+    () => excludeBacktestTrades(trades),
+    [trades]
+  )
+
   function handleDashboardTimeframeChange(value: string) {
     setTimeFilter(value)
     if (value !== "custom") {
@@ -537,28 +549,30 @@ export default function Dashboard() {
 
   const tradesForPerformanceSharePool = useMemo(
     () =>
-      filterTradesForPerformanceSharePool(trades, {
+      filterTradesForPerformanceSharePool(tradesExcludingBacktest, {
         selectedDate,
         accountFilter,
         accountTypeFilter,
         showPublicOnly,
       }),
-    [trades, selectedDate, accountFilter, accountTypeFilter, showPublicOnly]
+    [
+      tradesExcludingBacktest,
+      selectedDate,
+      accountFilter,
+      accountTypeFilter,
+      showPublicOnly,
+    ]
   )
 
   // 🔥 SAFE DATA FETCH (FIXES YOUR ERROR)
   const refreshDashboardData = useCallback(async () => {
     setLoading(true)
 
-    const { data: sessionData } = await supabase.auth.getSession()
-    const currentUser = sessionData?.session?.user
-
-    if (!currentUser) {
+    const currentUser = user
+    if (!currentUser?.id) {
       setLoading(false)
       return
     }
-
-    setUser(currentUser)
 
     const { data: accountsData } = await supabase
       .from("accounts")
@@ -576,12 +590,24 @@ export default function Dashboard() {
 
     if (trades) setTrades(trades)
 
-    const { data: existingProfile } = await supabase
-      .from("profiles")
-      .select("id")
-      .eq("id", currentUser.id)
+    dispatchGettingStartedSignalsRefresh()
 
-    if (!existingProfile || existingProfile.length === 0) {
+    setLoading(false)
+  }, [user])
+
+  useEffect(() => {
+    if (profileLoading) return
+    if (!user?.id) {
+      setLoading(false)
+      return
+    }
+    void refreshDashboardData()
+  }, [profileLoading, user?.id, refreshDashboardData])
+
+  useEffect(() => {
+    if (profileLoading || !user?.id || profile) return
+
+    void (async () => {
       const referralCode =
         typeof window !== "undefined"
           ? localStorage.getItem("referral_code")
@@ -591,16 +617,16 @@ export default function Dashboard() {
         Math.random().toString(36).substring(2, 8).toUpperCase()
 
       const rawUsername =
-        currentUser.user_metadata?.email?.split("@")[0] ||
-        currentUser.email ||
-        `user_${currentUser.id.slice(0, 6)}`
+        user.user_metadata?.email?.split("@")[0] ||
+        user.email ||
+        `user_${user.id.slice(0, 6)}`
       const { error: profileUpsertErr } = await supabase.from("profiles").upsert(
         {
-          id: currentUser.id,
+          id: user.id,
           username:
             normalizeProfileUsername(rawUsername) ||
-            `user_${currentUser.id.slice(0, 6)}`,
-          name: currentUser.user_metadata?.full_name || "",
+            `user_${user.id.slice(0, 6)}`,
+          name: user.user_metadata?.full_name || "",
           is_pro: false,
           subscription_status: "inactive",
           created_at: new Date().toISOString(),
@@ -612,27 +638,12 @@ export default function Dashboard() {
 
       if (profileUpsertErr) {
         console.error("dashboard ensureProfile:", profileUpsertErr)
+        return
       }
-    }
 
-    const { data: profileData } = await supabase
-      .from("profiles")
-      .select(
-        "id, username, bio, trading_style, primary_market, started_trading, avatar_url, onboarding_completed, max_drawdown_limit, is_pro, subscription_status, referral_code"
-      )
-      .eq("id", currentUser.id)
-      .single()
-
-    if (profileData) setProfile(profileData)
-
-    dispatchGettingStartedSignalsRefresh()
-
-    setLoading(false)
-  }, [])
-
-  useEffect(() => {
-    void refreshDashboardData()
-  }, [refreshDashboardData])
+      await refreshProfile()
+    })()
+  }, [profileLoading, user, profile, refreshProfile])
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -732,7 +743,7 @@ export default function Dashboard() {
       timeFilter: hydratedTimeFilter,
       accountFilter: hydratedAccountFilter,
       accountTypeFilter: hydratedAccountTypeFilter,
-    } = sanitizeHydratedDashboardFilters({ prefs: p, trades })
+    } = sanitizeHydratedDashboardFilters({ prefs: p, trades: tradesExcludingBacktest })
 
     setTimeFilter(hydratedTimeFilter)
     setAccountFilter(hydratedAccountFilter)
@@ -768,7 +779,7 @@ export default function Dashboard() {
         showWarnings: typeof p.showWarnings === "boolean" ? p.showWarnings : true,
       })
     }
-  }, [loading, trades])
+  }, [loading, tradesExcludingBacktest])
 
   function formatNumber(value: number) {
     if (value === null || value === undefined) return "-"
@@ -813,15 +824,16 @@ export default function Dashboard() {
     hasTradingDayTimeSource,
   } = useMemo(() => {
     if (process.env.NODE_ENV === "development") {
-      console.log("Trades:", trades)
-      if (trades.length) console.log("Sample trade:", trades[0])
+      console.log("Trades:", tradesExcludingBacktest)
+      if (tradesExcludingBacktest.length)
+        console.log("Sample trade:", tradesExcludingBacktest[0])
     }
 
     const accountMap = new Map<
       string,
       { value: string; label: string; accountType?: string | null }
     >()
-    trades
+    tradesExcludingBacktest
       .filter(t => t.account_name && t.account_size && t.account_id)
       .forEach((t) => {
         const accountName = String(t.account_name || "").trim()
@@ -886,7 +898,7 @@ export default function Dashboard() {
       return typeof desc === "string" && desc.trim().length > 0
     }
 
-    const withoutPublicFilter = trades.filter((trade) => {
+    const withoutPublicFilter = tradesExcludingBacktest.filter((trade) => {
       if (selectedDate) {
         const tradeDate = new Date(trade.created_at)
         const selected = new Date(selectedDate + "T00:00:00")
@@ -1295,7 +1307,7 @@ const worstDay = dailyPnLs.length > 0
     }
 
   }, [
-    trades,
+    tradesExcludingBacktest,
     showPublicOnly,
     accountFilter,
     accountTypeFilter,
@@ -1317,26 +1329,24 @@ const worstDay = dailyPnLs.length > 0
   const isPro = isProActive(profile)
 
   const showFreePlanAccountBanner = useMemo(() => {
-    if (isPro || !trades.length) return false
+    if (isPro || !tradesExcludingBacktest.length) return false
     const keys = new Set(
-      trades
-        .filter((t) => String(t.mode ?? "").toLowerCase() !== "backtest")
-        .map((t) =>
-          [
-            String(t.account_type ?? "").toLowerCase().trim(),
-            String(t.account_size ?? "").trim(),
-            String(t.account_id ?? "").trim(),
-          ].join("-")
-        )
+      tradesExcludingBacktest.map((t) =>
+        [
+          String(t.account_type ?? "").toLowerCase().trim(),
+          String(t.account_size ?? "").trim(),
+          String(t.account_id ?? "").trim(),
+        ].join("-")
+      )
     )
     return keys.size >= 1
-  }, [trades, isPro])
+  }, [tradesExcludingBacktest, isPro])
 
-  if (loading || (user?.id && !signalsReady)) {
+  if (profileLoading || loading || (user?.id && !signalsReady)) {
     return <SkeletonDashboardPage />
   }
 
-  const hasNoTrades = trades.length === 0
+  const hasNoTrades = tradesExcludingBacktest.length === 0
 
   const showOnboardingSection =
     shouldShowGettingStartedChecklist(user?.id, {
@@ -1501,7 +1511,7 @@ const worstDay = dailyPnLs.length > 0
             title="No recent trades"
             description="Your latest trades will appear here once you log activity."
             action={
-              trades.length === 0 ? (
+              tradesExcludingBacktest.length === 0 ? (
                 <Link
                   href="/app"
                   className="text-sm font-medium text-blue-300 hover:text-blue-200"

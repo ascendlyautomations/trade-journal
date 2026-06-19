@@ -16,9 +16,12 @@ import {
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js"
 import { supabase } from "./supabaseClient"
 
-/** Columns allowed in global client profile state — never load billing or moderation extras. */
-const USER_PROFILE_SELECT =
-  "id, username, avatar_url, is_pro, subscription_status, is_banned, banned_reason, referral_code, is_beta_tester" as const
+/**
+ * Shared profile columns for shell + dashboard + getting-started.
+ * Avoids duplicate `profiles` reads across Navbar, checklist, and key pages.
+ */
+export const USER_PROFILE_SELECT =
+  "id, username, avatar_url, is_pro, subscription_status, is_banned, banned_reason, referral_code, is_beta_tester, onboarding_completed, has_seen_getting_started_intro, has_seen_onboarding_complete_popup, bio, trading_style, trader_type, primary_market, started_trading, max_drawdown_limit" as const
 
 export type UserProfileSlice = {
   id: string
@@ -30,6 +33,15 @@ export type UserProfileSlice = {
   banned_reason: string | null
   referral_code: string | null
   is_beta_tester: boolean | null
+  onboarding_completed: boolean | null
+  has_seen_getting_started_intro: boolean | null
+  has_seen_onboarding_complete_popup: boolean | null
+  bio: string | null
+  trading_style: string | null
+  trader_type: string | null
+  primary_market: string | null
+  started_trading: string | null
+  max_drawdown_limit: number | null
 }
 
 function pickUserProfileFields(row: unknown): UserProfileSlice | null {
@@ -49,6 +61,27 @@ function pickUserProfileFields(row: unknown): UserProfileSlice | null {
     banned_reason: o.banned_reason != null ? String(o.banned_reason) : null,
     referral_code: o.referral_code != null ? String(o.referral_code) : null,
     is_beta_tester: typeof o.is_beta_tester === "boolean" ? o.is_beta_tester : null,
+    onboarding_completed:
+      typeof o.onboarding_completed === "boolean" ? o.onboarding_completed : null,
+    has_seen_getting_started_intro:
+      typeof o.has_seen_getting_started_intro === "boolean"
+        ? o.has_seen_getting_started_intro
+        : null,
+    has_seen_onboarding_complete_popup:
+      typeof o.has_seen_onboarding_complete_popup === "boolean"
+        ? o.has_seen_onboarding_complete_popup
+        : null,
+    bio: o.bio != null ? String(o.bio) : null,
+    trading_style: o.trading_style != null ? String(o.trading_style) : null,
+    trader_type: o.trader_type != null ? String(o.trader_type) : null,
+    primary_market: o.primary_market != null ? String(o.primary_market) : null,
+    started_trading: o.started_trading != null ? String(o.started_trading) : null,
+    max_drawdown_limit: (() => {
+      const v = o.max_drawdown_limit
+      if (v == null || v === "") return null
+      const n = typeof v === "number" ? v : Number(v)
+      return Number.isFinite(n) ? n : null
+    })(),
   }
 }
 
@@ -57,6 +90,8 @@ type UserProfileContextValue = {
   profile: UserProfileSlice | null
   loading: boolean
   setProfile: Dispatch<SetStateAction<UserProfileSlice | null>>
+  /** Re-fetch shared profile slice from Supabase (e.g. after ensure-profile upsert). */
+  refreshProfile: () => Promise<void>
 }
 
 const UserProfileContext = createContext<UserProfileContextValue | null>(null)
@@ -85,6 +120,20 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
     },
     []
   )
+
+  const refreshProfile = useCallback(async () => {
+    const userId = user?.id ?? profileRef.current?.id
+    if (!userId) return
+
+    const { data: profileData } = await supabase
+      .from("profiles")
+      .select(USER_PROFILE_SELECT)
+      .eq("id", userId)
+      .maybeSingle()
+
+    const picked = pickUserProfileFields(profileData)
+    if (picked) setProfileState(picked)
+  }, [user?.id])
 
   useEffect(() => {
     let mounted = true
@@ -228,8 +277,8 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const value = useMemo(
-    () => ({ user, profile, loading, setProfile }),
-    [user, profile, loading, setProfile]
+    () => ({ user, profile, loading, setProfile, refreshProfile }),
+    [user, profile, loading, setProfile, refreshProfile]
   )
 
   return (

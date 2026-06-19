@@ -96,7 +96,7 @@ export function GettingStartedProgressProvider({
 }: {
   children: ReactNode
 }) {
-  const { user } = useUserProfile()
+  const { user, profile, loading: profileLoading } = useUserProfile()
   const { showPopup, closePopup, feedbackModalProps } = useFeedbackPopup()
   const [signals, setSignals] =
     useState<GettingStartedChecklistSignals>(EMPTY_SIGNALS)
@@ -259,7 +259,22 @@ export function GettingStartedProgressProvider({
         signalsReady: signalsReadyRef.current,
       })
 
-      const next = await fetchGettingStartedChecklistSignals(supabase, userId)
+      const preloadedProfileSignals =
+        profile != null
+          ? {
+              onboardingCompleted: profile.onboarding_completed === true,
+              hasSeenGettingStartedIntro:
+                profile.has_seen_getting_started_intro === true,
+              hasSeenOnboardingCompletePopup:
+                profile.has_seen_onboarding_complete_popup === true,
+            }
+          : undefined
+
+      const next = await fetchGettingStartedChecklistSignals(
+        supabase,
+        userId,
+        preloadedProfileSignals
+      )
       if (generation !== refreshGenerationRef.current) {
         gsDebug("refresh discarded: stale generation", {
           generation,
@@ -343,7 +358,7 @@ export function GettingStartedProgressProvider({
 
       enqueuePopups(popups)
     },
-    [enqueuePopups]
+    [enqueuePopups, profile]
   )
 
   useEffect(() => {
@@ -369,13 +384,15 @@ export function GettingStartedProgressProvider({
       return
     }
 
+    if (profileLoading) return
+
     void refreshChecklistSignals().then(() => {
       if (pendingRefreshRef.current) {
         pendingRefreshRef.current = false
         void refreshChecklistSignals({ fromUserAction: true })
       }
     })
-  }, [user?.id, refreshChecklistSignals])
+  }, [user?.id, profileLoading, refreshChecklistSignals])
 
   useEffect(() => {
     return subscribeGettingStartedSignalsRefresh(

@@ -13,9 +13,17 @@ export type GettingStartedChecklistSignals = {
   firstPrivateTradeId: string | null
 }
 
+/** Profile onboarding flags from UserProfileProvider — skips duplicate profiles query. */
+export type GettingStartedPreloadedProfileSignals = {
+  onboardingCompleted: boolean
+  hasSeenGettingStartedIntro: boolean
+  hasSeenOnboardingCompletePopup: boolean
+}
+
 export async function fetchGettingStartedChecklistSignals(
   supabase: SupabaseClient,
-  userId: string
+  userId: string,
+  preloadedProfileSignals?: GettingStartedPreloadedProfileSignals
 ): Promise<GettingStartedChecklistSignals> {
   const [
     profileRes,
@@ -26,13 +34,24 @@ export async function fetchGettingStartedChecklistSignals(
     publicTradesRes,
     privateTradeRes,
   ] = await Promise.all([
-    supabase
-      .from("profiles")
-      .select(
-        "onboarding_completed, has_seen_getting_started_intro, has_seen_onboarding_complete_popup"
-      )
-      .eq("id", userId)
-      .maybeSingle(),
+    preloadedProfileSignals
+      ? Promise.resolve({
+          data: {
+            onboarding_completed: preloadedProfileSignals.onboardingCompleted,
+            has_seen_getting_started_intro:
+              preloadedProfileSignals.hasSeenGettingStartedIntro,
+            has_seen_onboarding_complete_popup:
+              preloadedProfileSignals.hasSeenOnboardingCompletePopup,
+          },
+          error: null,
+        })
+      : supabase
+          .from("profiles")
+          .select(
+            "onboarding_completed, has_seen_getting_started_intro, has_seen_onboarding_complete_popup"
+          )
+          .eq("id", userId)
+          .maybeSingle(),
     supabase
       .from("trades")
       .select("id", { count: "exact", head: true })

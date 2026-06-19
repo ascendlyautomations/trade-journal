@@ -5,6 +5,7 @@ import ProfileOnboarding, {
   profileNeedsUsername,
 } from "../../components/ProfileOnboarding"
 import { filterTradesForPerformanceSharePool } from "@/lib/performanceShare"
+import { excludeBacktestTrades } from "@/lib/tradeModeFilters"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { supabase } from "../../../lib/supabaseClient"
 import { useRouter } from "next/navigation"
@@ -170,7 +171,7 @@ export default function TradesPage() {
 
     console.log("FETCHED TRADES:", tradesData)
 
-    setTrades(tradesData || [])
+    setTrades(excludeBacktestTrades(tradesData || []))
     setLoading(false)
   }, [])
 
