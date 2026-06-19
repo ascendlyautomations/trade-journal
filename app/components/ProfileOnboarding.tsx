@@ -37,6 +37,17 @@ export function profileNeedsUsername(
   return username == null || String(username).trim() === ""
 }
 
+/** Unified gate: username required first, then post-setup CSV onboarding. */
+export function profileNeedsOnboarding(profile: {
+  username?: string | null
+  onboarding_completed?: boolean | null
+}): boolean {
+  return (
+    profileNeedsUsername(profile.username) ||
+    profile.onboarding_completed !== true
+  )
+}
+
 /** Normalize DB / ISO dates to `YYYY-MM-DD` for `<input type="date">`. */
 function sliceDateInput(raw: unknown): string {
   if (raw == null || raw === "") return ""
@@ -256,10 +267,14 @@ export default function ProfileOnboarding({
           id="onboarding-title"
           className="mb-2 text-center text-xl font-semibold text-white"
         >
-          Complete your profile
+          {profileNeedsUsername(initialUsername)
+            ? "Choose your username"
+            : "Complete your profile"}
         </h2>
         <p className="mb-6 text-center text-sm text-gray-300">
-          Add a few details so your journal and social profile look great.
+          {profileNeedsUsername(initialUsername)
+            ? "Pick a unique username to finish setting up your account."
+            : "Add a few details so your journal and social profile look great."}
         </p>
 
         <div className="mb-6 flex flex-col items-center gap-3">

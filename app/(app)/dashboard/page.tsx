@@ -17,7 +17,9 @@ import {
   sanitizeHydratedDashboardFilters,
   sanitizeDrawdownLimitInput,
 } from "../../components/dashboard/dashboardGearUtils"
-import ProfileOnboarding from "../../components/ProfileOnboarding"
+import ProfileOnboarding, {
+  profileNeedsOnboarding,
+} from "../../components/ProfileOnboarding"
 import PostSetupImportModal from "../../components/PostSetupImportModal"
 import PerformanceShareModal from "../../components/PerformanceShareModal"
 import LockedFeature from "../../components/LockedFeature"
@@ -42,7 +44,6 @@ import {
   getTradingWeekday,
   resolveTradingTimeSourceForKey,
 } from "@/lib/formatDate"
-import { normalizeProfileUsername } from "@/lib/profileUsername"
 import {
   dispatchGettingStartedSignalsRefresh,
   notifyGettingStartedChecklistMaybeCompleted,
@@ -605,47 +606,6 @@ export default function Dashboard() {
   }, [profileLoading, user?.id, refreshDashboardData])
 
   useEffect(() => {
-    if (profileLoading || !user?.id || profile) return
-
-    void (async () => {
-      const referralCode =
-        typeof window !== "undefined"
-          ? localStorage.getItem("referral_code")
-          : null
-
-      const generateReferralCode = () =>
-        Math.random().toString(36).substring(2, 8).toUpperCase()
-
-      const rawUsername =
-        user.user_metadata?.email?.split("@")[0] ||
-        user.email ||
-        `user_${user.id.slice(0, 6)}`
-      const { error: profileUpsertErr } = await supabase.from("profiles").upsert(
-        {
-          id: user.id,
-          username:
-            normalizeProfileUsername(rawUsername) ||
-            `user_${user.id.slice(0, 6)}`,
-          name: user.user_metadata?.full_name || "",
-          is_pro: false,
-          subscription_status: "inactive",
-          created_at: new Date().toISOString(),
-          referral_code: generateReferralCode(),
-          referred_by: referralCode || null,
-        },
-        { onConflict: "id", ignoreDuplicates: true }
-      )
-
-      if (profileUpsertErr) {
-        console.error("dashboard ensureProfile:", profileUpsertErr)
-        return
-      }
-
-      await refreshProfile()
-    })()
-  }, [profileLoading, user, profile, refreshProfile])
-
-  useEffect(() => {
     if (typeof window === "undefined") return
     const params = new URLSearchParams(window.location.search)
     if (params.get("checkout") !== "success") return
@@ -654,7 +614,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (loading || !profile || !user) return
-    if (profile.onboarding_completed === true) return
+    if (!profileNeedsOnboarding(profile)) return
     if (profileOnboardingDone) return
     setShowOnboarding(true)
   }, [loading, profile, user, profileOnboardingDone])

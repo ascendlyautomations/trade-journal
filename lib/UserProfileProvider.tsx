@@ -14,6 +14,10 @@ import {
   type SetStateAction,
 } from "react"
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js"
+import {
+  ensureProfileForUser,
+  readStoredReferralCode,
+} from "./ensureProfileForUser"
 import { supabase } from "./supabaseClient"
 
 /**
@@ -181,11 +185,33 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
         .from("profiles")
         .select(USER_PROFILE_SELECT)
         .eq("id", sessionUser.id)
-        .single()
+        .maybeSingle()
+
+      let resolvedProfile = profileData
+
+      if (!resolvedProfile) {
+        const ensureResult = await ensureProfileForUser(supabase, {
+          userId: sessionUser.id,
+          name: null,
+          referredBy: readStoredReferralCode(),
+          userMetadata: sessionUser.user_metadata,
+        })
+
+        if (ensureResult.ok) {
+          const { data: refetched } = await supabase
+            .from("profiles")
+            .select(USER_PROFILE_SELECT)
+            .eq("id", sessionUser.id)
+            .maybeSingle()
+          resolvedProfile = refetched
+        } else if (ensureResult.error) {
+          console.error("ensureProfileForUser:", ensureResult.error)
+        }
+      }
 
       if (!mounted || generation !== loadGeneration) return
 
-      setProfileState(pickUserProfileFields(profileData))
+      setProfileState(pickUserProfileFields(resolvedProfile))
 
       // Realtime: create channel → register .on handlers → subscribe() last (required by supabase-js).
       const topic = `profile:${sessionUser.id}:${realtimeTopicSuffix}`

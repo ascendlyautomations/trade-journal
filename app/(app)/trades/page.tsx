@@ -1,23 +1,25 @@
 "use client"
 
 import ProfileOnboarding, {
-  ONBOARDING_FLAG,
-  profileNeedsUsername,
+  profileNeedsOnboarding,
 } from "../../components/ProfileOnboarding"
 import { filterTradesForPerformanceSharePool } from "@/lib/performanceShare"
 import { excludeBacktestTrades } from "@/lib/tradeModeFilters"
+import {
+  ensureProfileForUser,
+  readStoredReferralCode,
+} from "@/lib/ensureProfileForUser"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { supabase } from "../../../lib/supabaseClient"
 import { useRouter } from "next/navigation"
 import { profilePath } from "@/lib/profileRoutes"
-import { normalizeProfileUsername } from "@/lib/profileUsername"
 import PostSetupImportModal from "../../components/PostSetupImportModal"
 import TradesPageMainContent from "../../components/TradesPageMainContent"
 import TradesPageOverlays from "../../components/TradesPageOverlays"
 import { ConfirmModal, useDeleteTradeConfirmation } from "../../components/ui"
 
 const TRADES_GATE_PROFILE_SELECT =
-  "username, bio, trading_style, trader_type, primary_market, started_trading, avatar_url, referral_code" as const
+  "username, onboarding_completed, bio, trading_style, trader_type, primary_market, started_trading, avatar_url, referral_code" as const
 
 export default function TradesPage() {
   const [trades, setTrades] = useState<any[]>([])
@@ -74,13 +76,7 @@ export default function TradesPage() {
 
   useEffect(() => {
     if (loading || !gateProfile) return
-    let fromSignup = false
-    try {
-      fromSignup = sessionStorage.getItem(ONBOARDING_FLAG) === "1"
-    } catch {
-      /* ignore */
-    }
-    if (fromSignup || profileNeedsUsername(gateProfile.username)) {
+    if (profileNeedsOnboarding(gateProfile)) {
       setShowOnboarding(true)
     }
   }, [loading, gateProfile])
@@ -97,52 +93,17 @@ export default function TradesPage() {
 
     setAuthUserId(user.id)
 
-    // 🔥 CREATE PROFILE IF NEEDED (GOOGLE FIX)
-    const { data: existingProfile } = await supabase
-      .from("profiles")
-      .select("id")
-      .eq("id", user.id)
+    const ensureResult = await ensureProfileForUser(supabase, {
+      userId: user.id,
+      referredBy: readStoredReferralCode(),
+      userMetadata: user.user_metadata,
+    })
 
-    if (!existingProfile || existingProfile.length === 0) {
-      const referralCode =
-        typeof window !== "undefined"
-          ? localStorage.getItem("referral_code")
-          : null
-
-      console.log("🔥 REFERRAL ON SIGNUP:", referralCode)
-
-      function generateReferralCode() {
-        return Math.random().toString(36).substring(2, 8).toUpperCase()
-      }
-
-      const rawUsername =
-        user.user_metadata?.email?.split("@")[0] ||
-        user.email ||
-        `user_${user.id.slice(0, 6)}`
-      const { error: profileUpsertErr } = await supabase
-        .from("profiles")
-        .upsert(
-          {
-            id: user.id,
-            username:
-              normalizeProfileUsername(rawUsername) ||
-              `user_${user.id.slice(0, 6)}`,
-            name: user.user_metadata?.full_name || "",
-            is_pro: false,
-            subscription_status: "inactive",
-            created_at: new Date().toISOString(),
-            referral_code: generateReferralCode(),
-            referred_by: referralCode || null,
-          },
-          { onConflict: "id", ignoreDuplicates: true }
-        )
-
-      if (profileUpsertErr) {
-        console.error(
-          "ERROR:",
-          JSON.stringify(profileUpsertErr, null, 2)
-        )
-      }
+    if (!ensureResult.ok && ensureResult.error) {
+      console.error(
+        "ensureProfileForUser:",
+        JSON.stringify(ensureResult.error, null, 2)
+      )
     }
 
     const { data: profRow } = await supabase

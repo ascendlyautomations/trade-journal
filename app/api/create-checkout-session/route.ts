@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js"
 import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 import { mirrorBillingAccountsStripeCustomerId } from "@/lib/profileSplitMirrorWrites"
-import { normalizeProfileUsername } from "@/lib/profileUsername"
+import { ensureProfileForUser } from "@/lib/ensureProfileForUser"
 import { isProActive } from "@/lib/subscription"
 
 export const runtime = "nodejs"
@@ -78,6 +78,20 @@ export async function POST(req: Request) {
     }
     const userEmail = user.email ?? undefined
 
+    let referralCodeFromBody: string | null = null
+    try {
+      const body = await req.json()
+      const raw =
+        body && typeof body === "object" && "referralCode" in body
+          ? body.referralCode
+          : null
+      if (raw != null && String(raw).trim()) {
+        referralCodeFromBody = String(raw).trim()
+      }
+    } catch {
+      /* empty body is fine */
+    }
+
     const { data: initialProfile, error: profileError } = await supabase
       .from("profiles")
       .select("id, stripe_customer_id, is_pro, subscription_status")
@@ -102,24 +116,17 @@ export async function POST(req: Request) {
     }
 
     if (!profile) {
-      const rawUsername =
-        userEmail?.split("@")[0] || `user_${user.id.slice(0, 6)}`
-      const { error: ensureErr } = await supabase.from("profiles").upsert(
-        {
-          id: user.id,
-          username:
-            normalizeProfileUsername(rawUsername) ||
-            `user_${user.id.slice(0, 6)}`,
-          name: "",
-          is_pro: false,
-          subscription_status: "inactive",
-          created_at: new Date().toISOString(),
-        },
-        { onConflict: "id" }
-      )
+      const ensureResult = await ensureProfileForUser(supabase, {
+        userId: user.id,
+        referredBy: referralCodeFromBody,
+        userMetadata: user.user_metadata,
+      })
 
-      if (ensureErr) {
-        console.error("ERROR:", JSON.stringify(ensureErr, null, 2))
+      if (!ensureResult.ok) {
+        console.error(
+          "ERROR:",
+          JSON.stringify(ensureResult.error ?? { message: "ensure failed" }, null, 2)
+        )
         return Response.json(
           { error: "Could not create profile" },
           { status: 500 }

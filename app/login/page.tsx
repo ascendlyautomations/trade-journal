@@ -3,11 +3,9 @@
 import { useState, useEffect, useRef } from "react"
 import { supabase } from "@/lib/supabaseClient"
 import {
-  isProfilesUsernameConflict,
-  normalizeProfileUsername,
-  sanitizeUsernameInputForTyping,
-  USERNAME_FORMAT_HINT,
-} from "@/lib/profileUsername"
+  ensureProfileForUser,
+  readStoredReferralCode,
+} from "@/lib/ensureProfileForUser"
 import { useRouter } from "next/navigation"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import AuthPasswordInput from "@/app/components/ui/AuthPasswordInput"
@@ -30,7 +28,6 @@ export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [name, setName] = useState("")
-  const [username, setUsername] = useState("")
   const [isLogin, setIsLogin] = useState(true)
   const [loading, setLoading] = useState(false)
   const [showReset, setShowReset] = useState(false)
@@ -185,40 +182,13 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      const referralCode =
-        typeof window !== "undefined"
-          ? localStorage.getItem("referral_code")
-          : null
-
-      const cleanUsername = normalizeProfileUsername(username ?? "")
-      if (!cleanUsername.length) {
-        showPopup({ type: "error", message: "Please enter a username" })
-        return
-      }
-
-      const { data: existingUser, error: usernameLookupErr } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("username", cleanUsername)
-        .maybeSingle()
-
-      if (usernameLookupErr) {
-        console.error("Username lookup:", usernameLookupErr)
-        showPopup({ type: "error", message: "Could not validate username. Try again." })
-        return
-      }
-
-      if (existingUser) {
-        showPopup({ type: "error", message: "Username already in use" })
-        return
-      }
+      const referralCode = readStoredReferralCode()
 
       const { data, error: authError } = await supabase.auth.signUp({
         email,
         password,
         options: {
           data: {
-            username: cleanUsername,
             name: name?.trim() || null,
             referral_code: referralCode || null,
           },
@@ -258,39 +228,20 @@ export default function LoginPage() {
         return
       }
 
-      const profileRow = {
-        id: user.id,
-        username: cleanUsername,
-        name: (name ?? "").trim(),
-        is_pro: false,
-        subscription_status: "inactive",
-        created_at: new Date().toISOString(),
-        referred_by: referralCode || null,
-      }
+      const ensureResult = await ensureProfileForUser(supabase, {
+        userId: user.id,
+        name: name?.trim() || null,
+        referredBy: referralCode,
+        userMetadata: user.user_metadata,
+      })
 
-      let profileError = (
-        await supabase.from("profiles").insert(profileRow)
-      ).error
-
-      if (profileError?.code === "23505" && !isProfilesUsernameConflict(profileError)) {
-        profileError = (
-          await supabase.from("profiles").upsert(profileRow, {
-            onConflict: "id",
-          })
-        ).error
-      }
-
-      if (profileError) {
-        if (profileError.code === "23505" && isProfilesUsernameConflict(profileError)) {
-          showPopup({ type: "error", message: "Username already in use" })
-          return
-        }
-        console.error("PROFILE INSERT ERROR:", profileError)
+      if (!ensureResult.ok) {
+        console.error("PROFILE ENSURE ERROR:", ensureResult.error)
         showPopup({ type: "error", message: "Error creating profile" })
         return
       }
 
-      console.log("✅ PROFILE CREATED")
+      console.log("✅ PROFILE ENSURED")
 
       if (shouldStartCheckout()) {
         try {
@@ -346,6 +297,15 @@ export default function LoginPage() {
     } = await supabase.auth.getUser()
 
     if (user) {
+      const ensureResult = await ensureProfileForUser(supabase, {
+        userId: user.id,
+        referredBy: readStoredReferralCode(),
+        userMetadata: user.user_metadata,
+      })
+      if (!ensureResult.ok) {
+        console.error("ensureProfileForUser after login:", ensureResult.error)
+      }
+
       if (shouldStartCheckout()) {
         try {
           await startCheckoutAfterAuth(user.id)
@@ -452,8 +412,7 @@ export default function LoginPage() {
               </p>
               <p>
                 The fact that you&apos;re here means a lot to me. I&apos;ve spent hundreds of hours
-                building this platform, and now I finally get to put it in the hands of real
-                traders.
+                building this platform, and now I finally get to put it in the hands of likeminded traders.
               </p>
               <p>
                 As you use the app, please don&apos;t be afraid to tell me what you love, what you
@@ -463,13 +422,13 @@ export default function LoginPage() {
               <p>
                 You have a real opportunity to help shape the future of TradeTraxs. Many of the
                 features and improvements added during beta will come directly from suggestions made
-                by traders like you.
+                by you all.
               </p>
               <p>
                 Thank you again for taking the time to test the platform. I&apos;m excited to hear
                 your feedback and continue building something awesome together.
               </p>
-              <p className="pt-1 font-medium text-amber-100/90">— Nick</p>
+              <p className="pt-1 font-medium text-amber-100/90"> — Nick</p>
             </div>
           </>
         ) : (
@@ -537,29 +496,13 @@ export default function LoginPage() {
         <div className="text-center text-gray-400 text-sm mb-4">or</div>
 
         {!isLogin && (
-          <>
-            <input
-              type="text"
-              placeholder="Full Name"
-              className="w-full mb-4 px-4 py-3 rounded-xl bg-white/10 border border-white/10 focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder-gray-400"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-
-            <div className="mb-4">
-              <input
-                type="text"
-                placeholder="username (lowercase only)"
-                autoComplete="username"
-                className="w-full px-4 py-3 rounded-xl bg-white/10 border border-white/10 focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder-gray-400"
-                value={username}
-                onChange={(e) => {
-                  setUsername(sanitizeUsernameInputForTyping(e.target.value))
-                }}
-              />
-              <p className="text-xs text-white/50 mt-1">{USERNAME_FORMAT_HINT}</p>
-            </div>
-          </>
+          <input
+            type="text"
+            placeholder="Full Name"
+            className="w-full mb-4 px-4 py-3 rounded-xl bg-white/10 border border-white/10 focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder-gray-400"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
         )}
 
         <form
