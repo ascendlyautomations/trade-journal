@@ -1,0 +1,37 @@
+import { profilePath } from "@/lib/profileRoutes"
+
+type PostOwnerLike = {
+  id: string
+  user_id?: string | null
+  profiles?: { username?: string | null } | null
+}
+
+/** Canonical public trade page (handles unavailable/private gracefully). */
+export function getSharedTradeViewHref(tradeId: string): string {
+  const id = String(tradeId ?? "").trim()
+  return id ? `/trade/${encodeURIComponent(id)}` : "/feed"
+}
+
+/**
+ * Profile deep-link for feed posts — reuses notification/profile `?post=` handling.
+ */
+export function getSharedPostViewHref(post: PostOwnerLike): string {
+  const postId = String(post.id ?? "").trim()
+  const ownerId = post.user_id != null ? String(post.user_id).trim() : ""
+
+  const base = profilePath({
+    id: ownerId,
+    username: post.profiles?.username,
+  })
+
+  if (!postId) return base
+
+  const params = new URLSearchParams({ post: postId })
+  return `${base}?${params.toString()}`
+}
+
+export const SHARED_TRADE_UNAVAILABLE =
+  "This trade is no longer available."
+
+export const SHARED_POST_UNAVAILABLE =
+  "This post is no longer available."

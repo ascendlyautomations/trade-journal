@@ -33,7 +33,6 @@ import {
 } from "@/lib/formatDisplay"
 import {
   PUBLIC_TRADE_SELECT,
-  publicAccountBadgeFromTrade,
   sanitizeTradeForViewer,
 } from "@/lib/publicAccountPrivacy"
 import { isConversationParticipant } from "@/lib/conversationAccess"
@@ -47,7 +46,12 @@ import {
   buildDmThreadPath,
   isConversationUuidSegment,
 } from "@/lib/messageRoutes"
-import { profilePath } from "@/lib/profileRoutes"
+import {
+  getSharedPostViewHref,
+  getSharedTradeViewHref,
+  SHARED_POST_UNAVAILABLE,
+  SHARED_TRADE_UNAVAILABLE,
+} from "@/lib/sharedContentNavigation"
 import {
   ProfileAvatarLink,
   ProfileLink,
@@ -117,18 +121,6 @@ function postScreenshotSrc(url: string | null | undefined): string | null {
   return `${base}/storage/v1/object/public/screenshots/${raw}`
 }
 
-function getTradeStageRaw(trade: any): string {
-  const badge = publicAccountBadgeFromTrade(trade)
-  if (badge) return badge
-  const v =
-    trade?.account_status ??
-    trade?.account_stage ??
-    trade?.account_category ??
-    trade?.trade_type ??
-    ""
-  return String(v).trim()
-}
-
 function TradeMessageBubble({
   message,
   isMe,
@@ -137,7 +129,7 @@ function TradeMessageBubble({
   setActiveMenuId,
   deleteForMe,
   deleteForEveryone,
-  onOpenTrade,
+  onViewTrade,
 }: {
   message: any
   isMe: boolean
@@ -146,7 +138,7 @@ function TradeMessageBubble({
   setActiveMenuId: (id: string | null) => void
   deleteForMe: (m: any) => void
   deleteForEveryone: (m: any) => void
-  onOpenTrade: (trade: any) => void
+  onViewTrade: (trade: any) => void
 }) {
   const [trade, setTrade] = useState<any>(null)
   const [tradeLoading, setTradeLoading] = useState(false)
@@ -226,7 +218,7 @@ function TradeMessageBubble({
         <div
           className={`${tradeCardWidth} rounded-lg bg-[#1e293b] p-3 text-sm italic text-gray-400`}
         >
-          Trade unavailable or private.
+          {SHARED_TRADE_UNAVAILABLE}
         </div>
       </div>
     )
@@ -289,18 +281,7 @@ function TradeMessageBubble({
           </div>
         ) : null}
 
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={() => onOpenTrade(trade)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault()
-              onOpenTrade(trade)
-            }
-          }}
-          className="w-full cursor-pointer rounded-xl border border-gray-700/80 bg-gradient-to-br from-[#0f172a] to-[#1e293b] p-3.5 shadow-md transition hover:scale-[1.01] hover:shadow-lg"
-        >
+        <div className="w-full rounded-xl border border-gray-700/80 bg-gradient-to-br from-[#0f172a] to-[#1e293b] p-3.5 shadow-md">
           <div className="flex items-center justify-between gap-3">
             <p className="text-lg font-bold tracking-tight text-white">
               {trade.ticker}
@@ -346,6 +327,17 @@ function TradeMessageBubble({
           <p className="mt-2.5 border-t border-gray-700/40 pt-2 text-center text-[10px] font-medium uppercase tracking-wide text-gray-500">
             Shared Trade
           </p>
+
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onViewTrade(trade)
+            }}
+            className="mt-2.5 w-full rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-xs font-medium text-blue-300 transition hover:bg-blue-500/20 hover:text-blue-200"
+          >
+            View trade →
+          </button>
         </div>
 
         <div className="mt-3 max-w-full" onClick={(e) => e.stopPropagation()}>
@@ -369,7 +361,7 @@ function PostMessageBubble({
   setActiveMenuId,
   deleteForMe,
   deleteForEveryone,
-  onOpenPost,
+  onViewPost,
 }: {
   message: any
   isMe: boolean
@@ -378,21 +370,29 @@ function PostMessageBubble({
   setActiveMenuId: (id: string | null) => void
   deleteForMe: (m: any) => void
   deleteForEveryone: (m: any) => void
-  onOpenPost: (post: any) => void
+  onViewPost: (post: any) => void
 }) {
   const [post, setPost] = useState<any>(null)
+  const [postLoading, setPostLoading] = useState(false)
 
   useEffect(() => {
-    if (!message.post_id) return
+    if (!message.post_id) {
+      setPost(null)
+      setPostLoading(false)
+      return
+    }
     let cancelled = false
+    setPostLoading(true)
+    setPost(null)
     ;(async () => {
       const { data } = await supabase
         .from("posts")
         .select("*, profiles(username, avatar_url)")
         .eq("id", message.post_id)
         .maybeSingle()
-      if (!cancelled && data) {
-        setPost(data)
+      if (!cancelled) {
+        setPost(data ?? null)
+        setPostLoading(false)
       }
     })()
     return () => {
@@ -408,11 +408,21 @@ function PostMessageBubble({
     )
   }
 
-  if (!post) {
+  if (postLoading) {
     return (
       <div className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
         <div className="max-w-xs rounded-lg bg-[#1e293b] p-3 text-sm text-gray-400">
-          Loading post...
+          Loading post…
+        </div>
+      </div>
+    )
+  }
+
+  if (!post) {
+    return (
+      <div className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
+        <div className="max-w-xs rounded-lg bg-[#1e293b] p-3 text-sm italic text-gray-400">
+          {SHARED_POST_UNAVAILABLE}
         </div>
       </div>
     )
@@ -471,20 +481,9 @@ function PostMessageBubble({
           </div>
         ) : null}
 
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={() => onOpenPost(post)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault()
-              onOpenPost(post)
-            }
-          }}
-          className="cursor-pointer bg-gradient-to-br from-[#0f172a] to-[#1e293b] border border-gray-700 rounded-xl p-4 shadow-lg transition hover:scale-[1.02] hover:shadow-xl"
-        >
+        <div className="rounded-xl border border-gray-700 bg-gradient-to-br from-[#0f172a] to-[#1e293b] p-4 shadow-lg">
           {message.content ? (
-            <p className="text-sm text-gray-300 mb-2">{message.content}</p>
+            <p className="mb-2 text-sm text-gray-300">{message.content}</p>
           ) : null}
 
           <div className="mb-2 flex items-center justify-between">
@@ -517,6 +516,17 @@ function PostMessageBubble({
               RR {formatRR(post.rr)}
             </span>
           </div>
+
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onViewPost(post)
+            }}
+            className="mt-3 w-full rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-xs font-medium text-blue-300 transition hover:bg-blue-500/20 hover:text-blue-200"
+          >
+            View post →
+          </button>
         </div>
       </div>
     </div>
@@ -586,8 +596,6 @@ export default function DMPage() {
   const [selectedUsers, setSelectedUsers] = useState<any[]>([])
   const [showTradePicker, setShowTradePicker] = useState(false)
   const [trades, setTrades] = useState<any[]>([])
-  const [tradeModalTrade, setTradeModalTrade] = useState<any>(null)
-  const [postModalPost, setPostModalPost] = useState<any>(null)
   const [pageAccess, setPageAccess] =
     useState<ConversationPageAccess>("loading")
 
@@ -615,12 +623,13 @@ export default function DMPage() {
     userIdRef.current = user?.id ?? null
   }, [user?.id])
 
-  function openTradeModal(trade: any) {
-    setTradeModalTrade(trade)
+  function viewSharedTrade(trade: { id?: string | null }) {
+    const href = getSharedTradeViewHref(String(trade?.id ?? ""))
+    router.push(href)
   }
 
-  function openPostModal(post: any) {
-    setPostModalPost(post)
+  function viewSharedPost(post: Parameters<typeof getSharedPostViewHref>[0]) {
+    router.push(getSharedPostViewHref(post))
   }
 
   useEffect(() => {
@@ -1641,7 +1650,7 @@ export default function DMPage() {
                         setActiveMenuId={setActiveMenuId}
                         deleteForMe={deleteForMe}
                         deleteForEveryone={deleteForEveryone}
-                        onOpenTrade={openTradeModal}
+                        onViewTrade={viewSharedTrade}
                       />
                       {showTimestamp ? (
                         <DmClusterTimestamp
@@ -1676,7 +1685,7 @@ export default function DMPage() {
                         setActiveMenuId={setActiveMenuId}
                         deleteForMe={deleteForMe}
                         deleteForEveryone={deleteForEveryone}
-                        onOpenPost={openPostModal}
+                        onViewPost={viewSharedPost}
                       />
                       {showTimestamp ? (
                         <DmClusterTimestamp
@@ -2033,134 +2042,6 @@ export default function DMPage() {
             >
               Cancel
             </button>
-          </div>
-        </div>
-      ) : null}
-
-      {tradeModalTrade ? (
-        <div
-          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4 text-white backdrop-blur-sm"
-          onClick={() => setTradeModalTrade(null)}
-        >
-          <div
-            className="w-full max-w-md rounded-2xl border border-gray-600 bg-[#0f172a] p-6 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {(() => {
-              const t = tradeModalTrade
-              const modalImg = tradeScreenshotSrc(t.image_url)
-              const p = Number(t.pnl)
-              const win = !Number.isNaN(p) && p >= 0
-              const modalStageRaw = getTradeStageRaw(t)
-              const modalStageKey = modalStageRaw.toLowerCase()
-              const modalStageFooterText = modalStageRaw || "Trade"
-              return (
-                <>
-                  <div className="bg-gradient-to-br from-[#0f172a] to-[#1e293b] border border-gray-700 rounded-xl p-4 shadow-lg">
-                    <div className="mb-2 flex items-center justify-between">
-                      <div>
-                        <p className="text-lg font-semibold text-white">
-                          {t.ticker}
-                        </p>
-                        <p className="text-xs text-gray-400">{t.direction}</p>
-                      </div>
-                      <div
-                        className={`text-sm font-semibold ${
-                          win ? "text-green-400" : "text-red-400"
-                        }`}
-                      >
-                        {formatSignedPnlDisplay(t.pnl)}
-                      </div>
-                    </div>
-                    <div className="mb-3 flex justify-between text-xs text-gray-400">
-                      <span>RR: {formatRR(t.rr)}</span>
-                      <span>Points: {formatPoints(t.points)}</span>
-                    </div>
-                    {modalImg ? (
-                      <img
-                        src={modalImg}
-                        alt=""
-                        loading="lazy"
-                        decoding="async"
-                        className="mb-3 max-h-64 w-full rounded-lg border border-gray-700 object-contain"
-                      />
-                    ) : null}
-                    <div className="flex items-center justify-between text-xs">
-                      <span
-                        className={`px-2 py-1 rounded-md text-xs font-medium ${
-                          modalStageKey === "live"
-                            ? "bg-green-500/20 text-green-400"
-                            : modalStageKey === "funded"
-                              ? "bg-blue-500/20 text-blue-400"
-                              : modalStageKey === "eval"
-                                ? "bg-yellow-500/20 text-yellow-400"
-                                : "bg-gray-500/20 text-gray-400"
-                        }`}
-                      >
-                        {modalStageFooterText}
-                      </span>
-                      <span className="text-gray-500">Shared Trade</span>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setTradeModalTrade(null)}
-                    className="mt-4 w-full rounded-lg bg-gray-700 px-4 py-2 text-white hover:bg-gray-600"
-                  >
-                    Close
-                  </button>
-                </>
-              )
-            })()}
-          </div>
-        </div>
-      ) : null}
-
-      {postModalPost ? (
-        <div
-          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4 text-white backdrop-blur-sm"
-          onClick={() => setPostModalPost(null)}
-        >
-          <div
-            className="w-full max-w-md rounded-2xl border border-gray-600 bg-[#0f172a] p-6 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {(() => {
-              const p = postModalPost
-              const imageSrc = postScreenshotSrc(p.image_url)
-              const pnl = Number(p.pnl)
-              const isWin = !Number.isNaN(pnl) && pnl >= 0
-              return (
-                <>
-                  <div className="bg-gradient-to-br from-[#0f172a] to-[#1e293b] border border-gray-700 rounded-xl p-4 shadow-lg">
-                    {imageSrc ? (
-                      <img
-                        src={imageSrc}
-                        alt=""
-                        loading="lazy"
-                        decoding="async"
-                        className="mb-3 max-h-64 w-full rounded-lg border border-gray-700 object-contain"
-                      />
-                    ) : null}
-                    <div className="flex justify-between text-sm">
-                      <span className={isWin ? "text-emerald-400" : "text-red-400"}>
-                        {formatSignedPnlDisplay(pnl)}
-                      </span>
-                      <span className="text-gray-300">
-                        RR {formatRR(p.rr)}
-                      </span>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setPostModalPost(null)}
-                    className="mt-4 w-full rounded-lg bg-gray-700 px-4 py-2 text-white hover:bg-gray-600"
-                  >
-                    Close
-                  </button>
-                </>
-              )
-            })()}
           </div>
         </div>
       ) : null}

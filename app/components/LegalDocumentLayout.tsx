@@ -1,5 +1,6 @@
 import Link from "next/link"
 import type { ReactNode } from "react"
+import LegalPageBackButton from "./LegalPageBackButton"
 import PublicNavbar from "./PublicNavbar"
 import { LEGAL_LAST_UPDATED } from "@/lib/legal/contact"
 
@@ -25,8 +26,9 @@ export default function LegalDocumentLayout({
   return (
     <>
       <PublicNavbar />
-      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 pb-16 pt-24 text-gray-100 md:px-6">
+      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 pb-16 pt-12 text-gray-100 md:px-6 md:pt-24">
         <article className="mx-auto max-w-3xl">
+          <LegalPageBackButton />
           <header className="mb-10 text-center">
             <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent md:text-4xl">
               {title}

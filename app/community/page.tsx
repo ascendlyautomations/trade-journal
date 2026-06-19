@@ -24,6 +24,7 @@ import { formatEST } from "@/lib/formatEST"
 import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
 import { feedbackPresets, persistentError } from "@/lib/feedbackPresets"
 import { formatMoneyUnknown, formatRR } from "@/lib/formatDisplay"
+import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { createRoomJoinNotification } from "@/lib/createRoomJoinNotification"
 import { notifyGettingStartedChecklistMaybeCompleted } from "@/lib/gettingStartedProgressSync"
@@ -302,6 +303,13 @@ function CommunityContent() {
   const [editAllowChat, setEditAllowChat] = useState(true)
   const typingChannelRef = useRef<any>(null)
   const messagesScrollRef = useRef<HTMLDivElement | null>(null)
+  const composerFileRef = useRef<HTMLInputElement>(null)
+  const [selectedComposerImage, setSelectedComposerImage] = useState<File | null>(
+    null
+  )
+  const [composerPreviewUrl, setComposerPreviewUrl] = useState<string | null>(
+    null
+  )
   const sectionFilterRef = useRef<{ len: number; id: string | null }>({
     len: 0,
     id: null,
@@ -1835,11 +1843,45 @@ function CommunityContent() {
     })
   }, [selectedRoomId, username])
 
+  function clearComposerImage() {
+    setSelectedComposerImage(null)
+    if (composerPreviewUrl) URL.revokeObjectURL(composerPreviewUrl)
+    setComposerPreviewUrl(null)
+    if (composerFileRef.current) composerFileRef.current.value = ""
+  }
+
+  useEffect(() => {
+    return () => {
+      if (composerPreviewUrl) URL.revokeObjectURL(composerPreviewUrl)
+    }
+  }, [composerPreviewUrl])
+
+  useEffect(() => {
+    setSelectedComposerImage(null)
+    setComposerPreviewUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev)
+      return null
+    })
+    if (composerFileRef.current) composerFileRef.current.value = ""
+  }, [selectedRoomId, selectedSectionId])
+
+  function handleComposerImageChange(e: ChangeEvent<HTMLInputElement>) {
+    if (!user?.id || !selectedRoomId || !canPostInRoom) return
+
+    const file = e.target.files?.[0]
+    e.target.value = ""
+    if (!file) return
+
+    if (composerPreviewUrl) URL.revokeObjectURL(composerPreviewUrl)
+    setSelectedComposerImage(file)
+    setComposerPreviewUrl(URL.createObjectURL(file))
+  }
+
   async function sendMessage() {
     if (sendingMessageRef.current || sendingMessage) return
     if (!user?.id || !selectedRoomId || !canPostInRoom) return
     const content = draft.trim()
-    if (!content) return
+    if (!content && !selectedComposerImage) return
 
     sendingMessageRef.current = true
     setSendingMessage(true)
@@ -1858,105 +1900,59 @@ function CommunityContent() {
       }
     }
 
-    const { error } = await supabase.from("room_messages").insert({
-      room_id: selectedRoomId,
-      user_id: user.id,
-      content,
-      section_id: selectedSectionId,
-    })
-    if (error) {
-      console.error("room_messages insert:", error)
-      showPopup({ type: "error", message: handleSupabaseError(error) })
-      return
-    }
+    if (selectedComposerImage) {
+      let uploadFile: File = selectedComposerImage
+      if (selectedComposerImage.type?.startsWith("image/")) {
+        uploadFile = await compressImage(selectedComposerImage)
+      }
+      const filePath = `room-images/${Date.now()}-${uploadFile.name}`
 
-    setDraft("")
-    } finally {
-      sendingMessageRef.current = false
-      setSendingMessage(false)
-    }
-  }
+      const { error: uploadError } = await supabase.storage
+        .from("screenshots")
+        .upload(filePath, uploadFile)
 
-  async function handleImageUpload(e: ChangeEvent<HTMLInputElement>) {
-    if (!user?.id || !selectedRoomId || !canPostInRoom) {
-      console.log("[trade-room-image] blocked early", {
-        hasUser: Boolean(user?.id),
-        selectedRoomId,
-        canPostInRoom,
+      if (uploadError) {
+        console.error("room image upload:", uploadError)
+        showPopup({ type: "error", message: handleSupabaseError(uploadError) })
+        return
+      }
+
+      const { data } = supabase.storage
+        .from("screenshots")
+        .getPublicUrl(filePath)
+
+      const { error } = await supabase.from("room_messages").insert({
+        room_id: selectedRoomId,
+        user_id: user.id,
+        type: "image" as const,
+        image_url: data.publicUrl,
+        content: content || "",
+        section_id: selectedSectionId,
       })
-      return
-    }
-    const file = e.target.files?.[0]
-    e.target.value = ""
-    if (!file) {
-      console.log("[trade-room-image] no file selected")
-      return
-    }
-
-    console.log("[trade-room-image] image selected", {
-      name: file.name,
-      type: file.type,
-      size: file.size,
-      roomId: selectedRoomId,
-      sectionId: selectedSectionId,
-    })
-
-    const userIsPro = await isUserPro(supabase as any, user.id)
-    if (!userIsPro) {
-      const limitReached = await reachedMessagesCommentsLimit(
-        supabase as any,
-        user.id,
-        10
-      )
-      if (limitReached) {
-        showPopup(feedbackPresets.messageLimit())
+      if (error) {
+        console.error("room_messages insert:", error)
+        showPopup({ type: "error", message: handleSupabaseError(error) })
+        return
+      }
+    } else {
+      const { error } = await supabase.from("room_messages").insert({
+        room_id: selectedRoomId,
+        user_id: user.id,
+        content,
+        section_id: selectedSectionId,
+      })
+      if (error) {
+        console.error("room_messages insert:", error)
+        showPopup({ type: "error", message: handleSupabaseError(error) })
         return
       }
     }
 
-    let uploadFile: File = file
-    if (file.type?.startsWith("image/")) {
-      uploadFile = await compressImage(file)
-    }
-    const filePath = `room-images/${Date.now()}-${uploadFile.name}`
-
-    console.log("[trade-room-image] upload started", { filePath, bucket: "screenshots" })
-
-    const { error: uploadError } = await supabase.storage
-      .from("screenshots")
-      .upload(filePath, uploadFile)
-
-    if (uploadError) {
-      console.error("[trade-room-image] upload failed:", uploadError)
-      return
-    }
-
-    const { data } = supabase.storage.from("screenshots").getPublicUrl(filePath)
-    console.log("[trade-room-image] upload completed", { publicUrl: data.publicUrl })
-
-    const insertPayload = {
-      room_id: selectedRoomId,
-      user_id: user.id,
-      type: "image" as const,
-      image_url: data.publicUrl,
-      section_id: selectedSectionId,
-    }
-    console.log("[trade-room-image] room message insert payload", insertPayload)
-
-    const { data: insertData, error: insertError } = await supabase
-      .from("room_messages")
-      .insert(insertPayload)
-      .select("id, type, image_url, section_id, room_id, user_id, created_at")
-      .maybeSingle()
-
-    console.log("[trade-room-image] room message insert response", {
-      insertData,
-      insertError,
-    })
-
-    if (insertError) {
-      console.error("room image message insert:", insertError)
-      showPopup({ type: "error", message: handleSupabaseError(insertError) })
+    setDraft("")
+    clearComposerImage()
+    } finally {
+      sendingMessageRef.current = false
+      setSendingMessage(false)
     }
   }
 
@@ -2484,13 +2480,20 @@ function CommunityContent() {
 
                       <div className="text-sm">
                         {msg.type === "image" ? (
-                          <img
-                            src={msg.image_url || ""}
-                            className="mt-1 max-w-xs rounded"
-                            alt=""
-                            loading="lazy"
-                            decoding="async"
-                          />
+                          <>
+                            <img
+                              src={msg.image_url || ""}
+                              className="mt-1 max-w-xs rounded"
+                              alt=""
+                              loading="lazy"
+                              decoding="async"
+                            />
+                            {msg.content?.trim() ? (
+                              <p className="mt-2 break-words text-sm text-white">
+                                {msg.content}
+                              </p>
+                            ) : null}
+                          </>
                         ) : msg.type === "trade" ? (
                           msg.trades ? (
                           <div className="mt-1 rounded bg-white/5 p-2 max-w-xs">
@@ -2598,13 +2601,20 @@ function CommunityContent() {
                             </div>
                             <div className="text-sm text-white">
                               {msg.type === "image" ? (
-                                <img
-                                  src={msg.image_url || ""}
-                                  className="mt-1 max-h-24 rounded"
-                                  alt=""
-                                  loading="lazy"
-                                  decoding="async"
-                                />
+                                <>
+                                  <img
+                                    src={msg.image_url || ""}
+                                    className="mt-1 max-h-24 rounded"
+                                    alt=""
+                                    loading="lazy"
+                                    decoding="async"
+                                  />
+                                  {msg.content?.trim() ? (
+                                    <p className="mt-1 break-words text-xs text-white">
+                                      {msg.content}
+                                    </p>
+                                  ) : null}
+                                </>
                               ) : msg.type === "trade" && msg.trades ? (
                                 <span>
                                   Trade · {msg.trades.ticker ?? "—"} · PnL{" "}
@@ -2665,6 +2675,28 @@ function CommunityContent() {
                       : "Only the room owner can post in this section."}
                   </div>
                 ) : (
+                  <>
+                  {composerPreviewUrl ? (
+                    <div className="shrink-0 border-t border-white/10 px-2 pb-2 pt-2">
+                      <div className="relative w-fit">
+                        <img
+                          src={composerPreviewUrl}
+                          className="h-24 w-24 rounded-lg border border-white/10 object-cover"
+                          alt="Selected preview"
+                          loading="lazy"
+                          decoding="async"
+                        />
+                        <button
+                          type="button"
+                          onClick={clearComposerImage}
+                          className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs text-white"
+                          aria-label="Remove image"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
                   <DmStyleComposer
                     value={draft}
                     onChange={(v) => {
@@ -2681,10 +2713,13 @@ function CommunityContent() {
                     }
                     textDisabled={!canPostInRoom}
                     sendDisabled={
-                      !canPostInRoom || !draft.trim() || sendingMessage
+                      !canPostInRoom ||
+                      sendingMessage ||
+                      (!draft.trim() && !selectedComposerImage)
                     }
-                    onImageChange={(e) => void handleImageUpload(e)}
+                    onImageChange={handleComposerImageChange}
                     imageDisabled={!canPostInRoom}
+                    fileInputRef={composerFileRef}
                     onTradeClick={() => setSelectTrade(true)}
                     tradeDisabled={!canPostInRoom}
                     beforeRow={
@@ -2694,7 +2729,15 @@ function CommunityContent() {
                         </p>
                       ) : null
                     }
+                    afterRow={
+                      selectedComposerImage ? (
+                        <p className="text-xs text-gray-400">
+                          {selectedComposerImage.name}
+                        </p>
+                      ) : null
+                    }
                   />
+                  </>
                 )}
               </>
             )}

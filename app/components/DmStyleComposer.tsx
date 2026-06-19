@@ -104,6 +104,8 @@ export default function DmStyleComposer({
   const [mobileAttachOpen, setMobileAttachOpen] = useState(false)
   const fileInputId = useId()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const internalFileInputRef = useRef<HTMLInputElement>(null)
+  const resolvedFileInputRef = fileInputRef ?? internalFileInputRef
   const showShare = hasShareActions(imageDisabled, onTradeClick)
 
   const syncTextareaHeight = useCallback(() => {
@@ -118,7 +120,7 @@ export default function DmStyleComposer({
   function openPhotoPicker() {
     setMobileAttachOpen(false)
     if (imageDisabled) return
-    fileInputRef?.current?.click()
+    resolvedFileInputRef.current?.click()
   }
 
   function openTradePicker() {
@@ -131,7 +133,7 @@ export default function DmStyleComposer({
     <div className="relative mt-auto shrink-0 border-t border-white/10 bg-[#0B1220] p-2 md:bg-[#020617] md:p-4">
       {beforeRow ? <div className="mb-1">{beforeRow}</div> : null}
       <input
-        ref={fileInputRef}
+        ref={resolvedFileInputRef}
         id={fileInputId}
         type="file"
         accept="image/*"
