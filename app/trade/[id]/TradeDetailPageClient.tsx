@@ -4,7 +4,13 @@ import Link from "next/link"
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Navbar from "../../components/Navbar"
-import TradeSocialLayer from "../../components/TradeSocialLayer"
+import { CommentFocusCompactStrip } from "@/app/components/comments/CommentFocusCompactStrip"
+import MobileCommentFocusLayout from "@/app/components/comments/MobileCommentFocusLayout"
+import {
+  TradeSocialCommentsSection,
+  TradeSocialEngagementBar,
+  TradeSocialProvider,
+} from "../../components/TradeSocialLayer"
 import { supabase } from "../../../lib/supabaseClient"
 import {
   PUBLIC_TRADE_SELECT,
@@ -36,9 +42,11 @@ export default function TradeDetailPageClient({
     id: string
     username?: string | null
     name?: string | null
+    avatar_url?: string | null
   } | null>(null)
   const [userId, setUserId] = useState<string | undefined>(undefined)
   const [loading, setLoading] = useState(true)
+  const [commentsFocused, setCommentsFocused] = useState(false)
 
   useEffect(() => {
     if (!tradeId) {
@@ -80,7 +88,7 @@ export default function TradeDetailPageClient({
         if (resolvedTrade?.user_id) {
           const { data: owner } = await supabase
             .from("profiles")
-            .select("id, username, name")
+            .select("id, username, name, avatar_url")
             .eq("id", resolvedTrade.user_id)
             .maybeSingle()
           if (!cancelled) setOwnerProfile(owner)
@@ -99,12 +107,75 @@ export default function TradeDetailPageClient({
   const imgSrc = trade ? tradeScreenshotSrc(trade.image_url) : null
   const pnl = trade != null ? Number(trade.pnl) : NaN
   const pnlPositive = !Number.isNaN(pnl) && pnl >= 0
+  const pnlLabel = Number.isNaN(pnl)
+    ? "—"
+    : `${pnlPositive ? "+" : "-"}$${Math.abs(pnl)}`
+
+  const tradeCompactMeta = trade ? (
+    <>
+      <span className={pnlPositive ? "text-emerald-400" : "text-red-400"}>
+        {pnlLabel}
+      </span>
+      <span className="text-gray-500"> · </span>
+      <span>
+        {trade.ticker ?? "—"} · {trade.direction ?? "—"}
+      </span>
+    </>
+  ) : null
+
+  const tradeImage = imgSrc ? (
+    <div className="w-full bg-black/30">
+      <img
+        src={imgSrc}
+        alt=""
+        loading="lazy"
+        decoding="async"
+        className="block w-full max-h-[400px] object-cover"
+      />
+    </div>
+  ) : null
+
+  const tradeCollapsibleContent = trade ? (
+    <div className="space-y-2">
+      {tradeImage ? (
+        <div className="hidden md:block">{tradeImage}</div>
+      ) : null}
+      <div className="space-y-2 p-4">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <p className="text-lg font-semibold">{trade.ticker}</p>
+          <p className="text-xs text-gray-400">{trade.direction}</p>
+        </div>
+        <span
+          className={`text-sm font-semibold tabular-nums ${
+            pnlPositive ? "text-emerald-400" : "text-red-400"
+          }`}
+        >
+          {pnlLabel}
+        </span>
+      </div>
+      {ownerProfile ? (
+        <Link
+          href={profilePath(ownerProfile)}
+          className="inline-flex text-sm font-medium text-blue-300 hover:text-blue-200"
+        >
+          View {profileSeoDisplayName(ownerProfile)}&apos;s profile →
+        </Link>
+      ) : null}
+      {trade.public_description ? (
+        <p className="text-sm leading-relaxed text-gray-300">
+          {trade.public_description}
+        </p>
+      ) : null}
+      </div>
+    </div>
+  ) : null
 
   if (!tradeId) {
     return (
       <>
         <Navbar />
-        <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white p-6">
+        <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] p-6 text-white">
           <p className="text-center text-gray-400">Invalid trade link.</p>
         </div>
       </>
@@ -115,7 +186,7 @@ export default function TradeDetailPageClient({
     return (
       <>
         <Navbar />
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white">
+        <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white">
           <div>Loading...</div>
         </div>
       </>
@@ -126,8 +197,8 @@ export default function TradeDetailPageClient({
     return (
       <>
         <Navbar />
-        <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white p-6">
-          <div className="max-w-xl mx-auto space-y-4 text-center">
+        <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] p-6 text-white">
+          <div className="mx-auto max-w-xl space-y-4 text-center">
             <p className="text-gray-400">This trade is unavailable.</p>
             <button
               type="button"
@@ -145,8 +216,8 @@ export default function TradeDetailPageClient({
   return (
     <>
       <Navbar />
-      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white p-6">
-        <div className="max-w-xl mx-auto space-y-4">
+      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] p-6 text-white">
+        <div className="mx-auto max-w-xl space-y-4">
           <button
             type="button"
             onClick={() => router.back()}
@@ -155,55 +226,41 @@ export default function TradeDetailPageClient({
             ← Back
           </button>
 
-          <div className="rounded-xl border border-white/10 bg-white/5 overflow-hidden">
-            {imgSrc ? (
-              <div className="w-full bg-black/30">
-                <img
-                  src={imgSrc}
-                  alt=""
-                  loading="lazy"
-                  decoding="async"
-                  className="w-full max-h-[400px] object-cover block"
-                />
-              </div>
-            ) : null}
-            <div className="p-4 space-y-2">
-              <div className="flex justify-between items-center gap-4">
-                <div>
-                  <p className="text-lg font-semibold">{trade.ticker}</p>
-                  <p className="text-xs text-gray-400">{trade.direction}</p>
-                </div>
-                <span
-                  className={`text-sm font-semibold tabular-nums ${
-                    pnlPositive ? "text-emerald-400" : "text-red-400"
-                  }`}
-                >
-                  {Number.isNaN(pnl)
-                    ? `—`
-                    : `${pnlPositive ? "+" : "-"}$${Math.abs(pnl)}`}
-                </span>
-              </div>
-              {ownerProfile ? (
-                <Link
-                  href={profilePath(ownerProfile)}
-                  className="inline-flex text-sm font-medium text-blue-300 hover:text-blue-200"
-                >
-                  View {profileSeoDisplayName(ownerProfile)}&apos;s profile →
-                </Link>
-              ) : null}
-              {trade.public_description ? (
-                <p className="text-sm text-gray-300 leading-relaxed">
-                  {trade.public_description}
-                </p>
-              ) : null}
-            </div>
+          <div className="overflow-hidden rounded-xl border border-white/10 bg-white/5">
+            <TradeSocialProvider
+              tradeId={tradeId}
+              currentUserId={userId}
+              tradeOwnerUserId={trade.user_id}
+            >
+              <MobileCommentFocusLayout
+                commentsFocused={commentsFocused}
+                compactHeader={
+                  ownerProfile ? (
+                    <CommentFocusCompactStrip
+                      userId={ownerProfile.id}
+                      username={ownerProfile.username}
+                      avatarUrl={ownerProfile.avatar_url}
+                      timestamp={trade.created_at ?? trade.trade_date}
+                      meta={tradeCompactMeta}
+                    />
+                  ) : undefined
+                }
+                mobileMedia={tradeImage ?? undefined}
+                engagement={
+                  <TradeSocialEngagementBar
+                    className="px-4 py-2"
+                    onCommentsFocus={() => setCommentsFocused(true)}
+                  />
+                }
+                engagementClassName="shrink-0 border-t border-white/10"
+                engagementAfterCollapsible
+                collapsibleContent={tradeCollapsibleContent}
+                comments={
+                  <TradeSocialCommentsSection className="border-t border-white/10 px-4 pb-4" />
+                }
+              />
+            </TradeSocialProvider>
           </div>
-
-          <TradeSocialLayer
-            tradeId={tradeId}
-            currentUserId={userId}
-            tradeOwnerUserId={trade.user_id}
-          />
         </div>
       </div>
     </>

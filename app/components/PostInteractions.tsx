@@ -1,6 +1,7 @@
 "use client"
 
 import FeedCommentItem from "@/app/components/feed/FeedCommentItem"
+import EngagementCountButton from "@/app/components/EngagementCountButton"
 
 type LikeMeta = {
   count: number
@@ -49,35 +50,30 @@ export function PostInteractionsEngagement({
   return (
     <div className={`text-sm ${className}`.trim()} {...guard(stopPropagation)}>
       <div className="flex items-center gap-3">
-        <button
-          type="button"
+        <EngagementCountButton
+          variant="boxed"
+          icon={<span>{likeMeta.liked ? "❤️" : "🤍"}</span>}
+          count={likeMeta.count}
+          ariaLabel={likeMeta.liked ? "Unlike" : "Like"}
+          disabled={!user || likeBusy}
           onClick={(e) => {
             if (stopPropagation) e.stopPropagation()
             onToggleLike(post)
           }}
-          disabled={!user || likeBusy}
-          className="flex items-center justify-center w-9 h-9 rounded-lg bg-white/5 hover:bg-white/10 transition text-sm text-gray-300 hover:text-white disabled:opacity-50"
-          aria-label={likeMeta.liked ? "Unlike" : "Like"}
-        >
-          <span className="leading-none" aria-hidden>
-            {likeMeta.liked ? "❤️" : "🤍"}
-          </span>
-          <span className="text-xs tabular-nums">{likeMeta.count}</span>
-        </button>
-        <button
-          type="button"
+          className={
+            likeMeta.liked ? "text-red-400 hover:text-red-300" : undefined
+          }
+        />
+        <EngagementCountButton
+          variant="boxed"
+          icon={<span>💬</span>}
+          count={comments.length}
+          ariaLabel="View comments"
           onClick={(e) => {
             if (stopPropagation) e.stopPropagation()
             onOpenComments(pid)
           }}
-          className="flex items-center justify-center w-9 h-9 rounded-lg bg-white/5 hover:bg-white/10 transition text-gray-300 hover:text-white"
-          aria-label="View comments"
-        >
-          <div className="flex items-center gap-1">
-            <span aria-hidden>💬</span>
-            <span className="text-xs tabular-nums">{comments.length || 0}</span>
-          </div>
-        </button>
+        />
         {onSharePost ? (
           <button
             type="button"

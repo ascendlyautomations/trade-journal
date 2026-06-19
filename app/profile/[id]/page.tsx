@@ -27,6 +27,9 @@ import DetailModalImage from "../../components/ui/DetailModalImage"
 import ImageLightbox from "../../components/ui/ImageLightbox"
 import { EMPTY_LIKE_META } from "../../components/feed/FeedPostCard"
 import FeedCommentItem from "../../components/feed/FeedCommentItem"
+import EngagementCountButton from "../../components/EngagementCountButton"
+import { CommentFocusCompactStrip } from "@/app/components/comments/CommentFocusCompactStrip"
+import MobileCommentFocusLayout from "@/app/components/comments/MobileCommentFocusLayout"
 import {
   FEED_COMMENT_INSERT_SELECT,
   FEED_COMMENTS_SELECT,
@@ -224,6 +227,9 @@ function TradeCard({
   onImageClick?: (url: string) => void
 }) {
   const commentsScrollRef = useRef<HTMLDivElement>(null)
+  const [commentsFocused, setCommentsFocused] = useState(
+    Boolean(scrollToCommentsOnMount)
+  )
   const imageSrc = postImageSrc(trade.image_url)
   const pnlRaw = Number(trade.pnl)
   const pnl = Number.isFinite(pnlRaw) ? pnlRaw : NaN
@@ -238,6 +244,30 @@ function TradeCard({
   const desc = trade.public_description
     ? String(trade.public_description).trim()
     : ""
+
+  useEffect(() => {
+    if (scrollToCommentsOnMount) setCommentsFocused(true)
+  }, [scrollToCommentsOnMount, trade.id])
+
+  const tradeCompactMeta = (
+    <>
+      <span
+        className={
+          Number.isFinite(pnl)
+            ? pnl >= 0
+              ? "text-emerald-400"
+              : "text-red-400"
+            : "text-gray-400"
+        }
+      >
+        {pnlLabel}
+      </span>
+      <span className="text-gray-500"> · </span>
+      <span>
+        {ticker} · {direction}
+      </span>
+    </>
+  )
 
   const tradeDetails = (
     <>
@@ -389,40 +419,55 @@ function TradeCard({
         ) : null}
 
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:w-[400px] md:shrink-0 lg:w-[420px]">
-          {tradeAuthorHeader}
-          <div className="shrink-0 bg-black/30 md:hidden">{tradeImageBlock}</div>
-
           {showInteractions ? (
-            <div
-              className="flex min-h-0 flex-1 flex-col overflow-hidden"
-              onKeyDown={(e) => e.stopPropagation()}
+            <TradeSocialProvider
+              tradeId={trade.id}
+              currentUserId={trade.currentUserId}
+              tradeOwnerUserId={trade.user_id}
+              commentsExpanded={commentsExpanded}
+              onRequestComments={commentsExpanded ? undefined : onOpenComments}
+              scrollToCommentsOnMount={scrollToCommentsOnMount}
             >
-              <TradeSocialProvider
-                tradeId={trade.id}
-                currentUserId={trade.currentUserId}
-                tradeOwnerUserId={trade.user_id}
-                commentsExpanded={commentsExpanded}
-                onRequestComments={commentsExpanded ? undefined : onOpenComments}
-                scrollToCommentsOnMount={scrollToCommentsOnMount}
-              >
-                <div className="shrink-0">
-                  <div className="border-t border-white/10 px-4 py-2 md:border-t-0">
-                    <TradeSocialEngagementBar />
-                  </div>
+              <MobileCommentFocusLayout
+                commentsFocused={commentsFocused}
+                header={tradeAuthorHeader}
+                compactHeader={
+                  <CommentFocusCompactStrip
+                    userId={String(profile.id ?? "")}
+                    username={profile.username}
+                    avatarUrl={profile.avatar_url}
+                    timestamp={trade.created_at ?? trade.trade_date}
+                    meta={tradeCompactMeta}
+                  />
+                }
+                mobileMedia={imageSrc ? tradeImageBlock : undefined}
+                engagement={
+                  <TradeSocialEngagementBar
+                    onCommentsFocus={() => setCommentsFocused(true)}
+                  />
+                }
+                engagementClassName="shrink-0 border-t border-white/10 px-4 py-2 md:border-t-0"
+                collapsibleContent={
                   <div className="space-y-3 px-4 pb-3 pt-4">{tradeDetails}</div>
-                </div>
-                {commentsExpanded ? (
-                  <div className="flex min-h-0 flex-1 flex-col overflow-hidden border-t border-white/10">
+                }
+                comments={
+                  commentsExpanded ? (
                     <TradeSocialCommentsSection
                       className="px-4 pb-4"
                       scrollContainerRef={commentsScrollRef}
                     />
-                  </div>
-                ) : null}
-              </TradeSocialProvider>
-            </div>
+                  ) : null
+                }
+              />
+            </TradeSocialProvider>
           ) : (
-            <div className="space-y-3 p-4">{tradeDetails}</div>
+            <>
+              {tradeAuthorHeader}
+              {imageSrc ? (
+                <div className="shrink-0 bg-black/30 md:hidden">{tradeImageBlock}</div>
+              ) : null}
+              <div className="space-y-3 p-4">{tradeDetails}</div>
+            </>
           )}
         </div>
       </article>
@@ -545,7 +590,14 @@ function PostCard({
   onSharePost?: (post: any) => void
 }) {
   const commentsScrollRef = useRef<HTMLDivElement>(null)
+  const [commentsFocused, setCommentsFocused] = useState(
+    Boolean(scrollToCommentsOnMount && showCommentsPanel)
+  )
   const imgSrc = profileWallImageSrc(post.image_url)
+
+  useEffect(() => {
+    if (scrollToCommentsOnMount && showCommentsPanel) setCommentsFocused(true)
+  }, [scrollToCommentsOnMount, showCommentsPanel, post.id])
 
   useEffect(() => {
     if (!showCommentsPanel || !scrollToCommentsOnMount) return
@@ -709,6 +761,67 @@ function PostCard({
       <DetailModalImage src={imgSrc} onClick={onImageClick} />
     ) : null
 
+  const postEngagementRow = showInteractions ? (
+    <div className="flex items-center gap-4 px-1 text-sm">
+      <EngagementCountButton
+        icon={<span>{likeMeta?.liked ? "❤️" : "🤍"}</span>}
+        count={likeMeta?.count ?? 0}
+        ariaLabel={likeMeta?.liked ? "Unlike" : "Like"}
+        disabled={likeBusy}
+        onClick={(e) => {
+          e.stopPropagation()
+          onLike?.()
+        }}
+        className="text-gray-300 hover:text-white"
+        countClassName="tabular-nums"
+      />
+      <EngagementCountButton
+        icon={<span>💬</span>}
+        count={comments?.length ?? 0}
+        ariaLabel="View comments"
+        onClick={(e) => {
+          e.stopPropagation()
+          setCommentsFocused(true)
+          onOpenComments?.()
+          if (inDetailModal && showCommentsPanel) {
+            requestAnimationFrame(() => {
+              scrollModalCommentsPane(commentsScrollRef.current)
+            })
+          }
+        }}
+        className="text-gray-300 hover:text-white"
+        countClassName="tabular-nums"
+      />
+      {onSharePost ? (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            onSharePost(post)
+          }}
+          className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/5 text-gray-300 transition hover:bg-white/10 hover:text-white"
+          aria-label="Share post"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="h-4 w-4"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            aria-hidden
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 16V4m0 0l-4 4m4-4l4 4M4 20h16"
+            />
+          </svg>
+        </button>
+      ) : null}
+    </div>
+  ) : null
+
   const postContentBlock = (
     <div className="shrink-0 space-y-3 p-4">
       {post.content ? (
@@ -717,63 +830,7 @@ function PostCard({
       <p className="text-xs text-gray-400">{formatEST(post.created_at)}</p>
       {showInteractions ? (
         <div className="border-t border-white/10 pt-3">
-          <div className="flex items-center gap-4 px-1 text-sm">
-            <button
-              type="button"
-              disabled={likeBusy}
-              onClick={(e) => {
-                e.stopPropagation()
-                onLike?.()
-              }}
-              className="flex items-center gap-1 text-gray-300 hover:text-white disabled:opacity-50"
-            >
-              <span>{likeMeta?.liked ? "❤️" : "🤍"}</span>
-              <span className="tabular-nums">{likeMeta?.count ?? 0}</span>
-            </button>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation()
-                onOpenComments?.()
-                if (inDetailModal && showCommentsPanel) {
-                  requestAnimationFrame(() => {
-                    scrollModalCommentsPane(commentsScrollRef.current)
-                  })
-                }
-              }}
-              className="text-gray-300 hover:text-white"
-              aria-label="View comments"
-            >
-              💬 {comments?.length ?? 0}
-            </button>
-            {onSharePost ? (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onSharePost(post)
-                }}
-                className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/5 text-gray-300 transition hover:bg-white/10 hover:text-white"
-                aria-label="Share post"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-4 w-4"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  aria-hidden
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 16V4m0 0l-4 4m4-4l4 4M4 20h16"
-                  />
-                </svg>
-              </button>
-            ) : null}
-          </div>
+          {postEngagementRow}
           <p className="px-1 pt-2 text-sm font-medium text-white">
             {(likeMeta?.count ?? 0).toLocaleString()} likes
           </p>
@@ -783,7 +840,34 @@ function PostCard({
     </div>
   )
 
+  const postCollapsibleContent = (
+    <div className="shrink-0 space-y-3 p-4">
+      {post.content ? (
+        <p className="px-1 text-sm leading-relaxed text-white">{post.content}</p>
+      ) : null}
+      <p className="text-xs text-gray-400">{formatEST(post.created_at)}</p>
+      <p className="px-1 text-sm font-medium text-white">
+        {(likeMeta?.count ?? 0).toLocaleString()} likes
+      </p>
+    </div>
+  )
+
   if (inDetailModal) {
+    const postCommentsPanel = showCommentsPanel ? (
+      <div
+        id={`profile-post-comments-${post.id}`}
+        className="flex min-h-0 flex-1 flex-col overflow-hidden"
+      >
+        <div
+          ref={commentsScrollRef}
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pt-3"
+        >
+          {commentsList}
+        </div>
+        <div className="shrink-0 px-4 pb-4 pt-3">{commentsComposer}</div>
+      </div>
+    ) : null
+
     return (
       <article className={cardShellClass}>
         {imgSrc ? (
@@ -793,25 +877,23 @@ function PostCard({
         ) : null}
 
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:w-[400px] md:shrink-0 lg:w-[420px]">
-          {postAuthorHeader}
-          {imgSrc ? (
-            <div className="shrink-0 bg-black/30 md:hidden">{postImageBlock}</div>
-          ) : null}
-          {postContentBlock}
-          {showCommentsPanel ? (
-            <div
-              id={`profile-post-comments-${post.id}`}
-              className="flex min-h-0 flex-1 flex-col overflow-hidden border-t border-white/10"
-            >
-              <div
-                ref={commentsScrollRef}
-                className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pt-3"
-              >
-                {commentsList}
-              </div>
-              <div className="shrink-0 px-4 pb-4 pt-3">{commentsComposer}</div>
-            </div>
-          ) : null}
+          <MobileCommentFocusLayout
+            commentsFocused={commentsFocused}
+            header={postAuthorHeader}
+            compactHeader={
+              <CommentFocusCompactStrip
+                userId={String(profile.id ?? "")}
+                username={profile.username}
+                avatarUrl={profile.avatar_url}
+                timestamp={post.created_at}
+              />
+            }
+            mobileMedia={postImageBlock ?? undefined}
+            engagement={postEngagementRow}
+            engagementClassName="shrink-0 border-b border-white/10 px-4 py-2"
+            collapsibleContent={postCollapsibleContent}
+            comments={postCommentsPanel}
+          />
         </div>
       </article>
     )

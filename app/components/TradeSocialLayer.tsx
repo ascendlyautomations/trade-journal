@@ -14,6 +14,7 @@ import {
 import { supabase } from "../../lib/supabaseClient"
 import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
 import FeedCommentItem from "@/app/components/feed/FeedCommentItem"
+import EngagementCountButton from "@/app/components/EngagementCountButton"
 import { feedbackPresets } from "@/lib/feedbackPresets"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 
@@ -411,8 +412,10 @@ export function TradeSocialProvider({
 /** Likes row + 💬 toggle (comments open state lives in provider). */
 export function TradeSocialEngagementBar({
   className = "",
+  onCommentsFocus,
 }: {
   className?: string
+  onCommentsFocus?: () => void
 }) {
   const {
     tradeId,
@@ -429,6 +432,7 @@ export function TradeSocialEngagementBar({
   } = useTradeSocial()
 
   const handleCommentClick = useCallback(() => {
+    onCommentsFocus?.()
     if (onRequestComments) {
       onRequestComments()
       return
@@ -447,6 +451,7 @@ export function TradeSocialEngagementBar({
     setShowComments(!showComments)
   }, [
     commentsExpanded,
+    onCommentsFocus,
     onRequestComments,
     setShowComments,
     showComments,
@@ -455,32 +460,29 @@ export function TradeSocialEngagementBar({
 
   return (
     <div className={`flex items-center gap-4 text-sm ${className}`}>
-      <button
-        type="button"
+      <EngagementCountButton
+        icon={<span>{liked ? "❤️" : "🤍"}</span>}
+        count={likes}
+        ariaLabel={liked ? "Unlike" : "Like"}
         disabled={!currentUserId || likeBusy}
         onClick={(e) => {
           e.stopPropagation()
           void handleLike()
         }}
-        className={`flex items-center gap-1 disabled:opacity-50 ${
-          liked ? "text-red-400" : "text-gray-400"
-        }`}
-      >
-        <span aria-hidden>{liked ? "❤️" : "🤍"}</span>
-        <span className="tabular-nums">{likes}</span>
-      </button>
+        className={liked ? "text-red-400 hover:text-red-300" : undefined}
+        countClassName="tabular-nums"
+      />
 
-      <button
-        type="button"
+      <EngagementCountButton
+        icon={<span>💬</span>}
+        count={comments.length}
+        ariaLabel="View comments"
         onClick={(e) => {
           e.stopPropagation()
           handleCommentClick()
         }}
-        className="text-gray-400 hover:text-gray-200"
-        aria-label="View comments"
-      >
-        💬 {comments.length}
-      </button>
+        countClassName="tabular-nums"
+      />
     </div>
   )
 }

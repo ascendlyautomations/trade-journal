@@ -23,6 +23,8 @@ type DetailModalShellProps = {
   layout?: "default" | "split"
   splitMedia?: ReactNode
   splitPanel?: ReactNode
+  /** Hides the stacked mobile media slot when comments are focused. */
+  suppressMobileSplitMedia?: boolean
   zIndexClass?: string
   backdropClassName?: string
 }
@@ -37,6 +39,7 @@ export default function DetailModalShell({
   layout = "default",
   splitMedia,
   splitPanel,
+  suppressMobileSplitMedia = false,
   zIndexClass = "z-[9000]",
   backdropClassName = "bg-black/70",
 }: DetailModalShellProps) {
@@ -79,7 +82,7 @@ export default function DetailModalShell({
           </div>
         ) : null}
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:w-[400px] md:shrink-0 lg:w-[420px]">
-          {splitMedia ? (
+          {splitMedia && !suppressMobileSplitMedia ? (
             <div className="shrink-0 bg-black/30 md:hidden">{splitMedia}</div>
           ) : null}
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
