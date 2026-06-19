@@ -15,7 +15,6 @@ import { profilePath } from "@/lib/profileRoutes"
 export default function ChatPage() {
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const [messages, setMessages] = useState<any[]>([])
-  const [globalMessages, setGlobalMessages] = useState<any[]>([])
   const [input, setInput] = useState("")
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [user, setUser] = useState<any>(null)
@@ -27,7 +26,6 @@ export default function ChatPage() {
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
-  const channelStateRef = useRef<"random" | "trades">("random")
   const router = useRouter()
   const selectedRoom = channel
   const setSelectedRoom = setChannel
@@ -43,43 +41,6 @@ export default function ChatPage() {
   useEffect(() => {
     fetchMessages()
   }, [channel])
-
-  useEffect(() => {
-    channelStateRef.current = channel
-  }, [channel])
-
-  useEffect(() => {
-    const channel = supabase.channel("global-chat")
-
-    channel.on(
-      "postgres_changes",
-      {
-        event: "INSERT",
-        schema: "public",
-        table: "messages"
-      },
-      (payload) => {
-        console.log("Realtime event:", payload)
-        setGlobalMessages((prev) => {
-          const updated = [...prev, payload.new]
-
-          const sorted = updated.sort(
-            (a, b) =>
-              new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-          )
-
-          setMessages(sorted.filter((m: any) => m.channel === channelStateRef.current))
-          return sorted
-        })
-      }
-    )
-
-    channel.subscribe()
-
-    return () => {
-      supabase.removeChannel(channel)
-    }
-  }, [])
 
   async function init() {
     const {
@@ -100,8 +61,6 @@ export default function ChatPage() {
       .single()
 
     setProfile(prof)
-
-    // realtime handled in useEffect
   }
 
   async function fetchMessages() {

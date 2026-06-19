@@ -113,6 +113,7 @@ export default function Navbar() {
         event: "*",
         schema: "public",
         table: "notifications",
+        filter: `user_id=eq.${uid}`,
       },
       (payload: { new?: { user_id?: string }; old?: { user_id?: string } }) => {
         const row = payload.new ?? payload.old

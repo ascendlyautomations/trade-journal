@@ -231,6 +231,7 @@ export default function TradeDetailPageClient({
               tradeId={tradeId}
               currentUserId={userId}
               tradeOwnerUserId={trade.user_id}
+              enableRealtime
             >
               <MobileCommentFocusLayout
                 commentsFocused={commentsFocused}

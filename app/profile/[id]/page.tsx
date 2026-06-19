@@ -427,6 +427,7 @@ function TradeCard({
               commentsExpanded={commentsExpanded}
               onRequestComments={commentsExpanded ? undefined : onOpenComments}
               scrollToCommentsOnMount={scrollToCommentsOnMount}
+              enableRealtime
             >
               <MobileCommentFocusLayout
                 commentsFocused={commentsFocused}

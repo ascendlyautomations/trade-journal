@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import AuthPasswordInput from "@/app/components/ui/AuthPasswordInput"
 import { isBetaReferralRef } from "@/lib/betaReferralCode"
+import { persistReferralCodeFromUrl } from "@/lib/referralPersistence"
 
 function getSafeNextPath(): string | null {
   if (typeof window === "undefined") return null
@@ -102,13 +103,8 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (typeof window === "undefined") return
-    const ref = new URLSearchParams(window.location.search).get("ref")
+    const ref = persistReferralCodeFromUrl()
     if (!ref) return
-    try {
-      localStorage.setItem("referral_code", ref.trim())
-    } catch {
-      /* ignore */
-    }
     if (isBetaReferralRef(ref)) {
       setIsLogin(false)
       setIsBetaSignup(true)

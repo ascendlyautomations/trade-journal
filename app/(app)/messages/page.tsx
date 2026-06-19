@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { supabase } from "../../../lib/supabaseClient"
 import {
@@ -23,7 +23,6 @@ import {
   CONVERSATION_UPDATED_EVENT,
   INBOX_PATCHES_STORAGE_KEY,
   mergeConversationInboxFields,
-  previewFromMessage,
   readInboxPatches,
 } from "@/lib/conversationInboxSync"
 import { useRouter } from "next/navigation"
@@ -64,11 +63,6 @@ export default function MessagesPage() {
   const [openConvoMenuId, setOpenConvoMenuId] = useState<string | null>(null)
 
   const router = useRouter()
-  const userIdRef = useRef<string | null>(null)
-  const conversationIdsRef = useRef<Set<string>>(new Set())
-  const unreadRefreshTimersRef = useRef<
-    Record<string, ReturnType<typeof setTimeout>>
-  >({})
 
   function mergeNewConversation(prev: any[], newConversation: any) {
     if (prev.some((c) => c.id === newConversation.id)) return prev
@@ -440,125 +434,51 @@ export default function MessagesPage() {
   )
 
   useEffect(() => {
-    userIdRef.current = user?.id ?? null
-  }, [user?.id])
-
-  useEffect(() => {
-    conversationIdsRef.current = new Set(conversations.map((c) => String(c.id)))
-  }, [conversations])
-
-  useEffect(() => {
     if (!user?.id) return
 
-    const channel = supabase.channel(`messages-list-${user.id}`)
+    const uid = user.id
 
-    channel.on(
-      "postgres_changes",
-      {
-        event: "INSERT",
-        schema: "public",
-        table: "messages",
-      },
-      (payload) => {
-        const row = payload.new as {
-          conversation_id?: string
-          sender_id?: string | null
-          content?: string | null
-          image_url?: string | null
-          type?: string | null
-          created_at?: string | null
-          seen_by?: unknown
-          deleted_for_everyone?: boolean | null
-          is_system?: boolean | null
-        }
-        const uid = userIdRef.current
-        const convoId = row?.conversation_id
-        if (!uid || !convoId) return
+    const refresh = () => {
+      if (document.hidden) return
+      void fetchConversations(uid)
+    }
 
-        if (!conversationIdsRef.current.has(convoId)) {
-          void fetchConversations(uid)
-          return
-        }
+    const onWindowFocus = () => refresh()
 
-        setConversations((prev) => {
-          if (!prev.some((c) => c.id === convoId)) return prev
+    let intervalId: ReturnType<typeof setInterval> | null = null
 
-          const preview = previewFromMessage(row)
-          const createdAt = row.created_at ?? new Date().toISOString()
-          const fromOther = !!row.sender_id && row.sender_id !== uid
-          const isUnread =
-            fromOther && !normalizeSeenBy(row.seen_by).includes(uid)
-
-          const updated = prev.map((c) => {
-            if (c.id !== convoId) return c
-            const merged = mergeConversationInboxFields(c, {
-              last_message: preview,
-              last_message_at: createdAt,
-            })
-            if (merged === c) return c
-            return {
-              ...merged,
-              unreadCount: isUnread
-                ? (c.unreadCount ?? 0) + 1
-                : c.unreadCount ?? 0,
-            }
-          })
-          return sortConversationsDesc(updated)
-        })
+    const stopInterval = () => {
+      if (intervalId != null) {
+        clearInterval(intervalId)
+        intervalId = null
       }
-    )
+    }
 
-    channel.on(
-      "postgres_changes",
-      {
-        event: "UPDATE",
-        schema: "public",
-        table: "messages",
-      },
-      (payload) => {
-        const row = payload.new as {
-          conversation_id?: string
-          seen_by?: unknown
-        }
-        const oldRow = payload.old as { seen_by?: unknown } | undefined
-        const uid = userIdRef.current
-        const convoId = row?.conversation_id
-        if (!uid || !convoId) return
-        if (!conversationIdsRef.current.has(convoId)) return
+    const startInterval = () => {
+      stopInterval()
+      if (document.hidden) return
+      intervalId = window.setInterval(refresh, 45_000)
+    }
 
-        const seenChanged =
-          JSON.stringify(normalizeSeenBy(oldRow?.seen_by)) !==
-          JSON.stringify(normalizeSeenBy(row.seen_by))
-        if (!seenChanged) return
-
-        const scheduleUnreadRefresh = () => {
-          const existing = unreadRefreshTimersRef.current[convoId]
-          if (existing) clearTimeout(existing)
-          unreadRefreshTimersRef.current[convoId] = setTimeout(() => {
-            delete unreadRefreshTimersRef.current[convoId]
-            void (async () => {
-              const count = await fetchUnreadCountForConversation(uid, convoId)
-              setConversations((prev) =>
-                prev.map((c) =>
-                  c.id === convoId ? { ...c, unreadCount: count } : c
-                )
-              )
-            })()
-          }, 200)
-        }
-
-        scheduleUnreadRefresh()
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refresh()
+        startInterval()
+      } else {
+        stopInterval()
       }
-    )
+    }
 
-    channel.subscribe()
+    window.addEventListener("focus", onWindowFocus)
+    document.addEventListener("visibilitychange", onVisibilityChange)
+    startInterval()
 
     return () => {
-      Object.values(unreadRefreshTimersRef.current).forEach(clearTimeout)
-      unreadRefreshTimersRef.current = {}
-      void supabase.removeChannel(channel)
+      window.removeEventListener("focus", onWindowFocus)
+      document.removeEventListener("visibilitychange", onVisibilityChange)
+      stopInterval()
     }
-  }, [user?.id, fetchConversations, fetchUnreadCountForConversation])
+  }, [user?.id, fetchConversations])
 
   const openConversation = useCallback(
     async (conversationId: string) => {

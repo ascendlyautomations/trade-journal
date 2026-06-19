@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import Navbar from "@/app/components/Navbar"
 import { supabase } from "@/lib/supabaseClient"
 import { CSV_SUPPORT_BROKERS } from "@/lib/csvBrokerHint"
+import { submitCsvSupportRequest } from "@/lib/submitCsvSupportRequest"
 
 const SUCCESS_MESSAGE =
   "Thank you for helping improve TradeTraxs. Your CSV sample has been submitted and may be used to support additional brokers/platforms in future updates."
@@ -59,32 +60,15 @@ function CsvSupportForm() {
       return
     }
 
-    const safeName = csvFile.name.replace(/[^\w.\-]+/g, "_").slice(0, 120) || "sample.csv"
-    const filePath = `${user.id}/${Date.now()}-${safeName}`
-
-    const { error: uploadError } = await supabase.storage
-      .from("csv-support")
-      .upload(filePath, csvFile, {
-        upsert: false,
-        contentType: csvFile.type || "text/csv",
-      })
-
-    if (uploadError) {
-      setError(uploadError.message)
-      setLoading(false)
-      return
-    }
-
-    const { error: insertError } = await supabase.from("csv_support_requests").insert({
-      user_id: user.id,
-      broker_name: broker,
+    const result = await submitCsvSupportRequest(supabase, {
+      userId: user.id,
+      csvFile,
+      brokerName: broker,
       notes: notes.trim() || null,
-      csv_file_url: filePath,
-      status: "new",
     })
 
-    if (insertError) {
-      setError(insertError.message)
+    if (!result.ok) {
+      setError(result.message)
       setLoading(false)
       return
     }

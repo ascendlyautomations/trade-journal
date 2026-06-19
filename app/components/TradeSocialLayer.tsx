@@ -59,6 +59,8 @@ type TradeSocialProviderProps = {
   /** Card list: open detail modal instead of inline comments. */
   onRequestComments?: () => void
   scrollToCommentsOnMount?: boolean
+  /** Live like/comment updates via Realtime (detail views only; off for grid cards). */
+  enableRealtime?: boolean
   children: ReactNode
 }
 
@@ -70,6 +72,7 @@ export function TradeSocialProvider({
   commentsExpanded = false,
   onRequestComments,
   scrollToCommentsOnMount = false,
+  enableRealtime = false,
   children,
 }: TradeSocialProviderProps) {
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
@@ -129,7 +132,7 @@ export function TradeSocialProvider({
   }, [resolvedId, currentUserId])
 
   useEffect(() => {
-    if (!resolvedId) return
+    if (!resolvedId || !enableRealtime) return
 
     const topic = `trade-${resolvedId}-${crypto.randomUUID()}`
     const channel = supabase.channel(topic)
@@ -196,7 +199,7 @@ export function TradeSocialProvider({
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [resolvedId, currentUserId])
+  }, [resolvedId, currentUserId, enableRealtime])
 
   const handleLike = useCallback(async () => {
     if (!resolvedId || !currentUserId || likeBusyRef.current || likeBusy) return
@@ -620,6 +623,7 @@ type TradeSocialLayerProps = {
   currentUserId: string | undefined
   tradeOwnerUserId?: string | null | undefined
   suppressNotifications?: boolean
+  enableRealtime?: boolean
 }
 
 /** Default: engagement row immediately followed by comments panel (legacy stack). */
@@ -628,6 +632,7 @@ export default function TradeSocialLayer({
   currentUserId,
   tradeOwnerUserId,
   suppressNotifications = false,
+  enableRealtime = false,
 }: TradeSocialLayerProps) {
   if (!tradeId) return null
 
@@ -638,6 +643,7 @@ export default function TradeSocialLayer({
         currentUserId={currentUserId}
         tradeOwnerUserId={tradeOwnerUserId}
         suppressNotifications={suppressNotifications}
+        enableRealtime={enableRealtime}
       >
         <TradeSocialEngagementBar className="mt-3" />
         <TradeSocialCommentsSection />

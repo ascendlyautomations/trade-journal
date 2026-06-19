@@ -17,10 +17,11 @@ import {
   insertCsvTradesWithAccount,
 } from "@/lib/insertCsvTradesWithAccount"
 import { assessFreePlanTradeUpload } from "@/lib/freePlanLimits"
-import { feedbackPresets } from "@/lib/feedbackPresets"
+import { feedbackPresets, persistentSuccess } from "@/lib/feedbackPresets"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import CsvImportUnsupportedBanner from "@/app/components/CsvImportUnsupportedBanner"
+import CsvImportFailureModal from "@/app/components/CsvImportFailureModal"
 import {
   detectCsvBrokerHint,
   isCsvFormatUnrecognized,
@@ -30,6 +31,8 @@ import {
   type CsvImportDiagnostics,
 } from "@/lib/csvImportDiagnostics"
 import CsvImportDiagnosticsPanel from "@/app/components/CsvImportDiagnosticsPanel"
+import { buildCsvSupportNotes } from "@/lib/csvImportSupportNotes"
+import { submitCsvSupportRequest } from "@/lib/submitCsvSupportRequest"
 import { mirrorAccountSettingsHasUsedInitialImport } from "@/lib/profileSplitMirrorWrites"
 import { csvTradesHaveFutureDate } from "@/lib/tradeDateValidation"
 import { notifyGettingStartedChecklistMaybeCompleted } from "@/lib/gettingStartedProgressSync"
@@ -57,6 +60,8 @@ export type CsvImportPanelProps = {
   selectedAccount?: CsvSelectedAccount | null
   /** If true, import is blocked until `selectedAccount` is set */
   requireSelectedAccount?: boolean
+  /** Label stored in csv_support_requests notes when user submits a failed file */
+  importSource?: string
 }
 
 export default function CsvImportPanel({
@@ -66,6 +71,7 @@ export default function CsvImportPanel({
   fileInputId,
   selectedAccount = null,
   requireSelectedAccount = false,
+  importSource = "csv_import_panel",
 }: CsvImportPanelProps) {
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const [parsed, setParsed] = useState<CsvRow[]>([])
@@ -73,11 +79,34 @@ export default function CsvImportPanel({
   const [unrecognized, setUnrecognized] = useState(false)
   const [brokerHint, setBrokerHint] = useState<string | null>(null)
   const [diagnostics, setDiagnostics] = useState<CsvImportDiagnostics | null>(null)
+  const [failureModalOpen, setFailureModalOpen] = useState(false)
+  const [failureReason, setFailureReason] = useState("")
+  const [submittingSupport, setSubmittingSupport] = useState(false)
   const importingRef = useRef(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const lastCsvFileRef = useRef<File | null>(null)
 
   function endImport() {
     importingRef.current = false
     setLoading(false)
+  }
+
+  function resetFileInput() {
+    if (fileInputRef.current) fileInputRef.current.value = ""
+  }
+
+  function clearCsvState() {
+    setParsed([])
+    setUnrecognized(false)
+    setBrokerHint(null)
+    setDiagnostics(null)
+    lastCsvFileRef.current = null
+    resetFileInput()
+  }
+
+  function openFailureModal(reason: string) {
+    setFailureReason(reason)
+    setFailureModalOpen(true)
   }
 
   function applyParsePreview(rows: CsvRow[]) {
@@ -87,30 +116,158 @@ export default function CsvImportPanel({
       rows,
       "00000000-0000-0000-0000-000000000000"
     )
+    const diag = buildCsvImportDiagnostics(rows, preview)
     setUnrecognized(isCsvFormatUnrecognized(preview.summary))
-    setDiagnostics(buildCsvImportDiagnostics(rows, preview))
+    setDiagnostics(diag)
+    return { preview, hint, diag }
   }
 
-  const handleFile = (file: File) => {
+  function showParseFailure(
+    reason: string,
+    rows: CsvRow[] = [],
+    preview?: ReturnType<typeof buildTradesFromParsedCsv>
+  ) {
+    if (rows.length > 0 && preview) {
+      setParsed(rows)
+      setBrokerHint(detectCsvBrokerHint(rows))
+      setUnrecognized(isCsvFormatUnrecognized(preview.summary))
+      setDiagnostics(buildCsvImportDiagnostics(rows, preview))
+    } else {
+      setParsed([])
+      setUnrecognized(false)
+      setBrokerHint(null)
+      setDiagnostics(null)
+    }
+    openFailureModal(reason)
+  }
+
+  async function handleFile(file: File) {
+    lastCsvFileRef.current = file
+    setFailureModalOpen(false)
+
+    if (file.size === 0) {
+      clearCsvState()
+      lastCsvFileRef.current = file
+      openFailureModal("The file is empty.")
+      return
+    }
+
+    let text: string
+    try {
+      text = await file.text()
+    } catch {
+      clearCsvState()
+      lastCsvFileRef.current = file
+      openFailureModal("Could not read the file.")
+      return
+    }
+
+    if (text.trim() === "undefined") {
+      clearCsvState()
+      lastCsvFileRef.current = file
+      openFailureModal('File content is invalid ("undefined").')
+      return
+    }
+
     Papa.parse<CsvRow>(file, {
       header: true,
       skipEmptyLines: true,
       transformHeader: (h: string) => stripBom(String(h).trim()),
+      error: (err) => {
+        clearCsvState()
+        lastCsvFileRef.current = file
+        openFailureModal(err.message || "Could not parse CSV file.")
+      },
       complete: (results) => {
+        const fields = (results.meta.fields ?? []).map((f) => stripBom(String(f).trim()))
+        const hasHeaders = fields.some((f) => f.length > 0)
+
         const data = (results.data || []) as CsvRow[]
         const filtered = data.filter(
           (r) => r && typeof r === "object" && Object.keys(r).length > 0
         )
-        setParsed(filtered)
-        if (filtered.length === 0) {
-          setUnrecognized(false)
-          setBrokerHint(null)
-          setDiagnostics(null)
+
+        if (!hasHeaders) {
+          showParseFailure("No column headers found in CSV.", filtered)
+          lastCsvFileRef.current = file
           return
         }
-        applyParsePreview(filtered)
+
+        if (filtered.length === 0) {
+          showParseFailure("No data rows found in CSV.")
+          lastCsvFileRef.current = file
+          return
+        }
+
+        setParsed(filtered)
+        const { preview } = applyParsePreview(filtered)
+
+        if (isCsvFormatUnrecognized(preview.summary)) {
+          openFailureModal("Unsupported CSV format — no rows could be imported.")
+        }
       },
     })
+  }
+
+  async function handleSubmitCsvSupport() {
+    const file = lastCsvFileRef.current
+    if (!file) {
+      showPopup(feedbackPresets.importFailed("No CSV file available to submit."))
+      return
+    }
+
+    setSubmittingSupport(true)
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      showPopup(feedbackPresets.importFailed("Please log in first."))
+      setSubmittingSupport(false)
+      return
+    }
+
+    const notes = buildCsvSupportNotes({
+      failureReason,
+      diagnostics,
+      source: importSource,
+      originalFilename: file.name,
+    })
+
+    const result = await submitCsvSupportRequest(supabase, {
+      userId: user.id,
+      csvFile: file,
+      brokerName: brokerHint ?? "Unknown",
+      notes,
+    })
+
+    setSubmittingSupport(false)
+
+    if (!result.ok) {
+      showPopup(feedbackPresets.importFailed(result.message))
+      return
+    }
+
+    setFailureModalOpen(false)
+    clearCsvState()
+    showPopup(
+      persistentSuccess(
+        "CSV submitted",
+        "We'll review this format and work on adding support."
+      )
+    )
+  }
+
+  function handleTryAnotherFile() {
+    setFailureModalOpen(false)
+    clearCsvState()
+    fileInputRef.current?.click()
+  }
+
+  function handleFailureCancel() {
+    setFailureModalOpen(false)
+    clearCsvState()
   }
 
   const handleImport = async () => {
@@ -159,6 +316,7 @@ export default function CsvImportPanel({
       setUnrecognized(isCsvFormatUnrecognized(summary))
       setBrokerHint(detectCsvBrokerHint(parsed))
       setDiagnostics(buildCsvImportDiagnostics(parsed, parseResult))
+      openFailureModal("No trades could be imported from this CSV.")
       endImport()
       return
     }
@@ -289,6 +447,8 @@ export default function CsvImportPanel({
       setUnrecognized(false)
       setBrokerHint(null)
       setDiagnostics(null)
+      lastCsvFileRef.current = null
+      resetFileInput()
       notifyGettingStartedChecklistMaybeCompleted()
       onImportSuccess?.({
         count: importedCount,
@@ -305,6 +465,14 @@ export default function CsvImportPanel({
   return (
     <div className={compact ? "space-y-3" : "space-y-4"}>
       <FeedbackModal {...feedbackModalProps} />
+      <CsvImportFailureModal
+        open={failureModalOpen}
+        submitting={submittingSupport}
+        onSubmit={() => void handleSubmitCsvSupport()}
+        onTryAnother={handleTryAnotherFile}
+        onCancel={handleFailureCancel}
+        overlayClassName={compact ? "z-[1300]" : undefined}
+      />
       {unrecognized ? (
         <CsvImportUnsupportedBanner brokerHint={brokerHint} />
       ) : null}
@@ -314,12 +482,13 @@ export default function CsvImportPanel({
       ) : null}
 
       <input
+        ref={fileInputRef}
         id={fileInputId}
         type="file"
         accept=".csv"
         onChange={(e) => {
           const file = e.target.files?.[0]
-          if (file) handleFile(file)
+          if (file) void handleFile(file)
         }}
         className="block w-full text-sm text-gray-300 file:mr-3 file:rounded-lg file:border-0 file:bg-emerald-500/20 file:px-3 file:py-1.5 file:text-sm file:text-emerald-200"
       />

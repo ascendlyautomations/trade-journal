@@ -15,6 +15,11 @@ import {
 } from "react"
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js"
 import {
+  applyBetaReferralIfEligible,
+  clearBetaReferralAfterApply,
+} from "./applyBetaReferralIfEligible"
+import { isBetaReferralRef } from "./betaReferralCode"
+import {
   ensureProfileForUser,
   readStoredReferralCode,
 } from "./ensureProfileForUser"
@@ -204,8 +209,23 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
             .eq("id", sessionUser.id)
             .maybeSingle()
           resolvedProfile = refetched
+          if (refetched && isBetaReferralRef(readStoredReferralCode())) {
+            clearBetaReferralAfterApply(refetched.is_beta_tester)
+          }
         } else if (ensureResult.error) {
           console.error("ensureProfileForUser:", ensureResult.error)
+        }
+      } else if (isBetaReferralRef(readStoredReferralCode())) {
+        const repair = await applyBetaReferralIfEligible(supabase, sessionUser.id)
+        if (repair.applied) {
+          const { data: refetched } = await supabase
+            .from("profiles")
+            .select(USER_PROFILE_SELECT)
+            .eq("id", sessionUser.id)
+            .maybeSingle()
+          if (refetched) resolvedProfile = refetched
+        } else {
+          clearBetaReferralAfterApply(resolvedProfile.is_beta_tester)
         }
       }
 

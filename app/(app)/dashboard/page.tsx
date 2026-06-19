@@ -18,6 +18,7 @@ import {
   sanitizeDrawdownLimitInput,
 } from "../../components/dashboard/dashboardGearUtils"
 import PerformanceShareModal from "../../components/PerformanceShareModal"
+import PostSetupImportModal from "../../components/PostSetupImportModal"
 import LockedFeature from "../../components/LockedFeature"
 import EmptyState from "../../components/ui/EmptyState"
 import { SkeletonDashboardPage } from "../../components/ui/skeletons"
@@ -41,6 +42,7 @@ import {
 } from "@/lib/formatDate"
 import {
   dispatchGettingStartedSignalsRefresh,
+  notifyGettingStartedChecklistMaybeCompleted,
 } from "@/lib/gettingStartedProgressSync"
 import { shouldShowGettingStartedChecklist } from "@/lib/gettingStartedChecklist"
 import { useGettingStartedProgress } from "@/lib/GettingStartedProgressProvider"
@@ -507,6 +509,7 @@ export default function Dashboard() {
   const [ddInputFocused, setDdInputFocused] = useState(false)
   const [savingGearSettings, setSavingGearSettings] = useState(false)
   const [showPerformanceShare, setShowPerformanceShare] = useState(false)
+  const [showImportModal, setShowImportModal] = useState(false)
   const didHydrateDashboardPrefs = useRef(false)
   /** Same fetch as /trades — used only for filter dropdown labels (#account_number vs UUID). */
   const [accountRows, setAccountRows] = useState<any[]>([])
@@ -1401,6 +1404,13 @@ const worstDay = dailyPnLs.length > 0
     setShowControls(false)
   }
 
+  const handleImportModalComplete = useCallback(async () => {
+    setShowImportModal(false)
+    notifyGettingStartedChecklistMaybeCompleted()
+    dispatchGettingStartedSignalsRefresh()
+    await refreshDashboardData()
+  }, [refreshDashboardData])
+
   const recentTradesList = (filteredTrades || [])
     .slice()
     .sort(
@@ -1525,6 +1535,11 @@ const worstDay = dailyPnLs.length > 0
   return (
     <>
       <FeedbackModal {...feedbackModalProps} />
+
+      <PostSetupImportModal
+        open={showImportModal}
+        onComplete={() => void handleImportModalComplete()}
+      />
 
       <div className="w-full text-white px-3 pb-3 pt-0 md:px-10 md:pb-10">
 

@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 import BannedAccountShell from "./components/BannedAccountShell"
 import OnboardingGateShell from "./components/OnboardingGateShell"
+import ReferralPersistence from "./components/ReferralPersistence"
 import SentryIdentifyUser from "./components/SentryIdentifyUser"
 import ToastRoot from "./components/ToastRoot"
 import { UserProfileProvider } from "@/lib/UserProfileProvider"
@@ -67,6 +69,9 @@ export default function RootLayout({
       <body className="flex flex-col">
         <ToastRoot>
           <UserProfileProvider>
+            <Suspense fallback={null}>
+              <ReferralPersistence />
+            </Suspense>
             <GettingStartedProgressProvider>
             <SentryIdentifyUser />
             <BannedAccountShell>

@@ -2,10 +2,11 @@
 
 import Navbar from "../components/Navbar"
 import InputTradeForm from "../components/InputTradeForm"
+import CsvImportFailureModal from "../components/CsvImportFailureModal"
 import { useState, useRef, useEffect } from "react"
 import Papa from "papaparse"
 import { supabase } from "../../lib/supabaseClient"
-import { buildTradesFromParsedCsv, stripBom } from "@/lib/csvTradeParsers"
+import { buildTradesFromParsedCsv, stripBom, type CsvRow } from "@/lib/csvTradeParsers"
 import {
   detectCsvBrokerHint,
   isCsvFormatUnrecognized,
@@ -14,12 +15,14 @@ import {
   buildCsvImportDiagnostics,
   type CsvImportDiagnostics,
 } from "@/lib/csvImportDiagnostics"
+import { buildCsvSupportNotes } from "@/lib/csvImportSupportNotes"
+import { submitCsvSupportRequest } from "@/lib/submitCsvSupportRequest"
 import {
   INPUT_TRADE_PAGE_TITLE_CLASSNAME,
   INPUT_TRADE_PAGE_TITLE_ROW_CLASSNAME,
 } from "@/lib/inputTradePageTitle"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
-import { feedbackPresets } from "@/lib/feedbackPresets"
+import { feedbackPresets, persistentSuccess } from "@/lib/feedbackPresets"
 
 export default function Home() {
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
@@ -29,17 +32,41 @@ export default function Home() {
   const [csvUnrecognized, setCsvUnrecognized] = useState(false)
   const [csvBrokerHint, setCsvBrokerHint] = useState<string | null>(null)
   const [csvDiagnostics, setCsvDiagnostics] = useState<CsvImportDiagnostics | null>(null)
+  const [failureModalOpen, setFailureModalOpen] = useState(false)
+  const [failureReason, setFailureReason] = useState("")
+  const [submittingSupport, setSubmittingSupport] = useState(false)
 
   const csvInputRef = useRef<HTMLInputElement>(null)
+  const lastCsvFileRef = useRef<File | null>(null)
 
   useEffect(() => {
     fetchReviewCount()
   }, [])
 
-  async function handleCSVUpload(e: any) {
-    const file = e.target.files[0]
+  function resetCsvInput() {
+    if (csvInputRef.current) csvInputRef.current.value = ""
+  }
+
+  function clearCsvUploadState() {
+    setParsedTrades([])
+    setCsvUnrecognized(false)
+    setCsvBrokerHint(null)
+    setCsvDiagnostics(null)
+    lastCsvFileRef.current = null
+    resetCsvInput()
+  }
+
+  function openFailureModal(reason: string) {
+    setFailureReason(reason)
+    setFailureModalOpen(true)
+  }
+
+  async function handleCSVUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
     if (!file) return
 
+    lastCsvFileRef.current = file
+    setFailureModalOpen(false)
     setLoading(true)
 
     const {
@@ -65,32 +92,155 @@ export default function Home() {
       return
     }
 
-    console.log("CSV CHECK:", profile)
-
     if (!profile.is_pro && profile.has_used_csv_import) {
       showPopup(feedbackPresets.csvImportUnavailable())
+      setLoading(false)
+      resetCsvInput()
+      return
+    }
+
+    if (file.size === 0) {
+      clearCsvUploadState()
+      lastCsvFileRef.current = file
+      openFailureModal("The file is empty.")
       setLoading(false)
       return
     }
 
-    Papa.parse(file, {
+    let text: string
+    try {
+      text = await file.text()
+    } catch {
+      clearCsvUploadState()
+      lastCsvFileRef.current = file
+      openFailureModal("Could not read the file.")
+      setLoading(false)
+      return
+    }
+
+    if (text.trim() === "undefined") {
+      clearCsvUploadState()
+      lastCsvFileRef.current = file
+      openFailureModal('File content is invalid ("undefined").')
+      setLoading(false)
+      return
+    }
+
+    Papa.parse<CsvRow>(file, {
       header: true,
       skipEmptyLines: true,
       transformHeader: (h: string) => stripBom(String(h).trim()),
-      complete: (results: any) => {
+      error: (err) => {
+        clearCsvUploadState()
+        lastCsvFileRef.current = file
+        openFailureModal(err.message || "Could not parse CSV file.")
+        setLoading(false)
+      },
+      complete: (results) => {
+        const fields = (results.meta.fields ?? []).map((f) => stripBom(String(f).trim()))
+        const hasHeaders = fields.some((f) => f.length > 0)
         const rows = (results.data || []).filter(
-          (r: Record<string, unknown>) =>
-            r && typeof r === "object" && Object.keys(r).length > 0
+          (r): r is CsvRow =>
+            !!r && typeof r === "object" && Object.keys(r).length > 0
         )
+
+        if (!hasHeaders) {
+          setParsedTrades([])
+          setCsvUnrecognized(false)
+          setCsvBrokerHint(null)
+          setCsvDiagnostics(null)
+          openFailureModal("No column headers found in CSV.")
+          setLoading(false)
+          return
+        }
+
+        if (rows.length === 0) {
+          setParsedTrades([])
+          setCsvUnrecognized(false)
+          setCsvBrokerHint(null)
+          setCsvDiagnostics(null)
+          openFailureModal("No data rows found in CSV.")
+          setLoading(false)
+          return
+        }
+
         const parsed = buildTradesFromParsedCsv(rows, user.id)
+        const diag = buildCsvImportDiagnostics(rows, parsed)
+        const unrecognized = isCsvFormatUnrecognized(parsed.summary)
 
         setParsedTrades(parsed.parsedTrades)
-        setCsvUnrecognized(isCsvFormatUnrecognized(parsed.summary))
+        setCsvUnrecognized(unrecognized)
         setCsvBrokerHint(detectCsvBrokerHint(rows))
+        setCsvDiagnostics(diag)
+
+        if (unrecognized || parsed.parsedTrades.length === 0) {
+          openFailureModal("Unsupported CSV format — no rows could be imported.")
+        }
 
         setLoading(false)
       },
     })
+  }
+
+  async function handleSubmitCsvSupport() {
+    const file = lastCsvFileRef.current
+    if (!file) {
+      showPopup(feedbackPresets.importFailed("No CSV file available to submit."))
+      return
+    }
+
+    setSubmittingSupport(true)
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      showPopup(feedbackPresets.importFailed("Please log in first."))
+      setSubmittingSupport(false)
+      return
+    }
+
+    const notes = buildCsvSupportNotes({
+      failureReason,
+      diagnostics: csvDiagnostics,
+      source: "input_trade_page",
+      originalFilename: file.name,
+    })
+
+    const result = await submitCsvSupportRequest(supabase, {
+      userId: user.id,
+      csvFile: file,
+      brokerName: csvBrokerHint ?? "Unknown",
+      notes,
+    })
+
+    setSubmittingSupport(false)
+
+    if (!result.ok) {
+      showPopup(feedbackPresets.importFailed(result.message))
+      return
+    }
+
+    setFailureModalOpen(false)
+    clearCsvUploadState()
+    showPopup(
+      persistentSuccess(
+        "CSV submitted",
+        "We'll review this format and work on adding support."
+      )
+    )
+  }
+
+  function handleTryAnotherFile() {
+    setFailureModalOpen(false)
+    clearCsvUploadState()
+    csvInputRef.current?.click()
+  }
+
+  function handleFailureCancel() {
+    setFailureModalOpen(false)
+    clearCsvUploadState()
   }
 
   async function fetchReviewCount() {
@@ -112,6 +262,13 @@ export default function Home() {
     <>
       <Navbar />
       <FeedbackModal {...feedbackModalProps} />
+      <CsvImportFailureModal
+        open={failureModalOpen}
+        submitting={submittingSupport}
+        onSubmit={() => void handleSubmitCsvSupport()}
+        onTryAnother={handleTryAnotherFile}
+        onCancel={handleFailureCancel}
+      />
 
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100">
         <div className="pt-2 px-4 pb-4 md:px-6 md:pb-5 max-w-8xl mx-auto">
@@ -124,7 +281,7 @@ export default function Home() {
             type="file"
             accept=".csv"
             className="hidden"
-            onChange={handleCSVUpload}
+            onChange={(e) => void handleCSVUpload(e)}
           />
 
           <InputTradeForm
@@ -139,10 +296,7 @@ export default function Home() {
             csvBrokerHint={csvBrokerHint}
             csvDiagnostics={csvDiagnostics}
             onParsedTradesClear={() => {
-              setParsedTrades([])
-              setCsvUnrecognized(false)
-              setCsvBrokerHint(null)
-              setCsvDiagnostics(null)
+              clearCsvUploadState()
               fetchReviewCount()
             }}
           />

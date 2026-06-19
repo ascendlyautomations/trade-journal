@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { REFERRAL_CODE_STORAGE_KEY } from "@/lib/referralPersistence"
 
 export type EnsureProfileOptions = {
   userId: string
@@ -22,7 +23,7 @@ export function generateProfileReferralCode(): string {
 export function readStoredReferralCode(): string | null {
   if (typeof window === "undefined") return null
   try {
-    const raw = localStorage.getItem("referral_code")
+    const raw = localStorage.getItem(REFERRAL_CODE_STORAGE_KEY)
     const trimmed = raw?.trim()
     return trimmed || null
   } catch {
