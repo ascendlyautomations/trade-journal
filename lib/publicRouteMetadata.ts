@@ -77,3 +77,17 @@ export const HELP_PAGE_METADATA = buildPublicRouteMetadata({
   description:
     "Get help with TradeTraxs. Contact support, submit feedback, report bugs, or find answers in the FAQ.",
 })
+
+export const PRIVACY_PAGE_METADATA = buildPublicRouteMetadata({
+  path: "/privacy",
+  title: "Privacy Policy",
+  description:
+    "TradeTraxs Privacy Policy — how we collect, use, and protect account, trading, and community data.",
+})
+
+export const TERMS_PAGE_METADATA = buildPublicRouteMetadata({
+  path: "/terms",
+  title: "Terms of Service",
+  description:
+    "TradeTraxs Terms of Service — account rules, subscriptions, user content, and platform disclaimers.",
+})

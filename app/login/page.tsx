@@ -38,6 +38,7 @@ export default function LoginPage() {
   const [resetMessage, setResetMessage] = useState("")
   const [loadingReset, setLoadingReset] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
+  const [agreedToTerms, setAgreedToTerms] = useState(false)
   const checkoutInFlightRef = useRef(false)
   const [isBetaSignup, setIsBetaSignup] = useState(false)
   const { showPopup, feedbackModalProps } = useFeedbackPopup({ autoDismissMs: 3000 })
@@ -171,6 +172,16 @@ export default function LoginPage() {
     console.log("Signup clicked")
     e.preventDefault()
     if (loading) return
+
+    if (!agreedToTerms) {
+      showPopup({
+        type: "error",
+        message:
+          "You must agree to the Terms of Service and Privacy Policy before creating an account.",
+      })
+      return
+    }
+
     setLoading(true)
 
     try {
@@ -489,7 +500,10 @@ export default function LoginPage() {
         >
           <button
             type="button"
-            onClick={() => setIsLogin(true)}
+            onClick={() => {
+              setIsLogin(true)
+              setAgreedToTerms(false)
+            }}
             className={`flex-1 py-2 rounded-lg font-semibold transition ${
               isLogin ? "bg-white text-black" : "text-white"
             }`}
@@ -581,9 +595,43 @@ export default function LoginPage() {
             </button>
           )}
 
+          {!isLogin && (
+            <label className="mb-5 flex cursor-pointer items-start gap-3 text-left text-sm leading-snug text-gray-300">
+              <input
+                type="checkbox"
+                checked={agreedToTerms}
+                onChange={(e) => setAgreedToTerms(e.target.checked)}
+                className="mt-0.5 h-4 w-4 shrink-0 rounded border-white/20 bg-white/10 text-blue-500 focus:ring-2 focus:ring-blue-400 focus:ring-offset-0"
+              />
+              <span>
+                I agree to the{" "}
+                <a
+                  href="/terms"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-400 underline underline-offset-2 hover:text-blue-300"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  Terms of Service
+                </a>{" "}
+                and{" "}
+                <a
+                  href="/privacy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-400 underline underline-offset-2 hover:text-blue-300"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  Privacy Policy
+                </a>
+                .
+              </span>
+            </label>
+          )}
+
           <button
             type={isLogin ? "submit" : "button"}
-            disabled={loading}
+            disabled={loading || (!isLogin && !agreedToTerms)}
             onClick={isLogin ? undefined : handleSignUp}
             className="w-full bg-gradient-to-r from-blue-500 to-teal-400 py-3 rounded-xl font-semibold hover:scale-105 transition disabled:opacity-60 disabled:hover:scale-100"
           >
@@ -615,6 +663,22 @@ export default function LoginPage() {
             {resetMessage && <p className="mt-2 text-xs text-gray-400">{resetMessage}</p>}
           </div>
         )}
+
+        <p className="mt-6 text-center text-xs text-gray-500">
+          <a
+            href="/privacy"
+            className="text-gray-400 transition hover:text-gray-300 hover:underline"
+          >
+            Privacy Policy
+          </a>
+          {" · "}
+          <a
+            href="/terms"
+            className="text-gray-400 transition hover:text-gray-300 hover:underline"
+          >
+            Terms of Service
+          </a>
+        </p>
       </div>
     </div>
     <FeedbackModal {...feedbackModalProps} />

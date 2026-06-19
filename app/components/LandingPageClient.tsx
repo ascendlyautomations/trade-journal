@@ -20,6 +20,7 @@ import {
   useLandingReveal,
 } from "@/lib/landingPageUi"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
+import { LEGAL_CONTACT_EMAIL } from "@/lib/legal/contact"
 
 const PRICING_FREE_FEATURES = [
   "Track your trades",
@@ -371,9 +372,36 @@ export default function LandingPageClient() {
           onPreview={() => router.push("/app")}
         />
 
-        <div className="border-t border-white/10 py-10 text-center text-sm text-gray-500">
-          Built for traders who actually want to improve.
-        </div>
+        <footer className="border-t border-white/10 py-10">
+          <div className="mx-auto max-w-4xl px-6">
+            <p className="text-center text-sm text-gray-500">
+              Built for traders who actually want to improve.
+            </p>
+            <nav
+              aria-label="Legal and resources"
+              className="mt-6 flex flex-col items-center gap-3 sm:flex-row sm:flex-wrap sm:justify-center sm:gap-x-6 sm:gap-y-2"
+            >
+              <Link
+                href="/privacy"
+                className="text-sm text-gray-400 transition hover:text-gray-300"
+              >
+                Privacy Policy
+              </Link>
+              <Link
+                href="/terms"
+                className="text-sm text-gray-400 transition hover:text-gray-300"
+              >
+                Terms of Service
+              </Link>
+              <a
+                href={`mailto:${LEGAL_CONTACT_EMAIL}`}
+                className="text-sm text-gray-400 transition hover:text-gray-300"
+              >
+                Contact Support
+              </a>
+            </nav>
+          </div>
+        </footer>
         </div>
       </div>
     </>

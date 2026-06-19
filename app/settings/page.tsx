@@ -1281,6 +1281,37 @@ export default function SettingsPage() {
                     </button>
                   </div>
                 </section>
+
+                <section className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm">
+                  <h3 className="text-sm font-semibold uppercase tracking-wide text-blue-300">
+                    Legal
+                  </h3>
+                  <p className="mt-1 text-sm text-gray-400">
+                    Review our policies and terms of use
+                  </p>
+                  <ul className="mt-4 space-y-2 text-sm">
+                    <li>
+                      <a
+                        href="/privacy"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-300 underline hover:text-blue-200"
+                      >
+                        Privacy Policy
+                      </a>
+                    </li>
+                    <li>
+                      <a
+                        href="/terms"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-300 underline hover:text-blue-200"
+                      >
+                        Terms of Service
+                      </a>
+                    </li>
+                  </ul>
+                </section>
               </div>
             )}
 
