@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import Navbar from "../components/Navbar"
 import { supabase } from "../../lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
+import { notifyAdminSubmission } from "@/lib/notifyAdminSubmission"
 
 const CATEGORIES = [
   { value: "bug", label: "Bug" },
@@ -111,22 +112,30 @@ export default function SupportPage() {
       screenshotUrl = publicData.publicUrl
     }
 
-    const { error: insertError } = await supabase.from("support_tickets").insert({
-      user_id: user.id,
-      email: user.email ?? null,
-      category,
-      subject: subject.trim(),
-      message: message.trim(),
-      screenshot_url: screenshotUrl,
-      status: "open",
-      priority: "normal",
-      viewed: false,
-    })
+    const { data, error: insertError } = await supabase
+      .from("support_tickets")
+      .insert({
+        user_id: user.id,
+        email: user.email ?? null,
+        category,
+        subject: subject.trim(),
+        message: message.trim(),
+        screenshot_url: screenshotUrl,
+        status: "open",
+        priority: "normal",
+        viewed: false,
+      })
+      .select("id")
+      .single()
 
     if (insertError) {
       setError(insertError.message)
       setLoading(false)
       return
+    }
+
+    if (data?.id) {
+      notifyAdminSubmission("support_ticket", data.id)
     }
 
     setSubject("")

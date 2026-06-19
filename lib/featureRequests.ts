@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabaseClient"
+import { notifyAdminSubmission } from "@/lib/notifyAdminSubmission"
 
 export type FeatureRequestStatus = "open" | "planned" | "completed"
 
@@ -35,11 +36,15 @@ export async function submitFeatureRequest(
     return { ok: false, message: "Title and description are required." }
   }
 
-  const { error: insertError } = await supabase.from("feature_requests").insert({
-    user_id: userId,
-    title,
-    description,
-  })
+  const { data, error: insertError } = await supabase
+    .from("feature_requests")
+    .insert({
+      user_id: userId,
+      title,
+      description,
+    })
+    .select("id")
+    .single()
 
   if (insertError) {
     if (insertError.code === "23505") {
@@ -49,6 +54,10 @@ export async function submitFeatureRequest(
       }
     }
     return { ok: false, message: insertError.message }
+  }
+
+  if (data?.id) {
+    notifyAdminSubmission("feature_request", data.id)
   }
 
   return { ok: true }

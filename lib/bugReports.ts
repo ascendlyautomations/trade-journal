@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
+import { notifyAdminSubmission } from "@/lib/notifyAdminSubmission"
 
 export type BugReportSeverity = "low" | "medium" | "high" | "critical"
 export type BugReportStatus = "open" | "in_progress" | "resolved"
@@ -94,18 +95,26 @@ export async function submitBugReport(
     screenshotUrl = publicData.publicUrl
   }
 
-  const { error: insertError } = await supabase.from("bug_reports").insert({
-    user_id: userId,
-    title,
-    description,
-    severity: input.severity,
-    screenshot_url: screenshotUrl,
-    page_url: input.pageUrl?.trim() || null,
-    browser_info: input.browserInfo?.trim() || null,
-  })
+  const { data, error: insertError } = await supabase
+    .from("bug_reports")
+    .insert({
+      user_id: userId,
+      title,
+      description,
+      severity: input.severity,
+      screenshot_url: screenshotUrl,
+      page_url: input.pageUrl?.trim() || null,
+      browser_info: input.browserInfo?.trim() || null,
+    })
+    .select("id")
+    .single()
 
   if (insertError) {
     return { ok: false, message: insertError.message }
+  }
+
+  if (data?.id) {
+    notifyAdminSubmission("bug_report", data.id)
   }
 
   return { ok: true }

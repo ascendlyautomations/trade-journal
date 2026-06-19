@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { notifyAdminSubmission } from "@/lib/notifyAdminSubmission"
 
 export type SubmitCsvSupportInput = {
   csvFile: File
@@ -85,12 +86,18 @@ export async function submitCsvSupportRequest(
     return { ok: false, message: uploadError.message }
   }
 
-  const { error: insertError } = await supabase
+  const { data, error: insertError } = await supabase
     .from("csv_support_requests")
     .insert(insertPayload)
+    .select("id")
+    .single()
 
   if (insertError) {
     return { ok: false, message: insertError.message }
+  }
+
+  if (data?.id) {
+    notifyAdminSubmission("csv_support_request", data.id)
   }
 
   return { ok: true, filePath }
