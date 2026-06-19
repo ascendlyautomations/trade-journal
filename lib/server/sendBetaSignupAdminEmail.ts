@@ -61,7 +61,10 @@ export function buildBetaSignupAdminEmailHtml(ctx: BetaSignupEmailContext): stri
 
 export async function sendBetaSignupAdminEmail(
   ctx: BetaSignupEmailContext
-): Promise<{ ok: true } | { ok: false; skipped?: boolean; error?: string }> {
+): Promise<
+  | { ok: true; emailId: string | null }
+  | { ok: false; skipped?: boolean; error?: string }
+> {
   const apiKey = process.env.RESEND_API_KEY?.trim()
   if (!apiKey) {
     console.warn("[admin-email/beta-signup] RESEND_API_KEY not set; skipping notification email")
@@ -91,7 +94,7 @@ export async function sendBetaSignupAdminEmail(
 
     if (!res.ok) {
       const text = await res.text()
-      console.error("[admin-email/beta-signup] Resend API error", {
+      console.error("[beta-signup-email] resend error", {
         userId: ctx.userId,
         status: res.status,
         body: text,
@@ -99,7 +102,15 @@ export async function sendBetaSignupAdminEmail(
       return { ok: false, error: text }
     }
 
-    return { ok: true }
+    let emailId: string | null = null
+    try {
+      const payload = (await res.json()) as { id?: string }
+      emailId = payload.id?.trim() || null
+    } catch {
+      emailId = null
+    }
+
+    return { ok: true, emailId }
   } catch (err) {
     console.error("[admin-email/beta-signup] send failed", { userId: ctx.userId, err })
     return {

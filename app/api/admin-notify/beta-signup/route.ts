@@ -7,11 +7,24 @@ function normalizeReferralCode(value: string | null | undefined): string {
   return value != null ? String(value).trim().toUpperCase() : ""
 }
 
+function isBetaSignupEligible(profile: {
+  is_beta_tester?: boolean | null
+  referred_by?: string | null
+}): boolean {
+  if (profile.is_beta_tester === true) return true
+  return normalizeReferralCode(profile.referred_by) === BETA_REFERRAL_CODE
+}
+
 export async function POST(req: Request) {
+  console.log("[beta-signup-email] route hit")
+
   const user = await getRouteUser(req)
   if (!user) {
+    console.log("[beta-signup-email] skipped reason: unauthorized")
     return Response.json({ error: "Unauthorized" }, { status: 401 })
   }
+
+  console.log("[beta-signup-email] user id", user.id)
 
   let signupMethod: string | null = null
   try {
@@ -30,70 +43,81 @@ export async function POST(req: Request) {
     .maybeSingle()
 
   if (profileErr || !profile) {
-    console.error("[admin-notify/beta-signup] profile load failed", profileErr)
+    console.error("[beta-signup-email] skipped reason: profile_load_failed", profileErr)
     return Response.json({ error: "Profile not found" }, { status: 404 })
   }
 
-  if (profile.is_beta_tester !== true) {
-    return Response.json({ error: "Not a beta tester" }, { status: 400 })
-  }
-
-  if (normalizeReferralCode(profile.referred_by) !== BETA_REFERRAL_CODE) {
-    return Response.json({ error: "Not a beta referral signup" }, { status: 400 })
-  }
+  console.log("[beta-signup-email] profile beta fields", {
+    userId: user.id,
+    referred_by: profile.referred_by,
+    is_beta_tester: profile.is_beta_tester,
+    is_pro: profile.is_pro,
+    beta_signup_notified_at: profile.beta_signup_notified_at,
+    signupMethod,
+  })
 
   if (profile.beta_signup_notified_at) {
+    console.log("[beta-signup-email] skipped reason: already_notified", {
+      userId: user.id,
+      beta_signup_notified_at: profile.beta_signup_notified_at,
+    })
     return Response.json({ ok: true, alreadyNotified: true })
   }
 
-  const claimedAt = new Date().toISOString()
-  const { data: claimed, error: claimErr } = await supabaseServiceRole
-    .from("profiles")
-    .update({ beta_signup_notified_at: claimedAt })
-    .eq("id", user.id)
-    .is("beta_signup_notified_at", null)
-    .select(
-      "id, username, name, referred_by, is_beta_tester, is_pro, created_at"
-    )
-    .maybeSingle()
-
-  if (claimErr) {
-    console.error("[admin-notify/beta-signup] claim failed", claimErr)
-    return Response.json({ error: "Could not claim notification slot" }, { status: 500 })
-  }
-
-  if (!claimed) {
-    return Response.json({ ok: true, alreadyNotified: true })
+  if (!isBetaSignupEligible(profile)) {
+    console.log("[beta-signup-email] skipped reason: not_eligible", {
+      userId: user.id,
+      referred_by: profile.referred_by,
+      is_beta_tester: profile.is_beta_tester,
+    })
+    return Response.json({ ok: true, skipped: true, reason: "not_eligible" })
   }
 
   const emailResult = await sendBetaSignupAdminEmail({
     userId: user.id,
     userEmail: user.email ?? null,
-    username: claimed.username != null ? String(claimed.username) : null,
-    displayName: claimed.name != null ? String(claimed.name) : null,
-    referredBy: claimed.referred_by != null ? String(claimed.referred_by) : null,
-    isBetaTester: claimed.is_beta_tester === true,
-    isPro: claimed.is_pro === true,
-    createdAt: claimed.created_at != null ? String(claimed.created_at) : null,
+    username: profile.username != null ? String(profile.username) : null,
+    displayName: profile.name != null ? String(profile.name) : null,
+    referredBy: profile.referred_by != null ? String(profile.referred_by) : null,
+    isBetaTester: profile.is_beta_tester === true,
+    isPro: profile.is_pro === true,
+    createdAt: profile.created_at != null ? String(profile.created_at) : null,
     signupMethod,
     adminUrl: `${SITE_URL}/admin/users`,
   })
 
-  if (!emailResult.ok && !emailResult.skipped) {
-    console.error("[admin-notify/beta-signup] email failed", {
-      userId: user.id,
-      error: emailResult.error,
-    })
-    const { error: revertErr } = await supabaseServiceRole
-      .from("profiles")
-      .update({ beta_signup_notified_at: null })
-      .eq("id", user.id)
-      .eq("beta_signup_notified_at", claimedAt)
-
-    if (revertErr) {
-      console.error("[admin-notify/beta-signup] revert claim failed", revertErr)
+  if (!emailResult.ok) {
+    if (!emailResult.skipped) {
+      console.error("[beta-signup-email] resend error", {
+        userId: user.id,
+        error: emailResult.error,
+      })
+    } else {
+      console.log("[beta-signup-email] skipped reason: resend_not_configured", {
+        userId: user.id,
+      })
     }
+    return Response.json({ ok: true, emailSent: false })
   }
 
-  return Response.json({ ok: true, emailSent: emailResult.ok })
+  console.log("[beta-signup-email] sent email id", {
+    userId: user.id,
+    emailId: emailResult.emailId,
+  })
+
+  const notifiedAt = new Date().toISOString()
+  const { error: markErr } = await supabaseServiceRole
+    .from("profiles")
+    .update({ beta_signup_notified_at: notifiedAt })
+    .eq("id", user.id)
+    .is("beta_signup_notified_at", null)
+
+  if (markErr) {
+    console.error("[beta-signup-email] failed to set beta_signup_notified_at", {
+      userId: user.id,
+      error: markErr,
+    })
+  }
+
+  return Response.json({ ok: true, emailSent: true, emailId: emailResult.emailId })
 }

@@ -18,12 +18,12 @@ import {
   applyBetaReferralIfEligible,
   clearBetaReferralAfterApply,
 } from "./applyBetaReferralIfEligible"
+import { notifyBetaSignupWhenReady } from "./betaSignupNotify"
 import { isBetaReferralRef } from "./betaReferralCode"
 import {
   ensureProfileForUser,
   readStoredReferralCode,
 } from "./ensureProfileForUser"
-import { notifyAdminBetaSignup } from "./notifyAdminBetaSignup"
 import { resolveSignupMethodLabel } from "./resolveSignupMethodLabel"
 import { supabase } from "./supabaseClient"
 
@@ -195,7 +195,6 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
         .maybeSingle()
 
       let resolvedProfile = profileData
-      let shouldNotifyBetaSignup = false
       let betaSignupMethod: string | undefined
       const storedBetaRef = isBetaReferralRef(readStoredReferralCode())
 
@@ -218,7 +217,6 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
             clearBetaReferralAfterApply(refetched.is_beta_tester)
           }
           if (ensureResult.created && storedBetaRef) {
-            shouldNotifyBetaSignup = true
             betaSignupMethod = resolveSignupMethodLabel(sessionUser)
           }
         } else if (ensureResult.error) {
@@ -233,7 +231,6 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
             .eq("id", sessionUser.id)
             .maybeSingle()
           if (refetched) resolvedProfile = refetched
-          shouldNotifyBetaSignup = true
           betaSignupMethod = resolveSignupMethodLabel(sessionUser, "beta_repair")
         } else {
           clearBetaReferralAfterApply(resolvedProfile.is_beta_tester)
@@ -244,8 +241,12 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
 
       setProfileState(pickUserProfileFields(resolvedProfile))
 
-      if (shouldNotifyBetaSignup) {
-        notifyAdminBetaSignup(betaSignupMethod)
+      if (resolvedProfile?.is_beta_tester === true || storedBetaRef) {
+        void notifyBetaSignupWhenReady(
+          supabase,
+          sessionUser.id,
+          betaSignupMethod ?? resolveSignupMethodLabel(sessionUser)
+        )
       }
 
       // Realtime: create channel → register .on handlers → subscribe() last (required by supabase-js).
