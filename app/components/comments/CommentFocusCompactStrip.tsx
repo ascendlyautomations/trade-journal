@@ -14,6 +14,8 @@ type CommentFocusCompactStripProps = {
   timestamp?: string | null
   meta?: ReactNode
   className?: string
+  /** Mobile: tap strip to restore collapsed content (sets commentsFocused false). */
+  onExpand?: () => void
 }
 
 /** Minimal author + meta row shown on mobile when comments are focused. */
@@ -24,24 +26,47 @@ export function CommentFocusCompactStrip({
   timestamp,
   meta,
   className = "",
+  onExpand,
 }: CommentFocusCompactStripProps) {
   const timeLabel = formatSocialCommentTime(timestamp)
+  const avatarSrc =
+    avatarUrl != null && String(avatarUrl).trim() !== ""
+      ? String(avatarUrl).trim()
+      : "/default-avatar.png"
+  const displayName = username?.trim() || "User"
 
-  return (
-    <div className={`flex min-w-0 items-center gap-2.5 px-4 py-2.5 ${className}`.trim()}>
-      <ProfileAvatarLink
-        userId={userId}
-        username={username}
-        src={avatarUrl}
-        imgClassName="h-8 w-8 shrink-0 rounded-full object-cover ring-2 ring-white/10"
-      />
-      <div className="min-w-0 flex-1">
+  const inner = (
+    <>
+      {onExpand ? (
+        <img
+          src={avatarSrc}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          className="h-8 w-8 shrink-0 rounded-full object-cover ring-2 ring-white/10"
+          onError={(e) => {
+            e.currentTarget.src = "/default-avatar.png"
+          }}
+        />
+      ) : (
+        <ProfileAvatarLink
+          userId={userId}
+          username={username}
+          src={avatarUrl}
+          imgClassName="h-8 w-8 shrink-0 rounded-full object-cover ring-2 ring-white/10"
+        />
+      )}
+      <div className="min-w-0 flex-1 text-left">
         <p className="truncate whitespace-nowrap text-xs text-gray-400">
-          <ProfileUsernameLink
-            userId={userId}
-            username={username}
-            className="inline font-semibold text-white hover:text-gray-200"
-          />
+          {onExpand ? (
+            <span className="inline font-semibold text-white">{displayName}</span>
+          ) : (
+            <ProfileUsernameLink
+              userId={userId}
+              username={username}
+              className="inline font-semibold text-white hover:text-gray-200"
+            />
+          )}
           {timeLabel ? (
             <>
               <span aria-hidden="true" className="mx-1 text-gray-500">
@@ -59,6 +84,33 @@ export function CommentFocusCompactStrip({
           </div>
         ) : null}
       </div>
+      {onExpand ? (
+        <span
+          className="shrink-0 text-[10px] text-gray-500"
+          aria-hidden
+        >
+          ▼
+        </span>
+      ) : null}
+    </>
+  )
+
+  if (onExpand) {
+    return (
+      <button
+        type="button"
+        onClick={onExpand}
+        className={`flex w-full min-w-0 items-center gap-2.5 px-4 py-2.5 text-left transition hover:bg-white/5 active:bg-white/[0.07] ${className}`.trim()}
+        aria-label="Show full content"
+      >
+        {inner}
+      </button>
+    )
+  }
+
+  return (
+    <div className={`flex min-w-0 items-center gap-2.5 px-4 py-2.5 ${className}`.trim()}>
+      {inner}
     </div>
   )
 }

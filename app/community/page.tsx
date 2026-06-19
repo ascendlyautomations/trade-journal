@@ -254,6 +254,7 @@ function CommunityContent() {
   const [selectTrade, setSelectTrade] = useState(false)
   const [userTrades, setUserTrades] = useState<any[]>([])
   const [mobileRoomsOpen, setMobileRoomsOpen] = useState(false)
+  const [mobileSectionsOpen, setMobileSectionsOpen] = useState(false)
   const [sections, setSections] = useState<any[]>([])
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null)
   const [isOwner, setIsOwner] = useState(false)
@@ -499,6 +500,11 @@ function CommunityContent() {
       url != null && String(url).trim() !== "" ? String(url) : null
     )
   }, [selectedRoom?.image_url, selectedRoom?.id])
+
+  useEffect(() => {
+    setMobileRoomsOpen(false)
+    setMobileSectionsOpen(false)
+  }, [selectedRoomId])
 
   useEffect(() => {
     sectionsRef.current = sections
@@ -2021,38 +2027,78 @@ function CommunityContent() {
       <div className="flex h-[calc(100dvh-4rem)] min-h-0 flex-col overflow-hidden bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 py-2 text-white">
         <div className="mx-auto flex h-full min-h-0 w-full max-w-6xl flex-col overflow-visible rounded-2xl border border-white/10 bg-black/25 md:flex-row md:overflow-hidden">
           <aside className="shrink-0 border-b border-white/10 bg-[#0b1220]/80 md:w-72 md:border-b-0 md:border-r">
-            <div className="border-b border-white/10 px-4 py-3">
+            <div className="border-b border-white/10 px-3 py-1.5 md:px-4 md:py-3">
               <h1 className="hidden text-lg font-semibold md:block">Trade Rooms</h1>
-              <button
-                type="button"
-                className="flex w-full min-h-[48px] items-center justify-between gap-3 rounded-lg border border-white/10 bg-[#0f172a]/60 px-3 py-2.5 text-left transition hover:bg-white/5 md:hidden"
-                onClick={() => setMobileRoomsOpen((o) => !o)}
-                aria-expanded={mobileRoomsOpen}
-                aria-controls="trade-rooms-list"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
-                    Trade Rooms
-                  </p>
-                  <p className="truncate text-sm font-semibold text-white">
-                    {selectedRoom?.name || "Select room"}
-                  </p>
-                </div>
-                <svg
-                  className={`h-5 w-5 shrink-0 text-gray-300 transition-transform duration-200 ${
-                    mobileRoomsOpen ? "rotate-180" : ""
-                  }`}
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden
+              <div className="flex items-center gap-1 md:hidden">
+                <button
+                  type="button"
+                  className="flex min-h-[40px] min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-2 text-left transition hover:bg-white/5"
+                  onClick={() => setMobileRoomsOpen((o) => !o)}
+                  aria-expanded={mobileRoomsOpen}
+                  aria-controls="trade-rooms-list"
                 >
-                  <path d="M6 9l6 6 6-6" />
-                </svg>
-              </button>
+                  <svg
+                    className={`h-4 w-4 shrink-0 text-gray-300 transition-transform duration-200 ${
+                      mobileRoomsOpen ? "rotate-180" : ""
+                    }`}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden
+                  >
+                    <path d="M6 9l6 6 6-6" />
+                  </svg>
+                  <span className="truncate text-sm font-semibold text-white">
+                    {selectedRoom?.name || "Select room"}
+                  </span>
+                </button>
+                {isOwner && selectedRoomId && !needsJoin ? (
+                  <div className="flex shrink-0 items-center gap-0.5">
+                    <button
+                      type="button"
+                      aria-label="Room settings"
+                      onClick={() => setShowRoomSettings(true)}
+                      className="flex items-center justify-center rounded-md p-2 text-gray-300 hover:bg-white/10 hover:text-white"
+                    >
+                      ⚙️
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Share invite"
+                      onClick={() => setShowInviteModal(true)}
+                      className="flex items-center justify-center rounded-md p-2 text-gray-300 hover:bg-white/10 hover:text-white"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="h-4 w-4 text-blue-300"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        aria-hidden
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M12 16V4m0 0l-4 4m4-4l4 4M4 20h16"
+                        />
+                      </svg>
+                    </button>
+                  </div>
+                ) : null}
+                {!isOwner && selectedRoomId && !needsJoin ? (
+                  <button
+                    type="button"
+                    onClick={() => void handleLeaveRoom()}
+                    className="shrink-0 rounded-md px-2 py-1.5 text-xs text-red-400 hover:bg-red-500/10"
+                  >
+                    Leave
+                  </button>
+                ) : null}
+              </div>
             </div>
             <div
               id="trade-rooms-list"
@@ -2136,7 +2182,7 @@ function CommunityContent() {
           </aside>
 
           <section className="flex min-h-0 w-full min-w-0 flex-1 flex-col">
-            <div className="border-b border-white/10 px-4 py-3">
+            <div className="hidden border-b border-white/10 px-4 py-3 md:block">
               <div className="flex items-center gap-3">
                 <img
                   src={
@@ -2360,12 +2406,12 @@ function CommunityContent() {
               <>
                 <div className="flex min-h-0 min-w-0 flex-1 flex-col md:flex-row">
               {sections.length > 0 ? (
-                <div className="flex max-h-[min(40svh,220px)] shrink-0 flex-col border-b border-white/10 p-2 md:max-h-none md:w-48 md:border-b-0 md:border-r md:border-white/10 md:p-2">
-                  <div className="flex max-h-[min(36svh,180px)] flex-row gap-1 overflow-x-auto md:max-h-none md:flex-col md:gap-0 md:overflow-y-auto">
+                <div className="hidden max-h-none w-48 shrink-0 flex-col border-r border-white/10 p-2 md:flex">
+                  <div className="flex max-h-none flex-col gap-0 overflow-y-auto">
                     {sections.map((section) => (
                       <div
                         key={section.id}
-                        className={`flex min-w-[8rem] items-stretch rounded-md md:min-w-0 ${
+                        className={`flex min-w-0 items-stretch rounded-md ${
                           selectedSectionId === section.id
                             ? "bg-green-500/20 text-green-300"
                             : "text-gray-400"
@@ -2417,9 +2463,87 @@ function CommunityContent() {
                 </div>
               ) : null}
 
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                {sections.length > 1 ? (
+                  <div className="shrink-0 border-b border-white/10 md:hidden">
+                    <button
+                      type="button"
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-white/5"
+                      onClick={() => setMobileSectionsOpen((o) => !o)}
+                      aria-expanded={mobileSectionsOpen}
+                      aria-controls="trade-room-sections-list"
+                    >
+                      <svg
+                        className={`h-4 w-4 shrink-0 text-gray-300 transition-transform duration-200 ${
+                          mobileSectionsOpen ? "rotate-180" : ""
+                        }`}
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden
+                      >
+                        <path d="M6 9l6 6 6-6" />
+                      </svg>
+                      <span className="truncate text-sm font-medium text-gray-200">
+                        {currentSection?.name || "Channel"}
+                      </span>
+                    </button>
+                    <div
+                      id="trade-room-sections-list"
+                      className={`grid overflow-hidden transition-[grid-template-rows] duration-200 ease-out ${
+                        mobileSectionsOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+                      }`}
+                    >
+                      <div className="min-h-0 overflow-hidden">
+                        <div className="max-h-[min(40svh,220px)] overflow-y-auto p-2">
+                          {sections.map((section) => (
+                            <button
+                              key={`mobile-section-${section.id}`}
+                              type="button"
+                              onClick={() => {
+                                setSelectedSectionId(section.id)
+                                setMobileSectionsOpen(false)
+                                if (selectedRoomId) {
+                                  void fetchRoomMessages(
+                                    selectedRoomId,
+                                    sections,
+                                    section.id
+                                  )
+                                }
+                              }}
+                              className={`mb-1 flex min-h-[40px] w-full items-center rounded-lg px-3 py-2 text-left text-sm transition ${
+                                selectedSectionId === section.id
+                                  ? "bg-green-500/20 font-medium text-green-300"
+                                  : "text-gray-300 hover:bg-white/10"
+                              }`}
+                            >
+                              <span className="truncate">{section.name}</span>
+                            </button>
+                          ))}
+                          {isOwner && sections.length < 5 ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setMobileSectionsOpen(false)
+                                setShowCreateSectionModal(true)
+                              }}
+                              className="mt-1 w-full rounded-md px-3 py-2 text-left text-sm text-green-400 hover:bg-white/5"
+                            >
+                              + Add Channel
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+
               <div
                 ref={messagesScrollRef}
-                className="min-h-0 min-w-0 max-h-[min(65svh,525px)] flex-1 overflow-y-auto px-4 py-3 md:max-h-none"
+                className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-3"
               >
               {!selectedRoomId ? (
                 <p className="text-sm text-gray-400">Pick a room to start chatting.</p>
@@ -2662,6 +2786,7 @@ function CommunityContent() {
                   ) : null}
                 </>
               )}
+              </div>
               </div>
                 </div>
 

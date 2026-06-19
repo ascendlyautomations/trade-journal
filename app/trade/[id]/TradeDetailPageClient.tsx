@@ -242,6 +242,7 @@ export default function TradeDetailPageClient({
                       avatarUrl={ownerProfile.avatar_url}
                       timestamp={trade.created_at ?? trade.trade_date}
                       meta={tradeCompactMeta}
+                      onExpand={() => setCommentsFocused(false)}
                     />
                   ) : undefined
                 }

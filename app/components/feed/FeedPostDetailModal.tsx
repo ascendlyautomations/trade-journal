@@ -151,6 +151,7 @@ export default function FeedPostDetailModal({
           avatarUrl={modalPostDetails.avatarUrl}
           timestamp={post.created_at}
           meta={pnlMeta}
+          onExpand={() => setCommentsFocused(false)}
         />
       }
       engagement={

@@ -438,6 +438,7 @@ function TradeCard({
                     avatarUrl={profile.avatar_url}
                     timestamp={trade.created_at ?? trade.trade_date}
                     meta={tradeCompactMeta}
+                    onExpand={() => setCommentsFocused(false)}
                   />
                 }
                 mobileMedia={imageSrc ? tradeImageBlock : undefined}
@@ -886,6 +887,7 @@ function PostCard({
                 username={profile.username}
                 avatarUrl={profile.avatar_url}
                 timestamp={post.created_at}
+                onExpand={() => setCommentsFocused(false)}
               />
             }
             mobileMedia={postImageBlock ?? undefined}
