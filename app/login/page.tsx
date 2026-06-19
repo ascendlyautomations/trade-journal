@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import AuthPasswordInput from "@/app/components/ui/AuthPasswordInput"
 import { isBetaReferralRef } from "@/lib/betaReferralCode"
+import { notifyAdminBetaSignup } from "@/lib/notifyAdminBetaSignup"
 import { persistReferralCodeFromUrl } from "@/lib/referralPersistence"
 
 function getSafeNextPath(): string | null {
@@ -239,6 +240,10 @@ export default function LoginPage() {
       }
 
       console.log("✅ PROFILE ENSURED")
+
+      if (ensureResult.created && isBetaReferralRef(referralCode)) {
+        notifyAdminBetaSignup("email")
+      }
 
       if (shouldStartCheckout()) {
         try {

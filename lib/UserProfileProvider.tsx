@@ -23,6 +23,8 @@ import {
   ensureProfileForUser,
   readStoredReferralCode,
 } from "./ensureProfileForUser"
+import { notifyAdminBetaSignup } from "./notifyAdminBetaSignup"
+import { resolveSignupMethodLabel } from "./resolveSignupMethodLabel"
 import { supabase } from "./supabaseClient"
 
 /**
@@ -193,6 +195,9 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
         .maybeSingle()
 
       let resolvedProfile = profileData
+      let shouldNotifyBetaSignup = false
+      let betaSignupMethod: string | undefined
+      const storedBetaRef = isBetaReferralRef(readStoredReferralCode())
 
       if (!resolvedProfile) {
         const ensureResult = await ensureProfileForUser(supabase, {
@@ -209,13 +214,17 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
             .eq("id", sessionUser.id)
             .maybeSingle()
           resolvedProfile = refetched
-          if (refetched && isBetaReferralRef(readStoredReferralCode())) {
+          if (refetched && storedBetaRef) {
             clearBetaReferralAfterApply(refetched.is_beta_tester)
+          }
+          if (ensureResult.created && storedBetaRef) {
+            shouldNotifyBetaSignup = true
+            betaSignupMethod = resolveSignupMethodLabel(sessionUser)
           }
         } else if (ensureResult.error) {
           console.error("ensureProfileForUser:", ensureResult.error)
         }
-      } else if (isBetaReferralRef(readStoredReferralCode())) {
+      } else if (storedBetaRef) {
         const repair = await applyBetaReferralIfEligible(supabase, sessionUser.id)
         if (repair.applied) {
           const { data: refetched } = await supabase
@@ -224,6 +233,8 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
             .eq("id", sessionUser.id)
             .maybeSingle()
           if (refetched) resolvedProfile = refetched
+          shouldNotifyBetaSignup = true
+          betaSignupMethod = resolveSignupMethodLabel(sessionUser, "beta_repair")
         } else {
           clearBetaReferralAfterApply(resolvedProfile.is_beta_tester)
         }
@@ -232,6 +243,10 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
       if (!mounted || generation !== loadGeneration) return
 
       setProfileState(pickUserProfileFields(resolvedProfile))
+
+      if (shouldNotifyBetaSignup) {
+        notifyAdminBetaSignup(betaSignupMethod)
+      }
 
       // Realtime: create channel → register .on handlers → subscribe() last (required by supabase-js).
       const topic = `profile:${sessionUser.id}:${realtimeTopicSuffix}`
