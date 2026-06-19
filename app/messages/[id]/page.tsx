@@ -4,12 +4,19 @@ import Navbar from "../../components/Navbar"
 import DmStyleComposer from "../../components/DmStyleComposer"
 import TradeSocialLayer from "../../components/TradeSocialLayer"
 import {
+  Fragment,
   useCallback,
   useEffect,
   useState,
   useRef,
   type ChangeEvent,
 } from "react"
+import {
+  formatConversationDateDividerLabel,
+  formatDmClusterTime,
+  shouldShowDmClusterTimestamp,
+  shouldShowDmDateDivider,
+} from "@/lib/formatMessageTimestamp"
 import { supabase } from "../../../lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
 import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
@@ -54,6 +61,43 @@ type ConversationPageAccess =
   | "allowed"
   | "unavailable"
   | "unauthenticated"
+
+function ConversationDateDivider({ label }: { label: string }) {
+  if (!label) return null
+  return (
+    <div
+      className="my-4 flex items-center gap-3 px-1"
+      role="separator"
+      aria-label={label}
+    >
+      <div className="h-px min-w-0 flex-1 bg-white/10" aria-hidden />
+      <span className="shrink-0 text-[11px] font-medium tracking-wide text-gray-500">
+        {label}
+      </span>
+      <div className="h-px min-w-0 flex-1 bg-white/10" aria-hidden />
+    </div>
+  )
+}
+
+function DmClusterTimestamp({
+  createdAt,
+  isMe,
+}: {
+  createdAt: string | null | undefined
+  isMe: boolean
+}) {
+  const label = formatDmClusterTime(createdAt)
+  if (!label) return null
+  return (
+    <p
+      className={`mt-1 px-1 text-[11px] leading-none text-gray-500 ${
+        isMe ? "self-end text-right" : "self-start text-left"
+      }`}
+    >
+      <time dateTime={createdAt ?? undefined}>{label}</time>
+    </p>
+  )
+}
 
 function tradeScreenshotSrc(url: string | null | undefined): string | null {
   const raw = url != null ? String(url).trim() : ""
@@ -1554,12 +1598,20 @@ export default function DMPage() {
                 isGroup &&
                 !isMe &&
                 (!prevMessage ||
+                  prevMessage.is_system ||
                   prevMessage.sender_id !== message.sender_id)
 
               const isNewSender =
-                !prevMessage || prevMessage.sender_id !== message.sender_id
+                !prevMessage ||
+                prevMessage.is_system ||
+                prevMessage.sender_id !== message.sender_id
 
               const rowClass = `flex flex-col ${isNewSender ? "mt-3" : "mt-1"}`
+              const showDateDivider = shouldShowDmDateDivider(messages, i)
+              const dateDividerLabel = showDateDivider
+                ? formatConversationDateDividerLabel(message.created_at)
+                : ""
+              const showTimestamp = shouldShowDmClusterTimestamp(messages, i)
 
               const profileRow = Array.isArray(message.profiles)
                 ? message.profiles[0]
@@ -1569,140 +1621,173 @@ export default function DMPage() {
 
               if (message.type === "trade") {
                 return (
-                  <div key={message.id} className={rowClass}>
-                    {showName && profileUsername ? (
-                      <ProfileUsernameLink
-                        userId={message.sender_id}
-                        username={profileUsername}
-                        className="mb-1 ml-1 inline-block text-xs text-gray-400 hover:text-gray-300"
-                      />
+                  <Fragment key={message.id}>
+                    {showDateDivider ? (
+                      <ConversationDateDivider label={dateDividerLabel} />
                     ) : null}
-                    <TradeMessageBubble
-                      message={message}
-                      isMe={isMe}
-                      userId={user?.id}
-                      activeMenuId={activeMenuId}
-                      setActiveMenuId={setActiveMenuId}
-                      deleteForMe={deleteForMe}
-                      deleteForEveryone={deleteForEveryone}
-                      onOpenTrade={openTradeModal}
-                    />
-                  </div>
+                    <div className={rowClass}>
+                      {showName && profileUsername ? (
+                        <ProfileUsernameLink
+                          userId={message.sender_id}
+                          username={profileUsername}
+                          className="mb-1 ml-1 inline-block text-xs text-gray-400 hover:text-gray-300"
+                        />
+                      ) : null}
+                      <TradeMessageBubble
+                        message={message}
+                        isMe={isMe}
+                        userId={user?.id}
+                        activeMenuId={activeMenuId}
+                        setActiveMenuId={setActiveMenuId}
+                        deleteForMe={deleteForMe}
+                        deleteForEveryone={deleteForEveryone}
+                        onOpenTrade={openTradeModal}
+                      />
+                      {showTimestamp ? (
+                        <DmClusterTimestamp
+                          createdAt={message.created_at}
+                          isMe={isMe}
+                        />
+                      ) : null}
+                    </div>
+                  </Fragment>
                 )
               }
 
               if (message.type === "post") {
                 return (
-                  <div key={message.id} className={rowClass}>
-                    {showName && profileUsername ? (
-                      <ProfileUsernameLink
-                        userId={message.sender_id}
-                        username={profileUsername}
-                        className="mb-1 ml-1 inline-block text-xs text-gray-400 hover:text-gray-300"
-                      />
+                  <Fragment key={message.id}>
+                    {showDateDivider ? (
+                      <ConversationDateDivider label={dateDividerLabel} />
                     ) : null}
-                    <PostMessageBubble
-                      message={message}
-                      isMe={isMe}
-                      userId={user?.id}
-                      activeMenuId={activeMenuId}
-                      setActiveMenuId={setActiveMenuId}
-                      deleteForMe={deleteForMe}
-                      deleteForEveryone={deleteForEveryone}
-                      onOpenPost={openPostModal}
-                    />
-                  </div>
+                    <div className={rowClass}>
+                      {showName && profileUsername ? (
+                        <ProfileUsernameLink
+                          userId={message.sender_id}
+                          username={profileUsername}
+                          className="mb-1 ml-1 inline-block text-xs text-gray-400 hover:text-gray-300"
+                        />
+                      ) : null}
+                      <PostMessageBubble
+                        message={message}
+                        isMe={isMe}
+                        userId={user?.id}
+                        activeMenuId={activeMenuId}
+                        setActiveMenuId={setActiveMenuId}
+                        deleteForMe={deleteForMe}
+                        deleteForEveryone={deleteForEveryone}
+                        onOpenPost={openPostModal}
+                      />
+                      {showTimestamp ? (
+                        <DmClusterTimestamp
+                          createdAt={message.created_at}
+                          isMe={isMe}
+                        />
+                      ) : null}
+                    </div>
+                  </Fragment>
                 )
               }
 
               const menuOpen = activeMenuId === message.id
 
               return (
-                <div key={message.id} className={rowClass}>
-                  {showName && profileUsername ? (
-                    <ProfileUsernameLink
-                      userId={message.sender_id}
-                      username={profileUsername}
-                      className="mb-1 ml-1 inline-block text-xs text-gray-400 hover:text-gray-300"
-                    />
+                <Fragment key={message.id}>
+                  {showDateDivider ? (
+                    <ConversationDateDivider label={dateDividerLabel} />
                   ) : null}
-                  <div
-                    className={`flex overflow-visible ${
-                      isMe ? "justify-end" : "justify-start"
-                    }`}
-                  >
-                    <div className="relative group inline-block max-w-[75%] overflow-visible">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setActiveMenuId(menuOpen ? null : message.id)
-                        }
-                        className={`absolute top-1 right-1 z-10 rounded px-1.5 py-0.5 text-xs text-gray-400 transition-opacity duration-200 hover:text-gray-200 ${
-                          menuOpen
-                            ? "opacity-100"
-                            : "opacity-0 group-hover:opacity-100"
-                        }`}
-                        aria-label="Message actions"
-                      >
-                        ⋯
-                      </button>
-
-                      {menuOpen ? (
-                        <div
-                          className={`absolute top-7 z-50 w-40 rounded-lg border border-gray-600 bg-[#1e293b] shadow-lg ${
-                            isMe ? "right-1" : "left-1"
+                  <div className={rowClass}>
+                    {showName && profileUsername ? (
+                      <ProfileUsernameLink
+                        userId={message.sender_id}
+                        username={profileUsername}
+                        className="mb-1 ml-1 inline-block text-xs text-gray-400 hover:text-gray-300"
+                      />
+                    ) : null}
+                    <div
+                      className={`flex overflow-visible ${
+                        isMe ? "justify-end" : "justify-start"
+                      }`}
+                    >
+                      <div className="relative group inline-block max-w-[75%] overflow-visible">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setActiveMenuId(menuOpen ? null : message.id)
+                          }
+                          className={`absolute top-1 right-1 z-10 rounded px-1.5 py-0.5 text-xs text-gray-400 transition-opacity duration-200 hover:text-gray-200 ${
+                            menuOpen
+                              ? "opacity-100"
+                              : "opacity-0 group-hover:opacity-100"
                           }`}
+                          aria-label="Message actions"
                         >
-                          <button
-                            type="button"
-                            onClick={() => deleteForMe(message)}
-                            className="w-full text-left px-3 py-2 text-sm hover:bg-white/10"
+                          ⋯
+                        </button>
+
+                        {menuOpen ? (
+                          <div
+                            className={`absolute top-7 z-50 w-40 rounded-lg border border-gray-600 bg-[#1e293b] shadow-lg ${
+                              isMe ? "right-1" : "left-1"
+                            }`}
                           >
-                            Delete for me
-                          </button>
-                          {message.sender_id === user?.id ? (
                             <button
                               type="button"
-                              onClick={() => deleteForEveryone(message)}
+                              onClick={() => deleteForMe(message)}
                               className="w-full text-left px-3 py-2 text-sm hover:bg-white/10"
                             >
-                              Delete for everyone
+                              Delete for me
                             </button>
-                          ) : null}
-                        </div>
-                      ) : null}
+                            {message.sender_id === user?.id ? (
+                              <button
+                                type="button"
+                                onClick={() => deleteForEveryone(message)}
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-white/10"
+                              >
+                                Delete for everyone
+                              </button>
+                            ) : null}
+                          </div>
+                        ) : null}
 
-                      <div
-                        className={`p-3 rounded-xl overflow-visible ${
-                          isMe ? "bg-blue-500" : "bg-gray-700"
-                        }`}
-                      >
-                        {message.deleted_for_everyone ? (
-                          <p className="text-gray-400 italic">
-                            Message deleted
-                          </p>
-                        ) : (
-                          <>
-                            {message.image_url ? (
-                              <img
-                                src={message.image_url}
-                                className="rounded-lg max-h-64"
-                                alt=""
-                                loading="lazy"
-                                decoding="async"
-                              />
-                            ) : null}
-                            {message.content ? (
-                              <p className={message.image_url ? "mt-2" : undefined}>
-                                {message.content}
-                              </p>
-                            ) : null}
-                          </>
-                        )}
+                        <div
+                          className={`p-3 rounded-xl overflow-visible ${
+                            isMe ? "bg-blue-500" : "bg-gray-700"
+                          }`}
+                        >
+                          {message.deleted_for_everyone ? (
+                            <p className="text-gray-400 italic">
+                              Message deleted
+                            </p>
+                          ) : (
+                            <>
+                              {message.image_url ? (
+                                <img
+                                  src={message.image_url}
+                                  className="rounded-lg max-h-64"
+                                  alt=""
+                                  loading="lazy"
+                                  decoding="async"
+                                />
+                              ) : null}
+                              {message.content ? (
+                                <p className={message.image_url ? "mt-2" : undefined}>
+                                  {message.content}
+                                </p>
+                              ) : null}
+                            </>
+                          )}
+                        </div>
                       </div>
                     </div>
+                    {showTimestamp ? (
+                      <DmClusterTimestamp
+                        createdAt={message.created_at}
+                        isMe={isMe}
+                      />
+                    ) : null}
                   </div>
-                </div>
+                </Fragment>
               )
             })}
             {typingText ? (

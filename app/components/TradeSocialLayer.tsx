@@ -13,11 +13,7 @@ import {
 } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
-import {
-  ProfileAvatarLink,
-  ProfileLink,
-  ProfileUsernameLink,
-} from "@/app/components/ProfileLink"
+import FeedCommentItem from "@/app/components/feed/FeedCommentItem"
 import { feedbackPresets } from "@/lib/feedbackPresets"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 
@@ -536,44 +532,13 @@ export function TradeSocialCommentsSection({
 
   const commentList = (
     <div className="space-y-2">
-        {comments.map((c) => {
-          const userId = String(c.user_id ?? "")
-          const username = c.profiles?.username
-          const av = c.profiles?.avatar_url
-          const hasAv =
-            av != null && String(av).trim() !== "" && String(av) !== "null"
-          return (
-            <div key={c.id} className="flex items-start gap-2">
-              {hasAv ? (
-                <ProfileAvatarLink
-                  userId={userId}
-                  username={username}
-                  src={String(av).trim()}
-                  imgClassName="h-6 w-6 shrink-0 rounded-full object-cover"
-                />
-              ) : (
-                <ProfileLink
-                  userId={userId}
-                  username={username}
-                  className="inline-flex shrink-0 cursor-pointer transition hover:opacity-90"
-                >
-                  <div
-                    className="h-6 w-6 shrink-0 rounded-full bg-gradient-to-br from-blue-500/40 to-emerald-500/40"
-                    aria-hidden
-                  />
-                </ProfileLink>
-              )}
-              <div className="min-w-0">
-                <ProfileUsernameLink
-                  userId={userId}
-                  username={username}
-                  className="text-xs text-gray-400"
-                />
-                <p className="break-words text-sm text-white">{c.content}</p>
-              </div>
-            </div>
-          )
-        })}
+      {comments.map((c) => (
+        <FeedCommentItem
+          key={c.id}
+          comment={c}
+          avatarClassName="h-6 w-6 shrink-0 rounded-full object-cover"
+        />
+      ))}
     </div>
   )
 

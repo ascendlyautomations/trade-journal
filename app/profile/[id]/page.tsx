@@ -26,6 +26,7 @@ import DropdownMenu from "@/app/components/ui/DropdownMenu"
 import DetailModalImage from "../../components/ui/DetailModalImage"
 import ImageLightbox from "../../components/ui/ImageLightbox"
 import { EMPTY_LIKE_META } from "../../components/feed/FeedPostCard"
+import FeedCommentItem from "../../components/feed/FeedCommentItem"
 import {
   FEED_COMMENT_INSERT_SELECT,
   FEED_COMMENTS_SELECT,
@@ -561,16 +562,9 @@ function PostCard({
   }, [inDetailModal, post.id, scrollToCommentsOnMount, showCommentsPanel])
 
   const commentsList = (
-    <div className="space-y-1 text-sm text-gray-300">
+    <div className="space-y-2 text-sm text-gray-300">
       {(comments || []).map((c: any) => (
-        <p key={c.id}>
-          <ProfileUsernameLink
-            userId={String(c.user_id ?? "")}
-            username={c.profiles?.username}
-            className="inline font-medium text-white"
-          />{" "}
-          {c.content}
-        </p>
+        <FeedCommentItem key={c.id} comment={c} />
       ))}
     </div>
   )

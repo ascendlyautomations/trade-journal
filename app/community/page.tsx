@@ -2559,12 +2559,17 @@ function CommunityContent() {
                       <div className="space-y-2">
                         {pinnedMessages.map((msg) => (
                           <div key={msg.id} className="group relative rounded-lg bg-black/20 p-2">
-                            <div className="mb-1 flex items-center justify-between gap-2">
-                              <ProfileUsernameLink
-                                userId={msg.user_id}
-                                username={msg.profiles?.username}
-                                className="text-xs text-gray-400"
-                              />
+                            <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                <ProfileUsernameLink
+                                  userId={msg.user_id}
+                                  username={msg.profiles?.username}
+                                  className="text-xs text-gray-400"
+                                />
+                                <span className="text-xs text-gray-400">
+                                  {formatEST(String(msg.created_at ?? ""))}
+                                </span>
+                              </div>
                               <div className="flex shrink-0 items-center gap-1">
                                 {isOwner ? (
                                   <button

@@ -1,9 +1,6 @@
 "use client"
 
-import {
-  ProfileAvatarLink,
-  ProfileUsernameLink,
-} from "@/app/components/ProfileLink"
+import FeedCommentItem from "@/app/components/feed/FeedCommentItem"
 
 type LikeMeta = {
   count: number
@@ -135,30 +132,13 @@ export function PostInteractionsComments({
       {...guard(stopPropagation)}
     >
       <div className="space-y-2">
-        {comments.map((c: any) => {
-          const userId = String(c.user_id ?? "")
-          const username = c.profiles?.username
-          return (
-            <div key={c.id} className="flex items-start gap-2">
-              <ProfileAvatarLink
-                userId={userId}
-                username={username}
-                src={c.profiles?.avatar_url}
-                imgClassName="h-8 w-8 shrink-0 rounded-full object-cover"
-                stopPropagation={stopPropagation}
-              />
-              <div className="min-w-0">
-                <ProfileUsernameLink
-                  userId={userId}
-                  username={username}
-                  className="text-xs text-gray-400"
-                  stopPropagation={stopPropagation}
-                />
-                <p className="break-words text-sm text-white">{c.content}</p>
-              </div>
-            </div>
-          )
-        })}
+        {comments.map((c: any) => (
+          <FeedCommentItem
+            key={c.id}
+            comment={c}
+            stopPropagation={stopPropagation}
+          />
+        ))}
       </div>
 
       {user ? (
