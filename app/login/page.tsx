@@ -398,16 +398,12 @@ export default function LoginPage() {
     </button>
 
     {/* 🔥 CONTENT */}
-    <div
-      className={`relative z-10 w-full max-w-6xl flex items-center justify-between px-6 ${
-        isBetaSignup ? "flex-col-reverse md:flex-row" : "flex-col md:flex-row"
-      }`}
-    >
+    <div className="relative z-10 flex w-full max-w-6xl flex-col items-center justify-between px-6 md:flex-row">
 
       {/* LEFT TEXT */}
       <div
         className={`max-w-lg text-center md:text-left ${
-          isBetaSignup ? "mt-4 mb-0 md:mt-0" : "mb-10 md:mb-0"
+          isBetaSignup ? "mb-4 md:mb-0" : "mb-10 md:mb-0"
         }`}
       >
         {isBetaSignup ? (
@@ -504,11 +500,7 @@ export default function LoginPage() {
       </div>
 
       {/* RIGHT LOGIN CARD */}
-      <div
-        className={`w-full max-w-md bg-white/10 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl p-8 ${
-          isBetaSignup ? "mb-4 md:mb-0" : ""
-        }`}
-      >
+      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-white/10 p-8 shadow-2xl backdrop-blur-xl">
 
         {/* Toggle */}
         <div
