@@ -330,6 +330,16 @@ export default function LoginPage() {
 
   const handleGoogleLogin = async () => {
     if (googleLoading || loading) return
+
+    if (!isLogin && !agreedToTerms) {
+      showPopup({
+        type: "error",
+        message:
+          "You must agree to the Terms of Service and Privacy Policy before creating an account.",
+      })
+      return
+    }
+
     setGoogleLoading(true)
 
     try {
@@ -535,10 +545,44 @@ export default function LoginPage() {
           {isLogin ? "Sign in to continue" : "Create your account"}
         </h2>
 
+        {!isLogin && (
+          <label className="mb-5 flex cursor-pointer items-start gap-3 text-left text-sm leading-snug text-gray-300">
+            <input
+              type="checkbox"
+              checked={agreedToTerms}
+              onChange={(e) => setAgreedToTerms(e.target.checked)}
+              className="mt-0.5 h-4 w-4 shrink-0 rounded border-white/20 bg-white/10 text-blue-500 focus:ring-2 focus:ring-blue-400 focus:ring-offset-0"
+            />
+            <span>
+              I agree to the{" "}
+              <a
+                href="/terms"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-400 underline underline-offset-2 hover:text-blue-300"
+                onClick={(e) => e.stopPropagation()}
+              >
+                Terms of Service
+              </a>{" "}
+              and{" "}
+              <a
+                href="/privacy"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-400 underline underline-offset-2 hover:text-blue-300"
+                onClick={(e) => e.stopPropagation()}
+              >
+                Privacy Policy
+              </a>
+              .
+            </span>
+          </label>
+        )}
+
         <button
           type="button"
           onClick={handleGoogleLogin}
-          disabled={googleLoading || loading}
+          disabled={googleLoading || loading || (!isLogin && !agreedToTerms)}
           className="mb-4 w-full rounded-xl bg-white py-3 font-medium text-black transition hover:scale-105 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {googleLoading ? "Redirecting…" : "Continue with Google"}
@@ -587,40 +631,6 @@ export default function LoginPage() {
             >
               Forgot password?
             </button>
-          )}
-
-          {!isLogin && (
-            <label className="mb-5 flex cursor-pointer items-start gap-3 text-left text-sm leading-snug text-gray-300">
-              <input
-                type="checkbox"
-                checked={agreedToTerms}
-                onChange={(e) => setAgreedToTerms(e.target.checked)}
-                className="mt-0.5 h-4 w-4 shrink-0 rounded border-white/20 bg-white/10 text-blue-500 focus:ring-2 focus:ring-blue-400 focus:ring-offset-0"
-              />
-              <span>
-                I agree to the{" "}
-                <a
-                  href="/terms"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-400 underline underline-offset-2 hover:text-blue-300"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  Terms of Service
-                </a>{" "}
-                and{" "}
-                <a
-                  href="/privacy"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-400 underline underline-offset-2 hover:text-blue-300"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  Privacy Policy
-                </a>
-                .
-              </span>
-            </label>
           )}
 
           <button
