@@ -1,19 +1,20 @@
 "use client"
 
 import { useEffect } from "react"
-import { usePathname, useSearchParams } from "next/navigation"
+import { usePathname } from "next/navigation"
 import { persistReferralCodeFromUrl } from "@/lib/referralPersistence"
 
-/** Persists `?ref=` from any route into localStorage for signup/OAuth flows. */
+/**
+ * Persists `?ref=` from the current URL into localStorage for signup/OAuth flows.
+ * Uses window.location.search inside useEffect only (no useSearchParams) to avoid
+ * root-layout Suspense/hook-order issues during OAuth redirects.
+ */
 export default function ReferralPersistence() {
-  const searchParams = useSearchParams()
   const pathname = usePathname()
 
   useEffect(() => {
-    const ref = searchParams.get("ref")?.trim()
-    if (!ref) return
-    persistReferralCodeFromUrl(`?${searchParams.toString()}`)
-  }, [searchParams, pathname])
+    persistReferralCodeFromUrl()
+  }, [pathname])
 
   return null
 }

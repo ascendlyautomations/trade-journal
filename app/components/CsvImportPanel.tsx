@@ -236,7 +236,6 @@ export default function CsvImportPanel({
     })
 
     const result = await submitCsvSupportRequest(supabase, {
-      userId: user.id,
       csvFile: file,
       brokerName: brokerHint ?? "Unknown",
       notes,

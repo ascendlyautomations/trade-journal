@@ -1,7 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
 export type SubmitCsvSupportInput = {
-  userId: string
   csvFile: File
   brokerName: string
   notes?: string | null
@@ -15,9 +14,19 @@ export async function submitCsvSupportRequest(
   supabase: SupabaseClient,
   input: SubmitCsvSupportInput
 ): Promise<{ ok: true; filePath: string } | { ok: false; message: string }> {
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser()
+
+  if (authError || !user) {
+    return { ok: false, message: "Please log in to submit a CSV sample." }
+  }
+
+  const userId = user.id
   const broker = input.brokerName.trim() || "Unknown"
   const safeName = sanitizeCsvSupportFilename(input.csvFile.name)
-  const filePath = `${input.userId}/${Date.now()}-${safeName}`
+  const filePath = `${userId}/${Date.now()}-${safeName}`
 
   const { error: uploadError } = await supabase.storage
     .from("csv-support")
@@ -31,7 +40,7 @@ export async function submitCsvSupportRequest(
   }
 
   const { error: insertError } = await supabase.from("csv_support_requests").insert({
-    user_id: input.userId,
+    user_id: userId,
     broker_name: broker,
     notes: input.notes?.trim() || null,
     csv_file_url: filePath,

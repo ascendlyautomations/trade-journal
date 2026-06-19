@@ -76,6 +76,7 @@ export default function AdminPage() {
   const [unviewedSupportCount, setUnviewedSupportCount] = useState<number>(0)
   const [openBugReportCount, setOpenBugReportCount] = useState<number>(0)
   const [openFeatureRequestCount, setOpenFeatureRequestCount] = useState<number>(0)
+  const [newCsvSupportCount, setNewCsvSupportCount] = useState<number>(0)
   const [affiliateApplicationCounts, setAffiliateApplicationCounts] =
     useState<AdminAffiliateApplicationCounts | null>(null)
   const [auditPreview, setAuditPreview] = useState<AdminAuditFeedItem[]>([])
@@ -140,6 +141,12 @@ export default function AdminPage() {
           .select("*", { count: "exact", head: true })
           .eq("status", "open")
         if (!cancelled) setOpenFeatureRequestCount(openFeatures || 0)
+
+        const { count: newCsvSupport } = await supabase
+          .from("csv_support_requests")
+          .select("*", { count: "exact", head: true })
+          .eq("status", "new")
+        if (!cancelled) setNewCsvSupportCount(newCsvSupport || 0)
 
         const { data: auditRows, error: auditErr } = await fetchAdminRecentAudit(supabase, 8)
         if (!cancelled) {
@@ -256,6 +263,17 @@ export default function AdminPage() {
               badge={
                 <span className="rounded bg-amber-500 px-2 py-0.5 text-xs font-semibold text-white tabular-nums">
                   {openFeatureRequestCount} open
+                </span>
+              }
+            />
+            <AdminModuleCard
+              href="/admin/csv-support"
+              title="CSV Support"
+              description="Review and download failed CSV import samples submitted by users."
+              variant="blue"
+              badge={
+                <span className="rounded bg-blue-500 px-2 py-0.5 text-xs font-semibold text-white tabular-nums">
+                  {newCsvSupportCount} new
                 </span>
               }
             />

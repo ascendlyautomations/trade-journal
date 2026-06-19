@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { Suspense } from "react";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
@@ -68,10 +67,8 @@ export default function RootLayout({
     >
       <body className="flex flex-col">
         <ToastRoot>
+          <ReferralPersistence />
           <UserProfileProvider>
-            <Suspense fallback={null}>
-              <ReferralPersistence />
-            </Suspense>
             <GettingStartedProgressProvider>
             <SentryIdentifyUser />
             <BannedAccountShell>

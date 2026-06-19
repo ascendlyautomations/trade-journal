@@ -590,6 +590,13 @@ export default function Dashboard() {
     setLoading(false)
   }, [user])
 
+  const handleImportModalComplete = useCallback(async () => {
+    setShowImportModal(false)
+    notifyGettingStartedChecklistMaybeCompleted()
+    dispatchGettingStartedSignalsRefresh()
+    await refreshDashboardData()
+  }, [refreshDashboardData])
+
   useEffect(() => {
     if (profileLoading) return
     if (!user?.id) {
@@ -1403,13 +1410,6 @@ const worstDay = dailyPnLs.length > 0
   function cancelDashboardGearPanel() {
     setShowControls(false)
   }
-
-  const handleImportModalComplete = useCallback(async () => {
-    setShowImportModal(false)
-    notifyGettingStartedChecklistMaybeCompleted()
-    dispatchGettingStartedSignalsRefresh()
-    await refreshDashboardData()
-  }, [refreshDashboardData])
 
   const recentTradesList = (filteredTrades || [])
     .slice()

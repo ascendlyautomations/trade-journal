@@ -61,7 +61,6 @@ function CsvSupportForm() {
     }
 
     const result = await submitCsvSupportRequest(supabase, {
-      userId: user.id,
       csvFile,
       brokerName: broker,
       notes: notes.trim() || null,
