@@ -40,6 +40,12 @@ export default function AdminUsersPage() {
   const [countsLoading, setCountsLoading] = useState(false)
   const [banReason, setBanReason] = useState("")
   const [moderationBusy, setModerationBusy] = useState(false)
+  const [deleteView, setDeleteView] = useState(false)
+  const [deletePreview, setDeletePreview] = useState<Record<string, unknown> | null>(null)
+  const [deletePreviewLoading, setDeletePreviewLoading] = useState(false)
+  const [deleteConfirm, setDeleteConfirm] = useState("")
+  const [deleteBusy, setDeleteBusy] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   useEffect(() => {
     const t = window.setTimeout(() => setDebouncedSearch(search), 300)
@@ -129,7 +135,67 @@ export default function AdminUsersPage() {
   function openRow(row: AdminUserListRow) {
     setSelected(row)
     setBanReason(row.banned_reason || "")
+    setDeleteView(false)
+    setDeletePreview(null)
+    setDeleteConfirm("")
+    setDeleteError(null)
   }
+
+  async function openDeleteView() {
+    if (!selected) return
+    setDeleteView(true)
+    setDeleteConfirm("")
+    setDeleteError(null)
+    setDeletePreviewLoading(true)
+    try {
+      const res = await fetch(`/api/admin/users/${selected.id}/delete-preview`)
+      const data = (await res.json()) as { preview?: Record<string, unknown>; error?: string }
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to load deletion preview")
+      }
+      setDeletePreview(data.preview ?? null)
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Failed to load deletion preview")
+      setDeletePreview(null)
+    } finally {
+      setDeletePreviewLoading(false)
+    }
+  }
+
+  async function handleDeleteUser() {
+    if (!selected || deleteConfirm !== "DELETE") return
+    if (!window.confirm(`Permanently delete @${selected.username || selected.id}? This cannot be undone.`)) {
+      return
+    }
+
+    setDeleteBusy(true)
+    setDeleteError(null)
+    try {
+      const res = await fetch(`/api/admin/users/${selected.id}/delete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmation: "DELETE" }),
+      })
+      const data = (await res.json()) as { error?: string }
+      if (!res.ok) {
+        throw new Error(data.error || "Delete failed")
+      }
+      setSelected(null)
+      setDeleteView(false)
+      setDeletePreview(null)
+      setDeleteConfirm("")
+      await loadDirectory()
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Delete failed")
+    } finally {
+      setDeleteBusy(false)
+    }
+  }
+
+  const deleteBlockedReason =
+    selected && adminUserId && selected.id === adminUserId
+      ? "You cannot delete your own account."
+      : null
 
   async function handleBan() {
     if (!selected || !adminUserId) return
@@ -527,7 +593,7 @@ export default function AdminUsersPage() {
                 {selected.is_banned ? (
                   <button
                     type="button"
-                    disabled={moderationBusy}
+                    disabled={moderationBusy || deleteView}
                     onClick={() => void handleUnban()}
                     className="rounded bg-emerald-600 px-4 py-2 text-sm font-semibold hover:bg-emerald-500 disabled:opacity-50"
                   >
@@ -536,7 +602,7 @@ export default function AdminUsersPage() {
                 ) : (
                   <button
                     type="button"
-                    disabled={moderationBusy}
+                    disabled={moderationBusy || deleteView}
                     onClick={() => void handleBan()}
                     className="rounded bg-red-600 px-4 py-2 text-sm font-semibold hover:bg-red-500 disabled:opacity-50"
                   >
@@ -544,6 +610,126 @@ export default function AdminUsersPage() {
                   </button>
                 )}
               </div>
+            </div>
+
+            <div className="mt-6 rounded-lg border border-red-500/30 bg-red-950/20 p-4">
+              <h3 className="text-sm font-semibold text-red-200">Danger zone</h3>
+              <p className="mt-1 text-xs text-red-200/80">
+                Permanently remove this account and all associated data. For internal administration and test-account cleanup only.
+              </p>
+
+              {!deleteView ? (
+                <button
+                  type="button"
+                  disabled={Boolean(deleteBlockedReason)}
+                  onClick={() => void openDeleteView()}
+                  className="mt-3 rounded border border-red-400/40 bg-red-600/20 px-4 py-2 text-sm font-semibold text-red-100 hover:bg-red-600/30 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Delete user
+                </button>
+              ) : null}
+
+              {deleteBlockedReason ? (
+                <p className="mt-2 text-xs text-amber-300">{deleteBlockedReason}</p>
+              ) : null}
+
+              {deleteView ? (
+                <div className="mt-4 space-y-4 border-t border-red-500/20 pt-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <h4 className="text-sm font-medium text-red-100">Review before deletion</h4>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDeleteView(false)
+                        setDeleteConfirm("")
+                        setDeleteError(null)
+                      }}
+                      className="rounded bg-white/10 px-2 py-1 text-xs hover:bg-white/20"
+                    >
+                      Back
+                    </button>
+                  </div>
+
+                  {deletePreviewLoading ? (
+                    <p className="text-sm text-gray-400">Loading account summary…</p>
+                  ) : deletePreview ? (
+                    <dl className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+                      {[
+                        ["Username", deletePreview.username ? `@${String(deletePreview.username)}` : "—"],
+                        ["Email", deletePreview.email || "—"],
+                        [
+                          "Created",
+                          deletePreview.createdAt
+                            ? new Date(String(deletePreview.createdAt)).toLocaleString()
+                            : "—",
+                        ],
+                        [
+                          "Last login",
+                          deletePreview.lastLoginAt
+                            ? new Date(String(deletePreview.lastLoginAt)).toLocaleString()
+                            : "—",
+                        ],
+                        ["Subscription", deletePreview.subscriptionStatus || "—"],
+                        ["Beta tester", deletePreview.isBetaTester ? "Yes" : "No"],
+                        ["Trades", deletePreview.tradeCount],
+                        ["Posts", deletePreview.postCount],
+                        ["Comments", deletePreview.commentCount],
+                        ["Messages", deletePreview.messageCount],
+                        ["Rooms owned", deletePreview.roomOwnershipCount],
+                        ["Followers", deletePreview.followerCount],
+                        ["Affiliate", deletePreview.affiliateStatus || "—"],
+                        ["Stripe customer", deletePreview.stripeCustomerId || "—"],
+                      ].map(([label, value]) => (
+                        <div key={label} className="flex justify-between gap-2 rounded bg-black/30 px-3 py-2">
+                          <dt className="text-gray-500">{label}</dt>
+                          <dd className="truncate text-right text-gray-200">{String(value)}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  ) : null}
+
+                  <div className="rounded-lg border border-red-500/30 bg-black/40 p-3 text-xs leading-relaxed text-red-100/90">
+                    <p className="font-semibold text-red-200">This action permanently removes:</p>
+                    <ul className="mt-2 list-inside list-disc space-y-1">
+                      <li>Profile</li>
+                      <li>Trades</li>
+                      <li>Posts</li>
+                      <li>Comments</li>
+                      <li>Messages</li>
+                      <li>Notifications</li>
+                      <li>Followers</li>
+                      <li>Trade Rooms</li>
+                      <li>Affiliate data</li>
+                    </ul>
+                    <p className="mt-2 font-medium">This cannot be undone.</p>
+                  </div>
+
+                  <label className="block text-xs text-gray-400">
+                    Type <span className="font-mono text-red-200">DELETE</span> to enable deletion
+                    <input
+                      value={deleteConfirm}
+                      onChange={(e) => setDeleteConfirm(e.target.value)}
+                      autoComplete="off"
+                      spellCheck={false}
+                      className="mt-1 w-full rounded border border-white/10 bg-[#111827] p-2 font-mono text-sm text-white"
+                      placeholder="DELETE"
+                    />
+                  </label>
+
+                  {deleteError ? (
+                    <p className="text-sm text-red-300">{deleteError}</p>
+                  ) : null}
+
+                  <button
+                    type="button"
+                    disabled={deleteBusy || deleteConfirm !== "DELETE" || deletePreviewLoading}
+                    onClick={() => void handleDeleteUser()}
+                    className="w-full rounded bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {deleteBusy ? "Deleting…" : "Permanently delete user"}
+                  </button>
+                </div>
+              ) : null}
             </div>
           </div>
         </div>

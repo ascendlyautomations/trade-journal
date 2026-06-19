@@ -4,6 +4,7 @@ import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 import BannedAccountShell from "./components/BannedAccountShell"
+import OnboardingGateShell from "./components/OnboardingGateShell"
 import SentryIdentifyUser from "./components/SentryIdentifyUser"
 import ToastRoot from "./components/ToastRoot"
 import { UserProfileProvider } from "@/lib/UserProfileProvider"
@@ -69,10 +70,12 @@ export default function RootLayout({
             <GettingStartedProgressProvider>
             <SentryIdentifyUser />
             <BannedAccountShell>
-              {/* pt-16: fixed Navbar offset (AppShell + page-level). Login uses -mt-16. */}
-              <div className="w-full flex flex-col pt-16">
-                {children}
-              </div>
+              <OnboardingGateShell>
+                {/* pt-16: fixed Navbar offset (AppShell + page-level). Login/onboarding use -mt-16. */}
+                <div className="w-full flex flex-col pt-16">
+                  {children}
+                </div>
+              </OnboardingGateShell>
             </BannedAccountShell>
             </GettingStartedProgressProvider>
           </UserProfileProvider>

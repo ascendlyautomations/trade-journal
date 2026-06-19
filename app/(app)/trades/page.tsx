@@ -1,8 +1,5 @@
 "use client"
 
-import ProfileOnboarding, {
-  profileNeedsOnboarding,
-} from "../../components/ProfileOnboarding"
 import { filterTradesForPerformanceSharePool } from "@/lib/performanceShare"
 import { excludeBacktestTrades } from "@/lib/tradeModeFilters"
 import {
@@ -12,8 +9,6 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { supabase } from "../../../lib/supabaseClient"
 import { useRouter } from "next/navigation"
-import { profilePath } from "@/lib/profileRoutes"
-import PostSetupImportModal from "../../components/PostSetupImportModal"
 import TradesPageMainContent from "../../components/TradesPageMainContent"
 import TradesPageOverlays from "../../components/TradesPageOverlays"
 import { ConfirmModal, useDeleteTradeConfirmation } from "../../components/ui"
@@ -37,8 +32,6 @@ export default function TradesPage() {
   const [editingTrade, setEditingTrade] = useState<any | null>(null)
   const [authUserId, setAuthUserId] = useState<string | null>(null)
   const [gateProfile, setGateProfile] = useState<any | null>(null)
-  const [showOnboarding, setShowOnboarding] = useState(false)
-  const [showImportModal, setShowImportModal] = useState(false)
   const [showPerformanceShare, setShowPerformanceShare] = useState(false)
   const [sendTradeId, setSendTradeId] = useState<string | null>(null)
   const [visibleCount, setVisibleCount] = useState(10)
@@ -73,13 +66,6 @@ export default function TradesPage() {
       setEditingTrade({ ...trade })
     }
   }, [loading, trades])
-
-  useEffect(() => {
-    if (loading || !gateProfile) return
-    if (profileNeedsOnboarding(gateProfile)) {
-      setShowOnboarding(true)
-    }
-  }, [loading, gateProfile])
 
   async function initPage() {
     const {
@@ -336,41 +322,6 @@ export default function TradesPage() {
 
   return (
     <>
-      {showOnboarding && authUserId && gateProfile ? (
-        <ProfileOnboarding
-          userId={authUserId}
-          initialUsername={gateProfile.username}
-          initialBio={gateProfile.bio}
-          initialTradingStyle={gateProfile.trading_style}
-          initialTraderType={gateProfile.trader_type}
-          initialPrimaryMarket={gateProfile.primary_market}
-          initialStartedTrading={gateProfile.started_trading}
-          initialAvatarUrl={gateProfile.avatar_url}
-          suppressPostSaveRedirect
-          onComplete={(patch) => {
-            setGateProfile((p: any) => (p ? { ...p, ...patch } : p))
-            setShowOnboarding(false)
-            setShowImportModal(true)
-          }}
-        />
-      ) : null}
-
-      <PostSetupImportModal
-        open={showImportModal}
-        onComplete={async () => {
-          setShowImportModal(false)
-          if (authUserId) {
-            router.push(
-              profilePath({
-                id: authUserId,
-                username: gateProfile?.username,
-              })
-            )
-            router.refresh()
-          }
-        }}
-      />
-
       <div className="w-full text-white px-2 pb-3 pt-0 md:px-4 md:pb-10">
 
         <div className="relative z-50 w-full px-1 md:px-6 md:max-w-[1600px] md:mx-auto">

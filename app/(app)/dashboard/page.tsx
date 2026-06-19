@@ -17,10 +17,6 @@ import {
   sanitizeHydratedDashboardFilters,
   sanitizeDrawdownLimitInput,
 } from "../../components/dashboard/dashboardGearUtils"
-import ProfileOnboarding, {
-  profileNeedsOnboarding,
-} from "../../components/ProfileOnboarding"
-import PostSetupImportModal from "../../components/PostSetupImportModal"
 import PerformanceShareModal from "../../components/PerformanceShareModal"
 import LockedFeature from "../../components/LockedFeature"
 import EmptyState from "../../components/ui/EmptyState"
@@ -29,7 +25,6 @@ import Link from "next/link"
 import { useCallback, useEffect, useState, useMemo, useRef } from "react"
 import {
   mirrorAccountSettingsMaxDrawdownLimit,
-  mirrorAccountSettingsOnboardingCompleted,
 } from "@/lib/profileSplitMirrorWrites"
 import { supabase } from "../../../lib/supabaseClient"
 import { isProActive } from "../../../lib/subscription"
@@ -46,7 +41,6 @@ import {
 } from "@/lib/formatDate"
 import {
   dispatchGettingStartedSignalsRefresh,
-  notifyGettingStartedChecklistMaybeCompleted,
 } from "@/lib/gettingStartedProgressSync"
 import { shouldShowGettingStartedChecklist } from "@/lib/gettingStartedChecklist"
 import { useGettingStartedProgress } from "@/lib/GettingStartedProgressProvider"
@@ -491,9 +485,6 @@ export default function Dashboard() {
     setProfile,
     refreshProfile,
   } = useUserProfile()
-  const [showOnboarding, setShowOnboarding] = useState(false)
-  const [profileOnboardingDone, setProfileOnboardingDone] = useState(false)
-  const [showImportModal, setShowImportModal] = useState(false)
   const [trades, setTrades] = useState<any[]>([])
   const [accountFilter, setAccountFilter] = useState("all")
   const [accountTypeFilter, setAccountTypeFilter] = useState("all")
@@ -611,49 +602,6 @@ export default function Dashboard() {
     if (params.get("checkout") !== "success") return
     void refreshDashboardData()
   }, [refreshDashboardData])
-
-  useEffect(() => {
-    if (loading || !profile || !user) return
-    if (!profileNeedsOnboarding(profile)) return
-    if (profileOnboardingDone) return
-    setShowOnboarding(true)
-  }, [loading, profile, user, profileOnboardingDone])
-
-  useEffect(() => {
-    if (loading || !profile || !user) return
-    if (profile.onboarding_completed === true) {
-      setShowImportModal(false)
-      return
-    }
-    if (showOnboarding) return
-    if (profileOnboardingDone) {
-      setShowImportModal(true)
-    }
-  }, [loading, profile, user, showOnboarding, profileOnboardingDone])
-
-  async function completeCsvOnboarding() {
-    if (!user?.id) return
-    const { error } = await supabase
-      .from("profiles")
-      .update({ onboarding_completed: true })
-      .eq("id", user.id)
-    if (error) {
-      console.error("completeCsvOnboarding:", error)
-    } else {
-      const { error: mirrorErr } = await mirrorAccountSettingsOnboardingCompleted(
-        supabase,
-        user.id,
-        true
-      )
-      if (mirrorErr) {
-        console.error("mirror account_settings.onboarding_completed:", mirrorErr)
-      }
-    }
-    setProfile((p: any) => (p ? { ...p, onboarding_completed: true } : p))
-    setShowImportModal(false)
-    notifyGettingStartedChecklistMaybeCompleted()
-    await refreshDashboardData()
-  }
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -1577,30 +1525,6 @@ const worstDay = dailyPnLs.length > 0
   return (
     <>
       <FeedbackModal {...feedbackModalProps} />
-      {showOnboarding && user && profile ? (
-        <ProfileOnboarding
-          userId={user.id}
-          initialUsername={profile.username}
-          initialBio={profile.bio}
-          initialTradingStyle={profile.trading_style}
-          initialTraderType={profile.trader_type}
-          initialPrimaryMarket={profile.primary_market}
-          initialStartedTrading={profile.started_trading}
-          initialAvatarUrl={profile.avatar_url}
-          suppressPostSaveRedirect
-          onComplete={(patch) => {
-            setProfile((p: any) => (p ? { ...p, ...patch } : p))
-            setProfileOnboardingDone(true)
-            setShowOnboarding(false)
-            setShowImportModal(true)
-          }}
-        />
-      ) : null}
-
-      <PostSetupImportModal
-        open={showImportModal}
-        onComplete={() => void completeCsvOnboarding()}
-      />
 
       <div className="w-full text-white px-3 pb-3 pt-0 md:px-10 md:pb-10">
 
