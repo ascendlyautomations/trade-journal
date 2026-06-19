@@ -10,6 +10,18 @@ import {
   submitBugReport,
   type BugReportSeverity,
 } from "@/lib/bugReports"
+import {
+  submissionFileBrowse,
+  submissionFilePicker,
+  submissionFormCard,
+  submissionInput,
+  submissionLabel,
+  submissionSelect,
+  submissionSubmitButton,
+  submissionSubtitle,
+  submissionTextarea,
+  submissionTitle,
+} from "@/lib/submissionFormStyles"
 
 const SUCCESS_AUTO_CLOSE_MS = 1000
 
@@ -130,19 +142,19 @@ export default function BugReportModal({
       }}
     >
       <div
-        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-white/10 bg-[#152238] p-6 text-white shadow-2xl"
+        className={`max-h-[90vh] w-full max-w-lg overflow-y-auto ${submissionFormCard}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="bug-report-title"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-start justify-between gap-3">
-          <div>
-            <h2 id="bug-report-title" className="text-lg font-semibold text-white">
+          <div className="min-w-0 flex-1">
+            <h2 id="bug-report-title" className={submissionTitle}>
               Report a bug
             </h2>
-            <p className="mt-1 text-sm text-gray-400">
-              Help us improve TradeTraxs during beta. Page and browser details are captured
+            <p className={`${submissionSubtitle} mb-0 mt-2 text-left`}>
+              Help us improve TradeTraxs. Page and browser details are captured
               automatically.
             </p>
           </div>
@@ -150,7 +162,7 @@ export default function BugReportModal({
             type="button"
             onClick={onClose}
             disabled={busy || success}
-            className="rounded px-2 py-1 text-gray-400 hover:bg-white/10 hover:text-white disabled:opacity-50"
+            className="shrink-0 rounded px-2 py-1 text-gray-400 hover:bg-white/10 hover:text-white disabled:opacity-50"
             aria-label="Close"
           >
             ✕
@@ -162,62 +174,60 @@ export default function BugReportModal({
             Thanks — your report was submitted.
           </p>
         ) : (
-          <form className="space-y-4" onSubmit={(e) => void handleSubmit(e)}>
-            <div>
-              <label className="mb-1 block text-sm text-gray-300" htmlFor="bug-title">
-                Title
-              </label>
-              <input
-                id="bug-title"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                required
-                maxLength={200}
-                disabled={busy}
-                className="w-full rounded-lg border border-white/10 bg-[#0f172a] px-3 py-2 text-sm text-white outline-none ring-blue-500/40 focus:ring-2 disabled:opacity-50"
-                placeholder="Short summary of the issue"
-              />
-            </div>
+          <form className="space-y-1" onSubmit={(e) => void handleSubmit(e)}>
+            <label className={submissionLabel} htmlFor="bug-title">
+              Title
+            </label>
+            <input
+              id="bug-title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              required
+              maxLength={200}
+              disabled={busy}
+              className={submissionInput}
+              placeholder="Short summary of the issue"
+            />
 
-            <div>
-              <label className="mb-1 block text-sm text-gray-300" htmlFor="bug-description">
-                Description
-              </label>
-              <textarea
-                id="bug-description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                required
-                rows={5}
-                disabled={busy}
-                className="w-full resize-y rounded-lg border border-white/10 bg-[#0f172a] px-3 py-2 text-sm text-white outline-none ring-blue-500/40 focus:ring-2 disabled:opacity-50"
-                placeholder="What happened? What did you expect? Steps to reproduce?"
-              />
-            </div>
+            <label className={submissionLabel} htmlFor="bug-description">
+              Description
+            </label>
+            <textarea
+              id="bug-description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              required
+              rows={5}
+              disabled={busy}
+              className={submissionTextarea}
+              placeholder="What happened? What did you expect? Steps to reproduce?"
+            />
 
-            <div>
-              <label className="mb-1 block text-sm text-gray-300" htmlFor="bug-severity">
-                Severity
-              </label>
-              <select
-                id="bug-severity"
-                value={severity}
-                onChange={(e) => setSeverity(e.target.value as BugReportSeverity)}
-                disabled={busy}
-                className="w-full rounded-lg border border-white/10 bg-[#0f172a] px-3 py-2 text-sm text-white outline-none ring-blue-500/40 focus:ring-2 disabled:opacity-50"
-              >
-                {BUG_REPORT_SEVERITY_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <label className={submissionLabel} htmlFor="bug-severity">
+              Severity
+            </label>
+            <select
+              id="bug-severity"
+              value={severity}
+              onChange={(e) => setSeverity(e.target.value as BugReportSeverity)}
+              disabled={busy}
+              className={submissionSelect}
+            >
+              {BUG_REPORT_SEVERITY_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
 
-            <div>
-              <label className="mb-1 block text-sm text-gray-300" htmlFor="bug-screenshot">
-                Screenshot (optional)
-              </label>
+            <label className={submissionLabel} htmlFor="bug-screenshot">
+              Screenshot (optional)
+            </label>
+            <label className={submissionFilePicker}>
+              <span className="truncate">
+                {screenshot ? screenshot.name : "Choose an image..."}
+              </span>
+              <span className={submissionFileBrowse}>Browse</span>
               <input
                 ref={fileInputRef}
                 id="bug-screenshot"
@@ -225,11 +235,11 @@ export default function BugReportModal({
                 accept="image/*"
                 disabled={busy || success}
                 onChange={(e) => setScreenshot(e.target.files?.[0] ?? null)}
-                className="block w-full text-sm text-gray-300 file:mr-3 file:rounded file:border-0 file:bg-white/10 file:px-3 file:py-1.5 file:text-sm file:text-gray-100"
+                className="hidden"
               />
-            </div>
+            </label>
 
-            <div className="rounded-lg border border-white/5 bg-black/20 px-3 py-2 text-xs text-gray-500">
+            <div className="mb-4 rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-xs text-gray-500">
               <p>
                 <span className="text-gray-400">Page:</span> {pageUrl || "—"}
               </p>
@@ -239,24 +249,24 @@ export default function BugReportModal({
             </div>
 
             {error ? (
-              <p className="rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+              <p className="mb-3 rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
                 {error}
               </p>
             ) : null}
 
-            <div className="flex justify-end gap-2 pt-1">
+            <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end">
               <button
                 type="button"
                 onClick={onClose}
                 disabled={busy || success}
-                className="rounded-lg border border-white/10 px-4 py-2 text-sm text-gray-200 hover:bg-white/5 disabled:opacity-50"
+                className="rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-medium text-gray-200 transition hover:bg-white/10 disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={busy || success || !title.trim() || !description.trim()}
-                className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+                className={`${submissionSubmitButton} sm:w-auto sm:min-w-[10rem] sm:px-6`}
               >
                 {busy && !success ? "Submitting…" : "Submit report"}
               </button>

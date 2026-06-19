@@ -6,6 +6,24 @@ import Navbar from "../components/Navbar"
 import { supabase } from "../../lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
 import { notifyAdminSubmission } from "@/lib/notifyAdminSubmission"
+import {
+  submissionFileBrowse,
+  submissionFilePicker,
+  submissionFormCard,
+  submissionHistoryCard,
+  submissionHistoryItem,
+  submissionHistoryList,
+  submissionInput,
+  submissionLabel,
+  submissionPageContainer,
+  submissionPageShell,
+  submissionSelect,
+  submissionStatusPill,
+  submissionSubmitButton,
+  submissionSubtitle,
+  submissionTextarea,
+  submissionTitle,
+} from "@/lib/submissionFormStyles"
 
 const CATEGORIES = [
   { value: "bug", label: "Bug" },
@@ -149,24 +167,19 @@ export default function SupportPage() {
   return (
     <>
       <Navbar />
-      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 py-8 md:px-6 text-white">
-        <div className="mx-auto w-full max-w-2xl space-y-8">
-          <form
-            onSubmit={handleSubmit}
-            className="rounded-2xl border border-white/10 bg-white/10 p-5 md:p-8 shadow-2xl backdrop-blur-xl"
-          >
-            <h1 className="text-center text-2xl font-semibold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
-              Need help?
-            </h1>
-            <p className="mt-2 mb-6 text-center text-sm text-gray-300">
+      <div className={submissionPageShell}>
+        <div className={submissionPageContainer}>
+          <form onSubmit={handleSubmit} className={submissionFormCard}>
+            <h1 className={submissionTitle}>Need help?</h1>
+            <p className={submissionSubtitle}>
               Submit a support request and we&apos;ll review it as soon as possible.
             </p>
 
-            <label className="mb-2 block text-sm text-gray-300">Category</label>
+            <label className={submissionLabel}>Category</label>
             <select
               value={category}
               onChange={(e) => setCategory(e.target.value)}
-              className="mb-4 w-full rounded-xl border border-white/10 bg-[#111827] px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+              className={submissionSelect}
             >
               {CATEGORIES.map((c) => (
                 <option key={c.value} value={c.value}>
@@ -175,28 +188,28 @@ export default function SupportPage() {
               ))}
             </select>
 
-            <label className="mb-2 block text-sm text-gray-300">Subject</label>
+            <label className={submissionLabel}>Subject</label>
             <input
               type="text"
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
               placeholder="Short summary of your issue"
-              className="mb-4 w-full rounded-xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400"
+              className={submissionInput}
             />
 
-            <label className="mb-2 block text-sm text-gray-300">Message</label>
+            <label className={submissionLabel}>Message</label>
             <textarea
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               placeholder="Describe what happened and what you need."
               rows={6}
-              className="mb-4 w-full resize-none rounded-xl border border-white/10 bg-white/10 px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400"
+              className={submissionTextarea}
             />
 
-            <label className="mb-2 block text-sm text-gray-300">Screenshot (optional)</label>
-            <label className="mb-4 flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-gray-200 hover:bg-white/15">
+            <label className={submissionLabel}>Screenshot (optional)</label>
+            <label className={submissionFilePicker}>
               <span className="truncate">{image ? image.name : "Choose an image..."}</span>
-              <span className="rounded bg-white px-3 py-1 text-xs font-medium text-black">Browse</span>
+              <span className={submissionFileBrowse}>Browse</span>
               <input
                 type="file"
                 accept="image/*"
@@ -211,26 +224,28 @@ export default function SupportPage() {
             <button
               type="submit"
               disabled={loading || !subject.trim() || !message.trim()}
-              className="w-full rounded-xl bg-gradient-to-r from-blue-500 to-teal-400 py-3 font-semibold transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100"
+              className={submissionSubmitButton}
             >
               {loading ? "Submitting..." : "Submit request"}
             </button>
           </form>
 
-          <section className="rounded-2xl border border-white/10 bg-white/5 p-5 md:p-6 backdrop-blur-sm">
+          <section className={submissionHistoryCard}>
             <h2 className="text-lg font-semibold text-white">Your recent requests</h2>
-            <p className="mt-1 text-sm text-gray-400">Subject, status, and date for tickets you opened.</p>
+            <p className="mt-1 text-sm text-gray-400">
+              Subject, status, and date for tickets you opened.
+            </p>
             {historyLoading ? (
               <p className="mt-4 text-sm text-gray-400">Loading...</p>
             ) : !history.length ? (
               <p className="mt-4 text-sm text-gray-400">No support requests yet.</p>
             ) : (
-              <ul className="mt-4 divide-y divide-white/10 rounded-xl border border-white/10 bg-black/20">
+              <ul className={submissionHistoryList}>
                 {history.map((row) => (
-                  <li key={row.id} className="flex flex-col gap-1 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+                  <li key={row.id} className={submissionHistoryItem}>
                     <span className="font-medium text-gray-100">{row.subject}</span>
                     <div className="flex flex-wrap items-center gap-2 text-xs text-gray-400">
-                      <span className="rounded bg-white/10 px-2 py-0.5 capitalize text-gray-200">
+                      <span className={submissionStatusPill}>
                         {row.status || "open"}
                       </span>
                       <span className="tabular-nums">

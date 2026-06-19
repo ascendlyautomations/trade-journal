@@ -8,6 +8,7 @@ const VALID_TYPES = new Set<AdminSubmissionType>([
   "feature_request",
   "support_ticket",
   "csv_support_request",
+  "feedback_submission",
 ])
 
 export async function POST(req: Request) {

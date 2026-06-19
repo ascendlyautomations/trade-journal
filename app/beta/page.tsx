@@ -2,13 +2,26 @@
 
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import Navbar from "@/app/components/Navbar"
 import BugReportModal from "@/app/components/BugReportModal"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { BETA_ROOM_SLUG } from "@/lib/betaHub"
 import { submitFeatureRequest } from "@/lib/featureRequests"
 import { supabase } from "@/lib/supabaseClient"
+import {
+  submissionFormCard,
+  submissionHistoryCard,
+  submissionHistoryItem,
+  submissionHistoryList,
+  submissionInput,
+  submissionLabel,
+  submissionStatusPill,
+  submissionSubmitButton,
+  submissionSubtitle,
+  submissionTextarea,
+  submissionTitle,
+} from "@/lib/submissionFormStyles"
 
 const ACTION_CARD_CLASS =
   "group flex h-full cursor-pointer flex-col rounded-xl border border-white/15 bg-white/[0.06] p-5 text-left shadow-md transition-all duration-200 hover:scale-[1.02] hover:border-white/25 hover:bg-white/[0.12] hover:shadow-lg motion-reduce:hover:scale-100"
@@ -18,6 +31,13 @@ const ACTION_CTA_CLASS =
 
 const PRIMARY_CTA_CLASS =
   "w-full rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md shadow-amber-900/30 transition hover:scale-[1.02] hover:from-amber-400 hover:to-amber-500 hover:shadow-lg hover:shadow-amber-900/40 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100 motion-reduce:hover:scale-100 sm:w-auto"
+
+type FeatureRequestRow = {
+  id: string
+  title: string
+  status: string | null
+  created_at: string | null
+}
 
 function DiscussionIcon({ className }: { className?: string }) {
   return (
@@ -43,6 +63,26 @@ export default function BetaHubPage() {
   const [featureDescription, setFeatureDescription] = useState("")
   const [featureBusy, setFeatureBusy] = useState(false)
   const featureSubmittingRef = useRef(false)
+  const [featureHistory, setFeatureHistory] = useState<FeatureRequestRow[]>([])
+  const [featureHistoryLoading, setFeatureHistoryLoading] = useState(false)
+
+  const loadFeatureHistory = useCallback(async (uid: string) => {
+    setFeatureHistoryLoading(true)
+    const { data, error } = await supabase
+      .from("feature_requests")
+      .select("id, title, status, created_at")
+      .eq("user_id", uid)
+      .order("created_at", { ascending: false })
+      .limit(25)
+
+    if (error) {
+      console.error("[beta] feature history fetch failed", error)
+      setFeatureHistory([])
+    } else {
+      setFeatureHistory((data as FeatureRequestRow[]) || [])
+    }
+    setFeatureHistoryLoading(false)
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -71,12 +111,13 @@ export default function BetaHubPage() {
 
       setUserId(user.id)
       setChecking(false)
+      void loadFeatureHistory(user.id)
     })()
 
     return () => {
       cancelled = true
     }
-  }, [router])
+  }, [router, loadFeatureHistory])
 
   async function handleFeatureSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -99,6 +140,7 @@ export default function BetaHubPage() {
     setFeatureTitle("")
     setFeatureDescription("")
     showPopup({ type: "success", message: "Feature request submitted. Thank you!" })
+    void loadFeatureHistory(userId)
     } finally {
       featureSubmittingRef.current = false
       setFeatureBusy(false)
@@ -181,35 +223,67 @@ export default function BetaHubPage() {
             </div>
           </section>
 
-          <section className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-5">
-            <h2 className="text-lg font-semibold text-amber-100">Feature request</h2>
-            <p className="mt-1 text-sm text-gray-400">
+          <section className={submissionFormCard}>
+            <h2 className={submissionTitle}>Feature request</h2>
+            <p className={submissionSubtitle}>
               Describe a feature you&apos;d like to see in TradeTraxs.
             </p>
-            <form onSubmit={(e) => void handleFeatureSubmit(e)} className="mt-4 space-y-3">
+            <form onSubmit={(e) => void handleFeatureSubmit(e)}>
+              <label className={submissionLabel}>Title</label>
               <input
                 type="text"
-                placeholder="Title"
+                placeholder="Short summary"
                 value={featureTitle}
                 onChange={(e) => setFeatureTitle(e.target.value)}
-                className="w-full rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-400/50"
+                className={submissionInput}
                 maxLength={200}
               />
+              <label className={submissionLabel}>Description</label>
               <textarea
-                placeholder="Description — what problem does this solve? How would it work?"
+                placeholder="What problem does this solve? How would it work?"
                 value={featureDescription}
                 onChange={(e) => setFeatureDescription(e.target.value)}
                 rows={5}
-                className="w-full resize-y rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-amber-400/50"
+                className={submissionTextarea}
               />
               <button
                 type="submit"
                 disabled={featureBusy}
-                className={PRIMARY_CTA_CLASS}
+                className={submissionSubmitButton}
               >
                 {featureBusy ? "Submitting..." : "Submit Feature Request"}
               </button>
             </form>
+          </section>
+
+          <section className={submissionHistoryCard}>
+            <h2 className="text-lg font-semibold text-white">Your recent feature requests</h2>
+            <p className="mt-1 text-sm text-gray-400">
+              Title, status, and date for requests you submitted.
+            </p>
+            {featureHistoryLoading ? (
+              <p className="mt-4 text-sm text-gray-400">Loading...</p>
+            ) : !featureHistory.length ? (
+              <p className="mt-4 text-sm text-gray-400">No feature requests yet.</p>
+            ) : (
+              <ul className={submissionHistoryList}>
+                {featureHistory.map((row) => (
+                  <li key={row.id} className={submissionHistoryItem}>
+                    <span className="font-medium text-gray-100">{row.title}</span>
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-gray-400">
+                      <span className={submissionStatusPill}>
+                        {row.status || "open"}
+                      </span>
+                      <span className="tabular-nums">
+                        {row.created_at
+                          ? new Date(row.created_at).toLocaleString()
+                          : "—"}
+                      </span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
           </section>
 
           <div className="grid gap-4 sm:grid-cols-2">

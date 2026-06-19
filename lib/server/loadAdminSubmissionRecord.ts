@@ -147,5 +147,34 @@ export async function loadAdminSubmissionEmailContext(
     }
   }
 
+  if (type === "feedback_submission") {
+    const { data, error } = await admin
+      .from("feedback_submissions")
+      .select(
+        "id, user_id, email, subject, message, screenshot_url, status, created_at"
+      )
+      .eq("id", recordId)
+      .maybeSingle()
+
+    if (error || !data || data.user_id !== userId) {
+      return { ok: false, status: 404, error: "Feedback submission not found" }
+    }
+
+    return {
+      ok: true,
+      context: {
+        ...base,
+        createdAt: data.created_at,
+        title: data.subject || "Feedback",
+        description: data.message,
+        userEmail: data.email ?? userEmail,
+        extraFields: [
+          { label: "Status", value: data.status },
+          { label: "Screenshot", value: data.screenshot_url },
+        ],
+      },
+    }
+  }
+
   return { ok: false, status: 400, error: "Unknown submission type" }
 }
