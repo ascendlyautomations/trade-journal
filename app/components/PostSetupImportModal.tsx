@@ -274,6 +274,7 @@ export default function PostSetupImportModal({ open, onComplete }: Props) {
               selectedAccount={csvAccount}
               requireSelectedAccount
               delegateSuccessFeedback
+              importSource="post_setup_import_modal"
               onImportSuccess={handleImportSuccess}
             />
           </div>

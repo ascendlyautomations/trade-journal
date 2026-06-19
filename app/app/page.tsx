@@ -232,9 +232,14 @@ export default function Home() {
   }
 
   function handleTryAnotherFile() {
-    setFailureModalOpen(false)
-    clearCsvUploadState()
+    resetCsvInput()
+    lastCsvFileRef.current = null
+    setParsedTrades([])
+    setCsvUnrecognized(false)
+    setCsvBrokerHint(null)
+    setCsvDiagnostics(null)
     csvInputRef.current?.click()
+    setFailureModalOpen(false)
   }
 
   function handleFailureCancel() {
@@ -278,8 +283,8 @@ export default function Home() {
           <input
             ref={csvInputRef}
             type="file"
-            accept=".csv"
-            className="hidden"
+            accept=".csv,text/csv"
+            className="sr-only"
             onChange={(e) => void handleCSVUpload(e)}
           />
 

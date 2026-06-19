@@ -259,9 +259,14 @@ export default function CsvImportPanel({
   }
 
   function handleTryAnotherFile() {
-    setFailureModalOpen(false)
-    clearCsvState()
+    resetFileInput()
+    lastCsvFileRef.current = null
+    setParsed([])
+    setUnrecognized(false)
+    setBrokerHint(null)
+    setDiagnostics(null)
     fileInputRef.current?.click()
+    setFailureModalOpen(false)
   }
 
   function handleFailureCancel() {
@@ -470,7 +475,6 @@ export default function CsvImportPanel({
         onSubmit={() => void handleSubmitCsvSupport()}
         onTryAnother={handleTryAnotherFile}
         onCancel={handleFailureCancel}
-        overlayClassName={compact ? "z-[1300]" : undefined}
       />
       {unrecognized ? (
         <CsvImportUnsupportedBanner brokerHint={brokerHint} />
@@ -489,7 +493,7 @@ export default function CsvImportPanel({
           const file = e.target.files?.[0]
           if (file) void handleFile(file)
         }}
-        className="block w-full text-sm text-gray-300 file:mr-3 file:rounded-lg file:border-0 file:bg-emerald-500/20 file:px-3 file:py-1.5 file:text-sm file:text-emerald-200"
+        className="block w-full text-sm text-gray-300 file:mr-3 file:min-h-[44px] file:rounded-lg file:border-0 file:bg-emerald-500/20 file:px-3 file:py-2.5 file:text-sm file:text-emerald-200"
       />
 
       {parsed.length > 0 ? (

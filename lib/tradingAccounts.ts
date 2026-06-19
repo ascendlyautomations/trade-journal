@@ -1,5 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { isProActive } from "@/lib/subscription"
+import {
+  normalizeAccountCategoryForForm,
+  normalizeAccountModeForForm,
+  type AccountType,
+} from "@/lib/createAccountForm"
 
 export type TradingAccountPropFirmRules = {
   consistency: number | null
@@ -19,6 +24,16 @@ export type TradingAccountListItem = {
   category: string | null
   is_active: boolean
   note: string
+  rules: TradingAccountPropFirmRules | null
+}
+
+export type AccountFormInitialValues = {
+  name: string
+  size: string
+  accountNumber: string
+  category: AccountType
+  mode: string
+  rules: TradingAccountPropFirmRules | null
 }
 
 export type CreateTradingAccountPayload = {
@@ -58,7 +73,25 @@ export function tradingAccountDisplayTitle(account: TradingAccountListItem): str
   return sizePart ? `${account.name} ${sizePart}` : account.name
 }
 
+function mapPropFirmRules(
+  acc: Record<string, unknown>
+): TradingAccountPropFirmRules {
+  const num = (value: unknown) =>
+    value != null && value !== "" && !Number.isNaN(Number(value))
+      ? Number(value)
+      : null
+
+  return {
+    consistency: num(acc.consistency),
+    maxDrawdown: num(acc.max_drawdown),
+    dailyDrawdown: num(acc.daily_drawdown),
+    profitTarget: num(acc.profit_target),
+    winningDays: num(acc.winning_days),
+  }
+}
+
 function mapAccountRow(acc: Record<string, unknown>): TradingAccountListItem {
+  const category = acc.category != null ? String(acc.category) : null
   return {
     name: String(acc.name ?? ""),
     size: acc.account_size != null ? String(acc.account_size) : "",
@@ -66,9 +99,24 @@ function mapAccountRow(acc: Record<string, unknown>): TradingAccountListItem {
     account_number:
       acc.account_number != null ? String(acc.account_number) : null,
     mode: acc.mode != null ? String(acc.mode) : null,
-    category: acc.category != null ? String(acc.category) : null,
+    category,
     is_active: acc.is_active !== false,
     note: acc.note != null ? String(acc.note) : "",
+    rules: category === "Prop Firm" ? mapPropFirmRules(acc) : null,
+  }
+}
+
+export function tradingAccountToFormValues(
+  account: TradingAccountListItem
+): AccountFormInitialValues {
+  const category = normalizeAccountCategoryForForm(account.category)
+  return {
+    name: account.name,
+    size: account.size.replace(/\D/g, ""),
+    accountNumber: account.account_number ?? "",
+    category,
+    mode: normalizeAccountModeForForm(account.mode, category),
+    rules: account.rules,
   }
 }
 
@@ -168,6 +216,82 @@ export async function insertTradingAccount(
 
   if (!data) {
     return { account: null, error: new Error("Account was not created") }
+  }
+
+  return {
+    account: mapAccountRow(data as Record<string, unknown>),
+    error: null,
+  }
+}
+
+function mergePropFirmRules(
+  next: TradingAccountPropFirmRules | null,
+  previous: TradingAccountPropFirmRules | null
+): TradingAccountPropFirmRules | null {
+  if (!next) return null
+  return {
+    consistency: next.consistency ?? previous?.consistency ?? null,
+    maxDrawdown: next.maxDrawdown ?? previous?.maxDrawdown ?? null,
+    dailyDrawdown: next.dailyDrawdown ?? previous?.dailyDrawdown ?? null,
+    profitTarget: next.profitTarget ?? previous?.profitTarget ?? null,
+    winningDays: next.winningDays ?? previous?.winningDays ?? null,
+  }
+}
+
+/** Updates an existing account row — owner-only via RLS + user_id filter. */
+export async function updateTradingAccount(
+  client: SupabaseClient,
+  userId: string,
+  accountId: string,
+  payload: CreateTradingAccountPayload,
+  previous: TradingAccountListItem
+): Promise<{ account: TradingAccountListItem | null; error: Error | null }> {
+  const name = payload.name.trim()
+  if (!name) {
+    return { account: null, error: new Error("Account name is required") }
+  }
+
+  const accountSize = payload.size.trim() ? payload.size : previous.size
+  const accountNumber = payload.id.trim()
+    ? payload.id.trim()
+    : (previous.account_number ?? "")
+
+  const rules =
+    payload.category === "Prop Firm"
+      ? mergePropFirmRules(payload.rules, previous.rules)
+      : null
+
+  const { data, error } = await client
+    .from("accounts")
+    .update({
+      name,
+      account_size: accountSize || null,
+      account_number: accountNumber || null,
+      category: payload.category,
+      mode: payload.mode,
+      consistency: rules?.consistency ?? null,
+      max_drawdown: rules?.maxDrawdown ?? null,
+      daily_drawdown: rules?.dailyDrawdown ?? null,
+      profit_target: rules?.profitTarget ?? null,
+      winning_days: rules?.winningDays ?? null,
+    })
+    .eq("id", accountId)
+    .eq("user_id", userId)
+    .select()
+    .single()
+
+  if (error) {
+    if (error.code === "23505") {
+      return {
+        account: null,
+        error: new Error("An account with this name already exists"),
+      }
+    }
+    return { account: null, error: new Error(error.message) }
+  }
+
+  if (!data) {
+    return { account: null, error: new Error("Account was not updated") }
   }
 
   return {

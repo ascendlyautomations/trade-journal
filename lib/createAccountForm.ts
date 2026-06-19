@@ -83,3 +83,27 @@ export function resolveAccountModeForSave(
   if (category === "Personal" || category === "Broker") return mode
   return "Live"
 }
+
+export function normalizeAccountCategoryForForm(
+  category: string | null | undefined
+): AccountType {
+  const c = String(category ?? "").trim()
+  if ((ACCOUNT_TYPES as readonly string[]).includes(c)) {
+    return c as AccountType
+  }
+  return "Personal"
+}
+
+/** Maps stored `accounts.mode` to Create/Edit account form select values. */
+export function normalizeAccountModeForForm(
+  mode: string | null | undefined,
+  category: AccountType
+): string {
+  const m = String(mode ?? "").trim().toLowerCase()
+  if (m === "eval") return "Eval"
+  if (m === "funded") return "Funded"
+  if (m === "live") return "Live"
+  if (m === "sim") return "Sim"
+  if (m === "backtest") return "backtest"
+  return defaultModeForAccountType(category)
+}

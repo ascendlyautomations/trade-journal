@@ -7,7 +7,6 @@ import CreateAccountModal, {
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { feedbackPresets } from "@/lib/feedbackPresets"
 import { supabase } from "@/lib/supabaseClient"
-import { isProActive } from "@/lib/subscription"
 import {
   assertCanCreateTradingAccount,
   formatTradingAccountMode,
@@ -16,6 +15,8 @@ import {
   loadTradingAccounts,
   setTradingAccountActive,
   tradingAccountDisplayTitle,
+  tradingAccountToFormValues,
+  updateTradingAccount,
   updateTradingAccountNote,
   type TradingAccountListItem,
 } from "@/lib/tradingAccounts"
@@ -48,13 +49,22 @@ export default function TradingAccountsSettingsSection({
   const [togglingId, setTogglingId] = useState<string | null>(null)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [creating, setCreating] = useState(false)
+  const [editModalAccount, setEditModalAccount] =
+    useState<TradingAccountListItem | null>(null)
+  const [savingEdit, setSavingEdit] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [page, setPage] = useState(0)
-  const [editingAccount, setEditingAccount] =
+  const [noteEditingAccount, setNoteEditingAccount] =
     useState<TradingAccountListItem | null>(null)
   const [savingNoteId, setSavingNoteId] = useState<string | null>(null)
 
   const canCreateMore = isPro || accounts.length < 1
+
+  const editFormValues = useMemo(
+    () =>
+      editModalAccount ? tradingAccountToFormValues(editModalAccount) : null,
+    [editModalAccount]
+  )
 
   const filteredAccounts = useMemo(() => {
     const sorted = sortAccountsForDisplay(accounts)
@@ -165,7 +175,39 @@ export default function TradingAccountsSettingsSection({
   }
 
   function openNoteEditor(account: TradingAccountListItem) {
-    setEditingAccount({ ...account, note: account.note ?? "" })
+    setNoteEditingAccount({ ...account, note: account.note ?? "" })
+  }
+
+  async function handleEditAccountSave(newAccount: CreateAccountSavePayload) {
+    if (!userId || !editModalAccount || savingEdit) return
+
+    setSavingEdit(true)
+    const { account, error } = await updateTradingAccount(
+      supabase,
+      userId,
+      editModalAccount.id,
+      newAccount,
+      editModalAccount
+    )
+    setSavingEdit(false)
+
+    if (error) {
+      console.error(error)
+      showPopup({
+        type: "error",
+        message:
+          error.message === "An account with this name already exists"
+            ? error.message
+            : "Something went wrong",
+      })
+      return
+    }
+
+    if (!account) return
+
+    setEditModalAccount(null)
+    showPopup({ type: "success", message: "Account updated" })
+    await refreshAccounts()
   }
 
   async function saveNote(account: TradingAccountListItem) {
@@ -190,7 +232,7 @@ export default function TradingAccountsSettingsSection({
         a.id === account.id ? { ...a, note: noteVal } : a
       )
     )
-    setEditingAccount(null)
+    setNoteEditingAccount(null)
   }
 
   return (
@@ -233,7 +275,7 @@ export default function TradingAccountsSettingsSection({
                     const isActive = account.is_active
                     const busy = togglingId === account.id
                     const isEditingNote =
-                      editingAccount?.id === account.id
+                      noteEditingAccount?.id === account.id
                     const noteText = account.note?.trim() ?? ""
                     const savingNote = savingNoteId === account.id
 
@@ -271,10 +313,10 @@ export default function TradingAccountsSettingsSection({
                         {isEditingNote ? (
                           <div className="mt-3 space-y-2 rounded-lg border border-white/10 bg-white/[0.04] p-3">
                             <input
-                              value={editingAccount.note ?? ""}
+                              value={noteEditingAccount.note ?? ""}
                               onChange={(e) =>
-                                setEditingAccount({
-                                  ...editingAccount,
+                                setNoteEditingAccount({
+                                  ...noteEditingAccount,
                                   note: e.target.value,
                                 })
                               }
@@ -285,7 +327,7 @@ export default function TradingAccountsSettingsSection({
                               <button
                                 type="button"
                                 disabled={savingNote}
-                                onClick={() => void saveNote(editingAccount)}
+                                onClick={() => void saveNote(noteEditingAccount)}
                                 className="text-sm font-medium text-blue-400 hover:text-blue-300 disabled:opacity-50"
                               >
                                 {savingNote ? "Saving…" : "Save"}
@@ -293,7 +335,7 @@ export default function TradingAccountsSettingsSection({
                               <button
                                 type="button"
                                 disabled={savingNote}
-                                onClick={() => setEditingAccount(null)}
+                                onClick={() => setNoteEditingAccount(null)}
                                 className="text-sm text-gray-400 hover:text-gray-300 disabled:opacity-50"
                               >
                                 Cancel
@@ -311,6 +353,13 @@ export default function TradingAccountsSettingsSection({
                               </div>
                             ) : null}
                             <div className="mt-3 flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setEditModalAccount(account)}
+                                className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-emerald-300 transition hover:bg-white/10"
+                              >
+                                Edit
+                              </button>
                               <button
                                 type="button"
                                 onClick={() => openNoteEditor(account)}
@@ -398,6 +447,12 @@ export default function TradingAccountsSettingsSection({
         open={showCreateModal}
         onClose={() => setShowCreateModal(false)}
         onSave={(acc) => void handleCreateAccountSave(acc)}
+      />
+      <CreateAccountModal
+        open={editModalAccount != null}
+        initialAccount={editFormValues}
+        onClose={() => setEditModalAccount(null)}
+        onSave={(acc) => void handleEditAccountSave(acc)}
       />
       <FeedbackModal {...feedbackModalProps} />
     </>

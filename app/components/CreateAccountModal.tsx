@@ -24,6 +24,15 @@ export type PropFirmRules = {
   winningDays: number | null
 }
 
+export type AccountFormInitialValues = {
+  name: string
+  size: string
+  accountNumber: string
+  category: AccountType
+  mode: string
+  rules: PropFirmRules | null
+}
+
 export interface Props {
   open: boolean
   onClose: () => void
@@ -35,6 +44,8 @@ export interface Props {
     mode: string | null
     rules: PropFirmRules | null
   }) => void | Promise<void>
+  /** When set, opens in edit mode with prefilled values. */
+  initialAccount?: AccountFormInitialValues | null
   /** Offset below fixed navbar on mobile (onboarding setup flows). */
   belowNavbarOnMobile?: boolean
 }
@@ -78,6 +89,7 @@ export default function CreateAccountModal({
   open,
   onClose,
   onSave,
+  initialAccount = null,
   belowNavbarOnMobile = false,
 }: Props) {
   const [name, setName] = useState("")
@@ -92,6 +104,7 @@ export default function CreateAccountModal({
   const [winningDays, setWinningDays] = useState("")
   const [isSaving, setIsSaving] = useState(false)
   const savingRef = useRef(false)
+  const isEdit = Boolean(initialAccount)
 
   useEffect(() => {
     if (!open) {
@@ -105,8 +118,53 @@ export default function CreateAccountModal({
       setDailyDrawdown(emptyForm.dailyDrawdown)
       setProfitTarget(emptyForm.profitTarget)
       setWinningDays(emptyForm.winningDays)
+      return
     }
-  }, [open])
+
+    if (initialAccount) {
+      setName(initialAccount.name)
+      setSize(initialAccount.size)
+      setId(initialAccount.accountNumber)
+      setCategory(initialAccount.category)
+      setMode(initialAccount.mode)
+      setConsistency(
+        initialAccount.rules?.consistency != null
+          ? String(initialAccount.rules.consistency)
+          : ""
+      )
+      setMaxDrawdown(
+        initialAccount.rules?.maxDrawdown != null
+          ? String(initialAccount.rules.maxDrawdown)
+          : ""
+      )
+      setDailyDrawdown(
+        initialAccount.rules?.dailyDrawdown != null
+          ? String(initialAccount.rules.dailyDrawdown)
+          : ""
+      )
+      setProfitTarget(
+        initialAccount.rules?.profitTarget != null
+          ? String(initialAccount.rules.profitTarget)
+          : ""
+      )
+      setWinningDays(
+        initialAccount.rules?.winningDays != null
+          ? String(initialAccount.rules.winningDays)
+          : ""
+      )
+    } else {
+      setName(emptyForm.name)
+      setSize(emptyForm.size)
+      setId(emptyForm.id)
+      setMode(emptyForm.mode)
+      setCategory(emptyForm.category)
+      setConsistency(emptyForm.consistency)
+      setMaxDrawdown(emptyForm.maxDrawdown)
+      setDailyDrawdown(emptyForm.dailyDrawdown)
+      setProfitTarget(emptyForm.profitTarget)
+      setWinningDays(emptyForm.winningDays)
+    }
+  }, [open, initialAccount])
 
   if (!open) return null
 
@@ -182,7 +240,7 @@ export default function CreateAccountModal({
           id="create-account-modal-title"
           className="text-lg font-semibold text-emerald-300"
         >
-          Create account
+          {isEdit ? "Edit account" : "Create account"}
         </h2>
 
         <div className="mt-5 space-y-4">
@@ -385,6 +443,8 @@ export default function CreateAccountModal({
                 />
                 Saving…
               </>
+            ) : isEdit ? (
+              "Save changes"
             ) : (
               "Save account"
             )}
