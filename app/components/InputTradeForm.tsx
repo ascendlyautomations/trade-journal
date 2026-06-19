@@ -1125,44 +1125,9 @@ export default function InputTradeForm({
     fileInputRef.current?.click()
   }
 
-  async function handleUploadCsvGuardClick() {
+  function handleUploadCsvGuardClick() {
     if (!onUploadCsvClick) return
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (!user?.id) {
-      showPopup(
-        persistentError("Sign In Required", "Please log in to save your trade.")
-      )
-      return
-    }
-
-    const { data: profile, error: profileErr } = await supabase
-      .from("profiles")
-      .select("is_pro, has_used_csv_import")
-      .eq("id", user.id)
-      .single()
-
-    if (profileErr || !profile) {
-      console.error("Profile fetch failed:", profileErr)
-      showPopup(
-        persistentError(
-          "Could Not Verify Account",
-          profileErr ? handleSupabaseError(profileErr) : "Something went wrong"
-        )
-      )
-      return
-    }
-
-    console.log("CSV BLOCK CHECK:", profile)
-
-    if (!profile.is_pro && profile.has_used_csv_import) {
-      showPopup(feedbackPresets.csvSubscriptionLimit())
-      return
-    }
-
+    // Mobile Safari requires file input activation in the same user gesture — no await before click().
     onUploadCsvClick()
   }
 
@@ -1568,7 +1533,7 @@ export default function InputTradeForm({
           <div className="flex gap-2">
             <button
               type="button"
-              onClick={() => void handleUploadCsvGuardClick()}
+              onClick={handleUploadCsvGuardClick}
               disabled={!onUploadCsvClick || csvLoading}
               className="shrink-0 flex-1 px-3 py-2 text-sm rounded-lg bg-blue-500 disabled:opacity-60"
             >
@@ -1622,7 +1587,7 @@ export default function InputTradeForm({
 
             <button
               type="button"
-              onClick={() => void handleUploadCsvGuardClick()}
+              onClick={handleUploadCsvGuardClick}
               disabled={!onUploadCsvClick || csvLoading}
               className="shrink-0 px-4 py-2 text-sm rounded-lg bg-blue-500 disabled:opacity-60"
             >

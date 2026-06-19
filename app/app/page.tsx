@@ -24,6 +24,8 @@ import {
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { feedbackPresets, persistentSuccess } from "@/lib/feedbackPresets"
 
+const INPUT_TRADE_CSV_INPUT_ID = "input-trade-csv-upload"
+
 export default function Home() {
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const [loading, setLoading] = useState(false)
@@ -232,19 +234,25 @@ export default function Home() {
   }
 
   function handleTryAnotherFile() {
-    resetCsvInput()
+    openCsvFilePicker()
+    setFailureModalOpen(false)
     lastCsvFileRef.current = null
     setParsedTrades([])
     setCsvUnrecognized(false)
     setCsvBrokerHint(null)
     setCsvDiagnostics(null)
-    csvInputRef.current?.click()
-    setFailureModalOpen(false)
   }
 
   function handleFailureCancel() {
     setFailureModalOpen(false)
     clearCsvUploadState()
+  }
+
+  function openCsvFilePicker() {
+    const input = csvInputRef.current
+    if (!input) return
+    input.value = ""
+    input.click()
   }
 
   async function fetchReviewCount() {
@@ -281,15 +289,18 @@ export default function Home() {
           </div>
 
           <input
+            id={INPUT_TRADE_CSV_INPUT_ID}
             ref={csvInputRef}
             type="file"
             accept=".csv,text/csv"
-            className="sr-only"
+            tabIndex={-1}
+            aria-hidden
+            className="fixed left-0 top-0 h-px w-px overflow-hidden opacity-0"
             onChange={(e) => void handleCSVUpload(e)}
           />
 
           <InputTradeForm
-            onUploadCsvClick={() => csvInputRef.current?.click()}
+            onUploadCsvClick={openCsvFilePicker}
             onReviewCsvClick={() => {
               window.location.href = "/review"
             }}
