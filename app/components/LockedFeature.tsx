@@ -1,5 +1,6 @@
 import Link from "next/link"
 import { buttonVariants, Card, cn } from "@/app/components/ui"
+import { TRAXPRO_PLAN_NAME } from "@/lib/traxProPricing"
 
 type LockedFeatureProps = {
   title?: string
@@ -21,16 +22,16 @@ export default function LockedFeature({ title, className = "" }: LockedFeaturePr
           {title}
         </p>
       ) : null}
-      <h3 className="mb-2 text-lg font-semibold text-white">Upgrade to Pro</h3>
+      <h3 className="mb-2 text-lg font-semibold text-white">Upgrade to {TRAXPRO_PLAN_NAME}</h3>
       <p className="mb-4 max-w-sm text-sm text-gray-400">
-        This feature is available with TradeTraxs Pro.
+        This feature is available with {TRAXPRO_PLAN_NAME}.
       </p>
       <div className="flex flex-col items-center gap-2 sm:flex-row sm:justify-center">
         <Link
           href="/pricing"
           className={buttonVariants({ variant: "primary", size: "md" })}
         >
-          Upgrade to Pro
+          Upgrade to {TRAXPRO_PLAN_NAME}
         </Link>
         <Link
           href="/dashboard"

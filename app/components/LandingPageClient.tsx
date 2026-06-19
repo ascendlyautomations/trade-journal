@@ -21,30 +21,14 @@ import {
 } from "@/lib/landingPageUi"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { LEGAL_CONTACT_EMAIL } from "@/lib/legal/contact"
-
-const PRICING_FREE_FEATURES = [
-  "Track your trades",
-  "1 trading account",
-  "Basic dashboard insights",
-  "Trading calendar access",
-  "Public profile",
-  "Community feed access",
-  "View and interact with other traders",
-  "Basic messaging (limited)",
-] as const
-
-const PRICING_PRO_FEATURES = [
-  "Unlimited trading accounts",
-  "Full performance dashboard",
-  "Advanced analytics & stats",
-  "AI Trade Analyst (automated insights)",
-  "Session + strategy breakdowns",
-  "Trading calendar with full analytics",
-  "Enhanced public profile & stats",
-  "Full messaging & networking",
-  "Priority community features",
-  "Track what actually makes you money",
-] as const
+import {
+  LANDING_FREE_FEATURES,
+  LANDING_PRO_FEATURES,
+  TRAXPRO_BILLING_LABEL,
+  TRAXPRO_CHECKOUT_FINE_PRINT,
+  TRAXPRO_PLAN_NAME,
+  TRAXPRO_PRICE_DISPLAY,
+} from "@/lib/traxProPricing"
 
 const HOW_STEPS = [
   {
@@ -304,7 +288,7 @@ export default function LandingPageClient() {
                   </p>
                 </div>
                 <ul className="mt-8 flex flex-1 flex-col gap-3 text-left text-sm text-gray-300">
-                  {PRICING_FREE_FEATURES.map((line) => (
+                  {LANDING_FREE_FEATURES.map((line) => (
                     <li key={line} className="flex gap-3">
                       <span className="mt-0.5 shrink-0 text-emerald-400/90" aria-hidden>
                         ✓
@@ -330,17 +314,17 @@ export default function LandingPageClient() {
                 </div>
                 <div className="flex h-full flex-col rounded-2xl border border-emerald-400/45 bg-gradient-to-b from-white/[0.1] to-emerald-950/30 p-8 pb-9 pt-12 shadow-[0_8px_48px_rgba(0,0,0,0.35),0_0_52px_rgba(52,211,153,0.2)] backdrop-blur-md transition-[transform,box-shadow] duration-300 ease-out hover:z-[1] hover:scale-[1.02] hover:border-emerald-400/60 hover:shadow-[0_12px_56px_rgba(0,0,0,0.4),0_0_64px_rgba(52,211,153,0.32)] motion-reduce:transition-none motion-reduce:hover:scale-100 md:p-10 md:pb-10 md:pt-14">
                   <div className="flex min-h-[7.25rem] flex-col text-left md:min-h-[7rem] lg:min-h-[6.75rem]">
-                    <h3 className="text-xl font-semibold text-emerald-200">TraxPro</h3>
+                    <h3 className="text-xl font-semibold text-emerald-200">{TRAXPRO_PLAN_NAME}</h3>
                     <p className="mt-2 text-4xl font-bold tracking-tight text-white md:text-[2.35rem]">
-                      $16.99
-                      <span className="text-lg font-semibold text-gray-400">/month</span>
+                      {TRAXPRO_PRICE_DISPLAY}
                     </p>
+                    <p className="mt-1 text-sm font-medium text-gray-400">{TRAXPRO_BILLING_LABEL}</p>
                     <p className="mt-3 flex-1 text-sm leading-relaxed text-gray-200">
                       Unlock full analytics, deeper insights, and unlimited access.
                     </p>
                   </div>
                   <ul className="mt-8 flex flex-1 flex-col gap-3 text-left text-sm text-gray-100">
-                    {PRICING_PRO_FEATURES.map((line) => (
+                    {LANDING_PRO_FEATURES.map((line) => (
                       <li key={line} className="flex gap-3">
                         <span className="mt-0.5 shrink-0 text-emerald-400" aria-hidden>
                           ✓
@@ -358,7 +342,7 @@ export default function LandingPageClient() {
                     {checkoutLoading ? "Starting trial..." : "Start Free Trial"}
                   </button>
                   <p className="mt-4 text-center text-xs leading-relaxed text-gray-500">
-                    ✓ 14-day free trial ✓ Cancel anytime ✓ No commitment
+                    {TRAXPRO_CHECKOUT_FINE_PRINT}
                   </p>
                 </div>
               </div>

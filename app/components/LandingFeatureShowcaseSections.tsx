@@ -7,6 +7,7 @@ import {
   LANDING_REVEAL_TO,
   LANDING_REVEAL_TRANSITION,
 } from "@/lib/landingPageUi"
+import { TRAXPRO_PLAN_NAME } from "@/lib/traxProPricing"
 
 type ShowcaseBlock = {
   id: string
@@ -14,7 +15,9 @@ type ShowcaseBlock = {
   title: string
   subtitle: string
   bullets: string[]
-  placeholderLabel: string
+  imageSrc?: string
+  imageAlt?: string
+  imageObjectPosition?: string
 }
 
 const BLOCKS: ShowcaseBlock[] = [
@@ -29,20 +32,24 @@ const BLOCKS: ShowcaseBlock[] = [
       "Risk-reward analysis",
       "Daily, weekly, and monthly breakdowns",
     ],
-    placeholderLabel: "Dashboard screenshot",
+    imageSrc: "/images/dashboard.png",
+    imageAlt: "Trading dashboard with analytics in TradeTraxs",
+    imageObjectPosition: "object-center",
   },
   {
     id: "showcase-trade-input",
     reverse: true,
     title: "Log Trades Your Way",
-    subtitle: "Fast manual entry or import everything in seconds.",
+    subtitle: "Fast manual entry or CSV import when you need it.",
     bullets: [
       "Quick and clean manual trade entry",
-      "CSV import support for bulk uploads",
+      "CSV import (1 on Free; unlimited on TraxPro)",
       "Screenshot uploads for full context",
       "Custom fields like RR, session, and notes",
     ],
-    placeholderLabel: "Trade input screenshot",
+    imageSrc: "/images/trade-input.png",
+    imageAlt: "Trade entry and import options in TradeTraxs",
+    imageObjectPosition: "object-top",
   },
   {
     id: "showcase-trade-review",
@@ -55,7 +62,9 @@ const BLOCKS: ShowcaseBlock[] = [
       "Notes and reasoning tracking",
       "Identify patterns and mistakes",
     ],
-    placeholderLabel: "Trade history screenshot",
+    imageSrc: "/images/trade-history.png",
+    imageAlt: "Trade history with screenshots and notes in TradeTraxs",
+    imageObjectPosition: "object-center",
   },
   {
     id: "showcase-messaging",
@@ -64,24 +73,26 @@ const BLOCKS: ShowcaseBlock[] = [
     subtitle: "Built-in messaging and real conversations — not random forums.",
     bullets: [
       "Direct messaging between traders",
-      "Real-time trade discussions",
-      "Learn from others in the platform",
+      "Group chats with other traders",
+      "Learn from others on the platform",
       "Stay connected with your trading network",
     ],
-    placeholderLabel: "Messaging UI screenshot",
+    imageSrc: "/images/messaging-ui-v2.png",
+    imageAlt: "Messaging and trade discussions in TradeTraxs",
+    imageObjectPosition: "object-right",
   },
   {
     id: "showcase-ai",
     reverse: false,
     title: "Get Instant Feedback On Your Trades",
-    subtitle: "AI-powered insights to help you improve faster.",
+    subtitle: `AI-powered trade analysis on ${TRAXPRO_PLAN_NAME} to help you improve faster.`,
     bullets: [
       "Analyze trades automatically",
       "Identify mistakes and patterns",
       "Get actionable feedback",
       "Improve decision-making over time",
     ],
-    placeholderLabel: "AI analysis screenshot",
+    // Screenshot: add imageSrc "/images/ai-analyst.png" when asset is captured from /analyst
   },
 ]
 
@@ -110,9 +121,29 @@ function ShowcaseFeatureImage({
   )
 }
 
+function layoutClassForBlock(block: ShowcaseBlock): string {
+  if (block.id === "showcase-trade-input") {
+    return "flex-col-reverse lg:flex-row-reverse"
+  }
+  if (
+    block.id === "showcase-dashboard" ||
+    block.id === "showcase-trade-review"
+  ) {
+    return "flex-col-reverse lg:flex-row"
+  }
+  if (block.id === "showcase-messaging") {
+    return "flex-col-reverse lg:flex-row-reverse"
+  }
+  if (block.reverse) {
+    return "flex-col lg:flex-row-reverse"
+  }
+  return "flex-col lg:flex-row"
+}
+
 function FeatureSplitSection({ block }: { block: ShowcaseBlock }) {
   const ref = useRef<HTMLElement>(null)
   const [visible, setVisible] = useState(false)
+  const hasImage = Boolean(block.imageSrc && block.imageAlt)
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -144,23 +175,11 @@ function FeatureSplitSection({ block }: { block: ShowcaseBlock }) {
       }`}
       aria-labelledby={`${block.id}-heading`}
     >
-      <div className="mx-auto max-w-6xl">
+      <div className={`mx-auto max-w-6xl ${hasImage ? "" : "max-w-3xl"}`}>
         <div
-          className={`flex gap-10 lg:items-center lg:gap-14 ${
-            block.id === "showcase-trade-input"
-              ? "flex-col-reverse lg:flex-row-reverse"
-              : block.id === "showcase-dashboard"
-                ? "flex-col-reverse lg:flex-row"
-                : block.id === "showcase-trade-review"
-                  ? "flex-col-reverse lg:flex-row"
-                  : block.id === "showcase-messaging"
-                    ? "flex-col-reverse lg:flex-row-reverse"
-                    : block.reverse
-                      ? "flex-col lg:flex-row-reverse"
-                      : "flex-col lg:flex-row"
-          }`}
+          className={`flex gap-10 lg:items-center lg:gap-14 ${layoutClassForBlock(block)}`}
         >
-          <div className="min-w-0 flex-1 space-y-5 text-left">
+          <div className={`min-w-0 space-y-5 text-left ${hasImage ? "flex-1" : ""}`}>
             <h2
               id={`${block.id}-heading`}
               className="text-3xl font-extrabold tracking-tight text-white drop-shadow-lg md:text-4xl"
@@ -178,43 +197,15 @@ function FeatureSplitSection({ block }: { block: ShowcaseBlock }) {
             </ul>
           </div>
 
-          <div className="min-w-0 flex-1">
-            {block.id === "showcase-trade-input" ? (
+          {hasImage ? (
+            <div className="min-w-0 flex-1">
               <ShowcaseFeatureImage
-                src="/images/trade-input.png"
-                alt="Trade entry and import options in TradeTraxs"
-                objectPositionClass="object-top"
+                src={block.imageSrc!}
+                alt={block.imageAlt!}
+                objectPositionClass={block.imageObjectPosition ?? "object-center"}
               />
-            ) : block.id === "showcase-trade-review" ? (
-              <ShowcaseFeatureImage
-                src="/images/trade-history.png"
-                alt="Trade history with screenshots and notes in TradeTraxs"
-                objectPositionClass="object-center"
-              />
-            ) : block.id === "showcase-messaging" ? (
-              <ShowcaseFeatureImage
-                src="/images/messaging-ui-v2.png"
-                alt="Messaging and trade discussions in TradeTraxs"
-                objectPositionClass="object-right"
-              />
-            ) : block.id === "showcase-dashboard" ? (
-              <ShowcaseFeatureImage
-                src="/images/dashboard.png"
-                alt="Trading dashboard with analytics in TradeTraxs"
-                objectPositionClass="object-center"
-              />
-            ) : (
-              <div
-                className="flex aspect-[4/3] w-full flex-col items-center justify-center rounded-2xl border border-dashed border-white/15 bg-gradient-to-br from-white/[0.04] to-emerald-500/[0.03] px-6 py-8 shadow-inner shadow-black/20"
-                aria-hidden
-              >
-                <span className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-gray-500">
-                  Placeholder
-                </span>
-                <span className="text-center text-sm text-gray-500">{block.placeholderLabel}</span>
-              </div>
-            )}
-          </div>
+            </div>
+          ) : null}
         </div>
       </div>
     </section>

@@ -15,6 +15,11 @@ import {
 } from "@/lib/getMembershipStatus"
 import { isProActive } from "../../lib/subscription"
 import {
+  TRAXPRO_BILLING_LABEL,
+  TRAXPRO_PLAN_NAME,
+  TRAXPRO_PRICE_DISPLAY,
+} from "@/lib/traxProPricing"
+import {
   canChangeProfileUsername,
   isProfilesUsernameConflict,
   MAX_PROFILE_USERNAME_CHANGES,
@@ -1329,7 +1334,7 @@ export default function SettingsPage() {
                     <p className="text-xs text-gray-500">Plan name</p>
                     <p className="mt-1 font-semibold text-white">
                       {isProActive(profile)
-                        ? "Traxs Pro ($23.99 / 4 weeks)"
+                        ? `${TRAXPRO_PLAN_NAME} (${TRAXPRO_PRICE_DISPLAY} ${TRAXPRO_BILLING_LABEL.toLowerCase()})`
                         : "Free Plan"}
                     </p>
                   </div>

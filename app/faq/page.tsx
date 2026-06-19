@@ -2,6 +2,13 @@
 
 import { useState } from "react"
 import PublicNavbar from "../components/PublicNavbar"
+import { FREE_PLAN_TRADES_PER_24H } from "@/lib/freePlanLimits"
+import {
+  TRAXPRO_BILLING_LABEL,
+  TRAXPRO_PLAN_NAME,
+  TRAXPRO_PRICE_DISPLAY,
+  TRAXPRO_TRIAL_LABEL,
+} from "@/lib/traxProPricing"
 
 const faqs = [
   {
@@ -10,35 +17,43 @@ const faqs = [
   },
   {
     q: "Can I track multiple trading accounts?",
-    a: "Yeah, you can track multiple accounts and separate your stats for each one.",
+    a: `${TRAXPRO_PLAN_NAME} includes unlimited trading accounts. The Free plan includes 1 trading account.`,
+  },
+  {
+    q: "What are the Free plan limits?",
+    a: `Free includes: 1 trading account; up to ${FREE_PLAN_TRADES_PER_24H} trades logged per 24 hours; 1 CSV import; 10 messages and comments per 24 hours; 1 public trade share and 1 feed post per 24 hours. Upgrade to ${TRAXPRO_PLAN_NAME} to remove these limits.`,
   },
   {
     q: "What stats does TradeTraxs show?",
-    a: "You can see your P&L, win rate, risk-reward ratio, session performance, and more.",
+    a: `You can see P&L, win rate, risk-reward ratio, session performance, equity curve, and more. Advanced dashboard insights (Performance Insights, Edge, Risk, and Behavior panels) require ${TRAXPRO_PLAN_NAME}.`,
   },
   {
     q: "Can I share my trades publicly?",
-    a: "Yes, you can post your trades to the feed and others can like and comment on them.",
+    a: "Yes. You can post trades to the feed and others can like and comment. On the Free plan, you can share 1 public trade and publish 1 feed post per 24 hours.",
   },
   {
     q: "Can I upload screenshots of my trades?",
-    a: "Yep, you can attach screenshots to every trade you log.",
+    a: "Yes, you can attach screenshots to every trade you log.",
+  },
+  {
+    q: "Can I import trades from a CSV?",
+    a: `The Free plan includes 1 CSV import. ${TRAXPRO_PLAN_NAME} includes unlimited CSV imports.`,
   },
   {
     q: "Does TradeTraxs support funded accounts?",
-    a: "Yes, you can mark trades as Eval, Funded, or Live accounts.",
+    a: `Yes, you can mark accounts and trades as Eval, Funded, or Live. ${TRAXPRO_PLAN_NAME} includes Prop Firm Mode analytics to track rule progress.`,
   },
   {
     q: "Can I message other traders?",
-    a: "Yes, you can send direct messages and create group chats with other users.",
+    a: `Yes. You can send direct messages and create group chats. The Free plan allows 10 messages and comments per 24 hours (DMs, trade comments, feed comments, and Trade Room messages combined). ${TRAXPRO_PLAN_NAME} includes unlimited messaging.`,
   },
   {
     q: "Is there a leaderboard?",
-    a: "Yeah, you can see how you rank compared to other traders.",
+    a: "Yes, you can see how you rank compared to other traders by P&L and other stats.",
   },
   {
     q: "Do I need to pay to use TradeTraxs?",
-    a: "There are free features, and premium features are available with a subscription.",
+    a: `No. TradeTraxs has a Free plan with the limits above. ${TRAXPRO_PLAN_NAME} is ${TRAXPRO_PRICE_DISPLAY}, ${TRAXPRO_BILLING_LABEL.toLowerCase()}, and includes a ${TRAXPRO_TRIAL_LABEL.toLowerCase()}.`,
   },
   {
     q: "Is my data private?",

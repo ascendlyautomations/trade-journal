@@ -61,7 +61,7 @@ export const PRICING_PAGE_METADATA = buildPublicRouteMetadata({
   path: "/pricing",
   title: "Pricing",
   description:
-    "TradeTraxs pricing: start free or upgrade to TraxPro for full analytics, AI trade insights, and unlimited accounts.",
+    "TradeTraxs pricing: start free or upgrade to TraxPro ($23.99 every 4 weeks) for full analytics, AI trade insights, and unlimited accounts.",
 })
 
 export const FAQ_PAGE_METADATA = buildPublicRouteMetadata({

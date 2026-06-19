@@ -7,22 +7,14 @@ import PublicNavbar from "../components/PublicNavbar"
 import { supabase } from "@/lib/supabaseClient"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { feedbackPresets } from "@/lib/feedbackPresets"
-
-const freeFeatures = [
-  "Track your trades",
-  "1 trading account",
-  "Basic trade history",
-  "Limited dashboard insights",
-]
-
-const proFeatures = [
-  "Unlimited trading accounts",
-  "Full performance dashboard",
-  "AI Trade Analyst (automated insights)",
-  "Advanced analytics & stats",
-  "Session + strategy breakdowns",
-  "Track what actually makes you money",
-]
+import {
+  LANDING_FREE_FEATURES,
+  LANDING_PRO_FEATURES,
+  TRAXPRO_BILLING_LABEL,
+  TRAXPRO_CHECKOUT_FINE_PRINT,
+  TRAXPRO_PLAN_NAME,
+  TRAXPRO_PRICE_DISPLAY,
+} from "@/lib/traxProPricing"
 
 const whyTraxPro = [
   "See your real win rate",
@@ -126,7 +118,7 @@ export default function PricingPage() {
               </p>
 
               <ul className="mt-8 flex flex-1 flex-col gap-3 text-sm text-gray-400">
-                {freeFeatures.map((f) => (
+                {LANDING_FREE_FEATURES.map((f) => (
                   <li key={f} className="flex gap-3">
                     <CheckIcon />
                     <span>{f}</span>
@@ -149,19 +141,17 @@ export default function PricingPage() {
                 🔥 Most Popular
               </span>
 
-              <h2 className="mt-0 text-xl font-bold text-white">TraxPro</h2>
+              <h2 className="mt-0 text-xl font-bold text-white">{TRAXPRO_PLAN_NAME}</h2>
               <p className="mt-2 text-4xl font-bold tracking-tight sm:text-5xl">
-                $16.99
-                <span className="text-lg font-semibold text-gray-200 sm:text-xl">
-                  /month
-                </span>
+                {TRAXPRO_PRICE_DISPLAY}
               </p>
+              <p className="mt-1 text-sm font-medium text-gray-300">{TRAXPRO_BILLING_LABEL}</p>
               <p className="mt-3 text-sm leading-relaxed text-gray-200 sm:text-base">
                 Everything you need to become a consistently profitable trader.
               </p>
 
               <ul className="mt-4 flex flex-1 flex-col gap-3.5 text-sm text-gray-100 sm:text-[0.95rem]">
-                {proFeatures.map((f) => (
+                {LANDING_PRO_FEATURES.map((f) => (
                   <li key={f} className="flex gap-3">
                     <CheckIcon bright />
                     <span>{f}</span>
@@ -178,8 +168,7 @@ export default function PricingPage() {
                 {checkoutLoading ? "Loading…" : "Start Free Trial"}
               </button>
               <div className="mt-4 space-y-1.5 text-center text-xs text-gray-300 sm:text-sm">
-                <p>✔ 14-day free trial   ✔ Cancel anytime   ✔ No commitment</p>
-                
+                <p>{TRAXPRO_CHECKOUT_FINE_PRINT}</p>
               </div>
             </div>
           </div>

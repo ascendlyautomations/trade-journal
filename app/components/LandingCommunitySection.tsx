@@ -38,7 +38,7 @@ const COMMUNITY_ITEMS = [
     objectPosition: "object-center",
     bullets: [
       "Compare stats with peers",
-      "Optional challenges",
+      "Rank by P&L, win rate, and consistency",
       "Stay motivated with visibility",
     ],
   },
