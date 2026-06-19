@@ -464,12 +464,26 @@ export default function SettingsPage() {
   async function updatePassword() {
     if (!user) return
 
+    const trimmedNew = newPassword.trim()
+    const trimmedConfirm = confirmPassword.trim()
+
+    if (!trimmedNew) {
+      showPopup({ type: "error", message: "Please enter a new password." })
+      return
+    }
+    if (!trimmedConfirm) {
+      showPopup({ type: "error", message: "Please confirm your new password." })
+      return
+    }
     if (newPassword.length < 6) {
-      showPopup({ type: "error", message: "Something went wrong" })
+      showPopup({
+        type: "error",
+        message: "Password must be at least 6 characters long.",
+      })
       return
     }
     if (newPassword !== confirmPassword) {
-      showPopup({ type: "error", message: "Something went wrong" })
+      showPopup({ type: "error", message: "Passwords do not match." })
       return
     }
 
@@ -480,7 +494,10 @@ export default function SettingsPage() {
     setSavingPassword(false)
 
     if (error) {
-      showPopup({ type: "error", message: "Something went wrong" })
+      showPopup({
+        type: "error",
+        message: "Something went wrong. Please try again.",
+      })
       return
     }
 

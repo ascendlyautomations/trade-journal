@@ -97,6 +97,29 @@ import {
 const PUBLIC_PROFILE_SELECT =
   "id, username, name, bio, avatar_url, trading_style, trader_type, primary_market, started_trading, is_private, created_at" as const
 
+const PRIVATE_PROFILE_TAB_COPY = {
+  trades: "This trader has chosen to keep their trades private.",
+  posts: "Posts are only visible to approved followers.",
+} as const
+
+function PrivateProfileTabMessage({
+  variant,
+}: {
+  variant: keyof typeof PRIVATE_PROFILE_TAB_COPY
+}) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/5 p-6 py-16 text-center">
+      <p className="text-lg text-gray-100">🔒 Private Profile</p>
+      <p className="mt-2 text-sm text-gray-400">
+        {PRIVATE_PROFILE_TAB_COPY[variant]}
+      </p>
+      <p className="mt-2 text-sm text-gray-400">
+        Follow this trader to request access.
+      </p>
+    </div>
+  )
+}
+
 function postImageSrc(imageUrl: string | null | undefined): string | null {
   const raw = imageUrl != null ? String(imageUrl).trim() : ""
   if (!raw) return null
@@ -2856,6 +2879,8 @@ function ProfilePageContent() {
                       }
                       className="py-10"
                     />
+                  ) : !canViewTrades ? (
+                    <PrivateProfileTabMessage variant="trades" />
                   ) : (
                     <p className="text-center text-sm text-gray-400">
                       No public trades yet.
@@ -2920,6 +2945,8 @@ function ProfilePageContent() {
                       }
                       className="py-10"
                     />
+                  ) : !canViewTrades ? (
+                    <PrivateProfileTabMessage variant="posts" />
                   ) : (
                     <p className="text-center text-sm text-gray-400">
                       No posts yet.

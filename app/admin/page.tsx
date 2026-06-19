@@ -18,26 +18,52 @@ function AdminModuleCard({
   description,
   badge,
   variant = "default",
+  comingSoon = false,
 }: {
-  href: string
+  href?: string
   title: string
   description: string
   badge?: React.ReactNode
   variant?: "default" | "emerald" | "blue"
+  comingSoon?: boolean
 }) {
-  const border =
-    variant === "emerald"
+  const border = comingSoon
+    ? "border-white/10 bg-white/5"
+    : variant === "emerald"
       ? "border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 hover:border-emerald-400/50"
       : variant === "blue"
         ? "border-blue-500/30 bg-blue-500/10 hover:bg-blue-500/20 hover:border-blue-400/50"
         : "border-white/10 bg-white/5 hover:bg-white/10 hover:border-white/20"
-  return (
-    <Link href={href} className={`rounded-xl border p-5 transition ${border}`}>
+
+  const className = `rounded-xl border p-5 ${comingSoon ? "" : "transition"} ${border}`
+
+  const content = (
+    <>
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-lg font-semibold">{title}</h2>
-        {badge}
+        {comingSoon ? (
+          <span className="rounded bg-white/10 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-gray-400">
+            Coming Soon
+          </span>
+        ) : (
+          badge
+        )}
       </div>
       <p className="mt-2 text-sm text-gray-300">{description}</p>
+    </>
+  )
+
+  if (comingSoon) {
+    return (
+      <div className={className} aria-disabled="true">
+        {content}
+      </div>
+    )
+  }
+
+  return (
+    <Link href={href ?? "#"} className={className}>
+      {content}
     </Link>
   )
 }
@@ -179,8 +205,16 @@ export default function AdminPage() {
               title="Users"
               description="Search profiles, view activity, ban or unban accounts."
             />
-            <AdminModuleCard href="/admin/reports" title="Reports" description="Trading reports and health metrics." />
-            <AdminModuleCard href="/admin/moderation" title="Moderation" description="Content review and community tools." />
+            <AdminModuleCard
+              comingSoon
+              title="Reports"
+              description="Advanced reporting tools are planned for a future update."
+            />
+            <AdminModuleCard
+              comingSoon
+              title="Moderation"
+              description="Community moderation tools are planned for a future update."
+            />
             <AdminModuleCard
               href="/admin/support"
               title="Support"
