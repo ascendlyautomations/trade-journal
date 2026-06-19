@@ -100,6 +100,20 @@ export function writeGettingStartedCollapsedPreference(
   }
 }
 
+/** Whether the getting-started intro popup should show (see GettingStartedProgressProvider). */
+export function shouldShowGettingStartedIntroPopup(options: {
+  onboardingCompleted: boolean
+  hasSeenGettingStartedIntro: boolean
+  prevOnboardingCompleted: boolean
+  isBaselineFetch: boolean
+}): boolean {
+  return (
+    options.onboardingCompleted &&
+    !options.hasSeenGettingStartedIntro &&
+    (options.isBaselineFetch || !options.prevOnboardingCompleted)
+  )
+}
+
 /** Whether the getting-started checklist should be offered (inline or mobile entry). */
 export function shouldShowGettingStartedChecklist(
   userId: string | null | undefined,

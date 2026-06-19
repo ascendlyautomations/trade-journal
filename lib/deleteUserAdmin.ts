@@ -1,4 +1,4 @@
-import type { SupabaseClient } from "@supabase/supabase-js"
+import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js"
 import Stripe from "stripe"
 
 export class AdminUserDeletionError extends Error {
@@ -11,6 +11,20 @@ export class AdminUserDeletionError extends Error {
     super(message)
     this.code = code
     this.name = "AdminUserDeletionError"
+  }
+}
+
+/** Structured failure from a specific deletion step (surfaced to admin UI). */
+export class AdminUserDeletionStepError extends Error {
+  readonly code = "DELETE_FAILED" as const
+  readonly step: string
+  readonly table: string | null
+
+  constructor(step: string, table: string | null, message: string) {
+    super(message)
+    this.name = "AdminUserDeletionStepError"
+    this.step = step
+    this.table = table
   }
 }
 
@@ -27,74 +41,132 @@ export type DeleteUserAdminResult = {
   email: string | null
 }
 
-async function deleteOr(
-  supabase: SupabaseClient,
-  table: string,
-  orFilter: string
-) {
-  const { error } = await supabase.from(table).delete().or(orFilter)
+type StepContext = {
+  targetUserId: string
+  step: string
+  table: string
+}
+
+function isMissingTableError(error: PostgrestError | null | undefined): boolean {
+  if (!error) return false
+  if (error.code === "PGRST205") return true
+  return /schema cache/i.test(error.message ?? "")
+}
+
+function logStep(ctx: StepContext) {
+  console.log(
+    `[deleteUserAdmin] step="${ctx.step}" table="${ctx.table}" userId=${ctx.targetUserId}`
+  )
+}
+
+function throwStepError(ctx: StepContext, error: PostgrestError | Error) {
+  const message =
+    "message" in error ? error.message : "Delete operation failed"
+  throw new AdminUserDeletionStepError(ctx.step, ctx.table, message)
+}
+
+async function deleteOr(ctx: StepContext, supabase: SupabaseClient, orFilter: string) {
+  logStep(ctx)
+  const { error } = await supabase.from(ctx.table).delete().or(orFilter)
   if (error) {
-    console.error(`[deleteUserAdmin] ${table} or:`, error.message)
-    throw new Error(`Failed to delete ${table}: ${error.message}`)
+    console.error(`[deleteUserAdmin] ${ctx.table} or:`, error.message)
+    throwStepError(ctx, error)
   }
 }
 
-async function deleteWhere(
+async function tryDeleteOr(
+  ctx: StepContext,
   supabase: SupabaseClient,
-  table: string,
+  orFilter: string
+) {
+  logStep(ctx)
+  const { error } = await supabase.from(ctx.table).delete().or(orFilter)
+  if (!error) return
+  if (isMissingTableError(error)) {
+    console.warn(
+      `[deleteUserAdmin] optional ${ctx.table} skipped (${error.code}): ${error.message}`
+    )
+    return
+  }
+  console.error(`[deleteUserAdmin] optional ${ctx.table} or:`, error.message)
+}
+
+async function deleteWhere(
+  ctx: StepContext,
+  supabase: SupabaseClient,
   column: string,
   value: string
 ) {
-  const { error } = await supabase.from(table).delete().eq(column, value)
+  logStep(ctx)
+  const { error } = await supabase.from(ctx.table).delete().eq(column, value)
   if (error) {
-    console.error(`[deleteUserAdmin] ${table}.${column}:`, error.message)
-    throw new Error(`Failed to delete ${table}: ${error.message}`)
+    console.error(`[deleteUserAdmin] ${ctx.table}.${column}:`, error.message)
+    throwStepError(ctx, error)
   }
 }
 
 async function tryDeleteWhere(
+  ctx: StepContext,
   supabase: SupabaseClient,
-  table: string,
   column: string,
   value: string
 ) {
-  const { error } = await supabase.from(table).delete().eq(column, value)
-  if (error) {
-    console.error(`[deleteUserAdmin] optional ${table}.${column}:`, error.message)
+  logStep(ctx)
+  const { error } = await supabase.from(ctx.table).delete().eq(column, value)
+  if (!error) return
+  if (isMissingTableError(error)) {
+    console.warn(
+      `[deleteUserAdmin] optional ${ctx.table} skipped (${error.code}): ${error.message}`
+    )
+    return
   }
+  console.error(`[deleteUserAdmin] optional ${ctx.table}.${column}:`, error.message)
 }
 
 async function tryDeleteWhereIn(
+  ctx: StepContext,
   supabase: SupabaseClient,
-  table: string,
   column: string,
   values: string[]
 ) {
   if (values.length === 0) return
-  const { error } = await supabase.from(table).delete().in(column, values)
-  if (error) {
-    console.error(`[deleteUserAdmin] optional ${table}.${column} in:`, error.message)
+  logStep(ctx)
+  const { error } = await supabase.from(ctx.table).delete().in(column, values)
+  if (!error) return
+  if (isMissingTableError(error)) {
+    console.warn(
+      `[deleteUserAdmin] optional ${ctx.table} skipped (${error.code}): ${error.message}`
+    )
+    return
   }
+  console.error(`[deleteUserAdmin] optional ${ctx.table}.${column} in:`, error.message)
 }
 
 async function deleteWhereIn(
+  ctx: StepContext,
   supabase: SupabaseClient,
-  table: string,
   column: string,
   values: string[]
 ) {
   if (values.length === 0) return
-  const { error } = await supabase.from(table).delete().in(column, values)
+  logStep(ctx)
+  const { error } = await supabase.from(ctx.table).delete().in(column, values)
   if (error) {
-    console.error(`[deleteUserAdmin] ${table}.${column} in:`, error.message)
-    throw new Error(`Failed to delete ${table}: ${error.message}`)
+    console.error(`[deleteUserAdmin] ${ctx.table}.${column} in:`, error.message)
+    throwStepError(ctx, error)
   }
 }
 
 async function cancelStripeSubscriptions(
+  targetUserId: string,
   stripe: Stripe | null | undefined,
   stripeCustomerId: string | null | undefined
 ) {
+  logStep({
+    targetUserId,
+    step: "Stripe subscription cleanup",
+    table: "stripe.subscriptions",
+  })
   if (!stripe || !stripeCustomerId?.trim()) return
 
   try {
@@ -115,6 +187,214 @@ async function cancelStripeSubscriptions(
   } catch (err) {
     console.error("[deleteUserAdmin] Stripe list subscriptions:", err)
   }
+}
+
+type UserContentIds = {
+  postIds: string[]
+  tradeIds: string[]
+}
+
+async function fetchUserContentIds(
+  supabase: SupabaseClient,
+  targetUserId: string
+): Promise<UserContentIds> {
+  const [{ data: posts, error: postError }, { data: trades, error: tradeError }] =
+    await Promise.all([
+      supabase.from("posts").select("id").eq("user_id", targetUserId),
+      supabase.from("trades").select("id").eq("user_id", targetUserId),
+    ])
+
+  if (postError) {
+    throw new AdminUserDeletionStepError(
+      "Owned content lookup",
+      "posts",
+      postError.message
+    )
+  }
+  if (tradeError) {
+    throw new AdminUserDeletionStepError(
+      "Owned content lookup",
+      "trades",
+      tradeError.message
+    )
+  }
+
+  return {
+    postIds: (posts ?? []).map((p) => String(p.id)),
+    tradeIds: (trades ?? []).map((t) => String(t.id)),
+  }
+}
+
+async function deleteNotificationsForIds(
+  supabase: SupabaseClient,
+  targetUserId: string,
+  stepName: string,
+  column: "post_id" | "trade_id",
+  ids: string[]
+) {
+  if (ids.length === 0) return
+
+  logStep({
+    targetUserId,
+    step: stepName,
+    table: "notifications",
+  })
+
+  const { error } = await supabase.from("notifications").delete().in(column, ids)
+
+  if (error) {
+    console.error(`[deleteUserAdmin] notifications.${column} in:`, error.message)
+    throw new AdminUserDeletionStepError(stepName, "notifications", error.message)
+  }
+}
+
+async function deleteEngagementOnOwnedPosts(
+  supabase: SupabaseClient,
+  targetUserId: string,
+  postIds: string[]
+) {
+  if (postIds.length === 0) return
+
+  await deleteWhereIn(
+    step(targetUserId, "Post likes cleanup", "likes"),
+    supabase,
+    "post_id",
+    postIds
+  )
+  await tryDeleteWhereIn(
+    step(targetUserId, "Saved posts on owned content cleanup", "saved_posts"),
+    supabase,
+    "post_id",
+    postIds
+  )
+  await deleteWhereIn(
+    step(targetUserId, "Comments on owned posts cleanup", "comments"),
+    supabase,
+    "post_id",
+    postIds
+  )
+  await deleteNotificationsForIds(
+    supabase,
+    targetUserId,
+    "Post-linked notification cleanup",
+    "post_id",
+    postIds
+  )
+}
+
+async function deleteEngagementOnOwnedTrades(
+  supabase: SupabaseClient,
+  targetUserId: string,
+  tradeIds: string[]
+) {
+  if (tradeIds.length === 0) return
+
+  await deleteWhereIn(
+    step(targetUserId, "Trade likes on owned trades cleanup", "trade_likes"),
+    supabase,
+    "trade_id",
+    tradeIds
+  )
+  await deleteWhereIn(
+    step(
+      targetUserId,
+      "Trade comments on owned trades cleanup",
+      "trade_comments"
+    ),
+    supabase,
+    "trade_id",
+    tradeIds
+  )
+  await tryDeleteWhereIn(
+    step(targetUserId, "Saved trades on owned content cleanup", "saved_trades"),
+    supabase,
+    "trade_id",
+    tradeIds
+  )
+  await deleteNotificationsForIds(
+    supabase,
+    targetUserId,
+    "Trade-linked notification cleanup",
+    "trade_id",
+    tradeIds
+  )
+  await deleteWhereIn(
+    step(targetUserId, "DM trade share cleanup", "messages"),
+    supabase,
+    "trade_id",
+    tradeIds
+  )
+  await deleteWhereIn(
+    step(targetUserId, "Room trade message cleanup", "room_messages"),
+    supabase,
+    "trade_id",
+    tradeIds
+  )
+  await tryDeleteWhereIn(
+    step(targetUserId, "Room pinned trade cleanup", "room_messages"),
+    supabase,
+    "pinned_trade_id",
+    tradeIds
+  )
+}
+
+async function deleteEngagementOnUserMessages(
+  supabase: SupabaseClient,
+  targetUserId: string
+) {
+  const { data: messages, error } = await supabase
+    .from("messages")
+    .select("id")
+    .eq("sender_id", targetUserId)
+
+  if (error) {
+    throw new AdminUserDeletionStepError(
+      "Message engagement lookup",
+      "messages",
+      error.message
+    )
+  }
+
+  const messageIds = (messages ?? []).map((m) => String(m.id))
+  if (messageIds.length === 0) return
+
+  await deleteWhereIn(
+    step(targetUserId, "Likes on user messages cleanup", "message_likes"),
+    supabase,
+    "message_id",
+    messageIds
+  )
+  await deleteWhereIn(
+    step(targetUserId, "Comments on user messages cleanup", "message_comments"),
+    supabase,
+    "message_id",
+    messageIds
+  )
+}
+
+async function clearReviewerReferences(
+  supabase: SupabaseClient,
+  targetUserId: string
+) {
+  logStep({
+    targetUserId,
+    step: "Affiliate reviewer reference cleanup",
+    table: "affiliate_applications",
+  })
+  await supabase
+    .from("affiliate_applications")
+    .update({ reviewed_by: null })
+    .eq("reviewed_by", targetUserId)
+
+  logStep({
+    targetUserId,
+    step: "Payout reviewer reference cleanup",
+    table: "affiliate_payout_requests",
+  })
+  await supabase
+    .from("affiliate_payout_requests")
+    .update({ reviewed_by: null })
+    .eq("reviewed_by", targetUserId)
 }
 
 export async function assertAdminCanDeleteTarget(
@@ -143,6 +423,14 @@ export async function assertAdminCanDeleteTarget(
   }
 }
 
+function step(
+  targetUserId: string,
+  stepName: string,
+  table: string
+): StepContext {
+  return { targetUserId, step: stepName, table }
+}
+
 /**
  * Permanently deletes a user and related application data.
  * Server-side only — caller must verify admin access first.
@@ -152,6 +440,10 @@ export async function deleteUserAdmin(
   input: DeleteUserAdminInput
 ): Promise<DeleteUserAdminResult> {
   const { adminUserId, targetUserId, stripe } = input
+
+  console.log(
+    `[deleteUserAdmin] start adminUserId=${adminUserId} targetUserId=${targetUserId}`
+  )
 
   await assertAdminCanDeleteTarget(supabase, adminUserId, targetUserId)
 
@@ -176,7 +468,13 @@ export async function deleteUserAdmin(
   const email = authUser?.email ?? null
   const username = profile?.username ?? null
 
-  await cancelStripeSubscriptions(stripe, profile?.stripe_customer_id)
+  await cancelStripeSubscriptions(
+    targetUserId,
+    stripe,
+    profile?.stripe_customer_id
+  )
+
+  const { postIds, tradeIds } = await fetchUserContentIds(supabase, targetUserId)
 
   const { data: ownedRooms } = await supabase
     .from("rooms")
@@ -185,102 +483,325 @@ export async function deleteUserAdmin(
   const ownedRoomIds = (ownedRooms ?? []).map((r) => String(r.id))
 
   if (ownedRoomIds.length > 0) {
-    await deleteWhereIn(supabase, "room_messages", "room_id", ownedRoomIds)
-    await deleteWhereIn(supabase, "room_members", "room_id", ownedRoomIds)
-    await deleteWhereIn(supabase, "room_bans", "room_id", ownedRoomIds)
-    await tryDeleteWhereIn(supabase, "room_presence", "room_id", ownedRoomIds)
-    await deleteWhereIn(supabase, "room_sections", "room_id", ownedRoomIds)
-    await deleteWhere(supabase, "rooms", "owner_user_id", targetUserId)
+    await deleteWhereIn(
+      step(targetUserId, "Owned room cleanup", "room_messages"),
+      supabase,
+      "room_id",
+      ownedRoomIds
+    )
+    await deleteWhereIn(
+      step(targetUserId, "Owned room cleanup", "room_members"),
+      supabase,
+      "room_id",
+      ownedRoomIds
+    )
+    await deleteWhereIn(
+      step(targetUserId, "Owned room cleanup", "room_bans"),
+      supabase,
+      "room_id",
+      ownedRoomIds
+    )
+    await tryDeleteWhereIn(
+      step(targetUserId, "Owned room cleanup", "room_presence"),
+      supabase,
+      "room_id",
+      ownedRoomIds
+    )
+    await deleteWhereIn(
+      step(targetUserId, "Owned room cleanup", "room_sections"),
+      supabase,
+      "room_id",
+      ownedRoomIds
+    )
+    await deleteWhere(
+      step(targetUserId, "Owned room cleanup", "rooms"),
+      supabase,
+      "owner_user_id",
+      targetUserId
+    )
   }
 
-  await deleteWhere(supabase, "room_members", "user_id", targetUserId)
-  await deleteWhere(supabase, "room_bans", "user_id", targetUserId)
+  await deleteWhere(
+    step(targetUserId, "Room membership cleanup", "room_members"),
+    supabase,
+    "user_id",
+    targetUserId
+  )
+  await deleteWhere(
+    step(targetUserId, "Room ban cleanup", "room_bans"),
+    supabase,
+    "user_id",
+    targetUserId
+  )
+  await deleteWhere(
+    step(targetUserId, "Room bans issued cleanup", "room_bans"),
+    supabase,
+    "banned_by",
+    targetUserId
+  )
+  await tryDeleteWhere(
+    step(targetUserId, "Room presence cleanup", "room_presence"),
+    supabase,
+    "user_id",
+    targetUserId
+  )
+  await deleteWhere(
+    step(targetUserId, "Room message cleanup", "room_messages"),
+    supabase,
+    "user_id",
+    targetUserId
+  )
 
   await deleteOr(
+    step(targetUserId, "Social graph cleanup", "followers"),
     supabase,
-    "followers",
     `follower_id.eq.${targetUserId},following_id.eq.${targetUserId}`
   )
   await deleteOr(
+    step(targetUserId, "Legacy follows cleanup", "follows"),
     supabase,
-    "follow_requests",
+    `follower_id.eq.${targetUserId},following_id.eq.${targetUserId}`
+  )
+  await deleteOr(
+    step(targetUserId, "Follow request cleanup", "follow_requests"),
+    supabase,
     `requester_id.eq.${targetUserId},target_id.eq.${targetUserId}`
   )
 
   await deleteOr(
+    step(targetUserId, "Notification cleanup", "notifications"),
     supabase,
-    "notifications",
     `user_id.eq.${targetUserId},sender_id.eq.${targetUserId}`
   )
 
-  await deleteWhere(supabase, "message_likes", "user_id", targetUserId)
-  await deleteWhere(supabase, "message_comments", "user_id", targetUserId)
-  await deleteWhere(supabase, "message_deletions", "user_id", targetUserId)
-  await deleteOr(
+  await deleteEngagementOnOwnedPosts(supabase, targetUserId, postIds)
+  await deleteEngagementOnOwnedTrades(supabase, targetUserId, tradeIds)
+  await deleteEngagementOnUserMessages(supabase, targetUserId)
+
+  await deleteWhere(
+    step(targetUserId, "Post likes cleanup", "likes"),
     supabase,
-    "messages",
+    "user_id",
+    targetUserId
+  )
+
+  await deleteWhere(
+    step(targetUserId, "Message likes cleanup", "message_likes"),
+    supabase,
+    "user_id",
+    targetUserId
+  )
+  await deleteWhere(
+    step(targetUserId, "Message comments cleanup", "message_comments"),
+    supabase,
+    "user_id",
+    targetUserId
+  )
+  await deleteWhere(
+    step(targetUserId, "Message deletions cleanup", "message_deletions"),
+    supabase,
+    "user_id",
+    targetUserId
+  )
+  await deleteOr(
+    step(targetUserId, "Legacy direct messages cleanup", "direct_messages"),
+    supabase,
+    `sender_id.eq.${targetUserId},recipient_id.eq.${targetUserId}`
+  )
+  await deleteOr(
+    step(targetUserId, "Messages cleanup", "messages"),
+    supabase,
     `sender_id.eq.${targetUserId},user_id.eq.${targetUserId}`
   )
-  await deleteWhere(supabase, "conversation_participants", "user_id", targetUserId)
-
-  await deleteWhere(supabase, "trade_likes", "user_id", targetUserId)
-  await deleteWhere(supabase, "trade_comments", "user_id", targetUserId)
-  await deleteWhere(supabase, "comments", "user_id", targetUserId)
-  await deleteWhere(supabase, "posts", "user_id", targetUserId)
-  await deleteWhere(supabase, "trades", "user_id", targetUserId)
-
-  await deleteWhere(supabase, "profile_posts", "user_id", targetUserId)
-  await deleteWhere(supabase, "stories", "user_id", targetUserId)
-  await deleteWhere(supabase, "saved_posts", "user_id", targetUserId)
-  await deleteWhere(supabase, "saved_trades", "user_id", targetUserId)
-
-  await deleteWhere(supabase, "affiliate_payout_requests", "user_id", targetUserId)
-  await deleteWhere(supabase, "affiliate_applications", "user_id", targetUserId)
-  await deleteWhere(supabase, "affiliates", "user_id", targetUserId)
-
-  await deleteWhere(supabase, "achievements", "user_id", targetUserId)
-  await deleteWhere(supabase, "feedback_submissions", "user_id", targetUserId)
-  await deleteWhere(supabase, "support_tickets", "user_id", targetUserId)
-  await deleteWhere(supabase, "bug_reports", "user_id", targetUserId)
-  await deleteWhere(supabase, "feature_requests", "user_id", targetUserId)
-  await deleteWhere(supabase, "presets", "user_id", targetUserId)
-  await deleteWhere(supabase, "accounts", "user_id", targetUserId)
-  await deleteWhere(supabase, "csv_support_requests", "user_id", targetUserId)
-  await tryDeleteWhere(supabase, "account_settings", "id", targetUserId)
-  await tryDeleteWhere(supabase, "billing_accounts", "id", targetUserId)
-
-  await deleteOr(
+  await deleteWhere(
+    step(targetUserId, "Conversation participant cleanup", "conversation_participants"),
     supabase,
-    "referrals_ledger",
-    `referrer_user_id.eq.${targetUserId},referred_user_id.eq.${targetUserId}`
+    "user_id",
+    targetUserId
   )
 
+  await deleteWhere(
+    step(targetUserId, "Trade likes cleanup", "trade_likes"),
+    supabase,
+    "user_id",
+    targetUserId
+  )
+  await deleteWhere(
+    step(targetUserId, "Trade comments cleanup", "trade_comments"),
+    supabase,
+    "user_id",
+    targetUserId
+  )
+  await deleteWhere(
+    step(targetUserId, "Post comments cleanup", "comments"),
+    supabase,
+    "user_id",
+    targetUserId
+  )
+
+  await deleteWhere(
+    step(targetUserId, "Posts cleanup", "posts"),
+    supabase,
+    "user_id",
+    targetUserId
+  )
+  await deleteWhere(
+    step(targetUserId, "Trades cleanup", "trades"),
+    supabase,
+    "user_id",
+    targetUserId
+  )
+
+  await deleteWhere(
+    step(targetUserId, "Profile posts cleanup", "profile_posts"),
+    supabase,
+    "user_id",
+    targetUserId
+  )
+  await deleteWhere(
+    step(targetUserId, "Stories cleanup", "stories"),
+    supabase,
+    "user_id",
+    targetUserId
+  )
+  await deleteWhere(
+    step(targetUserId, "Saved posts cleanup", "saved_posts"),
+    supabase,
+    "user_id",
+    targetUserId
+  )
+  await deleteWhere(
+    step(targetUserId, "Saved trades cleanup", "saved_trades"),
+    supabase,
+    "user_id",
+    targetUserId
+  )
+
+  await deleteWhere(
+    step(targetUserId, "Affiliate payout cleanup", "affiliate_payout_requests"),
+    supabase,
+    "user_id",
+    targetUserId
+  )
+  await deleteWhere(
+    step(targetUserId, "Affiliate application cleanup", "affiliate_applications"),
+    supabase,
+    "user_id",
+    targetUserId
+  )
+  await deleteWhere(
+    step(targetUserId, "Affiliate record cleanup", "affiliates"),
+    supabase,
+    "user_id",
+    targetUserId
+  )
+
+  await deleteWhere(
+    step(targetUserId, "Achievements cleanup", "achievements"),
+    supabase,
+    "user_id",
+    targetUserId
+  )
+  await deleteWhere(
+    step(targetUserId, "Feedback cleanup", "feedback_submissions"),
+    supabase,
+    "user_id",
+    targetUserId
+  )
+  await deleteWhere(
+    step(targetUserId, "Support ticket cleanup", "support_tickets"),
+    supabase,
+    "user_id",
+    targetUserId
+  )
+  await deleteWhere(
+    step(targetUserId, "Bug report cleanup", "bug_reports"),
+    supabase,
+    "user_id",
+    targetUserId
+  )
+  await deleteWhere(
+    step(targetUserId, "Feature request cleanup", "feature_requests"),
+    supabase,
+    "user_id",
+    targetUserId
+  )
+  await deleteWhere(
+    step(targetUserId, "Presets cleanup", "presets"),
+    supabase,
+    "user_id",
+    targetUserId
+  )
+  await deleteWhere(
+    step(targetUserId, "Accounts cleanup", "accounts"),
+    supabase,
+    "user_id",
+    targetUserId
+  )
+  await tryDeleteWhere(
+    step(targetUserId, "User accounts cleanup", "user_accounts"),
+    supabase,
+    "user_id",
+    targetUserId
+  )
+  await deleteWhere(
+    step(targetUserId, "CSV support cleanup", "csv_support_requests"),
+    supabase,
+    "user_id",
+    targetUserId
+  )
+  await tryDeleteWhere(
+    step(targetUserId, "Account settings cleanup", "account_settings"),
+    supabase,
+    "id",
+    targetUserId
+  )
+  await tryDeleteWhere(
+    step(targetUserId, "Billing account cleanup", "billing_accounts"),
+    supabase,
+    "id",
+    targetUserId
+  )
+
+  const referralFilter = `referrer_user_id.eq.${targetUserId},referred_user_id.eq.${targetUserId}`
+  await tryDeleteOr(
+    step(targetUserId, "Referral cleanup", "referrals"),
+    supabase,
+    referralFilter
+  )
+  await tryDeleteOr(
+    step(targetUserId, "Referral cleanup", "referrals_ledger"),
+    supabase,
+    referralFilter
+  )
+
+  logStep({
+    targetUserId,
+    step: "Profile ban reference cleanup",
+    table: "profiles",
+  })
   await supabase
     .from("profiles")
     .update({ banned_by: null })
     .eq("banned_by", targetUserId)
 
-  if (profile?.id) {
-    const { error: profileDeleteError } = await supabase
-      .from("profiles")
-      .delete()
-      .eq("id", targetUserId)
-    if (profileDeleteError) {
-      throw new AdminUserDeletionError("DELETE_FAILED", profileDeleteError.message)
-    }
-  }
+  logStep({
+    targetUserId,
+    step: "Account settings ban reference cleanup",
+    table: "account_settings",
+  })
+  await supabase
+    .from("account_settings")
+    .update({ banned_by: null })
+    .eq("banned_by", targetUserId)
 
-  if (authUser?.id) {
-    const { error: authDeleteError } = await supabase.auth.admin.deleteUser(
-      targetUserId
-    )
-    if (authDeleteError) {
-      throw new AdminUserDeletionError("DELETE_FAILED", authDeleteError.message)
-    }
-  } else if (authError && authError.message !== "User not found") {
-    throw new AdminUserDeletionError("DELETE_FAILED", authError.message)
-  }
+  await clearReviewerReferences(supabase, targetUserId)
 
+  logStep({
+    targetUserId,
+    step: "Audit log",
+    table: "admin_audit_log",
+  })
   const { error: auditError } = await supabase.from("admin_audit_log").insert({
     admin_user_id: adminUserId,
     target_user_id: targetUserId,
@@ -296,7 +817,47 @@ export async function deleteUserAdmin(
 
   if (auditError) {
     console.error("[deleteUserAdmin] audit log:", auditError.message)
+    throw new AdminUserDeletionStepError(
+      "Audit log",
+      "admin_audit_log",
+      auditError.message
+    )
   }
+
+  if (profile?.id) {
+    await deleteWhere(
+      step(targetUserId, "Profile delete", "profiles"),
+      supabase,
+      "id",
+      targetUserId
+    )
+  }
+
+  if (authUser?.id) {
+    logStep({
+      targetUserId,
+      step: "Auth user delete",
+      table: "auth.users",
+    })
+    const { error: authDeleteError } = await supabase.auth.admin.deleteUser(
+      targetUserId
+    )
+    if (authDeleteError) {
+      throw new AdminUserDeletionStepError(
+        "Auth user delete",
+        "auth.users",
+        authDeleteError.message
+      )
+    }
+  } else if (authError && authError.message !== "User not found") {
+    throw new AdminUserDeletionStepError(
+      "Auth user lookup",
+      "auth.users",
+      authError.message
+    )
+  }
+
+  console.log(`[deleteUserAdmin] complete targetUserId=${targetUserId}`)
 
   return {
     ok: true,

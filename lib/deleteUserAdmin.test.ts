@@ -2,6 +2,7 @@ const assert = require("node:assert/strict")
 const { describe, it } = require("node:test")
 const {
   AdminUserDeletionError,
+  AdminUserDeletionStepError,
   assertAdminCanDeleteTarget,
 } = require("./deleteUserAdmin.ts")
 
@@ -47,5 +48,16 @@ describe("assertAdminCanDeleteTarget", () => {
         return true
       }
     )
+  })
+
+  it("AdminUserDeletionStepError exposes step and table", () => {
+    const err = new AdminUserDeletionStepError(
+      "Referral cleanup",
+      "referrals_ledger",
+      "Table does not exist"
+    )
+    assert.equal(err.step, "Referral cleanup")
+    assert.equal(err.table, "referrals_ledger")
+    assert.equal(err.message, "Table does not exist")
   })
 })

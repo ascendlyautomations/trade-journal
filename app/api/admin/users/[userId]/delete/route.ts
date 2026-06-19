@@ -1,6 +1,7 @@
 import { supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
 import {
   AdminUserDeletionError,
+  AdminUserDeletionStepError,
   deleteUserAdmin,
 } from "@/lib/deleteUserAdmin"
 import { requireAdminApiUser } from "@/lib/requireAdminApi"
@@ -44,6 +45,19 @@ export async function POST(req: Request, context: RouteContext) {
 
     return Response.json({ success: true, ...result })
   } catch (err) {
+    if (err instanceof AdminUserDeletionStepError) {
+      return Response.json(
+        {
+          error: err.message,
+          code: err.code,
+          step: err.step,
+          table: err.table,
+          message: err.message,
+        },
+        { status: 500 }
+      )
+    }
+
     if (err instanceof AdminUserDeletionError) {
       const status =
         err.code === "NOT_FOUND"
@@ -51,11 +65,28 @@ export async function POST(req: Request, context: RouteContext) {
           : err.code === "SELF_DELETE" || err.code === "ADMIN_TARGET"
             ? 403
             : 500
-      return Response.json({ error: err.message, code: err.code }, { status })
+      return Response.json(
+        {
+          error: err.message,
+          code: err.code,
+          step: null,
+          table: null,
+          message: err.message,
+        },
+        { status }
+      )
     }
 
     const message = err instanceof Error ? err.message : "Delete failed"
     console.error("[admin/users/delete]", err)
-    return Response.json({ error: message }, { status: 500 })
+    return Response.json(
+      {
+        error: message,
+        step: null,
+        table: null,
+        message,
+      },
+      { status: 500 }
+    )
   }
 }

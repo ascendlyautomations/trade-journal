@@ -15,6 +15,7 @@ import type { FeedbackPopupInput } from "@/app/components/ui/feedback-popup-type
 import {
   computeGettingStartedProgress,
   type GettingStartedProgress,
+  shouldShowGettingStartedIntroPopup,
 } from "@/lib/gettingStartedChecklist"
 import {
   fetchGettingStartedChecklistSignals,
@@ -249,18 +250,21 @@ export function GettingStartedProgressProvider({
 
       const generation = ++refreshGenerationRef.current
       const isBaselineFetch = !baselineResolvedRef.current
+      const prevOnboardingCompleted = signalsRef.current.onboardingCompleted
       const preFetchSnapshot = computeRawProgress(signalsRef.current)
 
       gsDebug("refresh start", {
         generation,
         fromUserAction,
         isBaselineFetch,
+        prevOnboardingCompleted,
         preFetchCompletedCount: preFetchSnapshot.completedCount,
         signalsReady: signalsReadyRef.current,
       })
 
+      // After onboarding save, UserProfileProvider may still hold stale flags — read DB.
       const preloadedProfileSignals =
-        profile != null
+        !fromUserAction && profile != null
           ? {
               onboardingCompleted: profile.onboarding_completed === true,
               hasSeenGettingStartedIntro:
@@ -333,30 +337,46 @@ export function GettingStartedProgressProvider({
         popups.push(batch.completionPopup)
       }
 
-      if (
-        isBaselineFetch &&
-        next.onboardingCompleted &&
-        !next.hasSeenGettingStartedIntro
-      ) {
+      const showIntro = shouldShowGettingStartedIntroPopup({
+        onboardingCompleted: next.onboardingCompleted,
+        hasSeenGettingStartedIntro: next.hasSeenGettingStartedIntro,
+        prevOnboardingCompleted,
+        isBaselineFetch,
+      })
+
+      if (showIntro) {
         introPopupActiveRef.current = true
         popups.unshift(feedbackPresets.gettingStartedIntro())
         gsDebug("intro popup queued", {
           hasSeenGettingStartedIntro: next.hasSeenGettingStartedIntro,
           onboardingCompleted: next.onboardingCompleted,
+          prevOnboardingCompleted,
+          isBaselineFetch,
         })
       }
+
+      // Profile task completes with onboarding — intro popup covers that milestone.
+      const popupsToEnqueue =
+        showIntro && !prevOnboardingCompleted
+          ? popups.filter(
+              (p) =>
+                !(
+                  p.title === "Getting Started Progress" &&
+                  typeof p.message === "string" &&
+                  p.message.includes("Complete your profile")
+                )
+            )
+          : popups
 
       gsDebug("popup batch", {
         stepCount: batch.stepPopups.length,
         hasCompletion: Boolean(batch.completionPopup),
         hasSeenOnboardingCompletePopup: next.hasSeenOnboardingCompletePopup,
-        hasIntro:
-          isBaselineFetch &&
-          next.onboardingCompleted &&
-          !next.hasSeenGettingStartedIntro,
+        hasIntro: showIntro,
+        enqueueCount: popupsToEnqueue.length,
       })
 
-      enqueuePopups(popups)
+      enqueuePopups(popupsToEnqueue)
     },
     [enqueuePopups, profile]
   )

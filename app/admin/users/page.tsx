@@ -13,9 +13,62 @@ import {
   fetchUserActivityCounts,
 } from "@/lib/adminUsersDirectory"
 import { isProActive } from "@/lib/subscription"
+import { supabaseBearerHeaders } from "@/lib/supabaseBearerFetch"
 import { supabase } from "@/lib/supabaseClient"
 
 const PAGE_SIZE = 20
+
+/** TEMPORARY BETA CLEANUP TOOL — bulk multi-select delete; remove after launch. */
+type BulkDeleteUserRef = { id: string; username: string }
+type BulkDeleteOutcome = {
+  deleted: BulkDeleteUserRef[]
+  skipped: Array<BulkDeleteUserRef & { reason: string }>
+  failed: Array<BulkDeleteUserRef & { message: string; step?: string | null; table?: string | null }>
+}
+
+type AdminDeleteApiError = {
+  message: string
+  step?: string | null
+  table?: string | null
+  code?: string
+}
+
+async function postAdminUserDelete(
+  userId: string
+): Promise<{ ok: true } | { ok: false; error: AdminDeleteApiError }> {
+  const res = await fetch(`/api/admin/users/${userId}/delete`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      ...(await supabaseBearerHeaders()),
+    },
+    body: JSON.stringify({ confirmation: "DELETE" }),
+  })
+  const data = (await res.json()) as {
+    error?: string
+    step?: string | null
+    table?: string | null
+    message?: string
+    code?: string
+  }
+  if (!res.ok) {
+    return {
+      ok: false,
+      error: {
+        message: data.message ?? data.error ?? "Delete failed",
+        step: data.step ?? null,
+        table: data.table ?? null,
+        code: data.code,
+      },
+    }
+  }
+  return { ok: true }
+}
+
+function bulkUserLabel(row: Pick<AdminUserListRow, "id" | "username">) {
+  return row.username ? `@${row.username}` : row.id
+}
 
 export default function AdminUsersPage() {
   const router = useRouter()
@@ -45,7 +98,19 @@ export default function AdminUsersPage() {
   const [deletePreviewLoading, setDeletePreviewLoading] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState("")
   const [deleteBusy, setDeleteBusy] = useState(false)
-  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState<{
+    step?: string | null
+    table?: string | null
+    message: string
+  } | null>(null)
+
+  /** TEMPORARY BETA CLEANUP TOOL */
+  const [adminUserIds, setAdminUserIds] = useState<Set<string>>(new Set())
+  const [bulkSelectedIds, setBulkSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkDeleteModalOpen, setBulkDeleteModalOpen] = useState(false)
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState("")
+  const [bulkDeleteBusy, setBulkDeleteBusy] = useState(false)
+  const [bulkDeleteOutcome, setBulkDeleteOutcome] = useState<BulkDeleteOutcome | null>(null)
 
   useEffect(() => {
     const t = window.setTimeout(() => setDebouncedSearch(search), 300)
@@ -79,6 +144,103 @@ export default function AdminUsersPage() {
     }
   }, [router])
 
+  useEffect(() => {
+    if (!allowed) return
+    let cancelled = false
+    void (async () => {
+      const { data } = await supabase.from("admin_users").select("user_id")
+      if (cancelled) return
+      setAdminUserIds(new Set((data ?? []).map((r) => String(r.user_id))))
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [allowed])
+
+  const isBulkDeletable = useCallback(
+    (row: AdminUserListRow) => {
+      if (!adminUserId) return false
+      if (row.id === adminUserId) return false
+      if (adminUserIds.has(row.id)) return false
+      return true
+    },
+    [adminUserId, adminUserIds]
+  )
+
+  const deletableRowsOnPage = rows.filter(isBulkDeletable)
+  const bulkSelectedCount = bulkSelectedIds.size
+  const allDeletableOnPageSelected =
+    deletableRowsOnPage.length > 0 &&
+    deletableRowsOnPage.every((row) => bulkSelectedIds.has(row.id))
+  const someDeletableOnPageSelected =
+    deletableRowsOnPage.some((row) => bulkSelectedIds.has(row.id)) &&
+    !allDeletableOnPageSelected
+
+  function toggleBulkSelectRow(row: AdminUserListRow) {
+    if (!isBulkDeletable(row)) return
+    setBulkSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(row.id)) next.delete(row.id)
+      else next.add(row.id)
+      return next
+    })
+  }
+
+  function toggleBulkSelectAllOnPage() {
+    if (allDeletableOnPageSelected) {
+      setBulkSelectedIds((prev) => {
+        const next = new Set(prev)
+        for (const row of deletableRowsOnPage) next.delete(row.id)
+        return next
+      })
+      return
+    }
+    setBulkSelectedIds((prev) => {
+      const next = new Set(prev)
+      for (const row of deletableRowsOnPage) next.add(row.id)
+      return next
+    })
+  }
+
+  function openBulkDeleteModal() {
+    if (bulkSelectedCount === 0) return
+    setBulkDeleteConfirm("")
+    setBulkDeleteOutcome(null)
+    setBulkDeleteModalOpen(true)
+  }
+
+  function closeBulkDeleteModal() {
+    if (bulkDeleteBusy) return
+    setBulkDeleteModalOpen(false)
+    setBulkDeleteConfirm("")
+  }
+
+  function resolveBulkSelectedRows(): AdminUserListRow[] {
+    const byId = new Map(rows.map((r) => [r.id, r]))
+    return [...bulkSelectedIds].map(
+      (id) =>
+        byId.get(id) ?? {
+          id,
+          username: "",
+          name: "",
+          email: "",
+          avatar_url: null,
+          created_at: "",
+          is_private: false,
+          is_pro: false,
+          subscription_status: "",
+          referral_code: "",
+          is_banned: false,
+          banned_reason: null,
+          banned_at: null,
+          is_beta_tester: false,
+          full_count: 0,
+        }
+    )
+  }
+
+  const bulkModalRows = bulkDeleteModalOpen ? resolveBulkSelectedRows() : []
+
   const loadDirectory = useCallback(async () => {
     if (!allowed) return
     setListLoading(true)
@@ -105,6 +267,61 @@ export default function AdminUsersPage() {
   useEffect(() => {
     void loadDirectory()
   }, [loadDirectory])
+
+  async function handleBulkDeleteSelected() {
+    if (bulkDeleteConfirm !== "DELETE" || bulkSelectedCount === 0) return
+
+    const selectedRows = resolveBulkSelectedRows()
+    const outcome: BulkDeleteOutcome = { deleted: [], skipped: [], failed: [] }
+
+    setBulkDeleteBusy(true)
+    setBulkDeleteOutcome(null)
+
+    for (const row of selectedRows) {
+      const label = bulkUserLabel(row)
+      if (!isBulkDeletable(row)) {
+        const reason =
+          row.id === adminUserId
+            ? "You cannot delete your own account."
+            : adminUserIds.has(row.id)
+              ? "Admin accounts cannot be deleted."
+              : "Not eligible for deletion."
+        outcome.skipped.push({ id: row.id, username: label, reason })
+        continue
+      }
+
+      const result = await postAdminUserDelete(row.id)
+      if (result.ok) {
+        outcome.deleted.push({ id: row.id, username: label })
+        setBulkSelectedIds((prev) => {
+          const next = new Set(prev)
+          next.delete(row.id)
+          return next
+        })
+      } else if (
+        result.error.code === "SELF_DELETE" ||
+        result.error.code === "ADMIN_TARGET"
+      ) {
+        outcome.skipped.push({
+          id: row.id,
+          username: label,
+          reason: result.error.message,
+        })
+      } else {
+        outcome.failed.push({
+          id: row.id,
+          username: label,
+          message: result.error.message,
+          step: result.error.step,
+          table: result.error.table,
+        })
+      }
+    }
+
+    setBulkDeleteOutcome(outcome)
+    setBulkDeleteBusy(false)
+    await loadDirectory()
+  }
 
   useEffect(() => {
     if (!selected?.id) {
@@ -148,14 +365,21 @@ export default function AdminUsersPage() {
     setDeleteError(null)
     setDeletePreviewLoading(true)
     try {
-      const res = await fetch(`/api/admin/users/${selected.id}/delete-preview`)
+      const res = await fetch(`/api/admin/users/${selected.id}/delete-preview`, {
+        credentials: "include",
+        headers: {
+          ...(await supabaseBearerHeaders()),
+        },
+      })
       const data = (await res.json()) as { preview?: Record<string, unknown>; error?: string }
       if (!res.ok) {
         throw new Error(data.error || "Failed to load deletion preview")
       }
       setDeletePreview(data.preview ?? null)
     } catch (err) {
-      setDeleteError(err instanceof Error ? err.message : "Failed to load deletion preview")
+      setDeleteError({
+        message: err instanceof Error ? err.message : "Failed to load deletion preview",
+      })
       setDeletePreview(null)
     } finally {
       setDeletePreviewLoading(false)
@@ -171,14 +395,14 @@ export default function AdminUsersPage() {
     setDeleteBusy(true)
     setDeleteError(null)
     try {
-      const res = await fetch(`/api/admin/users/${selected.id}/delete`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ confirmation: "DELETE" }),
-      })
-      const data = (await res.json()) as { error?: string }
-      if (!res.ok) {
-        throw new Error(data.error || "Delete failed")
+      const result = await postAdminUserDelete(selected.id)
+      if (!result.ok) {
+        setDeleteError({
+          step: result.error.step ?? null,
+          table: result.error.table ?? null,
+          message: result.error.message,
+        })
+        return
       }
       setSelected(null)
       setDeleteView(false)
@@ -186,7 +410,9 @@ export default function AdminUsersPage() {
       setDeleteConfirm("")
       await loadDirectory()
     } catch (err) {
-      setDeleteError(err instanceof Error ? err.message : "Delete failed")
+      setDeleteError({
+        message: err instanceof Error ? err.message : "Delete failed",
+      })
     } finally {
       setDeleteBusy(false)
     }
@@ -383,10 +609,50 @@ export default function AdminUsersPage() {
               </div>
             </div>
 
+            {/* TEMPORARY BETA CLEANUP TOOL — bulk multi-select delete; remove after launch. */}
+            <div className="mt-4 flex flex-col gap-3 rounded-lg border border-amber-500/30 bg-amber-950/20 p-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+              <div className="text-sm text-amber-100/90">
+                <span className="font-medium text-amber-200">Beta cleanup:</span>{" "}
+                Selected: <span className="tabular-nums font-semibold text-white">{bulkSelectedCount}</span>{" "}
+                {bulkSelectedCount === 1 ? "user" : "users"}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={bulkSelectedCount === 0 || bulkDeleteBusy}
+                  onClick={() => setBulkSelectedIds(new Set())}
+                  className="rounded bg-white/10 px-3 py-1.5 text-sm hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Clear selection
+                </button>
+                <button
+                  type="button"
+                  disabled={bulkSelectedCount === 0 || bulkDeleteBusy}
+                  onClick={openBulkDeleteModal}
+                  className="rounded border border-red-400/40 bg-red-600/30 px-3 py-1.5 text-sm font-semibold text-red-100 hover:bg-red-600/40 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Delete selected
+                </button>
+              </div>
+            </div>
+
             <div className="mt-4 overflow-x-auto rounded-lg border border-white/10">
               <table className="min-w-full divide-y divide-white/10 text-left text-sm">
                 <thead className="bg-black/30 text-xs uppercase text-gray-400">
                   <tr>
+                    <th className="w-10 px-2 py-2">
+                      <input
+                        type="checkbox"
+                        aria-label="Select all users on this page"
+                        checked={allDeletableOnPageSelected}
+                        ref={(el) => {
+                          if (el) el.indeterminate = someDeletableOnPageSelected
+                        }}
+                        disabled={deletableRowsOnPage.length === 0 || bulkDeleteBusy}
+                        onChange={toggleBulkSelectAllOnPage}
+                        className="h-4 w-4 rounded border-white/20 bg-[#111827] accent-red-500"
+                      />
+                    </th>
                     <th className="px-3 py-2">User</th>
                     <th className="px-3 py-2">Email</th>
                     <th className="px-3 py-2">Joined</th>
@@ -400,19 +666,40 @@ export default function AdminUsersPage() {
                 <tbody className="divide-y divide-white/5">
                   {!listLoading && rows.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="px-3 py-6 text-center text-gray-400">
+                      <td colSpan={9} className="px-3 py-6 text-center text-gray-400">
                         No users match these filters.
                       </td>
                     </tr>
                   ) : null}
                   {rows.map((row) => {
                     const pro = isProActive({ is_pro: row.is_pro, subscription_status: row.subscription_status })
+                    const rowDeletable = isBulkDeletable(row)
+                    const rowSelected = bulkSelectedIds.has(row.id)
                     return (
                       <tr
                         key={row.id}
-                        className="cursor-pointer hover:bg-white/5"
+                        className={`cursor-pointer hover:bg-white/5 ${rowSelected ? "bg-red-950/20" : ""}`}
                         onClick={() => openRow(row)}
                       >
+                        <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            aria-label={`Select ${bulkUserLabel(row)}`}
+                            checked={rowSelected}
+                            disabled={!rowDeletable || bulkDeleteBusy}
+                            title={
+                              !rowDeletable
+                                ? row.id === adminUserId
+                                  ? "Cannot delete your own account"
+                                  : adminUserIds.has(row.id)
+                                    ? "Cannot delete admin accounts"
+                                    : "Cannot select"
+                                : undefined
+                            }
+                            onChange={() => toggleBulkSelectRow(row)}
+                            className="h-4 w-4 rounded border-white/20 bg-[#111827] accent-red-500 disabled:opacity-40"
+                          />
+                        </td>
                         <td className="px-3 py-2">
                           <div className="flex items-center gap-2">
                             <div className="relative h-8 w-8 shrink-0 overflow-hidden rounded-full bg-gray-700">
@@ -717,7 +1004,24 @@ export default function AdminUsersPage() {
                   </label>
 
                   {deleteError ? (
-                    <p className="text-sm text-red-300">{deleteError}</p>
+                    <div className="rounded-lg border border-red-500/30 bg-red-950/30 p-3 text-sm text-red-200">
+                      {deleteError.step ? (
+                        <p>
+                          <span className="font-medium text-red-100">Failed during:</span>{" "}
+                          {deleteError.step}
+                        </p>
+                      ) : null}
+                      {deleteError.table ? (
+                        <p className={deleteError.step ? "mt-1" : ""}>
+                          <span className="font-medium text-red-100">Table:</span>{" "}
+                          {deleteError.table}
+                        </p>
+                      ) : null}
+                      <p className={deleteError.step || deleteError.table ? "mt-1" : ""}>
+                        <span className="font-medium text-red-100">Reason:</span>{" "}
+                        {deleteError.message}
+                      </p>
+                    </div>
                   ) : null}
 
                   <button
@@ -731,6 +1035,147 @@ export default function AdminUsersPage() {
                 </div>
               ) : null}
             </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* TEMPORARY BETA CLEANUP TOOL — bulk delete confirmation + results */}
+      {bulkDeleteModalOpen ? (
+        <div
+          className="fixed inset-0 z-[140] flex items-center justify-center bg-black/70 p-3 backdrop-blur-sm md:p-6"
+          onClick={() => closeBulkDeleteModal()}
+        >
+          <div
+            className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-red-500/30 bg-[#0f172a] p-5 text-white shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-red-100">Delete selected users</h2>
+                <p className="mt-1 text-sm text-gray-400">
+                  Pre-beta cleanup — uses the same permanent delete workflow as single-user deletion.
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={bulkDeleteBusy}
+                onClick={() => closeBulkDeleteModal()}
+                className="rounded bg-white/10 px-3 py-1 text-sm hover:bg-white/20 disabled:opacity-50"
+              >
+                Close
+              </button>
+            </div>
+
+            {bulkDeleteOutcome ? (
+              <div className="mt-4 space-y-4">
+                <div className="grid grid-cols-3 gap-2 text-center text-sm">
+                  <div className="rounded-lg border border-emerald-500/30 bg-emerald-950/30 p-3">
+                    <p className="text-xs text-emerald-300">Deleted</p>
+                    <p className="text-2xl font-semibold tabular-nums text-white">
+                      {bulkDeleteOutcome.deleted.length}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-amber-500/30 bg-amber-950/30 p-3">
+                    <p className="text-xs text-amber-300">Skipped</p>
+                    <p className="text-2xl font-semibold tabular-nums text-white">
+                      {bulkDeleteOutcome.skipped.length}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-red-500/30 bg-red-950/30 p-3">
+                    <p className="text-xs text-red-300">Failed</p>
+                    <p className="text-2xl font-semibold tabular-nums text-white">
+                      {bulkDeleteOutcome.failed.length}
+                    </p>
+                  </div>
+                </div>
+
+                {bulkDeleteOutcome.skipped.length > 0 ? (
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-amber-300">Skipped</h3>
+                    <ul className="mt-2 max-h-32 space-y-1 overflow-y-auto text-sm text-gray-300">
+                      {bulkDeleteOutcome.skipped.map((u) => (
+                        <li key={u.id}>
+                          <span className="font-medium text-white">{u.username}</span>
+                          <span className="text-gray-500"> — {u.reason}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+
+                {bulkDeleteOutcome.failed.length > 0 ? (
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-red-300">Failed</h3>
+                    <ul className="mt-2 max-h-40 space-y-2 overflow-y-auto text-sm">
+                      {bulkDeleteOutcome.failed.map((u) => (
+                        <li key={u.id} className="rounded border border-red-500/20 bg-red-950/20 p-2">
+                          <p className="font-medium text-red-100">{u.username}</p>
+                          {u.step ? (
+                            <p className="text-xs text-gray-400">Step: {u.step}</p>
+                          ) : null}
+                          <p className="text-xs text-red-200/90">{u.message}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+
+                {bulkDeleteOutcome.deleted.length > 0 ? (
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-emerald-300">Deleted</h3>
+                    <p className="mt-1 text-sm text-gray-400">
+                      {bulkDeleteOutcome.deleted.map((u) => u.username).join(", ")}
+                    </p>
+                  </div>
+                ) : null}
+
+                <button
+                  type="button"
+                  onClick={() => closeBulkDeleteModal()}
+                  className="w-full rounded bg-white/10 px-4 py-2 text-sm font-semibold hover:bg-white/20"
+                >
+                  Done
+                </button>
+              </div>
+            ) : (
+              <div className="mt-4 space-y-4">
+                <p className="text-sm text-gray-300">
+                  You are about to permanently delete{" "}
+                  <span className="font-semibold text-white tabular-nums">{bulkSelectedCount}</span>{" "}
+                  {bulkSelectedCount === 1 ? "user" : "users"}.
+                </p>
+                <ul className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-white/10 bg-black/30 p-3 text-sm">
+                  {bulkModalRows.map((row) => (
+                    <li key={row.id} className="text-gray-200">
+                      {bulkUserLabel(row)}
+                      {!isBulkDeletable(row) ? (
+                        <span className="ml-2 text-xs text-amber-400">(will be skipped)</span>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+                <label className="block text-xs text-gray-400">
+                  Type <span className="font-mono text-red-200">DELETE</span> to confirm
+                  <input
+                    value={bulkDeleteConfirm}
+                    onChange={(e) => setBulkDeleteConfirm(e.target.value)}
+                    autoComplete="off"
+                    spellCheck={false}
+                    disabled={bulkDeleteBusy}
+                    className="mt-1 w-full rounded border border-white/10 bg-[#111827] p-2 font-mono text-sm text-white"
+                    placeholder="DELETE"
+                  />
+                </label>
+                <button
+                  type="button"
+                  disabled={bulkDeleteBusy || bulkDeleteConfirm !== "DELETE"}
+                  onClick={() => void handleBulkDeleteSelected()}
+                  className="w-full rounded bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {bulkDeleteBusy ? "Deleting…" : "Permanently delete selected"}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       ) : null}
