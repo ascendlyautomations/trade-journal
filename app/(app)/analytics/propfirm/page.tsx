@@ -364,7 +364,6 @@ export default function PropFirmPage() {
   }
 
   const isEmptyAccounts = accountsLoaded && accounts.length === 0
-  const emptyAccountLabel = "— • — • —"
 
   const drawdownUsed = trailingMetrics.maxDrawdownUsed
   const { progressPercent, status, ddPercent, distanceDanger } = progress
@@ -401,16 +400,14 @@ export default function PropFirmPage() {
 
             <div
               className={`inline-flex w-fit rounded-full border px-3 py-1 text-sm font-semibold ${
-                isEmptyAccounts
-                  ? "border-white/15 bg-white/5 text-gray-400"
-                  : status === "PASSED"
-                    ? "border-green-500/30 bg-green-500/10 text-green-400"
-                    : status === "FAILED"
-                      ? "border-red-500/30 bg-red-500/10 text-red-400"
-                      : "border-yellow-500/30 bg-yellow-500/10 text-yellow-400"
+                status === "PASSED"
+                  ? "border-green-500/30 bg-green-500/10 text-green-400"
+                  : status === "FAILED"
+                    ? "border-red-500/30 bg-red-500/10 text-red-400"
+                    : "border-yellow-500/30 bg-yellow-500/10 text-yellow-400"
               }`}
             >
-              {isEmptyAccounts ? "—" : statusLabel}
+              {statusLabel}
             </div>
           </div>
 
@@ -447,22 +444,11 @@ export default function PropFirmPage() {
             <p className="text-sm text-gray-400 md:text-right">
               Selected:{" "}
               <span className="font-medium text-gray-200">
-                {isEmptyAccounts ? emptyAccountLabel : selectedAccountLabel}
+                {selectedAccountLabel}
               </span>
             </p>
           </div>
         </div>
-
-        {isEmptyAccounts ? (
-          <div className="flex justify-center">
-            <Link
-              href="/settings#trading-accounts"
-              className="text-sm font-medium text-blue-300 hover:text-blue-200"
-            >
-              Create Prop Firm Account →
-            </Link>
-          </div>
-        ) : null}
 
         {loadingTrades ? (
           <SkeletonAnalyticsPage />
@@ -790,7 +776,19 @@ export default function PropFirmPage() {
           </div>
         </div>
 
-        {!selectedAccount && !isEmptyAccounts ? (
+        {isEmptyAccounts ? (
+          <div className="flex flex-col items-center gap-3 text-center">
+            <p className="text-sm text-gray-400">
+              You don&apos;t have any Prop Firm accounts yet.
+            </p>
+            <Link
+              href="/settings#trading-accounts"
+              className="text-sm font-medium text-blue-300 hover:text-blue-200"
+            >
+              Create Prop Firm Account →
+            </Link>
+          </div>
+        ) : !selectedAccount ? (
           <p className="text-center text-sm text-gray-400">
             Select a prop firm account to view progress
           </p>

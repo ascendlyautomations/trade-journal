@@ -38,7 +38,7 @@ function itemHref(
       return "/app"
     case "post":
       return profileId
-        ? `${profilePath({ id: profileId })}?createPost=1`
+        ? `${profilePath({ id: profileId })}?tab=posts&createPost=1`
         : undefined
     case "follow":
       return "/explore"

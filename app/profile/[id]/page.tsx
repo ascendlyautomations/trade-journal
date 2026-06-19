@@ -2172,6 +2172,7 @@ function ProfilePageContent() {
     if (searchParams.get("createPost") !== "1") return
     if (String(profile.id) !== String(currentUserId)) return
 
+    setActiveTab("posts")
     setShowCreatePost(true)
     clearProfileQueryParams()
   }, [

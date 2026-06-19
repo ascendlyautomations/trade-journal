@@ -130,7 +130,7 @@ export default function TradeAccountPicker({
                 }}
                 className={
                   isLastBeforeFooter
-                    ? "cursor-pointer px-3 pt-2 pb-0 text-sm text-white hover:bg-[#1f2937]"
+                    ? "cursor-pointer px-3 pt-2 pb-0 text-sm text-white hover:bg-[#1f2937] max-md:truncate max-md:whitespace-nowrap"
                     : ACCOUNT_DROPDOWN_ITEM_CLASS
                 }
               >
@@ -142,7 +142,8 @@ export default function TradeAccountPicker({
             {!hideManageAccounts ? (
               <>
                 <div className={ACCOUNT_DROPDOWN_DIVIDER_CLASS} aria-hidden="true">
-                  ────────────────────
+                  <span className="md:hidden">────────</span>
+                  <span className="hidden md:inline">────────────────────</span>
                 </div>
                 <div
                   role="button"

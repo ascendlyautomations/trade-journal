@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, type ReactNode } from "react"
+import { useEffect, useState, type ReactNode } from "react"
+import { createPortal } from "react-dom"
 import { cn } from "./cn"
 
 export type ModalProps = {
@@ -33,6 +34,12 @@ export default function Modal({
   panelClassName,
   backdropClassName,
 }: ModalProps) {
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
   useEffect(() => {
     if (!open) return
     function onKey(e: KeyboardEvent) {
@@ -42,12 +49,21 @@ export default function Modal({
     return () => window.removeEventListener("keydown", onKey)
   }, [open, onClose])
 
-  if (!open) return null
+  useEffect(() => {
+    if (!open) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+    return () => {
+      document.body.style.overflow = prev
+    }
+  }, [open])
 
-  return (
+  if (!open || !mounted) return null
+
+  return createPortal(
     <div
       className={cn(
-        "fixed inset-0 z-50 flex items-center justify-center p-4",
+        "fixed inset-0 z-[10050] flex items-center justify-center p-4",
         className
       )}
       role="presentation"
@@ -77,6 +93,7 @@ export default function Modal({
         <div>{children}</div>
         {footer ? <div className="mt-4">{footer}</div> : null}
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

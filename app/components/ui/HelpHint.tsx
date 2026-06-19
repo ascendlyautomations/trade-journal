@@ -37,10 +37,19 @@ function computeTooltipPosition(
 /** Compact ? help — hover on desktop, tap toggle on mobile. */
 export default function HelpHint({ body, className }: HelpHintProps) {
   const [open, setOpen] = useState(false)
+  const [hoverCapable, setHoverCapable] = useState(false)
   const [position, setPosition] = useState<TooltipPosition | null>(null)
   const rootRef = useRef<HTMLSpanElement>(null)
   const triggerRef = useRef<HTMLSpanElement>(null)
   const tooltipId = useId()
+
+  useEffect(() => {
+    const mq = window.matchMedia("(hover: hover) and (pointer: fine)")
+    const update = () => setHoverCapable(mq.matches)
+    update()
+    mq.addEventListener("change", update)
+    return () => mq.removeEventListener("change", update)
+  }, [])
 
   const toggleOpen = useCallback(() => {
     setOpen((prev) => !prev)
@@ -75,7 +84,7 @@ export default function HelpHint({ body, className }: HelpHintProps) {
   useEffect(() => {
     if (!open) return
 
-    function handlePointerDown(event: MouseEvent) {
+    function handlePointerDown(event: PointerEvent) {
       if (!rootRef.current?.contains(event.target as Node)) {
         setOpen(false)
       }
@@ -85,10 +94,10 @@ export default function HelpHint({ body, className }: HelpHintProps) {
       if (event.key === "Escape") setOpen(false)
     }
 
-    document.addEventListener("mousedown", handlePointerDown)
+    document.addEventListener("pointerdown", handlePointerDown)
     document.addEventListener("keydown", handleKeyDown)
     return () => {
-      document.removeEventListener("mousedown", handlePointerDown)
+      document.removeEventListener("pointerdown", handlePointerDown)
       document.removeEventListener("keydown", handleKeyDown)
     }
   }, [open])
@@ -126,8 +135,12 @@ export default function HelpHint({ body, className }: HelpHintProps) {
     <span
       ref={rootRef}
       className={cn("relative inline-flex shrink-0", className)}
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
+      onMouseEnter={() => {
+        if (hoverCapable) setOpen(true)
+      }}
+      onMouseLeave={() => {
+        if (hoverCapable) setOpen(false)
+      }}
     >
       <span
         ref={triggerRef}
@@ -136,10 +149,13 @@ export default function HelpHint({ body, className }: HelpHintProps) {
         aria-label="Help"
         aria-expanded={open}
         aria-describedby={open ? tooltipId : undefined}
+        onPointerDown={(event) => {
+          event.stopPropagation()
+        }}
         onClick={(event) => {
           event.preventDefault()
           event.stopPropagation()
-          toggleOpen()
+          if (!hoverCapable) toggleOpen()
         }}
         onKeyDown={(event) => {
           if (event.key === "Enter" || event.key === " ") {

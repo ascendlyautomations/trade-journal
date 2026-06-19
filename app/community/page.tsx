@@ -1878,10 +1878,28 @@ function CommunityContent() {
   }
 
   async function handleImageUpload(e: ChangeEvent<HTMLInputElement>) {
-    if (!user?.id || !selectedRoomId || !canPostInRoom) return
+    if (!user?.id || !selectedRoomId || !canPostInRoom) {
+      console.log("[trade-room-image] blocked early", {
+        hasUser: Boolean(user?.id),
+        selectedRoomId,
+        canPostInRoom,
+      })
+      return
+    }
     const file = e.target.files?.[0]
     e.target.value = ""
-    if (!file) return
+    if (!file) {
+      console.log("[trade-room-image] no file selected")
+      return
+    }
+
+    console.log("[trade-room-image] image selected", {
+      name: file.name,
+      type: file.type,
+      size: file.size,
+      roomId: selectedRoomId,
+      sectionId: selectedSectionId,
+    })
 
     const userIsPro = await isUserPro(supabase as any, user.id)
     if (!userIsPro) {
@@ -1902,23 +1920,38 @@ function CommunityContent() {
     }
     const filePath = `room-images/${Date.now()}-${uploadFile.name}`
 
+    console.log("[trade-room-image] upload started", { filePath, bucket: "screenshots" })
+
     const { error: uploadError } = await supabase.storage
       .from("screenshots")
       .upload(filePath, uploadFile)
 
     if (uploadError) {
-      console.error("room image upload:", uploadError)
+      console.error("[trade-room-image] upload failed:", uploadError)
       return
     }
 
     const { data } = supabase.storage.from("screenshots").getPublicUrl(filePath)
+    console.log("[trade-room-image] upload completed", { publicUrl: data.publicUrl })
 
-    const { error: insertError } = await supabase.from("room_messages").insert({
+    const insertPayload = {
       room_id: selectedRoomId,
       user_id: user.id,
-      type: "image",
+      type: "image" as const,
       image_url: data.publicUrl,
       section_id: selectedSectionId,
+    }
+    console.log("[trade-room-image] room message insert payload", insertPayload)
+
+    const { data: insertData, error: insertError } = await supabase
+      .from("room_messages")
+      .insert(insertPayload)
+      .select("id, type, image_url, section_id, room_id, user_id, created_at")
+      .maybeSingle()
+
+    console.log("[trade-room-image] room message insert response", {
+      insertData,
+      insertError,
     })
 
     if (insertError) {

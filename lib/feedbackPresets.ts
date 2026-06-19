@@ -157,7 +157,7 @@ export const feedbackPresets = {
     message:
       "Congratulations!\n\nYou have completed all Getting Started tasks and are ready to get the most out of TradeTraxs.",
     persist: true,
-    dismissLabel: "Continue Trading",
+    dismissLabel: "Continue Logging",
   }),
 
   subscriptionCheckoutFailed: (detail: string): FeedbackPopupInput =>

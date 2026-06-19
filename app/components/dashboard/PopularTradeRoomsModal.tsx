@@ -210,7 +210,6 @@ export default function PopularTradeRoomsModal({
       onClose={onClose}
       title="Popular Trade Rooms"
       size="lg"
-      className="z-[10000]"
       backdropClassName="bg-black/80 backdrop-blur-lg"
     >
       <label className="mb-4 block">
