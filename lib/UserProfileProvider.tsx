@@ -18,13 +18,11 @@ import {
   applyBetaReferralIfEligible,
   clearBetaReferralAfterApply,
 } from "./applyBetaReferralIfEligible"
-import { notifyBetaSignupWhenReady } from "./betaSignupNotify"
 import { isBetaReferralRef } from "./betaReferralCode"
 import {
   ensureProfileForUser,
   readStoredReferralCode,
 } from "./ensureProfileForUser"
-import { resolveSignupMethodLabel } from "./resolveSignupMethodLabel"
 import { supabase } from "./supabaseClient"
 
 /**
@@ -195,7 +193,6 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
         .maybeSingle()
 
       let resolvedProfile = profileData
-      let betaSignupMethod: string | undefined
       const storedBetaRef = isBetaReferralRef(readStoredReferralCode())
 
       if (!resolvedProfile) {
@@ -216,9 +213,6 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
           if (refetched && storedBetaRef) {
             clearBetaReferralAfterApply(refetched.is_beta_tester)
           }
-          if (ensureResult.created && storedBetaRef) {
-            betaSignupMethod = resolveSignupMethodLabel(sessionUser)
-          }
         } else if (ensureResult.error) {
           console.error("ensureProfileForUser:", ensureResult.error)
         }
@@ -231,7 +225,6 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
             .eq("id", sessionUser.id)
             .maybeSingle()
           if (refetched) resolvedProfile = refetched
-          betaSignupMethod = resolveSignupMethodLabel(sessionUser, "beta_repair")
         } else {
           clearBetaReferralAfterApply(resolvedProfile.is_beta_tester)
         }
@@ -240,14 +233,6 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
       if (!mounted || generation !== loadGeneration) return
 
       setProfileState(pickUserProfileFields(resolvedProfile))
-
-      if (resolvedProfile?.is_beta_tester === true || storedBetaRef) {
-        void notifyBetaSignupWhenReady(
-          supabase,
-          sessionUser.id,
-          betaSignupMethod ?? resolveSignupMethodLabel(sessionUser)
-        )
-      }
 
       // Realtime: create channel → register .on handlers → subscribe() last (required by supabase-js).
       const topic = `profile:${sessionUser.id}:${realtimeTopicSuffix}`

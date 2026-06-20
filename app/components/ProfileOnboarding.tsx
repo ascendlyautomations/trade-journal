@@ -20,6 +20,7 @@ import {
   isStartedTradingDateInFuture,
 } from "@/lib/tradeDateValidation"
 import { mirrorAccountSettingsOnboardingCompleted } from "@/lib/profileSplitMirrorWrites"
+import { notifyBetaSignupAfterOnboardingComplete } from "@/lib/betaSignupNotify"
 
 export {
   profileNeedsOnboarding,
@@ -224,6 +225,7 @@ export default function ProfileOnboarding({
       }
 
       clearOnboardingFlag()
+      notifyBetaSignupAfterOnboardingComplete("onboarding")
       onComplete(patch)
     } finally {
       savingRef.current = false

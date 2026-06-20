@@ -9,7 +9,6 @@ import {
 import { useRouter } from "next/navigation"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import AuthPasswordInput from "@/app/components/ui/AuthPasswordInput"
-import { notifyBetaSignupWhenReady } from "@/lib/betaSignupNotify"
 import { isBetaReferralRef } from "@/lib/betaReferralCode"
 import { persistReferralCodeFromUrl } from "@/lib/referralPersistence"
 
@@ -240,10 +239,6 @@ export default function LoginPage() {
       }
 
       console.log("✅ PROFILE ENSURED")
-
-      if (ensureResult.created && isBetaReferralRef(referralCode)) {
-        void notifyBetaSignupWhenReady(supabase, user.id, "email")
-      }
 
       if (shouldStartCheckout()) {
         try {

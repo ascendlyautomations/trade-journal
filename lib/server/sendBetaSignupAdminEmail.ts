@@ -8,11 +8,13 @@ export type BetaSignupEmailContext = {
   userId: string
   userEmail: string | null
   username: string | null
+  name: string | null
   displayName: string | null
   referredBy: string | null
   isBetaTester: boolean
   isPro: boolean
   createdAt: string | null
+  profileCompletedAt: string | null
   signupMethod: string | null
   adminUrl: string
 }
@@ -39,11 +41,18 @@ export function buildBetaSignupAdminEmailHtml(ctx: BetaSignupEmailContext): stri
     row("User ID", ctx.userId),
     row("User email", ctx.userEmail),
     row("Username", ctx.username),
+    row("Name", ctx.name ?? ctx.displayName),
     row("Display name", ctx.displayName),
     row("Referred by", ctx.referredBy ?? BETA_REFERRAL_CODE),
     row("Beta tester", ctx.isBetaTester ? "Yes" : "No"),
     row("Pro access", ctx.isPro ? "Yes" : "No"),
-    row("Created", ctx.createdAt ? new Date(ctx.createdAt).toLocaleString("en-US") : null),
+    row("Account created", ctx.createdAt ? new Date(ctx.createdAt).toLocaleString("en-US") : null),
+    row(
+      "Profile completed",
+      ctx.profileCompletedAt
+        ? new Date(ctx.profileCompletedAt).toLocaleString("en-US")
+        : null
+    ),
     row("Signup method", ctx.signupMethod),
     rowHtml(
       "Admin",
