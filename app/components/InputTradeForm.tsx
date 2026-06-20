@@ -25,6 +25,7 @@ import {
 } from "@/lib/inputTradeDateTime"
 import { tradeFormHasFutureDate, csvTradesHaveFutureDate, isDateAfterToday } from "@/lib/tradeDateValidation"
 import { notifyGettingStartedChecklistMaybeCompleted } from "@/lib/gettingStartedProgressSync"
+import { notifyAdminCsvImportCompleted } from "@/lib/notifyAdminCsvImportCompleted"
 import { profilePath } from "@/lib/profileRoutes"
 import CreateAccountModal, {
   type Props as CreateAccountModalProps,
@@ -67,6 +68,12 @@ export type InputTradeFormProps = {
   csvUnrecognized?: boolean
   csvBrokerHint?: string | null
   csvDiagnostics?: CsvImportDiagnostics | null
+  /** Original CSV file for diagnostics submit CTA */
+  csvSupportFile?: File | null
+  /** Data row count for diagnostics submit notes */
+  csvDataRowCount?: number
+  /** Source label for admin CSV import completed email */
+  csvImportSource?: string
 }
 
 function formatAccountSize(size: any) {
@@ -93,6 +100,9 @@ export default function InputTradeForm({
   csvUnrecognized = false,
   csvBrokerHint = null,
   csvDiagnostics = null,
+  csvSupportFile = null,
+  csvDataRowCount = 0,
+  csvImportSource = "input_trade_page",
   onParsedTradesClear,
 }: InputTradeFormProps) {
   const router = useRouter()
@@ -1145,6 +1155,8 @@ export default function InputTradeForm({
     csvImportingRef.current = true
     setCsvImporting(true)
 
+    const importBatchId = crypto.randomUUID()
+
     try {
       const {
         data: { user },
@@ -1209,6 +1221,18 @@ export default function InputTradeForm({
         showPopup(feedbackPresets.importFailed(handleSupabaseError(error)))
         return
       }
+
+      notifyAdminCsvImportCompleted({
+        importBatchId,
+        originalFilename: csvSupportFile?.name ?? null,
+        brokerFormat: csvBrokerHint ?? csvDiagnostics?.formatLabel ?? null,
+        rowsParsed:
+          csvDataRowCount > 0 ? csvDataRowCount : parsedTrades.length,
+        tradesImported: parsedTrades.length,
+        accountName: selectedAccount.name ?? null,
+        accountId: selectedAccount.id ?? null,
+        source: csvImportSource,
+      })
 
       showPopup(feedbackPresets.importSuccess(parsedTrades.length))
       notifyGettingStartedChecklistMaybeCompleted()
@@ -1553,7 +1577,7 @@ export default function InputTradeForm({
               ) : null}
             </button>
           </div>
-          {parsedTrades.length > 0 ? (
+          {parsedTrades.length > 0 && !csvDiagnostics ? (
             <button
               type="button"
               onClick={() => void handleCsvManualImport()}
@@ -1594,7 +1618,7 @@ export default function InputTradeForm({
               Upload CSV
             </button>
 
-            {parsedTrades.length > 0 ? (
+            {parsedTrades.length > 0 && !csvDiagnostics ? (
               <button
                 type="button"
                 onClick={() => void handleCsvManualImport()}
@@ -1644,7 +1668,20 @@ export default function InputTradeForm({
       ) : null}
 
       {csvDiagnostics ? (
-        <CsvImportDiagnosticsPanel diagnostics={csvDiagnostics} className="mb-4" />
+        <CsvImportDiagnosticsPanel
+          diagnostics={csvDiagnostics}
+          className="mb-4"
+          csvFile={csvSupportFile}
+          brokerName={csvBrokerHint ?? csvDiagnostics.formatLabel}
+          importedRowCount={
+            csvDataRowCount > 0 ? csvDataRowCount : parsedTrades.length
+          }
+          importableRowCount={parsedTrades.length}
+          canImport={Boolean(selectedAccount)}
+          importDisabledHint="Select an account above before importing."
+          importing={csvImporting}
+          onImportRows={handleCsvManualImport}
+        />
       ) : null}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

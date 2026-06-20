@@ -38,3 +38,25 @@ export function buildCsvSupportNotes(options: {
 
   return lines.join("\n")
 }
+
+/** Auto-generated notes when user submits an unrecognized-column CSV from diagnostics. */
+export function buildCsvDiagnosticsSubmitNotes(options: {
+  diagnostics: CsvImportDiagnostics
+  brokerName: string
+  importedRowCount: number
+}): string {
+  const { diagnostics, brokerName, importedRowCount } = options
+  const lines: string[] = [
+    "CSV submitted from diagnostics.",
+    "",
+    "Unknown columns detected:",
+    ...diagnostics.unknownColumns.map((col) => `- ${col}`),
+    "",
+    "Detected broker:",
+    brokerName.trim() || "Unknown Broker",
+    "",
+    "Imported rows:",
+    String(importedRowCount),
+  ]
+  return lines.join("\n")
+}

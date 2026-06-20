@@ -7,6 +7,28 @@ import DashboardStatsGrid from "../../components/dashboard/DashboardStatsGrid"
 import DashboardEquityCurve from "../../components/dashboard/DashboardEquityCurve"
 import DashboardWeekdayChart from "../../components/dashboard/DashboardWeekdayChart"
 import DashboardSessionChart from "../../components/dashboard/DashboardSessionChart"
+import DashboardLongShort from "../../components/dashboard/DashboardLongShort"
+import DashboardHoldTime from "../../components/dashboard/DashboardHoldTime"
+import DashboardMaxDrawdown from "../../components/dashboard/DashboardMaxDrawdown"
+import {
+  dashboardInsightBodyClass,
+  dashboardInsightCardClass,
+  dashboardInsightEmptyClass,
+  dashboardInsightHelperClass,
+  dashboardInsightLabelClass,
+  dashboardInsightMetricNeutralClass,
+  dashboardInsightMetricNegativeClass,
+  dashboardInsightMetricPositiveClass,
+  dashboardInsightTitleClass,
+} from "../../components/dashboard/dashboardInsightStyles"
+import {
+  NegativeInsightLine,
+  PerformanceInsightLine,
+  PositiveInsightLine,
+  SymbolInsightLine,
+  WarningInsightLine,
+  WeekdayInsightLine,
+} from "../../components/dashboard/DashboardInsightHighlight"
 import type {
   DashboardGearPersistedPrefs,
   GearDraftState,
@@ -35,11 +57,23 @@ import { formatEST } from "@/lib/formatEST"
 import { formatCurrency } from "@/lib/formatCurrency"
 import { formatRR } from "@/lib/formatDisplay"
 import {
-  getTradingDayKey,
   getTradingSession,
   getTradingWeekday,
-  resolveTradingTimeSourceForKey,
 } from "@/lib/formatDate"
+import { computeLongShortPerformance } from "@/lib/dashboardLongShortStats"
+import { computeHoldTimeStats } from "@/lib/dashboardHoldTimeStats"
+import { computeMaxDrawdown } from "@/lib/dashboardMaxDrawdown"
+import {
+  compareDashboardTradesChronological,
+  getDashboardTradingDayKey,
+  resolveDashboardTradeTimeSource,
+  tradeMatchesDashboardSelectedDate,
+  tradeMatchesDashboardTimeFilter,
+} from "@/lib/dashboardTradeDate"
+import {
+  DASHBOARD_SESSION_DISPLAY_ORDER,
+  normalizeSessionBucket,
+} from "@/lib/dashboardSessionBuckets"
 import {
   dispatchGettingStartedSignalsRefresh,
   notifyGettingStartedChecklistMaybeCompleted,
@@ -68,14 +102,6 @@ function saveDashboardGearPrefs(p: DashboardGearPersistedPrefs) {
   } catch {
     /* ignore quota / private mode */
   }
-}
-
-function normalizeSessionBucket(sessionRaw: string | null | undefined): "London" | "NY" | "Asia" | null {
-  const s = (sessionRaw || "").trim().toLowerCase()
-  if (s === "london") return "London"
-  if (s === "asia") return "Asia"
-  if (s === "ny" || s === "new york") return "NY"
-  return null
 }
 
 type SetupGroupResult = {
@@ -440,7 +466,7 @@ function analyzeTradingHours(trades: any[]): TradingHoursSummary | null {
   const hourlyMap: Record<number, number> = {}
 
   trades.forEach((trade) => {
-    const timeSource = trade.entry_time || trade.exit_time
+    const timeSource = resolveDashboardTradeTimeSource(trade)
     if (!timeSource) return
 
     const hour = parseHourFromEntryOrExit(timeSource)
@@ -578,7 +604,7 @@ export default function Dashboard() {
     const { data: trades } = await supabase
       .from("trades")
       .select(
-        "id, created_at, date, pnl, rr, entry_time, exit_time, account_name, account_size, account_id, mode, account_type, session, ticker, direction, strategy, trade_type, is_public, public_description"
+        "id, created_at, date, pnl, rr, entry_time, exit_time, duration_seconds, account_name, account_size, account_id, mode, account_type, session, ticker, direction, strategy, trade_type, is_public, public_description"
       )
       .eq("user_id", currentUser.id)
       .order("date", { ascending: false })
@@ -723,6 +749,9 @@ export default function Dashboard() {
     symbolStats,
     symbolPerformanceRows,
     strategyPerformanceRows,
+    longShortPerformance,
+    holdTimeStats,
+    maxDrawdown,
     sessionBuckets,
     bestSetup,
     insights,
@@ -777,38 +806,6 @@ export default function Dashboard() {
     const accounts = Array.from(accountMap.values())
     console.log("Accounts:", accounts)
 
-    function filterByTime(trade: any) {
-      if (timeFilter === "all") return true
-      const now = new Date()
-      const tradeDateRaw = trade.entry_time || trade.exit_time || trade.created_at
-      if (!tradeDateRaw) return false
-      const tradeDate = new Date(tradeDateRaw)
-      if (timeFilter === "daily") {
-        return tradeDate.toDateString() === now.toDateString()
-      }
-      if (timeFilter === "weekly") {
-        const weekAgo = new Date()
-        weekAgo.setDate(now.getDate() - 7)
-        return tradeDate >= weekAgo
-      }
-      if (timeFilter === "monthly") {
-        return (
-          tradeDate.getMonth() === now.getMonth() &&
-          tradeDate.getFullYear() === now.getFullYear()
-        )
-      }
-      if (timeFilter === "yearly") {
-        return tradeDate.getFullYear() === now.getFullYear()
-      }
-      if (timeFilter === "custom") {
-        if (!customRangeStart?.trim() || !customRangeEnd?.trim()) return true
-        const start = new Date(customRangeStart + "T00:00:00")
-        const end = new Date(customRangeEnd + "T23:59:59.999")
-        return tradeDate >= start && tradeDate <= end
-      }
-      return true
-    }
-
     /** Public trades: DB flag and/or non-empty public note (matches InputTradeForm / feed). */
     function tradeIsPublic(t: any) {
       if (t?.is_public === true) return true
@@ -816,20 +813,27 @@ export default function Dashboard() {
       return typeof desc === "string" && desc.trim().length > 0
     }
 
+    const now = new Date()
+
     const withoutPublicFilter = tradesExcludingBacktest.filter((trade) => {
-      if (selectedDate) {
-        const tradeDate = new Date(trade.created_at)
-        const selected = new Date(selectedDate + "T00:00:00")
-        if (
-          tradeDate.getFullYear() !== selected.getFullYear() ||
-          tradeDate.getMonth() !== selected.getMonth() ||
-          tradeDate.getDate() !== selected.getDate()
-        ) {
-          return false
-        }
+      if (
+        selectedDate &&
+        !tradeMatchesDashboardSelectedDate(trade, selectedDate)
+      ) {
+        return false
       }
 
-      if (!filterByTime(trade)) return false
+      if (
+        !tradeMatchesDashboardTimeFilter(
+          trade,
+          timeFilter,
+          now,
+          customRangeStart,
+          customRangeEnd
+        )
+      ) {
+        return false
+      }
 
       if (accountFilter !== "all") {
         const accountName = String(trade.account_name || "").trim()
@@ -860,10 +864,7 @@ export default function Dashboard() {
         publicFiltered.length > 0 ? publicFiltered : withoutPublicFilter
     }
 
-    filteredTrades = filteredTrades.sort(
-      (a, b) =>
-        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-    )
+    filteredTrades = filteredTrades.sort(compareDashboardTradesChronological)
 
     const totalTrades = filteredTrades.length
     const wins = filteredTrades.filter(t => t.pnl > 0)
@@ -1000,11 +1001,10 @@ const biggestLoss = losses.length > 0
       if (t.pnl > 0) sessionBuckets[b].wins += 1
     })
 
-    const sessionPieData = [
-      { name: "London", value: sessionBuckets.London.totalTrades },
-      { name: "NY", value: sessionBuckets.NY.totalTrades },
-      { name: "Asia", value: sessionBuckets.Asia.totalTrades }
-    ]
+    const sessionPieData = DASHBOARD_SESSION_DISPLAY_ORDER.map((name) => ({
+      name,
+      value: sessionBuckets[name].totalTrades,
+    }))
 
     const weekdayMap: Record<"Mon" | "Tue" | "Wed" | "Thu" | "Fri", number> = {
       Mon: 0,
@@ -1026,7 +1026,7 @@ const biggestLoss = losses.length > 0
     }
 
     filteredTrades.forEach((t) => {
-      const resolved = resolveTradingTimeSourceForKey(t)
+      const resolved = resolveDashboardTradeTimeSource(t)
       if (!resolved) return
       const longDay = getTradingWeekday(resolved)
       if (!longDay) return
@@ -1042,7 +1042,7 @@ const biggestLoss = losses.length > 0
 
     const weekdayInsightStats: Record<string, { pnl: number; trades: number }> = {}
     filteredTrades.forEach((trade) => {
-      const resolved = resolveTradingTimeSourceForKey(trade)
+      const resolved = resolveDashboardTradeTimeSource(trade)
       if (!resolved) return
       const day = getTradingWeekday(resolved)
       if (!day) return
@@ -1064,34 +1064,17 @@ const biggestLoss = losses.length > 0
       }
     })
 
-    const setupAgg: Record<string, { trades: number; wins: number; totalPnL: number }> = {}
-    filteredTrades.forEach((t) => {
-      const ty = (t.trade_type && String(t.trade_type).trim()) || ""
-      if (!ty) return
-      if (!setupAgg[ty]) setupAgg[ty] = { trades: 0, wins: 0, totalPnL: 0 }
-      setupAgg[ty].trades += 1
-      setupAgg[ty].totalPnL += t.pnl || 0
-      if (t.pnl > 0) setupAgg[ty].wins += 1
-    })
-
-    let bestSetup: {
-      trade_type: string
-      trades: number
-      winRate: number
-      totalPnL: number
-    } | null = null
-
-    for (const [trade_type, d] of Object.entries(setupAgg)) {
-      if (d.trades < 3) continue
-      if (!bestSetup || d.totalPnL > bestSetup.totalPnL) {
-        bestSetup = {
-          trade_type,
-          trades: d.trades,
-          winRate: (d.wins / d.trades) * 100,
-          totalPnL: d.totalPnL
+    const bestStrategyRow = strategyPerformanceRows.find(
+      (row) => row.totalTrades >= 3
+    )
+    const bestSetup = bestStrategyRow
+      ? {
+          strategy: bestStrategyRow.strategy,
+          trades: bestStrategyRow.totalTrades,
+          winRate: bestStrategyRow.winRate,
+          totalPnL: bestStrategyRow.totalPnL,
         }
-      }
-    }
+      : null
 
     const setupResults = analyzeBestSetups(filteredTrades)
     const insights = generateInsights(setupResults)
@@ -1109,9 +1092,12 @@ const biggestLoss = losses.length > 0
     const worstInsight = generateWorstInsight(worst)
 
     const chronologicalTrades = [...filteredTrades].sort(
-      (a, b) =>
-        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      compareDashboardTradesChronological
     )
+
+    const longShortPerformance = computeLongShortPerformance(filteredTrades)
+    const holdTimeStats = computeHoldTimeStats(filteredTrades)
+    const maxDrawdown = computeMaxDrawdown(filteredTrades)
     const streakData = calculateStreaks(chronologicalTrades)
     const expectancyData = calculateExpectancy(filteredTrades)
     const hourData = analyzeTradingHours(filteredTrades)
@@ -1126,7 +1112,10 @@ const biggestLoss = losses.length > 0
       }
 
       return {
-        date: trade.created_at,
+        date:
+          resolveDashboardTradeTimeSource(trade) ??
+          trade.created_at ??
+          "",
         equity: runningEquity,
       }
     })
@@ -1148,22 +1137,20 @@ const biggestLoss = losses.length > 0
     const dailyMap: Record<string, number> = {}
 
     filteredTrades.forEach((t) => {
-      const resolved = resolveTradingTimeSourceForKey(t)
-      if (!resolved) return
-      const dateKey = getTradingDayKey(resolved)
+      const dateKey = getDashboardTradingDayKey(t)
       if (!dateKey) return
       dailyMap[dateKey] = (dailyMap[dateKey] || 0) + (Number(t.pnl) || 0)
     })
 
     const dailyPnLs = Object.values(dailyMap)
 
-const bestDay = dailyPnLs.length > 0
+    const bestDay = dailyPnLs.length > 0
   ? Math.max(...dailyPnLs)
   : 0
 
-const worstDay = dailyPnLs.length > 0
-  ? Math.min(...dailyPnLs)
-  : 0
+    const worstDay = dailyPnLs.length > 0
+      ? Math.min(...dailyPnLs)
+      : 0
 
     const winsOnly = filteredTrades.filter(t => t.pnl > 0)
     const lossesOnly = filteredTrades.filter(t => t.pnl < 0)
@@ -1175,7 +1162,7 @@ const worstDay = dailyPnLs.length > 0
       lossesOnly.reduce((sum, t) => sum + t.pnl, 0) / (lossesOnly.length || 1)
 
     const hasTradingDayTimeSource = filteredTrades.some(
-      (t) => resolveTradingTimeSourceForKey(t) != null
+      (t) => resolveDashboardTradeTimeSource(t) != null
     )
 
     if (process.env.NODE_ENV === "development") {
@@ -1205,6 +1192,9 @@ const worstDay = dailyPnLs.length > 0
       symbolStats,
       symbolPerformanceRows,
       strategyPerformanceRows,
+      longShortPerformance,
+      holdTimeStats,
+      maxDrawdown,
       sessionBuckets,
       bestSetup,
       insights,
@@ -1306,9 +1296,7 @@ const worstDay = dailyPnLs.length > 0
   const dailyMap: Record<string, number> = {}
 
   filteredTrades.forEach((t) => {
-    const resolved = resolveTradingTimeSourceForKey(t)
-    if (!resolved) return
-    const date = getTradingDayKey(resolved)
+    const date = getDashboardTradingDayKey(t)
     if (!date) return
 
     if (!dailyMap[date]) {
@@ -1662,6 +1650,15 @@ const worstDay = dailyPnLs.length > 0
       hourData={hourData}
       showSessions={showSessions}
       mobileSessionsSlot={sessionPerformanceSection}
+      maxDrawdownSlot={
+        showDrawdown ? (
+          <DashboardMaxDrawdown
+            variant="compact"
+            maxDrawdown={maxDrawdown}
+            totalTrades={totalTrades}
+          />
+        ) : null
+      }
     />
 
     {/* RIGHT: CHARTS */}
@@ -1740,19 +1737,29 @@ const worstDay = dailyPnLs.length > 0
 
   </div>
 
+  <div className="grid grid-cols-1 gap-4 md:gap-6 lg:grid-cols-3 lg:items-stretch">
+    <DashboardLongShort
+      performance={longShortPerformance}
+      totalTrades={totalTrades}
+    />
+    <div className="lg:col-span-2">
+      <DashboardHoldTime stats={holdTimeStats} totalTrades={totalTrades} />
+    </div>
+  </div>
+
           {(showInsights || showBestSetup) ? (
           <div className="grid grid-cols-1 gap-4 md:gap-6 md:grid-cols-2">
             {showInsights ? (
-            <div className="rounded-xl border border-white/10 bg-white/10 p-3 md:p-4 backdrop-blur-md">
+            <div className={dashboardInsightCardClass}>
                 {dashboardUserIsPro ? (
                   <>
-                <h3 className="mb-2 text-xs md:text-sm text-gray-400">Performance Insights</h3>
-                <p className="mb-3 text-[11px] md:text-xs text-gray-500">
+                <h3 className={dashboardInsightTitleClass}>Performance Insights</h3>
+                <p className={dashboardInsightHelperClass}>
                   Data-driven highlights (min. 3 trades per session, symbol, or
                   direction). Respects current filters.
                 </p>
                 {totalTrades > 0 && !hasTradingDayTimeSource ? (
-                  <p className="mb-3 text-[11px] md:text-xs text-amber-200/90">
+                  <p className="mb-3 text-xs md:text-sm leading-relaxed text-amber-200/90">
                     Trading day stats use entry/exit times with a 6PM EST session
                     rollover. Add entry/exit times to unlock these insights.
                   </p>
@@ -1764,24 +1771,32 @@ const worstDay = dailyPnLs.length > 0
                     {insights.map((text, i) => (
                       <p
                         key={`${i}-${text.slice(0, 24)}`}
-                        className="text-xs md:text-sm text-gray-200"
+                        className={dashboardInsightBodyClass}
                       >
-                        • {text}
+                        • <PerformanceInsightLine text={text} />
                       </p>
                     ))}
                     {insightBestSymbol ? (
-                      <p className="text-xs md:text-sm text-blue-200">
-                        {`• ${insightBestSymbol} is your most profitable symbol (${formatCurrency(insightBestSymbolAvg)} avg per trade)`}
+                      <p className={dashboardInsightBodyClass}>
+                        •{" "}
+                        <SymbolInsightLine
+                          symbol={insightBestSymbol}
+                          avgPnL={insightBestSymbolAvg}
+                        />
                       </p>
                     ) : null}
                     {insightBestWeekday ? (
-                      <p className="text-xs md:text-sm text-blue-200">
-                        {`• You perform best on ${insightBestWeekday}s (${formatCurrency(insightBestWeekdayAvg)} avg)`}
+                      <p className={dashboardInsightBodyClass}>
+                        •{" "}
+                        <WeekdayInsightLine
+                          weekday={insightBestWeekday}
+                          avgPnL={insightBestWeekdayAvg}
+                        />
                       </p>
                     ) : null}
                   </div>
                 ) : (
-                  <p className="text-xs md:text-sm text-gray-400">
+                  <p className={dashboardInsightEmptyClass}>
                     Not enough sample size yet — need at least 3 trades in a session,
                     symbol, or direction bucket (with current filters).
                   </p>
@@ -1795,47 +1810,60 @@ const worstDay = dailyPnLs.length > 0
 
             {showBestSetup ? (
             <div
-              className={`rounded-xl border border-white/10 bg-white/10 p-3 md:p-4 backdrop-blur-md ${!showInsights ? "md:col-span-2" : ""}`}
+              className={`${dashboardInsightCardClass} ${!showInsights ? "md:col-span-2" : ""}`}
             >
               {dashboardUserIsPro ? (
                 <>
-              <h3 className="mb-2 text-xs md:text-sm text-gray-400">
-                Best Performing Setup
+              <h3 className={dashboardInsightTitleClass}>
+                Best Performing Strategy
               </h3>
               {bestSetup ? (
-                <div className="space-y-2 text-xs md:text-sm text-gray-300">
+                <div className={`space-y-2 ${dashboardInsightBodyClass}`}>
                   <p>
-                    <span className="text-gray-400">Setup:</span>{" "}
-                    <span className="text-sm md:text-lg font-semibold text-white">{bestSetup.trade_type}</span>
+                    <span className={dashboardInsightLabelClass}>Strategy:</span>{" "}
+                    <span className={dashboardInsightMetricPositiveClass}>
+                      {bestSetup.strategy}
+                    </span>
                   </p>
                   <p>
-                    <span className="text-gray-400">Win rate:</span>{" "}
-                    <span className="text-sm md:text-lg font-semibold text-white">{bestSetup.winRate.toFixed(1)}%</span>
-                  </p>
-                  <p>
-                    <span className="text-gray-400">Total P&amp;L:</span>{" "}
+                    <span className={dashboardInsightLabelClass}>Win rate:</span>{" "}
                     <span
-                      className={`text-sm md:text-lg font-semibold tabular-nums ${
-                        bestSetup.totalPnL >= 0 ? "text-green-400" : "text-red-400"
+                      className={
+                        bestSetup.winRate > 50
+                          ? dashboardInsightMetricPositiveClass
+                          : dashboardInsightMetricNegativeClass
+                      }
+                    >
+                      {bestSetup.winRate.toFixed(1)}%
+                    </span>
+                  </p>
+                  <p>
+                    <span className={dashboardInsightLabelClass}>Total P&amp;L:</span>{" "}
+                    <span
+                      className={`tabular-nums ${
+                        bestSetup.totalPnL >= 0
+                          ? dashboardInsightMetricPositiveClass
+                          : dashboardInsightMetricNegativeClass
                       }`}
                     >
                       {formatCurrency(bestSetup.totalPnL)}
                     </span>
                   </p>
                   <p>
-                    <span className="text-gray-400">Trades:</span>{" "}
-                    <span className="text-sm md:text-lg font-semibold text-white">{bestSetup.trades}</span>
+                    <span className={dashboardInsightLabelClass}>Trades:</span>{" "}
+                    <span className={dashboardInsightMetricNeutralClass}>
+                      {bestSetup.trades}
+                    </span>
                   </p>
                 </div>
               ) : (
-                <p className="text-xs md:text-sm text-gray-400">
-                  Need at least 3 trades with the same setup type (and non-empty
-                  trade type) to rank setups.
+                <p className={dashboardInsightEmptyClass}>
+                  Need at least 3 trades with the same strategy to rank setups.
                 </p>
               )}
                 </>
               ) : (
-                <LockedFeature title="Best Performing Setup" />
+                <LockedFeature title="Best Performing Strategy" />
               )}
             </div>
             ) : null}
@@ -1845,27 +1873,27 @@ const worstDay = dailyPnLs.length > 0
           {(showInsights || showWorstSetup || showWarnings) ? (
           <div className="grid grid-cols-1 gap-4 md:gap-6 md:grid-cols-2">
             {showInsights ? (
-            <div className="rounded-xl border border-white/10 bg-white/10 p-3 md:p-4 backdrop-blur-md">
+            <div className={dashboardInsightCardClass}>
                 {dashboardUserIsPro ? (
                   <>
-                <h3 className="mb-2 text-xs md:text-sm text-gray-400">Advanced Edge</h3>
-                <p className="mb-3 text-[11px] md:text-xs text-gray-500">
-                  Strongest <span className="text-gray-400">combined</span> setup
-                  (pairs or triples, min. 3 trades). Same filters as above.
+                <h3 className={dashboardInsightTitleClass}>Advanced Edge</h3>
+                <p className={dashboardInsightHelperClass}>
+                  Strongest combined setup (pairs or triples, min. 3 trades). Same
+                  filters as above.
                 </p>
                 {combinedInsights.length > 0 ? (
                   <div className="space-y-2">
                     {combinedInsights.map((text, i) => (
                       <p
                         key={`combo-${i}-${text.slice(0, 20)}`}
-                        className="text-xs md:text-sm font-medium text-emerald-300"
+                        className={`${dashboardInsightBodyClass} font-semibold`}
                       >
-                        ⭐ {text}
+                        ⭐ <PositiveInsightLine text={text} />
                       </p>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-xs md:text-sm text-gray-400">
+                  <p className={dashboardInsightEmptyClass}>
                     No qualifying combined setup yet — need 3+ trades with consistent
                     session, symbol, and direction data.
                   </p>
@@ -1878,17 +1906,19 @@ const worstDay = dailyPnLs.length > 0
             ) : null}
 
             {showWorstSetup ? (
-            <div className="rounded-xl border border-white/10 bg-white/10 p-3 md:p-4 backdrop-blur-md">
+            <div className={dashboardInsightCardClass}>
               {dashboardUserIsPro ? (
                 <>
-              <h3 className="mb-2 text-xs md:text-sm text-gray-400">Risk Insights</h3>
-              <p className="mb-3 text-[11px] md:text-xs text-gray-500">
+              <h3 className={dashboardInsightTitleClass}>Risk Insights</h3>
+              <p className={dashboardInsightHelperClass}>
                 Lowest-performing combined setup (same 3+ trade rule as Advanced Edge).
               </p>
               {worstInsight ? (
-                <p className="text-sm md:text-lg font-semibold text-red-400">⚠️ {worstInsight}</p>
+                <p className={`${dashboardInsightBodyClass} font-semibold`}>
+                  ⚠️ <NegativeInsightLine text={worstInsight} />
+                </p>
               ) : (
-                <p className="text-xs md:text-sm text-gray-400">
+                <p className={dashboardInsightEmptyClass}>
                   No combined setup to rank yet, or filters removed too much data.
                 </p>
               )}
@@ -1900,23 +1930,26 @@ const worstDay = dailyPnLs.length > 0
             ) : null}
 
             {showWarnings ? (
-            <div className="rounded-xl border border-white/10 bg-white/10 p-3 md:p-4 backdrop-blur-md md:col-span-2">
+            <div className={`${dashboardInsightCardClass} md:col-span-2`}>
               {dashboardUserIsPro ? (
                 <>
-              <h3 className="mb-2 text-xs md:text-sm text-gray-400">Behavior Warnings</h3>
-              <p className="mb-3 text-[11px] md:text-xs text-gray-500">
+              <h3 className={dashboardInsightTitleClass}>Behavior Warnings</h3>
+              <p className={dashboardInsightHelperClass}>
                 Post–loss streak win rate (next 5 trades) and RR sample comparison.
               </p>
               {warnings.length > 0 ? (
                 <div className="space-y-2">
                   {warnings.map((w, i) => (
-                    <p key={`warn-${i}-${w.slice(0, 16)}`} className="text-xs md:text-sm text-yellow-300">
-                      🚨 {w}
+                    <p
+                      key={`warn-${i}-${w.slice(0, 16)}`}
+                      className={dashboardInsightBodyClass}
+                    >
+                      🚨 <WarningInsightLine text={w} />
                     </p>
                   ))}
                 </div>
               ) : (
-                <p className="text-xs md:text-sm text-gray-400">
+                <p className={dashboardInsightEmptyClass}>
                   No behavioral flags for the current trade set.
                 </p>
               )}

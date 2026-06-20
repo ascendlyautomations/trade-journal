@@ -36,6 +36,7 @@ import { submitCsvSupportRequest } from "@/lib/submitCsvSupportRequest"
 import { mirrorAccountSettingsHasUsedInitialImport } from "@/lib/profileSplitMirrorWrites"
 import { csvTradesHaveFutureDate } from "@/lib/tradeDateValidation"
 import { notifyGettingStartedChecklistMaybeCompleted } from "@/lib/gettingStartedProgressSync"
+import { notifyAdminCsvImportCompleted } from "@/lib/notifyAdminCsvImportCompleted"
 
 export type CsvImportPanelProps = {
   /** Smaller preview + less chrome (e.g. onboarding modal) */
@@ -79,6 +80,7 @@ export default function CsvImportPanel({
   const [unrecognized, setUnrecognized] = useState(false)
   const [brokerHint, setBrokerHint] = useState<string | null>(null)
   const [diagnostics, setDiagnostics] = useState<CsvImportDiagnostics | null>(null)
+  const [csvSupportFile, setCsvSupportFile] = useState<File | null>(null)
   const [failureModalOpen, setFailureModalOpen] = useState(false)
   const [failureReason, setFailureReason] = useState("")
   const [submittingSupport, setSubmittingSupport] = useState(false)
@@ -100,6 +102,7 @@ export default function CsvImportPanel({
     setUnrecognized(false)
     setBrokerHint(null)
     setDiagnostics(null)
+    setCsvSupportFile(null)
     lastCsvFileRef.current = null
     resetFileInput()
   }
@@ -143,6 +146,7 @@ export default function CsvImportPanel({
 
   async function handleFile(file: File) {
     lastCsvFileRef.current = file
+    setCsvSupportFile(file)
     setFailureModalOpen(false)
 
     if (file.size === 0) {
@@ -289,6 +293,8 @@ export default function CsvImportPanel({
 
     importingRef.current = true
     setLoading(true)
+
+    const importBatchId = crypto.randomUUID()
 
     const { data: userData } = await supabase.auth.getUser()
     const user = userData.user
@@ -443,6 +449,27 @@ export default function CsvImportPanel({
       let message = successFeedback.message as string
       if (errLines) message += `\n\n${errLines}`
 
+      notifyAdminCsvImportCompleted({
+        importBatchId,
+        originalFilename:
+          csvSupportFile?.name ?? lastCsvFileRef.current?.name ?? null,
+        brokerFormat: brokerHint ?? diagnostics?.formatLabel ?? null,
+        rowsParsed: parsed.length,
+        tradesImported: importedCount,
+        rowsSkipped: skipped > 0 ? skipped : undefined,
+        accountName:
+          selectedAccount?.name ??
+          (parsedTrades[0]?.account_name != null
+            ? String(parsedTrades[0].account_name)
+            : null),
+        accountId:
+          selectedAccount?.id ??
+          (parsedTrades[0]?.account_id != null
+            ? String(parsedTrades[0].account_id)
+            : null),
+        source: importSource,
+      })
+
       if (!delegateSuccessFeedback) {
         showPopup({ ...successFeedback, message })
       }
@@ -451,6 +478,7 @@ export default function CsvImportPanel({
       setUnrecognized(false)
       setBrokerHint(null)
       setDiagnostics(null)
+      setCsvSupportFile(null)
       lastCsvFileRef.current = null
       resetFileInput()
       notifyGettingStartedChecklistMaybeCompleted()
@@ -481,7 +509,18 @@ export default function CsvImportPanel({
       ) : null}
 
       {diagnostics ? (
-        <CsvImportDiagnosticsPanel diagnostics={diagnostics} compact={compact} />
+        <CsvImportDiagnosticsPanel
+          diagnostics={diagnostics}
+          compact={compact}
+          csvFile={csvSupportFile}
+          brokerName={brokerHint ?? diagnostics.formatLabel}
+          importedRowCount={parsed.length}
+          importableRowCount={parsed.length}
+          canImport={!requireSelectedAccount || Boolean(selectedAccount)}
+          importDisabledHint="Select an account before importing."
+          importing={loading}
+          onImportRows={() => void handleImport()}
+        />
       ) : null}
 
       <input
@@ -563,7 +602,7 @@ export default function CsvImportPanel({
         </div>
       )}
 
-      {parsed.length > 0 && (
+      {parsed.length > 0 && !diagnostics ? (
         <button
           type="button"
           onClick={() => void handleImport()}
@@ -574,7 +613,7 @@ export default function CsvImportPanel({
         >
           {loading ? "Importing..." : "Import trades"}
         </button>
-      )}
+      ) : null}
     </div>
   )
 }

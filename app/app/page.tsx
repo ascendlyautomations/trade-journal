@@ -34,6 +34,8 @@ export default function Home() {
   const [csvUnrecognized, setCsvUnrecognized] = useState(false)
   const [csvBrokerHint, setCsvBrokerHint] = useState<string | null>(null)
   const [csvDiagnostics, setCsvDiagnostics] = useState<CsvImportDiagnostics | null>(null)
+  const [csvSupportFile, setCsvSupportFile] = useState<File | null>(null)
+  const [csvDataRowCount, setCsvDataRowCount] = useState(0)
   const [failureModalOpen, setFailureModalOpen] = useState(false)
   const [failureReason, setFailureReason] = useState("")
   const [submittingSupport, setSubmittingSupport] = useState(false)
@@ -54,6 +56,8 @@ export default function Home() {
     setCsvUnrecognized(false)
     setCsvBrokerHint(null)
     setCsvDiagnostics(null)
+    setCsvSupportFile(null)
+    setCsvDataRowCount(0)
     lastCsvFileRef.current = null
     resetCsvInput()
   }
@@ -68,6 +72,7 @@ export default function Home() {
     if (!file) return
 
     lastCsvFileRef.current = file
+    setCsvSupportFile(file)
     setFailureModalOpen(false)
     setLoading(true)
 
@@ -174,6 +179,7 @@ export default function Home() {
         setCsvUnrecognized(unrecognized)
         setCsvBrokerHint(detectCsvBrokerHint(rows))
         setCsvDiagnostics(diag)
+        setCsvDataRowCount(rows.length)
 
         if (unrecognized || parsed.parsedTrades.length === 0) {
           openFailureModal("Unsupported CSV format — no rows could be imported.")
@@ -310,6 +316,8 @@ export default function Home() {
             csvUnrecognized={csvUnrecognized}
             csvBrokerHint={csvBrokerHint}
             csvDiagnostics={csvDiagnostics}
+            csvSupportFile={csvSupportFile}
+            csvDataRowCount={csvDataRowCount}
             onParsedTradesClear={() => {
               clearCsvUploadState()
               fetchReviewCount()

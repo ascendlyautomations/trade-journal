@@ -14,8 +14,10 @@ export type CsvImportDiagnostics = {
   format: CsvFileFormat
   formatLabel: string
   detectedColumns: string[]
+  supportedColumnCount: number
   missingRequired: string[]
   unknownColumns: string[]
+  unknownColumnCount: number
   rowFailureSamples: { rowNumber: number; reason: string }[]
   explanation: string
 }
@@ -270,8 +272,10 @@ export function buildCsvImportDiagnostics(
     format,
     formatLabel,
     detectedColumns,
+    supportedColumnCount: detectedColumns.length,
     missingRequired,
     unknownColumns,
+    unknownColumnCount: unknownColumns.length,
     rowFailureSamples,
     explanation,
   }

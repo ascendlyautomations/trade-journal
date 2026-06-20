@@ -9,6 +9,11 @@ import {
 } from "recharts"
 import EmptyState from "@/app/components/ui/EmptyState"
 import { formatCurrency } from "@/lib/formatCurrency"
+import {
+  DASHBOARD_SESSION_COLORS,
+  DASHBOARD_SESSION_DISPLAY_ORDER,
+  type DashboardSessionBucket,
+} from "@/lib/dashboardSessionBuckets"
 
 function formatNumber(value: number) {
   if (value === null || value === undefined) return "-"
@@ -26,10 +31,7 @@ export type SessionBucketStats = {
   totalPnL: number
 }
 
-export type SessionBuckets = Record<
-  "London" | "NY" | "Asia",
-  SessionBucketStats
->
+export type SessionBuckets = Record<DashboardSessionBucket, SessionBucketStats>
 
 export type DashboardSessionChartProps = {
   sessionPieData: SessionPiePoint[]
@@ -72,10 +74,14 @@ export default function DashboardSessionChart({
                   label={false}
                   labelLine={false}
                 >
-                  {sessionPieData.map((entry, index) => (
+                  {sessionPieData.map((entry) => (
                     <Cell
                       key={`cell-${entry.name}`}
-                      fill={["#60a5fa", "#34d399", "#c084fc"][index % 3]}
+                      fill={
+                        DASHBOARD_SESSION_COLORS[
+                          entry.name as DashboardSessionBucket
+                        ] ?? "#94a3b8"
+                      }
                     />
                   ))}
                 </Pie>
@@ -87,7 +93,7 @@ export default function DashboardSessionChart({
         <div className="flex flex-col">
           <p className="mb-2 text-xs md:text-sm text-gray-400">Session breakdown</p>
           <div className="grid grid-cols-3 gap-2 md:gap-3">
-            {(["London", "NY", "Asia"] as const).map((name) => {
+            {DASHBOARD_SESSION_DISPLAY_ORDER.map((name) => {
               const s = sessionBuckets[name]
               const wr = s.totalTrades ? (s.wins / s.totalTrades) * 100 : 0
               const titleColor =

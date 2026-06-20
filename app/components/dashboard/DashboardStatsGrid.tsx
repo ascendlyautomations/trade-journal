@@ -59,6 +59,7 @@ export type DashboardStatsGridProps = {
   hourData: TradingHoursSummary | null
   showSessions: boolean
   mobileSessionsSlot: ReactNode
+  maxDrawdownSlot?: ReactNode
 }
 
 function Stat({
@@ -114,6 +115,7 @@ export default function DashboardStatsGrid({
   hourData,
   showSessions,
   mobileSessionsSlot,
+  maxDrawdownSlot,
 }: DashboardStatsGridProps) {
   return (
     <div className="flex flex-col gap-4 md:block md:space-y-4">
@@ -225,6 +227,8 @@ export default function DashboardStatsGrid({
           </>
         )}
       </div>
+
+      {maxDrawdownSlot}
     </div>
   )
 }
