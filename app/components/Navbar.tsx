@@ -172,6 +172,37 @@ export default function Navbar() {
     }
   }, [user?.id, fetchUnread, fetchUnreadMessages])
 
+  useEffect(() => {
+    if (!user?.id) {
+      setIsAdmin(false)
+      setHasFetchedAdmin(false)
+      return
+    }
+
+    let cancelled = false
+
+    void (async () => {
+      const check = await getCurrentAdminCheckResult()
+      if (process.env.NODE_ENV !== "production") {
+        console.debug("[admin-check][navbar] resolved", {
+          userId: check.userId,
+          email: check.email,
+          adminRow: check.row,
+          error: check.error,
+          isAdmin: check.isAdmin,
+        })
+      }
+      if (!cancelled) {
+        setIsAdmin(check.isAdmin)
+        setHasFetchedAdmin(true)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [user?.id])
+
   const toggleSection = (section: string) => {
     setOpenSection((prev) => (prev === section ? null : section))
   }
@@ -514,6 +545,19 @@ export default function Navbar() {
             ) : null}
 
             <GettingStartedMobileEntry />
+
+            {isAdmin ? (
+              <Link
+                href="/admin"
+                className={`md:hidden shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${
+                  isGroupActive(["/admin"])
+                    ? "bg-blue-500/20 text-blue-300"
+                    : "text-gray-200 hover:text-blue-400"
+                }`}
+              >
+                Admin
+              </Link>
+            ) : null}
 
             <button
               type="button"
