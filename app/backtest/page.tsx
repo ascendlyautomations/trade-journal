@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
+import { deleteUserTrade } from "@/lib/deleteTrade"
 import { isProActive } from "@/lib/subscription"
 import Navbar from "../components/Navbar"
 import LockedFeature from "../components/LockedFeature"
@@ -118,7 +119,7 @@ export default function BacktestPage() {
   })
 
   const performDeleteTrade = useCallback(async (id: string) => {
-    await supabase.from("trades").delete().eq("id", id)
+    await deleteUserTrade(supabase, id)
     setTrades((prev) => prev.filter((t) => t.id !== id))
   }, [])
 

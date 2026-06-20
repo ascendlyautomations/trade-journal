@@ -14,6 +14,7 @@ import {
 import { formatDecimal, formatRR } from "@/lib/formatDisplay"
 import { useEffect, useMemo, useState, useCallback } from "react"
 import { supabase } from "../../lib/supabaseClient"
+import { deleteUserTrade } from "@/lib/deleteTrade"
 import { useScrollPageTopOnMount } from "@/lib/useScrollPageTopOnMount"
 import { ConfirmModal, useDeleteTradeConfirmation } from "../components/ui"
 export default function CalendarPage() {
@@ -98,7 +99,7 @@ export default function CalendarPage() {
   }
 
   const performDeleteTrade = useCallback(async (id: string) => {
-    await supabase.from("trades").delete().eq("id", id)
+    await deleteUserTrade(supabase, id)
     setTrades((prev) => prev.filter((t) => String(t.id) !== id))
     setSelectedTrades((prev) => prev.filter((t) => String(t.id) !== id))
   }, [])

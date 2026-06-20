@@ -8,6 +8,7 @@ import {
 } from "@/lib/ensureProfileForUser"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { supabase } from "../../../lib/supabaseClient"
+import { deleteUserTrade } from "@/lib/deleteTrade"
 import { useRouter } from "next/navigation"
 import TradesPageMainContent from "../../components/TradesPageMainContent"
 import TradesPageOverlays from "../../components/TradesPageOverlays"
@@ -127,7 +128,7 @@ export default function TradesPage() {
   }, [])
 
   const performDeleteTrade = useCallback(async (id: string) => {
-    await supabase.from("trades").delete().eq("id", id)
+    await deleteUserTrade(supabase, id)
     setTrades((prev) => prev.filter((t) => t.id !== id))
   }, [])
 

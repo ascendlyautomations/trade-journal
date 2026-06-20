@@ -15,6 +15,7 @@ import {
   useState,
 } from "react"
 import { supabase } from "../../../lib/supabaseClient"
+import { deleteUserTrade } from "@/lib/deleteTrade"
 import { compressImage } from "@/lib/compressImage"
 import { normalizeTraderType } from "@/lib/traderType"
 import { useParams, useRouter, useSearchParams } from "next/navigation"
@@ -1941,11 +1942,7 @@ function ProfilePageContent() {
   }
 
   const performDeleteTrade = useCallback(async (tradeId: string) => {
-    const { error } = await supabase.from("trades").delete().eq("id", tradeId)
-    if (error) {
-      console.error(error)
-      throw error
-    }
+    await deleteUserTrade(supabase, tradeId)
     setAllTrades((prev) => prev.filter((t) => String(t.id) !== String(tradeId)))
     setSelectedTradeDetail((prev) =>
       prev && String(prev.id) === String(tradeId) ? null : prev
