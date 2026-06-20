@@ -36,7 +36,6 @@ import { submitCsvSupportRequest } from "@/lib/submitCsvSupportRequest"
 import { mirrorAccountSettingsHasUsedInitialImport } from "@/lib/profileSplitMirrorWrites"
 import { csvTradesHaveFutureDate } from "@/lib/tradeDateValidation"
 import { notifyGettingStartedChecklistMaybeCompleted } from "@/lib/gettingStartedProgressSync"
-import { notifyAdminCsvImportCompleted } from "@/lib/notifyAdminCsvImportCompleted"
 
 export type CsvImportPanelProps = {
   /** Smaller preview + less chrome (e.g. onboarding modal) */
@@ -294,8 +293,6 @@ export default function CsvImportPanel({
     importingRef.current = true
     setLoading(true)
 
-    const importBatchId = crypto.randomUUID()
-
     const { data: userData } = await supabase.auth.getUser()
     const user = userData.user
     if (!user) {
@@ -448,27 +445,6 @@ export default function CsvImportPanel({
       const successFeedback = feedbackPresets.importSuccess(importedCount, skipped)
       let message = successFeedback.message as string
       if (errLines) message += `\n\n${errLines}`
-
-      notifyAdminCsvImportCompleted({
-        importBatchId,
-        originalFilename:
-          csvSupportFile?.name ?? lastCsvFileRef.current?.name ?? null,
-        brokerFormat: brokerHint ?? diagnostics?.formatLabel ?? null,
-        rowsParsed: parsed.length,
-        tradesImported: importedCount,
-        rowsSkipped: skipped > 0 ? skipped : undefined,
-        accountName:
-          selectedAccount?.name ??
-          (parsedTrades[0]?.account_name != null
-            ? String(parsedTrades[0].account_name)
-            : null),
-        accountId:
-          selectedAccount?.id ??
-          (parsedTrades[0]?.account_id != null
-            ? String(parsedTrades[0].account_id)
-            : null),
-        source: importSource,
-      })
 
       if (!delegateSuccessFeedback) {
         showPopup({ ...successFeedback, message })

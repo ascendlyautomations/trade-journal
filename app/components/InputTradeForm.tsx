@@ -25,7 +25,6 @@ import {
 } from "@/lib/inputTradeDateTime"
 import { tradeFormHasFutureDate, csvTradesHaveFutureDate, isDateAfterToday } from "@/lib/tradeDateValidation"
 import { notifyGettingStartedChecklistMaybeCompleted } from "@/lib/gettingStartedProgressSync"
-import { notifyAdminCsvImportCompleted } from "@/lib/notifyAdminCsvImportCompleted"
 import { profilePath } from "@/lib/profileRoutes"
 import CreateAccountModal, {
   type Props as CreateAccountModalProps,
@@ -1155,8 +1154,6 @@ export default function InputTradeForm({
     csvImportingRef.current = true
     setCsvImporting(true)
 
-    const importBatchId = crypto.randomUUID()
-
     try {
       const {
         data: { user },
@@ -1221,18 +1218,6 @@ export default function InputTradeForm({
         showPopup(feedbackPresets.importFailed(handleSupabaseError(error)))
         return
       }
-
-      notifyAdminCsvImportCompleted({
-        importBatchId,
-        originalFilename: csvSupportFile?.name ?? null,
-        brokerFormat: csvBrokerHint ?? csvDiagnostics?.formatLabel ?? null,
-        rowsParsed:
-          csvDataRowCount > 0 ? csvDataRowCount : parsedTrades.length,
-        tradesImported: parsedTrades.length,
-        accountName: selectedAccount.name ?? null,
-        accountId: selectedAccount.id ?? null,
-        source: csvImportSource,
-      })
 
       showPopup(feedbackPresets.importSuccess(parsedTrades.length))
       notifyGettingStartedChecklistMaybeCompleted()
