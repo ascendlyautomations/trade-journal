@@ -2,6 +2,7 @@
 
 import { memo, type MutableRefObject } from "react"
 import FeedPostDetailModal from "./FeedPostDetailModal"
+import FeedProfilePostDetailModal from "./FeedProfilePostDetailModal"
 import ShareToConversationsModal from "@/app/components/ShareToConversationsModal"
 import type { FeedLikeMeta } from "./FeedPostCard"
 
@@ -45,21 +46,39 @@ function FeedPostOverlays({
   return (
     <>
       {selectedPost && selectedPostId ? (
-        <FeedPostDetailModal
-          key={selectedPostId}
-          post={selectedPost}
-          user={user}
-          comments={selectedPostComments}
-          likeMeta={selectedPostLikeMeta}
-          likeBusy={selectedPostLikeBusy}
-          commentSubmitting={selectedPostCommentSubmitting}
-          draftSyncRef={draftSyncRef}
-          openCommentsRef={openCommentsRef}
-          onClose={onCloseDetailModal}
-          onToggleLike={onToggleLike}
-          onSubmitComment={onSubmitComment}
-          onSharePost={onSharePost}
-        />
+        selectedPost.feedKind === "profile" ? (
+          <FeedProfilePostDetailModal
+            key={selectedPostId}
+            post={selectedPost}
+            user={user}
+            comments={selectedPostComments}
+            likeMeta={selectedPostLikeMeta}
+            likeBusy={selectedPostLikeBusy}
+            commentSubmitting={selectedPostCommentSubmitting}
+            draftSyncRef={draftSyncRef}
+            openCommentsRef={openCommentsRef}
+            onClose={onCloseDetailModal}
+            onToggleLike={onToggleLike}
+            onSubmitComment={onSubmitComment}
+            onSharePost={onSharePost}
+          />
+        ) : (
+          <FeedPostDetailModal
+            key={selectedPostId}
+            post={selectedPost}
+            user={user}
+            comments={selectedPostComments}
+            likeMeta={selectedPostLikeMeta}
+            likeBusy={selectedPostLikeBusy}
+            commentSubmitting={selectedPostCommentSubmitting}
+            draftSyncRef={draftSyncRef}
+            openCommentsRef={openCommentsRef}
+            onClose={onCloseDetailModal}
+            onToggleLike={onToggleLike}
+            onSubmitComment={onSubmitComment}
+            onSharePost={onSharePost}
+          />
+        )
       ) : null}
 
       {sharePost ? (

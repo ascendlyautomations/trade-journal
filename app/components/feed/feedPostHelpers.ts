@@ -6,8 +6,61 @@ import {
 
 export { normalizeFeedAccountType, resolveFeedTradeAccountType }
 
+export type FeedScope = "global" | "following"
+export type FeedContentFilter = "all" | "trades" | "posts"
+export type FeedItemKind = "trade" | "profile"
+
+export type FeedItem = {
+  feedKind: FeedItemKind
+  id: string
+  user_id: string
+  created_at: string
+  [key: string]: unknown
+}
+
 export const FEED_POSTS_SELECT =
   "id, user_id, trade_id, created_at, pnl, rr, image_url, profiles(username, avatar_url), trades(public_description, user_id, ticker, direction, account_type, points, entry_time, exit_time, entry_price, exit_price, trade_date, duration_seconds, duration_text)"
+
+export function normalizeTradeFeedItem(row: Record<string, unknown>): FeedItem {
+  return {
+    ...row,
+    feedKind: "trade",
+    id: String(row.id),
+    user_id: String(row.user_id),
+    created_at: String(row.created_at),
+  }
+}
+
+export function normalizeProfileFeedItem(row: Record<string, unknown>): FeedItem {
+  return {
+    ...row,
+    feedKind: "profile",
+    id: String(row.id),
+    user_id: String(row.user_id),
+    created_at: String(row.created_at),
+  }
+}
+
+export function sortFeedItemsDesc(items: FeedItem[]): FeedItem[] {
+  return [...items].sort(
+    (a, b) =>
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  )
+}
+
+export function dedupeFeedItems(items: FeedItem[]): FeedItem[] {
+  const seen = new Set<string>()
+  const out: FeedItem[] = []
+
+  for (const item of items) {
+    const key = `${item.feedKind}:${item.id}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(item)
+  }
+
+  return out
+}
 
 /** Columns used by feed comment threads. */
 export const FEED_COMMENTS_SELECT =

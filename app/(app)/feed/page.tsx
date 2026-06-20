@@ -8,6 +8,7 @@ import { supabase } from "../../../lib/supabaseClient"
 import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
 import { feedbackPresets } from "@/lib/feedbackPresets"
 import FeedLoadMoreFooter from "../../components/feed/FeedLoadMoreFooter"
+import FeedContentToggle from "../../components/feed/FeedContentToggle"
 import FeedModeToggle from "../../components/feed/FeedModeToggle"
 import FeedPostList from "../../components/feed/FeedPostList"
 import FeedPostOverlays from "../../components/feed/FeedPostOverlays"
@@ -21,10 +22,18 @@ import {
 import {
   FEED_COMMENT_INSERT_SELECT,
   FEED_COMMENTS_SELECT,
-  FEED_POSTS_SELECT,
   FEED_STORIES_SELECT,
   buildFeedPostsIndex,
+  type FeedContentFilter,
+  type FeedItem,
 } from "../../components/feed/feedPostHelpers"
+import {
+  FEED_PAGE_SIZE,
+  fetchFollowingIds,
+  fetchProfileFeedBatch,
+  fetchTradeFeedBatch,
+  topUpMergedFeedBuffer,
+} from "@/lib/feedContent"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import EmptyState from "@/app/components/ui/EmptyState"
 import { SkeletonFeedPage } from "@/app/components/ui/skeletons"
@@ -82,6 +91,12 @@ function FeedPageContent() {
   const loadingRef = useRef(false)
   const hasMoreRef = useRef(true)
   const [mode, setMode] = useState<"global" | "following">("following")
+  const [contentType, setContentType] = useState<FeedContentFilter>("all")
+  const mergeBufferRef = useRef<FeedItem[]>([])
+  const tradePageRef = useRef(0)
+  const profilePageRef = useRef(0)
+  const tradeExhaustedRef = useRef(false)
+  const profileExhaustedRef = useRef(false)
   const [likesByPost, setLikesByPost] = useState<Record<string, LikeMeta>>({})
   const [commentsByPost, setCommentsByPost] = useState<Record<string, any[]>>({})
   const [commentSubmitting, setCommentSubmitting] = useState<Record<string, boolean>>({})
@@ -520,8 +535,6 @@ function FeedPageContent() {
       if (!user || loadingRef.current || !hasMoreRef.current) return
 
       const currentPage = pageOverride ?? pageRef.current
-      const from = currentPage * 8
-      const to = from + 7
 
       setLoading(true)
       loadingRef.current = true
@@ -530,134 +543,153 @@ function FeedPageContent() {
         setFeedEmptyState(null)
       }
 
-      let list: any[] = []
+      try {
+        const followingIds = await fetchFollowingIds(supabase, user.id)
+        let list: FeedItem[] = []
 
-      if (mode === "global") {
-        const { data: following, error: followingError } = await supabase
-          .from("followers")
-          .select("following_id")
-          .eq("follower_id", user.id)
+        if (contentType === "all") {
+          const toppedUp = await topUpMergedFeedBuffer(supabase, {
+            scope: mode,
+            userId: user.id,
+            followingIds,
+            buffer: mergeBufferRef.current,
+            tradePage: tradePageRef.current,
+            profilePage: profilePageRef.current,
+            tradeExhausted: tradeExhaustedRef.current,
+            profileExhausted: profileExhaustedRef.current,
+            targetSize: FEED_PAGE_SIZE,
+            pageSize: FEED_PAGE_SIZE,
+          })
 
-        if (followingError) {
-          console.error(followingError)
-          loadingRef.current = false
-          setLoading(false)
-          return
-        }
+          mergeBufferRef.current = toppedUp.buffer
+          tradePageRef.current = toppedUp.tradePage
+          profilePageRef.current = toppedUp.profilePage
+          tradeExhaustedRef.current = toppedUp.tradeExhausted
+          profileExhaustedRef.current = toppedUp.profileExhausted
 
-        const followingIds = following?.map((f) => f.following_id) || []
+          list = mergeBufferRef.current.splice(0, FEED_PAGE_SIZE)
 
-        let globalQuery = supabase
-          .from("posts")
-          .select(FEED_POSTS_SELECT)
-          .neq("user_id", user.id)
-          .order("created_at", { ascending: false })
-          .range(from, to)
-
-        if (followingIds.length > 0) {
-          globalQuery = globalQuery.not(
-            "user_id",
-            "in",
-            `(${followingIds.join(",")})`
-          )
-        }
-
-        const { data, error } = await globalQuery
-
-        if (error) {
-          console.error(error)
-          loadingRef.current = false
-          setLoading(false)
-          return
-        }
-
-        list = data || []
-      }
-
-      if (mode === "following") {
-        const { data: following, error: followingError } = await supabase
-          .from("followers")
-          .select("following_id")
-          .eq("follower_id", user.id)
-
-        if (followingError) {
-          console.error(followingError)
-          loadingRef.current = false
-          setLoading(false)
-          return
-        }
-
-        const ids = following?.map((f) => f.following_id) || []
-
-        if (ids.length === 0) {
-          hasMoreRef.current = false
-          setHasMore(false)
-          if (currentPage === 0) {
+          if (
+            mode === "following" &&
+            followingIds.length === 0 &&
+            currentPage === 0
+          ) {
+            hasMoreRef.current = false
+            setHasMore(false)
             setFeedEmptyState("following_nobody")
+            loadingRef.current = false
+            setLoading(false)
+            return
           }
-          loadingRef.current = false
-          setLoading(false)
-          return
+
+          if (
+            toppedUp.tradeExhausted &&
+            toppedUp.profileExhausted &&
+            list.length < FEED_PAGE_SIZE
+          ) {
+            hasMoreRef.current = false
+            setHasMore(false)
+          }
+        } else if (contentType === "trades") {
+          const result = await fetchTradeFeedBatch(supabase, {
+            scope: mode,
+            userId: user.id,
+            followingIds,
+            page: currentPage,
+            pageSize: FEED_PAGE_SIZE,
+          })
+
+          if (result.emptyFollowing && currentPage === 0) {
+            hasMoreRef.current = false
+            setHasMore(false)
+            setFeedEmptyState("following_nobody")
+            loadingRef.current = false
+            setLoading(false)
+            return
+          }
+
+          list = result.items
+
+          if (list.length < FEED_PAGE_SIZE) {
+            hasMoreRef.current = false
+            setHasMore(false)
+          }
+        } else {
+          const result = await fetchProfileFeedBatch(supabase, {
+            scope: mode,
+            userId: user.id,
+            followingIds,
+            page: currentPage,
+            pageSize: FEED_PAGE_SIZE,
+          })
+
+          if (result.emptyFollowing && currentPage === 0) {
+            hasMoreRef.current = false
+            setHasMore(false)
+            setFeedEmptyState("following_nobody")
+            loadingRef.current = false
+            setLoading(false)
+            return
+          }
+
+          list = result.items
+
+          if (list.length < FEED_PAGE_SIZE) {
+            hasMoreRef.current = false
+            setHasMore(false)
+          }
         }
 
-        const { data, error } = await supabase
-          .from("posts")
-          .select(FEED_POSTS_SELECT)
-          .in("user_id", ids)
-          .neq("user_id", user.id)
-          .order("created_at", { ascending: false })
-          .range(from, to)
+        const { enriched, likesMap, commentsMap } = await loadEngagementForPosts(
+          list,
+          user
+        )
 
-        if (error) {
-          console.error(error)
-          loadingRef.current = false
-          setLoading(false)
-          return
+        if (currentPage === 0 && list.length === 0) {
+          setFeedEmptyState("no_posts")
         }
 
-        list = data || []
+        setPosts((prev) => [...prev, ...enriched])
+        setLikesByPost((prev) => ({ ...prev, ...likesMap }))
+        setCommentsByPost((prev) => ({ ...prev, ...commentsMap }))
+        const nextPage =
+          pageOverride != null ? pageOverride + 1 : pageRef.current + 1
+        pageRef.current = nextPage
+        setPage(nextPage)
+      } catch (error) {
+        console.error("[feed] loadPosts:", error)
+      } finally {
+        loadingRef.current = false
+        setLoading(false)
       }
-
-      console.log("FEED TRADE SAMPLE:", list?.[0])
-
-      if (list.length < 8) {
-        hasMoreRef.current = false
-        setHasMore(false)
-      }
-
-      const { enriched, likesMap, commentsMap } = await loadEngagementForPosts(list, user)
-
-      if (currentPage === 0 && list.length === 0) {
-        setFeedEmptyState("no_posts")
-      }
-
-      setPosts((prev) => [...prev, ...enriched])
-      setLikesByPost((prev) => ({ ...prev, ...likesMap }))
-      setCommentsByPost((prev) => ({ ...prev, ...commentsMap }))
-      const nextPage = pageOverride != null ? pageOverride + 1 : pageRef.current + 1
-      pageRef.current = nextPage
-      setPage(nextPage)
-      loadingRef.current = false
-      setLoading(false)
     },
-    [user, mode, loadEngagementForPosts]
+    [user, mode, contentType, loadEngagementForPosts]
   )
 
-  useEffect(() => {
-    if (profileLoading) return
-    if (!user) return
+  const resetFeedState = useCallback(() => {
     setPosts([])
     setLikesByPost({})
     setCommentsByPost({})
     setFeedEmptyState(null)
     setPage(0)
     setHasMore(true)
-    setLoading(true)
     pageRef.current = 0
     hasMoreRef.current = true
     loadingRef.current = false
+    mergeBufferRef.current = []
+    tradePageRef.current = 0
+    profilePageRef.current = 0
+    tradeExhaustedRef.current = false
+    profileExhaustedRef.current = false
+  }, [])
+
+  useEffect(() => {
+    if (profileLoading) return
+    if (!user) return
+    resetFeedState()
+    setLoading(true)
     void loadPosts(0)
-  }, [profileLoading, user, mode, loadPosts])
+  }, [profileLoading, user, mode, contentType, loadPosts, resetFeedState])
 
   useEffect(() => {
     const handleScroll = () => {
@@ -894,6 +926,10 @@ function FeedPageContent() {
       <div className="flex justify-center px-4 py-6 sm:py-8 pb-10">
         <div className="w-full max-w-xl space-y-6">
           <FeedModeToggle mode={mode} onModeChange={setMode} />
+          <FeedContentToggle
+            contentType={contentType}
+            onContentTypeChange={setContentType}
+          />
 
           {mode === "following" && user ? (
             <FeedStoriesBar
@@ -918,8 +954,16 @@ function FeedPageContent() {
                 feedEmptyState === "following_nobody"
                   ? "Follow traders on Explore to see their posts and activity here."
                   : mode === "following"
-                    ? "Posts from traders you follow will show up here when they share."
-                    : "The feed is quiet for now. Check back as traders post updates."
+                    ? contentType === "trades"
+                      ? "Trade posts from traders you follow will show up here when they share."
+                      : contentType === "posts"
+                        ? "Profile posts from traders you follow will show up here when they share."
+                        : "Posts from traders you follow will show up here when they share."
+                    : contentType === "trades"
+                      ? "Public trade posts will show up here as traders share."
+                      : contentType === "posts"
+                        ? "Public profile posts will show up here as traders share."
+                        : "The feed is quiet for now. Check back as traders post updates."
               }
               action={
                 feedEmptyState === "following_nobody" ? (

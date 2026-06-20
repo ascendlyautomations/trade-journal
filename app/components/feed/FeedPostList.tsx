@@ -6,6 +6,7 @@ import FeedPostCard, {
   EMPTY_LIKE_META,
   type FeedLikeMeta,
 } from "./FeedPostCard"
+import FeedProfilePostCard from "./FeedProfilePostCard"
 
 type FeedPostListProps = {
   posts: any[]
@@ -40,9 +41,28 @@ function FeedPostList({
     <>
       {posts.map((post) => {
         const pid = String(post.id)
+
+        if (post.feedKind === "profile") {
+          return (
+            <FeedProfilePostCard
+              key={`profile-${pid}`}
+              post={post}
+              user={user}
+              likeMeta={likesByPost[pid] ?? EMPTY_LIKE_META}
+              likeBusy={!!likeBusyByPost[pid]}
+              comments={commentsByPost[pid] ?? EMPTY_COMMENTS}
+              commentSubmitting={!!commentSubmitting[pid]}
+              onSelectPost={onSelectPost}
+              onOpenComments={onOpenComments}
+              onToggleLike={onToggleLike}
+              onSharePost={onSharePost}
+            />
+          )
+        }
+
         return (
           <FeedPostCard
-            key={pid}
+            key={`trade-${pid}`}
             post={post}
             user={user}
             likeMeta={likesByPost[pid] ?? EMPTY_LIKE_META}
