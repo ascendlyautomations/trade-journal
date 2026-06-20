@@ -194,6 +194,7 @@ export default function ExplorePage() {
       .from("profiles")
       .select(PROFILE_FIELDS)
       .in("id", missingTopIds)
+      .neq("is_private", true)
 
     if (data?.length) {
       setProfiles((prev) =>
@@ -257,6 +258,7 @@ export default function ExplorePage() {
         .select(SEARCH_PROFILE_FIELDS)
         .or(`username.ilike.%${term}%,name.ilike.%${term}%`)
         .not("username", "is", null)
+        .neq("is_private", true)
         .limit(8)
 
       setResults(data || [])
@@ -283,6 +285,7 @@ export default function ExplorePage() {
         .from("profiles")
         .select(PROFILE_FIELDS)
         .not("username", "is", null)
+        .neq("is_private", true)
         .order("created_at", { ascending: false })
         .limit(profilePoolLimit),
       user?.id
@@ -342,7 +345,9 @@ export default function ExplorePage() {
   const topTraders = useMemo((): EnrichedTopTrader[] => {
     const ranked = buildLeaderboardRankings(windowTrades, EXPLORE_TOP_LIMIT)
 
-    return ranked.map((row) => {
+    return ranked
+      .filter((row) => profilesById[row.userId]?.is_private !== true)
+      .map((row) => {
       const summary = windowTradeSummaries[row.userId]
       return {
         userId: row.userId,
@@ -376,7 +381,12 @@ export default function ExplorePage() {
 
   const newTraders = useMemo(() => {
     return profiles
-      .filter((p) => p.username?.trim() && p.id !== currentUserId)
+      .filter(
+        (p) =>
+          p.username?.trim() &&
+          p.id !== currentUserId &&
+          p.is_private !== true
+      )
       .slice(0, EXPLORE_NEW_LIMIT)
   }, [profiles, currentUserId])
 

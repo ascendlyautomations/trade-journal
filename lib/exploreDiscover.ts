@@ -163,7 +163,12 @@ export function rankActiveTraders(
   const now = Date.now()
 
   return profiles
-    .filter((p) => p.username?.trim() && !excludeUserIds.has(p.id))
+    .filter(
+      (p) =>
+        p.username?.trim() &&
+        !excludeUserIds.has(p.id) &&
+        p.is_private !== true
+    )
     .map((profile) => ({
       profile,
       score: scoreActiveTrader(

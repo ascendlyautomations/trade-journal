@@ -3,6 +3,7 @@ import {
   isExcludedDiscoveryRoomSlug,
   isPublicDiscoveryRoom,
 } from "@/lib/betaHub"
+import { filterRoomsWithPublicOwners } from "@/lib/publicProfileDiscovery"
 
 export type PopularTradeRoom = {
   id: string
@@ -130,7 +131,7 @@ export async function fetchPopularTradeRooms(
 
   const { data: rooms, error } = await supabase
     .from("rooms")
-    .select("id, name, description, slug, show_on_profile, image_url")
+    .select("id, name, description, slug, show_on_profile, image_url, owner_user_id")
     .not("owner_user_id", "is", null)
     .limit(capped * 3)
 
@@ -139,7 +140,9 @@ export async function fetchPopularTradeRooms(
     return []
   }
 
-  return (rooms ?? [])
+  const publicOwnerRooms = await filterRoomsWithPublicOwners(supabase, rooms ?? [])
+
+  return publicOwnerRooms
     .filter((room) => isPublicDiscoveryRoom(room))
     .slice(0, capped)
     .map((room) =>
@@ -200,7 +203,9 @@ export async function searchPublicTradeRooms(
     return []
   }
 
-  return (rooms ?? [])
+  const publicOwnerRooms = await filterRoomsWithPublicOwners(supabase, rooms ?? [])
+
+  return publicOwnerRooms
     .filter((room) => isPublicDiscoveryRoom(room))
     .slice(0, capped)
     .map((room) => mapRoomRow(room as Parameters<typeof mapRoomRow>[0], 0))

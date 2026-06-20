@@ -28,6 +28,7 @@ export default function SearchPage() {
       .from("profiles")
       .select("id, username")
       .ilike("username", `%${value}%`)
+      .neq("is_private", true)
       .limit(10)
 
     if (error) {

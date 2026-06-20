@@ -1081,6 +1081,10 @@ function ProfilePageContent() {
   const [likeBusyByPost, setLikeBusyByPost] = useState<Record<string, boolean>>({})
   const deepLinkHandledRef = useRef<string | null>(null)
 
+  const openCreatePostModal = useCallback(() => {
+    setShowCreatePost(true)
+  }, [])
+
   /** Profile Stats equity chart: Recharts props tuned below ~sm breakpoint. */
   const [equityChartNarrow, setEquityChartNarrow] = useState(false)
 
@@ -1177,21 +1181,15 @@ function ProfilePageContent() {
   ])
 
   const fetchTradesForProfile = useCallback(
-    async (forProfileId: string, viewerIsOwner?: boolean) => {
+    async (forProfileId: string) => {
       const isOwner =
-        viewerIsOwner ??
-        (currentUserId != null && String(currentUserId) === String(forProfileId))
+        currentUserId != null && String(currentUserId) === String(forProfileId)
 
-      let query = supabase
+      const { data, error } = await supabase
         .from("trades")
         .select(tradeSelectForViewer(isOwner))
         .eq("user_id", forProfileId)
-
-      if (!isOwner) {
-        query = query.eq("is_public", true)
-      }
-
-      const { data, error } = await query
+        .eq("is_public", true)
 
       if (error) {
         console.error("all trades fetch:", error)
@@ -2191,12 +2189,13 @@ function ProfilePageContent() {
     if (String(profile.id) !== String(currentUserId)) return
 
     setActiveTab("posts")
-    setShowCreatePost(true)
+    openCreatePostModal()
     clearProfileQueryParams()
   }, [
     clearProfileQueryParams,
     currentUserId,
     loading,
+    openCreatePostModal,
     profile?.id,
     searchParams,
   ])
@@ -2282,7 +2281,12 @@ function ProfilePageContent() {
     console.log(allTrades)
   }, [allTrades])
 
-  const filteredTrades = allTrades.filter((trade) => {
+  const profilePublicTrades = useMemo(
+    () => allTrades.filter((trade) => trade.is_public === true),
+    [allTrades]
+  )
+
+  const filteredTrades = profilePublicTrades.filter((trade) => {
     if (selectedMode === "all") return true
     const m = selectedMode.toLowerCase()
     const modeStr = String(trade.mode ?? "").trim().toLowerCase()
@@ -2290,14 +2294,14 @@ function ProfilePageContent() {
     return modeStr === m || typeStr === m
   })
 
-  // Public/profile analytics intentionally exclude backtest-mode trades.
+  // Profile statistics use public trades only; backtest-mode trades are excluded.
   const analyticsTrades = filteredTrades.filter((trade) => {
     const modeStr = String(trade.mode ?? "").trim().toLowerCase()
     const typeStr = String(trade.account_type ?? "").trim().toLowerCase()
     return modeStr !== "backtest" && typeStr !== "backtest"
   })
 
-  const profileOverviewTrades = allTrades.filter((trade) => {
+  const profileOverviewTrades = profilePublicTrades.filter((trade) => {
     const modeStr = String(trade.mode ?? "").trim().toLowerCase()
     const typeStr = String(trade.account_type ?? "").trim().toLowerCase()
     return modeStr !== "backtest" && typeStr !== "backtest"
@@ -2722,7 +2726,7 @@ function ProfilePageContent() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => setShowCreatePost(true)}
+                      onClick={openCreatePostModal}
                       className="flex-1 rounded-md bg-blue-500 px-3 py-2 text-sm font-medium text-white hover:bg-blue-600 sm:flex-none sm:py-1.5 sm:text-xs"
                     >
                       + Post
@@ -2931,12 +2935,13 @@ function ProfilePageContent() {
                       title="No Posts Yet"
                       description="Share trades and updates with the community."
                       action={
-                        <Link
-                          href="/app"
+                        <button
+                          type="button"
+                          onClick={openCreatePostModal}
                           className="text-sm font-medium text-blue-300 hover:text-blue-200"
                         >
                           Create Post →
-                        </Link>
+                        </button>
                       }
                       className="py-10"
                     />
