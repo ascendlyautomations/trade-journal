@@ -77,6 +77,46 @@ type RoomMessage = {
   } | null
 }
 
+/** PostgREST embed: disambiguate trade_id vs pinned_trade_id FKs (PGRST201). */
+const ROOM_MESSAGE_SELECT_SHAPE = `
+  *,
+  trades!room_messages_trade_id_fkey (
+    id,
+    ticker,
+    image_url,
+    pnl,
+    rr
+  ),
+  profiles (
+    username,
+    avatar_url
+  )
+`
+
+const ROOM_MESSAGE_REALTIME_SELECT = `
+  id,
+  room_id,
+  user_id,
+  seen_by,
+  pinned,
+  section_id,
+  type,
+  trade_id,
+  content,
+  image_url,
+  created_at,
+  trades!room_messages_trade_id_fkey (
+    id,
+    image_url,
+    pnl,
+    rr
+  ),
+  profiles (
+    username,
+    avatar_url
+  )
+`
+
 type ActivePresence = {
   user_id: string
   profiles?: {
@@ -469,12 +509,14 @@ function CommunityContent() {
 
   const canPostInRoom = useMemo(() => {
     if (!selectedRoomId || needsJoin) return false
+    if (sections.length > 0 && !selectedSectionId) return false
     if (isOwner) return true
     if (isBetaAnnouncementsLocked) return isAdmin
     if (sections.length === 0) return true
     return currentSection?.allow_members_chat !== false
   }, [
     selectedRoomId,
+    selectedSectionId,
     needsJoin,
     isOwner,
     isAdmin,
@@ -595,6 +637,40 @@ function CommunityContent() {
     return next
   }
 
+  /** Align insert section_id with the active channel filter (refs avoid stale send closures). */
+  function resolveInsertSectionId(): {
+    sectionId: string | null
+    source: "no-sections" | "sectionFilterRef" | "selectedSectionId" | "first-section-fallback"
+  } {
+    const list = sectionsRef.current
+    if (list.length === 0) {
+      return { sectionId: null, source: "no-sections" }
+    }
+    const fromFilter = sectionFilterRef.current.id
+    if (fromFilter) {
+      return { sectionId: fromFilter, source: "sectionFilterRef" }
+    }
+    if (selectedSectionId) {
+      return { sectionId: selectedSectionId, source: "selectedSectionId" }
+    }
+    const first = list[0]?.id ?? null
+    return {
+      sectionId: first,
+      source: first ? "first-section-fallback" : "no-sections",
+    }
+  }
+
+  function activeFetchSectionId(): string | null {
+    const list = sectionsRef.current
+    if (list.length === 0) return null
+    return (
+      sectionFilterRef.current.id ??
+      selectedSectionId ??
+      list[0]?.id ??
+      null
+    )
+  }
+
   function sectionMessageFilter(
     q: any,
     roomId: string,
@@ -652,6 +728,17 @@ function CommunityContent() {
       activeSectionId
     )
 
+    console.log("[room_messages fetch]", {
+      selectedRoomId: roomId,
+      activeSectionId,
+      selectedSectionId: sectionFilterRef.current.id,
+      sectionsCount: sectionsList.length,
+      sectionIds: sectionsList.map((s) => s.id),
+      bypassCache: options?.bypassCache ?? false,
+      cacheKey,
+      userId: userIdRef.current,
+    })
+
     const loadGen = ++roomMessagesFetchGenRef.current
 
     if (!options?.bypassCache) {
@@ -669,24 +756,9 @@ function CommunityContent() {
 
     setLoadingMessages(true)
 
-    const selectShape = `
-        *,
-        trades (
-          id,
-          ticker,
-          image_url,
-          pnl,
-          rr
-        ),
-        profiles (
-          username,
-          avatar_url
-        )
-      `
-
     let pinnedQ = supabase
       .from("room_messages")
-      .select(selectShape)
+      .select(ROOM_MESSAGE_SELECT_SHAPE)
       .eq("pinned", true)
       .order("created_at", { ascending: false })
       .limit(100)
@@ -700,7 +772,7 @@ function CommunityContent() {
 
     let mainQ = supabase
       .from("room_messages")
-      .select(selectShape)
+      .select(ROOM_MESSAGE_SELECT_SHAPE)
       .eq("pinned", false)
       .order("created_at", { ascending: false })
       .limit(100)
@@ -744,6 +816,14 @@ function CommunityContent() {
 
     const mainData = ((mainRes.data || []) as RoomMessage[]).slice().reverse()
     setMessages(mainData)
+
+    console.log("[room_messages fetch] result", {
+      selectedRoomId: roomId,
+      activeSectionId,
+      pinnedCount: pinnedData.length,
+      mainCount: mainData.length,
+      userId: userIdRef.current,
+    })
 
     setMessagesByRoom((prev) => ({
       ...prev,
@@ -1674,35 +1754,15 @@ function CommunityContent() {
 
         const { data, error } = await supabase
           .from("room_messages")
-          .select(
-            `
-            id,
-            room_id,
-            user_id,
-            seen_by,
-            pinned,
-            section_id,
-            type,
-            trade_id,
-            content,
-            image_url,
-            created_at,
-            trades (
-              id,
-              image_url,
-              pnl,
-              rr
-            ),
-            profiles (
-              username,
-              avatar_url
-            )
-          `
-          )
+          .select(ROOM_MESSAGE_REALTIME_SELECT)
           .eq("id", id)
           .maybeSingle()
 
-        if (error || !data) return
+        if (error) {
+          console.error("room_messages realtime hydrate:", error)
+          return
+        }
+        if (!data) return
 
         const row = data as RoomMessage
         const f = sectionFilterRef.current
@@ -1903,31 +1963,67 @@ function CommunityContent() {
         .from("screenshots")
         .getPublicUrl(filePath)
 
+      const { sectionId: insertSectionId, source: sectionIdSource } =
+        resolveInsertSectionId()
+      console.log("[room_messages insert]", {
+        selectedRoomId,
+        selectedSectionId,
+        insertSectionId,
+        sectionIdSource,
+        activeFetchSectionId: activeFetchSectionId(),
+        messageType: "image",
+      })
+
       const { error } = await supabase.from("room_messages").insert({
         room_id: selectedRoomId,
         user_id: user.id,
         type: "image" as const,
         image_url: data.publicUrl,
         content: content || "",
-        section_id: selectedSectionId,
+        section_id: insertSectionId,
       })
       if (error) {
         console.error("room_messages insert:", error)
         showPopup({ type: "error", message: handleSupabaseError(error) })
         return
       }
+
+      await fetchRoomMessages(
+        selectedRoomId,
+        sectionsRef.current,
+        activeFetchSectionId(),
+        { bypassCache: true }
+      )
     } else {
+      const { sectionId: insertSectionId, source: sectionIdSource } =
+        resolveInsertSectionId()
+      console.log("[room_messages insert]", {
+        selectedRoomId,
+        selectedSectionId,
+        insertSectionId,
+        sectionIdSource,
+        activeFetchSectionId: activeFetchSectionId(),
+        messageType: "text",
+      })
+
       const { error } = await supabase.from("room_messages").insert({
         room_id: selectedRoomId,
         user_id: user.id,
         content,
-        section_id: selectedSectionId,
+        section_id: insertSectionId,
       })
       if (error) {
         console.error("room_messages insert:", error)
         showPopup({ type: "error", message: handleSupabaseError(error) })
         return
       }
+
+      await fetchRoomMessages(
+        selectedRoomId,
+        sectionsRef.current,
+        activeFetchSectionId(),
+        { bypassCache: true }
+      )
     }
 
     setDraft("")
@@ -1978,13 +2074,24 @@ function CommunityContent() {
       }
     }
 
+    const { sectionId: insertSectionId, source: sectionIdSource } =
+      resolveInsertSectionId()
+    console.log("[room_messages insert]", {
+      selectedRoomId,
+      selectedSectionId,
+      insertSectionId,
+      sectionIdSource,
+      activeFetchSectionId: activeFetchSectionId(),
+      messageType: "trade",
+    })
+
     const { error } = await supabase.from("room_messages").insert({
       room_id: selectedRoomId,
       user_id: user.id,
       type: "trade",
       trade_id: trade.id,
       content: "Shared a trade",
-      section_id: selectedSectionId,
+      section_id: insertSectionId,
     })
 
     if (error) {
@@ -1992,6 +2099,13 @@ function CommunityContent() {
       showPopup({ type: "error", message: handleSupabaseError(error) })
       return
     }
+
+    await fetchRoomMessages(
+      selectedRoomId,
+      sectionsRef.current,
+      activeFetchSectionId(),
+      { bypassCache: true }
+    )
 
     setSelectTrade(false)
   }
