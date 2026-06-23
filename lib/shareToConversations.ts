@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
-import { compressImage } from "./compressImage"
+import { compressScreenshot } from "./compressImage"
 import { ensureDmConversation } from "./dmConversation"
 import { logSupabaseError } from "./logSupabaseError"
 import { assertSenderOwnsTrade } from "./tradeShareAccess"
@@ -273,7 +273,7 @@ export async function sendImageDataUrlToConversations(
     type: blob.type || "image/png",
   })
   if (uploadFile.type?.startsWith("image/")) {
-    uploadFile = await compressImage(uploadFile)
+    uploadFile = await compressScreenshot(uploadFile)
   }
   const path = `${opts.senderId}/share-${Date.now()}-${uploadFile.name}`
 

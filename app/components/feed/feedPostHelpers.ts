@@ -62,13 +62,45 @@ export function dedupeFeedItems(items: FeedItem[]): FeedItem[] {
   return out
 }
 
-/** Columns used by feed comment threads. */
-export const FEED_COMMENTS_SELECT =
+/** Feed comments without reply column (works before reply migration). */
+export const FEED_COMMENT_CORE_SELECT =
   "id, post_id, user_id, content, created_at, profiles(username, avatar_url)"
 
-/** Returned row shape after posting a comment. */
-export const FEED_COMMENT_INSERT_SELECT =
-  "id, post_id, user_id, content, created_at, profiles(username, avatar_url)"
+/** Feed comments including reply reference column (no PostgREST parent embed). */
+export const FEED_COMMENTS_SELECT =
+  `${FEED_COMMENT_CORE_SELECT}, parent_comment_id`
+
+/** Insert return shape — core columns only to avoid PGRST200 / missing-column failures. */
+export const FEED_COMMENT_INSERT_SELECT = FEED_COMMENT_CORE_SELECT
+
+function isMissingParentCommentIdColumn(error: {
+  code?: string
+  message?: string
+} | null): boolean {
+  if (!error) return false
+  if (error.code === "PGRST204") return true
+  const msg = (error.message ?? "").toLowerCase()
+  return msg.includes("parent_comment_id")
+}
+
+/** Select feed comments, falling back when parent_comment_id column is absent. */
+export async function queryFeedComments<T extends { data: unknown; error: unknown }>(
+  run: (select: string) => Promise<T>
+): Promise<T> {
+  const full = await run(FEED_COMMENTS_SELECT)
+  if (!full.error || !isMissingParentCommentIdColumn(full.error as { code?: string; message?: string })) {
+    return full
+  }
+  return run(FEED_COMMENT_CORE_SELECT)
+}
+
+export function withInsertedParentCommentId<T extends Record<string, unknown>>(
+  row: T,
+  parentCommentId?: string | null
+): T & { parent_comment_id?: string | null } {
+  if (!parentCommentId) return row
+  return { ...row, parent_comment_id: parentCommentId }
+}
 
 /** Columns used by the stories bar and viewer. */
 export const FEED_STORIES_SELECT = "id, user_id, image_url, created_at"

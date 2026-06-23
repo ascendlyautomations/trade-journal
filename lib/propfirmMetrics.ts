@@ -156,6 +156,50 @@ export function formatPropfirmUsd(n: number): string {
   })}`
 }
 
+export const PROPFIRM_EQUITY_CURVE_PADDING_LARGE = 300
+export const PROPFIRM_EQUITY_CURVE_PADDING_SMALL = 150
+export const PROPFIRM_EQUITY_CURVE_MIN_RANGE = 150
+
+export type PropfirmEquityCurveYDomainOptions = {
+  /** Optional reference-line Y values to keep visible (profit target, drawdown floor, etc.). */
+  includeValues?: number[]
+}
+
+/**
+ * Y-axis domain for the prop firm equity curve: zooms around plotted balances
+ * with fixed padding, not account size or evaluation targets.
+ */
+export function computePropfirmEquityCurveYDomain(
+  values: number[],
+  options?: PropfirmEquityCurveYDomainOptions
+): [number, number] | undefined {
+  const includeValues = options?.includeValues ?? []
+  const allValues = [...values, ...includeValues].filter((v) =>
+    Number.isFinite(v)
+  )
+  if (allValues.length === 0) return undefined
+
+  const minValue = Math.min(...allValues)
+  const maxValue = Math.max(...allValues)
+  const range = maxValue - minValue
+
+  const padding =
+    range < PROPFIRM_EQUITY_CURVE_MIN_RANGE
+      ? PROPFIRM_EQUITY_CURVE_PADDING_SMALL
+      : PROPFIRM_EQUITY_CURVE_PADDING_LARGE
+
+  let lowerBound = minValue - padding
+  let upperBound = maxValue + padding
+
+  if (lowerBound >= upperBound) {
+    const mid = (minValue + maxValue) / 2
+    lowerBound = mid - padding
+    upperBound = mid + padding
+  }
+
+  return [lowerBound, upperBound]
+}
+
 /** Drop duplicate trade rows (same `id`) so PnL is not double-counted. */
 export function dedupeTradesById<T extends PropfirmTrade>(trades: T[]): T[] {
   const seen = new Set<string>()

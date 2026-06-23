@@ -10,6 +10,11 @@ import {
 } from "react"
 import FeedCommentComposer from "./FeedCommentComposer"
 import FeedCommentList from "./FeedCommentList"
+import ConfirmModal from "@/app/components/ui/ConfirmModal"
+import {
+  buildReplyTargetFromComment,
+  type ReplyTarget,
+} from "@/lib/replyReference"
 
 type FeedCommentsSectionProps = {
   post: any
@@ -17,7 +22,13 @@ type FeedCommentsSectionProps = {
   comments: any[]
   commentSubmitting: boolean
   draftSyncRef?: MutableRefObject<Record<string, string>>
-  onSubmitComment: (post: any, text: string) => Promise<boolean>
+  onSubmitComment: (
+    post: any,
+    text: string,
+    parentCommentId?: string | null
+  ) => Promise<boolean>
+  onDeleteComment?: (comment: any) => Promise<boolean>
+  onReplyUnavailable?: () => void
   /** Scroll container for the comment list only (modal layout). */
   listScrollRef?: RefObject<HTMLDivElement | null>
 }
@@ -29,12 +40,17 @@ function FeedCommentsSection({
   commentSubmitting,
   draftSyncRef,
   onSubmitComment,
+  onDeleteComment,
+  onReplyUnavailable,
   listScrollRef,
 }: FeedCommentsSectionProps) {
   const pid = String(post.id)
   const [commentDraft, setCommentDraft] = useState(
     () => draftSyncRef?.current[pid] ?? ""
   )
+  const [replyTarget, setReplyTarget] = useState<ReplyTarget | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<any>(null)
+  const [deleteBusy, setDeleteBusy] = useState(false)
   const commentDraftRef = useRef(commentDraft)
   commentDraftRef.current = commentDraft
 
@@ -53,16 +69,55 @@ function FeedCommentsSection({
       if (commentSubmitting) return
       const text = commentDraftRef.current.trim()
       if (!text) return
-      const ok = await onSubmitComment(p, text)
+      const ok = await onSubmitComment(p, text, replyTarget?.id ?? null)
       if (ok) {
         setCommentDraft("")
+        setReplyTarget(null)
         if (draftSyncRef) {
           draftSyncRef.current[pid] = ""
         }
       }
     },
-    [commentSubmitting, draftSyncRef, onSubmitComment, pid]
+    [commentSubmitting, draftSyncRef, onSubmitComment, pid, replyTarget?.id]
   )
+
+  const handleReply = useCallback((comment: any) => {
+    setReplyTarget(buildReplyTargetFromComment(comment))
+    const input = document.getElementById(`comment-input-${pid}`)
+    if (input instanceof HTMLInputElement) input.focus()
+  }, [pid])
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (!pendingDelete || !onDeleteComment) {
+      console.warn("[comment-delete] confirm skipped", {
+        hasPending: pendingDelete != null,
+        hasHandler: onDeleteComment != null,
+      })
+      return
+    }
+
+    console.log("[comment-delete] confirm", {
+      commentId: String(pendingDelete.id),
+      postId: pendingDelete.post_id ?? post.id,
+      userId: pendingDelete.user_id,
+    })
+
+    setDeleteBusy(true)
+    try {
+      const commentForDelete = {
+        ...pendingDelete,
+        post_id: pendingDelete.post_id ?? post.id,
+      }
+      const ok = await onDeleteComment(commentForDelete)
+      console.log("[comment-delete] handler finished", {
+        commentId: String(pendingDelete.id),
+        ok,
+      })
+      if (ok) setPendingDelete(null)
+    } finally {
+      setDeleteBusy(false)
+    }
+  }, [onDeleteComment, pendingDelete, post.id])
 
   const stopPropagation = useCallback((e: React.SyntheticEvent) => {
     e.stopPropagation()
@@ -74,8 +129,44 @@ function FeedCommentsSection({
       user={user}
       commentValue={commentDraft}
       commentSubmitting={commentSubmitting}
+      replyTarget={replyTarget}
+      onCancelReply={() => setReplyTarget(null)}
       onCommentChange={handleCommentChange}
       onSubmitComment={handleSubmitComment}
+    />
+  ) : null
+
+  const commentList = (
+    <FeedCommentList
+      comments={comments}
+      currentUserId={user?.id}
+      onReply={handleReply}
+      onReplyUnavailable={onReplyUnavailable}
+      onRequestDelete={
+        onDeleteComment
+          ? (comment) =>
+              setPendingDelete({
+                ...comment,
+                post_id: comment.post_id ?? post.id,
+              })
+          : undefined
+      }
+      deleteMenuClassName="z-[9100]"
+    />
+  )
+
+  const deleteModal = onDeleteComment ? (
+    <ConfirmModal
+      open={pendingDelete != null}
+      title="Delete Comment?"
+      description="This action cannot be undone."
+      confirmLabel="Delete"
+      destructive
+      loading={deleteBusy}
+      onCancel={() => {
+        if (!deleteBusy) setPendingDelete(null)
+      }}
+      onConfirm={handleConfirmDelete}
     />
   ) : null
 
@@ -90,9 +181,10 @@ function FeedCommentsSection({
           ref={listScrollRef}
           className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
         >
-          <FeedCommentList comments={comments} />
+          {commentList}
         </div>
         {composer ? <div className="shrink-0 pt-3">{composer}</div> : null}
+        {deleteModal}
       </div>
     )
   }
@@ -103,8 +195,9 @@ function FeedCommentsSection({
       onClick={stopPropagation}
       onKeyDown={stopPropagation}
     >
-      <FeedCommentList comments={comments} />
+      {commentList}
       {composer}
+      {deleteModal}
     </div>
   )
 }

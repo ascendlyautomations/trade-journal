@@ -19,8 +19,8 @@ import {
 } from "../components/ui/skeletons"
 import DmStyleComposer from "../components/DmStyleComposer"
 import { supabase } from "../../lib/supabaseClient"
-import { compressImage } from "@/lib/compressImage"
-import { formatEST } from "@/lib/formatEST"
+import { compressImage, compressScreenshot } from "@/lib/compressImage"
+import { formatLocalDateTime } from "@/lib/formatDate"
 import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
 import { feedbackPresets, persistentError } from "@/lib/feedbackPresets"
 import { useUserProfile } from "@/lib/UserProfileProvider"
@@ -28,12 +28,31 @@ import { formatMoneyUnknown, formatRR } from "@/lib/formatDisplay"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { createRoomJoinNotification } from "@/lib/createRoomJoinNotification"
+import { createRoomMessageNotifications } from "@/lib/createRoomMessageNotifications"
+import RoomNotificationSettingsSheet from "@/app/components/RoomNotificationSettingsSheet"
+import ReplyActionButton from "@/app/components/replies/ReplyActionButton"
+import ReplyComposerStrip from "@/app/components/replies/ReplyComposerStrip"
+import ReplyReferenceBlock from "@/app/components/replies/ReplyReferenceBlock"
+import {
+  buildReplyTargetFromMessage,
+  roomMessageElementId,
+  scrollToReplyTarget,
+  type ReplyTarget,
+} from "@/lib/replyReference"
+import { ROOM_MESSAGE_PARENT_EMBED } from "@/lib/replyReferenceSelects"
+import {
+  anyRoomChannelNotificationsEnabled,
+  fetchRoomChannelNotificationPrefs,
+  upsertRoomChannelNotificationPref,
+} from "@/lib/roomChannelNotificationPreferences"
 import { notifyGettingStartedChecklistMaybeCompleted } from "@/lib/gettingStartedProgressSync"
 import { isCurrentUserAdmin } from "@/lib/adminUsers"
 import { isBetaAnnouncementsSection } from "@/lib/betaHub"
 import { isProfileUuidSegment } from "@/lib/profileRoutes"
 import { canEditRoomMessage } from "@/lib/roomModeration"
 import RoomMessageActionsMenu from "../components/RoomMessageActionsMenu"
+import SharedTradeMessageCard from "../components/SharedTradeMessageCard"
+import { getSharedTradeViewHref } from "@/lib/sharedContentNavigation"
 import {
   ProfileAvatarLink,
   ProfileUsernameLink,
@@ -59,6 +78,8 @@ type RoomMessage = {
   seen_by?: unknown
   pinned?: boolean | null
   section_id?: string | null
+  parent_message_id?: string | null
+  parent?: RoomMessage | null
   type?: string | null
   trade_id?: string | null
   content: string
@@ -80,6 +101,7 @@ type RoomMessage = {
 /** PostgREST embed: disambiguate trade_id vs pinned_trade_id FKs (PGRST201). */
 const ROOM_MESSAGE_SELECT_SHAPE = `
   *,
+  ${ROOM_MESSAGE_PARENT_EMBED},
   trades!room_messages_trade_id_fkey (
     id,
     ticker,
@@ -100,11 +122,13 @@ const ROOM_MESSAGE_REALTIME_SELECT = `
   seen_by,
   pinned,
   section_id,
+  parent_message_id,
   type,
   trade_id,
   content,
   image_url,
   created_at,
+  ${ROOM_MESSAGE_PARENT_EMBED},
   trades!room_messages_trade_id_fkey (
     id,
     image_url,
@@ -165,15 +189,6 @@ function ActionSpinner({ className = "border-current" }: { className?: string })
       aria-hidden
     />
   )
-}
-
-function tradeImageSrc(imageUrl: string | null | undefined): string | null {
-  const raw = imageUrl != null ? String(imageUrl).trim() : ""
-  if (!raw) return null
-  if (raw.startsWith("http")) return raw
-  const base = process.env.NEXT_PUBLIC_SUPABASE_URL
-  if (!base) return null
-  return `${base}/storage/v1/object/public/screenshots/${raw}`
 }
 
 function normalizeRoomMessageSeenBy(raw: unknown): string[] {
@@ -275,10 +290,18 @@ async function appendSelfToSeenByForRoomMessage(
 function CommunityContent() {
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const router = useRouter()
+  const viewSharedTrade = useCallback(
+    (trade: { id?: string | null }) => {
+      router.push(getSharedTradeViewHref(String(trade?.id ?? "")))
+    },
+    [router]
+  )
   const searchParams = useSearchParams()
   const { user, profile, loading: profileLoading } = useUserProfile()
   const username = profile?.username?.trim() || "User"
   const roomParam = searchParams.get("room")
+  const sectionParam = searchParams.get("section")
+  const messageParam = searchParams.get("message")
   const setupMode = searchParams.get("setup") === "true"
   const [rooms, setRooms] = useState<Room[]>([])
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null)
@@ -330,6 +353,19 @@ function CommunityContent() {
     null
   )
   const [joiningRoomId, setJoiningRoomId] = useState<string | null>(null)
+  const [roomNotificationsEnabled, setRoomNotificationsEnabled] = useState(true)
+  const [channelNotificationPrefs, setChannelNotificationPrefs] = useState<
+    Record<string, boolean>
+  >({})
+  const [showRoomNotificationSettings, setShowRoomNotificationSettings] =
+    useState(false)
+  const [savingRoomNotificationLevel, setSavingRoomNotificationLevel] =
+    useState(false)
+  const [savingChannelNotificationId, setSavingChannelNotificationId] = useState<
+    string | null
+  >(null)
+  const [replyTarget, setReplyTarget] = useState<ReplyTarget | null>(null)
+  const replyTargetRef = useRef<ReplyTarget | null>(null)
   const [sendingMessage, setSendingMessage] = useState(false)
   const sendingMessageRef = useRef(false)
   const [showInviteModal, setShowInviteModal] = useState(false)
@@ -362,8 +398,54 @@ function CommunityContent() {
     Record<string, { pinned: RoomMessage[]; main: RoomMessage[] }>
   >({})
   const roomMessagesFetchGenRef = useRef(0)
+  const pendingScrollMessageIdRef = useRef<string | null>(null)
 
   messagesByRoomRef.current = messagesByRoom
+
+  useEffect(() => {
+    replyTargetRef.current = replyTarget
+  }, [replyTarget])
+
+  const urlRoomId = useMemo(() => {
+    if (!roomParam?.trim()) return null
+    const decoded = decodeURIComponent(roomParam.trim())
+    const match =
+      rooms.find((r) => r.slug === decoded || r.slug === roomParam) ||
+      rooms.find((r) => r.id === decoded || r.id === roomParam)
+    if (match) return match.id
+    if (
+      inviteTargetRoom &&
+      (inviteTargetRoom.slug === decoded ||
+        inviteTargetRoom.slug === roomParam ||
+        inviteTargetRoom.id === decoded ||
+        inviteTargetRoom.id === roomParam)
+    ) {
+      return inviteTargetRoom.id
+    }
+    return null
+  }, [roomParam, rooms, inviteTargetRoom])
+
+  const selectedRoomMatchesUrl = useMemo(() => {
+    if (!selectedRoomId || !roomParam?.trim()) return false
+    if (urlRoomId === selectedRoomId) return true
+    const decoded = decodeURIComponent(roomParam.trim())
+    const room =
+      rooms.find((r) => r.id === selectedRoomId) ?? inviteTargetRoom
+    if (!room || room.id !== selectedRoomId) return false
+    return (
+      room.slug === decoded ||
+      room.slug === roomParam ||
+      room.id === decoded ||
+      room.id === roomParam
+    )
+  }, [selectedRoomId, roomParam, urlRoomId, rooms, inviteTargetRoom])
+
+  const deepLinkSectionId = useMemo(() => {
+    if (!sectionParam?.trim() || !selectedRoomMatchesUrl) {
+      return null
+    }
+    return sectionParam.trim()
+  }, [sectionParam, selectedRoomMatchesUrl])
 
   const selectedRoom = useMemo(
     () => rooms.find((r) => r.id === selectedRoomId) ?? null,
@@ -547,6 +629,7 @@ function CommunityContent() {
   useEffect(() => {
     setMobileRoomsOpen(false)
     setMobileSectionsOpen(false)
+    setReplyTarget(null)
   }, [selectedRoomId])
 
   useEffect(() => {
@@ -559,6 +642,114 @@ function CommunityContent() {
       id: selectedSectionId,
     }
   }, [sections.length, selectedSectionId])
+
+  useEffect(() => {
+    if (!selectedRoomId || needsJoin || !user?.id) {
+      setRoomNotificationsEnabled(true)
+      setChannelNotificationPrefs({})
+      return
+    }
+
+    let cancelled = false
+    void (async () => {
+      const [{ data, error }, channelPrefs] = await Promise.all([
+        supabase
+          .from("room_members")
+          .select("notification_enabled")
+          .eq("room_id", selectedRoomId)
+          .eq("user_id", user.id)
+          .is("left_at", null)
+          .maybeSingle(),
+        fetchRoomChannelNotificationPrefs(
+          supabase,
+          selectedRoomId,
+          user.id,
+          sectionsRef.current
+        ),
+      ])
+
+      if (cancelled) return
+      if (!error && data) {
+        setRoomNotificationsEnabled(data.notification_enabled !== false)
+      }
+      setChannelNotificationPrefs(channelPrefs)
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [selectedRoomId, needsJoin, user?.id, sections.length])
+
+  const roomBellEnabled = useMemo(
+    () =>
+      anyRoomChannelNotificationsEnabled(
+        roomNotificationsEnabled,
+        sections,
+        channelNotificationPrefs
+      ),
+    [roomNotificationsEnabled, sections, channelNotificationPrefs]
+  )
+
+  async function openRoomNotificationSettings() {
+    if (!selectedRoomId || !user?.id || needsJoin) return
+    setShowRoomNotificationSettings(true)
+    const prefs = await fetchRoomChannelNotificationPrefs(
+      supabase,
+      selectedRoomId,
+      user.id,
+      sections
+    )
+    setChannelNotificationPrefs(prefs)
+  }
+
+  async function handleToggleRoomNotificationLevel(enabled: boolean) {
+    if (!selectedRoomId || !user?.id || needsJoin || savingRoomNotificationLevel) {
+      return
+    }
+
+    setSavingRoomNotificationLevel(true)
+    const { error } = await supabase
+      .from("room_members")
+      .update({ notification_enabled: enabled })
+      .eq("room_id", selectedRoomId)
+      .eq("user_id", user.id)
+      .is("left_at", null)
+    setSavingRoomNotificationLevel(false)
+
+    if (error) {
+      console.error("handleToggleRoomNotificationLevel:", error)
+      showPopup({ type: "error", message: "Failed to update notification setting" })
+      return
+    }
+
+    setRoomNotificationsEnabled(enabled)
+  }
+
+  async function handleToggleChannelNotification(
+    sectionId: string,
+    enabled: boolean
+  ) {
+    if (!selectedRoomId || !user?.id || needsJoin || savingChannelNotificationId) {
+      return
+    }
+
+    setSavingChannelNotificationId(sectionId)
+    const result = await upsertRoomChannelNotificationPref(
+      supabase,
+      selectedRoomId,
+      user.id,
+      sectionId,
+      enabled
+    )
+    setSavingChannelNotificationId(null)
+
+    if (!result.ok) {
+      showPopup({ type: "error", message: "Failed to update channel notifications" })
+      return
+    }
+
+    setChannelNotificationPrefs((prev) => ({ ...prev, [sectionId]: enabled }))
+  }
 
   useEffect(() => {
     if (!user?.id) {
@@ -928,7 +1119,10 @@ function CommunityContent() {
     invalidateRoomMessagesCache()
   }
 
-  async function loadSections(roomId: string) {
+  async function loadSections(
+    roomId: string,
+    preferredSectionId?: string | null
+  ) {
     const { data, error } = await supabase
       .from("room_sections")
       .select("*")
@@ -943,8 +1137,13 @@ function CommunityContent() {
     setSections(list)
 
     if (list.length > 0) {
-      setSelectedSectionId(list[0].id)
-      return { list, activeSectionId: list[0].id as string }
+      const resolved =
+        preferredSectionId &&
+        list.some((section) => section.id === preferredSectionId)
+          ? preferredSectionId
+          : list[0].id
+      setSelectedSectionId(resolved)
+      return { list, activeSectionId: resolved as string }
     }
 
     setSelectedSectionId(null)
@@ -953,7 +1152,12 @@ function CommunityContent() {
 
   async function refetchSections() {
     if (!selectedRoomId) return
-    const { list, activeSectionId } = await loadSections(selectedRoomId)
+    const preserveSectionId =
+      sectionFilterRef.current.id ?? selectedSectionId ?? null
+    const { list, activeSectionId } = await loadSections(
+      selectedRoomId,
+      preserveSectionId
+    )
     await fetchRoomMessages(selectedRoomId, list, activeSectionId, {
       bypassCache: true,
     })
@@ -1448,6 +1652,7 @@ function CommunityContent() {
       const { error } = await supabase.from("room_members").insert({
         room_id: roomId,
         user_id: authUser.id,
+        notification_enabled: true,
       })
 
       if (error && error.code !== "23505") {
@@ -1458,7 +1663,7 @@ function CommunityContent() {
     } else if (!alreadyActive) {
       const { error } = await supabase
         .from("room_members")
-        .update({ left_at: null })
+        .update({ left_at: null, notification_enabled: true })
         .eq("room_id", roomId)
         .eq("user_id", authUser.id)
 
@@ -1482,6 +1687,7 @@ function CommunityContent() {
     } else {
       await createRoomJoinNotification(supabase, roomId)
       notifyGettingStartedChecklistMaybeCompleted()
+      setRoomNotificationsEnabled(true)
     }
     } finally {
       setJoiningRoomId(null)
@@ -1646,10 +1852,24 @@ function CommunityContent() {
       return
     }
 
+    if (roomParam?.trim() && selectedRoomId && !selectedRoomMatchesUrl && loadingRooms) {
+      return
+    }
+
     let cancelled = false
 
     ;(async () => {
-      const { list, activeSectionId } = await loadSections(selectedRoomId)
+      const preferredSectionId = deepLinkSectionId
+      if (messageParam?.trim() && selectedRoomMatchesUrl) {
+        pendingScrollMessageIdRef.current = messageParam.trim()
+      } else {
+        pendingScrollMessageIdRef.current = null
+      }
+
+      const { list, activeSectionId } = await loadSections(
+        selectedRoomId,
+        preferredSectionId
+      )
       if (cancelled) return
       await fetchRoomMessages(selectedRoomId, list, activeSectionId)
     })()
@@ -1657,7 +1877,15 @@ function CommunityContent() {
     return () => {
       cancelled = true
     }
-  }, [selectedRoomId, needsJoin])
+  }, [
+    selectedRoomId,
+    needsJoin,
+    deepLinkSectionId,
+    messageParam,
+    selectedRoomMatchesUrl,
+    roomParam,
+    loadingRooms,
+  ])
 
   useEffect(() => {
     if (!selectedRoomId || needsJoin || !user?.id) {
@@ -1870,11 +2098,26 @@ function CommunityContent() {
   useEffect(() => {
     const el = messagesScrollRef.current
     if (!el) return
+
+    const scrollTargetId = pendingScrollMessageIdRef.current
+    if (scrollTargetId) {
+      const target = el.querySelector<HTMLElement>(
+        `[data-room-message-id="${scrollTargetId}"]`
+      )
+      if (target) {
+        const id = window.setTimeout(() => {
+          target.scrollIntoView({ block: "center", behavior: "smooth" })
+          pendingScrollMessageIdRef.current = null
+        }, 50)
+        return () => window.clearTimeout(id)
+      }
+    }
+
     const id = window.setTimeout(() => {
       el.scrollTop = el.scrollHeight
     }, 50)
     return () => window.clearTimeout(id)
-  }, [messages])
+  }, [messages, loadingMessages])
 
   const sendTyping = useCallback(() => {
     if (!typingChannelRef.current || !selectedRoomId) return
@@ -1919,6 +2162,22 @@ function CommunityContent() {
     setComposerPreviewUrl(URL.createObjectURL(file))
   }
 
+  function scrollToRoomMessage(messageId: string): boolean {
+    return scrollToReplyTarget(
+      roomMessageElementId(messageId),
+      messagesScrollRef.current
+    )
+  }
+
+  function startReplyToMessage(msg: RoomMessage) {
+    setReplyTarget(buildReplyTargetFromMessage(msg))
+    setActiveMessageMenuId(null)
+  }
+
+  function roomMessageParentId(): string | undefined {
+    return replyTargetRef.current?.id
+  }
+
   async function sendMessage() {
     if (sendingMessageRef.current || sendingMessage) return
     if (!user?.id || !selectedRoomId || !canPostInRoom) return
@@ -1945,7 +2204,7 @@ function CommunityContent() {
     if (selectedComposerImage) {
       let uploadFile: File = selectedComposerImage
       if (selectedComposerImage.type?.startsWith("image/")) {
-        uploadFile = await compressImage(selectedComposerImage)
+        uploadFile = await compressScreenshot(selectedComposerImage)
       }
       const filePath = `room-images/${Date.now()}-${uploadFile.name}`
 
@@ -1974,14 +2233,21 @@ function CommunityContent() {
         messageType: "image",
       })
 
-      const { error } = await supabase.from("room_messages").insert({
-        room_id: selectedRoomId,
-        user_id: user.id,
-        type: "image" as const,
-        image_url: data.publicUrl,
-        content: content || "",
-        section_id: insertSectionId,
-      })
+      const { data: insertedRow, error } = await supabase
+        .from("room_messages")
+        .insert({
+          room_id: selectedRoomId,
+          user_id: user.id,
+          type: "image" as const,
+          image_url: data.publicUrl,
+          content: content || "",
+          section_id: insertSectionId,
+          ...(roomMessageParentId()
+            ? { parent_message_id: roomMessageParentId() }
+            : {}),
+        })
+        .select("id")
+        .single()
       if (error) {
         console.error("room_messages insert:", error)
         showPopup({ type: "error", message: handleSupabaseError(error) })
@@ -1994,6 +2260,9 @@ function CommunityContent() {
         activeFetchSectionId(),
         { bypassCache: true }
       )
+      if (insertedRow?.id) {
+        void createRoomMessageNotifications(supabase, insertedRow.id)
+      }
     } else {
       const { sectionId: insertSectionId, source: sectionIdSource } =
         resolveInsertSectionId()
@@ -2006,12 +2275,19 @@ function CommunityContent() {
         messageType: "text",
       })
 
-      const { error } = await supabase.from("room_messages").insert({
-        room_id: selectedRoomId,
-        user_id: user.id,
-        content,
-        section_id: insertSectionId,
-      })
+      const { data: insertedRow, error } = await supabase
+        .from("room_messages")
+        .insert({
+          room_id: selectedRoomId,
+          user_id: user.id,
+          content,
+          section_id: insertSectionId,
+          ...(roomMessageParentId()
+            ? { parent_message_id: roomMessageParentId() }
+            : {}),
+        })
+        .select("id")
+        .single()
       if (error) {
         console.error("room_messages insert:", error)
         showPopup({ type: "error", message: handleSupabaseError(error) })
@@ -2024,9 +2300,13 @@ function CommunityContent() {
         activeFetchSectionId(),
         { bypassCache: true }
       )
+      if (insertedRow?.id) {
+        void createRoomMessageNotifications(supabase, insertedRow.id)
+      }
     }
 
     setDraft("")
+    setReplyTarget(null)
     clearComposerImage()
     } finally {
       sendingMessageRef.current = false
@@ -2085,14 +2365,21 @@ function CommunityContent() {
       messageType: "trade",
     })
 
-    const { error } = await supabase.from("room_messages").insert({
-      room_id: selectedRoomId,
-      user_id: user.id,
-      type: "trade",
-      trade_id: trade.id,
-      content: "Shared a trade",
-      section_id: insertSectionId,
-    })
+    const { data: insertedRow, error } = await supabase
+      .from("room_messages")
+      .insert({
+        room_id: selectedRoomId,
+        user_id: user.id,
+        type: "trade",
+        trade_id: trade.id,
+        content: "Shared a trade",
+        section_id: insertSectionId,
+        ...(roomMessageParentId()
+          ? { parent_message_id: roomMessageParentId() }
+          : {}),
+      })
+      .select("id")
+      .single()
 
     if (error) {
       console.error("room trade message insert:", error)
@@ -2106,14 +2393,34 @@ function CommunityContent() {
       activeFetchSectionId(),
       { bypassCache: true }
     )
+    if (insertedRow?.id) {
+      void createRoomMessageNotifications(supabase, insertedRow.id)
+    }
 
     setSelectTrade(false)
+    setReplyTarget(null)
   }
 
   return (
     <>
       <Navbar />
       <FeedbackModal {...feedbackModalProps} />
+      <RoomNotificationSettingsSheet
+        open={showRoomNotificationSettings}
+        onClose={() => setShowRoomNotificationSettings(false)}
+        roomName={selectedRoom?.name ?? inviteTargetRoom?.name}
+        sections={sections}
+        roomNotificationsEnabled={roomNotificationsEnabled}
+        channelPrefs={channelNotificationPrefs}
+        savingSectionId={savingChannelNotificationId}
+        savingRoomLevel={savingRoomNotificationLevel}
+        onToggleRoomLevel={(enabled) =>
+          void handleToggleRoomNotificationLevel(enabled)
+        }
+        onToggleChannel={(sectionId, enabled) =>
+          void handleToggleChannelNotification(sectionId, enabled)
+        }
+      />
       <div className="flex h-[calc(100dvh-4rem)] min-h-0 flex-col overflow-hidden bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 py-2 text-white">
         <div className="mx-auto flex h-full min-h-0 w-full max-w-6xl flex-col overflow-visible rounded-2xl border border-white/10 bg-black/25 md:flex-row md:overflow-hidden">
           <aside className="shrink-0 border-b border-white/10 bg-[#0b1220]/80 md:w-72 md:border-b-0 md:border-r">
@@ -2145,6 +2452,21 @@ function CommunityContent() {
                     {selectedRoom?.name || "Select room"}
                   </span>
                 </button>
+                {selectedRoomId && !needsJoin ? (
+                  <button
+                    type="button"
+                    onClick={() => void openRoomNotificationSettings()}
+                    aria-label="Notification settings"
+                    title={
+                      roomBellEnabled
+                        ? "Notifications enabled"
+                        : "Notifications muted"
+                    }
+                    className="shrink-0 rounded-md p-2 text-gray-300 hover:bg-white/10 hover:text-white"
+                  >
+                    {roomBellEnabled ? "🔔" : "🔕"}
+                  </button>
+                ) : null}
                 {isOwner && selectedRoomId && !needsJoin ? (
                   <div className="flex shrink-0 items-center gap-0.5">
                     <button
@@ -2294,6 +2616,27 @@ function CommunityContent() {
                         inviteTargetRoom?.name ??
                         "Select a room"}
                     </h2>
+
+                    {selectedRoomId && !needsJoin ? (
+                      <button
+                        type="button"
+                        onClick={() => void openRoomNotificationSettings()}
+                        aria-label="Notification settings"
+                        title={
+                          roomBellEnabled
+                            ? "Notifications enabled"
+                            : "Notifications muted"
+                        }
+                        className="flex items-center gap-1 rounded-md bg-white/10 px-2 py-1 text-xs text-gray-200 hover:bg-white/20"
+                      >
+                        <span aria-hidden>{roomBellEnabled ? "🔔" : "🔕"}</span>
+                        <span className="hidden sm:inline">
+                          {roomBellEnabled
+                            ? "Notifications Enabled"
+                            : "Notifications Muted"}
+                        </span>
+                      </button>
+                    ) : null}
 
                     {!isOwner && selectedRoomId && !needsJoin ? (
                       <button
@@ -2651,7 +2994,12 @@ function CommunityContent() {
                   {messages.length > 0 ? (
                 <div className="space-y-3">
                   {messages.map((msg) => (
-                    <div key={msg.id} className="group relative rounded-xl bg-white/5 p-3">
+                    <div
+                      key={msg.id}
+                      id={roomMessageElementId(msg.id)}
+                      data-room-message-id={msg.id}
+                      className="group relative rounded-xl bg-white/5 p-3"
+                    >
                       <div className="mb-1 flex flex-wrap items-center gap-2">
                         <ProfileAvatarLink
                           userId={msg.user_id}
@@ -2665,8 +3013,9 @@ function CommunityContent() {
                           className="text-sm font-semibold"
                         />
                         <span className="text-xs text-gray-400">
-                          {formatEST(String(msg.created_at ?? ""))}
+                          {formatLocalDateTime(msg.created_at)}
                         </span>
+                        <ReplyActionButton onReply={() => startReplyToMessage(msg)} />
                         {isOwner ? (
                           <button
                             type="button"
@@ -2692,6 +3041,27 @@ function CommunityContent() {
                         />
                       </div>
 
+                      {msg.parent_message_id ? (
+                        <ReplyReferenceBlock
+                          parentMessageId={msg.parent_message_id}
+                          parentMessage={msg.parent}
+                          targetElementId={roomMessageElementId(
+                            String(msg.parent?.id ?? msg.parent_message_id)
+                          )}
+                          onJumpToParent={() =>
+                            scrollToRoomMessage(
+                              String(msg.parent?.id ?? msg.parent_message_id)
+                            )
+                          }
+                          onUnavailable={() =>
+                            showPopup({
+                              type: "info",
+                              message: "Original message unavailable",
+                            })
+                          }
+                        />
+                      ) : null}
+
                       <div className="text-sm">
                         {msg.type === "image" ? (
                           <>
@@ -2709,27 +3079,11 @@ function CommunityContent() {
                             ) : null}
                           </>
                         ) : msg.type === "trade" ? (
-                          msg.trades ? (
-                          <div className="mt-1 rounded bg-white/5 p-2 max-w-xs">
-                            {tradeImageSrc(msg.trades.image_url) ? (
-                              <img
-                                src={tradeImageSrc(msg.trades.image_url) || ""}
-                                className="rounded"
-                                alt=""
-                                loading="lazy"
-                                decoding="async"
-                              />
-                            ) : null}
-                            <p className="mt-1 text-xs">
-                              PnL: {formatMoneyUnknown(msg.trades.pnl, { empty: "—" })} | RR:{" "}
-                              {formatRR(msg.trades.rr)}
-                            </p>
-                          </div>
-                          ) : (
-                            <p className="mt-1 text-xs italic text-gray-400">
-                              Trade unavailable or private.
-                            </p>
-                          )
+                          <SharedTradeMessageCard
+                            tradeId={msg.trade_id ?? msg.trades?.id}
+                            viewerUserId={user?.id}
+                            onViewTrade={viewSharedTrade}
+                          />
                         ) : editingMessageId === msg.id &&
                           canEditRoomMessage(user?.id, msg) ? (
                           <div className="space-y-2">
@@ -2775,7 +3129,12 @@ function CommunityContent() {
 
                       <div className="space-y-2">
                         {pinnedMessages.map((msg) => (
-                          <div key={msg.id} className="group relative rounded-lg bg-black/20 p-2">
+                          <div
+                            key={msg.id}
+                            id={roomMessageElementId(msg.id)}
+                            data-room-message-id={msg.id}
+                            className="group relative rounded-lg bg-black/20 p-2"
+                          >
                             <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
                               <div className="flex min-w-0 flex-wrap items-center gap-2">
                                 <ProfileUsernameLink
@@ -2784,8 +3143,9 @@ function CommunityContent() {
                                   className="text-xs text-gray-400"
                                 />
                                 <span className="text-xs text-gray-400">
-                                  {formatEST(String(msg.created_at ?? ""))}
+                                  {formatLocalDateTime(msg.created_at)}
                                 </span>
+                                <ReplyActionButton onReply={() => startReplyToMessage(msg)} />
                               </div>
                               <div className="flex shrink-0 items-center gap-1">
                                 {isOwner ? (
@@ -2813,6 +3173,26 @@ function CommunityContent() {
                                 />
                               </div>
                             </div>
+                            {msg.parent_message_id ? (
+                              <ReplyReferenceBlock
+                                parentMessageId={msg.parent_message_id}
+                                parentMessage={msg.parent}
+                                targetElementId={roomMessageElementId(
+                                  String(msg.parent?.id ?? msg.parent_message_id)
+                                )}
+                                onJumpToParent={() =>
+                                  scrollToRoomMessage(
+                                    String(msg.parent?.id ?? msg.parent_message_id)
+                                  )
+                                }
+                                onUnavailable={() =>
+                                  showPopup({
+                                    type: "info",
+                                    message: "Original message unavailable",
+                                  })
+                                }
+                              />
+                            ) : null}
                             <div className="text-sm text-white">
                               {msg.type === "image" ? (
                                 <>
@@ -2829,11 +3209,12 @@ function CommunityContent() {
                                     </p>
                                   ) : null}
                                 </>
-                              ) : msg.type === "trade" && msg.trades ? (
-                                <span>
-                                  Trade · {msg.trades.ticker ?? "—"} · PnL{" "}
-                                  {msg.trades.pnl ?? "—"}
-                                </span>
+                              ) : msg.type === "trade" ? (
+                                <SharedTradeMessageCard
+                                  tradeId={msg.trade_id ?? msg.trades?.id}
+                                  viewerUserId={user?.id}
+                                  onViewTrade={viewSharedTrade}
+                                />
                               ) : editingMessageId === msg.id &&
                                 canEditRoomMessage(user?.id, msg) ? (
                                 <div className="space-y-2">
@@ -2938,11 +3319,20 @@ function CommunityContent() {
                     onTradeClick={() => setSelectTrade(true)}
                     tradeDisabled={!canPostInRoom}
                     beforeRow={
-                      typingUsers.length > 0 ? (
-                        <p className="text-xs text-gray-400">
-                          {typingUsers.join(", ")} typing...
-                        </p>
-                      ) : null
+                      <>
+                        {replyTarget ? (
+                          <ReplyComposerStrip
+                            authorName={replyTarget.authorName}
+                            preview={replyTarget.preview}
+                            onCancel={() => setReplyTarget(null)}
+                          />
+                        ) : null}
+                        {typingUsers.length > 0 ? (
+                          <p className="text-xs text-gray-400">
+                            {typingUsers.join(", ")} typing...
+                          </p>
+                        ) : null}
+                      </>
                     }
                     afterRow={
                       selectedComposerImage ? (

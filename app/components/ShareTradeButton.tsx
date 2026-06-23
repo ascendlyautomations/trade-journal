@@ -4,7 +4,11 @@ import { useCallback, useId, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import TradeShareCard from "./TradeShareCard"
 import ShareToConversationsModal from "./ShareToConversationsModal"
-import { downloadTradeShareCardPng, tradeShareExportDomId } from "@/lib/tradeShareExport"
+import {
+  downloadTradeShareCardPng,
+  TRADE_SHARE_EXPORT_WIDTH,
+  tradeShareExportDomId,
+} from "@/lib/tradeShareExport"
 
 export type ShareTradeButtonProps = {
   trade: any
@@ -80,7 +84,13 @@ export default function ShareTradeButton({
     <>
       {mode === "full" ? (
         <div
-          className="pointer-events-none fixed left-[-12000px] top-0 z-[1] flex w-full justify-center px-2"
+          className="pointer-events-none fixed top-0 overflow-hidden"
+          style={{
+            left: 0,
+            width: TRADE_SHARE_EXPORT_WIDTH,
+            opacity: 0,
+            zIndex: -1,
+          }}
           aria-hidden
         >
           <TradeShareCard trade={trade} exportId={exportDomId} profile={profile} />

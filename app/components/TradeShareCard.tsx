@@ -4,12 +4,13 @@ import { forwardRef } from "react"
 import { formatMoneyUnknown } from "@/lib/formatDisplay"
 import { publicAccountBadgeFromTrade } from "@/lib/publicAccountPrivacy"
 import { tradeScreenshotPublicUrl } from "@/lib/storagePublicUrl"
+import { TRADE_SHARE_EXPORT_WIDTH } from "@/lib/tradeShareExport"
 
 export type TradeShareCardProps = {
   trade: any
   /** For html-to-image: target this id with `document.getElementById` */
   exportId?: string
-  profile?: { referral_code?: string | null } | null
+  profile?: { referral_code?: string | null; username?: string | null } | null
 }
 
 function formatNumber(value: unknown, digits = 2): string {
@@ -119,13 +120,24 @@ const TradeShareCard = forwardRef<HTMLDivElement, TradeShareCardProps>(
         ? String(profile.referral_code).trim()
         : null
 
+    const usernameTrim =
+      profile?.username != null && String(profile.username).trim() !== ""
+        ? String(profile.username).trim().replace(/^@+/, "")
+        : null
+
     return (
-      <div className="mx-auto box-border w-full max-w-[430px]">
+      <div
+        className="mx-auto box-border shrink-0"
+        style={{ width: TRADE_SHARE_EXPORT_WIDTH }}
+      >
         <div
           ref={ref}
           id={exportId}
-          className="relative w-full overflow-hidden rounded-[28px] border border-cyan-300/20 bg-gradient-to-br from-[#061427] via-[#0b2d55] to-[#0f7ea8] shadow-2xl"
+          className="relative overflow-hidden rounded-[28px] border border-cyan-300/20 bg-gradient-to-br from-[#061427] via-[#0b2d55] to-[#0f7ea8] shadow-2xl"
           style={{
+            width: TRADE_SHARE_EXPORT_WIDTH,
+            minWidth: TRADE_SHARE_EXPORT_WIDTH,
+            boxSizing: "border-box",
             fontFamily:
               'ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif',
           }}
@@ -187,7 +199,7 @@ const TradeShareCard = forwardRef<HTMLDivElement, TradeShareCardProps>(
                 Profit / Loss
               </p>
               <h1
-                className={`mt-1 text-5xl font-black leading-none tabular-nums tracking-tight ${
+                className={`mt-1 text-[2.5rem] font-black leading-none tabular-nums tracking-tight ${
                   !hasPnl
                     ? "text-gray-300"
                     : positive
@@ -248,16 +260,21 @@ const TradeShareCard = forwardRef<HTMLDivElement, TradeShareCardProps>(
             </div>
 
             <div className="mt-5 flex items-center justify-between border-t border-cyan-300/15 pt-4">
-              <div className="flex items-center gap-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-cyan-300/30 bg-cyan-300/15 text-xs font-black text-cyan-100">
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-cyan-300/30 bg-cyan-300/15 text-xs font-black text-cyan-100">
                   TT
                 </div>
-                <div>
+                <div className="min-w-0 flex-1">
                   <p className="text-sm font-black leading-none tracking-tight text-white">
                     TradeTraxs
                   </p>
-                  <p className="mt-0.5 text-[9px] uppercase tracking-[0.22em] text-cyan-100/55">
-                    Journal. Review. Improve.
+                  <p className="mt-0.5 flex min-w-0 items-center justify-between gap-3 text-[9px] uppercase tracking-[0.22em] text-cyan-100/55">
+                    <span className="shrink-0">Journal. Review. Improve.</span>
+                    {usernameTrim ? (
+                      <span className="truncate font-medium normal-case tracking-normal text-cyan-100/40">
+                        - @{usernameTrim}
+                      </span>
+                    ) : null}
                   </p>
                 </div>
               </div>

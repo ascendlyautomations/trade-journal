@@ -20,5 +20,9 @@ export function handleSupabaseError(error: unknown): string {
     return "Upgrade to Pro to send more messages."
   }
 
+  if (msg.includes("not deleted") || msg.includes("delete policy")) {
+    return String(e.message)
+  }
+
   return "Something went wrong. Please try again."
 }

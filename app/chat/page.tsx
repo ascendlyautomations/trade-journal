@@ -4,7 +4,7 @@ import Navbar from "../components/Navbar"
 import { formatEST } from "@/lib/formatEST"
 import { useEffect, useState, useRef } from "react"
 import { supabase } from "../../lib/supabaseClient"
-import { compressImage } from "@/lib/compressImage"
+import { compressScreenshot } from "@/lib/compressImage"
 import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
 import { feedbackPresets } from "@/lib/feedbackPresets"
 import { logSupabaseError } from "@/lib/logSupabaseError"
@@ -110,7 +110,7 @@ export default function ChatPage() {
     if (selectedFile) {
       let uploadFile: File = selectedFile
       if (selectedFile.type?.startsWith("image/")) {
-        uploadFile = await compressImage(selectedFile)
+        uploadFile = await compressScreenshot(selectedFile)
       }
       const fileName = `${Date.now()}-${uploadFile.name}`
 

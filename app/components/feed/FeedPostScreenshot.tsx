@@ -1,6 +1,7 @@
 "use client"
 
-import { memo } from "react"
+import { memo, useCallback } from "react"
+import { logRenderedImageDimensions } from "@/lib/compressImage"
 
 const VARIANT_CLASSES = {
   thumbnail: "w-full max-h-[400px] object-cover block",
@@ -33,6 +34,17 @@ function FeedPostScreenshot({
         ? "w-full bg-black/30"
         : "w-full bg-black/30"
 
+  const handleLoad = useCallback(
+    (e: React.SyntheticEvent<HTMLImageElement>) => {
+      logRenderedImageDimensions(
+        `feed-post-screenshot:${variant}`,
+        e.currentTarget,
+        imageSrc
+      )
+    },
+    [imageSrc, variant]
+  )
+
   const img = (
     <img
       src={imageSrc}
@@ -40,6 +52,7 @@ function FeedPostScreenshot({
       loading="lazy"
       decoding="async"
       className={resolvedClassName}
+      onLoad={handleLoad}
       onClick={
         onImageClick
           ? (e) => {

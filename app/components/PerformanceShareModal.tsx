@@ -4,7 +4,12 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import PerformanceShareCard from "./PerformanceShareCard"
 import ShareToConversationsModal from "./ShareToConversationsModal"
 import {
+  PERFORMANCE_SHARE_EXPORT_WIDTH,
+  captureShareCardElementToPng,
+} from "@/lib/shareImageCapture"
+import {
   type PerformanceWindow,
+  type PerformanceWindowOptions,
   buildEquityCurveFromTrades,
   computePerformanceStats,
   filterTradesByPerformanceWindow,
@@ -13,7 +18,13 @@ import {
   performanceWindowLabel,
 } from "@/lib/performanceShare"
 
-const WINDOWS: PerformanceWindow[] = ["daily", "weekly", "monthly", "yearly"]
+const WINDOWS: PerformanceWindow[] = [
+  "daily",
+  "weekly",
+  "monthly",
+  "yearly",
+  "custom",
+]
 
 export type PerformanceShareModalProps = {
   open: boolean
@@ -24,6 +35,9 @@ export type PerformanceShareModalProps = {
   subtitle?: string
   /** From parent fetch — referral code for export card */
   profile?: { referral_code?: string | null } | null
+  /** Prefill custom range when opening from a page with custom filters. */
+  initialCustomRangeStart?: string
+  initialCustomRangeEnd?: string
 }
 
 export default function PerformanceShareModal({
@@ -32,17 +46,31 @@ export default function PerformanceShareModal({
   tradePool,
   subtitle,
   profile = null,
+  initialCustomRangeStart = "",
+  initialCustomRangeEnd = "",
 }: PerformanceShareModalProps) {
   const [windowKey, setWindowKey] = useState<PerformanceWindow>("monthly")
+  const [customRangeStart, setCustomRangeStart] = useState(
+    initialCustomRangeStart
+  )
+  const [customRangeEnd, setCustomRangeEnd] = useState(initialCustomRangeEnd)
   const [busy, setBusy] = useState(false)
   const [perfShareActionsOpen, setPerfShareActionsOpen] = useState(false)
   const [perfDmOpen, setPerfDmOpen] = useState(false)
   const lockRef = useRef(false)
-  const exportId = useId().replace(/:/g, "perf-share")
+  const exportId = useId().replace(/:/g, "")
+
+  const windowOptions = useMemo((): PerformanceWindowOptions => {
+    if (windowKey !== "custom") return {}
+    return {
+      customRangeStart,
+      customRangeEnd,
+    }
+  }, [windowKey, customRangeStart, customRangeEnd])
 
   const filtered = useMemo(
-    () => filterTradesByPerformanceWindow(tradePool, windowKey),
-    [tradePool, windowKey]
+    () => filterTradesByPerformanceWindow(tradePool, windowKey, windowOptions),
+    [tradePool, windowKey, windowOptions]
   )
 
   const stats = useMemo(() => computePerformanceStats(filtered), [filtered])
@@ -53,16 +81,46 @@ export default function PerformanceShareModal({
   )
 
   const periodLabel = performanceWindowLabel(windowKey)
-  const timeframeUpper = periodLabel.toUpperCase()
+  const timeframeUpper =
+    windowKey === "custom" && customRangeStart && customRangeEnd
+      ? "CUSTOM"
+      : periodLabel.toUpperCase()
   const dateRangeLabel = useMemo(
-    () => formatPerformanceShareDateRange(windowKey, filtered),
-    [windowKey, filtered]
+    () => formatPerformanceShareDateRange(windowKey, filtered, windowOptions),
+    [windowKey, filtered, windowOptions]
   )
 
   const rangeBounds = useMemo(
-    () => getPerformanceShareRangeBounds(windowKey, filtered),
-    [windowKey, filtered]
+    () => getPerformanceShareRangeBounds(windowKey, filtered, windowOptions),
+    [windowKey, filtered, windowOptions]
   )
+
+  useEffect(() => {
+    if (!open) return
+    console.log("[performanceShare]", {
+      timeframe: windowKey,
+      tradePoolCount: tradePool.length,
+      filteredTradesCount: filtered.length,
+      equityCurvePoints: equityCurve.length,
+      stats,
+      exportId,
+      cardElementFound: Boolean(document.getElementById(exportId)),
+    })
+  }, [
+    open,
+    windowKey,
+    tradePool.length,
+    filtered.length,
+    equityCurve.length,
+    stats,
+    exportId,
+  ])
+
+  useEffect(() => {
+    if (!open) return
+    setCustomRangeStart(initialCustomRangeStart)
+    setCustomRangeEnd(initialCustomRangeEnd)
+  }, [open, initialCustomRangeStart, initialCustomRangeEnd])
 
   useEffect(() => {
     if (!open) return
@@ -94,27 +152,46 @@ export default function PerformanceShareModal({
     lockRef.current = true
     setBusy(true)
     try {
-      const dataUrl = await captureShareCardElementToPng(exportId)
+      console.log("[performanceShare] download start", {
+        timeframe: windowKey,
+        filteredTradesCount: filtered.length,
+        equityCurvePoints: equityCurve.length,
+        exportId,
+      })
+      const dataUrl = await captureShareCardElementToPng(exportId, {
+        warmupMs: 520,
+        logContext: "performanceShare",
+      })
       const link = document.createElement("a")
       link.download = `performance-${windowKey}-${Date.now()}.png`
       link.href = dataUrl
       link.click()
+      console.log("[performanceShare] download success")
     } catch (e) {
-      console.error("Performance share export:", e)
+      console.error("[performanceShare] download failure:", e)
     } finally {
       lockRef.current = false
       setBusy(false)
     }
-  }, [exportId, windowKey])
+  }, [exportId, windowKey, filtered.length, equityCurve.length])
 
   const capturePerformancePng = useCallback(async () => {
     try {
-      return await captureShareCardElementToPng(exportId)
+      console.log("[performanceShare] DM capture start", {
+        timeframe: windowKey,
+        exportId,
+      })
+      const dataUrl = await captureShareCardElementToPng(exportId, {
+        warmupMs: 520,
+        logContext: "performanceShare",
+      })
+      console.log("[performanceShare] DM capture success")
+      return dataUrl
     } catch (e) {
-      console.error("Performance share capture:", e)
+      console.error("[performanceShare] DM capture failure:", e)
       return null
     }
-  }, [exportId])
+  }, [exportId, windowKey])
 
   if (!open) return null
 
@@ -163,7 +240,7 @@ export default function PerformanceShareModal({
         <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">
           Timeframe
         </p>
-        <div className="mb-6 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div className="mb-6 grid grid-cols-2 gap-2 sm:grid-cols-3">
           {WINDOWS.map((w) => (
             <button
               key={w}
@@ -179,6 +256,29 @@ export default function PerformanceShareModal({
             </button>
           ))}
         </div>
+
+        {windowKey === "custom" ? (
+          <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label className="block text-sm text-gray-300">
+              <span className="mb-1 block text-xs text-gray-500">Start date</span>
+              <input
+                type="date"
+                value={customRangeStart}
+                onChange={(e) => setCustomRangeStart(e.target.value)}
+                className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white"
+              />
+            </label>
+            <label className="block text-sm text-gray-300">
+              <span className="mb-1 block text-xs text-gray-500">End date</span>
+              <input
+                type="date"
+                value={customRangeEnd}
+                onChange={(e) => setCustomRangeEnd(e.target.value)}
+                className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white"
+              />
+            </label>
+          </div>
+        ) : null}
 
         <div className="mb-4 rounded-xl border border-white/10 bg-black/20 p-4">
           <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
@@ -215,7 +315,16 @@ export default function PerformanceShareModal({
           </div>
         </div>
 
-        <div className="pointer-events-none fixed left-[-13000px] top-0 z-0" aria-hidden>
+        <div
+          className="pointer-events-none fixed top-0 overflow-hidden"
+          style={{
+            left: 0,
+            width: PERFORMANCE_SHARE_EXPORT_WIDTH,
+            opacity: 0,
+            zIndex: -1,
+          }}
+          aria-hidden
+        >
           <PerformanceShareCard
             exportId={exportId}
             equityCurve={equityCurve}

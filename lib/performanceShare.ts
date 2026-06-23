@@ -1,4 +1,15 @@
-export type PerformanceWindow = "daily" | "weekly" | "monthly" | "yearly"
+export type PerformanceWindow =
+  | "daily"
+  | "weekly"
+  | "monthly"
+  | "yearly"
+  | "custom"
+
+export type PerformanceWindowOptions = {
+  now?: Date
+  customRangeStart?: string
+  customRangeEnd?: string
+}
 
 export type TradeSharePoolOptions = {
   selectedDate: string
@@ -76,8 +87,12 @@ export function filterTradesForPerformanceSharePool(
 export function filterTradesByPerformanceWindow(
   trades: any[],
   window: PerformanceWindow,
-  now = new Date()
+  options: PerformanceWindowOptions = {}
 ): any[] {
+  const now = options.now ?? new Date()
+  const customStart = options.customRangeStart?.trim() ?? ""
+  const customEnd = options.customRangeEnd?.trim() ?? ""
+
   return trades.filter((trade) => {
     const tradeDate = new Date(trade.created_at)
     if (Number.isNaN(tradeDate.getTime())) return false
@@ -97,6 +112,15 @@ export function filterTradesByPerformanceWindow(
         )
       case "yearly":
         return tradeDate.getFullYear() === now.getFullYear()
+      case "custom": {
+        if (!customStart || !customEnd) return true
+        const start = new Date(`${customStart}T00:00:00`)
+        const end = new Date(`${customEnd}T23:59:59.999`)
+        if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+          return true
+        }
+        return tradeDate >= start && tradeDate <= end
+      }
       default:
         return true
     }
@@ -109,6 +133,46 @@ export type PerformanceStats = {
   winRate: number
   totalPnL: number
   avgRR: number
+  /** Mean hold time in seconds (filtered trades with duration data only). */
+  avgDurationSeconds: number | null
+  /** Ticker symbol appearing most often in the filtered set. */
+  mostTradedTicker: string | null
+}
+
+function resolveTradeDurationSeconds(trade: any): number | null {
+  const stored = Number(trade.duration_seconds)
+  if (Number.isFinite(stored) && stored > 0) return Math.round(stored)
+
+  const entry = trade.entry_time ?? null
+  const exit = trade.exit_time ?? null
+  if (entry && exit) {
+    const diff = +new Date(String(exit)) - +new Date(String(entry))
+    if (Number.isFinite(diff) && diff > 0) return Math.floor(diff / 1000)
+  }
+
+  return null
+}
+
+function computeMostTradedTicker(trades: any[]): string | null {
+  const counts = new Map<string, number>()
+
+  for (const trade of trades) {
+    const raw = trade.ticker != null ? String(trade.ticker).trim() : ""
+    if (!raw) continue
+    const key = raw.toUpperCase()
+    counts.set(key, (counts.get(key) ?? 0) + 1)
+  }
+
+  let best: string | null = null
+  let bestCount = 0
+  for (const [ticker, count] of counts) {
+    if (count > bestCount) {
+      best = ticker
+      bestCount = count
+    }
+  }
+
+  return best
 }
 
 export function computePerformanceStats(trades: any[]): PerformanceStats {
@@ -119,7 +183,30 @@ export function computePerformanceStats(trades: any[]): PerformanceStats {
   const avgRR =
     trades.reduce((sum, t) => sum + (Number(t.rr) || 0), 0) /
     (totalTrades || 1)
-  return { totalTrades, wins, winRate, totalPnL, avgRR }
+
+  const durations = trades
+    .map(resolveTradeDurationSeconds)
+    .filter((seconds): seconds is number => seconds != null)
+
+  const avgDurationSeconds =
+    durations.length > 0
+      ? Math.round(
+          durations.reduce((sum, seconds) => sum + seconds, 0) /
+            durations.length
+        )
+      : null
+
+  const mostTradedTicker = computeMostTradedTicker(trades)
+
+  return {
+    totalTrades,
+    wins,
+    winRate,
+    totalPnL,
+    avgRR,
+    avgDurationSeconds,
+    mostTradedTicker,
+  }
 }
 
 /** Point for cumulative P&amp;L curve (sorted by trade time; starts at 0 equity). */
@@ -161,6 +248,8 @@ export function performanceWindowLabel(w: PerformanceWindow): string {
       return "Monthly"
     case "yearly":
       return "Yearly"
+    case "custom":
+      return "Custom"
     default:
       return w
   }
@@ -172,8 +261,12 @@ export function performanceWindowLabel(w: PerformanceWindow): string {
 export function getPerformanceShareRangeBounds(
   window: PerformanceWindow,
   filteredTrades: any[],
-  now = new Date()
+  options: PerformanceWindowOptions = {}
 ): { start: Date; end: Date } | null {
+  const now = options.now ?? new Date()
+  const customStart = options.customRangeStart?.trim() ?? ""
+  const customEnd = options.customRangeEnd?.trim() ?? ""
+
   const dates = filteredTrades
     .map((t) => new Date(t.created_at))
     .filter((d) => !Number.isNaN(d.getTime()))
@@ -182,6 +275,14 @@ export function getPerformanceShareRangeBounds(
     const minT = Math.min(...dates.map((d) => d.getTime()))
     const maxT = Math.max(...dates.map((d) => d.getTime()))
     return { start: new Date(minT), end: new Date(maxT) }
+  }
+
+  if (window === "custom" && customStart && customEnd) {
+    const start = new Date(`${customStart}T00:00:00`)
+    const end = new Date(`${customEnd}T23:59:59.999`)
+    if (!Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime())) {
+      return { start, end }
+    }
   }
 
   switch (window) {
@@ -207,6 +308,8 @@ export function getPerformanceShareRangeBounds(
       const end = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999)
       return { start, end }
     }
+    case "custom":
+      return null
     default:
       return null
   }
@@ -218,8 +321,12 @@ export function getPerformanceShareRangeBounds(
 export function formatPerformanceShareDateRange(
   window: PerformanceWindow,
   filteredTrades: any[],
-  now = new Date()
+  options: PerformanceWindowOptions = {}
 ): string {
+  const now = options.now ?? new Date()
+  const customStart = options.customRangeStart?.trim() ?? ""
+  const customEnd = options.customRangeEnd?.trim() ?? ""
+
   if (filteredTrades.length > 0) {
     const dates = filteredTrades
       .map((t) => new Date(t.created_at))
@@ -273,6 +380,23 @@ export function formatPerformanceShareDateRange(
       })
     case "yearly":
       return String(now.getFullYear())
+    case "custom": {
+      if (customStart && customEnd) {
+        const start = new Date(`${customStart}T00:00:00`)
+        const end = new Date(`${customEnd}T23:59:59.999`)
+        if (!Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime())) {
+          return `${start.toLocaleDateString(undefined, {
+            month: "short",
+            day: "numeric",
+          })} – ${end.toLocaleDateString(undefined, {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+          })}`
+        }
+      }
+      return "Custom range"
+    }
     default:
       return ""
   }

@@ -25,6 +25,8 @@ import {
   formatFollowRequestGroupMessage,
   formatLikeGroupMessage,
   formatRoomJoinMessage,
+  formatRoomMessageGroupSubtitle,
+  formatRoomMessageGroupTitle,
   getGroupedNotificationHref,
   getNotificationTimeSection,
   groupCardsByTimeSection,
@@ -48,6 +50,7 @@ const ENGAGEMENT_TYPES = NOTIFICATION_ENGAGEMENT_TYPES
 
 const TABS: { id: NotificationCenterTab; label: string }[] = [
   { id: "all", label: "All" },
+  { id: "rooms", label: "Trade Rooms" },
   { id: "likes", label: "Likes" },
   { id: "comments", label: "Comments" },
   { id: "followers", label: "Followers" },
@@ -108,6 +111,8 @@ function cardStableKey(card: GroupedNotificationCard): string {
       return card.key
     case "room_join":
       return `room_join:${card.notification.id}`
+    case "room_message_group":
+      return `room_message_group:${card.key}`
   }
 }
 
@@ -260,7 +265,40 @@ function GroupedNotificationCardView({
       : undefined
     title = formatRoomJoinMessage(senderDisplayName(sender))
     avatarUrl = sender?.avatar_url
+  } else if (card.kind === "room_message_group") {
+    expandable = card.messages.length > 0
+    title = formatRoomMessageGroupTitle(card)
+    expandedContent = (
+      <ul className="mt-2 space-y-2 border-t border-white/10 pt-2">
+        {card.messages.map((entry) => {
+          const sender = entry.senderId ? sendersById[entry.senderId] : undefined
+          const name = senderDisplayName(sender)
+          return (
+            <li key={entry.id} className="text-xs text-gray-300">
+              {entry.senderId ? (
+                <ProfileUsernameLink
+                  userId={entry.senderId}
+                  username={sender?.username}
+                  className="font-medium text-gray-200"
+                >
+                  {name}
+                </ProfileUsernameLink>
+              ) : (
+                <span className="font-medium text-gray-200">{name}</span>
+              )}
+              <span className="text-gray-500">: </span>
+              {entry.preview ?? "New message"}
+            </li>
+          )
+        })}
+      </ul>
+    )
   }
+
+  const subtitle =
+    card.kind === "room_message_group"
+      ? formatRoomMessageGroupSubtitle(card.totalMessages)
+      : null
 
   return (
     <div
@@ -271,7 +309,9 @@ function GroupedNotificationCardView({
       }`}
     >
       <div className="flex items-start gap-2 sm:gap-3">
-        {avatarUrl != null && card.kind === "room_join" && card.notification.sender_id ? (
+        {avatarUrl != null &&
+        card.kind === "room_join" &&
+        card.notification.sender_id ? (
           <div className="relative shrink-0">
             <ProfileAvatarLink
               userId={card.notification.sender_id}
@@ -329,6 +369,9 @@ function GroupedNotificationCardView({
               >
                 {title}
               </p>
+              {subtitle ? (
+                <p className="mt-0.5 text-xs text-gray-400">{subtitle}</p>
+              ) : null}
               <p className="mt-1 text-[11px] uppercase tracking-wide text-gray-500">
                 {timeAgo(timestamp)}
               </p>
@@ -513,10 +556,27 @@ export default function NotificationsPage() {
     [groupedCards, activeTab]
   )
 
-  const sections = useMemo(
-    () => groupCardsByTimeSection(tabCards),
+  const roomCards = useMemo(
+    () => tabCards.filter((card) => card.kind === "room_message_group"),
     [tabCards]
   )
+
+  const otherCards = useMemo(
+    () => tabCards.filter((card) => card.kind !== "room_message_group"),
+    [tabCards]
+  )
+
+  const roomSections = useMemo(
+    () => groupCardsByTimeSection(roomCards),
+    [roomCards]
+  )
+
+  const otherSections = useMemo(
+    () => groupCardsByTimeSection(otherCards),
+    [otherCards]
+  )
+
+  const sections = otherSections
 
   const unreadCount = useMemo(
     () => groupedCards.filter((card) => groupedCardIsUnread(card)).length,
@@ -553,7 +613,8 @@ export default function NotificationsPage() {
     const followers = groupedCards.filter(
       (c) => c.kind === "follow_group" || c.kind === "follow_request_group"
     ).length
-    return { all: groupedCards.length, likes, comments, followers }
+    const rooms = groupedCards.filter((c) => c.kind === "room_message_group").length
+    return { all: groupedCards.length, likes, comments, followers, rooms }
   }, [groupedCards])
 
   function toggleExpanded(key: string) {
@@ -675,7 +736,14 @@ export default function NotificationsPage() {
   }
 
   const hasAnyItems =
-    sections.today.length + sections.yesterday.length + sections.earlier.length >
+    (activeTab === "all" || activeTab === "rooms"
+      ? roomSections.today.length +
+        roomSections.yesterday.length +
+        roomSections.earlier.length
+      : 0) +
+      sections.today.length +
+      sections.yesterday.length +
+      sections.earlier.length >
     0
 
   if (loading) {
@@ -798,19 +866,66 @@ export default function NotificationsPage() {
               className="py-10"
             />
           ) : (
-            (["today", "yesterday", "earlier"] as TimeSection[]).map(
-              (section) =>
-                sections[section].length > 0 ? (
-                  <section key={section} className="space-y-2">
-                    <h2 className="text-sm font-semibold text-blue-300">
-                      {SECTION_LABELS[section]}
+            <>
+              {(activeTab === "all" || activeTab === "rooms") &&
+              (roomSections.today.length > 0 ||
+                roomSections.yesterday.length > 0 ||
+                roomSections.earlier.length > 0) ? (
+                <div className="space-y-3">
+                  {activeTab === "all" ? (
+                    <h2 className="text-sm font-semibold text-emerald-300">
+                      Trade Rooms
                     </h2>
-                    <div className="space-y-2">
-                      {sections[section].map((card) => renderCard(card))}
-                    </div>
-                  </section>
-                ) : null
-            )
+                  ) : null}
+                  {(["today", "yesterday", "earlier"] as TimeSection[]).map(
+                    (section) =>
+                      roomSections[section].length > 0 ? (
+                        <section key={`room-${section}`} className="space-y-2">
+                          <h2 className="text-sm font-semibold text-blue-300">
+                            {SECTION_LABELS[section]}
+                          </h2>
+                          <div className="space-y-2">
+                            {roomSections[section].map((card) => renderCard(card))}
+                          </div>
+                        </section>
+                      ) : null
+                  )}
+                </div>
+              ) : null}
+
+              {activeTab === "all" &&
+              (otherSections.today.length > 0 ||
+                otherSections.yesterday.length > 0 ||
+                otherSections.earlier.length > 0) ? (
+                <h2 className="text-sm font-semibold text-blue-300">
+                  Other activity
+                </h2>
+              ) : null}
+
+              {(activeTab === "all" ||
+                activeTab === "likes" ||
+                activeTab === "comments" ||
+                activeTab === "followers") &&
+                (["today", "yesterday", "earlier"] as TimeSection[]).map(
+                  (section) =>
+                    sections[section].length > 0 ? (
+                      <section key={section} className="space-y-2">
+                        <h2
+                          className={
+                            activeTab === "all"
+                              ? "text-sm font-semibold text-blue-300/90"
+                              : "text-sm font-semibold text-blue-300"
+                          }
+                        >
+                          {SECTION_LABELS[section]}
+                        </h2>
+                        <div className="space-y-2">
+                          {sections[section].map((card) => renderCard(card))}
+                        </div>
+                      </section>
+                    ) : null
+                )}
+            </>
           )}
         </div>
       </div>

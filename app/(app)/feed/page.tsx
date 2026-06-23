@@ -7,6 +7,11 @@ import { useSearchParams } from "next/navigation"
 import { supabase } from "../../../lib/supabaseClient"
 import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
 import { feedbackPresets } from "@/lib/feedbackPresets"
+import { handleSupabaseError } from "@/lib/handleSupabaseError"
+import {
+  deleteFeedComment,
+  filterCommentsAfterDelete,
+} from "@/lib/deleteComment"
 import FeedLoadMoreFooter from "../../components/feed/FeedLoadMoreFooter"
 import FeedContentToggle from "../../components/feed/FeedContentToggle"
 import FeedModeToggle from "../../components/feed/FeedModeToggle"
@@ -21,9 +26,10 @@ import {
 } from "../../components/feed/FeedPostCard"
 import {
   FEED_COMMENT_INSERT_SELECT,
-  FEED_COMMENTS_SELECT,
   FEED_STORIES_SELECT,
   buildFeedPostsIndex,
+  queryFeedComments,
+  withInsertedParentCommentId,
   type FeedContentFilter,
   type FeedItem,
 } from "../../components/feed/feedPostHelpers"
@@ -486,11 +492,13 @@ function FeedPageContent() {
       { count: likesExactCount },
     ] = await Promise.all([
       supabase.from("likes").select("post_id, user_id").in("post_id", ids),
-      supabase
-        .from("comments")
-        .select(FEED_COMMENTS_SELECT)
-        .in("post_id", ids)
-        .order("created_at", { ascending: true }),
+      queryFeedComments((select) =>
+        supabase
+          .from("comments")
+          .select(select)
+          .in("post_id", ids)
+          .order("created_at", { ascending: true })
+      ),
       supabase
         .from("likes")
         .select("post_id", { count: "exact", head: true })
@@ -800,7 +808,7 @@ function FeedPageContent() {
   )
 
   const submitComment = useCallback(
-    async (post: any, text: string) => {
+    async (post: any, text: string, parentCommentId?: string | null) => {
       if (!user) return false
 
       const pid = String(post.id)
@@ -825,13 +833,18 @@ function FeedPageContent() {
         }
       }
 
+      const insertPayload: Record<string, unknown> = {
+        post_id: pid,
+        user_id: user.id,
+        content: trimmed,
+      }
+      if (parentCommentId) {
+        insertPayload.parent_comment_id = parentCommentId
+      }
+
       const { data: newRow, error } = await supabase
         .from("comments")
-        .insert({
-          post_id: pid,
-          user_id: user.id,
-          content: trimmed,
-        })
+        .insert(insertPayload)
         .select(FEED_COMMENT_INSERT_SELECT)
         .single()
 
@@ -841,11 +854,13 @@ function FeedPageContent() {
         return false
       }
 
+      const insertedRow = withInsertedParentCommentId(newRow, parentCommentId)
+
       setCommentsByPost((prev) => {
         const currentComments = prev[pid] ?? EMPTY_COMMENTS
-        const nextComments = currentComments.some((c: any) => c.id === newRow.id)
+        const nextComments = currentComments.some((c: any) => c.id === insertedRow.id)
           ? currentComments
-          : [...currentComments, newRow]
+          : [...currentComments, insertedRow]
         return {
           ...prev,
           [pid]: nextComments,
@@ -878,6 +893,55 @@ function FeedPageContent() {
         commentSubmittingRef.current.delete(pid)
         setCommentSubmitting((s) => ({ ...s, [pid]: false }))
       }
+    },
+    [user, showPopup]
+  )
+
+  const deleteComment = useCallback(
+    async (comment: any) => {
+      if (!user) {
+        console.warn("[comment-delete] aborted: no user")
+        return false
+      }
+
+      const postId = String(comment.post_id ?? "")
+      if (!postId) {
+        console.error("[comment-delete] aborted: missing post_id", comment)
+        return false
+      }
+
+      const { error, deleted } = await deleteFeedComment(supabase, {
+        id: String(comment.id),
+        user_id: user.id,
+        content: comment.content,
+        post_id: postId,
+      })
+
+      if (error || !deleted) {
+        console.error("[comment-delete] failed", {
+          commentId: String(comment.id),
+          userId: user.id,
+          postId,
+          error,
+        })
+        showPopup({ type: "error", message: handleSupabaseError(error) })
+        return false
+      }
+
+      setCommentsByPost((prev) => ({
+        ...prev,
+        [postId]: filterCommentsAfterDelete(
+          prev[postId] ?? EMPTY_COMMENTS,
+          String(comment.id)
+        ),
+      }))
+
+      console.log("[comment-delete] local state updated", {
+        commentId: String(comment.id),
+        postId,
+      })
+
+      return true
     },
     [user, showPopup]
   )
@@ -1041,6 +1105,7 @@ function FeedPageContent() {
           onCloseShareOverlay={handleCloseShareOverlay}
           onToggleLike={toggleLike}
           onSubmitComment={submitComment}
+          onDeleteComment={deleteComment}
           onSharePost={handleSharePost}
         />
       ) : null}

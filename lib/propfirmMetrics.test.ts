@@ -3,6 +3,7 @@ const { describe, it } = require("node:test")
 const {
   buildDailyPnLMap,
   computePropfirmAccountMetrics,
+  computePropfirmEquityCurveYDomain,
   computeConsistencyRule,
   computeDailyMetrics,
   computeTrailingDrawdown,
@@ -165,6 +166,35 @@ describe("daily aggregation", () => {
     assert.equal(metrics.winningDays, 2)
     assert.equal(metrics.worstDay, -200)
     assert.equal(metrics.worstDailyLossUsed, 200)
+  })
+})
+
+describe("computePropfirmEquityCurveYDomain", () => {
+  it("pads plotted balances by 300 when range is at least 150", () => {
+    const domain = computePropfirmEquityCurveYDomain([49300, 51100])
+    assert.deepEqual(domain, [49000, 51400])
+  })
+
+  it("pads large-account balances the same way", () => {
+    const domain = computePropfirmEquityCurveYDomain([148900, 150800])
+    assert.deepEqual(domain, [148600, 151100])
+  })
+
+  it("uses smaller padding when the plotted range is very tight", () => {
+    const domain = computePropfirmEquityCurveYDomain([50000, 50100])
+    assert.deepEqual(domain, [49850, 50250])
+  })
+
+  it("includes reference-line values without anchoring to account size", () => {
+    const domain = computePropfirmEquityCurveYDomain([49900, 50100], {
+      includeValues: [53000, 48000],
+    })
+    assert.deepEqual(domain, [47700, 53300])
+  })
+
+  it("prevents an inverted domain", () => {
+    const domain = computePropfirmEquityCurveYDomain([50000])
+    assert.deepEqual(domain, [49850, 50150])
   })
 })
 

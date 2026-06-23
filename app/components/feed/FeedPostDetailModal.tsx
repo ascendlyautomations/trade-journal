@@ -39,6 +39,7 @@ type FeedPostDetailModalProps = {
   onClose: () => void
   onToggleLike: (post: any) => void
   onSubmitComment: (post: any, text: string) => Promise<boolean>
+  onDeleteComment?: (comment: any) => Promise<boolean>
   onSharePost: (post: any) => void
 }
 
@@ -54,6 +55,7 @@ export default function FeedPostDetailModal({
   onClose,
   onToggleLike,
   onSubmitComment,
+  onDeleteComment,
   onSharePost,
 }: FeedPostDetailModalProps) {
   const pid = String(post.id)
@@ -229,6 +231,7 @@ export default function FeedPostDetailModal({
           draftSyncRef={draftSyncRef}
           listScrollRef={commentsScrollRef}
           onSubmitComment={onSubmitComment}
+          onDeleteComment={onDeleteComment}
         />
       }
     />

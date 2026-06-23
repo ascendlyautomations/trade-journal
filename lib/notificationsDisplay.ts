@@ -75,12 +75,41 @@ export type RoomJoinNotificationItem = {
   notification: NotificationRecord
 }
 
+export type RoomMessageNotificationItem = {
+  kind: "room_message"
+  notification: NotificationRecord
+}
+
+export type RoomMessageEntry = {
+  id: string
+  senderId: string | null
+  preview: string | null
+  created_at: string
+}
+
+export type RoomMessageNotificationGroup = {
+  kind: "room_message_group"
+  key: string
+  room_id: string | null
+  section_id: string | null
+  message_id: string | null
+  room_name: string | null
+  section_name: string | null
+  room_slug: string | null
+  notificationIds: string[]
+  read: boolean
+  latestAt: string
+  totalMessages: number
+  messages: RoomMessageEntry[]
+}
+
 export type GroupedNotificationCard =
   | LikeNotificationGroup
   | CommentNotificationGroup
   | FollowNotificationGroup
   | FollowRequestNotificationGroup
   | RoomJoinNotificationItem
+  | RoomMessageNotificationGroup
 
 /** @deprecated Use GroupedNotificationCard */
 export type SingleNotificationItem = {
@@ -91,7 +120,12 @@ export type SingleNotificationItem = {
 /** @deprecated Use GroupedNotificationCard */
 export type NotificationListItem = LikeNotificationGroup | SingleNotificationItem
 
-export type NotificationCenterTab = "all" | "likes" | "comments" | "followers"
+export type NotificationCenterTab =
+  | "all"
+  | "likes"
+  | "comments"
+  | "followers"
+  | "rooms"
 
 export type TimeSection = "today" | "yesterday" | "earlier"
 
@@ -387,6 +421,7 @@ export function buildGroupedNotificationCards(
   const follows = rows.filter((row) => row.type === "follow")
   const followRequests = rows.filter((row) => row.type === "follow_request")
   const roomJoins = rows.filter((row) => row.type === "room_join")
+  const roomMessages = rows.filter((row) => row.type === "room_message")
 
   const cards: GroupedNotificationCard[] = [
     ...groupLikeNotifications(likes),
@@ -399,6 +434,7 @@ export function buildGroupedNotificationCards(
         notification,
       })
     ),
+    ...groupRoomMessageNotifications(roomMessages),
   ]
 
   cards.sort((a, b) => {
@@ -424,6 +460,8 @@ export function filterGroupedCardsByTab(
         (card) =>
           card.kind === "follow_group" || card.kind === "follow_request_group"
       )
+    case "rooms":
+      return cards.filter((card) => card.kind === "room_message_group")
     default:
       return cards
   }
@@ -462,16 +500,19 @@ export function getNotificationTimeSection(
 
 export function groupedCardCreatedAt(card: GroupedNotificationCard): string {
   if (card.kind === "room_join") return card.notification.created_at
+  if (card.kind === "room_message_group") return card.latestAt
   return card.latestAt
 }
 
 export function groupedCardIsUnread(card: GroupedNotificationCard): boolean {
   if (card.kind === "room_join") return !card.notification.read
+  if (card.kind === "room_message_group") return !card.read
   return !card.read
 }
 
 export function groupedCardNotificationIds(card: GroupedNotificationCard): string[] {
   if (card.kind === "room_join") return [card.notification.id]
+  if (card.kind === "room_message_group") return card.notificationIds
   return card.notificationIds
 }
 
@@ -545,6 +586,94 @@ export type RoomJoinMeta = {
   room_name?: string | null
 }
 
+export type RoomMessageMeta = {
+  message_id?: string | null
+  room_id?: string | null
+  room_slug?: string | null
+  room_name?: string | null
+  section_id?: string | null
+  section_name?: string | null
+  message_preview?: string | null
+}
+
+function roomMessageGroupKey(meta: RoomMessageMeta): string {
+  const roomId = meta.room_id ?? "unknown"
+  const sectionId = meta.section_id ?? "null"
+  return `room:${roomId}::section:${sectionId}`
+}
+
+export function groupRoomMessageNotifications(
+  rows: NotificationRecord[]
+): RoomMessageNotificationGroup[] {
+  const byKey = new Map<string, NotificationRecord[]>()
+
+  for (const row of rows) {
+    const meta = parseRoomMessageContent(row.content)
+    const key = roomMessageGroupKey(meta)
+    const bucket = byKey.get(key) ?? []
+    bucket.push(row)
+    byKey.set(key, bucket)
+  }
+
+  return Array.from(byKey.entries()).map(([key, bucket]) => {
+    const sorted = [...bucket].sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    )
+    const latest = sorted[0]
+    const latestMeta = parseRoomMessageContent(latest.content)
+
+    return {
+      kind: "room_message_group",
+      key,
+      room_id: latestMeta.room_id ?? null,
+      section_id: latestMeta.section_id ?? null,
+      message_id: latestMeta.message_id ?? null,
+      room_name: latestMeta.room_name ?? null,
+      section_name: latestMeta.section_name ?? null,
+      room_slug: latestMeta.room_slug ?? null,
+      notificationIds: sorted.map((row) => row.id),
+      read: sorted.every((row) => row.read),
+      latestAt: latest.created_at,
+      totalMessages: sorted.length,
+      messages: sorted.map((row) => {
+        const meta = parseRoomMessageContent(row.content)
+        return {
+          id: row.id,
+          senderId: row.sender_id,
+          preview: meta.message_preview ?? "New message",
+          created_at: row.created_at,
+        }
+      }),
+    }
+  })
+}
+
+export function formatRoomChannelTitle(
+  roomName?: string | null,
+  sectionName?: string | null
+): string {
+  const roomLabel = roomName?.trim() || "Trade Room"
+  const sectionLabel = sectionName?.trim()
+  if (!sectionLabel) return roomLabel
+  return `${roomLabel} (${sectionLabel})`
+}
+
+export function formatRoomMessageGroupTitle(
+  group: Pick<
+    RoomMessageNotificationGroup,
+    "room_name" | "section_name" | "totalMessages"
+  >
+): string {
+  return formatRoomChannelTitle(group.room_name, group.section_name)
+}
+
+export function formatRoomMessageGroupSubtitle(totalMessages: number): string {
+  if (totalMessages <= 0) return "New activity"
+  if (totalMessages === 1) return "1 new message"
+  return `${totalMessages} new messages`
+}
+
 export function parseRoomJoinContent(
   content: string | null | undefined
 ): RoomJoinMeta {
@@ -557,12 +686,55 @@ export function parseRoomJoinContent(
   }
 }
 
+export function parseRoomMessageContent(
+  content: string | null | undefined
+): RoomMessageMeta {
+  if (!content?.trim()) return {}
+  try {
+    const parsed = JSON.parse(content) as RoomMessageMeta
+    return parsed && typeof parsed === "object" ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
 export function formatRoomJoinMessage(username: string): string {
   return `${username} joined your room`
 }
 
+/** @deprecated Use formatRoomMessageGroupTitle for grouped room notifications. */
+export function formatRoomMessageNotification(
+  username: string,
+  meta: RoomMessageMeta
+): string {
+  const roomLabel = formatRoomChannelTitle(meta.room_name, meta.section_name)
+  return `${username} posted in ${roomLabel}`
+}
+
 export function formatFollowMessage(username: string): string {
   return `${username} started following you`
+}
+
+export function buildTradeRoomHref(
+  roomSlug: string,
+  opts?: {
+    sectionId?: string | null
+    messageId?: string | null
+  }
+): string {
+  const slug = roomSlug.trim()
+  if (!slug) return "/trade-rooms"
+
+  const params = new URLSearchParams()
+  params.set("room", slug)
+
+  const sectionId = opts?.sectionId?.trim()
+  if (sectionId) params.set("section", sectionId)
+
+  const messageId = opts?.messageId?.trim()
+  if (messageId) params.set("message", messageId)
+
+  return `/trade-rooms?${params.toString()}`
 }
 
 function profileContentHref(
@@ -615,11 +787,34 @@ export function getGroupedNotificationHref(
     return profilePath(owner)
   }
 
+  if (card.kind === "room_message_group") {
+    const slug = card.room_slug?.trim()
+    if (slug) {
+      return buildTradeRoomHref(slug, {
+        sectionId: card.section_id,
+        messageId: card.message_id,
+      })
+    }
+    return "/trade-rooms"
+  }
+
   const n = card.notification
   if (n.type === "room_join") {
     const meta = parseRoomJoinContent(n.content)
     const slug = meta.room_slug?.trim()
-    if (slug) return `/trade-rooms?room=${encodeURIComponent(slug)}`
+    if (slug) return buildTradeRoomHref(slug)
+    return "/trade-rooms"
+  }
+
+  if (n.type === "room_message") {
+    const meta = parseRoomMessageContent(n.content)
+    const slug = meta.room_slug?.trim()
+    if (slug) {
+      return buildTradeRoomHref(slug, {
+        sectionId: meta.section_id,
+        messageId: meta.message_id,
+      })
+    }
     return "/trade-rooms"
   }
 
@@ -650,7 +845,19 @@ export function getNotificationHref(
   if (n.type === "room_join") {
     const meta = parseRoomJoinContent(n.content)
     const slug = meta.room_slug?.trim()
-    if (slug) return `/trade-rooms?room=${encodeURIComponent(slug)}`
+    if (slug) return buildTradeRoomHref(slug)
+    return "/trade-rooms"
+  }
+
+  if (n.type === "room_message") {
+    const meta = parseRoomMessageContent(n.content)
+    const slug = meta.room_slug?.trim()
+    if (slug) {
+      return buildTradeRoomHref(slug, {
+        sectionId: meta.section_id,
+        messageId: meta.message_id,
+      })
+    }
     return "/trade-rooms"
   }
 

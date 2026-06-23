@@ -693,28 +693,32 @@ function parseTradeZellaRow(
     ? exitTimeIso
     : eIso
 
-  let duration_seconds: number | null = null
-  if (eIso && xIso) {
-    const a = new Date(eIso).getTime()
-    const b = new Date(xIso).getTime()
-    if (Number.isFinite(a) && Number.isFinite(b) && b > a) {
-      duration_seconds = Math.round((b - a) / 1000)
-    }
-  }
-
   const normalizedTicker = normalizeFuturesSymbol(symbolRaw ?? "")
   const ticker = normalizedTicker || symbolRaw || "UNKNOWN"
 
-  const dateIso = xIso
+  const executionTimes = normalizeCsvEntryExitTimestamps(
+    eIso,
+    xIso,
+    entry_price,
+    exit_price,
+    {
+      source: "tradezella",
+      rowNumber,
+      rawEntryTime: entryTimeRaw,
+      rawExitTime: exitTimeRaw,
+    }
+  )
+
+  const dateIso = executionTimes.exit_time
   const created = dateIso
 
   const trade: CsvTradeInsert = {
     user_id: userId,
     ticker,
-    entry_price: entry_price ?? null,
-    exit_price: exit_price ?? null,
-    entry_time: eIso,
-    exit_time: xIso,
+    entry_price: executionTimes.entry_price ?? null,
+    exit_price: executionTimes.exit_price ?? null,
+    entry_time: executionTimes.entry_time,
+    exit_time: executionTimes.exit_time,
     direction,
     pnl,
     contracts: c,
@@ -722,7 +726,7 @@ function parseTradeZellaRow(
     points: points != null && Number.isFinite(points) ? points : null,
     date: dateIso,
     created_at: created,
-    session: getSessionFromDate(eIso) || "NY",
+    session: getSessionFromDate(executionTimes.entry_time) || "NY",
     account_type: "imported",
     mode: "live",
     notes: "",
@@ -732,7 +736,7 @@ function parseTradeZellaRow(
     account_id: null,
     account_name: null,
     reviewed: false,
-    duration_seconds,
+    duration_seconds: executionTimes.duration_seconds,
     duration_text: null,
     is_public: false,
   }
@@ -743,10 +747,13 @@ function parseTradeZellaRow(
     console.log("Parsed Trade:", {
       symbol: getValueForTradeZella(normalized, "symbol") || "UNKNOWN",
       pnl,
-      entry_price,
-      exit_price,
+      entry_price: executionTimes.entry_price,
+      exit_price: executionTimes.exit_price,
       entry_time: entryTime,
       exit_time: exitTime,
+      assignedEntryTime: executionTimes.entry_time,
+      assignedExitTime: executionTimes.exit_time,
+      timestampsReordered: executionTimes.reordered,
       direction,
       contracts: c,
       rr,
@@ -774,6 +781,87 @@ export function getCellByAliases(row: CsvRow, aliases: readonly string[]): strin
 function logCsvRowDebug(label: string, payload: Record<string, unknown>) {
   if (process.env.NODE_ENV === "production") return
   console.debug(`[csv-import][${label}]`, payload)
+}
+
+export type CsvEntryExitNormalizeOptions = {
+  source: string
+  rowNumber?: number
+  /** Tradovate buy/sell columns: swap prices when timestamps are reordered. */
+  swapPricesWhenReordering?: boolean
+  rawEntryTime?: string | null
+  rawExitTime?: string | null
+}
+
+export type CsvEntryExitNormalizeResult = {
+  entry_time: string
+  exit_time: string
+  entry_price: number | null
+  exit_price: number | null
+  duration_seconds: number | null
+  reordered: boolean
+}
+
+/**
+ * Ensures entry_time is the earliest execution and exit_time is the latest.
+ * Used by all CSV import paths (not manual trade entry).
+ */
+export function normalizeCsvEntryExitTimestamps(
+  entryIso: string,
+  exitIso: string,
+  entryPrice: number | null,
+  exitPrice: number | null,
+  options: CsvEntryExitNormalizeOptions
+): CsvEntryExitNormalizeResult {
+  const entryMs = new Date(entryIso).getTime()
+  const exitMs = new Date(exitIso).getTime()
+  const entryOk = Number.isFinite(entryMs)
+  const exitOk = Number.isFinite(exitMs)
+
+  let nextEntryIso = entryIso
+  let nextExitIso = exitIso
+  let nextEntryPrice = entryPrice
+  let nextExitPrice = exitPrice
+  let reordered = false
+
+  if (entryOk && exitOk && exitMs < entryMs) {
+    nextEntryIso = exitIso
+    nextExitIso = entryIso
+    reordered = true
+    if (options.swapPricesWhenReordering) {
+      nextEntryPrice = exitPrice
+      nextExitPrice = entryPrice
+    }
+  }
+
+  let duration_seconds: number | null = null
+  const a = new Date(nextEntryIso).getTime()
+  const b = new Date(nextExitIso).getTime()
+  if (Number.isFinite(a) && Number.isFinite(b) && b > a) {
+    duration_seconds = Math.round((b - a) / 1000)
+  }
+
+  logCsvRowDebug("entry-exit-normalize", {
+    source: options.source,
+    rowNumber: options.rowNumber ?? null,
+    rawEntryTime: options.rawEntryTime ?? null,
+    rawExitTime: options.rawExitTime ?? null,
+    rawEntryIso: entryIso,
+    rawExitIso: exitIso,
+    sortedEntryIso: nextEntryIso,
+    sortedExitIso: nextExitIso,
+    reordered,
+    swapPricesWhenReordering: options.swapPricesWhenReordering ?? false,
+    duration_seconds,
+  })
+
+  return {
+    entry_time: nextEntryIso,
+    exit_time: nextExitIso,
+    entry_price: nextEntryPrice,
+    exit_price: nextExitPrice,
+    duration_seconds,
+    reordered,
+  }
 }
 
 export function parseTradovateRow(row: CsvRow, userId: string): CsvTradeInsert {
@@ -810,26 +898,42 @@ export function parseTradovateRow(row: CsvRow, userId: string): CsvTradeInsert {
   const contracts = qtyParsed != null ? qtyParsed : 1
 
   const directionFromSide = sideRaw ? normalizeDirection(sideRaw) : null
-  const direction =
-    directionFromSide ??
-    (entry != null && exit != null ? (exit > entry ? "Long" : "Short") : "Long")
 
   const entryTime = new Date(boughtTsRaw ?? "")
   const exitTime = new Date(soldTsRaw ?? "")
   const entryOk = !Number.isNaN(entryTime.getTime())
   const exitOk = !Number.isNaN(exitTime.getTime())
   const nowIso = new Date().toISOString()
-  const entryIso = entryOk ? entryTime.toISOString() : nowIso
-  const exitIso = exitOk ? exitTime.toISOString() : entryIso
-  const session = getSessionFromDate(entryIso) || "NY"
+  const boughtIso = entryOk ? entryTime.toISOString() : nowIso
+  const soldIso = exitOk ? exitTime.toISOString() : boughtIso
+
+  const normalized = normalizeCsvEntryExitTimestamps(
+    boughtIso,
+    soldIso,
+    entry,
+    exit,
+    {
+      source: "tradovate",
+      swapPricesWhenReordering: true,
+      rawEntryTime: boughtTsRaw,
+      rawExitTime: soldTsRaw,
+    }
+  )
+
+  const direction =
+    directionFromSide ??
+    (normalized.entry_price != null && normalized.exit_price != null
+      ? normalized.exit_price > normalized.entry_price
+        ? "Long"
+        : "Short"
+      : "Long")
+
+  const session = getSessionFromDate(normalized.entry_time) || "NY"
 
   const duration_text = durationRaw?.trim() || null
-  let duration_seconds: number | null = null
-  if (duration_text) {
+  let duration_seconds = normalized.duration_seconds
+  if (duration_seconds == null && duration_text) {
     duration_seconds = parseDurationCsvValue(duration_text)
-  } else if (entryOk && exitOk) {
-    const delta = Math.round((exitTime.getTime() - entryTime.getTime()) / 1000)
-    if (Number.isFinite(delta) && delta > 0) duration_seconds = delta
   }
 
   logCsvRowDebug("tradovate-row", {
@@ -837,26 +941,32 @@ export function parseTradovateRow(row: CsvRow, userId: string): CsvTradeInsert {
     parsedPnl: pnl,
     rawSymbol: symbolRaw ?? null,
     normalizedTicker,
-    rawEntryTime: boughtTsRaw,
-    rawExitTime: soldTsRaw,
+    rawBoughtTimestamp: boughtTsRaw,
+    rawSoldTimestamp: soldTsRaw,
     rawDurationText: duration_text,
+    assignedEntryTime: normalized.entry_time,
+    assignedExitTime: normalized.exit_time,
+    timestampsReordered: normalized.reordered,
     computedDurationSeconds: duration_seconds,
   })
 
   return {
     user_id: userId,
     ticker: normalizedTicker || (symbolRaw ?? ""),
-    entry_price: entry,
-    exit_price: exit,
-    entry_time: entryIso,
-    exit_time: exitIso,
+    entry_price: normalized.entry_price,
+    exit_price: normalized.exit_price,
+    entry_time: normalized.entry_time,
+    exit_time: normalized.exit_time,
     direction,
     pnl,
     contracts,
     rr: 0,
-    points: entry != null && exit != null ? Math.abs(exit - entry) : null,
-    date: entryIso,
-    created_at: entryIso,
+    points:
+      normalized.entry_price != null && normalized.exit_price != null
+        ? Math.abs(normalized.exit_price - normalized.entry_price)
+        : null,
+    date: normalized.entry_time,
+    created_at: normalized.entry_time,
     session,
     account_type: "imported",
     mode: "live",
@@ -1152,10 +1262,24 @@ function parseEnteredExitedFormatRow(
 
   const typeRaw = getCellByAliases(row, ENTERED_EXITED_DIRECTION_ALIASES)
   const directionFromType = typeRaw ? normalizeDirection(typeRaw) : null
+
+  const executionTimes = normalizeCsvEntryExitTimestamps(
+    entry.toISOString(),
+    exit.toISOString(),
+    entryPrice,
+    exitPrice,
+    {
+      source: "entered_exited",
+      rowNumber,
+      rawEntryTime: enteredRaw,
+      rawExitTime: exitedRaw,
+    }
+  )
+
   const direction: "Long" | "Short" =
     directionFromType ??
-    (entryPrice != null && exitPrice != null
-      ? exitPrice > entryPrice
+    (executionTimes.entry_price != null && executionTimes.exit_price != null
+      ? executionTimes.exit_price > executionTimes.entry_price
         ? "Long"
         : "Short"
       : "Short")
@@ -1164,8 +1288,8 @@ function parseEnteredExitedFormatRow(
     user_id: userId,
     ticker: normalizedTicker || contractName || "",
     direction,
-    entry_price: entryPrice ?? 0,
-    exit_price: exitPrice ?? 0,
+    entry_price: executionTimes.entry_price ?? 0,
+    exit_price: executionTimes.exit_price ?? 0,
     pnl: pnlParsed ?? 0,
     contracts:
       contractsParsed != null &&
@@ -1173,11 +1297,11 @@ function parseEnteredExitedFormatRow(
       contractsParsed > 0
         ? Math.max(1, Math.round(contractsParsed))
         : 1,
-    entry_time: entry.toISOString(),
-    exit_time: exit.toISOString(),
-    date: entry.toISOString(),
-    created_at: entry.toISOString(),
-    session: getSessionFromDate(entry.toISOString()) || "NY",
+    entry_time: executionTimes.entry_time,
+    exit_time: executionTimes.exit_time,
+    date: executionTimes.entry_time,
+    created_at: executionTimes.entry_time,
+    session: getSessionFromDate(executionTimes.entry_time) || "NY",
     account_type: "imported",
     mode: "live",
     notes: "",
@@ -1189,7 +1313,7 @@ function parseEnteredExitedFormatRow(
     reviewed: false,
     rr: null,
     points: null,
-    duration_seconds: null,
+    duration_seconds: executionTimes.duration_seconds,
     duration_text: null,
     is_public: false,
   }
@@ -1281,16 +1405,23 @@ function buildFlexibleTradeInsert(
     if (merged) exitTimeIso = merged
   }
 
-  const duration_text = f.duration?.trim() || null
-  let duration_seconds: number | null = null
-  if (duration_text) {
-    duration_seconds = parseDurationCsvValue(duration_text)
-  } else {
-    const a = new Date(entryTimeIso).getTime()
-    const b = new Date(exitTimeIso).getTime()
-    if (Number.isFinite(a) && Number.isFinite(b) && b > a) {
-      duration_seconds = Math.round((b - a) / 1000)
+  const executionTimes = normalizeCsvEntryExitTimestamps(
+    entryTimeIso,
+    exitTimeIso,
+    entryN,
+    exitN,
+    {
+      source: "flexible",
+      rowNumber,
+      rawEntryTime: f.entryTime ?? null,
+      rawExitTime: f.exitTime ?? null,
     }
+  )
+
+  const duration_text = f.duration?.trim() || null
+  let duration_seconds = executionTimes.duration_seconds
+  if (duration_seconds == null && duration_text) {
+    duration_seconds = parseDurationCsvValue(duration_text)
   }
 
   logCsvRowDebug("flex-row", {
@@ -1300,6 +1431,9 @@ function buildFlexibleTradeInsert(
     rawEntryTime: f.entryTime ?? null,
     rawExitTime: f.exitTime ?? null,
     rawDurationText: duration_text,
+    assignedEntryTime: executionTimes.entry_time,
+    assignedExitTime: executionTimes.exit_time,
+    timestampsReordered: executionTimes.reordered,
     rawCommission: f.commission ?? null,
     rawFees: f.fees ?? null,
     rawSwap: f.swap ?? null,
@@ -1307,7 +1441,7 @@ function buildFlexibleTradeInsert(
   })
 
   const sessionVal = f.session?.trim() || null
-  const autoSession = getSessionFromDate(entryTimeIso)
+  const autoSession = getSessionFromDate(executionTimes.entry_time)
   const acctTypeRaw = f.account_type?.trim() || ""
   const modeRaw = f.mode?.trim() || ""
   const account_type = acctTypeRaw ? acctTypeRaw.toLowerCase() : "imported"
@@ -1335,10 +1469,10 @@ function buildFlexibleTradeInsert(
   const trade: CsvTradeInsert = {
     user_id: userId,
     ticker: normalizedTicker,
-    entry_price: entryN,
-    exit_price: exitN,
-    entry_time: entryTimeIso,
-    exit_time: exitTimeIso,
+    entry_price: executionTimes.entry_price,
+    exit_price: executionTimes.exit_price,
+    entry_time: executionTimes.entry_time,
+    exit_time: executionTimes.exit_time,
     direction,
     pnl,
     contracts,

@@ -25,6 +25,7 @@ export async function joinTradeRoom(
     const { error } = await supabase.from("room_members").insert({
       room_id: roomId,
       user_id: userId,
+      notification_enabled: true,
     })
 
     if (error && error.code !== "23505") {
@@ -34,7 +35,7 @@ export async function joinTradeRoom(
   } else if (!alreadyActive) {
     const { error } = await supabase
       .from("room_members")
-      .update({ left_at: null })
+      .update({ left_at: null, notification_enabled: true })
       .eq("room_id", roomId)
       .eq("user_id", userId)
 

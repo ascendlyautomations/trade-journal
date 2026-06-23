@@ -15,8 +15,21 @@ import { supabase } from "../../lib/supabaseClient"
 import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
 import FeedCommentItem from "@/app/components/feed/FeedCommentItem"
 import EngagementCountButton from "@/app/components/EngagementCountButton"
+import ReplyComposerStrip from "@/app/components/replies/ReplyComposerStrip"
 import { feedbackPresets } from "@/lib/feedbackPresets"
+import { handleSupabaseError } from "@/lib/handleSupabaseError"
+import {
+  deleteTradeComment,
+  filterCommentsAfterDelete,
+} from "@/lib/deleteComment"
+import ConfirmModal from "@/app/components/ui/ConfirmModal"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
+import {
+  buildReplyTargetFromComment,
+  indexCommentsById,
+  resolveParentComment,
+  type ReplyTarget,
+} from "@/lib/replyReference"
 
 type TradeSocialContextValue = {
   tradeId: string
@@ -32,10 +45,13 @@ type TradeSocialContextValue = {
   scrollToCommentsOnMount: boolean
   newComment: string
   setNewComment: (value: string) => void
+  replyTarget: ReplyTarget | null
+  setReplyTarget: (target: ReplyTarget | null) => void
   likeBusy: boolean
   commentSubmitting: boolean
   handleLike: () => Promise<void>
   handleComment: () => Promise<void>
+  handleDeleteComment: (comment: any) => Promise<boolean>
 }
 
 const TradeSocialContext = createContext<TradeSocialContextValue | null>(null)
@@ -81,12 +97,18 @@ export function TradeSocialProvider({
   const [comments, setComments] = useState<any[]>([])
   const [showComments, setShowComments] = useState(false)
   const [newComment, setNewComment] = useState("")
+  const [replyTarget, setReplyTarget] = useState<ReplyTarget | null>(null)
+  const replyTargetRef = useRef<ReplyTarget | null>(null)
   const [likeBusy, setLikeBusy] = useState(false)
   const likeBusyRef = useRef(false)
   const [commentSubmitting, setCommentSubmitting] = useState(false)
   const commentSubmittingRef = useRef(false)
 
   const resolvedId = tradeId != null ? String(tradeId).trim() : ""
+
+  useEffect(() => {
+    replyTargetRef.current = replyTarget
+  }, [replyTarget])
 
   useEffect(() => {
     if (!resolvedId) return
@@ -110,12 +132,7 @@ export function TradeSocialProvider({
 
       const { data: commentData } = await supabase
         .from("trade_comments")
-        .select(
-          `
-          *,
-          profiles (username, avatar_url)
-        `
-        )
+        .select("*, profiles(username, avatar_url)")
         .eq("trade_id", resolvedId)
         .order("created_at", { ascending: true })
 
@@ -177,12 +194,7 @@ export function TradeSocialProvider({
 
           const { data } = await supabase
             .from("trade_comments")
-            .select(
-              `
-              *,
-              profiles (username, avatar_url)
-            `
-            )
+            .select("*, profiles(username, avatar_url)")
             .eq("id", id)
             .maybeSingle()
 
@@ -306,13 +318,11 @@ export function TradeSocialProvider({
         trade_id: resolvedId,
         user_id: currentUserId,
         content: newComment.trim(),
+        ...(replyTargetRef.current?.id
+          ? { parent_comment_id: replyTargetRef.current.id }
+          : {}),
       })
-      .select(
-        `
-        *,
-        profiles (username, avatar_url)
-      `
-      )
+      .select("*, profiles(username, avatar_url)")
       .single()
 
     if (error) {
@@ -322,8 +332,12 @@ export function TradeSocialProvider({
     }
 
     if (data) {
-      setComments((prev) => [...prev, data])
+      const insertedRow = replyTargetRef.current?.id
+        ? { ...data, parent_comment_id: replyTargetRef.current.id }
+        : data
+      setComments((prev) => [...prev, insertedRow])
       setNewComment("")
+      setReplyTarget(null)
 
       if (!suppressNotifications) {
         const receiverId =
@@ -363,6 +377,52 @@ export function TradeSocialProvider({
     showPopup,
   ])
 
+  const handleDeleteComment = useCallback(
+    async (comment: any) => {
+      if (!currentUserId || !resolvedId) {
+        console.warn("[comment-delete] aborted: missing user or trade", {
+          currentUserId,
+          tradeId: resolvedId,
+        })
+        return false
+      }
+      if (String(comment.user_id) !== String(currentUserId)) {
+        console.warn("[comment-delete] aborted: not author")
+        return false
+      }
+
+      const { error, deleted } = await deleteTradeComment(supabase, {
+        id: String(comment.id),
+        user_id: currentUserId,
+        content: comment.content,
+        trade_id: String(comment.trade_id ?? resolvedId),
+      })
+
+      if (error || !deleted) {
+        console.error("[comment-delete] failed", {
+          commentId: String(comment.id),
+          userId: currentUserId,
+          tradeId: resolvedId,
+          error,
+        })
+        showPopup({ type: "error", message: handleSupabaseError(error) })
+        return false
+      }
+
+      setComments((prev) =>
+        filterCommentsAfterDelete(prev, String(comment.id))
+      )
+
+      console.log("[comment-delete] local state updated", {
+        commentId: String(comment.id),
+        tradeId: resolvedId,
+      })
+
+      return true
+    },
+    [currentUserId, resolvedId, showPopup]
+  )
+
   const value = useMemo<TradeSocialContextValue | null>(() => {
     if (!resolvedId) return null
     return {
@@ -379,10 +439,13 @@ export function TradeSocialProvider({
       scrollToCommentsOnMount,
       newComment,
       setNewComment,
+      replyTarget,
+      setReplyTarget,
       likeBusy,
       commentSubmitting,
       handleLike,
       handleComment,
+      handleDeleteComment,
     }
   }, [
     resolvedId,
@@ -396,10 +459,12 @@ export function TradeSocialProvider({
     onRequestComments,
     scrollToCommentsOnMount,
     newComment,
+    replyTarget,
     likeBusy,
     commentSubmitting,
     handleLike,
     handleComment,
+    handleDeleteComment,
   ])
 
   if (!resolvedId || !value) return null
@@ -506,12 +571,17 @@ export function TradeSocialCommentsSection({
     comments,
     newComment,
     setNewComment,
+    replyTarget,
+    setReplyTarget,
     handleComment,
+    handleDeleteComment,
     currentUserId,
     commentSubmitting,
   } = useTradeSocial()
 
   const sectionRef = useRef<HTMLDivElement>(null)
+  const [pendingDelete, setPendingDelete] = useState<any>(null)
+  const [deleteBusy, setDeleteBusy] = useState(false)
 
   useEffect(() => {
     if (!scrollToCommentsOnMount || !commentsExpanded) return
@@ -533,7 +603,49 @@ export function TradeSocialCommentsSection({
     })
   }, [commentsExpanded, scrollContainerRef, scrollToCommentsOnMount, tradeId])
 
+  const commentsById = useMemo(() => indexCommentsById(comments), [comments])
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (!pendingDelete) return
+
+    console.log("[comment-delete] confirm", {
+      commentId: String(pendingDelete.id),
+      tradeId,
+      userId: pendingDelete.user_id,
+    })
+
+    setDeleteBusy(true)
+    try {
+      const ok = await handleDeleteComment({
+        ...pendingDelete,
+        trade_id: pendingDelete.trade_id ?? tradeId,
+      })
+      console.log("[comment-delete] handler finished", {
+        commentId: String(pendingDelete.id),
+        ok,
+      })
+      if (ok) setPendingDelete(null)
+    } finally {
+      setDeleteBusy(false)
+    }
+  }, [handleDeleteComment, pendingDelete, tradeId])
+
   if (!showComments && !commentsExpanded) return null
+
+  const deleteModal = (
+    <ConfirmModal
+      open={pendingDelete != null}
+      title="Delete Comment?"
+      description="This action cannot be undone."
+      confirmLabel="Delete"
+      destructive
+      loading={deleteBusy}
+      onCancel={() => {
+        if (!deleteBusy) setPendingDelete(null)
+      }}
+      onConfirm={handleConfirmDelete}
+    />
+  )
 
   const commentList = (
     <div className="space-y-2">
@@ -541,7 +653,20 @@ export function TradeSocialCommentsSection({
         <FeedCommentItem
           key={c.id}
           comment={c}
+          parentComment={resolveParentComment(c, commentsById)}
+          currentUserId={currentUserId}
           avatarClassName="h-6 w-6 shrink-0 rounded-full object-cover"
+          onReply={(comment) => {
+            setReplyTarget(buildReplyTargetFromComment(comment))
+            const input = sectionRef.current?.querySelector("input")
+            if (input instanceof HTMLInputElement) input.focus()
+          }}
+          onRequestDelete={(comment) =>
+            setPendingDelete({
+              ...comment,
+              trade_id: comment.trade_id ?? tradeId,
+            })
+          }
         />
       ))}
     </div>
@@ -549,10 +674,18 @@ export function TradeSocialCommentsSection({
 
   const composer = currentUserId ? (
         <div
-          className="mt-2 flex gap-2"
+          className="mt-2 flex flex-col gap-2"
           onClick={(e) => e.stopPropagation()}
           onKeyDown={(e) => e.stopPropagation()}
         >
+          {replyTarget ? (
+            <ReplyComposerStrip
+              authorName={replyTarget.authorName}
+              preview={replyTarget.preview}
+              onCancel={() => setReplyTarget(null)}
+            />
+          ) : null}
+          <div className="flex gap-2">
           <input
             type="text"
             value={newComment}
@@ -566,7 +699,7 @@ export function TradeSocialCommentsSection({
                 void handleComment()
               }
             }}
-            placeholder="Add a comment…"
+            placeholder={replyTarget ? "Write a reply…" : "Add a comment…"}
             className="flex-1 min-w-0 rounded-lg border border-gray-600 bg-[#1e293b] p-2 text-sm text-white placeholder:text-gray-500"
           />
 
@@ -581,6 +714,7 @@ export function TradeSocialCommentsSection({
           >
             Post
           </button>
+          </div>
         </div>
       ) : null
 
@@ -600,21 +734,25 @@ export function TradeSocialCommentsSection({
           {commentList}
         </div>
         {composer ? <div className="shrink-0">{composer}</div> : null}
+        {deleteModal}
       </div>
     )
   }
 
   return (
-    <div
-      id={`trade-comments-${tradeId}`}
-      ref={sectionRef}
-      className={`mt-2 space-y-3 border-t border-white/10 pt-3 ${className}`}
-      onClick={(e) => e.stopPropagation()}
-      onKeyDown={(e) => e.stopPropagation()}
-    >
-      {commentList}
-      {composer}
-    </div>
+    <>
+      <div
+        id={`trade-comments-${tradeId}`}
+        ref={sectionRef}
+        className={`mt-2 space-y-3 border-t border-white/10 pt-3 ${className}`}
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
+      >
+        {commentList}
+        {composer}
+      </div>
+      {deleteModal}
+    </>
   )
 }
 

@@ -372,6 +372,8 @@ export default function TradesPage() {
           sendTradeId={sendTradeId}
           tradesForPerformanceSharePool={tradesForPerformanceSharePool}
           gateProfile={gateProfile}
+          customRangeStart={customRangeStart}
+          customRangeEnd={customRangeEnd}
           onCloseImageLightbox={handleCloseImageLightbox}
           onCloseEditForm={handleCloseEditForm}
           onTradeFormSaved={() => void handleTradeFormSaved()}

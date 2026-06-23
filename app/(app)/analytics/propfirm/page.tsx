@@ -15,6 +15,7 @@ import {
 import { supabase } from "@/lib/supabaseClient"
 import {
   computePropfirmAccountMetrics,
+  computePropfirmEquityCurveYDomain,
   formatPropfirmUsd,
   type ConsistencyRuleResult,
   type PropfirmAccountRules,
@@ -95,28 +96,15 @@ function PropfirmPageShell({ children }: { children: ReactNode }) {
 
 function PropfirmEquityCurve({
   data,
-  startingBalance,
+  referenceYValues = [],
 }: {
   data: EquityCurvePoint[]
-  startingBalance: number
+  referenceYValues?: number[]
 }) {
-  const yAxisDomain = (() => {
-    if (startingBalance <= 0) return undefined
-
-    const lowerBound = startingBalance * 0.92
-    const defaultUpperBound = startingBalance * 1.3
-    const highestBalance = data.reduce(
-      (highest, point) => Math.max(highest, point.balance),
-      startingBalance
-    )
-    const upperBoundStep = 5000
-    const dynamicUpperBound =
-      highestBalance > defaultUpperBound
-        ? Math.ceil((highestBalance + 5000) / upperBoundStep) * upperBoundStep
-        : defaultUpperBound
-
-    return [lowerBound, dynamicUpperBound]
-  })()
+  const values = data.map((point) => point.balance)
+  const yAxisDomain = computePropfirmEquityCurveYDomain(values, {
+    includeValues: referenceYValues,
+  })
 
   return (
     <div className={SECTION_PANEL}>
@@ -263,6 +251,22 @@ export default function PropFirmPage() {
 
     return points
   }, [dailyRows, selectedAccount, startingBalance])
+
+  const equityCurveReferenceY = useMemo(() => {
+    if (!selectedAccount || startingBalance <= 0) return []
+
+    const profitTarget = Number(selectedAccount.profit_target) || 0
+    const refs: number[] = []
+
+    if (profitTarget > 0) {
+      refs.push(startingBalance + profitTarget)
+    }
+    if (Number.isFinite(trailingMetrics.drawdownFloor)) {
+      refs.push(trailingMetrics.drawdownFloor)
+    }
+
+    return refs
+  }, [selectedAccount, startingBalance, trailingMetrics.drawdownFloor])
 
   useEffect(() => {
     async function checkPlan() {
@@ -483,7 +487,7 @@ export default function PropFirmPage() {
         {selectedAccount && (
           <PropfirmEquityCurve
             data={equityCurveData}
-            startingBalance={startingBalance}
+            referenceYValues={equityCurveReferenceY}
           />
         )}
 

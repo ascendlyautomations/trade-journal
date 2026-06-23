@@ -1974,6 +1974,8 @@ const biggestLoss = losses.length > 0
         tradePool={tradesForPerformanceSharePool}
         subtitle="Dashboard · respects account, mode, date & public filters"
         profile={profile}
+        initialCustomRangeStart={customRangeStart}
+        initialCustomRangeEnd={customRangeEnd}
       />
     </>
   )

@@ -1,13 +1,64 @@
 import { toPng } from "html-to-image"
 
+/** Design canvas width — export at `pixelRatio` 2 → 1080px PNG width. */
+export const TRADE_SHARE_EXPORT_WIDTH = 540
+
+/** Minimum height if layout has not resolved before capture. */
+export const TRADE_SHARE_EXPORT_MIN_HEIGHT = 960
+
 /** Must match `ShareTradeButton` / hidden `TradeShareCard` root id. */
 export function tradeShareExportDomId(
   trade: { id?: unknown },
-  fallbackUnique?: string
+  uniqueSuffix?: string
 ): string {
-  const bit =
-    trade?.id != null ? String(trade.id) : fallbackUnique?.trim() || "export"
-  return `trade-share-export-${bit}`
+  const tradeBit = trade?.id != null ? String(trade.id) : "trade"
+  const suffix = uniqueSuffix?.trim() || "export"
+  return `trade-share-export-${tradeBit}-${suffix}`
+}
+
+function logExportTarget(exportDomId: string, root: HTMLElement) {
+  const style = getComputedStyle(root)
+  console.log("[tradeShareExport] exportId:", exportDomId)
+  console.log("[tradeShareExport] document.getElementById:", root)
+  console.log("[tradeShareExport] clientWidth:", root.clientWidth)
+  console.log("[tradeShareExport] clientHeight:", root.clientHeight)
+  console.log("[tradeShareExport] offsetWidth:", root.offsetWidth)
+  console.log("[tradeShareExport] offsetHeight:", root.offsetHeight)
+  console.log("[tradeShareExport] display:", style.display)
+  console.log("[tradeShareExport] visibility:", style.visibility)
+}
+
+/**
+ * html-to-image reads bounding-box size. Off-screen / duplicate-id nodes often
+ * resolve to 0×0 (→ 3×3 PNG). Force explicit px dimensions before capture.
+ */
+function ensureExportDimensions(root: HTMLElement): {
+  width: number
+  height: number
+} {
+  root.style.boxSizing = "border-box"
+  root.style.width = `${TRADE_SHARE_EXPORT_WIDTH}px`
+  root.style.minWidth = `${TRADE_SHARE_EXPORT_WIDTH}px`
+  root.style.maxWidth = `${TRADE_SHARE_EXPORT_WIDTH}px`
+
+  if (getComputedStyle(root).visibility === "hidden") {
+    root.style.visibility = "visible"
+  }
+
+  // Force layout
+  void root.offsetHeight
+
+  let height = root.offsetHeight
+  if (height < 100) {
+    root.style.minHeight = `${TRADE_SHARE_EXPORT_MIN_HEIGHT}px`
+    void root.offsetHeight
+    height = root.offsetHeight
+  }
+
+  return {
+    width: root.offsetWidth || TRADE_SHARE_EXPORT_WIDTH,
+    height: height || TRADE_SHARE_EXPORT_MIN_HEIGHT,
+  }
 }
 
 function slugPart(raw: string): string {
@@ -53,7 +104,21 @@ export async function downloadTradeShareCardPng(
     requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
   })
 
+  const { width, height } = ensureExportDimensions(root)
+  logExportTarget(exportDomId, root)
+
+  if (width < 100 || height < 100) {
+    console.error("downloadTradeShareCardPng: export root too small", {
+      exportDomId,
+      width,
+      height,
+    })
+    return
+  }
+
   const dataUrl = await toPng(root, {
+    width,
+    height,
     pixelRatio: 2,
     cacheBust: true,
     backgroundColor: "#0b1a2a",

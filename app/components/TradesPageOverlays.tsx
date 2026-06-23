@@ -13,6 +13,8 @@ type TradesPageOverlaysProps = {
   sendTradeId: string | null
   tradesForPerformanceSharePool: any[]
   gateProfile: any | null
+  customRangeStart?: string
+  customRangeEnd?: string
   onCloseImageLightbox: () => void
   onCloseEditForm: () => void
   onTradeFormSaved: () => void
@@ -27,6 +29,8 @@ function TradesPageOverlays({
   sendTradeId,
   tradesForPerformanceSharePool,
   gateProfile,
+  customRangeStart = "",
+  customRangeEnd = "",
   onCloseImageLightbox,
   onCloseEditForm,
   onTradeFormSaved,
@@ -53,6 +57,8 @@ function TradesPageOverlays({
           tradePool={tradesForPerformanceSharePool}
           subtitle="Matches account, mode & date filters"
           profile={gateProfile}
+          initialCustomRangeStart={customRangeStart}
+          initialCustomRangeEnd={customRangeEnd}
         />
       ) : null}
 

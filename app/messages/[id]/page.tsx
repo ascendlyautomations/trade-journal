@@ -2,7 +2,7 @@
 
 import Navbar from "../../components/Navbar"
 import DmStyleComposer from "../../components/DmStyleComposer"
-import TradeSocialLayer from "../../components/TradeSocialLayer"
+import SharedTradeMessageCard from "@/app/components/SharedTradeMessageCard"
 import {
   Fragment,
   useCallback,
@@ -18,7 +18,7 @@ import {
   shouldShowDmDateDivider,
 } from "@/lib/formatMessageTimestamp"
 import { supabase } from "../../../lib/supabaseClient"
-import { compressImage } from "@/lib/compressImage"
+import { compressImage, compressScreenshot } from "@/lib/compressImage"
 import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
 import { feedbackPresets } from "@/lib/feedbackPresets"
 import { logSupabaseError } from "@/lib/logSupabaseError"
@@ -27,14 +27,9 @@ import EmptyState from "@/app/components/ui/EmptyState"
 import { useParams, useRouter } from "next/navigation"
 import {
   formatMoneyUnknown,
-  formatPoints,
   formatRR,
   formatSignedPnlDisplay,
 } from "@/lib/formatDisplay"
-import {
-  PUBLIC_TRADE_SELECT,
-  sanitizeTradeForViewer,
-} from "@/lib/publicAccountPrivacy"
 import { isConversationParticipant } from "@/lib/conversationAccess"
 import { ensureDmConversation } from "@/lib/dmConversation"
 import {
@@ -59,6 +54,15 @@ import {
 } from "@/app/components/ProfileLink"
 import { normalizeProfileUsername } from "@/lib/profileUsername"
 import { isTradeOwnedByUser } from "@/lib/tradeShareAccess"
+import ReplyComposerStrip from "@/app/components/replies/ReplyComposerStrip"
+import ReplyReferenceBlock from "@/app/components/replies/ReplyReferenceBlock"
+import {
+  buildReplyTargetFromMessage,
+  dmMessageElementId,
+  scrollToReplyTarget,
+  type ReplyTarget,
+} from "@/lib/replyReference"
+import { DM_MESSAGE_PARENT_EMBED } from "@/lib/replyReferenceSelects"
 
 type ConversationPageAccess =
   | "loading"
@@ -103,7 +107,7 @@ function DmClusterTimestamp({
   )
 }
 
-function tradeScreenshotSrc(url: string | null | undefined): string | null {
+function postScreenshotSrc(url: string | null | undefined): string | null {
   const raw = url != null ? String(url).trim() : ""
   if (!raw) return null
   if (raw.startsWith("http")) return raw
@@ -112,13 +116,107 @@ function tradeScreenshotSrc(url: string | null | undefined): string | null {
   return `${base}/storage/v1/object/public/screenshots/${raw}`
 }
 
-function postScreenshotSrc(url: string | null | undefined): string | null {
-  const raw = url != null ? String(url).trim() : ""
-  if (!raw) return null
-  if (raw.startsWith("http")) return raw
-  const base = process.env.NEXT_PUBLIC_SUPABASE_URL
-  if (!base) return null
-  return `${base}/storage/v1/object/public/screenshots/${raw}`
+function DmReplyReference({
+  message,
+  onJumpToParent,
+  onUnavailable,
+}: {
+  message: any
+  onJumpToParent: (parentId: string) => boolean
+  onUnavailable: () => void
+}) {
+  if (!message.parent_message_id) return null
+  const parentId = String(message.parent?.id ?? message.parent_message_id)
+  return (
+    <ReplyReferenceBlock
+      parentMessageId={message.parent_message_id}
+      parentMessage={message.parent}
+      targetElementId={dmMessageElementId(parentId)}
+      onJumpToParent={() => onJumpToParent(parentId)}
+      onUnavailable={onUnavailable}
+    />
+  )
+}
+
+function DmMessageActionMenu({
+  message,
+  isMe,
+  userId,
+  menuOpen,
+  setActiveMenuId,
+  onReply,
+  deleteForMe,
+  deleteForEveryone,
+  alignRight,
+}: {
+  message: any
+  isMe: boolean
+  userId: string | undefined
+  menuOpen: boolean
+  setActiveMenuId: (id: string | null) => void
+  onReply: (message: any) => void
+  deleteForMe: (m: any) => void
+  deleteForEveryone: (m: any) => void
+  alignRight: boolean
+}) {
+  return (
+    <>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation()
+          setActiveMenuId(menuOpen ? null : message.id)
+        }}
+        className={`absolute top-1 right-1 z-10 rounded px-1.5 py-0.5 text-xs text-gray-400 transition-opacity duration-200 hover:text-gray-200 ${
+          menuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+        }`}
+        aria-label="Message actions"
+      >
+        ⋯
+      </button>
+
+      {menuOpen ? (
+        <div
+          className={`absolute top-7 z-50 w-40 rounded-lg border border-gray-600 bg-[#1e293b] shadow-lg ${
+            alignRight ? "right-1" : "left-1"
+          }`}
+        >
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onReply(message)
+            }}
+            className="w-full px-3 py-2 text-left text-sm hover:bg-white/10"
+          >
+            Reply
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              deleteForMe(message)
+            }}
+            className="w-full px-3 py-2 text-left text-sm hover:bg-white/10"
+          >
+            Delete for me
+          </button>
+          {message.sender_id === userId ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                deleteForEveryone(message)
+              }}
+              className="w-full px-3 py-2 text-left text-sm hover:bg-white/10"
+            >
+              Delete for everyone
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+    </>
+  )
 }
 
 function TradeMessageBubble({
@@ -130,6 +228,9 @@ function TradeMessageBubble({
   deleteForMe,
   deleteForEveryone,
   onViewTrade,
+  onReply,
+  onJumpToParent,
+  onReplyUnavailable,
 }: {
   message: any
   isMe: boolean
@@ -139,56 +240,10 @@ function TradeMessageBubble({
   deleteForMe: (m: any) => void
   deleteForEveryone: (m: any) => void
   onViewTrade: (trade: any) => void
+  onReply: (message: any) => void
+  onJumpToParent: (parentId: string) => boolean
+  onReplyUnavailable: () => void
 }) {
-  const [trade, setTrade] = useState<any>(null)
-  const [tradeLoading, setTradeLoading] = useState(false)
-
-  useEffect(() => {
-    if (!message.trade_id) {
-      setTrade(null)
-      setTradeLoading(false)
-      return
-    }
-    let cancelled = false
-    setTradeLoading(true)
-    setTrade(null)
-    ;(async () => {
-      const { data } = await supabase
-        .from("trades")
-        .select(PUBLIC_TRADE_SELECT)
-        .eq("id", message.trade_id)
-        .maybeSingle()
-      if (cancelled) return
-
-      const isOwner =
-        userId != null && data?.user_id != null && data.user_id === userId
-
-      let resolved = data
-      if (isOwner) {
-        const { data: full } = await supabase
-          .from("trades")
-          .select("*")
-          .eq("id", message.trade_id)
-          .maybeSingle()
-        resolved = full ?? data
-      }
-
-      setTrade(
-        resolved
-          ? sanitizeTradeForViewer(resolved, { isOwner: !!isOwner })
-          : null
-      )
-      setTradeLoading(false)
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [message.trade_id])
-
-  const imgSrc = trade ? tradeScreenshotSrc(trade.image_url) : null
-  const pnlNum = trade != null ? Number(trade.pnl) : NaN
-  const pnlNonNeg = !Number.isNaN(pnlNum) && pnlNum >= 0
-
   if (message.deleted_for_everyone) {
     return (
       <div className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
@@ -197,157 +252,43 @@ function TradeMessageBubble({
     )
   }
 
+  const isMine = message.sender_id === userId
+  const menuOpen = activeMenuId === message.id
   const tradeCardWidth =
     "w-full min-w-[15rem] max-w-[min(100%,19.5rem)]"
 
-  if (tradeLoading) {
-    return (
-      <div className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
-        <div
-          className={`${tradeCardWidth} rounded-lg bg-[#1e293b] p-3 text-sm text-gray-400`}
-        >
-          Loading trade…
-        </div>
-      </div>
-    )
-  }
-
-  if (!trade) {
-    return (
-      <div className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
-        <div
-          className={`${tradeCardWidth} rounded-lg bg-[#1e293b] p-3 text-sm italic text-gray-400`}
-        >
-          {SHARED_TRADE_UNAVAILABLE}
-        </div>
-      </div>
-    )
-  }
-
-  const isMine = message.sender_id === userId
-
-  const menuOpen = activeMenuId === message.id
-  const directionRaw =
-    trade.direction != null ? String(trade.direction).trim() : ""
-  const directionLabel = directionRaw
-    ? directionRaw.charAt(0).toUpperCase() + directionRaw.slice(1).toLowerCase()
-    : ""
-
   return (
-    <div className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
+    <div
+      id={dmMessageElementId(message.id)}
+      data-dm-message-id={message.id}
+      className={`flex ${isMe ? "justify-end" : "justify-start"}`}
+    >
       <div className={`relative group inline-block ${tradeCardWidth} overflow-visible`}>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation()
-            setActiveMenuId(menuOpen ? null : message.id)
-          }}
-          className={`absolute top-1 right-1 z-10 rounded px-1.5 py-0.5 text-xs text-gray-400 transition-opacity duration-200 hover:text-gray-200 ${
-            menuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-          }`}
-          aria-label="Message actions"
-        >
-          ⋯
-        </button>
+        <DmMessageActionMenu
+          message={message}
+          isMe={isMe}
+          userId={userId}
+          menuOpen={menuOpen}
+          setActiveMenuId={setActiveMenuId}
+          onReply={onReply}
+          deleteForMe={deleteForMe}
+          deleteForEveryone={deleteForEveryone}
+          alignRight={isMine}
+        />
 
-        {menuOpen ? (
-          <div
-            className={`absolute top-7 z-50 w-40 rounded-lg border border-gray-600 bg-[#1e293b] shadow-lg ${
-              isMine ? "right-1" : "left-1"
-            }`}
-          >
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation()
-                deleteForMe(message)
-              }}
-              className="w-full px-3 py-2 text-left text-sm hover:bg-white/10"
-            >
-              Delete for me
-            </button>
-            {message.sender_id === userId ? (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  deleteForEveryone(message)
-                }}
-                className="w-full px-3 py-2 text-left text-sm hover:bg-white/10"
-              >
-                Delete for everyone
-              </button>
-            ) : null}
-          </div>
-        ) : null}
-
-        <div className="w-full rounded-xl border border-gray-700/80 bg-gradient-to-br from-[#0f172a] to-[#1e293b] p-3.5 shadow-md">
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-lg font-bold tracking-tight text-white">
-              {trade.ticker}
-            </p>
-            <p
-              className={`shrink-0 text-base font-semibold tabular-nums ${
-                pnlNonNeg ? "text-emerald-400" : "text-red-400"
-              }`}
-            >
-              {formatSignedPnlDisplay(trade.pnl)}
-            </p>
-          </div>
-
-          {directionLabel ? (
-            <p className="mt-1 text-xs font-medium text-gray-400">
-              {directionLabel}
-            </p>
-          ) : null}
-
-          <div className="mt-2 flex items-center justify-between gap-3 text-xs text-gray-400">
-            <span className="tabular-nums">RR: {formatRR(trade.rr)}</span>
-            <span className="tabular-nums">
-              Points: {formatPoints(trade.points)}
-            </span>
-          </div>
-
-          {trade.public_description ? (
-            <p className="mt-2 text-xs leading-snug text-gray-300">
-              {trade.public_description}
-            </p>
-          ) : null}
-
-          {imgSrc ? (
-            <img
-              src={imgSrc}
-              alt=""
-              loading="lazy"
-              decoding="async"
-              className="mt-2 h-28 w-full rounded-lg border border-gray-700 object-cover"
+        <SharedTradeMessageCard
+          tradeId={message.trade_id}
+          viewerUserId={userId}
+          onViewTrade={onViewTrade}
+          className={tradeCardWidth}
+          beforeCardContent={
+            <DmReplyReference
+              message={message}
+              onJumpToParent={onJumpToParent}
+              onUnavailable={onReplyUnavailable}
             />
-          ) : null}
-
-          <p className="mt-2.5 border-t border-gray-700/40 pt-2 text-center text-[10px] font-medium uppercase tracking-wide text-gray-500">
-            Shared Trade
-          </p>
-
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation()
-              onViewTrade(trade)
-            }}
-            className="mt-2.5 w-full rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-xs font-medium text-blue-300 transition hover:bg-blue-500/20 hover:text-blue-200"
-          >
-            View trade →
-          </button>
-        </div>
-
-        <div className="mt-3 max-w-full" onClick={(e) => e.stopPropagation()}>
-          <TradeSocialLayer
-            tradeId={trade.id}
-            currentUserId={userId}
-            tradeOwnerUserId={trade.user_id}
-            suppressNotifications
-          />
-        </div>
+          }
+        />
       </div>
     </div>
   )
@@ -362,6 +303,9 @@ function PostMessageBubble({
   deleteForMe,
   deleteForEveryone,
   onViewPost,
+  onReply,
+  onJumpToParent,
+  onReplyUnavailable,
 }: {
   message: any
   isMe: boolean
@@ -371,6 +315,9 @@ function PostMessageBubble({
   deleteForMe: (m: any) => void
   deleteForEveryone: (m: any) => void
   onViewPost: (post: any) => void
+  onReply: (message: any) => void
+  onJumpToParent: (parentId: string) => boolean
+  onReplyUnavailable: () => void
 }) {
   const [post, setPost] = useState<any>(null)
   const [postLoading, setPostLoading] = useState(false)
@@ -434,54 +381,30 @@ function PostMessageBubble({
   const isWin = !Number.isNaN(pnl) && pnl >= 0
 
   return (
-    <div className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
+    <div
+      id={dmMessageElementId(message.id)}
+      data-dm-message-id={message.id}
+      className={`flex ${isMe ? "justify-end" : "justify-start"}`}
+    >
       <div className="relative group inline-block max-w-[75%] overflow-visible">
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation()
-            setActiveMenuId(menuOpen ? null : message.id)
-          }}
-          className={`absolute top-1 right-1 z-10 rounded px-1.5 py-0.5 text-xs text-gray-400 transition-opacity duration-200 hover:text-gray-200 ${
-            menuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-          }`}
-          aria-label="Message actions"
-        >
-          ⋯
-        </button>
-
-        {menuOpen ? (
-          <div
-            className={`absolute top-7 z-50 w-40 rounded-lg border border-gray-600 bg-[#1e293b] shadow-lg ${
-              isMe ? "right-1" : "left-1"
-            }`}
-          >
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation()
-                deleteForMe(message)
-              }}
-              className="w-full px-3 py-2 text-left text-sm hover:bg-white/10"
-            >
-              Delete for me
-            </button>
-            {message.sender_id === userId ? (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  deleteForEveryone(message)
-                }}
-                className="w-full px-3 py-2 text-left text-sm hover:bg-white/10"
-              >
-                Delete for everyone
-              </button>
-            ) : null}
-          </div>
-        ) : null}
+        <DmMessageActionMenu
+          message={message}
+          isMe={isMe}
+          userId={userId}
+          menuOpen={menuOpen}
+          setActiveMenuId={setActiveMenuId}
+          onReply={onReply}
+          deleteForMe={deleteForMe}
+          deleteForEveryone={deleteForEveryone}
+          alignRight={isMe}
+        />
 
         <div className="rounded-xl border border-gray-700 bg-gradient-to-br from-[#0f172a] to-[#1e293b] p-4 shadow-lg">
+          <DmReplyReference
+            message={message}
+            onJumpToParent={onJumpToParent}
+            onUnavailable={onReplyUnavailable}
+          />
           {message.content ? (
             <p className="mb-2 text-sm text-gray-300">{message.content}</p>
           ) : null}
@@ -574,6 +497,8 @@ export default function DMPage() {
   const [messages, setMessages] = useState<any[]>([])
   const [messagesLoaded, setMessagesLoaded] = useState(false)
   const [input, setInput] = useState("")
+  const [replyTarget, setReplyTarget] = useState<ReplyTarget | null>(null)
+  const replyTargetRef = useRef<ReplyTarget | null>(null)
   const [user, setUser] = useState<any>(null)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [selectedImage, setSelectedImage] = useState<File | null>(null)
@@ -622,6 +547,36 @@ export default function DMPage() {
   useEffect(() => {
     userIdRef.current = user?.id ?? null
   }, [user?.id])
+
+  useEffect(() => {
+    replyTargetRef.current = replyTarget
+  }, [replyTarget])
+
+  function startReplyToMessage(message: any) {
+    setReplyTarget(
+      buildReplyTargetFromMessage({
+        id: message.id,
+        sender_id: message.sender_id,
+        content: message.content,
+        type: message.type,
+        image_url: message.image_url,
+        deleted_for_everyone: message.deleted_for_everyone,
+        profiles: message.profiles,
+      })
+    )
+    setActiveMenuId(null)
+  }
+
+  function scrollToDmMessage(messageId: string): boolean {
+    return scrollToReplyTarget(dmMessageElementId(messageId), scrollRef.current)
+  }
+
+  function notifyReplyUnavailable() {
+    showPopup({
+      type: "info",
+      message: "Original message unavailable",
+    })
+  }
 
   function viewSharedTrade(trade: { id?: string | null }) {
     const href = getSharedTradeViewHref(String(trade?.id ?? ""))
@@ -720,6 +675,7 @@ export default function DMPage() {
                 .select(
                   `
                   *,
+                  ${DM_MESSAGE_PARENT_EMBED},
                   profiles!sender_id (
                     username,
                     avatar_url
@@ -979,6 +935,7 @@ export default function DMPage() {
       .select(
         `
         *,
+        ${DM_MESSAGE_PARENT_EMBED},
         profiles!sender_id (
           username,
           avatar_url
@@ -1154,7 +1111,7 @@ export default function DMPage() {
     if (selectedFile) {
       let uploadFile: File = selectedFile
       if (selectedFile.type?.startsWith("image/")) {
-        uploadFile = await compressImage(selectedFile)
+        uploadFile = await compressScreenshot(selectedFile)
       }
       const fileName = `${Date.now()}-${uploadFile.name}`
 
@@ -1171,6 +1128,9 @@ export default function DMPage() {
       content: input || "",
       image_url: imageUrl,
       channel: null,
+      ...(replyTargetRef.current?.id
+        ? { parent_message_id: replyTargetRef.current.id }
+        : {}),
     }
     const { error: sendErr } = await supabase.from("messages").insert(sendPayload)
     if (sendErr) {
@@ -1201,6 +1161,7 @@ export default function DMPage() {
     })
 
     setInput("")
+    setReplyTarget(null)
     setSelectedFile(null)
     setSelectedImage(null)
     setPreviewUrl(null)
@@ -1248,6 +1209,9 @@ export default function DMPage() {
       trade_id: trade.id,
       content: "Shared a trade",
       channel: null,
+      ...(replyTargetRef.current?.id
+        ? { parent_message_id: replyTargetRef.current.id }
+        : {}),
     }
     const { error: tradeSendErr } = await supabase
       .from("messages")
@@ -1278,6 +1242,7 @@ export default function DMPage() {
     })
 
     setShowTradePicker(false)
+    setReplyTarget(null)
     } finally {
       sendingMessageRef.current = false
       setSendingMessage(false)
@@ -1651,6 +1616,9 @@ export default function DMPage() {
                         deleteForMe={deleteForMe}
                         deleteForEveryone={deleteForEveryone}
                         onViewTrade={viewSharedTrade}
+                        onReply={startReplyToMessage}
+                        onJumpToParent={scrollToDmMessage}
+                        onReplyUnavailable={notifyReplyUnavailable}
                       />
                       {showTimestamp ? (
                         <DmClusterTimestamp
@@ -1686,6 +1654,9 @@ export default function DMPage() {
                         deleteForMe={deleteForMe}
                         deleteForEveryone={deleteForEveryone}
                         onViewPost={viewSharedPost}
+                        onReply={startReplyToMessage}
+                        onJumpToParent={scrollToDmMessage}
+                        onReplyUnavailable={notifyReplyUnavailable}
                       />
                       {showTimestamp ? (
                         <DmClusterTimestamp
@@ -1714,50 +1685,24 @@ export default function DMPage() {
                       />
                     ) : null}
                     <div
+                      id={dmMessageElementId(message.id)}
+                      data-dm-message-id={message.id}
                       className={`flex overflow-visible ${
                         isMe ? "justify-end" : "justify-start"
                       }`}
                     >
                       <div className="relative group inline-block max-w-[75%] overflow-visible">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setActiveMenuId(menuOpen ? null : message.id)
-                          }
-                          className={`absolute top-1 right-1 z-10 rounded px-1.5 py-0.5 text-xs text-gray-400 transition-opacity duration-200 hover:text-gray-200 ${
-                            menuOpen
-                              ? "opacity-100"
-                              : "opacity-0 group-hover:opacity-100"
-                          }`}
-                          aria-label="Message actions"
-                        >
-                          ⋯
-                        </button>
-
-                        {menuOpen ? (
-                          <div
-                            className={`absolute top-7 z-50 w-40 rounded-lg border border-gray-600 bg-[#1e293b] shadow-lg ${
-                              isMe ? "right-1" : "left-1"
-                            }`}
-                          >
-                            <button
-                              type="button"
-                              onClick={() => deleteForMe(message)}
-                              className="w-full text-left px-3 py-2 text-sm hover:bg-white/10"
-                            >
-                              Delete for me
-                            </button>
-                            {message.sender_id === user?.id ? (
-                              <button
-                                type="button"
-                                onClick={() => deleteForEveryone(message)}
-                                className="w-full text-left px-3 py-2 text-sm hover:bg-white/10"
-                              >
-                                Delete for everyone
-                              </button>
-                            ) : null}
-                          </div>
-                        ) : null}
+                        <DmMessageActionMenu
+                          message={message}
+                          isMe={isMe}
+                          userId={user?.id}
+                          menuOpen={menuOpen}
+                          setActiveMenuId={setActiveMenuId}
+                          onReply={startReplyToMessage}
+                          deleteForMe={deleteForMe}
+                          deleteForEveryone={deleteForEveryone}
+                          alignRight={isMe}
+                        />
 
                         <div
                           className={`p-3 rounded-xl overflow-visible ${
@@ -1770,6 +1715,11 @@ export default function DMPage() {
                             </p>
                           ) : (
                             <>
+                              <DmReplyReference
+                                message={message}
+                                onJumpToParent={scrollToDmMessage}
+                                onUnavailable={notifyReplyUnavailable}
+                              />
                               {message.image_url ? (
                                 <img
                                   src={message.image_url}
@@ -1843,6 +1793,15 @@ export default function DMPage() {
             imageDisabled={false}
             fileInputRef={fileRef}
             onTradeClick={() => setShowTradePicker(true)}
+            beforeRow={
+              replyTarget ? (
+                <ReplyComposerStrip
+                  authorName={replyTarget.authorName}
+                  preview={replyTarget.preview}
+                  onCancel={() => setReplyTarget(null)}
+                />
+              ) : null
+            }
             afterRow={
               <>
                 {allSeen ? (

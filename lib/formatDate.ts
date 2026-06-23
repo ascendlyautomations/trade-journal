@@ -2,9 +2,43 @@ const EST_TIMEZONE = "America/New_York"
 
 export { formatEST } from "./formatEST.ts"
 
+/**
+ * Normalize Supabase/Postgres timestamptz strings that omit timezone info.
+ * Timezone-less values are treated as UTC storage, not local wall clock.
+ *
+ * @example "2026-06-22 23:58:10.601163" → "2026-06-22T23:58:10.601163Z"
+ */
+export function normalizeStoredUtcTimestamp(
+  value: string | Date | null | undefined
+): string | null {
+  if (value == null || value === "") return null
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return null
+    return value.toISOString()
+  }
+
+  const trimmed = String(value).trim()
+  if (!trimmed) return null
+
+  if (/Z$/i.test(trimmed)) return trimmed
+
+  // Explicit offset (+00:00, -04:00, +0000)
+  if (/[+-]\d{2}:\d{2}(?::\d{2})?$/.test(trimmed) || /[+-]\d{4}$/.test(trimmed)) {
+    return trimmed
+  }
+
+  const withT = trimmed.includes("T") ? trimmed : trimmed.replace(" ", "T")
+  return `${withT}Z`
+}
+
 function parseDateLike(value: string | Date | null | undefined): Date | null {
   if (!value) return null
-  const d = value instanceof Date ? value : new Date(value)
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value
+  }
+  const normalized = normalizeStoredUtcTimestamp(value)
+  if (!normalized) return null
+  const d = new Date(normalized)
   if (Number.isNaN(d.getTime())) return null
   return d
 }
@@ -64,10 +98,25 @@ export function formatShortDateTimeEST(
 export function formatTimeOnly(
   val: string | Date | null | undefined
 ): string | null {
-  if (val == null || val === "") return null
-  const d = val instanceof Date ? val : new Date(val)
-  if (Number.isNaN(d.getTime())) return null
+  const d = parseDateLike(val)
+  if (!d) return null
   return d.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  })
+}
+
+/** Short date + time in the viewer's local timezone (respects DST). */
+export function formatLocalDateTime(
+  dateString: string | Date | null | undefined
+): string {
+  const d = parseDateLike(dateString)
+  if (!d) return ""
+  return d.toLocaleString("en-US", {
+    month: "numeric",
+    day: "numeric",
+    year: "2-digit",
     hour: "numeric",
     minute: "2-digit",
     hour12: true,
@@ -78,9 +127,8 @@ export function formatTimeOnly(
 export function formatDateOnly(
   val: string | Date | null | undefined
 ): string {
-  if (val == null || val === "") return ""
-  const d = val instanceof Date ? val : new Date(val)
-  if (Number.isNaN(d.getTime())) return ""
+  const d = parseDateLike(val)
+  if (!d) return ""
   return d.toLocaleDateString("en-US", {
     month: "numeric",
     day: "numeric",

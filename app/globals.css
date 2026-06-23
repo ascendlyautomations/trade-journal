@@ -23,6 +23,14 @@
   }
 }
 
+/* Reply jump-to-original highlight */
+.reply-target-highlight {
+  outline: 2px solid rgb(96 165 250 / 0.75);
+  outline-offset: 2px;
+  background-color: rgb(59 130 246 / 0.12);
+  transition: outline-color 0.2s ease, background-color 0.2s ease;
+}
+
 /* ------------------ GLOBAL RESET + BACKGROUND ------------------ */
 html,
 body {

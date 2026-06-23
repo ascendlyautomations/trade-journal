@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabaseClient"
-import { compressImage } from "@/lib/compressImage"
+import { compressScreenshot } from "@/lib/compressImage"
 import { ensureManualUserAccountRegistered } from "@/lib/ensureManualUserAccount"
 import { isProActive } from "@/lib/subscription"
 import { insertCsvTradesWithAccount } from "@/lib/insertCsvTradesWithAccount"
@@ -656,7 +656,7 @@ export default function InputTradeForm({
     if (image) {
       let uploadFile: File = image
       if (image.type?.startsWith("image/")) {
-        uploadFile = await compressImage(image)
+        uploadFile = await compressScreenshot(image)
       }
       const fileName = `${user.id}/${Date.now()}-${uploadFile.name}`
       const { error: upErr } = await supabase.storage

@@ -28,14 +28,28 @@ import DetailModalImage from "../../components/ui/DetailModalImage"
 import ImageLightbox from "../../components/ui/ImageLightbox"
 import { EMPTY_LIKE_META } from "../../components/feed/FeedPostCard"
 import FeedCommentItem from "../../components/feed/FeedCommentItem"
+import ReplyComposerStrip from "@/app/components/replies/ReplyComposerStrip"
+import {
+  buildReplyTargetFromComment,
+  indexCommentsById,
+  resolveParentComment,
+  type ReplyTarget,
+} from "@/lib/replyReference"
 import EngagementCountButton from "../../components/EngagementCountButton"
 import { CommentFocusCompactStrip } from "@/app/components/comments/CommentFocusCompactStrip"
 import MobileCommentFocusLayout from "@/app/components/comments/MobileCommentFocusLayout"
 import {
   FEED_COMMENT_INSERT_SELECT,
-  FEED_COMMENTS_SELECT,
   FEED_POSTS_SELECT,
+  queryFeedComments,
+  withInsertedParentCommentId,
 } from "../../components/feed/feedPostHelpers"
+import {
+  deleteFeedComment,
+  filterCommentsAfterDelete,
+} from "@/lib/deleteComment"
+import { handleSupabaseError } from "@/lib/handleSupabaseError"
+import { feedbackPresets, persistentError } from "@/lib/feedbackPresets"
 import {
   LineChart,
   Line,
@@ -68,8 +82,6 @@ import { formatEST } from "@/lib/formatEST"
 import { createUserRoom } from "@/lib/createUserRoom"
 import { loadFollowUiSnapshot } from "@/lib/followActions"
 import FollowButton from "../../components/FollowButton"
-import { handleSupabaseError } from "@/lib/handleSupabaseError"
-import { feedbackPresets, persistentError } from "@/lib/feedbackPresets"
 import { logSupabaseError } from "@/lib/logSupabaseError"
 import { ensureDmConversation } from "@/lib/dmConversation"
 import { dmThreadPath } from "@/lib/messageRoutes"
@@ -559,6 +571,8 @@ function PostCard({
   onCommentChange,
   onCommentSubmit,
   commentSubmitting,
+  currentUserId,
+  onDeleteComment,
   onOpenDetail,
   inDetailModal = false,
   disableOpen,
@@ -584,8 +598,10 @@ function PostCard({
   comments?: any[]
   commentText?: string
   onCommentChange?: (value: string) => void
-  onCommentSubmit?: () => void
+  onCommentSubmit?: (parentCommentId?: string | null) => void
   commentSubmitting?: boolean
+  currentUserId?: string | null
+  onDeleteComment?: (comment: any) => Promise<boolean>
   onOpenDetail?: () => void
   inDetailModal?: boolean
   disableOpen?: boolean
@@ -593,14 +609,22 @@ function PostCard({
   onSharePost?: (post: any) => void
 }) {
   const commentsScrollRef = useRef<HTMLDivElement>(null)
+  const [replyTarget, setReplyTarget] = useState<ReplyTarget | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<any>(null)
+  const [deleteBusy, setDeleteBusy] = useState(false)
   const [commentsFocused, setCommentsFocused] = useState(
     Boolean(scrollToCommentsOnMount && showCommentsPanel)
   )
   const imgSrc = profileWallImageSrc(post.image_url)
+  const postCommentInputId = `profile-comment-input-${post.id}`
 
   useEffect(() => {
     if (scrollToCommentsOnMount && showCommentsPanel) setCommentsFocused(true)
   }, [scrollToCommentsOnMount, showCommentsPanel, post.id])
+
+  useEffect(() => {
+    setReplyTarget(null)
+  }, [post.id])
 
   useEffect(() => {
     if (!showCommentsPanel || !scrollToCommentsOnMount) return
@@ -616,40 +640,79 @@ function PostCard({
     })
   }, [inDetailModal, post.id, scrollToCommentsOnMount, showCommentsPanel])
 
+  const commentsById = useMemo(
+    () => indexCommentsById(comments || []),
+    [comments]
+  )
+
   const commentsList = (
     <div className="space-y-2 text-sm text-gray-300">
       {(comments || []).map((c: any) => (
-        <FeedCommentItem key={c.id} comment={c} />
+        <FeedCommentItem
+          key={c.id}
+          comment={c}
+          parentComment={resolveParentComment(c, commentsById)}
+          currentUserId={currentUserId}
+          onReply={(comment) => {
+            setReplyTarget(buildReplyTargetFromComment(comment))
+            const input = document.getElementById(postCommentInputId)
+            if (input instanceof HTMLInputElement) input.focus()
+          }}
+          onRequestDelete={
+            onDeleteComment
+              ? (comment) =>
+                  setPendingDelete({
+                    ...comment,
+                    post_id: comment.post_id ?? post.id,
+                  })
+              : undefined
+          }
+          deleteMenuClassName="z-[9100]"
+        />
       ))}
     </div>
   )
 
   const commentsComposer = (
-    <div className="flex gap-2">
+    <div className="flex flex-col gap-2">
+      {replyTarget ? (
+        <ReplyComposerStrip
+          authorName={replyTarget.authorName}
+          preview={replyTarget.preview}
+          onCancel={() => setReplyTarget(null)}
+        />
+      ) : null}
+      <div className="flex gap-2">
       <input
+        id={postCommentInputId}
         value={commentText || ""}
         onChange={(e) => onCommentChange?.(e.target.value)}
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => {
           if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault()
-            if (!commentSubmitting) onCommentSubmit?.()
+            if (!commentSubmitting) {
+              onCommentSubmit?.(replyTarget?.id ?? null)
+              setReplyTarget(null)
+            }
           }
         }}
-        placeholder="Add a comment..."
+        placeholder={replyTarget ? "Write a reply…" : "Add a comment..."}
         className="flex-1 rounded-lg border border-white/10 bg-[#0f172a] px-3 py-2 text-sm text-white placeholder:text-gray-500"
       />
       <button
         type="button"
         onClick={(e) => {
           e.stopPropagation()
-          onCommentSubmit?.()
+          onCommentSubmit?.(replyTarget?.id ?? null)
+          setReplyTarget(null)
         }}
         disabled={commentSubmitting || !(commentText || "").trim()}
         className="rounded-lg bg-blue-500 px-3 py-2 text-sm text-white disabled:opacity-40"
       >
         Post
       </button>
+      </div>
     </div>
   )
 
@@ -855,6 +918,41 @@ function PostCard({
     </div>
   )
 
+  const deleteModal = onDeleteComment ? (
+    <ConfirmModal
+      open={pendingDelete != null}
+      title="Delete Comment?"
+      description="This action cannot be undone."
+      confirmLabel="Delete"
+      destructive
+      loading={deleteBusy}
+      onCancel={() => {
+        if (!deleteBusy) setPendingDelete(null)
+      }}
+      onConfirm={async () => {
+        if (!pendingDelete || !onDeleteComment) return
+        console.log("[comment-delete] confirm", {
+          commentId: String(pendingDelete.id),
+          postId: pendingDelete.post_id ?? post.id,
+        })
+        setDeleteBusy(true)
+        try {
+          const ok = await onDeleteComment({
+            ...pendingDelete,
+            post_id: pendingDelete.post_id ?? post.id,
+          })
+          console.log("[comment-delete] handler finished", {
+            commentId: String(pendingDelete.id),
+            ok,
+          })
+          if (ok) setPendingDelete(null)
+        } finally {
+          setDeleteBusy(false)
+        }
+      }}
+    />
+  ) : null
+
   if (inDetailModal) {
     const postCommentsPanel = showCommentsPanel ? (
       <div
@@ -872,39 +970,43 @@ function PostCard({
     ) : null
 
     return (
-      <article className={cardShellClass}>
-        {imgSrc ? (
-          <div className="hidden md:flex md:min-h-0 md:flex-1 md:items-center md:justify-center md:border-r md:border-white/10 md:bg-black/40 md:p-3">
-            {postImageBlock}
-          </div>
-        ) : null}
+      <>
+        <article className={cardShellClass}>
+          {imgSrc ? (
+            <div className="hidden md:flex md:min-h-0 md:flex-1 md:items-center md:justify-center md:border-r md:border-white/10 md:bg-black/40 md:p-3">
+              {postImageBlock}
+            </div>
+          ) : null}
 
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:w-[400px] md:shrink-0 lg:w-[420px]">
-          <MobileCommentFocusLayout
-            commentsFocused={commentsFocused}
-            header={postAuthorHeader}
-            compactHeader={
-              <CommentFocusCompactStrip
-                userId={String(profile.id ?? "")}
-                username={profile.username}
-                avatarUrl={profile.avatar_url}
-                timestamp={post.created_at}
-                onExpand={() => setCommentsFocused(false)}
-              />
-            }
-            mobileMedia={postImageBlock ?? undefined}
-            engagement={postEngagementRow}
-            engagementClassName="shrink-0 border-b border-white/10 px-4 py-2"
-            collapsibleContent={postCollapsibleContent}
-            comments={postCommentsPanel}
-          />
-        </div>
-      </article>
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:w-[400px] md:shrink-0 lg:w-[420px]">
+            <MobileCommentFocusLayout
+              commentsFocused={commentsFocused}
+              header={postAuthorHeader}
+              compactHeader={
+                <CommentFocusCompactStrip
+                  userId={String(profile.id ?? "")}
+                  username={profile.username}
+                  avatarUrl={profile.avatar_url}
+                  timestamp={post.created_at}
+                  onExpand={() => setCommentsFocused(false)}
+                />
+              }
+              mobileMedia={postImageBlock ?? undefined}
+              engagement={postEngagementRow}
+              engagementClassName="shrink-0 border-b border-white/10 px-4 py-2"
+              collapsibleContent={postCollapsibleContent}
+              comments={postCommentsPanel}
+            />
+          </div>
+        </article>
+        {deleteModal}
+      </>
     )
   }
 
   return (
-    <article
+    <>
+      <article
       className={cardShellClass}
       role={onOpenDetail && !disableOpen ? "button" : undefined}
       tabIndex={onOpenDetail && !disableOpen ? 0 : undefined}
@@ -938,6 +1040,8 @@ function PostCard({
 
       {postContentBlock}
     </article>
+      {deleteModal}
+    </>
   )
 }
 
@@ -1740,11 +1844,13 @@ function ProfilePageContent() {
     const ids = postList.map((p) => p.id)
     const [{ data: likesRows }, { data: commentsRows }] = await Promise.all([
       supabase.from("likes").select("post_id, user_id").in("post_id", ids),
-      supabase
-        .from("comments")
-        .select("*, profiles(username)")
-        .in("post_id", ids)
-        .order("created_at", { ascending: true }),
+      queryFeedComments((select) =>
+        supabase
+          .from("comments")
+          .select(select)
+          .in("post_id", ids)
+          .order("created_at", { ascending: true })
+      ),
     ])
 
     const likesMap: Record<string, { count: number; liked: boolean }> = {}
@@ -1819,7 +1925,11 @@ function ProfilePageContent() {
     }
   }
 
-  async function submitComment(id: string, type: "post" | "trade") {
+  async function submitComment(
+    id: string,
+    type: "post" | "trade",
+    parentCommentId?: string | null
+  ) {
     if (!currentUserId || type !== "post") return
     const key = String(id)
     const text = (commentDraft[key] || "").trim()
@@ -1830,22 +1940,84 @@ function ProfilePageContent() {
     setCommentSubmitting((s) => ({ ...s, [key]: true }))
 
     try {
+    const insertPayload: Record<string, unknown> = {
+      post_id: key,
+      user_id: currentUserId,
+      content: text,
+    }
+    if (parentCommentId) {
+      insertPayload.parent_comment_id = parentCommentId
+    }
+
     const { data, error } = await supabase
       .from("comments")
-      .insert({
-        post_id: key,
-        user_id: currentUserId,
-        content: text,
-      })
-      .select("*, profiles(username)")
+      .insert(insertPayload)
+      .select(FEED_COMMENT_INSERT_SELECT)
       .single()
     if (error) return console.error(error)
-    setCommentsByPost((prev) => ({ ...prev, [key]: [...(prev[key] || []), data] }))
+    const insertedRow = withInsertedParentCommentId(data, parentCommentId)
+    setCommentsByPost((prev) => ({ ...prev, [key]: [...(prev[key] || []), insertedRow] }))
     setCommentDraft((prev) => ({ ...prev, [key]: "" }))
     } finally {
       commentSubmittingRef.current.delete(key)
       setCommentSubmitting((s) => ({ ...s, [key]: false }))
     }
+  }
+
+  async function deleteComment(comment: any) {
+    if (!currentUserId) {
+      console.warn("[comment-delete] aborted: no user")
+      return false
+    }
+    if (String(comment.user_id) !== String(currentUserId)) {
+      console.warn("[comment-delete] aborted: not author", {
+        commentUserId: comment.user_id,
+        currentUserId,
+      })
+      return false
+    }
+
+    const postId = String(comment.post_id ?? "")
+    if (!postId) {
+      console.error("[comment-delete] aborted: missing post_id", comment)
+      return false
+    }
+
+    const { error, deleted } = await deleteFeedComment(supabase, {
+      id: String(comment.id),
+      user_id: currentUserId,
+      content: comment.content,
+      post_id: postId,
+    })
+
+    if (error || !deleted) {
+      console.error("[comment-delete] failed", {
+        commentId: String(comment.id),
+        userId: currentUserId,
+        postId,
+        error,
+      })
+      showPopup({ type: "error", message: handleSupabaseError(error) })
+      return false
+    }
+
+    setCommentsByPost((prev) => ({
+      ...prev,
+      [postId]: filterCommentsAfterDelete(prev[postId] ?? [], String(comment.id)),
+    }))
+
+    if (feedDeepLinkPost && String(feedDeepLinkPost.id) === postId) {
+      setFeedDeepLinkComments((prev) =>
+        filterCommentsAfterDelete(prev, String(comment.id))
+      )
+    }
+
+    console.log("[comment-delete] local state updated", {
+      commentId: String(comment.id),
+      postId,
+    })
+
+    return true
   }
 
   async function handleDeletePost(postId: string) {
@@ -2007,11 +2179,13 @@ function ProfilePageContent() {
     async (postId: string, openComments = false) => {
       const [{ data: likesRows }, { data: commentsRows }] = await Promise.all([
         supabase.from("likes").select("post_id, user_id").eq("post_id", postId),
-        supabase
-          .from("comments")
-          .select(FEED_COMMENTS_SELECT)
-          .eq("post_id", postId)
-          .order("created_at", { ascending: true }),
+        queryFeedComments((select) =>
+          supabase
+            .from("comments")
+            .select(select)
+            .eq("post_id", postId)
+            .order("created_at", { ascending: true })
+        ),
       ])
 
       let count = 0
@@ -2990,8 +3164,12 @@ function ProfilePageContent() {
                           onCommentChange={(value) =>
                             setCommentDraft((prev) => ({ ...prev, [key]: value }))
                           }
-                          onCommentSubmit={() => void submitComment(key, "post")}
+                          onCommentSubmit={(parentCommentId) =>
+                            void submitComment(key, "post", parentCommentId)
+                          }
                           commentSubmitting={!!commentSubmitting[key]}
+                          currentUserId={currentUserId}
+                          onDeleteComment={deleteComment}
                           onSharePost={
                             currentUserId ? handleSharePost : undefined
                           }
@@ -3540,8 +3718,12 @@ function ProfilePageContent() {
                 [String(selectedPostDetail.id)]: value,
               }))
             }
-            onCommentSubmit={() => void submitComment(String(selectedPostDetail.id), "post")}
+            onCommentSubmit={(parentCommentId) =>
+              void submitComment(String(selectedPostDetail.id), "post", parentCommentId)
+            }
             commentSubmitting={!!commentSubmitting[String(selectedPostDetail.id)]}
+            currentUserId={currentUserId}
+            onDeleteComment={deleteComment}
             disableOpen
             onImageClick={setScreenshotLightboxUrl}
             onSharePost={currentUserId ? handleSharePost : undefined}
@@ -3561,6 +3743,7 @@ function ProfilePageContent() {
           onClose={() => setFeedDeepLinkPost(null)}
           onToggleLike={toggleFeedDeepLinkLike}
           onSubmitComment={submitFeedDeepLinkComment}
+          onDeleteComment={deleteComment}
           onSharePost={currentUserId ? handleSharePost : undefined}
         />
       ) : null}
