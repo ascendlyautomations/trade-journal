@@ -90,7 +90,7 @@ await page.locator(".hidden.md\\:flex .account-dropdown").click()
 await page.locator(".hidden.md\\:flex .account-dropdown").getByText("E2E Test").click()
 await page.getByPlaceholder("e.g. MNQ, ES, AAPL").fill("ES")
 await page.locator('label:has-text("P&L")').locator("..").locator("input").fill("100")
-await page.getByRole("button", { name: /^Add Trade$/i }).click()
+await page.getByRole("button", { name: /^Save Trade$/i }).click()
 await page.waitForTimeout(6000)
 
 const gsModal = await page.locator('text=Getting Started Progress').count()

@@ -665,7 +665,19 @@ function FeedPageContent() {
         pageRef.current = nextPage
         setPage(nextPage)
       } catch (error) {
-        console.error("[feed] loadPosts:", error)
+        const supabaseError =
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          "message" in error
+        if (supabaseError) {
+          console.error(
+            "[feed] loadPosts FULL ERROR",
+            JSON.stringify(error, null, 2)
+          )
+        } else {
+          console.error("[feed] loadPosts FULL ERROR", error)
+        }
       } finally {
         loadingRef.current = false
         setLoading(false)

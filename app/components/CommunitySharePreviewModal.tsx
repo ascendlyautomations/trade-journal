@@ -12,7 +12,10 @@ type CommunitySharePreviewModalProps = {
   onPostTrade: () => void
   submitting?: boolean
   postTradeDisabled?: boolean
+  title?: string
+  subtitle?: string
   postTradeLabel?: string
+  submittingLabel?: string
   post: Record<string, unknown> | null
   user: { id: string } | null
 }
@@ -23,7 +26,10 @@ export default function CommunitySharePreviewModal({
   onPostTrade,
   submitting = false,
   postTradeDisabled = false,
+  title = "Preview Post",
+  subtitle = "This is how your trade will appear in the feed.",
   postTradeLabel = "Post Trade",
+  submittingLabel = "Saving…",
   post,
   user,
 }: CommunitySharePreviewModalProps) {
@@ -67,10 +73,10 @@ export default function CommunitySharePreviewModal({
               id="community-share-preview-title"
               className="text-base font-semibold text-white"
             >
-              Community post preview
+              {title}
             </h2>
             <p className="text-xs text-white/50">
-              This is how your trade will appear in the feed.
+              {subtitle}
             </p>
           </div>
           <button
@@ -114,7 +120,7 @@ export default function CommunitySharePreviewModal({
             onClick={onPostTrade}
             className="w-full rounded-lg bg-green-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
           >
-            {submitting ? "Saving…" : postTradeLabel}
+            {submitting ? submittingLabel : postTradeLabel}
           </button>
         </div>
       </div>

@@ -7,6 +7,7 @@ import {
   Fragment,
   useCallback,
   useEffect,
+  useMemo,
   useState,
   useRef,
   type ChangeEvent,
@@ -59,10 +60,21 @@ import ReplyReferenceBlock from "@/app/components/replies/ReplyReferenceBlock"
 import {
   buildReplyTargetFromMessage,
   dmMessageElementId,
+  indexCommentsById,
+  resolveParentMessage,
   scrollToReplyTarget,
+  type ReplyParentMessageLike,
   type ReplyTarget,
 } from "@/lib/replyReference"
-import { DM_MESSAGE_PARENT_EMBED } from "@/lib/replyReferenceSelects"
+
+/** Includes parent_message_id via *; no self-referencing parent embed (PGRST200). */
+const DM_MESSAGE_SELECT = `
+  *,
+  profiles!sender_id (
+    username,
+    avatar_url
+  )
+`
 
 type ConversationPageAccess =
   | "loading"
@@ -118,19 +130,21 @@ function postScreenshotSrc(url: string | null | undefined): string | null {
 
 function DmReplyReference({
   message,
+  parentMessage,
   onJumpToParent,
   onUnavailable,
 }: {
   message: any
+  parentMessage?: ReplyParentMessageLike | null
   onJumpToParent: (parentId: string) => boolean
   onUnavailable: () => void
 }) {
   if (!message.parent_message_id) return null
-  const parentId = String(message.parent?.id ?? message.parent_message_id)
+  const parentId = String(parentMessage?.id ?? message.parent_message_id)
   return (
     <ReplyReferenceBlock
       parentMessageId={message.parent_message_id}
-      parentMessage={message.parent}
+      parentMessage={parentMessage}
       targetElementId={dmMessageElementId(parentId)}
       onJumpToParent={() => onJumpToParent(parentId)}
       onUnavailable={onUnavailable}
@@ -231,6 +245,7 @@ function TradeMessageBubble({
   onReply,
   onJumpToParent,
   onReplyUnavailable,
+  parentMessage,
 }: {
   message: any
   isMe: boolean
@@ -243,6 +258,7 @@ function TradeMessageBubble({
   onReply: (message: any) => void
   onJumpToParent: (parentId: string) => boolean
   onReplyUnavailable: () => void
+  parentMessage?: ReplyParentMessageLike | null
 }) {
   if (message.deleted_for_everyone) {
     return (
@@ -284,6 +300,7 @@ function TradeMessageBubble({
           beforeCardContent={
             <DmReplyReference
               message={message}
+              parentMessage={parentMessage}
               onJumpToParent={onJumpToParent}
               onUnavailable={onReplyUnavailable}
             />
@@ -306,6 +323,7 @@ function PostMessageBubble({
   onReply,
   onJumpToParent,
   onReplyUnavailable,
+  parentMessage,
 }: {
   message: any
   isMe: boolean
@@ -318,6 +336,7 @@ function PostMessageBubble({
   onReply: (message: any) => void
   onJumpToParent: (parentId: string) => boolean
   onReplyUnavailable: () => void
+  parentMessage?: ReplyParentMessageLike | null
 }) {
   const [post, setPost] = useState<any>(null)
   const [postLoading, setPostLoading] = useState(false)
@@ -402,6 +421,7 @@ function PostMessageBubble({
         <div className="rounded-xl border border-gray-700 bg-gradient-to-br from-[#0f172a] to-[#1e293b] p-4 shadow-lg">
           <DmReplyReference
             message={message}
+            parentMessage={parentMessage}
             onJumpToParent={onJumpToParent}
             onUnavailable={onReplyUnavailable}
           />
@@ -672,16 +692,7 @@ export default function DMPage() {
             if (raw.id) {
               const { data } = await supabase
                 .from("messages")
-                .select(
-                  `
-                  *,
-                  ${DM_MESSAGE_PARENT_EMBED},
-                  profiles!sender_id (
-                    username,
-                    avatar_url
-                  )
-                `
-                )
+                .select(DM_MESSAGE_SELECT)
                 .eq("id", raw.id)
                 .maybeSingle()
               if (data) row = data
@@ -932,16 +943,7 @@ export default function DMPage() {
 
     const { data: fetched } = await supabase
       .from("messages")
-      .select(
-        `
-        *,
-        ${DM_MESSAGE_PARENT_EMBED},
-        profiles!sender_id (
-          username,
-          avatar_url
-        )
-      `
-      )
+      .select(DM_MESSAGE_SELECT)
       .eq("conversation_id", conversationId)
       .order("created_at", { ascending: true })
 
@@ -1432,6 +1434,8 @@ export default function DMPage() {
     members,
     Boolean(conversation?.is_group)
   )
+
+  const messagesById = useMemo(() => indexCommentsById(messages), [messages])
   const lastMessage = messages[messages.length - 1]
   const allSeen =
     !!lastMessage &&
@@ -1565,6 +1569,8 @@ export default function DMPage() {
                 )
               }
 
+              const parentMessage = resolveParentMessage(message, messagesById)
+
               const prevMessage = messages[i - 1]
               const isMe = message.sender_id === user?.id
               const isGroup = Boolean(conversation?.is_group)
@@ -1619,6 +1625,7 @@ export default function DMPage() {
                         onReply={startReplyToMessage}
                         onJumpToParent={scrollToDmMessage}
                         onReplyUnavailable={notifyReplyUnavailable}
+                        parentMessage={parentMessage}
                       />
                       {showTimestamp ? (
                         <DmClusterTimestamp
@@ -1657,6 +1664,7 @@ export default function DMPage() {
                         onReply={startReplyToMessage}
                         onJumpToParent={scrollToDmMessage}
                         onReplyUnavailable={notifyReplyUnavailable}
+                        parentMessage={parentMessage}
                       />
                       {showTimestamp ? (
                         <DmClusterTimestamp
@@ -1717,6 +1725,7 @@ export default function DMPage() {
                             <>
                               <DmReplyReference
                                 message={message}
+                                parentMessage={parentMessage}
                                 onJumpToParent={scrollToDmMessage}
                                 onUnavailable={notifyReplyUnavailable}
                               />

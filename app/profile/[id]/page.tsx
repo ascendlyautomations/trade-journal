@@ -44,6 +44,13 @@ import {
   queryFeedComments,
   withInsertedParentCommentId,
 } from "../../components/feed/feedPostHelpers"
+import FeedRoomShareCard from "../../components/feed/FeedRoomShareCard"
+import {
+  buildRoomSharePostInsert,
+  isRoomSharePost,
+  pendingRoomShareFromRoom,
+  type PendingRoomShareDraft,
+} from "@/lib/roomSharePost"
 import {
   deleteFeedComment,
   filterCommentsAfterDelete,
@@ -972,7 +979,15 @@ function PostCard({
     return (
       <>
         <article className={cardShellClass}>
-          {imgSrc ? (
+          {isRoomSharePost(post) ? (
+            <div className="hidden md:flex md:min-h-0 md:flex-1 md:items-center md:justify-center md:border-r md:border-white/10 md:bg-black/40 md:p-3">
+              <FeedRoomShareCard
+                post={post}
+                viewerUserId={currentUserId ?? null}
+                className="w-full max-w-md"
+              />
+            </div>
+          ) : imgSrc ? (
             <div className="hidden md:flex md:min-h-0 md:flex-1 md:items-center md:justify-center md:border-r md:border-white/10 md:bg-black/40 md:p-3">
               {postImageBlock}
             </div>
@@ -991,7 +1006,17 @@ function PostCard({
                   onExpand={() => setCommentsFocused(false)}
                 />
               }
-              mobileMedia={postImageBlock ?? undefined}
+              mobileMedia={
+                isRoomSharePost(post) ? (
+                  <FeedRoomShareCard
+                    post={post}
+                    viewerUserId={currentUserId ?? null}
+                    className="mx-4 my-3"
+                  />
+                ) : (
+                  postImageBlock ?? undefined
+                )
+              }
               engagement={postEngagementRow}
               engagementClassName="shrink-0 border-b border-white/10 px-4 py-2"
               collapsibleContent={postCollapsibleContent}
@@ -1023,7 +1048,14 @@ function PostCard({
     >
       {postAuthorHeader}
 
-      {imgSrc ? (
+      {isRoomSharePost(post) ? (
+        <div className="p-4" onClick={(e) => e.stopPropagation()}>
+          <FeedRoomShareCard
+            post={post}
+            viewerUserId={currentUserId ?? null}
+          />
+        </div>
+      ) : imgSrc ? (
         <div className="w-full bg-black/30">
           <img
             src={imgSrc}
@@ -1140,6 +1172,8 @@ function ProfilePageContent() {
   const [postImagePreviewUrl, setPostImagePreviewUrl] = useState<string | null>(
     null
   )
+  const [pendingRoomShare, setPendingRoomShare] =
+    useState<PendingRoomShareDraft | null>(null)
   const [creatingPost, setCreatingPost] = useState(false)
   const [postDetailFocusComments, setPostDetailFocusComments] = useState(false)
   const [tradeDetailFocusComments, setTradeDetailFocusComments] = useState(false)
@@ -1471,6 +1505,7 @@ function ProfilePageContent() {
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
         setShowCreatePost(false)
+        setPendingRoomShare(null)
         setEditingPost(null)
         setSelectedAchievementImage(null)
         setSelectedTradeDetail(null)
@@ -1761,8 +1796,8 @@ function ProfilePageContent() {
     if (creatingPostRef.current || creatingPost) return
 
     const text = postContent.trim()
-    if (!text && !postImage) {
-      showPopup({ type: "warning", message: "Add some text or an image." })
+    if (!text && !postImage && !pendingRoomShare) {
+      showPopup({ type: "warning", message: "Add some text, an image, or a room share." })
       return
     }
 
@@ -1795,11 +1830,20 @@ function ProfilePageContent() {
         : null
     }
 
-    const { error } = await supabase.from("profile_posts").insert({
-      user_id: currentUserId,
-      content: text || null,
-      image_url: imageUrl,
-    })
+    const insertPayload = pendingRoomShare
+      ? buildRoomSharePostInsert(
+          currentUserId,
+          pendingRoomShare,
+          text,
+          imageUrl
+        )
+      : {
+          user_id: currentUserId,
+          content: text || null,
+          image_url: imageUrl,
+        }
+
+    const { error } = await supabase.from("profile_posts").insert(insertPayload)
 
     if (error) {
       console.error(error)
@@ -1812,6 +1856,7 @@ function ProfilePageContent() {
     setShowCreatePost(false)
     setPostContent("")
     setPostImage(null)
+    setPendingRoomShare(null)
 
     const { data } = await supabase
       .from("profile_posts")
@@ -2359,9 +2404,56 @@ function ProfilePageContent() {
     if (searchParams.get("createPost") !== "1") return
     if (String(profile.id) !== String(currentUserId)) return
 
-    setActiveTab("posts")
-    openCreatePostModal()
-    clearProfileQueryParams()
+    const roomId = searchParams.get("shareRoom")?.trim() ?? ""
+
+    async function openComposer() {
+      setActiveTab("posts")
+
+      if (roomId) {
+        let draft: PendingRoomShareDraft | null = null
+
+        try {
+          const cached = sessionStorage.getItem("pendingRoomShareDraft")
+          if (cached) {
+            const parsed = JSON.parse(cached) as PendingRoomShareDraft
+            if (parsed?.roomId === roomId) {
+              draft = parsed
+              sessionStorage.removeItem("pendingRoomShareDraft")
+            }
+          }
+        } catch {
+          // ignore invalid session draft
+        }
+
+        if (!draft) {
+          const { data, error } = await supabase
+            .from("rooms")
+            .select("id, name, description, image_url")
+            .eq("id", roomId)
+            .maybeSingle()
+
+          if (error || !data) {
+            showPopup(
+              persistentError(
+                "Room Unavailable",
+                "Could not load this room for sharing."
+              )
+            )
+            clearProfileQueryParams()
+            return
+          }
+
+          draft = pendingRoomShareFromRoom(data)
+        }
+
+        setPendingRoomShare(draft)
+      }
+
+      openCreatePostModal()
+      clearProfileQueryParams()
+    }
+
+    void openComposer()
   }, [
     clearProfileQueryParams,
     currentUserId,
@@ -2369,6 +2461,7 @@ function ProfilePageContent() {
     openCreatePostModal,
     profile?.id,
     searchParams,
+    showPopup,
   ])
 
   const toggleFeedDeepLinkLike = useCallback(
@@ -3515,6 +3608,7 @@ function ProfilePageContent() {
               setShowCreatePost(false)
               setPostContent("")
               setPostImage(null)
+              setPendingRoomShare(null)
             }}
           >
             <div
@@ -3538,6 +3632,7 @@ function ProfilePageContent() {
                     setShowCreatePost(false)
                     setPostContent("")
                     setPostImage(null)
+                    setPendingRoomShare(null)
                   }}
                   className="rounded p-1.5 text-gray-400 hover:bg-white/10 hover:text-white"
                   aria-label="Close"
@@ -3549,10 +3644,28 @@ function ProfilePageContent() {
               <textarea
                 value={postContent}
                 onChange={(e) => setPostContent(e.target.value)}
-                placeholder="What's on your mind?"
+                placeholder={
+                  pendingRoomShare
+                    ? "Add a caption for your room share (optional)"
+                    : "What's on your mind?"
+                }
                 rows={4}
                 className="mb-3 w-full resize-none rounded-lg border border-white/10 bg-[#020617] p-2 text-sm text-white placeholder:text-gray-500"
               />
+
+              {pendingRoomShare ? (
+                <div className="mb-3">
+                  <FeedRoomShareCard
+                    post={{
+                      room_id: pendingRoomShare.roomId,
+                      room_name: pendingRoomShare.roomName,
+                      room_logo: pendingRoomShare.roomLogo,
+                      room_description: pendingRoomShare.roomDescription,
+                    }}
+                    viewerUserId={currentUserId}
+                  />
+                </div>
+              ) : null}
 
               {postImagePreviewUrl ? (
                 <div className="mb-3 flex flex-col items-center">

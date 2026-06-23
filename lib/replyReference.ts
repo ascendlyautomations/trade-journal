@@ -184,3 +184,12 @@ export function resolveParentComment<T extends ReplyParentCommentLike>(
   if (!parentId) return undefined
   return byId.get(String(parentId))
 }
+
+export function resolveParentMessage<T extends ReplyParentMessageLike>(
+  message: { parent_message_id?: string | null },
+  byId: Map<string, T>
+): T | undefined {
+  const parentId = message.parent_message_id
+  if (!parentId) return undefined
+  return byId.get(String(parentId))
+}

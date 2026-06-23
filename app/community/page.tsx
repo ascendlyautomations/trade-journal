@@ -35,11 +35,12 @@ import ReplyComposerStrip from "@/app/components/replies/ReplyComposerStrip"
 import ReplyReferenceBlock from "@/app/components/replies/ReplyReferenceBlock"
 import {
   buildReplyTargetFromMessage,
+  indexCommentsById,
+  resolveParentMessage,
   roomMessageElementId,
   scrollToReplyTarget,
   type ReplyTarget,
 } from "@/lib/replyReference"
-import { ROOM_MESSAGE_PARENT_EMBED } from "@/lib/replyReferenceSelects"
 import {
   anyRoomChannelNotificationsEnabled,
   fetchRoomChannelNotificationPrefs,
@@ -51,6 +52,7 @@ import { isBetaAnnouncementsSection } from "@/lib/betaHub"
 import { isProfileUuidSegment } from "@/lib/profileRoutes"
 import { canEditRoomMessage } from "@/lib/roomModeration"
 import RoomMessageActionsMenu from "../components/RoomMessageActionsMenu"
+import ShareRoomMenu from "../components/ShareRoomMenu"
 import SharedTradeMessageCard from "../components/SharedTradeMessageCard"
 import { getSharedTradeViewHref } from "@/lib/sharedContentNavigation"
 import {
@@ -79,7 +81,6 @@ type RoomMessage = {
   pinned?: boolean | null
   section_id?: string | null
   parent_message_id?: string | null
-  parent?: RoomMessage | null
   type?: string | null
   trade_id?: string | null
   content: string
@@ -101,7 +102,6 @@ type RoomMessage = {
 /** PostgREST embed: disambiguate trade_id vs pinned_trade_id FKs (PGRST201). */
 const ROOM_MESSAGE_SELECT_SHAPE = `
   *,
-  ${ROOM_MESSAGE_PARENT_EMBED},
   trades!room_messages_trade_id_fkey (
     id,
     ticker,
@@ -128,7 +128,6 @@ const ROOM_MESSAGE_REALTIME_SELECT = `
   content,
   image_url,
   created_at,
-  ${ROOM_MESSAGE_PARENT_EMBED},
   trades!room_messages_trade_id_fkey (
     id,
     image_url,
@@ -688,6 +687,11 @@ function CommunityContent() {
         channelNotificationPrefs
       ),
     [roomNotificationsEnabled, sections, channelNotificationPrefs]
+  )
+
+  const messagesById = useMemo(
+    () => indexCommentsById([...messages, ...pinnedMessages]),
+    [messages, pinnedMessages]
   )
 
   async function openRoomNotificationSettings() {
@@ -2477,28 +2481,18 @@ function CommunityContent() {
                     >
                       ⚙️
                     </button>
-                    <button
-                      type="button"
-                      aria-label="Share invite"
-                      onClick={() => setShowInviteModal(true)}
-                      className="flex items-center justify-center rounded-md p-2 text-gray-300 hover:bg-white/10 hover:text-white"
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        className="h-4 w-4 text-blue-300"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        aria-hidden
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M12 16V4m0 0l-4 4m4-4l4 4M4 20h16"
-                        />
-                      </svg>
-                    </button>
+                    <ShareRoomMenu
+                      room={selectedRoom!}
+                      inviteLink={inviteLinkDisplay || inviteLink}
+                      user={
+                        user?.id
+                          ? { id: user.id, username: profile?.username }
+                          : null
+                      }
+                      onCopyLink={() =>
+                        showPopup(feedbackPresets.roomLinkCopied())
+                      }
+                    />
                   </div>
                 ) : null}
                 {!isOwner && selectedRoomId && !needsJoin ? (
@@ -2658,27 +2652,20 @@ function CommunityContent() {
                         >
                           ⚙️
                         </button>
-                        <button
-                          type="button"
-                          aria-label="Share invite"
-                          onClick={() => setShowInviteModal(true)}
-                          className="flex items-center justify-center rounded-md bg-white/10 p-2 hover:bg-white/20"
-                        >
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            className="h-5 w-5 text-blue-300"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M12 16V4m0 0l-4 4m4-4l4 4M4 20h16"
-                            />
-                          </svg>
-                        </button>
+                        <ShareRoomMenu
+                          room={selectedRoom!}
+                          inviteLink={inviteLinkDisplay || inviteLink}
+                          user={
+                            user?.id
+                              ? { id: user.id, username: profile?.username }
+                              : null
+                          }
+                          onCopyLink={() =>
+                            showPopup(feedbackPresets.roomLinkCopied())
+                          }
+                          triggerClassName="flex items-center justify-center rounded-md bg-white/10 p-2 hover:bg-white/20"
+                          iconClassName="h-5 w-5 text-blue-300"
+                        />
                       </div>
                     ) : null}
                   </div>
@@ -2993,7 +2980,12 @@ function CommunityContent() {
                   ) : null}
                   {messages.length > 0 ? (
                 <div className="space-y-3">
-                  {messages.map((msg) => (
+                  {messages.map((msg) => {
+                    const parentMessage = resolveParentMessage(msg, messagesById)
+                    const parentTargetId = String(
+                      parentMessage?.id ?? msg.parent_message_id
+                    )
+                    return (
                     <div
                       key={msg.id}
                       id={roomMessageElementId(msg.id)}
@@ -3044,14 +3036,10 @@ function CommunityContent() {
                       {msg.parent_message_id ? (
                         <ReplyReferenceBlock
                           parentMessageId={msg.parent_message_id}
-                          parentMessage={msg.parent}
-                          targetElementId={roomMessageElementId(
-                            String(msg.parent?.id ?? msg.parent_message_id)
-                          )}
+                          parentMessage={parentMessage}
+                          targetElementId={roomMessageElementId(parentTargetId)}
                           onJumpToParent={() =>
-                            scrollToRoomMessage(
-                              String(msg.parent?.id ?? msg.parent_message_id)
-                            )
+                            scrollToRoomMessage(parentTargetId)
                           }
                           onUnavailable={() =>
                             showPopup({
@@ -3120,7 +3108,7 @@ function CommunityContent() {
                         )}
                       </div>
                     </div>
-                  ))}
+                  )})}
                 </div>
                   ) : null}
                   {pinnedMessages.length > 0 ? (
@@ -3128,7 +3116,15 @@ function CommunityContent() {
                       <p className="mb-2 text-xs text-yellow-400">Pinned</p>
 
                       <div className="space-y-2">
-                        {pinnedMessages.map((msg) => (
+                        {pinnedMessages.map((msg) => {
+                          const parentMessage = resolveParentMessage(
+                            msg,
+                            messagesById
+                          )
+                          const parentTargetId = String(
+                            parentMessage?.id ?? msg.parent_message_id
+                          )
+                          return (
                           <div
                             key={msg.id}
                             id={roomMessageElementId(msg.id)}
@@ -3176,14 +3172,12 @@ function CommunityContent() {
                             {msg.parent_message_id ? (
                               <ReplyReferenceBlock
                                 parentMessageId={msg.parent_message_id}
-                                parentMessage={msg.parent}
+                                parentMessage={parentMessage}
                                 targetElementId={roomMessageElementId(
-                                  String(msg.parent?.id ?? msg.parent_message_id)
+                                  parentTargetId
                                 )}
                                 onJumpToParent={() =>
-                                  scrollToRoomMessage(
-                                    String(msg.parent?.id ?? msg.parent_message_id)
-                                  )
+                                  scrollToRoomMessage(parentTargetId)
                                 }
                                 onUnavailable={() =>
                                   showPopup({
@@ -3251,7 +3245,7 @@ function CommunityContent() {
                               )}
                             </div>
                           </div>
-                        ))}
+                        )})}
                       </div>
                     </div>
                   ) : null}

@@ -13,7 +13,7 @@ import {
 export const FEED_PAGE_SIZE = 8
 
 export const FEED_PROFILE_POSTS_SELECT =
-  "id, user_id, content, image_url, created_at, profiles(username, avatar_url)"
+  "id, user_id, content, image_url, created_at, room_id, room_name, room_logo, room_description, profiles(username, avatar_url)"
 
 export async function fetchFollowingIds(
   supabase: SupabaseClient,

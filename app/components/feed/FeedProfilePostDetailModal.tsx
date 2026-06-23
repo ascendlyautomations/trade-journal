@@ -11,8 +11,10 @@ import { CommentFocusCompactStrip } from "@/app/components/comments/CommentFocus
 import MobileCommentFocusLayout from "@/app/components/comments/MobileCommentFocusLayout"
 import { formatEST } from "@/lib/formatEST"
 import { profilePostPublicUrl } from "@/lib/storagePublicUrl"
+import { isRoomSharePost } from "@/lib/roomSharePost"
 import FeedCommentsSection from "./FeedCommentsSection"
 import FeedPostHeader from "./FeedPostHeader"
+import FeedRoomShareCard from "./FeedRoomShareCard"
 import type { FeedLikeMeta } from "./FeedPostCard"
 
 type FeedProfilePostDetailModalProps = {
@@ -92,13 +94,20 @@ export default function FeedProfilePostDetailModal({
     }
   }, [post])
 
-  const splitMedia =
-    modalPostDetails.imageSrc != null ? (
-      <DetailModalImage
-        src={modalPostDetails.imageSrc}
-        onClick={setLightboxUrl}
+  const splitMedia = isRoomSharePost(post) ? (
+    <div className="flex h-full w-full items-center justify-center p-4">
+      <FeedRoomShareCard
+        post={post}
+        viewerUserId={user?.id ?? null}
+        className="w-full max-w-md"
       />
-    ) : null
+    </div>
+  ) : modalPostDetails.imageSrc != null ? (
+    <DetailModalImage
+      src={modalPostDetails.imageSrc}
+      onClick={setLightboxUrl}
+    />
+  ) : null
 
   const splitPanel = (
     <MobileCommentFocusLayout

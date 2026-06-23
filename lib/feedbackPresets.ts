@@ -132,6 +132,12 @@ export const feedbackPresets = {
       "Your post is now visible on your profile and in the community feed."
     ),
 
+  roomLinkCopied: (): FeedbackPopupInput =>
+    persistentSuccess(
+      "Link Copied",
+      "Room invite link copied to clipboard."
+    ),
+
   gettingStartedIntro: (): FeedbackPopupInput => ({
     type: "info",
     title: GETTING_STARTED_INTRO_POPUP_TITLE,

@@ -2024,7 +2024,9 @@ export default function InputTradeForm({
             <div>
               <p className="text-sm font-medium text-white">Share to Community</p>
               <p className="text-xs text-white/50">
-                Make this trade visible on the public feed
+                {isPublic
+                  ? "🌎 This trade will be shared to your profile and feed."
+                  : "🔒 Only you can see this trade."}
               </p>
             </div>
             <button
@@ -2053,16 +2055,6 @@ export default function InputTradeForm({
             </button>
           </div>
 
-          {isPublic ? (
-            <button
-              type="button"
-              disabled={!communityPreviewPost}
-              onClick={() => setCommunityPreviewOpen(true)}
-              className="mt-2 w-full text-left text-sm font-medium text-emerald-400 transition hover:text-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Preview Community Post
-            </button>
-          ) : null}
           </div>
         </div>
 
@@ -2282,11 +2274,27 @@ export default function InputTradeForm({
                   ? 20
                   : 19
             }
-            disabled={submitting || invalidFutureDate}
-            onClick={() => void handleSubmit()}
-            className="w-full py-3 text-lg font-semibold rounded bg-green-500 hover:bg-green-600 text-white"
+            disabled={
+              submitting ||
+              invalidFutureDate ||
+              (!isEditMode && isPublic && !communityPreviewPost)
+            }
+            onClick={() => {
+              if (isEditMode || !isPublic) {
+                void handleSubmit()
+                return
+              }
+              setCommunityPreviewOpen(true)
+            }}
+            className="w-full py-3 text-lg font-semibold rounded bg-green-500 hover:bg-green-600 text-white disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {submitting ? "Saving…" : isEditMode ? "Save changes" : "Add Trade"}
+            {submitting
+              ? "Saving…"
+              : isEditMode
+                ? "Save changes"
+                : isPublic
+                  ? "Preview Post"
+                  : "Save Trade"}
           </button>
           </div>
         </div>
@@ -2497,7 +2505,16 @@ export default function InputTradeForm({
       onPostTrade={() => void handleSubmit()}
       submitting={submitting}
       postTradeDisabled={invalidFutureDate}
-      postTradeLabel={isEditMode ? "Save changes" : "Post Trade"}
+      title={isPublic ? "Preview Post" : "Preview Trade"}
+      subtitle={
+        isPublic
+          ? "This is how your trade will appear in the feed."
+          : "Review your trade before saving."
+      }
+      postTradeLabel={
+        isEditMode ? "Save changes" : isPublic ? "Post Trade" : "Save Trade"
+      }
+      submittingLabel={isPublic ? "Posting…" : "Saving…"}
       post={communityPreviewPost}
       user={communityPreviewUser}
     />

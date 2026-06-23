@@ -3,9 +3,11 @@
 import { memo, useCallback, useMemo } from "react"
 import { formatEST } from "@/lib/formatEST"
 import { profilePostPublicUrl } from "@/lib/storagePublicUrl"
+import { isRoomSharePost } from "@/lib/roomSharePost"
 import FeedPostActions from "./FeedPostActions"
 import FeedPostHeader from "./FeedPostHeader"
 import FeedPostScreenshot from "./FeedPostScreenshot"
+import FeedRoomShareCard from "./FeedRoomShareCard"
 import type { FeedLikeMeta } from "./FeedPostCard"
 
 type FeedProfilePostCardProps = {
@@ -85,7 +87,13 @@ function FeedProfilePostCard({
         username={profileUsername}
       />
 
-      <FeedPostScreenshot imageSrc={imageSrc} />
+      {isRoomSharePost(post) ? (
+        <div className="px-4 pt-3">
+          <FeedRoomShareCard post={post} viewerUserId={user?.id ?? null} />
+        </div>
+      ) : (
+        <FeedPostScreenshot imageSrc={imageSrc} />
+      )}
 
       <FeedPostActions
         post={post}
