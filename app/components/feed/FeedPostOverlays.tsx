@@ -92,6 +92,7 @@ function FeedPostOverlays({
           onClose={onCloseShareOverlay}
           title="Send Post"
           postId={String(sharePost.id)}
+          feedKind={sharePost.feedKind === "profile" ? "profile" : "trade"}
           post={sharePost}
           captionPlaceholder="Add a message..."
           showCancel={false}

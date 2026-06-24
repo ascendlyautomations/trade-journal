@@ -164,6 +164,68 @@ async function insertShareMessage(
   }
 }
 
+/** Card first, optional caption as a follow-up text message (same sender, sequential). */
+async function sendShareCardSequence(
+  supabase: SupabaseClient,
+  opts: {
+    senderId: string
+    conversationId: string
+    cardPayload: Record<string, unknown>
+    caption?: string | null
+    logLabel: string
+    cardPreview: { type?: string | null; image_url?: string | null }
+  }
+): Promise<{ error: Error | null }> {
+  const caption = opts.caption?.trim() ?? ""
+
+  const { createdAt: cardAt, error: cardErr } = await insertShareMessage(
+    supabase,
+    { ...opts.cardPayload, content: null },
+    {
+      label: opts.logLabel,
+      userId: opts.senderId,
+      conversationId: opts.conversationId,
+    }
+  )
+  if (cardErr || !cardAt) {
+    return { error: cardErr ?? new Error("Message insert failed") }
+  }
+
+  let lastAt = cardAt
+  let lastPreview = previewFromMessage(opts.cardPreview)
+
+  if (caption) {
+    const { createdAt: textAt, error: textErr } = await insertShareMessage(
+      supabase,
+      {
+        conversation_id: opts.conversationId,
+        sender_id: opts.senderId,
+        content: caption,
+        channel: null,
+      },
+      {
+        label: `${opts.logLabel}:caption`,
+        userId: opts.senderId,
+        conversationId: opts.conversationId,
+      }
+    )
+    if (textErr || !textAt) {
+      return { error: textErr ?? new Error("Caption insert failed") }
+    }
+    lastAt = textAt
+    lastPreview = previewFromMessage({ content: caption })
+  }
+
+  await syncConversationAfterSend(
+    supabase,
+    opts.conversationId,
+    lastPreview,
+    lastAt
+  )
+
+  return { error: null }
+}
+
 /** Same insert shape as `handleSendTrade` in `app/messages/[id]/page.tsx`. */
 export async function sendTradeToConversations(
   supabase: SupabaseClient,
@@ -183,32 +245,26 @@ export async function sendTradeToConversations(
     return { error: ownership.error }
   }
 
-  const content = opts.content?.trim() || "Shared a trade"
+  const caption = opts.content?.trim() ?? ""
 
   for (const conversationId of opts.conversationIds) {
-    const payload = {
-      conversation_id: conversationId,
-      sender_id: opts.senderId,
-      type: "trade",
-      trade_id: opts.tradeId,
-      content,
-      channel: null,
-    }
-    const { createdAt, error } = await insertShareMessage(supabase, payload, {
-      label: "sendTradeToConversations",
-      userId: opts.senderId,
+    const { error } = await sendShareCardSequence(supabase, {
+      senderId: opts.senderId,
       conversationId,
+      caption,
+      logLabel: "sendTradeToConversations",
+      cardPayload: {
+        conversation_id: conversationId,
+        sender_id: opts.senderId,
+        type: "trade",
+        trade_id: opts.tradeId,
+        channel: null,
+      },
+      cardPreview: { type: "trade" },
     })
-    if (error || !createdAt) {
-      return { error: error ?? new Error("Message insert failed") }
+    if (error) {
+      return { error }
     }
-
-    await syncConversationAfterSend(
-      supabase,
-      conversationId,
-      previewFromMessage({ content, type: "trade" }),
-      createdAt
-    )
   }
 
   return { error: null }
@@ -220,35 +276,41 @@ export async function sendPostToConversations(
     senderId: string
     conversationIds: string[]
     postId: string
+    feedKind?: "trade" | "profile"
     content?: string
   }
 ): Promise<{ error: Error | null }> {
-  const content = opts.content?.trim() || "Shared a post"
+  const caption = opts.content?.trim() ?? ""
+  const isProfilePost = opts.feedKind === "profile"
 
   for (const conversationId of opts.conversationIds) {
-    const payload = {
-      conversation_id: conversationId,
-      sender_id: opts.senderId,
-      type: "post",
-      post_id: opts.postId,
-      content,
-      channel: null,
-    }
-    const { createdAt, error } = await insertShareMessage(supabase, payload, {
-      label: "sendPostToConversations",
-      userId: opts.senderId,
-      conversationId,
-    })
-    if (error || !createdAt) {
-      return { error: error ?? new Error("Message insert failed") }
-    }
+    const cardPayload = isProfilePost
+      ? {
+          conversation_id: conversationId,
+          sender_id: opts.senderId,
+          type: "profile_post",
+          profile_post_id: opts.postId,
+          channel: null,
+        }
+      : {
+          conversation_id: conversationId,
+          sender_id: opts.senderId,
+          type: "post",
+          post_id: opts.postId,
+          channel: null,
+        }
 
-    await syncConversationAfterSend(
-      supabase,
+    const { error } = await sendShareCardSequence(supabase, {
+      senderId: opts.senderId,
       conversationId,
-      previewFromMessage({ content, type: "post" }),
-      createdAt
-    )
+      caption,
+      logLabel: "sendPostToConversations",
+      cardPayload,
+      cardPreview: { type: isProfilePost ? "profile_post" : "post" },
+    })
+    if (error) {
+      return { error }
+    }
   }
 
   return { error: null }

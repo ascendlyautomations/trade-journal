@@ -44,7 +44,7 @@ import {
 const NOTIFICATIONS_TABLE = "notifications"
 
 const NOTIFICATION_SELECT =
-  "id, user_id, sender_id, type, post_id, trade_id, content, read, created_at"
+  "id, user_id, sender_id, type, post_id, trade_id, profile_post_id, content, read, created_at"
 
 const ENGAGEMENT_TYPES = NOTIFICATION_ENGAGEMENT_TYPES
 
@@ -150,14 +150,16 @@ function GroupedNotificationCardView({
       names,
       card.totalLikes,
       card.post_id,
-      card.trade_id
+      card.trade_id,
+      card.profile_post_id
     )
   } else if (card.kind === "comment_group") {
     expandable = true
     title = formatCommentGroupTitle(
       card.totalComments,
       card.post_id,
-      card.trade_id
+      card.trade_id,
+      card.profile_post_id
     )
     expandedContent = (
       <ul className="mt-2 space-y-2 border-t border-white/10 pt-2">

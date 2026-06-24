@@ -3,6 +3,7 @@
 import Navbar from "../../components/Navbar"
 import DmStyleComposer from "../../components/DmStyleComposer"
 import SharedTradeMessageCard from "@/app/components/SharedTradeMessageCard"
+import FeedPostScreenshot from "@/app/components/feed/FeedPostScreenshot"
 import {
   Fragment,
   useCallback,
@@ -52,6 +53,7 @@ import {
   ProfileLink,
   ProfileUsernameLink,
 } from "@/app/components/ProfileLink"
+import { profilePostPublicUrl } from "@/lib/storagePublicUrl"
 import { normalizeProfileUsername } from "@/lib/profileUsername"
 import { isTradeOwnedByUser } from "@/lib/tradeShareAccess"
 import ReplyComposerStrip from "@/app/components/replies/ReplyComposerStrip"
@@ -75,6 +77,15 @@ const DM_MESSAGE_SELECT = `
     avatar_url
   )
 `
+
+const DM_SHARE_CARD_CLASS = "w-full max-w-[min(100%,22rem)]"
+
+function legacyShareCardCaption(content: string | null | undefined): string | null {
+  const trimmed = content?.trim() ?? ""
+  if (!trimmed) return null
+  if (trimmed === "Shared a trade" || trimmed === "Shared a post") return null
+  return trimmed
+}
 
 type ConversationPageAccess =
   | "loading"
@@ -270,8 +281,6 @@ function TradeMessageBubble({
 
   const isMine = message.sender_id === userId
   const menuOpen = activeMenuId === message.id
-  const tradeCardWidth =
-    "w-full min-w-[15rem] max-w-[min(100%,19.5rem)]"
 
   return (
     <div
@@ -279,7 +288,7 @@ function TradeMessageBubble({
       data-dm-message-id={message.id}
       className={`flex ${isMe ? "justify-end" : "justify-start"}`}
     >
-      <div className={`relative group inline-block ${tradeCardWidth} overflow-visible`}>
+      <div className={`relative group ${DM_SHARE_CARD_CLASS} overflow-visible`}>
         <DmMessageActionMenu
           message={message}
           isMe={isMe}
@@ -296,7 +305,7 @@ function TradeMessageBubble({
           tradeId={message.trade_id}
           viewerUserId={userId}
           onViewTrade={onViewTrade}
-          className={tradeCardWidth}
+          layout="dm"
           beforeCardContent={
             <DmReplyReference
               message={message}
@@ -340,9 +349,41 @@ function PostMessageBubble({
 }) {
   const [post, setPost] = useState<any>(null)
   const [postLoading, setPostLoading] = useState(false)
+  const [lightboxImageUrl, setLightboxImageUrl] = useState<string | null>(null)
+  const isProfileShare =
+    message.type === "profile_post" || Boolean(message.profile_post_id)
 
   useEffect(() => {
-    if (!message.post_id) {
+    const profilePostId =
+      message.profile_post_id != null ? String(message.profile_post_id) : ""
+    const tradePostId = message.post_id != null ? String(message.post_id) : ""
+
+    if (isProfileShare) {
+      if (!profilePostId) {
+        setPost(null)
+        setPostLoading(false)
+        return
+      }
+      let cancelled = false
+      setPostLoading(true)
+      setPost(null)
+      ;(async () => {
+        const { data } = await supabase
+          .from("profile_posts")
+          .select("*, profiles(username, avatar_url)")
+          .eq("id", profilePostId)
+          .maybeSingle()
+        if (!cancelled) {
+          setPost(data ?? null)
+          setPostLoading(false)
+        }
+      })()
+      return () => {
+        cancelled = true
+      }
+    }
+
+    if (!tradePostId) {
       setPost(null)
       setPostLoading(false)
       return
@@ -354,7 +395,7 @@ function PostMessageBubble({
       const { data } = await supabase
         .from("posts")
         .select("*, profiles(username, avatar_url)")
-        .eq("id", message.post_id)
+        .eq("id", tradePostId)
         .maybeSingle()
       if (!cancelled) {
         setPost(data ?? null)
@@ -364,7 +405,7 @@ function PostMessageBubble({
     return () => {
       cancelled = true
     }
-  }, [message.post_id])
+  }, [isProfileShare, message.post_id, message.profile_post_id])
 
   if (message.deleted_for_everyone) {
     return (
@@ -395,9 +436,13 @@ function PostMessageBubble({
   }
 
   const menuOpen = activeMenuId === message.id
-  const imageSrc = postScreenshotSrc(post.image_url)
+  const imageSrc = isProfileShare
+    ? profilePostPublicUrl(post.image_url)
+    : postScreenshotSrc(post.image_url)
   const pnl = Number(post.pnl)
   const isWin = !Number.isNaN(pnl) && pnl >= 0
+  const showTradeStats = !isProfileShare && !Number.isNaN(pnl)
+  const legacyCaption = legacyShareCardCaption(message.content)
 
   return (
     <div
@@ -405,7 +450,7 @@ function PostMessageBubble({
       data-dm-message-id={message.id}
       className={`flex ${isMe ? "justify-end" : "justify-start"}`}
     >
-      <div className="relative group inline-block max-w-[75%] overflow-visible">
+      <div className={`relative group ${DM_SHARE_CARD_CLASS} overflow-visible`}>
         <DmMessageActionMenu
           message={message}
           isMe={isMe}
@@ -418,59 +463,76 @@ function PostMessageBubble({
           alignRight={isMe}
         />
 
-        <div className="rounded-xl border border-gray-700 bg-gradient-to-br from-[#0f172a] to-[#1e293b] p-4 shadow-lg">
+        <div className="w-full overflow-hidden rounded-xl border border-white/10 bg-white/5 shadow-lg shadow-black/20">
           <DmReplyReference
             message={message}
             parentMessage={parentMessage}
             onJumpToParent={onJumpToParent}
             onUnavailable={onReplyUnavailable}
           />
-          {message.content ? (
-            <p className="mb-2 text-sm text-gray-300">{message.content}</p>
+          {legacyCaption ? (
+            <p className="border-b border-white/10 px-4 pb-3 pt-3 text-sm text-gray-300">
+              {legacyCaption}
+            </p>
           ) : null}
 
-          <div className="mb-2 flex items-center justify-between">
-            <ProfileUsernameLink
-              userId={String(post.user_id ?? post.profiles?.id ?? "")}
-              username={post.profiles?.username}
-              stopPropagation
-              className="text-sm font-semibold text-white hover:underline"
+          <div className="p-4">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <ProfileUsernameLink
+                userId={String(post.user_id ?? post.profiles?.id ?? "")}
+                username={post.profiles?.username}
+                stopPropagation
+                className="text-sm font-semibold text-white hover:underline"
+              >
+                @{post.profiles?.username || "User"}
+              </ProfileUsernameLink>
+              <span className="shrink-0 text-xs text-gray-400">Shared Post</span>
+            </div>
+
+            {imageSrc ? (
+              <FeedPostScreenshot
+                imageSrc={imageSrc}
+                variant="detail"
+                wrapperClassName="mb-3 w-full overflow-hidden rounded-lg border border-gray-700 bg-black/30"
+                onImageClick={setLightboxImageUrl}
+              />
+            ) : null}
+
+            {post.content ? (
+              <p className="mb-3 text-sm leading-relaxed text-gray-200">
+                {post.content}
+              </p>
+            ) : null}
+
+            {showTradeStats ? (
+              <div className="mb-3 flex justify-between text-xs">
+                <span className={isWin ? "text-emerald-400" : "text-red-400"}>
+                  {formatSignedPnlDisplay(pnl)}
+                </span>
+                <span className="text-gray-400">
+                  RR {formatRR(post.rr)}
+                </span>
+              </div>
+            ) : null}
+
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                onViewPost(post)
+              }}
+              className="w-full rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-xs font-medium text-blue-300 transition hover:bg-blue-500/20 hover:text-blue-200"
             >
-              @{post.profiles?.username || "User"}
-            </ProfileUsernameLink>
-            <span className="text-xs text-gray-400">Shared Post</span>
+              View post →
+            </button>
           </div>
-
-          {imageSrc ? (
-            <img
-              src={imageSrc}
-              alt=""
-              loading="lazy"
-              decoding="async"
-              className="mb-3 h-32 w-full rounded-lg border border-gray-700 object-cover"
-            />
-          ) : null}
-
-          <div className="flex justify-between text-xs">
-            <span className={isWin ? "text-emerald-400" : "text-red-400"}>
-              {formatSignedPnlDisplay(pnl)}
-            </span>
-            <span className="text-gray-400">
-              RR {formatRR(post.rr)}
-            </span>
-          </div>
-
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation()
-              onViewPost(post)
-            }}
-            className="mt-3 w-full rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-xs font-medium text-blue-300 transition hover:bg-blue-500/20 hover:text-blue-200"
-          >
-            View post →
-          </button>
         </div>
+
+        <ImageLightbox
+          open={lightboxImageUrl != null}
+          imageUrl={lightboxImageUrl}
+          onClose={() => setLightboxImageUrl(null)}
+        />
       </div>
     </div>
   )
@@ -1184,7 +1246,7 @@ export default function DMPage() {
       sender_id: user.id,
       type: "trade",
       trade_id: trade.id,
-      content: "Shared a trade",
+      content: null,
       channel: null,
       ...(replyTargetRef.current?.id
         ? { parent_message_id: replyTargetRef.current.id }
@@ -1204,11 +1266,11 @@ export default function DMPage() {
       return
     }
 
-    const lastMsg = "Shared a trade"
+    const lastMsg = previewFromMessage({ type: "trade" })
     const lastMessageAt = await updateConversationPreview(
       supabase,
       activeConversationId,
-      previewFromMessage({ content: lastMsg, type: "trade" }),
+      lastMsg,
       undefined
     )
 
@@ -1613,7 +1675,7 @@ export default function DMPage() {
                 )
               }
 
-              if (message.type === "post") {
+              if (message.type === "post" || message.type === "profile_post") {
                 return (
                   <Fragment key={message.id}>
                     {showDateDivider ? (

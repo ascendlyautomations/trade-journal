@@ -52,9 +52,17 @@ import {
   type PendingRoomShareDraft,
 } from "@/lib/roomSharePost"
 import {
-  deleteFeedComment,
+  deleteProfilePostComment,
   filterCommentsAfterDelete,
 } from "@/lib/deleteComment"
+import {
+  PROFILE_POST_COMMENT_INSERT_SELECT,
+  insertProfilePostCommentNotifications,
+  insertProfilePostLikeNotification,
+  profilePostOwnerUserId,
+  queryProfilePostComments,
+  withInsertedProfilePostParentCommentId,
+} from "@/lib/profilePostEngagement"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import { feedbackPresets, persistentError } from "@/lib/feedbackPresets"
 import {
@@ -1888,12 +1896,15 @@ function ProfilePageContent() {
     }
     const ids = postList.map((p) => p.id)
     const [{ data: likesRows }, { data: commentsRows }] = await Promise.all([
-      supabase.from("likes").select("post_id, user_id").in("post_id", ids),
-      queryFeedComments((select) =>
+      supabase
+        .from("profile_post_likes")
+        .select("profile_post_id, user_id")
+        .in("profile_post_id", ids),
+      queryProfilePostComments((select) =>
         supabase
-          .from("comments")
+          .from("profile_post_comments")
           .select(select)
-          .in("post_id", ids)
+          .in("profile_post_id", ids)
           .order("created_at", { ascending: true })
       ),
     ])
@@ -1903,7 +1914,7 @@ function ProfilePageContent() {
       likesMap[String(id)] = { count: 0, liked: false }
     }
     for (const row of likesRows || []) {
-      const key = String(row.post_id)
+      const key = String(row.profile_post_id)
       if (!likesMap[key]) likesMap[key] = { count: 0, liked: false }
       likesMap[key].count += 1
       if (currentUserId && row.user_id === currentUserId) likesMap[key].liked = true
@@ -1912,7 +1923,7 @@ function ProfilePageContent() {
     const commentsMap: Record<string, any[]> = {}
     for (const id of ids) commentsMap[String(id)] = []
     for (const row of commentsRows || []) {
-      const key = String(row.post_id)
+      const key = String(row.profile_post_id)
       if (!commentsMap[key]) commentsMap[key] = []
       commentsMap[key].push(row)
     }
@@ -1943,11 +1954,12 @@ function ProfilePageContent() {
 
     try {
     const meta = likesByPost[key] || { count: 0, liked: false }
+    const postRow = posts.find((p) => String(p.id) === key)
     if (meta.liked) {
       const { error } = await supabase
-        .from("likes")
+        .from("profile_post_likes")
         .delete()
-        .eq("post_id", key)
+        .eq("profile_post_id", key)
         .eq("user_id", currentUserId)
       if (error) return console.error(error)
       setLikesByPost((prev) => ({
@@ -1956,14 +1968,24 @@ function ProfilePageContent() {
       }))
       return
     }
-    const { error } = await supabase
-      .from("likes")
-      .insert({ post_id: key, user_id: currentUserId })
+    const { error } = await supabase.from("profile_post_likes").insert({
+      profile_post_id: key,
+      user_id: currentUserId,
+    })
     if (error) return console.error(error)
     setLikesByPost((prev) => ({
       ...prev,
       [key]: { count: meta.count + 1, liked: true },
     }))
+
+    const ownerId = profilePostOwnerUserId(postRow ?? { user_id: profile?.id })
+    if (ownerId) {
+      await insertProfilePostLikeNotification(supabase, {
+        profilePostId: key,
+        ownerUserId: ownerId,
+        senderUserId: currentUserId,
+      })
+    }
     } finally {
       likeBusyRef.current.delete(key)
       setLikeBusyByPost((prev) => ({ ...prev, [key]: false }))
@@ -1985,8 +2007,10 @@ function ProfilePageContent() {
     setCommentSubmitting((s) => ({ ...s, [key]: true }))
 
     try {
+    const postRow = posts.find((p) => String(p.id) === key)
+    const existingComments = commentsByPost[key] || []
     const insertPayload: Record<string, unknown> = {
-      post_id: key,
+      profile_post_id: key,
       user_id: currentUserId,
       content: text,
     }
@@ -1995,14 +2019,26 @@ function ProfilePageContent() {
     }
 
     const { data, error } = await supabase
-      .from("comments")
+      .from("profile_post_comments")
       .insert(insertPayload)
-      .select(FEED_COMMENT_INSERT_SELECT)
+      .select(PROFILE_POST_COMMENT_INSERT_SELECT)
       .single()
     if (error) return console.error(error)
-    const insertedRow = withInsertedParentCommentId(data, parentCommentId)
+    const insertedRow = withInsertedProfilePostParentCommentId(data, parentCommentId)
     setCommentsByPost((prev) => ({ ...prev, [key]: [...(prev[key] || []), insertedRow] }))
     setCommentDraft((prev) => ({ ...prev, [key]: "" }))
+
+    const ownerId = profilePostOwnerUserId(postRow ?? { user_id: profile?.id })
+    if (ownerId) {
+      await insertProfilePostCommentNotifications(supabase, {
+        profilePostId: key,
+        ownerUserId: ownerId,
+        senderUserId: currentUserId,
+        content: text,
+        parentCommentId,
+        existingComments,
+      })
+    }
     } finally {
       commentSubmittingRef.current.delete(key)
       setCommentSubmitting((s) => ({ ...s, [key]: false }))
@@ -2022,24 +2058,24 @@ function ProfilePageContent() {
       return false
     }
 
-    const postId = String(comment.post_id ?? "")
-    if (!postId) {
-      console.error("[comment-delete] aborted: missing post_id", comment)
+    const profilePostId = String(comment.profile_post_id ?? comment.post_id ?? "")
+    if (!profilePostId) {
+      console.error("[comment-delete] aborted: missing profile_post_id", comment)
       return false
     }
 
-    const { error, deleted } = await deleteFeedComment(supabase, {
+    const { error, deleted } = await deleteProfilePostComment(supabase, {
       id: String(comment.id),
       user_id: currentUserId,
       content: comment.content,
-      post_id: postId,
+      profile_post_id: profilePostId,
     })
 
     if (error || !deleted) {
       console.error("[comment-delete] failed", {
         commentId: String(comment.id),
         userId: currentUserId,
-        postId,
+        profilePostId,
         error,
       })
       showPopup({ type: "error", message: handleSupabaseError(error) })
@@ -2048,10 +2084,13 @@ function ProfilePageContent() {
 
     setCommentsByPost((prev) => ({
       ...prev,
-      [postId]: filterCommentsAfterDelete(prev[postId] ?? [], String(comment.id)),
+      [profilePostId]: filterCommentsAfterDelete(
+        prev[profilePostId] ?? [],
+        String(comment.id)
+      ),
     }))
 
-    if (feedDeepLinkPost && String(feedDeepLinkPost.id) === postId) {
+    if (feedDeepLinkPost && String(feedDeepLinkPost.id) === profilePostId) {
       setFeedDeepLinkComments((prev) =>
         filterCommentsAfterDelete(prev, String(comment.id))
       )
@@ -2059,7 +2098,7 @@ function ProfilePageContent() {
 
     console.log("[comment-delete] local state updated", {
       commentId: String(comment.id),
-      postId,
+      profilePostId,
     })
 
     return true
@@ -3872,6 +3911,7 @@ function ProfilePageContent() {
           onClose={() => setSharePost(null)}
           title="Send Post"
           postId={String(sharePost.id)}
+          feedKind="profile"
           post={sharePost}
           captionPlaceholder="Add a message..."
           showCancel={false}

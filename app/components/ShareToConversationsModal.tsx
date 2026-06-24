@@ -32,6 +32,8 @@ export type ShareToConversationsModalProps = {
   tradeId?: string | null
   /** Share a feed/profile post in messages. */
   postId?: string | null
+  /** Route profile wall posts to messages.profile_post_id instead of post_id. */
+  feedKind?: "trade" | "profile"
   /** Optional post record for screenshot preview. */
   post?: { image_url?: string | null } | null
   /** When set, uploads PNG from this data URL and sends as image messages. */
@@ -47,6 +49,7 @@ export default function ShareToConversationsModal({
   title,
   tradeId,
   postId,
+  feedKind = "trade",
   post = null,
   imageDataUrlPromise,
   captionPlaceholder = "Add a message…",
@@ -208,12 +211,12 @@ export default function ShareToConversationsModal({
       }
 
       if (postId) {
-        const content = shareMessage.trim() || "Shared a post"
         const { error } = await sendPostToConversations(supabase, {
           senderId: user.id,
           conversationIds,
           postId,
-          content,
+          feedKind,
+          content: shareMessage.trim() || undefined,
         })
         if (error) {
           showPopup({ type: "error", message: handleSupabaseError(error) })
@@ -221,12 +224,11 @@ export default function ShareToConversationsModal({
           return
         }
       } else if (tradeId) {
-        const msg = shareMessage.trim() || "Shared a trade"
         const { error } = await sendTradeToConversations(supabase, {
           senderId: user.id,
           conversationIds,
           tradeId,
-          content: msg,
+          content: shareMessage.trim() || undefined,
         })
         if (error) {
           showPopup({ type: "error", message: handleSupabaseError(error) })
@@ -264,6 +266,7 @@ export default function ShareToConversationsModal({
     markSending,
     markSuccessAndDismiss,
     postId,
+    feedKind,
     reset,
     selectedConversations,
     selectedUserIds,

@@ -31,6 +31,8 @@ export type SharedTradeMessageCardProps = {
   showSocialLayer?: boolean
   beforeCardContent?: ReactNode
   className?: string
+  /** DM layout: full bubble width, contain screenshot aspect ratio. */
+  layout?: "default" | "dm"
 }
 
 /**
@@ -43,8 +45,14 @@ export default function SharedTradeMessageCard({
   onViewTrade,
   showSocialLayer = true,
   beforeCardContent,
-  className = "w-full min-w-[15rem] max-w-[min(100%,19.5rem)]",
+  className,
+  layout = "default",
 }: SharedTradeMessageCardProps) {
+  const resolvedClassName =
+    className ??
+    (layout === "dm"
+      ? "w-full max-w-[min(100%,22rem)]"
+      : "w-full min-w-[15rem] max-w-[min(100%,19.5rem)]")
   const [trade, setTrade] = useState<any>(null)
   const [tradeLoading, setTradeLoading] = useState(false)
   const [lightboxImageUrl, setLightboxImageUrl] = useState<string | null>(null)
@@ -102,7 +110,7 @@ export default function SharedTradeMessageCard({
   if (!resolvedTradeId) {
     return (
       <div
-        className={`${className} rounded-lg bg-[#1e293b] p-3 text-sm italic text-gray-400`}
+        className={`${resolvedClassName} rounded-lg bg-[#1e293b] p-3 text-sm italic text-gray-400`}
       >
         {SHARED_TRADE_UNAVAILABLE}
       </div>
@@ -111,7 +119,7 @@ export default function SharedTradeMessageCard({
 
   if (tradeLoading) {
     return (
-      <div className={`${className} rounded-lg bg-[#1e293b] p-3 text-sm text-gray-400`}>
+      <div className={`${resolvedClassName} rounded-lg bg-[#1e293b] p-3 text-sm text-gray-400`}>
         Loading trade…
       </div>
     )
@@ -120,7 +128,7 @@ export default function SharedTradeMessageCard({
   if (!trade) {
     return (
       <div
-        className={`${className} rounded-lg bg-[#1e293b] p-3 text-sm italic text-gray-400`}
+        className={`${resolvedClassName} rounded-lg bg-[#1e293b] p-3 text-sm italic text-gray-400`}
       >
         {SHARED_TRADE_UNAVAILABLE}
       </div>
@@ -128,6 +136,10 @@ export default function SharedTradeMessageCard({
   }
 
   const imgSrc = tradeScreenshotSrc(trade.image_url)
+  const screenshotClassName =
+    layout === "dm"
+      ? "max-h-[min(60dvh,360px)] w-full rounded-lg border border-gray-700 bg-black/30 object-contain"
+      : "h-28 w-full rounded-lg border border-gray-700 object-cover"
   const pnlNum = Number(trade.pnl)
   const pnlNonNeg = !Number.isNaN(pnlNum) && pnlNum >= 0
   const directionRaw =
@@ -137,7 +149,7 @@ export default function SharedTradeMessageCard({
     : ""
 
   return (
-    <div className={className}>
+    <div className={resolvedClassName}>
       <div className="w-full rounded-xl border border-gray-700/80 bg-gradient-to-br from-[#0f172a] to-[#1e293b] p-3.5 shadow-md">
         {beforeCardContent}
         <div className="flex items-center justify-between gap-3">
@@ -181,7 +193,7 @@ export default function SharedTradeMessageCard({
               alt=""
               loading="lazy"
               decoding="async"
-              className="h-28 w-full rounded-lg border border-gray-700 object-cover"
+              className={screenshotClassName}
             />
           </button>
         ) : null}

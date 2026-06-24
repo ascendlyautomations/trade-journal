@@ -58,7 +58,7 @@ export function previewFromMessage(row: {
   if (row.content?.trim()) return row.content.trim()
   if (row.image_url) return "Image"
   if (row.type === "trade") return "Shared a trade"
-  if (row.type === "post") return "Shared a post"
+  if (row.type === "post" || row.type === "profile_post") return "Shared a post"
   return "New message"
 }
 

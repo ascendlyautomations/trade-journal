@@ -9,8 +9,18 @@ import { feedbackPresets } from "@/lib/feedbackPresets"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import {
   deleteFeedComment,
+  deleteProfilePostComment,
   filterCommentsAfterDelete,
 } from "@/lib/deleteComment"
+import {
+  PROFILE_POST_COMMENT_INSERT_SELECT,
+  insertProfilePostCommentNotifications,
+  insertProfilePostLikeNotification,
+  isProfileFeedPost,
+  profilePostOwnerUserId,
+  queryProfilePostComments,
+  withInsertedProfilePostParentCommentId,
+} from "@/lib/profilePostEngagement"
 import FeedLoadMoreFooter from "../../components/feed/FeedLoadMoreFooter"
 import FeedContentToggle from "../../components/feed/FeedContentToggle"
 import FeedModeToggle from "../../components/feed/FeedModeToggle"
@@ -483,46 +493,76 @@ function FeedPageContent() {
       }
     }
 
-    const ids = postList.map((p) => p.id)
+    const tradeIds = postList
+      .filter((p) => !isProfileFeedPost(p))
+      .map((p) => p.id)
+    const profileIds = postList
+      .filter((p) => isProfileFeedPost(p))
+      .map((p) => p.id)
 
     const [
-      { data: likesRows },
-      { data: commentsRows },
-      { count: likesExactCount },
+      { data: tradeLikesRows },
+      { data: tradeCommentsRows },
+      { data: profileLikesRows },
+      { data: profileCommentsRows },
     ] = await Promise.all([
-      supabase.from("likes").select("post_id, user_id").in("post_id", ids),
-      queryFeedComments((select) =>
-        supabase
-          .from("comments")
-          .select(select)
-          .in("post_id", ids)
-          .order("created_at", { ascending: true })
-      ),
-      supabase
-        .from("likes")
-        .select("post_id", { count: "exact", head: true })
-        .in("post_id", ids),
+      tradeIds.length
+        ? supabase.from("likes").select("post_id, user_id").in("post_id", tradeIds)
+        : Promise.resolve({ data: [] as { post_id: string; user_id: string }[] }),
+      tradeIds.length
+        ? queryFeedComments((select) =>
+            supabase
+              .from("comments")
+              .select(select)
+              .in("post_id", tradeIds)
+              .order("created_at", { ascending: true })
+          )
+        : Promise.resolve({ data: [] as any[] }),
+      profileIds.length
+        ? supabase
+            .from("profile_post_likes")
+            .select("profile_post_id, user_id")
+            .in("profile_post_id", profileIds)
+        : Promise.resolve({ data: [] as { profile_post_id: string; user_id: string }[] }),
+      profileIds.length
+        ? queryProfilePostComments((select) =>
+            supabase
+              .from("profile_post_comments")
+              .select(select)
+              .in("profile_post_id", profileIds)
+              .order("created_at", { ascending: true })
+          )
+        : Promise.resolve({ data: [] as any[] }),
     ])
-    void likesExactCount
 
     const likesMap: Record<string, LikeMeta> = {}
-    for (const id of ids) {
-      const key = String(id)
+    const commentsMap: Record<string, any[]> = {}
+    for (const p of postList) {
+      const key = String(p.id)
       likesMap[key] = { count: 0, liked: false }
+      commentsMap[key] = []
     }
-    for (const row of likesRows || []) {
+
+    for (const row of tradeLikesRows || []) {
       const pid = String(row.post_id)
       if (!likesMap[pid]) likesMap[pid] = { count: 0, liked: false }
       likesMap[pid].count++
       if (currentUser && row.user_id === currentUser.id) likesMap[pid].liked = true
     }
-
-    const commentsMap: Record<string, any[]> = {}
-    for (const id of ids) {
-      commentsMap[String(id)] = []
+    for (const row of profileLikesRows || []) {
+      const pid = String(row.profile_post_id)
+      if (!likesMap[pid]) likesMap[pid] = { count: 0, liked: false }
+      likesMap[pid].count++
+      if (currentUser && row.user_id === currentUser.id) likesMap[pid].liked = true
     }
-    for (const c of commentsRows || []) {
+
+    for (const c of tradeCommentsRows || []) {
       const pid = String(c.post_id)
+      if (!commentsMap[pid]) commentsMap[pid] = []
+      commentsMap[pid].push(c)
+    }
+    for (const c of profileCommentsRows || []) {
+      const pid = String(c.profile_post_id)
       if (!commentsMap[pid]) commentsMap[pid] = []
       commentsMap[pid].push(c)
     }
@@ -748,6 +788,7 @@ function FeedPageContent() {
       if (!user) return
 
       const pid = String(post.id)
+      const isProfile = isProfileFeedPost(post)
       if (likeBusyRef.current.has(pid)) return
 
       likeBusyRef.current.add(pid)
@@ -757,11 +798,17 @@ function FeedPageContent() {
       const meta = likesByPostRef.current[pid] ?? EMPTY_LIKE_META
 
       if (meta.liked) {
-        const { error } = await supabase
-          .from("likes")
-          .delete()
-          .eq("post_id", pid)
-          .eq("user_id", user.id)
+        const { error } = isProfile
+          ? await supabase
+              .from("profile_post_likes")
+              .delete()
+              .eq("profile_post_id", pid)
+              .eq("user_id", user.id)
+          : await supabase
+              .from("likes")
+              .delete()
+              .eq("post_id", pid)
+              .eq("user_id", user.id)
 
         if (error) {
           console.error("Unlike error:", error)
@@ -773,14 +820,61 @@ function FeedPageContent() {
           ...prev,
           [pid]: { count: newCount, liked: false },
         }))
-      } else {
-        const { error } = await supabase.from("likes").insert({
-          post_id: pid,
+      } else if (isProfile) {
+        const likePayload = {
+          profile_post_id: pid,
           user_id: user.id,
-        })
+        }
+        const { error } = await supabase.from("profile_post_likes").insert(likePayload)
 
         if (error) {
-          console.error("Like error:", error)
+          console.error("[profile-post-like] insert failed", {
+            userId: user.id,
+            profilePostId: pid,
+            payload: likePayload,
+            supabaseError: {
+              code: error.code,
+              message: error.message,
+              details: error.details,
+              hint: error.hint,
+            },
+          })
+          return
+        }
+
+        setLikesByPost((prev) => ({
+          ...prev,
+          [pid]: { count: meta.count + 1, liked: true },
+        }))
+
+        const ownerId = profilePostOwnerUserId(post)
+        if (ownerId) {
+          await insertProfilePostLikeNotification(supabase, {
+            profilePostId: pid,
+            ownerUserId: ownerId,
+            senderUserId: user.id,
+          })
+        }
+      } else {
+        const likePayload = {
+          post_id: pid,
+          user_id: user.id,
+        }
+        const { error } = await supabase.from("likes").insert(likePayload)
+
+        if (error) {
+          console.error("[post-like] insert failed", {
+            userId: user.id,
+            postId: pid,
+            feedKind: post.feedKind ?? "unknown",
+            payload: likePayload,
+            supabaseError: {
+              code: error.code,
+              message: error.message,
+              details: error.details,
+              hint: error.hint,
+            },
+          })
           return
         }
 
@@ -831,6 +925,74 @@ function FeedPageContent() {
       setCommentSubmitting((s) => ({ ...s, [pid]: true }))
 
       try {
+      const isProfile = isProfileFeedPost(post)
+      const existingComments = commentsByPost[pid] ?? EMPTY_COMMENTS
+
+      if (isProfile) {
+        const insertPayload: Record<string, unknown> = {
+          profile_post_id: pid,
+          user_id: user.id,
+          content: trimmed,
+        }
+        if (parentCommentId) {
+          insertPayload.parent_comment_id = parentCommentId
+        }
+
+        const { data: newRow, error } = await supabase
+          .from("profile_post_comments")
+          .insert(insertPayload)
+          .select(PROFILE_POST_COMMENT_INSERT_SELECT)
+          .single()
+
+        if (error) {
+          console.error("[profile-post-comment] insert failed", {
+            userId: user.id,
+            profilePostId: pid,
+            commentText: trimmed,
+            parentCommentId: parentCommentId ?? null,
+            payload: insertPayload,
+            supabaseError: {
+              code: error.code,
+              message: error.message,
+              details: error.details,
+              hint: error.hint,
+            },
+          })
+          showPopup({ type: "error", message: handleSupabaseError(error) })
+          return false
+        }
+
+        const insertedRow = withInsertedProfilePostParentCommentId(
+          newRow,
+          parentCommentId
+        )
+
+        setCommentsByPost((prev) => {
+          const currentComments = prev[pid] ?? EMPTY_COMMENTS
+          const nextComments = currentComments.some((c: any) => c.id === insertedRow.id)
+            ? currentComments
+            : [...currentComments, insertedRow]
+          return {
+            ...prev,
+            [pid]: nextComments,
+          }
+        })
+
+        const ownerId = profilePostOwnerUserId(post)
+        if (ownerId) {
+          await insertProfilePostCommentNotifications(supabase, {
+            profilePostId: pid,
+            ownerUserId: ownerId,
+            senderUserId: user.id,
+            content: trimmed,
+            parentCommentId,
+            existingComments,
+          })
+        }
+
+        return true
+      }
+
       const insertPayload: Record<string, unknown> = {
         post_id: pid,
         user_id: user.id,
@@ -847,7 +1009,20 @@ function FeedPageContent() {
         .single()
 
       if (error) {
-        console.error("Comment insert error:", error)
+        console.error("[post-comment] insert failed", {
+          userId: user.id,
+          postId: pid,
+          feedKind: post.feedKind ?? "unknown",
+          commentText: trimmed,
+          parentCommentId: parentCommentId ?? null,
+          payload: insertPayload,
+          supabaseError: {
+            code: error.code,
+            message: error.message,
+            details: error.details,
+            hint: error.hint,
+          },
+        })
         showPopup({ type: "error", message: handleSupabaseError(error) })
         return false
       }
@@ -892,7 +1067,7 @@ function FeedPageContent() {
         setCommentSubmitting((s) => ({ ...s, [pid]: false }))
       }
     },
-    [user, showPopup]
+    [user, showPopup, commentsByPost]
   )
 
   const deleteComment = useCallback(
@@ -900,6 +1075,37 @@ function FeedPageContent() {
       if (!user) {
         console.warn("[comment-delete] aborted: no user")
         return false
+      }
+
+      const profilePostId = String(comment.profile_post_id ?? "")
+      if (profilePostId) {
+        const { error, deleted } = await deleteProfilePostComment(supabase, {
+          id: String(comment.id),
+          user_id: user.id,
+          content: comment.content,
+          profile_post_id: profilePostId,
+        })
+
+        if (error || !deleted) {
+          console.error("[comment-delete] failed", {
+            commentId: String(comment.id),
+            userId: user.id,
+            profilePostId,
+            error,
+          })
+          showPopup({ type: "error", message: handleSupabaseError(error) })
+          return false
+        }
+
+        setCommentsByPost((prev) => ({
+          ...prev,
+          [profilePostId]: filterCommentsAfterDelete(
+            prev[profilePostId] ?? EMPTY_COMMENTS,
+            String(comment.id)
+          ),
+        }))
+
+        return true
       }
 
       const postId = String(comment.post_id ?? "")

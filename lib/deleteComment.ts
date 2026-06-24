@@ -16,6 +16,14 @@ export type TradeCommentRow = {
   parent_comment_id?: string | null
 }
 
+export type ProfilePostCommentRow = {
+  id: string
+  user_id: string
+  content?: string | null
+  profile_post_id?: string | null
+  parent_comment_id?: string | null
+}
+
 const LOG_PREFIX = "[comment-delete]"
 
 function logDeleteStep(step: string, details?: Record<string, unknown>) {
@@ -74,6 +82,7 @@ async function cleanupCommentNotifications(
     content: string
     postId?: string | null
     tradeId?: string | null
+    profilePostId?: string | null
   }
 ) {
   const snippet = params.content.trim().slice(0, 200)
@@ -87,6 +96,8 @@ async function cleanupCommentNotifications(
     query = query.eq("post_id", params.postId)
   } else if (params.tradeId) {
     query = query.eq("trade_id", params.tradeId)
+  } else if (params.profilePostId) {
+    query = query.eq("profile_post_id", params.profilePostId)
   } else {
     return
   }
@@ -101,8 +112,81 @@ async function cleanupCommentNotifications(
       error,
       postId: params.postId,
       tradeId: params.tradeId,
+      profilePostId: params.profilePostId,
     })
   }
+}
+
+function noProfilePostRowDeletedError(): PostgrestError {
+  return {
+    name: "CommentDeleteError",
+    message:
+      "Profile post comment was not deleted. Ensure the profile_post_comments DELETE policy and grant are applied in Supabase.",
+    code: "PGRST116",
+    details: "No rows deleted — likely missing RLS DELETE policy or DELETE grant.",
+    hint: "Apply migration 20260624000000_profile_post_engagement.sql",
+  } as PostgrestError
+}
+
+export async function deleteProfilePostComment(
+  supabase: SupabaseClient,
+  comment: ProfilePostCommentRow
+) {
+  const commentId = String(comment.id)
+  const userId = String(comment.user_id)
+
+  logDeleteStep("supabase delete starting", {
+    table: "profile_post_comments",
+    commentId,
+    userId,
+    profilePostId: comment.profile_post_id ?? null,
+  })
+
+  const { data, error } = await supabase
+    .from("profile_post_comments")
+    .delete()
+    .eq("id", commentId)
+    .eq("user_id", userId)
+    .select("id")
+    .maybeSingle()
+
+  logDeleteStep("supabase delete result", {
+    table: "profile_post_comments",
+    commentId,
+    userId,
+    deletedId: data?.id ?? null,
+    error: error ?? null,
+  })
+
+  if (error) {
+    logDeleteError("supabase delete failed", {
+      table: "profile_post_comments",
+      commentId,
+      userId,
+      error,
+    })
+    return { error, deleted: false as const }
+  }
+
+  if (!data) {
+    const blocked = noProfilePostRowDeletedError()
+    logDeleteError("supabase delete returned no row", {
+      table: "profile_post_comments",
+      commentId,
+      userId,
+      hint: blocked.hint,
+    })
+    return { error: blocked, deleted: false as const }
+  }
+
+  await cleanupCommentNotifications(supabase, {
+    senderId: userId,
+    content: String(comment.content ?? ""),
+    profilePostId:
+      comment.profile_post_id != null ? String(comment.profile_post_id) : null,
+  })
+
+  return { error: null, deleted: true as const }
 }
 
 export async function deleteFeedComment(

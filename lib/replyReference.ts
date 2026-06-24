@@ -68,7 +68,7 @@ export function previewTextFromMessage(
   if (message.deleted_for_everyone) return "Message deleted"
   const type = message.type?.trim()
   if (type === "trade") return "Shared a trade"
-  if (type === "post") return "Shared a post"
+  if (type === "post" || type === "profile_post") return "Shared a post"
   if (message.image_url?.trim()) {
     const caption = message.content?.trim()
     if (caption) return truncateReplyPreview(caption)
