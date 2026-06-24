@@ -10,6 +10,7 @@ import CreateAccountModal, {
 } from "@/components/CreateAccountModal"
 import { supabase } from "@/lib/supabaseClient"
 import { isProActive } from "@/lib/subscription"
+import { FREE_PLAN_ACCOUNT_LIMIT } from "@/lib/tradingAccounts"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { feedbackPresets, persistentError } from "@/lib/feedbackPresets"
 
@@ -77,7 +78,7 @@ export default function PostSetupImportModal({ open, onComplete }: Props) {
         .eq("id", user.id)
         .maybeSingle()
       const userIsPro = isProActive(profile)
-      setCanCreateMoreAccounts(userIsPro || formatted.length < 1)
+      setCanCreateMoreAccounts(userIsPro || formatted.length < FREE_PLAN_ACCOUNT_LIMIT)
     }
 
     void loadAccounts()

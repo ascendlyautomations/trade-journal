@@ -21,16 +21,15 @@ import DmStyleComposer from "../components/DmStyleComposer"
 import { supabase } from "../../lib/supabaseClient"
 import { compressImage, compressScreenshot } from "@/lib/compressImage"
 import { formatLocalDateTime } from "@/lib/formatDate"
-import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
 import { feedbackPresets, persistentError } from "@/lib/feedbackPresets"
 import { useUserProfile } from "@/lib/UserProfileProvider"
 import { formatMoneyUnknown, formatRR } from "@/lib/formatDisplay"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
+import ImageLightbox from "@/app/components/ui/ImageLightbox"
 import { createRoomJoinNotification } from "@/lib/createRoomJoinNotification"
 import { createRoomMessageNotifications } from "@/lib/createRoomMessageNotifications"
 import RoomNotificationSettingsSheet from "@/app/components/RoomNotificationSettingsSheet"
-import ReplyActionButton from "@/app/components/replies/ReplyActionButton"
 import ReplyComposerStrip from "@/app/components/replies/ReplyComposerStrip"
 import ReplyReferenceBlock from "@/app/components/replies/ReplyReferenceBlock"
 import {
@@ -42,6 +41,17 @@ import {
   type ReplyTarget,
 } from "@/lib/replyReference"
 import {
+  isScrollContainerNearBottom,
+  scrollRoomMessageInContainer,
+  // TODO: Re-enable room scroll persistence after beta
+  // canPersistRoomScrollPosition,
+  // clampScrollTop,
+  // findAnchorMessageId,
+  // isNearBottomAfterSavedRestore,
+  // loadRoomScrollPosition,
+  // saveRoomScrollPosition,
+} from "@/lib/roomScrollPersistence"
+import {
   anyRoomChannelNotificationsEnabled,
   fetchRoomChannelNotificationPrefs,
   upsertRoomChannelNotificationPref,
@@ -50,8 +60,14 @@ import { notifyGettingStartedChecklistMaybeCompleted } from "@/lib/gettingStarte
 import { isCurrentUserAdmin } from "@/lib/adminUsers"
 import { isBetaAnnouncementsSection } from "@/lib/betaHub"
 import { isProfileUuidSegment } from "@/lib/profileRoutes"
+import {
+  patchRoomMessageReactions,
+  type RoomMessageReactionEmoji,
+  type RoomMessageReactionRow,
+} from "@/lib/roomMessageReactions"
 import { canEditRoomMessage } from "@/lib/roomModeration"
 import RoomMessageActionsMenu from "../components/RoomMessageActionsMenu"
+import RoomMessageFooter from "../components/RoomMessageFooter"
 import ShareRoomMenu from "../components/ShareRoomMenu"
 import SharedTradeMessageCard from "../components/SharedTradeMessageCard"
 import { getSharedTradeViewHref } from "@/lib/sharedContentNavigation"
@@ -97,6 +113,7 @@ type RoomMessage = {
     username?: string | null
     avatar_url?: string | null
   } | null
+  room_message_reactions?: RoomMessageReactionRow[] | null
 }
 
 /** PostgREST embed: disambiguate trade_id vs pinned_trade_id FKs (PGRST201). */
@@ -112,6 +129,11 @@ const ROOM_MESSAGE_SELECT_SHAPE = `
   profiles (
     username,
     avatar_url
+  ),
+  room_message_reactions (
+    id,
+    user_id,
+    reaction
   )
 `
 
@@ -137,6 +159,11 @@ const ROOM_MESSAGE_REALTIME_SELECT = `
   profiles (
     username,
     avatar_url
+  ),
+  room_message_reactions (
+    id,
+    user_id,
+    reaction
   )
 `
 
@@ -387,6 +414,7 @@ function CommunityContent() {
   const [composerPreviewUrl, setComposerPreviewUrl] = useState<string | null>(
     null
   )
+  const [lightboxImageUrl, setLightboxImageUrl] = useState<string | null>(null)
   const sectionFilterRef = useRef<{ len: number; id: string | null }>({
     len: 0,
     id: null,
@@ -398,8 +426,107 @@ function CommunityContent() {
   >({})
   const roomMessagesFetchGenRef = useRef(0)
   const pendingScrollMessageIdRef = useRef<string | null>(null)
+  const scrollContextRef = useRef<string | null>(null)
+  const didInitialScrollRef = useRef(false)
+  const userNearBottomRef = useRef(true)
 
   messagesByRoomRef.current = messagesByRoom
+
+  useEffect(() => {
+    roomMessageIdsRef.current = new Set([
+      ...messages.map((m) => m.id),
+      ...pinnedMessages.map((m) => m.id),
+    ])
+  }, [messages, pinnedMessages])
+
+  // TODO: Re-enable room scroll persistence after beta
+  // const scrollPersistRoomRef = useRef<string | null>(null)
+  // const scrollPersistSectionRef = useRef<string | null>(null)
+  // const scrollPersistTimerRef = useRef<number | null>(null)
+  // const loadingMessagesRef = useRef(false)
+  // const savedPositionRestoredRef = useRef(false)
+  //
+  // loadingMessagesRef.current = loadingMessages
+  //
+  // useEffect(() => {
+  //   scrollPersistRoomRef.current = selectedRoomId
+  //   scrollPersistSectionRef.current = selectedSectionId
+  // }, [selectedRoomId, selectedSectionId])
+  //
+  // const persistRoomScrollPosition = useCallback(() => {
+  //   const el = messagesScrollRef.current
+  //   const roomId = scrollPersistRoomRef.current
+  //   if (!el || !roomId) return
+  //   if (
+  //     !canPersistRoomScrollPosition(el, loadingMessagesRef.current)
+  //   ) {
+  //     return
+  //   }
+  //   saveRoomScrollPosition({
+  //     roomId,
+  //     sectionId: scrollPersistSectionRef.current,
+  //     lastMessageId: findAnchorMessageId(el),
+  //     scrollTop: el.scrollTop,
+  //   })
+  // }, [])
+  //
+  // useEffect(() => {
+  //   return () => {
+  //     persistRoomScrollPosition()
+  //   }
+  // }, [selectedRoomId, selectedSectionId, persistRoomScrollPosition])
+  //
+  // useEffect(() => {
+  //   const el = messagesScrollRef.current
+  //   if (!el || loadingMessages) return
+  //
+  //   const onScroll = () => {
+  //     userNearBottomRef.current = isScrollContainerNearBottom(el)
+  //     if (userNearBottomRef.current) {
+  //       savedPositionRestoredRef.current = false
+  //     }
+  //     if (scrollPersistTimerRef.current != null) {
+  //       window.clearTimeout(scrollPersistTimerRef.current)
+  //     }
+  //     scrollPersistTimerRef.current = window.setTimeout(() => {
+  //       persistRoomScrollPosition()
+  //       scrollPersistTimerRef.current = null
+  //     }, 150)
+  //   }
+  //
+  //   el.addEventListener("scroll", onScroll, { passive: true })
+  //   return () => {
+  //     el.removeEventListener("scroll", onScroll)
+  //     if (scrollPersistTimerRef.current != null) {
+  //       window.clearTimeout(scrollPersistTimerRef.current)
+  //       scrollPersistTimerRef.current = null
+  //       persistRoomScrollPosition()
+  //     }
+  //   }
+  // }, [
+  //   selectedRoomId,
+  //   selectedSectionId,
+  //   loadingMessages,
+  //   persistRoomScrollPosition,
+  // ])
+  //
+  // useEffect(() => {
+  //   const onPageHide = () => persistRoomScrollPosition()
+  //   window.addEventListener("pagehide", onPageHide)
+  //   return () => window.removeEventListener("pagehide", onPageHide)
+  // }, [persistRoomScrollPosition])
+
+  useEffect(() => {
+    const el = messagesScrollRef.current
+    if (!el || loadingMessages) return
+
+    const onScroll = () => {
+      userNearBottomRef.current = isScrollContainerNearBottom(el)
+    }
+
+    el.addEventListener("scroll", onScroll, { passive: true })
+    return () => el.removeEventListener("scroll", onScroll)
+  }, [selectedRoomId, selectedSectionId, loadingMessages])
 
   useEffect(() => {
     replyTargetRef.current = replyTarget
@@ -497,6 +624,8 @@ function CommunityContent() {
   const userIdRef = useRef<string | null>(null)
   const needsJoinRef = useRef(false)
   const usernameRef = useRef("")
+  const reactionBusyRef = useRef(new Set<string>())
+  const roomMessageIdsRef = useRef(new Set<string>())
   userIdRef.current = user?.id ?? null
   needsJoinRef.current = needsJoin
   usernameRef.current = username
@@ -1122,6 +1251,109 @@ function CommunityContent() {
     setPinnedMessages((prev) => prev.filter((m) => m.id !== messageId))
     invalidateRoomMessagesCache()
   }
+
+  const patchMessageReaction = useCallback(
+    (
+      messageId: string,
+      row: RoomMessageReactionRow,
+      mode: "insert" | "delete"
+    ) => {
+      const apply = (prev: RoomMessage[]) =>
+        prev.map((m) =>
+          m.id === messageId
+            ? {
+                ...m,
+                room_message_reactions: patchRoomMessageReactions(
+                  m.room_message_reactions,
+                  row,
+                  mode
+                ),
+              }
+            : m
+        )
+      setMessages(apply)
+      setPinnedMessages(apply)
+    },
+    []
+  )
+
+  const toggleRoomMessageReaction = useCallback(
+    async (messageId: string, reaction: RoomMessageReactionEmoji) => {
+      const uid = userIdRef.current
+      if (!uid || needsJoinRef.current) return
+
+      const busyKey = `${messageId}::${reaction}`
+      if (reactionBusyRef.current.has(busyKey)) return
+      reactionBusyRef.current.add(busyKey)
+
+      const findExisting = () => {
+        const msg =
+          messages.find((m) => m.id === messageId) ??
+          pinnedMessages.find((m) => m.id === messageId)
+        return (msg?.room_message_reactions ?? []).find(
+          (row) => row.user_id === uid && row.reaction === reaction
+        )
+      }
+
+      const existing = findExisting()
+
+      try {
+        if (existing) {
+          patchMessageReaction(messageId, existing, "delete")
+          const { error } = await supabase
+            .from("room_message_reactions")
+            .delete()
+            .eq("id", existing.id)
+          if (error) throw error
+          return
+        }
+
+        const optimistic: RoomMessageReactionRow = {
+          id: `optimistic-${messageId}-${reaction}`,
+          message_id: messageId,
+          user_id: uid,
+          reaction,
+        }
+        patchMessageReaction(messageId, optimistic, "insert")
+
+        const { data, error } = await supabase
+          .from("room_message_reactions")
+          .insert({
+            message_id: messageId,
+            user_id: uid,
+            reaction,
+          })
+          .select("id, message_id, user_id, reaction, created_at")
+          .single()
+
+        if (error) throw error
+
+        if (data) {
+          patchMessageReaction(messageId, optimistic, "delete")
+          patchMessageReaction(messageId, data as RoomMessageReactionRow, "insert")
+        }
+      } catch (error) {
+        console.error("toggleRoomMessageReaction:", error)
+        if (existing) {
+          patchMessageReaction(messageId, existing, "insert")
+        } else {
+          patchMessageReaction(messageId, {
+            id: `optimistic-${messageId}-${reaction}`,
+            message_id: messageId,
+            user_id: uid,
+            reaction,
+          }, "delete")
+        }
+        showPopup({
+          type: "error",
+          message: "Could not update reaction. Please try again.",
+        })
+      } finally {
+        reactionBusyRef.current.delete(busyKey)
+      }
+    },
+    [messages, pinnedMessages, patchMessageReaction, showPopup]
+  )
 
   async function loadSections(
     roomId: string,
@@ -2055,12 +2287,46 @@ function CommunityContent() {
         }
       }
     )
+    channel.on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "room_message_reactions",
+      },
+      (payload) => {
+        const eventType = payload.eventType
+        const row = (payload.new ?? payload.old) as
+          | RoomMessageReactionRow
+          | undefined
+        if (!row?.message_id || !roomMessageIdsRef.current.has(row.message_id)) {
+          return
+        }
+
+        if (eventType === "INSERT" && payload.new) {
+          patchMessageReaction(
+            row.message_id,
+            payload.new as RoomMessageReactionRow,
+            "insert"
+          )
+          return
+        }
+
+        if (eventType === "DELETE" && payload.old) {
+          patchMessageReaction(
+            row.message_id,
+            payload.old as RoomMessageReactionRow,
+            "delete"
+          )
+        }
+      }
+    )
     channel.subscribe()
 
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [selectedRoomId, needsJoin])
+  }, [selectedRoomId, needsJoin, patchMessageReaction])
 
   useEffect(() => {
     if (!selectedRoomId || needsJoin || !user?.id) {
@@ -2101,27 +2367,38 @@ function CommunityContent() {
   // will scroll the document and hide the Navbar.
   useEffect(() => {
     const el = messagesScrollRef.current
-    if (!el) return
+    if (!el || loadingMessages || !selectedRoomId) return
 
-    const scrollTargetId = pendingScrollMessageIdRef.current
-    if (scrollTargetId) {
-      const target = el.querySelector<HTMLElement>(
-        `[data-room-message-id="${scrollTargetId}"]`
-      )
-      if (target) {
-        const id = window.setTimeout(() => {
-          target.scrollIntoView({ block: "center", behavior: "smooth" })
-          pendingScrollMessageIdRef.current = null
-        }, 50)
-        return () => window.clearTimeout(id)
+    const contextKey = `${selectedRoomId}::${selectedSectionId ?? "null"}`
+    if (scrollContextRef.current !== contextKey) {
+      scrollContextRef.current = contextKey
+      didInitialScrollRef.current = false
+      userNearBottomRef.current = true
+    }
+
+    const runScroll = () => {
+      if (!didInitialScrollRef.current) {
+        didInitialScrollRef.current = true
+        pendingScrollMessageIdRef.current = null
+        el.scrollTop = el.scrollHeight
+        userNearBottomRef.current = true
+        return
+      }
+
+      if (userNearBottomRef.current) {
+        el.scrollTop = el.scrollHeight
       }
     }
 
-    const id = window.setTimeout(() => {
-      el.scrollTop = el.scrollHeight
-    }, 50)
+    const id = window.setTimeout(runScroll, 50)
     return () => window.clearTimeout(id)
-  }, [messages, loadingMessages])
+  }, [
+    messages,
+    pinnedMessages,
+    loadingMessages,
+    selectedRoomId,
+    selectedSectionId,
+  ])
 
   const sendTyping = useCallback(() => {
     if (!typingChannelRef.current || !selectedRoomId) return
@@ -2192,19 +2469,6 @@ function CommunityContent() {
     setSendingMessage(true)
 
     try {
-    const userIsPro = await isUserPro(supabase as any, user.id)
-    if (!userIsPro) {
-      const limitReached = await reachedMessagesCommentsLimit(
-        supabase as any,
-        user.id,
-        10
-      )
-      if (limitReached) {
-        showPopup(feedbackPresets.messageLimit())
-        return
-      }
-    }
-
     if (selectedComposerImage) {
       let uploadFile: File = selectedComposerImage
       if (selectedComposerImage.type?.startsWith("image/")) {
@@ -2344,19 +2608,6 @@ function CommunityContent() {
 
   async function sendTradeMessage(trade: any) {
     if (!user?.id || !selectedRoomId || !canPostInRoom) return
-
-    const userIsPro = await isUserPro(supabase as any, user.id)
-    if (!userIsPro) {
-      const limitReached = await reachedMessagesCommentsLimit(
-        supabase as any,
-        user.id,
-        10
-      )
-      if (limitReached) {
-        showPopup(feedbackPresets.messageLimit())
-        return
-      }
-    }
 
     const { sectionId: insertSectionId, source: sectionIdSource } =
       resolveInsertSectionId()
@@ -3007,7 +3258,6 @@ function CommunityContent() {
                         <span className="text-xs text-gray-400">
                           {formatLocalDateTime(msg.created_at)}
                         </span>
-                        <ReplyActionButton onReply={() => startReplyToMessage(msg)} />
                         {isOwner ? (
                           <button
                             type="button"
@@ -3053,13 +3303,25 @@ function CommunityContent() {
                       <div className="text-sm">
                         {msg.type === "image" ? (
                           <>
-                            <img
-                              src={msg.image_url || ""}
-                              className="mt-1 max-w-xs rounded"
-                              alt=""
-                              loading="lazy"
-                              decoding="async"
-                            />
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                if (msg.image_url) {
+                                  setLightboxImageUrl(msg.image_url)
+                                }
+                              }}
+                              className="mt-1 block max-w-full cursor-zoom-in"
+                              aria-label="View image full screen"
+                            >
+                              <img
+                                src={msg.image_url || ""}
+                                className="max-w-xs rounded"
+                                alt=""
+                                loading="lazy"
+                                decoding="async"
+                              />
+                            </button>
                             {msg.content?.trim() ? (
                               <p className="mt-2 break-words text-sm text-white">
                                 {msg.content}
@@ -3107,6 +3369,17 @@ function CommunityContent() {
                           <p className="break-words text-sm text-white">{msg.content}</p>
                         )}
                       </div>
+                      {!needsJoin ? (
+                        <RoomMessageFooter
+                          messageId={msg.id}
+                          reactions={msg.room_message_reactions}
+                          viewerUserId={user?.id}
+                          onReply={() => startReplyToMessage(msg)}
+                          onToggle={(id, reaction) =>
+                            void toggleRoomMessageReaction(id, reaction)
+                          }
+                        />
+                      ) : null}
                     </div>
                   )})}
                 </div>
@@ -3141,7 +3414,6 @@ function CommunityContent() {
                                 <span className="text-xs text-gray-400">
                                   {formatLocalDateTime(msg.created_at)}
                                 </span>
-                                <ReplyActionButton onReply={() => startReplyToMessage(msg)} />
                               </div>
                               <div className="flex shrink-0 items-center gap-1">
                                 {isOwner ? (
@@ -3190,13 +3462,25 @@ function CommunityContent() {
                             <div className="text-sm text-white">
                               {msg.type === "image" ? (
                                 <>
-                                  <img
-                                    src={msg.image_url || ""}
-                                    className="mt-1 max-h-24 rounded"
-                                    alt=""
-                                    loading="lazy"
-                                    decoding="async"
-                                  />
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      if (msg.image_url) {
+                                        setLightboxImageUrl(msg.image_url)
+                                      }
+                                    }}
+                                    className="mt-1 block max-w-full cursor-zoom-in"
+                                    aria-label="View image full screen"
+                                  >
+                                    <img
+                                      src={msg.image_url || ""}
+                                      className="max-h-24 rounded"
+                                      alt=""
+                                      loading="lazy"
+                                      decoding="async"
+                                    />
+                                  </button>
                                   {msg.content?.trim() ? (
                                     <p className="mt-1 break-words text-xs text-white">
                                       {msg.content}
@@ -3244,6 +3528,17 @@ function CommunityContent() {
                                 <span className="break-words">{msg.content}</span>
                               )}
                             </div>
+                            {!needsJoin ? (
+                              <RoomMessageFooter
+                                messageId={msg.id}
+                                reactions={msg.room_message_reactions}
+                                viewerUserId={user?.id}
+                                onReply={() => startReplyToMessage(msg)}
+                                onToggle={(id, reaction) =>
+                                  void toggleRoomMessageReaction(id, reaction)
+                                }
+                              />
+                            ) : null}
                           </div>
                         )})}
                       </div>
@@ -3969,6 +4264,11 @@ function CommunityContent() {
           </div>
         </div>
       ) : null}
+      <ImageLightbox
+        open={lightboxImageUrl != null}
+        imageUrl={lightboxImageUrl}
+        onClose={() => setLightboxImageUrl(null)}
+      />
     </>
   )
 }

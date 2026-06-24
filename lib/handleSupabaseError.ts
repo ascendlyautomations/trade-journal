@@ -4,20 +4,8 @@ export function handleSupabaseError(error: unknown): string {
 
   const msg = String(e.message).toLowerCase()
 
-  if (msg.includes("3 trades") || msg.includes("5 trades")) {
-    return "Free plan limit reached. Upgrade to Pro for unlimited trades."
-  }
-
-  if (msg.includes("public trade")) {
-    return "Upgrade to Pro to share more trades publicly."
-  }
-
-  if (msg.includes("1 post")) {
-    return "Upgrade to Pro to post more content."
-  }
-
-  if (msg.includes("10 messages")) {
-    return "Upgrade to Pro to send more messages."
+  if (msg.includes("account") && msg.includes("limit")) {
+    return "Free plan allows up to 3 accounts. Upgrade to Pro for unlimited accounts."
   }
 
   if (msg.includes("not deleted") || msg.includes("delete policy")) {

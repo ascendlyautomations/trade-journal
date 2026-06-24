@@ -16,7 +16,6 @@ import {
   type CsvSelectedAccount,
   insertCsvTradesWithAccount,
 } from "@/lib/insertCsvTradesWithAccount"
-import { assessFreePlanTradeUpload } from "@/lib/freePlanLimits"
 import { feedbackPresets, persistentSuccess } from "@/lib/feedbackPresets"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
@@ -342,36 +341,9 @@ export default function CsvImportPanel({
     }
 
     let tradesToInsert = parsedTrades
-    if (!profile.is_pro) {
-      let uploadCheck
-      try {
-        uploadCheck = await assessFreePlanTradeUpload(
-          supabase,
-          user.id,
-          parsedTrades.length
-        )
-      } catch {
-        showPopup(feedbackPresets.importVerifyFailed())
-        endImport()
-        return
-      }
-
-      if (!uploadCheck.allowed) {
-        showPopup(
-          feedbackPresets.csvImportLimitExceeded(
-            parsedTrades.length,
-            uploadCheck.remaining
-          )
-        )
-        endImport()
-        return
-      }
-
-      tradesToInsert = parsedTrades
-    }
 
     if (!tradesToInsert.length) {
-      showPopup(feedbackPresets.tradeLimitReached())
+      showPopup(feedbackPresets.importFailed("No trades could be imported from this file."))
       endImport()
       return
     }

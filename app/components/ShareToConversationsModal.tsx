@@ -16,7 +16,6 @@ import {
   searchProfilesForShare,
   type ShareProfileRow,
 } from "@/lib/shareRecipientSearch"
-import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
 import { feedbackPresets } from "@/lib/feedbackPresets"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import { FeedbackModal, ShareModalSendButton, useFeedbackPopup } from "@/app/components/ui"
@@ -209,20 +208,6 @@ export default function ShareToConversationsModal({
       }
 
       if (postId) {
-        const userIsPro = await isUserPro(supabase as any, user.id)
-        if (!userIsPro) {
-          const limitReached = await reachedMessagesCommentsLimit(
-            supabase as any,
-            user.id,
-            10
-          )
-          if (limitReached) {
-            showPopup(feedbackPresets.messageLimit())
-            reset()
-            return
-          }
-        }
-
         const content = shareMessage.trim() || "Shared a post"
         const { error } = await sendPostToConversations(supabase, {
           senderId: user.id,

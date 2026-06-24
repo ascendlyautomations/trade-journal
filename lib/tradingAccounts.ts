@@ -45,8 +45,10 @@ export type CreateTradingAccountPayload = {
   rules: TradingAccountPropFirmRules | null
 }
 
+export const FREE_PLAN_ACCOUNT_LIMIT = 3
+
 export const FREE_PLAN_ACCOUNT_LIMIT_MESSAGE =
-  "Free plan allows only 1 account. Upgrade to Pro to create more."
+  "Free plan allows up to 3 accounts. Upgrade to Pro for unlimited accounts."
 
 export function formatTradingAccountSize(size: unknown): string {
   if (!size) return ""
@@ -170,7 +172,7 @@ export async function assertCanCreateTradingAccount(
     return { ok: false, message: "Something went wrong" }
   }
 
-  if ((existingAccounts ?? []).length >= 1) {
+  if ((existingAccounts ?? []).length >= FREE_PLAN_ACCOUNT_LIMIT) {
     return { ok: false, message: FREE_PLAN_ACCOUNT_LIMIT_MESSAGE }
   }
 

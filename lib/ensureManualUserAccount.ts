@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { FREE_PLAN_ACCOUNT_LIMIT } from "@/lib/tradingAccounts"
 
 function isImportedType(t: string | null | undefined) {
   return String(t ?? "")
@@ -8,7 +9,7 @@ function isImportedType(t: string | null | undefined) {
 
 /**
  * Ensures this account_name is registered for the user before a non-imported trade is saved.
- * Free users may register only one manual (non-imported) account_name; further names are blocked.
+ * Free users may register up to FREE_PLAN_ACCOUNT_LIMIT manual (non-imported) account names.
  */
 export async function ensureManualUserAccountRegistered(
   supabase: SupabaseClient,
@@ -47,7 +48,7 @@ export async function ensureManualUserAccountRegistered(
 
   const manualAccounts = (accounts ?? []).filter((a) => !isImportedType(a.account_type))
 
-  if (!isPro && manualAccounts.length >= 1) {
+  if (!isPro && manualAccounts.length >= FREE_PLAN_ACCOUNT_LIMIT) {
     return { ok: false, reason: "limit" }
   }
 

@@ -1,3 +1,5 @@
+import { formatSubscriptionTimestamp, parseDateLike } from "@/lib/formatDate"
+
 export type MembershipStatus = "Trialing" | "Active" | "Canceling" | "Inactive"
 
 function normalizeSubscriptionStatus(profile: unknown): string {
@@ -9,8 +11,10 @@ function normalizeSubscriptionStatus(profile: unknown): string {
 
 function parseProfileDate(raw: unknown): Date | null {
   if (raw == null || raw === "") return null
-  const d = new Date(String(raw))
-  return Number.isNaN(d.getTime()) ? null : d
+  if (raw instanceof Date) {
+    return Number.isNaN(raw.getTime()) ? null : raw
+  }
+  return parseDateLike(String(raw))
 }
 
 function isCancelAtPeriodEnd(profile: unknown): boolean {
@@ -26,13 +30,52 @@ function isTrialEndInFuture(profile: unknown, now = new Date()): boolean {
   return trialEnd != null && trialEnd > now
 }
 
+/** Viewer-local date + time with timezone abbreviation (trial_end, renewals, etc.). */
 export function formatSubscriptionDateTime(raw: unknown): string {
-  const d = parseProfileDate(raw)
-  if (!d) return "—"
-  return d.toLocaleString(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  })
+  if (raw == null || raw === "") return "—"
+  if (raw instanceof Date) {
+    return formatSubscriptionTimestamp(raw)
+  }
+  return formatSubscriptionTimestamp(String(raw))
+}
+
+/** Future scheduled cancellation from Stripe cancel_at or cancel_at_period_end + current_period_end. */
+export function getScheduledCancellationAt(
+  profile: unknown,
+  now = new Date()
+): Date | null {
+  if (!profile || typeof profile !== "object") return null
+
+  const cancelAt = parseProfileDate(
+    (profile as { cancel_at?: unknown }).cancel_at
+  )
+  if (cancelAt != null && cancelAt > now) {
+    return cancelAt
+  }
+
+  if (isCancelAtPeriodEnd(profile)) {
+    const periodEnd = parseProfileDate(
+      (profile as { current_period_end?: unknown }).current_period_end
+    )
+    if (periodEnd != null && periodEnd > now) {
+      return periodEnd
+    }
+  }
+
+  return null
+}
+
+export function shouldShowScheduledCancellation(
+  profile: unknown,
+  now = new Date()
+): boolean {
+  return getScheduledCancellationAt(profile, now) != null
+}
+
+export function formatScheduledCancellation(profile: unknown): string {
+  const at = getScheduledCancellationAt(profile)
+  if (!at) return "—"
+  return formatSubscriptionTimestamp(at)
 }
 
 export function shouldShowTrialInfo(profile: unknown): boolean {
@@ -42,6 +85,7 @@ export function shouldShowTrialInfo(profile: unknown): boolean {
 
 export function shouldShowRenewalInfo(profile: unknown): boolean {
   if (!profile) return false
+  if (shouldShowScheduledCancellation(profile)) return false
   if (isCancelAtPeriodEnd(profile)) return false
   return normalizeSubscriptionStatus(profile) === "active"
 }

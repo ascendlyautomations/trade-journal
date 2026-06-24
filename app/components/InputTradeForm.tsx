@@ -4,10 +4,12 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabaseClient"
 import { compressScreenshot } from "@/lib/compressImage"
+import {
+  assertCanCreateTradingAccount,
+} from "@/lib/tradingAccounts"
 import { ensureManualUserAccountRegistered } from "@/lib/ensureManualUserAccount"
 import { isProActive } from "@/lib/subscription"
 import { insertCsvTradesWithAccount } from "@/lib/insertCsvTradesWithAccount"
-import { hasReachedRowLimit, last24hIso, assessFreePlanTradeUpload, FREE_PLAN_TRADES_PER_24H } from "@/lib/freePlanLimits"
 import { feedbackPresets, persistentError } from "@/lib/feedbackPresets"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import {
@@ -608,8 +610,6 @@ export default function InputTradeForm({
       return
     }
 
-    const sinceIso = last24hIso()
-
     const { data: profileRow } = await supabase
       .from("profiles")
       .select(
@@ -618,38 +618,6 @@ export default function InputTradeForm({
       .eq("id", user.id)
       .maybeSingle()
     const userIsPro = isProActive(profileRow)
-
-    if (!isEditMode && !userIsPro) {
-      const tradeLimitReached = await hasReachedRowLimit(supabase as any, {
-        table: "trades",
-        userColumn: "user_id",
-        userId: user.id,
-        limit: FREE_PLAN_TRADES_PER_24H,
-        sinceIso,
-      })
-      if (tradeLimitReached) {
-        showPopup(feedbackPresets.tradeLimitReached())
-        releaseSubmit()
-        return
-      }
-    }
-
-    if (!userIsPro && isPublic) {
-      const publicTradeLimitReached = await hasReachedRowLimit(supabase as any, {
-        table: "trades",
-        userColumn: "user_id",
-        userId: user.id,
-        limit: 1,
-        sinceIso,
-        extraEquals: { is_public: true },
-      })
-      if (publicTradeLimitReached) {
-        setIsPublic(false)
-        showPopup(feedbackPresets.publicTradeLimit())
-        releaseSubmit()
-        return
-      }
-    }
 
     let screenshotUrl: string | null = null
 
@@ -890,29 +858,6 @@ export default function InputTradeForm({
       }
 
       if (isPublic) {
-        if (!userIsPro) {
-          const { data: existingPost } = await supabase
-            .from("posts")
-            .select("id")
-            .eq("trade_id", existingTrade.id)
-            .maybeSingle()
-
-          if (!existingPost) {
-            const postLimitReached = await hasReachedRowLimit(supabase as any, {
-              table: "posts",
-              userColumn: "user_id",
-              userId: user.id,
-              limit: 1,
-              sinceIso,
-            })
-            if (postLimitReached) {
-              showPopup(feedbackPresets.postLimit())
-              releaseSubmit()
-              return
-            }
-          }
-        }
-
         const { error: postErr } = await supabase.from("posts").upsert(
           {
             trade_id: existingTrade.id,
@@ -1033,21 +978,6 @@ export default function InputTradeForm({
     }
 
     if (isPublic && newTradeData) {
-      if (!userIsPro) {
-        const postLimitReached = await hasReachedRowLimit(supabase as any, {
-          table: "posts",
-          userColumn: "user_id",
-          userId: user.id,
-          limit: 1,
-          sinceIso,
-        })
-        if (postLimitReached) {
-          showPopup(feedbackPresets.postLimit())
-          releaseSubmit()
-          return
-        }
-      }
-
       const { error: postError } = await supabase.from("posts").insert([
         {
           user_id: user.id,
@@ -1086,42 +1016,7 @@ export default function InputTradeForm({
 
   async function handlePublicToggle() {
     const nextIsPublic = !isPublic
-    if (!nextIsPublic) {
-      setIsPublic(false)
-      return
-    }
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user?.id) {
-      setIsPublic(nextIsPublic)
-      return
-    }
-
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("is_pro, subscription_status")
-      .eq("id", user.id)
-      .maybeSingle()
-
-    if (!isProActive(profile)) {
-      const publicTradeLimitReached = await hasReachedRowLimit(supabase as any, {
-        table: "trades",
-        userColumn: "user_id",
-        userId: user.id,
-        limit: 1,
-        sinceIso: last24hIso(),
-        extraEquals: { is_public: true },
-      })
-      if (publicTradeLimitReached) {
-        showPopup(feedbackPresets.publicTradeLimit())
-        setIsPublic(false)
-        return
-      }
-    }
-
-    setIsPublic(true)
+    setIsPublic(nextIsPublic)
   }
 
   function handleDrop(e: React.DragEvent<HTMLDivElement>) {
@@ -1173,30 +1068,8 @@ export default function InputTradeForm({
         showPopup(feedbackPresets.importFailed("Could not verify account. Try again."))
         return
       }
-      if (!profile.is_pro && profile.has_used_csv_import) {
+      if (!isProActive(profile) && profile.has_used_csv_import) {
         showPopup(feedbackPresets.csvSubscriptionLimit())
-        return
-      }
-
-      let uploadCheck
-      try {
-        uploadCheck = await assessFreePlanTradeUpload(
-          supabase,
-          user.id,
-          parsedTrades.length
-        )
-      } catch {
-        showPopup(feedbackPresets.importVerifyFailed())
-        return
-      }
-
-      if (!uploadCheck.allowed) {
-        showPopup(
-          feedbackPresets.csvImportLimitExceeded(
-            parsedTrades.length,
-            uploadCheck.remaining
-          )
-        )
         return
       }
 
@@ -1222,7 +1095,7 @@ export default function InputTradeForm({
       showPopup(feedbackPresets.importSuccess(parsedTrades.length))
       notifyGettingStartedChecklistMaybeCompleted()
 
-      if (!profile.is_pro) {
+      if (!isProActive(profile)) {
         const { error: flagErr } = await supabase
           .from("profiles")
           .update({ has_used_csv_import: true })
@@ -1310,26 +1183,11 @@ export default function InputTradeForm({
       .select("is_pro, subscription_status")
       .eq("id", user.id)
       .maybeSingle()
-    const userIsPro = isProActive(profile)
 
-    if (!userIsPro) {
-      const { data: existingAccounts, error: countErr } = await supabase
-        .from("accounts")
-        .select("id")
-        .eq("user_id", user.id)
-
-      if (countErr) {
-        console.error(countErr)
-        showPopup(
-          persistentError("Account Check Failed", handleSupabaseError(countErr))
-        )
-        return
-      }
-
-      if ((existingAccounts || []).length >= 1) {
-        showPopup(feedbackPresets.accountLimit())
-        return
-      }
+    const gate = await assertCanCreateTradingAccount(supabase, user.id, profile)
+    if (!gate.ok) {
+      showPopup(feedbackPresets.accountLimit())
+      return
     }
 
     const { data, error } = await supabase

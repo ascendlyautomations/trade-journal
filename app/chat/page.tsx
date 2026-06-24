@@ -5,7 +5,6 @@ import { formatEST } from "@/lib/formatEST"
 import { useEffect, useState, useRef } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { compressScreenshot } from "@/lib/compressImage"
-import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
 import { feedbackPresets } from "@/lib/feedbackPresets"
 import { logSupabaseError } from "@/lib/logSupabaseError"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
@@ -91,19 +90,6 @@ export default function ChatPage() {
   async function sendMessage() {
     if (!input.trim() && !selectedFile) return
     if (!user?.id) return
-
-    const userIsPro = await isUserPro(supabase as any, user.id)
-    if (!userIsPro) {
-      const limitReached = await reachedMessagesCommentsLimit(
-        supabase as any,
-        user.id,
-        10
-      )
-      if (limitReached) {
-        showPopup(feedbackPresets.messageLimit())
-        return
-      }
-    }
 
     let imageUrl = null
 

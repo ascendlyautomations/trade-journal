@@ -20,7 +20,6 @@ import {
 } from "@/lib/formatMessageTimestamp"
 import { supabase } from "../../../lib/supabaseClient"
 import { compressImage, compressScreenshot } from "@/lib/compressImage"
-import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
 import { feedbackPresets } from "@/lib/feedbackPresets"
 import { logSupabaseError } from "@/lib/logSupabaseError"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
@@ -57,6 +56,7 @@ import { normalizeProfileUsername } from "@/lib/profileUsername"
 import { isTradeOwnedByUser } from "@/lib/tradeShareAccess"
 import ReplyComposerStrip from "@/app/components/replies/ReplyComposerStrip"
 import ReplyReferenceBlock from "@/app/components/replies/ReplyReferenceBlock"
+import ImageLightbox from "@/app/components/ui/ImageLightbox"
 import {
   buildReplyTargetFromMessage,
   dmMessageElementId,
@@ -540,6 +540,7 @@ export default function DMPage() {
   const [allUsers, setAllUsers] = useState<any[]>([])
   const [selectedUsers, setSelectedUsers] = useState<any[]>([])
   const [showTradePicker, setShowTradePicker] = useState(false)
+  const [lightboxImageUrl, setLightboxImageUrl] = useState<string | null>(null)
   const [trades, setTrades] = useState<any[]>([])
   const [pageAccess, setPageAccess] =
     useState<ConversationPageAccess>("loading")
@@ -1095,19 +1096,6 @@ export default function DMPage() {
     setSendingMessage(true)
 
     try {
-    const userIsPro = await isUserPro(supabase as any, user.id)
-    if (!userIsPro) {
-      const limitReached = await reachedMessagesCommentsLimit(
-        supabase as any,
-        user.id,
-        10
-      )
-      if (limitReached) {
-        showPopup(feedbackPresets.messageLimit())
-        return
-      }
-    }
-
     let imageUrl = null
 
     if (selectedFile) {
@@ -1185,19 +1173,6 @@ export default function DMPage() {
         message: "You can only share trades you own.",
       })
       return
-    }
-
-    const userIsPro = await isUserPro(supabase as any, user.id)
-    if (!userIsPro) {
-      const limitReached = await reachedMessagesCommentsLimit(
-        supabase as any,
-        user.id,
-        10
-      )
-      if (limitReached) {
-        showPopup(feedbackPresets.messageLimit())
-        return
-      }
     }
 
     sendingMessageRef.current = true
@@ -1730,13 +1705,23 @@ export default function DMPage() {
                                 onUnavailable={notifyReplyUnavailable}
                               />
                               {message.image_url ? (
-                                <img
-                                  src={message.image_url}
-                                  className="rounded-lg max-h-64"
-                                  alt=""
-                                  loading="lazy"
-                                  decoding="async"
-                                />
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setLightboxImageUrl(message.image_url)
+                                  }}
+                                  className="block max-w-full cursor-zoom-in"
+                                  aria-label="View image full screen"
+                                >
+                                  <img
+                                    src={message.image_url}
+                                    className="max-h-64 rounded-lg"
+                                    alt=""
+                                    loading="lazy"
+                                    decoding="async"
+                                  />
+                                </button>
                               ) : null}
                               {message.content ? (
                                 <p className={message.image_url ? "mt-2" : undefined}>
@@ -2066,6 +2051,11 @@ export default function DMPage() {
           </div>
         </div>
       ) : null}
+      <ImageLightbox
+        open={lightboxImageUrl != null}
+        imageUrl={lightboxImageUrl}
+        onClose={() => setLightboxImageUrl(null)}
+      />
       </>
       )}
     </>

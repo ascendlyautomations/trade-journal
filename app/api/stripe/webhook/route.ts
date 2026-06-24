@@ -38,6 +38,10 @@ function buildSubscriptionProfileUpdatePayload(
   const updatePayload: Record<string, unknown> = {
     subscription_status: subscription.status,
     cancel_at_period_end: subscription.cancel_at_period_end ?? false,
+    cancel_at:
+      subscription.cancel_at != null
+        ? new Date(subscription.cancel_at * 1000)
+        : null,
   }
 
   if (subscription.trial_end) {
@@ -736,7 +740,10 @@ export async function POST(req: Request) {
             try {
               const { error: upErr } = await supabase
                 .from("profiles")
-                .update(SUBSCRIPTION_INACTIVE)
+                .update({
+                  ...SUBSCRIPTION_INACTIVE,
+                  cancel_at: null,
+                })
                 .eq("id", profile.id)
 
               if (upErr) {

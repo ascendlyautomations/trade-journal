@@ -31,7 +31,7 @@ export function normalizeStoredUtcTimestamp(
   return `${withT}Z`
 }
 
-function parseDateLike(value: string | Date | null | undefined): Date | null {
+export function parseDateLike(value: string | Date | null | undefined): Date | null {
   if (!value) return null
   if (value instanceof Date) {
     return Number.isNaN(value.getTime()) ? null : value
@@ -120,6 +120,27 @@ export function formatLocalDateTime(
     hour: "numeric",
     minute: "2-digit",
     hour12: true,
+  })
+}
+
+/**
+ * Stripe/profile billing instants (trial_end, current_period_end, cancel_at).
+ * Parses stored UTC timestamps, then formats in the viewer's local timezone
+ * with a short zone label (e.g. Jul 7, 2026, 9:31 PM EDT).
+ */
+export function formatSubscriptionTimestamp(
+  value: string | Date | null | undefined
+): string {
+  const d = parseDateLike(value)
+  if (!d) return "—"
+  return d.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+    timeZoneName: "short",
   })
 }
 

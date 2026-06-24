@@ -10,6 +10,7 @@ import { supabase } from "@/lib/supabaseClient"
 import {
   assertCanCreateTradingAccount,
   formatTradingAccountMode,
+  FREE_PLAN_ACCOUNT_LIMIT,
   FREE_PLAN_ACCOUNT_LIMIT_MESSAGE,
   insertTradingAccount,
   loadTradingAccounts,
@@ -58,7 +59,7 @@ export default function TradingAccountsSettingsSection({
     useState<TradingAccountListItem | null>(null)
   const [savingNoteId, setSavingNoteId] = useState<string | null>(null)
 
-  const canCreateMore = isPro || accounts.length < 1
+  const canCreateMore = isPro || accounts.length < FREE_PLAN_ACCOUNT_LIMIT
 
   const editFormValues = useMemo(
     () =>

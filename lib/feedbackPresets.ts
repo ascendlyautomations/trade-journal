@@ -1,10 +1,6 @@
 import type { FeedbackPopupInput } from "@/app/components/ui/feedback-popup-types"
 import { GETTING_STARTED_INTRO_POPUP_TITLE } from "@/lib/gettingStartedIntro"
 import { ONBOARDING_COMPLETE_POPUP_TITLE } from "@/lib/gettingStartedOnboardingComplete"
-import {
-  FREE_PLAN_TRADE_LIMIT_REACHED,
-  freePlanCsvImportLimitExceededMessage,
-} from "@/lib/freePlanLimits"
 import { FREE_PLAN_ACCOUNT_LIMIT_MESSAGE } from "@/lib/tradingAccounts"
 
 export function persistentError(
@@ -29,51 +25,16 @@ export function persistentSuccess(
 }
 
 export const feedbackPresets = {
-  tradeLimitReached: (): FeedbackPopupInput =>
-    persistentError(
-      FREE_PLAN_TRADE_LIMIT_REACHED.title,
-      FREE_PLAN_TRADE_LIMIT_REACHED.description
-    ),
-
-  csvImportLimitExceeded: (
-    csvTradeCount: number,
-    remainingUploads: number
-  ): FeedbackPopupInput => {
-    const copy = freePlanCsvImportLimitExceededMessage(
-      csvTradeCount,
-      remainingUploads
-    )
-    return persistentError(copy.title, copy.description)
-  },
-
   csvSubscriptionLimit: (): FeedbackPopupInput =>
     persistentWarning(
       "CSV Import Unavailable",
-      "Free plan includes 1 CSV import. Upgrade to Pro to import more trades."
+      "Free plan includes 1 CSV import. Upgrade to Pro for unlimited CSV imports."
     ),
 
   csvImportUnavailable: (): FeedbackPopupInput =>
     persistentWarning(
       "CSV Import Unavailable",
-      "Free plan includes one CSV import only. Upgrade to import more."
-    ),
-
-  publicTradeLimit: (): FeedbackPopupInput =>
-    persistentWarning(
-      "Public Trade Limit Reached",
-      "Free plan allows 1 public trade per 24 hours. Upgrade to Pro to share more."
-    ),
-
-  postLimit: (): FeedbackPopupInput =>
-    persistentWarning(
-      "Post Limit Reached",
-      "Free plan allows 1 post per 24 hours. Upgrade to Pro to post more."
-    ),
-
-  messageLimit: (): FeedbackPopupInput =>
-    persistentWarning(
-      "Message Limit Reached",
-      "Free plan allows 10 messages and comments per 24 hours. Upgrade to Pro."
+      "Free plan includes one CSV import only. Upgrade to Pro for unlimited imports."
     ),
 
   accountLimit: (): FeedbackPopupInput =>
@@ -87,12 +48,6 @@ export const feedbackPresets = {
 
   importFailed: (detail: string): FeedbackPopupInput =>
     persistentError("Import Failed", detail),
-
-  importVerifyFailed: (): FeedbackPopupInput =>
-    persistentError(
-      "Could Not Verify Limit",
-      "Could not verify daily trade limit. Please try again."
-    ),
 
   invalidTradeDate: (): FeedbackPopupInput =>
     persistentError(

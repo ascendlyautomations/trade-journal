@@ -5,7 +5,6 @@ import Link from "next/link"
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { supabase } from "../../../lib/supabaseClient"
-import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
 import { feedbackPresets } from "@/lib/feedbackPresets"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import {
@@ -832,19 +831,6 @@ function FeedPageContent() {
       setCommentSubmitting((s) => ({ ...s, [pid]: true }))
 
       try {
-      const userIsPro = await isUserPro(supabase as any, user.id)
-      if (!userIsPro) {
-        const limitReached = await reachedMessagesCommentsLimit(
-          supabase as any,
-          user.id,
-          10
-        )
-        if (limitReached) {
-            showPopup(feedbackPresets.messageLimit())
-          return false
-        }
-      }
-
       const insertPayload: Record<string, unknown> = {
         post_id: pid,
         user_id: user.id,

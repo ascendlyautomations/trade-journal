@@ -12,7 +12,6 @@ import {
   type RefObject,
 } from "react"
 import { supabase } from "../../lib/supabaseClient"
-import { isUserPro, reachedMessagesCommentsLimit } from "@/lib/freePlanLimits"
 import FeedCommentItem from "@/app/components/feed/FeedCommentItem"
 import EngagementCountButton from "@/app/components/EngagementCountButton"
 import ReplyComposerStrip from "@/app/components/replies/ReplyComposerStrip"
@@ -299,19 +298,6 @@ export function TradeSocialProvider({
     setCommentSubmitting(true)
 
     try {
-    const userIsPro = await isUserPro(supabase as any, currentUserId)
-    if (!userIsPro) {
-      const limitReached = await reachedMessagesCommentsLimit(
-        supabase as any,
-        currentUserId,
-        10
-      )
-      if (limitReached) {
-        showPopup(feedbackPresets.messageLimit())
-        return
-      }
-    }
-
     const { data, error } = await supabase
       .from("trade_comments")
       .insert({

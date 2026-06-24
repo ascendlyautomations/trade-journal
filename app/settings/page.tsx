@@ -10,7 +10,9 @@ import { supabase } from "../../lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
 import {
   formatSubscriptionDateTime,
+  formatScheduledCancellation,
   getMembershipStatus,
+  shouldShowScheduledCancellation,
   shouldShowTrialInfo,
 } from "@/lib/getMembershipStatus"
 import { isProActive } from "../../lib/subscription"
@@ -33,7 +35,7 @@ import { TRADER_TYPE_OPTIONS, normalizeTraderType } from "@/lib/traderType"
 import { mirrorAccountSettingsUsernameChangeCount } from "@/lib/profileSplitMirrorWrites"
 
 const SETTINGS_PROFILE_SELECT =
-  "id, name, username, bio, is_private, avatar_url, trading_style, trading_model, trader_type, primary_market, started_trading, username_change_count, referral_code, referral_count, is_pro, subscription_status, cancel_at_period_end, trial_end, current_period_end, stripe_customer_id" as const
+  "id, name, username, bio, is_private, avatar_url, trading_style, trading_model, trader_type, primary_market, started_trading, username_change_count, referral_code, referral_count, is_pro, subscription_status, cancel_at_period_end, cancel_at, trial_end, current_period_end, stripe_customer_id" as const
 import type { User } from "@supabase/supabase-js"
 import AffiliatePayoutSetupCard from "@/app/components/AffiliatePayoutSetupCard"
 import { supabaseBearerHeaders } from "@/lib/supabaseBearerFetch"
@@ -97,15 +99,10 @@ function profileDateExists(raw: unknown): boolean {
 
 function shouldShowRenewsOn(profile: Record<string, unknown> | null): boolean {
   if (!profile) return false
+  if (shouldShowScheduledCancellation(profile)) return false
   const status = String(profile.subscription_status ?? "").toLowerCase().trim()
   if (status !== "active") return false
   if (profile.cancel_at_period_end === true) return false
-  return profileDateExists(profile.current_period_end)
-}
-
-function shouldShowCancelsOn(profile: Record<string, unknown> | null): boolean {
-  if (!profile) return false
-  if (profile.cancel_at_period_end !== true) return false
   return profileDateExists(profile.current_period_end)
 }
 
@@ -178,6 +175,13 @@ export default function SettingsPage() {
   const [primaryMarket, setPrimaryMarket] = useState("")
   const [startedTrading, setStartedTrading] = useState("")
   const [tradingModel, setTradingModel] = useState("")
+
+  const [protectedFieldTestBusy, setProtectedFieldTestBusy] = useState(false)
+  const [protectedFieldTestResult, setProtectedFieldTestResult] = useState<{
+    status: "success" | "error"
+    data: unknown
+    error: { message: string; code?: string; details?: string; hint?: string } | null
+  } | null>(null)
 
   const invalidStartedTradingDate = isStartedTradingDateInFuture(startedTrading)
   const localTodayDate = getLocalTodayDateInputValue()
@@ -672,6 +676,45 @@ export default function SettingsPage() {
     } finally {
       setCheckoutLoading(false)
     }
+  }
+
+  async function testIsProProtection() {
+    if (!user) return
+
+    setProtectedFieldTestBusy(true)
+    setProtectedFieldTestResult(null)
+
+    const { data, error } = await supabase
+      .from("profiles")
+      .update({
+        is_pro: true,
+      })
+      .eq("id", user.id)
+      .select()
+
+    const response = { data, error }
+    console.log("PROFILE PROTECTION TEST", response)
+
+    if (error) {
+      setProtectedFieldTestResult({
+        status: "error",
+        data,
+        error: {
+          message: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint,
+        },
+      })
+    } else {
+      setProtectedFieldTestResult({
+        status: "success",
+        data,
+        error: null,
+      })
+    }
+
+    setProtectedFieldTestBusy(false)
   }
 
   async function openStripeSubscriptionPortal() {
@@ -1368,11 +1411,11 @@ export default function SettingsPage() {
                       </div>
                     ) : null}
 
-                    {shouldShowCancelsOn(profile) ? (
+                    {shouldShowScheduledCancellation(profile) ? (
                       <div className="border-t border-white/10 pt-3">
-                        <p className="text-xs text-gray-500">Cancels On</p>
+                        <p className="text-xs text-gray-500">Cancellation Scheduled</p>
                         <p className="mt-1 text-sm font-medium text-red-200">
-                          {formatSubscriptionDateTime(profile?.current_period_end)}
+                          {formatScheduledCancellation(profile)}
                         </p>
                       </div>
                     ) : null}
@@ -1385,7 +1428,11 @@ export default function SettingsPage() {
                   </p>
                   <ul className="mt-3 space-y-2">
                     <li className="flex items-center justify-between gap-4 text-sm text-gray-200">
-                      <span>Full Dashboard</span>
+                      <span>Basic Dashboard Analytics</span>
+                      <span aria-hidden>✅</span>
+                    </li>
+                    <li className="flex items-center justify-between gap-4 text-sm text-gray-200">
+                      <span>Advanced Dashboard Insights</span>
                       <span aria-hidden>
                         {isProActive(profile) ? "✅" : "❌"}
                       </span>
@@ -1397,7 +1444,7 @@ export default function SettingsPage() {
                       </span>
                     </li>
                     <li className="flex items-center justify-between gap-4 text-sm text-gray-200">
-                      <span>Multiple Accounts</span>
+                      <span>Unlimited Accounts</span>
                       <span aria-hidden>
                         {isProActive(profile) ? "✅" : "❌"}
                       </span>
@@ -1436,6 +1483,72 @@ export default function SettingsPage() {
             )}
           </div>
         </div>
+
+        {process.env.NODE_ENV === "development" ? (
+          <section
+            className="mx-auto mt-8 max-w-6xl rounded-2xl border-2 border-red-500/70 bg-red-950/30 p-6 backdrop-blur-sm"
+            aria-label="Development-only profile protection test"
+          >
+            <p className="text-xs font-bold uppercase tracking-widest text-red-400">
+              [DEV ONLY]
+            </p>
+            <h2 className="mt-2 text-lg font-semibold text-red-200">
+              Test Protected Profile Fields
+            </h2>
+            <p className="mt-2 text-sm text-red-100/80">
+              Attempts to set <code className="text-red-200">is_pro: true</code> on your
+              profile via the Supabase client. A protected trigger should reject this.
+            </p>
+
+            <button
+              type="button"
+              onClick={() => void testIsProProtection()}
+              disabled={!user || protectedFieldTestBusy}
+              className="mt-4 w-full rounded-xl border border-red-500/60 bg-red-500/20 py-3 text-sm font-semibold text-red-100 hover:bg-red-500/30 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:px-6"
+            >
+              {protectedFieldTestBusy ? "Testing…" : "Test is_pro Protection"}
+            </button>
+
+            {protectedFieldTestResult ? (
+              <div className="mt-4 space-y-3">
+                {protectedFieldTestResult.status === "error" ? (
+                  <div className="rounded-lg border border-red-400/50 bg-black/30 p-4">
+                    <p className="text-sm font-semibold text-red-300">Error result</p>
+                    <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-words text-xs text-red-100/90">
+                      {JSON.stringify(protectedFieldTestResult.error, null, 2)}
+                    </pre>
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-amber-400/50 bg-black/30 p-4">
+                    <p className="text-sm font-semibold text-amber-300">Success result</p>
+                    <p className="mt-1 text-xs text-amber-200/80">
+                      Protection may not be active — update succeeded unexpectedly.
+                    </p>
+                    <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-words text-xs text-amber-100/90">
+                      {JSON.stringify(protectedFieldTestResult.data, null, 2)}
+                    </pre>
+                  </div>
+                )}
+
+                <div className="rounded-lg border border-white/10 bg-black/20 p-4">
+                  <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                    Full Supabase response (see console)
+                  </p>
+                  <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-words text-xs text-gray-300">
+                    {JSON.stringify(
+                      {
+                        data: protectedFieldTestResult.data,
+                        error: protectedFieldTestResult.error,
+                      },
+                      null,
+                      2
+                    )}
+                  </pre>
+                </div>
+              </div>
+            ) : null}
+          </section>
+        ) : null}
       </div>
 
       <AffiliateApplyModal

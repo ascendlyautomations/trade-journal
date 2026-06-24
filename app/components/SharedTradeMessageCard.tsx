@@ -13,6 +13,7 @@ import {
 } from "@/lib/publicAccountPrivacy"
 import { SHARED_TRADE_UNAVAILABLE } from "@/lib/sharedContentNavigation"
 import { supabase } from "@/lib/supabaseClient"
+import ImageLightbox from "@/app/components/ui/ImageLightbox"
 
 function tradeScreenshotSrc(url: string | null | undefined): string | null {
   const raw = url != null ? String(url).trim() : ""
@@ -46,6 +47,7 @@ export default function SharedTradeMessageCard({
 }: SharedTradeMessageCardProps) {
   const [trade, setTrade] = useState<any>(null)
   const [tradeLoading, setTradeLoading] = useState(false)
+  const [lightboxImageUrl, setLightboxImageUrl] = useState<string | null>(null)
 
   const resolvedTradeId = tradeId != null ? String(tradeId).trim() : ""
 
@@ -165,13 +167,23 @@ export default function SharedTradeMessageCard({
         ) : null}
 
         {imgSrc ? (
-          <img
-            src={imgSrc}
-            alt=""
-            loading="lazy"
-            decoding="async"
-            className="mt-2 h-28 w-full rounded-lg border border-gray-700 object-cover"
-          />
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              setLightboxImageUrl(imgSrc)
+            }}
+            className="mt-2 block w-full cursor-zoom-in"
+            aria-label="View trade screenshot full screen"
+          >
+            <img
+              src={imgSrc}
+              alt=""
+              loading="lazy"
+              decoding="async"
+              className="h-28 w-full rounded-lg border border-gray-700 object-cover"
+            />
+          </button>
         ) : null}
 
         <p className="mt-2.5 border-t border-gray-700/40 pt-2 text-center text-[10px] font-medium uppercase tracking-wide text-gray-500">
@@ -200,6 +212,12 @@ export default function SharedTradeMessageCard({
           />
         </div>
       ) : null}
+
+      <ImageLightbox
+        open={lightboxImageUrl != null}
+        imageUrl={lightboxImageUrl}
+        onClose={() => setLightboxImageUrl(null)}
+      />
     </div>
   )
 }
