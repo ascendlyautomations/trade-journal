@@ -8,12 +8,15 @@ import {
   getTradeDurationDisplay,
 } from "@/lib/tradeDisplayFormat"
 import { formatEST } from "@/lib/formatEST"
-import { formatMoneyUnknown, formatNumberUnknown } from "@/lib/formatDisplay"
+import { formatMoneyUnknown, formatTradePoints } from "@/lib/formatDisplay"
+import { formatTradeAccountNameSizeLine } from "@/lib/tradeAccountDisplay"
 import { publicAccountBadgeFromTrade } from "@/lib/publicAccountPrivacy"
 import { tradeScreenshotPublicUrl } from "@/lib/storagePublicUrl"
 
 export type TradeCardProps = {
   trade: any
+  /** Linked account row — name/size resolve from accounts when present. */
+  accountRow?: { name?: string | null; account_size?: string | null } | null
   /** When false, only account-type badges are shown (no names, sizes, or IDs). */
   showAccountIdentifiers?: boolean
   showAdvanced?: boolean
@@ -26,6 +29,7 @@ export type TradeCardProps = {
 
 export default function TradeCard({
   trade,
+  accountRow = null,
   showAccountIdentifiers = true,
   showAdvanced = false,
   onEdit,
@@ -60,7 +64,7 @@ export default function TradeCard({
   const modeLower = String(trade.mode ?? "").toLowerCase().trim()
 
   const accountDisplay = showAccountIdentifiers
-    ? `${trade.account_name ?? ""} ${trade.account_size ?? ""}`.trim()
+    ? formatTradeAccountNameSizeLine(trade, accountRow)
     : (publicAccountBadgeFromTrade(trade) ?? "")
 
   const screenshotUrl = tradeScreenshotPublicUrl(trade.image_url)
@@ -110,7 +114,7 @@ export default function TradeCard({
             </span>
 
             <span className="rounded bg-white/10 px-2 py-1 text-xs">
-              Pts: {formatNumberUnknown(trade.points)}
+              Pts: {formatTradePoints(trade)}
             </span>
           </div>
           <p className="text-sm">

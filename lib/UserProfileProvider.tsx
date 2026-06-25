@@ -117,6 +117,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
   const realtimeTopicSuffix = useId().replace(/:/g, "")
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const profileRef = useRef<UserProfileSlice | null>(null)
+  const sessionUserIdRef = useRef<string | null>(null)
   profileRef.current = profile
 
   const setProfile = useCallback<Dispatch<SetStateAction<UserProfileSlice | null>>>(
@@ -159,6 +160,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
     const clearAuthState = () => {
       loadGeneration += 1
       removeProfileChannel()
+      sessionUserIdRef.current = null
       if (!mounted) return
       setUser(null)
       setProfileState(null)
@@ -178,6 +180,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
 
       if (!mounted || generation !== loadGeneration) return
 
+      sessionUserIdRef.current = sessionUser?.id ?? null
       setUser(sessionUser)
 
       if (!sessionUser) {
@@ -278,6 +281,17 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
       }
 
       if (AUTH_SYNC_EVENTS.includes(event)) {
+        const nextUserId = session?.user?.id ?? null
+        // Supabase emits SIGNED_IN on tab focus for session recovery — skip full
+        // profile reload when the signed-in user is unchanged (matches DMs/Rooms).
+        if (
+          event === "SIGNED_IN" &&
+          nextUserId &&
+          nextUserId === sessionUserIdRef.current &&
+          profileRef.current
+        ) {
+          return
+        }
         void applyAuthSession(session)
       }
     })

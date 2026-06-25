@@ -1,3 +1,9 @@
+import { averageRrFromTrades } from "./tradeRr"
+import {
+  accountRowForTrade,
+  tradeMatchesAccountFilter,
+} from "./tradeAccountDisplay"
+
 export type PerformanceWindow =
   | "daily"
   | "weekly"
@@ -18,6 +24,10 @@ export type TradeSharePoolOptions = {
   resultFilter?: "all" | "wins" | "losses"
   /** Matches dashboard “Public Trades” narrowing */
   showPublicOnly?: boolean
+  accountById?: Record<
+    string,
+    { name?: string | null; account_size?: string | null; is_active?: boolean | null }
+  > | null
 }
 
 function tradeIsPublic(t: any): boolean {
@@ -39,6 +49,7 @@ export function filterTradesForPerformanceSharePool(
     accountTypeFilter,
     resultFilter = "all",
     showPublicOnly,
+    accountById,
   } = opts
 
   let pool = trades.filter((trade) => {
@@ -57,12 +68,14 @@ export function filterTradesForPerformanceSharePool(
     if (resultFilter === "wins" && !(Number(trade.pnl) > 0)) return false
     if (resultFilter === "losses" && !(Number(trade.pnl) < 0)) return false
 
-    if (accountFilter !== "all") {
-      const accountName = String(trade.account_name || "").trim()
-      const size = String(trade.account_size || "").trim()
-      const id = String(trade.account_id || "").trim()
-      const accountKey = `${accountName}|${size}|${id}`
-      if (accountKey !== accountFilter) return false
+    if (
+      !tradeMatchesAccountFilter(
+        trade,
+        accountFilter,
+        accountRowForTrade(trade, accountById)
+      )
+    ) {
+      return false
     }
 
     const tradeMode = String(trade.mode ?? trade.account_type ?? "")
@@ -132,7 +145,7 @@ export type PerformanceStats = {
   wins: number
   winRate: number
   totalPnL: number
-  avgRR: number
+  avgRR: number | null
   /** Mean hold time in seconds (filtered trades with duration data only). */
   avgDurationSeconds: number | null
   /** Ticker symbol appearing most often in the filtered set. */
@@ -180,9 +193,7 @@ export function computePerformanceStats(trades: any[]): PerformanceStats {
   const wins = trades.filter((t) => (Number(t.pnl) || 0) > 0).length
   const winRate = totalTrades ? (wins / totalTrades) * 100 : 0
   const totalPnL = trades.reduce((sum, t) => sum + (Number(t.pnl) || 0), 0)
-  const avgRR =
-    trades.reduce((sum, t) => sum + (Number(t.rr) || 0), 0) /
-    (totalTrades || 1)
+  const avgRR = averageRrFromTrades(trades)
 
   const durations = trades
     .map(resolveTradeDurationSeconds)

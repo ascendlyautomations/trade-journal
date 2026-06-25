@@ -13,6 +13,7 @@ import {
 } from "@/lib/profileUsername"
 import { TRADER_TYPE_OPTIONS, normalizeTraderType } from "@/lib/traderType"
 import CustomSelect from "@/app/components/CustomSelect"
+import { useAutoResizeTextarea } from "@/lib/useAutoResizeTextarea"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { feedbackPresets } from "@/lib/feedbackPresets"
 import {
@@ -80,6 +81,7 @@ export default function ProfileOnboarding({
   )
   const [name, setName] = useState(initialName ? String(initialName) : "")
   const [bio, setBio] = useState(initialBio ? String(initialBio) : "")
+  const bioTextareaRef = useAutoResizeTextarea(bio, { minLines: 3, maxLines: 3 })
   const [tradingStyle, setTradingStyle] = useState(
     initialTradingStyle ? String(initialTradingStyle) : ""
   )
@@ -362,9 +364,10 @@ export default function ProfileOnboarding({
               Bio
             </label>
             <textarea
+              ref={bioTextareaRef}
               placeholder="Short bio (optional)"
               rows={3}
-              className={`${inputClass} mb-4 resize-none`}
+              className={`${inputClass} mb-4 resize-none overflow-hidden leading-normal`}
               value={bio}
               onChange={(e) => setBio(e.target.value)}
             />

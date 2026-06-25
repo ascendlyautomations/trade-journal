@@ -48,6 +48,7 @@ import {
 import { createUserRoom } from "@/lib/createUserRoom"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import AuthPasswordInput from "@/app/components/ui/AuthPasswordInput"
+import NativeDateInput from "@/app/components/ui/NativeDateInput"
 import { feedbackPresets, persistentError } from "@/lib/feedbackPresets"
 import {
   getLocalTodayDateInputValue,
@@ -55,6 +56,7 @@ import {
 } from "@/lib/tradeDateValidation"
 import TradingAccountsSettingsSection from "@/app/components/TradingAccountsSettingsSection"
 import { useScrollPageTopOnMount } from "@/lib/useScrollPageTopOnMount"
+import { useAutoResizeTextarea } from "@/lib/useAutoResizeTextarea"
 
 type TabId =
   | "profile"
@@ -165,6 +167,7 @@ export default function SettingsPage() {
   const [name, setName] = useState("")
   const [username, setUsername] = useState("")
   const [bio, setBio] = useState("")
+  const bioTextareaRef = useAutoResizeTextarea(bio, { minLines: 3, maxLines: 3 })
   const [isPrivate, setIsPrivate] = useState(false)
 
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
@@ -175,13 +178,6 @@ export default function SettingsPage() {
   const [primaryMarket, setPrimaryMarket] = useState("")
   const [startedTrading, setStartedTrading] = useState("")
   const [tradingModel, setTradingModel] = useState("")
-
-  const [protectedFieldTestBusy, setProtectedFieldTestBusy] = useState(false)
-  const [protectedFieldTestResult, setProtectedFieldTestResult] = useState<{
-    status: "success" | "error"
-    data: unknown
-    error: { message: string; code?: string; details?: string; hint?: string } | null
-  } | null>(null)
 
   const invalidStartedTradingDate = isStartedTradingDateInFuture(startedTrading)
   const localTodayDate = getLocalTodayDateInputValue()
@@ -678,45 +674,6 @@ export default function SettingsPage() {
     }
   }
 
-  async function testIsProProtection() {
-    if (!user) return
-
-    setProtectedFieldTestBusy(true)
-    setProtectedFieldTestResult(null)
-
-    const { data, error } = await supabase
-      .from("profiles")
-      .update({
-        is_pro: true,
-      })
-      .eq("id", user.id)
-      .select()
-
-    const response = { data, error }
-    console.log("PROFILE PROTECTION TEST", response)
-
-    if (error) {
-      setProtectedFieldTestResult({
-        status: "error",
-        data,
-        error: {
-          message: error.message,
-          code: error.code,
-          details: error.details,
-          hint: error.hint,
-        },
-      })
-    } else {
-      setProtectedFieldTestResult({
-        status: "success",
-        data,
-        error: null,
-      })
-    }
-
-    setProtectedFieldTestBusy(false)
-  }
-
   async function openStripeSubscriptionPortal() {
     if (!user) return
 
@@ -1005,12 +962,13 @@ export default function SettingsPage() {
                     Bio
                   </label>
                   <textarea
+                    ref={bioTextareaRef}
                     id="settings-bio"
                     value={bio}
                     onChange={(e) => setBio(e.target.value)}
                     placeholder="Tell others about your trading"
-                    rows={4}
-                    className="w-full rounded-xl border border-white/10 bg-black/30 p-3 placeholder:text-gray-500"
+                    rows={3}
+                    className="w-full resize-none overflow-hidden rounded-xl border border-white/10 bg-black/30 p-3 leading-normal placeholder:text-gray-500"
                   />
                 </div>
 
@@ -1080,13 +1038,11 @@ export default function SettingsPage() {
                   >
                     Started trading date
                   </label>
-                  <input
+                  <NativeDateInput
                     id="settings-started-trading"
-                    type="date"
                     max={localTodayDate}
                     value={startedTrading}
                     onChange={(e) => handleStartedTradingChange(e.target.value)}
-                    className="w-full rounded-xl border border-white/10 bg-[#0f172a] p-3"
                   />
                 </div>
 
@@ -1483,72 +1439,6 @@ export default function SettingsPage() {
             )}
           </div>
         </div>
-
-        {process.env.NODE_ENV === "development" ? (
-          <section
-            className="mx-auto mt-8 max-w-6xl rounded-2xl border-2 border-red-500/70 bg-red-950/30 p-6 backdrop-blur-sm"
-            aria-label="Development-only profile protection test"
-          >
-            <p className="text-xs font-bold uppercase tracking-widest text-red-400">
-              [DEV ONLY]
-            </p>
-            <h2 className="mt-2 text-lg font-semibold text-red-200">
-              Test Protected Profile Fields
-            </h2>
-            <p className="mt-2 text-sm text-red-100/80">
-              Attempts to set <code className="text-red-200">is_pro: true</code> on your
-              profile via the Supabase client. A protected trigger should reject this.
-            </p>
-
-            <button
-              type="button"
-              onClick={() => void testIsProProtection()}
-              disabled={!user || protectedFieldTestBusy}
-              className="mt-4 w-full rounded-xl border border-red-500/60 bg-red-500/20 py-3 text-sm font-semibold text-red-100 hover:bg-red-500/30 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:px-6"
-            >
-              {protectedFieldTestBusy ? "Testing…" : "Test is_pro Protection"}
-            </button>
-
-            {protectedFieldTestResult ? (
-              <div className="mt-4 space-y-3">
-                {protectedFieldTestResult.status === "error" ? (
-                  <div className="rounded-lg border border-red-400/50 bg-black/30 p-4">
-                    <p className="text-sm font-semibold text-red-300">Error result</p>
-                    <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-words text-xs text-red-100/90">
-                      {JSON.stringify(protectedFieldTestResult.error, null, 2)}
-                    </pre>
-                  </div>
-                ) : (
-                  <div className="rounded-lg border border-amber-400/50 bg-black/30 p-4">
-                    <p className="text-sm font-semibold text-amber-300">Success result</p>
-                    <p className="mt-1 text-xs text-amber-200/80">
-                      Protection may not be active — update succeeded unexpectedly.
-                    </p>
-                    <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-words text-xs text-amber-100/90">
-                      {JSON.stringify(protectedFieldTestResult.data, null, 2)}
-                    </pre>
-                  </div>
-                )}
-
-                <div className="rounded-lg border border-white/10 bg-black/20 p-4">
-                  <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                    Full Supabase response (see console)
-                  </p>
-                  <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-words text-xs text-gray-300">
-                    {JSON.stringify(
-                      {
-                        data: protectedFieldTestResult.data,
-                        error: protectedFieldTestResult.error,
-                      },
-                      null,
-                      2
-                    )}
-                  </pre>
-                </div>
-              </div>
-            ) : null}
-          </section>
-        ) : null}
       </div>
 
       <AffiliateApplyModal

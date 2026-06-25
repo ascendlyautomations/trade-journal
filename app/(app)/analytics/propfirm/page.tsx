@@ -31,6 +31,7 @@ import {
   MANAGE_ACCOUNTS_VALUE,
   navigateToManageAccounts,
 } from "@/app/components/TradeFilterBar"
+import { formatAccountNameWithSizeDisplay } from "@/lib/tradeAccountDisplay"
 
 const SECTION_PANEL =
   "rounded-xl border border-white/10 bg-white/10 p-2.5 backdrop-blur-md md:p-3"
@@ -194,17 +195,11 @@ export {
 
 function formatPropfirmAccountLabel(acc: PropfirmAccount | null) {
   if (!acc) return "None"
-  let sizePart =
-    acc.account_size != null && acc.account_size !== ""
-      ? String(acc.account_size).trim()
-      : ""
-  if (sizePart && !/k/i.test(sizePart)) {
-    const n = Number(sizePart.replace(/,/g, ""))
-    if (Number.isFinite(n) && n >= 1 && n <= 999) {
-      sizePart = `${n}K`
-    }
-  }
-  return `${acc.name} • ${sizePart || "—"} • ${acc.mode}`
+  const nameSize = formatAccountNameWithSizeDisplay(
+    acc.name,
+    acc.account_size
+  )
+  return `${nameSize || acc.name} • ${acc.mode}`
 }
 
 export default function PropFirmPage() {
@@ -436,8 +431,7 @@ export default function PropFirmPage() {
               <option value="">Select Account</option>
               {accounts.map((acc) => (
                 <option key={acc.id} value={String(acc.id)}>
-                  {acc.name} •{" "}
-                  {acc.account_size == null ? "" : String(acc.account_size)} •{" "}
+                  {formatAccountNameWithSizeDisplay(acc.name, acc.account_size)} •{" "}
                   {acc.mode}
                 </option>
               ))}

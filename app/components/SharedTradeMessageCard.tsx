@@ -6,6 +6,7 @@ import {
   formatPoints,
   formatRR,
   formatSignedPnlDisplay,
+  formatTradePoints,
 } from "@/lib/formatDisplay"
 import {
   PUBLIC_TRADE_SELECT,
@@ -169,7 +170,7 @@ export default function SharedTradeMessageCard({
 
         <div className="mt-2 flex items-center justify-between gap-3 text-xs text-gray-400">
           <span className="tabular-nums">RR: {formatRR(trade.rr)}</span>
-          <span className="tabular-nums">Points: {formatPoints(trade.points)}</span>
+          <span className="tabular-nums">Points: {formatTradePoints(trade)}</span>
         </div>
 
         {trade.public_description ? (

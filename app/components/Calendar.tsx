@@ -4,13 +4,18 @@ import { useMemo, useState } from "react"
 import { formatPnlCurrency, formatPnlWholeDollars } from "../../lib/formatMoney"
 import { tradeScreenshotPublicUrl } from "@/lib/storagePublicUrl"
 import { formatEST } from "@/lib/formatEST"
-import { formatPoints, formatRR } from "@/lib/formatDisplay"
+import { formatRR, formatTradePoints } from "@/lib/formatDisplay"
+import { resolveTradePoints } from "@/lib/resolveTradePoints"
 import {
   getTradingDayKey,
   resolveTradingTimeSourceForKey,
   toDateKey,
 } from "@/lib/formatDate"
 import { publicAccountBadgeFromTrade } from "@/lib/publicAccountPrivacy"
+import {
+  accountRowForTrade,
+  formatTradeAccountNameSizeLine,
+} from "@/lib/tradeAccountDisplay"
 type TradeLike = {
   id: string | number
   created_at: string
@@ -20,6 +25,8 @@ type TradeLike = {
   image_url?: string | null
   rr?: number | string | null
   points?: number | string | null
+  entry_price?: number | string | null
+  exit_price?: number | string | null
   session?: string | null
   mode?: string | null
   account_type?: string | null
@@ -39,6 +46,10 @@ type NormalizedTrade = TradeLike & { estKey: string }
 
 type CalendarProps = {
   trades: TradeLike[]
+  accountById?: Record<
+    string,
+    { name?: string | null; account_size?: string | null }
+  >
   showAccountFilter?: boolean
   showControls?: boolean
   /** When false, only account-type badges are shown (no names, sizes, or numbers). */
@@ -47,7 +58,8 @@ type CalendarProps = {
 
 function accountContextLine(
   trade: TradeLike,
-  showAccountIdentifiers: boolean
+  showAccountIdentifiers: boolean,
+  accountById?: CalendarProps["accountById"]
 ): string | null {
   const modeLower = String(trade.mode ?? "").toLowerCase().trim()
   if (modeLower === "backtest") return null
@@ -56,7 +68,8 @@ function accountContextLine(
     return publicAccountBadgeFromTrade(trade)
   }
 
-  const accountLine = `${trade.account_name ?? ""} ${trade.account_size ?? ""}`.trim()
+  const accountRow = accountRowForTrade(trade, accountById)
+  const accountLine = formatTradeAccountNameSizeLine(trade, accountRow)
   if (trade.account_type && accountLine) {
     return `${trade.account_type} · ${accountLine}`
   }
@@ -65,6 +78,7 @@ function accountContextLine(
 
 export default function Calendar({
   trades,
+  accountById,
   showAccountFilter = false,
   showControls = false,
   showAccountIdentifiers = true,
@@ -344,7 +358,8 @@ export default function Calendar({
                 const modeLower = String(trade.mode ?? "").toLowerCase().trim()
                 const accountLineWithType = accountContextLine(
                   trade,
-                  showAccountIdentifiers
+                  showAccountIdentifiers,
+                  accountById
                 )
 
                 return (
@@ -382,8 +397,8 @@ export default function Calendar({
                         {trade.rr != null && trade.rr !== "" ? (
                           <span>RR: {formatRR(trade.rr)}</span>
                         ) : null}
-                        {trade.points != null && trade.points !== "" ? (
-                          <span>Pts: {formatPoints(trade.points)}</span>
+                        {resolveTradePoints(trade) !== null ? (
+                          <span>Pts: {formatTradePoints(trade)}</span>
                         ) : null}
                         {trade.session ? <span>{trade.session}</span> : null}
                         {modeLower === "backtest" ? (
@@ -446,7 +461,8 @@ export default function Calendar({
                 .trim()
               const accountLineWithType = accountContextLine(
                 selectedTrade,
-                showAccountIdentifiers
+                showAccountIdentifiers,
+                accountById
               )
               return (
                 <>
@@ -470,9 +486,8 @@ export default function Calendar({
                     {selectedTrade.rr != null && selectedTrade.rr !== "" ? (
                       <span>RR: {formatRR(selectedTrade.rr)}</span>
                     ) : null}
-                    {selectedTrade.points != null &&
-                    selectedTrade.points !== "" ? (
-                      <span>Pts: {formatPoints(selectedTrade.points)}</span>
+                    {resolveTradePoints(selectedTrade) !== null ? (
+                      <span>Pts: {formatTradePoints(selectedTrade)}</span>
                     ) : null}
                     {selectedTrade.session ? (
                       <span>{selectedTrade.session}</span>

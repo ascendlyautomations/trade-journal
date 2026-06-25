@@ -13,9 +13,12 @@ import {
   filterCommentsAfterDelete,
 } from "@/lib/deleteComment"
 import {
+  deleteLikeNotification,
+  ensureLikeNotification,
+} from "@/lib/likeNotifications"
+import {
   PROFILE_POST_COMMENT_INSERT_SELECT,
   insertProfilePostCommentNotifications,
-  insertProfilePostLikeNotification,
   isProfileFeedPost,
   profilePostOwnerUserId,
   queryProfilePostComments,
@@ -112,6 +115,12 @@ function FeedPageContent() {
   const profilePageRef = useRef(0)
   const tradeExhaustedRef = useRef(false)
   const profileExhaustedRef = useRef(false)
+  const userIdRef = useRef<string | null>(null)
+  userIdRef.current = user?.id ?? null
+  const profileRef = useRef(profile)
+  profileRef.current = profile
+  const feedInitKeyRef = useRef<string | null>(null)
+  const hasLoadedFeedRef = useRef(false)
   const [likesByPost, setLikesByPost] = useState<Record<string, LikeMeta>>({})
   const [commentsByPost, setCommentsByPost] = useState<Record<string, any[]>>({})
   const [commentSubmitting, setCommentSubmitting] = useState<Record<string, boolean>>({})
@@ -218,22 +227,24 @@ function FeedPageContent() {
   )
 
   const loadFollowingStories = useCallback(async () => {
-    if (!user?.id) return
+    const userId = userIdRef.current
+    if (!userId) return
 
+    const profileSnapshot = profileRef.current
     setCurrentUserProfile(
-      profile
+      profileSnapshot
         ? {
-            id: profile.id,
-            username: profile.username,
-            avatar_url: profile.avatar_url,
+            id: profileSnapshot.id,
+            username: profileSnapshot.username,
+            avatar_url: profileSnapshot.avatar_url,
           }
-        : { id: user.id, username: null, avatar_url: null }
+        : { id: userId, username: null, avatar_url: null }
     )
 
     const { data: following } = await supabase
       .from("followers")
       .select("following_id")
-      .eq("follower_id", user.id)
+      .eq("follower_id", userId)
 
     const followingIds = [
       ...new Set(
@@ -243,7 +254,7 @@ function FeedPageContent() {
       ),
     ]
 
-    const storyUserIds = [...new Set([...followingIds, user.id])]
+    const storyUserIds = [...new Set([...followingIds, userId])]
 
     const { data: stories, error: storiesErr } = await supabase
       .from("stories")
@@ -305,11 +316,11 @@ function FeedPageContent() {
 
     setStoriesByUser(storiesByUserMap)
     setUsers(list)
-  }, [user, profile])
+  }, [])
 
   useEffect(() => {
     if (profileLoading) return
-    if (!user || mode !== "following") {
+    if (!user?.id || mode !== "following") {
       setStoriesByUser({})
       setUsers([])
       setCurrentUserProfile(null)
@@ -319,7 +330,7 @@ function FeedPageContent() {
     }
 
     void loadFollowingStories()
-  }, [profileLoading, user, mode, loadFollowingStories])
+  }, [profileLoading, user?.id, mode, loadFollowingStories])
 
   const handlePostStory = useCallback(async () => {
     if (!pendingStoryFile || !user?.id || postingStoryRef.current || postingStory) {
@@ -579,11 +590,15 @@ function FeedPageContent() {
 
   const loadPosts = useCallback(
     async (pageOverride?: number) => {
-      if (!user || loadingRef.current || !hasMoreRef.current) return
+      const userId = userIdRef.current
+      if (!userId || loadingRef.current || !hasMoreRef.current) return
 
       const currentPage = pageOverride ?? pageRef.current
 
-      setLoading(true)
+      const isInitialPage = currentPage === 0
+      if (isInitialPage && !hasLoadedFeedRef.current) {
+        setLoading(true)
+      }
       loadingRef.current = true
 
       if (currentPage === 0) {
@@ -591,13 +606,13 @@ function FeedPageContent() {
       }
 
       try {
-        const followingIds = await fetchFollowingIds(supabase, user.id)
+        const followingIds = await fetchFollowingIds(supabase, userId)
         let list: FeedItem[] = []
 
         if (contentType === "all") {
           const toppedUp = await topUpMergedFeedBuffer(supabase, {
             scope: mode,
-            userId: user.id,
+            userId,
             followingIds,
             buffer: mergeBufferRef.current,
             tradePage: tradePageRef.current,
@@ -640,7 +655,7 @@ function FeedPageContent() {
         } else if (contentType === "trades") {
           const result = await fetchTradeFeedBatch(supabase, {
             scope: mode,
-            userId: user.id,
+            userId,
             followingIds,
             page: currentPage,
             pageSize: FEED_PAGE_SIZE,
@@ -664,7 +679,7 @@ function FeedPageContent() {
         } else {
           const result = await fetchProfileFeedBatch(supabase, {
             scope: mode,
-            userId: user.id,
+            userId,
             followingIds,
             page: currentPage,
             pageSize: FEED_PAGE_SIZE,
@@ -689,11 +704,15 @@ function FeedPageContent() {
 
         const { enriched, likesMap, commentsMap } = await loadEngagementForPosts(
           list,
-          user
+          { id: userId }
         )
 
         if (currentPage === 0 && list.length === 0) {
           setFeedEmptyState("no_posts")
+        }
+
+        if (currentPage === 0) {
+          hasLoadedFeedRef.current = true
         }
 
         setPosts((prev) => [...prev, ...enriched])
@@ -722,10 +741,11 @@ function FeedPageContent() {
         setLoading(false)
       }
     },
-    [user, mode, contentType, loadEngagementForPosts]
+    [mode, contentType, loadEngagementForPosts]
   )
 
   const resetFeedState = useCallback(() => {
+    hasLoadedFeedRef.current = false
     setPosts([])
     setLikesByPost({})
     setCommentsByPost({})
@@ -744,11 +764,15 @@ function FeedPageContent() {
 
   useEffect(() => {
     if (profileLoading) return
-    if (!user) return
+    if (!user?.id) return
+
+    const feedInitKey = `${user.id}:${mode}:${contentType}`
+    if (feedInitKeyRef.current === feedInitKey) return
+    feedInitKeyRef.current = feedInitKey
+
     resetFeedState()
-    setLoading(true)
     void loadPosts(0)
-  }, [profileLoading, user, mode, contentType, loadPosts, resetFeedState])
+  }, [profileLoading, user?.id, mode, contentType, loadPosts, resetFeedState])
 
   useEffect(() => {
     const handleScroll = () => {
@@ -798,6 +822,10 @@ function FeedPageContent() {
       const meta = likesByPostRef.current[pid] ?? EMPTY_LIKE_META
 
       if (meta.liked) {
+        const ownerId = isProfile
+          ? profilePostOwnerUserId(post)
+          : postTradeOwnerUserId(post)
+
         const { error } = isProfile
           ? await supabase
               .from("profile_post_likes")
@@ -813,6 +841,16 @@ function FeedPageContent() {
         if (error) {
           console.error("Unlike error:", error)
           return
+        }
+
+        if (ownerId) {
+          await deleteLikeNotification(supabase, {
+            recipientUserId: String(ownerId),
+            senderUserId: user.id,
+            target: isProfile
+              ? { kind: "profile_post", profilePostId: pid }
+              : { kind: "post", postId: pid, tradeId: post.trade_id ?? null },
+          })
         }
 
         const newCount = Math.max(0, meta.count - 1)
@@ -849,10 +887,10 @@ function FeedPageContent() {
 
         const ownerId = profilePostOwnerUserId(post)
         if (ownerId) {
-          await insertProfilePostLikeNotification(supabase, {
-            profilePostId: pid,
-            ownerUserId: ownerId,
+          await ensureLikeNotification(supabase, {
+            recipientUserId: ownerId,
             senderUserId: user.id,
+            target: { kind: "profile_post", profilePostId: pid },
           })
         }
       } else {
@@ -887,21 +925,11 @@ function FeedPageContent() {
         const notifyUserId = postTradeOwnerUserId(post)
         const tradeId = post.trade_id
         if (notifyUserId && notifyUserId !== user.id) {
-          const { error: nErr } = await supabase.from("notifications").insert({
-            user_id: notifyUserId,
-            sender_id: user.id,
-            type: "like",
-            post_id: pid,
-            trade_id: tradeId ?? null,
+          await ensureLikeNotification(supabase, {
+            recipientUserId: String(notifyUserId),
+            senderUserId: user.id,
+            target: { kind: "post", postId: pid, tradeId: tradeId ?? null },
           })
-          if (nErr) {
-            console.error("Notification error:", nErr?.message, nErr)
-          } else {
-            window.dispatchEvent(new CustomEvent("notification-update"))
-            window.dispatchEvent(
-              new CustomEvent("tj-unread-notifications-refresh")
-            )
-          }
         }
       }
       } finally {
@@ -1209,7 +1237,8 @@ function FeedPageContent() {
             />
           ) : null}
 
-          {!authChecked || (loading && uniquePosts.length === 0) ? (
+          {!authChecked ||
+          (loading && uniquePosts.length === 0 && !hasLoadedFeedRef.current) ? (
             <SkeletonFeedPage count={3} />
           ) : !loading && uniquePosts.length === 0 && feedEmptyState ? (
             <EmptyState

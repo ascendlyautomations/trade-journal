@@ -2,6 +2,7 @@
 
 import { filterTradesForPerformanceSharePool } from "@/lib/performanceShare"
 import { excludeBacktestTrades } from "@/lib/tradeModeFilters"
+import { averageRrFromTrades } from "@/lib/tradeRr"
 import {
   ensureProfileForUser,
   readStoredReferralCode,
@@ -9,6 +10,12 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { supabase } from "../../../lib/supabaseClient"
 import { deleteUserTrade } from "@/lib/deleteTrade"
+import {
+  buildTradeAccountFilterKey,
+  formatAccountNameWithSizeDisplay,
+  resolveTradeAccountName,
+  resolveTradeAccountSize,
+} from "@/lib/tradeAccountDisplay"
 import { useRouter } from "next/navigation"
 import TradesPageMainContent from "../../components/TradesPageMainContent"
 import TradesPageOverlays from "../../components/TradesPageOverlays"
@@ -218,16 +225,20 @@ export default function TradesPage() {
       { value: string; label: string; accountType?: string | null }
     >()
     trades
-      .filter((t) => t.account_name && t.account_size && t.account_id)
+      .filter((t) => t.account_id)
       .forEach((t) => {
-        const accountName = String(t.account_name || "").trim()
-        const size = String(t.account_size || "").trim()
         const id = String(t.account_id || "").trim()
         const accRow = accountById[id]
         if (accRow?.is_active === false) return
-        const value = `${accountName}|${size}|${id}`
+        const accountName = resolveTradeAccountName(t, accRow)
+        const size = resolveTradeAccountSize(t, accRow)
+        if (!accountName || !size || !id) return
+        const value = buildTradeAccountFilterKey(t, accRow)
         const num = accRow?.account_number
-        const label = [accountName, size, num ? `• #${num}` : ""]
+        const label = [
+          formatAccountNameWithSizeDisplay(accountName, size),
+          num ? `• #${num}` : "",
+        ]
           .filter((x) => x !== "")
           .join(" ")
           .replace(/\s+/g, " ")
@@ -257,6 +268,7 @@ export default function TradesPage() {
         accountFilter,
         accountTypeFilter,
         resultFilter,
+        accountById,
       }),
     [trades, selectedDate, accountFilter, accountTypeFilter, resultFilter]
   )
@@ -315,9 +327,7 @@ export default function TradesPage() {
     const wins = visibleTrades.filter((t) => t.pnl > 0)
     const winRate = totalTrades ? (wins.length / totalTrades) * 100 : 0
     const totalPnL = visibleTrades.reduce((sum, t) => sum + (t.pnl || 0), 0)
-    const avgRR =
-      visibleTrades.reduce((sum, t) => sum + (Number(t.rr) || 0), 0) /
-      (totalTrades || 1)
+    const avgRR = averageRrFromTrades(visibleTrades)
     return { totalTrades, winRate, totalPnL, avgRR }
   }, [visibleTrades])
 

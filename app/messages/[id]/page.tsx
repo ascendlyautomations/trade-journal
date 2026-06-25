@@ -471,7 +471,7 @@ function PostMessageBubble({
             onUnavailable={onReplyUnavailable}
           />
           {legacyCaption ? (
-            <p className="border-b border-white/10 px-4 pb-3 pt-3 text-sm text-gray-300">
+            <p className="whitespace-pre-wrap break-words border-b border-white/10 px-4 pb-3 pt-3 text-sm text-gray-300">
               {legacyCaption}
             </p>
           ) : null}
@@ -499,7 +499,7 @@ function PostMessageBubble({
             ) : null}
 
             {post.content ? (
-              <p className="mb-3 text-sm leading-relaxed text-gray-200">
+              <p className="mb-3 whitespace-pre-wrap break-words text-sm leading-relaxed text-gray-200">
                 {post.content}
               </p>
             ) : null}
@@ -1599,7 +1599,7 @@ export default function DMPage() {
                 return (
                   <div
                     key={message.id}
-                    className="text-center text-gray-400 text-sm my-2"
+                    className="my-2 whitespace-pre-wrap break-words text-center text-sm text-gray-400"
                   >
                     {message.content}
                   </div>
@@ -1786,7 +1786,11 @@ export default function DMPage() {
                                 </button>
                               ) : null}
                               {message.content ? (
-                                <p className={message.image_url ? "mt-2" : undefined}>
+                                <p
+                                  className={`whitespace-pre-wrap break-words ${
+                                    message.image_url ? "mt-2" : undefined
+                                  }`}
+                                >
                                   {message.content}
                                 </p>
                               ) : null}

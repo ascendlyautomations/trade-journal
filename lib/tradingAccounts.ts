@@ -5,6 +5,10 @@ import {
   normalizeAccountModeForForm,
   type AccountType,
 } from "@/lib/createAccountForm"
+import {
+  formatAccountBalanceForDisplay,
+  formatAccountNameWithSizeDisplay,
+} from "@/lib/tradeAccountDisplay"
 
 export type TradingAccountPropFirmRules = {
   consistency: number | null
@@ -51,12 +55,7 @@ export const FREE_PLAN_ACCOUNT_LIMIT_MESSAGE =
   "Free plan allows up to 3 accounts. Upgrade to Pro for unlimited accounts."
 
 export function formatTradingAccountSize(size: unknown): string {
-  if (!size) return ""
-  const num = Number(size)
-  if (!Number.isNaN(num) && num >= 1000) {
-    return `${num / 1000}K`
-  }
-  return String(size)
+  return formatAccountBalanceForDisplay(size)
 }
 
 export function formatTradingAccountMode(mode: unknown): string | null {
@@ -71,8 +70,7 @@ export function formatTradingAccountMode(mode: unknown): string | null {
 }
 
 export function tradingAccountDisplayTitle(account: TradingAccountListItem): string {
-  const sizePart = formatTradingAccountSize(account.size)
-  return sizePart ? `${account.name} ${sizePart}` : account.name
+  return formatAccountNameWithSizeDisplay(account.name, account.size)
 }
 
 function mapPropFirmRules(
@@ -296,10 +294,62 @@ export async function updateTradingAccount(
     return { account: null, error: new Error("Account was not updated") }
   }
 
+  const syncError = await syncTradesAfterAccountRename(client, userId, accountId, {
+    name,
+    account_size: accountSize || null,
+  })
+  if (syncError) {
+    return { account: null, error: syncError }
+  }
+
   return {
     account: mapAccountRow(data as Record<string, unknown>),
     error: null,
   }
+}
+
+/** Keep denormalized trade fields aligned when an account is renamed. */
+export async function syncTradesAfterAccountRename(
+  client: SupabaseClient,
+  userId: string,
+  accountId: string,
+  fields: { name: string; account_size: string | null }
+): Promise<Error | null> {
+  const tradeUpdate: Record<string, string | null> = {
+    account_name: fields.name,
+  }
+  if (fields.account_size != null && fields.account_size !== "") {
+    tradeUpdate.account_size = fields.account_size
+  }
+
+  const { error: tradesErr } = await client
+    .from("trades")
+    .update(tradeUpdate)
+    .eq("user_id", userId)
+    .eq("account_id", accountId)
+
+  if (tradesErr) {
+    return new Error(tradesErr.message)
+  }
+
+  const profileUpdate: Record<string, string | null> = {
+    locked_account_name: fields.name,
+  }
+  if (fields.account_size != null && fields.account_size !== "") {
+    profileUpdate.locked_account_size = fields.account_size
+  }
+
+  const { error: profileErr } = await client
+    .from("profiles")
+    .update(profileUpdate)
+    .eq("id", userId)
+    .eq("locked_account_id", accountId)
+
+  if (profileErr) {
+    return new Error(profileErr.message)
+  }
+
+  return null
 }
 
 /** Mirrors InputTradeForm `toggleAccount` update. */

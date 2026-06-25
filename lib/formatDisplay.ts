@@ -1,5 +1,9 @@
 import { formatPnlCurrency, type PnlFormatOptions } from "./formatMoney"
 import { formatHoldDurationFromTimes } from "./tradeTimingDisplay.ts"
+import {
+  resolveTradePoints,
+  type TradePointsSource,
+} from "./resolveTradePoints"
 
 export type FormatUnknownOptions = PnlFormatOptions & {
   /** Shown when value is null/undefined/NaN (TradeCard uses "-", share cards use "—"). */
@@ -23,6 +27,7 @@ export function formatMoneyUnknown(
 /** Non-currency numeric display (RR, size, etc.). */
 export function formatNumberUnknown(value: unknown, empty = "-"): string {
   if (value === null || value === undefined) return empty
+  if (typeof value === "string" && value.trim() === "") return empty
   const number = Number(value)
   if (Number.isNaN(number)) return empty
   return number.toLocaleString(undefined, {
@@ -45,6 +50,16 @@ export function formatRR(value: unknown, empty = "—"): string {
 
 export function formatPoints(value: unknown, empty = "—"): string {
   return formatNumberUnknown(value, empty)
+}
+
+/** Stored trade points when present; otherwise directional fallback from prices. */
+export function formatTradePoints(
+  trade: TradePointsSource | null | undefined,
+  empty = "—"
+): string {
+  const resolved = resolveTradePoints(trade)
+  if (resolved === null) return empty
+  return formatPoints(resolved, empty)
 }
 
 export function formatSignedPnlDisplay(value: unknown, empty = "—"): string {

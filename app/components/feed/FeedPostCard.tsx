@@ -138,7 +138,6 @@ function FeedPostCard({
         accountTypeNorm={tradeDisplay.accountTypeNorm}
         accountTypeStyles={tradeDisplay.accountTypeStyles}
         rr={post.rr}
-        points={tradeRow?.points}
         publicDesc={publicDesc}
         timingTrade={tradeRow}
         createdAtLabel={createdAtLabel}

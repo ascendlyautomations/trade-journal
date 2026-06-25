@@ -3,7 +3,10 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { navigateToManageAccounts } from "./TradeFilterBar"
-import { safeAccountNumberLabel } from "@/lib/tradeAccountDisplay"
+import {
+  formatAccountNameWithSizeDisplay,
+  safeAccountNumberLabel,
+} from "@/lib/tradeAccountDisplay"
 import {
   ACCOUNT_DROPDOWN_DIVIDER_CLASS,
   ACCOUNT_DROPDOWN_ITEM_CLASS,
@@ -26,15 +29,6 @@ function accountNumberSuffix(acc: {
 }): string {
   const num = safeAccountNumberLabel(acc.account_number)
   return num ? ` • #${num}` : ""
-}
-
-function formatAccountSize(size: unknown) {
-  if (!size) return ""
-  const num = Number(size)
-  if (!Number.isNaN(num) && num >= 1000) {
-    return `${num / 1000}K`
-  }
-  return String(size)
 }
 
 function formatMode(mode: unknown) {
@@ -102,7 +96,7 @@ export default function TradeAccountPicker({
         >
           <span className="truncate">
             {selectedAccount
-              ? `${selectedAccount.name} • ${selectedAccount.size} • ${selectedAccount.category || "Personal"} • ${formatMode(selectedAccount.mode)}${accountNumberSuffix(selectedAccount)}`
+              ? `${formatAccountNameWithSizeDisplay(selectedAccount.name, selectedAccount.size)} • ${selectedAccount.category || "Personal"} • ${formatMode(selectedAccount.mode)}${accountNumberSuffix(selectedAccount)}`
               : "Select Account"}
           </span>
           <span className="shrink-0 text-gray-400">▾</span>
@@ -134,7 +128,7 @@ export default function TradeAccountPicker({
                     : ACCOUNT_DROPDOWN_ITEM_CLASS
                 }
               >
-                {acc.name} • {formatAccountSize(acc.size)} • {acc.category || "Personal"} •{" "}
+                {formatAccountNameWithSizeDisplay(acc.name, acc.size)} • {acc.category || "Personal"} •{" "}
                 {formatMode(acc.mode)}
                 {accountNumberSuffix(acc)}
               </div>

@@ -6,8 +6,10 @@ import {
   detectCsvFileFormat,
   getCellByAliases,
   isRecognizedCsvHeader,
+  isTradovateBrokerMetadataHeader,
   mapCsvHeadersToFields,
   resolveCsvHeaderField,
+  tradovateSupportedColumnLabel,
 } from "@/lib/csvTradeParsers"
 
 export type CsvImportDiagnostics = {
@@ -15,11 +17,14 @@ export type CsvImportDiagnostics = {
   formatLabel: string
   detectedColumns: string[]
   supportedColumnCount: number
+  calculatedFields: string[]
   missingRequired: string[]
   unknownColumns: string[]
   unknownColumnCount: number
   rowFailureSamples: { rowNumber: number; reason: string }[]
   explanation: string
+  /** Tradovate import parsed successfully with no unknown columns. */
+  successPreview: boolean
 }
 
 const FORMAT_LABELS: Record<CsvFileFormat, string> = {
@@ -165,6 +170,8 @@ function collectDetectedColumns(row: CsvRow, format: CsvFileFormat): string[] {
   const labels = new Set<string>()
 
   for (const key of Object.keys(row)) {
+    if (format === "tradovate" && isTradovateBrokerMetadataHeader(key)) continue
+
     if (!isRecognizedCsvHeader(key, format)) continue
     const val = String(row[key] ?? "").trim()
     if (!val) continue
@@ -176,14 +183,8 @@ function collectDetectedColumns(row: CsvRow, format: CsvFileFormat): string[] {
     }
 
     if (format === "tradovate") {
-      const nk = key.toLowerCase()
-      if (nk.includes("symbol") || nk.includes("contract")) labels.add("Symbol")
-      else if (nk.includes("pnl") || nk.includes("p&l")) labels.add("PnL")
-      else if (nk.includes("buy") || nk.includes("entry")) labels.add("Entry price")
-      else if (nk.includes("sell") || nk.includes("exit")) labels.add("Exit price")
-      else if (nk.includes("time") || nk.includes("timestamp")) labels.add("Time")
-      else if (nk.includes("qty") || nk.includes("size")) labels.add("Size / qty")
-      else labels.add(key.trim())
+      const label = tradovateSupportedColumnLabel(key)
+      if (label) labels.add(label)
     } else {
       labels.add(key.trim())
     }
@@ -249,6 +250,8 @@ export function buildCsvImportDiagnostics(
 
   const detectedColumns = collectDetectedColumns(firstRow, format)
   const unknownColumns = collectUnknownColumns(firstRow, format)
+  const calculatedFields =
+    format === "tradovate" && parseResult.summary.success > 0 ? ["Points"] : []
 
   const rowFailureSamples = parseResult.rowResults
     .filter((r): r is { ok: false; rowNumber: number; reason: string } => !r.ok)
@@ -266,17 +269,25 @@ export function buildCsvImportDiagnostics(
   const hasIssues =
     hasFailures || missingRequired.length > 0 || unknownColumns.length > 0
 
-  if (!hasIssues && !explanation) return null
+  const successPreview =
+    format === "tradovate" &&
+    parseResult.summary.success > 0 &&
+    missingRequired.length === 0 &&
+    unknownColumns.length === 0
+
+  if (!hasIssues && !explanation && !successPreview) return null
 
   return {
     format,
     formatLabel,
     detectedColumns,
     supportedColumnCount: detectedColumns.length,
+    calculatedFields,
     missingRequired,
     unknownColumns,
     unknownColumnCount: unknownColumns.length,
     rowFailureSamples,
     explanation,
+    successPreview,
   }
 }

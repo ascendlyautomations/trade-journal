@@ -1,7 +1,7 @@
 "use client"
 
 import { forwardRef } from "react"
-import { formatMoneyUnknown } from "@/lib/formatDisplay"
+import { formatMoneyUnknown, formatTradePoints } from "@/lib/formatDisplay"
 import { publicAccountBadgeFromTrade } from "@/lib/publicAccountPrivacy"
 import { tradeScreenshotPublicUrl } from "@/lib/storagePublicUrl"
 import { TRADE_SHARE_EXPORT_WIDTH } from "@/lib/tradeShareExport"
@@ -94,10 +94,7 @@ const TradeShareCard = forwardRef<HTMLDivElement, TradeShareCardProps>(
         ? String(trade.session)
         : "—"
 
-    const points =
-      trade.points != null && trade.points !== ""
-        ? formatNumber(trade.points)
-        : "—"
+    const points = formatTradePoints(trade)
 
     const rr = formatNumber(trade.rr)
     const account = publicAccountLabel(trade)

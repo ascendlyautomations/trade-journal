@@ -12,9 +12,12 @@ import {
   toDateKey,
 } from "@/lib/formatDate"
 import { formatDecimal, formatRR } from "@/lib/formatDisplay"
+import { averageRrFromTrades } from "@/lib/tradeRr"
+import { resolveTradePoints } from "@/lib/resolveTradePoints"
 import { useEffect, useMemo, useState, useCallback } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { deleteUserTrade } from "@/lib/deleteTrade"
+import { formatTradeAccountNameSizeLine } from "@/lib/tradeAccountDisplay"
 import { useScrollPageTopOnMount } from "@/lib/useScrollPageTopOnMount"
 import { ConfirmModal, useDeleteTradeConfirmation } from "../components/ui"
 export default function CalendarPage() {
@@ -124,7 +127,7 @@ export default function CalendarPage() {
       const id = t.account_id != null ? String(t.account_id) : ""
       if (!id || seen.has(id)) continue
       seen.add(id)
-      const label = `${t.account_name ?? ""} ${t.account_size ?? ""}`.trim()
+      const label = formatTradeAccountNameSizeLine(t, accountById[id])
       const prefix = t.account_type ? `${t.account_type} · ` : ""
       opts.push({
         value: id,
@@ -132,7 +135,7 @@ export default function CalendarPage() {
       })
     }
     return opts
-  }, [trades])
+  }, [trades, accountById])
 
   const filteredTrades = trades.filter((trade) => {
     if (accountFilter !== "all") {
@@ -237,10 +240,7 @@ export default function CalendarPage() {
     const winRateForDay = totalTradesForDay
       ? (winsForDay.length / totalTradesForDay) * 100
       : 0
-    const avgRRForDay = totalTradesForDay
-      ? dayTrades.reduce((sum: number, t: any) => sum + (Number(t.rr) || 0), 0) /
-        totalTradesForDay
-      : 0
+    const avgRRForDay = averageRrFromTrades(dayTrades)
     const bestTradeForDay = dayTrades.length
       ? Math.max(...dayTrades.map((t: any) => Number(t.pnl) || 0))
       : 0
@@ -256,7 +256,7 @@ export default function CalendarPage() {
         lossesForDay.length
       : 0
     const totalPointsForDay = dayTrades.reduce(
-      (sum: number, t: any) => sum + (Number(t.points) || 0),
+      (sum: number, t: any) => sum + (resolveTradePoints(t) ?? 0),
       0
     )
     const sessionCounts = dayTrades.reduce((acc: Record<string, number>, t: any) => {

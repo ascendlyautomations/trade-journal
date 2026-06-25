@@ -13,9 +13,14 @@ import {
 } from "../../components/TradeSocialLayer"
 import { supabase } from "../../../lib/supabaseClient"
 import {
+  formatSignedPnlDisplay,
+  formatTradePoints,
+} from "@/lib/formatDisplay"
+import {
   PUBLIC_TRADE_SELECT,
   sanitizeTradeForViewer,
 } from "@/lib/publicAccountPrivacy"
+import { resolveTradePoints } from "@/lib/resolveTradePoints"
 import { profilePath } from "@/lib/profileRoutes"
 import { profileSeoDisplayName } from "@/lib/publicSeo"
 
@@ -110,6 +115,7 @@ export default function TradeDetailPageClient({
   const pnlLabel = Number.isNaN(pnl)
     ? "—"
     : `${pnlPositive ? "+" : "-"}$${Math.abs(pnl)}`
+  const resolvedPoints = trade ? resolveTradePoints(trade) : null
 
   const tradeCompactMeta = trade ? (
     <>
@@ -154,6 +160,14 @@ export default function TradeDetailPageClient({
           {pnlLabel}
         </span>
       </div>
+      {resolvedPoints !== null ? (
+        <p className="text-sm text-gray-400">
+          Points:{" "}
+          <span className="tabular-nums text-gray-200">
+            {formatTradePoints(trade)}
+          </span>
+        </p>
+      ) : null}
       {ownerProfile ? (
         <Link
           href={profilePath(ownerProfile)}

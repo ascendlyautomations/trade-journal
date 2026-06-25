@@ -28,6 +28,8 @@ import {
 import { tradeFormHasFutureDate, csvTradesHaveFutureDate, isDateAfterToday } from "@/lib/tradeDateValidation"
 import { notifyGettingStartedChecklistMaybeCompleted } from "@/lib/gettingStartedProgressSync"
 import { profilePath } from "@/lib/profileRoutes"
+import { hasStoredTradePoints } from "@/lib/resolveTradePoints"
+import { parseOptionalRr } from "@/lib/tradeRr"
 import CreateAccountModal, {
   type Props as CreateAccountModalProps,
 } from "@/components/CreateAccountModal"
@@ -39,6 +41,7 @@ import { buildCommunitySharePreviewPost } from "@/lib/buildCommunitySharePreview
 import CommunitySharePreviewModal from "@/app/components/CommunitySharePreviewModal"
 import { postImageSrc } from "@/app/components/feed/feedPostHelpers"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
+import { formatAccountNameWithSizeDisplay } from "@/lib/tradeAccountDisplay"
 
 type CreateAccountSavePayload = Parameters<CreateAccountModalProps["onSave"]>[0]
 
@@ -75,17 +78,6 @@ export type InputTradeFormProps = {
   csvDataRowCount?: number
   /** Source label for admin CSV import completed email */
   csvImportSource?: string
-}
-
-function formatAccountSize(size: any) {
-  if (!size) return ""
-  const num = Number(size)
-
-  if (!isNaN(num) && num >= 1000) {
-    return `${num / 1000}K`
-  }
-
-  return size
 }
 
 export default function InputTradeForm({
@@ -638,7 +630,7 @@ export default function InputTradeForm({
     }
 
     const parsedPnl = parseFloat(pnl) || 0
-    const parsedRR = parseFloat(rr) || 0
+    const parsedRR = parseOptionalRr(rr)
     const parsedPoints = parseFloat(points) || 0
     const parsedContracts = Number.parseInt(contracts, 10)
     const contractsNum = Number.isFinite(parsedContracts) ? parsedContracts : 0
@@ -796,7 +788,7 @@ export default function InputTradeForm({
         ticker: ticker || null,
         direction,
         pnl: Number.isFinite(parsedPnl) ? parsedPnl : 0,
-        rr: Number.isFinite(parsedRR) ? parsedRR : 0,
+        rr: parsedRR,
         points: Number.isFinite(parsedPoints) ? parsedPoints : 0,
         contracts: contractsNum,
         session: sessionToSave,
@@ -917,8 +909,8 @@ export default function InputTradeForm({
       entry_price: entryPrice ? Number(entryPrice) : null,
       exit_price: exitPrice ? Number(exitPrice) : null,
       contracts: contracts ? Number(contracts) : null,
-      points: points ? Number(points) : null,
-      rr: rr ? Number(rr) : null,
+      points: hasStoredTradePoints(points) ? Number(points) : null,
+      rr: parseOptionalRr(rr),
     }
 
     const selectedDate = entryDate
@@ -2205,10 +2197,10 @@ export default function InputTradeForm({
           ) : (
             <>
               {visibleAccountsInSettings.map((account) => {
-                const sizeDisplay =
-                  account.size != null && String(account.size).trim() !== ""
-                    ? `$${formatAccountSize(account.size)}`
-                    : "—"
+                const title = formatAccountNameWithSizeDisplay(
+                  account.name,
+                  account.size
+                )
                 return (
                   <div
                     key={String(account.id)}
@@ -2217,7 +2209,7 @@ export default function InputTradeForm({
                     <div className="flex items-center justify-between gap-2">
                       <div className="min-w-0 flex-1">
                         <span className="block truncate text-sm text-white">
-                          {account.name} • {sizeDisplay}
+                          {title || "—"}
                         </span>
                         {account.note?.trim() ? (
                           <p className="mt-1 truncate text-xs text-gray-400">

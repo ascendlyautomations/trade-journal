@@ -1,15 +1,17 @@
 "use client"
 
 import {
-  useCallback,
   useId,
   useLayoutEffect,
   useRef,
   useState,
   type ChangeEvent,
+  type KeyboardEvent,
   type ReactNode,
   type RefObject,
 } from "react"
+import { useAutoResizeTextarea } from "@/lib/useAutoResizeTextarea"
+import { applyTextareaNewlineInsert } from "@/lib/insertTextareaNewline"
 
 export type DmStyleComposerProps = {
   value: string
@@ -38,24 +40,6 @@ const messageFieldClass =
 
 const MAX_TEXTAREA_LINES = 3
 
-function resizeMessageTextarea(el: HTMLTextAreaElement) {
-  const style = window.getComputedStyle(el)
-  const lineHeight = parseFloat(style.lineHeight) || 20
-  const padding =
-    parseFloat(style.paddingTop) + parseFloat(style.paddingBottom)
-  const maxHeight = lineHeight * MAX_TEXTAREA_LINES + padding
-
-  el.style.height = "0px"
-  el.style.overflowY = "hidden"
-  const scrollHeight = el.scrollHeight
-  if (scrollHeight > maxHeight) {
-    el.style.height = `${maxHeight}px`
-    el.style.overflowY = "auto"
-  } else {
-    el.style.height = `${scrollHeight}px`
-  }
-}
-
 const hasShareActions = (
   imageDisabled: boolean,
   onTradeClick?: () => void
@@ -83,6 +67,7 @@ function SharePlusIcon({ className }: { className?: string }) {
 /**
  * Shared bottom composer matching the Messages / DM layout.
  * Auto-growing textarea (max ~3 lines, then internal scroll).
+ * Enter sends; Ctrl+Enter inserts a newline.
  * Mobile: [textarea] [Share] [Send] with attach sheet for photo/trade.
  * Desktop (md+): [textarea] [📷] [📊] [Send] unchanged.
  */
@@ -103,19 +88,47 @@ export default function DmStyleComposer({
 }: DmStyleComposerProps) {
   const [mobileAttachOpen, setMobileAttachOpen] = useState(false)
   const fileInputId = useId()
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const textareaRef = useAutoResizeTextarea(value, {
+    maxLines: MAX_TEXTAREA_LINES,
+  })
   const internalFileInputRef = useRef<HTMLInputElement>(null)
   const resolvedFileInputRef = fileInputRef ?? internalFileInputRef
+  const pendingCaretRef = useRef<number | null>(null)
   const showShare = hasShareActions(imageDisabled, onTradeClick)
 
-  const syncTextareaHeight = useCallback(() => {
-    const el = textareaRef.current
-    if (el) resizeMessageTextarea(el)
-  }, [])
-
   useLayoutEffect(() => {
-    syncTextareaHeight()
-  }, [value, syncTextareaHeight])
+    const el = textareaRef.current
+    const caret = pendingCaretRef.current
+    if (!el || caret == null) return
+    pendingCaretRef.current = null
+    el.setSelectionRange(caret, caret)
+  }, [value])
+
+  function handleTextareaKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
+    if (process.env.NODE_ENV === "development") {
+      console.log({
+        key: e.key,
+        ctrl: e.ctrlKey,
+        shift: e.shiftKey,
+        meta: e.metaKey,
+      })
+    }
+
+    if (e.key !== "Enter") return
+
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault()
+      pendingCaretRef.current = applyTextareaNewlineInsert(
+        e.currentTarget,
+        value,
+        onChange
+      )
+      return
+    }
+
+    e.preventDefault()
+    if (!sendDisabled) onSend()
+  }
 
   function openPhotoPicker() {
     setMobileAttachOpen(false)
@@ -149,12 +162,7 @@ export default function DmStyleComposer({
           value={value}
           disabled={textDisabled}
           onChange={(e) => onChange(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault()
-              if (!sendDisabled) onSend()
-            }
-          }}
+          onKeyDown={handleTextareaKeyDown}
           className={messageFieldClass}
         />
         {showShare ? (
@@ -195,6 +203,11 @@ export default function DmStyleComposer({
           Send
         </button>
       </div>
+      <p className="mt-1.5 text-xs text-gray-500">
+        <span className="font-medium text-gray-400">Enter</span> to send •{" "}
+        <span className="font-medium text-gray-400">Ctrl + Enter</span> for new
+        line
+      </p>
       {afterRow ? <div className="mt-2">{afterRow}</div> : null}
 
       {mobileAttachOpen ? (

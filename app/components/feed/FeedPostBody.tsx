@@ -7,6 +7,7 @@ import {
   formatRR,
   formatSignedPnlDisplay,
 } from "@/lib/formatDisplay"
+import { resolveTradePoints } from "@/lib/resolveTradePoints"
 
 type FeedPostBodyProps = {
   pnl: number
@@ -16,7 +17,6 @@ type FeedPostBodyProps = {
   accountTypeNorm: string
   accountTypeStyles: string
   rr: unknown
-  points: unknown
   publicDesc: string | null
   timingTrade: Record<string, unknown> | null
   createdAtLabel: string
@@ -30,11 +30,11 @@ function FeedPostBody({
   accountTypeNorm,
   accountTypeStyles,
   rr,
-  points,
   publicDesc,
   timingTrade,
   createdAtLabel,
 }: FeedPostBodyProps) {
+  const resolvedPoints = resolveTradePoints(timingTrade)
   return (
     <div className="space-y-3 px-4 pb-3">
       <div className="mt-2 flex items-center justify-between gap-3">
@@ -65,9 +65,9 @@ function FeedPostBody({
           {rr != null && rr !== "" ? (
             <span className="tabular-nums">RR {formatRR(rr)}</span>
           ) : null}
-          {points !== null && points !== undefined ? (
+          {resolvedPoints !== null ? (
             <span className="rounded-md bg-white/10 px-2 py-0.5 text-gray-200">
-              {formatPoints(points)} pts
+              {formatPoints(resolvedPoints)} pts
             </span>
           ) : null}
         </div>

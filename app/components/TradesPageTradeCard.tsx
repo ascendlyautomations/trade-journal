@@ -9,8 +9,8 @@ import {
   getTradeDurationDisplay,
 } from "@/lib/tradeDisplayFormat"
 import { formatEST } from "@/lib/formatEST"
-import { formatMoneyUnknown, formatNumberUnknown } from "@/lib/formatDisplay"
-import { safeAccountNumberLabel } from "@/lib/tradeAccountDisplay"
+import { formatMoneyUnknown, formatNumberUnknown, formatTradePoints } from "@/lib/formatDisplay"
+import { safeAccountNumberLabel, formatTradeAccountNameSizeLine } from "@/lib/tradeAccountDisplay"
 
 export type TradesPageTradeCardProps = {
   trade: any
@@ -56,14 +56,18 @@ function TradesPageTradeCard({
     [accountRow?.account_number]
   )
 
+  const accountNameSizeLine = useMemo(
+    () => formatTradeAccountNameSizeLine(trade, accountRow),
+    [trade, accountRow]
+  )
+
   const hasAccountLine = useMemo(
     () =>
       !!(
-        String(trade.account_name || "").trim() ||
-        String(trade.account_size || "").trim() ||
-        accountRow?.account_number && accountNumberDisplay
+        accountNameSizeLine ||
+        (accountRow?.account_number && accountNumberDisplay)
       ),
-    [trade.account_name, trade.account_size, accountRow?.account_number, accountNumberDisplay]
+    [accountNameSizeLine, accountRow?.account_number, accountNumberDisplay]
   )
 
   const imageSrc = useMemo(() => {
@@ -210,7 +214,7 @@ function TradesPageTradeCard({
             </span>
 
             <span className="bg-white/10 px-2 py-1 rounded text-xs">
-              Pts: {formatNumberUnknown(trade.points)}
+              Pts: {formatTradePoints(trade)}
             </span>
           </div>
 
@@ -251,9 +255,7 @@ function TradesPageTradeCard({
 
             {hasAccountLine ? (
               <div className="flex items-center gap-2 text-sm text-gray-300">
-                <span>
-                  {trade.account_name} {trade.account_size}
-                </span>
+                <span>{accountNameSizeLine}</span>
                 {accountNumberDisplay ? (
                   <span className="opacity-70">
                     • #{accountNumberDisplay}

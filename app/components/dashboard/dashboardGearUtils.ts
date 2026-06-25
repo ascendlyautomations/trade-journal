@@ -1,3 +1,11 @@
+import type { AccountRowForDisplay } from "@/lib/tradeAccountDisplay"
+import {
+  buildTradeAccountFilterKey,
+  formatAccountNameWithSizeDisplay,
+  resolveTradeAccountName,
+  resolveTradeAccountSize,
+  tradeMatchesAccountFilter,
+} from "@/lib/tradeAccountDisplay"
 import type { DashboardGearPersistedPrefs } from "./dashboardGearTypes"
 
 /** Strip to digits + one dot; max 2 decimal places (internal value for save). */
@@ -100,20 +108,24 @@ export function sanitizeDashboardAccountFilter(
 }
 
 export function buildDashboardAccountOptionsFromTrades(
-  trades: TradeForAccountFilter[]
+  trades: TradeForAccountFilter[],
+  accountById?: Record<string, AccountRowForDisplay | null | undefined> | null
 ): DashboardAccountOption[] {
   const accountMap = new Map<string, DashboardAccountOption>()
   trades
-    .filter((t) => t.account_name && t.account_size && t.account_id)
+    .filter((t) => t.account_id)
     .forEach((t) => {
-      const accountName = String(t.account_name ?? "").trim()
-      const size = String(t.account_size ?? "").trim()
       const id = String(t.account_id ?? "").trim()
-      const value = `${accountName}|${size}|${id}`
+      const accountRow = id && accountById ? accountById[id] : null
+      if (accountRow?.is_active === false) return
+      const accountName = resolveTradeAccountName(t, accountRow)
+      const size = resolveTradeAccountSize(t, accountRow)
+      if (!accountName || !size || !id) return
+      const value = buildTradeAccountFilterKey(t, accountRow)
       if (!accountMap.has(value)) {
         accountMap.set(value, {
           value,
-          label: `${accountName} ${size}`.trim(),
+          label: formatAccountNameWithSizeDisplay(accountName, size),
         })
       }
     })
@@ -123,14 +135,13 @@ export function buildDashboardAccountOptionsFromTrades(
 export function tradeMatchesDashboardAccountFilters(
   trade: TradeForAccountFilter,
   accountFilter: string,
-  accountTypeFilter: string
+  accountTypeFilter: string,
+  accountById?: Record<string, AccountRowForDisplay | null | undefined> | null
 ): boolean {
-  if (accountFilter !== "all") {
-    const accountName = String(trade.account_name ?? "").trim()
-    const size = String(trade.account_size ?? "").trim()
-    const id = String(trade.account_id ?? "").trim()
-    const accountKey = `${accountName}|${size}|${id}`
-    if (accountKey !== accountFilter) return false
+  const id = String(trade.account_id ?? "").trim()
+  const accountRow = id && accountById ? accountById[id] : null
+  if (!tradeMatchesAccountFilter(trade, accountFilter, accountRow)) {
+    return false
   }
   if (accountTypeFilter !== "all") {
     const tradeAcct = String(trade.mode ?? trade.account_type ?? "")
@@ -145,11 +156,15 @@ export function tradeMatchesDashboardAccountFilters(
 export function sanitizeHydratedDashboardFilters(args: {
   prefs: Partial<DashboardGearPersistedPrefs>
   trades: TradeForAccountFilter[]
+  accountById?: Record<string, AccountRowForDisplay | null | undefined> | null
 }): Pick<
   DashboardGearPersistedPrefs,
   "timeFilter" | "accountFilter" | "accountTypeFilter"
 > {
-  const accountOptions = buildDashboardAccountOptionsFromTrades(args.trades)
+  const accountOptions = buildDashboardAccountOptionsFromTrades(
+    args.trades,
+    args.accountById
+  )
 
   let timeFilter = sanitizeDashboardTimeFilter(args.prefs.timeFilter)
   let accountFilter = sanitizeDashboardAccountFilter(
@@ -165,7 +180,12 @@ export function sanitizeHydratedDashboardFilters(args: {
       tradeMatchesDashboardAccountFilters(t, "all", "all")
     )
     const matchesHydrated = args.trades.some((t) =>
-      tradeMatchesDashboardAccountFilters(t, accountFilter, accountTypeFilter)
+      tradeMatchesDashboardAccountFilters(
+        t,
+        accountFilter,
+        accountTypeFilter,
+        args.accountById
+      )
     )
     if (hasAnyTrade && !matchesHydrated) {
       accountFilter = "all"

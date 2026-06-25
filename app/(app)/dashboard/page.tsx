@@ -39,6 +39,13 @@ import {
   sanitizeHydratedDashboardFilters,
   sanitizeDrawdownLimitInput,
 } from "../../components/dashboard/dashboardGearUtils"
+import {
+  buildTradeAccountFilterKey,
+  formatAccountNameWithSizeDisplay,
+  resolveTradeAccountName,
+  resolveTradeAccountSize,
+  tradeMatchesAccountFilter,
+} from "@/lib/tradeAccountDisplay"
 import PerformanceShareModal from "../../components/PerformanceShareModal"
 import PostSetupImportModal from "../../components/PostSetupImportModal"
 import LockedFeature from "../../components/LockedFeature"
@@ -61,6 +68,7 @@ import {
   getTradingWeekday,
 } from "@/lib/formatDate"
 import { computeLongShortPerformance } from "@/lib/dashboardLongShortStats"
+import { averageRrFromTrades, hasStoredRr } from "@/lib/tradeRr"
 import { computeHoldTimeStats } from "@/lib/dashboardHoldTimeStats"
 import { computeMaxDrawdown } from "@/lib/dashboardMaxDrawdown"
 import {
@@ -332,12 +340,12 @@ function detectLossStreak(trades: any[]): number | null {
 
 function detectRRThreshold(trades: any[]): string | null {
   const lowRR = trades.filter((t) => {
-    const r = Number(t.rr)
-    return Number.isFinite(r) && r < 1
+    if (!hasStoredRr(t.rr)) return false
+    return Number(t.rr) < 1
   })
   const highRR = trades.filter((t) => {
-    const r = Number(t.rr)
-    return Number.isFinite(r) && r >= 1
+    if (!hasStoredRr(t.rr)) return false
+    return Number(t.rr) >= 1
   })
 
   if (lowRR.length < 3 || highRR.length < 3) return null
@@ -537,6 +545,7 @@ export default function Dashboard() {
   const [showPerformanceShare, setShowPerformanceShare] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
   const didHydrateDashboardPrefs = useRef(false)
+  const dashboardLoadedUserIdRef = useRef<string | null>(null)
   /** Same fetch as /trades — used only for filter dropdown labels (#account_number vs UUID). */
   const [accountRows, setAccountRows] = useState<any[]>([])
 
@@ -575,6 +584,7 @@ export default function Dashboard() {
         accountFilter,
         accountTypeFilter,
         showPublicOnly,
+        accountById,
       }),
     [
       tradesExcludingBacktest,
@@ -587,18 +597,21 @@ export default function Dashboard() {
 
   // 🔥 SAFE DATA FETCH (FIXES YOUR ERROR)
   const refreshDashboardData = useCallback(async () => {
-    setLoading(true)
-
-    const currentUser = user
-    if (!currentUser?.id) {
+    const currentUserId = user?.id
+    if (!currentUserId) {
       setLoading(false)
       return
+    }
+
+    const isInitialLoad = dashboardLoadedUserIdRef.current !== currentUserId
+    if (isInitialLoad) {
+      setLoading(true)
     }
 
     const { data: accountsData } = await supabase
       .from("accounts")
       .select("id, account_number, name, account_size, mode, category, is_active")
-      .eq("user_id", currentUser.id)
+      .eq("user_id", currentUserId)
     setAccountRows(accountsData || [])
 
     const { data: trades } = await supabase
@@ -606,15 +619,14 @@ export default function Dashboard() {
       .select(
         "id, created_at, date, pnl, rr, entry_time, exit_time, duration_seconds, account_name, account_size, account_id, mode, account_type, session, ticker, direction, strategy, trade_type, is_public, public_description"
       )
-      .eq("user_id", currentUser.id)
+      .eq("user_id", currentUserId)
       .order("date", { ascending: false })
 
     if (trades) setTrades(trades)
 
-    dispatchGettingStartedSignalsRefresh()
-
+    dashboardLoadedUserIdRef.current = currentUserId
     setLoading(false)
-  }, [user])
+  }, [user?.id])
 
   const handleImportModalComplete = useCallback(async () => {
     setShowImportModal(false)
@@ -626,6 +638,7 @@ export default function Dashboard() {
   useEffect(() => {
     if (profileLoading) return
     if (!user?.id) {
+      dashboardLoadedUserIdRef.current = null
       setLoading(false)
       return
     }
@@ -687,7 +700,11 @@ export default function Dashboard() {
       timeFilter: hydratedTimeFilter,
       accountFilter: hydratedAccountFilter,
       accountTypeFilter: hydratedAccountTypeFilter,
-    } = sanitizeHydratedDashboardFilters({ prefs: p, trades: tradesExcludingBacktest })
+    } = sanitizeHydratedDashboardFilters({
+      prefs: p,
+      trades: tradesExcludingBacktest,
+      accountById,
+    })
 
     setTimeFilter(hydratedTimeFilter)
     setAccountFilter(hydratedAccountFilter)
@@ -781,16 +798,20 @@ export default function Dashboard() {
       { value: string; label: string; accountType?: string | null }
     >()
     tradesExcludingBacktest
-      .filter(t => t.account_name && t.account_size && t.account_id)
+      .filter((t) => t.account_id)
       .forEach((t) => {
-        const accountName = String(t.account_name || "").trim()
-        const size = String(t.account_size || "").trim()
         const id = String(t.account_id || "").trim()
         const accRow = accountById[id]
         if (accRow?.is_active === false) return
-        const value = `${accountName}|${size}|${id}`
+        const accountName = resolveTradeAccountName(t, accRow)
+        const size = resolveTradeAccountSize(t, accRow)
+        if (!accountName || !size || !id) return
+        const value = buildTradeAccountFilterKey(t, accRow)
         const num = accRow?.account_number
-        const label = [accountName, size, num ? `• #${num}` : ""]
+        const label = [
+          formatAccountNameWithSizeDisplay(accountName, size),
+          num ? `• #${num}` : "",
+        ]
           .filter((x) => x !== "")
           .join(" ")
           .replace(/\s+/g, " ")
@@ -835,12 +856,14 @@ export default function Dashboard() {
         return false
       }
 
-      if (accountFilter !== "all") {
-        const accountName = String(trade.account_name || "").trim()
-        const size = String(trade.account_size || "").trim()
-        const id = String(trade.account_id || "").trim()
-        const accountKey = `${accountName}|${size}|${id}`
-        if (accountKey !== accountFilter) return false
+      if (
+        !tradeMatchesAccountFilter(
+          trade,
+          accountFilter,
+          accountById[String(trade.account_id ?? "").trim()]
+        )
+      ) {
+        return false
       }
 
       const tradeAcct = String(trade.mode ?? trade.account_type ?? "")
@@ -871,9 +894,7 @@ export default function Dashboard() {
     const winRate = totalTrades ? (wins.length / totalTrades) * 100 : 0
     const totalPnL = filteredTrades.reduce((sum, t) => sum + (t.pnl || 0), 0)
 
-    const avgRR =
-      filteredTrades.reduce((sum, t) => sum + (Number(t.rr) || 0), 0) /
-      (filteredTrades.length || 1)
+    const avgRR = averageRrFromTrades(filteredTrades)
 
     const losses = filteredTrades
   .map(t => Number(t.pnl) || 0)
@@ -935,17 +956,23 @@ const biggestLoss = losses.length > 0
       }
     })
 
-    const tickerAgg: Record<string, { totalPnL: number; wins: number; totalTrades: number; rrSum: number }> = {}
+    const tickerAgg: Record<
+      string,
+      { totalPnL: number; wins: number; totalTrades: number; rrSum: number; rrCount: number }
+    > = {}
 
     filteredTrades.forEach((t) => {
       const ticker = t.ticker || "—"
       if (!tickerAgg[ticker]) {
-        tickerAgg[ticker] = { totalPnL: 0, wins: 0, totalTrades: 0, rrSum: 0 }
+        tickerAgg[ticker] = { totalPnL: 0, wins: 0, totalTrades: 0, rrSum: 0, rrCount: 0 }
       }
       tickerAgg[ticker].totalPnL += t.pnl || 0
       tickerAgg[ticker].totalTrades += 1
       if (t.pnl > 0) tickerAgg[ticker].wins += 1
-      tickerAgg[ticker].rrSum += Number(t.rr) || 0
+      if (hasStoredRr(t.rr)) {
+        tickerAgg[ticker].rrSum += Number(t.rr)
+        tickerAgg[ticker].rrCount += 1
+      }
     })
 
     const symbolPerformanceRows = Object.entries(tickerAgg)
@@ -955,25 +982,28 @@ const biggestLoss = losses.length > 0
         wins: s.wins,
         winRate: s.totalTrades ? (s.wins / s.totalTrades) * 100 : 0,
         totalPnL: s.totalPnL,
-        avgRR: s.rrSum / (s.totalTrades || 1)
+        avgRR: s.rrCount ? s.rrSum / s.rrCount : null,
       }))
       .sort((a, b) => b.totalPnL - a.totalPnL)
 
     const strategyAgg: Record<
       string,
-      { totalPnL: number; wins: number; totalTrades: number; rrSum: number }
+      { totalPnL: number; wins: number; totalTrades: number; rrSum: number; rrCount: number }
     > = {}
 
     filteredTrades.forEach((t) => {
       const strategy = (t.strategy && String(t.strategy).trim()) || ""
       if (!strategy) return
       if (!strategyAgg[strategy]) {
-        strategyAgg[strategy] = { totalPnL: 0, wins: 0, totalTrades: 0, rrSum: 0 }
+        strategyAgg[strategy] = { totalPnL: 0, wins: 0, totalTrades: 0, rrSum: 0, rrCount: 0 }
       }
       strategyAgg[strategy].totalPnL += t.pnl || 0
       strategyAgg[strategy].totalTrades += 1
       if (t.pnl > 0) strategyAgg[strategy].wins += 1
-      strategyAgg[strategy].rrSum += Number(t.rr) || 0
+      if (hasStoredRr(t.rr)) {
+        strategyAgg[strategy].rrSum += Number(t.rr)
+        strategyAgg[strategy].rrCount += 1
+      }
     })
 
     const strategyPerformanceRows = Object.entries(strategyAgg)
@@ -983,7 +1013,7 @@ const biggestLoss = losses.length > 0
         wins: s.wins,
         winRate: s.totalTrades ? (s.wins / s.totalTrades) * 100 : 0,
         totalPnL: s.totalPnL,
-        avgRR: s.rrSum / (s.totalTrades || 1),
+        avgRR: s.rrCount ? s.rrSum / s.rrCount : null,
       }))
       .sort((a, b) => b.totalPnL - a.totalPnL)
 
@@ -1250,7 +1280,14 @@ const biggestLoss = losses.length > 0
     return keys.size >= 1
   }, [tradesExcludingBacktest, isPro])
 
-  if (profileLoading || loading || (user?.id && !signalsReady)) {
+  const dashboardHasCachedData =
+    user?.id != null && dashboardLoadedUserIdRef.current === user.id
+
+  if (
+    profileLoading ||
+    (loading && !dashboardHasCachedData) ||
+    (user?.id && !signalsReady && !dashboardHasCachedData)
+  ) {
     return <SkeletonDashboardPage />
   }
 

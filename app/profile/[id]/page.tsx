@@ -56,9 +56,12 @@ import {
   filterCommentsAfterDelete,
 } from "@/lib/deleteComment"
 import {
+  deleteLikeNotification,
+  ensureLikeNotification,
+} from "@/lib/likeNotifications"
+import {
   PROFILE_POST_COMMENT_INSERT_SELECT,
   insertProfilePostCommentNotifications,
-  insertProfilePostLikeNotification,
   profilePostOwnerUserId,
   queryProfilePostComments,
   withInsertedProfilePostParentCommentId,
@@ -91,7 +94,9 @@ import {
   sumPayoutAchievementTotals,
 } from "../../../lib/achievements"
 import { formatPnlCurrency } from "../../../lib/formatMoney"
-import { formatRR } from "@/lib/formatDisplay"
+import { formatRR, formatTradePoints } from "@/lib/formatDisplay"
+import { averageRrFromTrades } from "@/lib/tradeRr"
+import { resolveTradePoints } from "@/lib/resolveTradePoints"
 import TradeCardTimingBlock from "../../components/TradeCardTimingBlock"
 import { formatEST } from "@/lib/formatEST"
 import { createUserRoom } from "@/lib/createUserRoom"
@@ -266,6 +271,9 @@ function TradeCard({
   const accountTypeNorm = String(trade.account_type ?? "").trim().toLowerCase()
   const rr =
     trade.rr != null && trade.rr !== "" ? formatRR(trade.rr) : "—"
+  const resolvedPoints = resolveTradePoints(trade)
+  const pointsLabel =
+    resolvedPoints !== null ? formatTradePoints(trade) : null
   const pnlLabel = Number.isFinite(pnl)
     ? `${pnl >= 0 ? "+" : ""}${formatMoney(pnl)}`
     : "—"
@@ -348,7 +356,10 @@ function TradeCard({
             </span>
           ) : null}
         </div>
-        <span className="shrink-0 text-gray-300 tabular-nums">RR {rr}</span>
+        <div className="flex shrink-0 items-center gap-3 text-gray-300 tabular-nums">
+          <span>RR {rr}</span>
+          {pointsLabel ? <span>Pts {pointsLabel}</span> : null}
+        </div>
       </div>
       {desc ? (
         <p className="px-1 text-sm leading-relaxed text-white">{desc}</p>
@@ -1955,6 +1966,7 @@ function ProfilePageContent() {
     try {
     const meta = likesByPost[key] || { count: 0, liked: false }
     const postRow = posts.find((p) => String(p.id) === key)
+    const ownerId = profilePostOwnerUserId(postRow ?? { user_id: profile?.id })
     if (meta.liked) {
       const { error } = await supabase
         .from("profile_post_likes")
@@ -1962,6 +1974,13 @@ function ProfilePageContent() {
         .eq("profile_post_id", key)
         .eq("user_id", currentUserId)
       if (error) return console.error(error)
+      if (ownerId) {
+        await deleteLikeNotification(supabase, {
+          recipientUserId: ownerId,
+          senderUserId: currentUserId,
+          target: { kind: "profile_post", profilePostId: key },
+        })
+      }
       setLikesByPost((prev) => ({
         ...prev,
         [key]: { count: Math.max(0, meta.count - 1), liked: false },
@@ -1978,12 +1997,11 @@ function ProfilePageContent() {
       [key]: { count: meta.count + 1, liked: true },
     }))
 
-    const ownerId = profilePostOwnerUserId(postRow ?? { user_id: profile?.id })
     if (ownerId) {
-      await insertProfilePostLikeNotification(supabase, {
-        profilePostId: key,
-        ownerUserId: ownerId,
+      await ensureLikeNotification(supabase, {
+        recipientUserId: ownerId,
         senderUserId: currentUserId,
+        target: { kind: "profile_post", profilePostId: key },
       })
     }
     } finally {
@@ -2656,11 +2674,9 @@ function ProfilePageContent() {
   const overviewTotalPnL = statsVisible
     ? profileOverviewTrades.reduce((sum, t) => sum + (Number(t.pnl) || 0), 0)
     : 0
-  const overviewAvgRR =
-    statsVisible && overviewTotalTrades
-      ? profileOverviewTrades.reduce((sum, t) => sum + (Number(t.rr) || 0), 0) /
-        overviewTotalTrades
-      : 0
+  const overviewAvgRR = statsVisible
+    ? averageRrFromTrades(profileOverviewTrades)
+    : null
   const overviewPayoutTotal = statsVisible
     ? sumPayoutAchievementTotals(achievements)
     : 0
@@ -2955,7 +2971,7 @@ function ProfilePageContent() {
                       {formatProfileMetadataLine(profile)}
                     </p>
 
-                    <p className="mt-2 px-4 text-sm leading-relaxed text-gray-300 md:px-0">
+                    <p className="mt-2 whitespace-pre-wrap break-words px-4 text-sm leading-relaxed text-gray-300 md:px-0">
                     {profile.bio || "No bio yet"}
                   </p>
 

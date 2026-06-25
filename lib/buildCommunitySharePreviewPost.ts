@@ -1,6 +1,7 @@
 /** Build a feed-shaped post object from Input Trade form state (no DB writes). */
 
 import { resolveFeedTradeAccountType } from "./feedAccountType.ts"
+import { resolveTradePoints } from "./resolveTradePoints"
 
 export type CommunitySharePreviewInput = {
   userId: string
@@ -35,9 +36,14 @@ export function buildCommunitySharePreviewPost(
 ): Record<string, unknown> {
   const pnl = parseNumericField(input.pnl) ?? 0
   const rr = parseNumericField(input.rr)
-  const points = parseNumericField(input.points)
   const entryPrice = parseNumericField(input.entryPrice ?? null)
   const exitPrice = parseNumericField(input.exitPrice ?? null)
+  const points = resolveTradePoints({
+    points: parseNumericField(input.points),
+    entry_price: entryPrice,
+    exit_price: exitPrice,
+    direction: input.direction,
+  })
   const accountType = resolveFeedTradeAccountType({
     mode: input.accountMode,
     accountType: input.accountType,
@@ -51,7 +57,7 @@ export function buildCommunitySharePreviewPost(
     trade_id: "community-preview",
     created_at: new Date().toISOString(),
     pnl,
-    rr: rr ?? 0,
+    rr,
     image_url: input.imageUrl,
     profiles: {
       username: input.username.trim() || "User",

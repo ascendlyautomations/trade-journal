@@ -292,6 +292,26 @@ function buildRoomMessagesCacheKey(
   return `${roomId}::${activeSectionId ?? "null"}::${sectionSig}`
 }
 
+function roomMessageMatchesSectionFilter(
+  row: RoomMessage,
+  sectionsList: { id: string; name?: string | null }[],
+  filter: { len: number; id: string | null }
+): boolean {
+  if (filter.len > 0 && filter.id) {
+    const sec = sectionsList.find((s) => s.id === filter.id)
+    const nameLower = String(sec?.name ?? "").trim().toLowerCase()
+    const generalMerge =
+      nameLower === "general" &&
+      (row.section_id === filter.id || row.section_id == null)
+    const strictMatch = nameLower !== "general" && row.section_id === filter.id
+    return generalMerge || strictMatch
+  }
+  if (filter.len > 0 && !filter.id && row.section_id != null) {
+    return false
+  }
+  return true
+}
+
 async function appendSelfToSeenByForRoomMessage(
   messageId: string,
   userId: string
@@ -1190,6 +1210,51 @@ function CommunityContent() {
       const next = { ...prev }
       delete next[cacheKey]
       return next
+    })
+  }
+
+  function appendRoomMessageToState(row: RoomMessage) {
+    if (!selectedRoomId) return
+
+    const f = sectionFilterRef.current
+    if (
+      !roomMessageMatchesSectionFilter(row, sectionsRef.current, f)
+    ) {
+      return
+    }
+
+    if (row.pinned === true) {
+      setPinnedMessages((prev) => {
+        if (prev.some((m) => m.id === row.id)) return prev
+        return [...prev, row]
+      })
+    } else {
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === row.id)) return prev
+        return [...prev, row]
+      })
+    }
+
+    const cacheKey = buildRoomMessagesCacheKey(
+      selectedRoomId,
+      sectionsRef.current,
+      sectionFilterRef.current.id
+    )
+    setMessagesByRoom((prev) => {
+      const entry = prev[cacheKey]
+      if (!entry) return prev
+      if (row.pinned === true) {
+        if (entry.pinned.some((m) => m.id === row.id)) return prev
+        return {
+          ...prev,
+          [cacheKey]: { pinned: [...entry.pinned, row], main: entry.main },
+        }
+      }
+      if (entry.main.some((m) => m.id === row.id)) return prev
+      return {
+        ...prev,
+        [cacheKey]: { pinned: entry.pinned, main: [...entry.main, row] },
+      }
     })
   }
 
@@ -2229,20 +2294,13 @@ function CommunityContent() {
         if (!data) return
 
         const row = data as RoomMessage
-        const f = sectionFilterRef.current
-        if (f.len > 0 && f.id) {
-          const sec = sectionsRef.current.find(
-            (s: { id: string }) => s.id === f.id
+        if (
+          !roomMessageMatchesSectionFilter(
+            row,
+            sectionsRef.current,
+            sectionFilterRef.current
           )
-          const nameLower = String(sec?.name ?? "")
-            .trim()
-            .toLowerCase()
-          const generalMerge =
-            nameLower === "general" &&
-            (row.section_id === f.id || row.section_id == null)
-          const strictMatch = nameLower !== "general" && row.section_id === f.id
-          if (!generalMerge && !strictMatch) return
-        } else if (f.len > 0 && !f.id && row.section_id != null) {
+        ) {
           return
         }
 
@@ -2256,25 +2314,7 @@ function CommunityContent() {
           return
         }
 
-        setMessages((prev) => {
-          if (prev.some((m) => m.id === data.id)) return prev
-          return [...prev, row]
-        })
-
-        const cacheKey = buildRoomMessagesCacheKey(
-          selectedRoomId,
-          sectionsRef.current,
-          sectionFilterRef.current.id
-        )
-        setMessagesByRoom((prev) => {
-          const entry = prev[cacheKey]
-          if (!entry) return prev
-          if (entry.main.some((m) => m.id === row.id)) return prev
-          return {
-            ...prev,
-            [cacheKey]: { pinned: entry.pinned, main: [...entry.main, row] },
-          }
-        })
+        appendRoomMessageToState(row)
 
         const viewerId = userIdRef.current
         if (viewerId && row.user_id !== viewerId) {
@@ -2514,7 +2554,7 @@ function CommunityContent() {
             ? { parent_message_id: roomMessageParentId() }
             : {}),
         })
-        .select("id")
+        .select(ROOM_MESSAGE_REALTIME_SELECT)
         .single()
       if (error) {
         console.error("room_messages insert:", error)
@@ -2522,13 +2562,8 @@ function CommunityContent() {
         return
       }
 
-      await fetchRoomMessages(
-        selectedRoomId,
-        sectionsRef.current,
-        activeFetchSectionId(),
-        { bypassCache: true }
-      )
-      if (insertedRow?.id) {
+      if (insertedRow) {
+        appendRoomMessageToState(insertedRow as RoomMessage)
         void createRoomMessageNotifications(supabase, insertedRow.id)
       }
     } else {
@@ -2554,7 +2589,7 @@ function CommunityContent() {
             ? { parent_message_id: roomMessageParentId() }
             : {}),
         })
-        .select("id")
+        .select(ROOM_MESSAGE_REALTIME_SELECT)
         .single()
       if (error) {
         console.error("room_messages insert:", error)
@@ -2562,13 +2597,8 @@ function CommunityContent() {
         return
       }
 
-      await fetchRoomMessages(
-        selectedRoomId,
-        sectionsRef.current,
-        activeFetchSectionId(),
-        { bypassCache: true }
-      )
-      if (insertedRow?.id) {
+      if (insertedRow) {
+        appendRoomMessageToState(insertedRow as RoomMessage)
         void createRoomMessageNotifications(supabase, insertedRow.id)
       }
     }
@@ -2633,7 +2663,7 @@ function CommunityContent() {
           ? { parent_message_id: roomMessageParentId() }
           : {}),
       })
-      .select("id")
+      .select(ROOM_MESSAGE_REALTIME_SELECT)
       .single()
 
     if (error) {
@@ -2642,13 +2672,8 @@ function CommunityContent() {
       return
     }
 
-    await fetchRoomMessages(
-      selectedRoomId,
-      sectionsRef.current,
-      activeFetchSectionId(),
-      { bypassCache: true }
-    )
-    if (insertedRow?.id) {
+    if (insertedRow) {
+      appendRoomMessageToState(insertedRow as RoomMessage)
       void createRoomMessageNotifications(supabase, insertedRow.id)
     }
 
@@ -3323,7 +3348,7 @@ function CommunityContent() {
                               />
                             </button>
                             {msg.content?.trim() ? (
-                              <p className="mt-2 break-words text-sm text-white">
+                              <p className="mt-2 whitespace-pre-wrap break-words text-sm text-white">
                                 {msg.content}
                               </p>
                             ) : null}
@@ -3366,7 +3391,7 @@ function CommunityContent() {
                             </div>
                           </div>
                         ) : (
-                          <p className="break-words text-sm text-white">{msg.content}</p>
+                          <p className="whitespace-pre-wrap break-words text-sm text-white">{msg.content}</p>
                         )}
                       </div>
                       {!needsJoin ? (
@@ -3482,7 +3507,7 @@ function CommunityContent() {
                                     />
                                   </button>
                                   {msg.content?.trim() ? (
-                                    <p className="mt-1 break-words text-xs text-white">
+                                    <p className="mt-1 whitespace-pre-wrap break-words text-xs text-white">
                                       {msg.content}
                                     </p>
                                   ) : null}
@@ -3525,7 +3550,7 @@ function CommunityContent() {
                                   </div>
                                 </div>
                               ) : (
-                                <span className="break-words">{msg.content}</span>
+                                <span className="whitespace-pre-wrap break-words">{msg.content}</span>
                               )}
                             </div>
                             {!needsJoin ? (

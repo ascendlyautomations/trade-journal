@@ -43,7 +43,7 @@ type TradingHoursSummary = {
 export type DashboardStatsGridProps = {
   totalTrades: number
   winRate: number
-  avgRR: number
+  avgRR: number | null
   totalPnL: number
   avgWin: number
   bestTrade: number

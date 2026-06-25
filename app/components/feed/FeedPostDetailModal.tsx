@@ -16,6 +16,7 @@ import {
   formatRR,
   formatSignedPnlDisplay,
 } from "@/lib/formatDisplay"
+import { resolveTradePoints } from "@/lib/resolveTradePoints"
 import FeedCommentsSection from "./FeedCommentsSection"
 import FeedPostHeader from "./FeedPostHeader"
 import {
@@ -104,7 +105,7 @@ export default function FeedPostDetailModal({
       acctStyleKey: String(tradeJoin?.account_type ?? "").trim().toLowerCase(),
       pnl,
       pnlPositive: !Number.isNaN(pnl) && pnl >= 0,
-      points: tradeJoin?.points,
+      points: resolveTradePoints(tradeJoin),
       timingTrade: tradeJoin,
       createdAtLabel: formatEST(post.created_at),
       avatarUrl,
@@ -198,8 +199,7 @@ export default function FeedPostDetailModal({
               {post.rr != null && post.rr !== "" ? (
                 <span className="tabular-nums">RR {formatRR(post.rr)}</span>
               ) : null}
-              {modalPostDetails.points !== null &&
-              modalPostDetails.points !== undefined ? (
+              {modalPostDetails.points !== null ? (
                 <span className="rounded-md bg-white/10 px-2 py-0.5 text-gray-200">
                   {formatPoints(modalPostDetails.points)} pts
                 </span>

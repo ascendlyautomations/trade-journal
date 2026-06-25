@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { ensureLikeNotification } from "./likeNotifications"
 
 export const PROFILE_POST_COMMENT_CORE_SELECT =
   "id, profile_post_id, user_id, content, created_at, profiles(username, avatar_url)"
@@ -64,21 +65,11 @@ export async function insertProfilePostLikeNotification(
     senderUserId: string
   }
 ) {
-  if (params.ownerUserId === params.senderUserId) return
-
-  const { error } = await supabase.from("notifications").insert({
-    user_id: params.ownerUserId,
-    sender_id: params.senderUserId,
-    type: "like",
-    profile_post_id: params.profilePostId,
+  await ensureLikeNotification(supabase, {
+    recipientUserId: params.ownerUserId,
+    senderUserId: params.senderUserId,
+    target: { kind: "profile_post", profilePostId: params.profilePostId },
   })
-
-  if (error) {
-    console.error("Profile post like notification error:", error.message, error)
-    return
-  }
-
-  dispatchNotificationRefresh()
 }
 
 export async function insertProfilePostCommentNotifications(

@@ -70,7 +70,7 @@ export default function DetailModalShell({
 
   const dialogWidthClass =
     layout === "split"
-      ? "max-w-2xl md:max-w-5xl lg:max-w-6xl"
+      ? "max-w-2xl md:max-w-[760px]"
       : "max-w-2xl"
 
   const body =

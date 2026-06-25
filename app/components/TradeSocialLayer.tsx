@@ -18,6 +18,10 @@ import ReplyComposerStrip from "@/app/components/replies/ReplyComposerStrip"
 import { feedbackPresets } from "@/lib/feedbackPresets"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import {
+  deleteLikeNotification,
+  ensureLikeNotification,
+} from "@/lib/likeNotifications"
+import {
   deleteTradeComment,
   filterCommentsAfterDelete,
 } from "@/lib/deleteComment"
@@ -238,6 +242,18 @@ export function TradeSocialProvider({
         return
       }
 
+      if (!suppressNotifications) {
+        const receiverId =
+          tradeOwnerUserId != null ? String(tradeOwnerUserId).trim() : ""
+        if (receiverId && receiverId !== currentUserId) {
+          await deleteLikeNotification(supabase, {
+            recipientUserId: receiverId,
+            senderUserId: currentUserId,
+            target: { kind: "trade", tradeId: resolvedId },
+          })
+        }
+      }
+
       setLiked(false)
       setLikes((prev) => Math.max(0, prev - 1))
     } else {
@@ -258,22 +274,11 @@ export function TradeSocialProvider({
         const receiverId =
           tradeOwnerUserId != null ? String(tradeOwnerUserId).trim() : ""
         if (receiverId && receiverId !== currentUserId) {
-          const { error: nErr } = await supabase.from("notifications").insert({
-            user_id: receiverId,
-            sender_id: currentUserId,
-            type: "like",
-            trade_id: resolvedId,
+          await ensureLikeNotification(supabase, {
+            recipientUserId: receiverId,
+            senderUserId: currentUserId,
+            target: { kind: "trade", tradeId: resolvedId },
           })
-
-          if (nErr) {
-            console.error("Notification error:", nErr?.message, nErr)
-            return
-          }
-
-          window.dispatchEvent(new CustomEvent("notification-update"))
-          window.dispatchEvent(
-            new CustomEvent("tj-unread-notifications-refresh")
-          )
         }
       }
     }

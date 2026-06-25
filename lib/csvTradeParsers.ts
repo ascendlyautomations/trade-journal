@@ -1,6 +1,7 @@
 import { parseCsvNumeric } from "./parseCsvNumeric"
 import { normalizeFuturesSymbol } from "./normalizeFuturesSymbol"
 import { getSessionFromDate } from "./getSession"
+import { calculateDirectionalPoints } from "./resolveTradePoints"
 
 export type CsvRow = Record<string, string>
 
@@ -936,6 +937,20 @@ export function parseTradovateRow(row: CsvRow, userId: string): CsvTradeInsert {
     duration_seconds = parseDurationCsvValue(duration_text)
   }
 
+  let points: number | null = null
+  if (normalized.entry_price != null && normalized.exit_price != null) {
+    points = calculateDirectionalPoints(
+      direction,
+      normalized.entry_price,
+      normalized.exit_price
+    )
+    const tickSizeRaw = getCellByAliases(row, ["_tickSize", "tickSize", "tick size"])
+    const tickSize = tickSizeRaw != null ? parseCsvNumeric(tickSizeRaw) : null
+    if (tickSize != null && tickSize > 0) {
+      points = roundPointsToTickSize(points, tickSize)
+    }
+  }
+
   logCsvRowDebug("tradovate-row", {
     rawPnl: pnlRaw,
     parsedPnl: pnl,
@@ -948,6 +963,9 @@ export function parseTradovateRow(row: CsvRow, userId: string): CsvTradeInsert {
     assignedExitTime: normalized.exit_time,
     timestampsReordered: normalized.reordered,
     computedDurationSeconds: duration_seconds,
+    direction,
+    computedPoints: points,
+    tickSize: getCellByAliases(row, ["_tickSize", "tickSize", "tick size"]),
   })
 
   return {
@@ -960,11 +978,8 @@ export function parseTradovateRow(row: CsvRow, userId: string): CsvTradeInsert {
     direction,
     pnl,
     contracts,
-    rr: 0,
-    points:
-      normalized.entry_price != null && normalized.exit_price != null
-        ? Math.abs(normalized.exit_price - normalized.entry_price)
-        : null,
+    rr: null,
+    points,
     date: normalized.entry_time,
     created_at: normalized.entry_time,
     session,
@@ -1132,6 +1147,74 @@ const TRADOVATE_HEADER_ALIASES = [
   "hold",
 ] as const
 
+/** Tradovate export metadata — recognized during import, not stored on trades. */
+export const TRADOVATE_BROKER_METADATA_HEADERS = [
+  "_priceFormat",
+  "_priceFormatType",
+  "_tickSize",
+  "buyFillId",
+  "sellFillId",
+] as const
+
+const TRADOVATE_BROKER_METADATA_KEYS = normalizedHeaderAliasSet(
+  TRADOVATE_BROKER_METADATA_HEADERS
+)
+
+export function isTradovateBrokerMetadataHeader(rawHeader: string): boolean {
+  return TRADOVATE_BROKER_METADATA_KEYS.has(normalizeHeaderKey(rawHeader))
+}
+
+function decimalPlacesForTickSize(tickSize: number): number {
+  const s = String(tickSize)
+  const dot = s.indexOf(".")
+  return dot === -1 ? 0 : s.length - dot - 1
+}
+
+function roundPointsToTickSize(points: number, tickSize: number): number {
+  if (!Number.isFinite(tickSize) || tickSize <= 0) return points
+  const decimals = decimalPlacesForTickSize(tickSize)
+  const snapped = Math.round(points / tickSize) * tickSize
+  return Number(snapped.toFixed(Math.min(decimals + 2, 8)))
+}
+
+export function tradovateSupportedColumnLabel(key: string): string | null {
+  const nk = normalizeHeaderKey(key)
+  if (nk.includes("symbol") || nk.includes("contract") || nk === "ticker") {
+    return "Symbol"
+  }
+  if (
+    nk === "qty" ||
+    nk.includes("quantity") ||
+    nk.includes("contracts") ||
+    nk.includes("size")
+  ) {
+    return "Quantity"
+  }
+  if (
+    nk === "buyprice" ||
+    nk === "entry price" ||
+    nk === "entry" ||
+    (nk.includes("buy") && nk.includes("price"))
+  ) {
+    return "Entry Price"
+  }
+  if (
+    nk === "sellprice" ||
+    nk === "exit price" ||
+    nk === "exit" ||
+    (nk.includes("sell") && nk.includes("price"))
+  ) {
+    return "Exit Price"
+  }
+  if (nk.includes("pnl") || nk.includes("p l")) return "P&L"
+  if (nk.includes("duration") || nk.includes("hold")) return "Duration"
+  if (nk.includes("timestamp") || nk.includes("time")) return "Time"
+  if (nk.includes("side") || nk.includes("direction") || nk === "action") {
+    return "Direction"
+  }
+  return null
+}
+
 function normalizedHeaderAliasSet(aliases: readonly string[]): Set<string> {
   return new Set(aliases.map((a) => normalizeHeaderKey(a)))
 }
@@ -1171,6 +1254,7 @@ export function isRecognizedCsvHeader(
   if (resolveCsvHeaderField(rawHeader)) return true
   const nk = normalizeHeaderKey(rawHeader)
   if (format === "tradovate" && TRADOVATE_RECOGNIZED_HEADERS.has(nk)) return true
+  if (format === "tradovate" && isTradovateBrokerMetadataHeader(rawHeader)) return true
   if (format === "tradezella") {
     const zKey = stripBom(rawHeader).toLowerCase().trim()
     if (TRADEZELLA_RECOGNIZED_HEADERS.has(zKey)) return true

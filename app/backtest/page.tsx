@@ -13,6 +13,7 @@ import InputTradeForm from "../components/InputTradeForm"
 import PerformanceShareModal from "../components/PerformanceShareModal"
 import { formatPnlCurrency } from "@/lib/formatMoney"
 import { formatRR } from "@/lib/formatDisplay"
+import { averageRrFromTrades } from "@/lib/tradeRr"
 import { ConfirmModal, useDeleteTradeConfirmation } from "../components/ui"
 
 type BacktestTrade = Record<string, unknown> & {
@@ -106,9 +107,7 @@ export default function BacktestPage() {
     0
   )
 
-  const avgRR =
-    filteredTrades.reduce((acc, t) => acc + (Number(t.rr) || 0), 0) /
-    (totalTrades || 1)
+  const avgRR = averageRrFromTrades(filteredTrades)
 
   const strategyMap: Record<string, BacktestTrade[]> = {}
   trades.forEach((t) => {
@@ -246,9 +245,7 @@ export default function BacktestPage() {
                 (acc, t) => acc + (Number(t.pnl) || 0),
                 0
               )
-              const stratAvgRR =
-                stratTrades.reduce((acc, t) => acc + (Number(t.rr) || 0), 0) /
-                (total || 1)
+              const stratAvgRR = averageRrFromTrades(stratTrades)
               return (
                 <div
                   key={name}

@@ -46,11 +46,13 @@ export default function CsvImportDiagnosticsPanel({
     formatLabel,
     detectedColumns,
     supportedColumnCount,
+    calculatedFields,
     missingRequired,
     unknownColumns,
     unknownColumnCount,
     rowFailureSamples,
     explanation,
+    successPreview,
   } = diagnostics
 
   const heavyUnknownFields = unknownColumnCount >= 3
@@ -123,30 +125,72 @@ export default function CsvImportDiagnosticsPanel({
   return (
     <div className={className}>
       <div
-        className={`rounded-xl border border-red-500/25 bg-red-950/30 p-4 text-sm text-red-50/95`}
-        role="alert"
+        className={`rounded-xl border p-4 text-sm ${
+          successPreview
+            ? "border-emerald-500/30 bg-emerald-950/25 text-emerald-50/95"
+            : "border-red-500/25 bg-red-950/30 text-red-50/95"
+        }`}
+        role={successPreview ? "status" : "alert"}
       >
-        <p className="font-semibold text-red-100">CSV import diagnostics</p>
+        <p
+          className={`font-semibold ${
+            successPreview ? "text-emerald-100" : "text-red-100"
+          }`}
+        >
+          {successPreview
+            ? `✓ ${formatLabel} format detected`
+            : "CSV import diagnostics"}
+        </p>
         {explanation ? (
           <p
-            className={`mt-2 leading-relaxed text-red-100/85 ${compact ? "text-xs" : "text-sm"}`}
+            className={`mt-2 leading-relaxed ${
+              successPreview ? "text-emerald-100/85" : "text-red-100/85"
+            } ${compact ? "text-xs" : "text-sm"}`}
           >
             {explanation}
           </p>
         ) : null}
-        <p className="mt-2 text-xs text-red-200/70">
-          Detected format: {formatLabel}
-        </p>
+        {!successPreview ? (
+          <p className="mt-2 text-xs text-red-200/70">
+            Detected format: {formatLabel}
+          </p>
+        ) : null}
 
         {detectedColumns.length > 0 ? (
           <div className="mt-3">
-            <p className="text-xs font-medium uppercase tracking-wide text-red-200/80">
-              Supported columns detected ({supportedColumnCount})
+            <p
+              className={`text-xs font-medium uppercase tracking-wide ${
+                successPreview ? "text-emerald-200/80" : "text-red-200/80"
+              }`}
+            >
+              {successPreview
+                ? "Supported fields detected"
+                : `Supported fields detected (${supportedColumnCount})`}
             </p>
             <ul className="mt-1 space-y-0.5">
               {detectedColumns.map((col) => (
-                <li key={col} className="text-xs text-emerald-200/90">
+                <li
+                  key={col}
+                  className={`text-xs ${
+                    successPreview ? "text-emerald-200/90" : "text-emerald-200/90"
+                  }`}
+                >
                   ✓ {col}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
+        {calculatedFields.length > 0 ? (
+          <div className="mt-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-emerald-200/80">
+              Calculated
+            </p>
+            <ul className="mt-1 space-y-0.5">
+              {calculatedFields.map((field) => (
+                <li key={field} className="text-xs text-emerald-200/90">
+                  ✓ {field}
                 </li>
               ))}
             </ul>

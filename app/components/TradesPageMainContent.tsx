@@ -12,7 +12,7 @@ type TradeStats = {
   totalTrades: number
   winRate: number
   totalPnL: number
-  avgRR: number
+  avgRR: number | null
 }
 
 type TradesPageMainContentProps = {
