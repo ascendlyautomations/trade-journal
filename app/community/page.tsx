@@ -20,7 +20,7 @@ import {
 import DmStyleComposer from "../components/DmStyleComposer"
 import { supabase } from "../../lib/supabaseClient"
 import { compressImage, compressScreenshot } from "@/lib/compressImage"
-import { formatLocalDateTime } from "@/lib/formatDate"
+import { formatRelativeTime } from "@/lib/formatRelativeTime"
 import { feedbackPresets, persistentError } from "@/lib/feedbackPresets"
 import { useUserProfile } from "@/lib/UserProfileProvider"
 import { formatMoneyUnknown, formatRR } from "@/lib/formatDisplay"
@@ -3281,7 +3281,7 @@ function CommunityContent() {
                           className="text-sm font-semibold"
                         />
                         <span className="text-xs text-gray-400">
-                          {formatLocalDateTime(msg.created_at)}
+                          {formatRelativeTime(msg.created_at)}
                         </span>
                         {isOwner ? (
                           <button
@@ -3437,7 +3437,7 @@ function CommunityContent() {
                                   className="text-xs text-gray-400"
                                 />
                                 <span className="text-xs text-gray-400">
-                                  {formatLocalDateTime(msg.created_at)}
+                                  {formatRelativeTime(msg.created_at)}
                                 </span>
                               </div>
                               <div className="flex shrink-0 items-center gap-1">

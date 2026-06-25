@@ -16,6 +16,7 @@ import {
   deleteLikeNotification,
   ensureLikeNotification,
 } from "@/lib/likeNotifications"
+import { ensureCommentNotificationsForInsert } from "@/lib/commentNotifications"
 import {
   PROFILE_POST_COMMENT_INSERT_SELECT,
   insertProfilePostCommentNotifications,
@@ -40,6 +41,7 @@ import {
   FEED_COMMENT_INSERT_SELECT,
   FEED_STORIES_SELECT,
   buildFeedPostsIndex,
+  postTradeOwnerUserId,
   queryFeedComments,
   withInsertedParentCommentId,
   type FeedContentFilter,
@@ -73,15 +75,6 @@ type StoryRow = {
   user_id: string
   image_url: string
   created_at: string
-}
-
-/** Trade owner for notifications (not always same as post author). */
-function postTradeOwnerUserId(post: any): string | null | undefined {
-  const t = post?.trades
-  const row = t ? (Array.isArray(t) ? t[0] : t) : null
-  const fromTrade = row?.user_id
-  if (fromTrade != null && String(fromTrade).trim() !== "") return String(fromTrade)
-  return post?.user_id ?? null
 }
 
 type LikeMeta = { count: number; liked: boolean }
@@ -1010,6 +1003,7 @@ function FeedPageContent() {
         if (ownerId) {
           await insertProfilePostCommentNotifications(supabase, {
             profilePostId: pid,
+            commentId: String(insertedRow.id),
             ownerUserId: ownerId,
             senderUserId: user.id,
             content: trimmed,
@@ -1069,25 +1063,15 @@ function FeedPageContent() {
       })
 
       const notifyUserId = postTradeOwnerUserId(post)
-      const tradeId = post.trade_id
-      if (notifyUserId && notifyUserId !== user.id) {
-        const { error: nErr } = await supabase.from("notifications").insert({
-          user_id: notifyUserId,
-          sender_id: user.id,
-          type: "comment",
-          post_id: pid,
-          trade_id: tradeId ?? null,
-          content: trimmed.slice(0, 200),
-        })
-        if (nErr) {
-          console.error("Notification error:", nErr?.message, nErr)
-        } else {
-          window.dispatchEvent(new CustomEvent("notification-update"))
-          window.dispatchEvent(
-            new CustomEvent("tj-unread-notifications-refresh")
-          )
-        }
-      }
+      await ensureCommentNotificationsForInsert(supabase, {
+        commentId: String(insertedRow.id),
+        senderUserId: user.id,
+        content: trimmed,
+        target: { kind: "post", postId: pid, tradeId: post.trade_id ?? null },
+        ownerUserId: notifyUserId,
+        parentCommentId,
+        existingComments,
+      })
 
       return true
       } finally {

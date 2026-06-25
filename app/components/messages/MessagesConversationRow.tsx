@@ -1,10 +1,11 @@
 "use client"
 
-import { memo } from "react"
+import { memo, useEffect, useState } from "react"
 import {
   ProfileAvatarLink,
   ProfileUsernameLink,
 } from "@/app/components/ProfileLink"
+import { formatConversationListTime } from "@/lib/formatRelativeTime"
 
 export type MessagesConversationRowProps = {
   conversationId: string
@@ -15,6 +16,7 @@ export type MessagesConversationRowProps = {
   username: string
   profileUserId?: string | null
   lastMessage: string
+  lastMessageAt?: string | null
   avatarUrl: string | null
   unreadCount: number
   isMenuOpen: boolean
@@ -34,6 +36,7 @@ function MessagesConversationRow({
   username,
   profileUserId,
   lastMessage,
+  lastMessageAt,
   avatarUrl,
   unreadCount,
   isMenuOpen,
@@ -43,6 +46,18 @@ function MessagesConversationRow({
   onMarkUnread,
   onDelete,
 }: MessagesConversationRowProps) {
+  const [now, setNow] = useState(() => Date.now())
+
+  useEffect(() => {
+    if (!lastMessageAt) return
+    const id = window.setInterval(() => setNow(Date.now()), 30_000)
+    return () => window.clearInterval(id)
+  }, [lastMessageAt])
+
+  const timeLabel = lastMessageAt
+    ? formatConversationListTime(lastMessageAt, now)
+    : ""
+
   return (
     <div
       onClick={() => onOpen(conversationId)}
@@ -103,7 +118,7 @@ function MessagesConversationRow({
             username={username}
             src={avatarUrl}
             stopPropagation
-            imgClassName="h-10 w-10 rounded-full object-cover transition hover:scale-105"
+            imgClassName="h-10 w-10 shrink-0 rounded-full object-cover transition hover:scale-105"
           />
         ) : avatarUrl ? (
           <img
@@ -111,50 +126,60 @@ function MessagesConversationRow({
             alt=""
             loading="lazy"
             decoding="async"
-            className="h-10 w-10 rounded-full object-cover transition hover:scale-105"
+            className="h-10 w-10 shrink-0 rounded-full object-cover transition hover:scale-105"
           />
         ) : (
-          <div className="h-10 w-10 rounded-full bg-gray-600" />
+          <div className="h-10 w-10 shrink-0 rounded-full bg-gray-600" />
         )}
 
         <div className="min-w-0 flex-1">
-          <p className="font-semibold text-emerald-400">
-            {isGroup ? (
-              <>
-                {groupName || displayName}
-                {isPinned ? (
-                  <span className="ml-2 text-xs text-yellow-400">📌</span>
-                ) : null}
-              </>
-            ) : profileUserId ? (
-              <>
-                <ProfileUsernameLink
-                  userId={profileUserId}
-                  username={username}
-                  stopPropagation
-                  className="hover:underline"
-                >
+          <div className="flex items-center gap-2 min-w-0">
+            <p className="min-w-0 flex-1 truncate font-semibold text-emerald-400">
+              {isGroup ? (
+                <>
+                  {groupName || displayName}
+                  {isPinned ? (
+                    <span className="ml-2 text-xs text-yellow-400">📌</span>
+                  ) : null}
+                </>
+              ) : profileUserId ? (
+                <>
+                  <ProfileUsernameLink
+                    userId={profileUserId}
+                    username={username}
+                    stopPropagation
+                    className="hover:underline"
+                  >
+                    @{username}
+                  </ProfileUsernameLink>
+                  {isPinned ? (
+                    <span className="ml-2 text-xs text-yellow-400">📌</span>
+                  ) : null}
+                </>
+              ) : (
+                <>
                   @{username}
-                </ProfileUsernameLink>
-                {isPinned ? (
-                  <span className="ml-2 text-xs text-yellow-400">📌</span>
-                ) : null}
-              </>
-            ) : (
-              <>
-                @{username}
-                {isPinned ? (
-                  <span className="ml-2 text-xs text-yellow-400">📌</span>
-                ) : null}
-              </>
-            )}
-          </p>
+                  {isPinned ? (
+                    <span className="ml-2 text-xs text-yellow-400">📌</span>
+                  ) : null}
+                </>
+              )}
+            </p>
+            {timeLabel ? (
+              <time
+                dateTime={lastMessageAt ?? undefined}
+                className="shrink-0 text-xs tabular-nums whitespace-nowrap text-gray-400"
+              >
+                {timeLabel}
+              </time>
+            ) : null}
+          </div>
 
           <p className="text-sm text-gray-400 truncate">{lastMessage}</p>
         </div>
 
         {unreadCount > 0 ? (
-          <span className="ml-auto shrink-0 bg-red-500 text-white text-xs px-2 py-1 rounded-full tabular-nums">
+          <span className="shrink-0 bg-red-500 text-white text-xs px-2 py-1 rounded-full tabular-nums">
             {unreadCount > 9 ? "9+" : unreadCount}
           </span>
         ) : null}

@@ -11,6 +11,8 @@ type LikeNotificationParams = {
   target: LikeNotificationTarget
 }
 
+const UNIQUE_VIOLATION = "23505"
+
 function dispatchNotificationRefresh() {
   if (typeof window === "undefined") return
   window.dispatchEvent(new CustomEvent("notification-update"))
@@ -31,7 +33,9 @@ function applyTargetFilter<
   return query.eq("profile_post_id", target.profilePostId)
 }
 
-function buildInsertPayload(params: LikeNotificationParams): Record<string, unknown> {
+export function buildLikeNotificationInsertPayload(
+  params: LikeNotificationParams
+): Record<string, unknown> {
   const base = {
     user_id: params.recipientUserId,
     sender_id: params.senderUserId,
@@ -51,40 +55,22 @@ function buildInsertPayload(params: LikeNotificationParams): Record<string, unkn
   return { ...base, profile_post_id: params.target.profilePostId }
 }
 
-/** Create a like notification, or skip if one already exists for this actor + target. */
+/** Create exactly one like notification for this actor + target. */
 export async function ensureLikeNotification(
   supabase: SupabaseClient,
   params: LikeNotificationParams
 ): Promise<void> {
   if (params.recipientUserId === params.senderUserId) return
 
-  let findQuery = supabase
-    .from("notifications")
-    .select("id")
-    .eq("type", "like")
-    .eq("user_id", params.recipientUserId)
-    .eq("sender_id", params.senderUserId)
-    .limit(1)
-
-  findQuery = applyTargetFilter(findQuery, params.target)
-
-  const { data: existing, error: findError } = await findQuery.maybeSingle()
-
-  if (findError) {
-    console.error("Like notification lookup error:", findError.message, findError)
-    return
-  }
-
-  if (existing?.id) {
-    dispatchNotificationRefresh()
-    return
-  }
-
   const { error } = await supabase
     .from("notifications")
-    .insert(buildInsertPayload(params))
+    .insert(buildLikeNotificationInsertPayload(params))
 
   if (error) {
+    if (error.code === UNIQUE_VIOLATION) {
+      dispatchNotificationRefresh()
+      return
+    }
     console.error("Like notification insert error:", error.message, error)
     return
   }
@@ -92,7 +78,7 @@ export async function ensureLikeNotification(
   dispatchNotificationRefresh()
 }
 
-/** Remove like notification(s) when the user unlikes (cleans legacy duplicates too). */
+/** Remove all like notifications for this actor + target when the user unlikes. */
 export async function deleteLikeNotification(
   supabase: SupabaseClient,
   params: LikeNotificationParams

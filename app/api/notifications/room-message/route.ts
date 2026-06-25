@@ -150,8 +150,8 @@ export async function POST(req: Request) {
     .from("notifications")
     .select("user_id")
     .eq("type", "room_message")
+    .eq("room_message_id", messageId)
     .in("user_id", recipientIds)
-    .like("content", `%\"message_id\":\"${messageId}\"%`)
 
   if (existingErr) {
     console.error(
@@ -189,6 +189,7 @@ export async function POST(req: Request) {
       user_id: recipientId,
       sender_id: user.id,
       type: "room_message",
+      room_message_id: messageId,
       content,
     }))
 
@@ -201,6 +202,9 @@ export async function POST(req: Request) {
     .insert(rows)
 
   if (insertErr) {
+    if (insertErr.code === "23505") {
+      return Response.json({ ok: true, inserted: 0, deduplicated: true })
+    }
     console.error("[api/notifications/room-message] insert failed", insertErr)
     return Response.json({ error: insertErr.message }, { status: 500 })
   }

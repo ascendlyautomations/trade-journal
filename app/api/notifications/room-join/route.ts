@@ -63,6 +63,7 @@ export async function POST(req: Request) {
       user_id: roomRow.owner_user_id,
       sender_id: user.id,
       type: "room_join",
+      room_id: roomId,
       content: JSON.stringify({
         room_slug: roomRow.slug ?? null,
         room_name: roomRow.name ?? null,
@@ -70,6 +71,9 @@ export async function POST(req: Request) {
     })
 
   if (insertErr) {
+    if (insertErr.code === "23505") {
+      return Response.json({ ok: true, deduplicated: true })
+    }
     console.error("[api/notifications/room-join] insert failed", insertErr)
     return Response.json({ error: insertErr.message }, { status: 500 })
   }

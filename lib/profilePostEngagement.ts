@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { ensureCommentNotificationsForInsert } from "./commentNotifications"
 import { ensureLikeNotification } from "./likeNotifications"
 
 export const PROFILE_POST_COMMENT_CORE_SELECT =
@@ -52,11 +53,6 @@ export function withInsertedProfilePostParentCommentId<T extends Record<string, 
   return { ...row, parent_comment_id: parentCommentId }
 }
 
-function dispatchNotificationRefresh() {
-  window.dispatchEvent(new CustomEvent("notification-update"))
-  window.dispatchEvent(new CustomEvent("tj-unread-notifications-refresh"))
-}
-
 export async function insertProfilePostLikeNotification(
   supabase: SupabaseClient,
   params: {
@@ -76,6 +72,7 @@ export async function insertProfilePostCommentNotifications(
   supabase: SupabaseClient,
   params: {
     profilePostId: string
+    commentId: string
     ownerUserId: string
     senderUserId: string
     content: string
@@ -83,40 +80,13 @@ export async function insertProfilePostCommentNotifications(
     existingComments?: Array<{ id: string; user_id: string }>
   }
 ) {
-  const receivers = new Set<string>()
-  const snippet = params.content.trim().slice(0, 200)
-
-  if (params.parentCommentId) {
-    const parent = params.existingComments?.find(
-      (c) => String(c.id) === String(params.parentCommentId)
-    )
-    const parentUserId =
-      parent?.user_id != null ? String(parent.user_id).trim() : ""
-    if (parentUserId && parentUserId !== params.senderUserId) {
-      receivers.add(parentUserId)
-    }
-  } else if (
-    params.ownerUserId &&
-    params.ownerUserId !== params.senderUserId
-  ) {
-    receivers.add(params.ownerUserId)
-  }
-
-  for (const receiverId of receivers) {
-    const { error } = await supabase.from("notifications").insert({
-      user_id: receiverId,
-      sender_id: params.senderUserId,
-      type: "comment",
-      profile_post_id: params.profilePostId,
-      content: snippet,
-    })
-
-    if (error) {
-      console.error("Profile post comment notification error:", error.message, error)
-    }
-  }
-
-  if (receivers.size > 0) {
-    dispatchNotificationRefresh()
-  }
+  await ensureCommentNotificationsForInsert(supabase, {
+    commentId: params.commentId,
+    senderUserId: params.senderUserId,
+    content: params.content,
+    target: { kind: "profile_post", profilePostId: params.profilePostId },
+    ownerUserId: params.ownerUserId,
+    parentCommentId: params.parentCommentId,
+    existingComments: params.existingComments,
+  })
 }

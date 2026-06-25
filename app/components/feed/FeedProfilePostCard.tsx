@@ -1,7 +1,7 @@
 "use client"
 
 import { memo, useCallback, useMemo } from "react"
-import { formatEST } from "@/lib/formatEST"
+import { formatSocialTimestamp } from "@/lib/formatRelativeTime"
 import { profilePostPublicUrl } from "@/lib/storagePublicUrl"
 import { isRoomSharePost } from "@/lib/roomSharePost"
 import FeedPostActions from "./FeedPostActions"
@@ -69,7 +69,7 @@ function FeedProfilePostCard({
     return raw !== "" ? raw : null
   }, [post.content])
   const createdAtLabel = useMemo(
-    () => formatEST(post.created_at),
+    () => formatSocialTimestamp(post.created_at),
     [post.created_at]
   )
 

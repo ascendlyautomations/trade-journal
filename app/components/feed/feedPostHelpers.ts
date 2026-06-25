@@ -21,6 +21,20 @@ export type FeedItem = {
 export const FEED_POSTS_SELECT =
   "id, user_id, trade_id, created_at, pnl, rr, image_url, profiles(username, avatar_url), trades(public_description, user_id, ticker, direction, account_type, points, entry_time, exit_time, entry_price, exit_price, trade_date, duration_seconds, duration_text)"
 
+/** Trade owner for notifications (not always same as post author). */
+export function postTradeOwnerUserId(post: {
+  user_id?: string | null
+  trades?: { user_id?: string | null } | { user_id?: string | null }[] | null
+}): string | null {
+  const t = post?.trades
+  const row = t ? (Array.isArray(t) ? t[0] : t) : null
+  const fromTrade = row?.user_id
+  if (fromTrade != null && String(fromTrade).trim() !== "") return String(fromTrade)
+  const fromPost = post?.user_id
+  if (fromPost != null && String(fromPost).trim() !== "") return String(fromPost)
+  return null
+}
+
 export function normalizeTradeFeedItem(row: Record<string, unknown>): FeedItem {
   return {
     ...row,

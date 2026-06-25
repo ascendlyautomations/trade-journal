@@ -1,3 +1,5 @@
+import { formatRelativeTime } from "@/lib/formatRelativeTime"
+
 export type ExploreProfile = {
   id: string
   username: string | null
@@ -194,19 +196,10 @@ export function rankActiveTraders(
 }
 
 export function formatJoinedLabel(createdAt: string): string {
-  const createdMs = new Date(createdAt).getTime()
-  if (!Number.isFinite(createdMs)) return "Joined recently"
-
-  const days = Math.floor((Date.now() - createdMs) / DAY_MS)
-  if (days <= 0) return "Joined today"
-  if (days === 1) return "Joined yesterday"
-  if (days < 14) return `Joined ${days} days ago`
-  if (days < 60) return "Joined recently"
-
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    year: "numeric",
-  }).format(new Date(createdAt))
+  const relative = formatRelativeTime(createdAt)
+  if (!relative) return "Joined recently"
+  if (relative === "Just now") return "Joined just now"
+  return `Joined ${relative.charAt(0).toLowerCase()}${relative.slice(1)}`
 }
 
 export function bioPreview(bio: string | null | undefined, maxLen = 96): string {

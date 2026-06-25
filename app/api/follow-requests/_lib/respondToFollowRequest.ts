@@ -89,8 +89,10 @@ export async function approveFollowRequest(
   })
 
   if (notifErr) {
-    console.error("[follow-requests] follow notification insert failed", notifErr)
-    return { ok: false, status: 500, error: notifErr.message }
+    if (notifErr.code !== "23505") {
+      console.error("[follow-requests] follow notification insert failed", notifErr)
+      return { ok: false, status: 500, error: notifErr.message }
+    }
   }
 
   return { ok: true }

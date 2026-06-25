@@ -1,4 +1,8 @@
 import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js"
+import {
+  deleteCommentNotificationByCommentId,
+  deleteLegacyCommentNotification,
+} from "./commentNotifications"
 
 export type FeedCommentRow = {
   id: string
@@ -78,6 +82,7 @@ export function filterCommentsAfterDelete<
 async function cleanupCommentNotifications(
   supabase: SupabaseClient,
   params: {
+    commentId: string
     senderId: string
     content: string
     postId?: string | null
@@ -85,36 +90,19 @@ async function cleanupCommentNotifications(
     profilePostId?: string | null
   }
 ) {
-  const snippet = params.content.trim().slice(0, 200)
-  let query = supabase
-    .from("notifications")
-    .delete()
-    .eq("type", "comment")
-    .eq("sender_id", params.senderId)
+  await deleteCommentNotificationByCommentId(
+    supabase,
+    params.commentId,
+    params.senderId
+  )
 
-  if (params.postId) {
-    query = query.eq("post_id", params.postId)
-  } else if (params.tradeId) {
-    query = query.eq("trade_id", params.tradeId)
-  } else if (params.profilePostId) {
-    query = query.eq("profile_post_id", params.profilePostId)
-  } else {
-    return
-  }
-
-  if (snippet) {
-    query = query.eq("content", snippet)
-  }
-
-  const { error } = await query
-  if (error) {
-    logDeleteError("notification cleanup failed (comment already deleted)", {
-      error,
-      postId: params.postId,
-      tradeId: params.tradeId,
-      profilePostId: params.profilePostId,
-    })
-  }
+  await deleteLegacyCommentNotification(supabase, {
+    senderId: params.senderId,
+    content: params.content,
+    postId: params.postId,
+    tradeId: params.tradeId,
+    profilePostId: params.profilePostId,
+  })
 }
 
 function noProfilePostRowDeletedError(): PostgrestError {
@@ -180,6 +168,7 @@ export async function deleteProfilePostComment(
   }
 
   await cleanupCommentNotifications(supabase, {
+    commentId,
     senderId: userId,
     content: String(comment.content ?? ""),
     profilePostId:
@@ -241,6 +230,7 @@ export async function deleteFeedComment(
   }
 
   await cleanupCommentNotifications(supabase, {
+    commentId,
     senderId: userId,
     content: String(comment.content ?? ""),
     postId: comment.post_id != null ? String(comment.post_id) : null,
@@ -301,6 +291,7 @@ export async function deleteTradeComment(
   }
 
   await cleanupCommentNotifications(supabase, {
+    commentId,
     senderId: userId,
     content: String(comment.content ?? ""),
     tradeId: comment.trade_id != null ? String(comment.trade_id) : null,

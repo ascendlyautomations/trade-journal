@@ -14,7 +14,7 @@ import EmptyState from "../components/ui/EmptyState"
 import { SkeletonNotificationsPage } from "../components/ui/skeletons"
 import Modal from "../components/ui/Modal"
 import { clearAllNotifications, dismissNotifications } from "@/lib/followNotifications"
-import { formatEST } from "@/lib/formatEST"
+import { formatSocialTimestamp } from "@/lib/formatRelativeTime"
 import { NOTIFICATION_ENGAGEMENT_TYPES } from "@/lib/notificationEngagementTypes"
 import {
   buildGroupedNotificationCards,
@@ -28,17 +28,17 @@ import {
   formatRoomMessageGroupSubtitle,
   formatRoomMessageGroupTitle,
   getGroupedNotificationHref,
-  getNotificationTimeSection,
   groupCardsByTimeSection,
   groupedCardCreatedAt,
   groupedCardIsUnread,
   groupedCardNotificationIds,
+  NOTIFICATION_TIME_SECTION_LABELS,
+  NOTIFICATION_TIME_SECTION_ORDER,
   senderDisplayName,
   type GroupedNotificationCard,
   type NotificationCenterTab,
   type NotificationRecord,
   type SenderProfile,
-  type TimeSection,
 } from "@/lib/notificationsDisplay"
 
 const NOTIFICATIONS_TABLE = "notifications"
@@ -78,25 +78,6 @@ function logNotificationsQueryError(
     details: error?.details,
     hint: error?.hint,
   })
-}
-
-const SECTION_LABELS: Record<TimeSection, string> = {
-  today: "Today",
-  yesterday: "Yesterday",
-  earlier: "Earlier",
-}
-
-function timeAgo(ts: string): string {
-  const t = new Date(ts).getTime()
-  if (!Number.isFinite(t)) return ""
-  const s = Math.max(0, Math.floor((Date.now() - t) / 1000))
-  if (s < 60) return "just now"
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`
-  if (s < 86400) return `${Math.floor(s / 3600)}h ago`
-  if (getNotificationTimeSection(ts) === "earlier") {
-    return formatEST(ts)
-  }
-  return `${Math.floor(s / 86400)}d ago`
 }
 
 /** React list key — must be unique across like/comment/follow/room_join cards. */
@@ -374,8 +355,8 @@ function GroupedNotificationCardView({
               {subtitle ? (
                 <p className="mt-0.5 text-xs text-gray-400">{subtitle}</p>
               ) : null}
-              <p className="mt-1 text-[11px] uppercase tracking-wide text-gray-500">
-                {timeAgo(timestamp)}
+              <p className="mt-1 text-[11px] tabular-nums text-gray-400">
+                {formatSocialTimestamp(timestamp)}
               </p>
             </button>
             {expandable ? (
@@ -548,6 +529,55 @@ export default function NotificationsPage() {
     void fetchNotifications()
   }, [userId, fetchNotifications])
 
+  useEffect(() => {
+    if (!userId) return
+
+    const channel = supabase.channel(`notifications-page-${userId}`)
+
+    channel.on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "notifications",
+        filter: `user_id=eq.${userId}`,
+      },
+      (payload: {
+        eventType: string
+        new: NotificationRecord | null
+        old: { id?: string } | null
+      }) => {
+        if (payload.eventType === "DELETE" && payload.old?.id) {
+          setNotifications((prev) =>
+            prev.filter((row) => row.id !== payload.old?.id)
+          )
+          return
+        }
+        if (payload.eventType === "INSERT" || payload.eventType === "UPDATE") {
+          void fetchNotifications()
+        }
+      }
+    )
+
+    channel.subscribe()
+
+    return () => {
+      void supabase.removeChannel(channel)
+    }
+  }, [userId, fetchNotifications])
+
+  useEffect(() => {
+    const onRefresh = () => {
+      void fetchNotifications()
+    }
+    window.addEventListener("notification-update", onRefresh)
+    window.addEventListener("tj-unread-notifications-refresh", onRefresh)
+    return () => {
+      window.removeEventListener("notification-update", onRefresh)
+      window.removeEventListener("tj-unread-notifications-refresh", onRefresh)
+    }
+  }, [fetchNotifications])
+
   const groupedCards = useMemo(
     () => buildGroupedNotificationCards(notifications),
     [notifications]
@@ -558,27 +588,10 @@ export default function NotificationsPage() {
     [groupedCards, activeTab]
   )
 
-  const roomCards = useMemo(
-    () => tabCards.filter((card) => card.kind === "room_message_group"),
+  const sections = useMemo(
+    () => groupCardsByTimeSection(tabCards),
     [tabCards]
   )
-
-  const otherCards = useMemo(
-    () => tabCards.filter((card) => card.kind !== "room_message_group"),
-    [tabCards]
-  )
-
-  const roomSections = useMemo(
-    () => groupCardsByTimeSection(roomCards),
-    [roomCards]
-  )
-
-  const otherSections = useMemo(
-    () => groupCardsByTimeSection(otherCards),
-    [otherCards]
-  )
-
-  const sections = otherSections
 
   const unreadCount = useMemo(
     () => groupedCards.filter((card) => groupedCardIsUnread(card)).length,
@@ -737,16 +750,13 @@ export default function NotificationsPage() {
     )
   }
 
-  const hasAnyItems =
-    (activeTab === "all" || activeTab === "rooms"
-      ? roomSections.today.length +
-        roomSections.yesterday.length +
-        roomSections.earlier.length
-      : 0) +
-      sections.today.length +
-      sections.yesterday.length +
-      sections.earlier.length >
-    0
+  const hasAnyItems = useMemo(
+    () =>
+      NOTIFICATION_TIME_SECTION_ORDER.some(
+        (section) => sections[section].length > 0
+      ),
+    [sections]
+  )
 
   if (loading) {
     return (
@@ -869,64 +879,18 @@ export default function NotificationsPage() {
             />
           ) : (
             <>
-              {(activeTab === "all" || activeTab === "rooms") &&
-              (roomSections.today.length > 0 ||
-                roomSections.yesterday.length > 0 ||
-                roomSections.earlier.length > 0) ? (
-                <div className="space-y-3">
-                  {activeTab === "all" ? (
-                    <h2 className="text-sm font-semibold text-emerald-300">
-                      Trade Rooms
+              {NOTIFICATION_TIME_SECTION_ORDER.map((section) =>
+                sections[section].length > 0 ? (
+                  <section key={section} className="space-y-2">
+                    <h2 className="text-sm font-semibold text-blue-300">
+                      {NOTIFICATION_TIME_SECTION_LABELS[section]}
                     </h2>
-                  ) : null}
-                  {(["today", "yesterday", "earlier"] as TimeSection[]).map(
-                    (section) =>
-                      roomSections[section].length > 0 ? (
-                        <section key={`room-${section}`} className="space-y-2">
-                          <h2 className="text-sm font-semibold text-blue-300">
-                            {SECTION_LABELS[section]}
-                          </h2>
-                          <div className="space-y-2">
-                            {roomSections[section].map((card) => renderCard(card))}
-                          </div>
-                        </section>
-                      ) : null
-                  )}
-                </div>
-              ) : null}
-
-              {activeTab === "all" &&
-              (otherSections.today.length > 0 ||
-                otherSections.yesterday.length > 0 ||
-                otherSections.earlier.length > 0) ? (
-                <h2 className="text-sm font-semibold text-blue-300">
-                  Other activity
-                </h2>
-              ) : null}
-
-              {(activeTab === "all" ||
-                activeTab === "likes" ||
-                activeTab === "comments" ||
-                activeTab === "followers") &&
-                (["today", "yesterday", "earlier"] as TimeSection[]).map(
-                  (section) =>
-                    sections[section].length > 0 ? (
-                      <section key={section} className="space-y-2">
-                        <h2
-                          className={
-                            activeTab === "all"
-                              ? "text-sm font-semibold text-blue-300/90"
-                              : "text-sm font-semibold text-blue-300"
-                          }
-                        >
-                          {SECTION_LABELS[section]}
-                        </h2>
-                        <div className="space-y-2">
-                          {sections[section].map((card) => renderCard(card))}
-                        </div>
-                      </section>
-                    ) : null
-                )}
+                    <div className="space-y-2">
+                      {sections[section].map((card) => renderCard(card))}
+                    </div>
+                  </section>
+                ) : null
+              )}
             </>
           )}
         </div>

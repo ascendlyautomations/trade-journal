@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { useCallback, useEffect, useState } from "react"
 import { supabase } from "@/lib/supabaseClient"
-import { formatEST } from "@/lib/formatEST"
+import { formatRelativeTime } from "@/lib/formatRelativeTime"
 import { profilePath } from "@/lib/profileRoutes"
 import {
   approveIncomingFollowRequest,
@@ -228,7 +228,7 @@ export default function FollowRequestsPanel({
                     {label}
                   </p>
                   <p className="text-xs text-gray-400">
-                    Requested {formatEST(request.created_at)}
+                    Requested {formatRelativeTime(request.created_at)}
                   </p>
                 </div>
               </Link>

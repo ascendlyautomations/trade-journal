@@ -1,7 +1,7 @@
 "use client"
 
 import { memo, useCallback, useMemo, type MutableRefObject } from "react"
-import { formatEST } from "@/lib/formatEST"
+import { formatSocialTimestamp } from "@/lib/formatRelativeTime"
 import {
   getModeStyles,
   normalizeFeedAccountType,
@@ -94,7 +94,7 @@ function FeedPostCard({
     }
   }, [tradeRow])
   const createdAtLabel = useMemo(
-    () => formatEST(post.created_at),
+    () => formatSocialTimestamp(post.created_at),
     [post.created_at]
   )
 

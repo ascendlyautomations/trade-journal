@@ -1,7 +1,7 @@
 "use client"
 
 import { ProfileUsernameLink } from "@/app/components/ProfileLink"
-import { formatSocialCommentTime } from "@/lib/formatSocialCommentTime"
+import { formatSocialTimestamp } from "@/lib/formatRelativeTime"
 
 type CommentAuthorLineProps = {
   userId: string
@@ -20,7 +20,7 @@ export function CommentAuthorLine({
   usernameClassName = "font-medium text-gray-400 hover:text-gray-300",
   stopPropagation = false,
 }: CommentAuthorLineProps) {
-  const timeLabel = formatSocialCommentTime(createdAt)
+  const timeLabel = formatSocialTimestamp(createdAt)
 
   return (
     <p className={className}>

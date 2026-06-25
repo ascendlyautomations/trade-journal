@@ -10,7 +10,7 @@ import { PostInteractionsEngagement } from "@/app/components/PostInteractions"
 import TradeCardTimingBlock from "@/app/components/TradeCardTimingBlock"
 import { CommentFocusCompactStrip } from "@/app/components/comments/CommentFocusCompactStrip"
 import MobileCommentFocusLayout from "@/app/components/comments/MobileCommentFocusLayout"
-import { formatEST } from "@/lib/formatEST"
+import { formatSocialTimestamp } from "@/lib/formatRelativeTime"
 import {
   formatPoints,
   formatRR,
@@ -107,7 +107,7 @@ export default function FeedPostDetailModal({
       pnlPositive: !Number.isNaN(pnl) && pnl >= 0,
       points: resolveTradePoints(tradeJoin),
       timingTrade: tradeJoin,
-      createdAtLabel: formatEST(post.created_at),
+      createdAtLabel: formatSocialTimestamp(post.created_at),
       avatarUrl,
       username: post.profiles?.username || "User",
     }

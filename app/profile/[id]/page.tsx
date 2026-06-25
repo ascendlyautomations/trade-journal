@@ -41,6 +41,7 @@ import MobileCommentFocusLayout from "@/app/components/comments/MobileCommentFoc
 import {
   FEED_COMMENT_INSERT_SELECT,
   FEED_POSTS_SELECT,
+  postTradeOwnerUserId,
   queryFeedComments,
   withInsertedParentCommentId,
 } from "../../components/feed/feedPostHelpers"
@@ -52,13 +53,16 @@ import {
   type PendingRoomShareDraft,
 } from "@/lib/roomSharePost"
 import {
+  deleteFeedComment,
   deleteProfilePostComment,
+  deleteTradeComment,
   filterCommentsAfterDelete,
 } from "@/lib/deleteComment"
 import {
   deleteLikeNotification,
   ensureLikeNotification,
 } from "@/lib/likeNotifications"
+import { ensureCommentNotificationsForInsert } from "@/lib/commentNotifications"
 import {
   PROFILE_POST_COMMENT_INSERT_SELECT,
   insertProfilePostCommentNotifications,
@@ -98,7 +102,7 @@ import { formatRR, formatTradePoints } from "@/lib/formatDisplay"
 import { averageRrFromTrades } from "@/lib/tradeRr"
 import { resolveTradePoints } from "@/lib/resolveTradePoints"
 import TradeCardTimingBlock from "../../components/TradeCardTimingBlock"
-import { formatEST } from "@/lib/formatEST"
+import { formatRelativeTime } from "@/lib/formatRelativeTime"
 import { createUserRoom } from "@/lib/createUserRoom"
 import { loadFollowUiSnapshot } from "@/lib/followActions"
 import FollowButton from "../../components/FollowButton"
@@ -919,7 +923,7 @@ function PostCard({
       {post.content ? (
         <p className="px-1 text-sm leading-relaxed text-white">{post.content}</p>
       ) : null}
-      <p className="text-xs text-gray-400">{formatEST(post.created_at)}</p>
+      <p className="text-xs text-gray-400">{formatRelativeTime(post.created_at, Date.now(), "compact")}</p>
       {showInteractions ? (
         <div className="border-t border-white/10 pt-3">
           {postEngagementRow}
@@ -937,7 +941,7 @@ function PostCard({
       {post.content ? (
         <p className="px-1 text-sm leading-relaxed text-white">{post.content}</p>
       ) : null}
-      <p className="text-xs text-gray-400">{formatEST(post.created_at)}</p>
+      <p className="text-xs text-gray-400">{formatRelativeTime(post.created_at, Date.now(), "compact")}</p>
       <p className="px-1 text-sm font-medium text-white">
         {(likeMeta?.count ?? 0).toLocaleString()} likes
       </p>
@@ -2050,6 +2054,7 @@ function ProfilePageContent() {
     if (ownerId) {
       await insertProfilePostCommentNotifications(supabase, {
         profilePostId: key,
+        commentId: String(insertedRow.id),
         ownerUserId: ownerId,
         senderUserId: currentUserId,
         content: text,
@@ -2076,24 +2081,57 @@ function ProfilePageContent() {
       return false
     }
 
-    const profilePostId = String(comment.profile_post_id ?? comment.post_id ?? "")
-    if (!profilePostId) {
-      console.error("[comment-delete] aborted: missing profile_post_id", comment)
+    const commentId = String(comment.id)
+    const profilePostId = comment.profile_post_id
+      ? String(comment.profile_post_id)
+      : null
+    const postId = comment.post_id ? String(comment.post_id) : null
+    const tradeId = comment.trade_id ? String(comment.trade_id) : null
+
+    let result:
+      | Awaited<ReturnType<typeof deleteProfilePostComment>>
+      | Awaited<ReturnType<typeof deleteFeedComment>>
+      | Awaited<ReturnType<typeof deleteTradeComment>>
+    let stateKey: string
+
+    if (profilePostId) {
+      result = await deleteProfilePostComment(supabase, {
+        id: commentId,
+        user_id: currentUserId,
+        content: comment.content,
+        profile_post_id: profilePostId,
+      })
+      stateKey = profilePostId
+    } else if (postId) {
+      result = await deleteFeedComment(supabase, {
+        id: commentId,
+        user_id: currentUserId,
+        content: comment.content,
+        post_id: postId,
+      })
+      stateKey = postId
+    } else if (tradeId) {
+      result = await deleteTradeComment(supabase, {
+        id: commentId,
+        user_id: currentUserId,
+        content: comment.content,
+        trade_id: tradeId,
+      })
+      stateKey = tradeId
+    } else {
+      console.error("[comment-delete] aborted: missing comment target", comment)
       return false
     }
 
-    const { error, deleted } = await deleteProfilePostComment(supabase, {
-      id: String(comment.id),
-      user_id: currentUserId,
-      content: comment.content,
-      profile_post_id: profilePostId,
-    })
+    const { error, deleted } = result
 
     if (error || !deleted) {
       console.error("[comment-delete] failed", {
-        commentId: String(comment.id),
+        commentId,
         userId: currentUserId,
         profilePostId,
+        postId,
+        tradeId,
         error,
       })
       showPopup({ type: "error", message: handleSupabaseError(error) })
@@ -2102,21 +2140,18 @@ function ProfilePageContent() {
 
     setCommentsByPost((prev) => ({
       ...prev,
-      [profilePostId]: filterCommentsAfterDelete(
-        prev[profilePostId] ?? [],
-        String(comment.id)
-      ),
+      [stateKey]: filterCommentsAfterDelete(prev[stateKey] ?? [], commentId),
     }))
 
-    if (feedDeepLinkPost && String(feedDeepLinkPost.id) === profilePostId) {
+    if (feedDeepLinkPost && String(feedDeepLinkPost.id) === stateKey) {
       setFeedDeepLinkComments((prev) =>
-        filterCommentsAfterDelete(prev, String(comment.id))
+        filterCommentsAfterDelete(prev, commentId)
       )
     }
 
     console.log("[comment-delete] local state updated", {
-      commentId: String(comment.id),
-      profilePostId,
+      commentId,
+      stateKey,
     })
 
     return true
@@ -2526,6 +2561,7 @@ function ProfilePageContent() {
       if (!currentUserId || feedDeepLinkLikeBusyRef.current) return
       const pid = String(post.id)
       const meta = feedDeepLinkLikeMeta
+      const ownerId = postTradeOwnerUserId(post)
 
       feedDeepLinkLikeBusyRef.current = true
 
@@ -2537,6 +2573,13 @@ function ProfilePageContent() {
           .eq("post_id", pid)
           .eq("user_id", currentUserId)
         if (error) return
+        if (ownerId) {
+          await deleteLikeNotification(supabase, {
+            recipientUserId: String(ownerId),
+            senderUserId: currentUserId,
+            target: { kind: "post", postId: pid, tradeId: post.trade_id ?? null },
+          })
+        }
         setFeedDeepLinkLikeMeta({
           count: Math.max(0, meta.count - 1),
           liked: false,
@@ -2549,6 +2592,14 @@ function ProfilePageContent() {
         .insert({ post_id: pid, user_id: currentUserId })
       if (error) return
       setFeedDeepLinkLikeMeta({ count: meta.count + 1, liked: true })
+
+      if (ownerId && String(ownerId) !== currentUserId) {
+        await ensureLikeNotification(supabase, {
+          recipientUserId: String(ownerId),
+          senderUserId: currentUserId,
+          target: { kind: "post", postId: pid, tradeId: post.trade_id ?? null },
+        })
+      }
       } finally {
         feedDeepLinkLikeBusyRef.current = false
       }
@@ -2583,13 +2634,24 @@ function ProfilePageContent() {
       }
 
       setFeedDeepLinkComments((prev) => [...prev, data])
+
+      const ownerId = postTradeOwnerUserId(post)
+      await ensureCommentNotificationsForInsert(supabase, {
+        commentId: String(data.id),
+        senderUserId: currentUserId,
+        content: trimmed,
+        target: { kind: "post", postId: pid, tradeId: post.trade_id ?? null },
+        ownerUserId: ownerId,
+        existingComments: feedDeepLinkComments,
+      })
+
       return true
       } finally {
         feedDeepLinkCommentSubmittingRef.current = false
         setFeedDeepLinkCommentSubmitting(false)
       }
     },
-    [currentUserId]
+    [currentUserId, feedDeepLinkComments]
   )
 
   const sortedTrades = [...trades].sort((a, b) => {

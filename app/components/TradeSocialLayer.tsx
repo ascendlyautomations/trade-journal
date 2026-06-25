@@ -21,6 +21,7 @@ import {
   deleteLikeNotification,
   ensureLikeNotification,
 } from "@/lib/likeNotifications"
+import { ensureCommentNotificationsForInsert } from "@/lib/commentNotifications"
 import {
   deleteTradeComment,
   filterCommentsAfterDelete,
@@ -323,35 +324,24 @@ export function TradeSocialProvider({
     }
 
     if (data) {
-      const insertedRow = replyTargetRef.current?.id
-        ? { ...data, parent_comment_id: replyTargetRef.current.id }
+      const parentCommentId = replyTargetRef.current?.id ?? null
+      const insertedRow = parentCommentId
+        ? { ...data, parent_comment_id: parentCommentId }
         : data
       setComments((prev) => [...prev, insertedRow])
       setNewComment("")
       setReplyTarget(null)
 
       if (!suppressNotifications) {
-        const receiverId =
-          tradeOwnerUserId != null ? String(tradeOwnerUserId).trim() : ""
-        if (receiverId && receiverId !== currentUserId) {
-          const { error: nErr } = await supabase.from("notifications").insert({
-            user_id: receiverId,
-            sender_id: currentUserId,
-            type: "comment",
-            trade_id: resolvedId,
-            content: newComment.trim().slice(0, 200),
-          })
-
-          if (nErr) {
-            console.error("Notification error:", nErr?.message, nErr)
-            return
-          }
-
-          window.dispatchEvent(new CustomEvent("notification-update"))
-          window.dispatchEvent(
-            new CustomEvent("tj-unread-notifications-refresh")
-          )
-        }
+        await ensureCommentNotificationsForInsert(supabase, {
+          commentId: String(insertedRow.id),
+          senderUserId: currentUserId,
+          content: newComment.trim(),
+          target: { kind: "trade", tradeId: resolvedId },
+          ownerUserId: tradeOwnerUserId,
+          parentCommentId,
+          existingComments: comments,
+        })
       }
     }
     } finally {
@@ -363,6 +353,7 @@ export function TradeSocialProvider({
     currentUserId,
     newComment,
     commentSubmitting,
+    comments,
     tradeOwnerUserId,
     suppressNotifications,
     showPopup,

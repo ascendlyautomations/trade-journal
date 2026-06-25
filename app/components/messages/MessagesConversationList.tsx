@@ -14,6 +14,7 @@ export type MessagesConversationListItem = {
   username: string
   profileUserId?: string | null
   lastMessage: string
+  lastMessageAt?: string | null
   avatar_url: string | null
   unreadCount: number
 }
@@ -50,6 +51,7 @@ function MessagesConversationList({
           username={c.username}
           profileUserId={c.profileUserId}
           lastMessage={c.lastMessage}
+          lastMessageAt={c.lastMessageAt}
           avatarUrl={c.avatar_url}
           unreadCount={c.unreadCount ?? 0}
           isMenuOpen={openConvoMenuId === c.id}

@@ -9,7 +9,7 @@ import ImageLightbox from "@/app/components/ui/ImageLightbox"
 import { PostInteractionsEngagement } from "@/app/components/PostInteractions"
 import { CommentFocusCompactStrip } from "@/app/components/comments/CommentFocusCompactStrip"
 import MobileCommentFocusLayout from "@/app/components/comments/MobileCommentFocusLayout"
-import { formatEST } from "@/lib/formatEST"
+import { formatSocialTimestamp } from "@/lib/formatRelativeTime"
 import { profilePostPublicUrl } from "@/lib/storagePublicUrl"
 import { isRoomSharePost } from "@/lib/roomSharePost"
 import FeedCommentsSection from "./FeedCommentsSection"
@@ -88,7 +88,7 @@ export default function FeedProfilePostDetailModal({
     return {
       imageSrc: profilePostPublicUrl(post.image_url),
       content,
-      createdAtLabel: formatEST(post.created_at),
+      createdAtLabel: formatSocialTimestamp(post.created_at),
       avatarUrl,
       username: post.profiles?.username || "User",
     }

@@ -771,10 +771,25 @@ export default function MessagesPage() {
 
   const filteredConversations = useMemo(() => {
     const query = search.trim().toLowerCase()
-    if (!query) return conversations
-    return conversations.filter((c) =>
-      (c.displayName || c.username).toLowerCase().includes(query)
-    )
+    const list = query
+      ? conversations.filter((c) =>
+          (c.displayName || c.username).toLowerCase().includes(query)
+        )
+      : conversations
+
+    return list.map((c) => ({
+      id: c.id,
+      is_group: c.is_group === true,
+      is_pinned: c.is_pinned === true,
+      name: c.name ?? null,
+      displayName: c.displayName,
+      username: c.username,
+      profileUserId: c.profileUserId ?? null,
+      lastMessage: c.lastMessage,
+      lastMessageAt: c.last_message_at ?? null,
+      avatar_url: c.avatar_url ?? null,
+      unreadCount: c.unreadCount ?? 0,
+    }))
   }, [conversations, search])
 
   return (

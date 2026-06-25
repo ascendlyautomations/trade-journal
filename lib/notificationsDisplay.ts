@@ -1,4 +1,17 @@
 import { profilePath } from "./profileRoutes"
+import {
+  getNotificationTimeSection,
+  NOTIFICATION_TIME_SECTION_ORDER,
+  NOTIFICATION_TIME_SECTION_LABELS,
+  type NotificationTimeSection,
+} from "./formatRelativeTime"
+
+export type TimeSection = NotificationTimeSection
+export {
+  getNotificationTimeSection,
+  NOTIFICATION_TIME_SECTION_ORDER,
+  NOTIFICATION_TIME_SECTION_LABELS,
+}
 
 export type NotificationRecord = {
   id: string
@@ -129,8 +142,6 @@ export type NotificationCenterTab =
   | "comments"
   | "followers"
   | "rooms"
-
-export type TimeSection = "today" | "yesterday" | "earlier"
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
@@ -498,20 +509,25 @@ export function buildNotificationListItems(
   return [...groupedLikes, ...singles]
 }
 
-export function getNotificationTimeSection(
-  iso: string,
-  now = Date.now()
-): TimeSection {
-  const date = new Date(iso)
-  if (!Number.isFinite(date.getTime())) return "earlier"
+export function groupCardsByTimeSection(cards: GroupedNotificationCard[]) {
+  const sections = Object.fromEntries(
+    NOTIFICATION_TIME_SECTION_ORDER.map((key) => [key, [] as GroupedNotificationCard[]])
+  ) as Record<TimeSection, GroupedNotificationCard[]>
 
-  const todayStart = new Date(now)
-  todayStart.setHours(0, 0, 0, 0)
-  const yesterdayStart = new Date(todayStart.getTime() - DAY_MS)
+  for (const card of cards) {
+    const createdAt = groupedCardCreatedAt(card)
+    sections[getNotificationTimeSection(createdAt)].push(card)
+  }
 
-  if (date.getTime() >= todayStart.getTime()) return "today"
-  if (date.getTime() >= yesterdayStart.getTime()) return "yesterday"
-  return "earlier"
+  const sortByLatest = (a: GroupedNotificationCard, b: GroupedNotificationCard) =>
+    new Date(groupedCardCreatedAt(b)).getTime() -
+    new Date(groupedCardCreatedAt(a)).getTime()
+
+  for (const key of NOTIFICATION_TIME_SECTION_ORDER) {
+    sections[key].sort(sortByLatest)
+  }
+
+  return sections
 }
 
 export function groupedCardCreatedAt(card: GroupedNotificationCard): string {
@@ -532,35 +548,10 @@ export function groupedCardNotificationIds(card: GroupedNotificationCard): strin
   return card.notificationIds
 }
 
-export function groupCardsByTimeSection(cards: GroupedNotificationCard[]) {
-  const sections: Record<TimeSection, GroupedNotificationCard[]> = {
-    today: [],
-    yesterday: [],
-    earlier: [],
-  }
-
-  for (const card of cards) {
-    const createdAt = groupedCardCreatedAt(card)
-    sections[getNotificationTimeSection(createdAt)].push(card)
-  }
-
-  const sortByLatest = (a: GroupedNotificationCard, b: GroupedNotificationCard) =>
-    new Date(groupedCardCreatedAt(b)).getTime() -
-    new Date(groupedCardCreatedAt(a)).getTime()
-
-  sections.today.sort(sortByLatest)
-  sections.yesterday.sort(sortByLatest)
-  sections.earlier.sort(sortByLatest)
-
-  return sections
-}
-
 export function groupItemsByTimeSection(items: NotificationListItem[]) {
-  const sections: Record<TimeSection, NotificationListItem[]> = {
-    today: [],
-    yesterday: [],
-    earlier: [],
-  }
+  const sections = Object.fromEntries(
+    NOTIFICATION_TIME_SECTION_ORDER.map((key) => [key, [] as NotificationListItem[]])
+  ) as Record<TimeSection, NotificationListItem[]>
 
   for (const item of items) {
     const createdAt =
@@ -576,9 +567,9 @@ export function groupItemsByTimeSection(items: NotificationListItem[]) {
     return new Date(bTime).getTime() - new Date(aTime).getTime()
   }
 
-  sections.today.sort(sortByLatest)
-  sections.yesterday.sort(sortByLatest)
-  sections.earlier.sort(sortByLatest)
+  for (const key of NOTIFICATION_TIME_SECTION_ORDER) {
+    sections[key].sort(sortByLatest)
+  }
 
   return sections
 }
