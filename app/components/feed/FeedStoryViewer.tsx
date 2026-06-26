@@ -3,6 +3,7 @@
 import { memo, useMemo, useRef } from "react"
 import type { StoryBarProfile } from "./FeedStoriesBar"
 import StoryFrame from "./StoryFrame"
+import StoryReplyInput from "./StoryReplyInput"
 
 type StorySlide = {
   id: string
@@ -17,6 +18,7 @@ type FeedStoryViewerProps = {
   currentStories: StorySlide[]
   currentStoryIndex: number
   currentStory: StorySlide
+  currentUserId?: string | null
   canGoPrevSlide: boolean
   canGoNextSlide: boolean
   canGoPrevUser: boolean
@@ -26,9 +28,13 @@ type FeedStoryViewerProps = {
   onNextSlide: () => void
   onPrevUser: () => void
   onNextUser: () => void
+  onStoryReplyError?: (message: string) => void
 }
 
 const SWIPE_THRESHOLD_PX = 48
+
+const STORY_FRAME_HEIGHT =
+  "h-[calc(100dvh-var(--navbar-height,4rem)-2rem)] max-h-[calc(100dvh-var(--navbar-height,4rem)-2rem)] sm:h-[min(700px,calc(100dvh-var(--navbar-height,4rem)-2rem))]"
 
 function ChevronLeftIcon({ className }: { className?: string }) {
   return (
@@ -81,7 +87,7 @@ function NeighborStoryPreview({
       type="button"
       onClick={onClick}
       aria-label={`View ${username}'s story`}
-      className={`group relative hidden h-[520px] w-[100px] shrink-0 overflow-hidden rounded-xl border border-white/10 opacity-60 transition duration-300 hover:opacity-80 md:block lg:h-[580px] lg:w-[120px] ${
+      className={`group relative hidden ${STORY_FRAME_HEIGHT} w-[100px] shrink-0 overflow-hidden rounded-xl border border-white/10 opacity-60 transition duration-300 hover:opacity-80 md:block lg:w-[120px] ${
         side === "prev" ? "origin-right scale-[0.88]" : "origin-left scale-[0.88]"
       }`}
     >
@@ -108,6 +114,7 @@ function FeedStoryViewer({
   users,
   storiesByUser,
   currentStory,
+  currentUserId,
   canGoPrevSlide,
   canGoNextSlide,
   canGoPrevUser,
@@ -117,6 +124,7 @@ function FeedStoryViewer({
   onNextSlide,
   onPrevUser,
   onNextUser,
+  onStoryReplyError,
 }: FeedStoryViewerProps) {
   const touchStartX = useRef<number | null>(null)
   const touchStartY = useRef<number | null>(null)
@@ -145,6 +153,9 @@ function FeedStoryViewer({
     nextProfile != null
       ? (storiesByUser[nextProfile.id]?.[0]?.image_url ?? null)
       : null
+
+  const showStoryReply =
+    currentUserId != null && currentUserId !== activeStoryUser
 
   function handleTouchStart(e: React.TouchEvent) {
     touchStartX.current = e.touches[0]?.clientX ?? null
@@ -181,7 +192,7 @@ function FeedStoryViewer({
 
   return (
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/95 px-2 md:px-6"
+      className="fixed inset-x-0 bottom-0 top-16 z-[9999] flex items-start justify-center bg-black/95 px-2 pt-4 md:px-6 md:pt-5"
       role="dialog"
       aria-modal="true"
       aria-label="Stories"
@@ -226,7 +237,8 @@ function FeedStoryViewer({
           imageUrl={currentStory.image_url}
           imageKey={currentStory.id}
           timestamp={currentStory.created_at}
-          className="relative h-[100dvh] w-full max-w-lg transition-opacity duration-300 sm:h-[700px] sm:w-[400px] sm:rounded-2xl sm:border sm:border-white/10"
+          hasFooter={showStoryReply}
+          className={`relative ${STORY_FRAME_HEIGHT} w-full max-w-lg transition-opacity duration-300 sm:w-[400px] sm:rounded-2xl sm:border sm:border-white/10`}
           headerRight={
             <button
               type="button"
@@ -236,6 +248,20 @@ function FeedStoryViewer({
             >
               Esc
             </button>
+          }
+          footer={
+            showStoryReply && currentUserId ? (
+              <StoryReplyInput
+                currentUserId={currentUserId}
+                storyOwnerId={activeStoryUser}
+                storyOwnerUsername={activeProfile.username}
+                story={{
+                  id: currentStory.id,
+                  image_url: currentStory.image_url,
+                }}
+                onError={onStoryReplyError}
+              />
+            ) : null
           }
         >
           <div

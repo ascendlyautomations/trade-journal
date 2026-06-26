@@ -4,41 +4,33 @@ import { memo } from "react"
 import { ProfileAvatarLink } from "@/app/components/ProfileLink"
 import { CommentAuthorLine } from "@/app/components/comments/CommentAuthorLine"
 import CommentDeleteMenu from "@/app/components/comments/CommentDeleteMenu"
+import CommentContent from "@/app/components/comments/CommentContent"
 import ReplyActionButton from "@/app/components/replies/ReplyActionButton"
-import ReplyReferenceBlock from "@/app/components/replies/ReplyReferenceBlock"
-import {
-  commentElementId,
-  type ReplyParentCommentLike,
-} from "@/lib/replyReference"
+import { commentElementId } from "@/lib/replyReference"
 
 type FeedCommentItemProps = {
   comment: any
-  parentComment?: ReplyParentCommentLike | null
+  mentionUserIdsByUsername?: Map<string, string>
   currentUserId?: string | null
   avatarClassName?: string
   stopPropagation?: boolean
   onReply?: (comment: any) => void
-  onReplyUnavailable?: () => void
   onRequestDelete?: (comment: any) => void
   deleteMenuClassName?: string
 }
 
 function FeedCommentItem({
   comment,
-  parentComment,
+  mentionUserIdsByUsername,
   currentUserId,
   avatarClassName = "h-8 w-8 shrink-0 rounded-full object-cover",
   stopPropagation = false,
   onReply,
-  onReplyUnavailable,
   onRequestDelete,
   deleteMenuClassName,
 }: FeedCommentItemProps) {
   const userId = String(comment.user_id ?? "")
   const username = comment.profiles?.username
-  const parent =
-    parentComment ??
-    (comment.parent as ReplyParentCommentLike | null | undefined)
   const canDelete =
     currentUserId != null &&
     onRequestDelete != null &&
@@ -66,11 +58,8 @@ function FeedCommentItem({
               stopPropagation={stopPropagation}
             />
           </div>
-          <div className="flex shrink-0 items-center gap-0.5">
-            {onReply ? (
-              <ReplyActionButton onReply={() => onReply(comment)} />
-            ) : null}
-            {canDelete ? (
+          {canDelete ? (
+            <div className="flex shrink-0 items-center">
               <CommentDeleteMenu
                 menuClassName={deleteMenuClassName}
                 onDelete={() => {
@@ -78,18 +67,20 @@ function FeedCommentItem({
                   onRequestDelete(comment)
                 }}
               />
-            ) : null}
-          </div>
+            </div>
+          ) : null}
         </div>
-        {comment.parent_comment_id ? (
-          <ReplyReferenceBlock
-            parentCommentId={comment.parent_comment_id}
-            parentComment={parent}
-            targetElementId={commentElementId(String(parent?.id ?? comment.parent_comment_id))}
-            onUnavailable={onReplyUnavailable}
+        <CommentContent
+          content={String(comment.content ?? "")}
+          mentionUserIdsByUsername={mentionUserIdsByUsername}
+          stopPropagation={stopPropagation}
+        />
+        {onReply ? (
+          <ReplyActionButton
+            onReply={() => onReply(comment)}
+            className="mt-0.5 px-0 py-0"
           />
         ) : null}
-        <p className="break-words text-sm text-white">{comment.content}</p>
       </div>
     </div>
   )

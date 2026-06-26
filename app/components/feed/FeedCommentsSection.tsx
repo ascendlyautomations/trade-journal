@@ -12,9 +12,10 @@ import FeedCommentComposer from "./FeedCommentComposer"
 import FeedCommentList from "./FeedCommentList"
 import ConfirmModal from "@/app/components/ui/ConfirmModal"
 import {
-  buildReplyTargetFromComment,
-  type ReplyTarget,
-} from "@/lib/replyReference"
+  clearCommentReplyDraft,
+  startCommentReply,
+  type CommentReplyTarget,
+} from "@/lib/commentReplyUx"
 
 type FeedCommentsSectionProps = {
   post: any
@@ -28,7 +29,6 @@ type FeedCommentsSectionProps = {
     parentCommentId?: string | null
   ) => Promise<boolean>
   onDeleteComment?: (comment: any) => Promise<boolean>
-  onReplyUnavailable?: () => void
   /** Scroll container for the comment list only (modal layout). */
   listScrollRef?: RefObject<HTMLDivElement | null>
 }
@@ -41,14 +41,13 @@ function FeedCommentsSection({
   draftSyncRef,
   onSubmitComment,
   onDeleteComment,
-  onReplyUnavailable,
   listScrollRef,
 }: FeedCommentsSectionProps) {
   const pid = String(post.id)
   const [commentDraft, setCommentDraft] = useState(
     () => draftSyncRef?.current[pid] ?? ""
   )
-  const [replyTarget, setReplyTarget] = useState<ReplyTarget | null>(null)
+  const [replyTarget, setReplyTarget] = useState<CommentReplyTarget | null>(null)
   const [pendingDelete, setPendingDelete] = useState<any>(null)
   const [deleteBusy, setDeleteBusy] = useState(false)
   const commentDraftRef = useRef(commentDraft)
@@ -69,7 +68,11 @@ function FeedCommentsSection({
       if (commentSubmitting) return
       const text = commentDraftRef.current.trim()
       if (!text) return
-      const ok = await onSubmitComment(p, text, replyTarget?.id ?? null)
+      const ok = await onSubmitComment(
+        p,
+        text,
+        replyTarget?.parentCommentId ?? null
+      )
       if (ok) {
         setCommentDraft("")
         setReplyTarget(null)
@@ -78,14 +81,44 @@ function FeedCommentsSection({
         }
       }
     },
-    [commentSubmitting, draftSyncRef, onSubmitComment, pid, replyTarget?.id]
+    [
+      commentSubmitting,
+      draftSyncRef,
+      onSubmitComment,
+      pid,
+      replyTarget?.parentCommentId,
+    ]
   )
 
-  const handleReply = useCallback((comment: any) => {
-    setReplyTarget(buildReplyTargetFromComment(comment))
-    const input = document.getElementById(`comment-input-${pid}`)
-    if (input instanceof HTMLInputElement) input.focus()
-  }, [pid])
+  const handleReply = useCallback(
+    (comment: any) => {
+      startCommentReply({
+        comment,
+        allComments: comments,
+        setReplyTarget,
+        setDraft: setCommentDraft,
+        inputId: `comment-input-${pid}`,
+        onDraftSync: (value) => {
+          if (draftSyncRef) {
+            draftSyncRef.current[pid] = value
+          }
+        },
+      })
+    },
+    [comments, draftSyncRef, pid]
+  )
+
+  const handleCancelReply = useCallback(() => {
+    clearCommentReplyDraft({
+      setReplyTarget,
+      setDraft: setCommentDraft,
+      onDraftSync: (value) => {
+        if (draftSyncRef) {
+          draftSyncRef.current[pid] = value
+        }
+      },
+    })
+  }, [draftSyncRef, pid])
 
   const handleConfirmDelete = useCallback(async () => {
     if (!pendingDelete || !onDeleteComment) {
@@ -130,7 +163,7 @@ function FeedCommentsSection({
       commentValue={commentDraft}
       commentSubmitting={commentSubmitting}
       replyTarget={replyTarget}
-      onCancelReply={() => setReplyTarget(null)}
+      onCancelReply={handleCancelReply}
       onCommentChange={handleCommentChange}
       onSubmitComment={handleSubmitComment}
     />
@@ -141,7 +174,6 @@ function FeedCommentsSection({
       comments={comments}
       currentUserId={user?.id}
       onReply={handleReply}
-      onReplyUnavailable={onReplyUnavailable}
       onRequestDelete={
         onDeleteComment
           ? (comment) =>

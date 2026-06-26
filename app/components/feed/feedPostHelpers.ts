@@ -116,8 +116,8 @@ export function withInsertedParentCommentId<T extends Record<string, unknown>>(
   return { ...row, parent_comment_id: parentCommentId }
 }
 
-/** Columns used by the stories bar and viewer. */
-export const FEED_STORIES_SELECT = "id, user_id, image_url, created_at"
+/** Columns used by the stories bar and viewer. Re-exported from activeStories. */
+export { ACTIVE_STORIES_SELECT as FEED_STORIES_SELECT } from "@/lib/activeStories"
 
 export function postImageSrc(imageUrl: string | null | undefined): string | null {
   const raw = imageUrl != null ? String(imageUrl).trim() : ""

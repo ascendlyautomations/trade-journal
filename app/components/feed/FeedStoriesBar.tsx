@@ -2,12 +2,10 @@
 
 import type { ChangeEvent } from "react"
 import { memo, useMemo } from "react"
+import type { StoryBarProfile } from "@/lib/activeStories"
+import StoryAvatarRing from "./StoryAvatarRing"
 
-export type StoryBarProfile = {
-  id: string
-  username?: string | null
-  avatar_url?: string | null
-}
+export type { StoryBarProfile }
 
 type FeedStoriesBarProps = {
   currentUser: StoryBarProfile | null
@@ -37,46 +35,6 @@ function StoryPlusBadge({ onClick }: { onClick: () => void }) {
   )
 }
 
-function StoryAvatar({
-  profile,
-  hasStoryRing,
-}: {
-  profile: StoryBarProfile
-  hasStoryRing: boolean
-}) {
-  const avatar = profile.avatar_url ? (
-    <img
-      src={profile.avatar_url}
-      alt=""
-      loading="lazy"
-      decoding="async"
-      className="h-full w-full rounded-full object-cover"
-      onError={(e) => {
-        e.currentTarget.src = "/default-avatar.png"
-      }}
-    />
-  ) : (
-    <div
-      className="h-full w-full rounded-full bg-gradient-to-br from-blue-500/40 to-emerald-500/40"
-      aria-hidden
-    />
-  )
-
-  if (hasStoryRing) {
-    return (
-      <div className="h-16 w-16 rounded-full border-2 border-emerald-400 p-[2px] ring-2 ring-emerald-400/30">
-        {avatar}
-      </div>
-    )
-  }
-
-  return (
-    <div className="h-16 w-16 overflow-hidden rounded-full ring-2 ring-white/15">
-      {avatar}
-    </div>
-  )
-}
-
 function MyStoryItem({
   profile,
   hasActiveStory,
@@ -103,7 +61,7 @@ function MyStoryItem({
           className="cursor-pointer rounded-full outline-none transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-emerald-400/60"
           aria-label={hasActiveStory ? "View your story" : "Add story"}
         >
-          <StoryAvatar profile={profile} hasStoryRing={hasActiveStory} />
+          <StoryAvatarRing profile={profile} hasActiveStory={hasActiveStory} />
         </button>
         <StoryPlusBadge onClick={openStoryUpload} />
       </div>
@@ -156,20 +114,7 @@ function FeedStoriesBar({
             onClick={() => onOpenStory(u.id)}
             className="flex shrink-0 cursor-pointer flex-col items-center text-left"
           >
-            {u.avatar_url ? (
-              <img
-                src={u.avatar_url}
-                alt=""
-                loading="lazy"
-                decoding="async"
-                className="h-16 w-16 rounded-full border-2 border-emerald-400 object-cover ring-2 ring-emerald-400/30"
-              />
-            ) : (
-              <div
-                className="h-16 w-16 rounded-full border-2 border-emerald-400 bg-gradient-to-br from-blue-500/40 to-emerald-500/40 ring-2 ring-emerald-400/30"
-                aria-hidden
-              />
-            )}
+            <StoryAvatarRing profile={u} hasActiveStory />
             <p className="mt-1 max-w-[4.5rem] truncate text-center text-xs text-gray-200">
               {u.username?.trim() || "User"}
             </p>

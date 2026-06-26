@@ -178,7 +178,7 @@ function TradesPageTradeCard({
   )
 
   return (
-    <div className="w-full bg-white/5 border border-white/10 backdrop-blur-md px-2 py-3 md:px-4 rounded-xl shadow hover:scale-[1.02] hover:border-white/20 transition-all duration-200">
+    <div className="w-full bg-white/5 border border-white/10 backdrop-blur-md px-2 py-3 md:px-4 rounded-xl shadow hover:border-white/20 transition-colors duration-200">
       <div className="flex flex-col gap-2.5 md:flex-row">
         <div className="min-w-0 flex-1 space-y-1 text-base text-gray-200">
           <div className="flex items-center justify-between gap-1.5 md:hidden">

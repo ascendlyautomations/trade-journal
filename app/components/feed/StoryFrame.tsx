@@ -17,6 +17,9 @@ type StoryFrameProps = {
   className?: string
   imageKey?: string
   headerRight?: ReactNode
+  footer?: ReactNode
+  /** When true, reserve space at the bottom for footer content (e.g. story reply input). */
+  hasFooter?: boolean
   children?: ReactNode
 }
 
@@ -27,6 +30,8 @@ export default function StoryFrame({
   className = "",
   imageKey,
   headerRight,
+  footer,
+  hasFooter = Boolean(footer),
   children,
 }: StoryFrameProps) {
   const username = profile.username?.trim() || "User"
@@ -61,7 +66,11 @@ export default function StoryFrame({
         <div className="absolute right-3 top-3 z-[2]">{headerRight}</div>
       ) : null}
 
-      <div className="absolute inset-0 z-0 flex items-center justify-center bg-black pt-11">
+      <div
+        className={`absolute inset-0 z-0 flex items-center justify-center bg-black pt-11 ${
+          hasFooter ? "pb-[4.75rem]" : ""
+        }`}
+      >
         <img
           key={imageKey ?? imageUrl}
           src={imageUrl}
@@ -72,6 +81,10 @@ export default function StoryFrame({
           draggable={false}
         />
       </div>
+
+      {footer ? (
+        <div className="absolute bottom-0 left-0 right-0 z-[3]">{footer}</div>
+      ) : null}
 
       {children}
     </div>

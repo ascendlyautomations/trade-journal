@@ -1,0 +1,120 @@
+"use client"
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { supabase } from "@/lib/supabaseClient"
+import {
+  getSoonestStoryExpiryMs,
+  pruneExpiredStories,
+  fetchActiveStoriesForUserIds,
+  type StoriesByUserMap,
+} from "@/lib/activeStories"
+
+function normalizeUserIds(userIds: string[]): string[] {
+  return [...new Set(userIds.map((id) => String(id).trim()).filter(Boolean))]
+}
+
+/**
+ * Shared active-story state: fetch, realtime refresh, and client-side expiry pruning.
+ */
+export function useActiveStories(userIds: string[], enabled = true) {
+  const [storiesByUser, setStoriesByUser] = useState<StoriesByUserMap>({})
+  const userIdsRef = useRef(userIds)
+  userIdsRef.current = userIds
+
+  const userIdsKey = useMemo(
+    () => normalizeUserIds(userIds).sort().join(","),
+    [userIds]
+  )
+
+  const loadStories = useCallback(async () => {
+    const ids = normalizeUserIds(userIdsRef.current)
+    if (ids.length === 0) {
+      setStoriesByUser({})
+      return
+    }
+
+    const { storiesByUser: next, error } = await fetchActiveStoriesForUserIds(
+      supabase,
+      ids
+    )
+
+    if (error) {
+      console.error("[useActiveStories] fetch failed:", error)
+      return
+    }
+
+    setStoriesByUser(next)
+  }, [userIdsKey])
+
+  useEffect(() => {
+    if (!enabled) {
+      setStoriesByUser({})
+      return
+    }
+    void loadStories()
+  }, [enabled, loadStories, userIdsKey])
+
+  useEffect(() => {
+    if (!enabled) return
+
+    const ids = normalizeUserIds(userIdsRef.current)
+    if (ids.length === 0) return
+
+    const channel = supabase.channel(`active-stories:${userIdsKey}`)
+
+    for (const userId of ids) {
+      channel.on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "stories",
+          filter: `user_id=eq.${userId}`,
+        },
+        () => {
+          void loadStories()
+        }
+      )
+    }
+
+    channel.subscribe()
+
+    return () => {
+      void supabase.removeChannel(channel)
+    }
+  }, [enabled, loadStories, userIdsKey])
+
+  useEffect(() => {
+    if (!enabled) return
+
+    let timeoutId: number | undefined
+
+    const scheduleExpiry = (map: StoriesByUserMap) => {
+      if (timeoutId != null) {
+        window.clearTimeout(timeoutId)
+      }
+
+      const expiresAt = getSoonestStoryExpiryMs(map)
+      if (expiresAt == null) return
+
+      const delay = Math.max(0, expiresAt - Date.now()) + 100
+      timeoutId = window.setTimeout(() => {
+        setStoriesByUser((current) => {
+          const pruned = pruneExpiredStories(current)
+          scheduleExpiry(pruned)
+          return pruned
+        })
+      }, delay)
+    }
+
+    scheduleExpiry(storiesByUser)
+
+    return () => {
+      if (timeoutId != null) {
+        window.clearTimeout(timeoutId)
+      }
+    }
+  }, [enabled, storiesByUser])
+
+  return { storiesByUser, loadStories, setStoriesByUser }
+}

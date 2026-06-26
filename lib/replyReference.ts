@@ -1,3 +1,5 @@
+import { storyReplyPreviewText } from "@/lib/storyReplyMessage"
+
 export const REPLY_PREVIEW_MAX = 80
 
 export type ReplyParentProfile = {
@@ -67,6 +69,9 @@ export function previewTextFromMessage(
 ): string {
   if (message.deleted_for_everyone) return "Message deleted"
   const type = message.type?.trim()
+  if (type === "story_reply") {
+    return storyReplyPreviewText(message.content, "Replied to your story")
+  }
   if (type === "trade") return "Shared a trade"
   if (type === "post" || type === "profile_post") return "Shared a post"
   if (message.image_url?.trim()) {

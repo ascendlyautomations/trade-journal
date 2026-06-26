@@ -134,37 +134,44 @@ function MessagesConversationRow({
 
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 min-w-0">
-            <p className="min-w-0 flex-1 truncate font-semibold text-emerald-400">
-              {isGroup ? (
-                <>
-                  {groupName || displayName}
-                  {isPinned ? (
-                    <span className="ml-2 text-xs text-yellow-400">📌</span>
-                  ) : null}
-                </>
-              ) : profileUserId ? (
-                <>
-                  <ProfileUsernameLink
-                    userId={profileUserId}
-                    username={username}
-                    stopPropagation
-                    className="hover:underline"
-                  >
+            <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
+              <p className="min-w-0 truncate font-semibold text-emerald-400">
+                {isGroup ? (
+                  <>
+                    {groupName || displayName}
+                    {isPinned ? (
+                      <span className="ml-2 text-xs text-yellow-400">📌</span>
+                    ) : null}
+                  </>
+                ) : profileUserId ? (
+                  <>
+                    <ProfileUsernameLink
+                      userId={profileUserId}
+                      username={username}
+                      stopPropagation
+                      className="hover:underline"
+                    >
+                      @{username}
+                    </ProfileUsernameLink>
+                    {isPinned ? (
+                      <span className="ml-2 text-xs text-yellow-400">📌</span>
+                    ) : null}
+                  </>
+                ) : (
+                  <>
                     @{username}
-                  </ProfileUsernameLink>
-                  {isPinned ? (
-                    <span className="ml-2 text-xs text-yellow-400">📌</span>
-                  ) : null}
-                </>
-              ) : (
-                <>
-                  @{username}
-                  {isPinned ? (
-                    <span className="ml-2 text-xs text-yellow-400">📌</span>
-                  ) : null}
-                </>
-              )}
-            </p>
+                    {isPinned ? (
+                      <span className="ml-2 text-xs text-yellow-400">📌</span>
+                    ) : null}
+                  </>
+                )}
+              </p>
+              {unreadCount > 0 ? (
+                <span className="shrink-0 bg-red-500 text-white text-xs px-2 py-1 rounded-full tabular-nums">
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </span>
+              ) : null}
+            </div>
             {timeLabel ? (
               <time
                 dateTime={lastMessageAt ?? undefined}
@@ -177,12 +184,6 @@ function MessagesConversationRow({
 
           <p className="text-sm text-gray-400 truncate">{lastMessage}</p>
         </div>
-
-        {unreadCount > 0 ? (
-          <span className="shrink-0 bg-red-500 text-white text-xs px-2 py-1 rounded-full tabular-nums">
-            {unreadCount > 9 ? "9+" : unreadCount}
-          </span>
-        ) : null}
       </div>
     </div>
   )

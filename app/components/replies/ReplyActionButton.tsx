@@ -18,7 +18,7 @@ export default function ReplyActionButton({
         e.stopPropagation()
         onReply()
       }}
-      className={`rounded px-1.5 py-0.5 text-xs text-gray-400 opacity-0 transition-opacity hover:text-gray-200 group-hover:opacity-100 ${className}`}
+      className={`text-xs font-medium text-gray-500 transition-colors hover:text-gray-300 ${className}`}
     >
       {label}
     </button>

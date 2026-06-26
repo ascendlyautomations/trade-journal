@@ -30,7 +30,7 @@ import FeedContentToggle from "../../components/feed/FeedContentToggle"
 import FeedModeToggle from "../../components/feed/FeedModeToggle"
 import FeedPostList from "../../components/feed/FeedPostList"
 import FeedPostOverlays from "../../components/feed/FeedPostOverlays"
-import FeedStoriesBar, { type StoryBarProfile } from "../../components/feed/FeedStoriesBar"
+import FeedStoriesBar from "../../components/feed/FeedStoriesBar"
 import FeedStoryViewer from "../../components/feed/FeedStoryViewer"
 import StoryComposeModal from "../../components/feed/StoryComposeModal"
 import {
@@ -39,7 +39,6 @@ import {
 } from "../../components/feed/FeedPostCard"
 import {
   FEED_COMMENT_INSERT_SELECT,
-  FEED_STORIES_SELECT,
   buildFeedPostsIndex,
   postTradeOwnerUserId,
   queryFeedComments,
@@ -47,6 +46,12 @@ import {
   type FeedContentFilter,
   type FeedItem,
 } from "../../components/feed/feedPostHelpers"
+import {
+  type ActiveStoryRow,
+  type StoryBarProfile,
+  userHasActiveStory,
+} from "@/lib/activeStories"
+import { useActiveStories } from "@/lib/useActiveStories"
 import {
   FEED_PAGE_SIZE,
   fetchFollowingIds,
@@ -65,17 +70,9 @@ import {
 } from "@/lib/storyComposeHelpers"
 import { useUserProfile } from "@/lib/UserProfileProvider"
 
-const STORY_WINDOW_MS = 24 * 60 * 60 * 1000
 /** Auto-advance each slide (Instagram-style). */
 const STORY_SLIDE_MS = 7000
-const EMPTY_STORY_LIST: StoryRow[] = []
-
-type StoryRow = {
-  id: string
-  user_id: string
-  image_url: string
-  created_at: string
-}
+const EMPTY_STORY_LIST: ActiveStoryRow[] = []
 
 type LikeMeta = { count: number; liked: boolean }
 
@@ -119,8 +116,8 @@ function FeedPageContent() {
   const [commentSubmitting, setCommentSubmitting] = useState<Record<string, boolean>>({})
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null)
   const [sharePostId, setSharePostId] = useState<string | null>(null)
-  const [storiesByUser, setStoriesByUser] = useState<Record<string, StoryRow[]>>(
-    {}
+  const [followingStoryUserIds, setFollowingStoryUserIds] = useState<string[]>(
+    []
   )
   const [users, setUsers] = useState<StoryBarProfile[]>([])
   const [currentUserProfile, setCurrentUserProfile] =
@@ -159,12 +156,112 @@ function FeedPageContent() {
   )
 
   const currentUserHasStory = useMemo(
-    () =>
-      Boolean(
-        user?.id && (storiesByUser[user.id]?.length ?? 0) > 0
-      ),
+    () => userHasActiveStory(storiesByUser, user?.id),
     [user?.id, storiesByUser]
   )
+
+  const {
+    storiesByUser,
+    loadStories: reloadActiveStories,
+  } = useActiveStories(
+    followingStoryUserIds,
+    !profileLoading &&
+      !!user?.id &&
+      mode === "following" &&
+      followingStoryUserIds.length > 0
+  )
+
+  useEffect(() => {
+    if (profileLoading || !user?.id || mode !== "following") {
+      setFollowingStoryUserIds([])
+      return
+    }
+
+    let cancelled = false
+
+    void (async () => {
+      const { data: following, error } = await supabase
+        .from("followers")
+        .select("following_id")
+        .eq("follower_id", user.id)
+
+      if (cancelled) return
+
+      if (error) {
+        console.error("[feed] following ids for stories:", error)
+        setFollowingStoryUserIds([user.id])
+        return
+      }
+
+      const followingIds = [
+        ...new Set(
+          (following ?? [])
+            .map((row) => row.following_id)
+            .filter(
+              (id): id is string => id != null && String(id).trim() !== ""
+            )
+        ),
+      ]
+
+      setFollowingStoryUserIds([...new Set([...followingIds, user.id])])
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [profileLoading, user?.id, mode])
+
+  useEffect(() => {
+    if (!user?.id) {
+      setCurrentUserProfile(null)
+      setUsers([])
+      return
+    }
+
+    setCurrentUserProfile(
+      profile
+        ? {
+            id: profile.id,
+            username: profile.username,
+            avatar_url: profile.avatar_url,
+          }
+        : { id: user.id, username: null, avatar_url: null }
+    )
+
+    const userIdsWithStories = Object.keys(storiesByUser)
+    if (userIdsWithStories.length === 0) {
+      setUsers([])
+      return
+    }
+
+    let cancelled = false
+
+    void (async () => {
+      const { data: profiles, error } = await supabase
+        .from("profiles")
+        .select("id, username, avatar_url")
+        .in("id", userIdsWithStories)
+
+      if (cancelled) return
+
+      if (error) {
+        console.error("[feed] story bar profiles:", error)
+        setUsers([])
+        return
+      }
+
+      const latestStoryMs = (id: string) =>
+        new Date(storiesByUser[id][0].created_at).getTime()
+
+      const list = [...(profiles ?? [])] as StoryBarProfile[]
+      list.sort((a, b) => latestStoryMs(b.id) - latestStoryMs(a.id))
+      setUsers(list)
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [profile, storiesByUser, user?.id])
 
   const storyNavigation = useMemo(() => {
     const list = activeStoryUser
@@ -219,111 +316,16 @@ function FeedPageContent() {
     [setStoryDraft, user?.id]
   )
 
-  const loadFollowingStories = useCallback(async () => {
-    const userId = userIdRef.current
-    if (!userId) return
-
-    const profileSnapshot = profileRef.current
-    setCurrentUserProfile(
-      profileSnapshot
-        ? {
-            id: profileSnapshot.id,
-            username: profileSnapshot.username,
-            avatar_url: profileSnapshot.avatar_url,
-          }
-        : { id: userId, username: null, avatar_url: null }
-    )
-
-    const { data: following } = await supabase
-      .from("followers")
-      .select("following_id")
-      .eq("follower_id", userId)
-
-    const followingIds = [
-      ...new Set(
-        (following ?? [])
-          .map((f) => f.following_id)
-          .filter((id): id is string => id != null && String(id).trim() !== "")
-      ),
-    ]
-
-    const storyUserIds = [...new Set([...followingIds, userId])]
-
-    const { data: stories, error: storiesErr } = await supabase
-      .from("stories")
-      .select(FEED_STORIES_SELECT)
-      .in("user_id", storyUserIds)
-      .order("created_at", { ascending: false })
-
-    if (storiesErr) {
-      console.error("stories fetch:", storiesErr)
-      setStoriesByUser({})
-      setUsers([])
-      return
-    }
-
-    const now = Date.now()
-    const recentStories = (stories ?? []).filter((story) => {
-      const created = new Date(story.created_at).getTime()
-      return !Number.isNaN(created) && now - created < STORY_WINDOW_MS
-    })
-
-    const storiesByUserMap: Record<string, StoryRow[]> = {}
-    for (const story of recentStories) {
-      const uid = String(story.user_id)
-      if (!storiesByUserMap[uid]) storiesByUserMap[uid] = []
-      storiesByUserMap[uid].push(story as StoryRow)
-    }
-
-    for (const uid of Object.keys(storiesByUserMap)) {
-      storiesByUserMap[uid].sort(
-        (a, b) =>
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      )
-    }
-
-    const userIds = Object.keys(storiesByUserMap)
-    if (userIds.length === 0) {
-      setStoriesByUser({})
-      setUsers([])
-      return
-    }
-
-    const { data: profiles, error: profilesErr } = await supabase
-      .from("profiles")
-      .select("id, username, avatar_url")
-      .in("id", userIds)
-
-    if (profilesErr) {
-      console.error("story bar profiles:", profilesErr)
-      setStoriesByUser(storiesByUserMap)
-      setUsers([])
-      return
-    }
-
-    const list = (profiles ?? []) as StoryBarProfile[]
-    const latest = (id: string) =>
-      new Date(storiesByUserMap[id][0].created_at).getTime()
-
-    list.sort((a, b) => latest(b.id) - latest(a.id))
-
-    setStoriesByUser(storiesByUserMap)
-    setUsers(list)
-  }, [])
-
   useEffect(() => {
     if (profileLoading) return
     if (!user?.id || mode !== "following") {
-      setStoriesByUser({})
+      setFollowingStoryUserIds([])
       setUsers([])
       setCurrentUserProfile(null)
       setActiveStoryUser(null)
       setCurrentStoryIndex(0)
-      return
     }
-
-    void loadFollowingStories()
-  }, [profileLoading, user?.id, mode, loadFollowingStories])
+  }, [profileLoading, user?.id, mode])
 
   const handlePostStory = useCallback(async () => {
     if (!pendingStoryFile || !user?.id || postingStoryRef.current || postingStory) {
@@ -342,7 +344,7 @@ function FeedPageContent() {
 
       showPopup({ type: "success", message: "Story uploaded!" })
       closeStoryCompose()
-      await loadFollowingStories()
+      await reloadActiveStories()
     } finally {
       postingStoryRef.current = false
       setPostingStory(false)
@@ -353,7 +355,7 @@ function FeedPageContent() {
     postingStory,
     showPopup,
     closeStoryCompose,
-    loadFollowingStories,
+    reloadActiveStories,
   ])
 
   const openStory = useCallback((userId: string) => {
@@ -1291,6 +1293,7 @@ function FeedPageContent() {
           currentStories={currentStories}
           currentStoryIndex={currentStoryIndex}
           currentStory={currentStory}
+          currentUserId={user?.id}
           canGoPrevSlide={storyNavigation.canGoPrevSlide}
           canGoNextSlide={storyNavigation.canGoNextSlide}
           canGoPrevUser={storyNavigation.canGoPrevUser}
@@ -1300,6 +1303,9 @@ function FeedPageContent() {
           onNextSlide={nextSlide}
           onPrevUser={prevUser}
           onNextUser={nextUser}
+          onStoryReplyError={(message) =>
+            showPopup({ type: "error", message })
+          }
         />
       ) : null}
 

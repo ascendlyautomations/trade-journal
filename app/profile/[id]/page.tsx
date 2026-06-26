@@ -27,14 +27,13 @@ import DropdownMenu from "@/app/components/ui/DropdownMenu"
 import DetailModalImage from "../../components/ui/DetailModalImage"
 import ImageLightbox from "../../components/ui/ImageLightbox"
 import { EMPTY_LIKE_META } from "../../components/feed/FeedPostCard"
-import FeedCommentItem from "../../components/feed/FeedCommentItem"
+import FeedCommentList from "../../components/feed/FeedCommentList"
 import ReplyComposerStrip from "@/app/components/replies/ReplyComposerStrip"
 import {
-  buildReplyTargetFromComment,
-  indexCommentsById,
-  resolveParentComment,
-  type ReplyTarget,
-} from "@/lib/replyReference"
+  clearCommentReplyDraft,
+  startCommentReply,
+  type CommentReplyTarget,
+} from "@/lib/commentReplyUx"
 import EngagementCountButton from "../../components/EngagementCountButton"
 import { CommentFocusCompactStrip } from "@/app/components/comments/CommentFocusCompactStrip"
 import MobileCommentFocusLayout from "@/app/components/comments/MobileCommentFocusLayout"
@@ -111,7 +110,14 @@ import { ensureDmConversation } from "@/lib/dmConversation"
 import { dmThreadPath } from "@/lib/messageRoutes"
 import { ConfirmModal, FeedbackModal, useDeleteTradeConfirmation, useFeedbackPopup } from "@/app/components/ui"
 import StoryComposeModal from "../../components/feed/StoryComposeModal"
+import FeedStoryViewer from "../../components/feed/FeedStoryViewer"
+import StoryAvatarRing from "../../components/feed/StoryAvatarRing"
 import { publishStory } from "@/lib/publishStory"
+import {
+  getActiveStoriesForUser,
+  userHasActiveStory,
+} from "@/lib/activeStories"
+import { useActiveStories } from "@/lib/useActiveStories"
 import {
   createStoryPreviewUrl,
   prepareStoryImageFile,
@@ -639,7 +645,7 @@ function PostCard({
   onSharePost?: (post: any) => void
 }) {
   const commentsScrollRef = useRef<HTMLDivElement>(null)
-  const [replyTarget, setReplyTarget] = useState<ReplyTarget | null>(null)
+  const [replyTarget, setReplyTarget] = useState<CommentReplyTarget | null>(null)
   const [pendingDelete, setPendingDelete] = useState<any>(null)
   const [deleteBusy, setDeleteBusy] = useState(false)
   const [commentsFocused, setCommentsFocused] = useState(
@@ -670,37 +676,30 @@ function PostCard({
     })
   }, [inDetailModal, post.id, scrollToCommentsOnMount, showCommentsPanel])
 
-  const commentsById = useMemo(
-    () => indexCommentsById(comments || []),
-    [comments]
-  )
-
   const commentsList = (
-    <div className="space-y-2 text-sm text-gray-300">
-      {(comments || []).map((c: any) => (
-        <FeedCommentItem
-          key={c.id}
-          comment={c}
-          parentComment={resolveParentComment(c, commentsById)}
-          currentUserId={currentUserId}
-          onReply={(comment) => {
-            setReplyTarget(buildReplyTargetFromComment(comment))
-            const input = document.getElementById(postCommentInputId)
-            if (input instanceof HTMLInputElement) input.focus()
-          }}
-          onRequestDelete={
-            onDeleteComment
-              ? (comment) =>
-                  setPendingDelete({
-                    ...comment,
-                    post_id: comment.post_id ?? post.id,
-                  })
-              : undefined
-          }
-          deleteMenuClassName="z-[9100]"
-        />
-      ))}
-    </div>
+    <FeedCommentList
+      comments={comments || []}
+      currentUserId={currentUserId}
+      onReply={(comment) => {
+        startCommentReply({
+          comment,
+          allComments: comments || [],
+          setReplyTarget,
+          setDraft: (value) => onCommentChange?.(value),
+          inputId: postCommentInputId,
+        })
+      }}
+      onRequestDelete={
+        onDeleteComment
+          ? (comment) =>
+              setPendingDelete({
+                ...comment,
+                post_id: comment.post_id ?? post.id,
+              })
+          : undefined
+      }
+      deleteMenuClassName="z-[9100]"
+    />
   )
 
   const commentsComposer = (
@@ -709,7 +708,12 @@ function PostCard({
         <ReplyComposerStrip
           authorName={replyTarget.authorName}
           preview={replyTarget.preview}
-          onCancel={() => setReplyTarget(null)}
+          onCancel={() =>
+            clearCommentReplyDraft({
+              setReplyTarget,
+              setDraft: (value) => onCommentChange?.(value),
+            })
+          }
         />
       ) : null}
       <div className="flex gap-2">
@@ -722,19 +726,19 @@ function PostCard({
           if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault()
             if (!commentSubmitting) {
-              onCommentSubmit?.(replyTarget?.id ?? null)
+              onCommentSubmit?.(replyTarget?.parentCommentId ?? null)
               setReplyTarget(null)
             }
           }
         }}
-        placeholder={replyTarget ? "Write a reply…" : "Add a comment..."}
+        placeholder={replyTarget ? "Add to reply…" : "Add a comment..."}
         className="flex-1 rounded-lg border border-white/10 bg-[#0f172a] px-3 py-2 text-sm text-white placeholder:text-gray-500"
       />
       <button
         type="button"
         onClick={(e) => {
           e.stopPropagation()
-          onCommentSubmit?.(replyTarget?.id ?? null)
+          onCommentSubmit?.(replyTarget?.parentCommentId ?? null)
           setReplyTarget(null)
         }}
         disabled={commentSubmitting || !(commentText || "").trim()}
@@ -1236,6 +1240,9 @@ function ProfilePageContent() {
   const creatingRoomRef = useRef(false)
   const creatingPostRef = useRef(false)
   const postingStoryRef = useRef(false)
+  const STORY_SLIDE_MS = 7000
+  const [profileStoryOpen, setProfileStoryOpen] = useState(false)
+  const [profileStoryIndex, setProfileStoryIndex] = useState(0)
   const likeBusyRef = useRef<Set<string>>(new Set())
   const commentSubmittingRef = useRef<Set<string>>(new Set())
   const feedDeepLinkLikeBusyRef = useRef(false)
@@ -1259,6 +1266,63 @@ function ProfilePageContent() {
     return () => mq.removeEventListener("change", sync)
   }, [])
 
+  const profileStoryUserIds = useMemo(
+    () => (profile?.id ? [String(profile.id)] : []),
+    [profile?.id]
+  )
+
+  const { storiesByUser: profileStoriesByUser, loadStories: loadProfileStories } =
+    useActiveStories(profileStoryUserIds, !!profile?.id)
+
+  const profileHasActiveStory = userHasActiveStory(
+    profileStoriesByUser,
+    profile?.id
+  )
+
+  const profileStorySlides = useMemo(
+    () => getActiveStoriesForUser(profileStoriesByUser, profile?.id),
+    [profileStoriesByUser, profile?.id]
+  )
+
+  const profileCurrentStory = profileStorySlides[profileStoryIndex] ?? null
+
+  const profileStoryBarUsers = useMemo(
+    () =>
+      profile
+        ? [
+            {
+              id: String(profile.id),
+              username: profile.username,
+              avatar_url: profile.avatar_url,
+            },
+          ]
+        : [],
+    [profile]
+  )
+
+  useEffect(() => {
+    if (!profileStoryOpen) return
+    if (profileStorySlides.length === 0) {
+      setProfileStoryOpen(false)
+      setProfileStoryIndex(0)
+      return
+    }
+    if (profileStoryIndex >= profileStorySlides.length) {
+      setProfileStoryIndex(Math.max(0, profileStorySlides.length - 1))
+    }
+  }, [profileStoryOpen, profileStoryIndex, profileStorySlides.length])
+
+  useEffect(() => {
+    if (!profileStoryOpen || profileStorySlides.length === 0) return
+    if (profileStoryIndex >= profileStorySlides.length - 1) return
+
+    const timer = window.setTimeout(() => {
+      setProfileStoryIndex((prev) => prev + 1)
+    }, STORY_SLIDE_MS)
+
+    return () => window.clearTimeout(timer)
+  }, [profileStoryOpen, profileStoryIndex, profileStorySlides.length])
+
   useEffect(() => {
     if (!postImage) {
       setPostImagePreviewUrl(null)
@@ -1273,20 +1337,17 @@ function ProfilePageContent() {
     }
   }, [postImage])
 
-  /** Feed refreshes the story bar here; profile has no story strip. */
-  const loadFollowingStories = useCallback(async () => {}, [])
-
-  useEffect(() => {
-    return () => {
-      revokeStoryPreviewUrl(pendingStoryPreviewUrl)
-    }
-  }, [pendingStoryPreviewUrl])
-
   const closeStoryCompose = useCallback(() => {
     revokeStoryPreviewUrl(pendingStoryPreviewUrl)
     setPendingStoryPreviewUrl(null)
     setPendingStoryFile(null)
     setStoryComposeOpen(false)
+  }, [pendingStoryPreviewUrl])
+
+  useEffect(() => {
+    return () => {
+      revokeStoryPreviewUrl(pendingStoryPreviewUrl)
+    }
   }, [pendingStoryPreviewUrl])
 
   const setStoryDraft = useCallback(
@@ -1328,7 +1389,7 @@ function ProfilePageContent() {
 
       showPopup({ type: "success", message: "Story uploaded!" })
       closeStoryCompose()
-      await loadFollowingStories()
+      await loadProfileStories()
     } finally {
       postingStoryRef.current = false
       setPostingStory(false)
@@ -1339,7 +1400,7 @@ function ProfilePageContent() {
     postingStory,
     showPopup,
     closeStoryCompose,
-    loadFollowingStories,
+    loadProfileStories,
   ])
 
   const fetchTradesForProfile = useCallback(
@@ -2927,20 +2988,68 @@ function ProfilePageContent() {
         />
       ) : null}
 
+      {profileStoryOpen && profile?.id && profileCurrentStory ? (
+        <FeedStoryViewer
+          activeStoryUser={String(profile.id)}
+          users={profileStoryBarUsers}
+          storiesByUser={profileStoriesByUser}
+          currentStories={profileStorySlides}
+          currentStoryIndex={profileStoryIndex}
+          currentStory={profileCurrentStory}
+          currentUserId={currentUserId}
+          canGoPrevSlide={profileStoryIndex > 0}
+          canGoNextSlide={profileStoryIndex < profileStorySlides.length - 1}
+          canGoPrevUser={false}
+          canGoNextUser={false}
+          onClose={() => {
+            setProfileStoryOpen(false)
+            setProfileStoryIndex(0)
+          }}
+          onPrevSlide={() =>
+            setProfileStoryIndex((prev) => Math.max(0, prev - 1))
+          }
+          onNextSlide={() =>
+            setProfileStoryIndex((prev) =>
+              Math.min(profileStorySlides.length - 1, prev + 1)
+            )
+          }
+          onPrevUser={() => {}}
+          onNextUser={() => {}}
+          onStoryReplyError={(message) =>
+            showPopup({ type: "error", message })
+          }
+        />
+      ) : null}
+
       <div className="w-full text-gray-100">
         <div className="mx-auto max-w-5xl space-y-4 px-4 py-6 sm:px-6 lg:px-8">
           <div className="bg-white/5 border border-white/10 rounded-xl p-6 backdrop-blur-md">
             <div className="flex flex-col items-center text-center sm:items-stretch sm:text-left md:block">
               <div className="flex w-full flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="flex min-w-0 w-full flex-1 flex-col items-center gap-2 sm:flex-row sm:items-center sm:gap-6">
-                  <img
-                    src={profile.avatar_url || "/default-avatar.png"}
-                    alt=""
-                    onError={(e) => {
-                      e.currentTarget.src = "/default-avatar.png"
-                    }}
-                    className="h-20 w-20 shrink-0 rounded-full border border-white/10 object-cover md:h-24 md:w-24"
-                  />
+                  {profileHasActiveStory ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setProfileStoryIndex(0)
+                        setProfileStoryOpen(true)
+                      }}
+                      className="shrink-0 rounded-full outline-none transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-emerald-400/60"
+                      aria-label={`View ${profile.username || "user"}'s story`}
+                    >
+                      <StoryAvatarRing
+                        profile={profile}
+                        hasActiveStory
+                        sizeClassName="h-20 w-20 md:h-24 md:w-24"
+                      />
+                    </button>
+                  ) : (
+                    <StoryAvatarRing
+                      profile={profile}
+                      hasActiveStory={false}
+                      sizeClassName="h-20 w-20 md:h-24 md:w-24"
+                    />
+                  )}
 
                   <div className="flex min-w-0 w-full flex-1 flex-col justify-center text-center sm:text-left">
                     <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start sm:gap-3">
@@ -3486,34 +3595,23 @@ function ProfilePageContent() {
                         value={statsVisible && profitPerTrade != null ? formatCurrency(profitPerTrade) : "—"}
                         positive={profitPerTrade != null ? profitPerTrade >= 0 : undefined}
                       />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-                      <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                        <p className="text-sm text-gray-400">Biggest Win</p>
-                        <p className="font-semibold text-green-400 tabular-nums">
-                          {formatPnlCurrency(biggestWin)}
-                        </p>
-                      </div>
-
-                      <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                        <p className="text-sm text-gray-400">Biggest Loss</p>
-                        <p className="font-semibold text-red-400 tabular-nums">
-                          {biggestLoss != null ? formatPnlCurrency(biggestLoss) : "—"}
-                        </p>
-                      </div>
-
-                      <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                        <p className="text-sm text-gray-400">Long Trades</p>
-                        <p className="font-semibold tabular-nums">{longTrades}</p>
-                      </div>
-
-                      <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                        <p className="text-sm text-gray-400">Largest Streaks</p>
-                        <p className="font-semibold tabular-nums">
-                          W{maxWinStreak} / L{maxLossStreak}
-                        </p>
-                      </div>
+                      <Stat
+                        title="Biggest Win"
+                        value={formatPnlCurrency(biggestWin)}
+                        positive
+                      />
+                      <Stat
+                        title="Biggest Loss"
+                        value={
+                          biggestLoss != null ? formatPnlCurrency(biggestLoss) : "—"
+                        }
+                        positive={false}
+                      />
+                      <Stat title="Long Trades" value={longTrades} />
+                      <Stat
+                        title="Largest Streaks"
+                        value={`W${maxWinStreak} / L${maxLossStreak}`}
+                      />
                     </div>
 
                     <div className="rounded-xl border border-white/10 bg-white/5 p-4 md:p-5">
@@ -4195,15 +4293,23 @@ export default function ProfilePage() {
   )
 }
 
-function Stat({ title, value, positive }: any) {
+function Stat({
+  title,
+  value,
+  positive,
+}: {
+  title: string
+  value: React.ReactNode
+  positive?: boolean
+}) {
   let color = "text-gray-100"
   if (positive === true) color = "text-green-400"
   if (positive === false) color = "text-red-400"
 
   return (
-    <div className="rounded-xl border border-white/10 bg-white/5 p-6 text-center">
+    <div className="flex h-full flex-col items-center justify-center gap-1 rounded-xl border border-white/10 bg-white/5 p-6 text-center">
       <p className="text-xs text-blue-300">{title}</p>
-      <p className={`text-lg font-semibold ${color}`}>{value}</p>
+      <p className={`text-lg font-semibold tabular-nums ${color}`}>{value}</p>
     </div>
   )
 }

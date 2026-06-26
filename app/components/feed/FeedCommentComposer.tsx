@@ -2,14 +2,14 @@
 
 import { useCallback } from "react"
 import ReplyComposerStrip from "@/app/components/replies/ReplyComposerStrip"
-import type { ReplyTarget } from "@/lib/replyReference"
+import type { CommentReplyTarget } from "@/lib/commentReplyUx"
 
 type FeedCommentComposerProps = {
   post: any
   user: any
   commentValue: string
   commentSubmitting: boolean
-  replyTarget?: ReplyTarget | null
+  replyTarget?: CommentReplyTarget | null
   onCancelReply?: () => void
   onCommentChange: (postId: string, value: string) => void
   onSubmitComment: (post: any) => void
@@ -76,7 +76,7 @@ function FeedCommentComposer({
         <input
           id={`comment-input-${pid}`}
           type="text"
-          placeholder={replyTarget ? "Write a reply…" : "Add a comment…"}
+          placeholder={replyTarget ? "Add to reply…" : "Add a comment…"}
           value={commentValue}
           onChange={handleChange}
           onClick={stopPropagation}

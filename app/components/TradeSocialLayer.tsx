@@ -12,7 +12,7 @@ import {
   type RefObject,
 } from "react"
 import { supabase } from "../../lib/supabaseClient"
-import FeedCommentItem from "@/app/components/feed/FeedCommentItem"
+import FeedCommentList from "@/app/components/feed/FeedCommentList"
 import EngagementCountButton from "@/app/components/EngagementCountButton"
 import ReplyComposerStrip from "@/app/components/replies/ReplyComposerStrip"
 import { feedbackPresets } from "@/lib/feedbackPresets"
@@ -29,11 +29,10 @@ import {
 import ConfirmModal from "@/app/components/ui/ConfirmModal"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import {
-  buildReplyTargetFromComment,
-  indexCommentsById,
-  resolveParentComment,
-  type ReplyTarget,
-} from "@/lib/replyReference"
+  clearCommentReplyDraft,
+  startCommentReply,
+  type CommentReplyTarget,
+} from "@/lib/commentReplyUx"
 
 type TradeSocialContextValue = {
   tradeId: string
@@ -49,8 +48,8 @@ type TradeSocialContextValue = {
   scrollToCommentsOnMount: boolean
   newComment: string
   setNewComment: (value: string) => void
-  replyTarget: ReplyTarget | null
-  setReplyTarget: (target: ReplyTarget | null) => void
+  replyTarget: CommentReplyTarget | null
+  setReplyTarget: (target: CommentReplyTarget | null) => void
   likeBusy: boolean
   commentSubmitting: boolean
   handleLike: () => Promise<void>
@@ -101,8 +100,8 @@ export function TradeSocialProvider({
   const [comments, setComments] = useState<any[]>([])
   const [showComments, setShowComments] = useState(false)
   const [newComment, setNewComment] = useState("")
-  const [replyTarget, setReplyTarget] = useState<ReplyTarget | null>(null)
-  const replyTargetRef = useRef<ReplyTarget | null>(null)
+  const [replyTarget, setReplyTarget] = useState<CommentReplyTarget | null>(null)
+  const replyTargetRef = useRef<CommentReplyTarget | null>(null)
   const [likeBusy, setLikeBusy] = useState(false)
   const likeBusyRef = useRef(false)
   const [commentSubmitting, setCommentSubmitting] = useState(false)
@@ -310,8 +309,8 @@ export function TradeSocialProvider({
         trade_id: resolvedId,
         user_id: currentUserId,
         content: newComment.trim(),
-        ...(replyTargetRef.current?.id
-          ? { parent_comment_id: replyTargetRef.current.id }
+        ...(replyTargetRef.current?.parentCommentId
+          ? { parent_comment_id: replyTargetRef.current.parentCommentId }
           : {}),
       })
       .select("*, profiles(username, avatar_url)")
@@ -324,7 +323,7 @@ export function TradeSocialProvider({
     }
 
     if (data) {
-      const parentCommentId = replyTargetRef.current?.id ?? null
+      const parentCommentId = replyTargetRef.current?.parentCommentId ?? null
       const insertedRow = parentCommentId
         ? { ...data, parent_comment_id: parentCommentId }
         : data
@@ -585,8 +584,6 @@ export function TradeSocialCommentsSection({
     })
   }, [commentsExpanded, scrollContainerRef, scrollToCommentsOnMount, tradeId])
 
-  const commentsById = useMemo(() => indexCommentsById(comments), [comments])
-
   const handleConfirmDelete = useCallback(async () => {
     if (!pendingDelete) return
 
@@ -630,28 +627,26 @@ export function TradeSocialCommentsSection({
   )
 
   const commentList = (
-    <div className="space-y-2">
-      {comments.map((c) => (
-        <FeedCommentItem
-          key={c.id}
-          comment={c}
-          parentComment={resolveParentComment(c, commentsById)}
-          currentUserId={currentUserId}
-          avatarClassName="h-6 w-6 shrink-0 rounded-full object-cover"
-          onReply={(comment) => {
-            setReplyTarget(buildReplyTargetFromComment(comment))
-            const input = sectionRef.current?.querySelector("input")
-            if (input instanceof HTMLInputElement) input.focus()
-          }}
-          onRequestDelete={(comment) =>
-            setPendingDelete({
-              ...comment,
-              trade_id: comment.trade_id ?? tradeId,
-            })
-          }
-        />
-      ))}
-    </div>
+    <FeedCommentList
+      comments={comments}
+      currentUserId={currentUserId}
+      replyAvatarClassName="h-6 w-6 shrink-0 rounded-full object-cover"
+      onReply={(comment) => {
+        startCommentReply({
+          comment,
+          allComments: comments,
+          setReplyTarget,
+          setDraft: setNewComment,
+          inputId: `trade-comment-input-${tradeId}`,
+        })
+      }}
+      onRequestDelete={(comment) =>
+        setPendingDelete({
+          ...comment,
+          trade_id: comment.trade_id ?? tradeId,
+        })
+      }
+    />
   )
 
   const composer = currentUserId ? (
@@ -664,11 +659,17 @@ export function TradeSocialCommentsSection({
             <ReplyComposerStrip
               authorName={replyTarget.authorName}
               preview={replyTarget.preview}
-              onCancel={() => setReplyTarget(null)}
+              onCancel={() =>
+                clearCommentReplyDraft({
+                  setReplyTarget,
+                  setDraft: setNewComment,
+                })
+              }
             />
           ) : null}
           <div className="flex gap-2">
           <input
+            id={`trade-comment-input-${tradeId}`}
             type="text"
             value={newComment}
             onChange={(e) => setNewComment(e.target.value)}
@@ -681,7 +682,7 @@ export function TradeSocialCommentsSection({
                 void handleComment()
               }
             }}
-            placeholder={replyTarget ? "Write a reply…" : "Add a comment…"}
+            placeholder={replyTarget ? "Add to reply…" : "Add a comment…"}
             className="flex-1 min-w-0 rounded-lg border border-gray-600 bg-[#1e293b] p-2 text-sm text-white placeholder:text-gray-500"
           />
 

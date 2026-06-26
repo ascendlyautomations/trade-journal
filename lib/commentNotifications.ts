@@ -1,4 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { parseLeadingCommentMention } from "@/lib/commentReplyUx"
+import { normalizeProfileUsername } from "@/lib/profileUsername"
 
 async function authFetch(
   supabase: SupabaseClient,
@@ -58,7 +60,12 @@ export function resolveCommentNotificationRecipients(params: {
   senderUserId: string
   ownerUserId?: string | null
   parentCommentId?: string | null
-  existingComments?: Array<{ id: string; user_id: string }>
+  content?: string | null
+  existingComments?: Array<{
+    id: string
+    user_id: string
+    profiles?: { username?: string | null } | null
+  }>
 }): string[] {
   const receivers = new Set<string>()
   const senderId = String(params.senderUserId).trim()
@@ -72,6 +79,23 @@ export function resolveCommentNotificationRecipients(params: {
     if (parentUserId && parentUserId !== senderId) {
       receivers.add(parentUserId)
     }
+
+    const { username: mentionedUsername } = parseLeadingCommentMention(
+      params.content ?? ""
+    )
+    if (mentionedUsername && params.existingComments?.length) {
+      const mentioned = params.existingComments.find(
+        (c) =>
+          normalizeProfileUsername(c.profiles?.username ?? "") ===
+          mentionedUsername
+      )
+      const mentionedUserId =
+        mentioned?.user_id != null ? String(mentioned.user_id).trim() : ""
+      if (mentionedUserId && mentionedUserId !== senderId) {
+        receivers.add(mentionedUserId)
+      }
+    }
+
     return Array.from(receivers)
   }
 
@@ -184,6 +208,7 @@ export async function ensureCommentNotificationsForInsert(
     senderUserId: params.senderUserId,
     ownerUserId: params.ownerUserId,
     parentCommentId: params.parentCommentId,
+    content: params.content,
     existingComments: params.existingComments,
   })
 

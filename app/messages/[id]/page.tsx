@@ -68,6 +68,10 @@ import {
   type ReplyParentMessageLike,
   type ReplyTarget,
 } from "@/lib/replyReference"
+import {
+  decodeStoryReplyContent,
+  STORY_REPLY_MESSAGE_TYPE,
+} from "@/lib/storyReplyMessage"
 
 /** Includes parent_message_id via *; no self-referencing parent embed (PGRST200). */
 const DM_MESSAGE_SELECT = `
@@ -533,6 +537,103 @@ function PostMessageBubble({
           imageUrl={lightboxImageUrl}
           onClose={() => setLightboxImageUrl(null)}
         />
+      </div>
+    </div>
+  )
+}
+
+function StoryReplyMessageBubble({
+  message,
+  isMe,
+  userId,
+  activeMenuId,
+  setActiveMenuId,
+  deleteForMe,
+  deleteForEveryone,
+  onReply,
+  onJumpToParent,
+  onReplyUnavailable,
+  parentMessage,
+}: {
+  message: any
+  isMe: boolean
+  userId: string | undefined
+  activeMenuId: string | null
+  setActiveMenuId: (id: string | null) => void
+  deleteForMe: (m: any) => void
+  deleteForEveryone: (m: any) => void
+  onReply: (message: any) => void
+  onJumpToParent: (parentId: string) => boolean
+  onReplyUnavailable: () => void
+  parentMessage?: ReplyParentMessageLike | null
+}) {
+  if (message.deleted_for_everyone) {
+    return (
+      <div className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
+        <p className="text-sm italic text-gray-400">Message deleted</p>
+      </div>
+    )
+  }
+
+  const payload = decodeStoryReplyContent(message.content)
+  const replyText = payload?.text?.trim() ?? ""
+  const storyImageUrl = payload?.story_image_url?.trim() ?? ""
+  const contextLabel = isMe ? "Replied to their story" : "Replied to your story"
+  const menuOpen = activeMenuId === message.id
+
+  return (
+    <div
+      id={dmMessageElementId(message.id)}
+      data-dm-message-id={message.id}
+      className={`flex ${isMe ? "justify-end" : "justify-start"}`}
+    >
+      <div className="relative group inline-block max-w-[min(100%,18rem)] overflow-visible">
+        <DmMessageActionMenu
+          message={message}
+          isMe={isMe}
+          userId={userId}
+          menuOpen={menuOpen}
+          setActiveMenuId={setActiveMenuId}
+          onReply={onReply}
+          deleteForMe={deleteForMe}
+          deleteForEveryone={deleteForEveryone}
+          alignRight={isMe}
+        />
+
+        <div
+          className={`overflow-hidden rounded-2xl border border-white/10 bg-[#1e293b] shadow-lg shadow-black/20 ${
+            isMe ? "rounded-br-md" : "rounded-bl-md"
+          }`}
+        >
+          <DmReplyReference
+            message={message}
+            parentMessage={parentMessage}
+            onJumpToParent={onJumpToParent}
+            onUnavailable={onReplyUnavailable}
+          />
+
+          <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2">
+            {storyImageUrl ? (
+              <img
+                src={storyImageUrl}
+                alt=""
+                className="h-10 w-10 shrink-0 rounded-md object-cover ring-1 ring-white/15"
+                draggable={false}
+              />
+            ) : (
+              <div className="h-10 w-10 shrink-0 rounded-md bg-white/10" />
+            )}
+            <p className="min-w-0 text-xs font-medium text-gray-400">
+              {contextLabel}
+            </p>
+          </div>
+
+          {replyText ? (
+            <p className="whitespace-pre-wrap break-words px-3 py-2.5 text-sm text-gray-100">
+              {replyText}
+            </p>
+          ) : null}
+        </div>
       </div>
     </div>
   )
@@ -1659,6 +1760,44 @@ export default function DMPage() {
                         deleteForMe={deleteForMe}
                         deleteForEveryone={deleteForEveryone}
                         onViewTrade={viewSharedTrade}
+                        onReply={startReplyToMessage}
+                        onJumpToParent={scrollToDmMessage}
+                        onReplyUnavailable={notifyReplyUnavailable}
+                        parentMessage={parentMessage}
+                      />
+                      {showTimestamp ? (
+                        <DmClusterTimestamp
+                          createdAt={message.created_at}
+                          isMe={isMe}
+                        />
+                      ) : null}
+                    </div>
+                  </Fragment>
+                )
+              }
+
+              if (message.type === STORY_REPLY_MESSAGE_TYPE) {
+                return (
+                  <Fragment key={message.id}>
+                    {showDateDivider ? (
+                      <ConversationDateDivider label={dateDividerLabel} />
+                    ) : null}
+                    <div className={rowClass}>
+                      {showName && profileUsername ? (
+                        <ProfileUsernameLink
+                          userId={message.sender_id}
+                          username={profileUsername}
+                          className="mb-1 ml-1 inline-block text-xs text-gray-400 hover:text-gray-300"
+                        />
+                      ) : null}
+                      <StoryReplyMessageBubble
+                        message={message}
+                        isMe={isMe}
+                        userId={user?.id}
+                        activeMenuId={activeMenuId}
+                        setActiveMenuId={setActiveMenuId}
+                        deleteForMe={deleteForMe}
+                        deleteForEveryone={deleteForEveryone}
                         onReply={startReplyToMessage}
                         onJumpToParent={scrollToDmMessage}
                         onReplyUnavailable={notifyReplyUnavailable}
