@@ -34,6 +34,9 @@ export type SharedTradeMessageCardProps = {
   className?: string
   /** DM layout: full bubble width, contain screenshot aspect ratio. */
   layout?: "default" | "dm"
+  /** Cached trade snapshot — renders immediately without a loading state. */
+  initialTrade?: any | null
+  onTradeLoaded?: (trade: any | null) => void
 }
 
 /**
@@ -48,14 +51,18 @@ export default function SharedTradeMessageCard({
   beforeCardContent,
   className,
   layout = "default",
+  initialTrade = null,
+  onTradeLoaded,
 }: SharedTradeMessageCardProps) {
   const resolvedClassName =
     className ??
     (layout === "dm"
       ? "w-full max-w-[min(100%,22rem)]"
       : "w-full min-w-[15rem] max-w-[min(100%,19.5rem)]")
-  const [trade, setTrade] = useState<any>(null)
-  const [tradeLoading, setTradeLoading] = useState(false)
+  const [trade, setTrade] = useState<any>(initialTrade)
+  const [tradeLoading, setTradeLoading] = useState(
+    () => !initialTrade && Boolean(tradeId != null && String(tradeId).trim())
+  )
   const [lightboxImageUrl, setLightboxImageUrl] = useState<string | null>(null)
 
   const resolvedTradeId = tradeId != null ? String(tradeId).trim() : ""
@@ -68,8 +75,10 @@ export default function SharedTradeMessageCard({
     }
 
     let cancelled = false
-    setTradeLoading(true)
-    setTrade(null)
+    if (!initialTrade) {
+      setTradeLoading(true)
+      setTrade(null)
+    }
 
     void (async () => {
       const { data } = await supabase
@@ -95,18 +104,19 @@ export default function SharedTradeMessageCard({
         resolved = full ?? data
       }
 
-      setTrade(
-        resolved
-          ? sanitizeTradeForViewer(resolved, { isOwner: !!isOwner })
-          : null
-      )
+      const sanitized = resolved
+        ? sanitizeTradeForViewer(resolved, { isOwner: !!isOwner })
+        : null
+
+      setTrade(sanitized)
       setTradeLoading(false)
+      onTradeLoaded?.(sanitized)
     })()
 
     return () => {
       cancelled = true
     }
-  }, [resolvedTradeId, viewerUserId])
+  }, [resolvedTradeId, viewerUserId, onTradeLoaded])
 
   if (!resolvedTradeId) {
     return (

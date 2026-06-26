@@ -10,8 +10,8 @@ import {
 import { ensureDmConversation } from "@/lib/dmConversation"
 import { buildDmThreadPath, groupThreadPath } from "@/lib/messageRoutes"
 import { normalizeProfileUsername } from "@/lib/profileUsername"
+import { markConversationMessagesSeen } from "@/lib/conversationReadMarking"
 import {
-  countUnreadFromRows,
   dispatchUnreadMessagesRefresh,
   fetchUnreadCountForConversation as fetchUnreadCountForConversationShared,
   fetchUnreadMessageRows,
@@ -25,6 +25,7 @@ import {
   mergeConversationInboxFields,
   readInboxPatches,
 } from "@/lib/conversationInboxSync"
+import { markConversationOpenFromInbox } from "@/lib/conversationOpenIntent"
 import { useRouter } from "next/navigation"
 import MessagesConversationList from "../../components/messages/MessagesConversationList"
 import EmptyState from "../../components/ui/EmptyState"
@@ -137,10 +138,6 @@ export default function MessagesPage() {
     void fetchAllUsers(user.id)
   }, [showGroupModal, showDMModal, user?.id, fetchAllUsers])
 
-  useEffect(() => {
-    init()
-  }, [])
-
   const markMessageNotificationsRead = useCallback(
     async (currentUserId: string, reason: "page-open" | "chat-open") => {
       console.log("[messages] mark read start", {
@@ -179,81 +176,7 @@ export default function MessagesPage() {
 
   const markConversationRead = useCallback(
     async (currentUserId: string, conversationId: string) => {
-      console.log("[messages] mark conversation read start", {
-        userId: currentUserId,
-        conversationId,
-      })
-
-      const { data: rows, error: fetchErr } = await supabase
-        .from("messages")
-        .select("id, sender_id, seen_by")
-        .eq("conversation_id", conversationId)
-
-      if (fetchErr) {
-        console.error("[messages] mark conversation read fetch error:", fetchErr)
-        return
-      }
-
-      let updates = 0
-      for (const row of rows || []) {
-        if (!row.sender_id || row.sender_id === currentUserId) continue
-        const seenBy = normalizeSeenBy(row.seen_by)
-        if (seenBy.includes(currentUserId)) continue
-        const nextSeenBy = [...seenBy, currentUserId]
-
-        console.log("[messages] seen_by update attempt", {
-          messageId: row.id,
-          oldSeenBy: seenBy,
-          newSeenBy: nextSeenBy,
-        })
-
-        const { error: upErr } = await supabase
-          .from("messages")
-          .update({ seen_by: nextSeenBy })
-          .eq("id", row.id)
-
-        if (upErr) {
-          console.error("[messages] mark conversation read update error:", {
-            messageId: row.id,
-            error: upErr,
-          })
-          continue
-        }
-        updates += 1
-      }
-
-      const { data: verifyRows, error: verifyErr } = await supabase
-        .from("messages")
-        .select("id, sender_id, seen_by")
-        .eq("conversation_id", conversationId)
-
-      if (verifyErr) {
-        console.error("[messages] mark conversation read verify error:", verifyErr)
-      } else {
-        const remainingUnread = (verifyRows || []).filter((r) => {
-          if (!r.sender_id || r.sender_id === currentUserId) return false
-          const seen = normalizeSeenBy(r.seen_by)
-          return !seen.includes(currentUserId)
-        })
-        console.log("[messages] mark conversation read verify", {
-          userId: currentUserId,
-          conversationId,
-          remainingUnreadCount: remainingUnread.length,
-          remainingUnreadMessageIds: remainingUnread.map((r) => r.id),
-        })
-      }
-
-      console.log("[messages] mark conversation read success", {
-        userId: currentUserId,
-        conversationId,
-        updatedMessages: updates,
-        unreadBefore:
-          (rows || []).filter((r) => {
-            if (!r.sender_id || r.sender_id === currentUserId) return false
-            const seen = Array.isArray(r.seen_by) ? r.seen_by : []
-            return !seen.includes(currentUserId)
-          }).length,
-      })
+      await markConversationMessagesSeen(currentUserId, conversationId)
     },
     []
   )
@@ -313,22 +236,6 @@ export default function MessagesPage() {
       document.removeEventListener("visibilitychange", onVisibilityChange)
     }
   }, [])
-
-  async function init() {
-    const {
-      data: { user }
-    } = await supabase.auth.getUser()
-
-    if (!user) {
-      router.push("/login")
-      return
-    }
-
-    setUser(user)
-
-    await fetchConversations(user.id)
-    setLoading(false)
-  }
 
   const fetchConversations = useCallback(async (userId: string) => {
     const { data: rows } = await supabase
@@ -427,6 +334,23 @@ export default function MessagesPage() {
     return sorted
   }, [])
 
+  useEffect(() => {
+    void (async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user) {
+        router.push("/login")
+        return
+      }
+
+      setUser(user)
+      await fetchConversations(user.id)
+      setLoading(false)
+    })()
+  }, [fetchConversations, router])
+
   const fetchUnreadCountForConversation = useCallback(
     async (userId: string, conversationId: string) =>
       fetchUnreadCountForConversationShared(userId, conversationId),
@@ -481,33 +405,45 @@ export default function MessagesPage() {
   }, [user?.id, fetchConversations])
 
   const openConversation = useCallback(
-    async (conversationId: string) => {
-      let list = conversations
-
-      if (user?.id) {
-        await markConversationRead(user.id, conversationId)
-        await markMessageNotificationsRead(user.id, "chat-open")
-        list = (await fetchConversations(user.id)) ?? list
-        setConversations((prev) =>
-          prev.map((c) =>
-            c.id === conversationId ? { ...c, unreadCount: 0 } : c
-          )
-        )
-      }
-
-      const item = list.find((c) => c.id === conversationId)
+    (conversationId: string) => {
+      const item = conversations.find((c) => c.id === conversationId)
       let path = groupThreadPath(conversationId)
+      let urlSegment = conversationId
       if (item && !item.is_group) {
         const normalized = normalizeProfileUsername(item.username ?? "")
+        urlSegment =
+          normalized && item.username !== "user"
+            ? normalized
+            : conversationId
         path =
           normalized && item.username !== "user"
             ? buildDmThreadPath(normalized)
             : groupThreadPath(conversationId)
       }
+
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === conversationId ? { ...c, unreadCount: 0 } : c
+        )
+      )
+
+      markConversationOpenFromInbox(conversationId, urlSegment)
       router.push(path)
+
+      if (!user?.id) return
+
+      const userId = user.id
+      void (async () => {
+        await markConversationRead(userId, conversationId)
+        await markMessageNotificationsRead(userId, "chat-open")
+        const list = await fetchConversations(userId)
+        if (list) {
+          setConversations(list)
+        }
+      })()
     },
     [
-      user?.id,
+      user,
       conversations,
       markConversationRead,
       markMessageNotificationsRead,
@@ -562,7 +498,7 @@ export default function MessagesPage() {
       await fetchConversations(user.id)
       setOpenConvoMenuId(null)
     },
-    [user?.id, fetchConversations]
+    [user, fetchConversations]
   )
 
   const handleMarkConversationUnread = useCallback(
@@ -607,7 +543,7 @@ export default function MessagesPage() {
       )
       dispatchUnreadMessagesRefresh()
     },
-    [user?.id, fetchUnreadCountForConversation]
+    [user, fetchUnreadCountForConversation]
   )
 
   async function createGroupChat() {

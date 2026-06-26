@@ -125,6 +125,11 @@ import {
 } from "@/lib/storyComposeHelpers"
 import { isProfileUuidSegment, profilePath } from "@/lib/profileRoutes"
 import {
+  patchProfileSession,
+  readProfileSession,
+  writeProfileSession,
+} from "@/lib/profileSessionCache"
+import {
   ProfileAvatarLink,
   ProfileLink,
   ProfileUsernameLink,
@@ -1451,6 +1456,27 @@ function ProfilePageContent() {
       return
     }
 
+    const cached = readProfileSession(profileId)
+    if (cached) {
+      setProfile(cached.profile)
+      setRoom(cached.room)
+      setFollowersCount(cached.followersCount)
+      setFollowingCount(cached.followingCount)
+      setIsFollowing(cached.isFollowing)
+      setIsRequested(cached.isRequested)
+      setFollowsYou(cached.followsYou)
+      setAllTrades(cached.allTrades)
+      setWallPosts(cached.wallPosts)
+      setVisibleTradeCount(cached.visibleTradeCount)
+      setWallPostsReady(true)
+      setLoading(false)
+      deepLinkHandledRef.current = null
+      if (cached.scrollY > 0) {
+        requestAnimationFrame(() => window.scrollTo(0, cached.scrollY))
+      }
+      return
+    }
+
     console.log("ProfileId from URL:", profileId)
 
     setProfile(null)
@@ -1474,7 +1500,10 @@ function ProfilePageContent() {
 
     void (async () => {
       const rows = await fetchTradesForProfile(profile.id)
-      if (!cancelled) setAllTrades(rows)
+      if (!cancelled) {
+        setAllTrades(rows)
+        patchProfileSession(profileId, { allTrades: rows })
+      }
     })()
 
     return () => {
@@ -1512,6 +1541,7 @@ function ProfilePageContent() {
       }
       setWallPosts(data || [])
       setWallPostsReady(true)
+      patchProfileSession(profileId, { wallPosts: data || [] })
     }
 
     void fetchWallPosts()
@@ -1547,6 +1577,17 @@ function ProfilePageContent() {
       cancelled = true
     }
   }, [profile?.id, currentUserId])
+
+  useEffect(() => {
+    if (!profileId || loading) return
+    const onScroll = () => {
+      const cached = readProfileSession(profileId)
+      if (!cached) return
+      patchProfileSession(profileId, { scrollY: window.scrollY })
+    }
+    window.addEventListener("scroll", onScroll, { passive: true })
+    return () => window.removeEventListener("scroll", onScroll)
+  }, [profileId, loading])
 
   useEffect(() => {
     if (
@@ -1718,6 +1759,20 @@ function ProfilePageContent() {
     setFollowingCount(followingN ?? 0)
 
     setLoading(false)
+
+    writeProfileSession(segment, {
+      profile: prof,
+      room: roomRow && roomRow.owner_user_id === prof.id ? roomRow : null,
+      followersCount: followersN ?? 0,
+      followingCount: followingN ?? 0,
+      isFollowing: following,
+      isRequested: requested,
+      followsYou: profileFollowsYou,
+      allTrades: readProfileSession(segment)?.allTrades ?? [],
+      wallPosts: readProfileSession(segment)?.wallPosts ?? [],
+      visibleTradeCount: PAGE_SIZE,
+      scrollY: 0,
+    })
 
     if (lookupByUuid && prof.username) {
       const target = profilePath(prof)

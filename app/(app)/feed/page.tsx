@@ -39,7 +39,10 @@ import {
 } from "../../components/feed/FeedPostCard"
 import {
   FEED_COMMENT_INSERT_SELECT,
+  FEED_POSTS_SELECT,
   buildFeedPostsIndex,
+  normalizeProfileFeedItem,
+  normalizeTradeFeedItem,
   postTradeOwnerUserId,
   queryFeedComments,
   withInsertedParentCommentId,
@@ -54,11 +57,17 @@ import {
 import { useActiveStories } from "@/lib/useActiveStories"
 import {
   FEED_PAGE_SIZE,
+  FEED_PROFILE_POSTS_SELECT,
   fetchFollowingIds,
   fetchProfileFeedBatch,
   fetchTradeFeedBatch,
   topUpMergedFeedBuffer,
 } from "@/lib/feedContent"
+import {
+  readFeedSession,
+  writeFeedSession,
+  type FeedSessionSnapshot,
+} from "@/lib/feedSessionCache"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import EmptyState from "@/app/components/ui/EmptyState"
 import { SkeletonFeedPage } from "@/app/components/ui/skeletons"
@@ -111,8 +120,15 @@ function FeedPageContent() {
   profileRef.current = profile
   const feedInitKeyRef = useRef<string | null>(null)
   const hasLoadedFeedRef = useRef(false)
+  const followingIdsRef = useRef<string[]>([])
   const [likesByPost, setLikesByPost] = useState<Record<string, LikeMeta>>({})
   const [commentsByPost, setCommentsByPost] = useState<Record<string, any[]>>({})
+  const postsRef = useRef<any[]>([])
+  postsRef.current = posts
+  const likesByPostRef = useRef(likesByPost)
+  likesByPostRef.current = likesByPost
+  const commentsByPostRef = useRef(commentsByPost)
+  commentsByPostRef.current = commentsByPost
   const [commentSubmitting, setCommentSubmitting] = useState<Record<string, boolean>>({})
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null)
   const [sharePostId, setSharePostId] = useState<string | null>(null)
@@ -133,15 +149,69 @@ function FeedPageContent() {
   const [feedEmptyState, setFeedEmptyState] = useState<FeedEmptyState | null>(
     null
   )
+  const feedEmptyStateRef = useRef<FeedEmptyState | null>(null)
+  feedEmptyStateRef.current = feedEmptyState
+  const scrollYRef = useRef(0)
 
-  const likesByPostRef = useRef(likesByPost)
-  likesByPostRef.current = likesByPost
+  const buildFeedSnapshot = useCallback(
+    (
+      nextPosts: any[],
+      nextLikes: Record<string, LikeMeta>,
+      nextComments: Record<string, any[]>,
+      overrides?: Partial<FeedSessionSnapshot>
+    ): FeedSessionSnapshot => ({
+      posts: nextPosts,
+      likesByPost: nextLikes,
+      commentsByPost: nextComments,
+      page: pageRef.current,
+      hasMore: hasMoreRef.current,
+      feedEmptyState: feedEmptyStateRef.current,
+      mergeBuffer: [...mergeBufferRef.current],
+      tradePage: tradePageRef.current,
+      profilePage: profilePageRef.current,
+      tradeExhausted: tradeExhaustedRef.current,
+      profileExhausted: profileExhaustedRef.current,
+      hasLoaded: hasLoadedFeedRef.current,
+      scrollY: scrollYRef.current,
+      ...overrides,
+    }),
+    []
+  )
+
+  const persistFeedSnapshot = useCallback(
+    (
+      nextPosts: any[],
+      nextLikes: Record<string, LikeMeta>,
+      nextComments: Record<string, any[]>,
+      overrides?: Partial<FeedSessionSnapshot>
+    ) => {
+      const key = feedInitKeyRef.current
+      if (!key) return
+      writeFeedSession(
+        key,
+        buildFeedSnapshot(nextPosts, nextLikes, nextComments, overrides)
+      )
+    },
+    [buildFeedSnapshot]
+  )
+
   const draftSyncRef = useRef<Record<string, string>>({})
   const openCommentsRef = useRef<Record<string, boolean>>({})
   const likeBusyRef = useRef<Set<string>>(new Set())
   const commentSubmittingRef = useRef<Set<string>>(new Set())
   const postingStoryRef = useRef(false)
   const [likeBusyByPost, setLikeBusyByPost] = useState<Record<string, boolean>>({})
+
+  const {
+    storiesByUser,
+    loadStories: reloadActiveStories,
+  } = useActiveStories(
+    followingStoryUserIds,
+    !profileLoading &&
+      !!user?.id &&
+      mode === "following" &&
+      followingStoryUserIds.length > 0
+  )
 
   const currentStories = useMemo(
     () =>
@@ -158,17 +228,6 @@ function FeedPageContent() {
   const currentUserHasStory = useMemo(
     () => userHasActiveStory(storiesByUser, user?.id),
     [user?.id, storiesByUser]
-  )
-
-  const {
-    storiesByUser,
-    loadStories: reloadActiveStories,
-  } = useActiveStories(
-    followingStoryUserIds,
-    !profileLoading &&
-      !!user?.id &&
-      mode === "following" &&
-      followingStoryUserIds.length > 0
   )
 
   useEffect(() => {
@@ -602,6 +661,7 @@ function FeedPageContent() {
 
       try {
         const followingIds = await fetchFollowingIds(supabase, userId)
+        followingIdsRef.current = followingIds
         let list: FeedItem[] = []
 
         if (contentType === "all") {
@@ -710,9 +770,15 @@ function FeedPageContent() {
           hasLoadedFeedRef.current = true
         }
 
-        setPosts((prev) => [...prev, ...enriched])
-        setLikesByPost((prev) => ({ ...prev, ...likesMap }))
-        setCommentsByPost((prev) => ({ ...prev, ...commentsMap }))
+        const mergedLikes = { ...likesByPostRef.current, ...likesMap }
+        const mergedComments = { ...commentsByPostRef.current, ...commentsMap }
+        const nextPosts = [...postsRef.current, ...enriched]
+        setPosts(nextPosts)
+        setLikesByPost(mergedLikes)
+        setCommentsByPost(mergedComments)
+        persistFeedSnapshot(nextPosts, mergedLikes, mergedComments, {
+          hasLoaded: hasLoadedFeedRef.current,
+        })
         const nextPage =
           pageOverride != null ? pageOverride + 1 : pageRef.current + 1
         pageRef.current = nextPage
@@ -736,7 +802,7 @@ function FeedPageContent() {
         setLoading(false)
       }
     },
-    [mode, contentType, loadEngagementForPosts]
+    [mode, contentType, loadEngagementForPosts, persistFeedSnapshot]
   )
 
   const resetFeedState = useCallback(() => {
@@ -757,20 +823,200 @@ function FeedPageContent() {
     profileExhaustedRef.current = false
   }, [])
 
+  const restoreFeedSession = useCallback((key: string, cached: FeedSessionSnapshot) => {
+    feedInitKeyRef.current = key
+    setPosts(cached.posts)
+    setLikesByPost(cached.likesByPost)
+    setCommentsByPost(cached.commentsByPost)
+    setFeedEmptyState(cached.feedEmptyState)
+    setPage(cached.page)
+    setHasMore(cached.hasMore)
+    pageRef.current = cached.page
+    hasMoreRef.current = cached.hasMore
+    mergeBufferRef.current = [...cached.mergeBuffer]
+    tradePageRef.current = cached.tradePage
+    profilePageRef.current = cached.profilePage
+    tradeExhaustedRef.current = cached.tradeExhausted
+    profileExhaustedRef.current = cached.profileExhausted
+    hasLoadedFeedRef.current = cached.hasLoaded
+    loadingRef.current = false
+    setLoading(false)
+    scrollYRef.current = cached.scrollY
+    if (cached.scrollY > 0) {
+      requestAnimationFrame(() => {
+        window.scrollTo(0, cached.scrollY)
+      })
+    }
+  }, [])
+
   useEffect(() => {
     if (profileLoading) return
     if (!user?.id) return
 
     const feedInitKey = `${user.id}:${mode}:${contentType}`
-    if (feedInitKeyRef.current === feedInitKey) return
-    feedInitKeyRef.current = feedInitKey
+    if (feedInitKeyRef.current === feedInitKey && hasLoadedFeedRef.current) {
+      return
+    }
 
+    const cached = readFeedSession(feedInitKey)
+    if (cached?.hasLoaded) {
+      restoreFeedSession(feedInitKey, cached)
+      return
+    }
+
+    feedInitKeyRef.current = feedInitKey
     resetFeedState()
     void loadPosts(0)
-  }, [profileLoading, user?.id, mode, contentType, loadPosts, resetFeedState])
+  }, [
+    profileLoading,
+    user?.id,
+    mode,
+    contentType,
+    loadPosts,
+    resetFeedState,
+    restoreFeedSession,
+  ])
+
+  useEffect(() => {
+    if (!user?.id) return
+    if (contentType === "profiles") return
+
+    const userId = user.id
+    const channel = supabase.channel(`feed-trade-posts-${userId}`)
+
+    channel.on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "posts" },
+      async (payload) => {
+        const row = payload.new as Record<string, unknown>
+        const authorId = String(row.user_id ?? "")
+        if (!authorId || authorId === userId) return
+        if (mode === "following" && !followingIdsRef.current.includes(authorId)) {
+          return
+        }
+        if (
+          mode === "global" &&
+          followingIdsRef.current.includes(authorId)
+        ) {
+          return
+        }
+
+        const { data } = await supabase
+          .from("posts")
+          .select(FEED_POSTS_SELECT)
+          .eq("id", String(row.id))
+          .maybeSingle()
+
+        if (!data) return
+
+        const item = normalizeTradeFeedItem(data as Record<string, unknown>)
+        const { enriched, likesMap, commentsMap } = await loadEngagementForPosts(
+          [item],
+          { id: userId }
+        )
+        const post = enriched[0]
+        if (!post) return
+
+        setPosts((prev) => {
+          if (prev.some((p) => String(p.id) === String(post.id))) return prev
+          const next = [post, ...prev]
+          const mergedLikes = {
+            ...likesByPostRef.current,
+            ...likesMap,
+          }
+          const mergedComments = {
+            ...commentsByPostRef.current,
+            ...commentsMap,
+          }
+          persistFeedSnapshot(next, mergedLikes, mergedComments)
+          setLikesByPost(mergedLikes)
+          setCommentsByPost(mergedComments)
+          return next
+        })
+      }
+    )
+
+    channel.subscribe()
+    return () => {
+      void supabase.removeChannel(channel)
+    }
+  }, [user?.id, mode, contentType, loadEngagementForPosts, persistFeedSnapshot])
+
+  useEffect(() => {
+    if (!user?.id) return
+    if (contentType === "trades") return
+
+    const userId = user.id
+    const channel = supabase.channel(`feed-profile-posts-${userId}`)
+
+    channel.on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "profile_posts" },
+      async (payload) => {
+        const row = payload.new as Record<string, unknown>
+        const authorId = String(row.user_id ?? "")
+        if (!authorId || authorId === userId) return
+        if (mode === "following" && !followingIdsRef.current.includes(authorId)) {
+          return
+        }
+        if (
+          mode === "global" &&
+          followingIdsRef.current.includes(authorId)
+        ) {
+          return
+        }
+
+        const { data } = await supabase
+          .from("profile_posts")
+          .select(FEED_PROFILE_POSTS_SELECT)
+          .eq("id", String(row.id))
+          .maybeSingle()
+
+        if (!data) return
+
+        const item = normalizeProfileFeedItem(data as Record<string, unknown>)
+        const { enriched, likesMap, commentsMap } = await loadEngagementForPosts(
+          [item],
+          { id: userId }
+        )
+        const post = enriched[0]
+        if (!post) return
+
+        setPosts((prev) => {
+          if (prev.some((p) => String(p.id) === String(post.id))) return prev
+          const next = [post, ...prev]
+          const mergedLikes = {
+            ...likesByPostRef.current,
+            ...likesMap,
+          }
+          const mergedComments = {
+            ...commentsByPostRef.current,
+            ...commentsMap,
+          }
+          persistFeedSnapshot(next, mergedLikes, mergedComments)
+          setLikesByPost(mergedLikes)
+          setCommentsByPost(mergedComments)
+          return next
+        })
+      }
+    )
+
+    channel.subscribe()
+    return () => {
+      void supabase.removeChannel(channel)
+    }
+  }, [user?.id, mode, contentType, loadEngagementForPosts, persistFeedSnapshot])
 
   useEffect(() => {
     const handleScroll = () => {
+      scrollYRef.current = window.scrollY
+      const key = feedInitKeyRef.current
+      if (key && hasLoadedFeedRef.current) {
+        const cached = readFeedSession(key)
+        if (cached) {
+          writeFeedSession(key, { ...cached, scrollY: window.scrollY })
+        }
+      }
       if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 200) {
         void loadPosts()
       }

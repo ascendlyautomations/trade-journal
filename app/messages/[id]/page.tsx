@@ -8,6 +8,7 @@ import {
   Fragment,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useState,
   useRef,
@@ -72,6 +73,29 @@ import {
   decodeStoryReplyContent,
   STORY_REPLY_MESSAGE_TYPE,
 } from "@/lib/storyReplyMessage"
+import { consumeConversationOpenFromInbox, consumeInboxConversationId, peekInboxConversationId } from "@/lib/conversationOpenIntent"
+import {
+  dmPostPreviewCacheKey,
+  dmTradePreviewCacheKey,
+} from "@/lib/conversationPreviewCache"
+import { markConversationMessagesSeen } from "@/lib/conversationReadMarking"
+import {
+  computeNewestMessage,
+  filterMessagesForUser,
+  isScrollNearBottom,
+  mergeMessageLists,
+  sortMessagesByCreatedAt,
+} from "@/lib/conversationMessageUtils"
+import {
+  findConversationSessionByUrlSegment,
+  patchConversationSession,
+  readConversationSession,
+  type ConversationSessionSnapshot,
+  setActiveConversationSession,
+  updateConversationMessages,
+  writeConversationSession,
+} from "@/lib/conversationSessionCache"
+import { useUserProfile } from "@/lib/UserProfileProvider"
 
 /** Includes parent_message_id via *; no self-referencing parent embed (PGRST200). */
 const DM_MESSAGE_SELECT = `
@@ -261,6 +285,8 @@ function TradeMessageBubble({
   onJumpToParent,
   onReplyUnavailable,
   parentMessage,
+  initialTrade,
+  onTradeLoaded,
 }: {
   message: any
   isMe: boolean
@@ -274,6 +300,8 @@ function TradeMessageBubble({
   onJumpToParent: (parentId: string) => boolean
   onReplyUnavailable: () => void
   parentMessage?: ReplyParentMessageLike | null
+  initialTrade?: any | null
+  onTradeLoaded?: (trade: any | null) => void
 }) {
   if (message.deleted_for_everyone) {
     return (
@@ -310,6 +338,8 @@ function TradeMessageBubble({
           viewerUserId={userId}
           onViewTrade={onViewTrade}
           layout="dm"
+          initialTrade={initialTrade}
+          onTradeLoaded={onTradeLoaded}
           beforeCardContent={
             <DmReplyReference
               message={message}
@@ -337,6 +367,8 @@ function PostMessageBubble({
   onJumpToParent,
   onReplyUnavailable,
   parentMessage,
+  initialPost,
+  onPostLoaded,
 }: {
   message: any
   isMe: boolean
@@ -350,9 +382,13 @@ function PostMessageBubble({
   onJumpToParent: (parentId: string) => boolean
   onReplyUnavailable: () => void
   parentMessage?: ReplyParentMessageLike | null
+  initialPost?: any | null
+  onPostLoaded?: (post: any | null) => void
 }) {
-  const [post, setPost] = useState<any>(null)
-  const [postLoading, setPostLoading] = useState(false)
+  const [post, setPost] = useState<any>(initialPost ?? null)
+  const [postLoading, setPostLoading] = useState(
+    () => !initialPost && Boolean(dmPostPreviewCacheKey(message))
+  )
   const [lightboxImageUrl, setLightboxImageUrl] = useState<string | null>(null)
   const isProfileShare =
     message.type === "profile_post" || Boolean(message.profile_post_id)
@@ -369,8 +405,10 @@ function PostMessageBubble({
         return
       }
       let cancelled = false
-      setPostLoading(true)
-      setPost(null)
+      if (!initialPost) {
+        setPostLoading(true)
+        setPost(null)
+      }
       ;(async () => {
         const { data } = await supabase
           .from("profile_posts")
@@ -380,6 +418,7 @@ function PostMessageBubble({
         if (!cancelled) {
           setPost(data ?? null)
           setPostLoading(false)
+          onPostLoaded?.(data ?? null)
         }
       })()
       return () => {
@@ -393,8 +432,10 @@ function PostMessageBubble({
       return
     }
     let cancelled = false
-    setPostLoading(true)
-    setPost(null)
+    if (!initialPost) {
+      setPostLoading(true)
+      setPost(null)
+    }
     ;(async () => {
       const { data } = await supabase
         .from("posts")
@@ -404,12 +445,13 @@ function PostMessageBubble({
       if (!cancelled) {
         setPost(data ?? null)
         setPostLoading(false)
+        onPostLoaded?.(data ?? null)
       }
     })()
     return () => {
       cancelled = true
     }
-  }, [isProfileShare, message.post_id, message.profile_post_id])
+  }, [isProfileShare, message.post_id, message.profile_post_id, initialPost])
 
   if (message.deleted_for_everyone) {
     return (
@@ -670,6 +712,7 @@ function buildTypingIndicatorText(
 
 export default function DMPage() {
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
+  const { user: profileUser } = useUserProfile()
   const params = useParams()
   const router = useRouter()
   const urlSegment = params.id as string
@@ -705,27 +748,103 @@ export default function DMPage() {
   const [showTradePicker, setShowTradePicker] = useState(false)
   const [lightboxImageUrl, setLightboxImageUrl] = useState<string | null>(null)
   const [trades, setTrades] = useState<any[]>([])
+  const [tradesById, setTradesById] = useState<Record<string, any>>({})
+  const [postsById, setPostsById] = useState<Record<string, any>>({})
   const [pageAccess, setPageAccess] =
     useState<ConversationPageAccess>("loading")
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const userIdRef = useRef<string | null>(null)
+  const conversationIdRef = useRef<string | null>(null)
   const messagesChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(
     null
   )
+  const userNearBottomRef = useRef(true)
+  const pendingScrollRestoreRef = useRef<number | null>(null)
+  const scrollPersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  )
+  const urlSegmentRef = useRef(urlSegment)
+  urlSegmentRef.current = urlSegment
+  const conversationMetaRef = useRef<{
+    conversation: any | null
+    participants: any[]
+    otherUser: any | null
+  }>({ conversation: null, participants: [], otherUser: null })
+  const tradesByIdRef = useRef(tradesById)
+  tradesByIdRef.current = tradesById
+  const postsByIdRef = useRef(postsById)
+  postsByIdRef.current = postsById
+  const restoredFromCacheRef = useRef(false)
 
-  function normalizeSeenBy(raw: unknown): string[] {
-    if (Array.isArray(raw)) return raw.map(String)
-    if (typeof raw === "string") {
-      try {
-        const parsed = JSON.parse(raw)
-        if (Array.isArray(parsed)) return parsed.map(String)
-      } catch {
-        return []
-      }
+  const patchPreviewCache = useCallback(
+    (patch: { tradesById?: Record<string, any>; postsById?: Record<string, any> }) => {
+      const uid = userIdRef.current
+      const cid = conversationIdRef.current
+      if (!uid || !cid) return
+      patchConversationSession(uid, cid, patch)
+    },
+    []
+  )
+
+  const handleTradePreviewLoaded = useCallback(
+    (tradeId: string, trade: any | null) => {
+      if (!trade) return
+      const key = dmTradePreviewCacheKey(tradeId)
+      if (!key) return
+      setTradesById((prev) => {
+        const next = { ...prev, [key]: trade }
+        patchPreviewCache({ tradesById: next })
+        return next
+      })
+    },
+    [patchPreviewCache]
+  )
+
+  const handlePostPreviewLoaded = useCallback(
+    (cacheKey: string, post: any | null) => {
+      if (!post || !cacheKey) return
+      setPostsById((prev) => {
+        const next = { ...prev, [cacheKey]: post }
+        patchPreviewCache({ postsById: next })
+        return next
+      })
+    },
+    [patchPreviewCache]
+  )
+
+  function applyCachedConversation(
+    cached: ConversationSessionSnapshot,
+    conversationId: string,
+    sessionUser: { id: string },
+    openFromInbox: boolean
+  ) {
+    setUser(sessionUser)
+    setActiveConversationId(conversationId)
+    setPageAccess("allowed")
+    setMessages(cached.messages)
+    setMessagesLoaded(true)
+    setConversation(cached.conversation)
+    setParticipants(cached.participants)
+    setOtherUser(cached.otherUser)
+    setInput(cached.draft)
+    setReplyTarget(cached.replyTarget)
+    setTradesById(cached.tradesById ?? {})
+    setPostsById(cached.postsById ?? {})
+    conversationMetaRef.current = {
+      conversation: cached.conversation,
+      participants: cached.participants,
+      otherUser: cached.otherUser,
     }
-    return []
+
+    if (openFromInbox || cached.wasAtBottom) {
+      userNearBottomRef.current = true
+      pendingScrollRestoreRef.current = null
+    } else {
+      userNearBottomRef.current = false
+      pendingScrollRestoreRef.current = cached.scrollTop
+    }
   }
 
   useEffect(() => {
@@ -733,8 +852,105 @@ export default function DMPage() {
   }, [user?.id])
 
   useEffect(() => {
+    conversationIdRef.current = activeConversationId
+  }, [activeConversationId])
+
+  useEffect(() => {
+    setActiveConversationSession(user?.id ?? null, activeConversationId)
+    return () => setActiveConversationSession(null, null)
+  }, [user?.id, activeConversationId])
+
+  useEffect(() => {
     replyTargetRef.current = replyTarget
   }, [replyTarget])
+
+  const persistConversationCache = useCallback(() => {
+    const uid = userIdRef.current
+    const cid = conversationIdRef.current
+    if (!uid || !cid || !messagesLoaded) return
+
+    const el = scrollRef.current
+    const scrollTop = el?.scrollTop ?? 0
+    const scrollHeight = el?.scrollHeight ?? 0
+    const clientHeight = el?.clientHeight ?? 0
+    const wasAtBottom = el
+      ? isScrollNearBottom(scrollTop, scrollHeight, clientHeight)
+      : true
+    const newest = computeNewestMessage(messages)
+
+    writeConversationSession(uid, cid, {
+      urlSegment: urlSegmentRef.current,
+      messages,
+      messagesLoaded,
+      conversation,
+      participants,
+      otherUser,
+      newestMessageId: newest.id,
+      newestTimestamp: newest.timestamp,
+      unreadCount: 0,
+      scrollTop,
+      wasAtBottom,
+      draft: input,
+      replyTarget,
+      tradesById: tradesByIdRef.current,
+      postsById: postsByIdRef.current,
+    })
+  }, [
+    messages,
+    messagesLoaded,
+    conversation,
+    participants,
+    otherUser,
+    input,
+    replyTarget,
+  ])
+
+  const setMessagesWithCache = useCallback(
+    (updater: (prev: any[]) => any[]) => {
+      setMessages((prev) => {
+        const next = updater(prev)
+        const uid = userIdRef.current
+        const cid = conversationIdRef.current
+        if (uid && cid) {
+          const meta = conversationMetaRef.current
+          updateConversationMessages(uid, cid, () => next, {
+            urlSegment: urlSegmentRef.current,
+            conversation: meta.conversation,
+            participants: meta.participants,
+            otherUser: meta.otherUser,
+            unreadCount: 0,
+          })
+        }
+        return next
+      })
+    },
+    []
+  )
+
+  const handleMessagesScroll = useCallback(() => {
+    const el = scrollRef.current
+    if (!el) return
+
+    userNearBottomRef.current = isScrollNearBottom(
+      el.scrollTop,
+      el.scrollHeight,
+      el.clientHeight
+    )
+
+    const uid = userIdRef.current
+    const cid = conversationIdRef.current
+    if (!uid || !cid) return
+
+    if (scrollPersistTimerRef.current) {
+      clearTimeout(scrollPersistTimerRef.current)
+    }
+    scrollPersistTimerRef.current = setTimeout(() => {
+      patchConversationSession(uid, cid, {
+        scrollTop: el.scrollTop,
+        wasAtBottom: userNearBottomRef.current,
+      })
+    }, 150)
+  }, [])
 
   function startReplyToMessage(message: any) {
     setReplyTarget(
@@ -770,10 +986,6 @@ export default function DMPage() {
   function viewSharedPost(post: Parameters<typeof getSharedPostViewHref>[0]) {
     router.push(getSharedPostViewHref(post))
   }
-
-  useEffect(() => {
-    init()
-  }, [urlSegment])
 
   async function markMessageNotificationsRead(currentUserId: string) {
     console.log("[messages/[id]] mark read start", {
@@ -861,26 +1073,23 @@ export default function DMPage() {
                 .maybeSingle()
               if (data) row = data
             }
-            setMessages((prev) => {
+            setMessagesWithCache((prev) => {
               const without = prev.filter((x) => x.id !== raw.id)
               const updated = [...without, row]
-              return updated.sort(
-                (a, b) =>
-                  new Date(a.created_at).getTime() -
-                  new Date(b.created_at).getTime()
-              )
+              return sortMessagesByCreatedAt(updated)
             })
 
             const uid = userIdRef.current
             const senderId = raw.sender_id
-            if (uid && senderId && senderId !== uid) {
-              void markMessagesSeen(uid)
+            const cid = conversationIdRef.current
+            if (uid && senderId && senderId !== uid && cid) {
+              void markConversationMessagesSeen(uid, cid)
             }
           })()
         }
 
         if (payload.eventType === "UPDATE") {
-          setMessages((prev) =>
+          setMessagesWithCache((prev) =>
             prev.map((msg) => {
               if (msg.id !== (payload.new as { id: string }).id) return msg
               const next = payload.new as any
@@ -901,7 +1110,7 @@ export default function DMPage() {
       setTypingUsers([])
       supabase.removeChannel(channel)
     }
-  }, [activeConversationId, pageAccess])
+  }, [activeConversationId, pageAccess, setMessagesWithCache])
 
   useEffect(() => {
     const participantIds = new Set(participants.map((p: any) => p.user_id))
@@ -921,19 +1130,31 @@ export default function DMPage() {
   }, [])
 
   useEffect(() => {
-    scrollToBottom()
-  }, [messages])
+    if (!messagesLoaded) return
+    const el = scrollRef.current
+    if (!el) return
+
+    if (pendingScrollRestoreRef.current !== null) {
+      el.scrollTop = pendingScrollRestoreRef.current
+      pendingScrollRestoreRef.current = null
+      userNearBottomRef.current = isScrollNearBottom(
+        el.scrollTop,
+        el.scrollHeight,
+        el.clientHeight
+      )
+      return
+    }
+
+    if (userNearBottomRef.current) {
+      scrollToBottom()
+    }
+  }, [messages, messagesLoaded])
 
   useEffect(() => {
     if (!isTyping) return
     const timer = setTimeout(() => setIsTyping(false), 1200)
     return () => clearTimeout(timer)
   }, [isTyping, input])
-
-  useEffect(() => {
-    const el = document.getElementById("chat-bottom")
-    el?.scrollIntoView({ behavior: "smooth" })
-  }, [messages])
 
   useEffect(() => {
     setGroupName(conversation?.name || "")
@@ -971,59 +1192,170 @@ export default function DMPage() {
     fetchTrades()
   }, [showTradePicker, user?.id])
 
+  async function fetchConversationDeletedMessageIds(
+    currentUserId: string,
+    messageIds: string[]
+  ): Promise<Set<string>> {
+    if (messageIds.length === 0) return new Set()
+    const { data } = await supabase
+      .from("message_deletions")
+      .select("message_id")
+      .eq("user_id", currentUserId)
+      .in("message_id", messageIds)
+    return new Set((data || []).map((row) => String(row.message_id)))
+  }
+
+  async function syncNewerMessages(
+    currentUserId: string,
+    conversationId: string,
+    cached: ConversationSessionSnapshot
+  ) {
+    if (!(await isConversationParticipant(conversationId, currentUserId))) return
+
+    if (!cached.newestTimestamp) return
+
+    const { data: incoming } = await supabase
+      .from("messages")
+      .select(DM_MESSAGE_SELECT)
+      .eq("conversation_id", conversationId)
+      .gt("created_at", cached.newestTimestamp)
+      .order("created_at", { ascending: true })
+
+    if (!incoming?.length) return
+
+    const deletedIds = await fetchConversationDeletedMessageIds(
+      currentUserId,
+      cached.messages.map((message) => String(message.id))
+    )
+
+    setMessagesWithCache((prev) => {
+      const merged = mergeMessageLists(prev, incoming)
+      return filterMessagesForUser(merged, deletedIds)
+    })
+  }
+
+  async function resolveConversationIdFromUrl(
+    sessionUser: { id: string },
+    knownInboxId: string | null
+  ): Promise<string | null> {
+    if (isConversationUuidSegment(urlSegment)) {
+      return urlSegment
+    }
+    if (knownInboxId) {
+      return knownInboxId
+    }
+
+    const normalized = normalizeProfileUsername(urlSegment)
+    if (!normalized) return null
+
+    const { data: prof } = await supabase
+      .from("profiles")
+      .select("id, username")
+      .eq("username", normalized)
+      .maybeSingle()
+
+    if (!prof || prof.id === sessionUser.id) return null
+
+    const result = await ensureDmConversation(supabase, sessionUser.id, prof.id)
+    if (!result.ok) return null
+    return result.conversationId
+  }
+
+  async function maybeCanonicalizeGroupDmUrl(
+    details: { isGroup: boolean; otherProfile: any | null } | null
+  ) {
+    if (
+      !isConversationUuidSegment(urlSegment) ||
+      !details ||
+      details.isGroup
+    ) {
+      return
+    }
+    const normalized = normalizeProfileUsername(details.otherProfile?.username ?? "")
+    if (!normalized) return
+    const target = buildDmThreadPath(normalized)
+    const currentPath = `/messages/${urlSegment}`
+    if (target !== currentPath) {
+      router.replace(target, { scroll: false })
+    }
+  }
+
+  async function runPostOpenSideEffects(
+    userId: string,
+    conversationId: string,
+    cached: ConversationSessionSnapshot | null
+  ) {
+    const allowed = await isConversationParticipant(conversationId, userId)
+    if (!allowed) {
+      setPageAccess("unavailable")
+      return
+    }
+
+    void markMessageNotificationsRead(userId)
+    void markConversationMessagesSeen(userId, conversationId)
+
+    const detailsPromise = fetchConversationDetails(userId, conversationId, {
+      skipParticipantCheck: true,
+    })
+
+    if (cached?.messagesLoaded) {
+      void syncNewerMessages(userId, conversationId, cached)
+    }
+
+    if (isConversationUuidSegment(urlSegment)) {
+      const details = await detailsPromise
+      await maybeCanonicalizeGroupDmUrl(details)
+    }
+  }
+
   async function init() {
-    setPageAccess("loading")
-    setMessages([])
-    setMessagesLoaded(false)
-    setConversation(null)
-    setParticipants([])
-    setOtherUser(null)
-    setActiveConversationId(null)
+    if (restoredFromCacheRef.current) {
+      return
+    }
+
+    persistConversationCache()
+
+    if (profileUser?.id && tryRestoreCachedConversation(profileUser)) {
+      return
+    }
 
     const {
-      data: { user },
-    } = await supabase.auth.getUser()
+      data: { session },
+    } = await supabase.auth.getSession()
+    const sessionUser = session?.user ?? profileUser ?? null
 
-    if (!user) {
+    if (sessionUser?.id && tryRestoreCachedConversation(sessionUser)) {
+      return
+    }
+
+    setPageAccess("loading")
+    setActiveConversationId(null)
+
+    if (!sessionUser) {
       setUser(null)
       setPageAccess("unauthenticated")
       router.push("/login")
       return
     }
 
-    setUser(user)
+    setUser(sessionUser)
 
-    let conversationId: string | null = null
-
-    if (isConversationUuidSegment(urlSegment)) {
-      conversationId = urlSegment
-    } else {
-      const normalized = normalizeProfileUsername(urlSegment)
-      if (!normalized) {
-        setPageAccess("unavailable")
-        return
-      }
-
-      const { data: prof } = await supabase
-        .from("profiles")
-        .select("id, username")
-        .eq("username", normalized)
-        .maybeSingle()
-
-      if (!prof || prof.id === user.id) {
-        setPageAccess("unavailable")
-        return
-      }
-
-      const result = await ensureDmConversation(supabase, user.id, prof.id)
-      if (!result.ok) {
-        setPageAccess("unavailable")
-        return
-      }
-      conversationId = result.conversationId
+    const inboxConversationId = peekInboxConversationId(urlSegment)
+    const conversationId = await resolveConversationIdFromUrl(
+      sessionUser,
+      inboxConversationId
+    )
+    if (!conversationId) {
+      setPageAccess("unavailable")
+      return
     }
 
-    const allowed = await isConversationParticipant(conversationId, user.id)
+    consumeInboxConversationId(urlSegment)
+
+    const allowed = await isConversationParticipant(
+      conversationId,
+      sessionUser.id
+    )
     if (!allowed) {
       setPageAccess("unavailable")
       return
@@ -1031,34 +1363,94 @@ export default function DMPage() {
 
     setActiveConversationId(conversationId)
     setPageAccess("allowed")
-    await markMessageNotificationsRead(user.id)
-    const details = await fetchConversationDetails(user.id, conversationId)
-    await loadMessages(user.id, conversationId)
 
-    if (
-      isConversationUuidSegment(urlSegment) &&
-      details &&
-      !details.isGroup
-    ) {
-      const normalized = normalizeProfileUsername(
-        details.otherProfile?.username ?? ""
-      )
-      if (normalized) {
-        const target = buildDmThreadPath(normalized)
-        const currentPath = `/messages/${urlSegment}`
-        if (target !== currentPath) {
-          router.replace(target, { scroll: false })
-        }
+    setMessages([])
+    setMessagesLoaded(false)
+    setConversation(null)
+    setParticipants([])
+    setOtherUser(null)
+    setInput("")
+    setReplyTarget(null)
+    setTradesById({})
+    setPostsById({})
+    userNearBottomRef.current = true
+    pendingScrollRestoreRef.current = null
+
+    const details = await fetchConversationDetails(
+      sessionUser.id,
+      conversationId
+    )
+    await loadMessages(sessionUser.id, conversationId)
+    void markMessageNotificationsRead(sessionUser.id)
+    void markConversationMessagesSeen(sessionUser.id, conversationId)
+    await maybeCanonicalizeGroupDmUrl(details)
+  }
+
+  function resolveProvisionalConversationId(
+    sessionUserId: string
+  ): string | null {
+    if (isConversationUuidSegment(urlSegment)) {
+      return urlSegment
+    }
+    const inboxId = peekInboxConversationId(urlSegment)
+    if (inboxId) return inboxId
+    const byUrl = findConversationSessionByUrlSegment(sessionUserId, urlSegment)
+    return byUrl?.conversationId ?? null
+  }
+
+  function tryRestoreCachedConversation(sessionUser: { id: string }): boolean {
+    const provisionalId = resolveProvisionalConversationId(sessionUser.id)
+    if (!provisionalId) return false
+
+    const cached =
+      readConversationSession(sessionUser.id, provisionalId) ??
+      findConversationSessionByUrlSegment(sessionUser.id, urlSegment)
+
+    if (!cached?.messagesLoaded) return false
+
+    const conversationId = cached.conversationId || provisionalId
+    consumeInboxConversationId(urlSegment)
+    const openFromInbox = consumeConversationOpenFromInbox(conversationId)
+    applyCachedConversation(cached, conversationId, sessionUser, openFromInbox)
+    restoredFromCacheRef.current = true
+    void runPostOpenSideEffects(sessionUser.id, conversationId, cached)
+    return true
+  }
+
+  useLayoutEffect(() => {
+    restoredFromCacheRef.current = false
+    persistConversationCache()
+    if (profileUser?.id && tryRestoreCachedConversation(profileUser)) {
+      return
+    }
+  }, [urlSegment, profileUser?.id, persistConversationCache])
+
+  useEffect(() => {
+    void init()
+    return () => {
+      persistConversationCache()
+      if (scrollPersistTimerRef.current) {
+        clearTimeout(scrollPersistTimerRef.current)
       }
     }
-  }
+  }, [urlSegment, profileUser?.id, persistConversationCache])
+
+  useEffect(() => {
+    const uid = userIdRef.current
+    const cid = conversationIdRef.current
+    if (!uid || !cid || !messagesLoaded) return
+    patchConversationSession(uid, cid, { draft: input, replyTarget })
+  }, [input, replyTarget, messagesLoaded])
 
   async function fetchConversationDetails(
     currentUserId: string,
-    conversationId: string
+    conversationId: string,
+    options?: { skipParticipantCheck?: boolean }
   ) {
-    if (!(await isConversationParticipant(conversationId, currentUserId))) {
-      return null
+    if (!options?.skipParticipantCheck) {
+      if (!(await isConversationParticipant(conversationId, currentUserId))) {
+        return null
+      }
     }
 
     const { data: convo } = await supabase
@@ -1084,6 +1476,21 @@ export default function DMPage() {
     const otherProfile = Array.isArray(rawProfile) ? rawProfile[0] : rawProfile
 
     setOtherUser(otherProfile || null)
+
+    conversationMetaRef.current = {
+      conversation: convo || null,
+      participants: data || [],
+      otherUser: otherProfile || null,
+    }
+
+    const uid = userIdRef.current
+    if (uid) {
+      patchConversationSession(uid, conversationId, {
+        conversation: convo || null,
+        participants: data || [],
+        otherUser: otherProfile || null,
+      })
+    }
 
     return {
       isGroup: convo?.is_group === true,
@@ -1111,79 +1518,37 @@ export default function DMPage() {
       .eq("conversation_id", conversationId)
       .order("created_at", { ascending: true })
 
-    const { data: deleted } = await supabase
-      .from("message_deletions")
-      .select("message_id")
-      .eq("user_id", currentUserId)
-
-    const filteredMessages = (fetched || []).filter((msg) => {
-      if (msg.deleted_for_everyone) return true
-      return !(deleted || []).some((d) => d.message_id === msg.id)
-    })
-
-    setMessages(
-      (filteredMessages || []).sort(
-        (a, b) =>
-          new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-      )
+    const deletedIds = await fetchConversationDeletedMessageIds(
+      currentUserId,
+      (fetched || []).map((message) => String(message.id))
     )
+
+    const filteredMessages = filterMessagesForUser(fetched || [], deletedIds)
+    const sorted = sortMessagesByCreatedAt(filteredMessages)
+
+    setMessages(sorted)
     setMessagesLoaded(true)
+
+    const newest = computeNewestMessage(sorted)
+    const meta = conversationMetaRef.current
+    writeConversationSession(currentUserId, conversationId, {
+      urlSegment: urlSegmentRef.current,
+      messages: sorted,
+      messagesLoaded: true,
+      conversation: meta.conversation,
+      participants: meta.participants,
+      otherUser: meta.otherUser,
+      newestMessageId: newest.id,
+      newestTimestamp: newest.timestamp,
+      unreadCount: 0,
+      scrollTop: 0,
+      wasAtBottom: true,
+      draft: "",
+      replyTarget: null,
+      tradesById: tradesByIdRef.current,
+      postsById: postsByIdRef.current,
+    })
   }
-
-  async function markMessagesSeen(currentUserId: string) {
-    if (pageAccess !== "allowed" || !activeConversationId) return
-
-    const { data } = await supabase
-      .from("messages")
-      .select("id, seen_by, sender_id")
-      .eq("conversation_id", activeConversationId)
-
-    let updatedCount = 0
-    for (const msg of data || []) {
-      if (!msg.sender_id) continue
-      if (msg.sender_id === currentUserId) continue
-      const seenBy = normalizeSeenBy(msg.seen_by)
-      if (seenBy.includes(currentUserId)) continue
-      const nextSeenBy = [...seenBy, currentUserId]
-      console.log("[messages/[id]] seen_by update attempt", {
-        messageId: msg.id,
-        oldSeenBy: seenBy,
-        newSeenBy: nextSeenBy,
-      })
-      await supabase
-        .from("messages")
-        .update({ seen_by: nextSeenBy })
-        .eq("id", msg.id)
-      updatedCount += 1
-    }
-
-    const { data: verifyRows, error: verifyErr } = await supabase
-      .from("messages")
-      .select("id, sender_id, seen_by")
-      .eq("conversation_id", activeConversationId)
-
-    if (verifyErr) {
-      console.error("[messages/[id]] verify seen_by error:", verifyErr)
-    } else {
-      const remainingUnread = (verifyRows || []).filter((r) => {
-        if (!r.sender_id || r.sender_id === currentUserId) return false
-        const seen = normalizeSeenBy(r.seen_by)
-        return !seen.includes(currentUserId)
-      })
-      console.log("[messages/[id]] markMessagesSeen verify", {
-        userId: currentUserId,
-        conversationId: activeConversationId,
-        updatedCount,
-        remainingUnreadCount: remainingUnread.length,
-        remainingUnreadMessageIds: remainingUnread.map((r) => r.id),
-      })
-    }
-  }
-
-  useEffect(() => {
-    if (!user?.id || !activeConversationId || pageAccess !== "allowed") return
-    void markMessagesSeen(user.id)
-  }, [activeConversationId, user?.id, pageAccess])
 
   function removeImage() {
     setSelectedFile(null)
@@ -1424,7 +1789,7 @@ export default function DMPage() {
       message_id: message.id,
       user_id: user.id
     })
-    setMessages((prev) => prev.filter((m) => m.id !== message.id))
+    setMessagesWithCache((prev) => prev.filter((m) => m.id !== message.id))
     setActiveMenuId(null)
   }
 
@@ -1544,7 +1909,7 @@ export default function DMPage() {
       .from("messages")
       .update({ deleted_for_everyone: true })
       .eq("id", message.id)
-    setMessages((prev) =>
+    setMessagesWithCache((prev) =>
       prev.map((m) =>
         m.id === message.id ? { ...m, deleted_for_everyone: true } : m
       )
@@ -1686,6 +2051,7 @@ export default function DMPage() {
           {/* MESSAGES */}
           <div
             ref={scrollRef}
+            onScroll={handleMessagesScroll}
             className="min-h-0 flex-1 overflow-y-auto overflow-x-visible px-2 py-3 md:p-4"
           >
             {messagesLoaded && messages.length === 0 ? (
@@ -1764,6 +2130,14 @@ export default function DMPage() {
                         onJumpToParent={scrollToDmMessage}
                         onReplyUnavailable={notifyReplyUnavailable}
                         parentMessage={parentMessage}
+                        initialTrade={
+                          tradesById[
+                            dmTradePreviewCacheKey(message.trade_id) ?? ""
+                          ] ?? null
+                        }
+                        onTradeLoaded={(trade) =>
+                          handleTradePreviewLoaded(String(message.trade_id), trade)
+                        }
                       />
                       {showTimestamp ? (
                         <DmClusterTimestamp
@@ -1841,6 +2215,13 @@ export default function DMPage() {
                         onJumpToParent={scrollToDmMessage}
                         onReplyUnavailable={notifyReplyUnavailable}
                         parentMessage={parentMessage}
+                        initialPost={
+                          postsById[dmPostPreviewCacheKey(message) ?? ""] ?? null
+                        }
+                        onPostLoaded={(post) => {
+                          const key = dmPostPreviewCacheKey(message)
+                          if (key) handlePostPreviewLoaded(key, post)
+                        }}
                       />
                       {showTimestamp ? (
                         <DmClusterTimestamp

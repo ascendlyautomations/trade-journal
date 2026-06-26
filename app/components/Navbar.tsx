@@ -10,6 +10,7 @@ import { getCurrentAdminCheckResult } from "../../lib/adminUsers"
 import { fetchTotalUnreadMessageCount } from "../../lib/messageUnread"
 import { NOTIFICATION_ENGAGEMENT_TYPES } from "../../lib/notificationEngagementTypes"
 import { profilePath } from "../../lib/profileRoutes"
+import { prefetchAppRoutes } from "../../lib/routePrefetch"
 import BugReportModal from "./BugReportModal"
 import GettingStartedMobileEntry from "./GettingStartedMobileEntry"
 
@@ -171,6 +172,11 @@ export default function Navbar() {
       cancelled = true
     }
   }, [user?.id, fetchUnread, fetchUnreadMessages])
+
+  useEffect(() => {
+    if (!user?.id) return
+    prefetchAppRoutes(router)
+  }, [user?.id, router])
 
   useEffect(() => {
     if (!user?.id) {

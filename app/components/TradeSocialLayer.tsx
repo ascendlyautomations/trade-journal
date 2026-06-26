@@ -29,10 +29,11 @@ import {
 import ConfirmModal from "@/app/components/ui/ConfirmModal"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import {
-  clearCommentReplyDraft,
-  startCommentReply,
-  type CommentReplyTarget,
-} from "@/lib/commentReplyUx"
+  readTradeSocial,
+  writeTradeSocial,
+  appendTradeSocialComment,
+  patchTradeSocialLikes,
+} from "@/lib/tradeSocialCache"
 
 type TradeSocialContextValue = {
   tradeId: string
@@ -119,6 +120,14 @@ export function TradeSocialProvider({
     let cancelled = false
 
     const fetchData = async () => {
+      const cached = readTradeSocial(resolvedId)
+      if (cached) {
+        setLikes(cached.likes)
+        setLiked(cached.liked)
+        setComments(cached.comments)
+        return
+      }
+
       const { data: likeData } = await supabase
         .from("trade_likes")
         .select("user_id")
@@ -142,6 +151,13 @@ export function TradeSocialProvider({
       if (cancelled) return
 
       setComments(commentData || [])
+      writeTradeSocial(resolvedId, {
+        likes: rows.length,
+        liked:
+          currentUserId != null &&
+          rows.some((l: { user_id: string }) => l.user_id === currentUserId),
+        comments: commentData || [],
+      })
     }
 
     void fetchData()
@@ -173,11 +189,12 @@ export function TradeSocialProvider({
             .eq("trade_id", resolvedId)
 
           const rows = data || []
-          setLikes(rows.length)
-          setLiked(
+          const nextLiked =
             currentUserId != null &&
-              rows.some((l: { user_id: string }) => l.user_id === currentUserId)
-          )
+            rows.some((l: { user_id: string }) => l.user_id === currentUserId)
+          setLikes(rows.length)
+          setLiked(nextLiked)
+          patchTradeSocialLikes(resolvedId, rows.length, nextLiked)
         })()
       }
     )
@@ -205,6 +222,7 @@ export function TradeSocialProvider({
           setComments((prev) =>
             prev.some((c) => c.id === data.id) ? prev : [...prev, data]
           )
+          appendTradeSocialComment(resolvedId, data)
         })()
       }
     )

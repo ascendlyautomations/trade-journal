@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
@@ -16,6 +16,7 @@ import Modal from "../components/ui/Modal"
 import { clearAllNotifications, dismissNotifications } from "@/lib/followNotifications"
 import { formatSocialTimestamp } from "@/lib/formatRelativeTime"
 import { NOTIFICATION_ENGAGEMENT_TYPES } from "@/lib/notificationEngagementTypes"
+import { useUserProfile } from "@/lib/UserProfileProvider"
 import {
   buildGroupedNotificationCards,
   commentPreview,
@@ -47,6 +48,17 @@ const NOTIFICATION_SELECT =
   "id, user_id, sender_id, type, post_id, trade_id, profile_post_id, content, read, created_at"
 
 const ENGAGEMENT_TYPES = NOTIFICATION_ENGAGEMENT_TYPES
+
+function isEngagementNotification(row: NotificationRecord): boolean {
+  return ENGAGEMENT_TYPES.includes(row.type as (typeof ENGAGEMENT_TYPES)[number])
+}
+
+function sortNotificationsDesc(rows: NotificationRecord[]): NotificationRecord[] {
+  return [...rows].sort(
+    (a, b) =>
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  )
+}
 
 const TABS: { id: NotificationCenterTab; label: string }[] = [
   { id: "all", label: "All" },
@@ -416,9 +428,10 @@ function GroupedNotificationCardView({
 
 export default function NotificationsPage() {
   const router = useRouter()
-  const [userId, setUserId] = useState<string | null>(null)
-  const [ownerUsername, setOwnerUsername] = useState<string | null>(null)
-  const [ownerIsPrivate, setOwnerIsPrivate] = useState<boolean | null>(null)
+  const { user, profile, loading: profileLoading } = useUserProfile()
+  const userId = user?.id ?? null
+  const ownerUsername = profile?.username ?? null
+  const ownerIsPrivate = profile?.is_private === true
   const [notifications, setNotifications] = useState<NotificationRecord[]>([])
   const [sendersById, setSendersById] = useState<Record<string, SenderProfile>>(
     {}
@@ -432,47 +445,33 @@ export default function NotificationsPage() {
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set())
 
   useEffect(() => {
-    let cancelled = false
-
-    async function initUser() {
-      const { data, error } = await supabase.auth.getUser()
-      if (cancelled) return
-      if (error || !data?.user) {
-        router.push("/login")
-        return
-      }
-      setUserId(data.user.id)
-
-      const { data: ownProfile, error: profileError } = await supabase
-        .from("profiles")
-        .select("username, is_private")
-        .eq("id", data.user.id)
-        .maybeSingle()
-
-      if (!cancelled) {
-        setOwnerUsername(ownProfile?.username ?? null)
-        setOwnerIsPrivate(ownProfile?.is_private === true)
-        console.info("[follow-requests] owner profile loaded", {
-          userId: data.user.id,
-          profileExists: Boolean(ownProfile),
-          is_private: ownProfile?.is_private ?? null,
-          profileError: profileError
-            ? {
-                code: profileError.code,
-                message: profileError.message,
-                details: profileError.details,
-                hint: profileError.hint,
-              }
-            : null,
-        })
-      }
+    if (!profileLoading && !user) {
+      router.push("/login")
     }
+  }, [profileLoading, user, router])
 
-    void initUser()
-    return () => {
-      cancelled = true
-    }
-  }, [router])
+  const ensureSenderProfiles = useCallback(async (senderIds: string[]) => {
+    const missing = senderIds.filter((id) => id && !sendersByIdRef.current[id])
+    if (missing.length === 0) return
+
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("id, username, name, avatar_url")
+      .in("id", missing)
+
+    if (!profiles?.length) return
+
+    setSendersById((prev) => {
+      const next = { ...prev }
+      for (const row of profiles) {
+        next[String(row.id)] = row as SenderProfile
+      }
+      return next
+    })
+  }, [])
+
+  const sendersByIdRef = useRef(sendersById)
+  sendersByIdRef.current = sendersById
 
   const fetchNotifications = useCallback(async () => {
     if (!userId) return
@@ -507,22 +506,13 @@ export default function NotificationsPage() {
     )
 
     if (senderIds.length > 0) {
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("id, username, name, avatar_url")
-        .in("id", senderIds)
-
-      const map: Record<string, SenderProfile> = {}
-      for (const profile of profiles || []) {
-        map[String(profile.id)] = profile as SenderProfile
-      }
-      setSendersById(map)
+      await ensureSenderProfiles(senderIds)
     } else {
       setSendersById({})
     }
 
     setLoading(false)
-  }, [userId])
+  }, [userId, ensureSenderProfiles])
 
   useEffect(() => {
     if (!userId) return
@@ -553,8 +543,36 @@ export default function NotificationsPage() {
           )
           return
         }
-        if (payload.eventType === "INSERT" || payload.eventType === "UPDATE") {
-          void fetchNotifications()
+        if (payload.eventType === "INSERT" && payload.new) {
+          const row = payload.new as NotificationRecord
+          if (!isEngagementNotification(row)) return
+          setNotifications((prev) => {
+            if (prev.some((existing) => existing.id === row.id)) return prev
+            return sortNotificationsDesc([row, ...prev]).slice(0, 200)
+          })
+          if (row.sender_id) {
+            void ensureSenderProfiles([row.sender_id])
+          }
+          return
+        }
+        if (payload.eventType === "UPDATE" && payload.new) {
+          const row = payload.new as NotificationRecord
+          if (!isEngagementNotification(row)) {
+            setNotifications((prev) => prev.filter((existing) => existing.id !== row.id))
+            return
+          }
+          setNotifications((prev) => {
+            const index = prev.findIndex((existing) => existing.id === row.id)
+            if (index < 0) {
+              return sortNotificationsDesc([row, ...prev]).slice(0, 200)
+            }
+            const next = [...prev]
+            next[index] = row
+            return sortNotificationsDesc(next)
+          })
+          if (row.sender_id) {
+            void ensureSenderProfiles([row.sender_id])
+          }
         }
       }
     )
@@ -564,7 +582,7 @@ export default function NotificationsPage() {
     return () => {
       void supabase.removeChannel(channel)
     }
-  }, [userId, fetchNotifications])
+  }, [userId, ensureSenderProfiles])
 
   useEffect(() => {
     const onRefresh = () => {
@@ -598,23 +616,25 @@ export default function NotificationsPage() {
     [groupedCards]
   )
 
+  const ownerIsPrivateKnown = profile?.is_private != null
   const showFollowRequestsPanel = Boolean(
     userId &&
-      ownerIsPrivate === true &&
+      ownerIsPrivateKnown &&
+      ownerIsPrivate &&
       (activeTab === "all" || activeTab === "followers")
   )
 
   useEffect(() => {
     console.info("[follow-requests] panel mount decision", {
       userId,
-      profileIsPrivate: ownerIsPrivate,
+      profileIsPrivate: profile?.is_private ?? null,
       activeTab,
       mounted: showFollowRequestsPanel,
       reason: !userId
         ? "no_user"
-        : ownerIsPrivate === null
+        : !ownerIsPrivateKnown
           ? "profile_not_loaded"
-          : ownerIsPrivate === false
+          : !ownerIsPrivate
             ? "not_private_account"
             : activeTab !== "all" && activeTab !== "followers"
               ? "tab_not_followers"
@@ -758,7 +778,7 @@ export default function NotificationsPage() {
     [sections]
   )
 
-  if (loading) {
+  if (profileLoading || (loading && notifications.length === 0)) {
     return (
       <>
         <Navbar />

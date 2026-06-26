@@ -3,10 +3,6 @@
 import { filterTradesForPerformanceSharePool } from "@/lib/performanceShare"
 import { excludeBacktestTrades } from "@/lib/tradeModeFilters"
 import { averageRrFromTrades } from "@/lib/tradeRr"
-import {
-  ensureProfileForUser,
-  readStoredReferralCode,
-} from "@/lib/ensureProfileForUser"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { supabase } from "../../../lib/supabaseClient"
 import { deleteUserTrade } from "@/lib/deleteTrade"
@@ -20,12 +16,24 @@ import { useRouter } from "next/navigation"
 import TradesPageMainContent from "../../components/TradesPageMainContent"
 import TradesPageOverlays from "../../components/TradesPageOverlays"
 import { ConfirmModal, useDeleteTradeConfirmation } from "../../components/ui"
-
-const TRADES_GATE_PROFILE_SELECT =
-  "username, onboarding_completed, bio, trading_style, trader_type, primary_market, started_trading, avatar_url, referral_code" as const
+import { useUserProfile } from "@/lib/UserProfileProvider"
+import { useCachedAccounts, useCachedTrades } from "@/lib/useAppDataCache"
 
 export default function TradesPage() {
-  const [trades, setTrades] = useState<any[]>([])
+  const { user, profile: gateProfile, loading: profileLoading } = useUserProfile()
+  const { trades: cachedTrades, loading: tradesLoading } = useCachedTrades(user?.id)
+  const { accounts: accountRows, loading: accountsLoading } = useCachedAccounts(
+    user?.id
+  )
+  const trades = useMemo(
+    () => excludeBacktestTrades(cachedTrades),
+    [cachedTrades]
+  )
+  const loading =
+    profileLoading ||
+    (tradesLoading && cachedTrades.length === 0) ||
+    (accountsLoading && accountRows.length === 0)
+
   const [resultFilter, setResultFilter] = useState<"all" | "wins" | "losses">("all")
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
   const [accountFilter, setAccountFilter] = useState("all")
@@ -35,16 +43,11 @@ export default function TradesPage() {
   const [timeframe, setTimeframe] = useState("all")
   const [customRangeStart, setCustomRangeStart] = useState("")
   const [customRangeEnd, setCustomRangeEnd] = useState("")
-  const [loading, setLoading] = useState(true)
   const [selectedDate, setSelectedDate] = useState("")
   const [editingTrade, setEditingTrade] = useState<any | null>(null)
-  const [authUserId, setAuthUserId] = useState<string | null>(null)
-  const [gateProfile, setGateProfile] = useState<any | null>(null)
   const [showPerformanceShare, setShowPerformanceShare] = useState(false)
   const [sendTradeId, setSendTradeId] = useState<string | null>(null)
   const [visibleCount, setVisibleCount] = useState(10)
-  /** Account rows for id → account_number (trades query unchanged; separate fetch) */
-  const [accountRows, setAccountRows] = useState<any[]>([])
   const router = useRouter()
 
   const accountById = useMemo(() => {
@@ -56,8 +59,10 @@ export default function TradesPage() {
   }, [accountRows])
 
   useEffect(() => {
-    initPage()
-  }, [])
+    if (!profileLoading && !user) {
+      router.push("/login")
+    }
+  }, [profileLoading, user, router])
 
   useEffect(() => {
     setVisibleCount(10)
@@ -75,69 +80,16 @@ export default function TradesPage() {
     }
   }, [loading, trades])
 
-  async function initPage() {
-    const {
-      data: { user }
-    } = await supabase.auth.getUser()
-
-    if (!user) {
-      router.push("/login")
-      return
-    }
-
-    setAuthUserId(user.id)
-
-    const ensureResult = await ensureProfileForUser(supabase, {
-      userId: user.id,
-      referredBy: readStoredReferralCode(),
-      userMetadata: user.user_metadata,
-    })
-
-    if (!ensureResult.ok && ensureResult.error) {
-      console.error(
-        "ensureProfileForUser:",
-        JSON.stringify(ensureResult.error, null, 2)
-      )
-    }
-
-    const { data: profRow } = await supabase
-      .from("profiles")
-      .select(TRADES_GATE_PROFILE_SELECT)
-      .eq("id", user.id)
-      .maybeSingle()
-
-    setGateProfile(profRow ?? null)
-
-    const { data: accountsData } = await supabase
-      .from("accounts")
-      .select("id, account_number, name, account_size, mode, category, is_active")
-      .eq("user_id", user.id)
-    setAccountRows(accountsData || [])
-
-    await fetchTrades(user.id)
-  }
-
-  const fetchTrades = useCallback(async (userId: string) => {
-    const { data: tradesData } = await supabase
-      .from("trades")
-      .select("*")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
-
-    console.log("FETCHED TRADES:", tradesData)
-
-    setTrades(excludeBacktestTrades(tradesData || []))
-    setLoading(false)
-  }, [])
-
   const handleEditTrade = useCallback((trade: any) => {
     setEditingTrade({ ...trade })
   }, [])
 
-  const performDeleteTrade = useCallback(async (id: string) => {
-    await deleteUserTrade(supabase, id)
-    setTrades((prev) => prev.filter((t) => t.id !== id))
-  }, [])
+  const performDeleteTrade = useCallback(
+    async (id: string) => {
+      await deleteUserTrade(supabase, id, { userId: user?.id })
+    },
+    [user?.id]
+  )
 
   const { requestDelete: handleDeleteTrade, confirmModalProps } =
     useDeleteTradeConfirmation(performDeleteTrade)
@@ -197,12 +149,9 @@ export default function TradesPage() {
     setVisibleCount((prev) => prev + 10)
   }, [])
 
-  const handleTradeFormSaved = useCallback(async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (user) await fetchTrades(user.id)
-  }, [fetchTrades])
+  const handleTradeFormSaved = useCallback(() => {
+    setEditingTrade(null)
+  }, [])
 
   const handleTimeframeChange = useCallback((value: string) => {
     setTimeframe(value)
@@ -365,32 +314,29 @@ export default function TradesPage() {
             gateProfile={gateProfile}
             onEditTrade={handleEditTrade}
             onDeleteTrade={handleDeleteTrade}
-            onSendTrade={handleSendTrade}
-            onAnalyzeTrade={handleAnalyzeTrade}
+            onSendClick={handleSendTrade}
+            onAnalyze={handleAnalyzeTrade}
             onImageClick={handleImageClick}
             onLoadMore={handleLoadMore}
-            onImportCsv={() => setShowImportModal(true)}
           />
         </div>
       </div>
 
-      {selectedImage || editingTrade || showPerformanceShare || sendTradeId ? (
-        <TradesPageOverlays
-          selectedImage={selectedImage}
-          editingTrade={editingTrade}
-          showPerformanceShare={showPerformanceShare}
-          sendTradeId={sendTradeId}
-          tradesForPerformanceSharePool={tradesForPerformanceSharePool}
-          gateProfile={gateProfile}
-          customRangeStart={customRangeStart}
-          customRangeEnd={customRangeEnd}
-          onCloseImageLightbox={handleCloseImageLightbox}
-          onCloseEditForm={handleCloseEditForm}
-          onTradeFormSaved={() => void handleTradeFormSaved()}
-          onClosePerformanceShare={handleClosePerformanceShare}
-          onCloseSendModal={handleCloseSendModal}
-        />
-      ) : null}
+      <TradesPageOverlays
+        selectedImage={selectedImage}
+        editingTrade={editingTrade}
+        showPerformanceShare={showPerformanceShare}
+        sendTradeId={sendTradeId}
+        tradesForPerformanceSharePool={tradesForPerformanceSharePool}
+        gateProfile={gateProfile}
+        customRangeStart={customRangeStart}
+        customRangeEnd={customRangeEnd}
+        onCloseImageLightbox={handleCloseImageLightbox}
+        onCloseEditForm={handleCloseEditForm}
+        onTradeFormSaved={handleTradeFormSaved}
+        onClosePerformanceShare={handleClosePerformanceShare}
+        onCloseSendModal={handleCloseSendModal}
+      />
 
       <ConfirmModal {...confirmModalProps} />
     </>

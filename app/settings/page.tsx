@@ -55,6 +55,7 @@ import {
   isStartedTradingDateInFuture,
 } from "@/lib/tradeDateValidation"
 import TradingAccountsSettingsSection from "@/app/components/TradingAccountsSettingsSection"
+import { useUserProfile } from "@/lib/UserProfileProvider"
 import { useScrollPageTopOnMount } from "@/lib/useScrollPageTopOnMount"
 import { useAutoResizeTextarea } from "@/lib/useAutoResizeTextarea"
 
@@ -156,6 +157,7 @@ export default function SettingsPage() {
   const [manageLoading, setManageLoading] = useState(false)
   const [checkoutLoading, setCheckoutLoading] = useState(false)
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
+  const { refreshProfile } = useUserProfile()
   const [profile, setProfile] = useState<Record<string, unknown> | null>(null)
   const [newPassword, setNewPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
@@ -460,6 +462,7 @@ export default function SettingsPage() {
     )
     setAvatarFile(null)
     showPopup(feedbackPresets.profileSaveSuccess())
+    void refreshProfile()
     } finally {
       savingProfileRef.current = false
       setSavingProfile(false)

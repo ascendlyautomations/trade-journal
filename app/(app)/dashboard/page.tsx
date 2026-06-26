@@ -89,6 +89,12 @@ import {
 import { shouldShowGettingStartedChecklist } from "@/lib/gettingStartedChecklist"
 import { useGettingStartedProgress } from "@/lib/GettingStartedProgressProvider"
 import { useUserProfile } from "@/lib/UserProfileProvider"
+import { useCachedAccounts, useCachedTrades } from "@/lib/useAppDataCache"
+import {
+  ensureAccountsLoaded,
+  ensureTradesLoaded,
+  getCachedTrades,
+} from "@/lib/appDataCache"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 const DASHBOARD_GEAR_PREFS_KEY = "tradetrax_dashboard_prefs_v1"
 
@@ -521,7 +527,9 @@ export default function Dashboard() {
     setProfile,
     refreshProfile,
   } = useUserProfile()
-  const [trades, setTrades] = useState<any[]>([])
+  const { trades, loading: tradesLoading } = useCachedTrades(user?.id)
+  const { accounts: accountRows, loading: accountsLoading } =
+    useCachedAccounts(user?.id)
   const [accountFilter, setAccountFilter] = useState("all")
   const [accountTypeFilter, setAccountTypeFilter] = useState("all")
   const [timeFilter, setTimeFilter] = useState("all")
@@ -529,7 +537,6 @@ export default function Dashboard() {
   const [customRangeEnd, setCustomRangeEnd] = useState("")
   const [selectedDate, setSelectedDate] = useState("")
   const [showPublicOnly, setShowPublicOnly] = useState(false)
-  const [loading, setLoading] = useState(true)
   const [showControls, setShowControls] = useState(false)
   const [showEquity, setShowEquity] = useState(true)
   const [showDrawdown, setShowDrawdown] = useState(true)
@@ -545,9 +552,12 @@ export default function Dashboard() {
   const [showPerformanceShare, setShowPerformanceShare] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
   const didHydrateDashboardPrefs = useRef(false)
-  const dashboardLoadedUserIdRef = useRef<string | null>(null)
   /** Same fetch as /trades — used only for filter dropdown labels (#account_number vs UUID). */
-  const [accountRows, setAccountRows] = useState<any[]>([])
+
+  const pageDataLoading =
+    profileLoading ||
+    (tradesLoading && trades.length === 0) ||
+    (accountsLoading && accountRows.length === 0)
 
   const accountById = useMemo(() => {
     const m: Record<string, any> = {}
@@ -595,37 +605,15 @@ export default function Dashboard() {
     ]
   )
 
-  // 🔥 SAFE DATA FETCH (FIXES YOUR ERROR)
+  // Refresh trades + accounts when data changes (import, checkout) — otherwise reuse cache.
   const refreshDashboardData = useCallback(async () => {
     const currentUserId = user?.id
-    if (!currentUserId) {
-      setLoading(false)
-      return
-    }
+    if (!currentUserId) return
 
-    const isInitialLoad = dashboardLoadedUserIdRef.current !== currentUserId
-    if (isInitialLoad) {
-      setLoading(true)
-    }
-
-    const { data: accountsData } = await supabase
-      .from("accounts")
-      .select("id, account_number, name, account_size, mode, category, is_active")
-      .eq("user_id", currentUserId)
-    setAccountRows(accountsData || [])
-
-    const { data: trades } = await supabase
-      .from("trades")
-      .select(
-        "id, created_at, date, pnl, rr, entry_time, exit_time, duration_seconds, account_name, account_size, account_id, mode, account_type, session, ticker, direction, strategy, trade_type, is_public, public_description"
-      )
-      .eq("user_id", currentUserId)
-      .order("date", { ascending: false })
-
-    if (trades) setTrades(trades)
-
-    dashboardLoadedUserIdRef.current = currentUserId
-    setLoading(false)
+    await Promise.all([
+      ensureTradesLoaded(supabase, currentUserId, { force: true }),
+      ensureAccountsLoaded(supabase, currentUserId, { force: true }),
+    ])
   }, [user?.id])
 
   const handleImportModalComplete = useCallback(async () => {
@@ -634,16 +622,6 @@ export default function Dashboard() {
     dispatchGettingStartedSignalsRefresh()
     await refreshDashboardData()
   }, [refreshDashboardData])
-
-  useEffect(() => {
-    if (profileLoading) return
-    if (!user?.id) {
-      dashboardLoadedUserIdRef.current = null
-      setLoading(false)
-      return
-    }
-    void refreshDashboardData()
-  }, [profileLoading, user?.id, refreshDashboardData])
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -691,7 +669,7 @@ export default function Dashboard() {
   }, [showControls])
 
   useEffect(() => {
-    if (loading || didHydrateDashboardPrefs.current) return
+    if (pageDataLoading || didHydrateDashboardPrefs.current) return
     didHydrateDashboardPrefs.current = true
     const p = loadDashboardGearPrefs()
     if (!p) return
@@ -740,7 +718,7 @@ export default function Dashboard() {
         showWarnings: typeof p.showWarnings === "boolean" ? p.showWarnings : true,
       })
     }
-  }, [loading, tradesExcludingBacktest])
+  }, [pageDataLoading, tradesExcludingBacktest])
 
   function formatNumber(value: number) {
     if (value === null || value === undefined) return "-"
@@ -1281,11 +1259,11 @@ const biggestLoss = losses.length > 0
   }, [tradesExcludingBacktest, isPro])
 
   const dashboardHasCachedData =
-    user?.id != null && dashboardLoadedUserIdRef.current === user.id
+    user?.id != null && getCachedTrades(user.id) != null
 
   if (
     profileLoading ||
-    (loading && !dashboardHasCachedData) ||
+    (pageDataLoading && !dashboardHasCachedData) ||
     (user?.id && !signalsReady && !dashboardHasCachedData)
   ) {
     return <SkeletonDashboardPage />

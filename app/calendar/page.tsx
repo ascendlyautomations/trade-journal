@@ -20,12 +20,20 @@ import { deleteUserTrade } from "@/lib/deleteTrade"
 import { formatTradeAccountNameSizeLine } from "@/lib/tradeAccountDisplay"
 import { useScrollPageTopOnMount } from "@/lib/useScrollPageTopOnMount"
 import { ConfirmModal, useDeleteTradeConfirmation } from "../components/ui"
+import { useUserProfile } from "@/lib/UserProfileProvider"
+import { useCachedAccounts, useCachedTrades } from "@/lib/useAppDataCache"
+import { getCachedTrades } from "@/lib/appDataCache"
 export default function CalendarPage() {
   useScrollPageTopOnMount()
-  const [trades, setTrades] = useState<any[]>([])
-  const [shareProfile, setShareProfile] = useState<{
-    referral_code?: string | null
-  } | null>(null)
+  const { user, profile: shareProfile, loading: profileLoading } = useUserProfile()
+  const { trades, loading: tradesLoading } = useCachedTrades(user?.id)
+  const { accounts: accountRows, loading: accountsLoading } = useCachedAccounts(
+    user?.id
+  )
+  const tradesLoaded =
+    !profileLoading &&
+    !(tradesLoading && trades.length === 0 && getCachedTrades(user?.id) == null) &&
+    !(accountsLoading && accountRows.length === 0)
   const [accountFilter, setAccountFilter] = useState("all")
   const [selectedMode, setSelectedMode] = useState("all")
   const [currentDate, setCurrentDate] = useState(new Date())
@@ -34,39 +42,6 @@ export default function CalendarPage() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
   const [editingTrade, setEditingTrade] = useState<any | null>(null)
   const [sendTradeId, setSendTradeId] = useState<string | null>(null)
-  const [accountRows, setAccountRows] = useState<any[]>([])
-  const [tradesLoaded, setTradesLoaded] = useState(false)
-
-  useEffect(() => {
-    fetchTrades()
-  }, [])
-
-  async function fetchTrades() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (!user) return
-
-    const { data: profileRow } = await supabase
-      .from("profiles")
-      .select("referral_code")
-      .eq("id", user.id)
-      .maybeSingle()
-    setShareProfile(profileRow ?? null)
-
-    const [{ data }, { data: accountsData }] = await Promise.all([
-      supabase.from("trades").select("*").eq("user_id", user.id),
-      supabase
-        .from("accounts")
-        .select("id, account_number, name, account_size, mode, category, is_active")
-        .eq("user_id", user.id),
-    ])
-
-    if (data) setTrades(data)
-    setAccountRows(accountsData || [])
-    setTradesLoaded(true)
-  }
 
   const accountById = useMemo(() => {
     const m: Record<string, any> = {}
@@ -77,21 +52,8 @@ export default function CalendarPage() {
   }, [accountRows])
 
   async function handleTradeFormSaved() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) return
-
-    const { data } = await supabase
-      .from("trades")
-      .select("*")
-      .eq("user_id", user.id)
-
-    if (!data) return
-    setTrades(data)
-
     if (selectedDate) {
-      const list = data.filter((trade) => {
+      const list = trades.filter((trade) => {
         const resolved = resolveTradingTimeSourceForKey(trade)
         if (!resolved) return false
         return getTradingDayKey(resolved) === selectedDate
@@ -101,11 +63,13 @@ export default function CalendarPage() {
     setEditingTrade(null)
   }
 
-  const performDeleteTrade = useCallback(async (id: string) => {
-    await deleteUserTrade(supabase, id)
-    setTrades((prev) => prev.filter((t) => String(t.id) !== id))
-    setSelectedTrades((prev) => prev.filter((t) => String(t.id) !== id))
-  }, [])
+  const performDeleteTrade = useCallback(
+    async (id: string) => {
+      await deleteUserTrade(supabase, id, { userId: user?.id })
+      setSelectedTrades((prev) => prev.filter((t) => String(t.id) !== id))
+    },
+    [user?.id]
+  )
 
   const { requestDelete: handleDeleteTrade, confirmModalProps } =
     useDeleteTradeConfirmation(performDeleteTrade)

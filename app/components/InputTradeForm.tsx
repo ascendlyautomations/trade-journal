@@ -42,6 +42,12 @@ import CommunitySharePreviewModal from "@/app/components/CommunitySharePreviewMo
 import { postImageSrc } from "@/app/components/feed/feedPostHelpers"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { formatAccountNameWithSizeDisplay } from "@/lib/tradeAccountDisplay"
+import {
+  invalidateTradesCache,
+  prependTradeInCache,
+  upsertAccountInCache,
+  upsertTradeInCache,
+} from "@/lib/appDataCache"
 
 type CreateAccountSavePayload = Parameters<CreateAccountModalProps["onSave"]>[0]
 
@@ -849,6 +855,12 @@ export default function InputTradeForm({
         return
       }
 
+      upsertTradeInCache(user.id, {
+        ...existingTrade,
+        ...updateRow,
+        id: existingTrade.id,
+      })
+
       if (isPublic) {
         const { error: postErr } = await supabase.from("posts").upsert(
           {
@@ -969,6 +981,10 @@ export default function InputTradeForm({
       return
     }
 
+    if (newTradeData) {
+      prependTradeInCache(user.id, newTradeData)
+    }
+
     if (isPublic && newTradeData) {
       const { error: postError } = await supabase.from("posts").insert([
         {
@@ -992,6 +1008,7 @@ export default function InputTradeForm({
       void refreshPlanAndAccountLock()
       setCommunityPreviewOpen(false)
       resetCreateForm()
+      onSave?.()
       showPopup(feedbackPresets.postPublished())
       notifyGettingStartedChecklistMaybeCompleted()
       releaseSubmit()
@@ -1001,6 +1018,7 @@ export default function InputTradeForm({
     void refreshPlanAndAccountLock()
     setCommunityPreviewOpen(false)
     resetCreateForm()
+    onSave?.()
     showPopup(feedbackPresets.tradeSaveSuccess())
     notifyGettingStartedChecklistMaybeCompleted()
     releaseSubmit()
@@ -1108,6 +1126,7 @@ export default function InputTradeForm({
 
       onParsedTradesClear?.()
       setSelectedAccount(null)
+      invalidateTradesCache(user.id)
     } catch (err) {
       console.error(err)
       showPopup(
@@ -1213,6 +1232,8 @@ export default function InputTradeForm({
     }
 
     if (!data) return
+
+    upsertAccountInCache(user.id, data)
 
     setAccounts((prev) => [
       ...prev,

@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState, type ReactNode } from "react"
+import { isImageUrlLoaded, markImageUrlLoaded } from "@/lib/imageUrlCache"
 
 export const DEFAULT_AVATAR_SRC = "/default-avatar.png"
 
@@ -10,6 +11,8 @@ type SafeProfileAvatarProps = {
   /** Outer box size + layout, e.g. "w-6 h-6" */
   className: string
   fallback: ReactNode
+  /** Eager load for above-the-fold avatars (nav, story bar). */
+  priority?: boolean
 }
 
 export function SafeProfileAvatar({
@@ -17,12 +20,17 @@ export function SafeProfileAvatar({
   alt = "",
   className,
   fallback,
+  priority = false,
 }: SafeProfileAvatarProps) {
   const [displaySrc, setDisplaySrc] = useState<string | null>(null)
 
   useEffect(() => {
     const t = typeof src === "string" ? src.trim() : ""
-    setDisplaySrc(t.length > 0 ? t : null)
+    if (t.length > 0) {
+      setDisplaySrc(t)
+      return
+    }
+    setDisplaySrc(null)
   }, [src])
 
   const onError = useCallback(() => {
@@ -32,6 +40,10 @@ export function SafeProfileAvatar({
       return null
     })
   }, [])
+
+  const onLoad = useCallback(() => {
+    if (displaySrc) markImageUrlLoaded(displaySrc)
+  }, [displaySrc])
 
   if (!displaySrc) {
     return (
@@ -50,10 +62,12 @@ export function SafeProfileAvatar({
       <img
         src={displaySrc}
         alt={alt}
-        loading="lazy"
+        loading={priority || isImageUrlLoaded(displaySrc) ? "eager" : "lazy"}
         decoding="async"
+        fetchPriority={priority ? "high" : undefined}
         className="h-full w-full object-cover"
         onError={onError}
+        onLoad={onLoad}
       />
     </div>
   )

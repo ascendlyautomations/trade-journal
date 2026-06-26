@@ -8,6 +8,10 @@ import {
   fetchActiveStoriesForUserIds,
   type StoriesByUserMap,
 } from "@/lib/activeStories"
+import {
+  readStoriesSession,
+  writeStoriesSession,
+} from "@/lib/storiesSessionCache"
 
 function normalizeUserIds(userIds: string[]): string[] {
   return [...new Set(userIds.map((id) => String(id).trim()).filter(Boolean))]
@@ -17,14 +21,15 @@ function normalizeUserIds(userIds: string[]): string[] {
  * Shared active-story state: fetch, realtime refresh, and client-side expiry pruning.
  */
 export function useActiveStories(userIds: string[], enabled = true) {
-  const [storiesByUser, setStoriesByUser] = useState<StoriesByUserMap>({})
-  const userIdsRef = useRef(userIds)
-  userIdsRef.current = userIds
-
   const userIdsKey = useMemo(
     () => normalizeUserIds(userIds).sort().join(","),
     [userIds]
   )
+
+  const [storiesByUser, setStoriesByUser] = useState<StoriesByUserMap>(() => {
+    if (!enabled) return {}
+    return readStoriesSession(userIdsKey) ?? {}
+  })
 
   const loadStories = useCallback(async () => {
     const ids = normalizeUserIds(userIdsRef.current)
@@ -44,11 +49,20 @@ export function useActiveStories(userIds: string[], enabled = true) {
     }
 
     setStoriesByUser(next)
+    writeStoriesSession(userIdsKey, next)
   }, [userIdsKey])
+
+  const userIdsRef = useRef(userIds)
+  userIdsRef.current = userIds
 
   useEffect(() => {
     if (!enabled) {
       setStoriesByUser({})
+      return
+    }
+    const warm = readStoriesSession(userIdsKey)
+    if (warm) {
+      setStoriesByUser(warm)
       return
     }
     void loadStories()

@@ -29,6 +29,12 @@ import {
 import { formatPnlCurrency } from "@/lib/formatMoney"
 import { formatRR, formatSignedPnlDisplay, pnlTextClassName } from "@/lib/formatDisplay"
 import { profilePath } from "@/lib/profileRoutes"
+import {
+  getExploreTradesForView,
+  readExploreSession,
+  setExploreTradesForView,
+  writeExploreSession,
+} from "@/lib/exploreSessionCache"
 
 type EnrichedTopTrader = {
   userId: string
@@ -205,10 +211,26 @@ export default function ExplorePage() {
 
   async function loadTradesForView(
     view: ExploreTopView,
-    existingProfiles: ExploreProfile[]
+    existingProfiles: ExploreProfile[],
+    options?: { skipCache?: boolean }
   ) {
+    if (!options?.skipCache) {
+      const cachedTrades = getExploreTradesForView(view)
+      if (cachedTrades) {
+        setTrades(cachedTrades)
+        const windowTrades = filterTradesForLeaderboardWindow(cachedTrades, view)
+        const ranked = buildLeaderboardRankings(windowTrades, EXPLORE_TOP_LIMIT)
+        await ensureTopTraderProfiles(
+          ranked.map((row) => row.userId),
+          existingProfiles
+        )
+        return
+      }
+    }
+
     const tradeRows = await fetchTradesForWindow(view)
     setTrades(tradeRows)
+    setExploreTradesForView(view, tradeRows)
 
     const windowTrades = filterTradesForLeaderboardWindow(tradeRows, view)
     const ranked = buildLeaderboardRankings(windowTrades, EXPLORE_TOP_LIMIT)
@@ -218,7 +240,28 @@ export default function ExplorePage() {
     )
   }
 
+  function restoreExploreSession(cached: NonNullable<ReturnType<typeof readExploreSession>>) {
+    setCurrentUserId(cached.currentUserId)
+    setProfiles(cached.profiles)
+    setFollowingIds(new Set(cached.followingIds))
+    setRequestedIds(new Set(cached.requestedIds))
+    setFollowsYouIds(new Set(cached.followsYouIds))
+    setTopView(cached.topView)
+    const viewTrades = cached.tradesByView[cached.topView]
+    if (viewTrades) setTrades(viewTrades)
+    initialLoadDone.current = true
+    setLoading(false)
+    if (cached.scrollY > 0) {
+      requestAnimationFrame(() => window.scrollTo(0, cached.scrollY))
+    }
+  }
+
   useEffect(() => {
+    const cached = readExploreSession()
+    if (cached) {
+      restoreExploreSession(cached)
+      return
+    }
     void init()
   }, [])
 
@@ -231,7 +274,13 @@ export default function ExplorePage() {
       setLoadingTopView(true)
       const snapshot = profiles
       await loadTradesForView(topView, snapshot)
-      if (!cancelled) setLoadingTopView(false)
+      if (!cancelled) {
+        setLoadingTopView(false)
+        const current = readExploreSession()
+        if (current) {
+          writeExploreSession({ ...current, topView })
+        }
+      }
     }
 
     void reloadTopWindow()
@@ -321,10 +370,43 @@ export default function ExplorePage() {
       new Set((followsYouRes.data || []).map((row) => String(row.follower_id)))
     )
 
-    await loadTradesForView("30D", pool)
+    await loadTradesForView("30D", pool, { skipCache: !readExploreSession() })
+
+    const followingIdsArr = (followingRes.data || []).map((row) =>
+      String(row.following_id)
+    )
+    const requestedIdsArr = (requestsRes.data || []).map((row) =>
+      String(row.target_id)
+    )
+    const followsYouIdsArr = (followsYouRes.data || []).map((row) =>
+      String(row.follower_id)
+    )
+    const tradesByView = readExploreSession()?.tradesByView ?? {}
+
+    writeExploreSession({
+      currentUserId: user?.id ?? null,
+      profiles: pool,
+      followingIds: followingIdsArr,
+      requestedIds: requestedIdsArr,
+      followsYouIds: followsYouIdsArr,
+      tradesByView,
+      topView: "30D",
+      scrollY: 0,
+    })
+
     initialLoadDone.current = true
     setLoading(false)
   }
+
+  useEffect(() => {
+    const onScroll = () => {
+      const cached = readExploreSession()
+      if (!cached || !initialLoadDone.current) return
+      writeExploreSession({ ...cached, scrollY: window.scrollY })
+    }
+    window.addEventListener("scroll", onScroll, { passive: true })
+    return () => window.removeEventListener("scroll", onScroll)
+  }, [])
 
   const profilesById = useMemo(() => {
     const map: Record<string, ExploreProfile> = {}

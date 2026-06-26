@@ -23,6 +23,7 @@ import {
 import { resolveTradePoints } from "@/lib/resolveTradePoints"
 import { profilePath } from "@/lib/profileRoutes"
 import { profileSeoDisplayName } from "@/lib/publicSeo"
+import { readTradeDetail, writeTradeDetail } from "@/lib/tradeDetailCache"
 
 function tradeScreenshotSrc(url: string | null | undefined): string | null {
   const raw = url != null ? String(url).trim() : ""
@@ -42,19 +43,24 @@ export default function TradeDetailPageClient({
 }: TradeDetailPageClientProps) {
   const router = useRouter()
 
-  const [trade, setTrade] = useState<any>(null)
-  const [ownerProfile, setOwnerProfile] = useState<{
-    id: string
-    username?: string | null
-    name?: string | null
-    avatar_url?: string | null
-  } | null>(null)
-  const [userId, setUserId] = useState<string | undefined>(undefined)
-  const [loading, setLoading] = useState(true)
+  const cached = readTradeDetail(tradeId)
+  const [trade, setTrade] = useState<any>(cached?.trade ?? null)
+  const [ownerProfile, setOwnerProfile] = useState(cached?.ownerProfile ?? null)
+  const [userId, setUserId] = useState<string | undefined>(cached?.sessionUserId)
+  const [loading, setLoading] = useState(!cached)
   const [commentsFocused, setCommentsFocused] = useState(false)
 
   useEffect(() => {
     if (!tradeId) {
+      setLoading(false)
+      return
+    }
+
+    const warm = readTradeDetail(tradeId)
+    if (warm) {
+      setTrade(warm.trade)
+      setOwnerProfile(warm.ownerProfile)
+      setUserId(warm.sessionUserId)
       setLoading(false)
       return
     }
@@ -85,22 +91,31 @@ export default function TradeDetailPageClient({
         ? null
         : sanitizeTradeForViewer(data, { isOwner })
 
+      let owner: typeof ownerProfile = null
       if (error && !resolvedTrade) {
         setTrade(null)
         setOwnerProfile(null)
       } else {
         setTrade(resolvedTrade)
         if (resolvedTrade?.user_id) {
-          const { data: owner } = await supabase
+          const { data: ownerRow } = await supabase
             .from("profiles")
             .select("id, username, name, avatar_url")
             .eq("id", resolvedTrade.user_id)
             .maybeSingle()
+          owner = ownerRow
           if (!cancelled) setOwnerProfile(owner)
         } else if (!cancelled) {
           setOwnerProfile(null)
         }
       }
+
+      writeTradeDetail(tradeId, {
+        trade: resolvedTrade,
+        ownerProfile: owner,
+        sessionUserId,
+      })
+
       setLoading(false)
     })()
 

@@ -24,13 +24,20 @@ import {
   readStoredReferralCode,
 } from "./ensureProfileForUser"
 import { supabase } from "./supabaseClient"
+import { clearAppDataCache } from "./appDataCache"
+import { invalidateExploreSession } from "./exploreSessionCache"
+import { clearFeedSessionsForUser } from "./feedSessionCache"
+import { clearConversationSessionsForUser } from "./conversationSessionCache"
+import { clearImageUrlCache } from "./imageUrlCache"
+import { invalidateStoriesSession } from "./storiesSessionCache"
+import { resetRoutePrefetchSession } from "./routePrefetch"
 
 /**
  * Shared profile columns for shell + dashboard + getting-started.
  * Avoids duplicate `profiles` reads across Navbar, checklist, and key pages.
  */
 export const USER_PROFILE_SELECT =
-  "id, username, avatar_url, is_pro, subscription_status, is_banned, banned_reason, referral_code, is_beta_tester, onboarding_completed, has_seen_getting_started_intro, has_seen_onboarding_complete_popup, bio, trading_style, trader_type, primary_market, started_trading, max_drawdown_limit" as const
+  "id, username, avatar_url, is_pro, subscription_status, is_banned, banned_reason, referral_code, is_beta_tester, onboarding_completed, has_seen_getting_started_intro, has_seen_onboarding_complete_popup, bio, trading_style, trader_type, primary_market, started_trading, max_drawdown_limit, is_private" as const
 
 export type UserProfileSlice = {
   id: string
@@ -51,6 +58,7 @@ export type UserProfileSlice = {
   primary_market: string | null
   started_trading: string | null
   max_drawdown_limit: number | null
+  is_private: boolean | null
 }
 
 function pickUserProfileFields(row: unknown): UserProfileSlice | null {
@@ -91,6 +99,7 @@ function pickUserProfileFields(row: unknown): UserProfileSlice | null {
       const n = typeof v === "number" ? v : Number(v)
       return Number.isFinite(n) ? n : null
     })(),
+    is_private: typeof o.is_private === "boolean" ? o.is_private : null,
   }
 }
 
@@ -160,7 +169,17 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
     const clearAuthState = () => {
       loadGeneration += 1
       removeProfileChannel()
+      const signedOutUserId = sessionUserIdRef.current
       sessionUserIdRef.current = null
+      clearAppDataCache()
+      invalidateExploreSession()
+      invalidateStoriesSession()
+      clearImageUrlCache()
+      resetRoutePrefetchSession()
+      if (signedOutUserId) {
+        clearFeedSessionsForUser(signedOutUserId)
+        clearConversationSessionsForUser(signedOutUserId)
+      }
       if (!mounted) return
       setUser(null)
       setProfileState(null)

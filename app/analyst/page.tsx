@@ -12,6 +12,9 @@ import {
   formatTradeAccountDisplay,
   safeAccountNumberLabel,
 } from "@/lib/tradeAccountDisplay"
+import { useUserProfile } from "@/lib/UserProfileProvider"
+import { useCachedTrades } from "@/lib/useAppDataCache"
+import { getCachedTrades, upsertTradeInCache } from "@/lib/appDataCache"
 
 type AnalyzeTradeApiPayload = {
   reply?: string
@@ -72,80 +75,18 @@ export default function AnalystPage() {
 }
 
 function AnalystPageContent() {
-  const [trades, setTrades] = useState<any[]>([])
+  const { user, profile, loading: profileLoading } = useUserProfile()
+  const { trades, loading: tradesLoading } = useCachedTrades(user?.id)
+  const pageReady =
+    !profileLoading &&
+    !(tradesLoading && trades.length === 0 && getCachedTrades(user?.id) == null)
   const [selectedTrade, setSelectedTrade] = useState<any>(null)
-  const [profile, setProfile] = useState<{
-    is_pro?: boolean | null
-    subscription_status?: string | null
-  } | null>(null)
 
   const [messages, setMessages] = useState<any[]>([])
   const [input, setInput] = useState("")
   const [loading, setLoading] = useState(false)
   const [tradePanelExpanded, setTradePanelExpanded] = useState(true)
-  const [pageReady, setPageReady] = useState(false)
   const searchParams = useSearchParams()
-
-  useEffect(() => {
-    void fetchTrades()
-  }, [])
-
-  async function fetchTrades() {
-    setPageReady(false)
-    console.log("AI ANALYSIS: fetching trades...")
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (!user) {
-      setPageReady(true)
-      return
-    }
-
-    const [{ data, error: tradesError }, { data: prof, error: profileError }] =
-      await Promise.all([
-      supabase
-        .from("trades")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("profiles")
-        .select("is_pro, subscription_status")
-        .eq("id", user.id)
-        .maybeSingle(),
-      ])
-
-    if (tradesError) {
-      console.error("AI ANALYSIS TRADES ERROR:", tradesError)
-    }
-    if (profileError) {
-      console.error("AI ANALYSIS PROFILE ERROR:", profileError)
-    }
-    if (tradesError || profileError) {
-      setPageReady(true)
-    }
-
-    console.log("AI ANALYSIS RAW:", data)
-    console.log(
-      "AI ANALYSIS FEEDBACK FIELDS:",
-      (data || []).map((t) => ({
-        id: t.id,
-        ai_feedback: t.ai_feedback,
-        ai_feedback_created_at: t.ai_feedback_created_at,
-      }))
-    )
-    const aiTrades = (data || []).filter(
-      (t) => t.ai_feedback !== null && t.ai_feedback !== ""
-    )
-    console.log("AI TRADES:", aiTrades)
-
-    setTrades(data || [])
-    setProfile(prof ?? null)
-    setPageReady(true)
-    console.log("AI ANALYSIS: page ready")
-    console.log("AI ANALYSIS: loading finished")
-  }
 
   function formatCurrency(val: number) {
     if (val === null || val === undefined) return "-"
@@ -268,11 +209,9 @@ function AnalystPageContent() {
 
     const reply = data.reply
     setMessages([{ role: "assistant", content: reply }])
-    setTrades((prev) =>
-      prev.map((t) =>
-        String(t.id) === String(trade.id) ? { ...t, ai_feedback: reply } : t
-      )
-    )
+    if (user?.id) {
+      upsertTradeInCache(user.id, { ...trade, ai_feedback: reply })
+    }
     setSelectedTrade((s) =>
       s && String(s.id) === String(trade.id) ? { ...s, ai_feedback: reply } : s
     )
@@ -346,13 +285,12 @@ function AnalystPageContent() {
     }
 
     setMessages([...newMessages, { role: "assistant", content: data.reply }])
-    setTrades((prev) =>
-      prev.map((t) =>
-        String(t.id) === String(selectedTrade.id)
-          ? { ...t, ai_feedback: data.reply }
-          : t
-      )
-    )
+    if (user?.id && selectedTrade) {
+      upsertTradeInCache(user.id, {
+        ...selectedTrade,
+        ai_feedback: data.reply,
+      })
+    }
     setSelectedTrade((s) =>
       s && String(s.id) === String(selectedTrade.id)
         ? { ...s, ai_feedback: data.reply }
