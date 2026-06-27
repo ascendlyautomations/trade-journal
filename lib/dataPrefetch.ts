@@ -1,9 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { ensureAccountsLoaded, ensureTradesLoaded } from "./appDataCache"
+import { fetchSettingsProfileRow } from "./settingsProfileSync"
+import { ensureTradingAccountsSettingsLoaded } from "./tradingAccountsSettingsCache"
 
 let warmedUserId: string | null = null
 
-/** Prefetch core trades/accounts caches after auth — speeds first navigation to dashboard/trades. */
+/** Prefetch core caches after auth — speeds first navigation to dashboard, trades, and settings. */
 export function warmAppDataCaches(
   supabase: SupabaseClient,
   userId: string
@@ -14,6 +16,8 @@ export function warmAppDataCaches(
   void Promise.all([
     ensureTradesLoaded(supabase, id),
     ensureAccountsLoaded(supabase, id),
+    fetchSettingsProfileRow(supabase, id).catch(() => null),
+    ensureTradingAccountsSettingsLoaded(supabase, id).catch(() => []),
   ])
 }
 

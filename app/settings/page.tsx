@@ -4,7 +4,7 @@ import { SkeletonSettingsPage } from "../components/ui/skeletons"
 
 import Navbar from "../components/Navbar"
 import AffiliateApplyModal from "../components/AffiliateApplyModal"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "../../lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
@@ -31,12 +31,9 @@ import {
   usernameChangesRemaining,
   validateProfileUsernameNotEmpty,
 } from "@/lib/profileUsername"
-import { TRADER_TYPE_OPTIONS, normalizeTraderType } from "@/lib/traderType"
+import { TRADER_TYPE_OPTIONS } from "@/lib/traderType"
 import { mirrorAccountSettingsUsernameChangeCount } from "@/lib/profileSplitMirrorWrites"
 
-const SETTINGS_PROFILE_SELECT =
-  "id, name, username, bio, is_private, avatar_url, trading_style, trading_model, trader_type, primary_market, started_trading, username_change_count, referral_code, referral_count, is_pro, subscription_status, cancel_at_period_end, cancel_at, trial_end, current_period_end, stripe_customer_id" as const
-import type { User } from "@supabase/supabase-js"
 import AffiliatePayoutSetupCard from "@/app/components/AffiliatePayoutSetupCard"
 import { supabaseBearerHeaders } from "@/lib/supabaseBearerFetch"
 import { fetchLatestAffiliateApplication, type AffiliateApplicationRow } from "@/lib/affiliateApplication"
@@ -56,8 +53,19 @@ import {
 } from "@/lib/tradeDateValidation"
 import TradingAccountsSettingsSection from "@/app/components/TradingAccountsSettingsSection"
 import { useUserProfile } from "@/lib/UserProfileProvider"
+import {
+  buildSettingsFormSeed,
+  fetchSettingsProfileRow,
+  mergeSettingsProfileSources,
+  persistSettingsProfileEverywhere,
+  settingsSaveToSharedSlice,
+  sharedSliceToSettingsRow,
+  sliceDateInput,
+} from "@/lib/settingsProfileSync"
+import { readSettingsProfileCache } from "@/lib/settingsProfileCache"
 import { useScrollPageTopOnMount } from "@/lib/useScrollPageTopOnMount"
 import { useAutoResizeTextarea } from "@/lib/useAutoResizeTextarea"
+import { getPasswordManagementMode } from "@/lib/authPasswordManagement"
 
 type TabId =
   | "profile"
@@ -86,18 +94,37 @@ function resolveSettingsTabFromHash(hash: string): TabId | null {
   return null
 }
 
-function sliceDateInput(raw: unknown): string {
-  if (raw == null || raw === "") return ""
-  const s = String(raw)
-  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10)
-  const d = new Date(s)
-  if (Number.isNaN(d.getTime())) return ""
-  return d.toISOString().slice(0, 10)
-}
-
 function profileDateExists(raw: unknown): boolean {
   if (raw == null || raw === "") return false
   return !Number.isNaN(new Date(String(raw)).getTime())
+}
+
+function applySettingsFormSeed(
+  seed: ReturnType<typeof buildSettingsFormSeed>,
+  setters: {
+    setName: (v: string) => void
+    setUsername: (v: string) => void
+    setBio: (v: string) => void
+    setIsPrivate: (v: boolean) => void
+    setAvatarPreview: (v: string | null) => void
+    setTradingStyle: (v: string) => void
+    setTraderType: (v: string) => void
+    setPrimaryMarket: (v: string) => void
+    setTradingModel: (v: string) => void
+    setStartedTrading: (v: string) => void
+  }
+) {
+  if (!seed) return
+  setters.setName(seed.name)
+  setters.setUsername(seed.username)
+  setters.setBio(seed.bio)
+  setters.setIsPrivate(seed.isPrivate)
+  setters.setAvatarPreview(seed.avatarPreview)
+  setters.setTradingStyle(seed.tradingStyle)
+  setters.setTraderType(seed.traderType)
+  setters.setPrimaryMarket(seed.primaryMarket)
+  setters.setTradingModel(seed.tradingModel)
+  setters.setStartedTrading(seed.startedTrading)
 }
 
 function shouldShowRenewsOn(profile: Record<string, unknown> | null): boolean {
@@ -146,10 +173,12 @@ export default function SettingsPage() {
   useScrollPageTopOnMount()
   const [activeTab, setActiveTab] = useState<TabId>("account")
 
-  const [user, setUser] = useState<User | null>(null)
-  const [loading, setLoading] = useState(true)
+  const { user, profile: sharedProfile, loading: profileLoading, setProfile: setSharedProfile } =
+    useUserProfile()
+  const [profile, setProfile] = useState<Record<string, unknown> | null>(null)
   const [savingProfile, setSavingProfile] = useState(false)
   const savingProfileRef = useRef(false)
+  const formSeededRef = useRef(false)
   const [savingPassword, setSavingPassword] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -157,8 +186,6 @@ export default function SettingsPage() {
   const [manageLoading, setManageLoading] = useState(false)
   const [checkoutLoading, setCheckoutLoading] = useState(false)
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
-  const { refreshProfile } = useUserProfile()
-  const [profile, setProfile] = useState<Record<string, unknown> | null>(null)
   const [newPassword, setNewPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [showAffiliateModal, setShowAffiliateModal] = useState(false)
@@ -183,6 +210,8 @@ export default function SettingsPage() {
 
   const invalidStartedTradingDate = isStartedTradingDateInFuture(startedTrading)
   const localTodayDate = getLocalTodayDateInputValue()
+  const passwordManagementMode = getPasswordManagementMode(user)
+  const isCreatePasswordFlow = passwordManagementMode === "create"
 
   function handleStartedTradingChange(next: string) {
     if (isStartedTradingDateInFuture(next)) {
@@ -191,16 +220,94 @@ export default function SettingsPage() {
     setStartedTrading(next)
   }
 
+  const formSetters = {
+    setName,
+    setUsername,
+    setBio,
+    setIsPrivate,
+    setAvatarPreview,
+    setTradingStyle,
+    setTraderType,
+    setPrimaryMarket,
+    setTradingModel,
+    setStartedTrading,
+  }
+
+  function hydrateProfileRow(row: Record<string, unknown> | null | undefined) {
+    if (!row) return
+    applySettingsFormSeed(buildSettingsFormSeed(row), formSetters)
+    setProfile(row)
+  }
+
+  useLayoutEffect(() => {
+    if (!user?.id || formSeededRef.current) return
+    const cached = readSettingsProfileCache(user.id)
+    const merged = mergeSettingsProfileSources(cached, sharedProfile)
+    const seedRow =
+      merged ??
+      (sharedProfile ? sharedSliceToSettingsRow(sharedProfile) : null)
+    if (seedRow) {
+      hydrateProfileRow(seedRow)
+      formSeededRef.current = true
+    }
+  }, [user?.id, sharedProfile])
+
   useEffect(() => {
-    void init()
-  }, [])
+    if (profileLoading) return
+    if (!user?.id) {
+      router.push("/login")
+      return
+    }
+
+    let cancelled = false
+
+    void (async () => {
+      const cached = readSettingsProfileCache(user.id)
+      if (cached) {
+        if (!formSeededRef.current) {
+          hydrateProfileRow(cached)
+          formSeededRef.current = true
+        } else {
+          setProfile(cached)
+        }
+        setSharedProfile((prev) => settingsSaveToSharedSlice(cached, prev))
+        return
+      }
+
+      const data = await fetchSettingsProfileRow(supabase, user.id)
+      if (cancelled || !data) return
+
+      if (!formSeededRef.current) {
+        hydrateProfileRow(data)
+        formSeededRef.current = true
+      } else {
+        setProfile(data)
+      }
+      setSharedProfile((prev) => settingsSaveToSharedSlice(data, prev))
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [user?.id, profileLoading, router, setSharedProfile])
+
+  useEffect(() => {
+    if (activeTab !== "affiliate" || profileLoading || !user?.id) return
+
+    void Promise.all([
+      refreshAffiliateState(user.id),
+      refreshAffiliateConnect(user.id),
+    ]).catch((e) => {
+      console.error("Affiliate state refresh failed:", e)
+    })
+  }, [activeTab, user?.id, profileLoading])
 
   useEffect(() => {
     if (typeof window === "undefined") return
     const params = new URLSearchParams(window.location.search)
     if (params.get("checkout") !== "success") return
     if (!user?.id) return
-    void fetchProfile(user.id)
+    void fetchProfile(user.id, { force: true })
   }, [user?.id])
 
   useEffect(() => {
@@ -216,30 +323,14 @@ export default function SettingsPage() {
     return () => window.removeEventListener("hashchange", syncTabFromHash)
   }, [])
 
-  async function fetchProfile(userId: string) {
-    const { data } = await supabase
-      .from("profiles")
-      .select(SETTINGS_PROFILE_SELECT)
-      .eq("id", userId)
-      .single()
+  async function fetchProfile(userId: string, options?: { force?: boolean }) {
+    const data = await fetchSettingsProfileRow(supabase, userId, options)
 
     if (data) {
-      setProfile(data)
-      setName((data.name as string) || "")
-      setUsername((data.username as string) || "")
-      setBio((data.bio as string) || "")
-      setIsPrivate(Boolean(data.is_private))
-      setAvatarPreview((data.avatar_url as string) || null)
-      setTradingStyle(
-        (data.trading_style as string) || (data.trading_model as string) || ""
-      )
-      setTraderType(normalizeTraderType(data.trader_type))
-      setPrimaryMarket((data.primary_market as string) || "")
-      setTradingModel((data.trading_model as string) || "")
-      setStartedTrading(sliceDateInput(data.started_trading))
+      hydrateProfileRow(data)
     }
 
-    return data ?? null
+    return data
   }
 
   async function refreshAffiliateState(userId: string) {
@@ -283,33 +374,6 @@ export default function SettingsPage() {
   async function getAccessToken(): Promise<string | null> {
     const { data: sessionData } = await supabase.auth.getSession()
     return sessionData.session?.access_token ?? null
-  }
-
-  async function init() {
-    const {
-      data: { user: u },
-    } = await supabase.auth.getUser()
-
-    if (!u) {
-      setLoading(false)
-      router.push("/login")
-      return
-    }
-
-    setUser(u)
-
-    const data = await fetchProfile(u.id)
-
-    setLoading(false)
-
-    if (data?.id) {
-      void Promise.all([
-        refreshAffiliateState(data.id),
-        refreshAffiliateConnect(data.id),
-      ]).catch((e) => {
-        console.error("Affiliate state refresh failed:", e)
-      })
-    }
   }
 
   async function uploadAvatar(): Promise<string | null> {
@@ -441,32 +505,54 @@ export default function SettingsPage() {
       }
     }
 
+    const nextProfile: Record<string, unknown> = {
+      ...(profile ?? {}),
+      name: name.trim() || null,
+      is_private: isPrivate,
+      username: cleanUsername,
+      username_change_count: nextChangeCount,
+      bio,
+      avatar_url: avatarUrl,
+      trading_style: tradingStyle,
+      trader_type: traderType.trim() || null,
+      primary_market: primaryMarket.trim() || null,
+      trading_model: tradingModel || tradingStyle || null,
+      started_trading: startedTrading.trim() || null,
+    }
+
     setUsername(cleanUsername)
-    setProfile((p) =>
-      p
-        ? {
-            ...p,
-            name: name.trim() || null,
-            is_private: isPrivate,
-            username: cleanUsername,
-            username_change_count: nextChangeCount,
-            bio,
-            avatar_url: avatarUrl,
-            trading_style: tradingStyle,
-            trader_type: traderType.trim() || null,
-            primary_market: primaryMarket.trim() || null,
-            trading_model: tradingModel || tradingStyle || null,
-            started_trading: startedTrading.trim() || null,
-          }
-        : p
-    )
+    setProfile(nextProfile)
     setAvatarFile(null)
+    persistSettingsProfileEverywhere(user.id, nextProfile)
+    setSharedProfile((prev) => settingsSaveToSharedSlice(nextProfile, prev))
     showPopup(feedbackPresets.profileSaveSuccess())
-    void refreshProfile()
     } finally {
       savingProfileRef.current = false
       setSavingProfile(false)
     }
+  }
+
+  async function sendCreatePasswordEmail() {
+    if (!user?.email || savingPassword) return
+
+    setSavingPassword(true)
+    const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    })
+    setSavingPassword(false)
+
+    if (error) {
+      showPopup({
+        type: "error",
+        message: "Something went wrong. Please try again.",
+      })
+      return
+    }
+
+    showPopup({
+      type: "success",
+      message: "Check your email for a link to set your password.",
+    })
   }
 
   async function updatePassword() {
@@ -774,12 +860,22 @@ export default function SettingsPage() {
   async function afterAffiliateModalSubmit() {
     if (!user) return
     setShowAffiliateModal(false)
-    await fetchProfile(user.id)
-    await refreshAffiliateState(user.id)
-    await refreshAffiliateConnect(user.id)
+    await Promise.all([
+      fetchProfile(user.id, { force: true }),
+      refreshAffiliateState(user.id),
+      refreshAffiliateConnect(user.id),
+    ])
   }
 
-  if (loading) {
+  const cachedSettingsProfile = user?.id
+    ? readSettingsProfileCache(user.id)
+    : null
+  const hasInstantProfile = Boolean(
+    user?.id && (sharedProfile || cachedSettingsProfile || profile)
+  )
+  const showFullSkeleton = profileLoading && !hasInstantProfile
+
+  if (showFullSkeleton) {
     return (
       <>
         <Navbar />
@@ -1214,51 +1310,66 @@ export default function SettingsPage() {
 
                 <section className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm">
                   <h3 className="text-sm font-semibold uppercase tracking-wide text-blue-300">
-                    Change password
+                    {isCreatePasswordFlow ? "Set password" : "Change password"}
                   </h3>
                   <p className="mt-1 text-sm text-gray-400">
-                    Choose a strong password you have not used elsewhere
+                    {isCreatePasswordFlow
+                      ? "Create a password so you can also sign in using your email and password, in addition to Google."
+                      : "Choose a strong password you have not used elsewhere"}
                   </p>
-                  <div className="mt-4">
-                    <label
-                      htmlFor="settings-new-password"
-                      className="mb-1 block text-sm text-gray-400"
+                  {isCreatePasswordFlow ? (
+                    <button
+                      type="button"
+                      onClick={() => void sendCreatePasswordEmail()}
+                      disabled={savingPassword || !user?.email}
+                      className="mt-4 w-full rounded-xl bg-gradient-to-r from-blue-500 to-emerald-500 py-3 font-semibold disabled:opacity-50"
                     >
-                      New password
-                    </label>
-                    <AuthPasswordInput
-                      id="settings-new-password"
-                      autoComplete="new-password"
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                      placeholder="Enter new password"
-                      className="w-full rounded-xl border border-white/10 bg-black/30 p-3 placeholder:text-gray-500"
-                    />
-                  </div>
-                  <div className="mt-4">
-                    <label
-                      htmlFor="settings-confirm-password"
-                      className="mb-1 block text-sm text-gray-400"
-                    >
-                      Confirm password
-                    </label>
-                    <AuthPasswordInput
-                      id="settings-confirm-password"
-                      autoComplete="new-password"
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      placeholder="Confirm new password"
-                      className="w-full rounded-xl border border-white/10 bg-black/30 p-3 placeholder:text-gray-500"
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => void updatePassword()}
-                    disabled={savingPassword}
-                    className="mt-4 w-full rounded-xl bg-gradient-to-r from-blue-500 to-emerald-500 py-3 font-semibold disabled:opacity-50"
-                  >
-                    {savingPassword ? "Updating…" : "Update password"}
-                  </button>
+                      {savingPassword ? "Sending…" : "Set password"}
+                    </button>
+                  ) : (
+                    <>
+                      <div className="mt-4">
+                        <label
+                          htmlFor="settings-new-password"
+                          className="mb-1 block text-sm text-gray-400"
+                        >
+                          New password
+                        </label>
+                        <AuthPasswordInput
+                          id="settings-new-password"
+                          autoComplete="new-password"
+                          value={newPassword}
+                          onChange={(e) => setNewPassword(e.target.value)}
+                          placeholder="Enter new password"
+                          className="w-full rounded-xl border border-white/10 bg-black/30 p-3 placeholder:text-gray-500"
+                        />
+                      </div>
+                      <div className="mt-4">
+                        <label
+                          htmlFor="settings-confirm-password"
+                          className="mb-1 block text-sm text-gray-400"
+                        >
+                          Confirm password
+                        </label>
+                        <AuthPasswordInput
+                          id="settings-confirm-password"
+                          autoComplete="new-password"
+                          value={confirmPassword}
+                          onChange={(e) => setConfirmPassword(e.target.value)}
+                          placeholder="Confirm new password"
+                          className="w-full rounded-xl border border-white/10 bg-black/30 p-3 placeholder:text-gray-500"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void updatePassword()}
+                        disabled={savingPassword}
+                        className="mt-4 w-full rounded-xl bg-gradient-to-r from-blue-500 to-emerald-500 py-3 font-semibold disabled:opacity-50"
+                      >
+                        {savingPassword ? "Updating…" : "Update password"}
+                      </button>
+                    </>
+                  )}
                 </section>
 
                 <section className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm">

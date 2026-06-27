@@ -7,13 +7,13 @@ import CreateAccountModal, {
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { feedbackPresets } from "@/lib/feedbackPresets"
 import { supabase } from "@/lib/supabaseClient"
+import { invalidateAccountsCache } from "@/lib/appDataCache"
 import {
   assertCanCreateTradingAccount,
   formatTradingAccountMode,
   FREE_PLAN_ACCOUNT_LIMIT,
   FREE_PLAN_ACCOUNT_LIMIT_MESSAGE,
   insertTradingAccount,
-  loadTradingAccounts,
   setTradingAccountActive,
   tradingAccountDisplayTitle,
   tradingAccountToFormValues,
@@ -21,6 +21,12 @@ import {
   updateTradingAccountNote,
   type TradingAccountListItem,
 } from "@/lib/tradingAccounts"
+import {
+  ensureTradingAccountsSettingsLoaded,
+  getCachedTradingAccountsSettings,
+  invalidateTradingAccountsSettingsCache,
+  subscribeTradingAccountsSettingsCache,
+} from "@/lib/tradingAccountsSettingsCache"
 
 const ACCOUNTS_PAGE_SIZE = 5
 
@@ -45,8 +51,16 @@ export default function TradingAccountsSettingsSection({
   isPro,
 }: Props) {
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
-  const [accounts, setAccounts] = useState<TradingAccountListItem[]>([])
-  const [loading, setLoading] = useState(false)
+  const initialCached = useMemo(
+    () => (userId ? getCachedTradingAccountsSettings(userId) : null),
+    [userId]
+  )
+  const [accounts, setAccounts] = useState<TradingAccountListItem[]>(
+    initialCached ?? []
+  )
+  const [loading, setLoading] = useState(
+    Boolean(userId) && initialCached == null
+  )
   const [togglingId, setTogglingId] = useState<string | null>(null)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [creating, setCreating] = useState(false)
@@ -88,25 +102,60 @@ export default function TradingAccountsSettingsSection({
     setPage(0)
   }, [searchQuery])
 
-  const refreshAccounts = useCallback(async () => {
+  const refreshAccounts = useCallback(
+    async (options?: { force?: boolean }) => {
+      if (!userId) return
+      const cached = getCachedTradingAccountsSettings(userId)
+      if (cached && !options?.force) {
+        setAccounts(cached)
+        setLoading(false)
+        return
+      }
+
+      if (!cached) setLoading(true)
+      try {
+        const loaded = await ensureTradingAccountsSettingsLoaded(
+          supabase,
+          userId,
+          options
+        )
+        setAccounts(loaded)
+      } catch (error) {
+        console.error(error)
+        showPopup({ type: "error", message: "Something went wrong" })
+      } finally {
+        setLoading(false)
+      }
+    },
+    [userId, showPopup]
+  )
+
+  function invalidateAccountCaches() {
     if (!userId) return
-    setLoading(true)
-    const { accounts: loaded, error } = await loadTradingAccounts(
-      supabase,
-      userId
-    )
-    setLoading(false)
-    if (error) {
-      console.error(error)
-      showPopup({ type: "error", message: "Something went wrong" })
-      return
-    }
-    setAccounts(loaded)
-  }, [userId, showPopup])
+    invalidateTradingAccountsSettingsCache(userId)
+    invalidateAccountsCache(userId)
+  }
 
   useEffect(() => {
-    void refreshAccounts()
-  }, [refreshAccounts])
+    if (!userId) {
+      setAccounts([])
+      setLoading(false)
+      return
+    }
+
+    const cached = getCachedTradingAccountsSettings(userId)
+    if (cached) {
+      setAccounts(cached)
+      setLoading(false)
+    } else {
+      void refreshAccounts()
+    }
+
+    return subscribeTradingAccountsSettingsCache(() => {
+      const next = getCachedTradingAccountsSettings(userId)
+      if (next) setAccounts(next)
+    })
+  }, [userId, refreshAccounts])
 
   async function handleToggleActive(account: TradingAccountListItem) {
     if (!userId || togglingId) return
@@ -130,6 +179,8 @@ export default function TradingAccountsSettingsSection({
         a.id === account.id ? { ...a, is_active: nextActive } : a
       )
     )
+    invalidateAccountCaches()
+    void refreshAccounts({ force: true })
   }
 
   async function handleCreateAccountSave(newAccount: CreateAccountSavePayload) {
@@ -172,6 +223,8 @@ export default function TradingAccountsSettingsSection({
 
     setAccounts((prev) => [...prev, account])
     setShowCreateModal(false)
+    invalidateAccountCaches()
+    void refreshAccounts({ force: true })
     showPopup({ type: "success", message: "Account created" })
   }
 
@@ -208,7 +261,8 @@ export default function TradingAccountsSettingsSection({
 
     setEditModalAccount(null)
     showPopup({ type: "success", message: "Account updated" })
-    await refreshAccounts()
+    invalidateAccountCaches()
+    await refreshAccounts({ force: true })
   }
 
   async function saveNote(account: TradingAccountListItem) {
@@ -234,6 +288,8 @@ export default function TradingAccountsSettingsSection({
       )
     )
     setNoteEditingAccount(null)
+    invalidateAccountCaches()
+    void refreshAccounts({ force: true })
   }
 
   return (
@@ -285,8 +341,13 @@ export default function TradingAccountsSettingsSection({
                         key={account.id}
                         className="rounded-xl border border-white/10 bg-black/20 p-4"
                       >
-                        <p className="font-medium text-white">
-                          {tradingAccountDisplayTitle(account)}
+                        <p className="flex flex-wrap items-baseline gap-x-1 font-medium text-white">
+                          <span>{tradingAccountDisplayTitle(account)}</span>
+                          {account.account_number?.trim() ? (
+                            <span className="text-sm font-normal text-gray-400">
+                              · ID: {account.account_number.trim()}
+                            </span>
+                          ) : null}
                         </p>
                         <dl className="mt-2 space-y-1 text-sm text-gray-400">
                           <div className="flex gap-2">

@@ -32,6 +32,8 @@ import { clearImageUrlCache } from "./imageUrlCache"
 import { invalidateStoriesSession } from "./storiesSessionCache"
 import { resetRoutePrefetchSession } from "./routePrefetch"
 import { warmAppDataCaches, resetDataPrefetchSession } from "./dataPrefetch"
+import { fetchSettingsProfileRow } from "./settingsProfileSync"
+import { readSettingsProfileCache, writeSettingsProfileCache } from "./settingsProfileCache"
 import { clearAllMessagesInboxSessions } from "./messagesInboxSessionCache"
 import { clearAllRoomSessions } from "./roomSessionCache"
 import {
@@ -40,6 +42,8 @@ import {
   readUserBootstrapProfile,
   writeUserBootstrapProfile,
 } from "./userBootstrapCache"
+import { clearAllSettingsProfileCaches } from "./settingsProfileCache"
+import { clearAllTradingAccountsSettingsCaches } from "./tradingAccountsSettingsCache"
 import { auditLogProfileLoaded } from "./onboardingChecklistAudit"
 
 /**
@@ -47,7 +51,7 @@ import { auditLogProfileLoaded } from "./onboardingChecklistAudit"
  * Avoids duplicate `profiles` reads across Navbar, checklist, and key pages.
  */
 export const USER_PROFILE_SELECT =
-  "id, username, avatar_url, is_pro, subscription_status, is_banned, banned_reason, referral_code, is_beta_tester, onboarding_completed, has_seen_getting_started_intro, has_seen_onboarding_complete_popup, bio, trading_style, trader_type, primary_market, started_trading, max_drawdown_limit, is_private" as const
+  "id, name, username, bio, is_private, avatar_url, trading_style, trading_model, trader_type, primary_market, started_trading, username_change_count, referral_code, referral_count, is_pro, subscription_status, cancel_at_period_end, cancel_at, trial_end, current_period_end, stripe_customer_id, is_banned, banned_reason, is_beta_tester, onboarding_completed, has_seen_getting_started_intro, has_seen_onboarding_complete_popup, max_drawdown_limit" as const
 
 export type UserProfileSlice = {
   id: string
@@ -154,13 +158,8 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
     const userId = user?.id ?? profileRef.current?.id
     if (!userId) return
 
-    const { data: profileData } = await supabase
-      .from("profiles")
-      .select(USER_PROFILE_SELECT)
-      .eq("id", userId)
-      .maybeSingle()
-
-    const picked = pickUserProfileFields(profileData)
+    const row = await fetchSettingsProfileRow(supabase, userId, { force: true })
+    const picked = pickUserProfileFields(row)
     if (picked) {
       setProfileState(picked)
       writeUserBootstrapProfile(userId, picked)
@@ -193,6 +192,8 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
       clearAllMessagesInboxSessions()
       clearAllRoomSessions()
       clearAllUserBootstrapProfiles()
+      clearAllSettingsProfileCaches()
+      clearAllTradingAccountsSettingsCaches()
       if (signedOutUserId) {
         clearUserBootstrapProfile(signedOutUserId)
         clearFeedSessionsForUser(signedOutUserId)
@@ -226,6 +227,12 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
           if (picked) {
             setProfileState(picked)
             writeUserBootstrapProfile(sessionUserId, picked)
+            if (payload.new && typeof payload.new === "object") {
+              writeSettingsProfileCache(
+                sessionUserId,
+                payload.new as Record<string, unknown>
+              )
+            }
           }
         }
       )
@@ -250,11 +257,9 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
         if (!mounted || generation !== loadGeneration) return
 
         if (repair.applied) {
-          const { data: refetched } = await supabase
-            .from("profiles")
-            .select(USER_PROFILE_SELECT)
-            .eq("id", sessionUserId)
-            .maybeSingle()
+          const refetched = await fetchSettingsProfileRow(supabase, sessionUserId, {
+            force: true,
+          })
           if (!mounted || generation !== loadGeneration) return
           const picked = pickUserProfileFields(refetched)
           if (picked) {
@@ -288,9 +293,10 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
         return
       }
 
-      const cachedPicked = pickUserProfileFields(
+      const cachedRow =
+        readSettingsProfileCache(sessionUser.id) ??
         readUserBootstrapProfile(sessionUser.id)
-      )
+      const cachedPicked = pickUserProfileFields(cachedRow)
       if (cachedPicked) {
         setProfileState(cachedPicked)
         setLoading(false)
@@ -310,13 +316,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
 
       warmAppDataCaches(supabase, sessionUser.id)
 
-      const { data: profileData } = await supabase
-        .from("profiles")
-        .select(USER_PROFILE_SELECT)
-        .eq("id", sessionUser.id)
-        .maybeSingle()
-
-      let resolvedProfile = profileData
+      let resolvedProfile = await fetchSettingsProfileRow(supabase, sessionUser.id)
 
       if (!resolvedProfile) {
         const ensureResult = await ensureProfileForUser(supabase, {
@@ -327,14 +327,15 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
         })
 
         if (ensureResult.ok) {
-          const { data: refetched } = await supabase
-            .from("profiles")
-            .select(USER_PROFILE_SELECT)
-            .eq("id", sessionUser.id)
-            .maybeSingle()
-          resolvedProfile = refetched
-          if (refetched && isBetaReferralRef(readStoredReferralCode())) {
-            clearBetaReferralAfterApply(refetched.is_beta_tester)
+          resolvedProfile = await fetchSettingsProfileRow(supabase, sessionUser.id, {
+            force: true,
+          })
+          if (resolvedProfile && isBetaReferralRef(readStoredReferralCode())) {
+            clearBetaReferralAfterApply(
+              typeof resolvedProfile.is_beta_tester === "boolean"
+                ? resolvedProfile.is_beta_tester
+                : null
+            )
           }
         } else if (ensureResult.error) {
           console.error("ensureProfileForUser:", ensureResult.error)
@@ -407,17 +408,13 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
       const params = new URLSearchParams(window.location.search)
       if (params.get("checkout") !== "success") return
 
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
+      const { data: { session } } = await supabase.auth.getSession()
       const userId = session?.user?.id
       if (!userId || cancelled) return
 
-      const { data: profileData } = await supabase
-        .from("profiles")
-        .select(USER_PROFILE_SELECT)
-        .eq("id", userId)
-        .single()
+      const profileData = await fetchSettingsProfileRow(supabase, userId, {
+        force: true,
+      })
 
       if (!cancelled && profileData) {
         const picked = pickUserProfileFields(profileData)
