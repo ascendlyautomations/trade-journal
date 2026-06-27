@@ -8,6 +8,12 @@ import {
   type RefObject,
 } from "react"
 import { createPortal } from "react-dom"
+import {
+  ACCOUNT_DROPDOWN_OPTION_CLASS,
+  ACCOUNT_DROPDOWN_OPTION_SELECTED_CLASS,
+  ACCOUNT_DROPDOWN_PORTAL_MENU_CLASS,
+  ACCOUNT_DROPDOWN_TRIGGER_CLASS,
+} from "@/lib/accountDropdownStyles"
 
 interface Option {
   label: string
@@ -25,11 +31,9 @@ interface Props {
   portalContainerRef?: RefObject<HTMLElement | null>
 }
 
-const DEFAULT_TRIGGER_CLASS =
-  "flex w-full cursor-pointer items-center justify-between rounded-xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+const DEFAULT_TRIGGER_CLASS = ACCOUNT_DROPDOWN_TRIGGER_CLASS
 
-const DEFAULT_MENU_CLASS =
-  "fixed z-[1500] overflow-hidden rounded-xl border border-white/10 bg-[#3d4451] shadow-xl"
+const DEFAULT_MENU_CLASS = ACCOUNT_DROPDOWN_PORTAL_MENU_CLASS
 
 type MenuPosition = {
   top: number
@@ -123,8 +127,8 @@ export default function CustomSelect({
                 onChange(opt.value)
                 setOpen(false)
               }}
-              className={`w-full px-4 py-2.5 text-left text-sm text-white focus:outline-none focus:bg-white/10 hover:bg-white/10 ${
-                isSelected ? "bg-white/10 font-medium" : ""
+              className={`${ACCOUNT_DROPDOWN_OPTION_CLASS} ${
+                isSelected ? ACCOUNT_DROPDOWN_OPTION_SELECTED_CLASS : ""
               }`}
             >
               {opt.label}
@@ -147,9 +151,13 @@ export default function CustomSelect({
             setOpen((prev) => !prev)
           }
         }}
-        className={triggerClassName}
+        className={`${triggerClassName} min-w-0 gap-2`}
       >
-        <span className={selected ? "text-white" : "text-gray-400"}>
+        <span
+          className={`min-w-0 flex-1 truncate text-left md:whitespace-normal md:overflow-visible ${
+            selected ? "text-white" : "text-gray-400"
+          }`}
+        >
           {selected?.label ?? placeholder}
         </span>
         <span className="ml-2 shrink-0 text-gray-400">▾</span>

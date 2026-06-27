@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import { ensureAccountsLoaded, ensureTradesLoaded } from "./appDataCache"
 import { fetchSettingsProfileRow } from "./settingsProfileSync"
 import { ensureTradingAccountsSettingsLoaded } from "./tradingAccountsSettingsCache"
+import { ensureNotificationPreferencesLoaded } from "./notificationPreferencesCache"
 
 let warmedUserId: string | null = null
 
@@ -18,6 +19,7 @@ export function warmAppDataCaches(
     ensureAccountsLoaded(supabase, id),
     fetchSettingsProfileRow(supabase, id).catch(() => null),
     ensureTradingAccountsSettingsLoaded(supabase, id).catch(() => []),
+    ensureNotificationPreferencesLoaded(supabase, id).catch(() => null),
   ])
 }
 

@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest"
 import type { User } from "@supabase/supabase-js"
 import {
-  getPasswordManagementMode,
   isGoogleAuthUser,
-  userHasEmailPasswordIdentity,
+  profileHasEmailPasswordFlag,
+  resolveGooglePasswordUiMode,
 } from "./authPasswordManagement"
 
 function mockUser(partial: Partial<User>): User {
@@ -17,47 +17,13 @@ describe("authPasswordManagement", () => {
         mockUser({ app_metadata: { provider: "google", providers: ["google"] } })
       )
     ).toBe(true)
-    expect(
-      isGoogleAuthUser(mockUser({ identities: [{ provider: "google" } as never] }))
-    ).toBe(true)
   })
 
-  it("detects email/password identity", () => {
-    expect(
-      userHasEmailPasswordIdentity(
-        mockUser({ app_metadata: { provider: "email", providers: ["email"] } })
-      )
-    ).toBe(true)
-    expect(
-      userHasEmailPasswordIdentity(
-        mockUser({
-          app_metadata: { provider: "google", providers: ["google", "email"] },
-        })
-      )
-    ).toBe(true)
-  })
-
-  it("uses create mode for Google-only accounts", () => {
-    expect(
-      getPasswordManagementMode(
-        mockUser({ app_metadata: { provider: "google", providers: ["google"] } })
-      )
-    ).toBe("create")
-  })
-
-  it("uses change mode for email accounts and Google accounts with a password", () => {
-    expect(
-      getPasswordManagementMode(
-        mockUser({ app_metadata: { provider: "email", providers: ["email"] } })
-      )
-    ).toBe("change")
-
-    expect(
-      getPasswordManagementMode(
-        mockUser({
-          app_metadata: { provider: "google", providers: ["google", "email"] },
-        })
-      )
-    ).toBe("change")
+  it("uses profiles.has_email_password as Google password UI source of truth", () => {
+    expect(resolveGooglePasswordUiMode(false)).toBe("create")
+    expect(resolveGooglePasswordUiMode(null)).toBe("create")
+    expect(resolveGooglePasswordUiMode(true)).toBe("update")
+    expect(profileHasEmailPasswordFlag(true)).toBe(true)
+    expect(profileHasEmailPasswordFlag(false)).toBe(false)
   })
 })

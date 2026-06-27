@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { parseLeadingCommentMention } from "@/lib/commentReplyUx"
+import type { CommentNotificationKind } from "@/lib/notificationPreferences"
 import { normalizeProfileUsername } from "@/lib/profileUsername"
 
 async function authFetch(
@@ -33,13 +34,17 @@ function targetToApiFields(target: CommentNotificationTarget) {
   if (target.kind === "trade") {
     return { tradeId: target.tradeId }
   }
-  return { profilePostId: target.profilePostId }
+  if (target.kind === "profile_post") {
+    return { profilePostId: target.profilePostId }
+  }
+  return { achievementPostId: target.achievementPostId }
 }
 
 export type CommentNotificationTarget =
   | { kind: "post"; postId: string; tradeId?: string | null }
   | { kind: "trade"; tradeId: string }
   | { kind: "profile_post"; profilePostId: string }
+  | { kind: "achievement_post"; achievementPostId: string }
 
 type CommentNotificationParams = {
   recipientUserId: string
@@ -47,8 +52,8 @@ type CommentNotificationParams = {
   commentId: string
   content: string
   target: CommentNotificationTarget
+  kind?: CommentNotificationKind
 }
-
 
 function dispatchNotificationRefresh() {
   if (typeof window === "undefined") return
@@ -134,7 +139,10 @@ export function buildCommentNotificationInsertPayload(
   if (params.target.kind === "trade") {
     return { ...base, trade_id: params.target.tradeId }
   }
-  return { ...base, profile_post_id: params.target.profilePostId }
+  if (params.target.kind === "profile_post") {
+    return { ...base, profile_post_id: params.target.profilePostId }
+  }
+  return { ...base, achievement_post_id: params.target.achievementPostId }
 }
 
 /** Create exactly one comment notification per recipient for this comment. */
@@ -156,6 +164,7 @@ export async function ensureCommentNotification(
       recipientUserId: params.recipientUserId,
       commentId,
       content: params.content,
+      kind: params.kind ?? "comment",
       ...targetToApiFields(params.target),
     }),
   })
@@ -212,13 +221,51 @@ export async function ensureCommentNotificationsForInsert(
     existingComments: params.existingComments,
   })
 
+  const parentId =
+    params.parentCommentId != null ? String(params.parentCommentId) : ""
+  const ownerId =
+    params.ownerUserId != null ? String(params.ownerUserId).trim() : ""
+  const { username: mentionedUsername } = parseLeadingCommentMention(
+    params.content ?? ""
+  )
+  const mentionedUserId =
+    mentionedUsername && params.existingComments?.length
+      ? String(
+          params.existingComments.find(
+            (c) =>
+              normalizeProfileUsername(
+                (c as { profiles?: { username?: string | null } }).profiles
+                  ?.username ?? ""
+              ) === mentionedUsername
+          )?.user_id ?? ""
+        ).trim()
+      : ""
+
   for (const recipientUserId of recipients) {
+    let kind: CommentNotificationKind = "comment"
+    if (parentId) {
+      const parent = params.existingComments?.find(
+        (c) => String(c.id) === parentId
+      )
+      if (parent && String(parent.user_id) === recipientUserId) {
+        kind = "reply"
+      }
+    }
+    if (
+      mentionedUserId &&
+      recipientUserId === mentionedUserId &&
+      recipientUserId !== ownerId
+    ) {
+      kind = "mention"
+    }
+
     await ensureCommentNotification(supabase, {
       recipientUserId,
       senderUserId: params.senderUserId,
       commentId,
       content: params.content,
       target: params.target,
+      kind,
     })
   }
 }
@@ -262,11 +309,19 @@ export async function deleteLegacyCommentNotification(
     postId?: string | null
     tradeId?: string | null
     profilePostId?: string | null
+    achievementPostId?: string | null
   }
 ): Promise<void> {
   const snippet = params.content.trim().slice(0, 200)
   if (!snippet) return
-  if (!params.postId && !params.tradeId && !params.profilePostId) return
+  if (
+    !params.postId &&
+    !params.tradeId &&
+    !params.profilePostId &&
+    !params.achievementPostId
+  ) {
+    return
+  }
 
   const res = await authFetch(supabase, "/api/notifications/comment", {
     method: "DELETE",
@@ -275,6 +330,7 @@ export async function deleteLegacyCommentNotification(
       postId: params.postId ?? null,
       tradeId: params.tradeId ?? null,
       profilePostId: params.profilePostId ?? null,
+      achievementPostId: params.achievementPostId ?? null,
     }),
   })
 

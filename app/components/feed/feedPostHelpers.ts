@@ -7,8 +7,8 @@ import {
 export { normalizeFeedAccountType, resolveFeedTradeAccountType }
 
 export type FeedScope = "global" | "following"
-export type FeedContentFilter = "all" | "trades" | "posts"
-export type FeedItemKind = "trade" | "profile"
+export type FeedContentFilter = "all" | "trades" | "posts" | "achievements"
+export type FeedItemKind = "trade" | "profile" | "achievement"
 
 export type FeedItem = {
   feedKind: FeedItemKind
@@ -49,6 +49,16 @@ export function normalizeProfileFeedItem(row: Record<string, unknown>): FeedItem
   return {
     ...row,
     feedKind: "profile",
+    id: String(row.id),
+    user_id: String(row.user_id),
+    created_at: String(row.created_at),
+  }
+}
+
+export function normalizeAchievementFeedItem(row: Record<string, unknown>): FeedItem {
+  return {
+    ...row,
+    feedKind: "achievement",
     id: String(row.id),
     user_id: String(row.user_id),
     created_at: String(row.created_at),

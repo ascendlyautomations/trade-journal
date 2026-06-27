@@ -311,6 +311,43 @@ export default function Navbar() {
     setOpenSection(null)
   }
 
+  const notificationBellControl = (
+    iconClassName: string,
+    wrapperClassName = "",
+    badgeClassName = "absolute -right-2 -top-1 min-w-[1.25rem] rounded-full bg-red-500 px-1.5 py-0.5 text-center text-xs tabular-nums text-white"
+  ) => (
+    <div
+      className={`relative shrink-0 cursor-pointer ${wrapperClassName}`.trim()}
+      role="button"
+      tabIndex={0}
+      aria-label="Notifications"
+      onClick={() => {
+        void handleToggleNotifications()
+        setAccountMenuOpen(false)
+        setActiveMenu(null)
+        router.push("/notifications")
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault()
+          void handleToggleNotifications()
+          setAccountMenuOpen(false)
+          setActiveMenu(null)
+          router.push("/notifications")
+        }
+      }}
+    >
+      <div className={`${iconClassName} text-white`} aria-hidden>
+        🔔
+      </div>
+      {unreadCount > 0 ? (
+        <span className={badgeClassName}>
+          {badgeText(unreadCount)}
+        </span>
+      ) : null}
+    </div>
+  )
+
   return (
     <div ref={navRef} className="fixed top-0 left-0 z-[9999] w-full overflow-visible text-gray-100">
       <div className="flex h-16 w-full shrink-0 items-center border-b border-white/5 bg-[#0b1f3a]">
@@ -565,23 +602,32 @@ export default function Navbar() {
               </Link>
             ) : null}
 
-            <button
-              type="button"
-              className="text-2xl leading-none text-white md:hidden px-1 py-1"
-              aria-expanded={isOpen}
-              aria-label={isOpen ? "Close menu" : "Open menu"}
-              onClick={() => {
-                setActiveMenu(null)
-                if (isOpen) {
-                  setOpenSection(null)
-                  setIsOpen(false)
-                } else {
-                  setIsOpen(true)
-                }
-              }}
-            >
-              ☰
-            </button>
+            <div className="flex items-center gap-2.5 md:hidden">
+              {!isHomePage
+                ? notificationBellControl(
+                    "text-xl leading-none",
+                    "inline-flex items-center justify-center px-1 py-1",
+                    "absolute -right-1 -top-0.5 min-w-[1rem] rounded-full bg-red-500 px-1 py-px text-center text-[10px] leading-tight tabular-nums text-white"
+                  )
+                : null}
+              <button
+                type="button"
+                className="text-2xl leading-none text-white px-1 py-1"
+                aria-expanded={isOpen}
+                aria-label={isOpen ? "Close menu" : "Open menu"}
+                onClick={() => {
+                  setActiveMenu(null)
+                  if (isOpen) {
+                    setOpenSection(null)
+                    setIsOpen(false)
+                  } else {
+                    setIsOpen(true)
+                  }
+                }}
+              >
+                ☰
+              </button>
+            </div>
 
             {!isHomePage ? (
               <div className="hidden items-center gap-3 md:flex">
@@ -591,35 +637,7 @@ export default function Navbar() {
                   </Link>
                 ) : null}
 
-                <div
-                  className="relative mr-2 shrink-0 cursor-pointer"
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => {
-                    void handleToggleNotifications()
-                    setAccountMenuOpen(false)
-                    setActiveMenu(null)
-                    router.push("/notifications")
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault()
-                      void handleToggleNotifications()
-                      setAccountMenuOpen(false)
-                      setActiveMenu(null)
-                      router.push("/notifications")
-                    }
-                  }}
-                >
-                  <div className="text-xl text-white" aria-hidden>
-                    🔔
-                  </div>
-                  {unreadCount > 0 ? (
-                    <span className="absolute -right-2 -top-1 min-w-[1.25rem] rounded-full bg-red-500 px-1.5 py-0.5 text-center text-xs tabular-nums text-white">
-                      {badgeText(unreadCount)}
-                    </span>
-                  ) : null}
-                </div>
+                {notificationBellControl("text-xl", "mr-2")}
 
                 {profile?.is_beta_tester ? (
                   <Link

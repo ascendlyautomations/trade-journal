@@ -9,9 +9,17 @@ import ImageLightbox from "@/app/components/ui/ImageLightbox"
 import { PostInteractionsEngagement } from "@/app/components/PostInteractions"
 import { CommentFocusCompactStrip } from "@/app/components/comments/CommentFocusCompactStrip"
 import MobileCommentFocusLayout from "@/app/components/comments/MobileCommentFocusLayout"
+import {
+  achievementFromPost,
+  isAchievementFeedPost,
+} from "@/lib/achievementPostEngagement"
 import { formatSocialTimestamp } from "@/lib/formatRelativeTime"
-import { profilePostPublicUrl } from "@/lib/storagePublicUrl"
+import {
+  achievementImagePublicUrl,
+  profilePostPublicUrl,
+} from "@/lib/storagePublicUrl"
 import { isRoomSharePost } from "@/lib/roomSharePost"
+import FeedAchievementDetailMeta from "./FeedAchievementDetailMeta"
 import FeedCommentsSection from "./FeedCommentsSection"
 import FeedPostHeader from "./FeedPostHeader"
 import FeedRoomShareCard from "./FeedRoomShareCard"
@@ -74,6 +82,23 @@ export default function FeedProfilePostDetailModal({
     }
   }, [openCommentsRef, pid, scrollCommentsIntoView])
 
+  const isAchievement = isAchievementFeedPost(post)
+  const achievement = useMemo(
+    () => (isAchievement ? achievementFromPost(post) : null),
+    [isAchievement, post]
+  )
+  const achievementImageSrc = useMemo(
+    () =>
+      achievement ? achievementImagePublicUrl(achievement.image_url) : null,
+    [achievement]
+  )
+
+  useEffect(() => {
+    if (!achievementImageSrc) return
+    const img = new Image()
+    img.src = achievementImageSrc
+  }, [achievementImageSrc])
+
   const modalPostDetails = useMemo(() => {
     const rawAvatar = post.profiles?.avatar_url
     const avatarUrl =
@@ -94,7 +119,18 @@ export default function FeedProfilePostDetailModal({
     }
   }, [post])
 
-  const splitMedia = isRoomSharePost(post) ? (
+  const splitMedia = isAchievement && achievement ? (
+    achievementImageSrc ? (
+      <DetailModalImage
+        src={achievementImageSrc}
+        onClick={setLightboxUrl}
+      />
+    ) : (
+      <div className="flex h-full w-full items-center justify-center p-6 text-sm text-white/45">
+        No certificate image
+      </div>
+    )
+  ) : isRoomSharePost(post) ? (
     <div className="flex h-full w-full items-center justify-center p-4">
       <FeedRoomShareCard
         post={post}
@@ -125,7 +161,13 @@ export default function FeedProfilePostDetailModal({
           username={modalPostDetails.username}
           avatarUrl={modalPostDetails.avatarUrl}
           timestamp={post.created_at}
-          meta={<span className="text-sky-400/90">Post</span>}
+          meta={
+            isAchievement ? (
+              <span className="text-amber-400/90">Achievement</span>
+            ) : (
+              <span className="text-sky-400/90">Post</span>
+            )
+          }
           onExpand={() => setCommentsFocused(false)}
         />
       }
@@ -142,6 +184,12 @@ export default function FeedProfilePostDetailModal({
         />
       }
       collapsibleContent={
+        isAchievement && achievement ? (
+          <FeedAchievementDetailMeta
+            achievement={achievement}
+            postedAt={post.created_at}
+          />
+        ) : (
         <div className="space-y-3 border-b border-white/10 px-4 py-4 text-sm">
           {modalPostDetails.content ? (
             <p className="whitespace-pre-wrap leading-relaxed text-white">
@@ -150,6 +198,7 @@ export default function FeedProfilePostDetailModal({
           ) : null}
           <p className="text-xs text-white/40">{modalPostDetails.createdAtLabel}</p>
         </div>
+        )
       }
       comments={
         <FeedCommentsSection
@@ -169,15 +218,19 @@ export default function FeedProfilePostDetailModal({
   return (
     <>
       <DetailModalShell
-        ariaLabel="Post details"
-        title="Post"
+        ariaLabel={isAchievement ? "Achievement details" : "Post details"}
+        title={isAchievement ? "Achievement" : "Post"}
         layout="split"
         onClose={onClose}
         splitMedia={splitMedia}
         splitPanel={splitPanel}
         suppressMobileSplitMedia={commentsFocused}
       />
-      <ImageLightbox imageUrl={lightboxUrl} onClose={() => setLightboxUrl(null)} />
+      <ImageLightbox
+        imageUrl={lightboxUrl}
+        onClose={() => setLightboxUrl(null)}
+        alt={achievement?.title ?? "Achievement certificate"}
+      />
     </>
   )
 }

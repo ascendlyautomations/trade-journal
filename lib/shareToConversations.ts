@@ -276,29 +276,45 @@ export async function sendPostToConversations(
     senderId: string
     conversationIds: string[]
     postId: string
-    feedKind?: "trade" | "profile"
+    feedKind?: "trade" | "profile" | "achievement"
     content?: string
   }
 ): Promise<{ error: Error | null }> {
   const caption = opts.content?.trim() ?? ""
-  const isProfilePost = opts.feedKind === "profile"
+  const feedKind = opts.feedKind ?? "trade"
 
   for (const conversationId of opts.conversationIds) {
-    const cardPayload = isProfilePost
-      ? {
-          conversation_id: conversationId,
-          sender_id: opts.senderId,
-          type: "profile_post",
-          profile_post_id: opts.postId,
-          channel: null,
-        }
-      : {
-          conversation_id: conversationId,
-          sender_id: opts.senderId,
-          type: "post",
-          post_id: opts.postId,
-          channel: null,
-        }
+    const cardPayload =
+      feedKind === "profile"
+        ? {
+            conversation_id: conversationId,
+            sender_id: opts.senderId,
+            type: "profile_post",
+            profile_post_id: opts.postId,
+            channel: null,
+          }
+        : feedKind === "achievement"
+          ? {
+              conversation_id: conversationId,
+              sender_id: opts.senderId,
+              type: "achievement_post",
+              achievement_post_id: opts.postId,
+              channel: null,
+            }
+          : {
+              conversation_id: conversationId,
+              sender_id: opts.senderId,
+              type: "post",
+              post_id: opts.postId,
+              channel: null,
+            }
+
+    const cardPreviewType =
+      feedKind === "profile"
+        ? "profile_post"
+        : feedKind === "achievement"
+          ? "achievement_post"
+          : "post"
 
     const { error } = await sendShareCardSequence(supabase, {
       senderId: opts.senderId,
@@ -306,7 +322,7 @@ export async function sendPostToConversations(
       caption,
       logLabel: "sendPostToConversations",
       cardPayload,
-      cardPreview: { type: isProfilePost ? "profile_post" : "post" },
+      cardPreview: { type: cardPreviewType },
     })
     if (error) {
       return { error }

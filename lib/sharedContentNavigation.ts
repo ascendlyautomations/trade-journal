@@ -30,6 +30,37 @@ export function getSharedPostViewHref(post: PostOwnerLike): string {
   return `${base}?${params.toString()}`
 }
 
+/** Profile achievements tab deep-link for shared achievement posts. */
+export function getSharedAchievementViewHref(post: PostOwnerLike): string {
+  const postId = String(post.id ?? "").trim()
+  const ownerId = post.user_id != null ? String(post.user_id).trim() : ""
+
+  const base = profilePath({
+    id: ownerId,
+    username: post.profiles?.username,
+  })
+
+  if (!postId) return `${base}?tab=achievements`
+
+  const params = new URLSearchParams({
+    achievement: postId,
+    tab: "achievements",
+  })
+  return `${base}?${params.toString()}`
+}
+
+export function getSharedContentViewHref(
+  post: PostOwnerLike & {
+    achievements?: unknown
+    achievement_id?: string | null
+  }
+): string {
+  if (post.achievements != null || post.achievement_id) {
+    return getSharedAchievementViewHref(post)
+  }
+  return getSharedPostViewHref(post)
+}
+
 export const SHARED_TRADE_UNAVAILABLE =
   "This trade is no longer available."
 

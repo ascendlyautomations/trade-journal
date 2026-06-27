@@ -2,13 +2,18 @@ const assert = require("node:assert/strict")
 const { describe, it } = require("node:test")
 const {
   buildDailyPnLMap,
+  buildPropfirmEquityCurveData,
+  buildPropfirmEquityEvents,
   computePropfirmAccountMetrics,
   computePropfirmEquityCurveYDomain,
+  computePropfirmEquityCurveYTicks,
   computeConsistencyRule,
   computeDailyMetrics,
+  computePayoutDrawdownFloor,
   computeTrailingDrawdown,
   dedupeTradesById,
   getPropfirmTradingDay,
+  replayPropfirmEquityEvents,
 } = require("./propfirmMetrics.ts")
 
 describe("dedupeTradesById", () => {
@@ -71,6 +76,28 @@ describe("computeTrailingDrawdown", () => {
     assert.equal(result.drawdownFloor, 50000)
     assert.equal(result.currentBalance, 49900)
     assert.equal(result.breachedTrailingDD, true)
+  })
+
+  it("starts from an initial drawdown floor after payout", () => {
+    const trades = [{ id: "1", pnl: 250, created_at: "2024-06-10T10:00:00Z" }]
+    const result = computeTrailingDrawdown(trades, 50250, 1000, {
+      accountBaseBalance: 50000,
+      initialDrawdownFloor: 50000,
+      lockDrawdownFloor: true,
+    })
+    assert.equal(result.currentBalance, 50500)
+    assert.equal(result.drawdownFloor, 50000)
+    assert.equal(result.distanceToDD, 500)
+  })
+
+  it("keeps a trailing floor from before payout when specified", () => {
+    const result = computeTrailingDrawdown([], 50250, 1000, {
+      accountBaseBalance: 50000,
+      initialDrawdownFloor: 49500,
+    })
+    assert.equal(result.currentBalance, 50250)
+    assert.equal(result.drawdownFloor, 49500)
+    assert.equal(result.distanceToDD, 750)
   })
 
   it("uses legacy created_at ordering", () => {
@@ -169,32 +196,190 @@ describe("daily aggregation", () => {
   })
 })
 
+describe("buildPropfirmEquityCurveData", () => {
+  it("steps downward at payout events and preserves prior trade gains", () => {
+    const trades = [
+      {
+        id: "1",
+        trade_date: "2024-06-01",
+        entry_time: null,
+        created_at: "2024-06-01T12:00:00Z",
+        pnl: 2000,
+      },
+      {
+        id: "2",
+        trade_date: "2024-06-10",
+        entry_time: null,
+        created_at: "2024-06-10T12:00:00Z",
+        pnl: 600,
+      },
+      {
+        id: "3",
+        trade_date: "2024-06-12",
+        entry_time: null,
+        created_at: "2024-06-12T12:00:00Z",
+        pnl: 1200,
+      },
+    ]
+    const payouts = [{ endedAt: "2024-06-09T18:00:00.000Z", amount: 1500 }]
+
+    const curve = buildPropfirmEquityCurveData(trades, 50000, payouts)
+    const balances = curve.map((point) => point.balance)
+
+    assert.deepEqual(balances, [50000, 52000, 50500, 51100, 52300])
+    assert.equal(curve[2].pnl, -1500)
+  })
+
+  it("creates multiple downward steps for multiple payouts", () => {
+    const trades = [
+      {
+        id: "1",
+        trade_date: "2024-06-01",
+        entry_time: null,
+        created_at: "2024-06-01T12:00:00Z",
+        pnl: 1000,
+      },
+      {
+        id: "2",
+        trade_date: "2024-06-15",
+        entry_time: null,
+        created_at: "2024-06-15T12:00:00Z",
+        pnl: 800,
+      },
+      {
+        id: "3",
+        trade_date: "2024-06-20",
+        entry_time: null,
+        created_at: "2024-06-20T12:00:00Z",
+        pnl: 500,
+      },
+    ]
+    const payouts = [
+      { endedAt: "2024-06-08T18:00:00.000Z", amount: 500 },
+      { endedAt: "2024-06-18T18:00:00.000Z", amount: 700 },
+    ]
+
+    const curve = buildPropfirmEquityCurveData(trades, 50000, payouts)
+    const payoutSteps = curve.filter((point) => point.pnl < 0)
+
+    assert.equal(payoutSteps.length, 2)
+    assert.equal(payoutSteps[0].balance, 50500)
+    assert.equal(payoutSteps[1].balance, 50600)
+  })
+
+  it("ends at the displayed current account balance after payout cycles", () => {
+    const trades = [
+      {
+        id: "1",
+        trade_date: "2024-06-01",
+        entry_time: null,
+        created_at: "2024-06-01T12:00:00Z",
+        pnl: 1500,
+      },
+      {
+        id: "2",
+        trade_date: "2024-06-10",
+        entry_time: null,
+        created_at: "2024-06-10T12:00:00Z",
+        pnl: 200,
+      },
+    ]
+    const account = {
+      account_size: "50K",
+      max_drawdown: 1000,
+      profit_target: 3000,
+      winning_days: 5,
+    }
+    const payouts = [{ endedAt: "2024-06-09T00:00:00.000Z", amount: 1250 }]
+    const metrics = computePropfirmAccountMetrics(trades, account, {
+      startedAt: "2024-06-09T00:00:00.000Z",
+      cycleStartBalance: 50250,
+      initialDrawdownFloor: 50000,
+      drawdownBehavior: "reset_to_account",
+      cycleNumber: 1,
+    })
+    const curve = buildPropfirmEquityCurveData(
+      trades,
+      metrics.startingBalance,
+      payouts
+    )
+
+    assert.equal(curve[curve.length - 1].balance, metrics.displayCurrentBalance)
+  })
+
+  it("does not emit duplicate consecutive points", () => {
+    const events = buildPropfirmEquityEvents([], [])
+    const curve = replayPropfirmEquityEvents(50000, events)
+
+    assert.deepEqual(curve, [{ date: "Start", balance: 50000, pnl: 0 }])
+  })
+})
+
 describe("computePropfirmEquityCurveYDomain", () => {
-  it("pads plotted balances by 300 when range is at least 150", () => {
-    const domain = computePropfirmEquityCurveYDomain([49300, 51100])
-    assert.deepEqual(domain, [49000, 51400])
+  it("pads plotted balances by 500 when movement is at least 500", () => {
+    const domain = computePropfirmEquityCurveYDomain([48250, 51300])
+    assert.deepEqual(domain, [47750, 51800])
   })
 
   it("pads large-account balances the same way", () => {
     const domain = computePropfirmEquityCurveYDomain([148900, 150800])
-    assert.deepEqual(domain, [148600, 151100])
+    assert.deepEqual(domain, [148400, 151300])
   })
 
-  it("uses smaller padding when the plotted range is very tight", () => {
-    const domain = computePropfirmEquityCurveYDomain([50000, 50100])
-    assert.deepEqual(domain, [49850, 50250])
+  it("centers a 1000 range when equity movement is under 500", () => {
+    const domain = computePropfirmEquityCurveYDomain([50000, 50200])
+    assert.deepEqual(domain, [49600, 50600])
   })
 
   it("includes reference-line values without anchoring to account size", () => {
     const domain = computePropfirmEquityCurveYDomain([49900, 50100], {
       includeValues: [53000, 48000],
     })
-    assert.deepEqual(domain, [47700, 53300])
+    assert.deepEqual(domain, [47500, 53500])
   })
 
-  it("prevents an inverted domain", () => {
+  it("centers a 1000 range for a flat equity line", () => {
     const domain = computePropfirmEquityCurveYDomain([50000])
-    assert.deepEqual(domain, [49850, 50150])
+    assert.deepEqual(domain, [49500, 50500])
+  })
+})
+
+describe("computePayoutDrawdownFloor", () => {
+  it("resets drawdown floor to the account base", () => {
+    const before = computeTrailingDrawdown(
+      [{ id: "1", pnl: 1500, created_at: "2024-06-01T10:00:00Z" }],
+      50000,
+      1000
+    )
+    const floor = computePayoutDrawdownFloor(
+      "reset_to_account",
+      50000,
+      before,
+      1000
+    )
+    assert.equal(floor, 50000)
+  })
+
+  it("keeps the previous trailing floor", () => {
+    const before = computeTrailingDrawdown(
+      [{ id: "1", pnl: 1500, created_at: "2024-06-01T10:00:00Z" }],
+      50000,
+      1000
+    )
+    const floor = computePayoutDrawdownFloor(
+      "keep_trailing",
+      50000,
+      before,
+      1000
+    )
+    assert.equal(floor, before.drawdownFloor)
+  })
+})
+
+describe("computePropfirmEquityCurveYTicks", () => {
+  it("uses rounded 500/1000 steps for typical domains", () => {
+    const ticks = computePropfirmEquityCurveYTicks([47750, 51800])
+    assert.deepEqual(ticks, [47000, 48000, 49000, 50000, 51000, 52000])
   })
 })
 
@@ -225,11 +410,146 @@ describe("computePropfirmAccountMetrics", () => {
 
     const metrics = computePropfirmAccountMetrics(trades, account)
     assert.equal(metrics.startingBalance, 50000)
-    assert.equal(metrics.totalPnL, 75)
-    assert.equal(metrics.dailyMetrics.winningDays, 1)
-    assert.equal(metrics.trailingMetrics.currentBalance, 50075)
-    assert.equal(metrics.consistencyMetrics.ruleActive, true)
-    assert.equal(metrics.progress.status, "IN PROGRESS")
+    assert.equal(metrics.lifetimeTotalPnL, 75)
+    assert.equal(metrics.cyclePnL, 75)
+    assert.equal(metrics.cycleDailyMetrics.winningDays, 1)
+    assert.equal(metrics.lifetimeTrailingMetrics.currentBalance, 50075)
+    assert.equal(metrics.cycleTrailingMetrics.currentBalance, 50075)
+    assert.equal(metrics.cycleConsistencyMetrics.ruleActive, true)
+    assert.equal(metrics.cycleProgress.status, "IN PROGRESS")
+  })
+
+  it("resets payout-cycle metrics after a recorded payout boundary", () => {
+    const trades = [
+      {
+        id: "1",
+        trade_date: "2024-06-01",
+        entry_time: null,
+        created_at: "2024-06-01T12:00:00Z",
+        pnl: 3000,
+      },
+      {
+        id: "2",
+        trade_date: "2024-06-05",
+        entry_time: null,
+        created_at: "2024-06-05T12:00:00Z",
+        pnl: 500,
+      },
+      {
+        id: "3",
+        trade_date: "2024-06-06",
+        entry_time: null,
+        created_at: "2024-06-06T12:00:00Z",
+        pnl: 200,
+      },
+    ]
+    const account = {
+      account_size: "50K",
+      consistency: 50,
+      max_drawdown: 2000,
+      profit_target: 3000,
+      winning_days: 5,
+    }
+
+    const lifetime = computePropfirmAccountMetrics(trades, account)
+    assert.equal(lifetime.lifetimeTotalPnL, 3700)
+    assert.equal(lifetime.lifetimeTrailingMetrics.currentBalance, 53700)
+    assert.equal(lifetime.cycleDailyMetrics.winningDays, 3)
+
+    const afterPayout = computePropfirmAccountMetrics(trades, account, {
+      startedAt: "2024-06-05T00:00:00.000Z",
+      cycleStartBalance: 53000,
+    })
+
+    assert.equal(afterPayout.lifetimeTotalPnL, 3700)
+    assert.equal(afterPayout.lifetimeTrailingMetrics.currentBalance, 53700)
+    assert.equal(afterPayout.displayCurrentBalance, 53700)
+    assert.equal(afterPayout.cyclePnL, 700)
+    assert.equal(afterPayout.cycleDailyMetrics.winningDays, 2)
+    assert.equal(afterPayout.cycleProgress.status, "IN PROGRESS")
+    assert.equal(afterPayout.cycleProgress.progressPercent, (700 / 3000) * 100)
+  })
+
+  it("resets winning days to zero immediately after payout timestamp", () => {
+    const trades = [
+      {
+        id: "1",
+        trade_date: "2024-06-05",
+        entry_time: "2024-06-05T10:00:00Z",
+        created_at: "2024-06-05T10:00:00Z",
+        pnl: 500,
+      },
+      {
+        id: "2",
+        trade_date: "2024-06-05",
+        entry_time: "2024-06-05T15:00:00Z",
+        created_at: "2024-06-05T15:00:00Z",
+        pnl: 300,
+      },
+    ]
+    const account = {
+      account_size: "50K",
+      max_drawdown: 2000,
+      profit_target: 3000,
+      winning_days: 5,
+    }
+
+    const beforePayout = computePropfirmAccountMetrics(trades, account)
+    assert.equal(beforePayout.cycleDailyMetrics.winningDays, 1)
+
+    const afterPayout = computePropfirmAccountMetrics(trades, account, {
+      startedAt: "2024-06-05T16:00:00.000Z",
+      cycleStartBalance: 50800,
+    })
+
+    assert.equal(afterPayout.lifetimeTotalPnL, 800)
+    assert.equal(afterPayout.cycleDailyMetrics.winningDays, 0)
+    assert.equal(afterPayout.cyclePnL, 0)
+    assert.equal(afterPayout.displayCurrentBalance, 50800)
+    assert.equal(afterPayout.lifetimeTrailingMetrics.currentBalance, 50800)
+  })
+
+  it("uses post-payout balance anchor and drawdown floor for the active cycle", () => {
+    const trades = [
+      {
+        id: "1",
+        trade_date: "2024-06-01",
+        entry_time: null,
+        created_at: "2024-06-01T12:00:00Z",
+        pnl: 1500,
+      },
+      {
+        id: "2",
+        trade_date: "2024-06-10",
+        entry_time: null,
+        created_at: "2024-06-10T12:00:00Z",
+        pnl: 200,
+      },
+    ]
+    const account = {
+      account_size: "50K",
+      max_drawdown: 1000,
+      profit_target: 3000,
+      winning_days: 5,
+    }
+
+    const lifetime = computePropfirmAccountMetrics(trades, account)
+    assert.equal(lifetime.lifetimeTotalPnL, 1700)
+    assert.equal(lifetime.lifetimeTrailingMetrics.currentBalance, 51700)
+
+    const afterPayout = computePropfirmAccountMetrics(trades, account, {
+      startedAt: "2024-06-09T00:00:00.000Z",
+      cycleStartBalance: 50250,
+      initialDrawdownFloor: 50000,
+      drawdownBehavior: "reset_to_account",
+      cycleNumber: 1,
+    })
+
+    assert.equal(afterPayout.lifetimeTotalPnL, 1700)
+    assert.equal(afterPayout.displayCurrentBalance, 50450)
+    assert.equal(afterPayout.cycleTrailingMetrics.drawdownFloor, 50000)
+    assert.equal(afterPayout.cycleTrailingMetrics.distanceToDD, 450)
+    assert.equal(afterPayout.cyclePnL, 200)
   })
 })
 

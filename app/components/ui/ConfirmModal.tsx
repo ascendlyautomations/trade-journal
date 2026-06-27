@@ -9,6 +9,7 @@ export type ConfirmModalProps = {
   confirmLabel?: string
   cancelLabel?: string
   loading?: boolean
+  loadingLabel?: string
   destructive?: boolean
   onCancel: () => void
   onConfirm: () => void | Promise<void>
@@ -22,6 +23,7 @@ export default function ConfirmModal({
   confirmLabel = "Confirm",
   cancelLabel = "Cancel",
   loading = false,
+  loadingLabel = "Please wait…",
   destructive = false,
   onCancel,
   onConfirm,
@@ -52,7 +54,7 @@ export default function ConfirmModal({
                 : "bg-blue-600 hover:bg-blue-500"
             }`}
           >
-            {loading ? "Deleting…" : confirmLabel}
+            {loading ? loadingLabel : confirmLabel}
           </button>
         </div>
       }

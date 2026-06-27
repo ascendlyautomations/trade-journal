@@ -162,7 +162,24 @@ export function mapPasswordUpdateError(error: unknown): string {
     return "Choose a different password than your current one."
   }
 
+  if (
+    lower.includes("weak") ||
+    lower.includes("too short") ||
+    lower.includes("at least")
+  ) {
+    return `Password must be at least ${PASSWORD_MIN_LENGTH} characters.`
+  }
+
   return "Could not update your password. Please try again or request a new reset link."
+}
+
+/** In-app password create/change (signed-in user) — no reset-email wording. */
+export function mapInAppPasswordUpdateError(error: unknown): string {
+  const message = mapPasswordUpdateError(error)
+  if (message.includes("reset link")) {
+    return "Could not save your password. Please try again."
+  }
+  return message
 }
 
 export const PASSWORD_MIN_LENGTH = 6

@@ -203,19 +203,29 @@ function FeedCommentsSection({
   ) : null
 
   if (listScrollRef) {
+    const hasComments = comments.length > 0
+
     return (
       <div
-        className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4 pt-3"
+        className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-4 pt-2"
         onClick={stopPropagation}
         onKeyDown={stopPropagation}
       >
         <div
           ref={listScrollRef}
-          className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
+          className={
+            hasComments
+              ? "min-h-0 flex-1 overflow-y-auto overscroll-contain"
+              : "shrink-0"
+          }
         >
-          {commentList}
+          {hasComments ? (
+            commentList
+          ) : (
+            <p className="text-sm text-white/40">No comments yet.</p>
+          )}
         </div>
-        {composer ? <div className="shrink-0 pt-3">{composer}</div> : null}
+        {composer ? <div className="shrink-0 pt-2">{composer}</div> : null}
         {deleteModal}
       </div>
     )

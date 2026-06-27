@@ -26,6 +26,13 @@ export function tradeScreenshotPublicUrl(
   return supabaseStoragePublicUrl("screenshots", imageUrl)
 }
 
+/** Achievement certificate images (`screenshots` bucket). */
+export function achievementImagePublicUrl(
+  imageUrl: string | null | undefined
+): string | null {
+  return supabaseStoragePublicUrl("screenshots", imageUrl)
+}
+
 /** Profile wall / post images (`profile_posts`). */
 export function profilePostPublicUrl(
   imageUrl: string | null | undefined

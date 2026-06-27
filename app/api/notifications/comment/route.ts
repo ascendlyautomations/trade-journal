@@ -1,9 +1,12 @@
 import { getRouteUser, supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
+import { isServerCommentNotificationAllowed } from "@/lib/serverNotificationPreferences"
+import type { CommentNotificationKind } from "@/lib/notificationPreferences"
 
 type CommentTargetBody = {
   postId?: string | null
   tradeId?: string | null
   profilePostId?: string | null
+  achievementPostId?: string | null
 }
 
 async function commentAuthoredByUser(
@@ -14,6 +17,7 @@ async function commentAuthoredByUser(
     { table: "comments" as const, column: "id" },
     { table: "trade_comments" as const, column: "id" },
     { table: "profile_post_comments" as const, column: "id" },
+    { table: "achievement_post_comments" as const, column: "id" },
   ]
 
   for (const { table } of tables) {
@@ -47,6 +51,8 @@ export async function POST(req: Request) {
     postId?: string | null
     tradeId?: string | null
     profilePostId?: string | null
+    achievementPostId?: string | null
+    kind?: CommentNotificationKind
   }
   try {
     body = (await req.json()) as typeof body
@@ -67,6 +73,17 @@ export async function POST(req: Request) {
     return Response.json({ error: "Comment not found" }, { status: 404 })
   }
 
+  const isAchievement = Boolean(body.achievementPostId)
+  const kind: CommentNotificationKind = body.kind ?? "comment"
+  const allowed = await isServerCommentNotificationAllowed(
+    recipientUserId,
+    kind,
+    isAchievement
+  )
+  if (!allowed) {
+    return Response.json({ ok: true, skipped: true })
+  }
+
   const insertRow: Record<string, unknown> = {
     user_id: recipientUserId,
     sender_id: user.id,
@@ -77,6 +94,8 @@ export async function POST(req: Request) {
 
   if (body.profilePostId) {
     insertRow.profile_post_id = body.profilePostId
+  } else if (body.achievementPostId) {
+    insertRow.achievement_post_id = body.achievementPostId
   } else if (body.postId) {
     insertRow.post_id = body.postId
     if (body.tradeId) insertRow.trade_id = body.tradeId
@@ -123,6 +142,7 @@ export async function DELETE(req: Request) {
     postId?: string | null
     tradeId?: string | null
     profilePostId?: string | null
+    achievementPostId?: string | null
   }
   try {
     body = (await req.json()) as typeof body
@@ -136,9 +156,14 @@ export async function DELETE(req: Request) {
     postId: body.postId,
     tradeId: body.tradeId,
     profilePostId: body.profilePostId,
+    achievementPostId: body.achievementPostId,
   }
   const hasLegacyTarget = Boolean(
-    snippet && (target.postId || target.tradeId || target.profilePostId)
+    snippet &&
+      (target.postId ||
+        target.tradeId ||
+        target.profilePostId ||
+        target.achievementPostId)
   )
 
   if (!commentId && !hasLegacyTarget) {
@@ -170,6 +195,8 @@ export async function DELETE(req: Request) {
 
     if (target.profilePostId) {
       legacyQuery = legacyQuery.eq("profile_post_id", target.profilePostId)
+    } else if (target.achievementPostId) {
+      legacyQuery = legacyQuery.eq("achievement_post_id", target.achievementPostId)
     } else if (target.postId) {
       legacyQuery = legacyQuery.eq("post_id", target.postId)
     } else if (target.tradeId) {

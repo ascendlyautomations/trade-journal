@@ -28,6 +28,14 @@ export type ProfilePostCommentRow = {
   parent_comment_id?: string | null
 }
 
+export type AchievementPostCommentRow = {
+  id: string
+  user_id: string
+  content?: string | null
+  achievement_post_id?: string | null
+  parent_comment_id?: string | null
+}
+
 const LOG_PREFIX = "[comment-delete]"
 
 function logDeleteStep(step: string, details?: Record<string, unknown>) {
@@ -88,6 +96,7 @@ async function cleanupCommentNotifications(
     postId?: string | null
     tradeId?: string | null
     profilePostId?: string | null
+    achievementPostId?: string | null
   }
 ) {
   await deleteCommentNotificationByCommentId(
@@ -102,6 +111,7 @@ async function cleanupCommentNotifications(
     postId: params.postId,
     tradeId: params.tradeId,
     profilePostId: params.profilePostId,
+    achievementPostId: params.achievementPostId,
   })
 }
 
@@ -173,6 +183,81 @@ export async function deleteProfilePostComment(
     content: String(comment.content ?? ""),
     profilePostId:
       comment.profile_post_id != null ? String(comment.profile_post_id) : null,
+  })
+
+  return { error: null, deleted: true as const }
+}
+
+function noAchievementPostRowDeletedError(): PostgrestError {
+  return {
+    name: "CommentDeleteError",
+    message:
+      "Achievement post comment was not deleted. Ensure the achievement_post_comments DELETE policy and grant are applied in Supabase.",
+    code: "PGRST116",
+    details: "No rows deleted — likely missing RLS DELETE policy or DELETE grant.",
+    hint: "Apply migration 20260626150000_achievement_posts_social.sql",
+  } as PostgrestError
+}
+
+export async function deleteAchievementPostComment(
+  supabase: SupabaseClient,
+  comment: AchievementPostCommentRow
+) {
+  const commentId = String(comment.id)
+  const userId = String(comment.user_id)
+
+  logDeleteStep("supabase delete starting", {
+    table: "achievement_post_comments",
+    commentId,
+    userId,
+    achievementPostId: comment.achievement_post_id ?? null,
+  })
+
+  const { data, error } = await supabase
+    .from("achievement_post_comments")
+    .delete()
+    .eq("id", commentId)
+    .eq("user_id", userId)
+    .select("id")
+    .maybeSingle()
+
+  logDeleteStep("supabase delete result", {
+    table: "achievement_post_comments",
+    commentId,
+    userId,
+    deletedId: data?.id ?? null,
+    error: error ?? null,
+  })
+
+  if (error) {
+    logDeleteError("supabase delete failed", {
+      table: "achievement_post_comments",
+      commentId,
+      userId,
+      error,
+    })
+    return { error, deleted: false as const }
+  }
+
+  if (!data) {
+    const blocked = noAchievementPostRowDeletedError()
+    logDeleteError("supabase delete returned no row", {
+      table: "achievement_post_comments",
+      commentId,
+      userId,
+      hint: blocked.hint,
+    })
+    return { error: blocked, deleted: false as const }
+  }
+
+  await cleanupCommentNotifications(supabase, {
+    commentId,
+    senderId: userId,
+    content: String(comment.content ?? ""),
+    achievementPostId:
+      comment.achievement_post_id != null
+        ? String(comment.achievement_post_id)
+        : null,
   })
 
   return { error: null, deleted: true as const }

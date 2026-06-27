@@ -8,7 +8,7 @@ import {
 } from "@/lib/settingsProfileCache"
 
 export const APP_PROFILE_SELECT =
-  "id, name, username, bio, is_private, avatar_url, trading_style, trading_model, trader_type, primary_market, started_trading, username_change_count, referral_code, referral_count, is_pro, subscription_status, cancel_at_period_end, cancel_at, trial_end, current_period_end, stripe_customer_id, is_banned, banned_reason, is_beta_tester, onboarding_completed, has_seen_getting_started_intro, has_seen_onboarding_complete_popup, max_drawdown_limit" as const
+  "id, name, username, bio, is_private, avatar_url, trading_style, trading_model, trader_type, primary_market, started_trading, username_change_count, referral_code, referral_count, is_pro, subscription_status, cancel_at_period_end, cancel_at, trial_end, current_period_end, stripe_customer_id, is_banned, banned_reason, is_beta_tester, onboarding_completed, has_seen_getting_started_intro, has_seen_onboarding_complete_popup, max_drawdown_limit, has_email_password" as const
 
 /** @deprecated Use APP_PROFILE_SELECT — kept for imports that expect this name. */
 export const SETTINGS_PROFILE_SELECT = APP_PROFILE_SELECT
@@ -168,5 +168,9 @@ export function settingsSaveToSharedSlice(
       profile?.subscription_status != null
         ? String(profile.subscription_status)
         : shared.subscription_status,
+    has_email_password:
+      typeof profile?.has_email_password === "boolean"
+        ? profile.has_email_password
+        : shared.has_email_password,
   }
 }

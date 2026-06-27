@@ -48,7 +48,8 @@ function FeedPostOverlays({
   return (
     <>
       {selectedPost && selectedPostId ? (
-        selectedPost.feedKind === "profile" ? (
+        selectedPost.feedKind === "profile" ||
+        selectedPost.feedKind === "achievement" ? (
           <FeedProfilePostDetailModal
             key={selectedPostId}
             post={selectedPost}
@@ -92,7 +93,13 @@ function FeedPostOverlays({
           onClose={onCloseShareOverlay}
           title="Send Post"
           postId={String(sharePost.id)}
-          feedKind={sharePost.feedKind === "profile" ? "profile" : "trade"}
+          feedKind={
+            sharePost.feedKind === "profile"
+              ? "profile"
+              : sharePost.feedKind === "achievement"
+                ? "achievement"
+                : "trade"
+          }
           post={sharePost}
           captionPlaceholder="Add a message..."
           showCancel={false}

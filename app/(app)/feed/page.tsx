@@ -10,6 +10,7 @@ import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import {
   deleteFeedComment,
   deleteProfilePostComment,
+  deleteAchievementPostComment,
   filterCommentsAfterDelete,
 } from "@/lib/deleteComment"
 import {
@@ -17,6 +18,17 @@ import {
   ensureLikeNotification,
 } from "@/lib/likeNotifications"
 import { ensureCommentNotificationsForInsert } from "@/lib/commentNotifications"
+import {
+  ACHIEVEMENT_POST_COMMENT_INSERT_SELECT,
+  FEED_ACHIEVEMENT_POSTS_SELECT,
+  achievementPostOwnerUserId,
+  fetchAchievementPostById,
+  insertAchievementPostCommentNotifications,
+  insertAchievementPostLikeNotification,
+  isAchievementFeedPost,
+  queryAchievementPostComments,
+  withInsertedAchievementPostParentCommentId,
+} from "@/lib/achievementPostEngagement"
 import {
   PROFILE_POST_COMMENT_INSERT_SELECT,
   insertProfilePostCommentNotifications,
@@ -41,6 +53,7 @@ import {
   FEED_COMMENT_INSERT_SELECT,
   FEED_POSTS_SELECT,
   buildFeedPostsIndex,
+  normalizeAchievementFeedItem,
   normalizeProfileFeedItem,
   normalizeTradeFeedItem,
   postTradeOwnerUserId,
@@ -61,6 +74,7 @@ import {
   fetchFollowingIds,
   fetchProfileFeedBatch,
   fetchTradeFeedBatch,
+  fetchAchievementFeedBatch,
   topUpMergedFeedBuffer,
 } from "@/lib/feedContent"
 import {
@@ -197,6 +211,7 @@ function FeedPageContent() {
 
   const draftSyncRef = useRef<Record<string, string>>({})
   const openCommentsRef = useRef<Record<string, boolean>>({})
+  const feedDeepLinkHandledRef = useRef<string | null>(null)
   const likeBusyRef = useRef<Set<string>>(new Set())
   const commentSubmittingRef = useRef<Set<string>>(new Set())
   const postingStoryRef = useRef(false)
@@ -532,10 +547,13 @@ function FeedPageContent() {
     }
 
     const tradeIds = postList
-      .filter((p) => !isProfileFeedPost(p))
+      .filter((p) => !isProfileFeedPost(p) && !isAchievementFeedPost(p))
       .map((p) => p.id)
     const profileIds = postList
       .filter((p) => isProfileFeedPost(p))
+      .map((p) => p.id)
+    const achievementIds = postList
+      .filter((p) => isAchievementFeedPost(p))
       .map((p) => p.id)
 
     const [
@@ -543,6 +561,8 @@ function FeedPageContent() {
       { data: tradeCommentsRows },
       { data: profileLikesRows },
       { data: profileCommentsRows },
+      { data: achievementLikesRows },
+      { data: achievementCommentsRows },
     ] = await Promise.all([
       tradeIds.length
         ? supabase.from("likes").select("post_id, user_id").in("post_id", tradeIds)
@@ -571,6 +591,23 @@ function FeedPageContent() {
               .order("created_at", { ascending: true })
           )
         : Promise.resolve({ data: [] as any[] }),
+      achievementIds.length
+        ? supabase
+            .from("achievement_post_likes")
+            .select("achievement_post_id, user_id")
+            .in("achievement_post_id", achievementIds)
+        : Promise.resolve({
+            data: [] as { achievement_post_id: string; user_id: string }[],
+          }),
+      achievementIds.length
+        ? queryAchievementPostComments((select) =>
+            supabase
+              .from("achievement_post_comments")
+              .select(select)
+              .in("achievement_post_id", achievementIds)
+              .order("created_at", { ascending: true })
+          )
+        : Promise.resolve({ data: [] as any[] }),
     ])
 
     const likesMap: Record<string, LikeMeta> = {}
@@ -593,6 +630,12 @@ function FeedPageContent() {
       likesMap[pid].count++
       if (currentUser && row.user_id === currentUser.id) likesMap[pid].liked = true
     }
+    for (const row of achievementLikesRows || []) {
+      const pid = String(row.achievement_post_id)
+      if (!likesMap[pid]) likesMap[pid] = { count: 0, liked: false }
+      likesMap[pid].count++
+      if (currentUser && row.user_id === currentUser.id) likesMap[pid].liked = true
+    }
 
     for (const c of tradeCommentsRows || []) {
       const pid = String(c.post_id)
@@ -601,6 +644,11 @@ function FeedPageContent() {
     }
     for (const c of profileCommentsRows || []) {
       const pid = String(c.profile_post_id)
+      if (!commentsMap[pid]) commentsMap[pid] = []
+      commentsMap[pid].push(c)
+    }
+    for (const c of achievementCommentsRows || []) {
+      const pid = String(c.achievement_post_id)
       if (!commentsMap[pid]) commentsMap[pid] = []
       commentsMap[pid].push(c)
     }
@@ -707,8 +755,32 @@ function FeedPageContent() {
             hasMoreRef.current = false
             setHasMore(false)
           }
-        } else {
+        } else if (contentType === "posts") {
           const result = await fetchProfileFeedBatch(supabase, {
+            scope: mode,
+            userId,
+            followingIds,
+            page: currentPage,
+            pageSize: FEED_PAGE_SIZE,
+          })
+
+          if (result.emptyFollowing && currentPage === 0) {
+            hasMoreRef.current = false
+            setHasMore(false)
+            setFeedEmptyState("following_nobody")
+            loadingRef.current = false
+            setLoading(false)
+            return
+          }
+
+          list = result.items
+
+          if (list.length < FEED_PAGE_SIZE) {
+            hasMoreRef.current = false
+            setHasMore(false)
+          }
+        } else if (contentType === "achievements") {
+          const result = await fetchAchievementFeedBatch(supabase, {
             scope: mode,
             userId,
             followingIds,
@@ -866,7 +938,7 @@ function FeedPageContent() {
 
   useEffect(() => {
     if (!user?.id) return
-    if (contentType === "profiles") return
+    if (contentType !== "all" && contentType !== "trades") return
 
     const userId = user.id
     const channel = supabase.channel(`feed-trade-posts-${userId}`)
@@ -931,7 +1003,7 @@ function FeedPageContent() {
 
   useEffect(() => {
     if (!user?.id) return
-    if (contentType === "trades") return
+    if (contentType !== "all" && contentType !== "posts") return
 
     const userId = user.id
     const channel = supabase.channel(`feed-profile-posts-${userId}`)
@@ -962,6 +1034,72 @@ function FeedPageContent() {
         if (!data) return
 
         const item = normalizeProfileFeedItem(data as Record<string, unknown>)
+        const { enriched, likesMap, commentsMap } = await loadEngagementForPosts(
+          [item],
+          { id: userId }
+        )
+        const post = enriched[0]
+        if (!post) return
+
+        setPosts((prev) => {
+          if (prev.some((p) => String(p.id) === String(post.id))) return prev
+          const next = [post, ...prev]
+          const mergedLikes = {
+            ...likesByPostRef.current,
+            ...likesMap,
+          }
+          const mergedComments = {
+            ...commentsByPostRef.current,
+            ...commentsMap,
+          }
+          persistFeedSnapshot(next, mergedLikes, mergedComments)
+          setLikesByPost(mergedLikes)
+          setCommentsByPost(mergedComments)
+          return next
+        })
+      }
+    )
+
+    channel.subscribe()
+    return () => {
+      void supabase.removeChannel(channel)
+    }
+  }, [user?.id, mode, contentType, loadEngagementForPosts, persistFeedSnapshot])
+
+  useEffect(() => {
+    if (!user?.id) return
+    if (contentType !== "achievements") return
+
+    const userId = user.id
+    const channel = supabase.channel(`feed-achievement-posts-${userId}`)
+
+    channel.on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "achievement_posts" },
+      async (payload) => {
+        const row = payload.new as Record<string, unknown>
+        const authorId = String(row.user_id ?? "")
+        if (!authorId || authorId === userId) return
+        if (mode === "following" && !followingIdsRef.current.includes(authorId)) {
+          return
+        }
+        if (
+          mode === "global" &&
+          followingIdsRef.current.includes(authorId)
+        ) {
+          return
+        }
+
+        const { data } = await supabase
+          .from("achievement_posts")
+          .select(FEED_ACHIEVEMENT_POSTS_SELECT)
+          .eq("id", String(row.id))
+          .eq("achievements.is_public", true)
+          .maybeSingle()
+
+        if (!data) return
+
+        const item = normalizeAchievementFeedItem(data as Record<string, unknown>)
         const { enriched, likesMap, commentsMap } = await loadEngagementForPosts(
           [item],
           { id: userId }
@@ -1041,6 +1179,7 @@ function FeedPageContent() {
 
       const pid = String(post.id)
       const isProfile = isProfileFeedPost(post)
+      const isAchievement = isAchievementFeedPost(post)
       if (likeBusyRef.current.has(pid)) return
 
       likeBusyRef.current.add(pid)
@@ -1052,7 +1191,9 @@ function FeedPageContent() {
       if (meta.liked) {
         const ownerId = isProfile
           ? profilePostOwnerUserId(post)
-          : postTradeOwnerUserId(post)
+          : isAchievement
+            ? achievementPostOwnerUserId(post)
+            : postTradeOwnerUserId(post)
 
         const { error } = isProfile
           ? await supabase
@@ -1060,11 +1201,17 @@ function FeedPageContent() {
               .delete()
               .eq("profile_post_id", pid)
               .eq("user_id", user.id)
-          : await supabase
-              .from("likes")
-              .delete()
-              .eq("post_id", pid)
-              .eq("user_id", user.id)
+          : isAchievement
+            ? await supabase
+                .from("achievement_post_likes")
+                .delete()
+                .eq("achievement_post_id", pid)
+                .eq("user_id", user.id)
+            : await supabase
+                .from("likes")
+                .delete()
+                .eq("post_id", pid)
+                .eq("user_id", user.id)
 
         if (error) {
           console.error("Unlike error:", error)
@@ -1077,7 +1224,9 @@ function FeedPageContent() {
             senderUserId: user.id,
             target: isProfile
               ? { kind: "profile_post", profilePostId: pid }
-              : { kind: "post", postId: pid, tradeId: post.trade_id ?? null },
+              : isAchievement
+                ? { kind: "achievement_post", achievementPostId: pid }
+                : { kind: "post", postId: pid, tradeId: post.trade_id ?? null },
           })
         }
 
@@ -1119,6 +1268,43 @@ function FeedPageContent() {
             recipientUserId: ownerId,
             senderUserId: user.id,
             target: { kind: "profile_post", profilePostId: pid },
+          })
+        }
+      } else if (isAchievement) {
+        const likePayload = {
+          achievement_post_id: pid,
+          user_id: user.id,
+        }
+        const { error } = await supabase
+          .from("achievement_post_likes")
+          .insert(likePayload)
+
+        if (error) {
+          console.error("[achievement-post-like] insert failed", {
+            userId: user.id,
+            achievementPostId: pid,
+            payload: likePayload,
+            supabaseError: {
+              code: error.code,
+              message: error.message,
+              details: error.details,
+              hint: error.hint,
+            },
+          })
+          return
+        }
+
+        setLikesByPost((prev) => ({
+          ...prev,
+          [pid]: { count: meta.count + 1, liked: true },
+        }))
+
+        const ownerId = achievementPostOwnerUserId(post)
+        if (ownerId) {
+          await insertAchievementPostLikeNotification(supabase, {
+            achievementPostId: pid,
+            ownerUserId: ownerId,
+            senderUserId: user.id,
           })
         }
       } else {
@@ -1182,6 +1368,7 @@ function FeedPageContent() {
 
       try {
       const isProfile = isProfileFeedPost(post)
+      const isAchievement = isAchievementFeedPost(post)
       const existingComments = commentsByPost[pid] ?? EMPTY_COMMENTS
 
       if (isProfile) {
@@ -1238,6 +1425,72 @@ function FeedPageContent() {
         if (ownerId) {
           await insertProfilePostCommentNotifications(supabase, {
             profilePostId: pid,
+            commentId: String(insertedRow.id),
+            ownerUserId: ownerId,
+            senderUserId: user.id,
+            content: trimmed,
+            parentCommentId,
+            existingComments,
+          })
+        }
+
+        return true
+      }
+
+      if (isAchievement) {
+        const insertPayload: Record<string, unknown> = {
+          achievement_post_id: pid,
+          user_id: user.id,
+          content: trimmed,
+        }
+        if (parentCommentId) {
+          insertPayload.parent_comment_id = parentCommentId
+        }
+
+        const { data: newRow, error } = await supabase
+          .from("achievement_post_comments")
+          .insert(insertPayload)
+          .select(ACHIEVEMENT_POST_COMMENT_INSERT_SELECT)
+          .single()
+
+        if (error) {
+          console.error("[achievement-post-comment] insert failed", {
+            userId: user.id,
+            achievementPostId: pid,
+            commentText: trimmed,
+            parentCommentId: parentCommentId ?? null,
+            payload: insertPayload,
+            supabaseError: {
+              code: error.code,
+              message: error.message,
+              details: error.details,
+              hint: error.hint,
+            },
+          })
+          showPopup({ type: "error", message: handleSupabaseError(error) })
+          return false
+        }
+
+        const insertedRow = withInsertedAchievementPostParentCommentId(
+          newRow,
+          parentCommentId
+        )
+
+        setCommentsByPost((prev) => {
+          const currentComments = prev[pid] ?? EMPTY_COMMENTS
+          const nextComments = currentComments.some((c: any) => c.id === insertedRow.id)
+            ? currentComments
+            : [...currentComments, insertedRow]
+          return {
+            ...prev,
+            [pid]: nextComments,
+          }
+        })
+
+        const ownerId = achievementPostOwnerUserId(post)
+        if (ownerId) {
+          await insertAchievementPostCommentNotifications(supabase, {
+            achievementPostId: pid,
             commentId: String(insertedRow.id),
             ownerUserId: ownerId,
             senderUserId: user.id,
@@ -1355,6 +1608,37 @@ function FeedPageContent() {
         return true
       }
 
+      const achievementPostId = String(comment.achievement_post_id ?? "")
+      if (achievementPostId) {
+        const { error, deleted } = await deleteAchievementPostComment(supabase, {
+          id: String(comment.id),
+          user_id: user.id,
+          content: comment.content,
+          achievement_post_id: achievementPostId,
+        })
+
+        if (error || !deleted) {
+          console.error("[comment-delete] failed", {
+            commentId: String(comment.id),
+            userId: user.id,
+            achievementPostId,
+            error,
+          })
+          showPopup({ type: "error", message: handleSupabaseError(error) })
+          return false
+        }
+
+        setCommentsByPost((prev) => ({
+          ...prev,
+          [achievementPostId]: filterCommentsAfterDelete(
+            prev[achievementPostId] ?? EMPTY_COMMENTS,
+            String(comment.id)
+          ),
+        }))
+
+        return true
+      }
+
       const postId = String(comment.post_id ?? "")
       if (!postId) {
         console.error("[comment-delete] aborted: missing post_id", comment)
@@ -1428,12 +1712,59 @@ function FeedPageContent() {
   }, [selectedPostId, commentSubmitting])
 
   useEffect(() => {
-    const postId = searchParams.get("post")?.trim()
-    if (!postId || posts.length === 0) return
-    if (postsById.has(postId)) {
-      setSelectedPostId(postId)
+    const postParam = searchParams.get("post")?.trim()
+    const achievementParam = searchParams.get("achievement")?.trim()
+    const targetId = achievementParam || postParam
+    if (!targetId) return
+
+    const openComments = searchParams.get("comments") === "1"
+    const key = `${targetId}:${openComments ? "1" : "0"}`
+    if (feedDeepLinkHandledRef.current === key) return
+
+    const openLoadedPost = (post: any) => {
+      feedDeepLinkHandledRef.current = key
+      if (post.feedKind === "achievement" || achievementParam) {
+        setContentType("achievements")
+      }
+      setSelectedPostId(String(post.id))
+      if (openComments) {
+        openCommentsRef.current[String(post.id)] = true
+      }
     }
-  }, [searchParams, posts.length, postsById])
+
+    const loaded = postsById.get(targetId)
+    if (loaded) {
+      openLoadedPost(loaded)
+      return
+    }
+
+    void (async () => {
+      const row = await fetchAchievementPostById(supabase, targetId)
+      if (!row) return
+
+      const { enriched, likesMap, commentsMap } = await loadEngagementForPosts(
+        [row],
+        user ? { id: user.id } : null
+      )
+      const post = enriched[0]
+      if (!post) return
+
+      setPosts((prev) => {
+        if (prev.some((p) => String(p.id) === String(post.id))) return prev
+        const next = [post, ...prev]
+        postsRef.current = next
+        return next
+      })
+      setLikesByPost((prev) => ({ ...prev, ...likesMap }))
+      setCommentsByPost((prev) => ({ ...prev, ...commentsMap }))
+      openLoadedPost(post)
+    })()
+  }, [
+    searchParams,
+    postsById,
+    user,
+    loadEngagementForPosts,
+  ])
 
   return (
     <div className="w-full text-white">

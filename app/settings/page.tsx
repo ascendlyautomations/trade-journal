@@ -52,6 +52,8 @@ import {
   isStartedTradingDateInFuture,
 } from "@/lib/tradeDateValidation"
 import TradingAccountsSettingsSection from "@/app/components/TradingAccountsSettingsSection"
+import NotificationPreferencesSettingsSection from "@/app/components/NotificationPreferencesSettingsSection"
+import CreatePasswordModal from "@/app/components/CreatePasswordModal"
 import { useUserProfile } from "@/lib/UserProfileProvider"
 import {
   buildSettingsFormSeed,
@@ -65,7 +67,11 @@ import {
 import { readSettingsProfileCache } from "@/lib/settingsProfileCache"
 import { useScrollPageTopOnMount } from "@/lib/useScrollPageTopOnMount"
 import { useAutoResizeTextarea } from "@/lib/useAutoResizeTextarea"
-import { getPasswordManagementMode } from "@/lib/authPasswordManagement"
+import { isGoogleAuthUser, resolveGooglePasswordUiMode } from "@/lib/authPasswordManagement"
+import {
+  applyHasEmailPasswordToCaches,
+  readProfileHasEmailPassword,
+} from "@/lib/emailPasswordProfile"
 
 type TabId =
   | "profile"
@@ -73,6 +79,7 @@ type TabId =
   | "account"
   | "subscription"
   | "trading-accounts"
+  | "notifications"
 
 function resolveSettingsTabFromHash(hash: string): TabId | null {
   const requested = hash.replace("#", "").toLowerCase().trim()
@@ -80,7 +87,8 @@ function resolveSettingsTabFromHash(hash: string): TabId | null {
     requested === "profile" ||
     requested === "affiliate" ||
     requested === "account" ||
-    requested === "subscription"
+    requested === "subscription" ||
+    requested === "notifications"
   ) {
     return requested
   }
@@ -162,6 +170,11 @@ const TABS: {
     description: "Manage active accounts and account types",
   },
   {
+    id: "notifications",
+    label: "Notifications",
+    description: "Choose which alerts you receive",
+  },
+  {
     id: "affiliate",
     label: "Affiliate",
     description: "Referrals, links, and earnings",
@@ -180,6 +193,7 @@ export default function SettingsPage() {
   const savingProfileRef = useRef(false)
   const formSeededRef = useRef(false)
   const [savingPassword, setSavingPassword] = useState(false)
+  const [showCreatePasswordModal, setShowCreatePasswordModal] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [confirmText, setConfirmText] = useState("")
@@ -210,8 +224,13 @@ export default function SettingsPage() {
 
   const invalidStartedTradingDate = isStartedTradingDateInFuture(startedTrading)
   const localTodayDate = getLocalTodayDateInputValue()
-  const passwordManagementMode = getPasswordManagementMode(user)
-  const isCreatePasswordFlow = passwordManagementMode === "create"
+  const isGoogleUser = isGoogleAuthUser(user)
+  const profileHasEmailPassword =
+    readProfileHasEmailPassword(sharedProfile) ||
+    readProfileHasEmailPassword(profile)
+  const googlePasswordUiMode = resolveGooglePasswordUiMode(profileHasEmailPassword)
+  const isGoogleCreateFlow = isGoogleUser && googlePasswordUiMode === "create"
+  const isGoogleUpdateFlow = isGoogleUser && googlePasswordUiMode === "update"
 
   function handleStartedTradingChange(next: string) {
     if (isStartedTradingDateInFuture(next)) {
@@ -530,29 +549,6 @@ export default function SettingsPage() {
       savingProfileRef.current = false
       setSavingProfile(false)
     }
-  }
-
-  async function sendCreatePasswordEmail() {
-    if (!user?.email || savingPassword) return
-
-    setSavingPassword(true)
-    const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
-      redirectTo: `${window.location.origin}/reset-password`,
-    })
-    setSavingPassword(false)
-
-    if (error) {
-      showPopup({
-        type: "error",
-        message: "Something went wrong. Please try again.",
-      })
-      return
-    }
-
-    showPopup({
-      type: "success",
-      message: "Check your email for a link to set your password.",
-    })
   }
 
   async function updatePassword() {
@@ -920,10 +916,12 @@ export default function SettingsPage() {
                       : "bg-white/5 hover:bg-white/10"
                   }`}
                 >
-                  <span className="block font-medium text-white">{tab.label}</span>
-                  <span className="mt-0.5 hidden text-xs text-gray-400 md:block">
-                    {tab.description}
-                  </span>
+                  <span className="block font-medium text-white">
+  {tab.id === "notifications" ? "Notifications" : tab.label}
+</span>
+<span className="mt-0.5 hidden text-xs text-gray-400 md:block">
+  {tab.description}
+</span>
                 </button>
               ))}
             </nav>
@@ -933,9 +931,15 @@ export default function SettingsPage() {
           <div className="min-w-0 flex-1">
             <div className="mb-6">
               <h2 className="text-lg font-semibold text-blue-200">
-                {activeMeta.label}
+                {activeTab === "notifications"
+                  ? "Notification Preferences"
+                  : activeMeta.label}
               </h2>
-              <p className="mt-1 text-sm text-gray-400">{activeMeta.description}</p>
+              <p className="mt-1 text-sm text-gray-400">
+                {activeTab === "notifications"
+                  ? "Choose which notifications you'd like to receive across TradeTraxs."
+                  : activeMeta.description}
+              </p>
             </div>
 
             {activeTab === "profile" && (
@@ -1310,24 +1314,78 @@ export default function SettingsPage() {
 
                 <section className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm">
                   <h3 className="text-sm font-semibold uppercase tracking-wide text-blue-300">
-                    {isCreatePasswordFlow ? "Set password" : "Change password"}
+                    {isGoogleCreateFlow
+                      ? "Create password"
+                      : isGoogleUpdateFlow
+                        ? "Update password"
+                        : "Change password"}
                   </h3>
-                  <p className="mt-1 text-sm text-gray-400">
-                    {isCreatePasswordFlow
-                      ? "Create a password so you can also sign in using your email and password, in addition to Google."
-                      : "Choose a strong password you have not used elsewhere"}
-                  </p>
-                  {isCreatePasswordFlow ? (
-                    <button
-                      type="button"
-                      onClick={() => void sendCreatePasswordEmail()}
-                      disabled={savingPassword || !user?.email}
-                      className="mt-4 w-full rounded-xl bg-gradient-to-r from-blue-500 to-emerald-500 py-3 font-semibold disabled:opacity-50"
-                    >
-                      {savingPassword ? "Sending…" : "Set password"}
-                    </button>
+                  {isGoogleCreateFlow ? (
+                    <>
+                      <p className="mt-1 text-sm text-gray-400">
+                        Create a password so you can sign in using either Google or
+                        your email and password.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setShowCreatePasswordModal(true)}
+                        className="mt-4 w-full rounded-xl bg-gradient-to-r from-blue-500 to-emerald-500 py-3 font-semibold disabled:opacity-50"
+                      >
+                        Create password
+                      </button>
+                    </>
+                  ) : isGoogleUpdateFlow ? (
+                    <>
+                      <p className="mt-1 text-sm text-gray-400">
+                        You can update your password at any time while continuing to
+                        sign in with either Google or your email and password.
+                      </p>
+                      <div className="mt-4">
+                        <label
+                          htmlFor="settings-new-password"
+                          className="mb-1 block text-sm text-gray-400"
+                        >
+                          New password
+                        </label>
+                        <AuthPasswordInput
+                          id="settings-new-password"
+                          autoComplete="new-password"
+                          value={newPassword}
+                          onChange={(e) => setNewPassword(e.target.value)}
+                          placeholder="Enter new password"
+                          className="w-full rounded-xl border border-white/10 bg-black/30 p-3 placeholder:text-gray-500"
+                        />
+                      </div>
+                      <div className="mt-4">
+                        <label
+                          htmlFor="settings-confirm-password"
+                          className="mb-1 block text-sm text-gray-400"
+                        >
+                          Confirm password
+                        </label>
+                        <AuthPasswordInput
+                          id="settings-confirm-password"
+                          autoComplete="new-password"
+                          value={confirmPassword}
+                          onChange={(e) => setConfirmPassword(e.target.value)}
+                          placeholder="Confirm new password"
+                          className="w-full rounded-xl border border-white/10 bg-black/30 p-3 placeholder:text-gray-500"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void updatePassword()}
+                        disabled={savingPassword}
+                        className="mt-4 w-full rounded-xl bg-gradient-to-r from-blue-500 to-emerald-500 py-3 font-semibold disabled:opacity-50"
+                      >
+                        {savingPassword ? "Updating…" : "Update password"}
+                      </button>
+                    </>
                   ) : (
                     <>
+                      <p className="mt-1 text-sm text-gray-400">
+                        Choose a strong password you have not used elsewhere
+                      </p>
                       <div className="mt-4">
                         <label
                           htmlFor="settings-new-password"
@@ -1438,6 +1496,10 @@ export default function SettingsPage() {
                 userId={user?.id}
                 isPro={isProActive(profile)}
               />
+            )}
+
+            {activeTab === "notifications" && (
+              <NotificationPreferencesSettingsSection userId={user?.id} />
             )}
 
             {activeTab === "subscription" && (
@@ -1609,6 +1671,23 @@ export default function SettingsPage() {
           </div>
         </div>
       )}
+      <CreatePasswordModal
+        open={showCreatePasswordModal}
+        userId={user?.id}
+        onClose={() => setShowCreatePasswordModal(false)}
+        onSuccess={() => {
+          if (!user?.id) return
+          const { shared: nextShared, settingsRow: nextSettingsRow } =
+            applyHasEmailPasswordToCaches(user.id, sharedProfile, profile)
+          if (nextShared) setSharedProfile(nextShared)
+          if (nextSettingsRow) setProfile(nextSettingsRow)
+          showPopup({
+            type: "success",
+            message:
+              "Password created successfully. You can now sign in using either Google or your email and password.",
+          })
+        }}
+      />
       <FeedbackModal {...feedbackModalProps} />
     </>
   )

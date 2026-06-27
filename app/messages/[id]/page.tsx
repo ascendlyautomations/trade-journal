@@ -43,7 +43,9 @@ import {
   buildDmThreadPath,
   isConversationUuidSegment,
 } from "@/lib/messageRoutes"
+import { FEED_ACHIEVEMENT_POSTS_SELECT } from "@/lib/achievementPostEngagement"
 import {
+  getSharedContentViewHref,
   getSharedPostViewHref,
   getSharedTradeViewHref,
   SHARED_POST_UNAVAILABLE,
@@ -81,11 +83,16 @@ import {
 import { markConversationMessagesSeen } from "@/lib/conversationReadMarking"
 import {
   computeNewestMessage,
+  areConversationPreviewsReady,
   filterMessagesForUser,
   isScrollNearBottom,
   mergeMessageLists,
   sortMessagesByCreatedAt,
 } from "@/lib/conversationMessageUtils"
+import {
+  isLastMessageInDom,
+  scrollContainerToBottom,
+} from "@/lib/conversationScroll"
 import {
   findConversationSessionByUrlSegment,
   patchConversationSession,
@@ -392,11 +399,45 @@ function PostMessageBubble({
   const [lightboxImageUrl, setLightboxImageUrl] = useState<string | null>(null)
   const isProfileShare =
     message.type === "profile_post" || Boolean(message.profile_post_id)
+  const isAchievementShare =
+    message.type === "achievement_post" || Boolean(message.achievement_post_id)
 
   useEffect(() => {
+    const achievementPostId =
+      message.achievement_post_id != null
+        ? String(message.achievement_post_id)
+        : ""
     const profilePostId =
       message.profile_post_id != null ? String(message.profile_post_id) : ""
     const tradePostId = message.post_id != null ? String(message.post_id) : ""
+
+    if (isAchievementShare) {
+      if (!achievementPostId) {
+        setPost(null)
+        setPostLoading(false)
+        return
+      }
+      let cancelled = false
+      if (!initialPost) {
+        setPostLoading(true)
+        setPost(null)
+      }
+      ;(async () => {
+        const { data } = await supabase
+          .from("achievement_posts")
+          .select(FEED_ACHIEVEMENT_POSTS_SELECT)
+          .eq("id", achievementPostId)
+          .maybeSingle()
+        if (!cancelled) {
+          setPost(data ?? null)
+          setPostLoading(false)
+          onPostLoaded?.(data ?? null)
+        }
+      })()
+      return () => {
+        cancelled = true
+      }
+    }
 
     if (isProfileShare) {
       if (!profilePostId) {
@@ -451,7 +492,14 @@ function PostMessageBubble({
     return () => {
       cancelled = true
     }
-  }, [isProfileShare, message.post_id, message.profile_post_id, initialPost])
+  }, [
+    isAchievementShare,
+    isProfileShare,
+    message.achievement_post_id,
+    message.post_id,
+    message.profile_post_id,
+    initialPost,
+  ])
 
   if (message.deleted_for_everyone) {
     return (
@@ -487,8 +535,20 @@ function PostMessageBubble({
     : postScreenshotSrc(post.image_url)
   const pnl = Number(post.pnl)
   const isWin = !Number.isNaN(pnl) && pnl >= 0
-  const showTradeStats = !isProfileShare && !Number.isNaN(pnl)
+  const showTradeStats =
+    !isProfileShare && !isAchievementShare && !Number.isNaN(pnl)
   const legacyCaption = legacyShareCardCaption(message.content)
+  const achievementTitle = isAchievementShare
+    ? String(
+        (post as { achievements?: { title?: string } })?.achievements?.title ??
+          "Achievement"
+      )
+    : null
+  const shareLabel = isAchievementShare
+    ? "Shared Achievement"
+    : isProfileShare
+      ? "Shared Post"
+      : "Shared Post"
 
   return (
     <div
@@ -532,8 +592,14 @@ function PostMessageBubble({
               >
                 @{post.profiles?.username || "User"}
               </ProfileUsernameLink>
-              <span className="shrink-0 text-xs text-gray-400">Shared Post</span>
+              <span className="shrink-0 text-xs text-gray-400">{shareLabel}</span>
             </div>
+
+            {isAchievementShare ? (
+              <p className="mb-3 text-sm font-medium text-amber-200">
+                🏆 {achievementTitle}
+              </p>
+            ) : null}
 
             {imageSrc ? (
               <FeedPostScreenshot
@@ -569,7 +635,7 @@ function PostMessageBubble({
               }}
               className="w-full rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-xs font-medium text-blue-300 transition hover:bg-blue-500/20 hover:text-blue-200"
             >
-              View post →
+              View {isAchievementShare ? "achievement" : "post"} →
             </button>
           </div>
         </div>
@@ -596,6 +662,7 @@ function StoryReplyMessageBubble({
   onJumpToParent,
   onReplyUnavailable,
   parentMessage,
+  onMediaLoad,
 }: {
   message: any
   isMe: boolean
@@ -608,6 +675,7 @@ function StoryReplyMessageBubble({
   onJumpToParent: (parentId: string) => boolean
   onReplyUnavailable: () => void
   parentMessage?: ReplyParentMessageLike | null
+  onMediaLoad?: () => void
 }) {
   if (message.deleted_for_everyone) {
     return (
@@ -661,6 +729,8 @@ function StoryReplyMessageBubble({
                 alt=""
                 className="h-10 w-10 shrink-0 rounded-md object-cover ring-1 ring-white/15"
                 draggable={false}
+                onLoad={onMediaLoad}
+                onError={onMediaLoad}
               />
             ) : (
               <div className="h-10 w-10 shrink-0 rounded-md bg-white/10" />
@@ -750,6 +820,7 @@ export default function DMPage() {
   const [trades, setTrades] = useState<any[]>([])
   const [tradesById, setTradesById] = useState<Record<string, any>>({})
   const [postsById, setPostsById] = useState<Record<string, any>>({})
+  const [messageLayoutGeneration, setMessageLayoutGeneration] = useState(0)
   const [pageAccess, setPageAccess] =
     useState<ConversationPageAccess>("loading")
 
@@ -761,7 +832,13 @@ export default function DMPage() {
     null
   )
   const userNearBottomRef = useRef(true)
-  const pendingScrollRestoreRef = useRef<number | null>(null)
+  const pendingSmoothScrollRef = useRef(false)
+  const prevLastMessageIdRef = useRef<string | null>(null)
+  const scrollAnchorRef = useRef<{
+    conversationId: string
+    lastMessageId: string | null
+  } | null>(null)
+  const persistConversationCacheRef = useRef<() => void>(() => {})
   const scrollPersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
   )
@@ -777,6 +854,10 @@ export default function DMPage() {
   const postsByIdRef = useRef(postsById)
   postsByIdRef.current = postsById
   const restoredFromCacheRef = useRef(false)
+
+  const bumpMessageLayout = useCallback(() => {
+    setMessageLayoutGeneration((generation) => generation + 1)
+  }, [])
 
   const patchPreviewCache = useCallback(
     (patch: { tradesById?: Record<string, any>; postsById?: Record<string, any> }) => {
@@ -817,8 +898,7 @@ export default function DMPage() {
   function applyCachedConversation(
     cached: ConversationSessionSnapshot,
     conversationId: string,
-    sessionUser: { id: string },
-    openFromInbox: boolean
+    sessionUser: { id: string }
   ) {
     setUser(sessionUser)
     setActiveConversationId(conversationId)
@@ -838,12 +918,11 @@ export default function DMPage() {
       otherUser: cached.otherUser,
     }
 
-    if (openFromInbox || cached.wasAtBottom) {
-      userNearBottomRef.current = true
-      pendingScrollRestoreRef.current = null
-    } else {
-      userNearBottomRef.current = false
-      pendingScrollRestoreRef.current = cached.scrollTop
+    userNearBottomRef.current = true
+    prevLastMessageIdRef.current = null
+    scrollAnchorRef.current = {
+      conversationId,
+      lastMessageId: computeNewestMessage(cached.messages).id,
     }
   }
 
@@ -905,6 +984,8 @@ export default function DMPage() {
     replyTarget,
   ])
 
+  persistConversationCacheRef.current = persistConversationCache
+
   const setMessagesWithCache = useCallback(
     (updater: (prev: any[]) => any[]) => {
       setMessages((prev) => {
@@ -936,6 +1017,9 @@ export default function DMPage() {
       el.scrollHeight,
       el.clientHeight
     )
+    if (!userNearBottomRef.current) {
+      scrollAnchorRef.current = null
+    }
 
     const uid = userIdRef.current
     const cid = conversationIdRef.current
@@ -983,8 +1067,8 @@ export default function DMPage() {
     router.push(href)
   }
 
-  function viewSharedPost(post: Parameters<typeof getSharedPostViewHref>[0]) {
-    router.push(getSharedPostViewHref(post))
+  function viewSharedPost(post: Parameters<typeof getSharedContentViewHref>[0]) {
+    router.push(getSharedContentViewHref(post))
   }
 
   async function markMessageNotificationsRead(currentUserId: string) {
@@ -1129,26 +1213,59 @@ export default function DMPage() {
     })
   }, [])
 
-  useEffect(() => {
-    if (!messagesLoaded) return
+  useLayoutEffect(() => {
+    if (!messagesLoaded || !activeConversationId) return
     const el = scrollRef.current
     if (!el) return
 
-    if (pendingScrollRestoreRef.current !== null) {
-      el.scrollTop = pendingScrollRestoreRef.current
-      pendingScrollRestoreRef.current = null
-      userNearBottomRef.current = isScrollNearBottom(
+    const lastMsg = messages[messages.length - 1]
+    const lastId = lastMsg ? String(lastMsg.id) : null
+
+    if (pendingSmoothScrollRef.current) {
+      pendingSmoothScrollRef.current = false
+      scrollContainerToBottom(el, { behavior: "smooth" })
+      prevLastMessageIdRef.current = lastId
+      userNearBottomRef.current = true
+      return
+    }
+
+    if (scrollAnchorRef.current && userNearBottomRef.current) {
+      scrollContainerToBottom(el, { behavior: "auto" })
+
+      const atBottom = isScrollNearBottom(
         el.scrollTop,
         el.scrollHeight,
         el.clientHeight
       )
-      return
+      const previewsReady = areConversationPreviewsReady(
+        messages,
+        tradesById,
+        postsById,
+        dmTradePreviewCacheKey,
+        dmPostPreviewCacheKey
+      )
+      const lastInDom = isLastMessageInDom(lastId, el, lastMsg)
+
+      if (atBottom && previewsReady && lastInDom) {
+        scrollAnchorRef.current = null
+      }
+    } else if (
+      lastId &&
+      lastId !== prevLastMessageIdRef.current &&
+      userNearBottomRef.current
+    ) {
+      scrollContainerToBottom(el, { behavior: "smooth" })
     }
 
-    if (userNearBottomRef.current) {
-      scrollToBottom()
-    }
-  }, [messages, messagesLoaded])
+    prevLastMessageIdRef.current = lastId
+  }, [
+    messages,
+    messagesLoaded,
+    activeConversationId,
+    tradesById,
+    postsById,
+    messageLayoutGeneration,
+  ])
 
   useEffect(() => {
     if (!isTyping) return
@@ -1374,7 +1491,8 @@ export default function DMPage() {
     setTradesById({})
     setPostsById({})
     userNearBottomRef.current = true
-    pendingScrollRestoreRef.current = null
+    prevLastMessageIdRef.current = null
+    scrollAnchorRef.current = null
 
     const details = await fetchConversationDetails(
       sessionUser.id,
@@ -1410,30 +1528,35 @@ export default function DMPage() {
 
     const conversationId = cached.conversationId || provisionalId
     consumeInboxConversationId(urlSegment)
-    const openFromInbox = consumeConversationOpenFromInbox(conversationId)
-    applyCachedConversation(cached, conversationId, sessionUser, openFromInbox)
+    consumeConversationOpenFromInbox(conversationId)
+    applyCachedConversation(cached, conversationId, sessionUser)
     restoredFromCacheRef.current = true
     void runPostOpenSideEffects(sessionUser.id, conversationId, cached)
     return true
   }
 
   useLayoutEffect(() => {
+    scrollAnchorRef.current = null
+    pendingSmoothScrollRef.current = false
+    userNearBottomRef.current = true
+    prevLastMessageIdRef.current = null
+
     restoredFromCacheRef.current = false
-    persistConversationCache()
+    persistConversationCacheRef.current()
     if (profileUser?.id && tryRestoreCachedConversation(profileUser)) {
       return
     }
-  }, [urlSegment, profileUser?.id, persistConversationCache])
+  }, [urlSegment, profileUser?.id])
 
   useEffect(() => {
     void init()
     return () => {
-      persistConversationCache()
+      persistConversationCacheRef.current()
       if (scrollPersistTimerRef.current) {
         clearTimeout(scrollPersistTimerRef.current)
       }
     }
-  }, [urlSegment, profileUser?.id, persistConversationCache])
+  }, [urlSegment, profileUser?.id])
 
   useEffect(() => {
     const uid = userIdRef.current
@@ -1498,12 +1621,9 @@ export default function DMPage() {
     }
   }
 
-  function scrollToBottom() {
-    setTimeout(() => {
-      if (scrollRef.current) {
-        scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-      }
-    }, 50)
+  function queueSmoothScrollToBottom() {
+    userNearBottomRef.current = true
+    pendingSmoothScrollRef.current = true
   }
 
   async function loadMessages(currentUserId: string, conversationId: string) {
@@ -1527,6 +1647,11 @@ export default function DMPage() {
     const sorted = sortMessagesByCreatedAt(filteredMessages)
 
     setMessages(sorted)
+    prevLastMessageIdRef.current = null
+    scrollAnchorRef.current = {
+      conversationId,
+      lastMessageId: computeNewestMessage(sorted).id,
+    }
     setMessagesLoaded(true)
 
     const newest = computeNewestMessage(sorted)
@@ -1678,6 +1803,7 @@ export default function DMPage() {
       last_message_at: lastMessageAt,
     })
 
+    queueSmoothScrollToBottom()
     setInput("")
     setReplyTarget(null)
     setSelectedFile(null)
@@ -1746,6 +1872,7 @@ export default function DMPage() {
       last_message_at: lastMessageAt,
     })
 
+    queueSmoothScrollToBottom()
     setShowTradePicker(false)
     setReplyTarget(null)
     } finally {
@@ -2176,6 +2303,7 @@ export default function DMPage() {
                         onJumpToParent={scrollToDmMessage}
                         onReplyUnavailable={notifyReplyUnavailable}
                         parentMessage={parentMessage}
+                        onMediaLoad={bumpMessageLayout}
                       />
                       {showTimestamp ? (
                         <DmClusterTimestamp
@@ -2188,7 +2316,11 @@ export default function DMPage() {
                 )
               }
 
-              if (message.type === "post" || message.type === "profile_post") {
+              if (
+                message.type === "post" ||
+                message.type === "profile_post" ||
+                message.type === "achievement_post"
+              ) {
                 return (
                   <Fragment key={message.id}>
                     {showDateDivider ? (
@@ -2302,6 +2434,8 @@ export default function DMPage() {
                                     alt=""
                                     loading="lazy"
                                     decoding="async"
+                                    onLoad={bumpMessageLayout}
+                                    onError={bumpMessageLayout}
                                   />
                                 </button>
                               ) : null}

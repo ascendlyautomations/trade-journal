@@ -1,10 +1,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import {
+  FEED_ACHIEVEMENT_POSTS_SELECT,
+} from "@/lib/achievementPostEngagement"
+import {
   FEED_POSTS_SELECT,
   type FeedContentFilter,
   type FeedItem,
   type FeedScope,
   dedupeFeedItems,
+  normalizeAchievementFeedItem,
   normalizeProfileFeedItem,
   normalizeTradeFeedItem,
   sortFeedItemsDesc,
@@ -138,6 +142,52 @@ export async function fetchProfileFeedBatch(
   return {
     items: (data ?? []).map((row) =>
       normalizeProfileFeedItem(row as Record<string, unknown>)
+    ),
+  }
+}
+
+export async function fetchAchievementFeedBatch(
+  supabase: SupabaseClient,
+  options: {
+    scope: FeedScope
+    userId: string
+    followingIds: string[]
+    page: number
+    pageSize?: number
+  }
+): Promise<FeedBatchResult> {
+  const pageSize = options.pageSize ?? FEED_PAGE_SIZE
+  const from = options.page * pageSize
+  const to = from + pageSize - 1
+
+  if (options.scope === "following" && options.followingIds.length === 0) {
+    return { items: [], emptyFollowing: true }
+  }
+
+  const baseQuery = supabase
+    .from("achievement_posts")
+    .select(FEED_ACHIEVEMENT_POSTS_SELECT)
+    .eq("achievements.is_public", true)
+    .order("created_at", { ascending: false })
+    .range(from, to)
+
+  const scoped = applyScopeFilter(
+    baseQuery,
+    options.scope,
+    options.userId,
+    options.followingIds
+  )
+
+  if (!scoped) {
+    return { items: [], emptyFollowing: true }
+  }
+
+  const { data, error } = await scoped
+  if (error) throw error
+
+  return {
+    items: (data ?? []).map((row) =>
+      normalizeAchievementFeedItem(row as Record<string, unknown>)
     ),
   }
 }

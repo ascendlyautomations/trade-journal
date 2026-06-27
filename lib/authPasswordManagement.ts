@@ -2,6 +2,15 @@ import type { User } from "@supabase/supabase-js"
 
 export type PasswordManagementMode = "change" | "create"
 
+/**
+ * Password UI source of truth (Settings):
+ * - Traditional email/password accounts: not a Google auth user → inline Change password.
+ * - Google accounts: profiles.has_email_password (persisted in DB, loaded via UserProfileProvider).
+ *
+ * Supabase identities / app_metadata.providers were unreliable after updateUser({ password })
+ * and local React state did not survive logout.
+ */
+
 function listAuthProviders(user: User): string[] {
   const fromMetadata = user.app_metadata?.providers
   if (Array.isArray(fromMetadata)) {
@@ -25,6 +34,7 @@ export function isGoogleAuthUser(user: User | null | undefined): boolean {
   return listAuthProviders(user).includes("google")
 }
 
+/** Legacy — not used for Google Settings UI; prefer profiles.has_email_password. */
 export function userHasEmailPasswordIdentity(
   user: User | null | undefined
 ): boolean {
@@ -35,13 +45,16 @@ export function userHasEmailPasswordIdentity(
   return user.identities?.some((identity) => identity.provider === "email") ?? false
 }
 
-/** Google-only users set a password via email link; everyone else uses inline change. */
-export function getPasswordManagementMode(
-  user: User | null | undefined
-): PasswordManagementMode {
-  if (!user) return "change"
-  if (isGoogleAuthUser(user) && !userHasEmailPasswordIdentity(user)) {
-    return "create"
-  }
-  return "change"
+export function profileHasEmailPasswordFlag(
+  hasEmailPassword: boolean | null | undefined
+): boolean {
+  return hasEmailPassword === true
+}
+
+export function resolveGooglePasswordUiMode(
+  profileHasEmailPassword: boolean | null | undefined
+): "create" | "update" {
+  return profileHasEmailPasswordFlag(profileHasEmailPassword)
+    ? "update"
+    : "create"
 }

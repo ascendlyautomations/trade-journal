@@ -16,6 +16,7 @@ function FeedContentToggle({
     { id: "all", label: "All" },
     { id: "trades", label: "Trades" },
     { id: "posts", label: "Posts" },
+    { id: "achievements", label: "Achievements" },
   ]
 
   return (

@@ -1,4 +1,5 @@
 import { getRouteUser, supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
+import { filterRecipientsByRoomMessagePreference } from "@/lib/serverNotificationPreferences"
 
 type RoomMessageMeta = {
   message_id: string
@@ -117,6 +118,12 @@ export async function POST(req: Request) {
 
   if (recipientIds.length === 0) {
     return Response.json({ ok: true, inserted: 0 })
+  }
+
+  recipientIds = await filterRecipientsByRoomMessagePreference(recipientIds)
+
+  if (recipientIds.length === 0) {
+    return Response.json({ ok: true, inserted: 0, skipped: "preferences" })
   }
 
   if (messageRow.section_id) {

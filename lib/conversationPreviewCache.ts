@@ -9,7 +9,17 @@ export function dmPostPreviewCacheKey(message: {
   type?: string | null
   post_id?: string | null
   profile_post_id?: string | null
+  achievement_post_id?: string | null
 }): string | null {
+  const isAchievementShare =
+    message.type === "achievement_post" || Boolean(message.achievement_post_id)
+  if (isAchievementShare) {
+    const id =
+      message.achievement_post_id != null
+        ? String(message.achievement_post_id).trim()
+        : ""
+    return id ? `achievement_post:${id}` : null
+  }
   const isProfileShare =
     message.type === "profile_post" || Boolean(message.profile_post_id)
   if (isProfileShare) {

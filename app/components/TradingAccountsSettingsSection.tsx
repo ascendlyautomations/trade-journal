@@ -19,6 +19,7 @@ import {
   tradingAccountToFormValues,
   updateTradingAccount,
   updateTradingAccountNote,
+  matchesTradingAccountSearch,
   type TradingAccountListItem,
 } from "@/lib/tradingAccounts"
 import {
@@ -83,9 +84,9 @@ export default function TradingAccountsSettingsSection({
 
   const filteredAccounts = useMemo(() => {
     const sorted = sortAccountsForDisplay(accounts)
-    const q = searchQuery.trim().toLowerCase()
+    const q = searchQuery.trim()
     if (!q) return sorted
-    return sorted.filter((a) => a.name.toLowerCase().includes(q))
+    return sorted.filter((account) => matchesTradingAccountSearch(account, q))
   }, [accounts, searchQuery])
 
   const pageCount = Math.max(1, Math.ceil(filteredAccounts.length / ACCOUNTS_PAGE_SIZE))

@@ -12,6 +12,7 @@ import {
   ACCOUNT_DROPDOWN_ITEM_CLASS,
   ACCOUNT_DROPDOWN_MANAGE_CLASS,
   ACCOUNT_DROPDOWN_PANEL_CLASS,
+  ACCOUNT_DROPDOWN_TRIGGER_CLASS,
 } from "@/lib/accountDropdownStyles"
 
 /** Mirrors `InputTradeForm` account row shape after `accounts` fetch. */
@@ -92,7 +93,7 @@ export default function TradeAccountPicker({
         <button
           type="button"
           onClick={() => setOpen(!open)}
-          className="flex w-full cursor-pointer items-center justify-between rounded-lg border border-white/10 bg-[#0f172a] p-2.5 text-left text-sm text-white"
+          className={ACCOUNT_DROPDOWN_TRIGGER_CLASS}
         >
           <span className="truncate">
             {selectedAccount

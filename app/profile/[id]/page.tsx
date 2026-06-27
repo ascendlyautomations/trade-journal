@@ -5,6 +5,8 @@ import Navbar from "../../components/Navbar"
 import EmptyState from "../../components/ui/EmptyState"
 import { SkeletonProfilePage, SkeletonTradeCard } from "../../components/ui/skeletons"
 import AchievementCard from "../../components/AchievementCard"
+import ProfileAchievementSocialCard from "../../components/ProfileAchievementSocialCard"
+import FeedProfilePostDetailModal from "../../components/feed/FeedProfilePostDetailModal"
 import type { ChangeEvent } from "react"
 import {
   Suspense,
@@ -54,6 +56,7 @@ import {
 import {
   deleteFeedComment,
   deleteProfilePostComment,
+  deleteAchievementPostComment,
   deleteTradeComment,
   filterCommentsAfterDelete,
 } from "@/lib/deleteComment"
@@ -69,6 +72,17 @@ import {
   queryProfilePostComments,
   withInsertedProfilePostParentCommentId,
 } from "@/lib/profilePostEngagement"
+import {
+  ACHIEVEMENT_POST_COMMENT_INSERT_SELECT,
+  achievementPostOwnerUserId,
+  fetchAchievementPostIdsByAchievementIds,
+  fetchAchievementPostById,
+  insertAchievementPostCommentNotifications,
+  insertAchievementPostLikeNotification,
+  loadAchievementPostEngagementMaps,
+  queryAchievementPostComments,
+  withInsertedAchievementPostParentCommentId,
+} from "@/lib/achievementPostEngagement"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import { feedbackPresets, persistentError } from "@/lib/feedbackPresets"
 import {
@@ -1263,6 +1277,9 @@ function ProfilePageContent() {
   const [editingTrade, setEditingTrade] = useState<any | null>(null)
   const [selectedMode, setSelectedMode] = useState("all")
   const [achievements, setAchievements] = useState<Achievement[]>([])
+  const [achievementPostIds, setAchievementPostIds] = useState<Record<string, string>>({})
+  const [selectedAchievementPostDetail, setSelectedAchievementPostDetail] =
+    useState<any | null>(null)
   const [selectedTradeDetail, setSelectedTradeDetail] = useState<any | null>(null)
   const [selectedPostDetail, setSelectedPostDetail] = useState<any | null>(null)
   const [screenshotLightboxUrl, setScreenshotLightboxUrl] = useState<string | null>(
@@ -1626,6 +1643,40 @@ function ProfilePageContent() {
       cancelled = true
     }
   }, [profile?.id, currentUserId])
+
+  useEffect(() => {
+    if (!achievements.length) {
+      setAchievementPostIds({})
+      return
+    }
+
+    let cancelled = false
+    async function loadAchievementEngagement() {
+      const map = await fetchAchievementPostIdsByAchievementIds(
+        supabase,
+        achievements.map((a) => String(a.id))
+      )
+      if (cancelled) return
+      setAchievementPostIds(map)
+
+      const postIds = Object.values(map)
+      if (postIds.length === 0) return
+
+      const { likesMap, commentsMap } = await loadAchievementPostEngagementMaps(
+        supabase,
+        postIds,
+        currentUserId
+      )
+      if (cancelled) return
+      setLikesByPost((prev) => ({ ...prev, ...likesMap }))
+      setCommentsByPost((prev) => ({ ...prev, ...commentsMap }))
+    }
+
+    void loadAchievementEngagement()
+    return () => {
+      cancelled = true
+    }
+  }, [achievements, currentUserId])
 
   useEffect(() => {
     if (!profileId || loading) return
@@ -2329,6 +2380,158 @@ function ProfilePageContent() {
     }
   }
 
+  const buildAchievementPostStub = useCallback(
+    (achievement: Achievement, postId: string, createdAt?: string | null) => ({
+      id: postId,
+      feedKind: "achievement" as const,
+      user_id: profile?.id,
+      achievement_id: achievement.id,
+      created_at: createdAt ?? achievement.created_at ?? achievement.achieved_at,
+      achievements: achievement,
+      profiles: {
+        username: profile?.username ?? null,
+        avatar_url: profile?.avatar_url ?? null,
+      },
+    }),
+    [profile?.avatar_url, profile?.id, profile?.username]
+  )
+
+  const openAchievementPostModal = useCallback(
+    (post: any, focusComments = false) => {
+      const postId = String(post.id)
+      if (focusComments) {
+        feedOpenCommentsRef.current[postId] = true
+      }
+      setSelectedAchievementPostDetail(post)
+    },
+    []
+  )
+
+  async function handleAchievementLike(postId: string) {
+    if (!currentUserId) return
+    const key = String(postId)
+    if (likeBusyRef.current.has(key) || likeBusyByPost[key]) return
+
+    likeBusyRef.current.add(key)
+    setLikeBusyByPost((prev) => ({ ...prev, [key]: true }))
+
+    try {
+      const meta = likesByPost[key] || { count: 0, liked: false }
+      const ownerId = profile?.id ? String(profile.id) : null
+
+      if (meta.liked) {
+        const { error } = await supabase
+          .from("achievement_post_likes")
+          .delete()
+          .eq("achievement_post_id", key)
+          .eq("user_id", currentUserId)
+        if (error) return console.error(error)
+        if (ownerId) {
+          await deleteLikeNotification(supabase, {
+            recipientUserId: ownerId,
+            senderUserId: currentUserId,
+            target: { kind: "achievement_post", achievementPostId: key },
+          })
+        }
+        setLikesByPost((prev) => ({
+          ...prev,
+          [key]: { count: Math.max(0, meta.count - 1), liked: false },
+        }))
+        return
+      }
+
+      const { error } = await supabase.from("achievement_post_likes").insert({
+        achievement_post_id: key,
+        user_id: currentUserId,
+      })
+      if (error) return console.error(error)
+      setLikesByPost((prev) => ({
+        ...prev,
+        [key]: { count: meta.count + 1, liked: true },
+      }))
+
+      if (ownerId) {
+        await insertAchievementPostLikeNotification(supabase, {
+          achievementPostId: key,
+          ownerUserId: ownerId,
+          senderUserId: currentUserId,
+        })
+      }
+    } finally {
+      likeBusyRef.current.delete(key)
+      setLikeBusyByPost((prev) => ({ ...prev, [key]: false }))
+    }
+  }
+
+  async function submitAchievementPostComment(
+    post: any,
+    text: string,
+    parentCommentId?: string | null
+  ) {
+    if (!currentUserId) return false
+    const key = String(post.id)
+    const trimmed = (text || "").trim()
+    if (!trimmed) return false
+    if (commentSubmittingRef.current.has(key) || commentSubmitting[key]) return false
+
+    commentSubmittingRef.current.add(key)
+    setCommentSubmitting((s) => ({ ...s, [key]: true }))
+
+    try {
+      const existingComments = commentsByPost[key] || []
+      const insertPayload: Record<string, unknown> = {
+        achievement_post_id: key,
+        user_id: currentUserId,
+        content: trimmed,
+      }
+      if (parentCommentId) {
+        insertPayload.parent_comment_id = parentCommentId
+      }
+
+      const { data, error } = await supabase
+        .from("achievement_post_comments")
+        .insert(insertPayload)
+        .select(ACHIEVEMENT_POST_COMMENT_INSERT_SELECT)
+        .single()
+
+      if (error) {
+        console.error(error)
+        return false
+      }
+
+      const insertedRow = withInsertedAchievementPostParentCommentId(
+        data,
+        parentCommentId
+      )
+      setCommentsByPost((prev) => ({
+        ...prev,
+        [key]: [...(prev[key] || []), insertedRow],
+      }))
+
+      const ownerId = achievementPostOwnerUserId(post)
+      if (ownerId) {
+        await insertAchievementPostCommentNotifications(supabase, {
+          achievementPostId: key,
+          commentId: String(insertedRow.id),
+          ownerUserId: ownerId,
+          senderUserId: currentUserId,
+          content: trimmed,
+          parentCommentId,
+          existingComments,
+        })
+      }
+
+      return true
+    } finally {
+      commentSubmittingRef.current.delete(key)
+      setCommentSubmitting((s) => ({ ...s, [key]: false }))
+    }
+  }
+
+  function handleShareAchievement(achievement: Achievement, postId: string) {
+    setSharePost(buildAchievementPostStub(achievement, postId))
+  }
+
   async function deleteComment(comment: any) {
     if (!currentUserId) {
       console.warn("[comment-delete] aborted: no user")
@@ -2346,11 +2549,15 @@ function ProfilePageContent() {
     const profilePostId = comment.profile_post_id
       ? String(comment.profile_post_id)
       : null
+    const achievementPostId = comment.achievement_post_id
+      ? String(comment.achievement_post_id)
+      : null
     const postId = comment.post_id ? String(comment.post_id) : null
     const tradeId = comment.trade_id ? String(comment.trade_id) : null
 
     let result:
       | Awaited<ReturnType<typeof deleteProfilePostComment>>
+      | Awaited<ReturnType<typeof deleteAchievementPostComment>>
       | Awaited<ReturnType<typeof deleteFeedComment>>
       | Awaited<ReturnType<typeof deleteTradeComment>>
     let stateKey: string
@@ -2363,6 +2570,14 @@ function ProfilePageContent() {
         profile_post_id: profilePostId,
       })
       stateKey = profilePostId
+    } else if (achievementPostId) {
+      result = await deleteAchievementPostComment(supabase, {
+        id: commentId,
+        user_id: currentUserId,
+        content: comment.content,
+        achievement_post_id: achievementPostId,
+      })
+      stateKey = achievementPostId
     } else if (postId) {
       result = await deleteFeedComment(supabase, {
         id: commentId,
@@ -2391,6 +2606,7 @@ function ProfilePageContent() {
         commentId,
         userId: currentUserId,
         profilePostId,
+        achievementPostId,
         postId,
         tradeId,
         error,
@@ -2699,14 +2915,66 @@ function ProfilePageContent() {
     [clearProfileQueryParams, wallPosts]
   )
 
+  const openAchievementPostDeepLink = useCallback(
+    async (postId: string, focusComments = false) => {
+      const achievement = achievements.find(
+        (row) => achievementPostIds[String(row.id)] === postId
+      )
+
+      if (achievement) {
+        setActiveTab("achievements")
+        openAchievementPostModal(
+          buildAchievementPostStub(achievement, postId),
+          focusComments
+        )
+        clearProfileQueryParams()
+        return true
+      }
+
+      const fetched = await fetchAchievementPostById(supabase, postId)
+      if (!fetched || String(fetched.user_id) !== String(profile?.id ?? "")) {
+        return false
+      }
+
+      const { likesMap, commentsMap } = await loadAchievementPostEngagementMaps(
+        supabase,
+        [postId],
+        currentUserId
+      )
+      setLikesByPost((prev) => ({ ...prev, ...likesMap }))
+      setCommentsByPost((prev) => ({ ...prev, ...commentsMap }))
+
+      setActiveTab("achievements")
+      openAchievementPostModal(fetched, focusComments)
+      clearProfileQueryParams()
+      return true
+    },
+    [
+      achievementPostIds,
+      achievements,
+      buildAchievementPostStub,
+      clearProfileQueryParams,
+      currentUserId,
+      openAchievementPostModal,
+      profile?.id,
+    ]
+  )
+
   useEffect(() => {
     if (!profile?.id || loading) return
     if (searchParams.get("post")?.trim() && !wallPostsReady) return
 
     const postParam = searchParams.get("post")?.trim()
+    const achievementParam = searchParams.get("achievement")?.trim()
     const tradeParam = searchParams.get("trade")?.trim()
     const openComments = searchParams.get("comments") === "1"
-    const key = postParam
+    const tabParam = searchParams.get("tab")?.trim()
+    if (tabParam === "achievements") {
+      setActiveTab("achievements")
+    }
+    const key = achievementParam
+      ? `achievement:${achievementParam}:${openComments ? "1" : "0"}`
+      : postParam
       ? `post:${postParam}:${openComments ? "1" : "0"}`
       : tradeParam
         ? `trade:${tradeParam}`
@@ -2716,6 +2984,11 @@ function ProfilePageContent() {
     deepLinkHandledRef.current = key
 
     void (async () => {
+      if (achievementParam) {
+        await openAchievementPostDeepLink(achievementParam, openComments)
+        return
+      }
+
       if (postParam) {
         if (!openProfilePostDeepLink(postParam, openComments)) {
           await openFeedPostDeepLink(postParam, openComments)
@@ -2731,6 +3004,7 @@ function ProfilePageContent() {
     loading,
     openFeedPostDeepLink,
     openProfilePostDeepLink,
+    openAchievementPostDeepLink,
     openTradeDeepLink,
     profile?.id,
     searchParams,
@@ -3975,21 +4249,69 @@ function ProfilePageContent() {
                           {achievements
                             .filter((a) => a.is_featured)
                             .map((a) => {
+                              const postId = achievementPostIds[String(a.id)]
+                              if (!postId) {
+                                return (
+                                  <AchievementCard
+                                    key={a.id}
+                                    achievement={a}
+                                    featured
+                                    showVisibility={false}
+                                    onImageClick={(src, achievement) =>
+                                      setSelectedAchievementImage({
+                                        src,
+                                        title: achievement.title,
+                                        achievedAt: achievement.achieved_at,
+                                        description: achievement.description,
+                                      })
+                                    }
+                                  />
+                                )
+                              }
+
                               return (
-                              <AchievementCard
-                                key={a.id}
-                                achievement={a}
-                                featured
-                                showVisibility={false}
-                                onImageClick={(src, achievement) =>
-                                  setSelectedAchievementImage({
-                                    src,
-                                    title: achievement.title,
-                                    achievedAt: achievement.achieved_at,
-                                    description: achievement.description,
-                                  })
-                                }
-                              />
+                                <ProfileAchievementSocialCard
+                                  key={a.id}
+                                  achievement={a}
+                                  achievementPostId={postId}
+                                  profileUserId={String(profile.id)}
+                                  featured
+                                  showVisibility={false}
+                                  currentUser={
+                                    currentUserId ? { id: currentUserId } : null
+                                  }
+                                  likeMeta={
+                                    likesByPost[postId] || { count: 0, liked: false }
+                                  }
+                                  likeBusy={!!likeBusyByPost[postId]}
+                                  comments={commentsByPost[postId] || []}
+                                  onLike={() => void handleAchievementLike(postId)}
+                                  onSelectPost={() => {
+                                    openAchievementPostModal(
+                                      buildAchievementPostStub(a, postId),
+                                      false
+                                    )
+                                  }}
+                                  onOpenComments={() => {
+                                    openAchievementPostModal(
+                                      buildAchievementPostStub(a, postId),
+                                      true
+                                    )
+                                  }}
+                                  onSharePost={
+                                    currentUserId
+                                      ? () => handleShareAchievement(a, postId)
+                                      : undefined
+                                  }
+                                  onImageClick={(src, achievement) =>
+                                    setSelectedAchievementImage({
+                                      src,
+                                      title: achievement.title,
+                                      achievedAt: achievement.achieved_at,
+                                      description: achievement.description,
+                                    })
+                                  }
+                                />
                               )
                             })}
                         </div>
@@ -3999,21 +4321,67 @@ function ProfilePageContent() {
                       {achievements
                         .filter((a) => !a.is_featured)
                         .map((a) => {
-                        return (
-                        <AchievementCard
-                          key={a.id}
-                          achievement={a}
-                          onImageClick={(src, achievement) =>
-                            setSelectedAchievementImage({
-                              src,
-                              title: achievement.title,
-                              achievedAt: achievement.achieved_at,
-                              description: achievement.description,
-                            })
+                          const postId = achievementPostIds[String(a.id)]
+                          if (!postId) {
+                            return (
+                              <AchievementCard
+                                key={a.id}
+                                achievement={a}
+                                onImageClick={(src, achievement) =>
+                                  setSelectedAchievementImage({
+                                    src,
+                                    title: achievement.title,
+                                    achievedAt: achievement.achieved_at,
+                                    description: achievement.description,
+                                  })
+                                }
+                              />
+                            )
                           }
-                        />
-                        )
-                      })}
+
+                          return (
+                            <ProfileAchievementSocialCard
+                              key={a.id}
+                              achievement={a}
+                              achievementPostId={postId}
+                              profileUserId={String(profile.id)}
+                              currentUser={
+                                currentUserId ? { id: currentUserId } : null
+                              }
+                              likeMeta={
+                                likesByPost[postId] || { count: 0, liked: false }
+                              }
+                              likeBusy={!!likeBusyByPost[postId]}
+                              comments={commentsByPost[postId] || []}
+                              onLike={() => void handleAchievementLike(postId)}
+                              onSelectPost={() => {
+                                openAchievementPostModal(
+                                  buildAchievementPostStub(a, postId),
+                                  false
+                                )
+                              }}
+                              onOpenComments={() => {
+                                openAchievementPostModal(
+                                  buildAchievementPostStub(a, postId),
+                                  true
+                                )
+                              }}
+                              onSharePost={
+                                currentUserId
+                                  ? () => handleShareAchievement(a, postId)
+                                  : undefined
+                              }
+                              onImageClick={(src, achievement) =>
+                                setSelectedAchievementImage({
+                                  src,
+                                  title: achievement.title,
+                                  achievedAt: achievement.achieved_at,
+                                  description: achievement.description,
+                                })
+                              }
+                            />
+                          )
+                        })}
                     </div>
                   </>
                 )}
@@ -4293,13 +4661,53 @@ function ProfilePageContent() {
         onClose={() => setScreenshotLightboxUrl(null)}
       />
 
+      {selectedAchievementPostDetail ? (
+        <FeedProfilePostDetailModal
+          post={selectedAchievementPostDetail}
+          user={currentUserId ? { id: currentUserId } : null}
+          comments={
+            commentsByPost[String(selectedAchievementPostDetail.id)] || []
+          }
+          likeMeta={
+            likesByPost[String(selectedAchievementPostDetail.id)] ||
+            EMPTY_LIKE_META
+          }
+          likeBusy={
+            !!likeBusyByPost[String(selectedAchievementPostDetail.id)]
+          }
+          commentSubmitting={
+            !!commentSubmitting[String(selectedAchievementPostDetail.id)]
+          }
+          draftSyncRef={feedDraftSyncRef}
+          openCommentsRef={feedOpenCommentsRef}
+          onClose={() => {
+            setSelectedAchievementPostDetail(null)
+          }}
+          onToggleLike={(post) => void handleAchievementLike(String(post.id))}
+          onSubmitComment={submitAchievementPostComment}
+          onDeleteComment={deleteComment}
+          onSharePost={(post) => {
+            const achievement = post.achievements as Achievement | undefined
+            if (achievement) {
+              handleShareAchievement(achievement, String(post.id))
+            }
+          }}
+        />
+      ) : null}
+
       {sharePost ? (
         <ShareToConversationsModal
           open
           onClose={() => setSharePost(null)}
           title="Send Post"
           postId={String(sharePost.id)}
-          feedKind="profile"
+          feedKind={
+            sharePost.feedKind === "achievement"
+              ? "achievement"
+              : sharePost.feedKind === "profile"
+                ? "profile"
+                : "trade"
+          }
           post={sharePost}
           captionPlaceholder="Add a message..."
           showCancel={false}

@@ -63,3 +63,22 @@ export function isScrollNearBottom(
 ): boolean {
   return scrollHeight - scrollTop - clientHeight < threshold
 }
+
+/** True when shared trade/post previews needed by the list are in cache. */
+export function areConversationPreviewsReady(
+  messages: any[],
+  tradesById: Record<string, any>,
+  postsById: Record<string, any>,
+  tradeKey: (tradeId: string) => string | null,
+  postKey: (message: any) => string | null
+): boolean {
+  for (const msg of messages) {
+    if (msg.type === "trade" && msg.trade_id) {
+      const key = tradeKey(String(msg.trade_id))
+      if (key && !tradesById[key]) return false
+    }
+    const key = postKey(msg)
+    if (key && !postsById[key]) return false
+  }
+  return true
+}

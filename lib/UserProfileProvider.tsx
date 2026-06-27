@@ -44,6 +44,7 @@ import {
 } from "./userBootstrapCache"
 import { clearAllSettingsProfileCaches } from "./settingsProfileCache"
 import { clearAllTradingAccountsSettingsCaches } from "./tradingAccountsSettingsCache"
+import { clearAllNotificationPreferencesCaches } from "./notificationPreferencesCache"
 import { auditLogProfileLoaded } from "./onboardingChecklistAudit"
 
 /**
@@ -51,7 +52,7 @@ import { auditLogProfileLoaded } from "./onboardingChecklistAudit"
  * Avoids duplicate `profiles` reads across Navbar, checklist, and key pages.
  */
 export const USER_PROFILE_SELECT =
-  "id, name, username, bio, is_private, avatar_url, trading_style, trading_model, trader_type, primary_market, started_trading, username_change_count, referral_code, referral_count, is_pro, subscription_status, cancel_at_period_end, cancel_at, trial_end, current_period_end, stripe_customer_id, is_banned, banned_reason, is_beta_tester, onboarding_completed, has_seen_getting_started_intro, has_seen_onboarding_complete_popup, max_drawdown_limit" as const
+  "id, name, username, bio, is_private, avatar_url, trading_style, trading_model, trader_type, primary_market, started_trading, username_change_count, referral_code, referral_count, is_pro, subscription_status, cancel_at_period_end, cancel_at, trial_end, current_period_end, stripe_customer_id, is_banned, banned_reason, is_beta_tester, onboarding_completed, has_seen_getting_started_intro, has_seen_onboarding_complete_popup, max_drawdown_limit, has_email_password" as const
 
 export type UserProfileSlice = {
   id: string
@@ -73,6 +74,7 @@ export type UserProfileSlice = {
   started_trading: string | null
   max_drawdown_limit: number | null
   is_private: boolean | null
+  has_email_password: boolean | null
 }
 
 function pickUserProfileFields(row: unknown): UserProfileSlice | null {
@@ -114,6 +116,8 @@ function pickUserProfileFields(row: unknown): UserProfileSlice | null {
       return Number.isFinite(n) ? n : null
     })(),
     is_private: typeof o.is_private === "boolean" ? o.is_private : null,
+    has_email_password:
+      typeof o.has_email_password === "boolean" ? o.has_email_password : null,
   }
 }
 
@@ -194,6 +198,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
       clearAllUserBootstrapProfiles()
       clearAllSettingsProfileCaches()
       clearAllTradingAccountsSettingsCaches()
+      clearAllNotificationPreferencesCaches()
       if (signedOutUserId) {
         clearUserBootstrapProfile(signedOutUserId)
         clearFeedSessionsForUser(signedOutUserId)

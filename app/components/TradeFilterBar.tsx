@@ -53,8 +53,8 @@ export type TradeFilterBarProps = {
   /** Prepended controls (e.g. Trade History win/loss toggle) */
   leading?: ReactNode
   /**
-   * When true with `leading`, pins leading on the left (md+) without shifting
-   * centered controls — used for dashboard Plan badge.
+   * When true with `leading`, pins leading on the left at md+ without shifting
+   * centered controls — used for dashboard Plan badge (desktop/tablet only).
    */
   leadingOverlay?: boolean
   /** Appended controls (e.g. Show Advanced, Public Trades, settings) */
@@ -173,12 +173,9 @@ export default function TradeFilterBar({
     if (!leadingOverlay) return leading
 
     return (
-      <>
-        <div className="shrink-0 md:hidden">{leading}</div>
-        <div className="pointer-events-none absolute inset-y-0 left-3 z-10 hidden items-center md:flex md:left-4">
-          <div className="pointer-events-auto">{leading}</div>
-        </div>
-      </>
+      <div className="pointer-events-none absolute inset-y-0 left-3 z-10 hidden items-center md:flex md:left-4">
+        <div className="pointer-events-auto">{leading}</div>
+      </div>
     )
   }
 

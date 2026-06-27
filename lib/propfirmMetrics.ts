@@ -1,6 +1,29 @@
 /**
  * PropFirm Mode calculation helpers.
  * Extracted from the analytics page for testability and reuse.
+ *
+ * ## Metric sources (Prop Firm page)
+ *
+ * All inputs are trades for the **selected account only** (page filters `account_id`).
+ *
+ * | UI metric | Scope | Source |
+ * |---|---|---|
+ * | Total P&L (hero) | Lifetime | `lifetimeTotalPnL` |
+ * | Current balance | Post-payout cycle | `displayCurrentBalance` (cycle anchor + cycle trades) |
+ * | Distance to DD | Payout cycle | `cycleTrailingMetrics.distanceToDD` |
+ * | Winning days | Payout cycle | `cycleDailyMetrics.winningDays` |
+ * | Equity curve | Lifetime | `buildPropfirmEquityCurveData(trades, payouts)` |
+ * | Max / daily drawdown rules | Payout cycle | `cycleTrailingMetrics`, `cycleDailyMetrics.worstDailyLossUsed` |
+ * | Consistency | Payout cycle | `cycleConsistencyMetrics` |
+ * | Cycle P&L | Payout cycle | `cyclePnL` |
+ * | Profit target % | Payout cycle | `cycleProgress.progressPercent` |
+ * | Drawdown used % | Payout cycle | `cycleProgress.ddPercent` |
+ * | Account status | Payout cycle | `cycleProgress.status` |
+ * | Today P&L | Calendar day | EST trading-day bucket from all trades (`lifetimeDailyMetrics.todayPnL`) |
+ * | Daily performance list | Lifetime | All prop-firm trading days (`lifetimeDailyMetrics.dailyRows`) |
+ *
+ * Payout cycle boundaries come from `account_payout_cycles` (see `propfirmPayoutCycles.ts`).
+ * Before the first recorded payout, the implicit cycle starts at `accounts.account_size`.
  */
 
 import { getTradingDayKey } from "./formatDate.ts"
@@ -59,13 +82,197 @@ export type PropfirmProgressResult = {
   distanceDanger: boolean
 }
 
+export type PayoutDrawdownBehavior = "reset_to_account" | "keep_trailing"
+
+export type PropfirmPayoutCycleContext = {
+  /** ISO timestamp when the current payout cycle began; null = account inception. */
+  startedAt: string | null
+  /** Account balance at the start of the current payout cycle. */
+  cycleStartBalance: number
+  /** Trailing drawdown floor in effect at cycle start (after payout). */
+  initialDrawdownFloor?: number | null
+  drawdownBehavior?: PayoutDrawdownBehavior | null
+  cycleNumber?: number | null
+}
+
+export type TrailingDrawdownOptions = {
+  /** Prop firm account base (cap for trailing floor). Defaults to startingBalance. */
+  accountBaseBalance?: number
+  /** Fixed floor at cycle start (e.g. after payout). */
+  initialDrawdownFloor?: number | null
+  /** When true, floor stays at the initial value (reset drawdown after payout). */
+  lockDrawdownFloor?: boolean
+}
+
 export type PropfirmAccountMetricsResult = {
   startingBalance: number
-  dailyMetrics: DailyMetricsResult
-  trailingMetrics: TrailingDrawdownResult
-  consistencyMetrics: ConsistencyRuleResult
-  totalPnL: number
-  progress: PropfirmProgressResult
+  /** Payout-cycle daily aggregation (winning days, daily drawdown rule). */
+  cycleDailyMetrics: DailyMetricsResult
+  /** Payout-cycle trailing drawdown (remaining drawdown, max DD used). */
+  cycleTrailingMetrics: TrailingDrawdownResult
+  /** Payout-cycle consistency rule. */
+  cycleConsistencyMetrics: ConsistencyRuleResult
+  /** Payout-cycle progress (profit target, status, drawdown bars). */
+  cycleProgress: PropfirmProgressResult
+  /** Lifetime net P&L across all trades. */
+  lifetimeTotalPnL: number
+  /** Profit since the current payout cycle start balance. */
+  cyclePnL: number
+  /** Lifetime daily aggregation (daily list, today P&L). */
+  lifetimeDailyMetrics: DailyMetricsResult
+  /** Lifetime trailing drawdown (trade-simulated, unchanged by withdrawals). */
+  lifetimeTrailingMetrics: TrailingDrawdownResult
+  /** Balance shown in UI: cycle anchor + cycle trades when a payout cycle is active. */
+  displayCurrentBalance: number
+  payoutCycle: PropfirmPayoutCycleContext
+}
+
+export type PropfirmEquityCurvePoint = {
+  date: string
+  balance: number
+  pnl: number
+}
+
+/** Future UI toggle: lifetime vs current payout cycle equity curve. */
+export type PropfirmEquityCurveScope = "lifetime" | "cycle"
+
+export type PropfirmEquityPayoutEventInput = {
+  endedAt: string
+  amount: number
+}
+
+export type PropfirmEquityEvent =
+  | {
+      kind: "trade"
+      sortMs: number
+      label: string
+      delta: number
+    }
+  | {
+      kind: "payout"
+      sortMs: number
+      label: string
+      amount: number
+    }
+
+function equityEventLabelFromIsoTimestamp(isoTimestamp: string): string {
+  const parsed = new Date(isoTimestamp)
+  if (!Number.isNaN(parsed.getTime())) {
+    return getTradingDayKey(parsed.toISOString())
+  }
+  return isoTimestamp.trim().slice(0, 10)
+}
+
+/** Build a chronological trade + payout timeline for equity replay. */
+export function buildPropfirmEquityEvents(
+  trades: PropfirmTrade[],
+  payouts: PropfirmEquityPayoutEventInput[] = []
+): PropfirmEquityEvent[] {
+  const events: PropfirmEquityEvent[] = []
+
+  for (const trade of sortTradesByTradeSequence(dedupeTradesById(trades))) {
+    const sortMs = getPropfirmTradeEpochMs(trade)
+    const label = getPropfirmTradingDay(trade)
+    if (sortMs == null || !label) continue
+
+    events.push({
+      kind: "trade",
+      sortMs,
+      label,
+      delta: Number(trade.pnl || 0),
+    })
+  }
+
+  for (const payout of payouts) {
+    const endedAt = String(payout.endedAt ?? "").trim()
+    const amount = Number(payout.amount)
+    if (!endedAt || !Number.isFinite(amount) || amount <= 0) continue
+
+    const sortMs = new Date(endedAt).getTime()
+    if (!Number.isFinite(sortMs)) continue
+
+    events.push({
+      kind: "payout",
+      sortMs,
+      label: equityEventLabelFromIsoTimestamp(endedAt),
+      amount,
+    })
+  }
+
+  return events.sort((left, right) => {
+    if (left.sortMs !== right.sortMs) return left.sortMs - right.sortMs
+    if (left.kind === right.kind) return 0
+    return left.kind === "trade" ? -1 : 1
+  })
+}
+
+function dedupePropfirmEquityCurvePoints(
+  points: PropfirmEquityCurvePoint[]
+): PropfirmEquityCurvePoint[] {
+  return points.filter((point, index) => {
+    if (index === 0) return true
+    const previous = points[index - 1]
+    return !(
+      previous.date === point.date &&
+      previous.balance === point.balance &&
+      previous.pnl === point.pnl
+    )
+  })
+}
+
+/** Replay trade and payout events into plotted equity curve points. */
+export function replayPropfirmEquityEvents(
+  startingBalance: number,
+  events: PropfirmEquityEvent[]
+): PropfirmEquityCurvePoint[] {
+  if (startingBalance <= 0) return []
+
+  let balance = startingBalance
+  const points: PropfirmEquityCurvePoint[] = [{ date: "Start", balance, pnl: 0 }]
+
+  for (const event of events) {
+    if (event.kind === "trade") {
+      balance += event.delta
+      points.push({ date: event.label, balance, pnl: event.delta })
+      continue
+    }
+
+    balance -= event.amount
+    points.push({ date: event.label, balance, pnl: -event.amount })
+  }
+
+  return dedupePropfirmEquityCurvePoints(points)
+}
+
+export function buildPropfirmEquityCurveData(
+  trades: PropfirmTrade[],
+  startingBalance: number,
+  payouts: PropfirmEquityPayoutEventInput[] = []
+): PropfirmEquityCurvePoint[] {
+  return replayPropfirmEquityEvents(
+    startingBalance,
+    buildPropfirmEquityEvents(trades, payouts)
+  )
+}
+
+export function selectPropfirmEquityCurveInputs(
+  metrics: PropfirmAccountMetricsResult,
+  scope: PropfirmEquityCurveScope = "lifetime"
+): {
+  startingBalance: number
+  expectedEndingBalance: number
+} {
+  if (scope === "cycle") {
+    return {
+      startingBalance: metrics.payoutCycle.cycleStartBalance,
+      expectedEndingBalance: metrics.displayCurrentBalance,
+    }
+  }
+
+  return {
+    startingBalance: metrics.startingBalance,
+    expectedEndingBalance: metrics.displayCurrentBalance,
+  }
 }
 
 const EMPTY_TRAILING_DRAWDOWN: TrailingDrawdownResult = {
@@ -156,9 +363,9 @@ export function formatPropfirmUsd(n: number): string {
   })}`
 }
 
-export const PROPFIRM_EQUITY_CURVE_PADDING_LARGE = 300
-export const PROPFIRM_EQUITY_CURVE_PADDING_SMALL = 150
-export const PROPFIRM_EQUITY_CURVE_MIN_RANGE = 150
+export const PROPFIRM_EQUITY_CURVE_PADDING = 500
+export const PROPFIRM_EQUITY_CURVE_MIN_RANGE = 1000
+export const PROPFIRM_EQUITY_CURVE_SMALL_MOVEMENT = 500
 
 export type PropfirmEquityCurveYDomainOptions = {
   /** Optional reference-line Y values to keep visible (profit target, drawdown floor, etc.). */
@@ -167,7 +374,8 @@ export type PropfirmEquityCurveYDomainOptions = {
 
 /**
  * Y-axis domain for the prop firm equity curve: zooms around plotted balances
- * with fixed padding, not account size or evaluation targets.
+ * with $500 padding and a $1,000 minimum visible range when movement is tight.
+ * Pass `includeValues` only when optional reference lines must stay in view.
  */
 export function computePropfirmEquityCurveYDomain(
   values: number[],
@@ -181,23 +389,62 @@ export function computePropfirmEquityCurveYDomain(
 
   const minValue = Math.min(...allValues)
   const maxValue = Math.max(...allValues)
-  const range = maxValue - minValue
+  const movement = maxValue - minValue
 
-  const padding =
-    range < PROPFIRM_EQUITY_CURVE_MIN_RANGE
-      ? PROPFIRM_EQUITY_CURVE_PADDING_SMALL
-      : PROPFIRM_EQUITY_CURVE_PADDING_LARGE
-
-  let lowerBound = minValue - padding
-  let upperBound = maxValue + padding
-
-  if (lowerBound >= upperBound) {
+  if (movement < PROPFIRM_EQUITY_CURVE_SMALL_MOVEMENT) {
     const mid = (minValue + maxValue) / 2
-    lowerBound = mid - padding
-    upperBound = mid + padding
+    return [
+      mid - PROPFIRM_EQUITY_CURVE_MIN_RANGE / 2,
+      mid + PROPFIRM_EQUITY_CURVE_MIN_RANGE / 2,
+    ]
+  }
+
+  let lowerBound = minValue - PROPFIRM_EQUITY_CURVE_PADDING
+  let upperBound = maxValue + PROPFIRM_EQUITY_CURVE_PADDING
+
+  if (upperBound - lowerBound < PROPFIRM_EQUITY_CURVE_MIN_RANGE) {
+    const mid = (minValue + maxValue) / 2
+    lowerBound = mid - PROPFIRM_EQUITY_CURVE_MIN_RANGE / 2
+    upperBound = mid + PROPFIRM_EQUITY_CURVE_MIN_RANGE / 2
   }
 
   return [lowerBound, upperBound]
+}
+
+const PROPFIRM_EQUITY_CURVE_NICE_STEPS = [
+  500, 1000, 2500, 5000, 10000, 25000, 50000,
+] as const
+
+/** Rounded Y-axis ticks for the prop firm equity curve. */
+export function computePropfirmEquityCurveYTicks(
+  domain: [number, number] | undefined,
+  maxTicks = 6
+): number[] | undefined {
+  if (!domain) return undefined
+
+  const [min, max] = domain
+  const range = max - min
+  if (range <= 0) return [Math.round(min)]
+
+  let step: number =
+    PROPFIRM_EQUITY_CURVE_NICE_STEPS[
+      PROPFIRM_EQUITY_CURVE_NICE_STEPS.length - 1
+    ]
+  for (const candidate of PROPFIRM_EQUITY_CURVE_NICE_STEPS) {
+    if (range / candidate <= maxTicks) {
+      step = candidate
+      break
+    }
+  }
+
+  const start = Math.floor(min / step) * step
+  const end = Math.ceil(max / step) * step
+  const ticks: number[] = []
+  for (let value = start; value <= end + step * 0.001; value += step) {
+    ticks.push(Math.round(value))
+  }
+
+  return ticks.length > 0 ? ticks : [Math.round(min), Math.round(max)]
 }
 
 /** Drop duplicate trade rows (same `id`) so PnL is not double-counted. */
@@ -240,19 +487,46 @@ export function sortTradesByCreatedAt<T extends PropfirmTrade>(trades: T[]): T[]
  * Trailing drawdown: floor rises with equity until it reaches the starting
  * balance. Once capped at the account size, it never trails higher.
  */
+/** Drawdown floor after a payout, based on prop firm reset vs trailing rules. */
+export function computePayoutDrawdownFloor(
+  behavior: PayoutDrawdownBehavior,
+  accountBaseBalance: number,
+  trailingMetricsBeforePayout: TrailingDrawdownResult,
+  maxDrawdown: number
+): number {
+  if (behavior === "reset_to_account") {
+    return accountBaseBalance
+  }
+
+  const previousFloor = trailingMetricsBeforePayout.drawdownFloor
+  if (Number.isFinite(previousFloor)) {
+    return previousFloor
+  }
+
+  const maxDd = Number(maxDrawdown) || 0
+  const balanceBefore = trailingMetricsBeforePayout.currentBalance
+  return Math.min(accountBaseBalance, balanceBefore - maxDd)
+}
+
 export function computeTrailingDrawdown(
   trades: PropfirmTrade[],
   startingBalance: number,
-  maxDrawdown: number
+  maxDrawdown: number,
+  options?: TrailingDrawdownOptions
 ): TrailingDrawdownResult {
   const maxDd = Number(maxDrawdown) || 0
+  const accountBase = options?.accountBaseBalance ?? startingBalance
 
   const uniqueTrades = dedupeTradesById(trades)
   const tradesSorted = sortTradesByCreatedAt(uniqueTrades)
 
   let balance = startingBalance
   let peakBalance = startingBalance
-  let drawdownFloor = startingBalance - maxDd
+  const initialFloor = options?.initialDrawdownFloor
+  let drawdownFloor =
+    initialFloor != null && Number.isFinite(initialFloor)
+      ? initialFloor
+      : startingBalance - maxDd
   let maxDrawdownUsed = 0
   let breachedTrailingDD = false
 
@@ -263,7 +537,9 @@ export function computeTrailingDrawdown(
 
     if (balance > peakBalance) {
       peakBalance = balance
-      drawdownFloor = Math.min(startingBalance, peakBalance - maxDd)
+      if (!options?.lockDrawdownFloor) {
+        drawdownFloor = Math.min(accountBase, peakBalance - maxDd)
+      }
     }
 
     const drawdownUsed = Math.max(0, drawdownFloor + maxDd - balance)
@@ -376,8 +652,47 @@ export function computeDailyMetrics(
   }
 }
 
+/** Resolve a trade to epoch ms for payout-cycle cutoff comparisons. */
+export function getPropfirmTradeEpochMs(trade: PropfirmTrade): number | null {
+  const tradeDate = String(trade.trade_date ?? trade.date ?? "")
+    .trim()
+    .slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(tradeDate)) return null
+
+  const entryTime = String(trade.entry_time ?? "").trim()
+  if (entryTime) {
+    const parsedEntry = new Date(entryTime)
+    if (!Number.isNaN(parsedEntry.getTime())) return parsedEntry.getTime()
+  }
+
+  return new Date(`${tradeDate}T12:00:00Z`).getTime()
+}
+
+/** Trades at or after the payout cycle start timestamp (immediate reset on Record Payout). */
+export function filterTradesForPayoutCycle<T extends PropfirmTrade>(
+  trades: T[],
+  cycleStartedAt: string | null
+): T[] {
+  if (!cycleStartedAt) return trades
+
+  const cutoffMs = new Date(cycleStartedAt).getTime()
+  if (!Number.isFinite(cutoffMs)) return trades
+
+  return trades.filter((trade) => {
+    const tradeMs = getPropfirmTradeEpochMs(trade)
+    return tradeMs != null && tradeMs >= cutoffMs
+  })
+}
+
+export function computeCyclePnL(
+  cycleCurrentBalance: number,
+  cycleStartBalance: number
+): number {
+  return cycleCurrentBalance - cycleStartBalance
+}
+
 export function computePropfirmProgress(
-  totalPnL: number,
+  cyclePnL: number,
   trailingMetrics: TrailingDrawdownResult,
   account: PropfirmAccountRules | null
 ): PropfirmProgressResult {
@@ -386,10 +701,10 @@ export function computePropfirmProgress(
   const drawdownUsed = trailingMetrics.maxDrawdownUsed
 
   const progressPercent = profitTarget
-    ? Math.min((totalPnL / profitTarget) * 100, 100)
+    ? Math.min((cyclePnL / profitTarget) * 100, 100)
     : 0
 
-  const isPassed = !!account && profitTarget > 0 && totalPnL >= profitTarget
+  const isPassed = !!account && profitTarget > 0 && cyclePnL >= profitTarget
   const isFailed =
     !!account &&
     maxDdLimit > 0 &&
@@ -411,7 +726,7 @@ export function computePropfirmProgress(
     distanceToDD < 0.2 * maxDdLimit
 
   return {
-    totalPnL,
+    totalPnL: cyclePnL,
     progressPercent,
     isPassed,
     isFailed,
@@ -423,29 +738,78 @@ export function computePropfirmProgress(
 
 export function computePropfirmAccountMetrics(
   trades: PropfirmTrade[],
-  account: PropfirmAccountRules | null
+  account: PropfirmAccountRules | null,
+  payoutCycle?: PropfirmPayoutCycleContext | null
 ): PropfirmAccountMetricsResult {
-  const dailyMetrics = computeDailyMetrics(trades)
-  const totalPnL = computeTotalPnL(trades)
   const startingBalance = account ? parseAccountSizeToNumber(account) : 0
-  const trailingMetrics = account
+  const cycleContext: PropfirmPayoutCycleContext = payoutCycle ?? {
+    startedAt: null,
+    cycleStartBalance: startingBalance,
+  }
+
+  const uniqueTrades = dedupeTradesById(trades)
+  const lifetimeDailyMetrics = computeDailyMetrics(uniqueTrades)
+  const totalPnL = computeTotalPnL(uniqueTrades)
+
+  const lifetimeTrailingMetrics = account
     ? computeTrailingDrawdown(
-        trades,
+        uniqueTrades,
         startingBalance,
         Number(account.max_drawdown) || 0
       )
     : EMPTY_TRAILING_DRAWDOWN
-  const consistencyMetrics = account
-    ? computeConsistencyRule(trades, Number(account.consistency) || 0)
+
+  const cycleTrades = filterTradesForPayoutCycle(
+    uniqueTrades,
+    cycleContext.startedAt
+  )
+  const cycleDailyMetrics = computeDailyMetrics(cycleTrades)
+  const trailingOptions: TrailingDrawdownOptions | undefined = account
+    ? {
+        accountBaseBalance: startingBalance,
+        initialDrawdownFloor: cycleContext.initialDrawdownFloor,
+        lockDrawdownFloor:
+          cycleContext.drawdownBehavior === "reset_to_account" &&
+          cycleContext.initialDrawdownFloor != null,
+      }
+    : undefined
+  const cycleTrailingMetrics = account
+    ? computeTrailingDrawdown(
+        cycleTrades,
+        cycleContext.cycleStartBalance,
+        Number(account.max_drawdown) || 0,
+        trailingOptions
+      )
+    : EMPTY_TRAILING_DRAWDOWN
+  const cycleConsistencyMetrics = account
+    ? computeConsistencyRule(cycleTrades, Number(account.consistency) || 0)
     : INACTIVE_CONSISTENCY_RULE
-  const progress = computePropfirmProgress(totalPnL, trailingMetrics, account)
+
+  const displayCurrentBalance = cycleContext.startedAt
+    ? cycleTrailingMetrics.currentBalance
+    : lifetimeTrailingMetrics.currentBalance
+
+  const cyclePnL = computeCyclePnL(
+    cycleTrailingMetrics.currentBalance,
+    cycleContext.cycleStartBalance
+  )
+  const cycleProgress = computePropfirmProgress(
+    cyclePnL,
+    cycleTrailingMetrics,
+    account
+  )
 
   return {
     startingBalance,
-    dailyMetrics,
-    trailingMetrics,
-    consistencyMetrics,
-    totalPnL,
-    progress,
+    cycleDailyMetrics,
+    cycleTrailingMetrics,
+    cycleConsistencyMetrics,
+    cycleProgress,
+    lifetimeTotalPnL: totalPnL,
+    cyclePnL,
+    lifetimeDailyMetrics,
+    lifetimeTrailingMetrics,
+    displayCurrentBalance,
+    payoutCycle: cycleContext,
   }
 }

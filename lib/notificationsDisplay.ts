@@ -21,6 +21,7 @@ export type NotificationRecord = {
   post_id: string | null
   trade_id: string | null
   profile_post_id: string | null
+  achievement_post_id: string | null
   content: string | null
   read: boolean
   created_at: string
@@ -39,6 +40,7 @@ export type LikeNotificationGroup = {
   post_id: string | null
   trade_id: string | null
   profile_post_id: string | null
+  achievement_post_id: string | null
   notificationIds: string[]
   read: boolean
   latestAt: string
@@ -59,6 +61,7 @@ export type CommentNotificationGroup = {
   post_id: string | null
   trade_id: string | null
   profile_post_id: string | null
+  achievement_post_id: string | null
   notificationIds: string[]
   read: boolean
   latestAt: string
@@ -156,15 +159,19 @@ export function senderDisplayName(
   )
 }
 
-export type EngagementTarget = "post" | "trade"
+export type EngagementTarget = "post" | "trade" | "achievement"
 
 function engagementContentPostId(
   postId?: string | null,
-  profilePostId?: string | null
+  profilePostId?: string | null,
+  achievementPostId?: string | null
 ): string | null {
   if (postId != null && String(postId).trim() !== "") return String(postId)
   if (profilePostId != null && String(profilePostId).trim() !== "") {
     return String(profilePostId)
+  }
+  if (achievementPostId != null && String(achievementPostId).trim() !== "") {
+    return String(achievementPostId)
   }
   return null
 }
@@ -172,8 +179,12 @@ function engagementContentPostId(
 export function engagementTarget(
   postId: string | null | undefined,
   tradeId: string | null | undefined,
-  profilePostId?: string | null
+  profilePostId?: string | null,
+  achievementPostId?: string | null
 ): EngagementTarget {
+  if (achievementPostId != null && String(achievementPostId).trim() !== "") {
+    return "achievement"
+  }
   if (engagementContentPostId(postId, profilePostId)) return "post"
   if (tradeId != null && String(tradeId).trim() !== "") return "trade"
   return "post"
@@ -184,9 +195,10 @@ export function formatLikeGroupMessage(
   totalLikes: number,
   postId?: string | null,
   tradeId?: string | null,
-  profilePostId?: string | null
+  profilePostId?: string | null,
+  achievementPostId?: string | null
 ): string {
-  const noun = engagementTarget(postId, tradeId, profilePostId)
+  const noun = engagementTarget(postId, tradeId, profilePostId, achievementPostId)
   const ordered = names.filter(Boolean)
   if (totalLikes <= 0) return `Someone liked your ${noun}`
   if (totalLikes === 1) {
@@ -238,6 +250,7 @@ export function groupLikeNotifications(
       post_id: latest.post_id,
       trade_id: latest.trade_id,
       profile_post_id: latest.profile_post_id ?? null,
+      achievement_post_id: latest.achievement_post_id ?? null,
       notificationIds: sorted.map((row) => row.id),
       read: sorted.every((row) => row.read),
       latestAt: latest.created_at,
@@ -251,9 +264,10 @@ export function formatCommentGroupTitle(
   totalComments: number,
   postId?: string | null,
   tradeId?: string | null,
-  profilePostId?: string | null
+  profilePostId?: string | null,
+  achievementPostId?: string | null
 ): string {
-  const noun = engagementTarget(postId, tradeId, profilePostId)
+  const noun = engagementTarget(postId, tradeId, profilePostId, achievementPostId)
   const n = Math.max(0, totalComments)
   if (n === 0) return `Someone commented on your ${noun}`
   if (n === 1) return `1 person commented on your ${noun}`
@@ -313,6 +327,7 @@ export function formatFollowGroupMessage(
 function engagementGroupKey(row: NotificationRecord): string {
   if (row.post_id) return `post:${row.post_id}`
   if (row.profile_post_id) return `profile_post:${row.profile_post_id}`
+  if (row.achievement_post_id) return `achievement_post:${row.achievement_post_id}`
   if (row.trade_id) return `trade:${row.trade_id}`
   return `row:${row.id}`
 }
@@ -342,6 +357,7 @@ export function groupCommentNotifications(
       post_id: latest.post_id,
       trade_id: latest.trade_id,
       profile_post_id: latest.profile_post_id ?? null,
+      achievement_post_id: latest.achievement_post_id ?? null,
       notificationIds: sorted.map((row) => row.id),
       read: sorted.every((row) => row.read),
       latestAt: latest.created_at,
@@ -746,9 +762,22 @@ export function buildTradeRoomHref(
 
 function profileContentHref(
   owner: { id: string; username?: string | null },
-  opts: { postId?: string | null; tradeId?: string | null; openComments?: boolean }
+  opts: {
+    postId?: string | null
+    tradeId?: string | null
+    achievementPostId?: string | null
+    openComments?: boolean
+  }
 ): string {
   const base = profilePath(owner)
+  if (opts.achievementPostId) {
+    const params = new URLSearchParams({
+      achievement: opts.achievementPostId,
+      tab: "achievements",
+    })
+    if (opts.openComments) params.set("comments", "1")
+    return `${base}?${params.toString()}`
+  }
   if (opts.postId) {
     const params = new URLSearchParams({ post: opts.postId })
     if (opts.openComments) params.set("comments", "1")
@@ -767,17 +796,27 @@ export function getGroupedNotificationHref(
 ): string {
   if (card.kind === "like_group") {
     return profileContentHref(owner, {
-      postId: engagementContentPostId(card.post_id, card.profile_post_id),
+      postId: engagementContentPostId(
+        card.post_id,
+        card.profile_post_id,
+        card.achievement_post_id
+      ),
       tradeId: card.trade_id,
+      achievementPostId: card.achievement_post_id,
     })
   }
 
   if (card.kind === "comment_group") {
-    const postId = engagementContentPostId(card.post_id, card.profile_post_id)
+    const postId = engagementContentPostId(
+      card.post_id,
+      card.profile_post_id,
+      card.achievement_post_id
+    )
     return profileContentHref(owner, {
       postId,
       tradeId: card.trade_id,
-      openComments: Boolean(postId),
+      achievementPostId: card.achievement_post_id,
+      openComments: Boolean(postId || card.achievement_post_id),
     })
   }
 
@@ -836,18 +875,28 @@ export function getNotificationHref(
 ): string {
   if (item.kind === "like_group") {
     return profileContentHref(owner, {
-      postId: engagementContentPostId(item.post_id, item.profile_post_id),
+      postId: engagementContentPostId(
+        item.post_id,
+        item.profile_post_id,
+        item.achievement_post_id
+      ),
       tradeId: item.trade_id,
+      achievementPostId: item.achievement_post_id,
     })
   }
 
   const n = item.notification
   if (n.type === "comment") {
-    const postId = engagementContentPostId(n.post_id, n.profile_post_id)
+    const postId = engagementContentPostId(
+      n.post_id,
+      n.profile_post_id,
+      n.achievement_post_id
+    )
     return profileContentHref(owner, {
       postId,
       tradeId: n.trade_id,
-      openComments: Boolean(postId),
+      achievementPostId: n.achievement_post_id,
+      openComments: Boolean(postId || n.achievement_post_id),
     })
   }
 

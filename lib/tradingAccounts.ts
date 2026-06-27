@@ -73,6 +73,8 @@ export function tradingAccountDisplayTitle(account: TradingAccountListItem): str
   return formatAccountNameWithSizeDisplay(account.name, account.size)
 }
 
+export { matchesTradingAccountSearch } from "./tradingAccountsSearch"
+
 function mapPropFirmRules(
   acc: Record<string, unknown>
 ): TradingAccountPropFirmRules {

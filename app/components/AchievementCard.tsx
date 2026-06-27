@@ -9,6 +9,7 @@ import {
   normalizeAchievementType,
   tierClassName,
 } from "../../lib/achievements"
+import { achievementImagePublicUrl } from "../../lib/storagePublicUrl"
 
 type AchievementCardProps = {
   achievement: Achievement
@@ -19,15 +20,6 @@ type AchievementCardProps = {
   onImageClick?: (imageSrc: string, achievement: Achievement) => void
 }
 
-function achievementImageSrc(imageUrl: string | null | undefined): string | null {
-  const raw = imageUrl != null ? String(imageUrl).trim() : ""
-  if (!raw) return null
-  if (raw.startsWith("http")) return raw
-  const base = process.env.NEXT_PUBLIC_SUPABASE_URL
-  if (!base) return null
-  return `${base}/storage/v1/object/public/screenshots/${raw}`
-}
-
 export default function AchievementCard({
   achievement,
   featured = false,
@@ -36,7 +28,7 @@ export default function AchievementCard({
   onDelete,
   onImageClick,
 }: AchievementCardProps) {
-  const imageSrc = achievementImageSrc(achievement.image_url)
+  const imageSrc = achievementImagePublicUrl(achievement.image_url)
   const valueText = formatAchievementValue(achievement)
   const isPayout = normalizeAchievementType(achievement.achievement_type) === "payout"
   const headerLabel =
