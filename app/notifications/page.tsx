@@ -506,7 +506,7 @@ export default function NotificationsPage() {
     )
 
     if (senderIds.length > 0) {
-      await ensureSenderProfiles(senderIds)
+      void ensureSenderProfiles(senderIds)
     } else {
       setSendersById({})
     }
@@ -778,7 +778,7 @@ export default function NotificationsPage() {
     [sections]
   )
 
-  if (profileLoading || (loading && notifications.length === 0)) {
+  if ((profileLoading && !profile) || (loading && notifications.length === 0)) {
     return (
       <>
         <Navbar />

@@ -8,7 +8,9 @@ import {
   GETTING_STARTED_COLLAPSED_STORAGE_KEY,
   GETTING_STARTED_ITEM_HELP,
   readGettingStartedCollapsedPreference,
+  readGettingStartedSessionDismissed,
   writeGettingStartedCollapsedPreference,
+  writeGettingStartedSessionDismissed,
 } from "@/lib/gettingStartedChecklist"
 import { profilePath } from "@/lib/profileRoutes"
 import PopularTradeRoomsModal from "./PopularTradeRoomsModal"
@@ -21,6 +23,8 @@ export type GettingStartedChecklistProps = {
   onChecklistRefresh?: () => void
   /** When true, always show tasks (no collapse toggle). Used in mobile drawer. */
   alwaysExpanded?: boolean
+  /** When false, start collapsed unless user previously expanded. */
+  defaultExpanded?: boolean
   /** When true, omit outer card chrome (parent supplies container). */
   embedded?: boolean
   className?: string
@@ -127,6 +131,7 @@ export default function GettingStartedChecklist({
   firstPrivateTradeId,
   onChecklistRefresh,
   alwaysExpanded = false,
+  defaultExpanded = true,
   embedded = false,
   className = "",
 }: GettingStartedChecklistProps) {
@@ -142,14 +147,27 @@ export default function GettingStartedChecklist({
       setExpanded(true)
       return
     }
-    setExpanded(!readGettingStartedCollapsedPreference(userId))
-  }, [userId, alwaysExpanded])
+    if (readGettingStartedSessionDismissed(userId)) {
+      setExpanded(false)
+      return
+    }
+    if (readGettingStartedCollapsedPreference(userId)) {
+      setExpanded(false)
+      return
+    }
+    setExpanded(defaultExpanded)
+  }, [userId, alwaysExpanded, defaultExpanded])
 
   const toggleExpanded = useCallback(() => {
     if (alwaysExpanded) return
     setExpanded((prev) => {
       const next = !prev
-      writeGettingStartedCollapsedPreference(userId, !next)
+      if (!next) {
+        writeGettingStartedSessionDismissed(userId)
+        writeGettingStartedCollapsedPreference(userId, true)
+      } else {
+        writeGettingStartedCollapsedPreference(userId, false)
+      }
       return next
     })
   }, [userId, alwaysExpanded])

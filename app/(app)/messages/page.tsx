@@ -29,6 +29,12 @@ import { markConversationOpenFromInbox } from "@/lib/conversationOpenIntent"
 import { useRouter } from "next/navigation"
 import MessagesConversationList from "../../components/messages/MessagesConversationList"
 import EmptyState from "../../components/ui/EmptyState"
+import { SkeletonMessagesPage } from "../../components/ui/skeletons"
+import { useUserProfile } from "@/lib/UserProfileProvider"
+import {
+  readMessagesInboxSession,
+  writeMessagesInboxSession,
+} from "@/lib/messagesInboxSessionCache"
 
 function sortConversationsDesc(list: any[]) {
   return [...list].sort(
@@ -45,8 +51,8 @@ function sortConversationsDesc(list: any[]) {
 }
 
 export default function MessagesPage() {
+  const { user: authUser, loading: profileLoading } = useUserProfile()
   const [conversations, setConversations] = useState<any[]>([])
-  const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
   const [showGroupModal, setShowGroupModal] = useState(false)
@@ -64,6 +70,7 @@ export default function MessagesPage() {
   const [openConvoMenuId, setOpenConvoMenuId] = useState<string | null>(null)
 
   const router = useRouter()
+  const user = authUser
 
   function mergeNewConversation(prev: any[], newConversation: any) {
     if (prev.some((c) => c.id === newConversation.id)) return prev
@@ -256,19 +263,23 @@ export default function MessagesPage() {
 
     if (!rows || rows.length === 0) {
       setConversations([])
+      writeMessagesInboxSession(userId, [])
       return []
     }
 
     const convoIds = rows.map((p: any) => p.conversation_id)
 
-    const { data: participantRows } = await supabase
-      .from("conversation_participants")
-      .select(`
+    const [{ data: participantRows }, msgRows] = await Promise.all([
+      supabase
+        .from("conversation_participants")
+        .select(`
         conversation_id,
         user_id,
         profiles (id, username, avatar_url, name)
       `)
-      .in("conversation_id", convoIds)
+        .in("conversation_id", convoIds),
+      fetchUnreadMessageRows(userId, convoIds),
+    ])
 
     const participantsByConvo = new Map<string, any[]>()
     for (const row of participantRows || []) {
@@ -277,8 +288,6 @@ export default function MessagesPage() {
       list.push(row)
       participantsByConvo.set(cid, list)
     }
-
-    const msgRows = await fetchUnreadMessageRows(userId, convoIds)
 
     const unreadByConvo: Record<string, number> = {}
     for (const cid of convoIds) unreadByConvo[cid] = 0
@@ -331,25 +340,26 @@ export default function MessagesPage() {
       applyInboxPatchesToConversations(convoData)
     )
     setConversations(sorted)
+    writeMessagesInboxSession(userId, sorted)
     return sorted
   }, [])
 
   useEffect(() => {
-    void (async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-
-      if (!user) {
+    if (!authUser?.id) {
+      if (!profileLoading) {
         router.push("/login")
-        return
       }
+      return
+    }
 
-      setUser(user)
-      await fetchConversations(user.id)
+    const cached = readMessagesInboxSession(authUser.id)
+    if (cached?.conversations.length) {
+      setConversations(cached.conversations)
       setLoading(false)
-    })()
-  }, [fetchConversations, router])
+    }
+
+    void fetchConversations(authUser.id).finally(() => setLoading(false))
+  }, [authUser?.id, profileLoading, fetchConversations, router])
 
   const fetchUnreadCountForConversation = useCallback(
     async (userId: string, conversationId: string) =>
@@ -764,8 +774,8 @@ export default function MessagesPage() {
           />
 
           <div className="min-h-0 flex-1 overflow-y-auto">
-            {loading ? (
-              <p className="text-gray-400">Loading...</p>
+            {!authUser?.id || (loading && conversations.length === 0) ? (
+              <SkeletonMessagesPage />
             ) : filteredConversations.length === 0 ? (
               conversations.length === 0 ? (
                 <EmptyState

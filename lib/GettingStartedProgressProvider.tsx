@@ -15,13 +15,16 @@ import type { FeedbackPopupInput } from "@/app/components/ui/feedback-popup-type
 import {
   computeGettingStartedProgress,
   type GettingStartedProgress,
-  shouldShowGettingStartedIntroPopup,
 } from "@/lib/gettingStartedChecklist"
 import {
   fetchGettingStartedChecklistSignals,
   type GettingStartedChecklistSignals,
 } from "@/lib/gettingStartedChecklistSignals"
 import { gsDebug } from "@/lib/gettingStartedDebug"
+import {
+  auditLogProfileLoaded,
+  auditLogSignalsResolved,
+} from "@/lib/onboardingChecklistAudit"
 import {
   resolveBaselineProgressPopups,
   resolveGettingStartedProgressPopups,
@@ -301,6 +304,27 @@ export function GettingStartedProgressProvider({
           .map((i) => i.id),
       })
 
+      auditLogSignalsResolved({
+        userId,
+        signalsReady: true,
+        onboardingCompleted: next.onboardingCompleted,
+        hasSeenGettingStartedIntro: next.hasSeenGettingStartedIntro,
+        hasSeenOnboardingCompletePopup: next.hasSeenOnboardingCompletePopup,
+        preloadedFromProfile: preloadedProfileSignals != null,
+      })
+
+      if (preloadedProfileSignals != null) {
+        auditLogProfileLoaded({
+          userId,
+          onboarding_completed: profile?.onboarding_completed,
+          has_seen_getting_started_intro: profile?.has_seen_getting_started_intro,
+          has_seen_onboarding_complete_popup:
+            profile?.has_seen_onboarding_complete_popup,
+          profileLoading,
+          profileLoaded: profile != null,
+        })
+      }
+
       setSignals(next)
       signalsRef.current = next
       setSignalsReady(true)
@@ -337,46 +361,14 @@ export function GettingStartedProgressProvider({
         popups.push(batch.completionPopup)
       }
 
-      const showIntro = shouldShowGettingStartedIntroPopup({
-        onboardingCompleted: next.onboardingCompleted,
-        hasSeenGettingStartedIntro: next.hasSeenGettingStartedIntro,
-        prevOnboardingCompleted,
-        isBaselineFetch,
-      })
-
-      if (showIntro) {
-        introPopupActiveRef.current = true
-        popups.unshift(feedbackPresets.gettingStartedIntro())
-        gsDebug("intro popup queued", {
-          hasSeenGettingStartedIntro: next.hasSeenGettingStartedIntro,
-          onboardingCompleted: next.onboardingCompleted,
-          prevOnboardingCompleted,
-          isBaselineFetch,
-        })
-      }
-
-      // Profile task completes with onboarding — intro popup covers that milestone.
-      const popupsToEnqueue =
-        showIntro && !prevOnboardingCompleted
-          ? popups.filter(
-              (p) =>
-                !(
-                  p.title === "Getting Started Progress" &&
-                  typeof p.message === "string" &&
-                  p.message.includes("Complete your profile")
-                )
-            )
-          : popups
-
       gsDebug("popup batch", {
         stepCount: batch.stepPopups.length,
         hasCompletion: Boolean(batch.completionPopup),
         hasSeenOnboardingCompletePopup: next.hasSeenOnboardingCompletePopup,
-        hasIntro: showIntro,
-        enqueueCount: popupsToEnqueue.length,
+        enqueueCount: popups.length,
       })
 
-      enqueuePopups(popupsToEnqueue)
+      enqueuePopups(popups)
     },
     [enqueuePopups, profile]
   )
@@ -404,7 +396,7 @@ export function GettingStartedProgressProvider({
       return
     }
 
-    if (profileLoading) return
+    if (profileLoading && !profile) return
 
     void refreshChecklistSignals().then(() => {
       if (pendingRefreshRef.current) {

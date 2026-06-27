@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react"
 import { usePathname } from "next/navigation"
 import GettingStartedChecklist from "@/app/components/dashboard/GettingStartedChecklist"
 import { useGettingStartedProgress } from "@/lib/GettingStartedProgressProvider"
-import { shouldShowGettingStartedChecklist } from "@/lib/gettingStartedChecklist"
+import { shouldOfferGettingStartedChecklist } from "@/lib/gettingStartedChecklist"
 import { useUserProfile } from "@/lib/useUserProfile"
 
 export default function GettingStartedMobileEntry() {
@@ -20,7 +20,7 @@ export default function GettingStartedMobileEntry() {
 
   const visible =
     signalsReady &&
-    shouldShowGettingStartedChecklist(user?.id, {
+    shouldOfferGettingStartedChecklist(user?.id, {
       hasSeenOnboardingCompletePopup: signals.hasSeenOnboardingCompletePopup,
       allComplete: progress.allComplete,
     })

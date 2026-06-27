@@ -52,6 +52,11 @@ export type TradeFilterBarProps = {
   onCustomRangeApply?: (start: string, end: string) => void
   /** Prepended controls (e.g. Trade History win/loss toggle) */
   leading?: ReactNode
+  /**
+   * When true with `leading`, pins leading on the left (md+) without shifting
+   * centered controls — used for dashboard Plan badge.
+   */
+  leadingOverlay?: boolean
   /** Appended controls (e.g. Show Advanced, Public Trades, settings) */
   trailing?: ReactNode
   /** Shown beside “All Modes” on small screens only */
@@ -82,6 +87,7 @@ export default function TradeFilterBar({
   customRangeEnd = "",
   onCustomRangeApply,
   leading,
+  leadingOverlay = false,
   trailing,
   settingsNextToModes,
   publicNextToModes,
@@ -162,6 +168,20 @@ export default function TradeFilterBar({
     )
   }
 
+  function renderLeading() {
+    if (!leading) return null
+    if (!leadingOverlay) return leading
+
+    return (
+      <>
+        <div className="shrink-0 md:hidden">{leading}</div>
+        <div className="pointer-events-none absolute inset-y-0 left-3 z-10 hidden items-center md:flex md:left-4">
+          <div className="pointer-events-auto">{leading}</div>
+        </div>
+      </>
+    )
+  }
+
   return (
     <>
       <div
@@ -177,7 +197,7 @@ export default function TradeFilterBar({
               isTradesVariant ? "px-2 py-3" : "px-3 py-2"
             }`}
           >
-            <div className="flex justify-center md:justify-start">{leading}</div>
+            <div className="flex justify-center md:justify-start">{renderLeading()}</div>
 
             <div className="w-full md:w-auto">
               {renderAccountSelect(`${accountSelectClassName} w-full`)}
@@ -219,7 +239,7 @@ export default function TradeFilterBar({
                 : `relative z-50 flex max-w-full overflow-visible rounded-xl border border-white/10 bg-white/5 px-3 py-2 backdrop-blur-md md:gap-3 md:px-4 md:py-3 flex-wrap items-center justify-center gap-2 lg:flex-nowrap`
             }
           >
-            {leading}
+            {renderLeading()}
 
             {renderAccountSelect(`${accountSelectClassName} w-full`)}
 

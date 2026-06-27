@@ -31,6 +31,16 @@ import { clearConversationSessionsForUser } from "./conversationSessionCache"
 import { clearImageUrlCache } from "./imageUrlCache"
 import { invalidateStoriesSession } from "./storiesSessionCache"
 import { resetRoutePrefetchSession } from "./routePrefetch"
+import { warmAppDataCaches, resetDataPrefetchSession } from "./dataPrefetch"
+import { clearAllMessagesInboxSessions } from "./messagesInboxSessionCache"
+import { clearAllRoomSessions } from "./roomSessionCache"
+import {
+  clearAllUserBootstrapProfiles,
+  clearUserBootstrapProfile,
+  readUserBootstrapProfile,
+  writeUserBootstrapProfile,
+} from "./userBootstrapCache"
+import { auditLogProfileLoaded } from "./onboardingChecklistAudit"
 
 /**
  * Shared profile columns for shell + dashboard + getting-started.
@@ -151,7 +161,10 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
       .maybeSingle()
 
     const picked = pickUserProfileFields(profileData)
-    if (picked) setProfileState(picked)
+    if (picked) {
+      setProfileState(picked)
+      writeUserBootstrapProfile(userId, picked)
+    }
   }, [user?.id])
 
   useEffect(() => {
@@ -176,7 +189,12 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
       invalidateStoriesSession()
       clearImageUrlCache()
       resetRoutePrefetchSession()
+      resetDataPrefetchSession()
+      clearAllMessagesInboxSessions()
+      clearAllRoomSessions()
+      clearAllUserBootstrapProfiles()
       if (signedOutUserId) {
+        clearUserBootstrapProfile(signedOutUserId)
         clearFeedSessionsForUser(signedOutUserId)
         clearConversationSessionsForUser(signedOutUserId)
       }
@@ -186,12 +204,74 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
       setLoading(false)
     }
 
+    async function subscribeProfileRealtime(
+      sessionUserId: string,
+      generation: number
+    ) {
+      const topic = `profile:${sessionUserId}:${realtimeTopicSuffix}`
+      const ch = supabase.channel(topic)
+      channelRef.current = ch
+
+      ch.on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "profiles",
+          filter: `id=eq.${sessionUserId}`,
+        },
+        (payload) => {
+          if (!mounted || generation !== loadGeneration) return
+          const picked = pickUserProfileFields(payload.new)
+          if (picked) {
+            setProfileState(picked)
+            writeUserBootstrapProfile(sessionUserId, picked)
+          }
+        }
+      )
+
+      if (!mounted || generation !== loadGeneration) {
+        void supabase.removeChannel(ch)
+        channelRef.current = null
+        return
+      }
+
+      ch.subscribe()
+    }
+
+    async function runDeferredBootstrap(
+      sessionUserId: string,
+      generation: number,
+      initialProfile: UserProfileSlice | null
+    ) {
+      const storedBetaRef = isBetaReferralRef(readStoredReferralCode())
+      if (storedBetaRef) {
+        const repair = await applyBetaReferralIfEligible(supabase, sessionUserId)
+        if (!mounted || generation !== loadGeneration) return
+
+        if (repair.applied) {
+          const { data: refetched } = await supabase
+            .from("profiles")
+            .select(USER_PROFILE_SELECT)
+            .eq("id", sessionUserId)
+            .maybeSingle()
+          if (!mounted || generation !== loadGeneration) return
+          const picked = pickUserProfileFields(refetched)
+          if (picked) {
+            setProfileState(picked)
+            writeUserBootstrapProfile(sessionUserId, picked)
+          }
+        } else if (initialProfile) {
+          clearBetaReferralAfterApply(initialProfile.is_beta_tester)
+        }
+      }
+
+      if (!mounted || generation !== loadGeneration) return
+      await subscribeProfileRealtime(sessionUserId, generation)
+    }
+
     async function applyAuthSession(session: Session | null) {
       const generation = ++loadGeneration
-
-      if (!profileRef.current) {
-        setLoading(true)
-      }
 
       removeProfileChannel()
 
@@ -208,6 +288,28 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
         return
       }
 
+      const cachedPicked = pickUserProfileFields(
+        readUserBootstrapProfile(sessionUser.id)
+      )
+      if (cachedPicked) {
+        setProfileState(cachedPicked)
+        setLoading(false)
+        auditLogProfileLoaded({
+          userId: sessionUser.id,
+          onboarding_completed: cachedPicked.onboarding_completed,
+          has_seen_getting_started_intro:
+            cachedPicked.has_seen_getting_started_intro,
+          has_seen_onboarding_complete_popup:
+            cachedPicked.has_seen_onboarding_complete_popup,
+          profileLoading: false,
+          profileLoaded: true,
+        })
+      } else if (!profileRef.current) {
+        setLoading(true)
+      }
+
+      warmAppDataCaches(supabase, sessionUser.id)
+
       const { data: profileData } = await supabase
         .from("profiles")
         .select(USER_PROFILE_SELECT)
@@ -215,7 +317,6 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
         .maybeSingle()
 
       let resolvedProfile = profileData
-      const storedBetaRef = isBetaReferralRef(readStoredReferralCode())
 
       if (!resolvedProfile) {
         const ensureResult = await ensureProfileForUser(supabase, {
@@ -232,61 +333,36 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
             .eq("id", sessionUser.id)
             .maybeSingle()
           resolvedProfile = refetched
-          if (refetched && storedBetaRef) {
+          if (refetched && isBetaReferralRef(readStoredReferralCode())) {
             clearBetaReferralAfterApply(refetched.is_beta_tester)
           }
         } else if (ensureResult.error) {
           console.error("ensureProfileForUser:", ensureResult.error)
         }
-      } else if (storedBetaRef) {
-        const repair = await applyBetaReferralIfEligible(supabase, sessionUser.id)
-        if (repair.applied) {
-          const { data: refetched } = await supabase
-            .from("profiles")
-            .select(USER_PROFILE_SELECT)
-            .eq("id", sessionUser.id)
-            .maybeSingle()
-          if (refetched) resolvedProfile = refetched
-        } else {
-          clearBetaReferralAfterApply(resolvedProfile.is_beta_tester)
-        }
       }
 
       if (!mounted || generation !== loadGeneration) return
 
-      setProfileState(pickUserProfileFields(resolvedProfile))
-
-      // Realtime: create channel → register .on handlers → subscribe() last (required by supabase-js).
-      const topic = `profile:${sessionUser.id}:${realtimeTopicSuffix}`
-      const ch = supabase.channel(topic)
-      channelRef.current = ch
-
-      ch.on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "profiles",
-          filter: `id=eq.${sessionUser.id}`,
-        },
-        (payload) => {
-          if (!mounted || generation !== loadGeneration) return
-          const picked = pickUserProfileFields(payload.new)
-          if (picked) setProfileState(picked)
-        }
-      )
-
-      if (!mounted || generation !== loadGeneration) {
-        void supabase.removeChannel(ch)
-        channelRef.current = null
-        return
+      const picked = pickUserProfileFields(resolvedProfile)
+      if (picked) {
+        setProfileState(picked)
+        writeUserBootstrapProfile(sessionUser.id, picked)
+        auditLogProfileLoaded({
+          userId: sessionUser.id,
+          onboarding_completed: picked.onboarding_completed,
+          has_seen_getting_started_intro: picked.has_seen_getting_started_intro,
+          has_seen_onboarding_complete_popup:
+            picked.has_seen_onboarding_complete_popup,
+          profileLoading: false,
+          profileLoaded: true,
+        })
       }
-
-      ch.subscribe()
 
       if (mounted && generation === loadGeneration) {
         setLoading(false)
       }
+
+      void runDeferredBootstrap(sessionUser.id, generation, picked)
     }
 
     const {
@@ -345,7 +421,10 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
 
       if (!cancelled && profileData) {
         const picked = pickUserProfileFields(profileData)
-        if (picked) setProfileState(picked)
+        if (picked) {
+          setProfileState(picked)
+          writeUserBootstrapProfile(userId, picked)
+        }
       }
     }
 

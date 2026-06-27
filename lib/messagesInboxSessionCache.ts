@@ -1,0 +1,46 @@
+/** Messages inbox session cache — survives route remounts for instant return visits. */
+
+const DEFAULT_STALE_MS = 5 * 60 * 1000
+
+export type MessagesInboxSnapshot = {
+  userId: string
+  conversations: any[]
+  fetchedAt: number
+}
+
+const sessions = new Map<string, MessagesInboxSnapshot>()
+
+export function readMessagesInboxSession(
+  userId: string
+): MessagesInboxSnapshot | null {
+  const key = userId.trim()
+  if (!key) return null
+  const entry = sessions.get(key)
+  if (!entry) return null
+  if (Date.now() - entry.fetchedAt > DEFAULT_STALE_MS) {
+    sessions.delete(key)
+    return null
+  }
+  return entry
+}
+
+export function writeMessagesInboxSession(
+  userId: string,
+  conversations: any[]
+) {
+  const key = userId.trim()
+  if (!key) return
+  sessions.set(key, {
+    userId: key,
+    conversations,
+    fetchedAt: Date.now(),
+  })
+}
+
+export function clearMessagesInboxSessionsForUser(userId: string) {
+  sessions.delete(userId.trim())
+}
+
+export function clearAllMessagesInboxSessions() {
+  sessions.clear()
+}

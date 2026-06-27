@@ -23,6 +23,12 @@ import { compressImage, compressScreenshot } from "@/lib/compressImage"
 import { formatRelativeTime } from "@/lib/formatRelativeTime"
 import { feedbackPresets, persistentError } from "@/lib/feedbackPresets"
 import { useUserProfile } from "@/lib/UserProfileProvider"
+import {
+  patchRoomMessagesInSession,
+  patchRoomSectionsInSession,
+  readRoomSession,
+  writeRoomSession,
+} from "@/lib/roomSessionCache"
 import { formatMoneyUnknown, formatRR } from "@/lib/formatDisplay"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
@@ -642,11 +648,13 @@ function CommunityContent() {
     unbanningBanId !== null
 
   const userIdRef = useRef<string | null>(null)
+  const roomsRef = useRef<Room[]>([])
   const needsJoinRef = useRef(false)
   const usernameRef = useRef("")
   const reactionBusyRef = useRef(new Set<string>())
   const roomMessageIdsRef = useRef(new Set<string>())
   userIdRef.current = user?.id ?? null
+  roomsRef.current = rooms
   needsJoinRef.current = needsJoin
   usernameRef.current = username
 
@@ -1174,6 +1182,13 @@ function CommunityContent() {
       [cacheKey]: { pinned: pinnedData, main: mainData },
     }))
 
+    if (userIdRef.current) {
+      patchRoomMessagesInSession(userIdRef.current, cacheKey, {
+        pinned: pinnedData,
+        main: mainData,
+      })
+    }
+
     setLoadingMessages(false)
   }
 
@@ -1444,10 +1459,22 @@ function CommunityContent() {
           ? preferredSectionId
           : list[0].id
       setSelectedSectionId(resolved)
+      if (userIdRef.current) {
+        patchRoomSectionsInSession(userIdRef.current, roomId, {
+          list,
+          activeSectionId: resolved as string,
+        })
+      }
       return { list, activeSectionId: resolved as string }
     }
 
     setSelectedSectionId(null)
+    if (userIdRef.current) {
+      patchRoomSectionsInSession(userIdRef.current, roomId, {
+        list,
+        activeSectionId: null,
+      })
+    }
     return { list, activeSectionId: null as string | null }
   }
 
@@ -2069,18 +2096,33 @@ function CommunityContent() {
   }
 
   useEffect(() => {
-    if (profileLoading) return
-
-    const init = async () => {
-      if (!user?.id) {
+    if (!user?.id) {
+      if (!profileLoading) {
         const returnPath = `/trade-rooms${window.location.search}`
         router.push(`/login?next=${encodeURIComponent(returnPath)}`)
-        return
+      }
+      return
+    }
+
+    const init = async () => {
+      const cached = readRoomSession(user.id)
+      if (cached?.rooms.length) {
+        setRooms(cached.rooms)
+        if (Object.keys(cached.messagesByKey).length > 0) {
+          setMessagesByRoom(cached.messagesByKey)
+        }
+        setLoadingRooms(false)
       }
 
       const nextRooms = await loadMemberRooms(user.id)
       setRooms(nextRooms)
       setLoadingRooms(false)
+
+      writeRoomSession(user.id, {
+        rooms: nextRooms,
+        messagesByKey: messagesByRoomRef.current,
+        sectionsByRoom: cached?.sectionsByRoom ?? {},
+      })
 
       const rp = searchParams.get("room")
       if (nextRooms.length > 0 && !rp) {
@@ -2089,7 +2131,7 @@ function CommunityContent() {
     }
 
     void init()
-  }, [profileLoading, user?.id, router, searchParams])
+  }, [user?.id, profileLoading, router, searchParams])
 
   useEffect(() => {
     if (!roomParam || loadingRooms) return
@@ -2160,6 +2202,27 @@ function CommunityContent() {
     let cancelled = false
 
     ;(async () => {
+      const uid = userIdRef.current
+      const cachedSession = uid ? readRoomSession(uid) : null
+      const cachedSections = cachedSession?.sectionsByRoom[selectedRoomId]
+      if (cachedSections) {
+        setSections(cachedSections.list)
+        setSelectedSectionId(cachedSections.activeSectionId)
+        const cacheKey = buildRoomMessagesCacheKey(
+          selectedRoomId,
+          cachedSections.list,
+          cachedSections.activeSectionId
+        )
+        const cachedMsgs =
+          cachedSession?.messagesByKey[cacheKey] ??
+          messagesByRoomRef.current[cacheKey]
+        if (cachedMsgs) {
+          setPinnedMessages(cachedMsgs.pinned)
+          setMessages(cachedMsgs.main)
+          setLoadingMessages(false)
+        }
+      }
+
       const preferredSectionId = deepLinkSectionId
       if (messageParam?.trim() && selectedRoomMatchesUrl) {
         pendingScrollMessageIdRef.current = messageParam.trim()

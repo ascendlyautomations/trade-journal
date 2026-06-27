@@ -15,6 +15,7 @@ import {
 import { useUserProfile } from "@/lib/UserProfileProvider"
 import { useCachedTrades } from "@/lib/useAppDataCache"
 import { getCachedTrades, upsertTradeInCache } from "@/lib/appDataCache"
+import { SkeletonTradesPageContent } from "../components/ui/skeletons"
 
 type AnalyzeTradeApiPayload = {
   reply?: string
@@ -63,8 +64,8 @@ export default function AnalystPage() {
       fallback={
         <>
           <Navbar />
-          <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100 p-10">
-            <p className="text-center text-gray-400">Loading…</p>
+          <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] p-10">
+            <SkeletonTradesPageContent tradeCount={4} />
           </div>
         </>
       }
@@ -78,7 +79,7 @@ function AnalystPageContent() {
   const { user, profile, loading: profileLoading } = useUserProfile()
   const { trades, loading: tradesLoading } = useCachedTrades(user?.id)
   const pageReady =
-    !profileLoading &&
+    (!profileLoading || profile != null) &&
     !(tradesLoading && trades.length === 0 && getCachedTrades(user?.id) == null)
   const [selectedTrade, setSelectedTrade] = useState<any>(null)
 
@@ -312,7 +313,7 @@ function AnalystPageContent() {
         </h1>
 
         {!pageReady ? (
-          <p className="text-center text-gray-400">Loading…</p>
+          <SkeletonTradesPageContent tradeCount={4} />
         ) : !pro ? (
           <div className="mx-auto max-w-lg">
             <LockedFeature title="AI Analyst" />

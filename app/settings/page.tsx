@@ -300,16 +300,16 @@ export default function SettingsPage() {
 
     const data = await fetchProfile(u.id)
 
-    if (data?.id) {
-      try {
-        await refreshAffiliateState(data.id)
-        await refreshAffiliateConnect(data.id)
-      } catch (e) {
-        console.error("Affiliate state refresh failed:", e)
-      }
-    }
-
     setLoading(false)
+
+    if (data?.id) {
+      void Promise.all([
+        refreshAffiliateState(data.id),
+        refreshAffiliateConnect(data.id),
+      ]).catch((e) => {
+        console.error("Affiliate state refresh failed:", e)
+      })
+    }
   }
 
   async function uploadAvatar(): Promise<string | null> {

@@ -34,7 +34,7 @@ function ExtremeRow({ label, extreme, pnlClass }: ExtremeRowProps) {
           </p>
         </div>
       ) : (
-        <p className="text-gray-500">No matching trades</p>
+        <p className="text-gray-400">No matching trades</p>
       )}
     </div>
   )
@@ -72,20 +72,20 @@ export default function DashboardHoldTime({
       ) : (
         <div className="space-y-4">
           <div className="flex min-h-[90px] flex-col items-center justify-center rounded-xl border border-white/10 bg-white/5 p-3 text-center">
-            <p className="mb-1 text-xs md:text-sm text-gray-400">
+            <p className="mb-1 text-xs md:text-sm text-gray-300">
               Average Hold Time
             </p>
             <p className="text-lg md:text-xl font-semibold tabular-nums text-white">
               {formatDuration(stats.avgHoldSeconds)}
             </p>
-            <p className="mt-1 text-[11px] text-gray-500">
+            <p className="mt-1 text-[11px] text-gray-400">
               {stats.tradesWithDuration} trade
               {stats.tradesWithDuration === 1 ? "" : "s"} with duration
             </p>
           </div>
 
           <div>
-            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-400">
+            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-300">
               Hold Time Breakdown
             </p>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -105,7 +105,7 @@ export default function DashboardHoldTime({
           </div>
 
           <div>
-            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-400">
+            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-300">
               Trade Duration Extremes
             </p>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

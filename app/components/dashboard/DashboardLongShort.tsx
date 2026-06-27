@@ -128,7 +128,7 @@ function DirectionEdgePanel({ edge }: { edge: DirectionEdge }) {
 
   return (
     <div className="rounded-lg border border-white/10 bg-white/5 p-3 md:p-4">
-      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
+      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-300">
         Direction Edge
       </h3>
       <p className={`text-sm font-medium leading-snug ${verdictClass}`}>

@@ -10,6 +10,7 @@ export const APP_PREFETCH_ROUTES = [
   "/explore",
   "/settings",
   "/calendar",
+  "/community",
 ] as const
 
 let prefetchedForSession = false

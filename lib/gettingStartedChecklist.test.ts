@@ -119,3 +119,60 @@ describe("computeGettingStartedProgress", () => {
     assert.equal(newly[0].label, "Log your first trade")
   })
 })
+
+describe("getting started visibility", () => {
+  const {
+    shouldAutoShowGettingStartedChecklist,
+    shouldOfferGettingStartedChecklist,
+    shouldShowGettingStartedIntroPopup,
+  } = require("./gettingStartedChecklist.ts")
+
+  it("offers manual checklist while tasks remain", () => {
+    assert.equal(
+      shouldOfferGettingStartedChecklist("user-1", {
+        hasSeenOnboardingCompletePopup: false,
+        allComplete: false,
+      }),
+      true
+    )
+    assert.equal(
+      shouldOfferGettingStartedChecklist("user-1", {
+        hasSeenOnboardingCompletePopup: true,
+        allComplete: false,
+      }),
+      false
+    )
+  })
+
+  it("auto-shows only while profile onboarding is incomplete", () => {
+    assert.equal(
+      shouldAutoShowGettingStartedChecklist("user-1", {
+        onboardingCompleted: false,
+      }),
+      true
+    )
+    assert.equal(
+      shouldAutoShowGettingStartedChecklist("user-1", {
+        onboardingCompleted: true,
+      }),
+      false
+    )
+  })
+
+  it("intro popup never auto-shows", () => {
+    assert.equal(
+      shouldShowGettingStartedIntroPopup({
+        onboardingCompleted: false,
+        hasSeenGettingStartedIntro: false,
+      }),
+      false
+    )
+    assert.equal(
+      shouldShowGettingStartedIntroPopup({
+        onboardingCompleted: true,
+        hasSeenGettingStartedIntro: false,
+      }),
+      false
+    )
+  })
+})

@@ -20,9 +20,9 @@ export default function DashboardMaxDrawdown({
   if (variant === "compact") {
     return (
       <div className="rounded-xl border border-white/10 bg-white/10 p-3 md:p-4 backdrop-blur-md">
-        <h3 className="mb-2 text-xs md:text-sm text-gray-400">Max Drawdown</h3>
+        <h3 className="mb-2 text-xs md:text-sm text-gray-300">Max Drawdown</h3>
         {showEmpty ? (
-          <p className="text-gray-500 text-xs md:text-sm">
+          <p className="text-gray-400 text-xs md:text-sm">
             Add more trades to unlock this metric.
           </p>
         ) : (
@@ -30,7 +30,7 @@ export default function DashboardMaxDrawdown({
             <p className="text-sm md:text-lg font-semibold tabular-nums text-red-400">
               {formatCurrency(maxDrawdown)}
             </p>
-            <p className="mt-1 text-[11px] md:text-xs text-gray-500">
+            <p className="mt-1 text-[11px] md:text-xs text-gray-400">
               Largest peak-to-trough drop on cumulative P&amp;L.
             </p>
           </>

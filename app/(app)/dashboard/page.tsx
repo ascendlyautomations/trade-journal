@@ -86,7 +86,13 @@ import {
   dispatchGettingStartedSignalsRefresh,
   notifyGettingStartedChecklistMaybeCompleted,
 } from "@/lib/gettingStartedProgressSync"
-import { shouldShowGettingStartedChecklist } from "@/lib/gettingStartedChecklist"
+import {
+  shouldAutoShowGettingStartedChecklist,
+} from "@/lib/gettingStartedChecklist"
+import {
+  auditLogDashboardDecision,
+  auditLogDashboardMounted,
+} from "@/lib/onboardingChecklistAudit"
 import { useGettingStartedProgress } from "@/lib/GettingStartedProgressProvider"
 import { useUserProfile } from "@/lib/UserProfileProvider"
 import { useCachedAccounts, useCachedTrades } from "@/lib/useAppDataCache"
@@ -173,6 +179,15 @@ function analyzeBestSetups(trades: any[]): SetupGroupResult[] {
     .sort((a, b) => b.avgPnL - a.avgPnL)
 }
 
+function formatPerformanceInsightMoney(v: number) {
+  const abs = Math.abs(v)
+  const formatted = abs.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+  return v < 0 ? `-$${formatted}` : `$${formatted}`
+}
+
 function generateInsights(results: SetupGroupResult[]): string[] {
   if (!results.length) return []
 
@@ -182,16 +197,11 @@ function generateInsights(results: SetupGroupResult[]): string[] {
   const bestTicker = results.find((r) => r.type === "ticker")
   const bestDirection = results.find((r) => r.type === "direction")
 
-  const formatMoney = (v: number) =>
-    v < 0
-      ? `-$${Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: 2 })}`
-      : `$${v.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
-
   const formatPct = (v: number) => `${(v * 100).toFixed(0)}%`
 
   if (bestSession && bestSession.value !== "—") {
     insights.push(
-      `You perform best trading ${bestSession.value} session (${formatMoney(
+      `You perform best trading ${bestSession.value} session (${formatPerformanceInsightMoney(
         bestSession.avgPnL
       )} avg, ${formatPct(bestSession.winRate)} win rate)`
     )
@@ -199,7 +209,7 @@ function generateInsights(results: SetupGroupResult[]): string[] {
 
   if (bestTicker && bestTicker.value !== "—") {
     insights.push(
-      `${bestTicker.value} is your most profitable market (${formatMoney(
+      `${bestTicker.value} is your most profitable market (${formatPerformanceInsightMoney(
         bestTicker.avgPnL
       )} avg per trade)`
     )
@@ -207,7 +217,7 @@ function generateInsights(results: SetupGroupResult[]): string[] {
 
   if (bestDirection && bestDirection.value !== "—") {
     insights.push(
-      `You are more profitable going ${bestDirection.value} (${formatMoney(
+      `You are more profitable going ${bestDirection.value} (${formatPerformanceInsightMoney(
         bestDirection.avgPnL
       )} avg)`
     )
@@ -289,11 +299,6 @@ function generateCombinedInsights(results: CombinedSetupResult[]): string[] {
   )
   if (!meaningful.length) return []
 
-  const formatMoney = (v: number) =>
-    v < 0
-      ? `-$${Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: 2 })}`
-      : `$${v.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
-
   const formatPct = (v: number) => `${(v * 100).toFixed(0)}%`
 
   const best = meaningful[0]
@@ -301,7 +306,7 @@ function generateCombinedInsights(results: CombinedSetupResult[]): string[] {
   return [
     `Your strongest setup is trading ${formatCombo(
       best.key
-    )} (${formatMoney(best.avgPnL)} avg, ${formatPct(
+    )} (${formatPerformanceInsightMoney(best.avgPnL)} avg, ${formatPct(
       best.winRate
     )} win rate over ${best.trades} trades)`,
   ]
@@ -310,16 +315,11 @@ function generateCombinedInsights(results: CombinedSetupResult[]): string[] {
 function generateWorstInsight(worst: CombinedSetupResult | undefined): string | null {
   if (!worst) return null
 
-  const formatMoney = (v: number) =>
-    v < 0
-      ? `-$${Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: 2 })}`
-      : `$${v.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
-
   const formatPct = (v: number) => `${(v * 100).toFixed(0)}%`
 
   return `You struggle most trading ${formatCombo(
     worst.key
-  )} (${formatMoney(worst.avgPnL)} avg, ${formatPct(
+  )} (${formatPerformanceInsightMoney(worst.avgPnL)} avg, ${formatPct(
     worst.winRate
   )} win rate over ${worst.trades} trades)`
 }
@@ -517,7 +517,7 @@ export default function Dashboard() {
   const {
     progress: gettingStartedProgress,
     signals: checklistSignals,
-    signalsReady,
+    signalsReady: checklistSignalsReady,
     refreshChecklistSignals,
   } = useGettingStartedProgress()
   const {
@@ -555,7 +555,7 @@ export default function Dashboard() {
   /** Same fetch as /trades — used only for filter dropdown labels (#account_number vs UUID). */
 
   const pageDataLoading =
-    profileLoading ||
+    (profileLoading && !profile) ||
     (tradesLoading && trades.length === 0) ||
     (accountsLoading && accountRows.length === 0)
 
@@ -622,6 +622,46 @@ export default function Dashboard() {
     dispatchGettingStartedSignalsRefresh()
     await refreshDashboardData()
   }, [refreshDashboardData])
+
+  useEffect(() => {
+    auditLogDashboardMounted(user?.id ?? null)
+  }, [user?.id])
+
+  useEffect(() => {
+    if (!user?.id) return
+
+    const profileLoaded = profile != null
+    const onboardingResolved = profileLoaded || checklistSignalsReady
+    const onboardingCompleted = profileLoaded
+      ? profile.onboarding_completed === true
+      : checklistSignals.onboardingCompleted
+
+    const renderChecklist =
+      onboardingResolved &&
+      shouldAutoShowGettingStartedChecklist(user.id, {
+        onboardingCompleted,
+      })
+
+    auditLogDashboardDecision({
+      source: "app/(app)/dashboard/page.tsx",
+      onboardingResolved,
+      onboardingCompleted,
+      renderChecklist,
+      reason: !onboardingResolved
+        ? "waiting for profile or checklist signals"
+        : onboardingCompleted
+          ? "onboarding_completed is true"
+          : renderChecklist
+            ? "active onboarding — auto-show allowed"
+            : "session dismissed or no user",
+    })
+  }, [
+    user?.id,
+    profile,
+    profileLoading,
+    checklistSignalsReady,
+    checklistSignals.onboardingCompleted,
+  ])
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -1261,21 +1301,22 @@ const biggestLoss = losses.length > 0
   const dashboardHasCachedData =
     user?.id != null && getCachedTrades(user.id) != null
 
-  if (
-    profileLoading ||
-    (pageDataLoading && !dashboardHasCachedData) ||
-    (user?.id && !signalsReady && !dashboardHasCachedData)
-  ) {
+  if (pageDataLoading && !dashboardHasCachedData) {
     return <SkeletonDashboardPage />
   }
 
   const hasNoTrades = tradesExcludingBacktest.length === 0
 
+  const onboardingCompletedResolved =
+    profile != null || checklistSignalsReady
+  const onboardingCompletedForAutoShow = profile
+    ? profile.onboarding_completed === true
+    : checklistSignals.onboardingCompleted
+
   const showOnboardingSection =
-    shouldShowGettingStartedChecklist(user?.id, {
-      hasSeenOnboardingCompletePopup:
-        checklistSignals.hasSeenOnboardingCompletePopup,
-      allComplete: gettingStartedProgress.allComplete,
+    onboardingCompletedResolved &&
+    shouldAutoShowGettingStartedChecklist(user?.id, {
+      onboardingCompleted: onboardingCompletedForAutoShow,
     })
 
   const gettingStartedSection =
@@ -1287,6 +1328,7 @@ const biggestLoss = losses.length > 0
           profileId={user.id ?? profile?.id}
           firstPrivateTradeId={checklistSignals.firstPrivateTradeId}
           onChecklistRefresh={() => void refreshChecklistSignals()}
+          defaultExpanded
         />
       </div>
     ) : null
@@ -1423,8 +1465,8 @@ const biggestLoss = losses.length > 0
     .slice(0, 5)
 
   const recentTradesSection = (
-    <div className="h-full rounded-xl border border-white/10 bg-white/10 p-3 md:p-4">
-      <h3 className="mb-2 text-xs md:text-sm text-gray-400">Recent Trades</h3>
+    <div className={`h-full ${dashboardInsightCardClass}`}>
+      <h3 className={dashboardInsightTitleClass}>Recent Trades</h3>
 
       <div className="max-h-[28rem] space-y-3 overflow-y-auto pr-1">
         {recentTradesList.length === 0 ? (
@@ -1441,27 +1483,27 @@ const biggestLoss = losses.length > 0
                 </Link>
               ) : undefined
             }
-            className="py-6"
+            className="border-0 bg-transparent py-6"
           />
         ) : (
           recentTradesList.map((trade) => (
             <div
               key={trade.id}
-              className="rounded-lg border border-white/10 bg-black/20 p-3 text-sm"
+              className="rounded-lg border border-white/10 bg-white/5 p-3 text-sm backdrop-blur-sm"
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 space-y-1">
                   <p className="truncate font-semibold text-white">
                     {trade.ticker}
                     {trade.direction ? (
-                      <span className="font-normal text-gray-400">
+                      <span className="font-normal text-gray-300">
                         {" "}
                         • {trade.direction}
                       </span>
                     ) : null}
                   </p>
                   <p
-                    className={`font-medium tabular-nums ${
+                    className={`font-semibold tabular-nums ${
                       (Number(trade.pnl) || 0) >= 0
                         ? "text-green-400"
                         : "text-red-400"
@@ -1469,13 +1511,13 @@ const biggestLoss = losses.length > 0
                   >
                     {formatCurrency(Number(trade.pnl) || 0)}
                   </p>
-                  <p className="text-xs text-gray-400">
+                  <p className="text-xs text-gray-300">
                     RR{" "}
                     {trade.rr != null && trade.rr !== ""
                       ? formatRR(trade.rr)
                       : "—"}
                   </p>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-gray-400">
                     {formatEST(String(trade.created_at ?? ""))}
                   </p>
                 </div>
@@ -1483,28 +1525,28 @@ const biggestLoss = losses.length > 0
                   {String(trade.mode ?? trade.account_type ?? "")
                     .toLowerCase()
                     .trim() === "backtest" ? (
-                    <span className="rounded-md bg-blue-500/80 px-2 py-1 text-xs text-white">
+                    <span className="rounded-md bg-blue-500/80 px-2 py-1 text-xs font-medium text-white">
                       Backtest
                     </span>
                   ) : null}
                   {trade.public_description ? (
-                    <span className="rounded-md bg-green-500/20 px-2 py-1 text-xs text-green-400">
+                    <span className="rounded-md bg-green-500/20 px-2 py-1 text-xs font-medium text-green-400">
                       Posted
                     </span>
                   ) : (
-                    <span className="rounded-md bg-gray-500/20 px-2 py-1 text-xs text-gray-400">
+                    <span className="rounded-md bg-white/10 px-2 py-1 text-xs font-medium text-gray-300">
                       Private
                     </span>
                   )}
                 </div>
               </div>
               {trade.public_description ? (
-                <p className="mt-2 line-clamp-2 text-sm text-gray-300">
+                <p className="mt-2 line-clamp-2 text-sm text-gray-200">
                   {trade.public_description}
                 </p>
               ) : null}
               {trade.strategy ? (
-                <p className="mt-1 text-xs text-gray-400">Strategy: {trade.strategy}</p>
+                <p className="mt-1 text-xs text-gray-300">Strategy: {trade.strategy}</p>
               ) : null}
             </div>
           ))
@@ -1549,6 +1591,7 @@ const biggestLoss = losses.length > 0
         <div className="relative z-50 mx-auto w-full max-w-[1600px] px-4 md:px-6">
           {!hasNoTrades ? (
             <DashboardFilters
+              isPro={isPro}
               accounts={accounts}
               accountFilter={accountFilter}
               onAccountChange={setAccountFilter}
@@ -1578,7 +1621,6 @@ const biggestLoss = losses.length > 0
             />
           ) : null}
           <DashboardHeader
-            isPro={isPro}
             showFreePlanAccountBanner={showFreePlanAccountBanner}
           />
         </div>
@@ -1708,7 +1750,7 @@ const biggestLoss = losses.length > 0
   <div className="grid grid-cols-1 gap-4 md:gap-6 lg:grid-cols-3 lg:items-stretch">
 
     <div className="h-full overflow-x-auto rounded-xl border border-white/10 bg-white/10 p-3 md:p-4 lg:col-span-2">
-      <h3 className="mb-2 text-xs md:text-sm text-gray-400">Symbol Performance</h3>
+      <h3 className={dashboardInsightTitleClass}>Symbol Performance</h3>
 
       {symbolPerformanceRows.length === 0 ? (
         <EmptyState
@@ -1719,7 +1761,7 @@ const biggestLoss = losses.length > 0
       ) : (
       <table className="w-full min-w-[520px] text-xs md:text-sm">
         <thead>
-          <tr className="border-b border-white/10 text-gray-400">
+          <tr className="border-b border-white/10 text-gray-300">
             <th className="py-2 text-center">Ticker</th>
             <th className="py-2 text-center">Trades</th>
             <th className="py-2 text-center">Win %</th>

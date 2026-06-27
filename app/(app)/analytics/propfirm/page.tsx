@@ -25,6 +25,14 @@ import {
 import LockedFeature from "@/app/components/LockedFeature"
 import EmptyState from "@/app/components/ui/EmptyState"
 import { SkeletonAnalyticsPage } from "@/app/components/ui/skeletons"
+import {
+  dashboardInsightBodyClass,
+  dashboardInsightCardClass,
+  dashboardInsightLabelClass,
+  dashboardInsightMetricNegativeClass,
+  dashboardInsightMetricPositiveClass,
+  dashboardInsightTitleClass,
+} from "@/app/components/dashboard/dashboardInsightStyles"
 import { isProActive } from "@/lib/subscription"
 import { formatPnlCurrency } from "@/lib/formatMoney"
 import {
@@ -33,11 +41,16 @@ import {
 } from "@/app/components/TradeFilterBar"
 import { formatAccountNameWithSizeDisplay } from "@/lib/tradeAccountDisplay"
 
-const SECTION_PANEL =
-  "rounded-xl border border-white/10 bg-white/10 p-2.5 backdrop-blur-md md:p-3"
+const SECTION_PANEL = dashboardInsightCardClass
 
 const SELECT_CLASS =
-  "h-[34px] w-full rounded-md border border-white/10 bg-[#0f172a] px-3 py-1 text-sm text-white hover:bg-[#1e293b] focus:outline-none focus:ring-2 focus:ring-blue-500"
+  "h-9 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-white transition-colors hover:bg-white/5 focus:border-blue-400/50 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+
+const INNER_ROW_CLASS =
+  "flex items-center justify-between rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 transition-colors hover:bg-white/[0.07]"
+
+const RULE_CHIP_CLASS =
+  "flex items-center gap-2.5 rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-sm transition-colors hover:bg-white/[0.07]"
 
 function PropfirmStat({
   title,
@@ -55,10 +68,10 @@ function PropfirmStat({
   if (positive === false) color = "text-red-400"
 
   return (
-    <div className="flex min-h-[72px] w-full flex-col items-center justify-center rounded-xl border border-white/10 bg-white/10 p-2.5 text-center backdrop-blur-md md:p-3">
-      <p className="mb-1 text-xs md:text-sm text-gray-400">{title}</p>
+    <div className="flex min-h-[90px] w-full flex-col items-center justify-center rounded-xl border border-white/10 bg-white/10 p-3 text-center backdrop-blur-md md:p-4">
+      <p className="mb-1 text-xs text-gray-400 md:text-sm">{title}</p>
       <span
-        className={`block font-semibold text-base leading-tight whitespace-nowrap tabular-nums md:text-lg lg:text-xl ${color}`}
+        className={`block whitespace-nowrap text-base font-semibold leading-tight tabular-nums md:text-lg lg:text-xl ${color}`}
       >
         {value}
       </span>
@@ -87,8 +100,8 @@ type EquityCurvePoint = {
 
 function PropfirmPageShell({ children }: { children: ReactNode }) {
   return (
-    <div className="w-full text-white px-2 pb-3 pt-0 md:px-4 md:pb-10">
-      <div className="relative z-0 mx-auto mt-2.5 flex w-full max-w-[1600px] flex-col gap-3 px-1 md:gap-4 md:px-6">
+    <div className="w-full px-3 pb-3 pt-0 text-white md:px-4 md:pb-10">
+      <div className="relative z-0 mx-auto mt-2.5 flex w-full max-w-[1600px] flex-col gap-6 px-1 md:gap-8 md:px-6">
         {children}
       </div>
     </div>
@@ -109,17 +122,19 @@ function PropfirmEquityCurve({
 
   return (
     <div className={SECTION_PANEL}>
-      <div className="mb-1.5 flex flex-col gap-0.5 sm:flex-row sm:items-end sm:justify-between">
+      <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 className="mb-1 text-sm font-semibold text-blue-300">Equity Curve</h2>
-          <p className="text-xs text-gray-400">
+          <h2 className="text-sm font-semibold text-blue-300 md:text-base">
+            Equity Curve
+          </h2>
+          <p className="mt-0.5 text-xs text-gray-400 md:text-sm">
             Account balance progression by trading day
           </p>
         </div>
       </div>
 
       {data.length > 1 ? (
-        <div className="h-[220px] w-full overflow-hidden sm:h-[280px]">
+        <div className="h-[240px] w-full overflow-hidden sm:h-[280px] md:h-[300px]">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart
               data={data}
@@ -179,7 +194,7 @@ function PropfirmEquityCurve({
         <EmptyState
           title="Not Enough Data Yet"
           description="Add more trades to unlock detailed analytics."
-          className="py-6"
+          className="border-0 bg-transparent py-8"
         />
       )}
     </div>
@@ -382,35 +397,37 @@ export default function PropFirmPage() {
 
   return (
     <PropfirmPageShell>
-        <div className={SECTION_PANEL}>
-          <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-blue-300">
-                Analytics
-              </p>
-              <h1 className="mt-0.5 bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-2xl font-semibold text-transparent md:text-3xl">
-                Prop Firm Mode
-              </h1>
-              <p className="mt-1 text-sm text-gray-400">
-                Track rule progress, drawdown room, and account balance from one
-                stabilized view.
-              </p>
-            </div>
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-blue-300">
+              Analytics
+            </p>
+            <h1 className="mt-0.5 bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-2xl font-semibold text-transparent md:text-3xl">
+              Prop Firm Mode
+            </h1>
+            <p className="mt-1 max-w-2xl text-sm text-gray-400 md:text-base">
+              Track rule progress, drawdown room, and account balance from one
+              stabilized view.
+            </p>
+          </div>
 
+          {selectedAccount ? (
             <div
-              className={`inline-flex w-fit rounded-full border px-3 py-1 text-sm font-semibold ${
+              className={`inline-flex w-fit shrink-0 rounded-full border px-3.5 py-1.5 text-sm font-semibold ${
                 status === "PASSED"
                   ? "border-green-500/30 bg-green-500/10 text-green-400"
                   : status === "FAILED"
                     ? "border-red-500/30 bg-red-500/10 text-red-400"
-                    : "border-yellow-500/30 bg-yellow-500/10 text-yellow-400"
+                    : "border-amber-500/30 bg-amber-500/10 text-amber-300"
               }`}
             >
               {statusLabel}
             </div>
-          </div>
+          ) : null}
+        </div>
 
-          <div className="mt-2 grid gap-2 md:grid-cols-[minmax(0,420px)_1fr] md:items-center">
+        <div className={SECTION_PANEL}>
+          <div className="grid gap-3 md:grid-cols-[minmax(0,420px)_1fr] md:items-center">
             <select
               value={
                 selectedAccount?.id != null ? String(selectedAccount.id) : ""
@@ -453,7 +470,7 @@ export default function PropFirmPage() {
         ) : (
           <>
         {selectedAccount && (
-          <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <PropfirmStat
               title="Total P&L"
               value={formatPropfirmUsd(totalPnL)}
@@ -472,7 +489,7 @@ export default function PropFirmPage() {
               title="Winning Days"
               value={`${winningDays}/${Number(selectedAccount.winning_days) || 0}`}
               valueClassName={
-                winningDaysTargetMet ? "text-green-400" : "text-yellow-400"
+                winningDaysTargetMet ? "text-green-400" : "text-amber-300"
               }
             />
           </div>
@@ -487,51 +504,51 @@ export default function PropFirmPage() {
 
         {selectedAccount && (
           <div className={SECTION_PANEL}>
-            <div className="mb-1.5 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-blue-300">Rule Status</h2>
-              <span className="text-xs uppercase tracking-wide text-gray-500">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <h2 className={dashboardInsightTitleClass}>Rule Status</h2>
+              <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 text-xs font-medium uppercase tracking-wide text-gray-400">
                 Evaluation
               </span>
             </div>
 
-            <div className="grid gap-1.5 text-sm sm:grid-cols-2">
+            <div className="grid gap-2 sm:grid-cols-2">
               <div
-                className={`flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 ${
+                className={`${RULE_CHIP_CLASS} ${
                   maxDdLimit > 0 && trailingMetrics.breachedTrailingDD
                     ? "text-red-400"
                     : "text-green-400"
                 }`}
               >
-                <span>
+                <span aria-hidden>
                   {maxDdLimit > 0 && trailingMetrics.breachedTrailingDD ? "❌" : "✔"}
                 </span>
                 <span className="font-medium">Max Drawdown</span>
               </div>
 
               <div
-                className={`flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 ${
+                className={`${RULE_CHIP_CLASS} ${
                   dailyDrawdownBreached
                     ? "text-red-400"
                     : "text-green-400"
                 }`}
               >
-                <span>{dailyDrawdownBreached ? "❌" : "✔"}</span>
+                <span aria-hidden>{dailyDrawdownBreached ? "❌" : "✔"}</span>
                 <span className="font-medium">Daily Drawdown</span>
               </div>
 
               <div
-                className={`flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 ${
+                className={`${RULE_CHIP_CLASS} ${
                   winningDaysTargetMet
                     ? "text-green-400"
-                    : "text-yellow-400"
+                    : "text-amber-300"
                 }`}
               >
-                <span>{winningDaysTargetMet ? "✔" : "⚠"}</span>
+                <span aria-hidden>{winningDaysTargetMet ? "✔" : "⚠"}</span>
                 <span className="font-medium">Winning Days</span>
               </div>
 
               <div
-                className={`flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 ${
+                className={`${RULE_CHIP_CLASS} ${
                   !consistencyMetrics.ruleActive
                     ? "text-gray-400"
                     : consistencyMetrics.isConsistent
@@ -539,7 +556,7 @@ export default function PropFirmPage() {
                       : "text-red-400"
                 }`}
               >
-                <span>
+                <span aria-hidden>
                   {!consistencyMetrics.ruleActive
                     ? "—"
                     : consistencyMetrics.isConsistent
@@ -554,48 +571,48 @@ export default function PropFirmPage() {
 
         {selectedAccount && (
           <div className={SECTION_PANEL}>
-            <h2 className="mb-1.5 text-sm font-semibold text-blue-300">
+            <h2 className={`${dashboardInsightTitleClass} mb-3`}>
               Account Rules
             </h2>
 
-            <div className="grid gap-x-6 gap-y-1 text-sm text-gray-300 sm:grid-cols-2">
+            <div className={`grid gap-x-6 gap-y-2.5 sm:grid-cols-2 ${dashboardInsightBodyClass}`}>
               <div className="flex justify-between gap-3">
-                <span className="text-gray-400">Account size</span>
+                <span className={dashboardInsightLabelClass}>Account size</span>
                 <span className="font-medium text-gray-100">
                   {startingBalance > 0 ? formatPropfirmUsd(startingBalance) : "—"}
                 </span>
               </div>
 
               <div className="flex justify-between gap-3">
-                <span className="text-gray-400">Consistency</span>
+                <span className={dashboardInsightLabelClass}>Consistency</span>
                 <span className="font-medium text-gray-100">
                   {selectedAccount.consistency || 0}%
                 </span>
               </div>
 
               <div className="flex justify-between gap-3">
-                <span className="text-gray-400">Max Drawdown</span>
+                <span className={dashboardInsightLabelClass}>Max Drawdown</span>
                 <span className="font-medium text-gray-100">
                   ${selectedAccount.max_drawdown}
                 </span>
               </div>
 
               <div className="flex justify-between gap-3">
-                <span className="text-gray-400">Daily Drawdown</span>
+                <span className={dashboardInsightLabelClass}>Daily Drawdown</span>
                 <span className="font-medium text-gray-100">
                   ${selectedAccount.daily_drawdown}
                 </span>
               </div>
 
               <div className="flex justify-between gap-3">
-                <span className="text-gray-400">Profit Target</span>
+                <span className={dashboardInsightLabelClass}>Profit Target</span>
                 <span className="font-medium text-gray-100">
                   ${selectedAccount.profit_target}
                 </span>
               </div>
 
               <div className="flex justify-between gap-3">
-                <span className="text-gray-400">Winning Days</span>
+                <span className={dashboardInsightLabelClass}>Winning Days</span>
                 <span className="font-medium text-gray-100">
                   {selectedAccount.winning_days}
                 </span>
@@ -606,30 +623,28 @@ export default function PropFirmPage() {
 
         {selectedAccount && (
           <div className={SECTION_PANEL}>
-            <h2 className="mb-1.5 text-sm font-semibold text-blue-300">
-              Progress
-            </h2>
+            <h2 className={`${dashboardInsightTitleClass} mb-3`}>Progress</h2>
 
-            <div className="grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
+            <div className={`grid gap-x-6 gap-y-2.5 sm:grid-cols-2 ${dashboardInsightBodyClass}`}>
               <div className="flex justify-between gap-3">
-                <span className="text-gray-400">Total P&L</span>
-                <span className={totalPnL >= 0 ? "text-green-400" : "text-red-400"}>
+                <span className={dashboardInsightLabelClass}>Total P&L</span>
+                <span className={totalPnL >= 0 ? dashboardInsightMetricPositiveClass : dashboardInsightMetricNegativeClass}>
                   {formatPropfirmUsd(totalPnL)}
                 </span>
               </div>
 
               <div className="flex justify-between gap-3">
-                <span className="text-gray-400">Profit Target</span>
-                <span className="text-gray-200">${selectedAccount.profit_target}</span>
+                <span className={dashboardInsightLabelClass}>Profit Target</span>
+                <span className="font-medium text-gray-200">${selectedAccount.profit_target}</span>
               </div>
 
               <div className="flex justify-between gap-3">
-                <span className="text-gray-400">Max Drawdown Used</span>
+                <span className={dashboardInsightLabelClass}>Max Drawdown Used</span>
                 <span
                   className={
                     maxDdLimit > 0 && drawdownUsed > maxDdLimit
-                      ? "text-red-400"
-                      : "text-gray-200"
+                      ? dashboardInsightMetricNegativeClass
+                      : "font-medium text-gray-200"
                   }
                 >
                   {formatPropfirmUsd(drawdownUsed)}
@@ -637,27 +652,27 @@ export default function PropFirmPage() {
               </div>
 
               <div className="flex justify-between gap-3">
-                <span className="text-gray-400">Drawdown Floor</span>
-                <span className="text-gray-200">
+                <span className={dashboardInsightLabelClass}>Drawdown Floor</span>
+                <span className="font-medium text-gray-200">
                   {formatPropfirmUsd(trailingMetrics.drawdownFloor)}
                 </span>
               </div>
 
               <div className="flex justify-between gap-3">
-                <span className="text-gray-400">Today P&L</span>
-                <span className={todayPnL >= 0 ? "text-green-400" : "text-red-400"}>
+                <span className={dashboardInsightLabelClass}>Today P&L</span>
+                <span className={todayPnL >= 0 ? dashboardInsightMetricPositiveClass : dashboardInsightMetricNegativeClass}>
                   {formatPropfirmUsd(todayPnL)}
                 </span>
               </div>
 
               <div className="flex justify-between gap-3">
-                <span className="text-gray-400">Biggest Trade</span>
-                <span>{formatPropfirmUsd(consistencyMetrics.biggestWin)}</span>
+                <span className={dashboardInsightLabelClass}>Biggest Trade</span>
+                <span className="font-medium text-gray-200">{formatPropfirmUsd(consistencyMetrics.biggestWin)}</span>
               </div>
 
               <div className="flex justify-between gap-3">
-                <span className="text-gray-400">Allowed Max</span>
-                <span>
+                <span className={dashboardInsightLabelClass}>Allowed Max</span>
+                <span className="font-medium text-gray-200">
                   {consistencyMetrics.ruleActive
                     ? formatPropfirmUsd(consistencyMetrics.allowedMax)
                     : "—"}
@@ -665,14 +680,14 @@ export default function PropFirmPage() {
               </div>
 
               <div className="flex justify-between gap-3">
-                <span className="text-gray-400">Consistency</span>
+                <span className={dashboardInsightLabelClass}>Consistency</span>
                 <span
                   className={
                     !consistencyMetrics.ruleActive
                       ? "text-gray-400"
                       : consistencyMetrics.isConsistent
-                        ? "text-green-400"
-                        : "text-red-400"
+                        ? dashboardInsightMetricPositiveClass
+                        : dashboardInsightMetricNegativeClass
                   }
                 >
                   {!consistencyMetrics.ruleActive
@@ -684,28 +699,28 @@ export default function PropFirmPage() {
               </div>
             </div>
 
-            <div className="mt-2 space-y-1.5">
+            <div className="mt-4 space-y-3">
               <div>
-                <div className="mb-1 flex justify-between text-xs text-gray-400">
+                <div className="mb-1.5 flex justify-between text-xs text-gray-400 md:text-sm">
                   <span>Profit target</span>
-                  <span>{progressPercent.toFixed(0)}%</span>
+                  <span className="tabular-nums">{progressPercent.toFixed(0)}%</span>
                 </div>
-                <div className="h-1.5 w-full rounded bg-white/10">
+                <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
                   <div
-                    className="h-1.5 rounded bg-green-500"
+                    className="h-full rounded-full bg-gradient-to-r from-blue-500 to-emerald-500 transition-[width] duration-300"
                     style={{ width: `${progressPercent}%` }}
                   />
                 </div>
               </div>
 
               <div>
-                <div className="mb-1 flex justify-between text-xs text-gray-400">
+                <div className="mb-1.5 flex justify-between text-xs text-gray-400 md:text-sm">
                   <span>Drawdown used</span>
-                  <span>{ddPercent.toFixed(0)}%</span>
+                  <span className="tabular-nums">{ddPercent.toFixed(0)}%</span>
                 </div>
-                <div className="h-1.5 w-full rounded bg-white/10">
+                <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
                   <div
-                    className="h-1.5 rounded bg-red-500"
+                    className="h-full rounded-full bg-red-500 transition-[width] duration-300"
                     style={{ width: `${ddPercent}%` }}
                   />
                 </div>
@@ -715,48 +730,46 @@ export default function PropFirmPage() {
             {selectedAccount &&
               maxDdLimit > 0 &&
               trailingMetrics.breachedTrailingDD && (
-                <div className="mt-3 text-sm text-red-400">
-                  ⚠️ Trailing max drawdown breached (balance below drawdown floor)
+                <div className="mt-4 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2.5 text-sm text-red-400">
+                  Trailing max drawdown breached (balance below drawdown floor)
                 </div>
               )}
 
             {selectedAccount &&
               dailyDrawdownBreached && (
-                <div className="mt-1.5 text-sm text-red-400">
-                  ⚠️ Daily drawdown exceeded
+                <div className="mt-2 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2.5 text-sm text-red-400">
+                  Daily drawdown exceeded
                 </div>
               )}
           </div>
         )}
 
         <div className={SECTION_PANEL}>
-          <div className="mb-1.5 flex items-center justify-between gap-2">
+          <div className="mb-3 flex items-center justify-between gap-2">
             <div>
-              <h2 className="text-sm font-semibold text-blue-300">
-                Daily Performance
-              </h2>
-              <p className="text-xs text-gray-400">
+              <h2 className={dashboardInsightTitleClass}>Daily Performance</h2>
+              <p className="mt-0.5 text-xs text-gray-400 md:text-sm">
                 Aggregated by trading day
               </p>
             </div>
-            <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-xs text-gray-300">
+            <span className="shrink-0 rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 text-xs font-medium tabular-nums text-gray-300">
               {dailyRows.length} days
             </span>
           </div>
 
-          <div className="max-h-56 space-y-1 overflow-y-auto pr-1 text-sm">
+          <div className="max-h-64 space-y-1.5 overflow-y-auto pr-1 text-sm">
             {dailyRows.length > 0 ? (
               dailyRows.map(([date, pnl]) => (
                 <div
                   key={date}
-                  className="flex items-center justify-between rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5"
+                  className={INNER_ROW_CLASS}
                 >
                   <span className="font-medium text-gray-300">{date}</span>
                   <span
                     className={
                       pnl >= 0
-                        ? "font-semibold text-green-400"
-                        : "font-semibold text-red-400"
+                        ? dashboardInsightMetricPositiveClass
+                        : dashboardInsightMetricNegativeClass
                     }
                   >
                     {formatPnlCurrency(pnl, {
@@ -767,7 +780,7 @@ export default function PropFirmPage() {
                 </div>
               ))
             ) : (
-              <div className="rounded-lg border border-dashed border-white/10 bg-white/5 px-3 py-4 text-center text-sm text-gray-400">
+              <div className="rounded-lg border border-dashed border-white/10 bg-white/5 px-4 py-6 text-center text-sm text-gray-400">
                 No daily performance yet.
               </div>
             )}
@@ -775,21 +788,24 @@ export default function PropFirmPage() {
         </div>
 
         {isEmptyAccounts ? (
-          <div className="flex flex-col items-center gap-3 text-center">
-            <p className="text-sm text-gray-400">
-              You don&apos;t have any Prop Firm accounts yet.
-            </p>
-            <Link
-              href="/settings#trading-accounts"
-              className="text-sm font-medium text-blue-300 hover:text-blue-200"
-            >
-              Create Prop Firm Account →
-            </Link>
-          </div>
+          <EmptyState
+            title="No Prop Firm Accounts"
+            description="You don't have any Prop Firm accounts yet. Create one in Settings to start tracking rule progress."
+            action={
+              <Link
+                href="/settings#trading-accounts"
+                className="inline-flex items-center justify-center rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600"
+              >
+                Create Prop Firm Account
+              </Link>
+            }
+          />
         ) : !selectedAccount ? (
-          <p className="text-center text-sm text-gray-400">
-            Select a prop firm account to view progress
-          </p>
+          <EmptyState
+            title="Select an Account"
+            description="Choose a prop firm account above to view drawdown room, rule status, and daily performance."
+            className="py-8"
+          />
         ) : null}
           </>
         )}

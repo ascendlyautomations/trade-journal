@@ -99,7 +99,7 @@ function FeedPageContent() {
   const searchParams = useSearchParams()
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const { user, profile, loading: profileLoading } = useUserProfile()
-  const authChecked = !profileLoading
+  const authChecked = !!user?.id
   const [posts, setPosts] = useState<any[]>([])
   const [page, setPage] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -207,8 +207,7 @@ function FeedPageContent() {
     loadStories: reloadActiveStories,
   } = useActiveStories(
     followingStoryUserIds,
-    !profileLoading &&
-      !!user?.id &&
+    !!user?.id &&
       mode === "following" &&
       followingStoryUserIds.length > 0
   )
@@ -231,44 +230,19 @@ function FeedPageContent() {
   )
 
   useEffect(() => {
-    if (profileLoading || !user?.id || mode !== "following") {
-      setFollowingStoryUserIds([])
+    if (!user?.id || mode !== "following") {
+      if (mode !== "following") {
+        setFollowingStoryUserIds([])
+      }
       return
     }
 
-    let cancelled = false
-
-    void (async () => {
-      const { data: following, error } = await supabase
-        .from("followers")
-        .select("following_id")
-        .eq("follower_id", user.id)
-
-      if (cancelled) return
-
-      if (error) {
-        console.error("[feed] following ids for stories:", error)
-        setFollowingStoryUserIds([user.id])
-        return
-      }
-
-      const followingIds = [
-        ...new Set(
-          (following ?? [])
-            .map((row) => row.following_id)
-            .filter(
-              (id): id is string => id != null && String(id).trim() !== ""
-            )
-        ),
-      ]
-
-      setFollowingStoryUserIds([...new Set([...followingIds, user.id])])
-    })()
-
-    return () => {
-      cancelled = true
+    if (followingIdsRef.current.length > 0) {
+      setFollowingStoryUserIds([
+        ...new Set([...followingIdsRef.current, user.id]),
+      ])
     }
-  }, [profileLoading, user?.id, mode])
+  }, [user?.id, mode])
 
   useEffect(() => {
     if (!user?.id) {
@@ -376,7 +350,6 @@ function FeedPageContent() {
   )
 
   useEffect(() => {
-    if (profileLoading) return
     if (!user?.id || mode !== "following") {
       setFollowingStoryUserIds([])
       setUsers([])
@@ -384,7 +357,7 @@ function FeedPageContent() {
       setActiveStoryUser(null)
       setCurrentStoryIndex(0)
     }
-  }, [profileLoading, user?.id, mode])
+  }, [user?.id, mode])
 
   const handlePostStory = useCallback(async () => {
     if (!pendingStoryFile || !user?.id || postingStoryRef.current || postingStory) {
@@ -662,6 +635,9 @@ function FeedPageContent() {
       try {
         const followingIds = await fetchFollowingIds(supabase, userId)
         followingIdsRef.current = followingIds
+        if (mode === "following") {
+          setFollowingStoryUserIds([...new Set([...followingIds, userId])])
+        }
         let list: FeedItem[] = []
 
         if (contentType === "all") {
@@ -757,6 +733,17 @@ function FeedPageContent() {
           }
         }
 
+        const painted =
+          currentPage === 0 ? list : [...postsRef.current, ...list]
+
+        if (currentPage === 0) {
+          hasLoadedFeedRef.current = true
+        }
+
+        postsRef.current = painted
+        setPosts(painted)
+        setLoading(false)
+
         const { enriched, likesMap, commentsMap } = await loadEngagementForPosts(
           list,
           { id: userId }
@@ -766,13 +753,15 @@ function FeedPageContent() {
           setFeedEmptyState("no_posts")
         }
 
-        if (currentPage === 0) {
-          hasLoadedFeedRef.current = true
-        }
-
+        const enrichedById = new Map(
+          enriched.map((p) => [String(p.id), p] as const)
+        )
+        const nextPosts = painted.map(
+          (p) => enrichedById.get(String(p.id)) ?? p
+        )
         const mergedLikes = { ...likesByPostRef.current, ...likesMap }
         const mergedComments = { ...commentsByPostRef.current, ...commentsMap }
-        const nextPosts = [...postsRef.current, ...enriched]
+        postsRef.current = nextPosts
         setPosts(nextPosts)
         setLikesByPost(mergedLikes)
         setCommentsByPost(mergedComments)
@@ -850,7 +839,6 @@ function FeedPageContent() {
   }, [])
 
   useEffect(() => {
-    if (profileLoading) return
     if (!user?.id) return
 
     const feedInitKey = `${user.id}:${mode}:${contentType}`
@@ -868,7 +856,6 @@ function FeedPageContent() {
     resetFeedState()
     void loadPosts(0)
   }, [
-    profileLoading,
     user?.id,
     mode,
     contentType,

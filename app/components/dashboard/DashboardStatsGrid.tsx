@@ -10,9 +10,12 @@ function formatNumber(value: number) {
 }
 
 function formatMoney(v: number) {
-  return v < 0
-    ? `-$${Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: 2 })}`
-    : `$${v.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+  const abs = Math.abs(v)
+  const formatted = abs.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+  return v < 0 ? `-$${formatted}` : `$${formatted}`
 }
 
 /** 0 → 12 AM, 13 → 1 PM (12-hour clock labels). */
@@ -23,7 +26,7 @@ function formatHour(h: number) {
 }
 
 type ExpectancySummary = {
-  expectancy: number
+  expectancy:       number
 }
 
 type StreakSummary = {
@@ -84,7 +87,7 @@ function Stat({
 
   return (
     <div className="flex min-h-[90px] w-full flex-col items-center justify-center rounded-xl border border-white/10 bg-white/10 p-3 text-center backdrop-blur-md md:p-4">
-      <p className="text-xs md:text-sm text-gray-400 mb-1">{title}</p>
+      <p className="text-xs md:text-sm text-gray-300 mb-1">{title}</p>
       <div className="w-full text-center">
         <span
           className={`block font-semibold text-base md:text-lg lg:text-xl text-center leading-tight whitespace-nowrap tabular-nums ${color}`}
@@ -148,29 +151,33 @@ export default function DashboardStatsGrid({
       </div>
 
       <div className="rounded-xl border border-white/10 bg-white/10 p-3 md:p-4 backdrop-blur-md">
-        <h3 className="mb-2 text-xs md:text-sm text-gray-400">Expectancy</h3>
+        <h3 className="text-xs md:text-sm text-gray-300">
+          Expectancy
+          {expectancyData ? (
+            <>
+              {" "}
+              <span
+                className={`font-semibold tabular-nums text-sm md:text-lg ${
+                  expectancyData.expectancy >= 0
+                    ? "text-green-400"
+                    : "text-red-400"
+                }`}
+              >
+                {formatMoney(expectancyData.expectancy)}
+              </span>
+            </>
+          ) : null}
+        </h3>
 
-        {expectancyData ? (
-          <>
-            <p
-              className={`text-sm md:text-lg font-semibold ${
-                expectancyData.expectancy >= 0
-                  ? "text-green-400"
-                  : "text-red-400"
-              }`}
-            >
-              {formatMoney(expectancyData.expectancy)}
-            </p>
-          </>
-        ) : (
-          <p className="text-gray-500 text-xs md:text-sm">
+        {!expectancyData ? (
+          <p className="mt-2 text-gray-400 text-xs md:text-sm">
             Add more trades to unlock this metric.
           </p>
-        )}
+        ) : null}
       </div>
 
       <div className="rounded-xl border border-white/10 bg-white/10 p-3 md:p-4 backdrop-blur-md">
-        <h3 className="mb-2 text-xs md:text-sm text-gray-400">Streaks</h3>
+        <h3 className="mb-2 text-xs md:text-sm text-gray-300">Streaks</h3>
 
         {streakData ? (
           <>
@@ -195,7 +202,7 @@ export default function DashboardStatsGrid({
             </div>
           </>
         ) : (
-          <p className="text-gray-500 text-xs md:text-sm">
+          <p className="text-gray-400 text-xs md:text-sm">
             Not enough trading history yet.
           </p>
         )}
@@ -206,10 +213,10 @@ export default function DashboardStatsGrid({
       </div>
 
       <div className="rounded-xl border border-white/10 bg-white/10 p-3 md:p-4 backdrop-blur-md">
-        <h3 className="mb-2 text-xs md:text-sm text-gray-400">Trading Hours</h3>
+        <h3 className="mb-2 text-xs md:text-sm text-gray-300">Trading Hours</h3>
 
         {hourData === null ? (
-          <p className="text-gray-500 text-xs md:text-sm">
+          <p className="text-gray-400 text-xs md:text-sm">
             Track additional trades to view insights.
           </p>
         ) : !hourData.hasValidTradingHoursData ? (

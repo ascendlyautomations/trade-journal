@@ -30,6 +30,7 @@ export {
   SkeletonLeaderboardPage,
   SkeletonNotificationsPage,
   SkeletonCommunityPage,
+  SkeletonMessagesPage,
   SkeletonCalendarPage,
   SkeletonSettingsPage,
   SkeletonAnalyticsPage,

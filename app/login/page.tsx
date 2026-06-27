@@ -289,21 +289,12 @@ export default function LoginPage() {
       return
     }
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+    if (shouldStartCheckout()) {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
 
-    if (user) {
-      const ensureResult = await ensureProfileForUser(supabase, {
-        userId: user.id,
-        referredBy: readStoredReferralCode(),
-        userMetadata: user.user_metadata,
-      })
-      if (!ensureResult.ok) {
-        console.error("ensureProfileForUser after login:", ensureResult.error)
-      }
-
-      if (shouldStartCheckout()) {
+      if (user) {
         try {
           await startCheckoutAfterAuth(user.id)
           setLoading(false)

@@ -3,7 +3,7 @@
 import Link from "next/link"
 import Navbar from "../../components/Navbar"
 import EmptyState from "../../components/ui/EmptyState"
-import { SkeletonProfilePage } from "../../components/ui/skeletons"
+import { SkeletonProfilePage, SkeletonTradeCard } from "../../components/ui/skeletons"
 import AchievementCard from "../../components/AchievementCard"
 import type { ChangeEvent } from "react"
 import {
@@ -112,6 +112,7 @@ import { ConfirmModal, FeedbackModal, useDeleteTradeConfirmation, useFeedbackPop
 import StoryComposeModal from "../../components/feed/StoryComposeModal"
 import FeedStoryViewer from "../../components/feed/FeedStoryViewer"
 import StoryAvatarRing from "../../components/feed/StoryAvatarRing"
+import { isImageUrlLoaded, markImageUrlLoaded } from "@/lib/imageUrlCache"
 import { publishStory } from "@/lib/publishStory"
 import {
   getActiveStoriesForUser,
@@ -238,6 +239,48 @@ function formatMoney(v: number) {
   return v < 0
     ? `-$${Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: 2 })}`
     : `$${v.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+}
+
+function ProfileTradeScreenshot({
+  src,
+  onImageClick,
+}: {
+  src: string
+  onImageClick?: (url: string) => void
+}) {
+  const [loaded, setLoaded] = useState(() => isImageUrlLoaded(src))
+
+  return (
+    <div className="relative aspect-[4/3] w-full bg-black/30">
+      {!loaded ? (
+        <div
+          className="absolute inset-0 animate-pulse bg-gradient-to-br from-white/[0.06] to-white/[0.02]"
+          aria-hidden
+        />
+      ) : null}
+      <img
+        src={src}
+        alt=""
+        loading="lazy"
+        decoding="async"
+        className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-300 ${
+          loaded ? "opacity-100" : "opacity-0"
+        }`}
+        onLoad={() => {
+          setLoaded(true)
+          markImageUrlLoaded(src)
+        }}
+        onClick={
+          onImageClick
+            ? (e) => {
+                e.stopPropagation()
+                onImageClick(src)
+              }
+            : undefined
+        }
+      />
+    </div>
+  )
 }
 
 function TradeCard({
@@ -549,17 +592,12 @@ function TradeCard({
       {tradeAuthorHeader}
 
       {imageSrc ? (
-        <div className="relative w-full bg-black/30">
-          <img
-            src={imageSrc}
-            alt=""
-            loading="lazy"
-            decoding="async"
-            className="block w-full max-h-[400px] object-cover"
-          />
-        </div>
+        <ProfileTradeScreenshot
+          src={imageSrc}
+          onImageClick={onImageClick}
+        />
       ) : (
-        <div className="flex min-h-[80px] items-center justify-center bg-gradient-to-br from-white/5 to-white/[0.02] text-xs text-gray-500">
+        <div className="flex aspect-[4/3] w-full items-center justify-center bg-gradient-to-br from-white/5 to-white/[0.02] text-xs text-gray-500">
           No screenshot
         </div>
       )}
@@ -1154,6 +1192,8 @@ function ProfilePageContent() {
   const [allTrades, setAllTrades] = useState<any[]>([])
   const [visibleTradeCount, setVisibleTradeCount] = useState(PAGE_SIZE)
   const [loading, setLoading] = useState(true)
+  const [metaLoading, setMetaLoading] = useState(false)
+  const [tradesLoading, setTradesLoading] = useState(false)
   /** Set when profile row fails to load (wrong env, RLS, missing row, or network). */
   const [lastProfileFetchError, setLastProfileFetchError] = useState<string | null>(
     null
@@ -1161,7 +1201,7 @@ function ProfilePageContent() {
   const [followersCount, setFollowersCount] = useState(0)
   const [followingCount, setFollowingCount] = useState(0)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
-  const { profile: viewerContextProfile } = useUserProfile()
+  const { profile: viewerContextProfile, user: viewerUser } = useUserProfile()
   const viewerShareProfile =
     viewerContextProfile?.referral_code != null
       ? { referral_code: viewerContextProfile.referral_code }
@@ -1470,10 +1510,13 @@ function ProfilePageContent() {
       setVisibleTradeCount(cached.visibleTradeCount)
       setWallPostsReady(true)
       setLoading(false)
+      setMetaLoading(false)
+      setTradesLoading(false)
       deepLinkHandledRef.current = null
       if (cached.scrollY > 0) {
         requestAnimationFrame(() => window.scrollTo(0, cached.scrollY))
       }
+      void refreshProfileInBackground(profileId)
       return
     }
 
@@ -1493,15 +1536,21 @@ function ProfilePageContent() {
     if (!profile?.id || !canViewTrades) {
       setAllTrades([])
       setVisibleTradeCount(PAGE_SIZE)
+      setTradesLoading(false)
       return
     }
 
     let cancelled = false
+    const showTradeSkeleton = allTrades.length === 0
+    if (showTradeSkeleton) {
+      setTradesLoading(true)
+    }
 
     void (async () => {
       const rows = await fetchTradesForProfile(profile.id)
       if (!cancelled) {
         setAllTrades(rows)
+        setTradesLoading(false)
         patchProfileSession(profileId, { allTrades: rows })
       }
     })()
@@ -1509,7 +1558,7 @@ function ProfilePageContent() {
     return () => {
       cancelled = true
     }
-  }, [profile?.id, canViewTrades, fetchTradesForProfile])
+  }, [profile?.id, canViewTrades, fetchTradesForProfile, profileId])
 
   useEffect(() => {
     setVisibleTradeCount(PAGE_SIZE)
@@ -1643,6 +1692,117 @@ function ProfilePageContent() {
     return () => window.removeEventListener("keydown", onKey)
   }, [showCreatePost, editingPost, selectedAchievementImage, selectedTradeDetail, selectedPostDetail, feedDeepLinkPost, sharePost])
 
+  useEffect(() => {
+    if (viewerUser?.id) {
+      setCurrentUserId(viewerUser.id)
+    }
+  }, [viewerUser?.id])
+
+  const applyProfileMetadata = useCallback(
+    async (
+      segment: string,
+      prof: { id: string },
+      uid: string | null
+    ) => {
+      const followPromise =
+        uid && uid !== prof.id
+          ? loadFollowUiSnapshot(supabase, uid, prof.id)
+          : Promise.resolve(null)
+
+      const [snapshot, roomRes, followersRes, followingRes] = await Promise.all([
+        followPromise,
+        supabase
+          .from("rooms")
+          .select("*")
+          .eq("owner_user_id", prof.id)
+          .maybeSingle(),
+        supabase
+          .from("followers")
+          .select("*", { count: "exact", head: true })
+          .eq("following_id", prof.id),
+        supabase
+          .from("followers")
+          .select("*", { count: "exact", head: true })
+          .eq("follower_id", prof.id),
+      ])
+
+      let following = false
+      let requested = false
+      let profileFollowsYou = false
+      if (snapshot) {
+        following = snapshot.state === "following"
+        requested = snapshot.state === "requested"
+        profileFollowsYou = snapshot.followsYou
+      }
+
+      setIsFollowing(following)
+      setIsRequested(requested)
+      setFollowsYou(profileFollowsYou)
+
+      const roomRow = roomRes.data
+      if (roomRes.error) {
+        console.error(roomRes.error)
+      }
+
+      setRoom(
+        roomRow && roomRow.owner_user_id === prof.id ? roomRow : null
+      )
+
+      const followersN = followersRes.count ?? 0
+      const followingN = followingRes.count ?? 0
+      setFollowersCount(followersN)
+      setFollowingCount(followingN)
+
+      patchProfileSession(segment, {
+        room: roomRow && roomRow.owner_user_id === prof.id ? roomRow : null,
+        followersCount: followersN,
+        followingCount: followingN,
+        isFollowing: following,
+        isRequested: requested,
+        followsYou: profileFollowsYou,
+      })
+
+      return { following, requested, profileFollowsYou, roomRow, followersN, followingN }
+    },
+    []
+  )
+
+  async function refreshProfileInBackground(urlSegment: string) {
+    const segment = urlSegment.trim()
+    const lookupByUuid = isProfileUuidSegment(segment)
+
+    let profileQuery = supabase.from("profiles").select(PUBLIC_PROFILE_SELECT)
+    if (lookupByUuid) {
+      profileQuery = profileQuery.eq("id", segment)
+    } else {
+      profileQuery = profileQuery.eq(
+        "username",
+        normalizeProfileUsername(segment)
+      )
+    }
+
+    const uid = viewerUser?.id ?? null
+
+    setMetaLoading(true)
+    try {
+      const { data: prof, error } = await profileQuery.maybeSingle()
+      if (error || !prof) return
+
+      setProfile(prof)
+      patchProfileSession(segment, { profile: prof })
+
+      await applyProfileMetadata(segment, prof, uid)
+
+      if (lookupByUuid && prof.username) {
+        const target = profilePath(prof)
+        const qs = searchParams.toString()
+        router.replace(qs ? `${target}?${qs}` : target, { scroll: false })
+      }
+    } finally {
+      setMetaLoading(false)
+    }
+  }
+
   async function fetchProfile(urlSegment: string) {
     const segment = urlSegment.trim()
     const lookupByUuid = isProfileUuidSegment(segment)
@@ -1657,20 +1817,21 @@ function ProfilePageContent() {
 
     setLastProfileFetchError(null)
 
-    const { data: sessionData } = await supabase.auth.getSession()
-    const uid = sessionData?.session?.user?.id ?? null
+    const uid = viewerUser?.id ?? null
     setCurrentUserId(uid)
 
     if (devProfileDebug) {
-      const listProbe = await supabase
+      void supabase
         .from("profiles")
         .select(PUBLIC_PROFILE_SELECT)
         .limit(50)
-      console.log("PROFILE DEBUG (list up to 50 rows):", {
-        rowCount: listProbe.data?.length ?? 0,
-        error: listProbe.error,
-        sampleIds: listProbe.data?.slice(0, 5).map((r: { id: string }) => r.id),
-      })
+        .then((listProbe) => {
+          console.log("PROFILE DEBUG (list up to 50 rows):", {
+            rowCount: listProbe.data?.length ?? 0,
+            error: listProbe.error,
+            sampleIds: listProbe.data?.slice(0, 5).map((r: { id: string }) => r.id),
+          })
+        })
     }
 
     let profileQuery = supabase.from("profiles").select(PUBLIC_PROFILE_SELECT)
@@ -1713,71 +1874,55 @@ function ProfilePageContent() {
       setIsRequested(false)
       setFollowsYou(false)
       setLoading(false)
+      setMetaLoading(false)
+      setTradesLoading(false)
       return
     }
 
-    let following = false
-    let requested = false
-    let profileFollowsYou = false
-    if (uid && uid !== prof.id) {
-      const snapshot = await loadFollowUiSnapshot(supabase, uid, prof.id)
-      following = snapshot.state === "following"
-      requested = snapshot.state === "requested"
-      profileFollowsYou = snapshot.followsYou
-    }
-
     setProfile(prof)
-    setIsFollowing(following)
-    setIsRequested(requested)
-    setFollowsYou(profileFollowsYou)
-
-    const { data: roomRow, error: roomError } = await supabase
-      .from("rooms")
-      .select("*")
-      .eq("owner_user_id", prof.id)
-      .maybeSingle()
-
-    if (roomError) {
-      console.error(roomError)
-    }
-
-    setRoom(
-      roomRow && roomRow.owner_user_id === prof.id ? roomRow : null
-    )
-
-    const { count: followersN } = await supabase
-      .from("followers")
-      .select("*", { count: "exact", head: true })
-      .eq("following_id", prof.id)
-
-    const { count: followingN } = await supabase
-      .from("followers")
-      .select("*", { count: "exact", head: true })
-      .eq("follower_id", prof.id)
-
-    setFollowersCount(followersN ?? 0)
-    setFollowingCount(followingN ?? 0)
-
     setLoading(false)
 
     writeProfileSession(segment, {
       profile: prof,
-      room: roomRow && roomRow.owner_user_id === prof.id ? roomRow : null,
-      followersCount: followersN ?? 0,
-      followingCount: followingN ?? 0,
-      isFollowing: following,
-      isRequested: requested,
-      followsYou: profileFollowsYou,
-      allTrades: readProfileSession(segment)?.allTrades ?? [],
-      wallPosts: readProfileSession(segment)?.wallPosts ?? [],
+      room: null,
+      followersCount: 0,
+      followingCount: 0,
+      isFollowing: false,
+      isRequested: false,
+      followsYou: false,
+      allTrades: [],
+      wallPosts: [],
       visibleTradeCount: PAGE_SIZE,
       scrollY: 0,
     })
 
-    if (lookupByUuid && prof.username) {
-      const target = profilePath(prof)
-      const qs = searchParams.toString()
-      router.replace(qs ? `${target}?${qs}` : target, { scroll: false })
+    setMetaLoading(true)
+    try {
+      const meta = await applyProfileMetadata(segment, prof, uid)
+      writeProfileSession(segment, {
+        profile: prof,
+        room:
+          meta.roomRow && meta.roomRow.owner_user_id === prof.id
+            ? meta.roomRow
+            : null,
+        followersCount: meta.followersN,
+        followingCount: meta.followingN,
+        isFollowing: meta.following,
+        isRequested: meta.requested,
+        followsYou: meta.profileFollowsYou,
+        allTrades: [],
+        wallPosts: [],
+        visibleTradeCount: PAGE_SIZE,
+        scrollY: 0,
+      })
+
+      if (lookupByUuid && prof.username) {
+        const target = profilePath(prof)
+        const qs = searchParams.toString()
+        router.replace(qs ? `${target}?${qs}` : target, { scroll: false })
+      }
+    } finally {
+      setMetaLoading(false)
     }
   }
 
@@ -2776,10 +2921,6 @@ function ProfilePageContent() {
     return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   })
 
-  useEffect(() => {
-    console.log(allTrades)
-  }, [allTrades])
-
   const profilePublicTrades = useMemo(
     () => allTrades.filter((trade) => trade.is_public === true),
     [allTrades]
@@ -2806,7 +2947,7 @@ function ProfilePageContent() {
     return modeStr !== "backtest" && typeStr !== "backtest"
   })
 
-  const statsVisible = canViewTrades
+  const statsVisible = canViewTrades && !tradesLoading
 
   const totalTrades = canViewTrades ? analyticsTrades.length : 0
   const wins = canViewTrades ? analyticsTrades.filter((t) => t.pnl > 0).length : 0
@@ -3095,6 +3236,7 @@ function ProfilePageContent() {
                       <StoryAvatarRing
                         profile={profile}
                         hasActiveStory
+                        priority
                         sizeClassName="h-20 w-20 md:h-24 md:w-24"
                       />
                     </button>
@@ -3102,6 +3244,7 @@ function ProfilePageContent() {
                     <StoryAvatarRing
                       profile={profile}
                       hasActiveStory={false}
+                      priority
                       sizeClassName="h-20 w-20 md:h-24 md:w-24"
                     />
                   )}
@@ -3172,7 +3315,11 @@ function ProfilePageContent() {
                         className="cursor-pointer tabular-nums hover:text-white"
                       >
                         <span className="font-semibold text-gray-200">
-                          {followersCount}
+                          {metaLoading ? (
+                            <span className="inline-block h-4 w-8 animate-pulse rounded bg-white/10 align-middle" />
+                          ) : (
+                            followersCount
+                          )}
                         </span>{" "}
                         Followers
                       </span>
@@ -3187,7 +3334,11 @@ function ProfilePageContent() {
                         className="cursor-pointer tabular-nums hover:text-white"
                       >
                         <span className="font-semibold text-gray-200">
-                          {followingCount}
+                          {metaLoading ? (
+                            <span className="inline-block h-4 w-8 animate-pulse rounded bg-white/10 align-middle" />
+                          ) : (
+                            followingCount
+                          )}
                         </span>{" "}
                         Following
                       </span>
@@ -3408,7 +3559,13 @@ function ProfilePageContent() {
           <div className="mt-3 space-y-6 px-2 md:mt-4 md:px-0">
             {activeTab === "trades" && (
               <div className="mt-4 w-full pb-8">
-                {sortedTrades.length === 0 ? (
+                {tradesLoading && sortedTrades.length === 0 ? (
+                  <div className="grid grid-cols-1 gap-x-6 gap-y-8 md:grid-cols-2">
+                    {Array.from({ length: 4 }).map((_, i) => (
+                      <SkeletonTradeCard key={i} />
+                    ))}
+                  </div>
+                ) : sortedTrades.length === 0 ? (
                   isOwnProfile ? (
                     <EmptyState
                       title="Share Your First Trade"

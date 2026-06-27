@@ -5,9 +5,11 @@ import TradeFilterBar, {
   type TradeFilterBarProps,
 } from "@/app/components/TradeFilterBar"
 import DashboardGearSettings from "./DashboardGearSettings"
+import { DashboardPlanIndicator } from "./DashboardHeader"
 import type { GearDraftState } from "./dashboardGearTypes"
 
 export type DashboardFiltersProps = {
+  isPro: boolean
   accounts: TradeFilterBarProps["accounts"]
   accountFilter: string
   onAccountChange: (value: string) => void
@@ -38,6 +40,7 @@ export type DashboardFiltersProps = {
 }
 
 export default function DashboardFilters({
+  isPro,
   accounts,
   accountFilter,
   onAccountChange,
@@ -82,8 +85,10 @@ export default function DashboardFilters({
 
   return (
     <TradeFilterBar
-      className="mt-2.5 mb-0"
+      className="mt-2.5 mb-3 md:mb-4"
       mobileThreeRowLayout
+      leading={<DashboardPlanIndicator isPro={isPro} />}
+      leadingOverlay
       accounts={accounts}
       accountFilter={accountFilter}
       onAccountChange={onAccountChange}

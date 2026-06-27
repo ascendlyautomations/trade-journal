@@ -1,12 +1,15 @@
 "use client"
 
 import type { StoryBarProfile } from "@/lib/activeStories"
+import { isImageUrlLoaded, markImageUrlLoaded } from "@/lib/imageUrlCache"
 
 type StoryAvatarRingProps = {
   profile: Pick<StoryBarProfile, "avatar_url">
   hasActiveStory: boolean
   sizeClassName?: string
   imageClassName?: string
+  /** Eager-load for above-the-fold profile header avatars. */
+  priority?: boolean
 }
 
 export default function StoryAvatarRing({
@@ -14,14 +17,20 @@ export default function StoryAvatarRing({
   hasActiveStory,
   sizeClassName = "h-16 w-16",
   imageClassName = "h-full w-full rounded-full object-cover",
+  priority = false,
 }: StoryAvatarRingProps) {
-  const avatar = profile.avatar_url ? (
+  const avatarUrl = profile.avatar_url?.trim() || ""
+  const avatar = avatarUrl ? (
     <img
-      src={profile.avatar_url}
+      src={avatarUrl}
       alt=""
-      loading="lazy"
+      loading={priority || isImageUrlLoaded(avatarUrl) ? "eager" : "lazy"}
       decoding="async"
+      fetchPriority={priority ? "high" : undefined}
       className={imageClassName}
+      onLoad={() => {
+        if (avatarUrl) markImageUrlLoaded(avatarUrl)
+      }}
       onError={(e) => {
         e.currentTarget.src = "/default-avatar.png"
       }}

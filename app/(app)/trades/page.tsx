@@ -18,6 +18,7 @@ import TradesPageOverlays from "../../components/TradesPageOverlays"
 import { ConfirmModal, useDeleteTradeConfirmation } from "../../components/ui"
 import { useUserProfile } from "@/lib/UserProfileProvider"
 import { useCachedAccounts, useCachedTrades } from "@/lib/useAppDataCache"
+import { getCachedAccounts, getCachedTrades } from "@/lib/appDataCache"
 
 export default function TradesPage() {
   const { user, profile: gateProfile, loading: profileLoading } = useUserProfile()
@@ -29,10 +30,15 @@ export default function TradesPage() {
     () => excludeBacktestTrades(cachedTrades),
     [cachedTrades]
   )
+  const tradesHasCachedData =
+    user?.id != null && getCachedTrades(user.id) != null
+  const accountsHasCachedData =
+    user?.id != null && getCachedAccounts(user.id) != null
+
   const loading =
-    profileLoading ||
-    (tradesLoading && cachedTrades.length === 0) ||
-    (accountsLoading && accountRows.length === 0)
+    (profileLoading && !gateProfile) ||
+    (tradesLoading && cachedTrades.length === 0 && !tradesHasCachedData) ||
+    (accountsLoading && accountRows.length === 0 && !accountsHasCachedData)
 
   const [resultFilter, setResultFilter] = useState<"all" | "wins" | "losses">("all")
   const [selectedImage, setSelectedImage] = useState<string | null>(null)

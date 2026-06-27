@@ -438,6 +438,32 @@ export function SkeletonCommunityPage() {
   )
 }
 
+export function SkeletonMessagesPage() {
+  return (
+    <div className="flex min-h-[60vh] flex-col">
+      <div className="mb-4 flex items-center justify-between">
+        <Skeleton className="h-8 w-32" />
+        <div className="flex gap-2">
+          <Skeleton className="h-9 w-24" />
+          <Skeleton className="h-9 w-28" />
+        </div>
+      </div>
+      <Skeleton className="mb-6 h-11 w-full rounded" />
+      <div className="space-y-2">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className="flex items-center gap-3 rounded-lg p-3">
+            <Skeleton className="h-12 w-12 shrink-0 rounded-full" />
+            <div className="min-w-0 flex-1 space-y-2">
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-3 w-full max-w-xs" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export function SkeletonCalendarPage() {
   return (
     <div className="mx-auto grid w-full max-w-7xl grid-cols-1 items-start gap-4 px-4 md:grid-cols-[2fr_1.4fr] md:gap-8">
@@ -499,9 +525,8 @@ export function SkeletonSettingsPage() {
 
 export function SkeletonAnalyticsPage() {
   return (
-    <div className="space-y-6">
-      <Skeleton className="h-6 w-48" />
-      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+    <div className="space-y-6 md:space-y-8">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {Array.from({ length: 4 }).map((_, i) => (
           <SkeletonStatsCard key={i} />
         ))}

@@ -60,7 +60,7 @@ export default function DashboardSessionChart({
       ) : (
       <div className="flex flex-1 flex-col gap-4">
         <div className="flex min-h-[240px] flex-col">
-          <p className="mb-2 text-xs md:text-sm text-gray-400">Trades by Session</p>
+          <p className="mb-2 text-xs md:text-sm text-gray-300">Trades by Session</p>
           <div className="min-h-0 flex-1 w-full overflow-hidden">
             <ResponsiveContainer width="100%" height={240}>
               <PieChart>
@@ -91,7 +91,7 @@ export default function DashboardSessionChart({
           </div>
         </div>
         <div className="flex flex-col">
-          <p className="mb-2 text-xs md:text-sm text-gray-400">Session breakdown</p>
+          <p className="mb-2 text-xs md:text-sm text-gray-300">Session breakdown</p>
           <div className="grid grid-cols-3 gap-2 md:gap-3">
             {DASHBOARD_SESSION_DISPLAY_ORDER.map((name) => {
               const s = sessionBuckets[name]

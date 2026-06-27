@@ -100,22 +100,44 @@ export function writeGettingStartedCollapsedPreference(
   }
 }
 
-/** Whether the getting-started intro popup should show (see GettingStartedProgressProvider). */
-export function shouldShowGettingStartedIntroPopup(options: {
-  onboardingCompleted: boolean
-  hasSeenGettingStartedIntro: boolean
-  prevOnboardingCompleted: boolean
-  isBaselineFetch: boolean
-}): boolean {
-  return (
-    options.onboardingCompleted &&
-    !options.hasSeenGettingStartedIntro &&
-    (options.isBaselineFetch || !options.prevOnboardingCompleted)
-  )
+const SESSION_DISMISS_STORAGE_KEY =
+  "tradetraxs_getting_started_dismissed_session_v1"
+
+function sessionDismissStorageKey(userId: string): string {
+  return `${SESSION_DISMISS_STORAGE_KEY}:${userId}`
 }
 
-/** Whether the getting-started checklist should be offered (inline or mobile entry). */
-export function shouldShowGettingStartedChecklist(
+/** True when the user collapsed/closed the checklist this browser session. */
+export function readGettingStartedSessionDismissed(userId: string): boolean {
+  if (typeof window === "undefined") return false
+  try {
+    return (
+      window.sessionStorage.getItem(sessionDismissStorageKey(userId)) === "1"
+    )
+  } catch {
+    return false
+  }
+}
+
+export function writeGettingStartedSessionDismissed(userId: string) {
+  if (typeof window === "undefined") return
+  try {
+    window.sessionStorage.setItem(sessionDismissStorageKey(userId), "1")
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
+/** Intro popup is never shown automatically — onboarding_completed gates all auto UI. */
+export function shouldShowGettingStartedIntroPopup(_options: {
+  onboardingCompleted: boolean
+  hasSeenGettingStartedIntro: boolean
+}): boolean {
+  return false
+}
+
+/** Whether the checklist can be opened manually (navbar mobile entry, etc.). */
+export function shouldOfferGettingStartedChecklist(
   userId: string | null | undefined,
   options: {
     hasSeenOnboardingCompletePopup: boolean
@@ -127,6 +149,38 @@ export function shouldShowGettingStartedChecklist(
       !options.hasSeenOnboardingCompletePopup &&
       !options.allComplete
   )
+}
+
+/**
+ * Whether the dashboard should embed the checklist automatically.
+ * Single rule: only while profile onboarding is not yet complete.
+ */
+export function shouldAutoShowGettingStartedChecklist(
+  userId: string | null | undefined,
+  options: {
+    onboardingCompleted: boolean
+  }
+): boolean {
+  if (!userId || options.onboardingCompleted) {
+    return false
+  }
+
+  if (readGettingStartedSessionDismissed(userId)) {
+    return false
+  }
+
+  return true
+}
+
+/** @deprecated Use shouldOfferGettingStartedChecklist or shouldAutoShowGettingStartedChecklist */
+export function shouldShowGettingStartedChecklist(
+  userId: string | null | undefined,
+  options: {
+    hasSeenOnboardingCompletePopup: boolean
+    allComplete: boolean
+  }
+): boolean {
+  return shouldOfferGettingStartedChecklist(userId, options)
 }
 
 export function computeGettingStartedProgress(
