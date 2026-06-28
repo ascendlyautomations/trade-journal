@@ -45,6 +45,10 @@ export {
   useDeleteTradeConfirmation,
   DELETE_TRADE_CONFIRM_COPY,
 } from "./useDeleteTradeConfirmation"
+export {
+  useDeleteAchievementConfirmation,
+  DELETE_ACHIEVEMENT_CONFIRM_COPY,
+} from "./useDeleteAchievementConfirmation"
 export { default as FeedbackModal } from "./FeedbackModal"
 export type { FeedbackModalProps } from "./FeedbackModal"
 export { useFeedbackPopup } from "./useFeedbackPopup"

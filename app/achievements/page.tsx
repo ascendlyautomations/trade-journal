@@ -6,6 +6,7 @@ import AchievementCard from "../components/AchievementCard"
 import AchievementUploadModal, {
   type AchievementUploadInitialValues,
 } from "../components/AchievementUploadModal"
+import { ConfirmModal, useDeleteAchievementConfirmation } from "../components/ui"
 import { supabase } from "../../lib/supabaseClient"
 import {
   type Achievement,
@@ -95,6 +96,27 @@ export default function AchievementsPage() {
     if (userId) await loadAchievements(userId)
   }
 
+  const handleDeleteAchievement = useCallback(
+    async (achievementId: string) => {
+      if (!userId) return
+      const { error: delErr } = await supabase
+        .from("achievements")
+        .delete()
+        .eq("id", achievementId)
+        .eq("user_id", userId)
+      if (delErr) {
+        console.error("[achievements] delete failed", delErr)
+        setError(delErr.message || "Could not delete achievement.")
+        throw delErr
+      }
+      setAchievements((prev) => prev.filter((row) => row.id !== achievementId))
+    },
+    [userId]
+  )
+
+  const { requestDelete, confirmModalProps } =
+    useDeleteAchievementConfirmation(handleDeleteAchievement)
+
   return (
     <>
       <Navbar />
@@ -182,21 +204,7 @@ export default function AchievementsPage() {
                   key={a.id}
                   achievement={a}
                   onEdit={() => openEdit(a)}
-                  onDelete={async () => {
-                    if (!userId) return
-                    if (!window.confirm("Delete this achievement?")) return
-                    const { error: delErr } = await supabase
-                      .from("achievements")
-                      .delete()
-                      .eq("id", a.id)
-                      .eq("user_id", userId)
-                    if (delErr) {
-                      console.error("[achievements] delete failed", delErr)
-                      setError(delErr.message || "Could not delete achievement.")
-                      return
-                    }
-                    setAchievements((prev) => prev.filter((row) => row.id !== a.id))
-                  }}
+                  onDelete={() => requestDelete(a.id)}
                 />
               ))}
             </section>
@@ -216,6 +224,8 @@ export default function AchievementsPage() {
         initialValues={createInitialValues}
         editingAchievement={editingAchievement}
       />
+
+      <ConfirmModal {...confirmModalProps} />
     </>
   )
 }

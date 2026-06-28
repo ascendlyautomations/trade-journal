@@ -1,9 +1,13 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { supabase } from "@/lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
-import { formatDateOnly } from "@/lib/formatDate"
+import NativeDateInput from "@/app/components/ui/NativeDateInput"
+import {
+  normalizeAchievementDateInputValue,
+  resolveNewAchievementDateInputValue,
+} from "@/lib/achievementDate"
 import {
   type Achievement,
   badgeKeyFromType,
@@ -48,6 +52,8 @@ export type AchievementUploadModalProps = {
   saveLabel?: string
 }
 
+AchievementUploadModal.displayName = "AchievementUploadModal"
+
 function mergeInitialForm(
   initialValues?: AchievementUploadInitialValues
 ): AchievementFormState {
@@ -75,20 +81,16 @@ export default function AchievementUploadModal({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [form, setForm] = useState<AchievementFormState>(EMPTY_ACHIEVEMENT_FORM)
-  const [achievedDate, setAchievedDate] = useState<string | null>(null)
-  const [showCalendar, setShowCalendar] = useState(false)
-  const [calendarMonth, setCalendarMonth] = useState<Date>(() => {
-    const now = new Date()
-    return new Date(now.getFullYear(), now.getMonth(), 1)
-  })
   const [file, setFile] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [removeImage, setRemoveImage] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
-  const calendarWrapperRef = useRef<HTMLDivElement | null>(null)
 
   const resetForm = useCallback(() => {
     if (editingAchievement) {
+      const savedDate = normalizeAchievementDateInputValue(
+        editingAchievement.achieved_at
+      )
       setForm({
         achievement_type: normalizeAchievementType(editingAchievement.achievement_type),
         title: editingAchievement.title || "",
@@ -98,38 +100,27 @@ export default function AchievementUploadModal({
           Number.isFinite(Number(editingAchievement.value_numeric))
             ? String(editingAchievement.value_numeric)
             : "",
-        achieved_at: editingAchievement.achieved_at
-          ? String(editingAchievement.achieved_at).slice(0, 10)
-          : "",
+        achieved_at: savedDate,
         image_url: editingAchievement.image_url || null,
         is_public: !!editingAchievement.is_public,
         is_featured: !!editingAchievement.is_featured,
       })
-      setAchievedDate(
-        editingAchievement.achieved_at
-          ? String(editingAchievement.achieved_at).slice(0, 10)
-          : null
-      )
-      if (editingAchievement.achieved_at) {
-        const d = new Date(String(editingAchievement.achieved_at))
-        if (!Number.isNaN(d.getTime())) {
-          setCalendarMonth(new Date(d.getFullYear(), d.getMonth(), 1))
-        }
-      }
     } else {
-      setForm(mergeInitialForm(initialValues))
-      setAchievedDate(initialValues?.achieved_at || null)
-      const now = new Date()
-      setCalendarMonth(new Date(now.getFullYear(), now.getMonth(), 1))
+      const defaultDate = resolveNewAchievementDateInputValue(initialValues)
+      setForm(
+        mergeInitialForm({
+          ...initialValues,
+          achieved_at: defaultDate,
+        })
+      )
     }
-    setShowCalendar(false)
     setFile(null)
     setPreviewUrl(null)
     setRemoveImage(false)
     setError(null)
   }, [editingAchievement, initialValues])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!open) return
     resetForm()
   }, [open, resetForm])
@@ -145,18 +136,6 @@ export default function AchievementUploadModal({
   }, [file])
 
   useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      const target = e.target as Node
-      if (!calendarWrapperRef.current?.contains(target)) {
-        setShowCalendar(false)
-      }
-    }
-
-    document.addEventListener("mousedown", handleClickOutside)
-    return () => document.removeEventListener("mousedown", handleClickOutside)
-  }, [])
-
-  useEffect(() => {
     if (!open) return
     const prev = document.body.style.overflow
     document.body.style.overflow = "hidden"
@@ -164,33 +143,6 @@ export default function AchievementUploadModal({
       document.body.style.overflow = prev
     }
   }, [open])
-
-  const monthLabel = calendarMonth.toLocaleString(undefined, {
-    month: "long",
-    year: "numeric",
-  })
-
-  const monthStart = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1)
-  const monthEnd = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 0)
-  const startWeekday = monthStart.getDay()
-  const totalDays = monthEnd.getDate()
-  const cells = useMemo(() => {
-    const next: Array<number | null> = []
-    for (let i = 0; i < startWeekday; i++) next.push(null)
-    for (let day = 1; day <= totalDays; day++) next.push(day)
-    while (next.length % 7 !== 0) next.push(null)
-    return next
-  }, [startWeekday, totalDays])
-
-  function openAchievedDateCalendar() {
-    if (achievedDate) {
-      const parsed = new Date(achievedDate)
-      if (!Number.isNaN(parsed.getTime())) {
-        setCalendarMonth(new Date(parsed.getFullYear(), parsed.getMonth(), 1))
-      }
-    }
-    setShowCalendar(true)
-  }
 
   function handleClose() {
     if (busy) return
@@ -273,7 +225,7 @@ export default function AchievementUploadModal({
       account_size: null,
       mode: null,
       firm: null,
-      achieved_at: achievedDate || form.achieved_at || null,
+      achieved_at: form.achieved_at || null,
       image_url: imageUrl,
       is_public: form.is_public,
       is_featured: form.is_featured,
@@ -375,123 +327,13 @@ export default function AchievementUploadModal({
           ) : null}
           <label className="text-xs text-gray-300">
             Achieved Date
-            <div ref={calendarWrapperRef} className="relative calendar-wrapper">
-              <div
-                className="mt-1.5 flex w-full cursor-pointer items-center rounded-lg border border-white/10 bg-[#0f172a]/70 px-3 py-2.5 text-white transition hover:border-blue-400"
-                onClick={openAchievedDateCalendar}
-              >
-                <span
-                  className={
-                    achievedDate
-                      ? "text-sm font-medium text-white md:text-base"
-                      : "text-sm text-gray-400"
-                  }
-                >
-                  {achievedDate ? formatDateOnly(achievedDate) : "Select date"}
-                </span>
-              </div>
-
-              {showCalendar ? (
-                <div className="absolute left-0 top-full z-50 mt-2 rounded-xl border border-white/10 bg-[#0f172a] shadow-lg">
-                  <div className="flex items-center justify-between gap-2 border-b border-white/10 px-3 py-2 text-sm text-white">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setCalendarMonth(
-                          new Date(
-                            calendarMonth.getFullYear(),
-                            calendarMonth.getMonth() - 1,
-                            1
-                          )
-                        )
-                      }
-                      className="rounded bg-white/10 px-2 py-1 hover:bg-white/20"
-                    >
-                      ←
-                    </button>
-                    <span>{monthLabel}</span>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setCalendarMonth(
-                          new Date(
-                            calendarMonth.getFullYear(),
-                            calendarMonth.getMonth() + 1,
-                            1
-                          )
-                        )
-                      }
-                      className="rounded bg-white/10 px-2 py-1 hover:bg-white/20"
-                    >
-                      →
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-7 gap-1 p-2 text-center text-xs text-gray-400">
-                    {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((label) => (
-                      <span key={label}>{label}</span>
-                    ))}
-                    {cells.map((day, i) => {
-                      if (!day) return <span key={`empty-${i}`} className="h-8" />
-                      const y = calendarMonth.getFullYear()
-                      const m = String(calendarMonth.getMonth() + 1).padStart(2, "0")
-                      const d = String(day).padStart(2, "0")
-                      const dateValue = `${y}-${m}-${d}`
-                      const isSelected = achievedDate === dateValue
-                      return (
-                        <button
-                          key={dateValue}
-                          type="button"
-                          onClick={() => {
-                            setAchievedDate(dateValue)
-                            setForm((prev) => ({ ...prev, achieved_at: dateValue }))
-                            setShowCalendar(false)
-                          }}
-                          className={`h-8 w-8 rounded ${
-                            isSelected
-                              ? "bg-blue-500/30 text-blue-200"
-                              : "text-gray-200 hover:bg-white/10"
-                          }`}
-                        >
-                          {day}
-                        </button>
-                      )
-                    })}
-                  </div>
-                  <div className="mt-2 flex justify-between px-2 pb-2">
-                    <button
-                      type="button"
-                      className="text-xs text-blue-400 hover:text-blue-300"
-                      onClick={() => {
-                        const today = new Date()
-                        const y = today.getFullYear()
-                        const m = String(today.getMonth() + 1).padStart(2, "0")
-                        const d = String(today.getDate()).padStart(2, "0")
-                        const dateValue = `${y}-${m}-${d}`
-                        setAchievedDate(dateValue)
-                        setForm((prev) => ({ ...prev, achieved_at: dateValue }))
-                        setCalendarMonth(
-                          new Date(today.getFullYear(), today.getMonth(), 1)
-                        )
-                        setShowCalendar(false)
-                      }}
-                    >
-                      Today
-                    </button>
-                    <button
-                      type="button"
-                      className="text-xs text-gray-400 hover:text-white"
-                      onClick={() => {
-                        setAchievedDate(null)
-                        setForm((prev) => ({ ...prev, achieved_at: "" }))
-                        setShowCalendar(false)
-                      }}
-                    >
-                      Clear
-                    </button>
-                  </div>
-                </div>
-              ) : null}
-            </div>
+            <NativeDateInput
+              className="mt-1.5 rounded-lg border-white/15 bg-[#0a1329]"
+              value={form.achieved_at}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, achieved_at: e.target.value }))
+              }
+            />
           </label>
           <label className="text-xs text-gray-300">
             Upload Image
