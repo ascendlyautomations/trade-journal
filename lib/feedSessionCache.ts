@@ -14,8 +14,10 @@ export type FeedSessionSnapshot = {
   mergeBuffer: FeedItem[]
   tradePage: number
   profilePage: number
+  achievementPage: number
   tradeExhausted: boolean
   profileExhausted: boolean
+  achievementExhausted: boolean
   hasLoaded: boolean
   scrollY: number
 }

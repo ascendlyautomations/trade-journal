@@ -75,6 +75,8 @@ import {
   fetchProfileFeedBatch,
   fetchTradeFeedBatch,
   fetchAchievementFeedBatch,
+  fetchProfileFeedPostById,
+  fetchTradeFeedPostById,
   topUpMergedFeedBuffer,
 } from "@/lib/feedContent"
 import {
@@ -126,8 +128,10 @@ function FeedPageContent() {
   const mergeBufferRef = useRef<FeedItem[]>([])
   const tradePageRef = useRef(0)
   const profilePageRef = useRef(0)
+  const achievementPageRef = useRef(0)
   const tradeExhaustedRef = useRef(false)
   const profileExhaustedRef = useRef(false)
+  const achievementExhaustedRef = useRef(false)
   const userIdRef = useRef<string | null>(null)
   userIdRef.current = user?.id ?? null
   const profileRef = useRef(profile)
@@ -183,8 +187,10 @@ function FeedPageContent() {
       mergeBuffer: [...mergeBufferRef.current],
       tradePage: tradePageRef.current,
       profilePage: profilePageRef.current,
+      achievementPage: achievementPageRef.current,
       tradeExhausted: tradeExhaustedRef.current,
       profileExhausted: profileExhaustedRef.current,
+      achievementExhausted: achievementExhaustedRef.current,
       hasLoaded: hasLoadedFeedRef.current,
       scrollY: scrollYRef.current,
       ...overrides,
@@ -696,8 +702,10 @@ function FeedPageContent() {
             buffer: mergeBufferRef.current,
             tradePage: tradePageRef.current,
             profilePage: profilePageRef.current,
+            achievementPage: achievementPageRef.current,
             tradeExhausted: tradeExhaustedRef.current,
             profileExhausted: profileExhaustedRef.current,
+            achievementExhausted: achievementExhaustedRef.current,
             targetSize: FEED_PAGE_SIZE,
             pageSize: FEED_PAGE_SIZE,
           })
@@ -705,8 +713,10 @@ function FeedPageContent() {
           mergeBufferRef.current = toppedUp.buffer
           tradePageRef.current = toppedUp.tradePage
           profilePageRef.current = toppedUp.profilePage
+          achievementPageRef.current = toppedUp.achievementPage
           tradeExhaustedRef.current = toppedUp.tradeExhausted
           profileExhaustedRef.current = toppedUp.profileExhausted
+          achievementExhaustedRef.current = toppedUp.achievementExhausted
 
           list = mergeBufferRef.current.splice(0, FEED_PAGE_SIZE)
 
@@ -726,6 +736,7 @@ function FeedPageContent() {
           if (
             toppedUp.tradeExhausted &&
             toppedUp.profileExhausted &&
+            toppedUp.achievementExhausted &&
             list.length < FEED_PAGE_SIZE
           ) {
             hasMoreRef.current = false
@@ -880,8 +891,10 @@ function FeedPageContent() {
     mergeBufferRef.current = []
     tradePageRef.current = 0
     profilePageRef.current = 0
+    achievementPageRef.current = 0
     tradeExhaustedRef.current = false
     profileExhaustedRef.current = false
+    achievementExhaustedRef.current = false
   }, [])
 
   const restoreFeedSession = useCallback((key: string, cached: FeedSessionSnapshot) => {
@@ -897,8 +910,10 @@ function FeedPageContent() {
     mergeBufferRef.current = [...cached.mergeBuffer]
     tradePageRef.current = cached.tradePage
     profilePageRef.current = cached.profilePage
+    achievementPageRef.current = cached.achievementPage ?? 0
     tradeExhaustedRef.current = cached.tradeExhausted
     profileExhaustedRef.current = cached.profileExhausted
+    achievementExhaustedRef.current = cached.achievementExhausted ?? false
     hasLoadedFeedRef.current = cached.hasLoaded
     loadingRef.current = false
     setLoading(false)
@@ -1068,7 +1083,7 @@ function FeedPageContent() {
 
   useEffect(() => {
     if (!user?.id) return
-    if (contentType !== "achievements") return
+    if (contentType !== "all" && contentType !== "achievements") return
 
     const userId = user.id
     const channel = supabase.channel(`feed-achievement-posts-${userId}`)
@@ -1725,6 +1740,8 @@ function FeedPageContent() {
       feedDeepLinkHandledRef.current = key
       if (post.feedKind === "achievement" || achievementParam) {
         setContentType("achievements")
+      } else if (postParam) {
+        setContentType("all")
       }
       setSelectedPostId(String(post.id))
       if (openComments) {
@@ -1739,7 +1756,17 @@ function FeedPageContent() {
     }
 
     void (async () => {
-      const row = await fetchAchievementPostById(supabase, targetId)
+      let row: FeedItem | null = null
+
+      if (achievementParam) {
+        row = await fetchAchievementPostById(supabase, targetId)
+      } else if (postParam) {
+        row = await fetchTradeFeedPostById(supabase, postParam)
+        if (!row) {
+          row = await fetchProfileFeedPostById(supabase, postParam)
+        }
+      }
+
       if (!row) return
 
       const { enriched, likesMap, commentsMap } = await loadEngagementForPosts(

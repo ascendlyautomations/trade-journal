@@ -48,6 +48,7 @@ import {
 } from "@/lib/tradeAccountDisplay"
 import PerformanceShareModal from "../../components/PerformanceShareModal"
 import PostSetupImportModal from "../../components/PostSetupImportModal"
+import TradesPageOverlays from "../../components/TradesPageOverlays"
 import LockedFeature from "../../components/LockedFeature"
 import EmptyState from "../../components/ui/EmptyState"
 import { SkeletonDashboardPage } from "../../components/ui/skeletons"
@@ -551,6 +552,9 @@ export default function Dashboard() {
   const [savingGearSettings, setSavingGearSettings] = useState(false)
   const [showPerformanceShare, setShowPerformanceShare] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
+  const [editingTrade, setEditingTrade] = useState<any | null>(null)
+  const [selectedImage, setSelectedImage] = useState<string | null>(null)
+  const [sendTradeId, setSendTradeId] = useState<string | null>(null)
   const didHydrateDashboardPrefs = useRef(false)
   /** Same fetch as /trades — used only for filter dropdown labels (#account_number vs UUID). */
 
@@ -566,6 +570,11 @@ export default function Dashboard() {
     })
     return m
   }, [accountRows])
+
+  const hasPropFirmAccounts = useMemo(
+    () => accountRows.some((acc) => acc.category === "Prop Firm"),
+    [accountRows]
+  )
 
   const tradesExcludingBacktest = useMemo(
     () => excludeBacktestTrades(trades),
@@ -1487,9 +1496,11 @@ const biggestLoss = losses.length > 0
           />
         ) : (
           recentTradesList.map((trade) => (
-            <div
+            <button
               key={trade.id}
-              className="rounded-lg border border-white/10 bg-white/5 p-3 text-sm backdrop-blur-sm"
+              type="button"
+              onClick={() => setEditingTrade(trade)}
+              className="w-full rounded-lg border border-white/10 bg-white/5 p-3 text-left text-sm backdrop-blur-sm transition hover:border-white/20 hover:bg-white/[0.07] cursor-pointer"
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 space-y-1">
@@ -1548,7 +1559,7 @@ const biggestLoss = losses.length > 0
               {trade.strategy ? (
                 <p className="mt-1 text-xs text-gray-300">Strategy: {trade.strategy}</p>
               ) : null}
-            </div>
+            </button>
           ))
         )}
       </div>
@@ -1618,6 +1629,7 @@ const biggestLoss = losses.length > 0
               onSaveGear={() => void saveDashboardGearPanel()}
               onCancelGear={cancelDashboardGearPanel}
               showShareControls={totalTrades > 0}
+              showPropFirmLink={hasPropFirmAccounts}
             />
           ) : null}
           <DashboardHeader
@@ -2033,6 +2045,19 @@ const biggestLoss = losses.length > 0
         profile={profile}
         initialCustomRangeStart={customRangeStart}
         initialCustomRangeEnd={customRangeEnd}
+      />
+      <TradesPageOverlays
+        selectedImage={selectedImage}
+        editingTrade={editingTrade}
+        showPerformanceShare={false}
+        sendTradeId={sendTradeId}
+        tradesForPerformanceSharePool={[]}
+        gateProfile={null}
+        onCloseImageLightbox={() => setSelectedImage(null)}
+        onCloseEditForm={() => setEditingTrade(null)}
+        onTradeFormSaved={() => setEditingTrade(null)}
+        onClosePerformanceShare={() => {}}
+        onCloseSendModal={() => setSendTradeId(null)}
       />
     </>
   )

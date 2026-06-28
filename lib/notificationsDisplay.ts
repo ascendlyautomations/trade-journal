@@ -1,4 +1,5 @@
 import { profilePath } from "./profileRoutes"
+import { getSharedTradeViewHref } from "./sharedContentNavigation"
 import {
   getNotificationTimeSection,
   NOTIFICATION_TIME_SECTION_ORDER,
@@ -760,33 +761,31 @@ export function buildTradeRoomHref(
   return `/trade-rooms?${params.toString()}`
 }
 
-function profileContentHref(
-  owner: { id: string; username?: string | null },
-  opts: {
-    postId?: string | null
-    tradeId?: string | null
-    achievementPostId?: string | null
-    openComments?: boolean
-  }
-): string {
-  const base = profilePath(owner)
-  if (opts.achievementPostId) {
-    const params = new URLSearchParams({
-      achievement: opts.achievementPostId,
-      tab: "achievements",
-    })
+function feedContentHref(opts: {
+  postId?: string | null
+  tradeId?: string | null
+  achievementPostId?: string | null
+  openComments?: boolean
+}): string {
+  const achievementPostId = opts.achievementPostId?.trim()
+  if (achievementPostId) {
+    const params = new URLSearchParams({ achievement: achievementPostId })
     if (opts.openComments) params.set("comments", "1")
-    return `${base}?${params.toString()}`
+    return `/feed?${params.toString()}`
   }
-  if (opts.postId) {
-    const params = new URLSearchParams({ post: opts.postId })
+
+  const postId = opts.postId?.trim()
+  if (postId) {
+    const params = new URLSearchParams({ post: postId })
     if (opts.openComments) params.set("comments", "1")
-    return `${base}?${params.toString()}`
+    return `/feed?${params.toString()}`
   }
-  if (opts.tradeId) {
-    return `${base}?trade=${encodeURIComponent(opts.tradeId)}`
+
+  if (opts.tradeId?.trim()) {
+    return getSharedTradeViewHref(opts.tradeId)
   }
-  return base
+
+  return "/feed"
 }
 
 export function getGroupedNotificationHref(
@@ -795,7 +794,7 @@ export function getGroupedNotificationHref(
   sendersById: Record<string, SenderProfile> = {}
 ): string {
   if (card.kind === "like_group") {
-    return profileContentHref(owner, {
+    return feedContentHref({
       postId: engagementContentPostId(
         card.post_id,
         card.profile_post_id,
@@ -812,11 +811,11 @@ export function getGroupedNotificationHref(
       card.profile_post_id,
       card.achievement_post_id
     )
-    return profileContentHref(owner, {
+    return feedContentHref({
       postId,
       tradeId: card.trade_id,
       achievementPostId: card.achievement_post_id,
-      openComments: Boolean(postId || card.achievement_post_id),
+      openComments: Boolean(postId || card.achievement_post_id || card.trade_id),
     })
   }
 
@@ -874,7 +873,7 @@ export function getNotificationHref(
   sendersById: Record<string, SenderProfile> = {}
 ): string {
   if (item.kind === "like_group") {
-    return profileContentHref(owner, {
+    return feedContentHref({
       postId: engagementContentPostId(
         item.post_id,
         item.profile_post_id,
@@ -892,11 +891,11 @@ export function getNotificationHref(
       n.profile_post_id,
       n.achievement_post_id
     )
-    return profileContentHref(owner, {
+    return feedContentHref({
       postId,
       tradeId: n.trade_id,
       achievementPostId: n.achievement_post_id,
-      openComments: Boolean(postId || n.achievement_post_id),
+      openComments: Boolean(postId || n.achievement_post_id || n.trade_id),
     })
   }
 

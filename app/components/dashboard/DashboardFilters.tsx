@@ -1,6 +1,7 @@
 "use client"
 
 import type { Dispatch, SetStateAction } from "react"
+import Link from "next/link"
 import TradeFilterBar, {
   type TradeFilterBarProps,
 } from "@/app/components/TradeFilterBar"
@@ -37,6 +38,8 @@ export type DashboardFiltersProps = {
   onCancelGear: () => void
   /** When false, hides Public toggle and Share performance controls (zero-trade dashboard). */
   showShareControls?: boolean
+  /** Subtle link to Prop Firm analytics when user has prop firm accounts. */
+  showPropFirmLink?: boolean
 }
 
 export default function DashboardFilters({
@@ -67,6 +70,7 @@ export default function DashboardFilters({
   onSaveGear,
   onCancelGear,
   showShareControls = true,
+  showPropFirmLink = false,
 }: DashboardFiltersProps) {
   const gearSettings = (
     <DashboardGearSettings
@@ -84,82 +88,94 @@ export default function DashboardFilters({
   )
 
   return (
-    <TradeFilterBar
-      className="mt-2.5 mb-3 md:mb-4"
-      mobileThreeRowLayout
-      leading={<DashboardPlanIndicator isPro={isPro} />}
-      leadingOverlay
-      accounts={accounts}
-      accountFilter={accountFilter}
-      onAccountChange={onAccountChange}
-      accountTypeFilter={accountTypeFilter}
-      onAccountTypeChange={onAccountTypeChange}
-      timeframe={timeframe}
-      onTimeframeChange={onTimeframeChange}
-      customRangeStart={customRangeStart}
-      customRangeEnd={customRangeEnd}
-      onCustomRangeApply={onCustomRangeApply}
-      selectedDate={selectedDate}
-      onSelectedDateChange={onSelectedDateChange}
-      publicNextToModes={
-        showShareControls ? (
-        <button
-          type="button"
-          onClick={onTogglePublicOnly}
-          className={`h-[34px] w-full whitespace-nowrap rounded-md border px-4 py-2 text-sm md:h-[34px] md:w-auto md:px-2 md:py-1 md:text-xs md:hidden ${
-            showPublicOnly
-              ? "border-emerald-400 bg-emerald-500 text-white hover:bg-emerald-600"
-              : "border-white/10 bg-[#0f172a] text-white hover:bg-[#1e293b]"
-          }`}
-        >
-          Public
-        </button>
-        ) : null
-      }
-      settingsNextToModes={<div className="md:hidden">{gearSettings}</div>}
-      trailing={
-        <>
-          {showShareControls ? (
-          <button
-            type="button"
-            onClick={onOpenPerformanceShare}
-            className="inline-flex h-[34px] w-full items-center justify-center whitespace-nowrap rounded-md bg-white/10 px-4 py-2 text-sm text-white hover:bg-white/20 md:hidden"
-            title="Share performance"
-            aria-label="Share performance"
-          >
-            📤 Share
-          </button>
-          ) : null}
-          {showShareControls ? (
+    <div>
+      <TradeFilterBar
+        className="mt-2.5 mb-3 md:mb-4"
+        mobileThreeRowLayout
+        leading={<DashboardPlanIndicator isPro={isPro} />}
+        leadingOverlay
+        accounts={accounts}
+        accountFilter={accountFilter}
+        onAccountChange={onAccountChange}
+        accountTypeFilter={accountTypeFilter}
+        onAccountTypeChange={onAccountTypeChange}
+        timeframe={timeframe}
+        onTimeframeChange={onTimeframeChange}
+        customRangeStart={customRangeStart}
+        customRangeEnd={customRangeEnd}
+        onCustomRangeApply={onCustomRangeApply}
+        selectedDate={selectedDate}
+        onSelectedDateChange={onSelectedDateChange}
+        publicNextToModes={
+          showShareControls ? (
           <button
             type="button"
             onClick={onTogglePublicOnly}
-            className={`hidden md:inline-flex shrink-0 whitespace-nowrap rounded-md px-3 py-2 text-sm ${
+            className={`h-[34px] w-full whitespace-nowrap rounded-md border px-4 py-2 text-sm md:h-[34px] md:w-auto md:px-2 md:py-1 md:text-xs md:hidden ${
               showPublicOnly
-                ? "bg-emerald-500 text-white hover:bg-emerald-600"
-                : "bg-white/10 text-white hover:bg-white/20"
+                ? "border-emerald-400 bg-emerald-500 text-white hover:bg-emerald-600"
+                : "border-white/10 bg-[#0f172a] text-white hover:bg-[#1e293b]"
             }`}
           >
-            Public Trades
+            Public
           </button>
-          ) : null}
-          {showShareControls ? (
-          <button
-            type="button"
-            onClick={onOpenPerformanceShare}
-            className="hidden md:inline-flex h-[34px] shrink-0 items-center whitespace-nowrap rounded-md bg-white/10 px-3 py-1 text-sm text-white hover:bg-white/20"
-            title="Share performance"
-            aria-label="Share performance"
-          >
-            📤 Share
-          </button>
-          ) : null}
+          ) : null
+        }
+        settingsNextToModes={<div className="md:hidden">{gearSettings}</div>}
+        trailing={
+          <>
+            {showShareControls ? (
+            <button
+              type="button"
+              onClick={onOpenPerformanceShare}
+              className="inline-flex h-[34px] w-full items-center justify-center whitespace-nowrap rounded-md bg-white/10 px-4 py-2 text-sm text-white hover:bg-white/20 md:hidden"
+              title="Share performance"
+              aria-label="Share performance"
+            >
+              📤 Share
+            </button>
+            ) : null}
+            {showShareControls ? (
+            <button
+              type="button"
+              onClick={onTogglePublicOnly}
+              className={`hidden md:inline-flex shrink-0 whitespace-nowrap rounded-md px-3 py-2 text-sm ${
+                showPublicOnly
+                  ? "bg-emerald-500 text-white hover:bg-emerald-600"
+                  : "bg-white/10 text-white hover:bg-white/20"
+              }`}
+            >
+              Public Trades
+            </button>
+            ) : null}
+            {showShareControls ? (
+            <button
+              type="button"
+              onClick={onOpenPerformanceShare}
+              className="hidden md:inline-flex h-[34px] shrink-0 items-center whitespace-nowrap rounded-md bg-white/10 px-3 py-1 text-sm text-white hover:bg-white/20"
+              title="Share performance"
+              aria-label="Share performance"
+            >
+              📤 Share
+            </button>
+            ) : null}
 
-          <div className="hidden md:flex shrink-0 items-center justify-center">
-            {gearSettings}
-          </div>
-        </>
-      }
-    />
+            <div className="hidden md:flex shrink-0 items-center justify-center">
+              {gearSettings}
+            </div>
+          </>
+        }
+      />
+      {showPropFirmLink ? (
+        <div className="-mt-1 mb-3 flex justify-end md:justify-start md:mb-4">
+          <Link
+            href="/analytics/propfirm"
+            className="text-xs text-blue-300/70 transition hover:text-blue-200"
+          >
+            View Prop Firm Dashboard →
+          </Link>
+        </div>
+      ) : null}
+    </div>
   )
 }

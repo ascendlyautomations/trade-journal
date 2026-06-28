@@ -192,6 +192,42 @@ export async function fetchAchievementFeedBatch(
   }
 }
 
+export async function fetchTradeFeedPostById(
+  supabase: SupabaseClient,
+  postId: string
+): Promise<FeedItem | null> {
+  const { data, error } = await supabase
+    .from("posts")
+    .select(FEED_POSTS_SELECT)
+    .eq("id", postId)
+    .maybeSingle()
+
+  if (error) {
+    console.error("fetchTradeFeedPostById:", error)
+    return null
+  }
+  if (!data) return null
+  return normalizeTradeFeedItem(data as Record<string, unknown>)
+}
+
+export async function fetchProfileFeedPostById(
+  supabase: SupabaseClient,
+  postId: string
+): Promise<FeedItem | null> {
+  const { data, error } = await supabase
+    .from("profile_posts")
+    .select(FEED_PROFILE_POSTS_SELECT)
+    .eq("id", postId)
+    .maybeSingle()
+
+  if (error) {
+    console.error("fetchProfileFeedPostById:", error)
+    return null
+  }
+  if (!data) return null
+  return normalizeProfileFeedItem(data as Record<string, unknown>)
+}
+
 export async function topUpMergedFeedBuffer(
   supabase: SupabaseClient,
   options: {
@@ -201,8 +237,10 @@ export async function topUpMergedFeedBuffer(
     buffer: FeedItem[]
     tradePage: number
     profilePage: number
+    achievementPage: number
     tradeExhausted: boolean
     profileExhausted: boolean
+    achievementExhausted: boolean
     targetSize: number
     pageSize?: number
   }
@@ -210,19 +248,23 @@ export async function topUpMergedFeedBuffer(
   buffer: FeedItem[]
   tradePage: number
   profilePage: number
+  achievementPage: number
   tradeExhausted: boolean
   profileExhausted: boolean
+  achievementExhausted: boolean
 }> {
   const pageSize = options.pageSize ?? FEED_PAGE_SIZE
   let buffer = dedupeFeedItems(options.buffer)
   let tradePage = options.tradePage
   let profilePage = options.profilePage
+  let achievementPage = options.achievementPage
   let tradeExhausted = options.tradeExhausted
   let profileExhausted = options.profileExhausted
+  let achievementExhausted = options.achievementExhausted
 
   while (
     buffer.length < options.targetSize &&
-    !(tradeExhausted && profileExhausted)
+    !(tradeExhausted && profileExhausted && achievementExhausted)
   ) {
     const fetches: Promise<FeedBatchResult>[] = []
 
@@ -250,6 +292,18 @@ export async function topUpMergedFeedBuffer(
       )
     }
 
+    if (!achievementExhausted) {
+      fetches.push(
+        fetchAchievementFeedBatch(supabase, {
+          scope: options.scope,
+          userId: options.userId,
+          followingIds: options.followingIds,
+          page: achievementPage,
+          pageSize,
+        })
+      )
+    }
+
     if (fetches.length === 0) break
 
     const results = await Promise.all(fetches)
@@ -263,14 +317,29 @@ export async function topUpMergedFeedBuffer(
     }
 
     if (!profileExhausted) {
-      const profileResult = results[resultIndex]
+      const profileResult = results[resultIndex++]
       profilePage += 1
       if (profileResult.items.length < pageSize) profileExhausted = true
       buffer = dedupeFeedItems([...buffer, ...profileResult.items])
     }
 
+    if (!achievementExhausted) {
+      const achievementResult = results[resultIndex]
+      achievementPage += 1
+      if (achievementResult.items.length < pageSize) achievementExhausted = true
+      buffer = dedupeFeedItems([...buffer, ...achievementResult.items])
+    }
+
     buffer = sortFeedItemsDesc(buffer)
   }
 
-  return { buffer, tradePage, profilePage, tradeExhausted, profileExhausted }
+  return {
+    buffer,
+    tradePage,
+    profilePage,
+    achievementPage,
+    tradeExhausted,
+    profileExhausted,
+    achievementExhausted,
+  }
 }
