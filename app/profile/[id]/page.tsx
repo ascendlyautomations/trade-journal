@@ -123,6 +123,11 @@ import { logSupabaseError } from "@/lib/logSupabaseError"
 import { ensureDmConversation } from "@/lib/dmConversation"
 import { dmThreadPath } from "@/lib/messageRoutes"
 import { ConfirmModal, FeedbackModal, useDeleteTradeConfirmation, useFeedbackPopup } from "@/app/components/ui"
+import ProfileCreateMenu from "../../components/profile/ProfileCreateMenu"
+import ReelComposerModal from "../../components/profile/ReelComposerModal"
+import ReelViewer from "../../components/profile/ReelViewer"
+import ProfileReelCard from "../../components/profile/ProfileReelCard"
+import { PROFILE_REELS_SELECT, type ReelRow } from "@/lib/reels"
 import StoryComposeModal from "../../components/feed/StoryComposeModal"
 import FeedStoryViewer from "../../components/feed/FeedStoryViewer"
 import StoryAvatarRing from "../../components/feed/StoryAvatarRing"
@@ -166,6 +171,7 @@ const PUBLIC_PROFILE_SELECT =
 
 const PRIVATE_PROFILE_TAB_COPY = {
   trades: "This trader has chosen to keep their trades private.",
+  reels: "Reels are only visible to approved followers.",
   posts: "Posts are only visible to approved followers.",
 } as const
 
@@ -1241,12 +1247,16 @@ function ProfilePageContent() {
   const [followingModalUsers, setFollowingModalUsers] = useState<any[]>([])
   const [wallPosts, setWallPosts] = useState<any[]>([])
   const [wallPostsReady, setWallPostsReady] = useState(false)
+  const [profileReels, setProfileReels] = useState<ReelRow[]>([])
+  const [profileReelsReady, setProfileReelsReady] = useState(false)
   const [activeTab, setActiveTab] = useState<
-    "trades" | "posts" | "calendar" | "stats" | "achievements"
+    "trades" | "reels" | "posts" | "calendar" | "stats" | "achievements"
   >(
     "trades"
   )
   const [showCreatePost, setShowCreatePost] = useState(false)
+  const [showReelComposer, setShowReelComposer] = useState(false)
+  const [selectedReel, setSelectedReel] = useState<ReelRow | null>(null)
   const [storyComposeOpen, setStoryComposeOpen] = useState(false)
   const [pendingStoryFile, setPendingStoryFile] = useState<File | null>(null)
   const [pendingStoryPreviewUrl, setPendingStoryPreviewUrl] = useState<
@@ -1314,6 +1324,25 @@ function ProfilePageContent() {
 
   const openCreatePostModal = useCallback(() => {
     setShowCreatePost(true)
+  }, [])
+
+  const openCreateReelModal = useCallback(() => {
+    setShowReelComposer(true)
+  }, [])
+
+  const fetchProfileReels = useCallback(async (userId: string) => {
+    const { data, error } = await supabase
+      .from("reels")
+      .select(PROFILE_REELS_SELECT)
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+
+    if (error) {
+      console.error("reels fetch:", error)
+      return []
+    }
+
+    return (data ?? []) as ReelRow[]
   }, [])
 
   /** Profile Stats equity chart: Recharts props tuned below ~sm breakpoint. */
@@ -1619,6 +1648,30 @@ function ProfilePageContent() {
 
   useEffect(() => {
     if (!profile?.id) {
+      setProfileReels([])
+      setProfileReelsReady(true)
+      return
+    }
+
+    let cancelled = false
+    setProfileReelsReady(false)
+
+    async function loadReels() {
+      const data = await fetchProfileReels(String(profile.id))
+      if (cancelled) return
+      setProfileReels(data)
+      setProfileReelsReady(true)
+    }
+
+    void loadReels()
+
+    return () => {
+      cancelled = true
+    }
+  }, [fetchProfileReels, profile?.id])
+
+  useEffect(() => {
+    if (!profile?.id) {
       setAchievements([])
       return
     }
@@ -1692,6 +1745,8 @@ function ProfilePageContent() {
   useEffect(() => {
     if (
       showCreatePost ||
+      showReelComposer ||
+      selectedReel ||
       editingPost ||
       selectedAchievementImage ||
       selectedTradeDetail ||
@@ -1708,6 +1763,8 @@ function ProfilePageContent() {
     return undefined
   }, [
     showCreatePost,
+    showReelComposer,
+    selectedReel,
     editingPost,
     selectedAchievementImage,
     selectedTradeDetail,
@@ -1719,6 +1776,8 @@ function ProfilePageContent() {
   useEffect(() => {
     if (
       !showCreatePost &&
+      !showReelComposer &&
+      !selectedReel &&
       !editingPost &&
       !selectedAchievementImage &&
       !selectedTradeDetail &&
@@ -2207,6 +2266,19 @@ function ProfilePageContent() {
       setCreatingPost(false)
     }
   }
+
+  const handleReelPublished = useCallback(
+    async (reelId: string) => {
+      if (!profile?.id) return
+      const data = await fetchProfileReels(String(profile.id))
+      setProfileReels(data)
+      setActiveTab("reels")
+      const published = data.find((row) => String(row.id) === String(reelId)) ?? null
+      if (published) setSelectedReel(published)
+      showPopup(feedbackPresets.reelPublished())
+    },
+    [fetchProfileReels, profile?.id, showPopup]
+  )
 
   const posts = wallPosts
   const sortedPosts = [...posts].sort((a, b) => {
@@ -2972,6 +3044,9 @@ function ProfilePageContent() {
     if (tabParam === "achievements") {
       setActiveTab("achievements")
     }
+    if (tabParam === "reels") {
+      setActiveTab("reels")
+    }
     const key = achievementParam
       ? `achievement:${achievementParam}:${openComments ? "1" : "0"}`
       : postParam
@@ -3457,6 +3532,19 @@ function ProfilePageContent() {
           onReplaceImage={(file) => void setStoryDraft(file)}
         />
       ) : null}
+      {currentUserId === profile?.id ? (
+        <ReelComposerModal
+          open={showReelComposer}
+          userId={currentUserId}
+          onClose={() => setShowReelComposer(false)}
+          onPublished={(reelId) => void handleReelPublished(reelId)}
+        />
+      ) : null}
+      <ReelViewer
+        reel={selectedReel}
+        creator={profile}
+        onClose={() => setSelectedReel(null)}
+      />
 
       {profileStoryOpen && profile?.id && profileCurrentStory ? (
         <FeedStoryViewer
@@ -3694,13 +3782,10 @@ function ProfilePageContent() {
                     >
                       + Story
                     </button>
-                    <button
-                      type="button"
-                      onClick={openCreatePostModal}
-                      className="flex-1 rounded-md bg-blue-500 px-3 py-2 text-sm font-medium text-white hover:bg-blue-600 sm:flex-none sm:py-1.5 sm:text-xs"
-                    >
-                      + Post
-                    </button>
+                    <ProfileCreateMenu
+                      onCreatePost={openCreatePostModal}
+                      onCreateReel={openCreateReelModal}
+                    />
                   </div>
                 </>
               )}
@@ -3780,6 +3865,18 @@ function ProfilePageContent() {
               onClick={() => setActiveTab("trades")}
             >
               Trades
+            </button>
+
+            <button
+              type="button"
+              className={`text-sm font-medium border-b-2 py-2 sm:py-0 ${
+                activeTab === "reels"
+                  ? "border-blue-400 text-white sm:border-blue-500 sm:pb-1"
+                  : "border-transparent text-gray-400 sm:border-b-0"
+              }`}
+              onClick={() => setActiveTab("reels")}
+            >
+              Reels
             </button>
 
             <button
@@ -3903,6 +4000,55 @@ function ProfilePageContent() {
               </div>
             )}
 
+            {activeTab === "reels" && (
+              <div className="mt-4 w-full pb-8">
+                {!profileReelsReady ? (
+                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <div
+                        key={i}
+                        className="aspect-[9/16] animate-pulse rounded-xl border border-white/10 bg-white/5"
+                      />
+                    ))}
+                  </div>
+                ) : profileReels.length === 0 ? (
+                  isOwnProfile ? (
+                    <EmptyState
+                      title="No Reels Yet"
+                      description="Share short vertical videos with your followers."
+                      action={
+                        <button
+                          type="button"
+                          onClick={openCreateReelModal}
+                          className="text-sm font-medium text-blue-300 hover:text-blue-200"
+                        >
+                          Create Reel →
+                        </button>
+                      }
+                      className="py-10"
+                    />
+                  ) : !canViewTrades ? (
+                    <PrivateProfileTabMessage variant="reels" />
+                  ) : (
+                    <p className="text-center text-sm text-gray-400">
+                      No reels yet.
+                    </p>
+                  )
+                ) : (
+                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                    {profileReels.map((reel) => (
+                      <ProfileReelCard
+                        key={reel.id}
+                        reel={reel}
+                        creator={profile}
+                        onOpen={() => setSelectedReel(reel)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             {activeTab === "posts" && (
               <div className="mt-4 w-full pb-8">
                 {sortedPosts.length === 0 ? (
@@ -3911,13 +4057,11 @@ function ProfilePageContent() {
                       title="No Posts Yet"
                       description="Share trades and updates with the community."
                       action={
-                        <button
-                          type="button"
-                          onClick={openCreatePostModal}
-                          className="text-sm font-medium text-blue-300 hover:text-blue-200"
-                        >
-                          Create Post →
-                        </button>
+                        <ProfileCreateMenu
+                          variant="link"
+                          onCreatePost={openCreatePostModal}
+                          onCreateReel={openCreateReelModal}
+                        />
                       }
                       className="py-10"
                     />

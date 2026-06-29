@@ -87,6 +87,12 @@ export const feedbackPresets = {
       "Your post is now visible on your profile and in the community feed."
     ),
 
+  reelPublished: (): FeedbackPopupInput =>
+    persistentSuccess(
+      "Reel Published",
+      "Your reel is now visible on your profile."
+    ),
+
   roomLinkCopied: (): FeedbackPopupInput =>
     persistentSuccess(
       "Link Copied",
