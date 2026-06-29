@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useCallback, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Navbar from "@/app/components/Navbar"
+import { ProfileAvatarImg } from "@/app/components/SafeProfileAvatar"
 import { getCurrentAdminCheckResult } from "@/lib/adminUsers"
 import { banUser, unbanUser } from "@/lib/adminModeration"
 import {
@@ -702,11 +703,10 @@ export default function AdminUsersPage() {
                         </td>
                         <td className="px-3 py-2">
                           <div className="flex items-center gap-2">
-                            <div className="relative h-8 w-8 shrink-0 overflow-hidden rounded-full bg-gray-700">
-                              {row.avatar_url ? (
-                                <img src={row.avatar_url} alt="" className="h-full w-full object-cover" />
-                              ) : null}
-                            </div>
+                            <ProfileAvatarImg
+                              src={row.avatar_url}
+                              className="h-8 w-8"
+                            />
                             <div className="min-w-0">
                               <p className="truncate font-medium text-white">@{row.username || "—"}</p>
                               <p className="truncate text-xs text-gray-400">{row.name || "—"}</p>
@@ -749,11 +749,10 @@ export default function AdminUsersPage() {
           >
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-3">
-                <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-full bg-gray-700">
-                  {selected.avatar_url ? (
-                    <img src={selected.avatar_url} alt="" className="h-full w-full object-cover" />
-                  ) : null}
-                </div>
+                <ProfileAvatarImg
+                  src={selected.avatar_url}
+                  className="h-12 w-12"
+                />
                 <div>
                   <h2 className="text-lg font-semibold">@{selected.username}</h2>
                   <p className="text-sm text-gray-400">{selected.name || "—"}</p>

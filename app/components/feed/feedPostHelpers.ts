@@ -7,8 +7,8 @@ import {
 export { normalizeFeedAccountType, resolveFeedTradeAccountType }
 
 export type FeedScope = "global" | "following"
-export type FeedContentFilter = "all" | "trades" | "posts" | "achievements"
-export type FeedItemKind = "trade" | "profile" | "achievement"
+export type FeedContentFilter = "all" | "trades" | "reels" | "posts" | "achievements"
+export type FeedItemKind = "trade" | "profile" | "achievement" | "reel"
 
 export type FeedItem = {
   feedKind: FeedItemKind
@@ -63,6 +63,51 @@ export function normalizeAchievementFeedItem(row: Record<string, unknown>): Feed
     user_id: String(row.user_id),
     created_at: String(row.created_at),
   }
+}
+
+export function normalizeReelFeedItem(row: Record<string, unknown>): FeedItem {
+  return {
+    ...row,
+    feedKind: "reel",
+    id: String(row.id),
+    user_id: String(row.user_id),
+    created_at: String(row.created_at),
+  }
+}
+
+/** Feed item for reel detail modals (merges profile when list rows omit join). */
+export function reelDetailFeedItem(
+  reel: Record<string, unknown>,
+  owner?: { username?: string | null; avatar_url?: string | null } | null
+): FeedItem {
+  const hasProfiles =
+    reel.profiles != null &&
+    typeof reel.profiles === "object" &&
+    !Array.isArray(reel.profiles)
+  return normalizeReelFeedItem({
+    ...reel,
+    ...(hasProfiles || !owner
+      ? {}
+      : {
+          profiles: {
+            username: owner.username ?? null,
+            avatar_url: owner.avatar_url ?? null,
+          },
+        }),
+  })
+}
+
+/** Comment section target — content-type agnostic (posts, achievements, reels, …). */
+export type FeedCommentTarget = {
+  contentId: string
+  submitContext: unknown
+}
+
+export function feedCommentTarget(
+  contentId: string,
+  submitContext: unknown
+): FeedCommentTarget {
+  return { contentId: String(contentId), submitContext }
 }
 
 export function sortFeedItemsDesc(items: FeedItem[]): FeedItem[] {

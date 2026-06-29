@@ -9,6 +9,7 @@ import {
 } from "../../../lib/conversationAccess"
 import { ensureDmConversation } from "@/lib/dmConversation"
 import { buildDmThreadPath, groupThreadPath } from "@/lib/messageRoutes"
+import { ProfileAvatarImg } from "@/app/components/SafeProfileAvatar"
 import { normalizeProfileUsername } from "@/lib/profileUsername"
 import { markConversationMessagesSeen } from "@/lib/conversationReadMarking"
 import {
@@ -863,12 +864,9 @@ export default function MessagesPage() {
                         : "hover:bg-[#1e293b]"
                     }`}
                   >
-                    <img
-                      src={u.avatar_url || "/default-avatar.png"}
-                      alt=""
-                      loading="lazy"
-                      decoding="async"
-                      className="h-8 w-8 shrink-0 rounded-full object-cover hover:scale-105 transition"
+                    <ProfileAvatarImg
+                      src={u.avatar_url}
+                      className="h-8 w-8 shrink-0 transition hover:scale-105"
                     />
                     <div className="flex flex-col text-left">
                       <span
@@ -962,12 +960,9 @@ export default function MessagesPage() {
                         : "hover:bg-[#1e293b]"
                     }`}
                   >
-                    <img
-                      src={u.avatar_url || "/default-avatar.png"}
-                      alt=""
-                      loading="lazy"
-                      decoding="async"
-                      className="h-8 w-8 shrink-0 rounded-full object-cover hover:scale-105 transition"
+                    <ProfileAvatarImg
+                      src={u.avatar_url}
+                      className="h-8 w-8 shrink-0 transition hover:scale-105"
                     />
                     <div className="flex flex-col text-left">
                       <span

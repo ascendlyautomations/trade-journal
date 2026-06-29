@@ -3,8 +3,7 @@
 import Link from "next/link"
 import type { ComponentProps, ReactNode } from "react"
 import { profilePath } from "@/lib/profileRoutes"
-
-const DEFAULT_AVATAR = "/default-avatar.png"
+import { SafeProfileAvatar } from "@/app/components/SafeProfileAvatar"
 
 type ProfileLinkProps = Omit<ComponentProps<typeof Link>, "href"> & {
   userId: string
@@ -44,26 +43,24 @@ type ProfileAvatarLinkProps = Omit<ProfileLinkProps, "children"> & {
   src?: string | null
   alt?: string
   imgClassName?: string
+  priority?: boolean
 }
 
 export function ProfileAvatarLink({
   src,
   alt = "",
-  imgClassName = "rounded-full object-cover",
+  imgClassName = "h-10 w-10 rounded-full object-cover",
+  priority,
   className = "inline-flex shrink-0 cursor-pointer transition hover:opacity-90",
   ...linkProps
 }: ProfileAvatarLinkProps) {
   return (
     <ProfileLink {...linkProps} className={className}>
-      <img
-        src={src?.trim() || DEFAULT_AVATAR}
+      <SafeProfileAvatar
+        src={src}
         alt={alt}
-        loading="lazy"
-        decoding="async"
         className={imgClassName}
-        onError={(e) => {
-          e.currentTarget.src = DEFAULT_AVATAR
-        }}
+        priority={priority}
       />
     </ProfileLink>
   )

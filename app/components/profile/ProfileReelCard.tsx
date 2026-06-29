@@ -5,24 +5,10 @@ import { formatRelativeTime } from "@/lib/formatRelativeTime"
 
 type ProfileReelCardProps = {
   reel: ReelRow
-  creator?: {
-    username?: string | null
-    avatar_url?: string | null
-    name?: string | null
-  } | null
   onOpen: () => void
 }
 
-export default function ProfileReelCard({
-  reel,
-  creator,
-  onOpen,
-}: ProfileReelCardProps) {
-  const displayName =
-    creator?.username?.trim() ||
-    creator?.name?.trim() ||
-    "Trader"
-
+export default function ProfileReelCard({ reel, onOpen }: ProfileReelCardProps) {
   return (
     <button
       type="button"
@@ -48,29 +34,15 @@ export default function ProfileReelCard({
         ) : null}
       </div>
 
-      <div className="space-y-2 p-3">
+      <div className="space-y-1.5 p-3">
         {reel.caption?.trim() ? (
           <p className="line-clamp-2 text-sm text-gray-100">{reel.caption}</p>
         ) : (
           <p className="text-sm italic text-gray-500">No caption</p>
         )}
-
-        <div className="flex items-center gap-2">
-          <img
-            src={creator?.avatar_url || "/default-avatar.png"}
-            alt=""
-            className="h-6 w-6 rounded-full border border-white/10 object-cover"
-            loading="lazy"
-          />
-          <div className="min-w-0">
-            <p className="truncate text-xs font-medium text-gray-200">
-              {displayName}
-            </p>
-            <p className="text-[11px] text-gray-500">
-              {formatRelativeTime(reel.created_at)}
-            </p>
-          </div>
-        </div>
+        <p className="text-[11px] text-gray-500">
+          {formatRelativeTime(reel.created_at)}
+        </p>
       </div>
     </button>
   )

@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import Navbar from "../components/Navbar"
+import { ProfileAvatarImg } from "@/app/components/SafeProfileAvatar"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { fetchLeaderboardTrades } from "../../lib/leaderboardFetch"
@@ -142,7 +143,7 @@ function getTraderDisplay(
   return {
     displayName,
     username,
-    avatarUrl: profile?.avatar_url || "/default-avatar.png",
+    avatarUrl: profile?.avatar_url || null,
   }
 }
 
@@ -163,15 +164,9 @@ function LeaderboardTraderCell({
       href={href}
       className="flex min-w-0 items-center gap-3 rounded-lg transition hover:opacity-90"
     >
-      <img
+      <ProfileAvatarImg
         src={avatarUrl}
-        alt=""
-        loading="lazy"
-        decoding="async"
-        className="h-9 w-9 shrink-0 rounded-full border border-white/10 object-cover"
-        onError={(e) => {
-          e.currentTarget.src = "/default-avatar.png"
-        }}
+        className="h-9 w-9 shrink-0 border border-white/10"
       />
       <div className="min-w-0">
         <div className="flex min-w-0 items-center gap-2">

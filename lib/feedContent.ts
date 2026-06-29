@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import {
   FEED_ACHIEVEMENT_POSTS_SELECT,
 } from "@/lib/achievementPostEngagement"
+import { FEED_REELS_SELECT } from "@/lib/reelEngagement"
 import {
   FEED_POSTS_SELECT,
   type FeedContentFilter,
@@ -10,6 +11,7 @@ import {
   dedupeFeedItems,
   normalizeAchievementFeedItem,
   normalizeProfileFeedItem,
+  normalizeReelFeedItem,
   normalizeTradeFeedItem,
   sortFeedItemsDesc,
 } from "@/app/components/feed/feedPostHelpers"
@@ -192,6 +194,51 @@ export async function fetchAchievementFeedBatch(
   }
 }
 
+export async function fetchReelFeedBatch(
+  supabase: SupabaseClient,
+  options: {
+    scope: FeedScope
+    userId: string
+    followingIds: string[]
+    page: number
+    pageSize?: number
+  }
+): Promise<FeedBatchResult> {
+  const pageSize = options.pageSize ?? FEED_PAGE_SIZE
+  const from = options.page * pageSize
+  const to = from + pageSize - 1
+
+  if (options.scope === "following" && options.followingIds.length === 0) {
+    return { items: [], emptyFollowing: true }
+  }
+
+  const baseQuery = supabase
+    .from("reels")
+    .select(FEED_REELS_SELECT)
+    .order("created_at", { ascending: false })
+    .range(from, to)
+
+  const scoped = applyScopeFilter(
+    baseQuery,
+    options.scope,
+    options.userId,
+    options.followingIds
+  )
+
+  if (!scoped) {
+    return { items: [], emptyFollowing: true }
+  }
+
+  const { data, error } = await scoped
+  if (error) throw error
+
+  return {
+    items: (data ?? []).map((row) =>
+      normalizeReelFeedItem(row as Record<string, unknown>)
+    ),
+  }
+}
+
 export async function fetchTradeFeedPostById(
   supabase: SupabaseClient,
   postId: string
@@ -238,9 +285,11 @@ export async function topUpMergedFeedBuffer(
     tradePage: number
     profilePage: number
     achievementPage: number
+    reelPage: number
     tradeExhausted: boolean
     profileExhausted: boolean
     achievementExhausted: boolean
+    reelExhausted: boolean
     targetSize: number
     pageSize?: number
   }
@@ -249,22 +298,26 @@ export async function topUpMergedFeedBuffer(
   tradePage: number
   profilePage: number
   achievementPage: number
+  reelPage: number
   tradeExhausted: boolean
   profileExhausted: boolean
   achievementExhausted: boolean
+  reelExhausted: boolean
 }> {
   const pageSize = options.pageSize ?? FEED_PAGE_SIZE
   let buffer = dedupeFeedItems(options.buffer)
   let tradePage = options.tradePage
   let profilePage = options.profilePage
   let achievementPage = options.achievementPage
+  let reelPage = options.reelPage
   let tradeExhausted = options.tradeExhausted
   let profileExhausted = options.profileExhausted
   let achievementExhausted = options.achievementExhausted
+  let reelExhausted = options.reelExhausted
 
   while (
     buffer.length < options.targetSize &&
-    !(tradeExhausted && profileExhausted && achievementExhausted)
+    !(tradeExhausted && profileExhausted && achievementExhausted && reelExhausted)
   ) {
     const fetches: Promise<FeedBatchResult>[] = []
 
@@ -304,6 +357,18 @@ export async function topUpMergedFeedBuffer(
       )
     }
 
+    if (!reelExhausted) {
+      fetches.push(
+        fetchReelFeedBatch(supabase, {
+          scope: options.scope,
+          userId: options.userId,
+          followingIds: options.followingIds,
+          page: reelPage,
+          pageSize,
+        })
+      )
+    }
+
     if (fetches.length === 0) break
 
     const results = await Promise.all(fetches)
@@ -324,10 +389,17 @@ export async function topUpMergedFeedBuffer(
     }
 
     if (!achievementExhausted) {
-      const achievementResult = results[resultIndex]
+      const achievementResult = results[resultIndex++]
       achievementPage += 1
       if (achievementResult.items.length < pageSize) achievementExhausted = true
       buffer = dedupeFeedItems([...buffer, ...achievementResult.items])
+    }
+
+    if (!reelExhausted) {
+      const reelResult = results[resultIndex]
+      reelPage += 1
+      if (reelResult.items.length < pageSize) reelExhausted = true
+      buffer = dedupeFeedItems([...buffer, ...reelResult.items])
     }
 
     buffer = sortFeedItemsDesc(buffer)
@@ -338,8 +410,10 @@ export async function topUpMergedFeedBuffer(
     tradePage,
     profilePage,
     achievementPage,
+    reelPage,
     tradeExhausted,
     profileExhausted,
     achievementExhausted,
+    reelExhausted,
   }
 }

@@ -7,6 +7,7 @@ type CommentTargetBody = {
   tradeId?: string | null
   profilePostId?: string | null
   achievementPostId?: string | null
+  reelId?: string | null
 }
 
 async function commentAuthoredByUser(
@@ -18,6 +19,7 @@ async function commentAuthoredByUser(
     { table: "trade_comments" as const, column: "id" },
     { table: "profile_post_comments" as const, column: "id" },
     { table: "achievement_post_comments" as const, column: "id" },
+    { table: "reel_comments" as const, column: "id" },
   ]
 
   for (const { table } of tables) {
@@ -52,6 +54,7 @@ export async function POST(req: Request) {
     tradeId?: string | null
     profilePostId?: string | null
     achievementPostId?: string | null
+    reelId?: string | null
     kind?: CommentNotificationKind
   }
   try {
@@ -74,6 +77,7 @@ export async function POST(req: Request) {
   }
 
   const isAchievement = Boolean(body.achievementPostId)
+  const isReel = Boolean(body.reelId)
   const kind: CommentNotificationKind = body.kind ?? "comment"
   const allowed = await isServerCommentNotificationAllowed(
     recipientUserId,
@@ -96,6 +100,8 @@ export async function POST(req: Request) {
     insertRow.profile_post_id = body.profilePostId
   } else if (body.achievementPostId) {
     insertRow.achievement_post_id = body.achievementPostId
+  } else if (body.reelId) {
+    insertRow.reel_id = body.reelId
   } else if (body.postId) {
     insertRow.post_id = body.postId
     if (body.tradeId) insertRow.trade_id = body.tradeId
@@ -143,6 +149,7 @@ export async function DELETE(req: Request) {
     tradeId?: string | null
     profilePostId?: string | null
     achievementPostId?: string | null
+    reelId?: string | null
   }
   try {
     body = (await req.json()) as typeof body
@@ -157,13 +164,15 @@ export async function DELETE(req: Request) {
     tradeId: body.tradeId,
     profilePostId: body.profilePostId,
     achievementPostId: body.achievementPostId,
+    reelId: body.reelId,
   }
   const hasLegacyTarget = Boolean(
     snippet &&
       (target.postId ||
         target.tradeId ||
         target.profilePostId ||
-        target.achievementPostId)
+        target.achievementPostId ||
+        target.reelId)
   )
 
   if (!commentId && !hasLegacyTarget) {
@@ -197,6 +206,8 @@ export async function DELETE(req: Request) {
       legacyQuery = legacyQuery.eq("profile_post_id", target.profilePostId)
     } else if (target.achievementPostId) {
       legacyQuery = legacyQuery.eq("achievement_post_id", target.achievementPostId)
+    } else if (target.reelId) {
+      legacyQuery = legacyQuery.eq("reel_id", target.reelId)
     } else if (target.postId) {
       legacyQuery = legacyQuery.eq("post_id", target.postId)
     } else if (target.tradeId) {

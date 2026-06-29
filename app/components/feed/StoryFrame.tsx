@@ -42,18 +42,10 @@ export default function StoryFrame({
       className={`relative flex flex-col overflow-hidden bg-black ${className}`}
     >
       <div className="absolute left-3 right-14 top-3 z-[2] flex items-center gap-2.5">
-        {profile.avatar_url ? (
-          <img
-            src={profile.avatar_url}
-            alt=""
-            className="h-8 w-8 shrink-0 rounded-full object-cover ring-2 ring-emerald-400/40"
-            onError={(e) => {
-              e.currentTarget.src = "/default-avatar.png"
-            }}
-          />
-        ) : (
-          <div className="h-8 w-8 shrink-0 rounded-full bg-gradient-to-br from-blue-500/50 to-emerald-500/50 ring-2 ring-emerald-400/40" />
-        )}
+        <ProfileAvatarImg
+          src={profile.avatar_url}
+          className="h-8 w-8 shrink-0 ring-2 ring-emerald-400/40"
+        />
         <p className="min-w-0 truncate text-sm font-medium text-white drop-shadow">
           <span>{username}</span>
           {storyAge ? (

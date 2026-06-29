@@ -3,6 +3,7 @@
 import { memo, type MutableRefObject } from "react"
 import FeedPostDetailModal from "./FeedPostDetailModal"
 import FeedProfilePostDetailModal from "./FeedProfilePostDetailModal"
+import FeedReelDetailModal from "./FeedReelDetailModal"
 import ShareToConversationsModal from "@/app/components/ShareToConversationsModal"
 import type { FeedLikeMeta } from "./FeedPostCard"
 
@@ -48,7 +49,24 @@ function FeedPostOverlays({
   return (
     <>
       {selectedPost && selectedPostId ? (
-        selectedPost.feedKind === "profile" ||
+        selectedPost.feedKind === "reel" ? (
+          <FeedReelDetailModal
+            key={selectedPostId}
+            post={selectedPost}
+            user={user}
+            comments={selectedPostComments}
+            likeMeta={selectedPostLikeMeta}
+            likeBusy={selectedPostLikeBusy}
+            commentSubmitting={selectedPostCommentSubmitting}
+            draftSyncRef={draftSyncRef}
+            openCommentsRef={openCommentsRef}
+            onClose={onCloseDetailModal}
+            onToggleLike={onToggleLike}
+            onSubmitComment={onSubmitComment}
+            onDeleteComment={onDeleteComment}
+            onSharePost={onSharePost}
+          />
+        ) : selectedPost.feedKind === "profile" ||
         selectedPost.feedKind === "achievement" ? (
           <FeedProfilePostDetailModal
             key={selectedPostId}
@@ -98,7 +116,9 @@ function FeedPostOverlays({
               ? "profile"
               : sharePost.feedKind === "achievement"
                 ? "achievement"
-                : "trade"
+                : sharePost.feedKind === "reel"
+                  ? "reel"
+                  : "trade"
           }
           post={sharePost}
           captionPlaceholder="Add a message..."

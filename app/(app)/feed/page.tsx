@@ -11,6 +11,7 @@ import {
   deleteFeedComment,
   deleteProfilePostComment,
   deleteAchievementPostComment,
+  deleteReelComment,
   filterCommentsAfterDelete,
 } from "@/lib/deleteComment"
 import {
@@ -55,6 +56,7 @@ import {
   buildFeedPostsIndex,
   normalizeAchievementFeedItem,
   normalizeProfileFeedItem,
+  normalizeReelFeedItem,
   normalizeTradeFeedItem,
   postTradeOwnerUserId,
   queryFeedComments,
@@ -75,6 +77,7 @@ import {
   fetchProfileFeedBatch,
   fetchTradeFeedBatch,
   fetchAchievementFeedBatch,
+  fetchReelFeedBatch,
   fetchProfileFeedPostById,
   fetchTradeFeedPostById,
   topUpMergedFeedBuffer,
@@ -93,6 +96,17 @@ import {
   prepareStoryImageFile,
   revokeStoryPreviewUrl,
 } from "@/lib/storyComposeHelpers"
+import {
+  REEL_COMMENT_INSERT_SELECT,
+  FEED_REELS_SELECT,
+  fetchReelFeedPostById,
+  insertReelCommentNotifications,
+  insertReelLikeNotification,
+  isReelFeedPost,
+  queryReelComments,
+  reelOwnerUserId,
+  withInsertedReelParentCommentId,
+} from "@/lib/reelEngagement"
 import { useUserProfile } from "@/lib/UserProfileProvider"
 
 /** Auto-advance each slide (Instagram-style). */
@@ -129,9 +143,11 @@ function FeedPageContent() {
   const tradePageRef = useRef(0)
   const profilePageRef = useRef(0)
   const achievementPageRef = useRef(0)
+  const reelPageRef = useRef(0)
   const tradeExhaustedRef = useRef(false)
   const profileExhaustedRef = useRef(false)
   const achievementExhaustedRef = useRef(false)
+  const reelExhaustedRef = useRef(false)
   const userIdRef = useRef<string | null>(null)
   userIdRef.current = user?.id ?? null
   const profileRef = useRef(profile)
@@ -188,9 +204,11 @@ function FeedPageContent() {
       tradePage: tradePageRef.current,
       profilePage: profilePageRef.current,
       achievementPage: achievementPageRef.current,
+      reelPage: reelPageRef.current,
       tradeExhausted: tradeExhaustedRef.current,
       profileExhausted: profileExhaustedRef.current,
       achievementExhausted: achievementExhaustedRef.current,
+      reelExhausted: reelExhaustedRef.current,
       hasLoaded: hasLoadedFeedRef.current,
       scrollY: scrollYRef.current,
       ...overrides,
@@ -553,13 +571,21 @@ function FeedPageContent() {
     }
 
     const tradeIds = postList
-      .filter((p) => !isProfileFeedPost(p) && !isAchievementFeedPost(p))
+      .filter(
+        (p) =>
+          !isProfileFeedPost(p) &&
+          !isAchievementFeedPost(p) &&
+          !isReelFeedPost(p)
+      )
       .map((p) => p.id)
     const profileIds = postList
       .filter((p) => isProfileFeedPost(p))
       .map((p) => p.id)
     const achievementIds = postList
       .filter((p) => isAchievementFeedPost(p))
+      .map((p) => p.id)
+    const reelIds = postList
+      .filter((p) => isReelFeedPost(p))
       .map((p) => p.id)
 
     const [
@@ -569,6 +595,8 @@ function FeedPageContent() {
       { data: profileCommentsRows },
       { data: achievementLikesRows },
       { data: achievementCommentsRows },
+      { data: reelLikesRows },
+      { data: reelCommentsRows },
     ] = await Promise.all([
       tradeIds.length
         ? supabase.from("likes").select("post_id, user_id").in("post_id", tradeIds)
@@ -614,6 +642,23 @@ function FeedPageContent() {
               .order("created_at", { ascending: true })
           )
         : Promise.resolve({ data: [] as any[] }),
+      reelIds.length
+        ? supabase
+            .from("reel_likes")
+            .select("reel_id, user_id")
+            .in("reel_id", reelIds)
+        : Promise.resolve({
+            data: [] as { reel_id: string; user_id: string }[],
+          }),
+      reelIds.length
+        ? queryReelComments((select) =>
+            supabase
+              .from("reel_comments")
+              .select(select)
+              .in("reel_id", reelIds)
+              .order("created_at", { ascending: true })
+          )
+        : Promise.resolve({ data: [] as any[] }),
     ])
 
     const likesMap: Record<string, LikeMeta> = {}
@@ -642,6 +687,12 @@ function FeedPageContent() {
       likesMap[pid].count++
       if (currentUser && row.user_id === currentUser.id) likesMap[pid].liked = true
     }
+    for (const row of reelLikesRows || []) {
+      const pid = String(row.reel_id)
+      if (!likesMap[pid]) likesMap[pid] = { count: 0, liked: false }
+      likesMap[pid].count++
+      if (currentUser && row.user_id === currentUser.id) likesMap[pid].liked = true
+    }
 
     for (const c of tradeCommentsRows || []) {
       const pid = String(c.post_id)
@@ -655,6 +706,11 @@ function FeedPageContent() {
     }
     for (const c of achievementCommentsRows || []) {
       const pid = String(c.achievement_post_id)
+      if (!commentsMap[pid]) commentsMap[pid] = []
+      commentsMap[pid].push(c)
+    }
+    for (const c of reelCommentsRows || []) {
+      const pid = String(c.reel_id)
       if (!commentsMap[pid]) commentsMap[pid] = []
       commentsMap[pid].push(c)
     }
@@ -703,9 +759,11 @@ function FeedPageContent() {
             tradePage: tradePageRef.current,
             profilePage: profilePageRef.current,
             achievementPage: achievementPageRef.current,
+            reelPage: reelPageRef.current,
             tradeExhausted: tradeExhaustedRef.current,
             profileExhausted: profileExhaustedRef.current,
             achievementExhausted: achievementExhaustedRef.current,
+            reelExhausted: reelExhaustedRef.current,
             targetSize: FEED_PAGE_SIZE,
             pageSize: FEED_PAGE_SIZE,
           })
@@ -714,9 +772,11 @@ function FeedPageContent() {
           tradePageRef.current = toppedUp.tradePage
           profilePageRef.current = toppedUp.profilePage
           achievementPageRef.current = toppedUp.achievementPage
+          reelPageRef.current = toppedUp.reelPage
           tradeExhaustedRef.current = toppedUp.tradeExhausted
           profileExhaustedRef.current = toppedUp.profileExhausted
           achievementExhaustedRef.current = toppedUp.achievementExhausted
+          reelExhaustedRef.current = toppedUp.reelExhausted
 
           list = mergeBufferRef.current.splice(0, FEED_PAGE_SIZE)
 
@@ -737,6 +797,7 @@ function FeedPageContent() {
             toppedUp.tradeExhausted &&
             toppedUp.profileExhausted &&
             toppedUp.achievementExhausted &&
+            toppedUp.reelExhausted &&
             list.length < FEED_PAGE_SIZE
           ) {
             hasMoreRef.current = false
@@ -792,6 +853,30 @@ function FeedPageContent() {
           }
         } else if (contentType === "achievements") {
           const result = await fetchAchievementFeedBatch(supabase, {
+            scope: mode,
+            userId,
+            followingIds,
+            page: currentPage,
+            pageSize: FEED_PAGE_SIZE,
+          })
+
+          if (result.emptyFollowing && currentPage === 0) {
+            hasMoreRef.current = false
+            setHasMore(false)
+            setFeedEmptyState("following_nobody")
+            loadingRef.current = false
+            setLoading(false)
+            return
+          }
+
+          list = result.items
+
+          if (list.length < FEED_PAGE_SIZE) {
+            hasMoreRef.current = false
+            setHasMore(false)
+          }
+        } else if (contentType === "reels") {
+          const result = await fetchReelFeedBatch(supabase, {
             scope: mode,
             userId,
             followingIds,
@@ -892,9 +977,11 @@ function FeedPageContent() {
     tradePageRef.current = 0
     profilePageRef.current = 0
     achievementPageRef.current = 0
+    reelPageRef.current = 0
     tradeExhaustedRef.current = false
     profileExhaustedRef.current = false
     achievementExhaustedRef.current = false
+    reelExhaustedRef.current = false
   }, [])
 
   const restoreFeedSession = useCallback((key: string, cached: FeedSessionSnapshot) => {
@@ -911,9 +998,11 @@ function FeedPageContent() {
     tradePageRef.current = cached.tradePage
     profilePageRef.current = cached.profilePage
     achievementPageRef.current = cached.achievementPage ?? 0
+    reelPageRef.current = cached.reelPage ?? 0
     tradeExhaustedRef.current = cached.tradeExhausted
     profileExhaustedRef.current = cached.profileExhausted
     achievementExhaustedRef.current = cached.achievementExhausted ?? false
+    reelExhaustedRef.current = cached.reelExhausted ?? false
     hasLoadedFeedRef.current = cached.hasLoaded
     loadingRef.current = false
     setLoading(false)
@@ -1148,6 +1237,71 @@ function FeedPageContent() {
   }, [user?.id, mode, contentType, loadEngagementForPosts, persistFeedSnapshot])
 
   useEffect(() => {
+    if (!user?.id) return
+    if (contentType !== "all" && contentType !== "reels") return
+
+    const userId = user.id
+    const channel = supabase.channel(`feed-reels-${userId}`)
+
+    channel.on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "reels" },
+      async (payload) => {
+        const row = payload.new as Record<string, unknown>
+        const authorId = String(row.user_id ?? "")
+        if (!authorId || authorId === userId) return
+        if (mode === "following" && !followingIdsRef.current.includes(authorId)) {
+          return
+        }
+        if (
+          mode === "global" &&
+          followingIdsRef.current.includes(authorId)
+        ) {
+          return
+        }
+
+        const { data } = await supabase
+          .from("reels")
+          .select(FEED_REELS_SELECT)
+          .eq("id", String(row.id))
+          .maybeSingle()
+
+        if (!data) return
+
+        const item = normalizeReelFeedItem(data as Record<string, unknown>)
+        const { enriched, likesMap, commentsMap } = await loadEngagementForPosts(
+          [item],
+          { id: userId }
+        )
+        const post = enriched[0]
+        if (!post) return
+
+        setPosts((prev) => {
+          if (prev.some((p) => String(p.id) === String(post.id))) return prev
+          const next = [post, ...prev]
+          const mergedLikes = {
+            ...likesByPostRef.current,
+            ...likesMap,
+          }
+          const mergedComments = {
+            ...commentsByPostRef.current,
+            ...commentsMap,
+          }
+          persistFeedSnapshot(next, mergedLikes, mergedComments)
+          setLikesByPost(mergedLikes)
+          setCommentsByPost(mergedComments)
+          return next
+        })
+      }
+    )
+
+    channel.subscribe()
+    return () => {
+      void supabase.removeChannel(channel)
+    }
+  }, [user?.id, mode, contentType, loadEngagementForPosts, persistFeedSnapshot])
+
+  useEffect(() => {
     const handleScroll = () => {
       scrollYRef.current = window.scrollY
       const key = feedInitKeyRef.current
@@ -1195,6 +1349,7 @@ function FeedPageContent() {
       const pid = String(post.id)
       const isProfile = isProfileFeedPost(post)
       const isAchievement = isAchievementFeedPost(post)
+      const isReel = isReelFeedPost(post)
       if (likeBusyRef.current.has(pid)) return
 
       likeBusyRef.current.add(pid)
@@ -1208,7 +1363,9 @@ function FeedPageContent() {
           ? profilePostOwnerUserId(post)
           : isAchievement
             ? achievementPostOwnerUserId(post)
-            : postTradeOwnerUserId(post)
+            : isReel
+              ? reelOwnerUserId(post)
+              : postTradeOwnerUserId(post)
 
         const { error } = isProfile
           ? await supabase
@@ -1222,11 +1379,17 @@ function FeedPageContent() {
                 .delete()
                 .eq("achievement_post_id", pid)
                 .eq("user_id", user.id)
-            : await supabase
-                .from("likes")
-                .delete()
-                .eq("post_id", pid)
-                .eq("user_id", user.id)
+            : isReel
+              ? await supabase
+                  .from("reel_likes")
+                  .delete()
+                  .eq("reel_id", pid)
+                  .eq("user_id", user.id)
+              : await supabase
+                  .from("likes")
+                  .delete()
+                  .eq("post_id", pid)
+                  .eq("user_id", user.id)
 
         if (error) {
           console.error("Unlike error:", error)
@@ -1241,7 +1404,9 @@ function FeedPageContent() {
               ? { kind: "profile_post", profilePostId: pid }
               : isAchievement
                 ? { kind: "achievement_post", achievementPostId: pid }
-                : { kind: "post", postId: pid, tradeId: post.trade_id ?? null },
+                : isReel
+                  ? { kind: "reel", reelId: pid }
+                  : { kind: "post", postId: pid, tradeId: post.trade_id ?? null },
           })
         }
 
@@ -1322,6 +1487,41 @@ function FeedPageContent() {
             senderUserId: user.id,
           })
         }
+      } else if (isReel) {
+        const likePayload = {
+          reel_id: pid,
+          user_id: user.id,
+        }
+        const { error } = await supabase.from("reel_likes").insert(likePayload)
+
+        if (error) {
+          console.error("[reel-like] insert failed", {
+            userId: user.id,
+            reelId: pid,
+            payload: likePayload,
+            supabaseError: {
+              code: error.code,
+              message: error.message,
+              details: error.details,
+              hint: error.hint,
+            },
+          })
+          return
+        }
+
+        setLikesByPost((prev) => ({
+          ...prev,
+          [pid]: { count: meta.count + 1, liked: true },
+        }))
+
+        const ownerId = reelOwnerUserId(post)
+        if (ownerId) {
+          await insertReelLikeNotification(supabase, {
+            reelId: pid,
+            ownerUserId: ownerId,
+            senderUserId: user.id,
+          })
+        }
       } else {
         const likePayload = {
           post_id: pid,
@@ -1384,6 +1584,7 @@ function FeedPageContent() {
       try {
       const isProfile = isProfileFeedPost(post)
       const isAchievement = isAchievementFeedPost(post)
+      const isReel = isReelFeedPost(post)
       const existingComments = commentsByPost[pid] ?? EMPTY_COMMENTS
 
       if (isProfile) {
@@ -1440,6 +1641,72 @@ function FeedPageContent() {
         if (ownerId) {
           await insertProfilePostCommentNotifications(supabase, {
             profilePostId: pid,
+            commentId: String(insertedRow.id),
+            ownerUserId: ownerId,
+            senderUserId: user.id,
+            content: trimmed,
+            parentCommentId,
+            existingComments,
+          })
+        }
+
+        return true
+      }
+
+      if (isReel) {
+        const insertPayload: Record<string, unknown> = {
+          reel_id: pid,
+          user_id: user.id,
+          content: trimmed,
+        }
+        if (parentCommentId) {
+          insertPayload.parent_comment_id = parentCommentId
+        }
+
+        const { data: newRow, error } = await supabase
+          .from("reel_comments")
+          .insert(insertPayload)
+          .select(REEL_COMMENT_INSERT_SELECT)
+          .single()
+
+        if (error) {
+          console.error("[reel-comment] insert failed", {
+            userId: user.id,
+            reelId: pid,
+            commentText: trimmed,
+            parentCommentId: parentCommentId ?? null,
+            payload: insertPayload,
+            supabaseError: {
+              code: error.code,
+              message: error.message,
+              details: error.details,
+              hint: error.hint,
+            },
+          })
+          showPopup({ type: "error", message: handleSupabaseError(error) })
+          return false
+        }
+
+        const insertedRow = withInsertedReelParentCommentId(
+          newRow,
+          parentCommentId
+        )
+
+        setCommentsByPost((prev) => {
+          const currentComments = prev[pid] ?? EMPTY_COMMENTS
+          const nextComments = currentComments.some((c: any) => c.id === insertedRow.id)
+            ? currentComments
+            : [...currentComments, insertedRow]
+          return {
+            ...prev,
+            [pid]: nextComments,
+          }
+        })
+
+        const ownerId = reelOwnerUserId(post)
+        if (ownerId) {
+          await insertReelCommentNotifications(supabase, {
+            reelId: pid,
             commentId: String(insertedRow.id),
             ownerUserId: ownerId,
             senderUserId: user.id,
@@ -1654,6 +1921,37 @@ function FeedPageContent() {
         return true
       }
 
+      const reelId = String(comment.reel_id ?? "")
+      if (reelId) {
+        const { error, deleted } = await deleteReelComment(supabase, {
+          id: String(comment.id),
+          user_id: user.id,
+          content: comment.content,
+          reel_id: reelId,
+        })
+
+        if (error || !deleted) {
+          console.error("[comment-delete] failed", {
+            commentId: String(comment.id),
+            userId: user.id,
+            reelId,
+            error,
+          })
+          showPopup({ type: "error", message: handleSupabaseError(error) })
+          return false
+        }
+
+        setCommentsByPost((prev) => ({
+          ...prev,
+          [reelId]: filterCommentsAfterDelete(
+            prev[reelId] ?? EMPTY_COMMENTS,
+            String(comment.id)
+          ),
+        }))
+
+        return true
+      }
+
       const postId = String(comment.post_id ?? "")
       if (!postId) {
         console.error("[comment-delete] aborted: missing post_id", comment)
@@ -1729,7 +2027,8 @@ function FeedPageContent() {
   useEffect(() => {
     const postParam = searchParams.get("post")?.trim()
     const achievementParam = searchParams.get("achievement")?.trim()
-    const targetId = achievementParam || postParam
+    const reelParam = searchParams.get("reel")?.trim()
+    const targetId = reelParam || achievementParam || postParam
     if (!targetId) return
 
     const openComments = searchParams.get("comments") === "1"
@@ -1738,7 +2037,9 @@ function FeedPageContent() {
 
     const openLoadedPost = (post: any) => {
       feedDeepLinkHandledRef.current = key
-      if (post.feedKind === "achievement" || achievementParam) {
+      if (post.feedKind === "reel" || reelParam) {
+        setContentType("reels")
+      } else if (post.feedKind === "achievement" || achievementParam) {
         setContentType("achievements")
       } else if (postParam) {
         setContentType("all")
@@ -1758,7 +2059,9 @@ function FeedPageContent() {
     void (async () => {
       let row: FeedItem | null = null
 
-      if (achievementParam) {
+      if (reelParam) {
+        row = await fetchReelFeedPostById(supabase, targetId)
+      } else if (achievementParam) {
         row = await fetchAchievementPostById(supabase, targetId)
       } else if (postParam) {
         row = await fetchTradeFeedPostById(supabase, postParam)

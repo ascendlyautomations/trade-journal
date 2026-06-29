@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { ProfileAvatarImg } from "@/app/components/SafeProfileAvatar"
 import Navbar from "../components/Navbar"
 import FollowButton from "../components/FollowButton"
 import EmptyState from "../components/ui/EmptyState"
@@ -98,7 +99,7 @@ function getTraderDisplay(profile: ExploreProfile | undefined, userId: string) {
   return {
     displayName,
     username,
-    avatarUrl: profile?.avatar_url?.trim() || "/default-avatar.png",
+    avatarUrl: profile?.avatar_url?.trim() || null,
   }
 }
 
@@ -123,17 +124,10 @@ function TraderIdentity({
       className="flex min-w-0 items-center gap-3 rounded-lg transition hover:opacity-90"
       onClick={(e) => e.stopPropagation()}
     >
-      <img
+      <ProfileAvatarImg
         src={avatarUrl}
-        alt=""
-        width={40}
-        height={40}
-        loading={eagerAvatar ? "eager" : "lazy"}
-        decoding="async"
-        className="h-10 w-10 shrink-0 rounded-full border border-white/10 object-cover"
-        onError={(e) => {
-          e.currentTarget.src = "/default-avatar.png"
-        }}
+        className="h-10 w-10 shrink-0 border border-white/10"
+        priority={eagerAvatar}
       />
       <div className="min-w-0">
         <p className="truncate font-medium text-gray-100">{displayName}</p>

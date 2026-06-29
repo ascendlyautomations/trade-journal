@@ -44,6 +44,7 @@ import {
   isConversationUuidSegment,
 } from "@/lib/messageRoutes"
 import { FEED_ACHIEVEMENT_POSTS_SELECT } from "@/lib/achievementPostEngagement"
+import { FEED_REELS_SELECT } from "@/lib/reelEngagement"
 import {
   getSharedContentViewHref,
   getSharedPostViewHref,
@@ -56,6 +57,7 @@ import {
   ProfileLink,
   ProfileUsernameLink,
 } from "@/app/components/ProfileLink"
+import { ProfileAvatarImg } from "@/app/components/SafeProfileAvatar"
 import { profilePostPublicUrl } from "@/lib/storagePublicUrl"
 import { normalizeProfileUsername } from "@/lib/profileUsername"
 import { isTradeOwnedByUser } from "@/lib/tradeShareAccess"
@@ -401,8 +403,12 @@ function PostMessageBubble({
     message.type === "profile_post" || Boolean(message.profile_post_id)
   const isAchievementShare =
     message.type === "achievement_post" || Boolean(message.achievement_post_id)
+  const isReelShare =
+    message.type === "reel" || Boolean(message.reel_id)
 
   useEffect(() => {
+    const reelId =
+      message.reel_id != null ? String(message.reel_id) : ""
     const achievementPostId =
       message.achievement_post_id != null
         ? String(message.achievement_post_id)
@@ -410,6 +416,37 @@ function PostMessageBubble({
     const profilePostId =
       message.profile_post_id != null ? String(message.profile_post_id) : ""
     const tradePostId = message.post_id != null ? String(message.post_id) : ""
+
+    if (isReelShare) {
+      if (!reelId) {
+        setPost(null)
+        setPostLoading(false)
+        return
+      }
+      let cancelled = false
+      if (!initialPost) {
+        setPostLoading(true)
+        setPost(null)
+      }
+      ;(async () => {
+        const { data } = await supabase
+          .from("reels")
+          .select(FEED_REELS_SELECT)
+          .eq("id", reelId)
+          .maybeSingle()
+        if (!cancelled) {
+          const loaded = data
+            ? { ...data, feedKind: "reel" as const }
+            : null
+          setPost(loaded)
+          setPostLoading(false)
+          onPostLoaded?.(loaded)
+        }
+      })()
+      return () => {
+        cancelled = true
+      }
+    }
 
     if (isAchievementShare) {
       if (!achievementPostId) {
@@ -495,10 +532,13 @@ function PostMessageBubble({
   }, [
     isAchievementShare,
     isProfileShare,
+    isReelShare,
     message.achievement_post_id,
     message.post_id,
     message.profile_post_id,
+    message.reel_id,
     initialPost,
+    onPostLoaded,
   ])
 
   if (message.deleted_for_everyone) {
@@ -530,13 +570,17 @@ function PostMessageBubble({
   }
 
   const menuOpen = activeMenuId === message.id
-  const imageSrc = isProfileShare
-    ? profilePostPublicUrl(post.image_url)
-    : postScreenshotSrc(post.image_url)
+  const imageSrc = isReelShare
+    ? post.thumbnail_url != null
+      ? String(post.thumbnail_url)
+      : null
+    : isProfileShare
+      ? profilePostPublicUrl(post.image_url)
+      : postScreenshotSrc(post.image_url)
   const pnl = Number(post.pnl)
   const isWin = !Number.isNaN(pnl) && pnl >= 0
   const showTradeStats =
-    !isProfileShare && !isAchievementShare && !Number.isNaN(pnl)
+    !isProfileShare && !isAchievementShare && !isReelShare && !Number.isNaN(pnl)
   const legacyCaption = legacyShareCardCaption(message.content)
   const achievementTitle = isAchievementShare
     ? String(
@@ -544,11 +588,15 @@ function PostMessageBubble({
           "Achievement"
       )
     : null
-  const shareLabel = isAchievementShare
-    ? "Shared Achievement"
-    : isProfileShare
-      ? "Shared Post"
-      : "Shared Post"
+  const reelCaption =
+    isReelShare && post.caption != null ? String(post.caption).trim() : ""
+  const shareLabel = isReelShare
+    ? "Shared Reel"
+    : isAchievementShare
+      ? "Shared Achievement"
+      : isProfileShare
+        ? "Shared Post"
+        : "Shared Post"
 
   return (
     <div
@@ -616,6 +664,12 @@ function PostMessageBubble({
               </p>
             ) : null}
 
+            {reelCaption ? (
+              <p className="mb-3 whitespace-pre-wrap break-words text-sm leading-relaxed text-gray-200">
+                {reelCaption}
+              </p>
+            ) : null}
+
             {showTradeStats ? (
               <div className="mb-3 flex justify-between text-xs">
                 <span className={isWin ? "text-emerald-400" : "text-red-400"}>
@@ -635,7 +689,13 @@ function PostMessageBubble({
               }}
               className="w-full rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-xs font-medium text-blue-300 transition hover:bg-blue-500/20 hover:text-blue-200"
             >
-              View {isAchievementShare ? "achievement" : "post"} →
+              View{" "}
+              {isReelShare
+                ? "reel"
+                : isAchievementShare
+                  ? "achievement"
+                  : "post"}{" "}
+              →
             </button>
           </div>
         </div>
@@ -2319,7 +2379,8 @@ export default function DMPage() {
               if (
                 message.type === "post" ||
                 message.type === "profile_post" ||
-                message.type === "achievement_post"
+                message.type === "achievement_post" ||
+                message.type === "reel"
               ) {
                 return (
                   <Fragment key={message.id}>
@@ -2594,12 +2655,9 @@ export default function DMPage() {
                     username={m.profiles?.username}
                     className="flex cursor-pointer items-center gap-2 rounded-lg bg-[#1e293b] px-3 py-2 transition hover:bg-[#334155]"
                   >
-                    <img
-                      src={m.profiles?.avatar_url || "/default-avatar.png"}
-                      alt=""
-                      loading="lazy"
-                      decoding="async"
-                      className="h-6 w-6 rounded-full"
+                    <ProfileAvatarImg
+                      src={m.profiles?.avatar_url}
+                      className="h-6 w-6"
                     />
                     <span className="text-sm text-white">
                       {m.profiles?.username}
@@ -2682,12 +2740,9 @@ export default function DMPage() {
                         : "hover:bg-[#1e293b]"
                     }`}
                   >
-                    <img
-                      src={u.avatar_url || "/default-avatar.png"}
-                      alt=""
-                      loading="lazy"
-                      decoding="async"
-                      className="h-8 w-8 shrink-0 rounded-full object-cover"
+                    <ProfileAvatarImg
+                      src={u.avatar_url}
+                      className="h-8 w-8 shrink-0"
                     />
                     <span className="text-left text-sm text-white">
                       @{u.username}

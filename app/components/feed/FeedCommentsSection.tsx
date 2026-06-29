@@ -16,15 +16,16 @@ import {
   startCommentReply,
   type CommentReplyTarget,
 } from "@/lib/commentReplyUx"
+import type { FeedCommentTarget } from "./feedPostHelpers"
 
 type FeedCommentsSectionProps = {
-  post: any
+  target: FeedCommentTarget
   user: any
   comments: any[]
   commentSubmitting: boolean
   draftSyncRef?: MutableRefObject<Record<string, string>>
   onSubmitComment: (
-    post: any,
+    submitContext: unknown,
     text: string,
     parentCommentId?: string | null
   ) => Promise<boolean>
@@ -34,7 +35,7 @@ type FeedCommentsSectionProps = {
 }
 
 function FeedCommentsSection({
-  post,
+  target,
   user,
   comments,
   commentSubmitting,
@@ -43,9 +44,9 @@ function FeedCommentsSection({
   onDeleteComment,
   listScrollRef,
 }: FeedCommentsSectionProps) {
-  const pid = String(post.id)
+  const contentId = target.contentId
   const [commentDraft, setCommentDraft] = useState(
-    () => draftSyncRef?.current[pid] ?? ""
+    () => draftSyncRef?.current[contentId] ?? ""
   )
   const [replyTarget, setReplyTarget] = useState<CommentReplyTarget | null>(null)
   const [pendingDelete, setPendingDelete] = useState<any>(null)
@@ -54,22 +55,22 @@ function FeedCommentsSection({
   commentDraftRef.current = commentDraft
 
   const handleCommentChange = useCallback(
-    (_postId: string, value: string) => {
+    (_contentId: string, value: string) => {
       setCommentDraft(value)
       if (draftSyncRef) {
-        draftSyncRef.current[pid] = value
+        draftSyncRef.current[contentId] = value
       }
     },
-    [draftSyncRef, pid]
+    [contentId, draftSyncRef]
   )
 
   const handleSubmitComment = useCallback(
-    async (p: any) => {
+    async (submitContext: unknown) => {
       if (commentSubmitting) return
       const text = commentDraftRef.current.trim()
       if (!text) return
       const ok = await onSubmitComment(
-        p,
+        submitContext,
         text,
         replyTarget?.parentCommentId ?? null
       )
@@ -77,15 +78,15 @@ function FeedCommentsSection({
         setCommentDraft("")
         setReplyTarget(null)
         if (draftSyncRef) {
-          draftSyncRef.current[pid] = ""
+          draftSyncRef.current[contentId] = ""
         }
       }
     },
     [
       commentSubmitting,
+      contentId,
       draftSyncRef,
       onSubmitComment,
-      pid,
       replyTarget?.parentCommentId,
     ]
   )
@@ -97,15 +98,15 @@ function FeedCommentsSection({
         allComments: comments,
         setReplyTarget,
         setDraft: setCommentDraft,
-        inputId: `comment-input-${pid}`,
+        inputId: `comment-input-${contentId}`,
         onDraftSync: (value) => {
           if (draftSyncRef) {
-            draftSyncRef.current[pid] = value
+            draftSyncRef.current[contentId] = value
           }
         },
       })
     },
-    [comments, draftSyncRef, pid]
+    [comments, contentId, draftSyncRef]
   )
 
   const handleCancelReply = useCallback(() => {
@@ -114,11 +115,11 @@ function FeedCommentsSection({
       setDraft: setCommentDraft,
       onDraftSync: (value) => {
         if (draftSyncRef) {
-          draftSyncRef.current[pid] = value
+          draftSyncRef.current[contentId] = value
         }
       },
     })
-  }, [draftSyncRef, pid])
+  }, [contentId, draftSyncRef])
 
   const handleConfirmDelete = useCallback(async () => {
     if (!pendingDelete || !onDeleteComment) {
@@ -129,28 +130,14 @@ function FeedCommentsSection({
       return
     }
 
-    console.log("[comment-delete] confirm", {
-      commentId: String(pendingDelete.id),
-      postId: pendingDelete.post_id ?? post.id,
-      userId: pendingDelete.user_id,
-    })
-
     setDeleteBusy(true)
     try {
-      const commentForDelete = {
-        ...pendingDelete,
-        post_id: pendingDelete.post_id ?? post.id,
-      }
-      const ok = await onDeleteComment(commentForDelete)
-      console.log("[comment-delete] handler finished", {
-        commentId: String(pendingDelete.id),
-        ok,
-      })
+      const ok = await onDeleteComment(pendingDelete)
       if (ok) setPendingDelete(null)
     } finally {
       setDeleteBusy(false)
     }
-  }, [onDeleteComment, pendingDelete, post.id])
+  }, [onDeleteComment, pendingDelete])
 
   const stopPropagation = useCallback((e: React.SyntheticEvent) => {
     e.stopPropagation()
@@ -158,7 +145,8 @@ function FeedCommentsSection({
 
   const composer = user ? (
     <FeedCommentComposer
-      post={post}
+      contentId={contentId}
+      submitContext={target.submitContext}
       user={user}
       commentValue={commentDraft}
       commentSubmitting={commentSubmitting}
@@ -175,13 +163,7 @@ function FeedCommentsSection({
       currentUserId={user?.id}
       onReply={handleReply}
       onRequestDelete={
-        onDeleteComment
-          ? (comment) =>
-              setPendingDelete({
-                ...comment,
-                post_id: comment.post_id ?? post.id,
-              })
-          : undefined
+        onDeleteComment ? (comment) => setPendingDelete(comment) : undefined
       }
       deleteMenuClassName="z-[9100]"
     />

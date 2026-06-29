@@ -5,6 +5,7 @@ export type LikeNotificationTarget =
   | { kind: "post"; postId: string; tradeId?: string | null }
   | { kind: "profile_post"; profilePostId: string }
   | { kind: "achievement_post"; achievementPostId: string }
+  | { kind: "reel"; reelId: string }
 
 type LikeNotificationParams = {
   recipientUserId: string
@@ -34,7 +35,10 @@ function applyTargetFilter<
   if (target.kind === "profile_post") {
     return query.eq("profile_post_id", target.profilePostId)
   }
-  return query.eq("achievement_post_id", target.achievementPostId)
+  if (target.kind === "achievement_post") {
+    return query.eq("achievement_post_id", target.achievementPostId)
+  }
+  return query.eq("reel_id", target.reelId)
 }
 
 export function buildLikeNotificationInsertPayload(
@@ -59,7 +63,10 @@ export function buildLikeNotificationInsertPayload(
   if (params.target.kind === "profile_post") {
     return { ...base, profile_post_id: params.target.profilePostId }
   }
-  return { ...base, achievement_post_id: params.target.achievementPostId }
+  if (params.target.kind === "achievement_post") {
+    return { ...base, achievement_post_id: params.target.achievementPostId }
+  }
+  return { ...base, reel_id: params.target.reelId }
 }
 
 /** Create exactly one like notification for this actor + target. */

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "reac
 import { useRouter } from "next/navigation"
 import { supabase } from "../../lib/supabaseClient"
 import Navbar from "../components/Navbar"
+import { ProfileAvatarImg } from "@/app/components/SafeProfileAvatar"
 import AffiliateApplyModal from "../components/AffiliateApplyModal"
 import AffiliatePayoutSetupCard from "../components/AffiliatePayoutSetupCard"
 import {
@@ -384,10 +385,9 @@ export default function AffiliateDashboard() {
                   key={u.id}
                   className="mb-3 flex items-center gap-3 rounded-xl bg-white/5 p-4 last:mb-0"
                 >
-                  <img
-                    src={u.avatar_url || "/default-avatar.png"}
-                    className="h-8 w-8 rounded-full"
-                    alt=""
+                  <ProfileAvatarImg
+                    src={u.avatar_url}
+                    className="h-8 w-8"
                   />
                   <span>{u.username?.trim() || "User"}</span>
                 </div>

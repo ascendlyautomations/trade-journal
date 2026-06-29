@@ -20,6 +20,7 @@ import { resolveTradePoints } from "@/lib/resolveTradePoints"
 import FeedCommentsSection from "./FeedCommentsSection"
 import FeedPostHeader from "./FeedPostHeader"
 import {
+  feedCommentTarget,
   getModeStyles,
   postImageSrc,
   postPublicDescription,
@@ -224,13 +225,15 @@ export default function FeedPostDetailModal({
       }
       comments={
         <FeedCommentsSection
-          post={post}
+          target={feedCommentTarget(pid, post)}
           user={user}
           comments={comments}
           commentSubmitting={commentSubmitting}
           draftSyncRef={draftSyncRef}
           listScrollRef={commentsScrollRef}
-          onSubmitComment={onSubmitComment}
+          onSubmitComment={(context, text, parentCommentId) =>
+            onSubmitComment(context, text, parentCommentId)
+          }
           onDeleteComment={onDeleteComment}
         />
       }

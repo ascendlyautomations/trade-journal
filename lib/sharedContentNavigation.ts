@@ -49,12 +49,36 @@ export function getSharedAchievementViewHref(post: PostOwnerLike): string {
   return `${base}?${params.toString()}`
 }
 
+/** Profile reels tab deep-link. */
+export function getSharedReelViewHref(post: PostOwnerLike): string {
+  const reelId = String(post.id ?? "").trim()
+  const ownerId = post.user_id != null ? String(post.user_id).trim() : ""
+
+  const base = profilePath({
+    id: ownerId,
+    username: post.profiles?.username,
+  })
+
+  if (!reelId) return `${base}?tab=reels`
+
+  const params = new URLSearchParams({
+    reel: reelId,
+    tab: "reels",
+  })
+  return `${base}?${params.toString()}`
+}
+
 export function getSharedContentViewHref(
   post: PostOwnerLike & {
     achievements?: unknown
     achievement_id?: string | null
+    feedKind?: string | null
+    video_url?: string | null
   }
 ): string {
+  if (post.feedKind === "reel" || post.video_url) {
+    return getSharedReelViewHref(post)
+  }
   if (post.achievements != null || post.achievement_id) {
     return getSharedAchievementViewHref(post)
   }

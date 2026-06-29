@@ -15,6 +15,7 @@ function FeedContentToggle({
   const options: { id: FeedContentFilter; label: string }[] = [
     { id: "all", label: "All" },
     { id: "trades", label: "Trades" },
+    { id: "reels", label: "Reels" },
     { id: "posts", label: "Posts" },
     { id: "achievements", label: "Achievements" },
   ]

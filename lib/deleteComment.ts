@@ -36,6 +36,14 @@ export type AchievementPostCommentRow = {
   parent_comment_id?: string | null
 }
 
+export type ReelCommentRow = {
+  id: string
+  user_id: string
+  content?: string | null
+  reel_id?: string | null
+  parent_comment_id?: string | null
+}
+
 const LOG_PREFIX = "[comment-delete]"
 
 function logDeleteStep(step: string, details?: Record<string, unknown>) {
@@ -97,6 +105,7 @@ async function cleanupCommentNotifications(
     tradeId?: string | null
     profilePostId?: string | null
     achievementPostId?: string | null
+    reelId?: string | null
   }
 ) {
   await deleteCommentNotificationByCommentId(
@@ -112,6 +121,7 @@ async function cleanupCommentNotifications(
     tradeId: params.tradeId,
     profilePostId: params.profilePostId,
     achievementPostId: params.achievementPostId,
+    reelId: params.reelId,
   })
 }
 
@@ -258,6 +268,51 @@ export async function deleteAchievementPostComment(
       comment.achievement_post_id != null
         ? String(comment.achievement_post_id)
         : null,
+  })
+
+  return { error: null, deleted: true as const }
+}
+
+function noReelRowDeletedError(): PostgrestError {
+  return {
+    name: "CommentDeleteError",
+    message:
+      "Reel comment was not deleted. Ensure the reel_comments DELETE policy and grant are applied in Supabase.",
+    code: "PGRST116",
+    details: "No rows deleted — likely missing RLS DELETE policy or DELETE grant.",
+    hint: "Apply migration 20260628130000_reel_engagement.sql",
+  } as PostgrestError
+}
+
+export async function deleteReelComment(
+  supabase: SupabaseClient,
+  comment: ReelCommentRow
+) {
+  const commentId = String(comment.id)
+  const userId = String(comment.user_id)
+
+  const { data, error } = await supabase
+    .from("reel_comments")
+    .delete()
+    .eq("id", commentId)
+    .eq("user_id", userId)
+    .select("id")
+    .maybeSingle()
+
+  if (error) {
+    return { error, deleted: false as const }
+  }
+
+  if (!data) {
+    return { error: noReelRowDeletedError(), deleted: false as const }
+  }
+
+  await cleanupCommentNotifications(supabase, {
+    commentId,
+    senderId: userId,
+    content: String(comment.content ?? ""),
+    reelId:
+      comment.reel_id != null ? String(comment.reel_id) : null,
   })
 
   return { error: null, deleted: true as const }

@@ -3,6 +3,7 @@
 import { SkeletonSettingsPage } from "../components/ui/skeletons"
 
 import Navbar from "../components/Navbar"
+import { ProfileAvatarImg } from "../components/SafeProfileAvatar"
 import AffiliateApplyModal from "../components/AffiliateApplyModal"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
@@ -955,18 +956,10 @@ export default function SettingsPage() {
                     className="flex flex-wrap items-center gap-4"
                     aria-labelledby="settings-avatar-label"
                   >
-                    <div className="h-16 w-16 shrink-0 overflow-hidden rounded-full bg-gray-700">
-                      {avatarPreview ? (
-                        <img
-                          src={avatarPreview}
-                          alt=""
-                          className="h-full w-full object-cover"
-                          onError={(e) => {
-                            e.currentTarget.src = "/default-avatar.png"
-                          }}
-                        />
-                      ) : null}
-                    </div>
+                    <ProfileAvatarImg
+                      src={avatarPreview}
+                      className="h-16 w-16"
+                    />
                     <input
                       id="settings-avatar"
                       type="file"

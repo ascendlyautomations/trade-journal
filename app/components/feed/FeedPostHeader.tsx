@@ -2,6 +2,7 @@
 
 import { memo } from "react"
 import Link from "next/link"
+import { ProfileAvatarImg } from "@/app/components/SafeProfileAvatar"
 import { profilePath } from "@/lib/profileRoutes"
 
 type FeedPostHeaderProps = {
@@ -23,20 +24,10 @@ function FeedPostHeader({
 
   const inner = (
     <>
-      {avatarUrl ? (
-        <img
-          src={avatarUrl}
-          alt=""
-          loading="lazy"
-          decoding="async"
-          className="w-10 h-10 rounded-full object-cover ring-2 ring-white/10 shrink-0"
-        />
-      ) : (
-        <div
-          className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500/40 to-emerald-500/40 ring-2 ring-white/10 shrink-0"
-          aria-hidden
-        />
-      )}
+      <ProfileAvatarImg
+        src={avatarUrl}
+        className="h-10 w-10 shrink-0 ring-2 ring-white/10"
+      />
       <span className="font-semibold text-sm sm:text-base truncate text-white">
         {username}
       </span>

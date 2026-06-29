@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import { profileNeedsUsername } from "@/lib/profileOnboardingGate"
 import { supabase } from "@/lib/supabaseClient"
 import { uploadAvatarFile } from "@/lib/avatarUpload"
+import { ProfileAvatarImg } from "@/app/components/SafeProfileAvatar"
 import {
   isProfilesUsernameConflict,
   normalizeProfileUsername,
@@ -270,20 +271,10 @@ export default function ProfileOnboarding({
             </p>
 
             <div className="mb-6 flex flex-col items-center gap-3">
-              <div className="relative h-24 w-24 overflow-hidden rounded-full border-2 border-white/20 bg-white/5">
-                {avatarPreview ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={avatarPreview}
-                    alt=""
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center text-3xl text-gray-500">
-                    ?
-                  </div>
-                )}
-              </div>
+              <ProfileAvatarImg
+                src={avatarPreview}
+                className="h-24 w-24 border-2 border-white/20"
+              />
               <label className="cursor-pointer rounded-xl bg-white/10 px-4 py-2 text-sm text-white transition hover:bg-white/20">
                 Upload photo (optional)
                 <input

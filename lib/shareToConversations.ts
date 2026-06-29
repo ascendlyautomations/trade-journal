@@ -78,8 +78,8 @@ export async function fetchShareConversations(
       ? conv.name || "Group Chat"
       : otherProfile?.username || "User"
     const displayAvatar = conv.is_group
-      ? conv.avatar_url || "/default-avatar.png"
-      : otherProfile?.avatar_url || "/default-avatar.png"
+      ? conv.avatar_url || null
+      : otherProfile?.avatar_url || null
 
     return {
       id: conv.id,
@@ -276,7 +276,7 @@ export async function sendPostToConversations(
     senderId: string
     conversationIds: string[]
     postId: string
-    feedKind?: "trade" | "profile" | "achievement"
+    feedKind?: "trade" | "profile" | "achievement" | "reel"
     content?: string
   }
 ): Promise<{ error: Error | null }> {
@@ -301,20 +301,30 @@ export async function sendPostToConversations(
               achievement_post_id: opts.postId,
               channel: null,
             }
-          : {
-              conversation_id: conversationId,
-              sender_id: opts.senderId,
-              type: "post",
-              post_id: opts.postId,
-              channel: null,
-            }
+          : feedKind === "reel"
+            ? {
+                conversation_id: conversationId,
+                sender_id: opts.senderId,
+                type: "reel",
+                reel_id: opts.postId,
+                channel: null,
+              }
+            : {
+                conversation_id: conversationId,
+                sender_id: opts.senderId,
+                type: "post",
+                post_id: opts.postId,
+                channel: null,
+              }
 
     const cardPreviewType =
       feedKind === "profile"
         ? "profile_post"
         : feedKind === "achievement"
           ? "achievement_post"
-          : "post"
+          : feedKind === "reel"
+            ? "reel"
+            : "post"
 
     const { error } = await sendShareCardSequence(supabase, {
       senderId: opts.senderId,

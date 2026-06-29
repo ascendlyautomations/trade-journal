@@ -1,7 +1,7 @@
 "use client"
 
 import type { StoryBarProfile } from "@/lib/activeStories"
-import { isImageUrlLoaded, markImageUrlLoaded } from "@/lib/imageUrlCache"
+import { ProfileAvatarImg } from "@/app/components/SafeProfileAvatar"
 
 type StoryAvatarRingProps = {
   profile: Pick<StoryBarProfile, "avatar_url">
@@ -16,29 +16,14 @@ export default function StoryAvatarRing({
   profile,
   hasActiveStory,
   sizeClassName = "h-16 w-16",
-  imageClassName = "h-full w-full rounded-full object-cover",
+  imageClassName = "h-full w-full",
   priority = false,
 }: StoryAvatarRingProps) {
-  const avatarUrl = profile.avatar_url?.trim() || ""
-  const avatar = avatarUrl ? (
-    <img
-      src={avatarUrl}
-      alt=""
-      loading={priority || isImageUrlLoaded(avatarUrl) ? "eager" : "lazy"}
-      decoding="async"
-      fetchPriority={priority ? "high" : undefined}
+  const avatar = (
+    <ProfileAvatarImg
+      src={profile.avatar_url}
       className={imageClassName}
-      onLoad={() => {
-        if (avatarUrl) markImageUrlLoaded(avatarUrl)
-      }}
-      onError={(e) => {
-        e.currentTarget.src = "/default-avatar.png"
-      }}
-    />
-  ) : (
-    <div
-      className={`${imageClassName} bg-gradient-to-br from-blue-500/40 to-emerald-500/40`}
-      aria-hidden
+      priority={priority}
     />
   )
 

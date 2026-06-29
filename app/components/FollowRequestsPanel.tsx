@@ -9,6 +9,7 @@ import {
   approveIncomingFollowRequest,
   declineIncomingFollowRequest,
 } from "@/lib/respondFollowRequest"
+import { ProfileAvatarImg } from "@/app/components/SafeProfileAvatar"
 
 export type IncomingFollowRequest = {
   id: string
@@ -215,13 +216,9 @@ export default function FollowRequestsPanel({
                 href={href}
                 className="flex min-w-0 flex-1 items-center gap-3"
               >
-                <img
-                  src={request.requester?.avatar_url || "/default-avatar.png"}
-                  alt=""
-                  className="h-10 w-10 shrink-0 rounded-full object-cover ring-2 ring-white/10"
-                  onError={(e) => {
-                    e.currentTarget.src = "/default-avatar.png"
-                  }}
+                <ProfileAvatarImg
+                  src={request.requester?.avatar_url}
+                  className="h-10 w-10 shrink-0 ring-2 ring-white/10"
                 />
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium text-white">

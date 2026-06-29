@@ -7,6 +7,7 @@ import {
   ProfileAvatarLink,
   ProfileUsernameLink,
 } from "@/app/components/ProfileLink"
+import { ProfileAvatarImg } from "@/app/components/SafeProfileAvatar"
 import { supabase } from "../../lib/supabaseClient"
 import Navbar from "../components/Navbar"
 import FollowRequestsPanel from "../components/FollowRequestsPanel"
@@ -45,7 +46,7 @@ import {
 const NOTIFICATIONS_TABLE = "notifications"
 
 const NOTIFICATION_SELECT =
-  "id, user_id, sender_id, type, post_id, trade_id, profile_post_id, achievement_post_id, content, read, created_at"
+  "id, user_id, sender_id, type, post_id, trade_id, profile_post_id, achievement_post_id, reel_id, content, read, created_at"
 
 const ENGAGEMENT_TYPES = NOTIFICATION_ENGAGEMENT_TYPES
 
@@ -145,7 +146,8 @@ function GroupedNotificationCardView({
       card.post_id,
       card.trade_id,
       card.profile_post_id,
-      card.achievement_post_id
+      card.achievement_post_id,
+      card.reel_id
     )
   } else if (card.kind === "comment_group") {
     expandable = true
@@ -154,7 +156,8 @@ function GroupedNotificationCardView({
       card.post_id,
       card.trade_id,
       card.profile_post_id,
-      card.achievement_post_id
+      card.achievement_post_id,
+      card.reel_id
     )
     expandedContent = (
       <ul className="mt-2 space-y-2 border-t border-white/10 pt-2">
@@ -330,13 +333,9 @@ function GroupedNotificationCardView({
           </div>
         ) : avatarUrl != null ? (
           <div className="relative shrink-0">
-            <img
-              src={avatarUrl || "/default-avatar.png"}
-              alt=""
-              className="h-9 w-9 rounded-full object-cover ring-2 ring-white/10"
-              onError={(e) => {
-                e.currentTarget.src = "/default-avatar.png"
-              }}
+            <ProfileAvatarImg
+              src={avatarUrl}
+              className="h-9 w-9 ring-2 ring-white/10"
             />
             {unread ? (
               <span

@@ -5,18 +5,20 @@ import ReplyComposerStrip from "@/app/components/replies/ReplyComposerStrip"
 import type { CommentReplyTarget } from "@/lib/commentReplyUx"
 
 type FeedCommentComposerProps = {
-  post: any
+  contentId: string
+  submitContext: unknown
   user: any
   commentValue: string
   commentSubmitting: boolean
   replyTarget?: CommentReplyTarget | null
   onCancelReply?: () => void
-  onCommentChange: (postId: string, value: string) => void
-  onSubmitComment: (post: any) => void
+  onCommentChange: (contentId: string, value: string) => void
+  onSubmitComment: (submitContext: unknown) => void
 }
 
 function FeedCommentComposer({
-  post,
+  contentId,
+  submitContext,
   user,
   commentValue,
   commentSubmitting,
@@ -25,17 +27,15 @@ function FeedCommentComposer({
   onCommentChange,
   onSubmitComment,
 }: FeedCommentComposerProps) {
-  const pid = String(post.id)
-
   const stopPropagation = useCallback((e: React.SyntheticEvent) => {
     e.stopPropagation()
   }, [])
 
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      onCommentChange(pid, e.target.value)
+      onCommentChange(contentId, e.target.value)
     },
-    [onCommentChange, pid]
+    [contentId, onCommentChange]
   )
 
   const handleKeyDown = useCallback(
@@ -43,18 +43,18 @@ function FeedCommentComposer({
       e.stopPropagation()
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault()
-        if (!commentSubmitting) onSubmitComment(post)
+        if (!commentSubmitting) onSubmitComment(submitContext)
       }
     },
-    [commentSubmitting, onSubmitComment, post]
+    [commentSubmitting, onSubmitComment, submitContext]
   )
 
   const handleSubmitClick = useCallback(
     (e: React.MouseEvent<HTMLButtonElement>) => {
       e.stopPropagation()
-      onSubmitComment(post)
+      onSubmitComment(submitContext)
     },
-    [onSubmitComment, post]
+    [onSubmitComment, submitContext]
   )
 
   if (!user) return null
@@ -74,7 +74,7 @@ function FeedCommentComposer({
       ) : null}
       <div className="flex gap-2">
         <input
-          id={`comment-input-${pid}`}
+          id={`comment-input-${contentId}`}
           type="text"
           placeholder={replyTarget ? "Add to reply…" : "Add a comment…"}
           value={commentValue}

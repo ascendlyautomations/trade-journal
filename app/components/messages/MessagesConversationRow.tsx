@@ -5,6 +5,7 @@ import {
   ProfileAvatarLink,
   ProfileUsernameLink,
 } from "@/app/components/ProfileLink"
+import { ProfileAvatarImg } from "@/app/components/SafeProfileAvatar"
 import { formatConversationListTime } from "@/lib/formatRelativeTime"
 
 export type MessagesConversationRowProps = {
@@ -120,16 +121,11 @@ function MessagesConversationRow({
             stopPropagation
             imgClassName="h-10 w-10 shrink-0 rounded-full object-cover transition hover:scale-105"
           />
-        ) : avatarUrl ? (
-          <img
-            src={avatarUrl}
-            alt=""
-            loading="lazy"
-            decoding="async"
-            className="h-10 w-10 shrink-0 rounded-full object-cover transition hover:scale-105"
-          />
         ) : (
-          <div className="h-10 w-10 shrink-0 rounded-full bg-gray-600" />
+          <ProfileAvatarImg
+            src={avatarUrl}
+            className="h-10 w-10 shrink-0 transition hover:scale-105"
+          />
         )}
 
         <div className="min-w-0 flex-1">

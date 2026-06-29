@@ -37,7 +37,10 @@ function targetToApiFields(target: CommentNotificationTarget) {
   if (target.kind === "profile_post") {
     return { profilePostId: target.profilePostId }
   }
-  return { achievementPostId: target.achievementPostId }
+  if (target.kind === "achievement_post") {
+    return { achievementPostId: target.achievementPostId }
+  }
+  return { reelId: target.reelId }
 }
 
 export type CommentNotificationTarget =
@@ -45,6 +48,7 @@ export type CommentNotificationTarget =
   | { kind: "trade"; tradeId: string }
   | { kind: "profile_post"; profilePostId: string }
   | { kind: "achievement_post"; achievementPostId: string }
+  | { kind: "reel"; reelId: string }
 
 type CommentNotificationParams = {
   recipientUserId: string
@@ -142,7 +146,10 @@ export function buildCommentNotificationInsertPayload(
   if (params.target.kind === "profile_post") {
     return { ...base, profile_post_id: params.target.profilePostId }
   }
-  return { ...base, achievement_post_id: params.target.achievementPostId }
+  if (params.target.kind === "achievement_post") {
+    return { ...base, achievement_post_id: params.target.achievementPostId }
+  }
+  return { ...base, reel_id: params.target.reelId }
 }
 
 /** Create exactly one comment notification per recipient for this comment. */
@@ -310,6 +317,7 @@ export async function deleteLegacyCommentNotification(
     tradeId?: string | null
     profilePostId?: string | null
     achievementPostId?: string | null
+    reelId?: string | null
   }
 ): Promise<void> {
   const snippet = params.content.trim().slice(0, 200)
@@ -318,7 +326,8 @@ export async function deleteLegacyCommentNotification(
     !params.postId &&
     !params.tradeId &&
     !params.profilePostId &&
-    !params.achievementPostId
+    !params.achievementPostId &&
+    !params.reelId
   ) {
     return
   }
@@ -331,6 +340,7 @@ export async function deleteLegacyCommentNotification(
       tradeId: params.tradeId ?? null,
       profilePostId: params.profilePostId ?? null,
       achievementPostId: params.achievementPostId ?? null,
+      reelId: params.reelId ?? null,
     }),
   })
 

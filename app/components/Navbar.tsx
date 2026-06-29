@@ -11,6 +11,7 @@ import { fetchTotalUnreadMessageCount } from "../../lib/messageUnread"
 import { NOTIFICATION_ENGAGEMENT_TYPES } from "../../lib/notificationEngagementTypes"
 import { profilePath } from "../../lib/profileRoutes"
 import { prefetchAppRoutes } from "../../lib/routePrefetch"
+import { ProfileAvatarImg } from "./SafeProfileAvatar"
 import BugReportModal from "./BugReportModal"
 import GettingStartedMobileEntry from "./GettingStartedMobileEntry"
 
@@ -661,10 +662,9 @@ export default function Navbar() {
                     className="flex items-center gap-2 rounded border px-3 py-1"
                   >
                     {!profileChromePending ? (
-                      <img
-                        src={profile?.avatar_url || "/default-avatar.png"}
-                        className="h-8 w-8 rounded-full"
-                        alt=""
+                      <ProfileAvatarImg
+                        src={profile?.avatar_url}
+                        className="h-8 w-8"
                       />
                     ) : (
                       <div className="h-8 w-8 animate-pulse rounded-full bg-white/10" aria-hidden />

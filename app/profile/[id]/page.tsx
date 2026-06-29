@@ -57,6 +57,7 @@ import {
   deleteFeedComment,
   deleteProfilePostComment,
   deleteAchievementPostComment,
+  deleteReelComment,
   deleteTradeComment,
   filterCommentsAfterDelete,
 } from "@/lib/deleteComment"
@@ -125,9 +126,18 @@ import { dmThreadPath } from "@/lib/messageRoutes"
 import { ConfirmModal, FeedbackModal, useDeleteTradeConfirmation, useFeedbackPopup } from "@/app/components/ui"
 import ProfileCreateMenu from "../../components/profile/ProfileCreateMenu"
 import ReelComposerModal from "../../components/profile/ReelComposerModal"
-import ReelViewer from "../../components/profile/ReelViewer"
 import ProfileReelCard from "../../components/profile/ProfileReelCard"
+import FeedReelDetailModal from "../../components/feed/FeedReelDetailModal"
 import { PROFILE_REELS_SELECT, type ReelRow } from "@/lib/reels"
+import { reelDetailFeedItem } from "../../components/feed/feedPostHelpers"
+import {
+  REEL_COMMENT_INSERT_SELECT,
+  insertReelCommentNotifications,
+  insertReelLikeNotification,
+  loadReelEngagementMaps,
+  withInsertedReelParentCommentId,
+} from "@/lib/reelEngagement"
+import { ProfileAvatarImg } from "../../components/SafeProfileAvatar"
 import StoryComposeModal from "../../components/feed/StoryComposeModal"
 import FeedStoryViewer from "../../components/feed/FeedStoryViewer"
 import StoryAvatarRing from "../../components/feed/StoryAvatarRing"
@@ -457,15 +467,9 @@ function TradeCard({
   const tradeAuthorHeader = (
     <div className="flex shrink-0 items-center justify-between border-b border-white/5 px-4 py-3">
       <div className="flex min-w-0 items-center gap-3">
-        <img
-          src={profile.avatar_url || "/default-avatar.png"}
-          alt=""
-          loading="lazy"
-          decoding="async"
-          className="h-10 w-10 shrink-0 rounded-full object-cover ring-2 ring-white/10"
-          onError={(e) => {
-            e.currentTarget.src = "/default-avatar.png"
-          }}
+        <ProfileAvatarImg
+          src={profile.avatar_url}
+          className="h-10 w-10 shrink-0 ring-2 ring-white/10"
         />
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-white">
@@ -836,15 +840,9 @@ function PostCard({
   const postAuthorHeader = (
     <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/5 p-4">
       <div className="flex min-w-0 items-center gap-3">
-        <img
-          src={profile.avatar_url || "/default-avatar.png"}
-          alt=""
-          loading="lazy"
-          decoding="async"
-          className="h-10 w-10 rounded-full object-cover ring-2 ring-white/10"
-          onError={(e) => {
-            e.currentTarget.src = "/default-avatar.png"
-          }}
+        <ProfileAvatarImg
+          src={profile.avatar_url}
+          className="h-10 w-10 ring-2 ring-white/10"
         />
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-white">
@@ -1256,7 +1254,7 @@ function ProfilePageContent() {
   )
   const [showCreatePost, setShowCreatePost] = useState(false)
   const [showReelComposer, setShowReelComposer] = useState(false)
-  const [selectedReel, setSelectedReel] = useState<ReelRow | null>(null)
+  const [selectedReelDetail, setSelectedReelDetail] = useState<any | null>(null)
   const [storyComposeOpen, setStoryComposeOpen] = useState(false)
   const [pendingStoryFile, setPendingStoryFile] = useState<File | null>(null)
   const [pendingStoryPreviewUrl, setPendingStoryPreviewUrl] = useState<
@@ -1321,6 +1319,18 @@ function ProfilePageContent() {
   const feedDeepLinkCommentSubmittingRef = useRef(false)
   const [likeBusyByPost, setLikeBusyByPost] = useState<Record<string, boolean>>({})
   const deepLinkHandledRef = useRef<string | null>(null)
+
+  const openReelDetail = useCallback(
+    (reel: ReelRow, focusComments = false) => {
+      const post = reelDetailFeedItem(reel as Record<string, unknown>, profile)
+      const key = String(reel.id)
+      if (focusComments) {
+        feedOpenCommentsRef.current[key] = true
+      }
+      setSelectedReelDetail(post)
+    },
+    [profile]
+  )
 
   const openCreatePostModal = useCallback(() => {
     setShowCreatePost(true)
@@ -1660,6 +1670,18 @@ function ProfilePageContent() {
       const data = await fetchProfileReels(String(profile.id))
       if (cancelled) return
       setProfileReels(data)
+      if (data.length > 0) {
+        const reelIds = data.map((row) => String(row.id))
+        const { likesMap, commentsMap } = await loadReelEngagementMaps(
+          supabase,
+          reelIds,
+          currentUserId
+        )
+        if (!cancelled) {
+          setLikesByPost((prev) => ({ ...prev, ...likesMap }))
+          setCommentsByPost((prev) => ({ ...prev, ...commentsMap }))
+        }
+      }
       setProfileReelsReady(true)
     }
 
@@ -1668,7 +1690,7 @@ function ProfilePageContent() {
     return () => {
       cancelled = true
     }
-  }, [fetchProfileReels, profile?.id])
+  }, [currentUserId, fetchProfileReels, profile?.id])
 
   useEffect(() => {
     if (!profile?.id) {
@@ -1746,7 +1768,7 @@ function ProfilePageContent() {
     if (
       showCreatePost ||
       showReelComposer ||
-      selectedReel ||
+      selectedReelDetail ||
       editingPost ||
       selectedAchievementImage ||
       selectedTradeDetail ||
@@ -1764,7 +1786,7 @@ function ProfilePageContent() {
   }, [
     showCreatePost,
     showReelComposer,
-    selectedReel,
+    selectedReelDetail,
     editingPost,
     selectedAchievementImage,
     selectedTradeDetail,
@@ -1777,7 +1799,7 @@ function ProfilePageContent() {
     if (
       !showCreatePost &&
       !showReelComposer &&
-      !selectedReel &&
+      !selectedReelDetail &&
       !editingPost &&
       !selectedAchievementImage &&
       !selectedTradeDetail &&
@@ -1794,6 +1816,7 @@ function ProfilePageContent() {
         setSelectedAchievementImage(null)
         setSelectedTradeDetail(null)
         setSelectedPostDetail(null)
+        setSelectedReelDetail(null)
         setFeedDeepLinkPost(null)
         setSharePost(null)
       }
@@ -2274,10 +2297,10 @@ function ProfilePageContent() {
       setProfileReels(data)
       setActiveTab("reels")
       const published = data.find((row) => String(row.id) === String(reelId)) ?? null
-      if (published) setSelectedReel(published)
+      if (published) openReelDetail(published)
       showPopup(feedbackPresets.reelPublished())
     },
-    [fetchProfileReels, profile?.id, showPopup]
+    [fetchProfileReels, openReelDetail, profile?.id, showPopup]
   )
 
   const posts = wallPosts
@@ -2600,6 +2623,124 @@ function ProfilePageContent() {
     }
   }
 
+  async function handleReelLike(postId: string) {
+    if (!currentUserId) return
+    const key = String(postId)
+    if (likeBusyRef.current.has(key) || likeBusyByPost[key]) return
+
+    likeBusyRef.current.add(key)
+    setLikeBusyByPost((prev) => ({ ...prev, [key]: true }))
+
+    try {
+      const meta = likesByPost[key] || { count: 0, liked: false }
+      const ownerId = profile?.id ? String(profile.id) : null
+
+      if (meta.liked) {
+        const { error } = await supabase
+          .from("reel_likes")
+          .delete()
+          .eq("reel_id", key)
+          .eq("user_id", currentUserId)
+        if (error) return console.error(error)
+        if (ownerId) {
+          await deleteLikeNotification(supabase, {
+            recipientUserId: ownerId,
+            senderUserId: currentUserId,
+            target: { kind: "reel", reelId: key },
+          })
+        }
+        setLikesByPost((prev) => ({
+          ...prev,
+          [key]: { count: Math.max(0, meta.count - 1), liked: false },
+        }))
+        return
+      }
+
+      const { error } = await supabase.from("reel_likes").insert({
+        reel_id: key,
+        user_id: currentUserId,
+      })
+      if (error) return console.error(error)
+      setLikesByPost((prev) => ({
+        ...prev,
+        [key]: { count: meta.count + 1, liked: true },
+      }))
+
+      if (ownerId) {
+        await insertReelLikeNotification(supabase, {
+          reelId: key,
+          ownerUserId: ownerId,
+          senderUserId: currentUserId,
+        })
+      }
+    } finally {
+      likeBusyRef.current.delete(key)
+      setLikeBusyByPost((prev) => ({ ...prev, [key]: false }))
+    }
+  }
+
+  async function submitReelComment(
+    post: any,
+    text: string,
+    parentCommentId?: string | null
+  ) {
+    if (!currentUserId) return false
+    const key = String(post.id)
+    const trimmed = (text || "").trim()
+    if (!trimmed) return false
+    if (commentSubmittingRef.current.has(key) || commentSubmitting[key]) return false
+
+    commentSubmittingRef.current.add(key)
+    setCommentSubmitting((s) => ({ ...s, [key]: true }))
+
+    try {
+      const existingComments = commentsByPost[key] || []
+      const insertPayload: Record<string, unknown> = {
+        reel_id: key,
+        user_id: currentUserId,
+        content: trimmed,
+      }
+      if (parentCommentId) {
+        insertPayload.parent_comment_id = parentCommentId
+      }
+
+      const { data, error } = await supabase
+        .from("reel_comments")
+        .insert(insertPayload)
+        .select(REEL_COMMENT_INSERT_SELECT)
+        .single()
+
+      if (error) {
+        console.error(error)
+        return false
+      }
+
+      const insertedRow = withInsertedReelParentCommentId(data, parentCommentId)
+      setCommentsByPost((prev) => ({
+        ...prev,
+        [key]: [...(prev[key] || []), insertedRow],
+      }))
+
+      const ownerId = profile?.id ? String(profile.id) : null
+      if (ownerId) {
+        await insertReelCommentNotifications(supabase, {
+          reelId: key,
+          commentId: String(insertedRow.id),
+          ownerUserId: ownerId,
+          senderUserId: currentUserId,
+          content: trimmed,
+          parentCommentId,
+          existingComments,
+        })
+      }
+
+      return true
+    } finally {
+      commentSubmittingRef.current.delete(key)
+      setCommentSubmitting((s) => ({ ...s, [key]: false }))
+    }
+  }
+
   function handleShareAchievement(achievement: Achievement, postId: string) {
     setSharePost(buildAchievementPostStub(achievement, postId))
   }
@@ -2624,12 +2765,14 @@ function ProfilePageContent() {
     const achievementPostId = comment.achievement_post_id
       ? String(comment.achievement_post_id)
       : null
+    const reelId = comment.reel_id ? String(comment.reel_id) : null
     const postId = comment.post_id ? String(comment.post_id) : null
     const tradeId = comment.trade_id ? String(comment.trade_id) : null
 
     let result:
       | Awaited<ReturnType<typeof deleteProfilePostComment>>
       | Awaited<ReturnType<typeof deleteAchievementPostComment>>
+      | Awaited<ReturnType<typeof deleteReelComment>>
       | Awaited<ReturnType<typeof deleteFeedComment>>
       | Awaited<ReturnType<typeof deleteTradeComment>>
     let stateKey: string
@@ -2650,6 +2793,14 @@ function ProfilePageContent() {
         achievement_post_id: achievementPostId,
       })
       stateKey = achievementPostId
+    } else if (reelId) {
+      result = await deleteReelComment(supabase, {
+        id: commentId,
+        user_id: currentUserId,
+        content: comment.content,
+        reel_id: reelId,
+      })
+      stateKey = reelId
     } else if (postId) {
       result = await deleteFeedComment(supabase, {
         id: commentId,
@@ -3035,9 +3186,11 @@ function ProfilePageContent() {
   useEffect(() => {
     if (!profile?.id || loading) return
     if (searchParams.get("post")?.trim() && !wallPostsReady) return
+    if (searchParams.get("reel")?.trim() && !profileReelsReady) return
 
     const postParam = searchParams.get("post")?.trim()
     const achievementParam = searchParams.get("achievement")?.trim()
+    const reelParam = searchParams.get("reel")?.trim()
     const tradeParam = searchParams.get("trade")?.trim()
     const openComments = searchParams.get("comments") === "1"
     const tabParam = searchParams.get("tab")?.trim()
@@ -3047,7 +3200,9 @@ function ProfilePageContent() {
     if (tabParam === "reels") {
       setActiveTab("reels")
     }
-    const key = achievementParam
+    const key = reelParam
+      ? `reel:${reelParam}:${openComments ? "1" : "0"}`
+      : achievementParam
       ? `achievement:${achievementParam}:${openComments ? "1" : "0"}`
       : postParam
       ? `post:${postParam}:${openComments ? "1" : "0"}`
@@ -3059,6 +3214,16 @@ function ProfilePageContent() {
     deepLinkHandledRef.current = key
 
     void (async () => {
+      if (reelParam) {
+        setActiveTab("reels")
+        const reel =
+          profileReels.find((row) => String(row.id) === reelParam) ?? null
+        if (reel) {
+          openReelDetail(reel, openComments)
+        }
+        return
+      }
+
       if (achievementParam) {
         await openAchievementPostDeepLink(achievementParam, openComments)
         return
@@ -3080,8 +3245,11 @@ function ProfilePageContent() {
     openFeedPostDeepLink,
     openProfilePostDeepLink,
     openAchievementPostDeepLink,
+    openReelDetail,
     openTradeDeepLink,
     profile?.id,
+    profileReels,
+    profileReelsReady,
     searchParams,
     wallPostsReady,
   ])
@@ -3540,11 +3708,27 @@ function ProfilePageContent() {
           onPublished={(reelId) => void handleReelPublished(reelId)}
         />
       ) : null}
-      <ReelViewer
-        reel={selectedReel}
-        creator={profile}
-        onClose={() => setSelectedReel(null)}
-      />
+      {selectedReelDetail ? (
+        <FeedReelDetailModal
+          post={selectedReelDetail}
+          user={currentUserId ? { id: currentUserId } : null}
+          comments={commentsByPost[String(selectedReelDetail.id)] || []}
+          likeMeta={
+            likesByPost[String(selectedReelDetail.id)] || EMPTY_LIKE_META
+          }
+          likeBusy={!!likeBusyByPost[String(selectedReelDetail.id)]}
+          commentSubmitting={
+            !!commentSubmitting[String(selectedReelDetail.id)]
+          }
+          draftSyncRef={feedDraftSyncRef}
+          openCommentsRef={feedOpenCommentsRef}
+          onClose={() => setSelectedReelDetail(null)}
+          onToggleLike={(post) => void handleReelLike(String(post.id))}
+          onSubmitComment={submitReelComment}
+          onDeleteComment={deleteComment}
+          onSharePost={(post) => setSharePost(post)}
+        />
+      ) : null}
 
       {profileStoryOpen && profile?.id && profileCurrentStory ? (
         <FeedStoryViewer
@@ -4040,8 +4224,7 @@ function ProfilePageContent() {
                       <ProfileReelCard
                         key={reel.id}
                         reel={reel}
-                        creator={profile}
-                        onOpen={() => setSelectedReel(reel)}
+                        onOpen={() => openReelDetail(reel)}
                       />
                     ))}
                   </div>
@@ -4850,7 +5033,9 @@ function ProfilePageContent() {
               ? "achievement"
               : sharePost.feedKind === "profile"
                 ? "profile"
-                : "trade"
+                : sharePost.feedKind === "reel"
+                  ? "reel"
+                  : "trade"
           }
           post={sharePost}
           captionPlaceholder="Add a message..."
@@ -4945,15 +5130,9 @@ function ProfilePageContent() {
                     onClick={closeFollowModals}
                     className="flex cursor-pointer items-center gap-3 rounded-lg p-2 transition hover:bg-white/10"
                   >
-                    <img
-                      src={u.avatar_url || "/default-avatar.png"}
-                      alt=""
-                      loading="lazy"
-                      decoding="async"
-                      onError={(e) => {
-                        e.currentTarget.src = "/default-avatar.png"
-                      }}
-                      className="h-8 w-8 rounded-full object-cover"
+                    <ProfileAvatarImg
+                      src={u.avatar_url}
+                      className="h-8 w-8"
                     />
                     <span className="text-white">{u.username}</span>
                   </ProfileLink>
@@ -5011,15 +5190,9 @@ function ProfilePageContent() {
                     onClick={closeFollowModals}
                     className="flex cursor-pointer items-center gap-3 rounded-lg p-2 transition hover:bg-white/10"
                   >
-                    <img
-                      src={u.avatar_url || "/default-avatar.png"}
-                      alt=""
-                      loading="lazy"
-                      decoding="async"
-                      onError={(e) => {
-                        e.currentTarget.src = "/default-avatar.png"
-                      }}
-                      className="h-8 w-8 rounded-full object-cover"
+                    <ProfileAvatarImg
+                      src={u.avatar_url}
+                      className="h-8 w-8"
                     />
                     <span className="text-white">{u.username}</span>
                   </ProfileLink>

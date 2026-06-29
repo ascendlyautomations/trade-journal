@@ -5,6 +5,7 @@ import {
   ProfileAvatarLink,
   ProfileUsernameLink,
 } from "@/app/components/ProfileLink"
+import { ProfileAvatarImg } from "@/app/components/SafeProfileAvatar"
 import { formatSocialTimestamp } from "@/lib/formatRelativeTime"
 
 type CommentFocusCompactStripProps = {
@@ -29,24 +30,14 @@ export function CommentFocusCompactStrip({
   onExpand,
 }: CommentFocusCompactStripProps) {
   const timeLabel = formatSocialTimestamp(timestamp)
-  const avatarSrc =
-    avatarUrl != null && String(avatarUrl).trim() !== ""
-      ? String(avatarUrl).trim()
-      : "/default-avatar.png"
   const displayName = username?.trim() || "User"
 
   const inner = (
     <>
       {onExpand ? (
-        <img
-          src={avatarSrc}
-          alt=""
-          loading="lazy"
-          decoding="async"
-          className="h-8 w-8 shrink-0 rounded-full object-cover ring-2 ring-white/10"
-          onError={(e) => {
-            e.currentTarget.src = "/default-avatar.png"
-          }}
+        <ProfileAvatarImg
+          src={avatarUrl}
+          className="h-8 w-8 shrink-0 ring-2 ring-white/10"
         />
       ) : (
         <ProfileAvatarLink

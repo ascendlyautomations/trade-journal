@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
+import { ProfileAvatarImg } from "@/app/components/SafeProfileAvatar"
 import type { ReelRow } from "@/lib/reels"
 import { formatRelativeTime } from "@/lib/formatRelativeTime"
 
@@ -202,10 +203,9 @@ export default function ReelViewer({ reel, creator, onClose }: ReelViewerProps) 
 
         <div className="mt-3 shrink-0 rounded-xl border border-white/10 bg-[#0b1f3a]/90 p-4 backdrop-blur-sm">
           <div className="flex items-center gap-3">
-            <img
-              src={creator?.avatar_url || "/default-avatar.png"}
-              alt=""
-              className="h-9 w-9 rounded-full border border-white/10 object-cover"
+            <ProfileAvatarImg
+              src={creator?.avatar_url}
+              className="h-9 w-9 border border-white/10"
             />
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold text-white">

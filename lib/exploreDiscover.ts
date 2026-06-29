@@ -64,7 +64,7 @@ function isRecent(iso: string, days: number, now = Date.now()): boolean {
 
 function hasAvatar(avatarUrl: string | null | undefined): boolean {
   const raw = avatarUrl?.trim() ?? ""
-  return raw.length > 0 && !raw.includes("default-avatar")
+  return raw.length > 0
 }
 
 /** Lightweight activity score for Discover — no ML, existing profile/trade/post signals only. */

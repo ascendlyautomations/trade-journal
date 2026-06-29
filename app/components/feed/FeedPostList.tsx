@@ -8,6 +8,7 @@ import FeedPostCard, {
 } from "./FeedPostCard"
 import FeedProfilePostCard from "./FeedProfilePostCard"
 import FeedAchievementPostCard from "./FeedAchievementPostCard"
+import FeedReelCard from "./FeedReelCard"
 
 type FeedPostListProps = {
   posts: any[]
@@ -65,6 +66,24 @@ function FeedPostList({
           return (
             <FeedAchievementPostCard
               key={`achievement-${pid}`}
+              post={post}
+              user={user}
+              likeMeta={likesByPost[pid] ?? EMPTY_LIKE_META}
+              likeBusy={!!likeBusyByPost[pid]}
+              comments={commentsByPost[pid] ?? EMPTY_COMMENTS}
+              commentSubmitting={!!commentSubmitting[pid]}
+              onSelectPost={onSelectPost}
+              onOpenComments={onOpenComments}
+              onToggleLike={onToggleLike}
+              onSharePost={onSharePost}
+            />
+          )
+        }
+
+        if (post.feedKind === "reel") {
+          return (
+            <FeedReelCard
+              key={`reel-${pid}`}
               post={post}
               user={user}
               likeMeta={likesByPost[pid] ?? EMPTY_LIKE_META}

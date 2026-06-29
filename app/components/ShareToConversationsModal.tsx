@@ -33,7 +33,7 @@ export type ShareToConversationsModalProps = {
   /** Share a feed/profile post in messages. */
   postId?: string | null
   /** Route profile wall posts to messages.profile_post_id instead of post_id. */
-  feedKind?: "trade" | "profile" | "achievement"
+  feedKind?: "trade" | "profile" | "achievement" | "reel"
   /** Optional post record for screenshot preview. */
   post?: { image_url?: string | null } | null
   /** When set, uploads PNG from this data URL and sends as image messages. */

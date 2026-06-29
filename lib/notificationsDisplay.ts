@@ -23,6 +23,7 @@ export type NotificationRecord = {
   trade_id: string | null
   profile_post_id: string | null
   achievement_post_id: string | null
+  reel_id: string | null
   content: string | null
   read: boolean
   created_at: string
@@ -42,6 +43,7 @@ export type LikeNotificationGroup = {
   trade_id: string | null
   profile_post_id: string | null
   achievement_post_id: string | null
+  reel_id: string | null
   notificationIds: string[]
   read: boolean
   latestAt: string
@@ -63,6 +65,7 @@ export type CommentNotificationGroup = {
   trade_id: string | null
   profile_post_id: string | null
   achievement_post_id: string | null
+  reel_id: string | null
   notificationIds: string[]
   read: boolean
   latestAt: string
@@ -160,12 +163,13 @@ export function senderDisplayName(
   )
 }
 
-export type EngagementTarget = "post" | "trade" | "achievement"
+export type EngagementTarget = "post" | "trade" | "achievement" | "reel"
 
 function engagementContentPostId(
   postId?: string | null,
   profilePostId?: string | null,
-  achievementPostId?: string | null
+  achievementPostId?: string | null,
+  reelId?: string | null
 ): string | null {
   if (postId != null && String(postId).trim() !== "") return String(postId)
   if (profilePostId != null && String(profilePostId).trim() !== "") {
@@ -174,6 +178,9 @@ function engagementContentPostId(
   if (achievementPostId != null && String(achievementPostId).trim() !== "") {
     return String(achievementPostId)
   }
+  if (reelId != null && String(reelId).trim() !== "") {
+    return String(reelId)
+  }
   return null
 }
 
@@ -181,8 +188,12 @@ export function engagementTarget(
   postId: string | null | undefined,
   tradeId: string | null | undefined,
   profilePostId?: string | null,
-  achievementPostId?: string | null
+  achievementPostId?: string | null,
+  reelId?: string | null
 ): EngagementTarget {
+  if (reelId != null && String(reelId).trim() !== "") {
+    return "reel"
+  }
   if (achievementPostId != null && String(achievementPostId).trim() !== "") {
     return "achievement"
   }
@@ -197,9 +208,16 @@ export function formatLikeGroupMessage(
   postId?: string | null,
   tradeId?: string | null,
   profilePostId?: string | null,
-  achievementPostId?: string | null
+  achievementPostId?: string | null,
+  reelId?: string | null
 ): string {
-  const noun = engagementTarget(postId, tradeId, profilePostId, achievementPostId)
+  const noun = engagementTarget(
+    postId,
+    tradeId,
+    profilePostId,
+    achievementPostId,
+    reelId
+  )
   const ordered = names.filter(Boolean)
   if (totalLikes <= 0) return `Someone liked your ${noun}`
   if (totalLikes === 1) {
@@ -252,6 +270,7 @@ export function groupLikeNotifications(
       trade_id: latest.trade_id,
       profile_post_id: latest.profile_post_id ?? null,
       achievement_post_id: latest.achievement_post_id ?? null,
+      reel_id: latest.reel_id ?? null,
       notificationIds: sorted.map((row) => row.id),
       read: sorted.every((row) => row.read),
       latestAt: latest.created_at,
@@ -266,9 +285,16 @@ export function formatCommentGroupTitle(
   postId?: string | null,
   tradeId?: string | null,
   profilePostId?: string | null,
-  achievementPostId?: string | null
+  achievementPostId?: string | null,
+  reelId?: string | null
 ): string {
-  const noun = engagementTarget(postId, tradeId, profilePostId, achievementPostId)
+  const noun = engagementTarget(
+    postId,
+    tradeId,
+    profilePostId,
+    achievementPostId,
+    reelId
+  )
   const n = Math.max(0, totalComments)
   if (n === 0) return `Someone commented on your ${noun}`
   if (n === 1) return `1 person commented on your ${noun}`
@@ -329,6 +355,7 @@ function engagementGroupKey(row: NotificationRecord): string {
   if (row.post_id) return `post:${row.post_id}`
   if (row.profile_post_id) return `profile_post:${row.profile_post_id}`
   if (row.achievement_post_id) return `achievement_post:${row.achievement_post_id}`
+  if (row.reel_id) return `reel:${row.reel_id}`
   if (row.trade_id) return `trade:${row.trade_id}`
   return `row:${row.id}`
 }
@@ -359,6 +386,7 @@ export function groupCommentNotifications(
       trade_id: latest.trade_id,
       profile_post_id: latest.profile_post_id ?? null,
       achievement_post_id: latest.achievement_post_id ?? null,
+      reel_id: latest.reel_id ?? null,
       notificationIds: sorted.map((row) => row.id),
       read: sorted.every((row) => row.read),
       latestAt: latest.created_at,
@@ -765,8 +793,16 @@ function feedContentHref(opts: {
   postId?: string | null
   tradeId?: string | null
   achievementPostId?: string | null
+  reelId?: string | null
   openComments?: boolean
 }): string {
+  const reelId = opts.reelId?.trim()
+  if (reelId) {
+    const params = new URLSearchParams({ reel: reelId })
+    if (opts.openComments) params.set("comments", "1")
+    return `/feed?${params.toString()}`
+  }
+
   const achievementPostId = opts.achievementPostId?.trim()
   if (achievementPostId) {
     const params = new URLSearchParams({ achievement: achievementPostId })
@@ -802,6 +838,7 @@ export function getGroupedNotificationHref(
       ),
       tradeId: card.trade_id,
       achievementPostId: card.achievement_post_id,
+      reelId: card.reel_id,
     })
   }
 
@@ -815,7 +852,10 @@ export function getGroupedNotificationHref(
       postId,
       tradeId: card.trade_id,
       achievementPostId: card.achievement_post_id,
-      openComments: Boolean(postId || card.achievement_post_id || card.trade_id),
+      reelId: card.reel_id,
+      openComments: Boolean(
+        postId || card.achievement_post_id || card.reel_id || card.trade_id
+      ),
     })
   }
 
@@ -881,6 +921,7 @@ export function getNotificationHref(
       ),
       tradeId: item.trade_id,
       achievementPostId: item.achievement_post_id,
+      reelId: item.reel_id,
     })
   }
 
@@ -895,7 +936,10 @@ export function getNotificationHref(
       postId,
       tradeId: n.trade_id,
       achievementPostId: n.achievement_post_id,
-      openComments: Boolean(postId || n.achievement_post_id || n.trade_id),
+      reelId: n.reel_id,
+      openComments: Boolean(
+        postId || n.achievement_post_id || n.reel_id || n.trade_id
+      ),
     })
   }
 

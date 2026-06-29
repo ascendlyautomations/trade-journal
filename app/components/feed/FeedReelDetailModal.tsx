@@ -1,32 +1,26 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react"
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MutableRefObject,
+} from "react"
 import DetailModalShell, {
   scrollModalCommentsPane,
 } from "@/app/components/ui/DetailModalShell"
-import DetailModalImage from "@/app/components/ui/DetailModalImage"
-import ImageLightbox from "@/app/components/ui/ImageLightbox"
 import { PostInteractionsEngagement } from "@/app/components/PostInteractions"
 import { CommentFocusCompactStrip } from "@/app/components/comments/CommentFocusCompactStrip"
 import MobileCommentFocusLayout from "@/app/components/comments/MobileCommentFocusLayout"
-import {
-  achievementFromPost,
-  isAchievementFeedPost,
-} from "@/lib/achievementPostEngagement"
 import { formatSocialTimestamp } from "@/lib/formatRelativeTime"
-import {
-  achievementImagePublicUrl,
-  profilePostPublicUrl,
-} from "@/lib/storagePublicUrl"
-import { isRoomSharePost } from "@/lib/roomSharePost"
-import FeedAchievementDetailMeta from "./FeedAchievementDetailMeta"
 import FeedCommentsSection from "./FeedCommentsSection"
 import FeedPostHeader from "./FeedPostHeader"
-import FeedRoomShareCard from "./FeedRoomShareCard"
 import { feedCommentTarget } from "./feedPostHelpers"
 import type { FeedLikeMeta } from "./FeedPostCard"
 
-type FeedProfilePostDetailModalProps = {
+type FeedReelDetailModalProps = {
   post: any
   user: any
   comments: any[]
@@ -42,7 +36,7 @@ type FeedProfilePostDetailModalProps = {
   onSharePost: (post: any) => void
 }
 
-export default function FeedProfilePostDetailModal({
+export default function FeedReelDetailModal({
   post,
   user,
   comments,
@@ -56,12 +50,17 @@ export default function FeedProfilePostDetailModal({
   onSubmitComment,
   onDeleteComment,
   onSharePost,
-}: FeedProfilePostDetailModalProps) {
+}: FeedReelDetailModalProps) {
   const pid = String(post.id)
+  const videoRef = useRef<HTMLVideoElement>(null)
   const commentsScrollRef = useRef<HTMLDivElement>(null)
-  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
   const [commentsFocused, setCommentsFocused] = useState(
     () => Boolean(openCommentsRef.current[pid])
+  )
+
+  const commentTarget = useMemo(
+    () => feedCommentTarget(pid, post),
+    [pid, post]
   )
 
   const scrollCommentsIntoView = useCallback(() => {
@@ -83,68 +82,45 @@ export default function FeedProfilePostDetailModal({
     }
   }, [openCommentsRef, pid, scrollCommentsIntoView])
 
-  const isAchievement = isAchievementFeedPost(post)
-  const achievement = useMemo(
-    () => (isAchievement ? achievementFromPost(post) : null),
-    [isAchievement, post]
-  )
-  const achievementImageSrc = useMemo(
-    () =>
-      achievement ? achievementImagePublicUrl(achievement.image_url) : null,
-    [achievement]
-  )
-
   useEffect(() => {
-    if (!achievementImageSrc) return
-    const img = new Image()
-    img.src = achievementImageSrc
-  }, [achievementImageSrc])
+    return () => {
+      videoRef.current?.pause()
+    }
+  }, [])
 
-  const modalPostDetails = useMemo(() => {
+  const modalDetails = useMemo(() => {
     const rawAvatar = post.profiles?.avatar_url
     const avatarUrl =
       rawAvatar != null && String(rawAvatar).trim() !== ""
         ? String(rawAvatar).trim()
         : null
-    const content =
-      post.content != null && String(post.content).trim() !== ""
-        ? String(post.content).trim()
+    const caption =
+      post.caption != null && String(post.caption).trim() !== ""
+        ? String(post.caption).trim()
         : null
 
     return {
-      imageSrc: profilePostPublicUrl(post.image_url),
-      content,
-      createdAtLabel: formatSocialTimestamp(post.created_at),
       avatarUrl,
       username: post.profiles?.username || "User",
+      caption,
+      createdAtLabel: formatSocialTimestamp(post.created_at),
     }
   }, [post])
 
-  const splitMedia = isAchievement && achievement ? (
-    achievementImageSrc ? (
-      <DetailModalImage
-        src={achievementImageSrc}
-        onClick={setLightboxUrl}
-      />
-    ) : (
-      <div className="flex h-full w-full items-center justify-center p-6 text-sm text-white/45">
-        No certificate image
-      </div>
-    )
-  ) : isRoomSharePost(post) ? (
-    <div className="flex h-full w-full items-center justify-center p-4">
-      <FeedRoomShareCard
-        post={post}
-        viewerUserId={user?.id ?? null}
-        className="w-full max-w-md"
+  const splitMedia = (
+    <div className="flex h-full w-full items-center justify-center bg-black p-4">
+      <video
+        ref={videoRef}
+        src={String(post.video_url)}
+        poster={String(post.thumbnail_url)}
+        className="max-h-full max-w-full rounded-lg object-contain"
+        style={{ aspectRatio: "9/16" }}
+        playsInline
+        controls
+        preload="metadata"
       />
     </div>
-  ) : modalPostDetails.imageSrc != null ? (
-    <DetailModalImage
-      src={modalPostDetails.imageSrc}
-      onClick={setLightboxUrl}
-    />
-  ) : null
+  )
 
   const splitPanel = (
     <MobileCommentFocusLayout
@@ -152,23 +128,17 @@ export default function FeedProfilePostDetailModal({
       header={
         <FeedPostHeader
           userId={post.user_id}
-          avatarUrl={modalPostDetails.avatarUrl}
-          username={modalPostDetails.username}
+          avatarUrl={modalDetails.avatarUrl}
+          username={modalDetails.username}
         />
       }
       compactHeader={
         <CommentFocusCompactStrip
           userId={String(post.user_id ?? "")}
-          username={modalPostDetails.username}
-          avatarUrl={modalPostDetails.avatarUrl}
+          username={modalDetails.username}
+          avatarUrl={modalDetails.avatarUrl}
           timestamp={post.created_at}
-          meta={
-            isAchievement ? (
-              <span className="text-amber-400/90">Achievement</span>
-            ) : (
-              <span className="text-sky-400/90">Post</span>
-            )
-          }
+          meta={<span className="text-violet-400/90">Reel</span>}
           onExpand={() => setCommentsFocused(false)}
         />
       }
@@ -185,25 +155,18 @@ export default function FeedProfilePostDetailModal({
         />
       }
       collapsibleContent={
-        isAchievement && achievement ? (
-          <FeedAchievementDetailMeta
-            achievement={achievement}
-            postedAt={post.created_at}
-          />
-        ) : (
         <div className="space-y-3 border-b border-white/10 px-4 py-4 text-sm">
-          {modalPostDetails.content ? (
+          {modalDetails.caption ? (
             <p className="whitespace-pre-wrap leading-relaxed text-white">
-              {modalPostDetails.content}
+              {modalDetails.caption}
             </p>
           ) : null}
-          <p className="text-xs text-white/40">{modalPostDetails.createdAtLabel}</p>
+          <p className="text-xs text-white/40">{modalDetails.createdAtLabel}</p>
         </div>
-        )
       }
       comments={
         <FeedCommentsSection
-          target={feedCommentTarget(pid, post)}
+          target={commentTarget}
           user={user}
           comments={comments}
           commentSubmitting={commentSubmitting}
@@ -219,21 +182,14 @@ export default function FeedProfilePostDetailModal({
   )
 
   return (
-    <>
-      <DetailModalShell
-        ariaLabel={isAchievement ? "Achievement details" : "Post details"}
-        title={isAchievement ? "Achievement" : "Post"}
-        layout="split"
-        onClose={onClose}
-        splitMedia={splitMedia}
-        splitPanel={splitPanel}
-        suppressMobileSplitMedia={commentsFocused}
-      />
-      <ImageLightbox
-        imageUrl={lightboxUrl}
-        onClose={() => setLightboxUrl(null)}
-        alt={achievement?.title ?? "Achievement certificate"}
-      />
-    </>
+    <DetailModalShell
+      ariaLabel="Reel details"
+      title="Reel"
+      layout="split"
+      onClose={onClose}
+      splitMedia={splitMedia}
+      splitPanel={splitPanel}
+      suppressMobileSplitMedia={commentsFocused}
+    />
   )
 }

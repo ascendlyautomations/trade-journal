@@ -2,6 +2,7 @@
 
 import type { ShareConversationRow } from "@/lib/shareToConversations"
 import type { ShareProfileRow } from "@/lib/shareRecipientSearch"
+import { ProfileAvatarImg } from "@/app/components/SafeProfileAvatar"
 
 type ShareRecipientPickerProps = {
   conversations: ShareConversationRow[]
@@ -68,12 +69,9 @@ export default function ShareRecipientPicker({
                       selectedConversationIds.includes(conv.id)
                     )}
                   >
-                    <img
-                      src={conv.avatar_url || "/default-avatar.png"}
-                      className="w-8 h-8 rounded-full object-cover"
-                      alt=""
-                      loading="lazy"
-                      decoding="async"
+                    <ProfileAvatarImg
+                      src={conv.avatar_url}
+                      className="h-8 w-8"
                     />
                     <span>
                       {conv.name || (conv.is_group ? "Group Chat" : "Chat")}
@@ -101,12 +99,9 @@ export default function ShareRecipientPicker({
                       selectedUserIds.includes(profile.id)
                     )}
                   >
-                    <img
-                      src={profile.avatar_url || "/default-avatar.png"}
-                      className="w-8 h-8 rounded-full object-cover"
-                      alt=""
-                      loading="lazy"
-                      decoding="async"
+                    <ProfileAvatarImg
+                      src={profile.avatar_url}
+                      className="h-8 w-8"
                     />
                     <div className="flex flex-col text-left">
                       <span>{profile.name || profile.username}</span>
@@ -145,12 +140,9 @@ export default function ShareRecipientPicker({
                   selectedConversationIds.includes(conv.id)
                 )}
               >
-                <img
-                  src={conv.avatar_url || "/default-avatar.png"}
-                  className="w-8 h-8 rounded-full object-cover"
-                  alt=""
-                  loading="lazy"
-                  decoding="async"
+                <ProfileAvatarImg
+                  src={conv.avatar_url}
+                  className="h-8 w-8"
                 />
                 <span>
                   {conv.name || (conv.is_group ? "Group Chat" : "Chat")}

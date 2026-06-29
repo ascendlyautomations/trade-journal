@@ -3933,9 +3933,7 @@ function CommunityContent() {
                         const isSelf = member.user_id === user?.id
                         const displayName = member.profiles?.name?.trim()
                         const username = member.profiles?.username?.trim()
-                        const avatarSrc =
-                          member.profiles?.avatar_url?.trim() ||
-                          "/default-avatar.png"
+                        const avatarSrc = member.profiles?.avatar_url
                         const isRemoving = removingMemberId === member.user_id
                         const isBanning = banningMemberId === member.user_id
 
@@ -4031,9 +4029,7 @@ function CommunityContent() {
                         {filteredBannedUsers.map((ban) => {
                           const displayName = ban.profiles?.name?.trim()
                           const username = ban.profiles?.username?.trim()
-                          const avatarSrc =
-                            ban.profiles?.avatar_url?.trim() ||
-                            "/default-avatar.png"
+                          const avatarSrc = ban.profiles?.avatar_url
                           const isUnbanning = unbanningBanId === ban.id
 
                           return (

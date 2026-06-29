@@ -15,9 +15,11 @@ export type FeedSessionSnapshot = {
   tradePage: number
   profilePage: number
   achievementPage: number
+  reelPage: number
   tradeExhausted: boolean
   profileExhausted: boolean
   achievementExhausted: boolean
+  reelExhausted: boolean
   hasLoaded: boolean
   scrollY: number
 }
