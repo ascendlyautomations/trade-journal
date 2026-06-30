@@ -153,6 +153,36 @@ export function tradeMatchesDashboardAccountFilters(
   return true
 }
 
+/** Last segment of `name|size|accountId` dashboard account filter keys. */
+export function accountIdFromDashboardAccountFilterKey(
+  accountFilter: string | undefined
+): string | null {
+  if (!accountFilter || accountFilter === "all") return null
+  const segments = accountFilter.split("|")
+  const id = segments[segments.length - 1]?.trim()
+  return id || null
+}
+
+/** Prop Firm dashboard link — prop firm account selected OR Eval/Funded mode. */
+export function shouldShowPropFirmDashboardLink(args: {
+  accountFilter: string
+  accountTypeFilter: string
+  accountById: Record<string, { category?: string | null } | null | undefined>
+}): boolean {
+  const { accountFilter, accountTypeFilter, accountById } = args
+
+  if (accountTypeFilter === "eval" || accountTypeFilter === "funded") {
+    return true
+  }
+
+  if (!accountFilter || accountFilter === "all") return false
+
+  const accountId = accountIdFromDashboardAccountFilterKey(accountFilter)
+  if (!accountId) return false
+
+  return accountById[accountId]?.category === "Prop Firm"
+}
+
 export function sanitizeHydratedDashboardFilters(args: {
   prefs: Partial<DashboardGearPersistedPrefs>
   trades: TradeForAccountFilter[]

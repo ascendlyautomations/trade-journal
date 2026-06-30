@@ -9,10 +9,13 @@ import {
   resolveNewAchievementDateInputValue,
 } from "@/lib/achievementDate"
 import {
+  ACHIEVEMENT_TYPE,
+  ACHIEVEMENT_TYPE_OPTIONS,
   type Achievement,
   badgeKeyFromType,
+  canonicalAchievementType,
   categoryFromType,
-  normalizeAchievementType,
+  isPayoutAchievementType,
 } from "@/lib/achievements"
 
 export type AchievementFormState = {
@@ -24,10 +27,14 @@ export type AchievementFormState = {
   image_url: string | null
   is_public: boolean
   is_featured: boolean
+  firm?: string
+  account_name?: string
+  account_size?: string
+  metadata?: Record<string, unknown> | null
 }
 
 export const EMPTY_ACHIEVEMENT_FORM: AchievementFormState = {
-  achievement_type: "payout",
+  achievement_type: ACHIEVEMENT_TYPE.LIVE_TRADING_PAYOUT,
   title: "",
   description: "",
   payout_amount: "",
@@ -92,7 +99,9 @@ export default function AchievementUploadModal({
         editingAchievement.achieved_at
       )
       setForm({
-        achievement_type: normalizeAchievementType(editingAchievement.achievement_type),
+        achievement_type: canonicalAchievementType(
+          editingAchievement.achievement_type
+        ),
         title: editingAchievement.title || "",
         description: editingAchievement.description || "",
         payout_amount:
@@ -104,6 +113,10 @@ export default function AchievementUploadModal({
         image_url: editingAchievement.image_url || null,
         is_public: !!editingAchievement.is_public,
         is_featured: !!editingAchievement.is_featured,
+        firm: editingAchievement.firm ?? undefined,
+        account_name: editingAchievement.account_name ?? undefined,
+        account_size: editingAchievement.account_size ?? undefined,
+        metadata: editingAchievement.metadata ?? null,
       })
     } else {
       const defaultDate = resolveNewAchievementDateInputValue(initialValues)
@@ -151,11 +164,12 @@ export default function AchievementUploadModal({
 
   async function saveAchievement() {
     if (!userId || !form.title.trim() || !form.achievement_type.trim()) return
-    const normalizedType = normalizeAchievementType(form.achievement_type)
-    const payoutAmount =
-      normalizedType === "payout" ? Number(form.payout_amount) : null
+    const achievementType = canonicalAchievementType(form.achievement_type)
+    const payoutAmount = isPayoutAchievementType(achievementType)
+      ? Number(form.payout_amount)
+      : null
     if (
-      normalizedType === "payout" &&
+      isPayoutAchievementType(achievementType) &&
       (!Number.isFinite(payoutAmount) || (payoutAmount as number) <= 0)
     ) {
       setError("Please enter a valid payout amount.")
@@ -205,30 +219,31 @@ export default function AchievementUploadModal({
 
     const payload = {
       user_id: userId,
-      achievement_type: normalizedType,
+      achievement_type: achievementType,
       title: form.title.trim(),
       description: form.description.trim() || null,
-      badge_key: badgeKeyFromType(form.achievement_type),
-      category: categoryFromType(form.achievement_type),
+      badge_key: badgeKeyFromType(achievementType),
+      category: categoryFromType(achievementType),
       tier: null,
-      value_numeric: normalizedType === "payout" ? payoutAmount : null,
+      value_numeric: isPayoutAchievementType(achievementType) ? payoutAmount : null,
       value_text:
-        normalizedType === "payout" && payoutAmount != null
+        isPayoutAchievementType(achievementType) && payoutAmount != null
           ? `+$${Math.abs(payoutAmount).toLocaleString(undefined, {
               minimumFractionDigits: 0,
               maximumFractionDigits: 2,
             })}`
           : null,
-      currency: normalizedType === "payout" ? "USD" : null,
+      currency: isPayoutAchievementType(achievementType) ? "USD" : null,
       account_type: null,
-      account_name: null,
-      account_size: null,
+      account_name: form.account_name?.trim() || null,
+      account_size: form.account_size?.trim() || null,
       mode: null,
-      firm: null,
+      firm: form.firm?.trim() || null,
       achieved_at: form.achieved_at || null,
       image_url: imageUrl,
       is_public: form.is_public,
       is_featured: form.is_featured,
+      metadata: form.metadata ?? null,
     }
 
     const query = editingId
@@ -294,9 +309,11 @@ export default function AchievementUploadModal({
               }
               className="mt-1.5 h-11 w-full rounded-lg border border-white/15 bg-[#0a1329] px-3 text-sm text-white outline-none transition focus:border-blue-400/60 focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-70"
             >
-              <option value="payout">Payout</option>
-              <option value="passed_eval">Passed Eval</option>
-              <option value="milestone">Milestone</option>
+              {ACHIEVEMENT_TYPE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
             </select>
           </label>
           <label className="text-xs text-gray-300">
@@ -309,7 +326,7 @@ export default function AchievementUploadModal({
               className="mt-1.5 h-11 w-full rounded-lg border border-white/15 bg-[#0a1329] px-3 text-sm text-white placeholder:text-slate-500 outline-none transition focus:border-blue-400/60 focus:ring-2 focus:ring-blue-500/20"
             />
           </label>
-          {normalizeAchievementType(form.achievement_type) === "payout" ? (
+          {isPayoutAchievementType(form.achievement_type) ? (
             <label className="text-xs text-gray-300">
               Payout Amount (USD)
               <input

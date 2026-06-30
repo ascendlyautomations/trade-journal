@@ -19,7 +19,7 @@
  * | Profit target % | Payout cycle | `cycleProgress.progressPercent` |
  * | Drawdown used % | Payout cycle | `cycleProgress.ddPercent` |
  * | Account status | Payout cycle | `cycleProgress.status` |
- * | Today P&L | Calendar day | EST trading-day bucket from all trades (`lifetimeDailyMetrics.todayPnL`) |
+ * | Today P&L | Futures trading day | Current session bucket from all trades (`lifetimeDailyMetrics.todayPnL`) |
  * | Daily performance list | Lifetime | All prop-firm trading days (`lifetimeDailyMetrics.dailyRows`) |
  *
  * Payout cycle boundaries come from `account_payout_cycles` (see `propfirmPayoutCycles.ts`).
@@ -34,6 +34,7 @@ export type PropfirmTrade = {
   date?: string | null
   trade_date?: string | null
   entry_time?: string | null
+  exit_time?: string | null
   created_at?: string | null
 }
 
@@ -42,6 +43,8 @@ export type PropfirmAccountRules = {
   consistency?: number | string | null
   max_drawdown?: number | string | null
   profit_target?: number | string | null
+  winning_days?: number | string | null
+  winning_day_threshold?: number | string | null
 }
 
 export type TrailingDrawdownResult = {
@@ -292,50 +295,91 @@ const INACTIVE_CONSISTENCY_RULE: ConsistencyRuleResult = {
   ruleActive: false,
 }
 
-function addCalendarDay(dateKey: string): string | null {
-  const [year, month, day] = dateKey.split("-").map(Number)
-  if (![year, month, day].every(Number.isFinite)) return null
-  const d = new Date(Date.UTC(year, month - 1, day + 1))
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(
-    2,
-    "0"
-  )}-${String(d.getUTCDate()).padStart(2, "0")}`
+function resolvePropfirmTimeField(
+  timeRaw: string,
+  tradeDate: string
+): string | null {
+  const trimmed = timeRaw.trim()
+  if (!trimmed) return null
+
+  const parsed = new Date(trimmed)
+  if (!Number.isNaN(parsed.getTime())) return trimmed
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(tradeDate)) return null
+
+  const timeOnly = /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec(trimmed)
+  if (!timeOnly) return null
+
+  const hour = timeOnly[1].padStart(2, "0")
+  const minute = timeOnly[2]
+  const second = timeOnly[3] ?? "00"
+  return `${tradeDate}T${hour}:${minute}:${second}`
 }
 
-function resolvePropfirmTradingTimeSource(trade: {
+/** Exit timestamp for futures session bucketing; falls back to entry, then trade_date. */
+export function resolvePropfirmTradingTimeSource(trade: {
   date?: string | null
   trade_date?: string | null
   entry_time?: string | null
+  exit_time?: string | null
 }): string | null {
   const tradeDate = String(trade.trade_date ?? trade.date ?? "")
     .trim()
     .slice(0, 10)
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(tradeDate)) return null
+
+  const exitTime = String(trade.exit_time ?? "").trim()
+  if (exitTime) {
+    const resolved = resolvePropfirmTimeField(exitTime, tradeDate)
+    if (resolved) return resolved
+  }
 
   const entryTime = String(trade.entry_time ?? "").trim()
-  if (!entryTime) return tradeDate
+  if (entryTime) {
+    const resolved = resolvePropfirmTimeField(entryTime, tradeDate)
+    if (resolved) return resolved
+  }
 
-  const parsedEntry = new Date(entryTime)
-  if (!Number.isNaN(parsedEntry.getTime())) return entryTime
-
-  const timeOnly = /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec(entryTime)
-  if (!timeOnly) return tradeDate
-
-  const hour = Number(timeOnly[1])
-  if (!Number.isFinite(hour)) return tradeDate
-
-  return hour >= 18 ? addCalendarDay(tradeDate) : tradeDate
+  if (/^\d{4}-\d{2}-\d{2}$/.test(tradeDate)) return tradeDate
+  return null
 }
 
-/** Futures-style session day key using trade_date/entry_time, never import created_at. */
+/** Futures session day key from the trade exit timestamp (6 PM ET rollover). */
 export function getPropfirmTradingDay(trade: {
   date?: string | null
   trade_date?: string | null
   entry_time?: string | null
+  exit_time?: string | null
 }): string | null {
   const source = resolvePropfirmTradingTimeSource(trade)
   if (!source) return null
   return getTradingDayKey(source)
+}
+
+/** Whether a day's net P/L counts as a winning day for prop firm rules. */
+export function isWinningTradingDay(
+  dailyNetPnL: number,
+  winningDayThreshold?: number | string | null
+): boolean {
+  const raw = winningDayThreshold
+  const threshold =
+    raw != null && raw !== "" && Number.isFinite(Number(raw))
+      ? Number(raw)
+      : null
+
+  if (threshold != null && threshold > 0) {
+    return dailyNetPnL >= threshold
+  }
+
+  return dailyNetPnL > 0
+}
+
+export function countWinningDays(
+  dailyPnLMap: Record<string, number>,
+  winningDayThreshold?: number | string | null
+): number {
+  return Object.values(dailyPnLMap).filter((pnl) =>
+    isWinningTradingDay(pnl, winningDayThreshold)
+  ).length
 }
 
 /** Parse `accounts.account_size` (number or strings like "50K", "50,000") to dollars. */
@@ -564,13 +608,22 @@ export function computeTrailingDrawdown(
   }
 }
 
+/** Whether the account has an active consistency rule (DB column `consistency`). */
+export function isPropfirmConsistencyRuleRequired(
+  consistencyPercent?: number | string | null
+): boolean {
+  if (consistencyPercent == null || consistencyPercent === "") return false
+  const pct = Number(consistencyPercent)
+  return Number.isFinite(pct) && pct > 0
+}
+
 /** `consistency_percent` from account rules (DB column `consistency`). */
 export function computeConsistencyRule(
   trades: PropfirmTrade[],
-  consistencyPercent: number
+  consistencyPercent?: number | string | null
 ): ConsistencyRuleResult {
-  const pct = Number(consistencyPercent)
-  const ruleActive = Number.isFinite(pct) && pct > 0
+  const ruleActive = isPropfirmConsistencyRuleRequired(consistencyPercent)
+  const pct = ruleActive ? Number(consistencyPercent) : 0
 
   const winningTrades = trades.filter((t) => Number(t.pnl) > 0)
   const totalProfit = winningTrades.reduce(
@@ -601,16 +654,14 @@ export function computeTotalPnL(trades: PropfirmTrade[]): number {
   )
 }
 
+/** Current futures trading day key (6 PM ET session rollover). */
+export function getCurrentPropfirmTradingDayKey(date: Date = new Date()): string {
+  return getTradingDayKey(date) ?? ""
+}
+
+/** @deprecated Use {@link getCurrentPropfirmTradingDayKey} — kept for test imports. */
 export function getEstCalendarDayKey(date: Date = new Date()): string {
-  const nowEST = new Date(
-    date.toLocaleString("en-US", {
-      timeZone: "America/New_York",
-    })
-  )
-  return `${nowEST.getFullYear()}-${String(nowEST.getMonth() + 1).padStart(
-    2,
-    "0"
-  )}-${String(nowEST.getDate()).padStart(2, "0")}`
+  return getCurrentPropfirmTradingDayKey(date)
 }
 
 export function buildDailyPnLMap(
@@ -629,14 +680,15 @@ export function buildDailyPnLMap(
 
 export function computeDailyMetrics(
   trades: PropfirmTrade[],
-  now: Date = new Date()
+  now: Date = new Date(),
+  winningDayThreshold?: number | string | null
 ): DailyMetricsResult {
   const dailyPnLMap = buildDailyPnLMap(trades)
   const dailyRows = Object.entries(dailyPnLMap).sort(([a], [b]) =>
     a.localeCompare(b)
   )
-  const winningDays = Object.values(dailyPnLMap).filter((pnl) => pnl > 0).length
-  const todayKey = getEstCalendarDayKey(now)
+  const winningDays = countWinningDays(dailyPnLMap, winningDayThreshold)
+  const todayKey = getCurrentPropfirmTradingDayKey(now)
   const todayPnL = dailyPnLMap[todayKey] || 0
   const dayPnLValues = Object.values(dailyPnLMap)
   const worstDay = dayPnLValues.length > 0 ? Math.min(...dayPnLValues) : 0
@@ -652,20 +704,19 @@ export function computeDailyMetrics(
   }
 }
 
-/** Resolve a trade to epoch ms for payout-cycle cutoff comparisons. */
+/** Resolve a trade to epoch ms for payout-cycle cutoff comparisons (exit time first). */
 export function getPropfirmTradeEpochMs(trade: PropfirmTrade): number | null {
-  const tradeDate = String(trade.trade_date ?? trade.date ?? "")
-    .trim()
-    .slice(0, 10)
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(tradeDate)) return null
+  const source = resolvePropfirmTradingTimeSource(trade)
+  if (!source) return null
 
-  const entryTime = String(trade.entry_time ?? "").trim()
-  if (entryTime) {
-    const parsedEntry = new Date(entryTime)
-    if (!Number.isNaN(parsedEntry.getTime())) return parsedEntry.getTime()
+  const parsed = new Date(source)
+  if (!Number.isNaN(parsed.getTime())) return parsed.getTime()
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(source)) {
+    return new Date(`${source}T12:00:00Z`).getTime()
   }
 
-  return new Date(`${tradeDate}T12:00:00Z`).getTime()
+  return null
 }
 
 /** Trades at or after the payout cycle start timestamp (immediate reset on Record Payout). */
@@ -748,7 +799,12 @@ export function computePropfirmAccountMetrics(
   }
 
   const uniqueTrades = dedupeTradesById(trades)
-  const lifetimeDailyMetrics = computeDailyMetrics(uniqueTrades)
+  const winningDayThreshold = account?.winning_day_threshold ?? null
+  const lifetimeDailyMetrics = computeDailyMetrics(
+    uniqueTrades,
+    new Date(),
+    winningDayThreshold
+  )
   const totalPnL = computeTotalPnL(uniqueTrades)
 
   const lifetimeTrailingMetrics = account
@@ -763,7 +819,11 @@ export function computePropfirmAccountMetrics(
     uniqueTrades,
     cycleContext.startedAt
   )
-  const cycleDailyMetrics = computeDailyMetrics(cycleTrades)
+  const cycleDailyMetrics = computeDailyMetrics(
+    cycleTrades,
+    new Date(),
+    winningDayThreshold
+  )
   const trailingOptions: TrailingDrawdownOptions | undefined = account
     ? {
         accountBaseBalance: startingBalance,
@@ -782,7 +842,7 @@ export function computePropfirmAccountMetrics(
       )
     : EMPTY_TRAILING_DRAWDOWN
   const cycleConsistencyMetrics = account
-    ? computeConsistencyRule(cycleTrades, Number(account.consistency) || 0)
+    ? computeConsistencyRule(cycleTrades, account.consistency)
     : INACTIVE_CONSISTENCY_RULE
 
   const displayCurrentBalance = cycleContext.startedAt

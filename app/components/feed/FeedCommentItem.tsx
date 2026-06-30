@@ -5,8 +5,10 @@ import { ProfileAvatarLink } from "@/app/components/ProfileLink"
 import { CommentAuthorLine } from "@/app/components/comments/CommentAuthorLine"
 import CommentDeleteMenu from "@/app/components/comments/CommentDeleteMenu"
 import CommentContent from "@/app/components/comments/CommentContent"
+import CommentLikeActionButton from "@/app/components/comments/CommentLikeActionButton"
 import ReplyActionButton from "@/app/components/replies/ReplyActionButton"
 import { commentElementId } from "@/lib/replyReference"
+import type { CommentLikeMeta } from "@/lib/commentLikes"
 
 type FeedCommentItemProps = {
   comment: any
@@ -14,6 +16,9 @@ type FeedCommentItemProps = {
   currentUserId?: string | null
   avatarClassName?: string
   stopPropagation?: boolean
+  likeMeta?: CommentLikeMeta
+  onToggleLike?: (comment: any) => void
+  likeDisabled?: boolean
   onReply?: (comment: any) => void
   onRequestDelete?: (comment: any) => void
   deleteMenuClassName?: string
@@ -25,6 +30,9 @@ function FeedCommentItem({
   currentUserId,
   avatarClassName = "h-8 w-8 shrink-0 rounded-full object-cover",
   stopPropagation = false,
+  likeMeta,
+  onToggleLike,
+  likeDisabled = false,
   onReply,
   onRequestDelete,
   deleteMenuClassName,
@@ -75,7 +83,22 @@ function FeedCommentItem({
           mentionUserIdsByUsername={mentionUserIdsByUsername}
           stopPropagation={stopPropagation}
         />
-        {onReply ? (
+        {onToggleLike ? (
+          <div className="mt-0.5 flex items-center gap-3">
+            <CommentLikeActionButton
+              meta={likeMeta ?? { count: 0, liked: false }}
+              disabled={likeDisabled}
+              onToggle={() => onToggleLike(comment)}
+              className="px-0 py-0"
+            />
+            {onReply ? (
+              <ReplyActionButton
+                onReply={() => onReply(comment)}
+                className="px-0 py-0"
+              />
+            ) : null}
+          </div>
+        ) : onReply ? (
           <ReplyActionButton
             onReply={() => onReply(comment)}
             className="mt-0.5 px-0 py-0"

@@ -3,7 +3,7 @@
 import type { ChangeEvent } from "react"
 import Link from "next/link"
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { useSearchParams } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { supabase } from "../../../lib/supabaseClient"
 import { feedbackPresets } from "@/lib/feedbackPresets"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
@@ -23,7 +23,6 @@ import {
   ACHIEVEMENT_POST_COMMENT_INSERT_SELECT,
   FEED_ACHIEVEMENT_POSTS_SELECT,
   achievementPostOwnerUserId,
-  fetchAchievementPostById,
   insertAchievementPostCommentNotifications,
   insertAchievementPostLikeNotification,
   isAchievementFeedPost,
@@ -78,13 +77,13 @@ import {
   fetchTradeFeedBatch,
   fetchAchievementFeedBatch,
   fetchReelFeedBatch,
-  fetchProfileFeedPostById,
-  fetchTradeFeedPostById,
   topUpMergedFeedBuffer,
 } from "@/lib/feedContent"
 import {
   readFeedSession,
   writeFeedSession,
+  patchFeedReelInSessionsForUser,
+  removeFeedReelFromSessionsForUser,
   type FeedSessionSnapshot,
 } from "@/lib/feedSessionCache"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
@@ -99,15 +98,22 @@ import {
 import {
   REEL_COMMENT_INSERT_SELECT,
   FEED_REELS_SELECT,
-  fetchReelFeedPostById,
+  fetchReelLikeMetaByIds,
   insertReelCommentNotifications,
-  insertReelLikeNotification,
   isReelFeedPost,
   queryReelComments,
   reelOwnerUserId,
+  toggleReelLike,
   withInsertedReelParentCommentId,
 } from "@/lib/reelEngagement"
 import { useUserProfile } from "@/lib/UserProfileProvider"
+import ReelComposerModal from "@/app/components/profile/ReelComposerModal"
+import { deleteReel, type ReelRow } from "@/lib/reels"
+import {
+  feedDeepLinkSessionKey,
+  fetchFeedDeepLinkContent,
+  parseFeedDeepLinkTarget,
+} from "@/lib/feedDeepLink"
 
 /** Auto-advance each slide (Instagram-style). */
 const STORY_SLIDE_MS = 7000
@@ -127,6 +133,8 @@ export default function FeedPage() {
 
 function FeedPageContent() {
   const searchParams = useSearchParams()
+  const router = useRouter()
+  const pathname = usePathname()
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const { user, profile, loading: profileLoading } = useUserProfile()
   const authChecked = !!user?.id
@@ -165,7 +173,11 @@ function FeedPageContent() {
   commentsByPostRef.current = commentsByPost
   const [commentSubmitting, setCommentSubmitting] = useState<Record<string, boolean>>({})
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null)
+  /** Modal-owned post data for URL deep links — independent of the feed array. */
+  const [feedModalPost, setFeedModalPost] = useState<FeedItem | null>(null)
   const [sharePostId, setSharePostId] = useState<string | null>(null)
+  const [openReelMenuId, setOpenReelMenuId] = useState<string | null>(null)
+  const [editingReel, setEditingReel] = useState<ReelRow | null>(null)
   const [followingStoryUserIds, setFollowingStoryUserIds] = useState<string[]>(
     []
   )
@@ -232,6 +244,17 @@ function FeedPageContent() {
     },
     [buildFeedSnapshot]
   )
+
+  const clearFeedDeepLinkParams = useCallback(() => {
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete("post")
+    params.delete("trade")
+    params.delete("achievement")
+    params.delete("reel")
+    params.delete("comments")
+    const qs = params.toString()
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+  }, [pathname, router, searchParams])
 
   const draftSyncRef = useRef<Record<string, string>>({})
   const openCommentsRef = useRef<Record<string, boolean>>({})
@@ -1302,6 +1325,62 @@ function FeedPageContent() {
   }, [user?.id, mode, contentType, loadEngagementForPosts, persistFeedSnapshot])
 
   useEffect(() => {
+    if (!user?.id) return
+
+    const userId = user.id
+    const reelIds = postsRef.current
+      .filter((p) => isReelFeedPost(p))
+      .map((p) => String(p.id))
+
+    if (reelIds.length === 0) return
+
+    const channel = supabase.channel(`feed-reel-likes-${userId}`)
+
+    const refreshReelLike = (reelId: string) => {
+      void (async () => {
+        const metaById = await fetchReelLikeMetaByIds(
+          supabase,
+          [reelId],
+          userId
+        )
+        const next = metaById[reelId]
+        if (!next) return
+
+        setLikesByPost((prev) => {
+          const merged = { ...prev, [reelId]: next }
+          persistFeedSnapshot(
+            postsRef.current,
+            merged,
+            commentsByPostRef.current
+          )
+          return merged
+        })
+      })()
+    }
+
+    for (const reelId of reelIds) {
+      channel.on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "reel_likes",
+          filter: `reel_id=eq.${reelId}`,
+        },
+        () => {
+          refreshReelLike(reelId)
+        }
+      )
+    }
+
+    channel.subscribe()
+
+    return () => {
+      void supabase.removeChannel(channel)
+    }
+  }, [user?.id, posts, persistFeedSnapshot])
+
+  useEffect(() => {
     const handleScroll = () => {
       scrollYRef.current = window.scrollY
       const key = feedInitKeyRef.current
@@ -1320,15 +1399,27 @@ function FeedPageContent() {
     return () => window.removeEventListener("scroll", handleScroll)
   }, [loadPosts])
 
-  const handleSelectPost = useCallback((post: any) => {
-    setSelectedPostId(String(post.id))
-  }, [])
+  const handleSelectPost = useCallback(
+    (post: any) => {
+      setFeedModalPost(null)
+      feedDeepLinkHandledRef.current = null
+      clearFeedDeepLinkParams()
+      setSelectedPostId(String(post.id))
+    },
+    [clearFeedDeepLinkParams]
+  )
 
-  const handleOpenPostComments = useCallback((post: any) => {
-    const pid = String(post.id)
-    openCommentsRef.current[pid] = true
-    setSelectedPostId(pid)
-  }, [])
+  const handleOpenPostComments = useCallback(
+    (post: any) => {
+      const pid = String(post.id)
+      openCommentsRef.current[pid] = true
+      setFeedModalPost(null)
+      feedDeepLinkHandledRef.current = null
+      clearFeedDeepLinkParams()
+      setSelectedPostId(pid)
+    },
+    [clearFeedDeepLinkParams]
+  )
 
   const handleSharePost = useCallback((post: any) => {
     setSharePostId(String(post.id))
@@ -1336,11 +1427,115 @@ function FeedPageContent() {
 
   const handleCloseDetailModal = useCallback(() => {
     setSelectedPostId(null)
-  }, [])
+    setFeedModalPost(null)
+    feedDeepLinkHandledRef.current = null
+    clearFeedDeepLinkParams()
+  }, [clearFeedDeepLinkParams])
 
   const handleCloseShareOverlay = useCallback(() => {
     setSharePostId(null)
   }, [])
+
+  const patchFeedReel = useCallback(
+    (reelId: string, patch: Record<string, unknown>) => {
+      setPosts((prev) => {
+        const next = prev.map((p) =>
+          isReelFeedPost(p) && String(p.id) === reelId ? { ...p, ...patch } : p
+        )
+        postsRef.current = next
+        persistFeedSnapshot(
+          next,
+          likesByPostRef.current,
+          commentsByPostRef.current
+        )
+        return next
+      })
+      setFeedModalPost((prev) =>
+        prev && isReelFeedPost(prev) && String(prev.id) === reelId
+          ? { ...prev, ...patch }
+          : prev
+      )
+      const uid = userIdRef.current
+      if (uid) patchFeedReelInSessionsForUser(uid, reelId, patch)
+    },
+    [persistFeedSnapshot]
+  )
+
+  const handleReelMenuToggle = useCallback((reelId: string) => {
+    setOpenReelMenuId((prev) => (prev === reelId ? null : reelId))
+  }, [])
+
+  const handleStartEditReel = useCallback(
+    (post: any) => {
+      if (!user?.id || String(post.user_id) !== String(user.id)) return
+      setEditingReel({
+        id: String(post.id),
+        user_id: String(post.user_id),
+        caption: post.caption != null ? String(post.caption) : null,
+        video_url: String(post.video_url),
+        thumbnail_url: String(post.thumbnail_url),
+        duration_seconds:
+          post.duration_seconds != null ? Number(post.duration_seconds) : null,
+        visibility: post.visibility === "private" ? "private" : "public",
+        created_at: String(post.created_at),
+        updated_at: String(post.updated_at ?? post.created_at),
+      })
+      setOpenReelMenuId(null)
+    },
+    [user?.id]
+  )
+
+  const handleReelSaved = useCallback(
+    (reel: ReelRow) => {
+      patchFeedReel(String(reel.id), {
+        caption: reel.caption,
+        updated_at: reel.updated_at,
+      })
+      setEditingReel(null)
+      setOpenReelMenuId(null)
+    },
+    [patchFeedReel]
+  )
+
+  const handleDeleteReel = useCallback(
+    async (post: any) => {
+      if (!user?.id || String(post.user_id) !== String(user.id)) return
+      if (!window.confirm("Delete this reel?")) return
+
+      const reelId = String(post.id)
+      const result = await deleteReel(supabase, {
+        reelId,
+        userId: user.id,
+      })
+
+      if ("error" in result) {
+        showPopup({ type: "error", message: result.error })
+        return
+      }
+
+      setPosts((prev) => {
+        const next = prev.filter(
+          (p) => !(isReelFeedPost(p) && String(p.id) === reelId)
+        )
+        postsRef.current = next
+        persistFeedSnapshot(
+          next,
+          likesByPostRef.current,
+          commentsByPostRef.current
+        )
+        return next
+      })
+      removeFeedReelFromSessionsForUser(user.id, reelId)
+      setOpenReelMenuId(null)
+      if (selectedPostId === reelId) {
+        setSelectedPostId(null)
+        setFeedModalPost(null)
+        feedDeepLinkHandledRef.current = null
+        clearFeedDeepLinkParams()
+      }
+    },
+    [user?.id, persistFeedSnapshot, selectedPostId, showPopup, clearFeedDeepLinkParams]
+  )
 
   const toggleLike = useCallback(
     async (post: any) => {
@@ -1358,14 +1553,33 @@ function FeedPageContent() {
       try {
       const meta = likesByPostRef.current[pid] ?? EMPTY_LIKE_META
 
+      if (isReel) {
+        await toggleReelLike(supabase, {
+          reelId: pid,
+          userId: user.id,
+          ownerUserId: reelOwnerUserId(post),
+          meta,
+          onMetaChange: (next) => {
+            setLikesByPost((prev) => {
+              const merged = { ...prev, [pid]: next }
+              persistFeedSnapshot(
+                postsRef.current,
+                merged,
+                commentsByPostRef.current
+              )
+              return merged
+            })
+          },
+        })
+        return
+      }
+
       if (meta.liked) {
         const ownerId = isProfile
           ? profilePostOwnerUserId(post)
           : isAchievement
             ? achievementPostOwnerUserId(post)
-            : isReel
-              ? reelOwnerUserId(post)
-              : postTradeOwnerUserId(post)
+            : postTradeOwnerUserId(post)
 
         const { error } = isProfile
           ? await supabase
@@ -1379,17 +1593,11 @@ function FeedPageContent() {
                 .delete()
                 .eq("achievement_post_id", pid)
                 .eq("user_id", user.id)
-            : isReel
-              ? await supabase
-                  .from("reel_likes")
-                  .delete()
-                  .eq("reel_id", pid)
-                  .eq("user_id", user.id)
-              : await supabase
-                  .from("likes")
-                  .delete()
-                  .eq("post_id", pid)
-                  .eq("user_id", user.id)
+            : await supabase
+                .from("likes")
+                .delete()
+                .eq("post_id", pid)
+                .eq("user_id", user.id)
 
         if (error) {
           console.error("Unlike error:", error)
@@ -1404,9 +1612,7 @@ function FeedPageContent() {
               ? { kind: "profile_post", profilePostId: pid }
               : isAchievement
                 ? { kind: "achievement_post", achievementPostId: pid }
-                : isReel
-                  ? { kind: "reel", reelId: pid }
-                  : { kind: "post", postId: pid, tradeId: post.trade_id ?? null },
+                : { kind: "post", postId: pid, tradeId: post.trade_id ?? null },
           })
         }
 
@@ -1487,41 +1693,6 @@ function FeedPageContent() {
             senderUserId: user.id,
           })
         }
-      } else if (isReel) {
-        const likePayload = {
-          reel_id: pid,
-          user_id: user.id,
-        }
-        const { error } = await supabase.from("reel_likes").insert(likePayload)
-
-        if (error) {
-          console.error("[reel-like] insert failed", {
-            userId: user.id,
-            reelId: pid,
-            payload: likePayload,
-            supabaseError: {
-              code: error.code,
-              message: error.message,
-              details: error.details,
-              hint: error.hint,
-            },
-          })
-          return
-        }
-
-        setLikesByPost((prev) => ({
-          ...prev,
-          [pid]: { count: meta.count + 1, liked: true },
-        }))
-
-        const ownerId = reelOwnerUserId(post)
-        if (ownerId) {
-          await insertReelLikeNotification(supabase, {
-            reelId: pid,
-            ownerUserId: ownerId,
-            senderUserId: user.id,
-          })
-        }
       } else {
         const likePayload = {
           post_id: pid,
@@ -1566,7 +1737,7 @@ function FeedPageContent() {
         setLikeBusyByPost((prev) => ({ ...prev, [pid]: false }))
       }
     },
-    [user]
+    [user, persistFeedSnapshot]
   )
 
   const submitComment = useCallback(
@@ -1999,15 +2170,21 @@ function FeedPageContent() {
     [posts]
   )
 
-  const selectedPost = useMemo(
-    () => (selectedPostId ? postsById.get(selectedPostId) ?? null : null),
-    [selectedPostId, postsById]
-  )
+  const selectedPost = useMemo(() => {
+    if (!selectedPostId) return null
+    if (feedModalPost && String(feedModalPost.id) === selectedPostId) {
+      return feedModalPost
+    }
+    return postsById.get(selectedPostId) ?? null
+  }, [feedModalPost, selectedPostId, postsById])
 
-  const sharePost = useMemo(
-    () => (sharePostId ? postsById.get(sharePostId) ?? null : null),
-    [sharePostId, postsById]
-  )
+  const sharePost = useMemo(() => {
+    if (!sharePostId) return null
+    if (feedModalPost && String(feedModalPost.id) === sharePostId) {
+      return feedModalPost
+    }
+    return postsById.get(sharePostId) ?? null
+  }, [feedModalPost, sharePostId, postsById])
 
   const selectedPostComments = useMemo(() => {
     if (!selectedPostId) return EMPTY_COMMENTS
@@ -2025,76 +2202,33 @@ function FeedPageContent() {
   }, [selectedPostId, commentSubmitting])
 
   useEffect(() => {
-    const postParam = searchParams.get("post")?.trim()
-    const achievementParam = searchParams.get("achievement")?.trim()
-    const reelParam = searchParams.get("reel")?.trim()
-    const targetId = reelParam || achievementParam || postParam
-    if (!targetId) return
+    const target = parseFeedDeepLinkTarget(searchParams)
+    if (!target || !user?.id) return
 
-    const openComments = searchParams.get("comments") === "1"
-    const key = `${targetId}:${openComments ? "1" : "0"}`
+    const key = feedDeepLinkSessionKey(target)
     if (feedDeepLinkHandledRef.current === key) return
 
-    const openLoadedPost = (post: any) => {
-      feedDeepLinkHandledRef.current = key
-      if (post.feedKind === "reel" || reelParam) {
-        setContentType("reels")
-      } else if (post.feedKind === "achievement" || achievementParam) {
-        setContentType("achievements")
-      } else if (postParam) {
-        setContentType("all")
-      }
-      setSelectedPostId(String(post.id))
-      if (openComments) {
-        openCommentsRef.current[String(post.id)] = true
-      }
-    }
-
-    const loaded = postsById.get(targetId)
-    if (loaded) {
-      openLoadedPost(loaded)
-      return
-    }
-
     void (async () => {
-      let row: FeedItem | null = null
-
-      if (reelParam) {
-        row = await fetchReelFeedPostById(supabase, targetId)
-      } else if (achievementParam) {
-        row = await fetchAchievementPostById(supabase, targetId)
-      } else if (postParam) {
-        row = await fetchTradeFeedPostById(supabase, postParam)
-        if (!row) {
-          row = await fetchProfileFeedPostById(supabase, postParam)
-        }
-      }
-
+      const row = await fetchFeedDeepLinkContent(supabase, target)
       if (!row) return
 
       const { enriched, likesMap, commentsMap } = await loadEngagementForPosts(
         [row],
-        user ? { id: user.id } : null
+        { id: user.id }
       )
       const post = enriched[0]
       if (!post) return
 
-      setPosts((prev) => {
-        if (prev.some((p) => String(p.id) === String(post.id))) return prev
-        const next = [post, ...prev]
-        postsRef.current = next
-        return next
-      })
+      feedDeepLinkHandledRef.current = key
+      setFeedModalPost(post)
+      setSelectedPostId(String(post.id))
       setLikesByPost((prev) => ({ ...prev, ...likesMap }))
       setCommentsByPost((prev) => ({ ...prev, ...commentsMap }))
-      openLoadedPost(post)
+      if (target.openComments) {
+        openCommentsRef.current[String(post.id)] = true
+      }
     })()
-  }, [
-    searchParams,
-    postsById,
-    user,
-    loadEngagementForPosts,
-  ])
+  }, [searchParams, user?.id, loadEngagementForPosts])
 
   return (
     <div className="w-full text-white">
@@ -2168,6 +2302,10 @@ function FeedPageContent() {
               onToggleLike={toggleLike}
               onSubmitComment={submitComment}
               onSharePost={handleSharePost}
+              openReelMenuId={openReelMenuId}
+              onReelMenuToggle={handleReelMenuToggle}
+              onEditReel={handleStartEditReel}
+              onDeleteReel={(post) => void handleDeleteReel(post)}
             />
           ) : null}
 
@@ -2224,6 +2362,20 @@ function FeedPageContent() {
           onSubmitComment={submitComment}
           onDeleteComment={deleteComment}
           onSharePost={handleSharePost}
+          openReelMenuId={openReelMenuId}
+          onReelMenuToggle={handleReelMenuToggle}
+          onEditReel={handleStartEditReel}
+          onDeleteReel={(post) => void handleDeleteReel(post)}
+        />
+      ) : null}
+
+      {editingReel ? (
+        <ReelComposerModal
+          open
+          userId={user?.id ?? null}
+          editReel={editingReel}
+          onClose={() => setEditingReel(null)}
+          onSaved={handleReelSaved}
         />
       ) : null}
 

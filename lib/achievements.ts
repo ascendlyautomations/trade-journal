@@ -1,203 +1,23 @@
 import { supabase } from "./supabaseClient"
 import { formatPnlCurrency } from "./formatMoney"
 
-export type AchievementTier = "bronze" | "silver" | "gold" | "platinum" | string
+export * from "./achievementTypes.ts"
 
-export type AchievementCategory =
-  | "payouts"
-  | "passed_evals"
-  | "milestones"
-  | string
-
-export type Achievement = {
-  id: string
-  user_id: string
-  achievement_type: string
-  title: string
-  description: string | null
-  badge_key: string | null
-  tier: AchievementTier | null
-  category: AchievementCategory | null
-  value_numeric: number | null
-  value_text: string | null
-  currency: string | null
-  account_type: string | null
-  account_name: string | null
-  account_size: string | null
-  mode: string | null
-  firm: string | null
-  image_url: string | null
-  achieved_at: string | null
-  created_at: string
-  updated_at: string
-  is_featured: boolean
-  is_public: boolean
-  sort_order: number | null
-  metadata: Record<string, unknown> | null
-}
-
-export const ACHIEVEMENT_SELECT = `
-  id,
-  user_id,
-  achievement_type,
-  title,
-  description,
-  badge_key,
-  tier,
-  category,
-  value_numeric,
-  value_text,
-  currency,
-  account_type,
-  account_name,
-  account_size,
-  mode,
-  firm,
-  image_url,
-  achieved_at,
-  created_at,
-  updated_at,
-  is_featured,
-  is_public,
-  sort_order,
-  metadata
-`
-
-/** Public profile achievements — no account_name or account_size. */
-export const PUBLIC_ACHIEVEMENT_SELECT = `
-  id,
-  user_id,
-  achievement_type,
-  title,
-  description,
-  badge_key,
-  tier,
-  category,
-  value_numeric,
-  value_text,
-  currency,
-  account_type,
-  mode,
-  firm,
-  image_url,
-  achieved_at,
-  created_at,
-  updated_at,
-  is_featured,
-  is_public,
-  sort_order,
-  metadata
-`
-
-export function normalizeAchievementType(type: string | null): "payout" | "passed_eval" | "milestone" {
-  const t = String(type || "").toLowerCase().trim()
-  if (t === "payout" || t.includes("payout")) return "payout"
-  if (t === "passed_eval" || t.includes("passed") || t.includes("eval")) return "passed_eval"
-  return "milestone"
-}
-
-export function categoryFromType(type: string | null): "payouts" | "passed_evals" | "milestones" {
-  const normalized = normalizeAchievementType(type)
-  if (normalized === "payout") return "payouts"
-  if (normalized === "passed_eval") return "passed_evals"
-  return "milestones"
-}
-
-export function badgeKeyFromType(type: string | null): "payout" | "passed_eval" | "milestone" {
-  return normalizeAchievementType(type)
-}
-
-export function achievementTypeLabel(type: string | null): "Payout" | "Passed Eval" | "Milestone" {
-  const normalized = normalizeAchievementType(type)
-  if (normalized === "payout") return "Payout"
-  if (normalized === "passed_eval") return "Passed Eval"
-  return "Milestone"
-}
-
-export function badgeIconForKey(
-  badgeKey: string | null,
-  achievementType?: string | null
-): string {
-  const key = String(badgeKey || "").toLowerCase().trim()
-  const fallbackType = normalizeAchievementType(achievementType ?? null)
-  if (key.includes("payout")) return "💰"
-  if (key.includes("eval") || key.includes("pass")) return "✅"
-  if (key.includes("milestone")) return "🏆"
-  if (fallbackType === "payout") return "💰"
-  if (fallbackType === "passed_eval") return "✅"
-  if (fallbackType === "milestone") return "🏆"
-  return "⭐"
-}
-
-export function tierClassName(tier: string | null): string {
-  const t = String(tier || "").toLowerCase()
-  if (t === "platinum") return "border-cyan-300/40 bg-cyan-500/10"
-  if (t === "gold") return "border-amber-300/40 bg-amber-500/10"
-  if (t === "silver") return "border-slate-300/40 bg-slate-400/10"
-  if (t === "bronze") return "border-orange-300/40 bg-orange-500/10"
-  return "border-white/10 bg-white/5"
-}
-
-export function formatAchievementDate(value: string | null): string {
-  if (!value) return "—"
-  const d = new Date(value)
-  if (Number.isNaN(d.getTime())) return "—"
-  return d.toLocaleDateString()
-}
+import type { Achievement, PayoutAchievementRow } from "./achievementTypes.ts"
+import {
+  ACHIEVEMENT_SELECT,
+  PUBLIC_ACHIEVEMENT_SELECT,
+  buildPayoutTotalsByUserId,
+} from "./achievementTypes.ts"
 
 export function formatAchievementValue(a: Achievement): string | null {
   if (a.value_text && a.value_text.trim() !== "") return a.value_text
-  if (a.value_numeric == null || !Number.isFinite(Number(a.value_numeric))) return null
+  if (a.value_numeric == null || !Number.isFinite(Number(a.value_numeric))) {
+    return null
+  }
   const numeric = Number(a.value_numeric)
   if (a.currency && a.currency.trim() !== "") return formatPnlCurrency(numeric)
   return numeric.toLocaleString()
-}
-
-export function isPayoutAchievementType(type: string | null | undefined): boolean {
-  return String(type ?? "")
-    .trim()
-    .toLowerCase()
-    .includes("payout")
-}
-
-type PayoutAchievementSumInput = {
-  achievement_type: string | null
-  value_numeric: number | null
-}
-
-/** Sum payout achievement values — matches profile overview “Payout Total”. */
-export function sumPayoutAchievementTotals(
-  achievements: PayoutAchievementSumInput[]
-): number {
-  return achievements
-    .filter((a) => isPayoutAchievementType(a.achievement_type))
-    .reduce((sum, a) => sum + (Number(a.value_numeric) || 0), 0)
-}
-
-export type PayoutAchievementRow = {
-  user_id: string
-  achievement_type: string | null
-  value_numeric: number | null
-}
-
-export function buildPayoutTotalsByUserId(
-  rows: PayoutAchievementRow[]
-): Record<string, number> {
-  const grouped = new Map<string, PayoutAchievementSumInput[]>()
-
-  for (const row of rows) {
-    const userId = String(row.user_id ?? "").trim()
-    if (!userId) continue
-    const list = grouped.get(userId) ?? []
-    list.push(row)
-    grouped.set(userId, list)
-  }
-
-  const totals: Record<string, number> = {}
-  for (const [userId, list] of grouped) {
-    totals[userId] = sumPayoutAchievementTotals(list)
-  }
-  return totals
 }
 
 /** Public payout totals for explore / discovery (RLS: is_public only for others). */

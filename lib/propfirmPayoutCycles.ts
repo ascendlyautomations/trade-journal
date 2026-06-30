@@ -150,6 +150,46 @@ export function summarizeAccountPayouts(cycles: AccountPayoutCycle[]): {
   )
 }
 
+function isCompletedPayoutCycle(cycle: AccountPayoutCycle): boolean {
+  return (
+    cycle.ended_at != null &&
+    cycle.payout_amount != null &&
+    cycle.payout_amount > 0
+  )
+}
+
+/** Completed payout history for UI (newest first; excludes active open cycle). */
+export function selectCompletedPayoutHistory(
+  cycles: AccountPayoutCycle[]
+): AccountPayoutCycle[] {
+  return cycles
+    .filter(isCompletedPayoutCycle)
+    .sort(
+      (left, right) =>
+        new Date(String(right.ended_at)).getTime() -
+        new Date(String(left.ended_at)).getTime()
+    )
+}
+
+export function formatPayoutDrawdownBehaviorLabel(
+  behavior: PayoutDrawdownBehavior | null | undefined
+): string {
+  if (behavior === "keep_trailing") return "Trailing Drawdown Continues"
+  if (behavior === "reset_to_account") return "Resets To Starting Balance"
+  return "—"
+}
+
+export function formatPayoutHistoryDate(iso: string | null | undefined): string {
+  if (!iso) return "—"
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return "—"
+  return date.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  })
+}
+
 export type RecordedPayoutSnapshot = {
   amount: number
   balanceBefore: number
@@ -298,6 +338,65 @@ export async function recordAccountPayout(
 
 export function isFundedPropfirmAccount(mode: unknown): boolean {
   return String(mode ?? "").trim().toLowerCase() === "funded"
+}
+
+export function isEvalPropfirmAccount(mode: unknown): boolean {
+  return String(mode ?? "").trim().toLowerCase() === "eval"
+}
+
+export const PROPFIRM_ALL_ACCOUNTS_VALUE = "all"
+
+export type PayoutHistoryEntry = AccountPayoutCycle & {
+  accountName: string
+}
+
+/** Load payout cycles for many accounts in parallel (funded accounts only). */
+export async function fetchPayoutCycleHistoryByAccountIds(
+  supabase: SupabaseClient,
+  accountIds: Array<string | number>
+): Promise<Record<string, AccountPayoutCycle[]>> {
+  const uniqueIds = [
+    ...new Set(accountIds.map((id) => String(id).trim()).filter(Boolean)),
+  ]
+  if (uniqueIds.length === 0) return {}
+
+  const entries = await Promise.all(
+    uniqueIds.map(async (accountId) => {
+      const cycles = await fetchPayoutCycleHistory(supabase, accountId)
+      return [accountId, cycles] as const
+    })
+  )
+
+  return Object.fromEntries(entries)
+}
+
+/** Merge completed payouts across funded accounts (newest first). */
+export function mergeFundedPayoutHistory(
+  accounts: Array<{ id: string | number; name?: string | null; account_size?: unknown }>,
+  cyclesByAccountId: Record<string, AccountPayoutCycle[]>,
+  formatAccountLabel: (account: {
+    name?: string | null
+    account_size?: unknown
+  }) => string
+): PayoutHistoryEntry[] {
+  const rows: PayoutHistoryEntry[] = []
+
+  for (const account of accounts) {
+    if (!isFundedPropfirmAccount((account as { mode?: unknown }).mode)) continue
+    const accountId = String(account.id)
+    const accountName = formatAccountLabel(account)
+    for (const cycle of selectCompletedPayoutHistory(
+      cyclesByAccountId[accountId] ?? []
+    )) {
+      rows.push({ ...cycle, accountName })
+    }
+  }
+
+  return rows.sort(
+    (left, right) =>
+      new Date(String(right.ended_at)).getTime() -
+      new Date(String(left.ended_at)).getTime()
+  )
 }
 
 /** Strip trailing account size from a prop firm account name for display defaults. */

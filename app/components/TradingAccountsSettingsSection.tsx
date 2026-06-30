@@ -7,13 +7,19 @@ import CreateAccountModal, {
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { feedbackPresets } from "@/lib/feedbackPresets"
 import { supabase } from "@/lib/supabaseClient"
-import { invalidateAccountsCache } from "@/lib/appDataCache"
+import {
+  ensureAccountsLoaded,
+  getCachedAccounts,
+  invalidateAccountsCache,
+  subscribeAppDataCache,
+} from "@/lib/appDataCache"
 import {
   assertCanCreateTradingAccount,
   formatTradingAccountMode,
   FREE_PLAN_ACCOUNT_LIMIT,
   FREE_PLAN_ACCOUNT_LIMIT_MESSAGE,
   insertTradingAccount,
+  mapTradingAccountRow,
   setTradingAccountActive,
   tradingAccountDisplayTitle,
   tradingAccountToFormValues,
@@ -22,14 +28,14 @@ import {
   matchesTradingAccountSearch,
   type TradingAccountListItem,
 } from "@/lib/tradingAccounts"
-import {
-  ensureTradingAccountsSettingsLoaded,
-  getCachedTradingAccountsSettings,
-  invalidateTradingAccountsSettingsCache,
-  subscribeTradingAccountsSettingsCache,
-} from "@/lib/tradingAccountsSettingsCache"
 
 const ACCOUNTS_PAGE_SIZE = 5
+
+function mapCachedAccountRows(rows: any[]): TradingAccountListItem[] {
+  return rows.map((row) =>
+    mapTradingAccountRow(row as Record<string, unknown>)
+  )
+}
 
 function sortAccountsForDisplay(
   accounts: TradingAccountListItem[]
@@ -52,16 +58,8 @@ export default function TradingAccountsSettingsSection({
   isPro,
 }: Props) {
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
-  const initialCached = useMemo(
-    () => (userId ? getCachedTradingAccountsSettings(userId) : null),
-    [userId]
-  )
-  const [accounts, setAccounts] = useState<TradingAccountListItem[]>(
-    initialCached ?? []
-  )
-  const [loading, setLoading] = useState(
-    Boolean(userId) && initialCached == null
-  )
+  const [accounts, setAccounts] = useState<TradingAccountListItem[]>([])
+  const [loading, setLoading] = useState(Boolean(userId))
   const [togglingId, setTogglingId] = useState<string | null>(null)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [creating, setCreating] = useState(false)
@@ -106,21 +104,18 @@ export default function TradingAccountsSettingsSection({
   const refreshAccounts = useCallback(
     async (options?: { force?: boolean }) => {
       if (!userId) return
-      const cached = getCachedTradingAccountsSettings(userId)
+
+      const cached = getCachedAccounts(userId)
       if (cached && !options?.force) {
-        setAccounts(cached)
+        setAccounts(mapCachedAccountRows(cached))
         setLoading(false)
         return
       }
 
       if (!cached) setLoading(true)
       try {
-        const loaded = await ensureTradingAccountsSettingsLoaded(
-          supabase,
-          userId,
-          options
-        )
-        setAccounts(loaded)
+        const rows = await ensureAccountsLoaded(supabase, userId, options)
+        setAccounts(mapCachedAccountRows(rows))
       } catch (error) {
         console.error(error)
         showPopup({ type: "error", message: "Something went wrong" })
@@ -133,7 +128,6 @@ export default function TradingAccountsSettingsSection({
 
   function invalidateAccountCaches() {
     if (!userId) return
-    invalidateTradingAccountsSettingsCache(userId)
     invalidateAccountsCache(userId)
   }
 
@@ -144,17 +138,17 @@ export default function TradingAccountsSettingsSection({
       return
     }
 
-    const cached = getCachedTradingAccountsSettings(userId)
+    const cached = getCachedAccounts(userId)
     if (cached) {
-      setAccounts(cached)
+      setAccounts(mapCachedAccountRows(cached))
       setLoading(false)
-    } else {
-      void refreshAccounts()
     }
 
-    return subscribeTradingAccountsSettingsCache(() => {
-      const next = getCachedTradingAccountsSettings(userId)
-      if (next) setAccounts(next)
+    void refreshAccounts({ force: true })
+
+    return subscribeAppDataCache(() => {
+      const next = getCachedAccounts(userId)
+      if (next) setAccounts(mapCachedAccountRows(next))
     })
   }, [userId, refreshAccounts])
 

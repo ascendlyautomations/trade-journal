@@ -16,10 +16,14 @@ import {
   searchProfilesForShare,
   type ShareProfileRow,
 } from "@/lib/shareRecipientSearch"
-import { feedbackPresets } from "@/lib/feedbackPresets"
+import {
+  copyFeedDeepLinkToClipboard,
+  feedDeepLinkTargetFromShareInput,
+} from "@/lib/feedDeepLink"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import { FeedbackModal, ShareModalSendButton, useFeedbackPopup } from "@/app/components/ui"
 import { useShareSuccessDismiss } from "@/lib/shareSuccessDismiss"
+import ShareCopyLinkButton from "@/app/components/ShareCopyLinkButton"
 import ShareRecipientPicker from "@/app/components/ShareRecipientPicker"
 import FeedPostScreenshot from "@/app/components/feed/FeedPostScreenshot"
 import { postImageSrc } from "@/app/components/feed/feedPostHelpers"
@@ -93,6 +97,11 @@ export default function ShareToConversationsModal({
   const sharePostImageSrc = useMemo(
     () => (post ? postImageSrc(post.image_url) : null),
     [post]
+  )
+
+  const deepLinkTarget = useMemo(
+    () => feedDeepLinkTargetFromShareInput({ postId, tradeId, feedKind }),
+    [feedKind, postId, tradeId]
   )
 
   const successLabel = tradeId || postId ? "Shared" : "Sent"
@@ -184,6 +193,11 @@ export default function ShareToConversationsModal({
     if (isBusy) return
     onClose()
   }, [isBusy, onClose])
+
+  const handleCopyLink = useCallback(async () => {
+    if (!deepLinkTarget) return false
+    return copyFeedDeepLinkToClipboard(deepLinkTarget)
+  }, [deepLinkTarget])
 
   const handleSend = useCallback(async () => {
     if (!hasRecipients || isBusy) return
@@ -290,6 +304,16 @@ export default function ShareToConversationsModal({
         onClick={(e) => e.stopPropagation()}
       >
           <h2 className="mb-3 text-lg font-semibold">{title}</h2>
+
+          {deepLinkTarget ? (
+            <ShareCopyLinkButton
+              className="mb-3"
+              onCopy={handleCopyLink}
+              onCopyError={() =>
+                showPopup({ type: "error", message: "Could not copy link." })
+              }
+            />
+          ) : null}
 
           {postId && sharePostImageSrc != null ? (
             <div className="mb-3">

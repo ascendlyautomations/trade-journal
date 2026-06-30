@@ -99,6 +99,9 @@ export const feedbackPresets = {
       "Room invite link copied to clipboard."
     ),
 
+  contentLinkCopied: (): FeedbackPopupInput =>
+    persistentSuccess("Link Copied", "Link copied to clipboard."),
+
   gettingStartedIntro: (): FeedbackPopupInput => ({
     type: "info",
     title: GETTING_STARTED_INTRO_POPUP_TITLE,

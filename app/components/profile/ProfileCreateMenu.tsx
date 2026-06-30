@@ -13,11 +13,20 @@ type CreateMenuEntry = {
 }
 
 type ProfileCreateMenuProps = {
+  onCreateStory: () => void
   onCreatePost: () => void
   onCreateReel: () => void
   /** Header action button vs empty-state text link */
   variant?: "button" | "link"
   className?: string
+}
+
+function StoryIcon({ className }: { className?: string }) {
+  return (
+    <span className={className} aria-hidden>
+      📖
+    </span>
+  )
 }
 
 function PostIcon({ className }: { className?: string }) {
@@ -75,6 +84,7 @@ function MenuOptionsList({
 }
 
 export default function ProfileCreateMenu({
+  onCreateStory,
   onCreatePost,
   onCreateReel,
   variant = "button",
@@ -87,7 +97,14 @@ export default function ProfileCreateMenu({
 
   const close = useCallback(() => setOpen(false), [])
 
+  // Extend this array to add future content types (Journal, Achievement, Live Stream, etc.)
   const menuItems: CreateMenuEntry[] = [
+    {
+      id: "story",
+      label: "Story",
+      icon: <StoryIcon />,
+      onSelect: onCreateStory,
+    },
     {
       id: "post",
       label: "Post",
@@ -166,7 +183,7 @@ export default function ProfileCreateMenu({
         aria-haspopup="menu"
         className={
           className ??
-          "w-full rounded-md bg-blue-500 px-3 py-2 text-sm font-medium text-white hover:bg-blue-600 sm:w-auto sm:py-1.5 sm:text-xs"
+          "inline-flex min-h-10 items-center justify-center rounded-md bg-blue-500 px-2.5 py-1.5 text-xs font-medium text-white transition hover:bg-blue-600 sm:min-h-0 sm:px-3 sm:py-2 sm:text-sm"
         }
       >
         + Create
@@ -233,9 +250,7 @@ export default function ProfileCreateMenu({
     <div
       ref={rootRef}
       className={
-        variant === "button"
-          ? "relative flex-1 sm:flex-none"
-          : "inline-flex"
+        variant === "button" ? "relative shrink-0 sm:flex-none" : "inline-flex"
       }
     >
       {trigger}

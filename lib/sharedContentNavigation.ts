@@ -1,4 +1,7 @@
-import { profilePath } from "@/lib/profileRoutes"
+import {
+  buildFeedDeepLinkHref,
+  type ShareContentFeedKind,
+} from "@/lib/feedDeepLink"
 
 type PostOwnerLike = {
   id: string
@@ -6,80 +9,48 @@ type PostOwnerLike = {
   profiles?: { username?: string | null } | null
 }
 
-/** Canonical public trade page (handles unavailable/private gracefully). */
+/** Opens the trade detail modal on the feed via deep link. */
 export function getSharedTradeViewHref(tradeId: string): string {
   const id = String(tradeId ?? "").trim()
-  return id ? `/trade/${encodeURIComponent(id)}` : "/feed"
+  return id ? buildFeedDeepLinkHref({ kind: "trade", id }) : "/feed"
 }
 
-/**
- * Profile deep-link for feed posts — reuses notification/profile `?post=` handling.
- */
+/** Opens a feed/profile post detail modal on the feed. */
 export function getSharedPostViewHref(post: PostOwnerLike): string {
   const postId = String(post.id ?? "").trim()
-  const ownerId = post.user_id != null ? String(post.user_id).trim() : ""
-
-  const base = profilePath({
-    id: ownerId,
-    username: post.profiles?.username,
-  })
-
-  if (!postId) return base
-
-  const params = new URLSearchParams({ post: postId })
-  return `${base}?${params.toString()}`
+  return postId ? buildFeedDeepLinkHref({ kind: "post", id: postId }) : "/feed"
 }
 
-/** Profile achievements tab deep-link for shared achievement posts. */
+/** Opens an achievement detail modal on the feed. */
 export function getSharedAchievementViewHref(post: PostOwnerLike): string {
   const postId = String(post.id ?? "").trim()
-  const ownerId = post.user_id != null ? String(post.user_id).trim() : ""
-
-  const base = profilePath({
-    id: ownerId,
-    username: post.profiles?.username,
-  })
-
-  if (!postId) return `${base}?tab=achievements`
-
-  const params = new URLSearchParams({
-    achievement: postId,
-    tab: "achievements",
-  })
-  return `${base}?${params.toString()}`
+  return postId
+    ? buildFeedDeepLinkHref({ kind: "achievement", id: postId })
+    : "/feed"
 }
 
-/** Profile reels tab deep-link. */
+/** Opens a reel detail modal on the feed. */
 export function getSharedReelViewHref(post: PostOwnerLike): string {
   const reelId = String(post.id ?? "").trim()
-  const ownerId = post.user_id != null ? String(post.user_id).trim() : ""
-
-  const base = profilePath({
-    id: ownerId,
-    username: post.profiles?.username,
-  })
-
-  if (!reelId) return `${base}?tab=reels`
-
-  const params = new URLSearchParams({
-    reel: reelId,
-    tab: "reels",
-  })
-  return `${base}?${params.toString()}`
+  return reelId ? buildFeedDeepLinkHref({ kind: "reel", id: reelId }) : "/feed"
 }
 
 export function getSharedContentViewHref(
   post: PostOwnerLike & {
     achievements?: unknown
     achievement_id?: string | null
-    feedKind?: string | null
+    feedKind?: ShareContentFeedKind | string | null
     video_url?: string | null
   }
 ): string {
   if (post.feedKind === "reel" || post.video_url) {
     return getSharedReelViewHref(post)
   }
-  if (post.achievements != null || post.achievement_id) {
+  if (
+    post.feedKind === "achievement" ||
+    post.achievements != null ||
+    post.achievement_id
+  ) {
     return getSharedAchievementViewHref(post)
   }
   return getSharedPostViewHref(post)

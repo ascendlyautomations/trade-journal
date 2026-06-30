@@ -92,3 +92,48 @@ export async function publishReel(
 
   return { reel: data as ReelRow }
 }
+
+export type UpdateReelCaptionInput = {
+  reelId: string
+  userId: string
+  caption?: string | null
+}
+
+/** Update reel metadata (caption only in phase 1). Owner-only via RLS. */
+export async function updateReelCaption(
+  supabase: SupabaseClient,
+  input: UpdateReelCaptionInput
+): Promise<{ reel: ReelRow } | { error: string }> {
+  const caption = input.caption?.trim() ?? ""
+
+  const { data, error } = await supabase
+    .from("reels")
+    .update({ caption: caption || null })
+    .eq("id", input.reelId)
+    .eq("user_id", input.userId)
+    .select(PROFILE_REELS_SELECT)
+    .single()
+
+  if (error) {
+    return { error: handleSupabaseError(error) }
+  }
+
+  return { reel: data as ReelRow }
+}
+
+export async function deleteReel(
+  supabase: SupabaseClient,
+  input: { reelId: string; userId: string }
+): Promise<{ ok: true } | { error: string }> {
+  const { error } = await supabase
+    .from("reels")
+    .delete()
+    .eq("id", input.reelId)
+    .eq("user_id", input.userId)
+
+  if (error) {
+    return { error: handleSupabaseError(error) }
+  }
+
+  return { ok: true }
+}

@@ -6,6 +6,15 @@ export type LikeNotificationTarget =
   | { kind: "profile_post"; profilePostId: string }
   | { kind: "achievement_post"; achievementPostId: string }
   | { kind: "reel"; reelId: string }
+  | {
+      kind: "comment"
+      commentId: string
+      postId?: string | null
+      tradeId?: string | null
+      profilePostId?: string | null
+      achievementPostId?: string | null
+      reelId?: string | null
+    }
 
 type LikeNotificationParams = {
   recipientUserId: string
@@ -38,6 +47,9 @@ function applyTargetFilter<
   if (target.kind === "achievement_post") {
     return query.eq("achievement_post_id", target.achievementPostId)
   }
+  if (target.kind === "comment") {
+    return query.eq("comment_id", target.commentId)
+  }
   return query.eq("reel_id", target.reelId)
 }
 
@@ -65,6 +77,17 @@ export function buildLikeNotificationInsertPayload(
   }
   if (params.target.kind === "achievement_post") {
     return { ...base, achievement_post_id: params.target.achievementPostId }
+  }
+  if (params.target.kind === "comment") {
+    return {
+      ...base,
+      comment_id: params.target.commentId,
+      post_id: params.target.postId ?? null,
+      trade_id: params.target.tradeId ?? null,
+      profile_post_id: params.target.profilePostId ?? null,
+      achievement_post_id: params.target.achievementPostId ?? null,
+      reel_id: params.target.reelId ?? null,
+    }
   }
   return { ...base, reel_id: params.target.reelId }
 }

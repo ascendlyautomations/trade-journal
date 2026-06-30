@@ -1,5 +1,5 @@
 import { profilePath } from "./profileRoutes"
-import { getSharedTradeViewHref } from "./sharedContentNavigation"
+import { buildFeedDeepLinkHref } from "./feedDeepLink"
 import {
   getNotificationTimeSection,
   NOTIFICATION_TIME_SECTION_ORDER,
@@ -24,6 +24,7 @@ export type NotificationRecord = {
   profile_post_id: string | null
   achievement_post_id: string | null
   reel_id: string | null
+  comment_id: string | null
   content: string | null
   read: boolean
   created_at: string
@@ -44,6 +45,7 @@ export type LikeNotificationGroup = {
   profile_post_id: string | null
   achievement_post_id: string | null
   reel_id: string | null
+  comment_id: string | null
   notificationIds: string[]
   read: boolean
   latestAt: string
@@ -209,15 +211,18 @@ export function formatLikeGroupMessage(
   tradeId?: string | null,
   profilePostId?: string | null,
   achievementPostId?: string | null,
-  reelId?: string | null
+  reelId?: string | null,
+  commentId?: string | null
 ): string {
-  const noun = engagementTarget(
-    postId,
-    tradeId,
-    profilePostId,
-    achievementPostId,
-    reelId
-  )
+  const noun = commentId
+    ? "comment"
+    : engagementTarget(
+        postId,
+        tradeId,
+        profilePostId,
+        achievementPostId,
+        reelId
+      )
   const ordered = names.filter(Boolean)
   if (totalLikes <= 0) return `Someone liked your ${noun}`
   if (totalLikes === 1) {
@@ -271,6 +276,7 @@ export function groupLikeNotifications(
       profile_post_id: latest.profile_post_id ?? null,
       achievement_post_id: latest.achievement_post_id ?? null,
       reel_id: latest.reel_id ?? null,
+      comment_id: latest.comment_id ?? null,
       notificationIds: sorted.map((row) => row.id),
       read: sorted.every((row) => row.read),
       latestAt: latest.created_at,
@@ -352,6 +358,9 @@ export function formatFollowGroupMessage(
 }
 
 function engagementGroupKey(row: NotificationRecord): string {
+  if (row.type === "like" && row.comment_id) {
+    return `comment_like:${row.comment_id}`
+  }
   if (row.post_id) return `post:${row.post_id}`
   if (row.profile_post_id) return `profile_post:${row.profile_post_id}`
   if (row.achievement_post_id) return `achievement_post:${row.achievement_post_id}`
@@ -798,27 +807,38 @@ function feedContentHref(opts: {
 }): string {
   const reelId = opts.reelId?.trim()
   if (reelId) {
-    const params = new URLSearchParams({ reel: reelId })
-    if (opts.openComments) params.set("comments", "1")
-    return `/feed?${params.toString()}`
+    return buildFeedDeepLinkHref({
+      kind: "reel",
+      id: reelId,
+      openComments: opts.openComments,
+    })
   }
 
   const achievementPostId = opts.achievementPostId?.trim()
   if (achievementPostId) {
-    const params = new URLSearchParams({ achievement: achievementPostId })
-    if (opts.openComments) params.set("comments", "1")
-    return `/feed?${params.toString()}`
+    return buildFeedDeepLinkHref({
+      kind: "achievement",
+      id: achievementPostId,
+      openComments: opts.openComments,
+    })
   }
 
   const postId = opts.postId?.trim()
   if (postId) {
-    const params = new URLSearchParams({ post: postId })
-    if (opts.openComments) params.set("comments", "1")
-    return `/feed?${params.toString()}`
+    return buildFeedDeepLinkHref({
+      kind: "post",
+      id: postId,
+      openComments: opts.openComments,
+    })
   }
 
-  if (opts.tradeId?.trim()) {
-    return getSharedTradeViewHref(opts.tradeId)
+  const tradeId = opts.tradeId?.trim()
+  if (tradeId) {
+    return buildFeedDeepLinkHref({
+      kind: "trade",
+      id: tradeId,
+      openComments: opts.openComments,
+    })
   }
 
   return "/feed"
@@ -839,6 +859,7 @@ export function getGroupedNotificationHref(
       tradeId: card.trade_id,
       achievementPostId: card.achievement_post_id,
       reelId: card.reel_id,
+      openComments: Boolean(card.comment_id),
     })
   }
 

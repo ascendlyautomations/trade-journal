@@ -38,7 +38,7 @@ export type DashboardFiltersProps = {
   onCancelGear: () => void
   /** When false, hides Public toggle and Share performance controls (zero-trade dashboard). */
   showShareControls?: boolean
-  /** Subtle link to Prop Firm analytics when user has prop firm accounts. */
+  /** Subtle link when filters indicate prop firm context (account or Eval/Funded mode). */
   showPropFirmLink?: boolean
 }
 

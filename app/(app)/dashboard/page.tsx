@@ -38,6 +38,7 @@ import {
   sanitizeDashboardAccountFilter,
   sanitizeHydratedDashboardFilters,
   sanitizeDrawdownLimitInput,
+  shouldShowPropFirmDashboardLink,
 } from "../../components/dashboard/dashboardGearUtils"
 import {
   buildTradeAccountFilterKey,
@@ -571,9 +572,14 @@ export default function Dashboard() {
     return m
   }, [accountRows])
 
-  const hasPropFirmAccounts = useMemo(
-    () => accountRows.some((acc) => acc.category === "Prop Firm"),
-    [accountRows]
+  const showPropFirmLink = useMemo(
+    () =>
+      shouldShowPropFirmDashboardLink({
+        accountFilter,
+        accountTypeFilter,
+        accountById,
+      }),
+    [accountFilter, accountTypeFilter, accountById]
   )
 
   const tradesExcludingBacktest = useMemo(
@@ -1629,7 +1635,7 @@ const biggestLoss = losses.length > 0
               onSaveGear={() => void saveDashboardGearPanel()}
               onCancelGear={cancelDashboardGearPanel}
               showShareControls={totalTrades > 0}
-              showPropFirmLink={hasPropFirmAccounts}
+              showPropFirmLink={showPropFirmLink}
             />
           ) : null}
           <DashboardHeader

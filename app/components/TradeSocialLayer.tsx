@@ -29,6 +29,10 @@ import {
 import ConfirmModal from "@/app/components/ui/ConfirmModal"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import {
+  commentLikeNotificationParentFromTradeId,
+} from "@/lib/commentLikes"
+import { useCommentLikes } from "@/lib/useCommentLikes"
+import {
   readTradeSocial,
   writeTradeSocial,
   appendTradeSocialComment,
@@ -578,6 +582,14 @@ export function TradeSocialCommentsSection({
     commentSubmitting,
   } = useTradeSocial()
 
+  const { likesByCommentId, toggleCommentLikeFor, isCommentLikeBusy, canLikeComments } =
+    useCommentLikes({
+      source: "trade_comments",
+      comments,
+      currentUserId,
+      notificationParent: commentLikeNotificationParentFromTradeId(tradeId),
+    })
+
   const sectionRef = useRef<HTMLDivElement>(null)
   const [pendingDelete, setPendingDelete] = useState<any>(null)
   const [deleteBusy, setDeleteBusy] = useState(false)
@@ -649,6 +661,9 @@ export function TradeSocialCommentsSection({
       comments={comments}
       currentUserId={currentUserId}
       replyAvatarClassName="h-6 w-6 shrink-0 rounded-full object-cover"
+      likesByCommentId={likesByCommentId}
+      onToggleCommentLike={canLikeComments ? toggleCommentLikeFor : undefined}
+      isCommentLikeBusy={isCommentLikeBusy}
       onReply={(comment) => {
         startCommentReply({
           comment,

@@ -4,6 +4,7 @@ import { memo, useCallback, useMemo } from "react"
 import { formatSocialTimestamp } from "@/lib/formatRelativeTime"
 import FeedPostActions from "./FeedPostActions"
 import FeedPostHeader from "./FeedPostHeader"
+import FeedReelOwnerMenu from "./FeedReelOwnerMenu"
 import type { FeedLikeMeta } from "./FeedPostCard"
 
 type FeedReelCardProps = {
@@ -13,6 +14,11 @@ type FeedReelCardProps = {
   likeBusy?: boolean
   comments?: any[]
   commentSubmitting: boolean
+  canManageReel?: boolean
+  menuOpen?: boolean
+  onMenuToggle?: () => void
+  onEditReel?: () => void
+  onDeleteReel?: () => void
   onSelectPost: (post: any) => void
   onOpenComments: (post: any) => void
   onToggleLike: (post: any) => void
@@ -33,6 +39,11 @@ function FeedReelCard({
   likeBusy = false,
   comments = [],
   commentSubmitting: _commentSubmitting,
+  canManageReel = false,
+  menuOpen = false,
+  onMenuToggle,
+  onEditReel,
+  onDeleteReel,
   onSelectPost,
   onOpenComments,
   onToggleLike,
@@ -81,11 +92,25 @@ function FeedReelCard({
       onKeyDown={handleArticleKeyDown}
       className="cursor-pointer overflow-hidden rounded-xl border border-white/10 bg-white/5 shadow-lg shadow-black/20 transition-all duration-200 hover:border-white/20 hover:bg-white/[0.07] hover:shadow-xl"
     >
-      <FeedPostHeader
-        userId={post.user_id}
-        avatarUrl={avatarUrl}
-        username={profileUsername}
-      />
+      <div className="flex items-center border-b border-white/5">
+        <div className="min-w-0 flex-1">
+          <FeedPostHeader
+            userId={post.user_id}
+            avatarUrl={avatarUrl}
+            username={profileUsername}
+          />
+        </div>
+        {canManageReel ? (
+          <div className="pr-3">
+            <FeedReelOwnerMenu
+              menuOpen={menuOpen}
+              onMenuToggle={() => onMenuToggle?.()}
+              onEdit={() => onEditReel?.()}
+              onDelete={() => onDeleteReel?.()}
+            />
+          </div>
+        ) : null}
+      </div>
 
       <div className="px-4 pt-3">
         <div className="relative mx-auto max-w-[280px] overflow-hidden rounded-xl border border-white/10 bg-black/40">

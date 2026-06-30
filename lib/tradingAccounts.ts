@@ -16,6 +16,7 @@ export type TradingAccountPropFirmRules = {
   dailyDrawdown: number | null
   profitTarget: number | null
   winningDays: number | null
+  winningDayThreshold: number | null
 }
 
 /** Row shape used by Input Trade after `accounts` fetch (settings uses the same mapping). */
@@ -89,7 +90,14 @@ function mapPropFirmRules(
     dailyDrawdown: num(acc.daily_drawdown),
     profitTarget: num(acc.profit_target),
     winningDays: num(acc.winning_days),
+    winningDayThreshold: num(acc.winning_day_threshold),
   }
+}
+
+export function mapTradingAccountRow(
+  acc: Record<string, unknown>
+): TradingAccountListItem {
+  return mapAccountRow(acc)
 }
 
 function mapAccountRow(acc: Record<string, unknown>): TradingAccountListItem {
@@ -201,6 +209,7 @@ export async function insertTradingAccount(
         daily_drawdown: newAccount.rules?.dailyDrawdown ?? null,
         profit_target: newAccount.rules?.profitTarget ?? null,
         winning_days: newAccount.rules?.winningDays ?? null,
+        winning_day_threshold: newAccount.rules?.winningDayThreshold ?? null,
       },
     ])
     .select()
@@ -237,6 +246,8 @@ function mergePropFirmRules(
     dailyDrawdown: next.dailyDrawdown ?? previous?.dailyDrawdown ?? null,
     profitTarget: next.profitTarget ?? previous?.profitTarget ?? null,
     winningDays: next.winningDays ?? previous?.winningDays ?? null,
+    winningDayThreshold:
+      next.winningDayThreshold ?? previous?.winningDayThreshold ?? null,
   }
 }
 
@@ -276,6 +287,7 @@ export async function updateTradingAccount(
       daily_drawdown: rules?.dailyDrawdown ?? null,
       profit_target: rules?.profitTarget ?? null,
       winning_days: rules?.winningDays ?? null,
+      winning_day_threshold: rules?.winningDayThreshold ?? null,
     })
     .eq("id", accountId)
     .eq("user_id", userId)

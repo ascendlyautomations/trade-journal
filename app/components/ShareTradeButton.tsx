@@ -9,6 +9,9 @@ import {
   TRADE_SHARE_EXPORT_WIDTH,
   tradeShareExportDomId,
 } from "@/lib/tradeShareExport"
+import { copyFeedDeepLinkToClipboard } from "@/lib/feedDeepLink"
+import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
+import ShareCopyLinkButton from "@/app/components/ShareCopyLinkButton"
 
 export type ShareTradeButtonProps = {
   trade: any
@@ -34,12 +37,17 @@ export default function ShareTradeButton({
   mode = "full",
   onSendClick,
 }: ShareTradeButtonProps) {
+  const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const [busy, setBusy] = useState(false)
   const [isOpen, setIsOpen] = useState(false)
   const [conversationOpen, setConversationOpen] = useState(false)
   const lockRef = useRef(false)
   const instanceId = useId().replace(/:/g, "")
   const exportDomId = tradeShareExportDomId(trade, instanceId)
+  const tradeIdForDm =
+    trade?.id != null && String(trade.id).trim() !== ""
+      ? String(trade.id)
+      : null
 
   const handleDownload = useCallback(async () => {
     if (lockRef.current) return
@@ -58,6 +66,14 @@ export default function ShareTradeButton({
     setConversationOpen(true)
   }, [])
 
+  const handleCopyLink = useCallback(async () => {
+    if (!tradeIdForDm) return false
+    return copyFeedDeepLinkToClipboard({
+      kind: "trade",
+      id: tradeIdForDm,
+    })
+  }, [tradeIdForDm])
+
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation()
@@ -75,13 +91,9 @@ export default function ShareTradeButton({
     [mode, onSendClick]
   )
 
-  const tradeIdForDm =
-    trade?.id != null && String(trade.id).trim() !== ""
-      ? String(trade.id)
-      : null
-
   return (
     <>
+      <FeedbackModal {...feedbackModalProps} />
       {mode === "full" ? (
         <div
           className="pointer-events-none fixed top-0 overflow-hidden"
@@ -162,6 +174,14 @@ export default function ShareTradeButton({
                 >
                   Download Image
                 </button>
+
+                <ShareCopyLinkButton
+                  onCopy={handleCopyLink}
+                  idleClassName="border-transparent bg-white/10 text-white hover:bg-white/20"
+                  onCopyError={() =>
+                    showPopup({ type: "error", message: "Could not copy link." })
+                  }
+                />
 
                 <button
                   type="button"

@@ -10,18 +10,22 @@ import { ConfirmModal, useDeleteAchievementConfirmation } from "../components/ui
 import { supabase } from "../../lib/supabaseClient"
 import {
   type Achievement,
-  categoryFromType,
+  ACHIEVEMENT_TRACK_FILTER_OPTIONS,
+  ACHIEVEMENT_TYPE_FILTER_OPTIONS,
+  achievementMatchesTrackFilter,
+  achievementMatchesTypeFilter,
+  type AchievementTrackFilter,
+  type AchievementTypeFilter,
   fetchOwnAchievements,
 } from "../../lib/achievements"
-
-type CategoryFilter = "all" | "payouts" | "passed_evals" | "milestones"
 
 export default function AchievementsPage() {
   const [userId, setUserId] = useState<string | null>(null)
   const [achievements, setAchievements] = useState<Achievement[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [filter, setFilter] = useState<CategoryFilter>("all")
+  const [trackFilter, setTrackFilter] = useState<AchievementTrackFilter>("all")
+  const [typeFilter, setTypeFilter] = useState<AchievementTypeFilter>("all")
   const [showForm, setShowForm] = useState(false)
   const [editingAchievement, setEditingAchievement] = useState<Achievement | null>(
     null
@@ -64,19 +68,20 @@ export default function AchievementsPage() {
     }
   }, [loadAchievements])
 
+  const filteredAchievements = useMemo(() => {
+    return achievements.filter(
+      (a) =>
+        achievementMatchesTrackFilter(a, trackFilter) &&
+        achievementMatchesTypeFilter(a, typeFilter)
+    )
+  }, [achievements, trackFilter, typeFilter])
+
   const featured = useMemo(
     () => achievements.filter((a) => a.is_featured),
     [achievements]
   )
 
-  const visible = useMemo(() => {
-    if (filter === "all") return achievements
-    return achievements.filter((a) => {
-      const normalizedStored = String(a.category || "").toLowerCase().trim()
-      const derived = categoryFromType(a.achievement_type)
-      return normalizedStored === filter || derived === filter
-    })
-  }, [achievements, filter])
+  const visible = filteredAchievements
 
   const unreadFeatured = featured.length
 
@@ -140,25 +145,40 @@ export default function AchievementsPage() {
             </button>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            {(["all", "payouts", "passed_evals", "milestones"] as const).map((key) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setFilter(key)}
-                className={`rounded-lg border px-3 py-1.5 text-sm ${
-                  filter === key
-                    ? "border-blue-400/60 bg-blue-500/20 text-white"
-                    : "border-white/10 bg-white/5 text-gray-200 hover:bg-white/10"
-                }`}
-              >
-                {key === "all"
-                  ? "All"
-                  : key === "passed_evals"
-                  ? "Passed Evals"
-                  : key[0].toUpperCase() + key.slice(1)}
-              </button>
-            ))}
+          <div className="space-y-3">
+            <div className="inline-flex rounded-lg border border-white/10 bg-white/5 p-0.5">
+              {ACHIEVEMENT_TRACK_FILTER_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setTrackFilter(option.value)}
+                  className={`rounded-md px-3 py-1.5 text-sm transition ${
+                    trackFilter === option.value
+                      ? "border border-blue-400/60 bg-blue-500/20 text-white"
+                      : "border border-transparent text-gray-200 hover:bg-white/10"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {ACHIEVEMENT_TYPE_FILTER_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setTypeFilter(option.value)}
+                  className={`rounded-lg border px-3 py-1.5 text-sm ${
+                    typeFilter === option.value
+                      ? "border-blue-400/60 bg-blue-500/20 text-white"
+                      : "border-white/10 bg-white/5 text-gray-200 hover:bg-white/10"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           {error ? (
@@ -192,9 +212,15 @@ export default function AchievementsPage() {
             </div>
           ) : visible.length === 0 ? (
             <div className="rounded-xl border border-white/10 bg-white/5 p-8 text-center">
-              <p className="text-base text-white">No achievements yet.</p>
+              <p className="text-base text-white">
+                {achievements.length === 0
+                  ? "No achievements yet."
+                  : "No achievements match these filters."}
+              </p>
               <p className="mt-2 text-sm text-gray-400">
-                Add milestones like first payout, passed eval, profit targets, or consistency streaks.
+                {achievements.length === 0
+                  ? "Add milestones like first payout, passed eval, profit targets, or consistency streaks."
+                  : "Try another filter or add a new achievement."}
               </p>
             </div>
           ) : (

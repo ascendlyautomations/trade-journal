@@ -18,6 +18,7 @@ import {
 interface Option {
   label: string
   value: string
+  disabled?: boolean
 }
 
 interface Props {
@@ -119,6 +120,16 @@ export default function CustomSelect({
       >
         {options.map((opt) => {
           const isSelected = opt.value === value
+          if (opt.disabled) {
+            return (
+              <div
+                key={opt.value}
+                className="pointer-events-none select-none px-3 py-1.5 text-xs leading-none text-gray-500"
+              >
+                {opt.label}
+              </div>
+            )
+          }
           return (
             <button
               key={opt.value}

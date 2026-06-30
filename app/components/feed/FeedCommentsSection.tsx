@@ -16,6 +16,11 @@ import {
   startCommentReply,
   type CommentReplyTarget,
 } from "@/lib/commentReplyUx"
+import {
+  commentLikeNotificationParentFromFeedPost,
+  commentLikeSourceFromFeedPost,
+} from "@/lib/commentLikes"
+import { useCommentLikes } from "@/lib/useCommentLikes"
 import type { FeedCommentTarget } from "./feedPostHelpers"
 
 type FeedCommentsSectionProps = {
@@ -45,6 +50,25 @@ function FeedCommentsSection({
   listScrollRef,
 }: FeedCommentsSectionProps) {
   const contentId = target.contentId
+  const submitContext =
+    target.submitContext && typeof target.submitContext === "object"
+      ? (target.submitContext as Record<string, unknown>)
+      : null
+  const commentLikeSource = submitContext
+    ? commentLikeSourceFromFeedPost(submitContext)
+    : null
+  const commentLikeNotificationParent = submitContext
+    ? commentLikeNotificationParentFromFeedPost(submitContext)
+    : {}
+
+  const { likesByCommentId, toggleCommentLikeFor, isCommentLikeBusy, canLikeComments } =
+    useCommentLikes({
+      source: commentLikeSource,
+      comments,
+      currentUserId: user?.id,
+      notificationParent: commentLikeNotificationParent,
+    })
+
   const [commentDraft, setCommentDraft] = useState(
     () => draftSyncRef?.current[contentId] ?? ""
   )
@@ -161,6 +185,9 @@ function FeedCommentsSection({
     <FeedCommentList
       comments={comments}
       currentUserId={user?.id}
+      likesByCommentId={likesByCommentId}
+      onToggleCommentLike={canLikeComments ? toggleCommentLikeFor : undefined}
+      isCommentLikeBusy={isCommentLikeBusy}
       onReply={handleReply}
       onRequestDelete={
         onDeleteComment ? (comment) => setPendingDelete(comment) : undefined

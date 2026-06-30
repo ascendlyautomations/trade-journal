@@ -25,6 +25,10 @@ type FeedPostOverlaysProps = {
   onSubmitComment: (post: any, text: string) => Promise<boolean>
   onDeleteComment?: (comment: any) => Promise<boolean>
   onSharePost: (post: any) => void
+  openReelMenuId?: string | null
+  onReelMenuToggle?: (reelId: string) => void
+  onEditReel?: (post: any) => void
+  onDeleteReel?: (post: any) => void
 }
 
 function FeedPostOverlays({
@@ -45,6 +49,10 @@ function FeedPostOverlays({
   onSubmitComment,
   onDeleteComment,
   onSharePost,
+  openReelMenuId = null,
+  onReelMenuToggle,
+  onEditReel,
+  onDeleteReel,
 }: FeedPostOverlaysProps) {
   return (
     <>
@@ -65,6 +73,14 @@ function FeedPostOverlays({
             onSubmitComment={onSubmitComment}
             onDeleteComment={onDeleteComment}
             onSharePost={onSharePost}
+            canManageReel={
+              user?.id != null &&
+              String(user.id) === String(selectedPost.user_id)
+            }
+            menuOpen={openReelMenuId === selectedPostId}
+            onMenuToggle={() => onReelMenuToggle?.(selectedPostId)}
+            onEditReel={() => onEditReel?.(selectedPost)}
+            onDeleteReel={() => onDeleteReel?.(selectedPost)}
           />
         ) : selectedPost.feedKind === "profile" ||
         selectedPost.feedKind === "achievement" ? (

@@ -46,7 +46,7 @@ import {
 const NOTIFICATIONS_TABLE = "notifications"
 
 const NOTIFICATION_SELECT =
-  "id, user_id, sender_id, type, post_id, trade_id, profile_post_id, achievement_post_id, reel_id, content, read, created_at"
+  "id, user_id, sender_id, type, post_id, trade_id, profile_post_id, achievement_post_id, reel_id, comment_id, content, read, created_at"
 
 const ENGAGEMENT_TYPES = NOTIFICATION_ENGAGEMENT_TYPES
 
@@ -147,7 +147,8 @@ function GroupedNotificationCardView({
       card.trade_id,
       card.profile_post_id,
       card.achievement_post_id,
-      card.reel_id
+      card.reel_id,
+      card.comment_id
     )
   } else if (card.kind === "comment_group") {
     expandable = true

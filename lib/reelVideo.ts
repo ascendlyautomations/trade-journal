@@ -3,8 +3,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { compressImage } from "@/lib/compressImage"
 
-export const REEL_MAX_DURATION_SECONDS = 60
+export const REEL_MAX_DURATION_SECONDS = 90
 export const REEL_MAX_FILE_BYTES = 100 * 1024 * 1024
+
+/** User-facing duration limit copy (keep in sync across validation + UI). */
+export const REEL_MAX_DURATION_LABEL = "1 min 30 sec"
+export const REEL_DURATION_LIMIT_MESSAGE =
+  "Reels must be 90 seconds (1 minute 30 seconds) or less."
 
 const ACCEPTED_VIDEO_MIME_TYPES = new Set([
   "video/mp4",
@@ -89,11 +94,7 @@ export function readReelVideoMetadata(
 
       if (duration > REEL_MAX_DURATION_SECONDS) {
         cleanup()
-        reject(
-          new Error(
-            `Videos must be ${REEL_MAX_DURATION_SECONDS} seconds or shorter.`
-          )
-        )
+        reject(new Error(REEL_DURATION_LIMIT_MESSAGE))
         return
       }
 

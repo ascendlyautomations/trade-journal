@@ -6,7 +6,7 @@ import {
   badgeIconForKey,
   formatAchievementDate,
   formatAchievementValue,
-  normalizeAchievementType,
+  isPayoutAchievementType,
   tierClassName,
 } from "../../lib/achievements"
 import { achievementImagePublicUrl } from "../../lib/storagePublicUrl"
@@ -30,7 +30,7 @@ export default function AchievementCard({
 }: AchievementCardProps) {
   const imageSrc = achievementImagePublicUrl(achievement.image_url)
   const valueText = formatAchievementValue(achievement)
-  const isPayout = normalizeAchievementType(achievement.achievement_type) === "payout"
+  const isPayout = isPayoutAchievementType(achievement.achievement_type)
   const headerLabel =
     isPayout && valueText
       ? `${achievementTypeLabel(achievement.achievement_type)} • ${valueText}`

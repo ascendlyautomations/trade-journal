@@ -23,6 +23,10 @@ type FeedPostListProps = {
   onToggleLike: (post: any) => void
   onSubmitComment: (post: any, text: string) => Promise<boolean>
   onSharePost: (post: any) => void
+  openReelMenuId?: string | null
+  onReelMenuToggle?: (reelId: string) => void
+  onEditReel?: (post: any) => void
+  onDeleteReel?: (post: any) => void
 }
 
 function FeedPostList({
@@ -38,6 +42,10 @@ function FeedPostList({
   onToggleLike,
   onSubmitComment,
   onSharePost,
+  openReelMenuId = null,
+  onReelMenuToggle,
+  onEditReel,
+  onDeleteReel,
 }: FeedPostListProps) {
   return (
     <>
@@ -81,6 +89,8 @@ function FeedPostList({
         }
 
         if (post.feedKind === "reel") {
+          const canManageReel =
+            user?.id != null && String(user.id) === String(post.user_id)
           return (
             <FeedReelCard
               key={`reel-${pid}`}
@@ -90,6 +100,11 @@ function FeedPostList({
               likeBusy={!!likeBusyByPost[pid]}
               comments={commentsByPost[pid] ?? EMPTY_COMMENTS}
               commentSubmitting={!!commentSubmitting[pid]}
+              canManageReel={canManageReel}
+              menuOpen={openReelMenuId === pid}
+              onMenuToggle={() => onReelMenuToggle?.(pid)}
+              onEditReel={() => onEditReel?.(post)}
+              onDeleteReel={() => onDeleteReel?.(post)}
               onSelectPost={onSelectPost}
               onOpenComments={onOpenComments}
               onToggleLike={onToggleLike}

@@ -60,3 +60,67 @@ export function clearFeedSessionsForUser(userId: string) {
     }
   }
 }
+
+/** Patch a reel row across in-memory feed sessions (caption edits, etc.). */
+export function patchFeedReelInSessionsForUser(
+  userId: string,
+  reelId: string,
+  patch: Record<string, unknown>
+) {
+  const id = reelId.trim()
+  if (!id) return
+
+  for (const [key, session] of feedSessions.entries()) {
+    if (!key.startsWith(`${userId}:`)) continue
+
+    let changed = false
+    const nextPosts = session.posts.map((p) => {
+      if (String(p.id) !== id || p.feedKind !== "reel") return p
+      changed = true
+      return { ...p, ...patch }
+    })
+    const nextBuffer = session.mergeBuffer.map((item) => {
+      if (String(item.id) !== id || item.feedKind !== "reel") return item
+      changed = true
+      return { ...item, ...patch }
+    })
+
+    if (!changed) continue
+
+    feedSessions.set(key, {
+      ...session,
+      posts: nextPosts,
+      mergeBuffer: nextBuffer,
+    })
+  }
+}
+
+/** Remove a reel from all in-memory feed sessions after delete. */
+export function removeFeedReelFromSessionsForUser(userId: string, reelId: string) {
+  const id = reelId.trim()
+  if (!id) return
+
+  for (const [key, session] of feedSessions.entries()) {
+    if (!key.startsWith(`${userId}:`)) continue
+
+    const nextPosts = session.posts.filter(
+      (p) => !(String(p.id) === id && p.feedKind === "reel")
+    )
+    const nextBuffer = session.mergeBuffer.filter(
+      (item) => !(String(item.id) === id && item.feedKind === "reel")
+    )
+
+    if (
+      nextPosts.length === session.posts.length &&
+      nextBuffer.length === session.mergeBuffer.length
+    ) {
+      continue
+    }
+
+    feedSessions.set(key, {
+      ...session,
+      posts: nextPosts,
+      mergeBuffer: nextBuffer,
+    })
+  }
+}

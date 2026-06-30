@@ -30,6 +30,7 @@ import DetailModalImage from "../../components/ui/DetailModalImage"
 import ImageLightbox from "../../components/ui/ImageLightbox"
 import { EMPTY_LIKE_META } from "../../components/feed/FeedPostCard"
 import FeedCommentList from "../../components/feed/FeedCommentList"
+import { useCommentLikes } from "@/lib/useCommentLikes"
 import ReplyComposerStrip from "@/app/components/replies/ReplyComposerStrip"
 import {
   clearCommentReplyDraft,
@@ -128,13 +129,18 @@ import ProfileCreateMenu from "../../components/profile/ProfileCreateMenu"
 import ReelComposerModal from "../../components/profile/ReelComposerModal"
 import ProfileReelCard from "../../components/profile/ProfileReelCard"
 import FeedReelDetailModal from "../../components/feed/FeedReelDetailModal"
-import { PROFILE_REELS_SELECT, type ReelRow } from "@/lib/reels"
+import { PROFILE_REELS_SELECT, type ReelRow, deleteReel } from "@/lib/reels"
 import { reelDetailFeedItem } from "../../components/feed/feedPostHelpers"
+import {
+  patchFeedReelInSessionsForUser,
+  removeFeedReelFromSessionsForUser,
+} from "@/lib/feedSessionCache"
 import {
   REEL_COMMENT_INSERT_SELECT,
   insertReelCommentNotifications,
-  insertReelLikeNotification,
   loadReelEngagementMaps,
+  fetchReelLikeMetaByIds,
+  toggleReelLike,
   withInsertedReelParentCommentId,
 } from "@/lib/reelEngagement"
 import { ProfileAvatarImg } from "../../components/SafeProfileAvatar"
@@ -743,10 +749,21 @@ function PostCard({
     })
   }, [inDetailModal, post.id, scrollToCommentsOnMount, showCommentsPanel])
 
+  const { likesByCommentId, toggleCommentLikeFor, isCommentLikeBusy, canLikeComments } =
+    useCommentLikes({
+      source: "profile_post_comments",
+      comments: comments || [],
+      currentUserId,
+      notificationParent: { profilePostId: String(post.id) },
+    })
+
   const commentsList = (
     <FeedCommentList
       comments={comments || []}
       currentUserId={currentUserId}
+      likesByCommentId={likesByCommentId}
+      onToggleCommentLike={canLikeComments ? toggleCommentLikeFor : undefined}
+      isCommentLikeBusy={isCommentLikeBusy}
       onReply={(comment) => {
         startCommentReply({
           comment,
@@ -992,9 +1009,6 @@ function PostCard({
       {showInteractions ? (
         <div className="border-t border-white/10 pt-3">
           {postEngagementRow}
-          <p className="px-1 pt-2 text-sm font-medium text-white">
-            {(likeMeta?.count ?? 0).toLocaleString()} likes
-          </p>
           {!inDetailModal ? commentsPanel : null}
         </div>
       ) : null}
@@ -1007,9 +1021,6 @@ function PostCard({
         <p className="px-1 text-sm leading-relaxed text-white">{post.content}</p>
       ) : null}
       <p className="text-xs text-gray-400">{formatRelativeTime(post.created_at, Date.now(), "compact")}</p>
-      <p className="px-1 text-sm font-medium text-white">
-        {(likeMeta?.count ?? 0).toLocaleString()} likes
-      </p>
     </div>
   )
 
@@ -1254,6 +1265,7 @@ function ProfilePageContent() {
   )
   const [showCreatePost, setShowCreatePost] = useState(false)
   const [showReelComposer, setShowReelComposer] = useState(false)
+  const [editingReel, setEditingReel] = useState<ReelRow | null>(null)
   const [selectedReelDetail, setSelectedReelDetail] = useState<any | null>(null)
   const [storyComposeOpen, setStoryComposeOpen] = useState(false)
   const [pendingStoryFile, setPendingStoryFile] = useState<File | null>(null)
@@ -1334,6 +1346,10 @@ function ProfilePageContent() {
 
   const openCreatePostModal = useCallback(() => {
     setShowCreatePost(true)
+  }, [])
+
+  const openCreateStory = useCallback(() => {
+    document.getElementById("storyUploadInput")?.click()
   }, [])
 
   const openCreateReelModal = useCallback(() => {
@@ -1693,6 +1709,47 @@ function ProfilePageContent() {
   }, [currentUserId, fetchProfileReels, profile?.id])
 
   useEffect(() => {
+    if (!profile?.id || profileReels.length === 0) return
+
+    const reelIds = profileReels.map((row) => String(row.id))
+    const channel = supabase.channel(`profile-reel-likes-${profile.id}`)
+
+    const refreshReelLike = (reelId: string) => {
+      void (async () => {
+        const metaById = await fetchReelLikeMetaByIds(
+          supabase,
+          [reelId],
+          currentUserId
+        )
+        const next = metaById[reelId]
+        if (!next) return
+        setLikesByPost((prev) => ({ ...prev, [reelId]: next }))
+      })()
+    }
+
+    for (const reelId of reelIds) {
+      channel.on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "reel_likes",
+          filter: `reel_id=eq.${reelId}`,
+        },
+        () => {
+          refreshReelLike(reelId)
+        }
+      )
+    }
+
+    channel.subscribe()
+
+    return () => {
+      void supabase.removeChannel(channel)
+    }
+  }, [profile?.id, profileReels, currentUserId])
+
+  useEffect(() => {
     if (!profile?.id) {
       setAchievements([])
       return
@@ -1768,6 +1825,7 @@ function ProfilePageContent() {
     if (
       showCreatePost ||
       showReelComposer ||
+      editingReel ||
       selectedReelDetail ||
       editingPost ||
       selectedAchievementImage ||
@@ -1786,6 +1844,7 @@ function ProfilePageContent() {
   }, [
     showCreatePost,
     showReelComposer,
+    editingReel,
     selectedReelDetail,
     editingPost,
     selectedAchievementImage,
@@ -1799,6 +1858,7 @@ function ProfilePageContent() {
     if (
       !showCreatePost &&
       !showReelComposer &&
+      !editingReel &&
       !selectedReelDetail &&
       !editingPost &&
       !selectedAchievementImage &&
@@ -1813,6 +1873,8 @@ function ProfilePageContent() {
         setShowCreatePost(false)
         setPendingRoomShare(null)
         setEditingPost(null)
+        setShowReelComposer(false)
+        setEditingReel(null)
         setSelectedAchievementImage(null)
         setSelectedTradeDetail(null)
         setSelectedPostDetail(null)
@@ -1823,7 +1885,15 @@ function ProfilePageContent() {
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [showCreatePost, editingPost, selectedAchievementImage, selectedTradeDetail, selectedPostDetail, feedDeepLinkPost, sharePost])
+  }, [
+    showCreatePost,
+    editingPost,
+    selectedAchievementImage,
+    selectedTradeDetail,
+    selectedPostDetail,
+    feedDeepLinkPost,
+    sharePost,
+  ])
 
   useEffect(() => {
     if (viewerUser?.id) {
@@ -2303,6 +2373,85 @@ function ProfilePageContent() {
     [fetchProfileReels, openReelDetail, profile?.id, showPopup]
   )
 
+  const applyReelPatch = useCallback(
+    (reelId: string, patch: Partial<ReelRow>) => {
+      setProfileReels((prev) =>
+        prev.map((row) =>
+          String(row.id) === reelId ? { ...row, ...patch } : row
+        )
+      )
+      setSelectedReelDetail((prev) => {
+        if (!prev || String(prev.id) !== reelId) return prev
+        return reelDetailFeedItem({ ...prev, ...patch }, profile)
+      })
+      if (currentUserId) {
+        patchFeedReelInSessionsForUser(currentUserId, reelId, patch)
+      }
+    },
+    [currentUserId, profile]
+  )
+
+  const handleReelSaved = useCallback(
+    (reel: ReelRow) => {
+      applyReelPatch(String(reel.id), {
+        caption: reel.caption,
+        updated_at: reel.updated_at,
+      })
+      setEditingReel(null)
+      setOpenMenuId(null)
+    },
+    [applyReelPatch]
+  )
+
+  const handleStartEditReel = useCallback(
+    (post: any) => {
+      if (!currentUserId || !profile || currentUserId !== profile.id) return
+      setEditingReel({
+        id: String(post.id),
+        user_id: String(post.user_id),
+        caption: post.caption != null ? String(post.caption) : null,
+        video_url: String(post.video_url),
+        thumbnail_url: String(post.thumbnail_url),
+        duration_seconds:
+          post.duration_seconds != null ? Number(post.duration_seconds) : null,
+        visibility: post.visibility === "private" ? "private" : "public",
+        created_at: String(post.created_at),
+        updated_at: String(post.updated_at ?? post.created_at),
+      })
+      setOpenMenuId(null)
+    },
+    [currentUserId, profile]
+  )
+
+  const handleDeleteReel = useCallback(
+    async (post: any) => {
+      if (!currentUserId || !profile || currentUserId !== profile.id) return
+      if (String(post.user_id) !== profile.id) return
+      if (!window.confirm("Delete this reel?")) return
+
+      const reelId = String(post.id)
+      const result = await deleteReel(supabase, {
+        reelId,
+        userId: currentUserId,
+      })
+
+      if ("error" in result) {
+        showPopup({ type: "error", message: result.error })
+        return
+      }
+
+      setProfileReels((prev) =>
+        prev.filter((row) => String(row.id) !== reelId)
+      )
+      if (selectedReelDetail && String(selectedReelDetail.id) === reelId) {
+        setSelectedReelDetail(null)
+      }
+      removeFeedReelFromSessionsForUser(currentUserId, reelId)
+      setOpenMenuId(null)
+    },
+    [currentUserId, profile, selectedReelDetail, showPopup]
+  )
+
   const posts = wallPosts
   const sortedPosts = [...posts].sort((a, b) => {
     if (a.is_pinned && !b.is_pinned) return -1
@@ -2312,8 +2461,6 @@ function ProfilePageContent() {
 
   async function loadPostEngagement(postList: any[]) {
     if (!postList.length) {
-      setLikesByPost({})
-      setCommentsByPost({})
       return
     }
     const ids = postList.map((p) => p.id)
@@ -2350,8 +2497,8 @@ function ProfilePageContent() {
       commentsMap[key].push(row)
     }
 
-    setLikesByPost(likesMap)
-    setCommentsByPost(commentsMap)
+    setLikesByPost((prev) => ({ ...prev, ...likesMap }))
+    setCommentsByPost((prev) => ({ ...prev, ...commentsMap }))
   }
 
   useEffect(() => {
@@ -2635,44 +2782,15 @@ function ProfilePageContent() {
       const meta = likesByPost[key] || { count: 0, liked: false }
       const ownerId = profile?.id ? String(profile.id) : null
 
-      if (meta.liked) {
-        const { error } = await supabase
-          .from("reel_likes")
-          .delete()
-          .eq("reel_id", key)
-          .eq("user_id", currentUserId)
-        if (error) return console.error(error)
-        if (ownerId) {
-          await deleteLikeNotification(supabase, {
-            recipientUserId: ownerId,
-            senderUserId: currentUserId,
-            target: { kind: "reel", reelId: key },
-          })
-        }
-        setLikesByPost((prev) => ({
-          ...prev,
-          [key]: { count: Math.max(0, meta.count - 1), liked: false },
-        }))
-        return
-      }
-
-      const { error } = await supabase.from("reel_likes").insert({
-        reel_id: key,
-        user_id: currentUserId,
+      await toggleReelLike(supabase, {
+        reelId: key,
+        userId: currentUserId,
+        ownerUserId: ownerId,
+        meta,
+        onMetaChange: (next) => {
+          setLikesByPost((prev) => ({ ...prev, [key]: next }))
+        },
       })
-      if (error) return console.error(error)
-      setLikesByPost((prev) => ({
-        ...prev,
-        [key]: { count: meta.count + 1, liked: true },
-      }))
-
-      if (ownerId) {
-        await insertReelLikeNotification(supabase, {
-          reelId: key,
-          ownerUserId: ownerId,
-          senderUserId: currentUserId,
-        })
-      }
     } finally {
       likeBusyRef.current.delete(key)
       setLikeBusyByPost((prev) => ({ ...prev, [key]: false }))
@@ -3702,10 +3820,15 @@ function ProfilePageContent() {
       ) : null}
       {currentUserId === profile?.id ? (
         <ReelComposerModal
-          open={showReelComposer}
+          open={showReelComposer || editingReel != null}
           userId={currentUserId}
-          onClose={() => setShowReelComposer(false)}
+          editReel={editingReel}
+          onClose={() => {
+            setShowReelComposer(false)
+            setEditingReel(null)
+          }}
           onPublished={(reelId) => void handleReelPublished(reelId)}
+          onSaved={handleReelSaved}
         />
       ) : null}
       {selectedReelDetail ? (
@@ -3727,6 +3850,17 @@ function ProfilePageContent() {
           onSubmitComment={submitReelComment}
           onDeleteComment={deleteComment}
           onSharePost={(post) => setSharePost(post)}
+          canManageReel={currentUserId === profile?.id}
+          menuOpen={openMenuId === String(selectedReelDetail.id)}
+          onMenuToggle={() =>
+            setOpenMenuId((prev) =>
+              prev === String(selectedReelDetail.id)
+                ? null
+                : String(selectedReelDetail.id)
+            )
+          }
+          onEditReel={() => handleStartEditReel(selectedReelDetail)}
+          onDeleteReel={() => void handleDeleteReel(selectedReelDetail)}
         />
       ) : null}
 
@@ -3765,7 +3899,16 @@ function ProfilePageContent() {
 
       <div className="w-full text-gray-100">
         <div className="mx-auto max-w-5xl space-y-4 px-4 py-6 sm:px-6 lg:px-8">
-          <div className="bg-white/5 border border-white/10 rounded-xl p-6 backdrop-blur-md">
+          <div className="relative bg-white/5 border border-white/10 rounded-xl p-6 backdrop-blur-md">
+            {currentUserId === profile.id ? (
+              <input
+                id="storyUploadInput"
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => void handleStoryFileSelect(e)}
+              />
+            ) : null}
             <div className="flex flex-col items-center text-center sm:items-stretch sm:text-left md:block">
               <div className="flex w-full flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="flex min-w-0 w-full flex-1 flex-col items-center gap-2 sm:flex-row sm:items-center sm:gap-6">
@@ -3812,7 +3955,7 @@ function ProfilePageContent() {
                         ) : null}
 
                         {currentUserId === profile.id && (
-                          <div className="flex items-center gap-2">
+                          <div className="hidden items-center gap-2 sm:flex">
                             <button
                               type="button"
                               onClick={() => router.push("/settings#profile")}
@@ -3900,7 +4043,7 @@ function ProfilePageContent() {
 
                   {isOwnProfile ? (
                     hasRoom ? (
-                      <div className="mt-3">
+                      <div className="mt-3 flex flex-wrap items-center justify-center gap-2 sm:justify-start">
                         <button
                           type="button"
                           onClick={() =>
@@ -3914,9 +4057,16 @@ function ProfilePageContent() {
                         >
                           View Trade Room
                         </button>
+                        <button
+                          type="button"
+                          onClick={() => router.push("/settings#profile")}
+                          className="rounded-md bg-gray-600 px-2 py-1 text-xs text-gray-100 hover:bg-gray-500 sm:hidden"
+                        >
+                          Edit Profile
+                        </button>
                       </div>
                     ) : (
-                      <div className="mt-3">
+                      <div className="mt-3 flex flex-wrap items-center justify-center gap-2 sm:justify-start">
                         <button
                           type="button"
                           onClick={() => void handleCreateRoom()}
@@ -3924,6 +4074,13 @@ function ProfilePageContent() {
                           className="px-6 py-2 rounded-lg bg-green-500 font-semibold text-sm text-white hover:bg-green-600 disabled:opacity-60"
                         >
                           {creatingRoom ? "Creating…" : "Create Trade Room"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => router.push("/settings#profile")}
+                          className="rounded-md bg-gray-600 px-2 py-1 text-xs text-gray-100 hover:bg-gray-500 sm:hidden"
+                        >
+                          Edit Profile
                         </button>
                       </div>
                     )
@@ -3947,32 +4104,15 @@ function ProfilePageContent() {
                 </div>
               </div>
 
-              {currentUserId === profile.id && (
-                <>
-                  <input
-                    id="storyUploadInput"
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(e) => void handleStoryFileSelect(e)}
+              {currentUserId === profile.id ? (
+                <div className="absolute right-1 top-3 z-10 sm:relative sm:right-auto sm:top-auto sm:mt-0 sm:flex sm:shrink-0 sm:justify-end sm:pt-1">
+                  <ProfileCreateMenu
+                    onCreateStory={openCreateStory}
+                    onCreatePost={openCreatePostModal}
+                    onCreateReel={openCreateReelModal}
                   />
-                  <div className="mt-0 flex w-full shrink-0 justify-center gap-2 sm:mt-0 sm:w-auto sm:justify-end sm:pt-1 md:w-auto">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        document.getElementById("storyUploadInput")?.click()
-                      }
-                      className="flex-1 rounded-md bg-blue-500 px-3 py-2 text-sm font-medium text-white hover:bg-blue-600 sm:flex-none sm:py-1.5 sm:text-xs"
-                    >
-                      + Story
-                    </button>
-                    <ProfileCreateMenu
-                      onCreatePost={openCreatePostModal}
-                      onCreateReel={openCreateReelModal}
-                    />
-                  </div>
-                </>
-              )}
+                </div>
+              ) : null}
             </div>
             </div>
           </div>
@@ -4077,6 +4217,7 @@ function ProfilePageContent() {
 
             <button
               type="button"
+              aria-label="Stats"
               className={`text-sm font-medium border-b-2 py-2 sm:py-0 ${
                 activeTab === "stats"
                   ? "border-blue-400 text-white sm:border-blue-500 sm:pb-1"
@@ -4084,11 +4225,15 @@ function ProfilePageContent() {
               }`}
               onClick={() => setActiveTab("stats")}
             >
-              Stats
+              <span className="hidden sm:inline">Stats</span>
+              <span className="sm:hidden" aria-hidden>
+                📊
+              </span>
             </button>
 
             <button
               type="button"
+              aria-label="Calendar"
               className={`text-sm font-medium border-b-2 py-2 sm:py-0 ${
                 activeTab === "calendar"
                   ? "border-blue-400 text-white sm:border-blue-500 sm:pb-1"
@@ -4096,10 +4241,14 @@ function ProfilePageContent() {
               }`}
               onClick={() => setActiveTab("calendar")}
             >
-              Calendar
+              <span className="hidden sm:inline">Calendar</span>
+              <span className="sm:hidden" aria-hidden>
+                📅
+              </span>
             </button>
             <button
               type="button"
+              aria-label="Achievements"
               className={`text-sm font-medium border-b-2 py-2 sm:py-0 ${
                 activeTab === "achievements"
                   ? "border-blue-400 text-white sm:border-blue-500 sm:pb-1"
@@ -4107,7 +4256,10 @@ function ProfilePageContent() {
               }`}
               onClick={() => setActiveTab("achievements")}
             >
-              Achievements
+              <span className="hidden sm:inline">Achievements</span>
+              <span className="sm:hidden" aria-hidden>
+                🏆
+              </span>
             </button>
           </div>
 
@@ -4242,6 +4394,7 @@ function ProfilePageContent() {
                       action={
                         <ProfileCreateMenu
                           variant="link"
+                          onCreateStory={openCreateStory}
                           onCreatePost={openCreatePostModal}
                           onCreateReel={openCreateReelModal}
                         />

@@ -3,6 +3,7 @@
 import { memo, useState } from "react"
 import { getReplyThreadDisplay } from "@/lib/commentThreads"
 import FeedCommentItem from "@/app/components/feed/FeedCommentItem"
+import type { CommentLikeMeta } from "@/lib/commentLikes"
 
 type CommentReplyThreadProps = {
   replies: any[]
@@ -10,6 +11,9 @@ type CommentReplyThreadProps = {
   mentionUserIdsByUsername: Map<string, string>
   currentUserId?: string | null
   replyAvatarClassName?: string
+  likesByCommentId?: Record<string, CommentLikeMeta>
+  onToggleCommentLike?: (comment: any) => void
+  isCommentLikeBusy?: (commentId: string) => boolean
   onReply?: (comment: any) => void
   onRequestDelete?: (comment: any) => void
   deleteMenuClassName?: string
@@ -21,6 +25,9 @@ function CommentReplyThread({
   mentionUserIdsByUsername,
   currentUserId,
   replyAvatarClassName = "h-6 w-6 shrink-0 rounded-full object-cover",
+  likesByCommentId,
+  onToggleCommentLike,
+  isCommentLikeBusy,
   onReply,
   onRequestDelete,
   deleteMenuClassName,
@@ -45,6 +52,9 @@ function CommentReplyThread({
             mentionUserIdsByUsername={mentionUserIdsByUsername}
             currentUserId={currentUserId}
             avatarClassName={replyAvatarClassName}
+            likeMeta={likesByCommentId?.[String(reply.id)]}
+            onToggleLike={onToggleCommentLike}
+            likeDisabled={isCommentLikeBusy?.(String(reply.id)) ?? false}
             onReply={onReply}
             onRequestDelete={onRequestDelete}
             deleteMenuClassName={deleteMenuClassName}

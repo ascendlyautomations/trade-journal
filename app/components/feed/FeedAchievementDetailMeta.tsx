@@ -10,6 +10,8 @@ import { formatSocialTimestamp } from "@/lib/formatRelativeTime"
 
 function formatCategoryLabel(achievement: Achievement): string {
   const raw = achievement.category ?? categoryFromType(achievement.achievement_type)
+  if (raw === "prop_firm_payouts") return "Prop Firm Payouts"
+  if (raw === "live_trading_payouts") return "Live Trading Payouts"
   if (raw === "payouts") return "Payouts"
   if (raw === "passed_evals") return "Passed Evals"
   if (raw === "milestones") return "Milestones"

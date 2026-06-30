@@ -257,6 +257,24 @@ export async function fetchTradeFeedPostById(
   return normalizeTradeFeedItem(data as Record<string, unknown>)
 }
 
+export async function fetchTradeFeedPostByTradeId(
+  supabase: SupabaseClient,
+  tradeId: string
+): Promise<FeedItem | null> {
+  const { data, error } = await supabase
+    .from("posts")
+    .select(FEED_POSTS_SELECT)
+    .eq("trade_id", tradeId)
+    .maybeSingle()
+
+  if (error) {
+    console.error("fetchTradeFeedPostByTradeId:", error)
+    return null
+  }
+  if (!data) return null
+  return normalizeTradeFeedItem(data as Record<string, unknown>)
+}
+
 export async function fetchProfileFeedPostById(
   supabase: SupabaseClient,
   postId: string

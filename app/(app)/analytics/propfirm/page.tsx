@@ -52,24 +52,47 @@ import Modal from "@/app/components/ui/Modal"
 import AchievementUploadModal, {
   type AchievementUploadInitialValues,
 } from "@/app/components/AchievementUploadModal"
+import CreateAccountModal from "@/app/components/CreateAccountModal"
+import PropFirmEvalContinuanceModal from "@/app/components/propfirm/PropFirmEvalContinuanceModal"
+import PropFirmFundedRulesChoiceModal from "@/app/components/propfirm/PropFirmFundedRulesChoiceModal"
 import PayoutSetupModal, {
   type PayoutSetupValues,
 } from "@/app/components/PayoutSetupModal"
+import PropFirmPayoutHistoryModal from "@/app/components/propfirm/PropFirmPayoutHistoryModal"
 import { useUserProfile } from "@/lib/useUserProfile"
 import {
   buildPayoutCycleContext,
-  fetchPayoutCycleHistory,
-  inferPropFirmName,
+  fetchPayoutCycleHistoryByAccountIds,
+  isEvalPropfirmAccount,
   isFundedPropfirmAccount,
+  mergeFundedPayoutHistory,
+  PROPFIRM_ALL_ACCOUNTS_VALUE,
   recordAccountPayout,
   resolveDefaultPayoutDrawdownBehavior,
   selectActivePayoutCycle,
   summarizeAccountPayouts,
   applyRecordedPayoutToHistory,
+  selectCompletedPayoutHistory,
   selectRecordedPayoutEquityEvents,
   type AccountPayoutCycle,
+  type PayoutHistoryEntry,
 } from "@/lib/propfirmPayoutCycles"
 import { ACCOUNT_DROPDOWN_TRIGGER_COMPACT_CLASS } from "@/lib/accountDropdownStyles"
+import {
+  buildConvertEvalToFundedFormInitial,
+  buildCreateFundedAccountFormInitial,
+  buildPropFirmMilestoneAchievementInitials,
+  convertEvalAccountToFundedWithRules,
+  propFirmMilestoneUploadConfig,
+  type PropFirmMilestoneKind,
+} from "@/lib/propfirmMilestones"
+import {
+  insertTradingAccount,
+  type CreateTradingAccountPayload,
+  type TradingAccountListItem,
+} from "@/lib/tradingAccounts"
+import { resolveAccountModeForSave } from "@/lib/createAccountForm"
+import { invalidateAccountsCache } from "@/lib/appDataCache"
 
 const SECTION_PANEL = dashboardInsightCardClass
 
@@ -84,39 +107,60 @@ function PropfirmStat({
   value,
   positive,
   valueClassName,
+  onClick,
 }: {
   title: string
   value: string
   positive?: boolean
   valueClassName?: string
+  onClick?: () => void
 }) {
   let color = valueClassName ?? "text-white"
   if (positive === true) color = "text-green-400"
   if (positive === false) color = "text-red-400"
 
-  return (
-    <div className="flex min-h-[90px] w-full flex-col items-center justify-center rounded-xl border border-white/10 bg-white/10 p-3 text-center backdrop-blur-md md:p-4">
+  const className = `flex min-h-[90px] w-full flex-col items-center justify-center rounded-xl border border-white/10 bg-white/10 p-3 text-center backdrop-blur-md md:p-4${
+    onClick
+      ? " cursor-pointer transition hover:border-white/20 hover:bg-white/[0.14] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
+      : ""
+  }`
+
+  const content = (
+    <>
       <p className="mb-1 text-xs text-gray-400 md:text-sm">{title}</p>
       <span
         className={`block whitespace-nowrap text-base font-semibold leading-tight tabular-nums md:text-lg lg:text-xl ${color}`}
       >
         {value}
       </span>
-    </div>
+    </>
   )
+
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className={className}>
+        {content}
+      </button>
+    )
+  }
+
+  return <div className={className}>{content}</div>
 }
 
 const PROPFIRM_ACCOUNT_FIELDS =
-  "id,name,account_size,mode,consistency,max_drawdown,daily_drawdown,profit_target,winning_days,payout_drawdown_behavior,remember_payout_drawdown_behavior"
+  "id,name,account_size,account_number,mode,consistency,max_drawdown,daily_drawdown,profit_target,winning_days,winning_day_threshold,payout_drawdown_behavior,remember_payout_drawdown_behavior"
 
-const PROPFIRM_TRADE_FIELDS = "id,pnl,date,trade_date,entry_time,created_at"
+const PROPFIRM_TRADE_FIELDS =
+  "id,pnl,date,trade_date,entry_time,exit_time,created_at"
 
 type PropfirmAccount = PropfirmAccountRules & {
   id: string | number
   name?: string | null
+  account_number?: string | null
   mode?: string | null
   daily_drawdown?: number | string | null
   winning_days?: number | string | null
+  winning_day_threshold?: number | string | null
   payout_drawdown_behavior?: string | null
   remember_payout_drawdown_behavior?: boolean | null
 }
@@ -231,10 +275,38 @@ export {
 function formatPropfirmAccountLabel(acc: PropfirmAccount | null) {
   if (!acc) return "None"
   const nameSize = formatAccountNameWithSizeDisplay(
-    acc.name,
-    acc.account_size
+    acc.name ?? "",
+    acc.account_size as string | null | undefined
   )
   return `${nameSize || acc.name} • ${acc.mode}`
+}
+
+function formatPropfirmAccountNameOnly(acc: PropfirmAccount) {
+  const nameSize = formatAccountNameWithSizeDisplay(
+    acc.name ?? "",
+    acc.account_size as string | null | undefined
+  )
+  return nameSize || acc.name || "Account"
+}
+
+function tradingListItemToPropfirmAccount(
+  item: TradingAccountListItem,
+  previous?: PropfirmAccount
+): PropfirmAccount {
+  return {
+    ...previous,
+    id: item.id,
+    name: item.name,
+    account_size: item.size,
+    account_number: item.account_number,
+    mode: item.mode,
+    consistency: item.rules?.consistency ?? null,
+    max_drawdown: item.rules?.maxDrawdown ?? null,
+    daily_drawdown: item.rules?.dailyDrawdown ?? null,
+    profit_target: item.rules?.profitTarget ?? null,
+    winning_days: item.rules?.winningDays ?? null,
+    winning_day_threshold: item.rules?.winningDayThreshold ?? null,
+  }
 }
 
 export default function PropFirmPage() {
@@ -244,19 +316,66 @@ export default function PropFirmPage() {
   const [hasProAccess, setHasProAccess] = useState(false)
   const [accounts, setAccounts] = useState<PropfirmAccount[]>([])
   const [accountsLoaded, setAccountsLoaded] = useState(false)
-  const [selectedAccount, setSelectedAccount] =
-    useState<PropfirmAccount | null>(null)
+  const [accountFilter, setAccountFilter] = useState(PROPFIRM_ALL_ACCOUNTS_VALUE)
   const [trades, setTrades] = useState<PropfirmTrade[]>([])
   const [loadingTrades, setLoadingTrades] = useState(false)
-  const [payoutCycles, setPayoutCycles] = useState<AccountPayoutCycle[]>([])
+  const [payoutCyclesByAccountId, setPayoutCyclesByAccountId] = useState<
+    Record<string, AccountPayoutCycle[]>
+  >({})
+  const [loadingPayoutHistory, setLoadingPayoutHistory] = useState(false)
   const [payoutModalOpen, setPayoutModalOpen] = useState(false)
   const [payoutSetupOpen, setPayoutSetupOpen] = useState(false)
   const [payoutSetupKey, setPayoutSetupKey] = useState(0)
+  const [payoutHistoryOpen, setPayoutHistoryOpen] = useState(false)
   const [recordingPayout, setRecordingPayout] = useState(false)
   const [achievementUploadOpen, setAchievementUploadOpen] = useState(false)
   const [achievementUploadInitial, setAchievementUploadInitial] = useState<
     AchievementUploadInitialValues | undefined
   >(undefined)
+  const [activeMilestoneKind, setActiveMilestoneKind] =
+    useState<PropFirmMilestoneKind | null>(null)
+  const [evalContinuanceOpen, setEvalContinuanceOpen] = useState(false)
+  const [evalContinuanceAccount, setEvalContinuanceAccount] =
+    useState<PropfirmAccount | null>(null)
+  const [evalContinuanceBusy, setEvalContinuanceBusy] = useState(false)
+  const [evalRulesChoiceOpen, setEvalRulesChoiceOpen] = useState(false)
+  const [convertRulesEditorOpen, setConvertRulesEditorOpen] = useState(false)
+  const [convertRulesSameAsEval, setConvertRulesSameAsEval] = useState(false)
+  const [createFundedAccountOpen, setCreateFundedAccountOpen] = useState(false)
+
+  const isAllAccountsView = accountFilter === PROPFIRM_ALL_ACCOUNTS_VALUE
+
+  const selectedAccount = useMemo(() => {
+    if (isAllAccountsView) return null
+    return (
+      accounts.find((account) => String(account.id) === accountFilter) ?? null
+    )
+  }, [accounts, accountFilter, isAllAccountsView])
+
+  const fundedAccounts = useMemo(
+    () => accounts.filter((account) => isFundedPropfirmAccount(account.mode)),
+    [accounts]
+  )
+
+  const payoutCycles = useMemo(() => {
+    if (!selectedAccount) return []
+    return payoutCyclesByAccountId[String(selectedAccount.id)] ?? []
+  }, [selectedAccount, payoutCyclesByAccountId])
+
+  const isFundedAccountSelected =
+    selectedAccount != null && isFundedPropfirmAccount(selectedAccount.mode)
+
+  const isEvalAccountSelected =
+    selectedAccount != null && isEvalPropfirmAccount(selectedAccount.mode)
+
+  const showPassEvalControls = isEvalAccountSelected
+
+  const showPayoutHistoryButton =
+    isAllAccountsView || isFundedAccountSelected
+
+  const showPayoutControls = isFundedAccountSelected
+
+  const showAccountDashboard = selectedAccount != null
 
   const activePayoutCycle = useMemo(
     () => selectActivePayoutCycle(payoutCycles),
@@ -267,6 +386,35 @@ export default function PropFirmPage() {
     () => summarizeAccountPayouts(payoutCycles),
     [payoutCycles]
   )
+
+  const completedPayoutHistory = useMemo((): PayoutHistoryEntry[] => {
+    if (isAllAccountsView) {
+      return mergeFundedPayoutHistory(
+        fundedAccounts,
+        payoutCyclesByAccountId,
+        (account) =>
+          formatPropfirmAccountNameOnly(account as PropfirmAccount)
+      )
+    }
+
+    if (!selectedAccount) return []
+
+    const accountName = formatPropfirmAccountNameOnly(selectedAccount)
+    return selectCompletedPayoutHistory(payoutCycles).map((payout) => ({
+      ...payout,
+      accountName,
+    }))
+  }, [
+    isAllAccountsView,
+    fundedAccounts,
+    payoutCyclesByAccountId,
+    selectedAccount,
+    payoutCycles,
+  ])
+
+  const payoutHistorySubtitle = isAllAccountsView
+    ? "Every payout recorded across your funded prop firm accounts, newest first."
+    : "View every payout recorded for this trading account."
 
   const payoutCycleContext = useMemo(() => {
     const startingBalance = selectedAccount
@@ -294,22 +442,25 @@ export default function PropFirmPage() {
   } = accountMetrics
   const { winningDays, worstDailyLossUsed } = cycleDailyMetrics
   const lifetimeDailyRows = lifetimeDailyMetrics.dailyRows
-  const selectedAccountLabel = useMemo(
-    () => formatPropfirmAccountLabel(selectedAccount),
-    [selectedAccount]
-  )
+  const selectedAccountLabel = useMemo(() => {
+    if (isAllAccountsView) return "All Accounts"
+    return formatPropfirmAccountLabel(selectedAccount)
+  }, [isAllAccountsView, selectedAccount])
+
   const accountSelectOptions = useMemo(
     () => [
+      { value: PROPFIRM_ALL_ACCOUNTS_VALUE, label: "All Accounts" },
+      { value: "__divider__", label: "----------------", disabled: true },
       ...accounts.map((acc) => ({
         value: String(acc.id),
-        label: `${formatAccountNameWithSizeDisplay(acc.name, acc.account_size)} • ${acc.mode}`,
+        label: `${formatAccountNameWithSizeDisplay(acc.name ?? "", acc.account_size as string | null | undefined)} • ${acc.mode}`,
       })),
       { value: MANAGE_ACCOUNTS_VALUE, label: "⚙️ Manage Accounts" },
     ],
     [accounts]
   )
   const equityCurveData = useMemo(() => {
-    if (!selectedAccount) return []
+    if (!showAccountDashboard) return []
     const { startingBalance: curveStart } = selectPropfirmEquityCurveInputs(
       accountMetrics,
       PROPFIRM_EQUITY_CURVE_SCOPE
@@ -319,7 +470,7 @@ export default function PropFirmPage() {
       curveStart,
       selectRecordedPayoutEquityEvents(payoutCycles)
     )
-  }, [accountMetrics, selectedAccount, trades, payoutCycles])
+  }, [accountMetrics, showAccountDashboard, trades, payoutCycles])
 
   useEffect(() => {
     async function checkPlan() {
@@ -375,9 +526,46 @@ export default function PropFirmPage() {
 
   useEffect(() => {
     if (!planChecked || !hasProAccess) return
-    if (!selectedAccount) return
+    if (!accountsLoaded || fundedAccounts.length === 0) {
+      setPayoutCyclesByAccountId({})
+      return
+    }
 
-    const selectedAccountId = selectedAccount.id
+    let cancelled = false
+
+    async function loadFundedPayoutCycles() {
+      setLoadingPayoutHistory(true)
+      try {
+        const cyclesByAccountId = await fetchPayoutCycleHistoryByAccountIds(
+          supabase,
+          fundedAccounts.map((account) => account.id)
+        )
+        if (!cancelled) setPayoutCyclesByAccountId(cyclesByAccountId)
+      } finally {
+        if (!cancelled) setLoadingPayoutHistory(false)
+      }
+    }
+
+    void loadFundedPayoutCycles()
+    return () => {
+      cancelled = true
+    }
+  }, [planChecked, hasProAccess, accountsLoaded, fundedAccounts])
+
+  useEffect(() => {
+    if (!planChecked || !hasProAccess) return
+
+    const accountIds = isAllAccountsView
+      ? accounts.map((account) => account.id)
+      : selectedAccount
+        ? [selectedAccount.id]
+        : []
+
+    if (accountIds.length === 0) {
+      setTrades([])
+      return
+    }
+
     setTrades([])
 
     async function loadTrades() {
@@ -386,7 +574,7 @@ export default function PropFirmPage() {
         const { data, error } = await supabase
           .from("trades")
           .select(PROPFIRM_TRADE_FIELDS)
-          .eq("account_id", selectedAccountId)
+          .in("account_id", accountIds)
           .order("trade_date", { ascending: true })
           .order("entry_time", { ascending: true })
 
@@ -402,28 +590,13 @@ export default function PropFirmPage() {
     }
 
     loadTrades()
-  }, [selectedAccount, planChecked, hasProAccess])
-
-  useEffect(() => {
-    if (!planChecked || !hasProAccess) return
-    if (!selectedAccount) {
-      setPayoutCycles([])
-      return
-    }
-
-    const selectedAccountId = selectedAccount.id
-    let cancelled = false
-
-    async function loadPayoutCycles() {
-      const cycles = await fetchPayoutCycleHistory(supabase, selectedAccountId)
-      if (!cancelled) setPayoutCycles(cycles)
-    }
-
-    void loadPayoutCycles()
-    return () => {
-      cancelled = true
-    }
-  }, [selectedAccount, planChecked, hasProAccess])
+  }, [
+    isAllAccountsView,
+    selectedAccount,
+    accounts,
+    planChecked,
+    hasProAccess,
+  ])
 
   async function handlePayoutSetupSubmit(values: PayoutSetupValues) {
     if (!selectedAccount) return
@@ -461,34 +634,28 @@ export default function PropFirmPage() {
         return
       }
 
-      setPayoutCycles((previous) =>
-        applyRecordedPayoutToHistory(
-          previous,
-          activePayoutCycle,
-          cycle,
-          {
-            amount: values.payoutAmount,
-            balanceBefore: balanceBeforePayout,
-            balanceAfter: values.balanceAfterPayout,
-            drawdownBehavior: values.drawdownBehavior,
-            drawdownFloor: drawdownFloorAfterPayout,
-            recordedAt: cycle.started_at,
-            cycleNumber: nextCycleNumber,
-          }
-        )
-      )
+      setPayoutCyclesByAccountId((previous) => {
+        const accountId = String(selectedAccount.id)
+        const previousCycles = previous[accountId] ?? []
+        return {
+          ...previous,
+          [accountId]: applyRecordedPayoutToHistory(
+            previousCycles,
+            activePayoutCycle,
+            cycle,
+            {
+              amount: values.payoutAmount,
+              balanceBefore: balanceBeforePayout,
+              balanceAfter: values.balanceAfterPayout,
+              drawdownBehavior: values.drawdownBehavior,
+              drawdownFloor: drawdownFloorAfterPayout,
+              recordedAt: cycle.started_at,
+              cycleNumber: nextCycleNumber,
+            }
+          ),
+        }
+      })
       if (accountPreferences) {
-        setSelectedAccount((prev) =>
-          prev
-            ? {
-                ...prev,
-                payout_drawdown_behavior:
-                  accountPreferences.payout_drawdown_behavior,
-                remember_payout_drawdown_behavior:
-                  accountPreferences.remember_payout_drawdown_behavior,
-              }
-            : prev
-        )
         setAccounts((prev) =>
           prev.map((acc) =>
             String(acc.id) === String(selectedAccount.id)
@@ -506,17 +673,151 @@ export default function PropFirmPage() {
 
       setPayoutSetupOpen(false)
 
-      const firm = inferPropFirmName(selectedAccount.name)
-      setAchievementUploadInitial({
-        achievement_type: "payout",
-        payout_amount: String(values.payoutAmount),
-        title: firm ? `${firm} Payout` : "Payout",
-        is_public: true,
-      })
+      setActiveMilestoneKind("payout")
+      setAchievementUploadInitial(
+        buildPropFirmMilestoneAchievementInitials("payout", selectedAccount, {
+          payoutAmount: values.payoutAmount,
+        })
+      )
       setAchievementUploadOpen(true)
     } finally {
       setRecordingPayout(false)
     }
+  }
+
+  function openPassEvalWorkflow() {
+    if (!selectedAccount) return
+    setEvalContinuanceAccount(selectedAccount)
+    setActiveMilestoneKind("passed_eval")
+    setAchievementUploadInitial(
+      buildPropFirmMilestoneAchievementInitials("passed_eval", selectedAccount)
+    )
+    setAchievementUploadOpen(true)
+  }
+
+  function handleAchievementUploadClose() {
+    setAchievementUploadOpen(false)
+    if (activeMilestoneKind === "passed_eval") {
+      setEvalContinuanceAccount(null)
+    }
+    setActiveMilestoneKind(null)
+    setAchievementUploadInitial(undefined)
+  }
+
+  async function handleAchievementSaved() {
+    const shouldOpenContinuance =
+      activeMilestoneKind === "passed_eval" && evalContinuanceAccount != null
+
+    setActiveMilestoneKind(null)
+    setAchievementUploadInitial(undefined)
+
+    if (shouldOpenContinuance) {
+      setEvalContinuanceOpen(true)
+    }
+  }
+
+  function closeEvalMilestoneFlow() {
+    if (evalContinuanceBusy) return
+    setEvalContinuanceOpen(false)
+    setEvalRulesChoiceOpen(false)
+    setConvertRulesEditorOpen(false)
+    setCreateFundedAccountOpen(false)
+    setEvalContinuanceAccount(null)
+    setConvertRulesSameAsEval(false)
+  }
+
+  function handleConvertEvalToFunded() {
+    setEvalContinuanceOpen(false)
+    setEvalRulesChoiceOpen(true)
+  }
+
+  function openConvertRulesEditor(sameAsEval: boolean) {
+    setConvertRulesSameAsEval(sameAsEval)
+    setEvalRulesChoiceOpen(false)
+    setConvertRulesEditorOpen(true)
+  }
+
+  async function handleConvertRulesSave(account: CreateTradingAccountPayload) {
+    if (!user?.id || !evalContinuanceAccount) return
+
+    setEvalContinuanceBusy(true)
+    try {
+      const { account: updated, error } = await convertEvalAccountToFundedWithRules(
+        supabase,
+        user.id,
+        evalContinuanceAccount,
+        {
+          name: account.name,
+          size: account.size,
+          id: account.id,
+          category: "Prop Firm",
+          mode: resolveAccountModeForSave("Prop Firm", "Funded"),
+          rules: account.rules,
+        }
+      )
+      if (error || !updated) {
+        console.error(error ?? "Failed to convert account")
+        return
+      }
+
+      const accountId = String(evalContinuanceAccount.id)
+      setAccounts((previous) =>
+        previous.map((row) =>
+          String(row.id) === accountId
+            ? tradingListItemToPropfirmAccount(updated, row)
+            : row
+        )
+      )
+      setAccountFilter(accountId)
+      invalidateAccountsCache(user.id)
+      closeEvalMilestoneFlow()
+    } finally {
+      setEvalContinuanceBusy(false)
+    }
+  }
+
+  function handleOpenCreateFundedAccount() {
+    setEvalContinuanceOpen(false)
+    setCreateFundedAccountOpen(true)
+  }
+
+  async function handleCreateFundedAccountSave(account: CreateTradingAccountPayload) {
+    if (!user?.id || !evalContinuanceAccount) return
+
+    setEvalContinuanceBusy(true)
+    try {
+      const { account: created, error } = await insertTradingAccount(
+        supabase,
+        user.id,
+        {
+          name: account.name,
+          size: account.size,
+          id: account.id,
+          category: "Prop Firm",
+          mode: resolveAccountModeForSave("Prop Firm", "Funded"),
+          rules: account.rules,
+        }
+      )
+      if (error || !created) {
+        console.error(error ?? "Failed to create funded account")
+        return
+      }
+
+      setAccounts((previous) => [...previous, created as PropfirmAccount])
+      setAccountFilter(String(created.id))
+      invalidateAccountsCache(user.id)
+      closeEvalMilestoneFlow()
+    } finally {
+      setEvalContinuanceBusy(false)
+    }
+  }
+
+  const milestoneUploadConfig = activeMilestoneKind
+    ? propFirmMilestoneUploadConfig(activeMilestoneKind)
+    : propFirmMilestoneUploadConfig("payout")
+
+  function openPayoutHistory() {
+    setPayoutHistoryOpen(true)
   }
 
   function openPayoutWorkflow() {
@@ -559,7 +860,13 @@ export default function PropFirmPage() {
   const maxDdLimit = Number(selectedAccount?.max_drawdown) || 0
   const dailyDrawdownBreached =
     worstDailyLossUsed > Number(selectedAccount?.daily_drawdown)
+  const winningDaysRequired =
+    selectedAccount?.winning_days != null &&
+    selectedAccount.winning_days !== "" &&
+    Number(selectedAccount.winning_days) > 0
+  const consistencyRequired = cycleConsistencyMetrics.ruleActive
   const winningDaysTargetMet =
+    !winningDaysRequired ||
     winningDays >= Number(selectedAccount?.winning_days)
 
   return (
@@ -579,23 +886,17 @@ export default function PropFirmPage() {
 
         <div className={SECTION_PANEL}>
           <div className="flex flex-col gap-2">
-            <div className="flex min-w-0 items-center gap-3">
+            <div className="flex min-w-0 items-center gap-2 sm:gap-3">
               <div className="min-w-0 flex-1 basis-0">
                 <CustomSelect
-                  value={
-                    selectedAccount?.id != null
-                      ? String(selectedAccount.id)
-                      : ""
-                  }
+                  value={accountFilter}
                   onChange={(value) => {
                     if (value === MANAGE_ACCOUNTS_VALUE) {
                       navigateToManageAccounts(router)
                       return
                     }
-                    const selected = accounts.find(
-                      (a) => String(a.id) === value
-                    )
-                    setSelectedAccount(selected ?? null)
+                    if (value === "__divider__") return
+                    setAccountFilter(value)
                   }}
                   placeholder="Select Account"
                   options={accountSelectOptions}
@@ -603,7 +904,17 @@ export default function PropFirmPage() {
                 />
               </div>
 
-              {selectedAccount ? (
+              {showPayoutHistoryButton ? (
+                <button
+                  type="button"
+                  onClick={openPayoutHistory}
+                  className="shrink-0 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-sm font-semibold text-gray-200 transition hover:bg-white/10"
+                >
+                  Payouts
+                </button>
+              ) : null}
+
+              {showAccountDashboard ? (
                 <div
                   className={`inline-flex w-[108px] shrink-0 items-center justify-center rounded-full border px-3 py-1.5 text-sm font-semibold ${
                     status === "PASSED"
@@ -617,7 +928,17 @@ export default function PropFirmPage() {
                 </div>
               ) : null}
 
-              {selectedAccount && isFundedPropfirmAccount(selectedAccount.mode) ? (
+              {showPassEvalControls ? (
+                <button
+                  type="button"
+                  onClick={openPassEvalWorkflow}
+                  className="shrink-0 rounded-lg border border-blue-500/30 bg-blue-500/10 px-3.5 py-1.5 text-sm font-semibold text-blue-300 transition hover:bg-blue-500/20"
+                >
+                  Pass Evaluation
+                </button>
+              ) : null}
+
+              {showPayoutControls ? (
                 <button
                   type="button"
                   onClick={openPayoutWorkflow}
@@ -636,6 +957,15 @@ export default function PropFirmPage() {
             </p>
           </div>
         </div>
+
+        <PropFirmPayoutHistoryModal
+          open={payoutHistoryOpen}
+          onClose={() => setPayoutHistoryOpen(false)}
+          subtitle={payoutHistorySubtitle}
+          payouts={completedPayoutHistory}
+          showAccountNames={isAllAccountsView}
+          loading={loadingPayoutHistory}
+        />
 
         <Modal
           open={payoutModalOpen}
@@ -689,21 +1019,90 @@ export default function PropFirmPage() {
 
         <AchievementUploadModal
           open={achievementUploadOpen}
-          onClose={() => setAchievementUploadOpen(false)}
+          onClose={handleAchievementUploadClose}
           userId={user?.id ?? null}
           initialValues={achievementUploadInitial}
-          lockAchievementType
-          dialogTitle="Share Your Payout"
-          dialogSubtitle="Upload your real payout certificate screenshot. This uses the same achievement flow as the Achievements page and is optional."
-          saveLabel="Save Achievement"
+          onSaved={handleAchievementSaved}
+          lockAchievementType={milestoneUploadConfig.lockAchievementType}
+          dialogTitle={milestoneUploadConfig.dialogTitle}
+          dialogSubtitle={milestoneUploadConfig.dialogSubtitle}
+          saveLabel={milestoneUploadConfig.saveLabel}
+        />
+
+        <PropFirmEvalContinuanceModal
+          open={evalContinuanceOpen}
+          account={evalContinuanceAccount}
+          busy={evalContinuanceBusy}
+          onClose={closeEvalMilestoneFlow}
+          onConvertToFunded={handleConvertEvalToFunded}
+          onCreateNewFundedAccount={handleOpenCreateFundedAccount}
+        />
+
+        <PropFirmFundedRulesChoiceModal
+          open={evalRulesChoiceOpen}
+          busy={evalContinuanceBusy}
+          onClose={closeEvalMilestoneFlow}
+          onKeepSameRules={() => openConvertRulesEditor(true)}
+          onReviewRules={() => openConvertRulesEditor(false)}
+        />
+
+        <CreateAccountModal
+          open={convertRulesEditorOpen}
+          onClose={() => {
+            if (!evalContinuanceBusy) {
+              setConvertRulesEditorOpen(false)
+              setEvalRulesChoiceOpen(true)
+            }
+          }}
+          initialAccount={
+            evalContinuanceAccount
+              ? buildConvertEvalToFundedFormInitial(evalContinuanceAccount)
+              : null
+          }
+          onSave={handleConvertRulesSave}
+          dialogTitle="Funded Account Rules"
+          dialogSubtitle={
+            convertRulesSameAsEval
+              ? "Your evaluation rules are pre-filled below. Press Continue if nothing changed."
+              : "Review and update your funded account rules before continuing."
+          }
+          saveLabel="Continue"
+          lockCategory="Prop Firm"
+          lockMode="Funded"
+        />
+
+        <CreateAccountModal
+          open={createFundedAccountOpen}
+          onClose={() => {
+            if (!evalContinuanceBusy) {
+              setCreateFundedAccountOpen(false)
+              setEvalContinuanceOpen(true)
+            }
+          }}
+          initialAccount={
+            evalContinuanceAccount
+              ? buildCreateFundedAccountFormInitial(evalContinuanceAccount)
+              : null
+          }
+          onSave={handleCreateFundedAccountSave}
+          dialogTitle="Create Funded Account"
+          dialogSubtitle="Your prop firm issued a new funded account. Rules are copied from your evaluation and can be edited before saving."
+          lockCategory="Prop Firm"
+          lockMode="Funded"
         />
 
         {loadingTrades ? (
           <SkeletonAnalyticsPage />
         ) : (
           <>
-        {selectedAccount && (
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {showAccountDashboard && (
+          <div
+            className={`grid gap-3 ${
+              showPayoutControls
+                ? "grid-cols-2 lg:grid-cols-4"
+                : "grid-cols-2 lg:grid-cols-3"
+            }`}
+          >
             <PropfirmStat
               title="Current Balance"
               value={formatPropfirmUsd(displayCurrentBalance)}
@@ -715,24 +1114,35 @@ export default function PropFirmPage() {
             />
             <PropfirmStat
               title="Cycle Winning Days"
-              value={`${winningDays}/${Number(selectedAccount.winning_days) || 0}`}
+              value={
+                winningDaysRequired
+                  ? `${winningDays}/${Number(selectedAccount!.winning_days)}`
+                  : "—"
+              }
               valueClassName={
-                winningDaysTargetMet ? "text-green-400" : "text-amber-300"
+                !winningDaysRequired
+                  ? undefined
+                  : winningDaysTargetMet
+                    ? "text-green-400"
+                    : "text-amber-300"
               }
             />
-            <PropfirmStat
-              title={`Payout Total (${payoutSummary.count})`}
-              value={formatPropfirmUsd(payoutSummary.totalAmount)}
-              positive={payoutSummary.totalAmount > 0}
-            />
+            {showPayoutControls ? (
+              <PropfirmStat
+                title={`Payout Total (${payoutSummary.count})`}
+                value={formatPropfirmUsd(payoutSummary.totalAmount)}
+                positive={payoutSummary.totalAmount > 0}
+                onClick={openPayoutHistory}
+              />
+            ) : null}
           </div>
         )}
 
-        {selectedAccount && (
+        {showAccountDashboard && (
           <PropfirmEquityCurve data={equityCurveData} />
         )}
 
-        {selectedAccount && (
+        {showAccountDashboard && (
           <div className={SECTION_PANEL}>
             <div className="mb-3 flex items-center justify-between gap-2">
               <h2 className={dashboardInsightTitleClass}>Rule Status</h2>
@@ -768,38 +1178,42 @@ export default function PropFirmPage() {
 
               <div
                 className={`${RULE_CHIP_CLASS} ${
-                  winningDaysTargetMet
-                    ? "text-green-400"
-                    : "text-amber-300"
-                }`}
-              >
-                <span aria-hidden>{winningDaysTargetMet ? "✔" : "⚠"}</span>
-                <span className="font-medium">Winning Days</span>
-              </div>
-
-              <div
-                className={`${RULE_CHIP_CLASS} ${
-                  !cycleConsistencyMetrics.ruleActive
+                  !winningDaysRequired
                     ? "text-gray-400"
-                    : cycleConsistencyMetrics.isConsistent
+                    : winningDaysTargetMet
                       ? "text-green-400"
-                      : "text-red-400"
+                      : "text-amber-300"
                 }`}
               >
                 <span aria-hidden>
-                  {!cycleConsistencyMetrics.ruleActive
+                  {!winningDaysRequired
                     ? "—"
-                    : cycleConsistencyMetrics.isConsistent
+                    : winningDaysTargetMet
                       ? "✔"
-                      : "✖"}
+                      : "⚠"}
                 </span>
-                <span className="font-medium">Consistency</span>
+                <span className="font-medium">Winning Days</span>
               </div>
+
+              {consistencyRequired ? (
+                <div
+                  className={`${RULE_CHIP_CLASS} ${
+                    cycleConsistencyMetrics.isConsistent
+                      ? "text-green-400"
+                      : "text-red-400"
+                  }`}
+                >
+                  <span aria-hidden>
+                    {cycleConsistencyMetrics.isConsistent ? "✔" : "✖"}
+                  </span>
+                  <span className="font-medium">Consistency</span>
+                </div>
+              ) : null}
             </div>
           </div>
         )}
 
-        {selectedAccount && (
+        {showAccountDashboard && (
           <div className={SECTION_PANEL}>
             <h2 className={`${dashboardInsightTitleClass} mb-3`}>
               Account Rules
@@ -816,42 +1230,61 @@ export default function PropFirmPage() {
               <div className="flex justify-between gap-3">
                 <span className={dashboardInsightLabelClass}>Consistency</span>
                 <span className="font-medium text-gray-100">
-                  {selectedAccount.consistency || 0}%
+                  {consistencyRequired
+                    ? `${selectedAccount!.consistency}%`
+                    : "Does Not Apply"}
                 </span>
               </div>
 
               <div className="flex justify-between gap-3">
                 <span className={dashboardInsightLabelClass}>Max Drawdown</span>
                 <span className="font-medium text-gray-100">
-                  ${selectedAccount.max_drawdown}
+                  ${selectedAccount!.max_drawdown}
                 </span>
               </div>
 
               <div className="flex justify-between gap-3">
                 <span className={dashboardInsightLabelClass}>Daily Drawdown</span>
                 <span className="font-medium text-gray-100">
-                  ${selectedAccount.daily_drawdown}
+                  ${selectedAccount!.daily_drawdown}
                 </span>
               </div>
 
               <div className="flex justify-between gap-3">
                 <span className={dashboardInsightLabelClass}>Profit Target</span>
                 <span className="font-medium text-gray-100">
-                  ${selectedAccount.profit_target}
+                  ${selectedAccount!.profit_target}
                 </span>
               </div>
 
               <div className="flex justify-between gap-3">
                 <span className={dashboardInsightLabelClass}>Winning Days</span>
                 <span className="font-medium text-gray-100">
-                  {selectedAccount.winning_days}
+                  {selectedAccount!.winning_days != null &&
+                  selectedAccount!.winning_days !== ""
+                    ? selectedAccount!.winning_days
+                    : "Does Not Apply"}
                 </span>
               </div>
+
+              {selectedAccount!.winning_days != null &&
+              selectedAccount!.winning_days !== "" ? (
+                <div className="flex justify-between gap-3">
+                  <span className={dashboardInsightLabelClass}>
+                    Winning Day Threshold
+                  </span>
+                  <span className="font-medium text-gray-100">
+                    {selectedAccount!.winning_day_threshold
+                      ? `$${selectedAccount!.winning_day_threshold}`
+                      : "Any positive day"}
+                  </span>
+                </div>
+              ) : null}
             </div>
           </div>
         )}
 
-        {selectedAccount && (
+        {showAccountDashboard && (
           <div className={SECTION_PANEL}>
             <h2 className={`${dashboardInsightTitleClass} mb-3`}>
               Progress <span className="text-xs font-normal text-gray-500">(current cycle)</span>
@@ -867,7 +1300,7 @@ export default function PropFirmPage() {
 
               <div className="flex justify-between gap-3">
                 <span className={dashboardInsightLabelClass}>Profit Target</span>
-                <span className="font-medium text-gray-200">${selectedAccount.profit_target}</span>
+                <span className="font-medium text-gray-200">${selectedAccount!.profit_target}</span>
               </div>
 
               <div className="flex justify-between gap-3">
@@ -897,38 +1330,38 @@ export default function PropFirmPage() {
                 </span>
               </div>
 
-              <div className="flex justify-between gap-3">
-                <span className={dashboardInsightLabelClass}>Biggest Trade</span>
-                <span className="font-medium text-gray-200">{formatPropfirmUsd(cycleConsistencyMetrics.biggestWin)}</span>
-              </div>
+              {consistencyRequired ? (
+                <>
+                  <div className="flex justify-between gap-3">
+                    <span className={dashboardInsightLabelClass}>Biggest Trade</span>
+                    <span className="font-medium text-gray-200">
+                      {formatPropfirmUsd(cycleConsistencyMetrics.biggestWin)}
+                    </span>
+                  </div>
 
-              <div className="flex justify-between gap-3">
-                <span className={dashboardInsightLabelClass}>Allowed Max</span>
-                <span className="font-medium text-gray-200">
-                  {cycleConsistencyMetrics.ruleActive
-                    ? formatPropfirmUsd(cycleConsistencyMetrics.allowedMax)
-                    : "—"}
-                </span>
-              </div>
+                  <div className="flex justify-between gap-3">
+                    <span className={dashboardInsightLabelClass}>Allowed Max</span>
+                    <span className="font-medium text-gray-200">
+                      {formatPropfirmUsd(cycleConsistencyMetrics.allowedMax)}
+                    </span>
+                  </div>
 
-              <div className="flex justify-between gap-3">
-                <span className={dashboardInsightLabelClass}>Consistency</span>
-                <span
-                  className={
-                    !cycleConsistencyMetrics.ruleActive
-                      ? "text-gray-400"
-                      : cycleConsistencyMetrics.isConsistent
-                        ? dashboardInsightMetricPositiveClass
-                        : dashboardInsightMetricNegativeClass
-                  }
-                >
-                  {!cycleConsistencyMetrics.ruleActive
-                    ? "Set rule % to track"
-                    : cycleConsistencyMetrics.isConsistent
-                      ? "Consistent"
-                      : "Not Consistent"}
-                </span>
-              </div>
+                  <div className="flex justify-between gap-3">
+                    <span className={dashboardInsightLabelClass}>Consistency</span>
+                    <span
+                      className={
+                        cycleConsistencyMetrics.isConsistent
+                          ? dashboardInsightMetricPositiveClass
+                          : dashboardInsightMetricNegativeClass
+                      }
+                    >
+                      {cycleConsistencyMetrics.isConsistent
+                        ? "Consistent"
+                        : "Not Consistent"}
+                    </span>
+                  </div>
+                </>
+              ) : null}
             </div>
 
             <div className="mt-4 space-y-3">
@@ -959,7 +1392,7 @@ export default function PropFirmPage() {
               </div>
             </div>
 
-            {selectedAccount &&
+            {showAccountDashboard &&
               maxDdLimit > 0 &&
               cycleTrailingMetrics.breachedTrailingDD && (
                 <div className="mt-4 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2.5 text-sm text-red-400">
@@ -967,7 +1400,7 @@ export default function PropFirmPage() {
                 </div>
               )}
 
-            {selectedAccount &&
+            {showAccountDashboard &&
               dailyDrawdownBreached && (
                 <div className="mt-2 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2.5 text-sm text-red-400">
                   Daily drawdown exceeded
@@ -1032,7 +1465,7 @@ export default function PropFirmPage() {
               </Link>
             }
           />
-        ) : !selectedAccount ? (
+        ) : !showAccountDashboard && !isAllAccountsView ? (
           <EmptyState
             title="Select an Account"
             description="Choose a prop firm account above to view drawdown room, rule status, and daily performance."

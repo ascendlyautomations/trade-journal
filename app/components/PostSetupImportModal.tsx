@@ -161,6 +161,7 @@ export default function PostSetupImportModal({ open, onComplete }: Props) {
           daily_drawdown: newAccount.rules?.dailyDrawdown ?? null,
           profit_target: newAccount.rules?.profitTarget ?? null,
           winning_days: newAccount.rules?.winningDays ?? null,
+          winning_day_threshold: newAccount.rules?.winningDayThreshold ?? null,
         },
       ])
       .select()

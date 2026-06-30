@@ -1,7 +1,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { normalizeReelFeedItem } from "@/app/components/feed/feedPostHelpers"
 import { ensureCommentNotificationsForInsert } from "./commentNotifications"
-import { ensureLikeNotification } from "./likeNotifications"
+import {
+  deleteLikeNotification,
+  ensureLikeNotification,
+} from "./likeNotifications"
+
+export type ReelLikeMeta = { count: number; liked: boolean }
+
+const UNIQUE_VIOLATION = "23505"
 
 export const REEL_COMMENT_CORE_SELECT =
   "id, reel_id, user_id, content, created_at, profiles(username, avatar_url)"
@@ -15,9 +22,11 @@ export const FEED_REELS_SELECT =
   "id, user_id, caption, video_url, thumbnail_url, duration_seconds, visibility, created_at, profiles(username, avatar_url)"
 
 export function isReelFeedPost(
-  post: { feedKind?: string } | null | undefined
+  post: { feedKind?: string; video_url?: unknown } | null | undefined
 ): boolean {
-  return post?.feedKind === "reel"
+  if (post?.feedKind === "reel") return true
+  const videoUrl = post?.video_url
+  return videoUrl != null && String(videoUrl).trim() !== ""
 }
 
 export function reelOwnerUserId(post: {
@@ -96,6 +105,137 @@ export async function insertReelLikeNotification(
   })
 }
 
+/** Load like count + viewer liked state for one or more reels. */
+export async function fetchReelLikeMetaByIds(
+  client: SupabaseClient,
+  reelIds: string[],
+  currentUserId: string | null | undefined
+): Promise<Record<string, ReelLikeMeta>> {
+  const meta: Record<string, ReelLikeMeta> = {}
+  for (const id of reelIds) {
+    meta[id] = { count: 0, liked: false }
+  }
+  if (reelIds.length === 0) return meta
+
+  const { data, error } = await client
+    .from("reel_likes")
+    .select("reel_id, user_id")
+    .in("reel_id", reelIds)
+
+  if (error) {
+    console.error("[reel-likes] fetch meta failed", error)
+    return meta
+  }
+
+  for (const row of data ?? []) {
+    const rid = String(row.reel_id)
+    if (!meta[rid]) meta[rid] = { count: 0, liked: false }
+    meta[rid].count++
+    if (currentUserId && row.user_id === currentUserId) {
+      meta[rid].liked = true
+    }
+  }
+
+  return meta
+}
+
+/**
+ * Toggle reel like with optimistic UI — mirrors achievement/profile post handlers.
+ * Rolls back local state when the mutation fails (except unique-violation sync).
+ */
+export async function toggleReelLike(
+  client: SupabaseClient,
+  params: {
+    reelId: string
+    userId: string
+    ownerUserId: string | null
+    meta: ReelLikeMeta
+    onMetaChange: (next: ReelLikeMeta) => void
+  }
+): Promise<boolean> {
+  const reelId = params.reelId.trim()
+  const { userId, ownerUserId, meta, onMetaChange } = params
+  if (!reelId || !userId) return false
+
+  const optimistic: ReelLikeMeta = meta.liked
+    ? { count: Math.max(0, meta.count - 1), liked: false }
+    : { count: meta.count + 1, liked: true }
+
+  onMetaChange(optimistic)
+
+  try {
+    if (meta.liked) {
+      const { error } = await client
+        .from("reel_likes")
+        .delete()
+        .eq("reel_id", reelId)
+        .eq("user_id", userId)
+
+      if (error) {
+        console.error("[reel-like] unlike failed", {
+          reelId,
+          userId,
+          message: error.message,
+          code: error.code,
+        })
+        onMetaChange(meta)
+        return false
+      }
+
+      if (ownerUserId) {
+        await deleteLikeNotification(client, {
+          recipientUserId: ownerUserId,
+          senderUserId: userId,
+          target: { kind: "reel", reelId },
+        })
+      }
+
+      return true
+    }
+
+    const { error } = await client.from("reel_likes").insert({
+      reel_id: reelId,
+      user_id: userId,
+    })
+
+    if (error?.code === UNIQUE_VIOLATION) {
+      const synced: ReelLikeMeta = {
+        count: Math.max(meta.count, 1),
+        liked: true,
+      }
+      onMetaChange(synced)
+      return true
+    }
+
+    if (error) {
+      console.error("[reel-like] insert failed", {
+        reelId,
+        userId,
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+      })
+      onMetaChange(meta)
+      return false
+    }
+
+    if (ownerUserId && ownerUserId !== userId) {
+      await insertReelLikeNotification(client, {
+        reelId,
+        ownerUserId,
+        senderUserId: userId,
+      })
+    }
+
+    return true
+  } catch (err) {
+    console.error("[reel-like] toggle failed", err)
+    onMetaChange(meta)
+    return false
+  }
+}
+
 export async function insertReelCommentNotifications(
   client: SupabaseClient,
   params: {
@@ -141,11 +281,8 @@ export async function loadReelEngagementMaps(
     return { likesMap, commentsMap }
   }
 
-  const [{ data: likeRows }, commentsResult] = await Promise.all([
-    client
-      .from("reel_likes")
-      .select("reel_id, user_id")
-      .in("reel_id", reelIds),
+  const [likeMetaById, commentsResult] = await Promise.all([
+    fetchReelLikeMetaByIds(client, reelIds, currentUserId),
     queryReelComments((select) =>
       client
         .from("reel_comments")
@@ -155,14 +292,7 @@ export async function loadReelEngagementMaps(
     ),
   ])
 
-  for (const row of likeRows ?? []) {
-    const rid = String(row.reel_id)
-    if (!likesMap[rid]) likesMap[rid] = { count: 0, liked: false }
-    likesMap[rid].count++
-    if (currentUserId && row.user_id === currentUserId) {
-      likesMap[rid].liked = true
-    }
-  }
+  Object.assign(likesMap, likeMetaById)
 
   for (const c of (commentsResult.data as any[]) ?? []) {
     const rid = String(c.reel_id)

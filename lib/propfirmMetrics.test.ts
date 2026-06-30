@@ -11,8 +11,10 @@ const {
   computeDailyMetrics,
   computePayoutDrawdownFloor,
   computeTrailingDrawdown,
+  countWinningDays,
   dedupeTradesById,
   getPropfirmTradingDay,
+  isWinningTradingDay,
   replayPropfirmEquityEvents,
 } = require("./propfirmMetrics.ts")
 
@@ -119,6 +121,7 @@ describe("computeConsistencyRule", () => {
     assert.equal(result.biggestWin, 300)
     assert.equal(result.allowedMax, 200)
     assert.equal(result.isConsistent, false)
+    assert.equal(result.ruleActive, true)
   })
 
   it("passes when rule inactive", () => {
@@ -126,6 +129,14 @@ describe("computeConsistencyRule", () => {
     const result = computeConsistencyRule(trades, 0)
     assert.equal(result.ruleActive, false)
     assert.equal(result.isConsistent, true)
+  })
+
+  it("treats null consistency as does not apply", () => {
+    const trades = [{ pnl: 1000 }]
+    const result = computeConsistencyRule(trades, null)
+    assert.equal(result.ruleActive, false)
+    assert.equal(result.isConsistent, true)
+    assert.equal(result.allowedMax, 0)
   })
 })
 
@@ -193,6 +204,30 @@ describe("daily aggregation", () => {
     assert.equal(metrics.winningDays, 2)
     assert.equal(metrics.worstDay, -200)
     assert.equal(metrics.worstDailyLossUsed, 200)
+  })
+
+  it("applies winning day threshold to daily net P/L", () => {
+    const trades = [
+      { trade_date: "2024-06-03", pnl: 199 },
+      { trade_date: "2024-06-04", pnl: 200 },
+      { trade_date: "2024-06-05", pnl: 250 },
+    ]
+    const metrics = computeDailyMetrics(
+      trades,
+      new Date("2024-06-05T15:00:00Z"),
+      200
+    )
+    assert.equal(metrics.winningDays, 2)
+  })
+
+  it("defaults to positive daily net P/L when threshold is unset", () => {
+    const trades = [{ trade_date: "2024-06-03", pnl: 1 }]
+    const metrics = computeDailyMetrics(trades)
+    assert.equal(metrics.winningDays, 1)
+    assert.equal(isWinningTradingDay(1, null), true)
+    assert.equal(isWinningTradingDay(0, null), false)
+    assert.equal(countWinningDays({ "2024-06-03": 199 }, 200), 0)
+    assert.equal(countWinningDays({ "2024-06-03": 200 }, 200), 1)
   })
 })
 
@@ -558,7 +593,40 @@ describe("getPropfirmTradingDay", () => {
     assert.equal(getPropfirmTradingDay({}), null)
   })
 
-  it("rolls the trading day after 6pm Eastern", () => {
+  it("uses exit_time for futures session bucketing", () => {
+    assert.equal(
+      getPropfirmTradingDay({
+        trade_date: "2024-06-03",
+        entry_time: "2024-06-03T14:00:00-04:00",
+        exit_time: "2024-06-03T22:00:00Z",
+      }),
+      "2024-06-04"
+    )
+  })
+
+  it("assigns Sunday evening exit to Monday trading day", () => {
+    assert.equal(
+      getPropfirmTradingDay({
+        trade_date: "2024-01-07",
+        entry_time: "2024-01-08T00:00:00Z",
+        exit_time: "2024-01-08T15:30:00Z",
+      }),
+      "2024-01-08"
+    )
+  })
+
+  it("assigns Monday evening exit to Tuesday trading day", () => {
+    assert.equal(
+      getPropfirmTradingDay({
+        trade_date: "2024-01-08",
+        entry_time: "2024-01-08T20:00:00Z",
+        exit_time: "2024-01-09T00:30:00Z",
+      }),
+      "2024-01-09"
+    )
+  })
+
+  it("falls back to entry_time when exit_time is missing", () => {
     assert.equal(
       getPropfirmTradingDay({
         trade_date: "2024-06-03",
@@ -568,13 +636,33 @@ describe("getPropfirmTradingDay", () => {
     )
   })
 
-  it("rolls time-only entry_time using trade_date", () => {
+  it("rolls time-only exit_time using trade_date", () => {
     assert.equal(
       getPropfirmTradingDay({
         trade_date: "2024-06-03",
-        entry_time: "18:30:00",
+        exit_time: "18:30:00",
       }),
       "2024-06-04"
     )
+  })
+
+  it("aggregates trades by exit-assigned futures day", () => {
+    const trades = [
+      {
+        trade_date: "2024-01-07",
+        entry_time: "2024-01-08T00:00:00Z",
+        exit_time: "2024-01-08T15:30:00Z",
+        pnl: 100,
+      },
+      {
+        trade_date: "2024-01-08",
+        entry_time: "2024-01-08T20:00:00Z",
+        exit_time: "2024-01-09T00:30:00Z",
+        pnl: 50,
+      },
+    ]
+    const map = buildDailyPnLMap(trades)
+    assert.equal(map["2024-01-08"], 100)
+    assert.equal(map["2024-01-09"], 50)
   })
 })

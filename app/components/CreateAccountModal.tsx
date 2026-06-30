@@ -15,14 +15,9 @@ import {
   showsAccountModeSelector,
   type AccountType,
 } from "@/lib/createAccountForm"
+import type { TradingAccountPropFirmRules } from "@/lib/tradingAccounts"
 
-export type PropFirmRules = {
-  consistency: number | null
-  maxDrawdown: number | null
-  dailyDrawdown: number | null
-  profitTarget: number | null
-  winningDays: number | null
-}
+export type PropFirmRules = TradingAccountPropFirmRules
 
 export type AccountFormInitialValues = {
   name: string
@@ -48,6 +43,12 @@ export interface Props {
   initialAccount?: AccountFormInitialValues | null
   /** Offset below fixed navbar on mobile (onboarding setup flows). */
   belowNavbarOnMobile?: boolean
+  dialogTitle?: string
+  dialogSubtitle?: string
+  saveLabel?: string
+  /** Lock account type / mode selectors (prop firm milestone flows). */
+  lockCategory?: AccountType
+  lockMode?: string
 }
 
 const emptyForm = {
@@ -61,6 +62,7 @@ const emptyForm = {
   dailyDrawdown: "",
   profitTarget: "",
   winningDays: "",
+  winningDayThreshold: "",
 }
 
 const inputClass =
@@ -91,6 +93,11 @@ export default function CreateAccountModal({
   onSave,
   initialAccount = null,
   belowNavbarOnMobile = false,
+  dialogTitle,
+  dialogSubtitle,
+  saveLabel,
+  lockCategory,
+  lockMode,
 }: Props) {
   const [name, setName] = useState("")
   const [size, setSize] = useState("")
@@ -98,13 +105,23 @@ export default function CreateAccountModal({
   const [mode, setMode] = useState("Live")
   const [category, setCategory] = useState<AccountType>("Personal")
   const [consistency, setConsistency] = useState("")
+  const [consistencyMode, setConsistencyMode] = useState<"na" | "required">("na")
   const [maxDrawdown, setMaxDrawdown] = useState("")
   const [dailyDrawdown, setDailyDrawdown] = useState("")
   const [profitTarget, setProfitTarget] = useState("")
   const [winningDays, setWinningDays] = useState("")
+  const [winningDaysMode, setWinningDaysMode] = useState<"na" | "required">("na")
+  const [winningDayThreshold, setWinningDayThreshold] = useState("")
   const [isSaving, setIsSaving] = useState(false)
   const savingRef = useRef(false)
   const isEdit = Boolean(initialAccount)
+  const categoryLocked = lockCategory != null
+  const modeLocked = lockMode != null
+  const heading =
+    dialogTitle ?? (isEdit ? "Edit account" : "Create account")
+  const subheading = dialogSubtitle
+  const primaryLabel =
+    saveLabel ?? (isEdit ? "Save changes" : "Save account")
 
   useEffect(() => {
     if (!open) {
@@ -114,10 +131,13 @@ export default function CreateAccountModal({
       setMode(emptyForm.mode)
       setCategory(emptyForm.category)
       setConsistency(emptyForm.consistency)
+      setConsistencyMode("na")
       setMaxDrawdown(emptyForm.maxDrawdown)
       setDailyDrawdown(emptyForm.dailyDrawdown)
       setProfitTarget(emptyForm.profitTarget)
       setWinningDays(emptyForm.winningDays)
+      setWinningDaysMode("na")
+      setWinningDayThreshold(emptyForm.winningDayThreshold)
       return
     }
 
@@ -131,6 +151,9 @@ export default function CreateAccountModal({
         initialAccount.rules?.consistency != null
           ? String(initialAccount.rules.consistency)
           : ""
+      )
+      setConsistencyMode(
+        initialAccount.rules?.consistency != null ? "required" : "na"
       )
       setMaxDrawdown(
         initialAccount.rules?.maxDrawdown != null
@@ -152,6 +175,14 @@ export default function CreateAccountModal({
           ? String(initialAccount.rules.winningDays)
           : ""
       )
+      setWinningDaysMode(
+        initialAccount.rules?.winningDays != null ? "required" : "na"
+      )
+      setWinningDayThreshold(
+        initialAccount.rules?.winningDayThreshold != null
+          ? String(initialAccount.rules.winningDayThreshold)
+          : ""
+      )
     } else {
       setName(emptyForm.name)
       setSize(emptyForm.size)
@@ -159,10 +190,13 @@ export default function CreateAccountModal({
       setMode(emptyForm.mode)
       setCategory(emptyForm.category)
       setConsistency(emptyForm.consistency)
+      setConsistencyMode("na")
       setMaxDrawdown(emptyForm.maxDrawdown)
       setDailyDrawdown(emptyForm.dailyDrawdown)
       setProfitTarget(emptyForm.profitTarget)
       setWinningDays(emptyForm.winningDays)
+      setWinningDaysMode("na")
+      setWinningDayThreshold(emptyForm.winningDayThreshold)
     }
   }, [open, initialAccount])
 
@@ -175,10 +209,13 @@ export default function CreateAccountModal({
     setMode(emptyForm.mode)
     setCategory(emptyForm.category)
     setConsistency(emptyForm.consistency)
+    setConsistencyMode("na")
     setMaxDrawdown(emptyForm.maxDrawdown)
     setDailyDrawdown(emptyForm.dailyDrawdown)
     setProfitTarget(emptyForm.profitTarget)
     setWinningDays(emptyForm.winningDays)
+    setWinningDaysMode("na")
+    setWinningDayThreshold(emptyForm.winningDayThreshold)
   }
 
   function handleCategoryChange(nextCategory: AccountType) {
@@ -194,12 +231,19 @@ export default function CreateAccountModal({
     setIsSaving(true)
 
     try {
+      const winningDaysRequired = winningDaysMode === "required"
+      const consistencyRequired = consistencyMode === "required"
       const parsedData = {
-        consistency: consistency ? Number(consistency) : null,
+        consistency:
+          consistencyRequired && consistency ? Number(consistency) : null,
         maxDrawdown: maxDrawdown ? Number(maxDrawdown) : null,
         dailyDrawdown: dailyDrawdown ? Number(dailyDrawdown) : null,
         profitTarget: profitTarget ? Number(profitTarget) : null,
-        winningDays: winningDays ? Number(winningDays) : null,
+        winningDays: winningDaysRequired && winningDays ? Number(winningDays) : null,
+        winningDayThreshold:
+          winningDaysRequired && winningDayThreshold
+            ? Number(winningDayThreshold)
+            : null,
       }
 
       await onSave({
@@ -240,18 +284,24 @@ export default function CreateAccountModal({
           id="create-account-modal-title"
           className="text-lg font-semibold text-emerald-300"
         >
-          {isEdit ? "Edit account" : "Create account"}
+          {heading}
         </h2>
+        {subheading ? (
+          <p className="mt-1 text-sm leading-relaxed text-gray-400">
+            {subheading}
+          </p>
+        ) : null}
 
         <div className="mt-5 space-y-4">
           <label className="block">
             <span className="text-xs text-gray-400">Account type</span>
             <select
               value={category}
+              disabled={categoryLocked}
               onChange={(e) =>
                 handleCategoryChange(e.target.value as AccountType)
               }
-              className={selectClass}
+              className={`${selectClass} disabled:cursor-not-allowed disabled:opacity-70`}
             >
               {ACCOUNT_TYPES.map((type) => (
                 <option key={type} value={type}>
@@ -312,8 +362,9 @@ export default function CreateAccountModal({
               <span className="text-xs text-gray-400">Account mode</span>
               <select
                 value={mode}
+                disabled={modeLocked}
                 onChange={(e) => setMode(e.target.value)}
-                className={selectClass}
+                className={`${selectClass} disabled:cursor-not-allowed disabled:opacity-70`}
               >
                 {accountModeOptions(category).map((option) => (
                   <option key={option.value} value={option.value}>
@@ -327,23 +378,43 @@ export default function CreateAccountModal({
           {category === "Prop Firm" && (
             <>
               <div className="space-y-1">
-                <div className="text-xs text-gray-400">Consistency</div>
-                <div className="relative w-full">
-                  <input
-                    type="text"
-                    value={formatNumber(consistency)}
-                    onChange={(e) =>
-                      handleNumberChange(e.target.value, setConsistency)
+                <div className="text-xs text-gray-400">Consistency Rule</div>
+                <select
+                  value={consistencyMode}
+                  onChange={(e) => {
+                    const next = e.target.value as "na" | "required"
+                    setConsistencyMode(next)
+                    if (next === "na") {
+                      setConsistency("")
                     }
-                    className="w-full pr-8 pl-3 py-2 rounded-lg bg-[#0f172a] border border-white/10 text-white focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
-                    placeholder="Consistency"
-                  />
-
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
-                    %
-                  </span>
-                </div>
+                  }}
+                  className={selectClass}
+                >
+                  <option value="na">Does Not Apply</option>
+                  <option value="required">Required</option>
+                </select>
               </div>
+
+              {consistencyMode === "required" ? (
+                <div className="space-y-1">
+                  <div className="text-xs text-gray-400">Consistency Threshold</div>
+                  <div className="relative w-full">
+                    <input
+                      type="text"
+                      value={formatNumber(consistency)}
+                      onChange={(e) =>
+                        handleNumberChange(e.target.value, setConsistency)
+                      }
+                      className="w-full pr-8 pl-3 py-2 rounded-lg bg-[#0f172a] border border-white/10 text-white focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
+                      placeholder="Consistency Threshold"
+                    />
+
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
+                      %
+                    </span>
+                  </div>
+                </div>
+              ) : null}
 
               <div className="space-y-1">
                 <div className="text-xs text-gray-400">Max Drawdown</div>
@@ -404,18 +475,60 @@ export default function CreateAccountModal({
 
               <div className="space-y-1">
                 <div className="text-xs text-gray-400">Winning Days</div>
-                <div className="relative w-full">
-                  <input
-                    type="text"
-                    value={formatNumber(winningDays)}
-                    onChange={(e) =>
-                      handleNumberChange(e.target.value, setWinningDays)
+                <select
+                  value={winningDaysMode}
+                  onChange={(e) => {
+                    const next = e.target.value as "na" | "required"
+                    setWinningDaysMode(next)
+                    if (next === "na") {
+                      setWinningDays("")
+                      setWinningDayThreshold("")
                     }
-                    className="w-full px-3 py-2 rounded-lg bg-[#0f172a] border border-white/10 text-white focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
-                    placeholder="Winning Days"
-                  />
-                </div>
+                  }}
+                  className={selectClass}
+                >
+                  <option value="na">Does Not Apply</option>
+                  <option value="required">Required</option>
+                </select>
               </div>
+
+              {winningDaysMode === "required" ? (
+                <>
+                  <div className="space-y-1">
+                    <div className="text-xs text-gray-400">Minimum Winning Days</div>
+                    <div className="relative w-full">
+                      <input
+                        type="text"
+                        value={formatNumber(winningDays)}
+                        onChange={(e) =>
+                          handleNumberChange(e.target.value, setWinningDays)
+                        }
+                        className="w-full px-3 py-2 rounded-lg bg-[#0f172a] border border-white/10 text-white focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
+                        placeholder="Minimum Winning Days"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="text-xs text-gray-400">Winning Day Threshold</div>
+                    <div className="relative w-full">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
+                        $
+                      </span>
+
+                      <input
+                        type="text"
+                        value={formatNumber(winningDayThreshold)}
+                        onChange={(e) =>
+                          handleNumberChange(e.target.value, setWinningDayThreshold)
+                        }
+                        className="w-full pl-8 pr-3 py-2 rounded-lg bg-[#0f172a] border border-white/10 text-white focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
+                        placeholder="Winning Day Threshold"
+                      />
+                    </div>
+                  </div>
+                </>
+              ) : null}
             </>
           )}
         </div>
@@ -443,10 +556,8 @@ export default function CreateAccountModal({
                 />
                 Saving…
               </>
-            ) : isEdit ? (
-              "Save changes"
             ) : (
-              "Save account"
+              primaryLabel
             )}
           </button>
         </div>

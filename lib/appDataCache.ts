@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 /** Shared client-side cache for trades and accounts (module-level, survives route remounts). */
 
 export const ACCOUNTS_SELECT =
-  "id, account_number, name, account_size, mode, category, is_active" as const
+  "id, account_number, name, account_size, mode, category, is_active, note, consistency, max_drawdown, daily_drawdown, profit_target, winning_days, winning_day_threshold" as const
 
 const DEFAULT_STALE_MS = 5 * 60 * 1000
 
@@ -245,12 +245,21 @@ export async function ensureAccountsLoaded(
   const entry = accountsByUser.get(userId)
   if (cached && !options?.force) return cached
   if (entry?.loading) {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       const unsub = subscribeAppDataCache(() => {
-        const hit = getCachedAccounts(userId)
-        if (hit && !accountsByUser.get(userId)?.loading) {
+        const mem = accountsByUser.get(userId)
+        if (!mem?.loading) {
           unsub()
-          resolve(hit)
+          const hit = getCachedAccounts(userId)
+          if (hit) {
+            resolve(hit)
+            return
+          }
+          if (mem?.invalidated) {
+            reject(new Error("Accounts failed to load"))
+            return
+          }
+          resolve((mem?.data ?? EMPTY_ACCOUNTS) as any[])
         }
       })
     })
@@ -268,10 +277,22 @@ export async function ensureAccountsLoaded(
   })
   if (!wasLoading) notify()
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("accounts")
     .select(ACCOUNTS_SELECT)
     .eq("user_id", userId)
+
+  if (error) {
+    accountsByUser.set(userId, {
+      userId,
+      data: previousData,
+      fetchedAt: entry?.fetchedAt ?? 0,
+      invalidated: true,
+      loading: false,
+    })
+    notify()
+    throw new Error(error.message)
+  }
 
   const next = data?.length ? data : (EMPTY_ACCOUNTS as any[])
   setAccountsCache(userId, next)
