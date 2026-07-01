@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react"
 import { createPortal } from "react-dom"
 import { cn } from "./cn"
+import { MODAL_FIXED_BELOW_NAVBAR_CLASS } from "./DetailModalShell"
 
 export type ModalProps = {
   open: boolean
@@ -12,6 +13,8 @@ export type ModalProps = {
   footer?: ReactNode
   /** Panel width cap */
   size?: "sm" | "md" | "lg"
+  /** Anchor overlay below the fixed navbar (top-16), top-aligned on all breakpoints. */
+  belowNavbar?: boolean
   className?: string
   panelClassName?: string
   backdropClassName?: string
@@ -30,6 +33,7 @@ export default function Modal({
   children,
   footer,
   size = "md",
+  belowNavbar = false,
   className,
   panelClassName,
   backdropClassName,
@@ -63,7 +67,9 @@ export default function Modal({
   return createPortal(
     <div
       className={cn(
-        "fixed inset-0 z-[10050] flex items-center justify-center p-4",
+        belowNavbar
+          ? `${MODAL_FIXED_BELOW_NAVBAR_CLASS} z-[10050] p-4`
+          : "fixed inset-0 z-[10050] flex items-center justify-center p-4",
         className
       )}
       role="presentation"

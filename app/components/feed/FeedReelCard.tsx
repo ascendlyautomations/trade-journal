@@ -1,7 +1,6 @@
 "use client"
 
 import { memo, useCallback, useMemo } from "react"
-import { formatSocialTimestamp } from "@/lib/formatRelativeTime"
 import FeedPostActions from "./FeedPostActions"
 import FeedPostHeader from "./FeedPostHeader"
 import FeedReelOwnerMenu from "./FeedReelOwnerMenu"
@@ -79,10 +78,6 @@ function FeedReelCard({
     const raw = post.caption != null ? String(post.caption).trim() : ""
     return raw !== "" ? raw : null
   }, [post.caption])
-  const createdAtLabel = useMemo(
-    () => formatSocialTimestamp(post.created_at),
-    [post.created_at]
-  )
 
   return (
     <article
@@ -98,6 +93,9 @@ function FeedReelCard({
             userId={post.user_id}
             avatarUrl={avatarUrl}
             username={profileUsername}
+            metaLabel="Reel"
+            metaLabelClassName="font-medium text-violet-400/90"
+            postedAt={post.created_at}
           />
         </div>
         {canManageReel ? (
@@ -148,8 +146,6 @@ function FeedReelCard({
         onOpenComments={handleOpenComments}
         onSharePost={onSharePost}
       />
-
-      <p className="px-4 pb-3 text-xs text-white/40">{createdAtLabel}</p>
     </article>
   )
 }

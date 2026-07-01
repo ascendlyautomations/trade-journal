@@ -12,7 +12,7 @@ import {
   parseAffiliateConnectRow,
   type AffiliateConnectRow,
 } from "@/lib/affiliateStripeConnect"
-import { AFFILIATE_PER_REFERRAL_EARNINGS } from "@/lib/affiliateEarnings"
+import { COMMISSION_RATE } from "@/lib/affiliateEarnings"
 import {
   fetchAffiliatePayoutBalance,
   type AffiliatePayoutBalance,
@@ -25,6 +25,8 @@ import {
 } from "@/lib/affiliatePayoutRequests"
 import { supabase } from "@/lib/supabaseClient"
 import { supabaseBearerHeaders } from "@/lib/supabaseBearerFetch"
+import { AFFILIATE_PRIMARY_BUTTON_CLASS } from "@/lib/affiliateUi"
+import { SkeletonPayoutsPage } from "@/app/components/ui/skeletons"
 
 type MeProfile = {
   id: string
@@ -199,8 +201,6 @@ export default function AffiliatePayoutsPage() {
     }
   }, [])
 
-  const referralCountBalance = payoutBalance?.referralCount ?? 0
-  const perReferralFromRpc = payoutBalance?.perReferralEarnings ?? AFFILIATE_PER_REFERRAL_EARNINGS
   const totalEarnings = payoutBalance?.totalEarnings ?? 0
   const totalPaidOut = payoutBalance?.totalPaid ?? 0
   const earningsSinceLastPayout = payoutBalance?.earningsSinceLastPayout ?? 0
@@ -307,9 +307,10 @@ export default function AffiliatePayoutsPage() {
                 Payouts
               </h1>
               <p className="mt-1 text-sm text-gray-400">
-                Totals follow the affiliate earnings model (referrals × ${AFFILIATE_PER_REFERRAL_EARNINGS.toFixed(2)});
-                payout request statuses in this app reserve or consume balance — not Stripe settlement timing.
-                You need at least <strong className="text-gray-200">${minimumPayout.toFixed(0)}</strong>{" "}
+                Total earnings reflect recorded Stripe commissions ({Math.round(COMMISSION_RATE * 100)}% of paid
+                invoices). Payout request statuses reserve or consume balance — not Stripe settlement timing. You
+                need at least{" "}
+                <strong className="text-gray-200">${minimumPayout.toFixed(0)}</strong>{" "}
                 <span className="text-gray-500">available</span> before you can submit a payout request.
               </p>
             </div>
@@ -317,9 +318,9 @@ export default function AffiliatePayoutsPage() {
               type="button"
               onClick={() => void load()}
               disabled={loading}
-              className="rounded-lg bg-white/10 px-4 py-2 text-sm hover:bg-white/20 disabled:opacity-50"
+              className={AFFILIATE_PRIMARY_BUTTON_CLASS}
             >
-              {loading ? "Refreshing…" : "Refresh"}
+              Refresh
             </button>
           </div>
 
@@ -345,23 +346,23 @@ export default function AffiliatePayoutsPage() {
             </div>
           ) : null}
 
-          {balanceRpcError ? (
-            <div className="mb-6 rounded-xl border border-red-400/40 bg-red-500/15 px-4 py-3 text-sm text-red-100">
-              Could not load payout balance ({balanceRpcError}). Try Refresh — if this persists, the payout balance
-              function may need to be applied on the database.
-            </div>
-          ) : null}
-
-          {affiliateRowId ? (
-            <div className="mb-6">
-              <AffiliatePayoutSetupCard affiliateConnect={affiliateConnectRow} show />
-            </div>
-          ) : null}
-
           {loading ? (
-            <p className="text-sm text-gray-400">Loading…</p>
+            <SkeletonPayoutsPage />
           ) : (
             <>
+              {balanceRpcError ? (
+                <div className="mb-6 rounded-xl border border-red-400/40 bg-red-500/15 px-4 py-3 text-sm text-red-100">
+                  Could not load payout balance ({balanceRpcError}). Try Refresh — if this persists, the payout balance
+                  function may need to be applied on the database.
+                </div>
+              ) : null}
+
+              {affiliateRowId ? (
+                <div className="mb-6">
+                  <AffiliatePayoutSetupCard affiliateConnect={affiliateConnectRow} show />
+                </div>
+              ) : null}
+
               <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <div className="rounded-xl border border-white/10 bg-white/5 p-5 backdrop-blur-md">
                   <p className="text-sm text-gray-400">Total earnings</p>
@@ -369,8 +370,7 @@ export default function AffiliatePayoutsPage() {
                     ${formatMoney(totalEarnings)}
                   </p>
                   <p className="mt-1 text-xs text-gray-500">
-                    {referralCountBalance} referrals × ${perReferralFromRpc.toFixed(2)} — matches the Affiliate
-                    dashboard.
+                    Cumulative commission from paid TraxPro invoices — matches the Affiliate dashboard.
                   </p>
                   <p className="mt-2 border-t border-white/10 pt-2 text-xs text-gray-400">
                     Paid out via completed requests (status paid):{" "}
@@ -474,7 +474,7 @@ export default function AffiliatePayoutsPage() {
                   type="button"
                   disabled={!canRequestPayout || loading}
                   onClick={() => setModalOpen(true)}
-                  className="rounded-lg bg-gradient-to-r from-emerald-500 to-blue-500 px-5 py-2.5 text-sm font-semibold shadow-lg hover:opacity-95 disabled:opacity-50"
+                  className={`${AFFILIATE_PRIMARY_BUTTON_CLASS} px-5 py-2.5`}
                 >
                   Request payout
                 </button>

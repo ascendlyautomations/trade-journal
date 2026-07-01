@@ -170,7 +170,7 @@ export default function SupportPage() {
       <div className={submissionPageShell}>
         <div className={submissionPageContainer}>
           <form onSubmit={handleSubmit} className={submissionFormCard}>
-            <h1 className={submissionTitle}>Need help?</h1>
+            <h1 className={submissionTitle}>Need Help?</h1>
             <p className={submissionSubtitle}>
               Submit a support request and we&apos;ll review it as soon as possible.
             </p>

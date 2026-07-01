@@ -10,12 +10,11 @@ import { ConfirmModal, useDeleteAchievementConfirmation } from "../components/ui
 import { supabase } from "../../lib/supabaseClient"
 import {
   type Achievement,
-  ACHIEVEMENT_TRACK_FILTER_OPTIONS,
+  ACHIEVEMENT_PAGE_MOBILE_FILTER_OPTIONS,
   ACHIEVEMENT_TYPE_FILTER_OPTIONS,
-  achievementMatchesTrackFilter,
-  achievementMatchesTypeFilter,
-  type AchievementTrackFilter,
-  type AchievementTypeFilter,
+  achievementMatchesPageFilter,
+  achievementPageMobileFilterActive,
+  type AchievementPageFilter,
   fetchOwnAchievements,
 } from "../../lib/achievements"
 
@@ -24,8 +23,7 @@ export default function AchievementsPage() {
   const [achievements, setAchievements] = useState<Achievement[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [trackFilter, setTrackFilter] = useState<AchievementTrackFilter>("all")
-  const [typeFilter, setTypeFilter] = useState<AchievementTypeFilter>("all")
+  const [filter, setFilter] = useState<AchievementPageFilter>("all")
   const [showForm, setShowForm] = useState(false)
   const [editingAchievement, setEditingAchievement] = useState<Achievement | null>(
     null
@@ -69,12 +67,8 @@ export default function AchievementsPage() {
   }, [loadAchievements])
 
   const filteredAchievements = useMemo(() => {
-    return achievements.filter(
-      (a) =>
-        achievementMatchesTrackFilter(a, trackFilter) &&
-        achievementMatchesTypeFilter(a, typeFilter)
-    )
-  }, [achievements, trackFilter, typeFilter])
+    return achievements.filter((a) => achievementMatchesPageFilter(a, filter))
+  }, [achievements, filter])
 
   const featured = useMemo(
     () => achievements.filter((a) => a.is_featured),
@@ -145,40 +139,35 @@ export default function AchievementsPage() {
             </button>
           </div>
 
-          <div className="space-y-3">
-            <div className="inline-flex rounded-lg border border-white/10 bg-white/5 p-0.5">
-              {ACHIEVEMENT_TRACK_FILTER_OPTIONS.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => setTrackFilter(option.value)}
-                  className={`rounded-md px-3 py-1.5 text-sm transition ${
-                    trackFilter === option.value
-                      ? "border border-blue-400/60 bg-blue-500/20 text-white"
-                      : "border border-transparent text-gray-200 hover:bg-white/10"
-                  }`}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              {ACHIEVEMENT_TYPE_FILTER_OPTIONS.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => setTypeFilter(option.value)}
-                  className={`rounded-lg border px-3 py-1.5 text-sm ${
-                    typeFilter === option.value
-                      ? "border-blue-400/60 bg-blue-500/20 text-white"
-                      : "border-white/10 bg-white/5 text-gray-200 hover:bg-white/10"
-                  }`}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
+          <div className="flex flex-nowrap gap-1.5 md:flex-wrap md:gap-2">
+            {ACHIEVEMENT_TYPE_FILTER_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setFilter(option.value)}
+                className={`hidden rounded-lg border px-3 py-1.5 text-sm md:inline-flex ${
+                  filter === option.value
+                    ? "border-blue-400/60 bg-blue-500/20 text-white"
+                    : "border-white/10 bg-white/5 text-gray-200 hover:bg-white/10"
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+            {ACHIEVEMENT_PAGE_MOBILE_FILTER_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setFilter(option.value)}
+                className={`min-w-0 flex-1 basis-0 rounded-lg border px-2 py-1.5 text-center text-xs whitespace-nowrap md:hidden ${
+                  achievementPageMobileFilterActive(filter, option.value)
+                    ? "border-blue-400/60 bg-blue-500/20 text-white"
+                    : "border-white/10 bg-white/5 text-gray-200 hover:bg-white/10"
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
           </div>
 
           {error ? (

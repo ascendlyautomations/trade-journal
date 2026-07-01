@@ -64,6 +64,7 @@ export function buildCommunitySharePreviewPost(
       avatar_url: input.avatarUrl,
     },
     trades: {
+      created_at: new Date().toISOString(),
       public_description: input.publicDescription,
       user_id: input.userId,
       ticker: input.ticker.trim() || "—",

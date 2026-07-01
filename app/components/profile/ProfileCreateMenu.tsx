@@ -16,6 +16,7 @@ type ProfileCreateMenuProps = {
   onCreateStory: () => void
   onCreatePost: () => void
   onCreateReel: () => void
+  onCreateQuickTrade: () => void
   /** Header action button vs empty-state text link */
   variant?: "button" | "link"
   className?: string
@@ -41,6 +42,14 @@ function ReelIcon({ className }: { className?: string }) {
   return (
     <span className={className} aria-hidden>
       🎥
+    </span>
+  )
+}
+
+function QuickTradeIcon({ className }: { className?: string }) {
+  return (
+    <span className={className} aria-hidden>
+      ⚡
     </span>
   )
 }
@@ -87,6 +96,7 @@ export default function ProfileCreateMenu({
   onCreateStory,
   onCreatePost,
   onCreateReel,
+  onCreateQuickTrade,
   variant = "button",
   className,
 }: ProfileCreateMenuProps) {
@@ -116,6 +126,12 @@ export default function ProfileCreateMenu({
       label: "Reel",
       icon: <ReelIcon />,
       onSelect: onCreateReel,
+    },
+    {
+      id: "quick-trade",
+      label: "Quick Trade",
+      icon: <QuickTradeIcon />,
+      onSelect: onCreateQuickTrade,
     },
   ]
 

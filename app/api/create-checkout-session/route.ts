@@ -4,6 +4,7 @@ import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 import { mirrorBillingAccountsStripeCustomerId } from "@/lib/profileSplitMirrorWrites"
 import { ensureProfileForUser } from "@/lib/ensureProfileForUser"
+import { createAffiliateReferralNotification, resolveAffiliateUserIdFromCode } from "@/lib/server/affiliateReferralNotifications"
 import { isProActive } from "@/lib/subscription"
 
 export const runtime = "nodejs"
@@ -131,6 +132,23 @@ export async function POST(req: Request) {
           { error: "Could not create profile" },
           { status: 500 }
         )
+      }
+
+      if (ensureResult.created && referralCodeFromBody?.trim()) {
+        try {
+          const affiliateUserId = await resolveAffiliateUserIdFromCode(
+            supabase,
+            referralCodeFromBody
+          )
+          if (affiliateUserId && affiliateUserId !== user.id) {
+            await createAffiliateReferralNotification(supabase, {
+              affiliateUserId,
+              referredUserId: user.id,
+            })
+          }
+        } catch (notifErr) {
+          console.error("[create-checkout-session] affiliate referral notification failed:", notifErr)
+        }
       }
 
       const refetch = await supabase

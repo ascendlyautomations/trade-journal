@@ -6,6 +6,19 @@ import { useCallback, useEffect, type ReactNode } from "react"
 export const NAVBAR_HEIGHT_CLASS = "top-16"
 export const NAVBAR_HEIGHT_REM = "4rem"
 
+/**
+ * Standard form-modal overlay: anchored below the fixed navbar on all breakpoints.
+ * Matches DetailModalShell / FeedStoryViewer — top-aligned, horizontally centered, scrollable.
+ */
+export const MODAL_FIXED_BELOW_NAVBAR_CLASS =
+  "fixed inset-x-0 bottom-0 top-16 flex items-start justify-center overflow-y-auto"
+
+/** @deprecated Use MODAL_FIXED_BELOW_NAVBAR_CLASS */
+export const MODAL_OVERLAY_BELOW_NAVBAR_CLASS = MODAL_FIXED_BELOW_NAVBAR_CLASS
+
+/** @deprecated Pass belowNavbar to Modal instead */
+export const MODAL_COMPONENT_BELOW_NAVBAR_CLASS = MODAL_FIXED_BELOW_NAVBAR_CLASS
+
 type DetailModalShellProps = {
   ariaLabel: string
   onClose: () => void

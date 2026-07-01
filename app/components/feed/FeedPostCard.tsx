@@ -1,7 +1,6 @@
 "use client"
 
 import { memo, useCallback, useMemo, type MutableRefObject } from "react"
-import { formatSocialTimestamp } from "@/lib/formatRelativeTime"
 import {
   getModeStyles,
   normalizeFeedAccountType,
@@ -93,11 +92,6 @@ function FeedPostCard({
       accountTypeStyles: accountTypeNorm ? getModeStyles(accountTypeNorm) : "",
     }
   }, [tradeRow])
-  const createdAtLabel = useMemo(
-    () => formatSocialTimestamp(post.created_at),
-    [post.created_at]
-  )
-
   return (
     <article
       role={preview ? "article" : "button"}
@@ -114,6 +108,9 @@ function FeedPostCard({
         userId={post.user_id}
         avatarUrl={avatarUrl}
         username={profileUsername}
+        metaLabel="Trade"
+        metaLabelClassName="font-medium text-amber-400/90"
+        postedAt={post.created_at}
         preview={preview}
       />
 
@@ -140,7 +137,6 @@ function FeedPostCard({
         rr={post.rr}
         publicDesc={publicDesc}
         timingTrade={tradeRow}
-        createdAtLabel={createdAtLabel}
       />
     </article>
   )

@@ -203,11 +203,6 @@ export default function DmStyleComposer({
           Send
         </button>
       </div>
-      <p className="mt-1.5 text-xs text-gray-500">
-        <span className="font-medium text-gray-400">Enter</span> to send •{" "}
-        <span className="font-medium text-gray-400">Ctrl + Enter</span> for new
-        line
-      </p>
       {afterRow ? <div className="mt-2">{afterRow}</div> : null}
 
       {mobileAttachOpen ? (

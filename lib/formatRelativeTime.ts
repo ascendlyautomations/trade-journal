@@ -172,6 +172,66 @@ export function formatSocialTimestamp(
   return formatRelativeTime(dateString, now, "compact")
 }
 
+/**
+ * Posted/published timestamp for public trade cards.
+ * Just now → 5m ago → 2h ago → Yesterday → 3d ago → Jun 18 → Jun 18, 2025
+ */
+export function formatPostedTimestamp(
+  dateString: string | Date | null | undefined,
+  now: Date | number = Date.now()
+): string {
+  const d = parseDateLike(dateString)
+  if (!d) return ""
+
+  const nowMs = typeof now === "number" ? now : now.getTime()
+  const t = d.getTime()
+  if (!Number.isFinite(t) || !Number.isFinite(nowMs)) return ""
+
+  const iso =
+    typeof dateString === "string" ? dateString : dateString.toISOString()
+  const diffMs = Math.max(0, nowMs - t)
+  const diffSec = Math.floor(diffMs / SECOND_MS)
+
+  if (diffSec < 30) return "Just now"
+
+  const diffMin = Math.floor(diffMs / MINUTE_MS)
+  if (diffMin < 60) {
+    return `${Math.max(1, diffMin)}m ago`
+  }
+
+  const diffHours = Math.floor(diffMs / HOUR_MS)
+  if (diffHours < 24) {
+    return `${diffHours}h ago`
+  }
+
+  const diffDays = Math.floor(diffMs / DAY_MS)
+  if (diffDays < 2) return "Yesterday"
+
+  if (diffDays <= 6) {
+    return `${diffDays}d ago`
+  }
+
+  const messageKey = getESTDateKey(iso)
+  const todayKey = getESTDateKey(new Date(nowMs).toISOString())
+  if (!messageKey || !todayKey) {
+    return d.toLocaleDateString("en-US", {
+      timeZone: EST_TIMEZONE,
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    })
+  }
+
+  const [ty] = todayKey.split("-")
+  const [my] = messageKey.split("-")
+  return d.toLocaleDateString("en-US", {
+    timeZone: EST_TIMEZONE,
+    month: "short",
+    day: "numeric",
+    ...(ty !== my ? { year: "numeric" } : {}),
+  })
+}
+
 /** Calendar-based buckets for the notifications center (America/New_York). */
 export function getNotificationTimeSection(
   iso: string,

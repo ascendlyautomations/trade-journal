@@ -4,6 +4,8 @@ import Link from "next/link"
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Navbar from "../../components/Navbar"
+import FeedPostHeader from "@/app/components/feed/FeedPostHeader"
+import FeedPostMetaRow from "@/app/components/feed/FeedPostMetaRow"
 import { CommentFocusCompactStrip } from "@/app/components/comments/CommentFocusCompactStrip"
 import MobileCommentFocusLayout from "@/app/components/comments/MobileCommentFocusLayout"
 import {
@@ -264,14 +266,40 @@ export default function TradeDetailPageClient({
             >
               <MobileCommentFocusLayout
                 commentsFocused={commentsFocused}
+                header={
+                  ownerProfile ? (
+                    <FeedPostHeader
+                      userId={String(ownerProfile.id)}
+                      avatarUrl={ownerProfile.avatar_url ?? null}
+                      username={
+                        ownerProfile.username ||
+                        ownerProfile.name ||
+                        "User"
+                      }
+                      metaLabel="Trade"
+                      metaLabelClassName="font-medium text-amber-400/90"
+                      postedAt={trade.created_at}
+                    />
+                  ) : undefined
+                }
                 compactHeader={
                   ownerProfile ? (
                     <CommentFocusCompactStrip
                       userId={ownerProfile.id}
                       username={ownerProfile.username}
                       avatarUrl={ownerProfile.avatar_url}
-                      timestamp={trade.created_at ?? trade.trade_date}
-                      meta={tradeCompactMeta}
+                      meta={
+                        <>
+                          <FeedPostMetaRow
+                            label="Trade"
+                            labelClassName="font-medium text-amber-400/90"
+                            createdAt={trade.created_at}
+                          />
+                          <div className="mt-0.5 truncate text-xs font-medium text-gray-300">
+                            {tradeCompactMeta}
+                          </div>
+                        </>
+                      }
                       onExpand={() => setCommentsFocused(false)}
                     />
                   ) : undefined

@@ -37,3 +37,87 @@ export function formatPnlWholeDollars(value: number): string {
   })
   return rounded < 0 ? `-$${formatted}` : `$${formatted}`
 }
+
+/** Strip grouping/currency symbols from a trade input string. */
+export function cleanTradeNumericInput(value: string): string {
+  return value.replace(/,/g, "").replace(/\$/g, "")
+}
+
+export function parseTradeNumericInput(value: string): number | null {
+  const cleaned = cleanTradeNumericInput(value)
+  if (cleaned === "" || cleaned === "-" || cleaned === "-.") return null
+  const num = Number(cleaned)
+  return Number.isFinite(num) ? num : null
+}
+
+/** Intermediate typing states that should not be reformatted in currency inputs. */
+export function isIntermediateNumericInput(value: string): boolean {
+  return (
+    value === "" ||
+    value === "-" ||
+    value === "." ||
+    value === "-." ||
+    value.endsWith(".")
+  )
+}
+
+/** Display formatter for P&L inputs (always two decimal places). */
+export function formatTradeInputPnlDisplay(value: string): string {
+  if (!value) return ""
+  if (isIntermediateNumericInput(value)) return value
+  const num = parseTradeNumericInput(value)
+  if (num === null) return ""
+  return formatPnlCurrency(num)
+}
+
+/** Display formatter for price inputs (preserves imported decimal precision). */
+export function formatTradeInputPriceDisplay(value: string): string {
+  if (!value) return ""
+  if (isIntermediateNumericInput(value)) return value
+  const num = parseTradeNumericInput(value)
+  if (num === null) return ""
+  const cleaned = cleanTradeNumericInput(value)
+  const dot = cleaned.indexOf(".")
+  const fractionDigits =
+    dot === -1 ? 2 : Math.max(2, cleaned.length - dot - 1)
+  return formatPnlCurrency(num, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: fractionDigits,
+  })
+}
+
+export function handleTradeNumericInput(
+  value: string,
+  setter: (val: string) => void,
+  options?: {
+    allowDecimal?: boolean
+    allowNegative?: boolean
+  }
+): void {
+  let cleaned = cleanTradeNumericInput(value)
+  const { allowDecimal = false, allowNegative = false } = options ?? {}
+
+  if (allowDecimal) {
+    const decimalCount = (cleaned.match(/\./g) ?? []).length
+    if (decimalCount > 1) return
+  }
+
+  let regex: RegExp
+  if (allowDecimal && allowNegative) {
+    regex = /^-?\d*(\.\d*)?$/
+  } else if (allowDecimal) {
+    regex = /^\d*(\.\d*)?$/
+  } else if (allowNegative) {
+    regex = /^-?\d*$/
+  } else {
+    regex = /^\d*$/
+  }
+
+  if (isIntermediateNumericInput(cleaned)) {
+    setter(cleaned)
+    return
+  }
+
+  if (!regex.test(cleaned)) return
+  setter(cleaned)
+}

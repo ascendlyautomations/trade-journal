@@ -2,6 +2,7 @@
 
 import Navbar from "../components/Navbar"
 import InputTradeForm from "../components/InputTradeForm"
+import QuickTradeModal from "../components/QuickTradeModal"
 import CsvImportFailureModal from "../components/CsvImportFailureModal"
 import { useState, useRef, useEffect } from "react"
 import Papa from "papaparse"
@@ -39,12 +40,17 @@ export default function Home() {
   const [failureModalOpen, setFailureModalOpen] = useState(false)
   const [failureReason, setFailureReason] = useState("")
   const [submittingSupport, setSubmittingSupport] = useState(false)
+  const [showQuickTrade, setShowQuickTrade] = useState(false)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
 
   const csvInputRef = useRef<HTMLInputElement>(null)
   const lastCsvFileRef = useRef<File | null>(null)
 
   useEffect(() => {
-    fetchReviewCount()
+    void fetchReviewCount()
+    void supabase.auth.getUser().then(({ data: { user } }) => {
+      setCurrentUserId(user?.id ?? null)
+    })
   }, [])
 
   function resetCsvInput() {
@@ -306,6 +312,7 @@ export default function Home() {
           />
 
           <InputTradeForm
+            onQuickInputClick={() => setShowQuickTrade(true)}
             onUploadCsvClick={openCsvFilePicker}
             onReviewCsvClick={() => {
               window.location.href = "/review"
@@ -325,6 +332,15 @@ export default function Home() {
           />
         </div>
       </div>
+
+      <QuickTradeModal
+        open={showQuickTrade}
+        userId={currentUserId}
+        onClose={() => setShowQuickTrade(false)}
+        onSaved={() => {
+          void fetchReviewCount()
+        }}
+      />
     </>
   )
 }

@@ -10,7 +10,6 @@ import { PostInteractionsEngagement } from "@/app/components/PostInteractions"
 import TradeCardTimingBlock from "@/app/components/TradeCardTimingBlock"
 import { CommentFocusCompactStrip } from "@/app/components/comments/CommentFocusCompactStrip"
 import MobileCommentFocusLayout from "@/app/components/comments/MobileCommentFocusLayout"
-import { formatSocialTimestamp } from "@/lib/formatRelativeTime"
 import {
   formatPoints,
   formatRR,
@@ -19,6 +18,7 @@ import {
 import { resolveTradePoints } from "@/lib/resolveTradePoints"
 import FeedCommentsSection from "./FeedCommentsSection"
 import FeedPostHeader from "./FeedPostHeader"
+import FeedPostMetaRow from "./FeedPostMetaRow"
 import {
   feedCommentTarget,
   getModeStyles,
@@ -108,7 +108,7 @@ export default function FeedPostDetailModal({
       pnlPositive: !Number.isNaN(pnl) && pnl >= 0,
       points: resolveTradePoints(tradeJoin),
       timingTrade: tradeJoin,
-      createdAtLabel: formatSocialTimestamp(post.created_at),
+      postedAt: post.created_at,
       avatarUrl,
       username: post.profiles?.username || "User",
     }
@@ -146,6 +146,9 @@ export default function FeedPostDetailModal({
           userId={post.user_id}
           avatarUrl={modalPostDetails.avatarUrl}
           username={modalPostDetails.username}
+          metaLabel="Trade"
+          metaLabelClassName="font-medium text-amber-400/90"
+          postedAt={modalPostDetails.postedAt}
         />
       }
       compactHeader={
@@ -153,8 +156,18 @@ export default function FeedPostDetailModal({
           userId={String(post.user_id ?? "")}
           username={modalPostDetails.username}
           avatarUrl={modalPostDetails.avatarUrl}
-          timestamp={post.created_at}
-          meta={pnlMeta}
+          meta={
+            <>
+              <FeedPostMetaRow
+                label="Trade"
+                labelClassName="font-medium text-amber-400/90"
+                createdAt={modalPostDetails.postedAt}
+              />
+              <div className="mt-0.5 truncate text-xs font-medium text-gray-300">
+                {pnlMeta}
+              </div>
+            </>
+          }
           onExpand={() => setCommentsFocused(false)}
         />
       }
@@ -217,10 +230,6 @@ export default function FeedPostDetailModal({
           {modalPostDetails.timingTrade ? (
             <TradeCardTimingBlock trade={modalPostDetails.timingTrade} />
           ) : null}
-
-          <p className="text-xs text-white/40">
-            {modalPostDetails.createdAtLabel}
-          </p>
         </div>
       }
       comments={

@@ -6,7 +6,7 @@ import {
   ProfileUsernameLink,
 } from "@/app/components/ProfileLink"
 import { ProfileAvatarImg } from "@/app/components/SafeProfileAvatar"
-import { formatSocialTimestamp } from "@/lib/formatRelativeTime"
+import { formatPostedTimestamp } from "@/lib/formatRelativeTime"
 
 type CommentFocusCompactStripProps = {
   userId: string
@@ -29,7 +29,7 @@ export function CommentFocusCompactStrip({
   className = "",
   onExpand,
 }: CommentFocusCompactStripProps) {
-  const timeLabel = formatSocialTimestamp(timestamp)
+  const timeLabel = formatPostedTimestamp(timestamp)
   const displayName = username?.trim() || "User"
 
   const inner = (

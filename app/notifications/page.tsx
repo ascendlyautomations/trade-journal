@@ -16,9 +16,11 @@ import { SkeletonNotificationsPage } from "../components/ui/skeletons"
 import Modal from "../components/ui/Modal"
 import { clearAllNotifications, dismissNotifications } from "@/lib/followNotifications"
 import { formatSocialTimestamp } from "@/lib/formatRelativeTime"
-import { NOTIFICATION_ENGAGEMENT_TYPES } from "@/lib/notificationEngagementTypes"
+import { NOTIFICATION_INBOX_TYPES } from "@/lib/notificationEngagementTypes"
 import { useUserProfile } from "@/lib/UserProfileProvider"
 import {
+  affiliateNotificationBody,
+  affiliateNotificationTitle,
   buildGroupedNotificationCards,
   commentPreview,
   filterGroupedCardsByTab,
@@ -48,10 +50,10 @@ const NOTIFICATIONS_TABLE = "notifications"
 const NOTIFICATION_SELECT =
   "id, user_id, sender_id, type, post_id, trade_id, profile_post_id, achievement_post_id, reel_id, comment_id, content, read, created_at"
 
-const ENGAGEMENT_TYPES = NOTIFICATION_ENGAGEMENT_TYPES
+const INBOX_TYPES = NOTIFICATION_INBOX_TYPES
 
-function isEngagementNotification(row: NotificationRecord): boolean {
-  return ENGAGEMENT_TYPES.includes(row.type as (typeof ENGAGEMENT_TYPES)[number])
+function isInboxNotification(row: NotificationRecord): boolean {
+  return INBOX_TYPES.includes(row.type as (typeof INBOX_TYPES)[number])
 }
 
 function sortNotificationsDesc(rows: NotificationRecord[]): NotificationRecord[] {
@@ -107,6 +109,8 @@ function cardStableKey(card: GroupedNotificationCard): string {
       return `room_join:${card.notification.id}`
     case "room_message_group":
       return `room_message_group:${card.key}`
+    case "affiliate_notification":
+      return `affiliate:${card.notification.id}`
   }
 }
 
@@ -294,12 +298,20 @@ function GroupedNotificationCardView({
         })}
       </ul>
     )
+  } else if (card.kind === "affiliate_notification") {
+    title = affiliateNotificationTitle(card.notification)
+    const sender = card.notification.sender_id
+      ? sendersById[card.notification.sender_id]
+      : undefined
+    avatarUrl = sender?.avatar_url
   }
 
   const subtitle =
-    card.kind === "room_message_group"
-      ? formatRoomMessageGroupSubtitle(card.totalMessages)
-      : null
+    card.kind === "affiliate_notification"
+      ? affiliateNotificationBody(card.notification)
+      : card.kind === "room_message_group"
+        ? formatRoomMessageGroupSubtitle(card.totalMessages)
+        : null
 
   return (
     <div
@@ -311,7 +323,7 @@ function GroupedNotificationCardView({
     >
       <div className="flex items-start gap-2 sm:gap-3">
         {avatarUrl != null &&
-        card.kind === "room_join" &&
+        (card.kind === "room_join" || card.kind === "affiliate_notification") &&
         card.notification.sender_id ? (
           <div className="relative shrink-0">
             <ProfileAvatarLink
@@ -484,7 +496,7 @@ export default function NotificationsPage() {
       .from("notifications")
       .select(NOTIFICATION_SELECT)
       .eq("user_id", userId)
-      .in("type", [...ENGAGEMENT_TYPES])
+      .in("type", [...INBOX_TYPES])
       .order("created_at", { ascending: false })
       .limit(200)
 
@@ -547,7 +559,7 @@ export default function NotificationsPage() {
         }
         if (payload.eventType === "INSERT" && payload.new) {
           const row = payload.new as NotificationRecord
-          if (!isEngagementNotification(row)) return
+          if (!isInboxNotification(row)) return
           setNotifications((prev) => {
             if (prev.some((existing) => existing.id === row.id)) return prev
             return sortNotificationsDesc([row, ...prev]).slice(0, 200)
@@ -559,7 +571,7 @@ export default function NotificationsPage() {
         }
         if (payload.eventType === "UPDATE" && payload.new) {
           const row = payload.new as NotificationRecord
-          if (!isEngagementNotification(row)) {
+          if (!isInboxNotification(row)) {
             setNotifications((prev) => prev.filter((existing) => existing.id !== row.id))
             return
           }
@@ -695,7 +707,7 @@ export default function NotificationsPage() {
       .from("notifications")
       .update({ read: true })
       .eq("user_id", userId)
-      .in("type", [...ENGAGEMENT_TYPES])
+      .in("type", [...INBOX_TYPES])
       .eq("read", false)
 
     if (error) {

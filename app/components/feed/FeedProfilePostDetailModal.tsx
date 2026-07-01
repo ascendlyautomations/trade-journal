@@ -13,15 +13,15 @@ import {
   achievementFromPost,
   isAchievementFeedPost,
 } from "@/lib/achievementPostEngagement"
-import { formatSocialTimestamp } from "@/lib/formatRelativeTime"
+import { isRoomSharePost } from "@/lib/roomSharePost"
 import {
   achievementImagePublicUrl,
   profilePostPublicUrl,
 } from "@/lib/storagePublicUrl"
-import { isRoomSharePost } from "@/lib/roomSharePost"
 import FeedAchievementDetailMeta from "./FeedAchievementDetailMeta"
 import FeedCommentsSection from "./FeedCommentsSection"
 import FeedPostHeader from "./FeedPostHeader"
+import FeedPostMetaRow from "./FeedPostMetaRow"
 import FeedRoomShareCard from "./FeedRoomShareCard"
 import { feedCommentTarget } from "./feedPostHelpers"
 import type { FeedLikeMeta } from "./FeedPostCard"
@@ -114,7 +114,6 @@ export default function FeedProfilePostDetailModal({
     return {
       imageSrc: profilePostPublicUrl(post.image_url),
       content,
-      createdAtLabel: formatSocialTimestamp(post.created_at),
       avatarUrl,
       username: post.profiles?.username || "User",
     }
@@ -154,6 +153,13 @@ export default function FeedProfilePostDetailModal({
           userId={post.user_id}
           avatarUrl={modalPostDetails.avatarUrl}
           username={modalPostDetails.username}
+          metaLabel={isAchievement ? "Achievement" : "Post"}
+          metaLabelClassName={
+            isAchievement
+              ? "font-medium text-amber-400/90"
+              : "font-medium text-sky-400/90"
+          }
+          postedAt={post.created_at}
         />
       }
       compactHeader={
@@ -161,13 +167,14 @@ export default function FeedProfilePostDetailModal({
           userId={String(post.user_id ?? "")}
           username={modalPostDetails.username}
           avatarUrl={modalPostDetails.avatarUrl}
-          timestamp={post.created_at}
           meta={
-            isAchievement ? (
-              <span className="text-amber-400/90">Achievement</span>
-            ) : (
-              <span className="text-sky-400/90">Post</span>
-            )
+            <FeedPostMetaRow
+              label={isAchievement ? "Achievement" : "Post"}
+              labelClassName={
+                isAchievement ? "font-medium text-amber-400/90" : undefined
+              }
+              createdAt={post.created_at}
+            />
           }
           onExpand={() => setCommentsFocused(false)}
         />
@@ -186,10 +193,7 @@ export default function FeedProfilePostDetailModal({
       }
       collapsibleContent={
         isAchievement && achievement ? (
-          <FeedAchievementDetailMeta
-            achievement={achievement}
-            postedAt={post.created_at}
-          />
+          <FeedAchievementDetailMeta achievement={achievement} />
         ) : (
         <div className="space-y-3 border-b border-white/10 px-4 py-4 text-sm">
           {modalPostDetails.content ? (
@@ -197,7 +201,6 @@ export default function FeedProfilePostDetailModal({
               {modalPostDetails.content}
             </p>
           ) : null}
-          <p className="text-xs text-white/40">{modalPostDetails.createdAtLabel}</p>
         </div>
         )
       }

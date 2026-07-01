@@ -8,6 +8,7 @@ import {
   formatSignedPnlDisplay,
   formatTradePoints,
 } from "@/lib/formatDisplay"
+import { formatPostedTimestamp } from "@/lib/formatRelativeTime"
 import {
   PUBLIC_TRADE_SELECT,
   sanitizeTradeForViewer,
@@ -163,8 +164,20 @@ export default function SharedTradeMessageCard({
     <div className={resolvedClassName}>
       <div className="w-full rounded-xl border border-gray-700/80 bg-gradient-to-br from-[#0f172a] to-[#1e293b] p-3.5 shadow-md">
         {beforeCardContent}
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-lg font-bold tracking-tight text-white">{trade.ticker}</p>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-lg font-bold tracking-tight text-white">
+              {trade.ticker}
+            </p>
+            {trade.created_at ? (
+              <time
+                dateTime={String(trade.created_at)}
+                className="text-[10px] text-gray-500"
+              >
+                {formatPostedTimestamp(trade.created_at)}
+              </time>
+            ) : null}
+          </div>
           <p
             className={`shrink-0 text-base font-semibold tabular-nums ${
               pnlNonNeg ? "text-emerald-400" : "text-red-400"

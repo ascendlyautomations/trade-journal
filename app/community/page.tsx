@@ -11,6 +11,7 @@ import {
 } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Navbar from "../components/Navbar"
+import PopularTradeRoomsPanel from "../components/dashboard/PopularTradeRoomsPanel"
 import EmptyState from "../components/ui/EmptyState"
 import {
   SkeletonCommunityPage,
@@ -92,6 +93,13 @@ type Room = {
   avatar_url?: string | null
   owner_user_id?: string | null
   show_on_profile?: boolean | null
+}
+
+/** Default room on load: user's owned room when present, otherwise first in list order. */
+function pickInitialTradeRoomId(rooms: Room[], userId: string): string | null {
+  if (rooms.length === 0) return null
+  const owned = rooms.find((r) => r.owner_user_id === userId)
+  return owned?.id ?? rooms[0].id
 }
 
 type RoomMessage = {
@@ -621,6 +629,14 @@ function CommunityContent() {
       !rooms.some((r) => r.id === selectedRoomId)
     )
   }, [inviteTargetRoom, selectedRoomId, rooms])
+
+  const showRecommendedRooms = useMemo(() => {
+    if (loadingRooms) return false
+    if (rooms.length > 0) return false
+    if (needsJoin) return false
+    if (roomParam?.trim()) return false
+    return true
+  }, [loadingRooms, rooms.length, needsJoin, roomParam])
 
   const filteredManageMembers = useMemo(() => {
     const q = memberSearchQuery.trim().toLowerCase()
@@ -2022,6 +2038,15 @@ function CommunityContent() {
     }
   }
 
+  async function handleRecommendedRoomJoined(room: {
+    id: string
+    slug?: string | null
+  }) {
+    await joinRoom(room.id)
+    const target = room.slug ?? room.id
+    router.replace(`/trade-rooms?room=${encodeURIComponent(String(target))}`)
+  }
+
   async function handleLeaveRoom() {
     const authUser = user
 
@@ -2126,7 +2151,8 @@ function CommunityContent() {
 
       const rp = searchParams.get("room")
       if (nextRooms.length > 0 && !rp) {
-        setSelectedRoomId(nextRooms[0].id)
+        const defaultRoomId = pickInitialTradeRoomId(nextRooms, user.id)
+        if (defaultRoomId) setSelectedRoomId(defaultRoomId)
       }
     }
 
@@ -2927,6 +2953,20 @@ function CommunityContent() {
           </aside>
 
           <section className="flex min-h-0 w-full min-w-0 flex-1 flex-col">
+            {showRecommendedRooms ? (
+              <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-6 md:px-8 md:py-10">
+                <div className="mx-auto w-full max-w-2xl">
+                  <PopularTradeRoomsPanel
+                    active
+                    heading="Recommended Trade Rooms"
+                    subheading="Join a Trade Room to start chatting, sharing trades, and connecting with other traders."
+                    listClassName="space-y-3"
+                    onJoined={(room) => void handleRecommendedRoomJoined(room)}
+                  />
+                </div>
+              </div>
+            ) : (
+            <>
             <div className="hidden border-b border-white/10 px-4 py-3 md:block">
               <div className="flex items-center gap-3">
                 <img
@@ -3722,6 +3762,8 @@ function CommunityContent() {
                   </>
                 )}
               </>
+            )}
+            </>
             )}
           </section>
         </div>

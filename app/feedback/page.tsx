@@ -170,7 +170,7 @@ export default function FeedbackPage() {
       <div className={submissionPageShell}>
         <div className={submissionPageContainer}>
           <form onSubmit={handleSubmit} className={submissionFormCard}>
-            <h1 className={submissionTitle}>Send feedback</h1>
+            <h1 className={submissionTitle}>Send Feedback</h1>
             <p className={submissionSubtitle}>
               Tell us what you want changed or improved.
             </p>

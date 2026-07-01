@@ -8,6 +8,7 @@ import {
   affiliateConnectPhaseLabel,
   isAffiliatePayoutSetupComplete,
 } from "@/lib/affiliateStripeConnect"
+import { STRIPE_CONNECT_PRIMARY_BUTTON_CLASS } from "@/lib/affiliateUi"
 
 type Props = {
   /** Affiliate row incl. Stripe Connect fields (null if no row yet). */
@@ -83,7 +84,7 @@ export default function AffiliatePayoutSetupCard({ affiliateConnect, show }: Pro
             type="button"
             disabled={busy}
             onClick={() => void handleCompleteSetup()}
-            className="rounded-lg bg-gradient-to-r from-violet-500 to-blue-500 px-4 py-2 text-sm font-semibold text-white shadow hover:opacity-95 disabled:opacity-50"
+            className={STRIPE_CONNECT_PRIMARY_BUTTON_CLASS}
           >
             {busy ? "Opening…" : "Complete payout setup"}
           </button>

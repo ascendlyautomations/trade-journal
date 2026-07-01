@@ -47,9 +47,46 @@ export const ACHIEVEMENT_TYPE_FILTER_OPTIONS: ReadonlyArray<{
   { value: "all", label: "All" },
   { value: "prop_firm_payout", label: "Prop Firm Payout" },
   { value: "live_trading_payout", label: "Live Trading Payout" },
-  { value: "passed_evals", label: "Passed Evals" },
+  { value: "passed_evals", label: "Passed Evaluations" },
   { value: "milestones", label: "Milestones" },
 ]
+
+/** Achievements page filter — desktop uses type filters; mobile adds combined payouts. */
+export type AchievementPageFilter = AchievementTypeFilter | "payouts"
+
+export const ACHIEVEMENT_PAGE_MOBILE_FILTER_OPTIONS: ReadonlyArray<{
+  value: AchievementCategoryFilter
+  label: string
+}> = [
+  { value: "all", label: "All" },
+  { value: "payouts", label: "Payouts" },
+  { value: "passed_evals", label: "Evals" },
+  { value: "milestones", label: "Milestones" },
+]
+
+export function achievementMatchesPageFilter(
+  achievement: Pick<Achievement, "achievement_type" | "category">,
+  filter: AchievementPageFilter
+): boolean {
+  if (filter === "payouts") {
+    return achievementMatchesCategoryFilter(achievement, "payouts")
+  }
+  return achievementMatchesTypeFilter(achievement, filter)
+}
+
+export function achievementPageMobileFilterActive(
+  current: AchievementPageFilter,
+  option: AchievementCategoryFilter
+): boolean {
+  if (option === "payouts") {
+    return (
+      current === "payouts" ||
+      current === "prop_firm_payout" ||
+      current === "live_trading_payout"
+    )
+  }
+  return current === option
+}
 
 /** High-level achievement track for page filters and future expansion. */
 export type AchievementTrack =

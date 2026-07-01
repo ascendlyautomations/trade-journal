@@ -5,6 +5,7 @@ import {
   isPostgrestRowCardinalityError,
   logPostgrestErrorDev,
 } from "@/lib/postgrestError"
+import { notifyAdminSubmission } from "@/lib/notifyAdminSubmission"
 
 const MAX_INT4 = 2_147_483_647
 
@@ -155,6 +156,14 @@ function buildWritePayload(input: SubmitAffiliateApplicationInput): AffiliateApp
   }
 }
 
+function notifyAffiliateApplicationSaved(data: unknown): void {
+  if (data == null || typeof data !== "object") return
+  const applicationId = rowFromRaw(data as Record<string, unknown>)?.id
+  if (applicationId) {
+    notifyAdminSubmission("affiliate_application", applicationId)
+  }
+}
+
 /**
  * Submit or update pending application only:
  * - update if latest row for user is pending
@@ -210,6 +219,7 @@ export async function submitAffiliateApplication(
       }
     }
 
+    notifyAffiliateApplicationSaved(data)
     return { ok: true, error: null }
   }
 
@@ -239,6 +249,8 @@ export async function submitAffiliateApplication(
       error: "Could not create your application. Try again.",
     }
   }
+
+  notifyAffiliateApplicationSaved(data)
 
   return { ok: true, error: null }
 }

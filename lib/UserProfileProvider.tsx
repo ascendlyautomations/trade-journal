@@ -23,6 +23,7 @@ import {
   ensureProfileForUser,
   readStoredReferralCode,
 } from "./ensureProfileForUser"
+import { notifyAffiliateReferralAttribution } from "./notifyAffiliateReferralAttribution"
 import { supabase } from "./supabaseClient"
 import { clearAppDataCache } from "./appDataCache"
 import { invalidateExploreSession } from "./exploreSessionCache"
@@ -332,6 +333,9 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
         })
 
         if (ensureResult.ok) {
+          if (ensureResult.created && readStoredReferralCode()?.trim()) {
+            notifyAffiliateReferralAttribution()
+          }
           resolvedProfile = await fetchSettingsProfileRow(supabase, sessionUser.id, {
             force: true,
           })

@@ -12,7 +12,7 @@ export const submissionHistoryCard =
   "rounded-2xl border border-white/10 bg-white/5 p-5 md:p-6 backdrop-blur-sm"
 
 export const submissionTitle =
-  "text-center text-2xl font-semibold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent"
+  "text-center text-2xl font-semibold text-blue-400 md:text-3xl"
 
 export const submissionSubtitle = "mt-2 mb-6 text-center text-sm text-gray-300"
 
@@ -34,7 +34,7 @@ export const submissionFileBrowse =
   "rounded bg-white px-3 py-1 text-xs font-medium text-black"
 
 export const submissionSubmitButton =
-  "w-full rounded-xl bg-gradient-to-r from-blue-500 to-teal-400 py-3 font-semibold transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100"
+  "w-full rounded-xl bg-blue-600 py-3 font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
 
 export const submissionHistoryList =
   "mt-4 divide-y divide-white/10 rounded-xl border border-white/10 bg-black/20"

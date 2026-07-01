@@ -20,8 +20,8 @@ export function isProfileBetaSignupEligible(
 }
 
 /**
- * Fire admin beta signup email after onboarding profile save (never throws).
- * Server route enforces beta eligibility, username, onboarding_completed, and dedup.
+ * Fire admin onboarding-complete email after profile save (never throws).
+ * Server route dedupes via beta_signup_notified_at.
  */
 export function notifyBetaSignupAfterOnboardingComplete(
   signupMethod = "onboarding"

@@ -15,21 +15,31 @@ export function navigateToManageAccounts(
   router.push(MANAGE_ACCOUNTS_SETTINGS_HREF)
 }
 
+const ALL_TIMEFRAME_LABEL = "All Time"
+
 const TF_LABEL_FROM_VALUE: Record<string, string> = {
-  all: "All",
-  daily: "Daily",
-  weekly: "Weekly",
-  monthly: "Monthly",
-  yearly: "Yearly",
+  all: ALL_TIMEFRAME_LABEL,
+  daily: "Today",
+  weekly: "This Week",
+  monthly: "This Month",
+  yearly: "This Year",
   custom: "Custom",
 }
 
+const PRESET_TIMEFRAME_LABELS = [
+  ALL_TIMEFRAME_LABEL,
+  "Today",
+  "This Week",
+  "This Month",
+  "This Year",
+] as const
+
 const PRESET_LABEL_TO_VALUE: Record<string, string> = {
-  All: "all",
-  Daily: "daily",
-  Weekly: "weekly",
-  Monthly: "monthly",
-  Yearly: "yearly",
+  [ALL_TIMEFRAME_LABEL]: "all",
+  Today: "daily",
+  "This Week": "weekly",
+  "This Month": "monthly",
+  "This Year": "yearly",
 }
 
 export type TradeFilterBarProps = {
@@ -99,7 +109,7 @@ export default function TradeFilterBar({
   const router = useRouter()
   const isTradesVariant = _variant === "trades"
   const [timeframeOpen, setTimeframeOpen] = useState(false)
-  const [selectedTimeframe, setSelectedTimeframe] = useState("All")
+  const [selectedTimeframe, setSelectedTimeframe] = useState(ALL_TIMEFRAME_LABEL)
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
 
@@ -109,7 +119,7 @@ export default function TradeFilterBar({
     } else if (selectedDate?.trim()) {
       setSelectedTimeframe("Specific Date")
     } else {
-      setSelectedTimeframe(TF_LABEL_FROM_VALUE[timeframe] ?? "All")
+      setSelectedTimeframe(TF_LABEL_FROM_VALUE[timeframe] ?? ALL_TIMEFRAME_LABEL)
     }
   }, [timeframe, selectedDate])
 
@@ -128,7 +138,7 @@ export default function TradeFilterBar({
   }, [timeframeOpen, timeframe, selectedDate, customRangeStart, customRangeEnd])
 
   const timeframeButtonLabel =
-    selectedTimeframe === "All" ? "Timeframe" : selectedTimeframe
+    selectedTimeframe === ALL_TIMEFRAME_LABEL ? "Timeframe" : selectedTimeframe
 
   function openNativeDatePicker(input: HTMLInputElement) {
     try {
@@ -339,7 +349,7 @@ export default function TradeFilterBar({
             </h2>
 
             <div className="grid grid-cols-2 gap-3 mb-4">
-              {(["All", "Daily", "Weekly", "Monthly", "Yearly"] as const).map(
+              {PRESET_TIMEFRAME_LABELS.map(
                 (tf) => (
                   <button
                     key={tf}
@@ -432,7 +442,7 @@ export default function TradeFilterBar({
                 setEndDate("")
                 onSelectedDateChange("")
                 onTimeframeChange("all")
-                setSelectedTimeframe("All")
+                setSelectedTimeframe(ALL_TIMEFRAME_LABEL)
                 setTimeframeOpen(false)
               }}
               className="w-full mt-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm"

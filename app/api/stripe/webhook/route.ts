@@ -2,7 +2,11 @@
 
 import Stripe from "stripe"
 import { createClient, type SupabaseClient } from "@supabase/supabase-js"
-import { mirrorBillingAccountsStripeCustomerId } from "@/lib/profileSplitMirrorWrites"
+import { COMMISSION_RATE } from "@/lib/affiliateEarnings"
+import {
+  createAffiliateCommissionNotification,
+  createAffiliateReferralNotification,
+} from "@/lib/server/affiliateReferralNotifications"
 
 export const runtime = "nodejs"
 
@@ -263,6 +267,14 @@ async function trackAffiliateFromManualCheckoutDiscount(params: {
       console.error("ERROR:", JSON.stringify(buyerRefErr, null, 2))
     } else {
       console.log("✅ Buyer referred_by set from manual promo:", affiliate.code)
+      try {
+        await createAffiliateReferralNotification(supabase, {
+          affiliateUserId: affiliate.user_id,
+          referredUserId: buyerProfileId,
+        })
+      } catch (notifErr) {
+        console.error("[checkout] affiliate referral notification failed:", notifErr)
+      }
     }
 
     const { data: referrerProfile, error: refFetchErr } = await supabase
@@ -611,6 +623,14 @@ export async function POST(req: Request) {
           return new Response("OK", { status: 200 })
         }
 
+        const { count: priorCommissionCount } = await supabase
+          .from("referrals")
+          .select("id", { count: "exact", head: true })
+          .eq("referrer_user_id", referrer.id)
+          .eq("referred_user_id", payingUser.id as string)
+
+        const isFirstCommissionForPair = (priorCommissionCount ?? 0) === 0
+
         //----------------------------------------
         // STEP 4: Commission basis (prefer amount_paid; fallback for edge cases)
         //----------------------------------------
@@ -624,12 +644,14 @@ export async function POST(req: Request) {
           basisCents = totalCents
         }
 
-        const amountPaid = basisCents / 100
+        const amountPaid = Math.round((basisCents / 100) * 100) / 100
+        const commissionRatePercent = Math.round(COMMISSION_RATE * 10000) / 100
+        const currency = String(invoice.currency ?? "usd").toLowerCase()
 
         console.log(
           "[invoice.paid] commission basis (major units, after cents/100):",
           amountPaid,
-          invoice.currency
+          currency
         )
 
         if (amountPaid <= 0) {
@@ -639,7 +661,7 @@ export async function POST(req: Request) {
           return new Response("OK", { status: 200 })
         }
 
-        const commission = Math.round(amountPaid * 0.18 * 100) / 100
+        const commission = Math.round(amountPaid * COMMISSION_RATE * 100) / 100
 
         console.log("[invoice.paid] commission 18%:", commission)
 
@@ -651,6 +673,9 @@ export async function POST(req: Request) {
           referrer_user_id: referrer.id,
           referred_user_id: payingUser.id as string,
           amount_earned: commission,
+          transaction_amount: amountPaid,
+          commission_rate: commissionRatePercent,
+          currency,
           stripe_customer_id: customerId,
           stripe_subscription_id: subscriptionId,
           stripe_invoice_id: invoice.id,
@@ -662,8 +687,13 @@ export async function POST(req: Request) {
         }
 
         console.log("[invoice.paid] referral row inserted", {
+          transaction_amount: amountPaid,
+          commission_rate: commissionRatePercent,
           amount_earned: commission,
+          currency,
           stripe_invoice_id: invoice.id,
+          stripe_subscription_id: subscriptionId,
+          stripe_customer_id: customerId,
         })
 
         //----------------------------------------
@@ -686,6 +716,18 @@ export async function POST(req: Request) {
         }
 
         console.log("[invoice.paid] referrer referral_earnings →", newTotal)
+
+        if (isFirstCommissionForPair) {
+          try {
+            await createAffiliateCommissionNotification(supabase, {
+              affiliateUserId: referrer.id as string,
+              referredUserId: payingUser.id as string,
+              commissionAmount: commission,
+            })
+          } catch (notifErr) {
+            console.error("[invoice.paid] affiliate commission notification failed:", notifErr)
+          }
+        }
       } catch (err) {
         console.error("[invoice.paid] handler error:", err)
       }

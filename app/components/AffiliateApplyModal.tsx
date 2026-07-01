@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { AFFILIATE_PRIMARY_BUTTON_CLASS } from "@/lib/affiliateUi"
 import { supabase } from "@/lib/supabaseClient"
 import {
   submitAffiliateApplication,
@@ -302,7 +303,7 @@ export default function AffiliateApplyModal({
               <button
                 type="submit"
                 disabled={submitDisabled}
-                className="rounded-lg bg-gradient-to-r from-blue-500 to-emerald-500 px-5 py-2 text-sm font-semibold disabled:opacity-50"
+                className={`${AFFILIATE_PRIMARY_BUTTON_CLASS} px-5`}
               >
                 {busy
                   ? "Submitting…"

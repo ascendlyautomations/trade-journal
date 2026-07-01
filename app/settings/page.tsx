@@ -32,7 +32,7 @@ import {
   usernameChangesRemaining,
   validateProfileUsernameNotEmpty,
 } from "@/lib/profileUsername"
-import { TRADER_TYPE_OPTIONS } from "@/lib/traderType"
+import { TRADER_TYPE_OPTIONS, normalizeTraderType } from "@/lib/traderType"
 import { mirrorAccountSettingsUsernameChangeCount } from "@/lib/profileSplitMirrorWrites"
 
 import AffiliatePayoutSetupCard from "@/app/components/AffiliatePayoutSetupCard"
@@ -65,6 +65,7 @@ import {
   sharedSliceToSettingsRow,
   sliceDateInput,
 } from "@/lib/settingsProfileSync"
+import { recordedAffiliateEarnings } from "@/lib/affiliateEarnings"
 import { readSettingsProfileCache } from "@/lib/settingsProfileCache"
 import { useScrollPageTopOnMount } from "@/lib/useScrollPageTopOnMount"
 import { useAutoResizeTextarea } from "@/lib/useAutoResizeTextarea"
@@ -817,13 +818,11 @@ export default function SettingsPage() {
       : ""
 
   const referralCount = Number(profile?.referral_count ?? 0)
-  const COMMISSION_RATE = 0.18
+  const earnings = recordedAffiliateEarnings(profile?.referral_earnings)
   const usernameChangeCount = Number(profile?.username_change_count ?? 0)
   const remainingUsernameChanges = usernameChangesRemaining(usernameChangeCount)
   const atUsernameChangeLimit =
     usernameChangeCount >= MAX_PROFILE_USERNAME_CHANGES
-  const PLAN_PRICE = 15.99
-  const earnings = referralCount * PLAN_PRICE * COMMISSION_RATE
 
   const isAffiliatePending = latestApp?.status === "pending"
   const affiliateApplicationLocked = Boolean(

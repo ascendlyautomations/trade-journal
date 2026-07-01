@@ -8,7 +8,7 @@ import { useUserProfile } from "../../lib/useUserProfile"
 import { isProActive } from "../../lib/subscription"
 import { getCurrentAdminCheckResult } from "../../lib/adminUsers"
 import { fetchTotalUnreadMessageCount } from "../../lib/messageUnread"
-import { NOTIFICATION_ENGAGEMENT_TYPES } from "../../lib/notificationEngagementTypes"
+import { NOTIFICATION_INBOX_TYPES } from "../../lib/notificationEngagementTypes"
 import { profilePath } from "../../lib/profileRoutes"
 import { prefetchAppRoutes } from "../../lib/routePrefetch"
 import { ProfileAvatarImg } from "./SafeProfileAvatar"
@@ -84,7 +84,7 @@ export default function Navbar() {
       .select("*", { count: "exact", head: true })
       .eq("user_id", user.id)
       .eq("read", false)
-      .in("type", [...NOTIFICATION_ENGAGEMENT_TYPES])
+      .in("type", [...NOTIFICATION_INBOX_TYPES])
 
     if (error) {
       console.error("[navbar] unread notifications fetch failed", {
@@ -301,11 +301,16 @@ export default function Navbar() {
     { label: "Explore", href: "/explore" },
   ]
 
-  const affiliateLinks: { label: string; href: string }[] = [
-    { label: "Affiliate Dashboard", href: "/affiliate" },
-    { label: "Affiliate Payouts", href: "/payouts" },
-    { label: "Become an Affiliate", href: "/affiliate?apply=true" },
-  ]
+  const affiliateReferralCode =
+    profile?.referral_code != null ? String(profile.referral_code).trim() : ""
+  const hasAffiliateAccess = affiliateReferralCode.length > 0
+
+  const affiliateLinks: { label: string; href: string }[] = hasAffiliateAccess
+    ? [
+        { label: "Affiliate Dashboard", href: "/affiliate" },
+        { label: "Affiliate Payouts", href: "/payouts" },
+      ]
+    : [{ label: "Become an Affiliate", href: "/affiliate?apply=true" }]
 
   const closeMobile = () => {
     setIsOpen(false)

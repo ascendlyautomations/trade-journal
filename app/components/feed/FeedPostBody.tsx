@@ -19,7 +19,6 @@ type FeedPostBodyProps = {
   rr: unknown
   publicDesc: string | null
   timingTrade: Record<string, unknown> | null
-  createdAtLabel: string
 }
 
 function FeedPostBody({
@@ -32,7 +31,6 @@ function FeedPostBody({
   rr,
   publicDesc,
   timingTrade,
-  createdAtLabel,
 }: FeedPostBodyProps) {
   const resolvedPoints = resolveTradePoints(timingTrade)
   return (
@@ -82,8 +80,6 @@ function FeedPostBody({
           <TradeCardTimingBlock trade={timingTrade} />
         </div>
       ) : null}
-
-      <p className="text-xs text-white/40">{createdAtLabel}</p>
     </div>
   )
 }

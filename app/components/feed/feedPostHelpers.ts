@@ -19,7 +19,7 @@ export type FeedItem = {
 }
 
 export const FEED_POSTS_SELECT =
-  "id, user_id, trade_id, created_at, pnl, rr, image_url, profiles(username, avatar_url), trades(public_description, user_id, ticker, direction, account_type, points, entry_time, exit_time, entry_price, exit_price, trade_date, duration_seconds, duration_text)"
+  "id, user_id, trade_id, created_at, pnl, rr, image_url, profiles(username, avatar_url), trades(created_at, public_description, user_id, ticker, direction, account_type, points, entry_time, exit_time, entry_price, exit_price, trade_date, duration_seconds, duration_text)"
 
 /** Trade owner for notifications (not always same as post author). */
 export function postTradeOwnerUserId(post: {
@@ -197,6 +197,23 @@ export function postTradeJoin(post: any) {
   const t = post?.trades
   if (!t) return null
   return Array.isArray(t) ? t[0] : t
+}
+
+/** When the trade was posted — prefers trade.created_at over post.created_at. */
+export function tradePostedAt(post: {
+  created_at?: string | null
+  trades?: { created_at?: string | null } | { created_at?: string | null }[] | null
+}): string | null {
+  const trade = postTradeJoin(post)
+  const fromTrade = trade?.created_at
+  if (fromTrade != null && String(fromTrade).trim() !== "") {
+    return String(fromTrade)
+  }
+  const fromPost = post?.created_at
+  if (fromPost != null && String(fromPost).trim() !== "") {
+    return String(fromPost)
+  }
+  return null
 }
 
 export function getModeStyles(mode: string | null | undefined): string {

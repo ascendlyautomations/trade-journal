@@ -19,6 +19,7 @@ export default function PropFirmPassEvalModal({
       onClose={onClose}
       title="Pass Evaluation"
       size="sm"
+      belowNavbar
       footer={
         <div className="flex justify-end gap-3">
           <button

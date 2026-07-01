@@ -3,7 +3,6 @@
 import { memo, useCallback, useMemo } from "react"
 import AchievementCard from "@/app/components/AchievementCard"
 import { achievementFromPost } from "@/lib/achievementPostEngagement"
-import { formatSocialTimestamp } from "@/lib/formatRelativeTime"
 import FeedPostActions from "./FeedPostActions"
 import FeedPostHeader from "./FeedPostHeader"
 import type { FeedLikeMeta } from "./FeedPostCard"
@@ -61,10 +60,6 @@ function FeedAchievementPostCard({
   }, [post.profiles?.avatar_url])
 
   const profileUsername = post.profiles?.username || "User"
-  const createdAtLabel = useMemo(
-    () => formatSocialTimestamp(post.created_at),
-    [post.created_at]
-  )
 
   return (
     <article
@@ -78,6 +73,9 @@ function FeedAchievementPostCard({
         userId={post.user_id}
         avatarUrl={avatarUrl}
         username={profileUsername}
+        metaLabel="Achievement"
+        metaLabelClassName="font-medium text-amber-400/90"
+        postedAt={post.created_at}
       />
 
       <div className="px-4 pt-3">
@@ -94,8 +92,6 @@ function FeedAchievementPostCard({
         onOpenComments={handleOpenComments}
         onSharePost={onSharePost}
       />
-
-      <p className="px-4 pb-3 text-xs text-white/40">{createdAtLabel}</p>
     </article>
   )
 }

@@ -6,6 +6,7 @@ import {
   ensureProfileForUser,
   readStoredReferralCode,
 } from "@/lib/ensureProfileForUser"
+import { notifyAffiliateReferralAttribution } from "@/lib/notifyAffiliateReferralAttribution"
 import { useRouter } from "next/navigation"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import AuthPasswordInput from "@/app/components/ui/AuthPasswordInput"
@@ -239,6 +240,10 @@ export default function LoginPage() {
       }
 
       console.log("✅ PROFILE ENSURED")
+
+      if (ensureResult.created && referralCode?.trim()) {
+        notifyAffiliateReferralAttribution()
+      }
 
       if (shouldStartCheckout()) {
         try {

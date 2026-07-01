@@ -195,3 +195,45 @@ describe("achievement type filters", () => {
     assert.equal(achievementMatchesTypeFilter(milestone, "prop_firm_payout"), false)
   })
 })
+
+describe("achievement page filters", () => {
+  const {
+    achievementMatchesPageFilter,
+    achievementPageMobileFilterActive,
+    ACHIEVEMENT_TYPE,
+  } = require("./achievementTypes.ts")
+
+  it("combines payout types under the mobile payouts filter", () => {
+    const propFirmPayout = {
+      achievement_type: ACHIEVEMENT_TYPE.PROP_FIRM_PAYOUT,
+      category: "prop_firm_payouts",
+    }
+    const livePayout = {
+      achievement_type: ACHIEVEMENT_TYPE.LIVE_TRADING_PAYOUT,
+      category: "live_trading_payouts",
+    }
+    const milestone = {
+      achievement_type: ACHIEVEMENT_TYPE.MILESTONE,
+      category: "milestones",
+    }
+
+    assert.equal(achievementMatchesPageFilter(propFirmPayout, "payouts"), true)
+    assert.equal(achievementMatchesPageFilter(livePayout, "payouts"), true)
+    assert.equal(achievementMatchesPageFilter(milestone, "payouts"), false)
+  })
+
+  it("highlights mobile payouts when a desktop payout filter is active", () => {
+    assert.equal(
+      achievementPageMobileFilterActive("prop_firm_payout", "payouts"),
+      true
+    )
+    assert.equal(
+      achievementPageMobileFilterActive("live_trading_payout", "payouts"),
+      true
+    )
+    assert.equal(
+      achievementPageMobileFilterActive("milestones", "payouts"),
+      false
+    )
+  })
+})

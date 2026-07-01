@@ -537,4 +537,147 @@ export function SkeletonAnalyticsPage() {
   )
 }
 
+function SkeletonAffiliateStatCard({ className }: { className?: string }) {
+  return (
+    <SkeletonCard className={cn("p-5", className)}>
+      <Skeleton className="h-4 w-28" />
+      <Skeleton className="mt-3 h-8 w-14" />
+      <Skeleton className="mt-3 h-3 w-full" />
+    </SkeletonCard>
+  )
+}
+
+function SkeletonAffiliateReferralRow({ className }: { className?: string }) {
+  return (
+    <SkeletonCard className={cn("p-4", className)}>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-center gap-3">
+          <Skeleton className="h-10 w-10 shrink-0 rounded-full" />
+          <div className="min-w-0 space-y-2">
+            <Skeleton className="h-4 w-28" />
+            <Skeleton className="h-3 w-24" />
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-3 sm:justify-end">
+          <Skeleton className="h-6 w-16 rounded-full" />
+          <Skeleton className="h-8 w-24" />
+        </div>
+      </div>
+    </SkeletonCard>
+  )
+}
+
+export function SkeletonAffiliateDashboardPage() {
+  return (
+    <div aria-busy="true" aria-label="Loading affiliate dashboard" className="space-y-8">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <Skeleton className="h-9 w-52 sm:w-64" />
+        <div className="flex items-center gap-2">
+          <Skeleton className="h-10 w-24 rounded-lg" />
+          <Skeleton className="h-10 w-20 rounded-lg" />
+        </div>
+      </div>
+
+      <Skeleton className="h-14 w-full rounded-xl" />
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <SkeletonAffiliateStatCard key={`summary-${i}`} />
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <SkeletonAffiliateStatCard key={`lifecycle-${i}`} />
+        ))}
+      </div>
+
+      <SkeletonCard className="space-y-3 p-4">
+        <Skeleton className="h-3 w-36" />
+        <Skeleton className="h-4 w-48" />
+        <Skeleton className="h-10 w-44 rounded-lg" />
+      </SkeletonCard>
+
+      <SkeletonCard className="space-y-4 p-6">
+        <Skeleton className="h-4 w-28" />
+        <Skeleton className="h-5 w-24" />
+        <Skeleton className="h-4 w-20" />
+        <Skeleton className="h-10 w-full rounded-lg" />
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Skeleton className="h-10 min-w-0 flex-1 rounded-lg" />
+          <Skeleton className="h-10 w-28 shrink-0 rounded-lg" />
+        </div>
+      </SkeletonCard>
+
+      <div>
+        <Skeleton className="mb-4 h-6 w-32" />
+        <div className="space-y-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <SkeletonAffiliateReferralRow key={i} />
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function SkeletonAffiliateOnboardingPage() {
+  return (
+    <div aria-busy="true" aria-label="Loading affiliate program" className="space-y-8">
+      <div className="space-y-2">
+        <Skeleton className="h-9 w-56" />
+        <Skeleton className="h-4 w-full max-w-2xl" />
+      </div>
+      <SkeletonCard className="space-y-4 p-6 sm:p-8">
+        <Skeleton className="h-6 w-64" />
+        <Skeleton className="h-4 w-full" />
+        <Skeleton className="h-4 w-5/6" />
+        <div className="space-y-2 pt-2">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="h-4 w-full max-w-md" />
+          ))}
+        </div>
+        <Skeleton className="h-20 w-full rounded-lg" />
+        <Skeleton className="h-11 w-44 rounded-lg" />
+      </SkeletonCard>
+      <SkeletonCard className="p-6 sm:p-8">
+        <div className="flex items-start gap-4">
+          <Skeleton className="h-10 w-10 shrink-0 rounded-full" />
+          <div className="min-w-0 flex-1 space-y-2">
+            <Skeleton className="h-5 w-40" />
+            <Skeleton className="h-4 w-full max-w-lg" />
+          </div>
+        </div>
+      </SkeletonCard>
+    </div>
+  )
+}
+
+export function SkeletonPayoutsPage() {
+  return (
+    <div aria-busy="true" aria-label="Loading payouts" className="space-y-6">
+      <Skeleton className="h-14 w-full rounded-xl" />
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <SkeletonAffiliateStatCard key={i} />
+        ))}
+      </div>
+
+      <SkeletonCard className="space-y-3 p-4">
+        <Skeleton className="h-3 w-36" />
+        <Skeleton className="h-4 w-48" />
+        <Skeleton className="h-10 w-44 rounded-lg" />
+      </SkeletonCard>
+
+      <Skeleton className="h-11 w-36 rounded-lg" />
+
+      <div className="space-y-3">
+        <Skeleton className="h-4 w-24" />
+        <SkeletonCard className="h-24" />
+      </div>
+    </div>
+  )
+}
+
 export { SkeletonCard }

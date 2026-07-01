@@ -39,6 +39,7 @@ import CsvImportDiagnosticsPanel from "@/app/components/CsvImportDiagnosticsPane
 import type { CsvImportDiagnostics } from "@/lib/csvImportDiagnostics"
 import { buildCommunitySharePreviewPost } from "@/lib/buildCommunitySharePreviewPost"
 import CommunitySharePreviewModal from "@/app/components/CommunitySharePreviewModal"
+import TradePublicShareToggle from "@/app/components/TradePublicShareToggle"
 import { postImageSrc } from "@/app/components/feed/feedPostHelpers"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { formatAccountNameWithSizeDisplay } from "@/lib/tradeAccountDisplay"
@@ -67,6 +68,7 @@ export type InputTradeFormProps = {
   onClose?: () => void
   forceMarkReviewedOnSave?: boolean
   onUploadCsvClick?: () => void
+  onQuickInputClick?: () => void
   onReviewCsvClick?: () => void
   reviewCount?: number
   csvLoading?: boolean
@@ -92,6 +94,7 @@ export default function InputTradeForm({
   onClose,
   forceMarkReviewedOnSave = false,
   onUploadCsvClick,
+  onQuickInputClick,
   onReviewCsvClick,
   reviewCount = 0,
   csvLoading = false,
@@ -1386,6 +1389,9 @@ export default function InputTradeForm({
     "Custom",
   ] as const
 
+  const quickInputButtonClass =
+    "shrink-0 rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-sm font-medium text-blue-100 transition hover:bg-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60 md:px-4"
+
   const formBody = (
     <>
       <div className="mb-4">
@@ -1401,6 +1407,15 @@ export default function InputTradeForm({
                 disableCreate={accountFieldsLocked}
                 showExternalCreateButton={false}
               />
+            ) : null}
+            {onQuickInputClick ? (
+              <button
+                type="button"
+                onClick={onQuickInputClick}
+                className={quickInputButtonClass}
+              >
+                Quick Input
+              </button>
             ) : null}
             <button
               type="button"
@@ -1464,6 +1479,16 @@ export default function InputTradeForm({
                 disableCreate={accountFieldsLocked}
                 showExternalCreateButton={false}
               />
+            ) : null}
+
+            {onQuickInputClick ? (
+              <button
+                type="button"
+                onClick={onQuickInputClick}
+                className={quickInputButtonClass}
+              >
+                Quick Input
+              </button>
             ) : null}
 
             <button
@@ -1892,40 +1917,10 @@ export default function InputTradeForm({
             />
           </div>
 
-          <div className="flex items-center justify-between mt-2 p-3 rounded-xl bg-white/5 border border-white/10">
-            <div>
-              <p className="text-sm font-medium text-white">Share to Community</p>
-              <p className="text-xs text-white/50">
-                {isPublic
-                  ? "🌎 This trade will be shared to your profile and feed."
-                  : "🔒 Only you can see this trade."}
-              </p>
-            </div>
-            <button
-              type="button"
-              tabIndex={
-                inputSettings.showEntryExit
-                  ? inputSettings.showNotes
-                    ? 17
-                    : 16
-                  : inputSettings.showNotes
-                    ? 11
-                    : 10
-              }
-              onClick={() => void handlePublicToggle()}
-              className={`
-                px-4 py-1.5 rounded-full text-xs font-medium
-                transition
-                ${
-                  isPublic
-                    ? "bg-green-500/20 text-green-400 border border-green-400/30"
-                    : "bg-white/10 text-white/50 border border-white/10"
-                }
-              `}
-            >
-              {isPublic ? "Public" : "Private"}
-            </button>
-          </div>
+          <TradePublicShareToggle
+            isPublic={isPublic}
+            onToggle={() => void handlePublicToggle()}
+          />
 
           </div>
         </div>

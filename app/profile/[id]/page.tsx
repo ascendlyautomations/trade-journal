@@ -117,7 +117,7 @@ import { formatRR, formatTradePoints } from "@/lib/formatDisplay"
 import { averageRrFromTrades } from "@/lib/tradeRr"
 import { resolveTradePoints } from "@/lib/resolveTradePoints"
 import TradeCardTimingBlock from "../../components/TradeCardTimingBlock"
-import { formatRelativeTime } from "@/lib/formatRelativeTime"
+import FeedPostMetaRow from "@/app/components/feed/FeedPostMetaRow"
 import { createUserRoom } from "@/lib/createUserRoom"
 import { loadFollowUiSnapshot } from "@/lib/followActions"
 import FollowButton from "../../components/FollowButton"
@@ -126,6 +126,7 @@ import { ensureDmConversation } from "@/lib/dmConversation"
 import { dmThreadPath } from "@/lib/messageRoutes"
 import { ConfirmModal, FeedbackModal, useDeleteTradeConfirmation, useFeedbackPopup } from "@/app/components/ui"
 import ProfileCreateMenu from "../../components/profile/ProfileCreateMenu"
+import QuickTradeModal from "../../components/QuickTradeModal"
 import ReelComposerModal from "../../components/profile/ReelComposerModal"
 import ProfileReelCard from "../../components/profile/ProfileReelCard"
 import FeedReelDetailModal from "../../components/feed/FeedReelDetailModal"
@@ -481,9 +482,18 @@ function TradeCard({
           <p className="truncate text-sm font-semibold text-white">
             {profile.username || "User"}
           </p>
-          <p className="text-xs font-medium text-amber-400/90">
-            Trade {trade.is_pinned ? <span className="ml-2 text-yellow-400">📌</span> : null}
-          </p>
+          <FeedPostMetaRow
+            label="Trade"
+            labelClassName="font-medium text-amber-400/90"
+            createdAt={trade.created_at}
+            suffix={
+              trade.is_pinned ? (
+                <span className="ml-1.5" aria-label="Pinned">
+                  📌
+                </span>
+              ) : null
+            }
+          />
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-1">
@@ -564,8 +574,18 @@ function TradeCard({
                     userId={String(profile.id ?? "")}
                     username={profile.username}
                     avatarUrl={profile.avatar_url}
-                    timestamp={trade.created_at ?? trade.trade_date}
-                    meta={tradeCompactMeta}
+                    meta={
+                      <>
+                        <FeedPostMetaRow
+                          label="Trade"
+                          labelClassName="font-medium text-amber-400/90"
+                          createdAt={trade.created_at}
+                        />
+                        <div className="mt-0.5 truncate text-xs font-medium text-gray-300">
+                          {tradeCompactMeta}
+                        </div>
+                      </>
+                    }
                     onExpand={() => setCommentsFocused(false)}
                   />
                 }
@@ -865,9 +885,17 @@ function PostCard({
           <p className="truncate text-sm font-semibold text-white">
             {profile.username || "User"}
           </p>
-          <p className="text-xs font-medium text-sky-400/90">
-            Post {post.is_pinned ? <span className="ml-2 text-yellow-400">📌</span> : null}
-          </p>
+          <FeedPostMetaRow
+            label="Post"
+            createdAt={post.created_at}
+            suffix={
+              post.is_pinned ? (
+                <span className="ml-2 text-yellow-400" aria-label="Pinned">
+                  📌
+                </span>
+              ) : null
+            }
+          />
         </div>
       </div>
       {canManagePost ? (
@@ -1005,7 +1033,6 @@ function PostCard({
       {post.content ? (
         <p className="px-1 text-sm leading-relaxed text-white">{post.content}</p>
       ) : null}
-      <p className="text-xs text-gray-400">{formatRelativeTime(post.created_at, Date.now(), "compact")}</p>
       {showInteractions ? (
         <div className="border-t border-white/10 pt-3">
           {postEngagementRow}
@@ -1020,7 +1047,6 @@ function PostCard({
       {post.content ? (
         <p className="px-1 text-sm leading-relaxed text-white">{post.content}</p>
       ) : null}
-      <p className="text-xs text-gray-400">{formatRelativeTime(post.created_at, Date.now(), "compact")}</p>
     </div>
   )
 
@@ -1101,7 +1127,9 @@ function PostCard({
                   userId={String(profile.id ?? "")}
                   username={profile.username}
                   avatarUrl={profile.avatar_url}
-                  timestamp={post.created_at}
+                  meta={
+                    <FeedPostMetaRow label="Post" createdAt={post.created_at} />
+                  }
                   onExpand={() => setCommentsFocused(false)}
                 />
               }
@@ -1265,6 +1293,7 @@ function ProfilePageContent() {
   )
   const [showCreatePost, setShowCreatePost] = useState(false)
   const [showReelComposer, setShowReelComposer] = useState(false)
+  const [showQuickTrade, setShowQuickTrade] = useState(false)
   const [editingReel, setEditingReel] = useState<ReelRow | null>(null)
   const [selectedReelDetail, setSelectedReelDetail] = useState<any | null>(null)
   const [storyComposeOpen, setStoryComposeOpen] = useState(false)
@@ -1354,6 +1383,10 @@ function ProfilePageContent() {
 
   const openCreateReelModal = useCallback(() => {
     setShowReelComposer(true)
+  }, [])
+
+  const openQuickTradeModal = useCallback(() => {
+    setShowQuickTrade(true)
   }, [])
 
   const fetchProfileReels = useCallback(async (userId: string) => {
@@ -1825,6 +1858,7 @@ function ProfilePageContent() {
     if (
       showCreatePost ||
       showReelComposer ||
+      showQuickTrade ||
       editingReel ||
       selectedReelDetail ||
       editingPost ||
@@ -1844,6 +1878,7 @@ function ProfilePageContent() {
   }, [
     showCreatePost,
     showReelComposer,
+    showQuickTrade,
     editingReel,
     selectedReelDetail,
     editingPost,
@@ -1858,6 +1893,7 @@ function ProfilePageContent() {
     if (
       !showCreatePost &&
       !showReelComposer &&
+      !showQuickTrade &&
       !editingReel &&
       !selectedReelDetail &&
       !editingPost &&
@@ -3831,6 +3867,19 @@ function ProfilePageContent() {
           onSaved={handleReelSaved}
         />
       ) : null}
+      {currentUserId === profile?.id ? (
+        <QuickTradeModal
+          open={showQuickTrade}
+          userId={currentUserId}
+          onClose={() => setShowQuickTrade(false)}
+          onSaved={() => {
+            if (profile?.id) {
+              setVisibleTradeCount(PAGE_SIZE)
+              void fetchTradesForProfile(profile.id).then(setAllTrades)
+            }
+          }}
+        />
+      ) : null}
       {selectedReelDetail ? (
         <FeedReelDetailModal
           post={selectedReelDetail}
@@ -4110,6 +4159,7 @@ function ProfilePageContent() {
                     onCreateStory={openCreateStory}
                     onCreatePost={openCreatePostModal}
                     onCreateReel={openCreateReelModal}
+                    onCreateQuickTrade={openQuickTradeModal}
                   />
                 </div>
               ) : null}
@@ -4397,6 +4447,7 @@ function ProfilePageContent() {
                           onCreateStory={openCreateStory}
                           onCreatePost={openCreatePostModal}
                           onCreateReel={openCreateReelModal}
+                          onCreateQuickTrade={openQuickTradeModal}
                         />
                       }
                       className="py-10"

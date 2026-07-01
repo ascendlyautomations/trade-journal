@@ -68,7 +68,7 @@ export function notifyAdminBetaSignup(signupMethod?: string): void {
         return
       }
 
-      if (typeof window !== "undefined") {
+      if (body.emailSent === true && typeof window !== "undefined") {
         sessionStorage.setItem(guardKey, "1")
       }
     } catch (err) {

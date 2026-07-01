@@ -1,19 +1,6 @@
 import { getRouteUser, supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
-import { BETA_REFERRAL_CODE } from "@/lib/betaReferralCode"
 import { SITE_URL } from "@/lib/site"
 import { sendBetaSignupAdminEmail } from "@/lib/server/sendBetaSignupAdminEmail"
-
-function normalizeReferralCode(value: string | null | undefined): string {
-  return value != null ? String(value).trim().toUpperCase() : ""
-}
-
-function isBetaSignupEligible(profile: {
-  is_beta_tester?: boolean | null
-  referred_by?: string | null
-}): boolean {
-  if (profile.is_beta_tester === true) return true
-  return normalizeReferralCode(profile.referred_by) === BETA_REFERRAL_CODE
-}
 
 export async function POST(req: Request) {
   console.log("[beta-signup-email] route hit")
@@ -47,11 +34,9 @@ export async function POST(req: Request) {
     return Response.json({ error: "Profile not found" }, { status: 404 })
   }
 
-  console.log("[beta-signup-email] profile beta fields", {
+  console.log("[beta-signup-email] profile fields", {
     userId: user.id,
-    referred_by: profile.referred_by,
-    is_beta_tester: profile.is_beta_tester,
-    is_pro: profile.is_pro,
+    onboarding_completed: profile.onboarding_completed,
     beta_signup_notified_at: profile.beta_signup_notified_at,
     signupMethod,
   })
@@ -64,36 +49,13 @@ export async function POST(req: Request) {
     return Response.json({ ok: true, alreadyNotified: true })
   }
 
-  if (!isBetaSignupEligible(profile)) {
-    console.log("[beta-signup-email] skipped reason: not_eligible", {
-      userId: user.id,
-      referred_by: profile.referred_by,
-      is_beta_tester: profile.is_beta_tester,
-    })
-    return Response.json({ ok: true, skipped: true, reason: "not_eligible" })
-  }
-
   const username = profile.username != null ? String(profile.username).trim() : ""
-  if (!username) {
-    console.log("[beta-signup-email] skipped reason: username_missing", {
-      userId: user.id,
-    })
-    return Response.json({ ok: true, skipped: true, reason: "username_missing" })
-  }
-
-  if (profile.onboarding_completed !== true) {
-    console.log("[beta-signup-email] skipped reason: onboarding_incomplete", {
-      userId: user.id,
-    })
-    return Response.json({ ok: true, skipped: true, reason: "onboarding_incomplete" })
-  }
-
   const profileCompletedAt = new Date().toISOString()
 
   const emailResult = await sendBetaSignupAdminEmail({
     userId: user.id,
     userEmail: user.email ?? null,
-    username,
+    username: username || null,
     name: profile.name != null ? String(profile.name).trim() || null : null,
     displayName: profile.name != null ? String(profile.name).trim() || null : null,
     referredBy: profile.referred_by != null ? String(profile.referred_by) : null,

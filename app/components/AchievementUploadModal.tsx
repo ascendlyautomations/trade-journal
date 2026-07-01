@@ -17,6 +17,7 @@ import {
   categoryFromType,
   isPayoutAchievementType,
 } from "@/lib/achievements"
+import { MODAL_FIXED_BELOW_NAVBAR_CLASS } from "@/app/components/ui/DetailModalShell"
 
 export type AchievementFormState = {
   achievement_type: string
@@ -277,7 +278,7 @@ export default function AchievementUploadModal({
 
   return (
     <div
-      className="fixed inset-0 z-[150] flex items-end justify-center bg-black/75 p-2 backdrop-blur-md sm:items-center sm:p-4"
+      className={`${MODAL_FIXED_BELOW_NAVBAR_CLASS} z-[150] bg-black/75 p-3 backdrop-blur-md sm:p-4`}
       onClick={handleClose}
     >
       <div

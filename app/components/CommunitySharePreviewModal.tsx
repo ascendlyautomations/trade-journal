@@ -1,10 +1,7 @@
 "use client"
 
 import { useEffect } from "react"
-import FeedPostCard, {
-  EMPTY_COMMENTS,
-  EMPTY_LIKE_META,
-} from "@/app/components/feed/FeedPostCard"
+import CommunitySharePreviewPanel from "@/app/components/CommunitySharePreviewPanel"
 
 type CommunitySharePreviewModalProps = {
   open: boolean
@@ -90,19 +87,7 @@ export default function CommunitySharePreviewModal({
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4">
-          <FeedPostCard
-            post={post}
-            user={user}
-            likeMeta={EMPTY_LIKE_META}
-            comments={EMPTY_COMMENTS}
-            commentSubmitting={false}
-            preview
-            onSelectPost={() => {}}
-            onOpenComments={() => {}}
-            onToggleLike={() => {}}
-            onSubmitComment={async () => false}
-            onSharePost={() => {}}
-          />
+          <CommunitySharePreviewPanel post={post} user={user} showHeading={false} />
         </div>
 
         <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-white/10 bg-[#0b1220] p-3 sm:flex-row sm:justify-end sm:gap-3">

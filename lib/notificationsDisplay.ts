@@ -128,6 +128,11 @@ export type RoomMessageNotificationGroup = {
   messages: RoomMessageEntry[]
 }
 
+export type AffiliateNotificationItem = {
+  kind: "affiliate_notification"
+  notification: NotificationRecord
+}
+
 export type GroupedNotificationCard =
   | LikeNotificationGroup
   | CommentNotificationGroup
@@ -135,6 +140,7 @@ export type GroupedNotificationCard =
   | FollowRequestNotificationGroup
   | RoomJoinNotificationItem
   | RoomMessageNotificationGroup
+  | AffiliateNotificationItem
 
 /** @deprecated Use GroupedNotificationCard */
 export type SingleNotificationItem = {
@@ -503,6 +509,10 @@ export function buildGroupedNotificationCards(
   const followRequests = rows.filter((row) => row.type === "follow_request")
   const roomJoins = rows.filter((row) => row.type === "room_join")
   const roomMessages = rows.filter((row) => row.type === "room_message")
+  const affiliateNotifications = rows.filter(
+    (row) =>
+      row.type === "affiliate_referral" || row.type === "affiliate_commission_earned"
+  )
 
   const cards: GroupedNotificationCard[] = [
     ...groupLikeNotifications(likes),
@@ -516,6 +526,12 @@ export function buildGroupedNotificationCards(
       })
     ),
     ...groupRoomMessageNotifications(roomMessages),
+    ...affiliateNotifications.map(
+      (notification): AffiliateNotificationItem => ({
+        kind: "affiliate_notification",
+        notification,
+      })
+    ),
   ]
 
   cards.sort((a, b) => {
@@ -586,18 +602,21 @@ export function groupCardsByTimeSection(cards: GroupedNotificationCard[]) {
 
 export function groupedCardCreatedAt(card: GroupedNotificationCard): string {
   if (card.kind === "room_join") return card.notification.created_at
+  if (card.kind === "affiliate_notification") return card.notification.created_at
   if (card.kind === "room_message_group") return card.latestAt
   return card.latestAt
 }
 
 export function groupedCardIsUnread(card: GroupedNotificationCard): boolean {
   if (card.kind === "room_join") return !card.notification.read
+  if (card.kind === "affiliate_notification") return !card.notification.read
   if (card.kind === "room_message_group") return !card.read
   return !card.read
 }
 
 export function groupedCardNotificationIds(card: GroupedNotificationCard): string[] {
   if (card.kind === "room_join") return [card.notification.id]
+  if (card.kind === "affiliate_notification") return [card.notification.id]
   if (card.kind === "room_message_group") return card.notificationIds
   return card.notificationIds
 }
@@ -759,6 +778,48 @@ export function parseRoomMessageContent(
   }
 }
 
+export type AffiliateNotificationMeta = {
+  title?: string | null
+  body?: string | null
+  href?: string | null
+}
+
+export function parseAffiliateNotificationContent(
+  content: string | null | undefined
+): AffiliateNotificationMeta {
+  if (!content?.trim()) return {}
+  try {
+    const parsed = JSON.parse(content) as AffiliateNotificationMeta
+    return parsed && typeof parsed === "object" ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+export function affiliateNotificationTitle(notification: NotificationRecord): string {
+  const meta = parseAffiliateNotificationContent(notification.content)
+  if (meta.title?.trim()) return meta.title.trim()
+  if (notification.type === "affiliate_commission_earned") {
+    return "💰 Commission Earned!"
+  }
+  return "🎉 New Referral!"
+}
+
+export function affiliateNotificationBody(notification: NotificationRecord): string {
+  const meta = parseAffiliateNotificationContent(notification.content)
+  if (meta.body?.trim()) return meta.body.trim()
+  if (notification.type === "affiliate_commission_earned") {
+    return "You earned affiliate commission from a referred subscriber."
+  }
+  return "A new user signed up using your referral code."
+}
+
+export function affiliateNotificationHref(notification: NotificationRecord): string {
+  const meta = parseAffiliateNotificationContent(notification.content)
+  const href = meta.href?.trim()
+  return href || "/affiliate"
+}
+
 export function formatRoomJoinMessage(username: string): string {
   return `${username} joined your room`
 }
@@ -849,6 +910,10 @@ export function getGroupedNotificationHref(
   owner: { id: string; username?: string | null },
   sendersById: Record<string, SenderProfile> = {}
 ): string {
+  if (card.kind === "affiliate_notification") {
+    return affiliateNotificationHref(card.notification)
+  }
+
   if (card.kind === "like_group") {
     return feedContentHref({
       postId: engagementContentPostId(

@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { AFFILIATE_PRIMARY_BUTTON_CLASS } from "@/lib/affiliateUi"
 
 type Props = {
   open: boolean
@@ -131,7 +132,7 @@ export default function AffiliatePayoutRequestModal({
           <button
             type="submit"
             disabled={busy || max <= 0 || (min > 0 && max < min - 0.001)}
-            className="w-full rounded-lg bg-gradient-to-r from-emerald-500 to-blue-500 py-2.5 text-sm font-semibold disabled:opacity-50"
+            className={`w-full ${AFFILIATE_PRIMARY_BUTTON_CLASS} py-2.5`}
           >
             {busy ? "Submitting…" : "Submit request"}
           </button>

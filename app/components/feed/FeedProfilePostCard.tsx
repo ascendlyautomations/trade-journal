@@ -1,7 +1,6 @@
 "use client"
 
 import { memo, useCallback, useMemo } from "react"
-import { formatSocialTimestamp } from "@/lib/formatRelativeTime"
 import { profilePostPublicUrl } from "@/lib/storagePublicUrl"
 import { isRoomSharePost } from "@/lib/roomSharePost"
 import FeedPostActions from "./FeedPostActions"
@@ -68,11 +67,6 @@ function FeedProfilePostCard({
     const raw = post.content != null ? String(post.content).trim() : ""
     return raw !== "" ? raw : null
   }, [post.content])
-  const createdAtLabel = useMemo(
-    () => formatSocialTimestamp(post.created_at),
-    [post.created_at]
-  )
-
   return (
     <article
       role="button"
@@ -85,6 +79,8 @@ function FeedProfilePostCard({
         userId={post.user_id}
         avatarUrl={avatarUrl}
         username={profileUsername}
+        metaLabel="Post"
+        postedAt={post.created_at}
       />
 
       {isRoomSharePost(post) ? (
@@ -106,14 +102,13 @@ function FeedProfilePostCard({
         onSharePost={onSharePost}
       />
 
-      <div className="space-y-2 px-4 pb-3">
-        {content ? (
+      {content ? (
+        <div className="px-4 pb-3">
           <p className="whitespace-pre-wrap text-sm leading-relaxed text-white">
             {content}
           </p>
-        ) : null}
-        <p className="text-xs text-white/40">{createdAtLabel}</p>
-      </div>
+        </div>
+      ) : null}
     </article>
   )
 }

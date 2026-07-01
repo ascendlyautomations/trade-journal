@@ -3,6 +3,7 @@ const { describe, it } = require("node:test")
 const {
   formatRelativeTime,
   formatSocialTimestamp,
+  formatPostedTimestamp,
   getNotificationTimeSection,
 } = require("./formatRelativeTime.ts")
 
@@ -53,6 +54,29 @@ describe("formatSocialTimestamp", () => {
   it("uses Yesterday instead of 1d", () => {
     const ts = new Date(now.getTime() - 30 * 60 * 60_000).toISOString()
     assert.equal(formatSocialTimestamp(ts, now), "Yesterday")
+  })
+})
+
+describe("formatPostedTimestamp", () => {
+  const now = new Date("2026-06-25T15:00:00.000Z")
+
+  it("shows Just now under 30 seconds", () => {
+    const ts = new Date(now.getTime() - 10_000).toISOString()
+    assert.equal(formatPostedTimestamp(ts, now), "Just now")
+  })
+
+  it("shows minutes and hours with ago suffix", () => {
+    const fiveMin = new Date(now.getTime() - 5 * 60_000).toISOString()
+    assert.equal(formatPostedTimestamp(fiveMin, now), "5m ago")
+    const threeHr = new Date(now.getTime() - 3 * 60 * 60_000).toISOString()
+    assert.equal(formatPostedTimestamp(threeHr, now), "3h ago")
+  })
+
+  it("shows Yesterday and day counts", () => {
+    const ts = new Date(now.getTime() - 30 * 60 * 60_000).toISOString()
+    assert.equal(formatPostedTimestamp(ts, now), "Yesterday")
+    const threeDays = new Date(now.getTime() - 3 * 24 * 60 * 60_000).toISOString()
+    assert.equal(formatPostedTimestamp(threeDays, now), "3d ago")
   })
 })
 

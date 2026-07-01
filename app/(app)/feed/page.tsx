@@ -198,6 +198,14 @@ function FeedPageContent() {
   const feedEmptyStateRef = useRef<FeedEmptyState | null>(null)
   feedEmptyStateRef.current = feedEmptyState
   const scrollYRef = useRef(0)
+  /** Incremented on tab/filter change; stale async work must not mutate state. */
+  const feedRequestGenerationRef = useRef(0)
+  const [feedReady, setFeedReady] = useState(false)
+
+  const bumpFeedRequestGeneration = useCallback(() => {
+    feedRequestGenerationRef.current += 1
+    return feedRequestGenerationRef.current
+  }, [])
 
   const buildFeedSnapshot = useCallback(
     (
@@ -233,8 +241,15 @@ function FeedPageContent() {
       nextPosts: any[],
       nextLikes: Record<string, LikeMeta>,
       nextComments: Record<string, any[]>,
-      overrides?: Partial<FeedSessionSnapshot>
+      overrides?: Partial<FeedSessionSnapshot>,
+      requestGeneration?: number
     ) => {
+      if (
+        requestGeneration != null &&
+        requestGeneration !== feedRequestGenerationRef.current
+      ) {
+        return
+      }
       const key = feedInitKeyRef.current
       if (!key) return
       writeFeedSession(
@@ -753,20 +768,26 @@ function FeedPageContent() {
       const userId = userIdRef.current
       if (!userId || loadingRef.current || !hasMoreRef.current) return
 
+      const requestGen = feedRequestGenerationRef.current
+      const isActive = () => feedRequestGenerationRef.current === requestGen
+
       const currentPage = pageOverride ?? pageRef.current
 
       const isInitialPage = currentPage === 0
       if (isInitialPage && !hasLoadedFeedRef.current) {
+        if (!isActive()) return
         setLoading(true)
       }
       loadingRef.current = true
 
-      if (currentPage === 0) {
+      if (currentPage === 0 && isActive()) {
         setFeedEmptyState(null)
       }
 
       try {
         const followingIds = await fetchFollowingIds(supabase, userId)
+        if (!isActive()) return
+
         followingIdsRef.current = followingIds
         if (mode === "following") {
           setFollowingStoryUserIds([...new Set([...followingIds, userId])])
@@ -790,6 +811,7 @@ function FeedPageContent() {
             targetSize: FEED_PAGE_SIZE,
             pageSize: FEED_PAGE_SIZE,
           })
+          if (!isActive()) return
 
           mergeBufferRef.current = toppedUp.buffer
           tradePageRef.current = toppedUp.tradePage
@@ -808,11 +830,12 @@ function FeedPageContent() {
             followingIds.length === 0 &&
             currentPage === 0
           ) {
+            if (!isActive()) return
             hasMoreRef.current = false
             setHasMore(false)
             setFeedEmptyState("following_nobody")
-            loadingRef.current = false
-            setLoading(false)
+            hasLoadedFeedRef.current = true
+            setFeedReady(true)
             return
           }
 
@@ -823,6 +846,7 @@ function FeedPageContent() {
             toppedUp.reelExhausted &&
             list.length < FEED_PAGE_SIZE
           ) {
+            if (!isActive()) return
             hasMoreRef.current = false
             setHasMore(false)
           }
@@ -834,19 +858,22 @@ function FeedPageContent() {
             page: currentPage,
             pageSize: FEED_PAGE_SIZE,
           })
+          if (!isActive()) return
 
           if (result.emptyFollowing && currentPage === 0) {
+            if (!isActive()) return
             hasMoreRef.current = false
             setHasMore(false)
             setFeedEmptyState("following_nobody")
-            loadingRef.current = false
-            setLoading(false)
+            hasLoadedFeedRef.current = true
+            setFeedReady(true)
             return
           }
 
           list = result.items
 
           if (list.length < FEED_PAGE_SIZE) {
+            if (!isActive()) return
             hasMoreRef.current = false
             setHasMore(false)
           }
@@ -858,19 +885,22 @@ function FeedPageContent() {
             page: currentPage,
             pageSize: FEED_PAGE_SIZE,
           })
+          if (!isActive()) return
 
           if (result.emptyFollowing && currentPage === 0) {
+            if (!isActive()) return
             hasMoreRef.current = false
             setHasMore(false)
             setFeedEmptyState("following_nobody")
-            loadingRef.current = false
-            setLoading(false)
+            hasLoadedFeedRef.current = true
+            setFeedReady(true)
             return
           }
 
           list = result.items
 
           if (list.length < FEED_PAGE_SIZE) {
+            if (!isActive()) return
             hasMoreRef.current = false
             setHasMore(false)
           }
@@ -882,19 +912,22 @@ function FeedPageContent() {
             page: currentPage,
             pageSize: FEED_PAGE_SIZE,
           })
+          if (!isActive()) return
 
           if (result.emptyFollowing && currentPage === 0) {
+            if (!isActive()) return
             hasMoreRef.current = false
             setHasMore(false)
             setFeedEmptyState("following_nobody")
-            loadingRef.current = false
-            setLoading(false)
+            hasLoadedFeedRef.current = true
+            setFeedReady(true)
             return
           }
 
           list = result.items
 
           if (list.length < FEED_PAGE_SIZE) {
+            if (!isActive()) return
             hasMoreRef.current = false
             setHasMore(false)
           }
@@ -906,39 +939,40 @@ function FeedPageContent() {
             page: currentPage,
             pageSize: FEED_PAGE_SIZE,
           })
+          if (!isActive()) return
 
           if (result.emptyFollowing && currentPage === 0) {
+            if (!isActive()) return
             hasMoreRef.current = false
             setHasMore(false)
             setFeedEmptyState("following_nobody")
-            loadingRef.current = false
-            setLoading(false)
+            hasLoadedFeedRef.current = true
+            setFeedReady(true)
             return
           }
 
           list = result.items
 
           if (list.length < FEED_PAGE_SIZE) {
+            if (!isActive()) return
             hasMoreRef.current = false
             setHasMore(false)
           }
         }
 
+        if (!isActive()) return
+
         const painted =
           currentPage === 0 ? list : [...postsRef.current, ...list]
 
-        if (currentPage === 0) {
-          hasLoadedFeedRef.current = true
-        }
-
         postsRef.current = painted
         setPosts(painted)
-        setLoading(false)
 
         const { enriched, likesMap, commentsMap } = await loadEngagementForPosts(
           list,
           { id: userId }
         )
+        if (!isActive()) return
 
         if (currentPage === 0 && list.length === 0) {
           setFeedEmptyState("no_posts")
@@ -956,9 +990,16 @@ function FeedPageContent() {
         setPosts(nextPosts)
         setLikesByPost(mergedLikes)
         setCommentsByPost(mergedComments)
+
+        if (currentPage === 0) {
+          hasLoadedFeedRef.current = true
+          setFeedReady(true)
+        }
+
         persistFeedSnapshot(nextPosts, mergedLikes, mergedComments, {
           hasLoaded: hasLoadedFeedRef.current,
-        })
+        }, requestGen)
+
         const nextPage =
           pageOverride != null ? pageOverride + 1 : pageRef.current + 1
         pageRef.current = nextPage
@@ -978,8 +1019,10 @@ function FeedPageContent() {
           console.error("[feed] loadPosts FULL ERROR", error)
         }
       } finally {
-        loadingRef.current = false
-        setLoading(false)
+        if (isActive()) {
+          loadingRef.current = false
+          setLoading(false)
+        }
       }
     },
     [mode, contentType, loadEngagementForPosts, persistFeedSnapshot]
@@ -987,6 +1030,7 @@ function FeedPageContent() {
 
   const resetFeedState = useCallback(() => {
     hasLoadedFeedRef.current = false
+    setFeedReady(false)
     setPosts([])
     setLikesByPost({})
     setCommentsByPost({})
@@ -1027,6 +1071,7 @@ function FeedPageContent() {
     achievementExhaustedRef.current = cached.achievementExhausted ?? false
     reelExhaustedRef.current = cached.reelExhausted ?? false
     hasLoadedFeedRef.current = cached.hasLoaded
+    setFeedReady(cached.hasLoaded)
     loadingRef.current = false
     setLoading(false)
     scrollYRef.current = cached.scrollY
@@ -1047,12 +1092,15 @@ function FeedPageContent() {
 
     const cached = readFeedSession(feedInitKey)
     if (cached?.hasLoaded) {
+      bumpFeedRequestGeneration()
       restoreFeedSession(feedInitKey, cached)
       return
     }
 
+    bumpFeedRequestGeneration()
     feedInitKeyRef.current = feedInitKey
     resetFeedState()
+    setLoading(true)
     void loadPosts(0)
   }, [
     user?.id,
@@ -1061,6 +1109,7 @@ function FeedPageContent() {
     loadPosts,
     resetFeedState,
     restoreFeedSession,
+    bumpFeedRequestGeneration,
   ])
 
   useEffect(() => {
@@ -1068,6 +1117,7 @@ function FeedPageContent() {
     if (contentType !== "all" && contentType !== "trades") return
 
     const userId = user.id
+    const realtimeGeneration = feedRequestGenerationRef.current
     const channel = supabase.channel(`feed-trade-posts-${userId}`)
 
     channel.on(
@@ -1094,16 +1144,19 @@ function FeedPageContent() {
           .maybeSingle()
 
         if (!data) return
+        if (realtimeGeneration !== feedRequestGenerationRef.current) return
 
         const item = normalizeTradeFeedItem(data as Record<string, unknown>)
         const { enriched, likesMap, commentsMap } = await loadEngagementForPosts(
           [item],
           { id: userId }
         )
+        if (realtimeGeneration !== feedRequestGenerationRef.current) return
         const post = enriched[0]
         if (!post) return
 
         setPosts((prev) => {
+          if (realtimeGeneration !== feedRequestGenerationRef.current) return prev
           if (prev.some((p) => String(p.id) === String(post.id))) return prev
           const next = [post, ...prev]
           const mergedLikes = {
@@ -1114,7 +1167,13 @@ function FeedPageContent() {
             ...commentsByPostRef.current,
             ...commentsMap,
           }
-          persistFeedSnapshot(next, mergedLikes, mergedComments)
+          persistFeedSnapshot(
+            next,
+            mergedLikes,
+            mergedComments,
+            undefined,
+            realtimeGeneration
+          )
           setLikesByPost(mergedLikes)
           setCommentsByPost(mergedComments)
           return next
@@ -1133,6 +1192,7 @@ function FeedPageContent() {
     if (contentType !== "all" && contentType !== "posts") return
 
     const userId = user.id
+    const realtimeGeneration = feedRequestGenerationRef.current
     const channel = supabase.channel(`feed-profile-posts-${userId}`)
 
     channel.on(
@@ -1159,16 +1219,19 @@ function FeedPageContent() {
           .maybeSingle()
 
         if (!data) return
+        if (realtimeGeneration !== feedRequestGenerationRef.current) return
 
         const item = normalizeProfileFeedItem(data as Record<string, unknown>)
         const { enriched, likesMap, commentsMap } = await loadEngagementForPosts(
           [item],
           { id: userId }
         )
+        if (realtimeGeneration !== feedRequestGenerationRef.current) return
         const post = enriched[0]
         if (!post) return
 
         setPosts((prev) => {
+          if (realtimeGeneration !== feedRequestGenerationRef.current) return prev
           if (prev.some((p) => String(p.id) === String(post.id))) return prev
           const next = [post, ...prev]
           const mergedLikes = {
@@ -1179,7 +1242,13 @@ function FeedPageContent() {
             ...commentsByPostRef.current,
             ...commentsMap,
           }
-          persistFeedSnapshot(next, mergedLikes, mergedComments)
+          persistFeedSnapshot(
+            next,
+            mergedLikes,
+            mergedComments,
+            undefined,
+            realtimeGeneration
+          )
           setLikesByPost(mergedLikes)
           setCommentsByPost(mergedComments)
           return next
@@ -1198,6 +1267,7 @@ function FeedPageContent() {
     if (contentType !== "all" && contentType !== "achievements") return
 
     const userId = user.id
+    const realtimeGeneration = feedRequestGenerationRef.current
     const channel = supabase.channel(`feed-achievement-posts-${userId}`)
 
     channel.on(
@@ -1225,16 +1295,19 @@ function FeedPageContent() {
           .maybeSingle()
 
         if (!data) return
+        if (realtimeGeneration !== feedRequestGenerationRef.current) return
 
         const item = normalizeAchievementFeedItem(data as Record<string, unknown>)
         const { enriched, likesMap, commentsMap } = await loadEngagementForPosts(
           [item],
           { id: userId }
         )
+        if (realtimeGeneration !== feedRequestGenerationRef.current) return
         const post = enriched[0]
         if (!post) return
 
         setPosts((prev) => {
+          if (realtimeGeneration !== feedRequestGenerationRef.current) return prev
           if (prev.some((p) => String(p.id) === String(post.id))) return prev
           const next = [post, ...prev]
           const mergedLikes = {
@@ -1245,7 +1318,13 @@ function FeedPageContent() {
             ...commentsByPostRef.current,
             ...commentsMap,
           }
-          persistFeedSnapshot(next, mergedLikes, mergedComments)
+          persistFeedSnapshot(
+            next,
+            mergedLikes,
+            mergedComments,
+            undefined,
+            realtimeGeneration
+          )
           setLikesByPost(mergedLikes)
           setCommentsByPost(mergedComments)
           return next
@@ -1264,6 +1343,7 @@ function FeedPageContent() {
     if (contentType !== "all" && contentType !== "reels") return
 
     const userId = user.id
+    const realtimeGeneration = feedRequestGenerationRef.current
     const channel = supabase.channel(`feed-reels-${userId}`)
 
     channel.on(
@@ -1290,16 +1370,19 @@ function FeedPageContent() {
           .maybeSingle()
 
         if (!data) return
+        if (realtimeGeneration !== feedRequestGenerationRef.current) return
 
         const item = normalizeReelFeedItem(data as Record<string, unknown>)
         const { enriched, likesMap, commentsMap } = await loadEngagementForPosts(
           [item],
           { id: userId }
         )
+        if (realtimeGeneration !== feedRequestGenerationRef.current) return
         const post = enriched[0]
         if (!post) return
 
         setPosts((prev) => {
+          if (realtimeGeneration !== feedRequestGenerationRef.current) return prev
           if (prev.some((p) => String(p.id) === String(post.id))) return prev
           const next = [post, ...prev]
           const mergedLikes = {
@@ -1310,7 +1393,13 @@ function FeedPageContent() {
             ...commentsByPostRef.current,
             ...commentsMap,
           }
-          persistFeedSnapshot(next, mergedLikes, mergedComments)
+          persistFeedSnapshot(
+            next,
+            mergedLikes,
+            mergedComments,
+            undefined,
+            realtimeGeneration
+          )
           setLikesByPost(mergedLikes)
           setCommentsByPost(mergedComments)
           return next
@@ -1334,6 +1423,7 @@ function FeedPageContent() {
 
     if (reelIds.length === 0) return
 
+    const realtimeGeneration = feedRequestGenerationRef.current
     const channel = supabase.channel(`feed-reel-likes-${userId}`)
 
     const refreshReelLike = (reelId: string) => {
@@ -1343,15 +1433,19 @@ function FeedPageContent() {
           [reelId],
           userId
         )
+        if (realtimeGeneration !== feedRequestGenerationRef.current) return
         const next = metaById[reelId]
         if (!next) return
 
         setLikesByPost((prev) => {
+          if (realtimeGeneration !== feedRequestGenerationRef.current) return prev
           const merged = { ...prev, [reelId]: next }
           persistFeedSnapshot(
             postsRef.current,
             merged,
-            commentsByPostRef.current
+            commentsByPostRef.current,
+            undefined,
+            realtimeGeneration
           )
           return merged
         })
@@ -2251,10 +2345,9 @@ function FeedPageContent() {
             />
           ) : null}
 
-          {!authChecked ||
-          (loading && uniquePosts.length === 0 && !hasLoadedFeedRef.current) ? (
+          {!authChecked || (!feedReady && uniquePosts.length === 0) ? (
             <SkeletonFeedPage count={3} />
-          ) : !loading && uniquePosts.length === 0 && feedEmptyState ? (
+          ) : feedReady && !loading && uniquePosts.length === 0 && feedEmptyState ? (
             <EmptyState
               title={
                 feedEmptyState === "following_nobody"

@@ -252,13 +252,13 @@ export function buildEquityCurveFromTrades(trades: any[]): EquityCurvePoint[] {
 export function performanceWindowLabel(w: PerformanceWindow): string {
   switch (w) {
     case "daily":
-      return "Daily"
+      return "Today"
     case "weekly":
-      return "Weekly"
+      return "This Week"
     case "monthly":
-      return "Monthly"
+      return "This Month"
     case "yearly":
-      return "Yearly"
+      return "This Year"
     case "custom":
       return "Custom"
     default:

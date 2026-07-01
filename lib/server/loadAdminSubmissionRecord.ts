@@ -3,6 +3,8 @@ import {
   ADMIN_SUBMISSION_LABELS,
   type AdminSubmissionType,
 } from "@/lib/adminSubmissionTypes"
+import { profilePath } from "@/lib/profileRoutes"
+import { normalizeProfileUsername } from "@/lib/profileUsername"
 import { SITE_URL } from "@/lib/site"
 import type { AdminSubmissionEmailContext } from "@/lib/server/sendAdminSubmissionEmail"
 import type { SupabaseClient } from "@supabase/supabase-js"
@@ -171,6 +173,49 @@ export async function loadAdminSubmissionEmailContext(
         extraFields: [
           { label: "Status", value: data.status },
           { label: "Screenshot", value: data.screenshot_url },
+        ],
+      },
+    }
+  }
+
+  if (type === "affiliate_application") {
+    const { data, error } = await admin
+      .from("affiliate_applications")
+      .select(
+        "id, user_id, social_handle, followers, requested_code, status, has_edited, created_at"
+      )
+      .eq("id", recordId)
+      .maybeSingle()
+
+    if (error || !data || data.user_id !== userId) {
+      return { ok: false, status: 404, error: "Affiliate application not found" }
+    }
+
+    const usernameNormalized = normalizeProfileUsername(profile?.username ?? "")
+    const subjectOverride = usernameNormalized
+      ? `New Affiliate Application – @${usernameNormalized}`
+      : "New Affiliate Application"
+    const profileUrl = `${SITE_URL}${profilePath({
+      username: profile?.username ?? null,
+      id: userId,
+    })}`
+
+    return {
+      ok: true,
+      context: {
+        ...base,
+        createdAt: data.created_at,
+        subjectOverride,
+        headingOverride: "New Affiliate Application Submitted",
+        profileUrl,
+        extraFields: [
+          { label: "Social handle", value: data.social_handle },
+          {
+            label: "Follower count",
+            value: data.followers != null ? String(data.followers) : null,
+          },
+          { label: "Requested referral code", value: data.requested_code },
+          { label: "Application status", value: data.status },
         ],
       },
     }

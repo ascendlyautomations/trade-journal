@@ -20,6 +20,9 @@ export type AdminSubmissionEmailContext = {
   category?: string | null
   severity?: string | null
   adminUrl: string
+  profileUrl?: string | null
+  subjectOverride?: string | null
+  headingOverride?: string | null
   extraFields?: { label: string; value: string | null | undefined }[]
 }
 
@@ -56,6 +59,12 @@ export function buildAdminSubmissionEmailHtml(ctx: AdminSubmissionEmailContext):
     ctx.description != null ? row("Description", ctx.description) : "",
     ctx.notes != null ? row("Notes", ctx.notes) : "",
     ...(ctx.extraFields ?? []).map((f) => row(f.label, f.value ?? null)),
+    ctx.profileUrl
+      ? rowHtml(
+          "User profile",
+          `<a href="${escapeHtml(ctx.profileUrl)}" style="color:#38bdf8">${escapeHtml(ctx.profileUrl)}</a>`
+        )
+      : "",
     rowHtml(
       "Admin",
       `<a href="${escapeHtml(ctx.adminUrl)}" style="color:#38bdf8">${escapeHtml(ctx.adminUrl)}</a>`
@@ -64,7 +73,7 @@ export function buildAdminSubmissionEmailHtml(ctx: AdminSubmissionEmailContext):
 
   return `<!DOCTYPE html><html><body style="margin:0;padding:24px;background:#0f172a;font-family:system-ui,sans-serif">
 <div style="max-width:640px;margin:0 auto;background:#1e293b;border:1px solid #334155;border-radius:12px;padding:24px">
-<h1 style="margin:0 0 16px;font-size:18px;color:#f8fafc">${escapeHtml(ADMIN_SUBMISSION_EMAIL_SUBJECTS[ctx.type])}</h1>
+<h1 style="margin:0 0 16px;font-size:18px;color:#f8fafc">${escapeHtml(ctx.headingOverride?.trim() || ADMIN_SUBMISSION_EMAIL_SUBJECTS[ctx.type])}</h1>
 <table style="width:100%;border-collapse:collapse;font-size:14px">${rows.join("")}</table>
 <p style="margin:24px 0 0;font-size:12px;color:#64748b">TradeTraxs admin notification · ${escapeHtml(SITE_URL)}</p>
 </div></body></html>`
@@ -83,7 +92,8 @@ export async function sendAdminSubmissionEmail(
     process.env.ADMIN_NOTIFY_FROM_EMAIL?.trim() ||
     "TradeTraxs Notifications <notifications@tradetraxs.com>"
 
-  const subject = ADMIN_SUBMISSION_EMAIL_SUBJECTS[ctx.type]
+  const subject =
+    ctx.subjectOverride?.trim() || ADMIN_SUBMISSION_EMAIL_SUBJECTS[ctx.type]
   const html = buildAdminSubmissionEmailHtml(ctx)
 
   try {

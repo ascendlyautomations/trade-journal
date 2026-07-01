@@ -5,6 +5,10 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import Navbar from "../components/Navbar"
 import { supabase } from "../../lib/supabaseClient"
+import {
+  recordedAffiliateEarnings,
+  resolveRecordedAffiliateEarnings,
+} from "@/lib/affiliateEarnings"
 import { useToast } from "@/app/components/ui"
 
 type ProfileRow = {
@@ -67,7 +71,7 @@ export default function ReferralsPage() {
 
     const { data: prof, error: profErr } = await supabase
       .from("profiles")
-      .select("id, referral_code")
+      .select("id, referral_code, referral_earnings")
       .eq("id", user.id)
       .single()
 
@@ -89,14 +93,14 @@ export default function ReferralsPage() {
 
     if (ledgerErr) {
       console.error("referrals ledger:", ledgerErr)
-      setLedgerTotal(0)
+      setLedgerTotal(recordedAffiliateEarnings(prof.referral_earnings))
     } else {
-      let sum = 0
-      for (const row of ledger ?? []) {
-        const n = Number(row.amount_earned)
-        if (Number.isFinite(n)) sum += n
-      }
-      setLedgerTotal(sum)
+      setLedgerTotal(
+        resolveRecordedAffiliateEarnings(
+          (prof as { referral_earnings?: number | null }).referral_earnings,
+          ledger
+        )
+      )
     }
 
     const code = prof.referral_code != null ? String(prof.referral_code).trim() : ""
