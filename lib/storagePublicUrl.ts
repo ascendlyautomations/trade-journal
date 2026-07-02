@@ -23,6 +23,9 @@ export function supabaseStoragePublicUrl(
 export function tradeScreenshotPublicUrl(
   imageUrl: string | null | undefined
 ): string | null {
+  const raw = imageUrl != null ? String(imageUrl).trim() : ""
+  if (!raw) return null
+  if (raw.startsWith("/") || raw.startsWith("http")) return raw
   return supabaseStoragePublicUrl("screenshots", imageUrl)
 }
 
@@ -37,6 +40,9 @@ export function achievementImagePublicUrl(
 export function profilePostPublicUrl(
   imageUrl: string | null | undefined
 ): string | null {
+  const raw = imageUrl != null ? String(imageUrl).trim() : ""
+  if (!raw) return null
+  if (raw.startsWith("/") || raw.startsWith("http")) return raw
   return supabaseStoragePublicUrl("profile_posts", imageUrl)
 }
 
@@ -44,5 +50,8 @@ export function profilePostPublicUrl(
 export function storyImagePublicUrl(
   imageUrl: string | null | undefined
 ): string | null {
+  const raw = imageUrl != null ? String(imageUrl).trim() : ""
+  if (!raw) return null
+  if (raw.startsWith("/") || raw.startsWith("http")) return raw
   return supabaseStoragePublicUrl("stories", imageUrl)
 }

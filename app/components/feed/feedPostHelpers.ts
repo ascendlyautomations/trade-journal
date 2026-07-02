@@ -118,12 +118,28 @@ export function sortFeedItemsDesc(items: FeedItem[]): FeedItem[] {
 }
 
 export function dedupeFeedItems(items: FeedItem[]): FeedItem[] {
+  const tradeIdsWithReel = new Set<string>()
+  for (const item of items) {
+    if (item.feedKind === "reel" && item.trade_id != null) {
+      tradeIdsWithReel.add(String(item.trade_id))
+    }
+  }
+
   const seen = new Set<string>()
   const out: FeedItem[] = []
 
   for (const item of items) {
     const key = `${item.feedKind}:${item.id}`
     if (seen.has(key)) continue
+
+    if (
+      item.feedKind === "trade" &&
+      item.trade_id != null &&
+      tradeIdsWithReel.has(String(item.trade_id))
+    ) {
+      continue
+    }
+
     seen.add(key)
     out.push(item)
   }
@@ -178,6 +194,7 @@ export function postImageSrc(imageUrl: string | null | undefined): string | null
   const raw = imageUrl != null ? String(imageUrl).trim() : ""
   if (!raw) return null
   if (raw.startsWith("http") || raw.startsWith("blob:")) return raw
+  if (raw.startsWith("/")) return raw
   const base = process.env.NEXT_PUBLIC_SUPABASE_URL
   if (!base) return null
   return `${base}/storage/v1/object/public/screenshots/${raw}`

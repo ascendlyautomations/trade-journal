@@ -185,6 +185,20 @@ export function reelStoragePublicUrl(storagePath: string): string {
   return `${base}/storage/v1/object/public/reels/${normalized}`
 }
 
+/** Extract storage object path from a public reels bucket URL. */
+export function reelPublicUrlToStoragePath(publicUrl: string): string | null {
+  const raw = String(publicUrl ?? "").trim()
+  if (!raw) return null
+  const marker = "/storage/v1/object/public/reels/"
+  const idx = raw.indexOf(marker)
+  if (idx < 0) return null
+  try {
+    return decodeURIComponent(raw.slice(idx + marker.length))
+  } catch {
+    return raw.slice(idx + marker.length)
+  }
+}
+
 export async function uploadReelVideoFile(
   supabase: SupabaseClient,
   userId: string,

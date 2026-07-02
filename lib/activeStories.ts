@@ -1,4 +1,10 @@
 import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js"
+import { isDemoModeActive } from "@/lib/demo/demoMode"
+import {
+  getDemoFollowingIds,
+  getDemoStoriesForUserIds,
+  getDemoStoryBarProfiles,
+} from "@/lib/demo/demoFeed"
 
 /** Stories remain visible for 24 hours (matches feed + profile). */
 export const STORY_WINDOW_MS = 24 * 60 * 60 * 1000
@@ -116,6 +122,11 @@ export async function fetchActiveStoriesForUserIds(
     return { storiesByUser: {}, error: null }
   }
 
+  if (isDemoModeActive()) {
+    const active = filterActiveStories(getDemoStoriesForUserIds(ids))
+    return { storiesByUser: groupActiveStoriesByUser(active), error: null }
+  }
+
   const { data, error } = await client
     .from("stories")
     .select(ACTIVE_STORIES_SELECT)
@@ -154,6 +165,27 @@ export async function fetchFollowingStoriesBarData(
         avatar_url: viewerProfile.avatar_url,
       }
     : { id: viewerUserId, username: null, avatar_url: null }
+
+  if (isDemoModeActive()) {
+    const followingIds = getDemoFollowingIds(viewerUserId)
+    const storyUserIds = [...new Set([...followingIds, viewerUserId])]
+    const { storiesByUser } = await fetchActiveStoriesForUserIds(
+      client,
+      storyUserIds
+    )
+    const userIdsWithStories = Object.keys(storiesByUser)
+    const users = getDemoStoryBarProfiles(userIdsWithStories)
+    const latestStoryMs = (id: string) =>
+      new Date(storiesByUser[id][0].created_at).getTime()
+    users.sort((a, b) => latestStoryMs(b.id) - latestStoryMs(a.id))
+
+    return {
+      storiesByUser,
+      users,
+      currentUserProfile,
+      error: null,
+    }
+  }
 
   const { data: following, error: followingErr } = await client
     .from("followers")

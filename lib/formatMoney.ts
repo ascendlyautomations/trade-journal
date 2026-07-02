@@ -61,45 +61,56 @@ export function isIntermediateNumericInput(value: string): boolean {
   )
 }
 
-/** Display formatter for P&L inputs (always two decimal places). */
-export function formatTradeInputPnlDisplay(value: string): string {
-  if (!value) return ""
-  if (isIntermediateNumericInput(value)) return value
-  const num = parseTradeNumericInput(value)
-  if (num === null) return ""
-  return formatPnlCurrency(num)
+/** Clear partial numeric input on blur; keep valid in-progress decimals intact. */
+export function finalizeTradeNumericInputOnBlur(value: string): string {
+  const cleaned = cleanTradeNumericInput(value.trim())
+  if (!cleaned || cleaned === "-" || cleaned === "." || cleaned === "-.") return ""
+  if (cleaned.endsWith(".")) return cleaned.slice(0, -1)
+  return cleaned
 }
 
-/** Display formatter for price inputs (preserves imported decimal precision). */
-export function formatTradeInputPriceDisplay(value: string): string {
+/** In-form currency display (comma grouping, no $ prefix — prefix is shown separately). */
+export function formatTradeFormCurrencyDisplay(value: string): string {
+  if (!value) return ""
+
+  const num = Number(cleanTradeNumericInput(value))
+  if (isNaN(num)) return ""
+
+  return num.toLocaleString("en-US", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  })
+}
+
+/** Value shown in trade form currency inputs while typing or after formatting. */
+export function getTradeFormCurrencyInputDisplayValue(value: string): string {
   if (!value) return ""
   if (isIntermediateNumericInput(value)) return value
-  const num = parseTradeNumericInput(value)
-  if (num === null) return ""
-  const cleaned = cleanTradeNumericInput(value)
-  const dot = cleaned.indexOf(".")
-  const fractionDigits =
-    dot === -1 ? 2 : Math.max(2, cleaned.length - dot - 1)
-  return formatPnlCurrency(num, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: fractionDigits,
-  })
+  return formatTradeFormCurrencyDisplay(value)
+}
+
+export type TradeNumericInputOptions = {
+  allowDecimal?: boolean
+  allowNegative?: boolean
+  onDecimalError?: (message: string) => void
 }
 
 export function handleTradeNumericInput(
   value: string,
   setter: (val: string) => void,
-  options?: {
-    allowDecimal?: boolean
-    allowNegative?: boolean
-  }
+  options?: TradeNumericInputOptions
 ): void {
   let cleaned = cleanTradeNumericInput(value)
-  const { allowDecimal = false, allowNegative = false } = options ?? {}
+  const { allowDecimal = false, allowNegative = false, onDecimalError } =
+    options ?? {}
 
   if (allowDecimal) {
     const decimalCount = (cleaned.match(/\./g) ?? []).length
-    if (decimalCount > 1) return
+    if (decimalCount > 1) {
+      onDecimalError?.("Only one decimal point allowed")
+      return
+    }
+    onDecimalError?.("")
   }
 
   let regex: RegExp

@@ -1,6 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type { Achievement } from "@/lib/achievements"
 import { normalizeAchievementFeedItem } from "@/app/components/feed/feedPostHelpers"
+import {
+  DEMO_FEED_COMMENTS,
+  DEMO_FEED_LIKES,
+  findDemoFeedItem,
+  getDemoAchievementPostIdsByAchievementIds,
+} from "@/lib/demo/demoFeed"
+import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { ensureCommentNotificationsForInsert } from "./commentNotifications"
 import { ensureLikeNotification } from "./likeNotifications"
 
@@ -62,6 +69,10 @@ export async function fetchAchievementPostById(
   const id = postId.trim()
   if (!id) return null
 
+  const demo = findDemoFeedItem(id, "achievement")
+  if (demo) return demo
+  if (isDemoModeActive()) return null
+
   const { data, error } = await client
     .from("achievement_posts")
     .select(FEED_ACHIEVEMENT_POSTS_SELECT)
@@ -122,6 +133,10 @@ export async function fetchAchievementPostIdsByAchievementIds(
 ): Promise<Record<string, string>> {
   const ids = [...new Set(achievementIds.map((id) => id.trim()).filter(Boolean))]
   if (ids.length === 0) return {}
+
+  if (isDemoModeActive()) {
+    return getDemoAchievementPostIdsByAchievementIds(ids)
+  }
 
   const { data, error } = await client
     .from("achievement_posts")
@@ -203,6 +218,14 @@ export async function loadAchievementPostEngagementMaps(
   }
 
   if (postIds.length === 0) {
+    return { likesMap, commentsMap }
+  }
+
+  if (isDemoModeActive()) {
+    for (const id of postIds) {
+      likesMap[id] = DEMO_FEED_LIKES[id] ?? { count: 0, liked: false }
+      commentsMap[id] = [...(DEMO_FEED_COMMENTS[id] ?? [])]
+    }
     return { likesMap, commentsMap }
   }
 

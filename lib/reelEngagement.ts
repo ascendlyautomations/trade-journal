@@ -1,5 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { normalizeReelFeedItem } from "@/app/components/feed/feedPostHelpers"
+import { FEED_REELS_SELECT } from "@/lib/reels"
+import {
+  DEMO_FEED_COMMENTS,
+  DEMO_FEED_LIKES,
+  findDemoFeedItem,
+} from "@/lib/demo/demoFeed"
+import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { ensureCommentNotificationsForInsert } from "./commentNotifications"
 import {
   deleteLikeNotification,
@@ -18,8 +25,7 @@ export const REEL_COMMENTS_SELECT =
 
 export const REEL_COMMENT_INSERT_SELECT = REEL_COMMENT_CORE_SELECT
 
-export const FEED_REELS_SELECT =
-  "id, user_id, caption, video_url, thumbnail_url, duration_seconds, visibility, created_at, profiles(username, avatar_url)"
+export { FEED_REELS_SELECT } from "@/lib/reels"
 
 export function isReelFeedPost(
   post: { feedKind?: string; video_url?: unknown } | null | undefined
@@ -75,6 +81,10 @@ export async function fetchReelFeedPostById(
   const id = reelId.trim()
   if (!id) return null
 
+  const demo = findDemoFeedItem(id, "reel")
+  if (demo) return demo
+  if (isDemoModeActive()) return null
+
   const { data, error } = await client
     .from("reels")
     .select(FEED_REELS_SELECT)
@@ -116,6 +126,13 @@ export async function fetchReelLikeMetaByIds(
     meta[id] = { count: 0, liked: false }
   }
   if (reelIds.length === 0) return meta
+
+  if (isDemoModeActive()) {
+    for (const id of reelIds) {
+      meta[id] = DEMO_FEED_LIKES[id] ?? { count: 0, liked: false }
+    }
+    return meta
+  }
 
   const { data, error } = await client
     .from("reel_likes")
@@ -278,6 +295,15 @@ export async function loadReelEngagementMaps(
   }
 
   if (reelIds.length === 0) {
+    return { likesMap, commentsMap }
+  }
+
+  if (isDemoModeActive()) {
+    for (const id of reelIds) {
+      const likeMeta = DEMO_FEED_LIKES[id]
+      likesMap[id] = likeMeta ?? { count: 0, liked: false }
+      commentsMap[id] = DEMO_FEED_COMMENTS[id] ?? []
+    }
     return { likesMap, commentsMap }
   }
 

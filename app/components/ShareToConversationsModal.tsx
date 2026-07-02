@@ -27,6 +27,8 @@ import ShareCopyLinkButton from "@/app/components/ShareCopyLinkButton"
 import ShareRecipientPicker from "@/app/components/ShareRecipientPicker"
 import FeedPostScreenshot from "@/app/components/feed/FeedPostScreenshot"
 import { postImageSrc } from "@/app/components/feed/feedPostHelpers"
+import { isDemoModeActive } from "@/lib/demo/demoMode"
+import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 
 export type ShareToConversationsModalProps = {
   open: boolean
@@ -200,6 +202,10 @@ export default function ShareToConversationsModal({
   }, [deepLinkTarget])
 
   const handleSend = useCallback(async () => {
+    if (isDemoModeActive()) {
+      requestDemoSignup("default")
+      return
+    }
     if (!hasRecipients || isBusy) return
 
     const {

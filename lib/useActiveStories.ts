@@ -12,6 +12,7 @@ import {
   readStoriesSession,
   writeStoriesSession,
 } from "@/lib/storiesSessionCache"
+import { isDemoModeActive } from "@/lib/demo/demoMode"
 
 function normalizeUserIds(userIds: string[]): string[] {
   return [...new Set(userIds.map((id) => String(id).trim()).filter(Boolean))]
@@ -69,7 +70,7 @@ export function useActiveStories(userIds: string[], enabled = true) {
   }, [enabled, loadStories, userIdsKey])
 
   useEffect(() => {
-    if (!enabled) return
+    if (!enabled || isDemoModeActive()) return
 
     const ids = normalizeUserIds(userIdsRef.current)
     if (ids.length === 0) return

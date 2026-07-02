@@ -19,7 +19,9 @@ import FeedCommentsSection from "./FeedCommentsSection"
 import FeedPostHeader from "./FeedPostHeader"
 import FeedPostMetaRow from "./FeedPostMetaRow"
 import FeedReelOwnerMenu from "./FeedReelOwnerMenu"
+import TradeReelSummaryStrip from "./TradeReelSummaryStrip"
 import { feedCommentTarget } from "./feedPostHelpers"
+import { resolveReelCaption } from "@/lib/reels"
 import type { FeedLikeMeta } from "./FeedPostCard"
 
 type FeedReelDetailModalProps = {
@@ -41,6 +43,8 @@ type FeedReelDetailModalProps = {
   onMenuToggle?: () => void
   onEditReel?: () => void
   onDeleteReel?: () => void
+  onReplaceReelVideo?: () => void
+  isTradeAttachedReel?: boolean
 }
 
 export default function FeedReelDetailModal({
@@ -62,6 +66,8 @@ export default function FeedReelDetailModal({
   onMenuToggle,
   onEditReel,
   onDeleteReel,
+  onReplaceReelVideo,
+  isTradeAttachedReel = false,
 }: FeedReelDetailModalProps) {
   const pid = String(post.id)
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -106,10 +112,7 @@ export default function FeedReelDetailModal({
       rawAvatar != null && String(rawAvatar).trim() !== ""
         ? String(rawAvatar).trim()
         : null
-    const caption =
-      post.caption != null && String(post.caption).trim() !== ""
-        ? String(post.caption).trim()
-        : null
+    const caption = resolveReelCaption(post)
 
     return {
       avatarUrl,
@@ -148,6 +151,8 @@ export default function FeedReelDetailModal({
                 onMenuToggle={() => onMenuToggle?.()}
                 onEdit={() => onEditReel?.()}
                 onDelete={() => onDeleteReel?.()}
+                onReplaceVideo={() => onReplaceReelVideo?.()}
+                isTradeAttached={isTradeAttachedReel}
               />
             </div>
           ) : null}
@@ -183,6 +188,7 @@ export default function FeedReelDetailModal({
       engagementClassName="shrink-0 border-b border-white/10 px-4 py-2"
       collapsibleContent={
         <div className="space-y-3 border-b border-white/10 px-4 py-4 text-sm">
+          <TradeReelSummaryStrip post={post} />
           {modalDetails.caption ? (
             <p className="whitespace-pre-wrap leading-relaxed text-white">
               {modalDetails.caption}

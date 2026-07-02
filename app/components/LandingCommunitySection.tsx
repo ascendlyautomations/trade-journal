@@ -12,45 +12,28 @@ import {
 
 const COMMUNITY_ITEMS = [
   {
-    title: "Social feed",
+    title: "Feed & reels",
     img: "/images/social-feed.png",
     objectPosition: "object-top",
-    bullets: [
-      "Follow traders you respect",
-      "Share charts and thoughts",
-      "Discuss setups and psychology",
-      "Discover new edges",
-    ],
+    bullets: ["Share trades with full context", "Watch short-form trading reels"],
   },
   {
-    title: "Public profiles",
+    title: "Trader profiles",
     img: "/images/public-profiles.png",
     objectPosition: "object-top",
-    bullets: [
-      "Showcase performance",
-      "Share strategy tags",
-      "Let others learn from your journey",
-    ],
+    bullets: ["Follow your favorite traders", "Build your reputation over time"],
   },
   {
-    title: "Leaderboards & accountability",
+    title: "Leaderboards",
     img: "/images/leaderboard.png",
     objectPosition: "object-center",
-    bullets: [
-      "Compare stats with peers",
-      "Rank by P&L, win rate, and consistency",
-      "Stay motivated with visibility",
-    ],
+    bullets: ["Celebrate milestones and achievements", "See how your stats stack up"],
   },
   {
-    title: "Community learning",
+    title: "Learn & discuss",
     img: "/images/community-learning.png",
     objectPosition: "object-center",
-    bullets: [
-      "Learn from shared mistakes",
-      "Ask questions and get feedback",
-      "Grow faster together",
-    ],
+    bullets: ["Learn from wins and mistakes", "Discuss setups inside Trade Rooms"],
   },
 ] as const
 
@@ -61,7 +44,7 @@ export default function LandingCommunitySection() {
     <section
       ref={ref}
       id="community"
-      className="relative overflow-hidden px-6 py-24 md:py-28"
+      className="relative z-10 overflow-hidden border-t border-white/10 px-6 py-24 md:py-28"
     >
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_70%_30%,rgba(52,211,153,0.06),transparent_55%),radial-gradient(circle_at_25%_75%,rgba(96,165,250,0.06),transparent_55%)]" />
 
@@ -69,13 +52,12 @@ export default function LandingCommunitySection() {
         <div
           className={`mx-auto mb-14 max-w-3xl text-center ${LANDING_REVEAL_TRANSITION} ${visible ? LANDING_REVEAL_TO : LANDING_REVEAL_FROM}`}
         >
-          <h2 className="text-3xl font-semibold tracking-tight text-white md:text-4xl">
-            Community &{" "}
-            <span className={LANDING_TITLE_GRADIENT}>Insights</span>
+          <h2 className="text-3xl font-extrabold tracking-tight text-white drop-shadow-lg md:text-4xl">
+            Learn. Share.{" "}
+            <span className={LANDING_TITLE_GRADIENT}>Improve.</span>
           </h2>
-          <p className="mt-4 text-lg text-zinc-400 md:text-xl">
-            Share ideas, compare stats, and learn together — without turning
-            trading into noise.
+          <p className="mt-5 text-lg text-gray-400 md:text-xl">
+            Share trades, study setups, and learn from real breakdowns — right inside the app.
           </p>
         </div>
 
@@ -84,14 +66,12 @@ export default function LandingCommunitySection() {
             <article
               key={item.title}
               className={`group relative flex flex-col overflow-hidden ${LANDING_CARD_FULL} ${LANDING_REVEAL_TRANSITION} ${visible ? LANDING_REVEAL_TO : LANDING_REVEAL_FROM}`}
-              style={{
-                transitionDelay: visible ? `${i * 75}ms` : "0ms",
-              }}
+              style={{ transitionDelay: visible ? `${i * 75}ms` : "0ms" }}
             >
               <div className="relative h-[260px] w-full shrink-0 overflow-hidden md:h-[320px] lg:h-[360px]">
                 <Image
                   src={item.img}
-                  alt=""
+                  alt={item.title}
                   fill
                   className={`object-cover transition-transform duration-[400ms] ease-out group-hover:scale-[1.03] motion-reduce:group-hover:scale-100 ${item.objectPosition}`}
                   sizes="(max-width: 768px) 100vw, 50vw"
@@ -99,10 +79,8 @@ export default function LandingCommunitySection() {
                 />
               </div>
               <div className="flex flex-1 flex-col p-6 md:p-8">
-                <h3 className="text-xl font-semibold text-white">
-                  {item.title}
-                </h3>
-                <ul className="mt-4 space-y-2.5 text-zinc-400">
+                <h3 className="text-xl font-semibold text-white">{item.title}</h3>
+                <ul className="mt-4 space-y-2 text-gray-400">
                   {item.bullets.map((b) => (
                     <li key={b} className="flex gap-3 text-[15px] leading-relaxed">
                       <span

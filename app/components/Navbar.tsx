@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useCallback, useEffect, useState, useRef } from "react"
+import { useCallback, useEffect, useState, useRef, type MouseEvent } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { useRouter, usePathname } from "next/navigation"
 import { useUserProfile } from "../../lib/useUserProfile"
@@ -14,6 +14,10 @@ import { prefetchAppRoutes } from "../../lib/routePrefetch"
 import { ProfileAvatarImg } from "./SafeProfileAvatar"
 import BugReportModal from "./BugReportModal"
 import GettingStartedMobileEntry from "./GettingStartedMobileEntry"
+import { isDemoUserId } from "@/lib/demo/constants"
+import { getDemoUnreadNotificationCount } from "@/lib/demo/demoNotifications"
+import { exitDemoMode, isDemoModeActive, subscribeDemoModeChanges } from "@/lib/demo/demoMode"
+import { isDemoSupabaseBlocked } from "@/lib/demo/demoSupabaseGuard"
 
 export default function Navbar() {
   const { user, profile, loading } = useUserProfile()
@@ -40,9 +44,45 @@ export default function Navbar() {
   const router = useRouter()
   const pathname = usePathname()
   const isHomePage = pathname === "/"
+  const isPreviewAppRoute = pathname === "/app"
+  const [demoActive, setDemoActive] = useState(false)
+  const showReturnToApp =
+    !!user && (isHomePage || isPreviewAppRoute || demoActive)
   const isActive = (path: string) => pathname === path
   const isGroupActive = (paths: string[]) =>
     paths.some((p) => pathname.startsWith(p))
+
+  function handleLogoClick(e: MouseEvent<HTMLAnchorElement>) {
+    if (!isDemoModeActive()) return
+    e.preventDefault()
+    exitDemoMode()
+    setIsOpen(false)
+    setActiveMenu(null)
+    setAccountMenuOpen(false)
+    setUnreadCount(0)
+    setUnreadMessagesCount(0)
+    router.push("/")
+  }
+
+  const handleReturnToApp = useCallback(
+    (e: MouseEvent<HTMLButtonElement>) => {
+      e.preventDefault()
+      setIsOpen(false)
+      setActiveMenu(null)
+      setAccountMenuOpen(false)
+      if (isDemoModeActive()) {
+        exitDemoMode()
+      }
+      router.push("/dashboard")
+    },
+    [router]
+  )
+
+  useEffect(() => {
+    const syncDemo = () => setDemoActive(isDemoModeActive())
+    syncDemo()
+    return subscribeDemoModeChanges(syncDemo)
+  }, [])
 
   const navRef = useRef<HTMLDivElement>(null)
   const badgeText = (count: number) => (count > 99 ? "99+" : String(count))
@@ -79,6 +119,11 @@ export default function Navbar() {
   const fetchUnread = useCallback(async () => {
     if (!user?.id) return
 
+    if (isDemoUserId(user.id)) {
+      setUnreadCount(getDemoUnreadNotificationCount(user.id))
+      return
+    }
+
     const { count, error } = await supabase
       .from("notifications")
       .select("*", { count: "exact", head: true })
@@ -104,6 +149,7 @@ export default function Navbar() {
 
   useEffect(() => {
     if (!user?.id) return
+    if (isDemoSupabaseBlocked()) return
 
     const uid = user.id
 
@@ -183,6 +229,12 @@ export default function Navbar() {
     if (!user?.id) {
       setIsAdmin(false)
       setHasFetchedAdmin(false)
+      return
+    }
+
+    if (isDemoUserId(user.id)) {
+      setIsAdmin(false)
+      setHasFetchedAdmin(true)
       return
     }
 
@@ -362,6 +414,7 @@ export default function Navbar() {
         <div className="flex min-w-0 items-center gap-3">
           <Link
             href="/"
+            onClick={handleLogoClick}
             className="font-bold text-xl shrink-0 bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent"
           >
             TradeTraxs
@@ -580,17 +633,14 @@ export default function Navbar() {
         <div className="flex shrink-0 items-center gap-3 md:gap-4">
         {user ? (
           <>
-            {isHomePage ? (
-              <Link
-                href="/app"
-                className={`hidden shrink-0 rounded px-4 py-1.5 text-sm font-medium transition md:inline-flex ${
-                  isActive("/app")
-                    ? "bg-blue-500/20 text-blue-300"
-                    : "bg-blue-500 text-white hover:bg-blue-600"
-                }`}
+            {showReturnToApp ? (
+              <button
+                type="button"
+                onClick={handleReturnToApp}
+                className="hidden shrink-0 rounded bg-blue-500 px-4 py-1.5 text-sm font-medium text-white transition hover:bg-blue-600 md:inline-flex"
               >
                 Return to App
-              </Link>
+              </button>
             ) : null}
 
             <GettingStartedMobileEntry />
@@ -755,6 +805,15 @@ export default function Navbar() {
       {isOpen && user ? (
         <div className="max-h-[calc(100vh-4rem)] w-full overflow-y-auto border-t border-white/5 bg-[#0b1f3a] md:hidden">
           <div className="flex w-full flex-col gap-2 px-4 pb-3 pt-1.5 text-sm text-white md:px-6">
+          {showReturnToApp ? (
+            <button
+              type="button"
+              onClick={handleReturnToApp}
+              className="rounded-lg bg-blue-500 px-3 py-2 font-medium text-white transition hover:bg-blue-600"
+            >
+              Return to App
+            </button>
+          ) : null}
           <Link
             href="/app"
             className={`rounded-lg px-3 py-2 transition ${

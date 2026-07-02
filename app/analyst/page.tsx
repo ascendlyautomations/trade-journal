@@ -16,6 +16,8 @@ import { useUserProfile } from "@/lib/UserProfileProvider"
 import { useCachedTrades } from "@/lib/useAppDataCache"
 import { getCachedTrades, upsertTradeInCache } from "@/lib/appDataCache"
 import { SkeletonTradesPageContent } from "../components/ui/skeletons"
+import { isDemoModeActive } from "@/lib/demo/demoMode"
+import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 
 type AnalyzeTradeApiPayload = {
   reply?: string
@@ -153,6 +155,10 @@ function AnalystPageContent() {
   async function runTradeAnalysis() {
     if (!selectedTrade || !isProActive(profile) || loading) return
     if (selectedTrade.ai_feedback) return
+    if (isDemoModeActive()) {
+      requestDemoSignup("ai")
+      return
+    }
 
     const trade = selectedTrade
     setLoading(true)
@@ -222,6 +228,10 @@ function AnalystPageContent() {
   async function sendMessage() {
     if (!input.trim() || !selectedTrade) return
     if (!isProActive(profile)) return
+    if (isDemoModeActive()) {
+      requestDemoSignup("ai")
+      return
+    }
 
     const newMessages = [...messages, { role: "user", content: input }]
 

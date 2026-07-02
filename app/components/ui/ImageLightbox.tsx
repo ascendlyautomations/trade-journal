@@ -1,6 +1,8 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
+import { createPortal } from "react-dom"
+import { NAVBAR_HEIGHT_CLASS } from "./DetailModalShell"
 
 type ImageLightboxProps = {
   imageUrl: string | null
@@ -8,6 +10,8 @@ type ImageLightboxProps = {
   alt?: string
   open?: boolean
   zIndexClass?: string
+  /** Anchor below the fixed navbar instead of covering the full viewport. */
+  belowNavbar?: boolean
 }
 
 export default function ImageLightbox({
@@ -15,9 +19,16 @@ export default function ImageLightbox({
   onClose,
   alt = "",
   open,
-  zIndexClass = "z-[9500]",
+  zIndexClass = "z-[9998]",
+  belowNavbar = false,
 }: ImageLightboxProps) {
   const isOpen = open ?? Boolean(imageUrl)
+  const [visible, setVisible] = useState(false)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   useEffect(() => {
     if (!isOpen) return
@@ -41,11 +52,30 @@ export default function ImageLightbox({
     }
   }, [isOpen])
 
-  if (!isOpen || !imageUrl) return null
+  useEffect(() => {
+    if (!isOpen) {
+      setVisible(false)
+      return
+    }
+    const frame = requestAnimationFrame(() => setVisible(true))
+    return () => cancelAnimationFrame(frame)
+  }, [isOpen])
 
-  return (
+  if (!isOpen || !imageUrl || !mounted) return null
+
+  const overlayClass = belowNavbar
+    ? `fixed inset-x-0 bottom-0 ${NAVBAR_HEIGHT_CLASS}`
+    : "fixed inset-0"
+
+  const imageMaxHeight = belowNavbar
+    ? "max-h-[calc(100dvh-var(--navbar-height,4rem)-2rem)]"
+    : "max-h-[95vh]"
+
+  return createPortal(
     <div
-      className={`fixed inset-0 ${zIndexClass} flex items-center justify-center bg-black/90 p-4`}
+      className={`${overlayClass} ${zIndexClass} flex items-start justify-center overflow-y-auto bg-black/75 p-4 pt-3 backdrop-blur-md transition-opacity duration-300 ease-out sm:p-6 sm:pt-4 ${
+        visible ? "opacity-100" : "opacity-0"
+      }`}
       role="dialog"
       aria-modal="true"
       aria-label="Image viewer"
@@ -64,10 +94,13 @@ export default function ImageLightbox({
         src={imageUrl}
         alt={alt}
         decoding="async"
-        className="max-h-[95vh] max-w-[95vw] cursor-zoom-in object-contain"
-        style={{ touchAction: "pinch-zoom" }}
+        className={`${imageMaxHeight} w-auto max-w-[min(95vw,100%)] object-contain transition-transform duration-300 ease-out ${
+          visible ? "scale-100" : "scale-[0.98]"
+        }`}
+        style={{ touchAction: "pinch-zoom", imageRendering: "auto" }}
         onClick={(e) => e.stopPropagation()}
       />
-    </div>
+    </div>,
+    document.body
   )
 }

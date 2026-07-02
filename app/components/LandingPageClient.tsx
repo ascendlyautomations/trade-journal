@@ -6,50 +6,22 @@ import { useRouter } from "next/navigation"
 import PublicNavbar from "./PublicNavbar"
 import LandingComparisonSection from "./LandingComparisonSection"
 import LandingFeatureShowcaseSections from "./LandingFeatureShowcaseSections"
-import LandingCommunitySection from "./LandingCommunitySection"
-import LandingTradingContentSection from "./LandingTradingContentSection"
-import LandingFeatureGridSection from "./LandingFeatureGridSection"
 import LandingFinalCtaSection from "./LandingFinalCtaSection"
+import LandingProblemSection from "./landing/LandingProblemSection"
+import LandingAnalyticsShowcaseSection from "./landing/LandingAnalyticsShowcaseSection"
+import LandingPricingSection from "./landing/LandingPricingSection"
+import LandingTestimonialsSection from "./landing/LandingTestimonialsSection"
+import LandingFaqSection from "./landing/LandingFaqSection"
 import { supabase } from "../../lib/supabaseClient"
-import {
-  LANDING_CARD_FULL,
-  LANDING_REVEAL_FROM,
-  LANDING_REVEAL_TO,
-  LANDING_REVEAL_TRANSITION,
-  LANDING_TITLE_GRADIENT,
-  useLandingReveal,
-} from "@/lib/landingPageUi"
+import { LANDING_BRAND_TAGLINE } from "@/lib/landingFlagships"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { LEGAL_CONTACT_EMAIL } from "@/lib/legal/contact"
-import {
-  LANDING_FREE_FEATURES,
-  LANDING_PRO_FEATURES,
-  TRAXPRO_BILLING_LABEL,
-  TRAXPRO_CHECKOUT_FINE_PRINT,
-  TRAXPRO_PLAN_NAME,
-  TRAXPRO_PRICE_DISPLAY,
-} from "@/lib/traxProPricing"
-
-const HOW_STEPS = [
-  {
-    title: "1. Log Your Trades",
-    body: "Seconds per entry: P&L, risk/reward, session tags, notes that stick.",
-  },
-  {
-    title: "2. See Exactly What You Saw",
-    body: "Screenshots bring levels, zones, and context back—the way you saw them live.",
-  },
-  {
-    title: "3. Fix Mistakes & Improve Faster",
-    body: "Spot costly patterns—overtrading, loose entries, weak risk—and correct with data, not guesses.",
-  },
-] as const
+import { TRAXPRO_TRIAL_HEADLINE } from "@/lib/traxProPricing"
 
 export default function LandingPageClient() {
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const router = useRouter()
   const [checkoutLoading, setCheckoutLoading] = useState(false)
-  const howItWorks = useLandingReveal()
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -64,9 +36,7 @@ export default function LandingPageClient() {
         data: { user },
       } = await supabase.auth.getUser()
 
-      if (!user) {
-        return
-      }
+      if (!user) return
 
       fetch("/api/create-checkout-session", {
         method: "POST",
@@ -167,225 +137,96 @@ export default function LandingPageClient() {
         />
 
         <div className="relative z-10">
-        <div className="relative flex flex-col items-center px-6 pt-20 pb-14 text-center md:pb-20">
-          <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 via-emerald-500/10 to-transparent blur-3xl opacity-30" />
+          <div className="relative flex flex-col items-center px-6 pt-28 pb-20 text-center md:pt-36 md:pb-28">
+            <div
+              className="pointer-events-none absolute inset-0 bg-gradient-to-r from-blue-500/10 via-emerald-500/10 to-transparent blur-3xl opacity-30"
+              aria-hidden
+            />
 
-          <h1 className="text-6xl font-bold mb-6 leading-tight z-10">
-            Trade Smarter.
-            <br />
-            <span className="bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
-              Not Harder.
-            </span>
-          </h1>
+            <h1 className="z-10 mb-6 text-5xl font-bold leading-tight md:text-6xl lg:text-7xl">
+              The First Social Platform
+              <br />
+              <span className="bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
+                Built for Traders.
+              </span>
+            </h1>
 
-          <p className="text-lg text-gray-400 max-w-xl mb-10 z-10 leading-relaxed">
-            Log every trade. See the full picture. Tighten your edge—fast.
-            <br />
-            <span className="text-gray-500">Built for traders who treat this like a craft.</span>
-          </p>
-
-          <div className="flex flex-wrap justify-center gap-4 z-10">
-            <button
-              type="button"
-              disabled={checkoutLoading}
-              onClick={() => void handleSubscribe()}
-              className="bg-emerald-500 hover:bg-emerald-600 disabled:opacity-60 disabled:cursor-not-allowed px-6 py-3 rounded-xl font-semibold text-white"
-            >
-              {checkoutLoading ? "Starting trial..." : "Start 14-Day Free Trial"}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => router.push("/app")}
-              className="border border-white/20 px-6 py-3 rounded-lg hover:bg-white/10 transition"
-            >
-              Preview Site
-            </button>
-          </div>
-
-          <div className="mt-6 flex flex-wrap justify-center gap-x-6 gap-y-2 z-10">
-            <Link
-              href="/explore"
-              className="text-sm font-medium text-blue-300 transition hover:text-blue-200"
-            >
-              Explore Traders →
-            </Link>
-            <Link
-              href="/leaderboard"
-              className="text-sm font-medium text-blue-300 transition hover:text-blue-200"
-            >
-              View Leaderboard →
-            </Link>
-          </div>
-        </div>
-
-        <section
-          ref={howItWorks.ref}
-          id="how"
-          className="text-center px-6 pt-12 pb-24 md:pt-16 md:pb-24"
-        >
-          <h2
-            className={`text-4xl font-extrabold mb-12 md:mb-14 text-white drop-shadow-lg tracking-tight ${LANDING_REVEAL_TRANSITION} ${howItWorks.visible ? LANDING_REVEAL_TO : LANDING_REVEAL_FROM}`}
-          >
-            How It Works
-          </h2>
-
-          <div className="grid md:grid-cols-3 gap-6 md:gap-8 max-w-6xl mx-auto">
-            {HOW_STEPS.map((step, i) => (
-              <div
-                key={step.title}
-                className={`flex flex-col text-left ${LANDING_CARD_FULL} p-8 ${LANDING_REVEAL_TRANSITION} ${howItWorks.visible ? LANDING_REVEAL_TO : LANDING_REVEAL_FROM}`}
-                style={{
-                  transitionDelay: howItWorks.visible ? `${i * 75}ms` : "0ms",
-                }}
-              >
-                <h3 className="text-xl font-semibold mb-3 text-emerald-300">{step.title}</h3>
-                <p className="text-gray-200 text-sm leading-relaxed">{step.body}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <LandingCommunitySection />
-
-        <LandingTradingContentSection />
-
-        <LandingFeatureGridSection />
-
-        <LandingComparisonSection />
-
-        <LandingFeatureShowcaseSections />
-
-        <section
-          id="pricing"
-          className="border-t border-white/10 px-6 py-24 md:py-28"
-          aria-labelledby="pricing-heading"
-        >
-          <div className="mx-auto max-w-5xl">
-            <header className="mx-auto mb-12 max-w-2xl text-center md:mb-16">
-              <h2
-                id="pricing-heading"
-                className="text-3xl font-extrabold tracking-tight text-white drop-shadow-lg md:text-4xl"
-              >
-                Take Your Trading to the{" "}
-                <span className={LANDING_TITLE_GRADIENT}>Next Level</span>
-              </h2>
-              <p className="mt-4 text-lg leading-relaxed text-gray-400 md:text-xl">
-                Stop guessing. Start tracking, analyzing, and improving with real data.
-              </p>
-              <p className="mt-4 text-sm text-gray-500">
-                Trusted by growing traders every day
-              </p>
-            </header>
-
-            <div className="grid gap-8 lg:grid-cols-2 lg:gap-10 lg:items-stretch">
-              <div className="flex h-full flex-col rounded-2xl border border-white/10 bg-white/[0.04] p-8 shadow-lg shadow-black/25 backdrop-blur-md md:p-9">
-                <div className="flex min-h-[7.25rem] flex-col text-left md:min-h-[7rem] lg:min-h-[6.75rem]">
-                  <h3 className="text-xl font-semibold text-gray-100">Free</h3>
-                  <p className="mt-2 text-4xl font-bold tracking-tight text-white">$0</p>
-                  <p className="mt-3 flex-1 text-sm leading-relaxed text-gray-400">
-                    Everything you need to start tracking and sharing your trades.
-                  </p>
-                </div>
-                <ul className="mt-8 flex flex-1 flex-col gap-3 text-left text-sm text-gray-300">
-                  {LANDING_FREE_FEATURES.map((line) => (
-                    <li key={line} className="flex gap-3">
-                      <span className="mt-0.5 shrink-0 text-emerald-400/90" aria-hidden>
-                        ✓
-                      </span>
-                      <span className="leading-snug">{line}</span>
-                    </li>
-                  ))}
-                </ul>
-                <button
-                  type="button"
-                  onClick={() => router.push("/login")}
-                  className="mt-10 w-full rounded-xl border border-white/15 bg-white/[0.06] px-6 py-3.5 font-semibold text-white transition-[transform,box-shadow] duration-200 hover:scale-[1.02] hover:border-emerald-400/25 hover:bg-white/[0.10] hover:shadow-[0_0_24px_rgba(52,211,153,0.12)] motion-reduce:hover:scale-100"
-                >
-                  Start Free
-                </button>
-              </div>
-
-              <div className="relative flex h-full flex-col lg:-translate-y-1 lg:justify-center">
-                <div className="pointer-events-none absolute left-1/2 top-2 z-10 -translate-x-1/2 lg:-top-1">
-                  <span className="inline-flex rounded-full bg-gradient-to-r from-blue-500 to-emerald-500 px-4 py-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-white shadow-lg shadow-emerald-500/30">
-                    MOST POPULAR
-                  </span>
-                </div>
-                <div className="flex h-full flex-col rounded-2xl border border-emerald-400/45 bg-gradient-to-b from-white/[0.1] to-emerald-950/30 p-8 pb-9 pt-12 shadow-[0_8px_48px_rgba(0,0,0,0.35),0_0_52px_rgba(52,211,153,0.2)] backdrop-blur-md transition-[transform,box-shadow] duration-300 ease-out hover:z-[1] hover:scale-[1.02] hover:border-emerald-400/60 hover:shadow-[0_12px_56px_rgba(0,0,0,0.4),0_0_64px_rgba(52,211,153,0.32)] motion-reduce:transition-none motion-reduce:hover:scale-100 md:p-10 md:pb-10 md:pt-14">
-                  <div className="flex min-h-[7.25rem] flex-col text-left md:min-h-[7rem] lg:min-h-[6.75rem]">
-                    <h3 className="text-xl font-semibold text-emerald-200">{TRAXPRO_PLAN_NAME}</h3>
-                    <p className="mt-2 text-4xl font-bold tracking-tight text-white md:text-[2.35rem]">
-                      {TRAXPRO_PRICE_DISPLAY}
-                    </p>
-                    <p className="mt-1 text-sm font-medium text-gray-400">{TRAXPRO_BILLING_LABEL}</p>
-                    <p className="mt-3 flex-1 text-sm leading-relaxed text-gray-200">
-                      Unlock full analytics, deeper insights, and unlimited access.
-                    </p>
-                  </div>
-                  <ul className="mt-8 flex flex-1 flex-col gap-3 text-left text-sm text-gray-100">
-                    {LANDING_PRO_FEATURES.map((line) => (
-                      <li key={line} className="flex gap-3">
-                        <span className="mt-0.5 shrink-0 text-emerald-400" aria-hidden>
-                          ✓
-                        </span>
-                        <span className="leading-snug">{line}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  <button
-                    type="button"
-                    disabled={checkoutLoading}
-                    onClick={() => void handleSubscribe()}
-                    className="mt-10 w-full rounded-xl bg-gradient-to-r from-blue-500 to-emerald-500 px-6 py-3.5 font-semibold text-white shadow-lg shadow-emerald-500/20 transition-[transform,box-shadow] duration-200 hover:scale-[1.02] hover:from-blue-600 hover:to-emerald-600 hover:shadow-[0_0_28px_rgba(52,211,153,0.35)] disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:hover:scale-100"
-                  >
-                    {checkoutLoading ? "Starting trial..." : "Start Free Trial"}
-                  </button>
-                  <p className="mt-4 text-center text-xs leading-relaxed text-gray-500">
-                    {TRAXPRO_CHECKOUT_FINE_PRINT}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <LandingFinalCtaSection
-          checkoutLoading={checkoutLoading}
-          onStartTrial={() => void handleSubscribe()}
-          onPreview={() => router.push("/app")}
-        />
-
-        <footer className="border-t border-white/10 py-10">
-          <div className="mx-auto max-w-4xl px-6">
-            <p className="text-center text-sm text-gray-500">
-              Built for traders who actually want to improve.
+            <p className="z-10 mb-10 max-w-2xl text-lg leading-relaxed text-gray-400 md:text-xl">
+              TradeTraxs brings together journaling, analytics, community, education, and AI into
+              one connected home where traders can learn, improve, and grow together.
             </p>
-            <nav
-              aria-label="Legal and resources"
-              className="mt-6 flex flex-col items-center gap-3 sm:flex-row sm:flex-wrap sm:justify-center sm:gap-x-6 sm:gap-y-2"
-            >
-              <Link
-                href="/privacy"
-                className="text-sm text-gray-400 transition hover:text-gray-300"
+
+            <div className="z-10 flex flex-wrap justify-center gap-4">
+              <button
+                type="button"
+                disabled={checkoutLoading}
+                onClick={() => void handleSubscribe()}
+                className="min-w-[220px] rounded-xl bg-emerald-500 px-8 py-3.5 font-semibold text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Privacy Policy
-              </Link>
-              <Link
-                href="/terms"
-                className="text-sm text-gray-400 transition hover:text-gray-300"
+                {checkoutLoading ? "Starting trial…" : "Start Free Trial"}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => router.push("/demo")}
+                className="min-w-[220px] rounded-lg border border-white/20 px-8 py-3.5 font-semibold transition hover:bg-white/10"
               >
-                Terms of Service
-              </Link>
-              <a
-                href={`mailto:${LEGAL_CONTACT_EMAIL}`}
-                className="text-sm text-gray-400 transition hover:text-gray-300"
-              >
-                Contact Support
-              </a>
-            </nav>
+                Explore the Demo
+              </button>
+            </div>
+
           </div>
-        </footer>
+
+          <LandingProblemSection />
+          <LandingFeatureShowcaseSections />
+          <LandingAnalyticsShowcaseSection />
+          <LandingComparisonSection />
+          <LandingPricingSection
+            checkoutLoading={checkoutLoading}
+            onStartTrial={() => void handleSubscribe()}
+            onStartFree={() => router.push("/login")}
+          />
+          <LandingTestimonialsSection />
+          <LandingFaqSection />
+          <LandingFinalCtaSection
+            checkoutLoading={checkoutLoading}
+            onStartTrial={() => void handleSubscribe()}
+          />
+
+          <footer className="border-t border-white/10 py-10">
+            <div className="mx-auto max-w-4xl px-6">
+              <p className="text-center text-sm text-gray-500">{LANDING_BRAND_TAGLINE}</p>
+              <nav
+                aria-label="Legal and resources"
+                className="mt-6 flex flex-col items-center gap-3 sm:flex-row sm:flex-wrap sm:justify-center sm:gap-x-6 sm:gap-y-2"
+              >
+                <Link
+                  href="/privacy"
+                  className="text-sm text-gray-400 transition hover:text-gray-300"
+                >
+                  Privacy Policy
+                </Link>
+                <Link
+                  href="/terms"
+                  className="text-sm text-gray-400 transition hover:text-gray-300"
+                >
+                  Terms of Service
+                </Link>
+                <Link
+                  href="/faq"
+                  className="text-sm text-gray-400 transition hover:text-gray-300"
+                >
+                  FAQ
+                </Link>
+                <a
+                  href={`mailto:${LEGAL_CONTACT_EMAIL}`}
+                  className="text-sm text-gray-400 transition hover:text-gray-300"
+                >
+                  Contact Support
+                </a>
+              </nav>
+            </div>
+          </footer>
         </div>
       </div>
     </>

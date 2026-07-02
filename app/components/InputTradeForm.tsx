@@ -40,6 +40,23 @@ import type { CsvImportDiagnostics } from "@/lib/csvImportDiagnostics"
 import { buildCommunitySharePreviewPost } from "@/lib/buildCommunitySharePreviewPost"
 import CommunitySharePreviewModal from "@/app/components/CommunitySharePreviewModal"
 import TradePublicShareToggle from "@/app/components/TradePublicShareToggle"
+import TradeReelAttachment from "@/app/components/TradeReelAttachment"
+import TradeFormCurrencyInput from "@/app/components/trade/TradeFormCurrencyInput"
+import {
+  getTradeFormCurrencyInputDisplayValue,
+  handleTradeNumericInput,
+} from "@/lib/formatMoney"
+import {
+  TRADE_FIELD_LABEL_CLASS,
+  TRADE_FULL_INPUT_MEDIA_UPLOAD_CLASS,
+} from "@/lib/tradeFormUi"
+import {
+  deleteReel,
+  fetchTradeReel,
+  publishTradeReel,
+  replaceTradeReelVideo,
+  type ReelRow,
+} from "@/lib/reels"
 import { postImageSrc } from "@/app/components/feed/feedPostHelpers"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { formatAccountNameWithSizeDisplay } from "@/lib/tradeAccountDisplay"
@@ -170,68 +187,6 @@ export default function InputTradeForm({
     return num.toLocaleString("en-US")
   }
 
-  function formatCurrency(value: string) {
-    if (!value) return ""
-
-    const num = Number(value.replace(/,/g, ""))
-    if (isNaN(num)) return ""
-
-    return num.toLocaleString("en-US", {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 2,
-    })
-  }
-
-  function handleNumericInput(
-    value: string,
-    setter: (val: string) => void,
-    options?: {
-      allowDecimal?: boolean
-      allowNegative?: boolean
-    }
-  ) {
-    let cleaned = value.replace(/,/g, "")
-    const { allowDecimal = false, allowNegative = false } = options || {}
-    // 🚫 BLOCK MULTIPLE DECIMALS
-    if (allowDecimal) {
-      const decimalCount = (cleaned.match(/\./g) || []).length
-      if (decimalCount > 1) {
-        setDecimalError("Only one decimal point allowed")
-        return
-      } else {
-        setDecimalError("")
-      }
-    }
-
-    let regex
-
-    if (allowDecimal && allowNegative) {
-      regex = /^-?\d*(\.\d*)?$/
-    } else if (allowDecimal) {
-      regex = /^\d*(\.\d*)?$/
-    } else if (allowNegative) {
-      regex = /^-?\d*$/
-    } else {
-      regex = /^\d*$/
-    }
-
-    // ALLOW INTERMEDIATE STATES
-    if (
-      cleaned === "" ||
-      cleaned === "-" ||
-      cleaned === "." ||
-      cleaned === "-." ||
-      cleaned.endsWith(".")
-    ) {
-      setter(cleaned)
-      return
-    }
-
-    if (!regex.test(cleaned)) return
-
-    setter(cleaned)
-  }
-
   const [entryDate, setEntryDate] = useState(getESTDate())
   const [exitDate, setExitDate] = useState(getESTDate())
   const [ticker, setTicker] = useState("")
@@ -247,6 +202,9 @@ export default function InputTradeForm({
   const [postToFeed, setPostToFeed] = useState(false)
   const [isPublic, setIsPublic] = useState(false)
   const [image, setImage] = useState<File | null>(null)
+  const [pendingReelFile, setPendingReelFile] = useState<File | null>(null)
+  const [attachedReel, setAttachedReel] = useState<ReelRow | null>(null)
+  const [reelDeleteBusy, setReelDeleteBusy] = useState(false)
 
   const [strategy, setStrategy] = useState("")
 
@@ -532,7 +490,24 @@ export default function InputTradeForm({
     )
     setEntryTime(dtFields.entryTime)
     setExitTime(dtFields.exitTime)
+    setPendingReelFile(null)
   }, [existingTrade])
+
+  useEffect(() => {
+    if (!existingTrade?.id) {
+      setAttachedReel(null)
+      return
+    }
+
+    let cancelled = false
+    void fetchTradeReel(supabase, String(existingTrade.id)).then((reel) => {
+      if (!cancelled) setAttachedReel(reel)
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [existingTrade?.id])
 
   function resetCreateForm() {
     setTicker("")
@@ -545,6 +520,8 @@ export default function InputTradeForm({
     setConfluences("")
     setPublicDescription("")
     setImage(null)
+    setPendingReelFile(null)
+    setAttachedReel(null)
     setEntryPrice("")
     setExitPrice("")
     setContracts("")
@@ -566,6 +543,59 @@ export default function InputTradeForm({
     setPostToFeed(false)
     setStrategy("")
   }
+
+  const handleDeleteAttachedReel = useCallback(async () => {
+    if (!attachedReel) return
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user?.id) return
+    if (!window.confirm("Remove replay from this trade?")) return
+
+    setReelDeleteBusy(true)
+    const result = await deleteReel(supabase, {
+      reelId: attachedReel.id,
+      userId: user.id,
+    })
+    setReelDeleteBusy(false)
+
+    if ("error" in result) {
+      showPopup(persistentError("Delete Failed", result.error))
+      return
+    }
+
+    setAttachedReel(null)
+    setPendingReelFile(null)
+  }, [attachedReel, showPopup])
+
+  const syncTradeReplayAfterSave = useCallback(
+    async (userId: string, tradeId: string): Promise<string | null> => {
+      if (!pendingReelFile) return null
+
+      if (attachedReel) {
+        const result = await replaceTradeReelVideo(supabase, {
+          reelId: attachedReel.id,
+          userId,
+          file: pendingReelFile,
+        })
+        if ("error" in result) return result.error
+        setAttachedReel(result.reel)
+        setPendingReelFile(null)
+        return null
+      }
+
+      const result = await publishTradeReel(supabase, {
+        tradeId,
+        userId,
+        file: pendingReelFile,
+      })
+      if ("error" in result) return result.error
+      setAttachedReel(result.reel)
+      setPendingReelFile(null)
+      return null
+    },
+    [attachedReel, pendingReelFile]
+  )
 
   async function handleSubmit() {
     if (submittingRef.current || submitting) return
@@ -892,6 +922,19 @@ export default function InputTradeForm({
         if (delErr) console.error("posts delete:", delErr)
       }
 
+      const replayError = await syncTradeReplayAfterSave(
+        user.id,
+        String(existingTrade.id)
+      )
+      if (replayError) {
+        showPopup(
+          persistentError(
+            "Replay Upload Failed",
+            `Trade saved, but replay could not be updated: ${replayError}`
+          )
+        )
+      }
+
       void refreshPlanAndAccountLock()
       setCommunityPreviewOpen(false)
       onSave?.()
@@ -1008,6 +1051,19 @@ export default function InputTradeForm({
         return
       }
 
+      const replayError = await syncTradeReplayAfterSave(
+        user.id,
+        String(newTradeData.id)
+      )
+      if (replayError) {
+        showPopup(
+          persistentError(
+            "Replay Upload Failed",
+            `Trade posted, but replay could not be uploaded: ${replayError}`
+          )
+        )
+      }
+
       void refreshPlanAndAccountLock()
       setCommunityPreviewOpen(false)
       resetCreateForm()
@@ -1016,6 +1072,21 @@ export default function InputTradeForm({
       notifyGettingStartedChecklistMaybeCompleted()
       releaseSubmit()
       return
+    }
+
+    if (newTradeData?.id) {
+      const replayErrorPrivate = await syncTradeReplayAfterSave(
+        user.id,
+        String(newTradeData.id)
+      )
+      if (replayErrorPrivate) {
+        showPopup(
+          persistentError(
+            "Replay Upload Failed",
+            `Trade saved, but replay could not be uploaded: ${replayErrorPrivate}`
+          )
+        )
+      }
     }
 
     void refreshPlanAndAccountLock()
@@ -1306,7 +1377,7 @@ export default function InputTradeForm({
     }
   }, [entryDateTime, session, sessionManuallySet])
 
-  const fieldLabelClass = "block text-xs text-gray-400 mb-1"
+  const fieldLabelClass = TRADE_FIELD_LABEL_CLASS
 
   const communityPreviewImageUrl = useMemo(() => {
     if (screenshotPreviewUrl) return screenshotPreviewUrl
@@ -1572,31 +1643,14 @@ export default function InputTradeForm({
           <div className="space-y-2">
           <div>
             <label className={fieldLabelClass}>P&amp;L</label>
-            <div className="relative w-full">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
-                $
-              </span>
-
-              <input
-                type="text"
-                tabIndex={1}
-                value={
-                  pnl === "-" ||
-                  pnl === "." ||
-                  pnl === "-." ||
-                  pnl.endsWith(".")
-                    ? pnl
-                    : formatCurrency(pnl)
-                }
-                onChange={(e) =>
-                  handleNumericInput(e.target.value, setPnl, {
-                    allowDecimal: true,
-                    allowNegative: true,
-                  })
-                }
-                className="w-full pl-8 pr-3 py-2 rounded bg-[#0f172a] border border-white/10 focus:border-green-500 outline-none"
-              />
-            </div>
+            <TradeFormCurrencyInput
+              value={pnl}
+              onChange={setPnl}
+              allowNegative
+              onDecimalError={setDecimalError}
+              tabIndex={1}
+              inputClassName="w-full pl-8 pr-3 py-2 rounded bg-[#0f172a] border border-white/10 focus:border-green-500 outline-none"
+            />
           </div>
           {decimalError && (
             <p className="text-red-400 text-xs mt-1">
@@ -1672,7 +1726,10 @@ export default function InputTradeForm({
                     tabIndex={6}
                     value={rr}
                     onChange={(e) =>
-                      handleNumericInput(e.target.value, setRR, { allowDecimal: true })
+                      handleTradeNumericInput(e.target.value, setRR, {
+                        allowDecimal: true,
+                        onDecimalError: setDecimalError,
+                      })
                     }
                     className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
                   />
@@ -1685,18 +1742,12 @@ export default function InputTradeForm({
                     placeholder="e.g. 15.5"
                     type="text"
                     tabIndex={7}
-                    value={
-                      points === "-" ||
-                      points === "." ||
-                      points === "-." ||
-                      points.endsWith(".")
-                        ? points
-                        : formatCurrency(points)
-                    }
+                    value={getTradeFormCurrencyInputDisplayValue(points)}
                     onChange={(e) =>
-                      handleNumericInput(e.target.value, setPoints, {
+                      handleTradeNumericInput(e.target.value, setPoints, {
                         allowDecimal: true,
                         allowNegative: true,
+                        onDecimalError: setDecimalError,
                       })
                     }
                     className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
@@ -1714,7 +1765,11 @@ export default function InputTradeForm({
                 type="text"
                 tabIndex={8}
                 value={formatWithCommas(contracts)}
-                onChange={(e) => handleNumericInput(e.target.value, setContracts)}
+                onChange={(e) =>
+                  handleTradeNumericInput(e.target.value, setContracts, {
+                    onDecimalError: setDecimalError,
+                  })
+                }
                 className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
               />
             </div>
@@ -1743,57 +1798,23 @@ export default function InputTradeForm({
             <div className="space-y-2 mb-4">
               <div>
                 <label className={fieldLabelClass}>Entry Price</label>
-                <div className="relative w-full">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
-                    $
-                  </span>
-
-                  <input
-                    type="text"
-                    tabIndex={inputSettings.showNotes ? 10 : 9}
-                    value={
-                      entryPrice === "-" ||
-                      entryPrice === "." ||
-                      entryPrice === "-." ||
-                      entryPrice.endsWith(".")
-                        ? entryPrice
-                        : formatCurrency(entryPrice)
-                    }
-                    onChange={(e) =>
-                      handleNumericInput(e.target.value, setEntryPrice, {
-                        allowDecimal: true,
-                      })
-                    }
-                    className="w-full pl-8 pr-3 py-2 rounded bg-[#0f172a] border border-white/10 focus:border-green-500 outline-none"
-                  />
-                </div>
+                <TradeFormCurrencyInput
+                  value={entryPrice}
+                  onChange={setEntryPrice}
+                  onDecimalError={setDecimalError}
+                  tabIndex={inputSettings.showNotes ? 10 : 9}
+                  inputClassName="w-full pl-8 pr-3 py-2 rounded bg-[#0f172a] border border-white/10 focus:border-green-500 outline-none"
+                />
               </div>
               <div>
                 <label className={fieldLabelClass}>Exit Price</label>
-                <div className="relative w-full">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
-                    $
-                  </span>
-
-                  <input
-                    type="text"
-                    tabIndex={inputSettings.showNotes ? 11 : 10}
-                    value={
-                      exitPrice === "-" ||
-                      exitPrice === "." ||
-                      exitPrice === "-." ||
-                      exitPrice.endsWith(".")
-                        ? exitPrice
-                        : formatCurrency(exitPrice)
-                    }
-                    onChange={(e) =>
-                      handleNumericInput(e.target.value, setExitPrice, {
-                        allowDecimal: true,
-                      })
-                    }
-                    className="w-full pl-8 pr-3 py-2 rounded bg-[#0f172a] border border-white/10 focus:border-green-500 outline-none"
-                  />
-                </div>
+                <TradeFormCurrencyInput
+                  value={exitPrice}
+                  onChange={setExitPrice}
+                  onDecimalError={setDecimalError}
+                  tabIndex={inputSettings.showNotes ? 11 : 10}
+                  inputClassName="w-full pl-8 pr-3 py-2 rounded bg-[#0f172a] border border-white/10 focus:border-green-500 outline-none"
+                />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2">
                 <div>
@@ -2107,7 +2128,7 @@ export default function InputTradeForm({
               onClick={handleClickUpload}
               onDrop={handleDrop}
               onDragOver={(e) => e.preventDefault()}
-              className="h-24 flex items-center justify-center border border-dashed border-white/10 rounded text-gray-400 text-sm"
+              className={TRADE_FULL_INPUT_MEDIA_UPLOAD_CLASS}
             >
             {image ? (
               <p>{image.name}</p>
@@ -2127,6 +2148,18 @@ export default function InputTradeForm({
               }}
             />
           </div>
+
+          <TradeReelAttachment
+            variant="full"
+            disabled={submitting}
+            pendingFile={pendingReelFile}
+            onPendingFileChange={setPendingReelFile}
+            attachedReel={isEditMode ? attachedReel : null}
+            onDeleteAttached={
+              isEditMode ? () => void handleDeleteAttachedReel() : undefined
+            }
+            deleteBusy={reelDeleteBusy}
+          />
           </div>
           </div>
 

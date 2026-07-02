@@ -72,9 +72,11 @@ function TradesPageTradeCard({
 
   const imageSrc = useMemo(() => {
     if (!trade.image_url) return null
-    return trade.image_url.startsWith("http")
-      ? trade.image_url
-      : `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/screenshots/${trade.image_url}`
+    const raw = String(trade.image_url).trim()
+    if (raw.startsWith("/")) return raw
+    return raw.startsWith("http")
+      ? raw
+      : `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/screenshots/${raw}`
   }, [trade.image_url])
 
   const imageLightboxUrl = useMemo(() => {

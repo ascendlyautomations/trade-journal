@@ -8,6 +8,12 @@ import {
   removeFollowNotification,
   removeFollowRequestNotification,
 } from "@/lib/followNotifications"
+import { isDemoModeActive } from "@/lib/demo/demoMode"
+import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
+import {
+  getDemoFollowUiSnapshot,
+  isDemoProfileId,
+} from "@/lib/demo/demoProfile"
 
 export type FollowUiState = "none" | "following" | "requested"
 
@@ -51,6 +57,10 @@ export async function loadFollowUiSnapshot(
 ): Promise<FollowUiSnapshot> {
   if (!viewerId || !profileUserId || viewerId === profileUserId) {
     return { state: "none", followsYou: false }
+  }
+
+  if (isDemoModeActive() && isDemoProfileId(profileUserId)) {
+    return getDemoFollowUiSnapshot(viewerId, profileUserId)
   }
 
   const [followRes, requestRes, followsYouRes] = await Promise.all([
@@ -100,6 +110,11 @@ export async function followOrRequest(
     return { ok: false, message: "Invalid follow target" }
   }
 
+  if (isDemoModeActive()) {
+    requestDemoSignup("follow")
+    return { ok: false, message: "Sign up to follow traders" }
+  }
+
   const isPrivate = target.is_private === true
 
   if (isPrivate) {
@@ -141,6 +156,11 @@ export async function unfollowOrCancelRequest(
 ): Promise<{ ok: true; state: FollowUiState } | { ok: false; message: string }> {
   if (!followerId || !targetId) {
     return { ok: false, message: "Invalid unfollow target" }
+  }
+
+  if (isDemoModeActive()) {
+    requestDemoSignup("follow")
+    return { ok: false, message: "Sign up to manage follows" }
   }
 
   if (currentState === "following") {

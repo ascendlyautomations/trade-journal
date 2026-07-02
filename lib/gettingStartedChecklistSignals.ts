@@ -1,4 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { isDemoUserId } from "@/lib/demo/constants"
+import { DEMO_TRADES } from "@/lib/demo/fixtures"
 
 export type GettingStartedChecklistSignals = {
   onboardingCompleted: boolean
@@ -25,6 +27,20 @@ export async function fetchGettingStartedChecklistSignals(
   userId: string,
   preloadedProfileSignals?: GettingStartedPreloadedProfileSignals
 ): Promise<GettingStartedChecklistSignals> {
+  if (isDemoUserId(userId)) {
+    return {
+      onboardingCompleted: true,
+      hasSeenGettingStartedIntro: true,
+      hasSeenOnboardingCompletePopup: true,
+      tradeCount: DEMO_TRADES.length,
+      profilePostCount: 3,
+      followCount: 8,
+      hasEverJoinedOtherRoom: true,
+      hasPublicTrade: true,
+      firstPrivateTradeId: DEMO_TRADES[0]?.id ?? null,
+    }
+  }
+
   const [
     profileRes,
     tradesRes,

@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation"
 import { supabase } from "../../lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
 import {
+  formatMembershipStatusLabel,
   formatSubscriptionDateTime,
   formatScheduledCancellation,
   getMembershipStatus,
@@ -56,6 +57,8 @@ import TradingAccountsSettingsSection from "@/app/components/TradingAccountsSett
 import NotificationPreferencesSettingsSection from "@/app/components/NotificationPreferencesSettingsSection"
 import CreatePasswordModal from "@/app/components/CreatePasswordModal"
 import { useUserProfile } from "@/lib/UserProfileProvider"
+import { isDemoModeActive } from "@/lib/demo/demoMode"
+import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 import {
   buildSettingsFormSeed,
   fetchSettingsProfileRow,
@@ -135,6 +138,25 @@ function applySettingsFormSeed(
   setters.setPrimaryMarket(seed.primaryMarket)
   setters.setTradingModel(seed.tradingModel)
   setters.setStartedTrading(seed.startedTrading)
+}
+
+function isStripePortalReturn(): boolean {
+  if (typeof window === "undefined") return false
+  return new URLSearchParams(window.location.search).get("portal") === "return"
+}
+
+function clearStripePortalReturnParam() {
+  if (typeof window === "undefined") return
+  const params = new URLSearchParams(window.location.search)
+  if (!params.has("portal")) return
+  params.delete("portal")
+  const qs = params.toString()
+  const hash = window.location.hash || "#subscription"
+  window.history.replaceState(
+    {},
+    "",
+    `${window.location.pathname}${qs ? `?${qs}` : ""}${hash}`
+  )
 }
 
 function shouldShowRenewsOn(profile: Record<string, unknown> | null): boolean {
@@ -262,6 +284,7 @@ export default function SettingsPage() {
 
   useLayoutEffect(() => {
     if (!user?.id || formSeededRef.current) return
+    if (isStripePortalReturn()) return
     const cached = readSettingsProfileCache(user.id)
     const merged = mergeSettingsProfileSources(cached, sharedProfile)
     const seedRow =
@@ -283,19 +306,28 @@ export default function SettingsPage() {
     let cancelled = false
 
     void (async () => {
-      const cached = readSettingsProfileCache(user.id)
-      if (cached) {
-        if (!formSeededRef.current) {
-          hydrateProfileRow(cached)
-          formSeededRef.current = true
-        } else {
-          setProfile(cached)
-        }
-        setSharedProfile((prev) => settingsSaveToSharedSlice(cached, prev))
-        return
+      const portalReturn = isStripePortalReturn()
+      if (portalReturn) {
+        setActiveTab("subscription")
       }
 
-      const data = await fetchSettingsProfileRow(supabase, user.id)
+      if (!portalReturn) {
+        const cached = readSettingsProfileCache(user.id)
+        if (cached) {
+          if (!formSeededRef.current) {
+            hydrateProfileRow(cached)
+            formSeededRef.current = true
+          } else {
+            setProfile(cached)
+          }
+          setSharedProfile((prev) => settingsSaveToSharedSlice(cached, prev))
+          return
+        }
+      }
+
+      const data = await fetchSettingsProfileRow(supabase, user.id, {
+        force: portalReturn,
+      })
       if (cancelled || !data) return
 
       if (!formSeededRef.current) {
@@ -305,6 +337,10 @@ export default function SettingsPage() {
         setProfile(data)
       }
       setSharedProfile((prev) => settingsSaveToSharedSlice(data, prev))
+      if (portalReturn) {
+        persistSettingsProfileEverywhere(user.id, data)
+        clearStripePortalReturnParam()
+      }
     })()
 
     return () => {
@@ -419,6 +455,10 @@ export default function SettingsPage() {
   }
 
   async function saveProfileTab() {
+    if (isDemoModeActive()) {
+      requestDemoSignup("save")
+      return
+    }
     if (!user || savingProfileRef.current || savingProfile) return
 
     if (invalidStartedTradingDate) {
@@ -1513,7 +1553,8 @@ export default function SettingsPage() {
                         Billing: {isProActive(profile) ? "Pro" : "Free"}
                       </p>
                       <p className="mt-1 text-sm text-gray-400">
-                        Membership: {getMembershipStatus(profile)}
+                        Membership:{" "}
+                        {formatMembershipStatusLabel(getMembershipStatus(profile))}
                       </p>
                     </div>
 

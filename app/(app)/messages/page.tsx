@@ -32,6 +32,14 @@ import MessagesConversationList from "../../components/messages/MessagesConversa
 import EmptyState from "../../components/ui/EmptyState"
 import { SkeletonMessagesPage } from "../../components/ui/skeletons"
 import { useUserProfile } from "@/lib/UserProfileProvider"
+import { isDemoModeActive } from "@/lib/demo/demoMode"
+import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
+import {
+  fetchDemoConversations,
+  fetchDemoDmSearchUsers,
+} from "@/lib/demo/demoMessages"
+import { isDemoUserId } from "@/lib/demo/constants"
+import { isDemoSupabaseBlocked } from "@/lib/demo/demoSupabaseGuard"
 import {
   readMessagesInboxSession,
   writeMessagesInboxSession,
@@ -95,6 +103,10 @@ export default function MessagesPage() {
     }
 
     const fetchUsers = async () => {
+      if (isDemoUserId(user.id)) {
+        setGroupResults(fetchDemoDmSearchUsers(query, user.id))
+        return
+      }
       const { data } = await supabase
         .from("profiles")
         .select("id, username, name, avatar_url")
@@ -117,6 +129,10 @@ export default function MessagesPage() {
     }
 
     const fetchUsers = async () => {
+      if (isDemoUserId(user.id)) {
+        setGroupResults(fetchDemoDmSearchUsers(query, user.id))
+        return
+      }
       const { data } = await supabase
         .from("profiles")
         .select("id, username, name, avatar_url")
@@ -131,6 +147,10 @@ export default function MessagesPage() {
   }, [dmSearchQuery, showDMModal, user?.id])
 
   const fetchAllUsers = useCallback(async (currentUserId: string) => {
+    if (isDemoUserId(currentUserId)) {
+      setAllUsers(fetchDemoDmSearchUsers("", currentUserId))
+      return
+    }
     const { data } = await supabase
       .from("profiles")
       .select("id, username, name, avatar_url")
@@ -148,6 +168,8 @@ export default function MessagesPage() {
 
   const markMessageNotificationsRead = useCallback(
     async (currentUserId: string, reason: "page-open" | "chat-open") => {
+      if (isDemoSupabaseBlocked()) return
+
       console.log("[messages] mark read start", {
         reason,
         userId: currentUserId,
@@ -184,6 +206,7 @@ export default function MessagesPage() {
 
   const markConversationRead = useCallback(
     async (currentUserId: string, conversationId: string) => {
+      if (isDemoSupabaseBlocked()) return
       await markConversationMessagesSeen(currentUserId, conversationId)
     },
     []
@@ -246,6 +269,13 @@ export default function MessagesPage() {
   }, [])
 
   const fetchConversations = useCallback(async (userId: string) => {
+    if (isDemoUserId(userId)) {
+      const sorted = fetchDemoConversations(userId)
+      setConversations(sorted)
+      writeMessagesInboxSession(userId, sorted)
+      return sorted
+    }
+
     const { data: rows } = await supabase
       .from("conversation_participants")
       .select(`
@@ -347,7 +377,7 @@ export default function MessagesPage() {
 
   useEffect(() => {
     if (!authUser?.id) {
-      if (!profileLoading) {
+      if (!profileLoading && !isDemoModeActive()) {
         router.push("/login")
       }
       return
@@ -558,6 +588,10 @@ export default function MessagesPage() {
   )
 
   async function createGroupChat() {
+    if (isDemoModeActive()) {
+      requestDemoSignup("default")
+      return
+    }
     if (!user || groupSelectedUsers.length === 0 || !groupName.trim()) return
 
     setCreatingGroup(true)
@@ -636,6 +670,17 @@ export default function MessagesPage() {
   async function startDMChat() {
     const selectedDmUserId = dmSelectedUsers[0]?.id
     if (!user || !selectedDmUserId) return
+
+    if (isDemoModeActive()) {
+      const username = dmSelectedUsers[0]?.username
+      if (username) {
+        router.push(buildDmThreadPath(username))
+        setShowDMModal(false)
+      } else {
+        requestDemoSignup("default")
+      }
+      return
+    }
 
     setCreatingDM(true)
     const result = await ensureDmConversation(

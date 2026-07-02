@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react"
 import type { StoryBarProfile } from "./FeedStoriesBar"
-
+import { ProfileAvatarImg } from "@/app/components/SafeProfileAvatar"
 import { formatSocialTimestamp } from "@/lib/formatRelativeTime"
 
 export function storyTimeAgo(iso: string): string {

@@ -18,6 +18,15 @@ import { clearAllNotifications, dismissNotifications } from "@/lib/followNotific
 import { formatSocialTimestamp } from "@/lib/formatRelativeTime"
 import { NOTIFICATION_INBOX_TYPES } from "@/lib/notificationEngagementTypes"
 import { useUserProfile } from "@/lib/UserProfileProvider"
+import { isDemoModeActive } from "@/lib/demo/demoMode"
+import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
+import { isDemoUserId } from "@/lib/demo/constants"
+import { isDemoSupabaseBlocked } from "@/lib/demo/demoSupabaseGuard"
+import {
+  fetchDemoNotifications,
+  getDemoNotificationSenderProfiles,
+  getDemoUnreadNotificationCount,
+} from "@/lib/demo/demoNotifications"
 import {
   affiliateNotificationBody,
   affiliateNotificationTitle,
@@ -459,7 +468,7 @@ export default function NotificationsPage() {
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set())
 
   useEffect(() => {
-    if (!profileLoading && !user) {
+    if (!profileLoading && !user && !isDemoModeActive()) {
       router.push("/login")
     }
   }, [profileLoading, user, router])
@@ -467,6 +476,12 @@ export default function NotificationsPage() {
   const ensureSenderProfiles = useCallback(async (senderIds: string[]) => {
     const missing = senderIds.filter((id) => id && !sendersByIdRef.current[id])
     if (missing.length === 0) return
+
+    if (isDemoModeActive() && userId && isDemoUserId(userId)) {
+      const demoProfiles = getDemoNotificationSenderProfiles(missing)
+      setSendersById((prev) => ({ ...prev, ...demoProfiles }))
+      return
+    }
 
     const { data: profiles } = await supabase
       .from("profiles")
@@ -491,6 +506,25 @@ export default function NotificationsPage() {
     if (!userId) return
     setLoading(true)
     setLoadError(null)
+
+    if (isDemoUserId(userId)) {
+      const rows = fetchDemoNotifications(userId)
+      setNotifications(rows)
+      const senderIds = Array.from(
+        new Set(
+          rows
+            .map((row) => row.sender_id)
+            .filter((id): id is string => typeof id === "string" && id.length > 0)
+        )
+      )
+      if (senderIds.length > 0) {
+        setSendersById(getDemoNotificationSenderProfiles(senderIds))
+      } else {
+        setSendersById({})
+      }
+      setLoading(false)
+      return
+    }
 
     const { data, error } = await supabase
       .from("notifications")
@@ -535,6 +569,7 @@ export default function NotificationsPage() {
 
   useEffect(() => {
     if (!userId) return
+    if (isDemoSupabaseBlocked()) return
 
     const channel = supabase.channel(`notifications-page-${userId}`)
 
@@ -678,6 +713,15 @@ export default function NotificationsPage() {
   async function markIdsRead(ids: string[]) {
     if (!userId || ids.length === 0) return
 
+    if (isDemoUserId(userId)) {
+      const idSet = new Set(ids)
+      setNotifications((prev) =>
+        prev.map((row) => (idSet.has(row.id) ? { ...row, read: true } : row))
+      )
+      window.dispatchEvent(new CustomEvent("tj-unread-notifications-refresh"))
+      return
+    }
+
     const { error } = await supabase
       .from("notifications")
       .update({ read: true })
@@ -703,6 +747,12 @@ export default function NotificationsPage() {
   async function markAllAsRead() {
     if (!userId) return
 
+    if (isDemoUserId(userId)) {
+      setNotifications((prev) => prev.map((row) => ({ ...row, read: true })))
+      window.dispatchEvent(new CustomEvent("tj-unread-notifications-refresh"))
+      return
+    }
+
     const { error } = await supabase
       .from("notifications")
       .update({ read: true })
@@ -726,6 +776,15 @@ export default function NotificationsPage() {
     if (!userId || clearing) return
     setClearing(true)
 
+    if (isDemoUserId(userId)) {
+      setNotifications([])
+      setSendersById({})
+      setShowClearConfirm(false)
+      setClearing(false)
+      window.dispatchEvent(new CustomEvent("tj-unread-notifications-refresh"))
+      return
+    }
+
     const ok = await clearAllNotifications(supabase)
     if (!ok) {
       setClearing(false)
@@ -743,6 +802,16 @@ export default function NotificationsPage() {
 
     const idSet = new Set(ids)
     setDismissingIds((prev) => new Set([...prev, ...ids]))
+
+    if (isDemoUserId(userId)) {
+      setDismissingIds((prev) => {
+        const next = new Set(prev)
+        for (const id of ids) next.delete(id)
+        return next
+      })
+      setNotifications((prev) => prev.filter((row) => !idSet.has(row.id)))
+      return
+    }
 
     const ok = await dismissNotifications(supabase, ids)
     setDismissingIds((prev) => {

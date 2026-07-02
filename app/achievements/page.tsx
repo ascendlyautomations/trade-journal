@@ -17,9 +17,13 @@ import {
   type AchievementPageFilter,
   fetchOwnAchievements,
 } from "../../lib/achievements"
+import { isDemoModeActive } from "@/lib/demo/demoMode"
+import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
+import { useUserProfile } from "@/lib/UserProfileProvider"
 
 export default function AchievementsPage() {
-  const [userId, setUserId] = useState<string | null>(null)
+  const { user, loading: profileLoading } = useUserProfile()
+  const userId = user?.id ?? null
   const [achievements, setAchievements] = useState<Achievement[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -48,23 +52,16 @@ export default function AchievementsPage() {
   }, [])
 
   useEffect(() => {
-    let cancelled = false
-    async function init() {
-      const { data, error: authError } = await supabase.auth.getUser()
-      if (cancelled) return
-      if (authError || !data?.user) {
+    if (profileLoading) return
+    if (!userId) {
+      if (!isDemoModeActive()) {
         setError("Please log in to view achievements.")
-        setLoading(false)
-        return
       }
-      setUserId(data.user.id)
-      void loadAchievements(data.user.id)
+      setLoading(false)
+      return
     }
-    void init()
-    return () => {
-      cancelled = true
-    }
-  }, [loadAchievements])
+    void loadAchievements(userId)
+  }, [loadAchievements, profileLoading, userId])
 
   const filteredAchievements = useMemo(() => {
     return achievements.filter((a) => achievementMatchesPageFilter(a, filter))
@@ -80,6 +77,10 @@ export default function AchievementsPage() {
   const unreadFeatured = featured.length
 
   function openCreate() {
+    if (isDemoModeActive()) {
+      requestDemoSignup("upload")
+      return
+    }
     setEditingAchievement(null)
     setCreateInitialValues(undefined)
     setShowForm(true)
@@ -98,6 +99,10 @@ export default function AchievementsPage() {
   const handleDeleteAchievement = useCallback(
     async (achievementId: string) => {
       if (!userId) return
+      if (isDemoModeActive()) {
+        requestDemoSignup("delete")
+        return
+      }
       const { error: delErr } = await supabase
         .from("achievements")
         .delete()

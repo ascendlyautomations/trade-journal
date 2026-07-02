@@ -1,4 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { isDemoUserId } from "./demo/constants"
+import { seedDemoCaches } from "./demo/demoUser"
 import { ensureAccountsLoaded, ensureTradesLoaded } from "./appDataCache"
 import { fetchSettingsProfileRow } from "./settingsProfileSync"
 import { ensureTradingAccountsSettingsLoaded } from "./tradingAccountsSettingsCache"
@@ -14,6 +16,10 @@ export function warmAppDataCaches(
   const id = userId.trim()
   if (!id || warmedUserId === id) return
   warmedUserId = id
+  if (isDemoUserId(id)) {
+    seedDemoCaches()
+    return
+  }
   void Promise.all([
     ensureTradesLoaded(supabase, id),
     ensureAccountsLoaded(supabase, id),

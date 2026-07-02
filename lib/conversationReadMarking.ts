@@ -1,4 +1,5 @@
 import { supabase } from "./supabaseClient"
+import { isDemoSupabaseBlocked } from "./demo/demoSupabaseGuard"
 import { normalizeSeenBy } from "./messageUnread"
 
 const RECENT_MARK_MS = 8_000
@@ -15,6 +16,7 @@ export async function markConversationMessagesSeen(
   conversationId: string
 ): Promise<void> {
   if (!userId || !conversationId) return
+  if (isDemoSupabaseBlocked()) return
 
   const key = markKey(userId, conversationId)
   const last = recentMarks.get(key)

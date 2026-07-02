@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import EmptyState from "@/app/components/ui/EmptyState"
 import { supabase } from "@/lib/supabaseClient"
 import { joinTradeRoom } from "@/lib/joinTradeRoom"
+import { isDemoSupabaseBlocked } from "@/lib/demo/demoSupabaseGuard"
+import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 import {
   fetchPopularTradeRooms,
   resolveRoomAvatarUrl,
@@ -176,6 +178,11 @@ export default function PopularTradeRoomsPanel({
 
   const handleJoin = useCallback(
     async (room: PopularTradeRoom) => {
+      if (isDemoSupabaseBlocked()) {
+        requestDemoSignup("room")
+        return
+      }
+
       setJoiningId(room.id)
       setError(null)
 

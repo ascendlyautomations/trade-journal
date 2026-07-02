@@ -6,6 +6,7 @@ import FeedProfilePostDetailModal from "./FeedProfilePostDetailModal"
 import FeedReelDetailModal from "./FeedReelDetailModal"
 import ShareToConversationsModal from "@/app/components/ShareToConversationsModal"
 import type { FeedLikeMeta } from "./FeedPostCard"
+import { isTradeAttachedReel } from "@/lib/reels"
 
 type FeedPostOverlaysProps = {
   selectedPostId: string | null
@@ -29,6 +30,7 @@ type FeedPostOverlaysProps = {
   onReelMenuToggle?: (reelId: string) => void
   onEditReel?: (post: any) => void
   onDeleteReel?: (post: any) => void
+  onReplaceReelVideo?: (post: any) => void
 }
 
 function FeedPostOverlays({
@@ -53,6 +55,7 @@ function FeedPostOverlays({
   onReelMenuToggle,
   onEditReel,
   onDeleteReel,
+  onReplaceReelVideo,
 }: FeedPostOverlaysProps) {
   return (
     <>
@@ -81,6 +84,8 @@ function FeedPostOverlays({
             onMenuToggle={() => onReelMenuToggle?.(selectedPostId)}
             onEditReel={() => onEditReel?.(selectedPost)}
             onDeleteReel={() => onDeleteReel?.(selectedPost)}
+            onReplaceReelVideo={() => onReplaceReelVideo?.(selectedPost)}
+            isTradeAttachedReel={isTradeAttachedReel(selectedPost)}
           />
         ) : selectedPost.feedKind === "profile" ||
         selectedPost.feedKind === "achievement" ? (

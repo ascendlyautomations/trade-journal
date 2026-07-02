@@ -27,6 +27,7 @@ type FeedPostListProps = {
   onReelMenuToggle?: (reelId: string) => void
   onEditReel?: (post: any) => void
   onDeleteReel?: (post: any) => void
+  onReplaceReelVideo?: (post: any) => void
 }
 
 function FeedPostList({
@@ -46,6 +47,7 @@ function FeedPostList({
   onReelMenuToggle,
   onEditReel,
   onDeleteReel,
+  onReplaceReelVideo,
 }: FeedPostListProps) {
   return (
     <>
@@ -105,6 +107,7 @@ function FeedPostList({
               onMenuToggle={() => onReelMenuToggle?.(pid)}
               onEditReel={() => onEditReel?.(post)}
               onDeleteReel={() => onDeleteReel?.(post)}
+              onReplaceReelVideo={() => onReplaceReelVideo?.(post)}
               onSelectPost={onSelectPost}
               onOpenComments={onOpenComments}
               onToggleLike={onToggleLike}

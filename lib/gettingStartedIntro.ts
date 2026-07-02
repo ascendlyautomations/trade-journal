@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { gsDebug } from "@/lib/gettingStartedDebug"
+import { isDemoSupabaseBlocked } from "@/lib/demo/demoSupabaseGuard"
 
 export const GETTING_STARTED_INTRO_POPUP_TITLE = "Welcome to Getting Started"
 
@@ -7,6 +8,8 @@ export async function markGettingStartedIntroSeen(
   supabase: SupabaseClient,
   userId: string
 ): Promise<boolean> {
+  if (isDemoSupabaseBlocked()) return true
+
   gsDebug("markGettingStartedIntroSeen: before", {
     userId: userId.slice(0, 8),
   })

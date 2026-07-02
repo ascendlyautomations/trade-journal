@@ -6,6 +6,10 @@ import { ProfileAvatarImg } from "@/app/components/SafeProfileAvatar"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { fetchLeaderboardTrades } from "../../lib/leaderboardFetch"
+import { isDemoModeActive } from "@/lib/demo/demoMode"
+import { getDemoLeaderboardTrades } from "@/lib/demo/demoLeaderboard"
+import { getDemoProfileById } from "@/lib/demo/demoProfile"
+import { useUserProfile } from "@/lib/UserProfileProvider"
 import {
   LineChart,
   Line,
@@ -185,6 +189,7 @@ function LeaderboardTraderCell({
 }
 
 export default function Leaderboard() {
+  const { user } = useUserProfile()
   const [trades, setTrades] = useState<TradeForLeaderboard[]>([])
   const [tradesLoading, setTradesLoading] = useState(true)
   const [userId, setUserId] = useState<string | null>(null)
@@ -202,16 +207,22 @@ export default function Leaderboard() {
 
   useEffect(() => {
     fetchData()
-  }, [])
+  }, [user?.id])
 
   async function fetchData() {
     setTradesLoading(true)
     try {
+      if (isDemoModeActive()) {
+        setUserId(user?.id ?? null)
+        setTrades(getDemoLeaderboardTrades())
+        return
+      }
+
       const {
-        data: { user },
+        data: { user: authUser },
       } = await supabase.auth.getUser()
 
-      if (user) setUserId(user.id)
+      if (authUser) setUserId(authUser.id)
 
       const allTrades = await fetchLeaderboardTrades()
 
@@ -273,6 +284,23 @@ export default function Leaderboard() {
     let cancelled = false
 
     async function fetchProfiles() {
+      if (isDemoModeActive()) {
+        const map: Record<string, LeaderboardProfile> = {}
+        for (const id of rankedTraderIds) {
+          const profile = getDemoProfileById(id)
+          if (profile) {
+            map[id] = {
+              id: profile.id,
+              username: profile.username,
+              name: profile.name,
+              avatar_url: profile.avatar_url,
+            }
+          }
+        }
+        if (!cancelled) setProfilesById(map)
+        return
+      }
+
       const { data, error } = await supabase
         .from("profiles")
         .select("id, username, name, avatar_url")

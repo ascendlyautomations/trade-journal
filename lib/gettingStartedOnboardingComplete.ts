@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { gsDebug } from "@/lib/gettingStartedDebug"
+import { isDemoSupabaseBlocked } from "@/lib/demo/demoSupabaseGuard"
 
 export const ONBOARDING_COMPLETE_POPUP_TITLE =
   "🎉 You Have Completed All Onboarding Tasks"
@@ -8,6 +9,8 @@ export async function markOnboardingCompletePopupSeen(
   supabase: SupabaseClient,
   userId: string
 ): Promise<boolean> {
+  if (isDemoSupabaseBlocked()) return true
+
   gsDebug("markOnboardingCompletePopupSeen: before", {
     userId: userId.slice(0, 8),
   })

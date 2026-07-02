@@ -108,12 +108,20 @@ import {
 } from "@/lib/reelEngagement"
 import { useUserProfile } from "@/lib/UserProfileProvider"
 import ReelComposerModal from "@/app/components/profile/ReelComposerModal"
-import { deleteReel, type ReelRow } from "@/lib/reels"
+import { deleteReel, isTradeAttachedReel, replaceTradeReelVideo, type ReelRow } from "@/lib/reels"
 import {
   feedDeepLinkSessionKey,
   fetchFeedDeepLinkContent,
   parseFeedDeepLinkTarget,
 } from "@/lib/feedDeepLink"
+import { isDemoModeActive } from "@/lib/demo/demoMode"
+import { isDemoUserId } from "@/lib/demo/constants"
+import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
+import {
+  getDemoStoryBarProfiles,
+  loadDemoFeedEngagement,
+} from "@/lib/demo/demoFeed"
+import type { DemoSignupReason } from "@/lib/demo/DemoModeContext"
 
 /** Auto-advance each slide (Instagram-style). */
 const STORY_SLIDE_MS = 7000
@@ -122,6 +130,12 @@ const EMPTY_STORY_LIST: ActiveStoryRow[] = []
 type LikeMeta = { count: number; liked: boolean }
 
 type FeedEmptyState = "following_nobody" | "no_posts"
+
+function guardDemoFeedWrite(reason: DemoSignupReason): boolean {
+  if (!isDemoModeActive()) return false
+  requestDemoSignup(reason)
+  return true
+}
 
 export default function FeedPage() {
   return (
@@ -178,6 +192,8 @@ function FeedPageContent() {
   const [sharePostId, setSharePostId] = useState<string | null>(null)
   const [openReelMenuId, setOpenReelMenuId] = useState<string | null>(null)
   const [editingReel, setEditingReel] = useState<ReelRow | null>(null)
+  const replaceReelInputRef = useRef<HTMLInputElement>(null)
+  const [replacingReelPost, setReplacingReelPost] = useState<any | null>(null)
   const [followingStoryUserIds, setFollowingStoryUserIds] = useState<string[]>(
     []
   )
@@ -347,6 +363,16 @@ function FeedPageContent() {
     let cancelled = false
 
     void (async () => {
+      if (isDemoModeActive()) {
+        if (cancelled) return
+        const list = getDemoStoryBarProfiles(userIdsWithStories)
+        const latestStoryMs = (id: string) =>
+          new Date(storiesByUser[id][0].created_at).getTime()
+        list.sort((a, b) => latestStoryMs(b.id) - latestStoryMs(a.id))
+        setUsers(list)
+        return
+      }
+
       const { data: profiles, error } = await supabase
         .from("profiles")
         .select("id, username, avatar_url")
@@ -437,6 +463,7 @@ function FeedPageContent() {
   }, [user?.id, mode])
 
   const handlePostStory = useCallback(async () => {
+    if (guardDemoFeedWrite("upload")) return
     if (!pendingStoryFile || !user?.id || postingStoryRef.current || postingStory) {
       return
     }
@@ -606,6 +633,10 @@ function FeedPageContent() {
         likesMap: {} as Record<string, LikeMeta>,
         commentsMap: {} as Record<string, any[]>,
       }
+    }
+
+    if (isDemoUserId(currentUser?.id)) {
+      return loadDemoFeedEngagement(postList, currentUser)
     }
 
     const tradeIds = postList
@@ -1113,7 +1144,7 @@ function FeedPageContent() {
   ])
 
   useEffect(() => {
-    if (!user?.id) return
+    if (!user?.id || isDemoModeActive()) return
     if (contentType !== "all" && contentType !== "trades") return
 
     const userId = user.id
@@ -1188,7 +1219,7 @@ function FeedPageContent() {
   }, [user?.id, mode, contentType, loadEngagementForPosts, persistFeedSnapshot])
 
   useEffect(() => {
-    if (!user?.id) return
+    if (!user?.id || isDemoModeActive()) return
     if (contentType !== "all" && contentType !== "posts") return
 
     const userId = user.id
@@ -1263,7 +1294,7 @@ function FeedPageContent() {
   }, [user?.id, mode, contentType, loadEngagementForPosts, persistFeedSnapshot])
 
   useEffect(() => {
-    if (!user?.id) return
+    if (!user?.id || isDemoModeActive()) return
     if (contentType !== "all" && contentType !== "achievements") return
 
     const userId = user.id
@@ -1339,7 +1370,7 @@ function FeedPageContent() {
   }, [user?.id, mode, contentType, loadEngagementForPosts, persistFeedSnapshot])
 
   useEffect(() => {
-    if (!user?.id) return
+    if (!user?.id || isDemoModeActive()) return
     if (contentType !== "all" && contentType !== "reels") return
 
     const userId = user.id
@@ -1414,7 +1445,7 @@ function FeedPageContent() {
   }, [user?.id, mode, contentType, loadEngagementForPosts, persistFeedSnapshot])
 
   useEffect(() => {
-    if (!user?.id) return
+    if (!user?.id || isDemoModeActive()) return
 
     const userId = user.id
     const reelIds = postsRef.current
@@ -1516,6 +1547,7 @@ function FeedPageContent() {
   )
 
   const handleSharePost = useCallback((post: any) => {
+    if (guardDemoFeedWrite("default")) return
     setSharePostId(String(post.id))
   }, [])
 
@@ -1561,7 +1593,9 @@ function FeedPageContent() {
 
   const handleStartEditReel = useCallback(
     (post: any) => {
+      if (guardDemoFeedWrite("edit")) return
       if (!user?.id || String(post.user_id) !== String(user.id)) return
+      if (isTradeAttachedReel(post)) return
       setEditingReel({
         id: String(post.id),
         user_id: String(post.user_id),
@@ -1571,6 +1605,8 @@ function FeedPageContent() {
         duration_seconds:
           post.duration_seconds != null ? Number(post.duration_seconds) : null,
         visibility: post.visibility === "private" ? "private" : "public",
+        trade_id: null,
+        kind: null,
         created_at: String(post.created_at),
         updated_at: String(post.updated_at ?? post.created_at),
       })
@@ -1579,8 +1615,54 @@ function FeedPageContent() {
     [user?.id]
   )
 
+  const handleReplaceReelVideo = useCallback(
+    (post: any) => {
+      if (guardDemoFeedWrite("edit")) return
+      if (!user?.id || String(post.user_id) !== String(user.id)) return
+      if (!isTradeAttachedReel(post)) return
+      setReplacingReelPost(post)
+      setOpenReelMenuId(null)
+      replaceReelInputRef.current?.click()
+    },
+    [user?.id]
+  )
+
+  const handleReplaceReelFileSelected = useCallback(
+    async (file: File | null) => {
+      if (!file || !replacingReelPost || !user?.id) return
+
+      const reelId = String(replacingReelPost.id)
+      const result = await replaceTradeReelVideo(supabase, {
+        reelId,
+        userId: user.id,
+        file,
+      })
+      setReplacingReelPost(null)
+
+      if ("error" in result) {
+        showPopup({ type: "error", message: result.error })
+        return
+      }
+
+      const updated = result.reel
+      patchFeedReel(reelId, {
+        video_url: updated.video_url,
+        thumbnail_url: updated.thumbnail_url,
+        duration_seconds: updated.duration_seconds,
+        updated_at: updated.updated_at,
+      })
+      if (selectedPostId === reelId) {
+        setFeedModalPost((prev) =>
+          prev && String(prev.id) === reelId ? { ...prev, ...updated } : prev
+        )
+      }
+    },
+    [patchFeedReel, replacingReelPost, selectedPostId, showPopup, user?.id]
+  )
+
   const handleReelSaved = useCallback(
     (reel: ReelRow) => {
+      if (guardDemoFeedWrite("save")) return
       patchFeedReel(String(reel.id), {
         caption: reel.caption,
         updated_at: reel.updated_at,
@@ -1593,8 +1675,16 @@ function FeedPageContent() {
 
   const handleDeleteReel = useCallback(
     async (post: any) => {
+      if (guardDemoFeedWrite("delete")) return
       if (!user?.id || String(post.user_id) !== String(user.id)) return
-      if (!window.confirm("Delete this reel?")) return
+      if (
+        !window.confirm(
+          isTradeAttachedReel(post)
+            ? "Remove replay from this trade?"
+            : "Delete this reel?"
+        )
+      )
+        return
 
       const reelId = String(post.id)
       const result = await deleteReel(supabase, {
@@ -1633,6 +1723,7 @@ function FeedPageContent() {
 
   const toggleLike = useCallback(
     async (post: any) => {
+      if (guardDemoFeedWrite("like")) return
       if (!user) return
 
       const pid = String(post.id)
@@ -1836,6 +1927,7 @@ function FeedPageContent() {
 
   const submitComment = useCallback(
     async (post: any, text: string, parentCommentId?: string | null) => {
+      if (guardDemoFeedWrite("comment")) return false
       if (!user) return false
 
       const pid = String(post.id)
@@ -2119,6 +2211,7 @@ function FeedPageContent() {
 
   const deleteComment = useCallback(
     async (comment: any) => {
+      if (guardDemoFeedWrite("delete")) return false
       if (!user) {
         console.warn("[comment-delete] aborted: no user")
         return false
@@ -2399,6 +2492,7 @@ function FeedPageContent() {
               onReelMenuToggle={handleReelMenuToggle}
               onEditReel={handleStartEditReel}
               onDeleteReel={(post) => void handleDeleteReel(post)}
+              onReplaceReelVideo={handleReplaceReelVideo}
             />
           ) : null}
 
@@ -2459,8 +2553,21 @@ function FeedPageContent() {
           onReelMenuToggle={handleReelMenuToggle}
           onEditReel={handleStartEditReel}
           onDeleteReel={(post) => void handleDeleteReel(post)}
+          onReplaceReelVideo={handleReplaceReelVideo}
         />
       ) : null}
+
+      <input
+        ref={replaceReelInputRef}
+        type="file"
+        accept="video/mp4,video/quicktime,.mp4,.mov"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0] ?? null
+          e.target.value = ""
+          void handleReplaceReelFileSelected(file)
+        }}
+      />
 
       {editingReel ? (
         <ReelComposerModal

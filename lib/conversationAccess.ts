@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { supabase } from "./supabaseClient"
+import { isDemoModeActive } from "@/lib/demo/demoMode"
+import { isDemoConversationParticipant } from "@/lib/demo/demoMessages"
 
 /** Client-generated id — avoids INSERT…RETURNING before participant rows exist (RLS SELECT). */
 export function newConversationId(): string {
@@ -13,6 +15,10 @@ export async function isConversationParticipant(
   client: SupabaseClient = supabase
 ): Promise<boolean> {
   if (!conversationId || !userId) return false
+
+  if (isDemoModeActive()) {
+    return isDemoConversationParticipant(conversationId, userId)
+  }
 
   const { data, error } = await client
     .from("conversation_participants")

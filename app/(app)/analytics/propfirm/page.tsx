@@ -93,6 +93,14 @@ import {
 } from "@/lib/tradingAccounts"
 import { resolveAccountModeForSave } from "@/lib/createAccountForm"
 import { invalidateAccountsCache } from "@/lib/appDataCache"
+import { isDemoModeActive } from "@/lib/demo/demoMode"
+import { isDemoUserId } from "@/lib/demo/constants"
+import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
+import {
+  getDemoPayoutCyclesByAccountId,
+  getDemoPropfirmAccounts,
+  getDemoPropfirmTrades,
+} from "@/lib/demo/demoPropfirm"
 
 const SECTION_PANEL = dashboardInsightCardClass
 
@@ -272,15 +280,6 @@ export {
   computeTrailingDrawdown,
 } from "@/lib/propfirmMetrics"
 
-function formatPropfirmAccountLabel(acc: PropfirmAccount | null) {
-  if (!acc) return "None"
-  const nameSize = formatAccountNameWithSizeDisplay(
-    acc.name ?? "",
-    acc.account_size as string | null | undefined
-  )
-  return `${nameSize || acc.name} • ${acc.mode}`
-}
-
 function formatPropfirmAccountNameOnly(acc: PropfirmAccount) {
   const nameSize = formatAccountNameWithSizeDisplay(
     acc.name ?? "",
@@ -311,7 +310,7 @@ function tradingListItemToPropfirmAccount(
 
 export default function PropFirmPage() {
   const router = useRouter()
-  const { user } = useUserProfile()
+  const { user, profile } = useUserProfile()
   const [planChecked, setPlanChecked] = useState(false)
   const [hasProAccess, setHasProAccess] = useState(false)
   const [accounts, setAccounts] = useState<PropfirmAccount[]>([])
@@ -442,10 +441,6 @@ export default function PropFirmPage() {
   } = accountMetrics
   const { winningDays, worstDailyLossUsed } = cycleDailyMetrics
   const lifetimeDailyRows = lifetimeDailyMetrics.dailyRows
-  const selectedAccountLabel = useMemo(() => {
-    if (isAllAccountsView) return "All Accounts"
-    return formatPropfirmAccountLabel(selectedAccount)
-  }, [isAllAccountsView, selectedAccount])
 
   const accountSelectOptions = useMemo(
     () => [
@@ -473,34 +468,46 @@ export default function PropFirmPage() {
   }, [accountMetrics, showAccountDashboard, trades, payoutCycles])
 
   useEffect(() => {
+    if (profile) {
+      setHasProAccess(isProActive(profile))
+      setPlanChecked(true)
+      return
+    }
+
     async function checkPlan() {
       const {
-        data: { user },
+        data: { user: authUser },
       } = await supabase.auth.getUser()
-      if (!user?.id) {
+      if (!authUser?.id) {
         setHasProAccess(false)
         setPlanChecked(true)
         return
       }
-      const { data: profile } = await supabase
+      const { data: profileRow } = await supabase
         .from("profiles")
         .select("is_pro, subscription_status")
-        .eq("id", user.id)
+        .eq("id", authUser.id)
         .maybeSingle()
-      setHasProAccess(isProActive(profile))
+      setHasProAccess(isProActive(profileRow))
       setPlanChecked(true)
     }
     void checkPlan()
-  }, [])
+  }, [profile])
 
   useEffect(() => {
     if (!planChecked || !hasProAccess) return
     async function loadAccounts() {
+      if (isDemoUserId(user?.id)) {
+        setAccounts(getDemoPropfirmAccounts() as PropfirmAccount[])
+        setAccountsLoaded(true)
+        return
+      }
+
       const {
-        data: { user },
+        data: { user: authUser },
       } = await supabase.auth.getUser()
 
-      if (!user) {
+      if (!authUser) {
         setAccountsLoaded(true)
         return
       }
@@ -508,7 +515,7 @@ export default function PropFirmPage() {
       const { data, error } = await supabase
         .from("accounts")
         .select(PROPFIRM_ACCOUNT_FIELDS)
-        .eq("user_id", user.id)
+        .eq("user_id", authUser.id)
         .eq("category", "Prop Firm")
 
       if (error) {
@@ -522,7 +529,7 @@ export default function PropFirmPage() {
     }
 
     loadAccounts()
-  }, [planChecked, hasProAccess])
+  }, [planChecked, hasProAccess, user?.id])
 
   useEffect(() => {
     if (!planChecked || !hasProAccess) return
@@ -536,6 +543,15 @@ export default function PropFirmPage() {
     async function loadFundedPayoutCycles() {
       setLoadingPayoutHistory(true)
       try {
+        if (isDemoUserId(user?.id)) {
+          if (!cancelled) {
+            setPayoutCyclesByAccountId(
+              getDemoPayoutCyclesByAccountId(fundedAccounts.map((account) => account.id))
+            )
+          }
+          return
+        }
+
         const cyclesByAccountId = await fetchPayoutCycleHistoryByAccountIds(
           supabase,
           fundedAccounts.map((account) => account.id)
@@ -550,7 +566,7 @@ export default function PropFirmPage() {
     return () => {
       cancelled = true
     }
-  }, [planChecked, hasProAccess, accountsLoaded, fundedAccounts])
+  }, [planChecked, hasProAccess, accountsLoaded, fundedAccounts, user?.id])
 
   useEffect(() => {
     if (!planChecked || !hasProAccess) return
@@ -571,6 +587,11 @@ export default function PropFirmPage() {
     async function loadTrades() {
       setLoadingTrades(true)
       try {
+        if (isDemoUserId(user?.id)) {
+          setTrades(getDemoPropfirmTrades(accountIds))
+          return
+        }
+
         const { data, error } = await supabase
           .from("trades")
           .select(PROPFIRM_TRADE_FIELDS)
@@ -596,9 +617,14 @@ export default function PropFirmPage() {
     accounts,
     planChecked,
     hasProAccess,
+    user?.id,
   ])
 
   async function handlePayoutSetupSubmit(values: PayoutSetupValues) {
+    if (isDemoModeActive()) {
+      requestDemoSignup("save")
+      return
+    }
     if (!selectedAccount) return
 
     setRecordingPayout(true)
@@ -686,6 +712,10 @@ export default function PropFirmPage() {
   }
 
   function openPassEvalWorkflow() {
+    if (isDemoModeActive()) {
+      requestDemoSignup("save")
+      return
+    }
     if (!selectedAccount) return
     setEvalContinuanceAccount(selectedAccount)
     setActiveMilestoneKind("passed_eval")
@@ -738,6 +768,10 @@ export default function PropFirmPage() {
   }
 
   async function handleConvertRulesSave(account: CreateTradingAccountPayload) {
+    if (isDemoModeActive()) {
+      requestDemoSignup("save")
+      return
+    }
     if (!user?.id || !evalContinuanceAccount) return
 
     setEvalContinuanceBusy(true)
@@ -782,6 +816,10 @@ export default function PropFirmPage() {
   }
 
   async function handleCreateFundedAccountSave(account: CreateTradingAccountPayload) {
+    if (isDemoModeActive()) {
+      requestDemoSignup("save")
+      return
+    }
     if (!user?.id || !evalContinuanceAccount) return
 
     setEvalContinuanceBusy(true)
@@ -885,13 +923,16 @@ export default function PropFirmPage() {
         </div>
 
         <div className={SECTION_PANEL}>
-          <div className="flex flex-col gap-2">
-            <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+          <div className="flex min-w-0 items-center gap-2 sm:gap-3">
               <div className="min-w-0 flex-1 basis-0">
                 <CustomSelect
                   value={accountFilter}
                   onChange={(value) => {
                     if (value === MANAGE_ACCOUNTS_VALUE) {
+                      if (isDemoModeActive()) {
+                        requestDemoSignup("save")
+                        return
+                      }
                       navigateToManageAccounts(router)
                       return
                     }
@@ -947,14 +988,6 @@ export default function PropFirmPage() {
                   Record Payout
                 </button>
               ) : null}
-            </div>
-
-            <p className="text-sm text-gray-400">
-              Selected:{" "}
-              <span className="font-medium text-gray-200">
-                {selectedAccountLabel}
-              </span>
-            </p>
           </div>
         </div>
 

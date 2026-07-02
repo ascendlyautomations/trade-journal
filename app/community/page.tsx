@@ -24,6 +24,21 @@ import { compressImage, compressScreenshot } from "@/lib/compressImage"
 import { formatRelativeTime } from "@/lib/formatRelativeTime"
 import { feedbackPresets, persistentError } from "@/lib/feedbackPresets"
 import { useUserProfile } from "@/lib/UserProfileProvider"
+import { isDemoModeActive } from "@/lib/demo/demoMode"
+import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
+import { isDemoUserId } from "@/lib/demo/constants"
+import {
+  fetchDemoMemberRooms,
+  fetchDemoRoomMessages,
+  fetchDemoRoomOwnerUserId,
+  fetchDemoRoomSections,
+  getDemoActivePresence,
+  getDemoChannelNotificationPrefs,
+  getDemoRoomUnreadByRoomIds,
+  getDemoRoomMemberStats,
+  resolveDemoRoomFromParam,
+} from "@/lib/demo/demoRooms"
+import { isDemoSupabaseBlocked } from "@/lib/demo/demoSupabaseGuard"
 import {
   patchRoomMessagesInSession,
   patchRoomSectionsInSession,
@@ -250,6 +265,10 @@ async function fetchUnreadByRoomIds(
   roomIds: string[],
   userId: string
 ): Promise<Record<string, boolean>> {
+  if (isDemoSupabaseBlocked()) {
+    return getDemoRoomUnreadByRoomIds(roomIds)
+  }
+
   const unread: Record<string, boolean> = {}
   if (roomIds.length === 0) return unread
 
@@ -273,6 +292,8 @@ async function fetchUnreadByRoomIds(
 }
 
 async function markAllRoomMessagesSeenForUser(roomId: string, userId: string) {
+  if (isDemoSupabaseBlocked()) return
+
   const { data, error } = await supabase
     .from("room_messages")
     .select("id, user_id, seen_by")
@@ -330,6 +351,8 @@ async function appendSelfToSeenByForRoomMessage(
   messageId: string,
   userId: string
 ) {
+  if (isDemoSupabaseBlocked()) return
+
   const { data, error } = await supabase
     .from("room_messages")
     .select("seen_by, user_id")
@@ -822,6 +845,14 @@ function CommunityContent() {
       return
     }
 
+    if (isDemoSupabaseBlocked()) {
+      setRoomNotificationsEnabled(true)
+      setChannelNotificationPrefs(
+        getDemoChannelNotificationPrefs(sectionsRef.current)
+      )
+      return
+    }
+
     let cancelled = false
     void (async () => {
       const [{ data, error }, channelPrefs] = await Promise.all([
@@ -870,6 +901,10 @@ function CommunityContent() {
   async function openRoomNotificationSettings() {
     if (!selectedRoomId || !user?.id || needsJoin) return
     setShowRoomNotificationSettings(true)
+    if (isDemoSupabaseBlocked()) {
+      setChannelNotificationPrefs(getDemoChannelNotificationPrefs(sections))
+      return
+    }
     const prefs = await fetchRoomChannelNotificationPrefs(
       supabase,
       selectedRoomId,
@@ -881,6 +916,11 @@ function CommunityContent() {
 
   async function handleToggleRoomNotificationLevel(enabled: boolean) {
     if (!selectedRoomId || !user?.id || needsJoin || savingRoomNotificationLevel) {
+      return
+    }
+
+    if (isDemoSupabaseBlocked()) {
+      requestDemoSignup("room")
       return
     }
 
@@ -910,6 +950,11 @@ function CommunityContent() {
       return
     }
 
+    if (isDemoSupabaseBlocked()) {
+      requestDemoSignup("room")
+      return
+    }
+
     setSavingChannelNotificationId(sectionId)
     const result = await upsertRoomChannelNotificationPref(
       supabase,
@@ -933,6 +978,10 @@ function CommunityContent() {
       setIsAdmin(false)
       return
     }
+    if (isDemoUserId(user.id)) {
+      setIsAdmin(false)
+      return
+    }
     void isCurrentUserAdmin().then(setIsAdmin)
   }, [user?.id])
 
@@ -940,6 +989,11 @@ function CommunityContent() {
     async function checkOwner() {
       if (!selectedRoomId || !user?.id) {
         setIsOwner(false)
+        return
+      }
+
+      if (isDemoUserId(user.id)) {
+        setIsOwner(fetchDemoRoomOwnerUserId(selectedRoomId) === user.id)
         return
       }
 
@@ -1123,6 +1177,16 @@ function CommunityContent() {
     if (loadGen !== roomMessagesFetchGenRef.current) return
 
     setLoadingMessages(true)
+
+    if (isDemoUserId(userIdRef.current ?? "")) {
+      const demo = fetchDemoRoomMessages(roomId, activeSectionId)
+      if (loadGen !== roomMessagesFetchGenRef.current) return
+      setPinnedMessages(demo.pinned as RoomMessage[])
+      setMessages(demo.main as RoomMessage[])
+      setLoadingMessages(false)
+      messagesByRoomRef.current[cacheKey] = demo
+      return
+    }
 
     let pinnedQ = supabase
       .from("room_messages")
@@ -1455,6 +1519,32 @@ function CommunityContent() {
     roomId: string,
     preferredSectionId?: string | null
   ) {
+    if (isDemoUserId(userIdRef.current ?? "")) {
+      const list = fetchDemoRoomSections(roomId).map((section, index) => ({
+        ...section,
+        position: index,
+        room_id: roomId,
+      }))
+      setSections(list)
+      if (list.length > 0) {
+        const resolved =
+          preferredSectionId &&
+          list.some((section) => section.id === preferredSectionId)
+            ? preferredSectionId
+            : list[0].id
+        setSelectedSectionId(resolved)
+        if (userIdRef.current) {
+          patchRoomSectionsInSession(userIdRef.current, roomId, {
+            list,
+            activeSectionId: resolved as string,
+          })
+        }
+        return { list, activeSectionId: resolved as string }
+      }
+      setSelectedSectionId(null)
+      return { list, activeSectionId: null as string | null }
+    }
+
     const { data, error } = await supabase
       .from("room_sections")
       .select("*")
@@ -1739,6 +1829,13 @@ function CommunityContent() {
   }
 
   async function loadMemberStats(roomId: string) {
+    if (isDemoUserId(userIdRef.current ?? "")) {
+      const stats = getDemoRoomMemberStats(roomId)
+      setActiveMembers(stats.active)
+      setLeftMembers(stats.left)
+      return
+    }
+
     const { count: active } = await supabase
       .from("room_members")
       .select("*", { count: "exact", head: true })
@@ -1755,6 +1852,13 @@ function CommunityContent() {
   }
 
   async function loadManageMembers(roomId: string) {
+    if (isDemoUserId(userIdRef.current ?? "")) {
+      setManageMembers([])
+      setManageBans([])
+      setLoadingManageMembers(false)
+      return
+    }
+
     setLoadingManageMembers(true)
 
     const [membersResult, bansResult] = await Promise.all([
@@ -1938,6 +2042,10 @@ function CommunityContent() {
   }
 
   async function loadMemberRooms(userId: string): Promise<Room[]> {
+    if (isDemoUserId(userId)) {
+      return fetchDemoMemberRooms(userId)
+    }
+
     const { data: memberships, error: memErr } = await supabase
       .from("room_members")
       .select("room_id")
@@ -1975,6 +2083,10 @@ function CommunityContent() {
 
   async function joinRoom(roomId: string) {
     if (joiningRoomId) return
+    if (isDemoSupabaseBlocked()) {
+      requestDemoSignup("room")
+      return
+    }
     setJoiningRoomId(roomId)
 
     try {
@@ -2122,7 +2234,7 @@ function CommunityContent() {
 
   useEffect(() => {
     if (!user?.id) {
-      if (!profileLoading) {
+      if (!profileLoading && !isDemoModeActive()) {
         const returnPath = `/trade-rooms${window.location.search}`
         router.push(`/login?next=${encodeURIComponent(returnPath)}`)
       }
@@ -2176,6 +2288,18 @@ function CommunityContent() {
     let cancelled = false
 
     ;(async () => {
+      if (isDemoSupabaseBlocked()) {
+        const demoRoom = resolveDemoRoomFromParam(decoded)
+        if (cancelled) return
+        if (!demoRoom) {
+          setInviteTargetRoom(null)
+          return
+        }
+        setInviteTargetRoom(demoRoom as Room)
+        setSelectedRoomId(demoRoom.id)
+        return
+      }
+
       const roomSelect =
         "id, name, description, slug, image_url, owner_user_id, show_on_profile" as const
 
@@ -2283,6 +2407,11 @@ function CommunityContent() {
       return
     }
 
+    if (isDemoSupabaseBlocked()) {
+      setActiveUsers(getDemoActivePresence(selectedRoomId) as ActivePresence[])
+      return
+    }
+
     let cancelled = false
     const roomId = selectedRoomId
 
@@ -2356,6 +2485,7 @@ function CommunityContent() {
 
   useEffect(() => {
     if (!selectedRoomId || needsJoin) return
+    if (isDemoSupabaseBlocked()) return
 
     const channel = supabase.channel(`room-${selectedRoomId}`)
     channel.on(
@@ -2459,6 +2589,11 @@ function CommunityContent() {
 
   useEffect(() => {
     if (!selectedRoomId || needsJoin || !user?.id) {
+      setTypingUsers([])
+      return
+    }
+
+    if (isDemoSupabaseBlocked()) {
       setTypingUsers([])
       return
     }
@@ -2589,6 +2724,10 @@ function CommunityContent() {
   }
 
   async function sendMessage() {
+    if (isDemoModeActive()) {
+      requestDemoSignup("room")
+      return
+    }
     if (sendingMessageRef.current || sendingMessage) return
     if (!user?.id || !selectedRoomId || !canPostInRoom) return
     const content = draft.trim()

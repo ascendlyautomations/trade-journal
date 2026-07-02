@@ -47,6 +47,14 @@ import { clearAllSettingsProfileCaches } from "./settingsProfileCache"
 import { clearAllTradingAccountsSettingsCaches } from "./tradingAccountsSettingsCache"
 import { clearAllNotificationPreferencesCaches } from "./notificationPreferencesCache"
 import { auditLogProfileLoaded } from "./onboardingChecklistAudit"
+import { isDemoModeActive, disableDemoMode, subscribeDemoModeChanges } from "./demo/demoMode"
+import {
+  getDemoAuthUser,
+  getDemoProfileSlice,
+  seedDemoCaches,
+} from "./demo/demoUser"
+import { DEMO_PROFILE } from "./demo/fixtures"
+import { DEMO_USER_ID, isDemoUserId } from "./demo/constants"
 
 /**
  * Shared profile columns for shell + dashboard + getting-started.
@@ -162,6 +170,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
   const refreshProfile = useCallback(async () => {
     const userId = user?.id ?? profileRef.current?.id
     if (!userId) return
+    if (isDemoUserId(userId)) return
 
     const row = await fetchSettingsProfileRow(supabase, userId, { force: true })
     const picked = pickUserProfileFields(row)
@@ -281,6 +290,29 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
       await subscribeProfileRealtime(sessionUserId, generation)
     }
 
+    async function applyDemoAuthSession(generation: number) {
+      const demoUser = getDemoAuthUser()
+      sessionUserIdRef.current = demoUser.id
+      setUser(demoUser)
+      const profileSlice = getDemoProfileSlice()
+      setProfileState(profileSlice)
+      writeUserBootstrapProfile(demoUser.id, profileSlice)
+      writeSettingsProfileCache(demoUser.id, DEMO_PROFILE as Record<string, unknown>)
+      seedDemoCaches()
+      auditLogProfileLoaded({
+        userId: demoUser.id,
+        onboarding_completed: profileSlice.onboarding_completed,
+        has_seen_getting_started_intro: profileSlice.has_seen_getting_started_intro,
+        has_seen_onboarding_complete_popup:
+          profileSlice.has_seen_onboarding_complete_popup,
+        profileLoading: false,
+        profileLoaded: true,
+      })
+      if (mounted && generation === loadGeneration) {
+        setLoading(false)
+      }
+    }
+
     async function applyAuthSession(session: Session | null) {
       const generation = ++loadGeneration
 
@@ -290,10 +322,18 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
 
       if (!mounted || generation !== loadGeneration) return
 
+      if (sessionUser) {
+        disableDemoMode()
+      }
+
       sessionUserIdRef.current = sessionUser?.id ?? null
       setUser(sessionUser)
 
       if (!sessionUser) {
+        if (isDemoModeActive()) {
+          await applyDemoAuthSession(generation)
+          return
+        }
         setProfileState(null)
         setLoading(false)
         return
@@ -382,6 +422,9 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
 
       if (event === "SIGNED_OUT") {
         clearAuthState()
+        if (isDemoModeActive() && mounted) {
+          void applyDemoAuthSession(++loadGeneration)
+        }
         return
       }
 
@@ -401,10 +444,24 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
       }
     })
 
+    const unsubDemoMode = subscribeDemoModeChanges(() => {
+      if (!mounted) return
+      if (isDemoModeActive()) {
+        if (!sessionUserIdRef.current) {
+          void applyDemoAuthSession(++loadGeneration)
+        }
+        return
+      }
+      if (sessionUserIdRef.current === DEMO_USER_ID) {
+        clearAuthState()
+      }
+    })
+
     return () => {
       mounted = false
       loadGeneration += 1
       subscription.unsubscribe()
+      unsubDemoMode()
       removeProfileChannel()
     }
   }, [realtimeTopicSuffix])

@@ -112,3 +112,17 @@ export function getMembershipStatus(profile: unknown): MembershipStatus {
 
   return "Inactive"
 }
+
+/** User-facing membership label (Settings billing section). */
+export function formatMembershipStatusLabel(status: MembershipStatus): string {
+  switch (status) {
+    case "Canceling":
+      return "🟠 Cancelling"
+    case "Trialing":
+      return "Trialing"
+    case "Active":
+      return "Active"
+    default:
+      return "Inactive"
+  }
+}

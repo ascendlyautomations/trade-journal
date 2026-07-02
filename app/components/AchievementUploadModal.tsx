@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { supabase } from "@/lib/supabaseClient"
+import { isDemoModeActive } from "@/lib/demo/demoMode"
+import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 import { compressImage } from "@/lib/compressImage"
 import NativeDateInput from "@/app/components/ui/NativeDateInput"
 import {
@@ -164,6 +166,10 @@ export default function AchievementUploadModal({
   }
 
   async function saveAchievement() {
+    if (isDemoModeActive()) {
+      requestDemoSignup("upload")
+      return
+    }
     if (!userId || !form.title.trim() || !form.achievement_type.trim()) return
     const achievementType = canonicalAchievementType(form.achievement_type)
     const payoutAmount = isPayoutAchievementType(achievementType)

@@ -8,7 +8,7 @@ import {
   getTradeDurationDisplay,
 } from "@/lib/tradeDisplayFormat"
 import { formatEST } from "@/lib/formatEST"
-import { formatMoneyUnknown, formatTradePoints } from "@/lib/formatDisplay"
+import { formatMoneyUnknown, formatNumberUnknown, formatTradePoints } from "@/lib/formatDisplay"
 import { formatTradeAccountNameSizeLine } from "@/lib/tradeAccountDisplay"
 import { publicAccountBadgeFromTrade } from "@/lib/publicAccountPrivacy"
 import { tradeScreenshotPublicUrl } from "@/lib/storagePublicUrl"

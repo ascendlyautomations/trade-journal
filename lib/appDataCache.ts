@@ -1,4 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { isDemoUserId } from "./demo/constants"
+import { DEMO_ACCOUNTS, DEMO_TRADES } from "./demo/fixtures"
 
 /** Shared client-side cache for trades and accounts (module-level, survives route remounts). */
 
@@ -241,6 +243,12 @@ export async function ensureAccountsLoaded(
   userId: string,
   options?: { force?: boolean }
 ): Promise<any[]> {
+  if (isDemoUserId(userId)) {
+    const cached = getCachedAccounts(userId)
+    if (!cached) setAccountsCache(userId, [...DEMO_ACCOUNTS])
+    return getCachedAccounts(userId) ?? [...DEMO_ACCOUNTS]
+  }
+
   const cached = getCachedAccounts(userId)
   const entry = accountsByUser.get(userId)
   if (cached && !options?.force) return cached
@@ -304,6 +312,12 @@ export async function ensureTradesLoaded(
   userId: string,
   options?: { force?: boolean }
 ): Promise<any[]> {
+  if (isDemoUserId(userId)) {
+    const cached = getCachedTrades(userId)
+    if (!cached) setTradesCache(userId, DEMO_TRADES)
+    return getCachedTrades(userId) ?? DEMO_TRADES
+  }
+
   const cached = getCachedTrades(userId)
   const entry = tradesByUser.get(userId)
   if (cached && !options?.force) return cached

@@ -4,6 +4,11 @@ import {
   isPublicDiscoveryRoom,
 } from "@/lib/betaHub"
 import { filterRoomsWithPublicOwners } from "@/lib/publicProfileDiscovery"
+import { isDemoSupabaseBlocked } from "@/lib/demo/demoSupabaseGuard"
+import {
+  getDemoPopularTradeRooms,
+  searchDemoPopularTradeRooms,
+} from "@/lib/demo/demoRooms"
 
 export type PopularTradeRoom = {
   id: string
@@ -101,6 +106,10 @@ export async function fetchPopularTradeRooms(
   supabase: SupabaseClient,
   limit = DEFAULT_LIMIT
 ): Promise<PopularTradeRoom[]> {
+  if (isDemoSupabaseBlocked()) {
+    return getDemoPopularTradeRooms().slice(0, limit)
+  }
+
   const capped = Math.max(1, Math.min(limit, 50))
 
   const { data: rpcRows, error: rpcError } = await supabase.rpc(
@@ -157,6 +166,10 @@ export async function searchPublicTradeRooms(
   query: string,
   limit = 20
 ): Promise<PopularTradeRoom[]> {
+  if (isDemoSupabaseBlocked()) {
+    return searchDemoPopularTradeRooms(query).slice(0, limit)
+  }
+
   const trimmed = sanitizeRoomSearchQuery(query)
   if (!trimmed) return []
 

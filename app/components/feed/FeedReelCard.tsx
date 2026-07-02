@@ -5,6 +5,7 @@ import FeedPostActions from "./FeedPostActions"
 import FeedPostHeader from "./FeedPostHeader"
 import FeedReelOwnerMenu from "./FeedReelOwnerMenu"
 import type { FeedLikeMeta } from "./FeedPostCard"
+import { resolveReelCaption, isTradeAttachedReel } from "@/lib/reels"
 
 type FeedReelCardProps = {
   post: any
@@ -18,6 +19,7 @@ type FeedReelCardProps = {
   onMenuToggle?: () => void
   onEditReel?: () => void
   onDeleteReel?: () => void
+  onReplaceReelVideo?: () => void
   onSelectPost: (post: any) => void
   onOpenComments: (post: any) => void
   onToggleLike: (post: any) => void
@@ -43,6 +45,7 @@ function FeedReelCard({
   onMenuToggle,
   onEditReel,
   onDeleteReel,
+  onReplaceReelVideo,
   onSelectPost,
   onOpenComments,
   onToggleLike,
@@ -74,10 +77,8 @@ function FeedReelCard({
   }, [post.profiles?.avatar_url])
 
   const profileUsername = post.profiles?.username || "User"
-  const caption = useMemo(() => {
-    const raw = post.caption != null ? String(post.caption).trim() : ""
-    return raw !== "" ? raw : null
-  }, [post.caption])
+  const caption = useMemo(() => resolveReelCaption(post), [post])
+  const tradeAttached = isTradeAttachedReel(post)
 
   return (
     <article
@@ -105,6 +106,8 @@ function FeedReelCard({
               onMenuToggle={() => onMenuToggle?.()}
               onEdit={() => onEditReel?.()}
               onDelete={() => onDeleteReel?.()}
+              onReplaceVideo={() => onReplaceReelVideo?.()}
+              isTradeAttached={tradeAttached}
             />
           </div>
         ) : null}

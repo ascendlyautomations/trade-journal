@@ -1,7 +1,9 @@
 import { supabase } from "./supabaseClient"
+import { isDemoUserId } from "./demo/constants"
 
 export async function isUserAdmin(userId: string | null | undefined): Promise<boolean> {
   if (!userId) return false
+  if (isDemoUserId(userId)) return false
   const { data, error } = await supabase
     .from("admin_users")
     .select("user_id, role")
@@ -36,6 +38,7 @@ export async function isCurrentUserAdmin(): Promise<boolean> {
     }
     return false
   }
+  if (isDemoUserId(user.id)) return false
   return isUserAdmin(user.id)
 }
 
@@ -72,6 +75,16 @@ export async function getCurrentAdminCheckResult(): Promise<AdminCheckResult> {
             hint: null,
           }
         : null,
+    }
+  }
+
+  if (isDemoUserId(user.id)) {
+    return {
+      isAdmin: false,
+      userId: user.id,
+      email: user.email ?? null,
+      row: null,
+      error: null,
     }
   }
 

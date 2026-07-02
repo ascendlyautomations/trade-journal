@@ -105,6 +105,16 @@ import {
   writeConversationSession,
 } from "@/lib/conversationSessionCache"
 import { useUserProfile } from "@/lib/UserProfileProvider"
+import { isDemoModeActive } from "@/lib/demo/demoMode"
+import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
+import { isDemoUserId } from "@/lib/demo/constants"
+import { isDemoSupabaseBlocked } from "@/lib/demo/demoSupabaseGuard"
+import { getCachedTrades } from "@/lib/appDataCache"
+import {
+  fetchDemoConversationDetails,
+  fetchDemoConversationMessages,
+  resolveDemoConversationIdFromSegment,
+} from "@/lib/demo/demoMessages"
 
 /** Includes parent_message_id via *; no self-referencing parent embed (PGRST200). */
 const DM_MESSAGE_SELECT = `
@@ -1132,6 +1142,8 @@ export default function DMPage() {
   }
 
   async function markMessageNotificationsRead(currentUserId: string) {
+    if (isDemoSupabaseBlocked()) return
+
     console.log("[messages/[id]] mark read start", {
       userId: currentUserId,
       conversationId: activeConversationId,
@@ -1166,6 +1178,7 @@ export default function DMPage() {
 
   useEffect(() => {
     if (!activeConversationId || pageAccess !== "allowed") return
+    if (isDemoSupabaseBlocked()) return
 
     const topic = `messages-${activeConversationId}`
     supabase.getChannels().forEach((c) => {
@@ -1356,6 +1369,11 @@ export default function DMPage() {
   useEffect(() => {
     if (!showTradePicker || !user?.id) return
 
+    if (isDemoUserId(user.id)) {
+      setTrades(getCachedTrades(user.id) ?? [])
+      return
+    }
+
     const fetchTrades = async () => {
       const { data } = await supabase
         .from("trades")
@@ -1374,6 +1392,7 @@ export default function DMPage() {
     messageIds: string[]
   ): Promise<Set<string>> {
     if (messageIds.length === 0) return new Set()
+    if (isDemoSupabaseBlocked()) return new Set()
     const { data } = await supabase
       .from("message_deletions")
       .select("message_id")
@@ -1387,6 +1406,7 @@ export default function DMPage() {
     conversationId: string,
     cached: ConversationSessionSnapshot
   ) {
+    if (isDemoSupabaseBlocked()) return
     if (!(await isConversationParticipant(conversationId, currentUserId))) return
 
     if (!cached.newestTimestamp) return
@@ -1420,6 +1440,10 @@ export default function DMPage() {
     }
     if (knownInboxId) {
       return knownInboxId
+    }
+
+    if (isDemoUserId(sessionUser.id)) {
+      return resolveDemoConversationIdFromSegment(urlSegment, sessionUser.id)
     }
 
     const normalized = normalizeProfileUsername(urlSegment)
@@ -1496,10 +1520,11 @@ export default function DMPage() {
       return
     }
 
-    const {
-      data: { session },
-    } = await supabase.auth.getSession()
-    const sessionUser = session?.user ?? profileUser ?? null
+    const sessionUser = isDemoSupabaseBlocked() && profileUser?.id
+      ? profileUser
+      : (
+          await supabase.auth.getSession()
+        ).data.session?.user ?? profileUser ?? null
 
     if (sessionUser?.id && tryRestoreCachedConversation(sessionUser)) {
       return
@@ -1559,8 +1584,10 @@ export default function DMPage() {
       conversationId
     )
     await loadMessages(sessionUser.id, conversationId)
-    void markMessageNotificationsRead(sessionUser.id)
-    void markConversationMessagesSeen(sessionUser.id, conversationId)
+    if (!isDemoSupabaseBlocked()) {
+      void markMessageNotificationsRead(sessionUser.id)
+      void markConversationMessagesSeen(sessionUser.id, conversationId)
+    }
     await maybeCanonicalizeGroupDmUrl(details)
   }
 
@@ -1630,6 +1657,31 @@ export default function DMPage() {
     conversationId: string,
     options?: { skipParticipantCheck?: boolean }
   ) {
+    if (isDemoUserId(currentUserId)) {
+      const demo = fetchDemoConversationDetails(currentUserId, conversationId)
+      if (!demo) return null
+      setConversation(demo.conversation)
+      setParticipants(demo.participants)
+      setOtherUser(demo.otherUser)
+      conversationMetaRef.current = {
+        conversation: demo.conversation,
+        participants: demo.participants,
+        otherUser: demo.otherUser,
+      }
+      const uid = userIdRef.current
+      if (uid) {
+        patchConversationSession(uid, conversationId, {
+          conversation: demo.conversation,
+          participants: demo.participants,
+          otherUser: demo.otherUser,
+        })
+      }
+      return {
+        isGroup: demo.conversation.is_group === true,
+        otherProfile: demo.otherUser,
+      }
+    }
+
     if (!options?.skipParticipantCheck) {
       if (!(await isConversationParticipant(conversationId, currentUserId))) {
         return null
@@ -1687,6 +1739,18 @@ export default function DMPage() {
   }
 
   async function loadMessages(currentUserId: string, conversationId: string) {
+    if (isDemoUserId(currentUserId)) {
+      const fetched = fetchDemoConversationMessages(conversationId, currentUserId)
+      setMessages(fetched as typeof messages)
+      setMessagesLoaded(true)
+      const uid = userIdRef.current
+      if (uid) {
+        updateConversationMessages(uid, conversationId, () => fetched)
+      }
+      queueSmoothScrollToBottom()
+      return
+    }
+
     if (!(await isConversationParticipant(conversationId, currentUserId))) {
       setMessagesLoaded(true)
       return
@@ -1801,6 +1865,10 @@ export default function DMPage() {
   }
 
   async function sendMessage() {
+    if (isDemoModeActive()) {
+      requestDemoSignup("comment")
+      return
+    }
     if (sendingMessageRef.current || sendingMessage) return
     if (!user || pageAccess !== "allowed" || !activeConversationId) return
     if (!input.trim() && !selectedFile) return
@@ -1878,6 +1946,10 @@ export default function DMPage() {
   }
 
   async function handleSendTrade(trade: any) {
+    if (isDemoModeActive()) {
+      requestDemoSignup("comment")
+      return
+    }
     if (sendingMessageRef.current || sendingMessage) return
     if (!user || pageAccess !== "allowed" || !activeConversationId) return
 

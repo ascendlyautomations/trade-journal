@@ -1,6 +1,7 @@
 "use client"
 
 import type { ReelRow } from "@/lib/reels"
+import { resolveReelCaption } from "@/lib/reels"
 import { formatRelativeTime } from "@/lib/formatRelativeTime"
 
 type ProfileReelCardProps = {
@@ -9,6 +10,8 @@ type ProfileReelCardProps = {
 }
 
 export default function ProfileReelCard({ reel, onOpen }: ProfileReelCardProps) {
+  const caption = resolveReelCaption(reel)
+
   return (
     <button
       type="button"
@@ -35,8 +38,8 @@ export default function ProfileReelCard({ reel, onOpen }: ProfileReelCardProps) 
       </div>
 
       <div className="space-y-1.5 p-3">
-        {reel.caption?.trim() ? (
-          <p className="line-clamp-2 text-sm text-gray-100">{reel.caption}</p>
+        {caption ? (
+          <p className="line-clamp-2 text-sm text-gray-100">{caption}</p>
         ) : (
           <p className="text-sm italic text-gray-500">No caption</p>
         )}

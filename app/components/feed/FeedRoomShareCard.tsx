@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { joinTradeRoom } from "@/lib/joinTradeRoom"
+import { isDemoModeActive } from "@/lib/demo/demoMode"
+import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 import {
   formatRoomMemberCount,
   isRoomSharePost,
@@ -108,6 +110,11 @@ export default function FeedRoomShareCard({
 
       if (!viewerUserId) {
         router.push("/login")
+        return
+      }
+
+      if (isDemoModeActive()) {
+        requestDemoSignup("room")
         return
       }
 

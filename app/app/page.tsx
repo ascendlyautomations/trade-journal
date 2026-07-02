@@ -24,6 +24,8 @@ import {
 } from "@/lib/inputTradePageTitle"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { feedbackPresets, persistentSuccess } from "@/lib/feedbackPresets"
+import { isDemoModeActive } from "@/lib/demo/demoMode"
+import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 
 const INPUT_TRADE_CSV_INPUT_ID = "input-trade-csv-upload"
 
@@ -312,7 +314,13 @@ export default function Home() {
           />
 
           <InputTradeForm
-            onQuickInputClick={() => setShowQuickTrade(true)}
+            onQuickInputClick={() => {
+              if (isDemoModeActive()) {
+                requestDemoSignup("trade")
+                return
+              }
+              setShowQuickTrade(true)
+            }}
             onUploadCsvClick={openCsvFilePicker}
             onReviewCsvClick={() => {
               window.location.href = "/review"

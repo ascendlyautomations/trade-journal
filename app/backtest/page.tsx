@@ -7,7 +7,7 @@ import { deleteUserTrade } from "@/lib/deleteTrade"
 import { isProActive } from "@/lib/subscription"
 import Navbar from "../components/Navbar"
 import LockedFeature from "../components/LockedFeature"
-import TradeCard from "@/components/TradeCard"
+import TradesPageTradeCard from "../components/TradesPageTradeCard"
 import Calendar from "@/components/Calendar"
 import InputTradeForm from "../components/InputTradeForm"
 import PerformanceShareModal from "../components/PerformanceShareModal"
@@ -15,6 +15,12 @@ import { formatPnlCurrency } from "@/lib/formatMoney"
 import { formatRR } from "@/lib/formatDisplay"
 import { averageRrFromTrades } from "@/lib/tradeRr"
 import { ConfirmModal, useDeleteTradeConfirmation } from "../components/ui"
+import { isDemoModeActive } from "@/lib/demo/demoMode"
+import { isDemoSupabaseBlocked } from "@/lib/demo/demoSupabaseGuard"
+import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
+import { getDemoBacktestTrades } from "@/lib/demo/demoBacktest"
+import { DEMO_PROFILE } from "@/lib/demo/fixtures"
+import { useUserProfile } from "@/lib/UserProfileProvider"
 
 type BacktestTrade = Record<string, unknown> & {
   id: string
@@ -26,6 +32,7 @@ type BacktestTrade = Record<string, unknown> & {
 
 export default function BacktestPage() {
   const router = useRouter()
+  const { user } = useUserProfile()
   const [trades, setTrades] = useState<BacktestTrade[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedStrategy, setSelectedStrategy] = useState("all")
@@ -39,14 +46,23 @@ export default function BacktestPage() {
   } | null>(null)
 
   useEffect(() => {
+    if (isDemoModeActive() && !user?.id) return
     void loadBacktests()
-  }, [])
+  }, [user?.id])
 
   const loadBacktests = async () => {
+    if (isDemoModeActive() && user?.id) {
+      setShareProfile({ referral_code: DEMO_PROFILE.referral_code })
+      setTrades(getDemoBacktestTrades() as BacktestTrade[])
+      setProLocked(false)
+      setLoading(false)
+      return
+    }
+
     const {
-      data: { user },
+      data: { user: authUser },
     } = await supabase.auth.getUser()
-    if (!user?.id) {
+    if (!authUser?.id) {
       router.push("/login")
       setLoading(false)
       return
@@ -55,7 +71,7 @@ export default function BacktestPage() {
     const { data: profileRow } = await supabase
       .from("profiles")
       .select("is_pro, subscription_status, referral_code")
-      .eq("id", user.id)
+      .eq("id", authUser.id)
       .maybeSingle()
     if (!isProActive(profileRow)) {
       setProLocked(true)
@@ -67,7 +83,7 @@ export default function BacktestPage() {
     const { data, error } = await supabase
       .from("trades")
       .select("*")
-      .eq("user_id", user.id)
+      .eq("user_id", authUser.id)
       .eq("mode", "backtest")
       .order("created_at", { ascending: false })
 
@@ -118,8 +134,26 @@ export default function BacktestPage() {
   })
 
   const performDeleteTrade = useCallback(async (id: string) => {
+    if (isDemoSupabaseBlocked()) {
+      requestDemoSignup("delete")
+      return
+    }
     await deleteUserTrade(supabase, id)
     setTrades((prev) => prev.filter((t) => t.id !== id))
+  }, [])
+
+  const handleEditTrade = useCallback((trade: BacktestTrade) => {
+    if (isDemoSupabaseBlocked()) {
+      requestDemoSignup("edit")
+      return
+    }
+    setEditingTrade(trade)
+  }, [])
+
+  const handleSendTrade = useCallback((_trade: BacktestTrade) => {
+    if (isDemoSupabaseBlocked()) {
+      requestDemoSignup("trade")
+    }
   }, [])
 
   const { requestDelete: deleteTrade, confirmModalProps } =
@@ -279,20 +313,21 @@ export default function BacktestPage() {
           <h2 className="mb-3 text-xl font-semibold text-white">
             Backtest Trades
           </h2>
-          <div className="space-y-6 pb-12">
+          <div className="grid grid-cols-1 gap-4 pb-12 md:grid-cols-2">
             {filteredTrades.map((trade) => (
-              <TradeCard
+              <TradesPageTradeCard
                 key={trade.id}
                 trade={trade}
                 showAdvanced={showAdvanced}
-                onEdit={() => setEditingTrade(trade)}
-                onDelete={() => void deleteTrade(trade.id)}
-                onImageClick={(url) => setSelectedImage(url)}
                 shareProfile={shareProfile}
+                onEdit={handleEditTrade}
+                onDelete={(id) => void deleteTrade(id)}
+                onSendClick={handleSendTrade}
+                onImageClick={(url) => setSelectedImage(url)}
               />
             ))}
             {!loading && filteredTrades.length === 0 ? (
-              <p className="text-center text-gray-400">
+              <p className="text-center text-gray-400 md:col-span-2">
                 No backtest trades match this filter.
               </p>
             ) : null}
@@ -318,6 +353,11 @@ export default function BacktestPage() {
           existingTrade={editingTrade}
           onClose={() => setEditingTrade(null)}
           onSave={() => {
+            if (isDemoSupabaseBlocked()) {
+              requestDemoSignup("save")
+              setEditingTrade(null)
+              return
+            }
             void loadBacktests()
             setEditingTrade(null)
           }}

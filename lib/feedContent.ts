@@ -1,4 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { isDemoUserId } from "./demo/constants"
+import { isDemoModeActive } from "./demo/demoMode"
+import {
+  fetchDemoFeedBatch,
+  findDemoFeedItem,
+  findDemoFeedItemByTradeId,
+  getDemoFollowingIds,
+  topUpDemoMergedFeedBuffer,
+} from "./demo/demoFeed"
 import {
   FEED_ACHIEVEMENT_POSTS_SELECT,
 } from "@/lib/achievementPostEngagement"
@@ -25,6 +34,10 @@ export async function fetchFollowingIds(
   supabase: SupabaseClient,
   userId: string
 ): Promise<string[]> {
+  if (isDemoUserId(userId)) {
+    return getDemoFollowingIds(userId)
+  }
+
   const { data, error } = await supabase
     .from("followers")
     .select("following_id")
@@ -70,6 +83,10 @@ export async function fetchTradeFeedBatch(
     pageSize?: number
   }
 ): Promise<FeedBatchResult> {
+  if (isDemoUserId(options.userId)) {
+    return fetchDemoFeedBatch({ ...options, kind: "trade" })
+  }
+
   const pageSize = options.pageSize ?? FEED_PAGE_SIZE
   const from = options.page * pageSize
   const to = from + pageSize - 1
@@ -113,6 +130,10 @@ export async function fetchProfileFeedBatch(
     pageSize?: number
   }
 ): Promise<FeedBatchResult> {
+  if (isDemoUserId(options.userId)) {
+    return fetchDemoFeedBatch({ ...options, kind: "profile" })
+  }
+
   const pageSize = options.pageSize ?? FEED_PAGE_SIZE
   const from = options.page * pageSize
   const to = from + pageSize - 1
@@ -158,6 +179,10 @@ export async function fetchAchievementFeedBatch(
     pageSize?: number
   }
 ): Promise<FeedBatchResult> {
+  if (isDemoUserId(options.userId)) {
+    return fetchDemoFeedBatch({ ...options, kind: "achievement" })
+  }
+
   const pageSize = options.pageSize ?? FEED_PAGE_SIZE
   const from = options.page * pageSize
   const to = from + pageSize - 1
@@ -204,6 +229,10 @@ export async function fetchReelFeedBatch(
     pageSize?: number
   }
 ): Promise<FeedBatchResult> {
+  if (isDemoUserId(options.userId)) {
+    return fetchDemoFeedBatch({ ...options, kind: "reel" })
+  }
+
   const pageSize = options.pageSize ?? FEED_PAGE_SIZE
   const from = options.page * pageSize
   const to = from + pageSize - 1
@@ -243,6 +272,10 @@ export async function fetchTradeFeedPostById(
   supabase: SupabaseClient,
   postId: string
 ): Promise<FeedItem | null> {
+  const demo = findDemoFeedItem(postId, "trade")
+  if (demo) return demo
+  if (isDemoModeActive()) return null
+
   const { data, error } = await supabase
     .from("posts")
     .select(FEED_POSTS_SELECT)
@@ -261,6 +294,10 @@ export async function fetchTradeFeedPostByTradeId(
   supabase: SupabaseClient,
   tradeId: string
 ): Promise<FeedItem | null> {
+  const demo = findDemoFeedItemByTradeId(tradeId)
+  if (demo) return demo
+  if (isDemoModeActive()) return null
+
   const { data, error } = await supabase
     .from("posts")
     .select(FEED_POSTS_SELECT)
@@ -279,6 +316,10 @@ export async function fetchProfileFeedPostById(
   supabase: SupabaseClient,
   postId: string
 ): Promise<FeedItem | null> {
+  const demo = findDemoFeedItem(postId, "profile")
+  if (demo) return demo
+  if (isDemoModeActive()) return null
+
   const { data, error } = await supabase
     .from("profile_posts")
     .select(FEED_PROFILE_POSTS_SELECT)
@@ -322,6 +363,10 @@ export async function topUpMergedFeedBuffer(
   achievementExhausted: boolean
   reelExhausted: boolean
 }> {
+  if (isDemoUserId(options.userId)) {
+    return topUpDemoMergedFeedBuffer(options)
+  }
+
   const pageSize = options.pageSize ?? FEED_PAGE_SIZE
   let buffer = dedupeFeedItems(options.buffer)
   let tradePage = options.tradePage

@@ -8,6 +8,7 @@ import OnboardingGateShell from "./components/OnboardingGateShell"
 import ReferralPersistence from "./components/ReferralPersistence"
 import SentryIdentifyUser from "./components/SentryIdentifyUser"
 import ToastRoot from "./components/ToastRoot"
+import DemoAppShell from "./components/demo/DemoAppShell"
 import { UserProfileProvider } from "@/lib/UserProfileProvider"
 import { GettingStartedProgressProvider } from "@/lib/GettingStartedProgressProvider"
 import {
@@ -73,10 +74,12 @@ export default function RootLayout({
             <SentryIdentifyUser />
             <BannedAccountShell>
               <OnboardingGateShell>
-                {/* pt-16: fixed Navbar offset (AppShell + page-level). Login/onboarding use -mt-16. */}
-                <div className="w-full flex flex-col pt-16">
-                  {children}
-                </div>
+                <DemoAppShell>
+                  {/* pt-16: fixed Navbar offset (AppShell + page-level). Login/onboarding use -mt-16. */}
+                  <div className="w-full flex flex-col pt-16">
+                    {children}
+                  </div>
+                </DemoAppShell>
               </OnboardingGateShell>
             </BannedAccountShell>
             </GettingStartedProgressProvider>

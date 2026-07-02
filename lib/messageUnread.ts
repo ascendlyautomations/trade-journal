@@ -1,5 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { supabase } from "./supabaseClient"
+import { isDemoUserId } from "./demo/constants"
+import {
+  getDemoUnreadCountForConversation,
+  getDemoUnreadMessageCount,
+  getDemoUnreadMessageRows,
+} from "./demo/demoMessages"
+import { isDemoSupabaseBlocked } from "./demo/demoSupabaseGuard"
 
 export function normalizeSeenBy(raw: unknown): string[] {
   if (Array.isArray(raw)) return raw.map(String)
@@ -49,6 +56,9 @@ export async function fetchUnreadMessageRows(
   client: SupabaseClient = supabase
 ): Promise<{ conversation_id: string; seen_by: unknown; sender_id: string | null }[]> {
   if (!conversationIds.length) return []
+  if (isDemoSupabaseBlocked() && isDemoUserId(userId)) {
+    return getDemoUnreadMessageRows(userId, conversationIds)
+  }
 
   const { data, error } = await client
     .from("messages")
@@ -71,6 +81,9 @@ export async function fetchUnreadCountForConversation(
   conversationId: string,
   client: SupabaseClient = supabase
 ): Promise<number> {
+  if (isDemoSupabaseBlocked() && isDemoUserId(userId)) {
+    return getDemoUnreadCountForConversation(userId, conversationId)
+  }
   const rows = await fetchUnreadMessageRows(userId, [conversationId], client)
   return countUnreadFromRows(rows, userId)
 }
@@ -80,6 +93,9 @@ export async function fetchTotalUnreadMessageCount(
   userId: string,
   client: SupabaseClient = supabase
 ): Promise<number> {
+  if (isDemoSupabaseBlocked() && isDemoUserId(userId)) {
+    return getDemoUnreadMessageCount(userId)
+  }
   const conversationIds = await fetchParticipantConversationIds(userId, client)
   if (!conversationIds.length) return 0
 
@@ -97,6 +113,9 @@ export async function markConversationUnread(
   conversationId: string,
   client: SupabaseClient = supabase
 ): Promise<MarkConversationUnreadResult> {
+  if (isDemoSupabaseBlocked()) {
+    return { ok: false, reason: "no_message" }
+  }
   const { data: rows, error: fetchErr } = await client
     .from("messages")
     .select("id, sender_id, seen_by, created_at")

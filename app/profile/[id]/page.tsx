@@ -120,6 +120,19 @@ import TradeCardTimingBlock from "../../components/TradeCardTimingBlock"
 import FeedPostMetaRow from "@/app/components/feed/FeedPostMetaRow"
 import { createUserRoom } from "@/lib/createUserRoom"
 import { loadFollowUiSnapshot } from "@/lib/followActions"
+import { isDemoModeActive } from "@/lib/demo/demoMode"
+import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
+import {
+  getDemoFollowersModalUsers,
+  getDemoFollowingModalUsers,
+  getDemoProfileMetadata,
+  getDemoProfileReels,
+  getDemoReelsByTradeIds,
+  getDemoProfileTrades,
+  getDemoProfileWallPosts,
+  isDemoProfileId,
+  resolveDemoProfileBySegment,
+} from "@/lib/demo/demoProfile"
 import FollowButton from "../../components/FollowButton"
 import { logSupabaseError } from "@/lib/logSupabaseError"
 import { ensureDmConversation } from "@/lib/dmConversation"
@@ -130,7 +143,7 @@ import QuickTradeModal from "../../components/QuickTradeModal"
 import ReelComposerModal from "../../components/profile/ReelComposerModal"
 import ProfileReelCard from "../../components/profile/ProfileReelCard"
 import FeedReelDetailModal from "../../components/feed/FeedReelDetailModal"
-import { PROFILE_REELS_SELECT, type ReelRow, deleteReel } from "@/lib/reels"
+import { PROFILE_REELS_SELECT, type ReelRow, deleteReel, fetchReelsByTradeIds, replaceTradeReelVideo, isTradeAttachedReel } from "@/lib/reels"
 import { reelDetailFeedItem } from "../../components/feed/feedPostHelpers"
 import {
   patchFeedReelInSessionsForUser,
@@ -331,6 +344,8 @@ function TradeCard({
   showInteractions,
   onOpenDetail,
   onOpenComments,
+  attachedReel,
+  onOpenReplay,
   commentsExpanded = false,
   scrollToCommentsOnMount = false,
   inDetailModal = false,
@@ -348,6 +363,8 @@ function TradeCard({
   showInteractions?: boolean
   onOpenDetail?: () => void
   onOpenComments?: () => void
+  attachedReel?: { id: string } | null
+  onOpenReplay?: () => void
   commentsExpanded?: boolean
   scrollToCommentsOnMount?: boolean
   inDetailModal?: boolean
@@ -458,6 +475,19 @@ function TradeCard({
       </div>
       {desc ? (
         <p className="px-1 text-sm leading-relaxed text-white">{desc}</p>
+      ) : null}
+      {attachedReel && onOpenReplay ? (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            onOpenReplay()
+          }}
+          className="inline-flex items-center gap-1.5 px-1 text-xs font-medium text-violet-300/90 transition hover:text-violet-200"
+        >
+          <span aria-hidden>▶</span>
+          Watch Reel
+        </button>
       ) : null}
       <TradeCardTimingBlock trade={trade} />
     </>
@@ -1286,6 +1316,11 @@ function ProfilePageContent() {
   const [wallPostsReady, setWallPostsReady] = useState(false)
   const [profileReels, setProfileReels] = useState<ReelRow[]>([])
   const [profileReelsReady, setProfileReelsReady] = useState(false)
+  const [tradeReelsByTradeId, setTradeReelsByTradeId] = useState<
+    Record<string, ReelRow>
+  >({})
+  const replaceReelInputRef = useRef<HTMLInputElement>(null)
+  const [replacingReelPost, setReplacingReelPost] = useState<any | null>(null)
   const [activeTab, setActiveTab] = useState<
     "trades" | "reels" | "posts" | "calendar" | "stats" | "achievements"
   >(
@@ -1386,10 +1421,18 @@ function ProfilePageContent() {
   }, [])
 
   const openQuickTradeModal = useCallback(() => {
+    if (isDemoModeActive()) {
+      requestDemoSignup("trade")
+      return
+    }
     setShowQuickTrade(true)
   }, [])
 
   const fetchProfileReels = useCallback(async (userId: string) => {
+    if (isDemoModeActive() && isDemoProfileId(userId)) {
+      return getDemoProfileReels(userId)
+    }
+
     const { data, error } = await supabase
       .from("reels")
       .select(PROFILE_REELS_SELECT)
@@ -1558,6 +1601,12 @@ function ProfilePageContent() {
       const isOwner =
         currentUserId != null && String(currentUserId) === String(forProfileId)
 
+      if (isDemoModeActive() && isDemoProfileId(forProfileId)) {
+        return getDemoProfileTrades(forProfileId, currentUserId) as Awaited<
+          ReturnType<typeof sanitizeTradesForViewer>
+        >
+      }
+
       const { data, error } = await supabase
         .from("trades")
         .select(tradeSelectForViewer(isOwner))
@@ -1666,6 +1715,47 @@ function ProfilePageContent() {
   }, [profile?.id, canViewTrades, fetchTradesForProfile, profileId])
 
   useEffect(() => {
+    if (!allTrades.length) {
+      setTradeReelsByTradeId({})
+      return
+    }
+
+    let cancelled = false
+    const tradeIds = allTrades
+      .map((trade) => String(trade.id))
+      .filter((id) => id.trim() !== "")
+
+    if (
+      isDemoModeActive() &&
+      profile?.id &&
+      isDemoProfileId(String(profile.id))
+    ) {
+      const map = getDemoReelsByTradeIds(String(profile.id), tradeIds)
+      const record: Record<string, ReelRow> = {}
+      map.forEach((reel, tradeId) => {
+        record[tradeId] = reel
+      })
+      setTradeReelsByTradeId(record)
+      return () => {
+        cancelled = true
+      }
+    }
+
+    void fetchReelsByTradeIds(supabase, tradeIds).then((map) => {
+      if (cancelled) return
+      const record: Record<string, ReelRow> = {}
+      map.forEach((reel, tradeId) => {
+        record[tradeId] = reel
+      })
+      setTradeReelsByTradeId(record)
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [allTrades, profile?.id])
+
+  useEffect(() => {
     setVisibleTradeCount(PAGE_SIZE)
   }, [profile?.id])
 
@@ -1680,6 +1770,15 @@ function ProfilePageContent() {
     setWallPostsReady(false)
 
     async function fetchWallPosts() {
+      if (isDemoModeActive() && isDemoProfileId(String(profile.id))) {
+        const data = getDemoProfileWallPosts(String(profile.id))
+        if (cancelled) return
+        setWallPosts(data)
+        setWallPostsReady(true)
+        patchProfileSession(profileId, { wallPosts: data })
+        return
+      }
+
       const { data, error } = await supabase
         .from("profile_posts")
         .select("*")
@@ -1743,6 +1842,7 @@ function ProfilePageContent() {
 
   useEffect(() => {
     if (!profile?.id || profileReels.length === 0) return
+    if (isDemoModeActive()) return
 
     const reelIds = profileReels.map((row) => String(row.id))
     const channel = supabase.channel(`profile-reel-likes-${profile.id}`)
@@ -2059,6 +2159,58 @@ function ProfilePageContent() {
     const uid = viewerUser?.id ?? null
     setCurrentUserId(uid)
 
+    if (isDemoModeActive()) {
+      const demoProf = resolveDemoProfileBySegment(segment)
+      if (!demoProf) {
+        setProfile(null)
+        setRoom(null)
+        setAllTrades([])
+        setVisibleTradeCount(PAGE_SIZE)
+        setFollowersCount(0)
+        setFollowingCount(0)
+        setIsFollowing(false)
+        setIsRequested(false)
+        setFollowsYou(false)
+        setLoading(false)
+        setMetaLoading(false)
+        setTradesLoading(false)
+        return
+      }
+
+      setProfile(demoProf)
+      setLoading(false)
+
+      const meta = getDemoProfileMetadata(demoProf.id, uid)
+      if (meta) {
+        setIsFollowing(meta.following)
+        setIsRequested(meta.requested)
+        setFollowsYou(meta.profileFollowsYou)
+        setRoom(
+          meta.roomRow && meta.roomRow.owner_user_id === demoProf.id
+            ? meta.roomRow
+            : null
+        )
+        setFollowersCount(meta.followersN)
+        setFollowingCount(meta.followingN)
+      }
+
+      writeProfileSession(segment, {
+        profile: demoProf,
+        room: meta?.roomRow ?? null,
+        followersCount: meta?.followersN ?? 0,
+        followingCount: meta?.followingN ?? 0,
+        isFollowing: meta?.following ?? false,
+        isRequested: meta?.requested ?? false,
+        followsYou: meta?.profileFollowsYou ?? false,
+        allTrades: [],
+        wallPosts: [],
+        visibleTradeCount: PAGE_SIZE,
+        scrollY: 0,
+      })
+      setMetaLoading(false)
+      return
+    }
+
     if (devProfileDebug) {
       void supabase
         .from("profiles")
@@ -2168,6 +2320,11 @@ function ProfilePageContent() {
   async function handleMessage() {
     if (!currentUserId || !profile || currentUserId === profile.id) return
 
+    if (isDemoModeActive()) {
+      router.push(dmThreadPath(profile))
+      return
+    }
+
     setMessageBusy(true)
     try {
       const result = await ensureDmConversation(
@@ -2213,6 +2370,10 @@ function ProfilePageContent() {
   }
 
   async function handleCreateRoom() {
+    if (isDemoModeActive()) {
+      requestDemoSignup("room")
+      return
+    }
     if (creatingRoomRef.current || creatingRoom) return
     creatingRoomRef.current = true
     setCreatingRoom(true)
@@ -2271,6 +2432,11 @@ function ProfilePageContent() {
     setShowFollowing(false)
     setShowFollowers(true)
 
+    if (isDemoModeActive() && isDemoProfileId(profile.id)) {
+      setFollowersModalUsers(getDemoFollowersModalUsers(profile.id))
+      return
+    }
+
     const { data: rows } = await supabase
       .from("followers")
       .select("follower_id")
@@ -2295,6 +2461,11 @@ function ProfilePageContent() {
     setShowFollowers(false)
     setShowFollowing(true)
 
+    if (isDemoModeActive() && isDemoProfileId(profile.id)) {
+      setFollowingModalUsers(getDemoFollowingModalUsers(profile.id))
+      return
+    }
+
     const { data: rows } = await supabase
       .from("followers")
       .select("following_id")
@@ -2316,6 +2487,10 @@ function ProfilePageContent() {
 
   async function handleCreatePost() {
     if (!currentUserId || !profile || currentUserId !== profile.id) return
+    if (isDemoModeActive()) {
+      requestDemoSignup("comment")
+      return
+    }
     if (creatingPostRef.current || creatingPost) return
 
     const text = postContent.trim()
@@ -2442,6 +2617,7 @@ function ProfilePageContent() {
   const handleStartEditReel = useCallback(
     (post: any) => {
       if (!currentUserId || !profile || currentUserId !== profile.id) return
+      if (isTradeAttachedReel(post)) return
       setEditingReel({
         id: String(post.id),
         user_id: String(post.user_id),
@@ -2451,6 +2627,8 @@ function ProfilePageContent() {
         duration_seconds:
           post.duration_seconds != null ? Number(post.duration_seconds) : null,
         visibility: post.visibility === "private" ? "private" : "public",
+        trade_id: null,
+        kind: null,
         created_at: String(post.created_at),
         updated_at: String(post.updated_at ?? post.created_at),
       })
@@ -2459,11 +2637,67 @@ function ProfilePageContent() {
     [currentUserId, profile]
   )
 
+  const handleReplaceReelVideo = useCallback((post: any) => {
+    if (!currentUserId || !profile || currentUserId !== profile.id) return
+    if (!isTradeAttachedReel(post)) return
+    setReplacingReelPost(post)
+    setOpenMenuId(null)
+    replaceReelInputRef.current?.click()
+  }, [currentUserId, profile])
+
+  const handleReplaceReelFileSelected = useCallback(
+    async (file: File | null) => {
+      if (!file || !replacingReelPost || !currentUserId) return
+
+      const reelId = String(replacingReelPost.id)
+      const result = await replaceTradeReelVideo(supabase, {
+        reelId,
+        userId: currentUserId,
+        file,
+      })
+      setReplacingReelPost(null)
+
+      if ("error" in result) {
+        showPopup({ type: "error", message: result.error })
+        return
+      }
+
+      const updated = result.reel
+      setProfileReels((prev) =>
+        prev.map((row) => (String(row.id) === reelId ? updated : row))
+      )
+      if (updated.trade_id) {
+        setTradeReelsByTradeId((prev) => ({
+          ...prev,
+          [String(updated.trade_id)]: updated,
+        }))
+      }
+      if (selectedReelDetail && String(selectedReelDetail.id) === reelId) {
+        setSelectedReelDetail(
+          reelDetailFeedItem(updated as Record<string, unknown>, profile)
+        )
+      }
+      applyReelPatch(reelId, updated)
+    },
+    [
+      applyReelPatch,
+      currentUserId,
+      profile,
+      replacingReelPost,
+      selectedReelDetail,
+      showPopup,
+    ]
+  )
+
   const handleDeleteReel = useCallback(
     async (post: any) => {
       if (!currentUserId || !profile || currentUserId !== profile.id) return
       if (String(post.user_id) !== profile.id) return
-      if (!window.confirm("Delete this reel?")) return
+      if (!window.confirm(
+        isTradeAttachedReel(post)
+          ? "Remove replay from this trade?"
+          : "Delete this reel?"
+      )) return
 
       const reelId = String(post.id)
       const result = await deleteReel(supabase, {
@@ -2479,6 +2713,14 @@ function ProfilePageContent() {
       setProfileReels((prev) =>
         prev.filter((row) => String(row.id) !== reelId)
       )
+      if (post.trade_id) {
+        const tradeId = String(post.trade_id)
+        setTradeReelsByTradeId((prev) => {
+          const next = { ...prev }
+          delete next[tradeId]
+          return next
+        })
+      }
       if (selectedReelDetail && String(selectedReelDetail.id) === reelId) {
         setSelectedReelDetail(null)
       }
@@ -3105,6 +3347,10 @@ function ProfilePageContent() {
   }
 
   const performDeleteTrade = useCallback(async (tradeId: string) => {
+    if (isDemoModeActive()) {
+      requestDemoSignup("delete")
+      return
+    }
     await deleteUserTrade(supabase, tradeId)
     setAllTrades((prev) => prev.filter((t) => String(t.id) !== String(tradeId)))
     setSelectedTradeDetail((prev) =>
@@ -3910,8 +4156,22 @@ function ProfilePageContent() {
           }
           onEditReel={() => handleStartEditReel(selectedReelDetail)}
           onDeleteReel={() => void handleDeleteReel(selectedReelDetail)}
+          onReplaceReelVideo={() => handleReplaceReelVideo(selectedReelDetail)}
+          isTradeAttachedReel={isTradeAttachedReel(selectedReelDetail)}
         />
       ) : null}
+
+      <input
+        ref={replaceReelInputRef}
+        type="file"
+        accept="video/mp4,video/quicktime,.mp4,.mov"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0] ?? null
+          e.target.value = ""
+          void handleReplaceReelFileSelected(file)
+        }}
+      />
 
       {profileStoryOpen && profile?.id && profileCurrentStory ? (
         <FeedStoryViewer
@@ -4353,6 +4613,11 @@ function ProfilePageContent() {
                         profile={profile}
                         shareProfile={viewerShareProfile}
                         canManageTrade={currentUserId === profile.id}
+                        attachedReel={tradeReelsByTradeId[String(trade.id)] ?? null}
+                        onOpenReplay={() => {
+                          const reel = tradeReelsByTradeId[String(trade.id)]
+                          if (reel) openReelDetail(reel)
+                        }}
                         onStartEditTrade={() => {
                           openEditTradeModal(trade)
                         }}

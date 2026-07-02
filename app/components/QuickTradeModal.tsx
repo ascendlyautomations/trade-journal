@@ -27,20 +27,22 @@ import {
   type QuickTradeCsvFormPatch,
 } from "@/lib/parseQuickCsvPaste"
 import { feedbackPresets, persistentError } from "@/lib/feedbackPresets"
-import {
-  formatTradeInputPnlDisplay,
-  formatTradeInputPriceDisplay,
-  handleTradeNumericInput,
-} from "@/lib/formatMoney"
+import { handleTradeNumericInput } from "@/lib/formatMoney"
+import TradeFormCurrencyInput from "@/app/components/trade/TradeFormCurrencyInput"
+import { TRADE_OPTIONAL_ATTACHMENT_LABEL_CLASS } from "@/lib/tradeFormUi"
 import { assertCanCreateTradingAccount } from "@/lib/tradingAccounts"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import { upsertAccountInCache } from "@/lib/appDataCache"
 import { parseOptionalRr } from "@/lib/tradeRr"
 import CommunitySharePreviewPanel from "@/app/components/CommunitySharePreviewPanel"
 import TradePublicShareToggle from "@/app/components/TradePublicShareToggle"
+import TradeReelAttachment from "@/app/components/TradeReelAttachment"
+import { publishTradeReel } from "@/lib/reels"
 import { buildCommunitySharePreviewPost } from "@/lib/buildCommunitySharePreviewPost"
 import { buildDateTime } from "@/lib/inputTradeDateTime"
 import { isProActive } from "@/lib/subscription"
+import { isDemoModeActive } from "@/lib/demo/demoMode"
+import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 
 type CreateAccountSavePayload = Parameters<CreateAccountModalProps["onSave"]>[0]
 
@@ -62,6 +64,8 @@ const LABEL_CLASS = "block text-xs font-medium text-gray-300"
 const FIELD_PAIR_ROW_CLASS = "grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5"
 
 const FIELD_TRIPLE_ROW_CLASS = "grid grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-5"
+
+const QUICK_CURRENCY_INPUT_CLASS = `${INPUT_CLASS} mt-2 pl-8 tabular-nums`
 
 const QUICK_CSV_BUTTON_CLASS = buttonVariants({
   variant: "secondary",
@@ -99,18 +103,21 @@ function inferPreviewDirection(
 function FieldLabel({
   children,
   htmlFor,
+  className,
 }: {
   children: ReactNode
   htmlFor?: string
+  className?: string
 }) {
+  const labelClass = className ?? LABEL_CLASS
   if (htmlFor) {
     return (
-      <label htmlFor={htmlFor} className={LABEL_CLASS}>
+      <label htmlFor={htmlFor} className={labelClass}>
         {children}
       </label>
     )
   }
-  return <p className={LABEL_CLASS}>{children}</p>
+  return <p className={labelClass}>{children}</p>
 }
 
 function TimeField({
@@ -175,6 +182,7 @@ export default function QuickTradeModal({
 
   const [ticker, setTicker] = useState("")
   const [pnl, setPnl] = useState("")
+  const [decimalError, setDecimalError] = useState("")
   const [points, setPoints] = useState("")
   const [contracts, setContracts] = useState("")
   const [rr, setRr] = useState("")
@@ -187,6 +195,7 @@ export default function QuickTradeModal({
   const [description, setDescription] = useState("")
   const [isPublic, setIsPublic] = useState(false)
   const [image, setImage] = useState<File | null>(null)
+  const [pendingReelFile, setPendingReelFile] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [csvPasteOpen, setCsvPasteOpen] = useState(false)
   const [csvPasteText, setCsvPasteText] = useState("")
@@ -217,6 +226,7 @@ export default function QuickTradeModal({
     setDescription("")
     setIsPublic(false)
     setImage(null)
+    setPendingReelFile(null)
     setPreviewUrl(null)
     setAdvancedOpen(false)
     setError(null)
@@ -426,6 +436,10 @@ export default function QuickTradeModal({
   }
 
   async function handleCreateAccountSave(newAccount: CreateAccountSavePayload) {
+    if (isDemoModeActive()) {
+      requestDemoSignup("save")
+      return
+    }
     if (creatingAccountRef.current || creatingAccount || !userId) return
 
     creatingAccountRef.current = true
@@ -497,6 +511,10 @@ export default function QuickTradeModal({
   }
 
   async function handleSave() {
+    if (isDemoModeActive()) {
+      requestDemoSignup("trade")
+      return
+    }
     if (busy || !userId) return
 
     if (!selectedAccount) {
@@ -593,6 +611,25 @@ export default function QuickTradeModal({
         showPopup(persistentError("Save Failed", result.message))
       }
       return
+    }
+
+    if (pendingReelFile && result.trade?.id) {
+      const reelResult = await publishTradeReel(supabase, {
+        tradeId: String(result.trade.id),
+        userId,
+        file: pendingReelFile,
+      })
+      if ("error" in reelResult) {
+        showPopup(
+          persistentError(
+            "Replay Upload Failed",
+            `Trade saved, but replay could not be uploaded: ${reelResult.error}`
+          )
+        )
+        onSaved?.()
+        onClose()
+        return
+      }
     }
 
     notifyGettingStartedChecklistMaybeCompleted()
@@ -732,20 +769,17 @@ export default function QuickTradeModal({
               </div>
               <div>
                 <FieldLabel htmlFor="quick-trade-pnl">P&amp;L</FieldLabel>
-                <input
+                <TradeFormCurrencyInput
                   id="quick-trade-pnl"
-                  type="text"
-                  inputMode="decimal"
-                  value={formatTradeInputPnlDisplay(pnl)}
-                  onChange={(e) =>
-                    handleTradeNumericInput(e.target.value, setPnl, {
-                      allowDecimal: true,
-                      allowNegative: true,
-                    })
-                  }
-                  placeholder="-$250.00 or $1,200.00"
-                  className={`${INPUT_CLASS} mt-2 tabular-nums`}
+                  value={pnl}
+                  onChange={setPnl}
+                  allowNegative
+                  onDecimalError={setDecimalError}
+                  inputClassName={QUICK_CURRENCY_INPUT_CLASS}
                 />
+                {decimalError ? (
+                  <p className="mt-1 text-xs text-red-400">{decimalError}</p>
+                ) : null}
               </div>
             </div>
 
@@ -861,34 +895,22 @@ export default function QuickTradeModal({
                 >
                   <div>
                     <FieldLabel htmlFor="quick-entry-price">Entry Price</FieldLabel>
-                    <input
+                    <TradeFormCurrencyInput
                       id="quick-entry-price"
-                      type="text"
-                      inputMode="decimal"
-                      value={formatTradeInputPriceDisplay(entryPrice)}
-                      onChange={(e) =>
-                        handleTradeNumericInput(e.target.value, setEntryPrice, {
-                          allowDecimal: true,
-                        })
-                      }
-                      placeholder="Optional"
-                      className={`${INPUT_CLASS} mt-2 tabular-nums`}
+                      value={entryPrice}
+                      onChange={setEntryPrice}
+                      onDecimalError={setDecimalError}
+                      inputClassName={QUICK_CURRENCY_INPUT_CLASS}
                     />
                   </div>
                   <div>
                     <FieldLabel htmlFor="quick-exit-price">Exit Price</FieldLabel>
-                    <input
+                    <TradeFormCurrencyInput
                       id="quick-exit-price"
-                      type="text"
-                      inputMode="decimal"
-                      value={formatTradeInputPriceDisplay(exitPrice)}
-                      onChange={(e) =>
-                        handleTradeNumericInput(e.target.value, setExitPrice, {
-                          allowDecimal: true,
-                        })
-                      }
-                      placeholder="Optional"
-                      className={`${INPUT_CLASS} mt-2 tabular-nums`}
+                      value={exitPrice}
+                      onChange={setExitPrice}
+                      onDecimalError={setDecimalError}
+                      inputClassName={QUICK_CURRENCY_INPUT_CLASS}
                     />
                   </div>
                 </div>
@@ -897,7 +919,9 @@ export default function QuickTradeModal({
 
             {/* Row 5: Upload image */}
             <div>
-              <FieldLabel>Screenshot (optional)</FieldLabel>
+              <FieldLabel className={TRADE_OPTIONAL_ATTACHMENT_LABEL_CLASS}>
+                Screenshot (Optional)
+              </FieldLabel>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -919,6 +943,14 @@ export default function QuickTradeModal({
                   className="mt-3 max-h-32 w-full rounded-lg border border-white/10 object-cover"
                 />
               ) : null}
+
+              <TradeReelAttachment
+                variant="quick"
+                disabled={busy}
+                pendingFile={pendingReelFile}
+                onPendingFileChange={setPendingReelFile}
+                labelClassName={TRADE_OPTIONAL_ATTACHMENT_LABEL_CLASS}
+              />
             </div>
 
             {/* Row 6: Description */}

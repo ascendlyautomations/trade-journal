@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import Modal from "@/app/components/ui/Modal"
 import { supabase } from "@/lib/supabaseClient"
-import { publishReel, updateReelCaption, type ReelRow } from "@/lib/reels"
+import { publishReel, updateReelCaption, type ReelRow, isTradeAttachedReel } from "@/lib/reels"
 import {
   readReelVideoMetadata,
   REEL_MAX_DURATION_LABEL,
@@ -30,6 +30,7 @@ export default function ReelComposerModal({
   onSaved,
 }: ReelComposerModalProps) {
   const isEditMode = editReel != null
+  const isTradeReplayEdit = isEditMode && isTradeAttachedReel(editReel)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const previewUrlRef = useRef<string | null>(null)
 
@@ -68,7 +69,7 @@ export default function ReelComposerModal({
       resetForm()
       return
     }
-    if (isEditMode && editReel) {
+    if (isEditMode && editReel && !isTradeAttachedReel(editReel)) {
       setCaption(editReel.caption ?? "")
       setErrorMessage(null)
     }
@@ -169,7 +170,7 @@ export default function ReelComposerModal({
     <Modal
       open={open}
       onClose={handleClose}
-      title={isEditMode ? "Edit Reel" : "Create Reel"}
+      title={isTradeReplayEdit ? "Trade Replay" : isEditMode ? "Edit Reel" : "Create Reel"}
       size="md"
       panelClassName="max-w-lg p-4 sm:p-6"
       footer={
@@ -182,7 +183,7 @@ export default function ReelComposerModal({
           >
             Cancel
           </button>
-          {isEditMode ? (
+          {isEditMode && !isTradeReplayEdit ? (
             <button
               type="button"
               disabled={publishing}
@@ -190,6 +191,15 @@ export default function ReelComposerModal({
               className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-500 disabled:opacity-50"
             >
               {publishing ? "Saving…" : "Save"}
+            </button>
+          ) : isEditMode ? (
+            <button
+              type="button"
+              disabled={publishing}
+              onClick={handleClose}
+              className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-500 disabled:opacity-50"
+            >
+              Done
             </button>
           ) : (
             <button
@@ -216,27 +226,36 @@ export default function ReelComposerModal({
               preload="metadata"
             />
           </div>
-          <p className="text-center text-xs text-gray-500">
-            Video cannot be changed after publishing.
-          </p>
-          <div>
-            <label
-              htmlFor="reel-caption-edit"
-              className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-gray-400"
-            >
-              Caption
-            </label>
-            <textarea
-              id="reel-caption-edit"
-              value={caption}
-              onChange={(e) => setCaption(e.target.value)}
-              rows={3}
-              maxLength={2200}
-              placeholder="Write a caption…"
-              disabled={publishing}
-              className="w-full resize-none rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-gray-500 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30 disabled:opacity-60"
-            />
-          </div>
+          {isTradeReplayEdit ? (
+            <p className="text-center text-sm text-gray-400">
+              Caption comes from your trade description. Use Replace Video from
+              the reel menu to change the video.
+            </p>
+          ) : (
+            <>
+              <p className="text-center text-xs text-gray-500">
+                Video cannot be changed after publishing.
+              </p>
+              <div>
+                <label
+                  htmlFor="reel-caption-edit"
+                  className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-gray-400"
+                >
+                  Caption
+                </label>
+                <textarea
+                  id="reel-caption-edit"
+                  value={caption}
+                  onChange={(e) => setCaption(e.target.value)}
+                  rows={3}
+                  maxLength={2200}
+                  placeholder="Write a caption…"
+                  disabled={publishing}
+                  className="w-full resize-none rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-gray-500 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30 disabled:opacity-60"
+                />
+              </div>
+            </>
+          )}
         </div>
       ) : (
         <>

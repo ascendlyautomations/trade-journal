@@ -1,5 +1,11 @@
 import { supabase } from "./supabaseClient"
 import { formatPnlCurrency } from "./formatMoney"
+import { isDemoUserId } from "./demo/constants"
+import { isDemoProfileId } from "./demo/demoProfile"
+import {
+  getDemoAchievementsForUser,
+  getDemoPublicAchievementsForUser,
+} from "./demo/demoAchievements"
 
 export * from "./achievementTypes.ts"
 
@@ -42,6 +48,12 @@ export async function fetchPublicPayoutTotalsByUserId(
 }
 
 export async function fetchOwnAchievements(userId: string) {
+  if (isDemoUserId(userId)) {
+    return {
+      data: getDemoAchievementsForUser(userId),
+      error: null,
+    }
+  }
   return supabase
     .from("achievements")
     .select(ACHIEVEMENT_SELECT)
@@ -52,6 +64,12 @@ export async function fetchOwnAchievements(userId: string) {
 }
 
 export async function fetchVisibleProfileAchievements(profileUserId: string) {
+  if (isDemoProfileId(profileUserId)) {
+    return {
+      data: getDemoPublicAchievementsForUser(profileUserId),
+      error: null,
+    }
+  }
   return supabase
     .from("achievements")
     .select(PUBLIC_ACHIEVEMENT_SELECT)

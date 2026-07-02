@@ -19,6 +19,8 @@ import { ConfirmModal, useDeleteTradeConfirmation } from "../../components/ui"
 import { useUserProfile } from "@/lib/UserProfileProvider"
 import { useCachedAccounts, useCachedTrades } from "@/lib/useAppDataCache"
 import { getCachedAccounts, getCachedTrades } from "@/lib/appDataCache"
+import { isDemoModeActive } from "@/lib/demo/demoMode"
+import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 
 export default function TradesPage() {
   const { user, profile: gateProfile, loading: profileLoading } = useUserProfile()
@@ -65,7 +67,7 @@ export default function TradesPage() {
   }, [accountRows])
 
   useEffect(() => {
-    if (!profileLoading && !user) {
+    if (!profileLoading && !user && !isDemoModeActive()) {
       router.push("/login")
     }
   }, [profileLoading, user, router])
@@ -80,6 +82,11 @@ export default function TradesPage() {
     const editId = new URLSearchParams(window.location.search).get("edit")?.trim()
     if (!editId) return
 
+    if (isDemoModeActive()) {
+      requestDemoSignup("edit")
+      return
+    }
+
     const trade = trades.find((t) => String(t.id) === editId)
     if (trade) {
       setEditingTrade({ ...trade })
@@ -87,11 +94,19 @@ export default function TradesPage() {
   }, [loading, trades])
 
   const handleEditTrade = useCallback((trade: any) => {
+    if (isDemoModeActive()) {
+      requestDemoSignup("edit")
+      return
+    }
     setEditingTrade({ ...trade })
   }, [])
 
   const performDeleteTrade = useCallback(
     async (id: string) => {
+      if (isDemoModeActive()) {
+        requestDemoSignup("delete")
+        return
+      }
       await deleteUserTrade(supabase, id, { userId: user?.id })
     },
     [user?.id]
@@ -101,11 +116,19 @@ export default function TradesPage() {
     useDeleteTradeConfirmation(performDeleteTrade)
 
   const handleSendTrade = useCallback((trade: any) => {
+    if (isDemoModeActive()) {
+      requestDemoSignup("trade")
+      return
+    }
     setSendTradeId(String(trade.id))
   }, [])
 
   const handleAnalyzeTrade = useCallback(
     (trade: any) => {
+      if (isDemoModeActive()) {
+        requestDemoSignup("ai")
+        return
+      }
       router.push(`/analyst?trade=${encodeURIComponent(String(trade.id))}`)
     },
     [router]
@@ -140,6 +163,10 @@ export default function TradesPage() {
   }, [])
 
   const handleOpenPerformanceShare = useCallback(() => {
+    if (isDemoModeActive()) {
+      requestDemoSignup("upload")
+      return
+    }
     setShowPerformanceShare(true)
   }, [])
 
@@ -156,6 +183,10 @@ export default function TradesPage() {
   }, [])
 
   const handleTradeFormSaved = useCallback(() => {
+    if (isDemoModeActive()) {
+      requestDemoSignup("save")
+      return
+    }
     setEditingTrade(null)
   }, [])
 

@@ -84,6 +84,8 @@ import {
   DASHBOARD_SESSION_DISPLAY_ORDER,
   normalizeSessionBucket,
 } from "@/lib/dashboardSessionBuckets"
+import { isDemoModeActive } from "@/lib/demo/demoMode"
+import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 import {
   dispatchGettingStartedSignalsRefresh,
   notifyGettingStartedChecklistMaybeCompleted,
@@ -1393,6 +1395,10 @@ const biggestLoss = losses.length > 0
       : 0
 
   async function saveDashboardGearPanel() {
+    if (isDemoModeActive()) {
+      requestDemoSignup("save")
+      return
+    }
     if (!user || !gearDraft) return
 
     const rawLimit = finalizeDrawdownLimitInput(gearDraft.drawdownLimit).trim()
@@ -1623,7 +1629,13 @@ const biggestLoss = losses.length > 0
               onSelectedDateChange={setSelectedDate}
               showPublicOnly={showPublicOnly}
               onTogglePublicOnly={() => setShowPublicOnly(!showPublicOnly)}
-              onOpenPerformanceShare={() => setShowPerformanceShare(true)}
+              onOpenPerformanceShare={() => {
+                if (isDemoModeActive()) {
+                  requestDemoSignup("upload")
+                  return
+                }
+                setShowPerformanceShare(true)
+              }}
               showControls={showControls}
               onToggleShowControls={() => setShowControls((prev) => !prev)}
               gearDraft={gearDraft}
@@ -1670,7 +1682,13 @@ const biggestLoss = losses.length > 0
           </Link>
           <button
             type="button"
-            onClick={() => setShowImportModal(true)}
+            onClick={() => {
+              if (isDemoModeActive()) {
+                requestDemoSignup("save")
+                return
+              }
+              setShowImportModal(true)
+            }}
             className="rounded-lg border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/15"
           >
             Import CSV

@@ -4,6 +4,8 @@ import { memo, useCallback, useState } from "react"
 import { supabase } from "@/lib/supabaseClient"
 import { sendStoryReply } from "@/lib/sendStoryReply"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
+import { isDemoModeActive } from "@/lib/demo/demoMode"
+import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 
 type StoryReplyInputProps = {
   currentUserId: string
@@ -41,6 +43,11 @@ function StoryReplyInput({
   const submit = useCallback(async () => {
     const trimmed = text.trim()
     if (!trimmed || sending) return
+
+    if (isDemoModeActive()) {
+      requestDemoSignup("comment")
+      return
+    }
 
     setSending(true)
     try {

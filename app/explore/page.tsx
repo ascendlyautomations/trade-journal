@@ -36,6 +36,16 @@ import {
   setExploreTradesForView,
   writeExploreSession,
 } from "@/lib/exploreSessionCache"
+import { isDemoModeActive } from "@/lib/demo/demoMode"
+import {
+  getDemoExploreFollowingIds,
+  getDemoExploreFollowsYouIds,
+  getDemoExploreProfiles,
+  getDemoExploreTradesForView,
+  searchDemoExploreProfiles,
+} from "@/lib/demo/demoExplore"
+import { getDemoProfileById } from "@/lib/demo/demoProfile"
+import { useUserProfile } from "@/lib/UserProfileProvider"
 
 type EnrichedTopTrader = {
   userId: string
@@ -67,6 +77,10 @@ const SEARCH_INPUT_CLASS =
 async function fetchTradesForWindow(
   view: ExploreTopView
 ): Promise<TradeForLeaderboard[]> {
+  if (isDemoModeActive()) {
+    return getDemoExploreTradesForView(view)
+  }
+
   const cutoff = getExploreTradeWindowCutoff(view)
 
   let query = supabase
@@ -165,6 +179,7 @@ function SectionHeading({
 }
 
 export default function ExplorePage() {
+  const { user } = useUserProfile()
   const initialLoadDone = useRef(false)
   const [loading, setLoading] = useState(true)
   const [loadingTopView, setLoadingTopView] = useState(false)
@@ -189,6 +204,25 @@ export default function ExplorePage() {
     const have = new Set(existing.map((p) => p.id))
     const missingTopIds = topIds.filter((id) => !have.has(id))
     if (missingTopIds.length === 0) return
+
+    if (isDemoModeActive()) {
+      const rows = missingTopIds
+        .map((id) => getDemoProfileById(id))
+        .filter(Boolean)
+        .map((profile) => ({
+          id: profile!.id,
+          username: profile!.username,
+          name: profile!.name,
+          avatar_url: profile!.avatar_url,
+          bio: profile!.bio,
+          created_at: profile!.created_at,
+          is_private: profile!.is_private,
+        }))
+      if (rows.length) {
+        setProfiles((prev) => mergeExploreProfiles(prev, rows))
+      }
+      return
+    }
 
     const { data } = await supabase
       .from("profiles")
@@ -251,13 +285,18 @@ export default function ExplorePage() {
   }
 
   useEffect(() => {
+    if (isDemoModeActive() && !user?.id) return
     const cached = readExploreSession()
-    if (cached) {
+    if (cached && !isDemoModeActive()) {
+      restoreExploreSession(cached)
+      return
+    }
+    if (cached && isDemoModeActive()) {
       restoreExploreSession(cached)
       return
     }
     void init()
-  }, [])
+  }, [user?.id])
 
   useEffect(() => {
     if (!initialLoadDone.current) return
@@ -296,6 +335,13 @@ export default function ExplorePage() {
       setLoadingSearch(true)
       setSearchFinished(false)
 
+      if (isDemoModeActive()) {
+        setResults(searchDemoExploreProfiles(term))
+        setLoadingSearch(false)
+        setSearchFinished(true)
+        return
+      }
+
       const { data } = await supabase
         .from("profiles")
         .select(SEARCH_PROFILE_FIELDS)
@@ -315,10 +361,40 @@ export default function ExplorePage() {
   async function init() {
     setLoading(true)
 
+    if (isDemoModeActive()) {
+      const uid = user?.id ?? null
+      const demoProfiles = getDemoExploreProfiles()
+      const followingIdsArr = getDemoExploreFollowingIds(uid)
+      const followsYouIdsArr = getDemoExploreFollowsYouIds(uid)
+      const demoTrades = getDemoExploreTradesForView("30D")
+
+      setCurrentUserId(uid)
+      setProfiles(demoProfiles)
+      setFollowingIds(new Set(followingIdsArr))
+      setRequestedIds(new Set())
+      setFollowsYouIds(new Set(followsYouIdsArr))
+      setTrades(demoTrades)
+
+      writeExploreSession({
+        currentUserId: uid,
+        profiles: demoProfiles,
+        followingIds: followingIdsArr,
+        requestedIds: [],
+        followsYouIds: followsYouIdsArr,
+        tradesByView: { "30D": demoTrades },
+        topView: "30D",
+        scrollY: 0,
+      })
+
+      initialLoadDone.current = true
+      setLoading(false)
+      return
+    }
+
     const {
-      data: { user },
+      data: { user: authUser },
     } = await supabase.auth.getUser()
-    setCurrentUserId(user?.id ?? null)
+    setCurrentUserId(authUser?.id ?? null)
 
     const profilePoolLimit = EXPLORE_NEW_LIMIT + EXPLORE_ACTIVE_LIMIT
 
@@ -331,24 +407,24 @@ export default function ExplorePage() {
         .neq("is_private", true)
         .order("created_at", { ascending: false })
         .limit(profilePoolLimit),
-      user?.id
+      authUser?.id
         ? supabase
             .from("followers")
             .select("following_id")
-            .eq("follower_id", user.id)
+            .eq("follower_id", authUser.id)
         : Promise.resolve({ data: null }),
-      user?.id
+      authUser?.id
         ? supabase
             .from("follow_requests")
             .select("target_id")
-            .eq("requester_id", user.id)
+            .eq("requester_id", authUser.id)
             .eq("status", "pending")
         : Promise.resolve({ data: null }),
-      user?.id
+      authUser?.id
         ? supabase
             .from("followers")
             .select("follower_id")
-            .eq("following_id", user.id)
+            .eq("following_id", authUser.id)
         : Promise.resolve({ data: null }),
     ])
 
@@ -378,7 +454,7 @@ export default function ExplorePage() {
     const tradesByView = readExploreSession()?.tradesByView ?? {}
 
     writeExploreSession({
-      currentUserId: user?.id ?? null,
+      currentUserId: authUser?.id ?? null,
       profiles: pool,
       followingIds: followingIdsArr,
       requestedIds: requestedIdsArr,

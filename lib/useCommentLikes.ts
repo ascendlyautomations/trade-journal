@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { supabase } from "@/lib/supabaseClient"
+import { isDemoModeActive } from "@/lib/demo/demoMode"
+import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 import {
   applyCommentLikeRealtimeEvent,
   fetchCommentLikeMetaByIds,
@@ -42,7 +44,7 @@ export function useCommentLikes(args: {
   currentUserIdRef.current = currentUserId
 
   useEffect(() => {
-    if (!source || commentIds.length === 0) {
+    if (!source || commentIds.length === 0 || isDemoModeActive()) {
       setLikesByCommentId({})
       return
     }
@@ -63,7 +65,7 @@ export function useCommentLikes(args: {
   }, [source, commentIdsKey, currentUserId, commentIds])
 
   useEffect(() => {
-    if (!source || !hasComments) return
+    if (!source || !hasComments || isDemoModeActive()) return
 
     const topic = `comment-likes-${source}-${crypto.randomUUID()}`
     const channel = supabase.channel(topic)
@@ -118,6 +120,10 @@ export function useCommentLikes(args: {
 
   const toggleCommentLikeFor = useCallback(
     async (comment: any) => {
+      if (isDemoModeActive()) {
+        requestDemoSignup("like")
+        return
+      }
       if (!source || !currentUserId) return
       const commentId = String(comment.id)
       if (likeBusyRef.current.has(commentId)) return
