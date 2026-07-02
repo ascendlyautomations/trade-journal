@@ -211,3 +211,5 @@ $$;
 
 comment on function public.delete_own_trade(uuid) is
   'Deletes a trade owned by auth.uid(), attached reels, feed posts, engagement, notifications, and shares.';
+
+notify pgrst, 'reload schema';

@@ -38,6 +38,8 @@ export type SharedTradeMessageCardProps = {
   /** Cached trade snapshot — renders immediately without a loading state. */
   initialTrade?: any | null
   onTradeLoaded?: (trade: any | null) => void
+  /** Hide footer View trade CTA (e.g. inline expand in reel viewer). */
+  hideViewTradeAction?: boolean
 }
 
 /**
@@ -54,6 +56,7 @@ export default function SharedTradeMessageCard({
   layout = "default",
   initialTrade = null,
   onTradeLoaded,
+  hideViewTradeAction = false,
 }: SharedTradeMessageCardProps) {
   const resolvedClassName =
     className ??
@@ -222,20 +225,24 @@ export default function SharedTradeMessageCard({
           </button>
         ) : null}
 
-        <p className="mt-2.5 border-t border-gray-700/40 pt-2 text-center text-[10px] font-medium uppercase tracking-wide text-gray-500">
-          Shared Trade
-        </p>
+        {hideViewTradeAction ? null : (
+          <>
+            <p className="mt-2.5 border-t border-gray-700/40 pt-2 text-center text-[10px] font-medium uppercase tracking-wide text-gray-500">
+              Shared Trade
+            </p>
 
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation()
-            onViewTrade(trade)
-          }}
-          className="mt-2.5 w-full rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-xs font-medium text-blue-300 transition hover:bg-blue-500/20 hover:text-blue-200"
-        >
-          View trade →
-        </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                onViewTrade(trade)
+              }}
+              className="mt-2.5 w-full rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-xs font-medium text-blue-300 transition hover:bg-blue-500/20 hover:text-blue-200"
+            >
+              View trade →
+            </button>
+          </>
+        )}
       </div>
 
       {showSocialLayer ? (

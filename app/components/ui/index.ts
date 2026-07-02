@@ -49,6 +49,11 @@ export {
   useDeleteAchievementConfirmation,
   DELETE_ACHIEVEMENT_CONFIRM_COPY,
 } from "./useDeleteAchievementConfirmation"
+export {
+  useDeleteReelConfirmation,
+  DELETE_REPLAY_CONFIRM_COPY,
+  DELETE_REEL_CONFIRM_COPY,
+} from "./useDeleteReelConfirmation"
 export { default as FeedbackModal } from "./FeedbackModal"
 export type { FeedbackModalProps } from "./FeedbackModal"
 export { useFeedbackPopup } from "./useFeedbackPopup"

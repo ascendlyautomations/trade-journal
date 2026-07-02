@@ -196,6 +196,7 @@ export default function QuickTradeModal({
   const [isPublic, setIsPublic] = useState(false)
   const [image, setImage] = useState<File | null>(null)
   const [pendingReelFile, setPendingReelFile] = useState<File | null>(null)
+  const pendingReelFileRef = useRef<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [csvPasteOpen, setCsvPasteOpen] = useState(false)
   const [csvPasteText, setCsvPasteText] = useState("")
@@ -236,6 +237,10 @@ export default function QuickTradeModal({
     setCsvImportError(null)
     setPlanProfile(null)
   }, [])
+
+  useEffect(() => {
+    pendingReelFileRef.current = pendingReelFile
+  }, [pendingReelFile])
 
   const loadAccounts = useCallback(async (uid: string) => {
     setAccountLoading(true)
@@ -280,11 +285,13 @@ export default function QuickTradeModal({
   useEffect(() => {
     if (!open) return
     resetForm()
-    if (userId) {
-      void loadAccounts(userId)
-      void loadPlanProfile(userId)
-    }
-  }, [open, userId, resetForm, loadAccounts, loadPlanProfile])
+  }, [open, resetForm])
+
+  useEffect(() => {
+    if (!open || !userId) return
+    void loadAccounts(userId)
+    void loadPlanProfile(userId)
+  }, [open, userId, loadAccounts, loadPlanProfile])
 
   useEffect(() => {
     if (!image) {
@@ -600,9 +607,8 @@ export default function QuickTradeModal({
     }
     )
 
-    setBusy(false)
-
     if (!result.ok) {
+      setBusy(false)
       if (result.code === "account_limit") {
         showPopup(feedbackPresets.accountLimit())
       } else if (result.code === "account_locked") {
@@ -613,13 +619,45 @@ export default function QuickTradeModal({
       return
     }
 
-    if (pendingReelFile && result.trade?.id) {
+    console.log("[QuickTradeModal] trade created", {
+      tradeId: result.trade?.id,
+      posted: result.posted,
+    })
+
+    const reelFile = pendingReelFileRef.current ?? pendingReelFile
+    if (reelFile && result.trade?.id) {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      const authUserId = user?.id ?? userId
+
+      if (!authUserId) {
+        setBusy(false)
+        showPopup(
+          persistentError(
+            "Replay Upload Failed",
+            "Trade saved, but you must be signed in to upload a replay."
+          )
+        )
+        onSaved?.()
+        onClose()
+        return
+      }
+
+      console.log("[QuickTradeModal] replay upload starting", {
+        tradeId: result.trade.id,
+        userId: authUserId,
+        fileName: reelFile.name,
+      })
+
       const reelResult = await publishTradeReel(supabase, {
         tradeId: String(result.trade.id),
-        userId,
-        file: pendingReelFile,
+        userId: authUserId,
+        file: reelFile,
       })
       if ("error" in reelResult) {
+        setBusy(false)
+        console.error("[QuickTradeModal] replay upload failed", reelResult.error)
         showPopup(
           persistentError(
             "Replay Upload Failed",
@@ -630,7 +668,16 @@ export default function QuickTradeModal({
         onClose()
         return
       }
+
+      console.log("[QuickTradeModal] replay upload succeeded", {
+        reelId: reelResult.reel.id,
+        tradeId: reelResult.reel.trade_id,
+      })
+    } else if (!reelFile) {
+      console.log("[QuickTradeModal] no replay file attached at save time")
     }
+
+    setBusy(false)
 
     notifyGettingStartedChecklistMaybeCompleted()
     showPopup(

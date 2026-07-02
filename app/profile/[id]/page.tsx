@@ -137,13 +137,13 @@ import FollowButton from "../../components/FollowButton"
 import { logSupabaseError } from "@/lib/logSupabaseError"
 import { ensureDmConversation } from "@/lib/dmConversation"
 import { dmThreadPath } from "@/lib/messageRoutes"
-import { ConfirmModal, FeedbackModal, useDeleteTradeConfirmation, useFeedbackPopup } from "@/app/components/ui"
+import { ConfirmModal, FeedbackModal, useDeleteTradeConfirmation, useDeleteReelConfirmation, useFeedbackPopup } from "@/app/components/ui"
 import ProfileCreateMenu from "../../components/profile/ProfileCreateMenu"
 import QuickTradeModal from "../../components/QuickTradeModal"
 import ReelComposerModal from "../../components/profile/ReelComposerModal"
 import ProfileReelCard from "../../components/profile/ProfileReelCard"
 import FeedReelDetailModal from "../../components/feed/FeedReelDetailModal"
-import { PROFILE_REELS_SELECT, type ReelRow, deleteReel, fetchReelsByTradeIds, replaceTradeReelVideo, isTradeAttachedReel } from "@/lib/reels"
+import { type ReelRow, deleteReel, fetchReelsByTradeIds, fetchUserProfileReels, replaceTradeReelVideo, isTradeAttachedReel } from "@/lib/reels"
 import { reelDetailFeedItem } from "../../components/feed/feedPostHelpers"
 import {
   patchFeedReelInSessionsForUser,
@@ -1433,18 +1433,7 @@ function ProfilePageContent() {
       return getDemoProfileReels(userId)
     }
 
-    const { data, error } = await supabase
-      .from("reels")
-      .select(PROFILE_REELS_SELECT)
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
-
-    if (error) {
-      console.error("reels fetch:", error)
-      return []
-    }
-
-    return (data ?? []) as ReelRow[]
+    return fetchUserProfileReels(supabase, userId)
   }, [])
 
   /** Profile Stats equity chart: Recharts props tuned below ~sm breakpoint. */
@@ -1622,6 +1611,45 @@ function ProfilePageContent() {
     },
     [currentUserId]
   )
+
+  const refreshProfileMedia = useCallback(async () => {
+    if (!profile?.id) return
+
+    const userId = String(profile.id)
+    const [trades, reels] = await Promise.all([
+      fetchTradesForProfile(userId),
+      fetchProfileReels(userId),
+    ])
+
+    setAllTrades(trades)
+    setProfileReels(reels)
+
+    const tradeIds = trades
+      .map((trade) => String(trade.id))
+      .filter((id) => id.trim() !== "")
+
+    if (tradeIds.length === 0) {
+      setTradeReelsByTradeId({})
+      return
+    }
+
+    if (isDemoModeActive() && isDemoProfileId(userId)) {
+      const map = getDemoReelsByTradeIds(userId, tradeIds)
+      const record: Record<string, ReelRow> = {}
+      map.forEach((reel, tradeId) => {
+        record[tradeId] = reel
+      })
+      setTradeReelsByTradeId(record)
+      return
+    }
+
+    const map = await fetchReelsByTradeIds(supabase, tradeIds)
+    const record: Record<string, ReelRow> = {}
+    map.forEach((reel, tradeId) => {
+      record[tradeId] = reel
+    })
+    setTradeReelsByTradeId(record)
+  }, [fetchProfileReels, fetchTradesForProfile, profile?.id])
 
   const publicTradesByDate = useMemo(
     () =>
@@ -2689,15 +2717,10 @@ function ProfilePageContent() {
     ]
   )
 
-  const handleDeleteReel = useCallback(
+  const performDeleteReel = useCallback(
     async (post: any) => {
       if (!currentUserId || !profile || currentUserId !== profile.id) return
       if (String(post.user_id) !== profile.id) return
-      if (!window.confirm(
-        isTradeAttachedReel(post)
-          ? "Remove replay from this trade?"
-          : "Delete this reel?"
-      )) return
 
       const reelId = String(post.id)
       const result = await deleteReel(supabase, {
@@ -2729,6 +2752,11 @@ function ProfilePageContent() {
     },
     [currentUserId, profile, selectedReelDetail, showPopup]
   )
+
+  const {
+    requestDelete: requestDeleteReel,
+    confirmModalProps: deleteReelConfirmProps,
+  } = useDeleteReelConfirmation(performDeleteReel)
 
   const posts = wallPosts
   const sortedPosts = [...posts].sort((a, b) => {
@@ -4081,6 +4109,7 @@ function ProfilePageContent() {
       <Navbar />
       <FeedbackModal {...feedbackModalProps} />
       <ConfirmModal {...deleteTradeConfirmProps} />
+      <ConfirmModal {...deleteReelConfirmProps} />
       {currentUserId === profile?.id ? (
         <StoryComposeModal
           open={storyComposeOpen}
@@ -4119,10 +4148,8 @@ function ProfilePageContent() {
           userId={currentUserId}
           onClose={() => setShowQuickTrade(false)}
           onSaved={() => {
-            if (profile?.id) {
-              setVisibleTradeCount(PAGE_SIZE)
-              void fetchTradesForProfile(profile.id).then(setAllTrades)
-            }
+            setVisibleTradeCount(PAGE_SIZE)
+            void refreshProfileMedia()
           }}
         />
       ) : null}
@@ -4155,7 +4182,7 @@ function ProfilePageContent() {
             )
           }
           onEditReel={() => handleStartEditReel(selectedReelDetail)}
-          onDeleteReel={() => void handleDeleteReel(selectedReelDetail)}
+          onDeleteReel={() => requestDeleteReel(selectedReelDetail)}
           onReplaceReelVideo={() => handleReplaceReelVideo(selectedReelDetail)}
           isTradeAttachedReel={isTradeAttachedReel(selectedReelDetail)}
         />

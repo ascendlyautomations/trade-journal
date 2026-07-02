@@ -58,7 +58,7 @@ import {
   type ReelRow,
 } from "@/lib/reels"
 import { postImageSrc } from "@/app/components/feed/feedPostHelpers"
-import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
+import { ConfirmModal, FeedbackModal, useDeleteReelConfirmation, useFeedbackPopup } from "@/app/components/ui"
 import { formatAccountNameWithSizeDisplay } from "@/lib/tradeAccountDisplay"
 import {
   invalidateTradesCache,
@@ -203,6 +203,7 @@ export default function InputTradeForm({
   const [isPublic, setIsPublic] = useState(false)
   const [image, setImage] = useState<File | null>(null)
   const [pendingReelFile, setPendingReelFile] = useState<File | null>(null)
+  const pendingReelFileRef = useRef<File | null>(null)
   const [attachedReel, setAttachedReel] = useState<ReelRow | null>(null)
   const [reelDeleteBusy, setReelDeleteBusy] = useState(false)
 
@@ -509,6 +510,10 @@ export default function InputTradeForm({
     }
   }, [existingTrade?.id])
 
+  useEffect(() => {
+    pendingReelFileRef.current = pendingReelFile
+  }, [pendingReelFile])
+
   function resetCreateForm() {
     setTicker("")
     setDirection("Long")
@@ -544,57 +549,92 @@ export default function InputTradeForm({
     setStrategy("")
   }
 
-  const handleDeleteAttachedReel = useCallback(async () => {
-    if (!attachedReel) return
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user?.id) return
-    if (!window.confirm("Remove replay from this trade?")) return
+  const performDeleteAttachedReel = useCallback(
+    async (post: ReelRow) => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user?.id) return
 
-    setReelDeleteBusy(true)
-    const result = await deleteReel(supabase, {
-      reelId: attachedReel.id,
-      userId: user.id,
-    })
-    setReelDeleteBusy(false)
+      setReelDeleteBusy(true)
+      const result = await deleteReel(supabase, {
+        reelId: post.id,
+        userId: user.id,
+      })
+      setReelDeleteBusy(false)
 
-    if ("error" in result) {
-      showPopup(persistentError("Delete Failed", result.error))
-      return
-    }
+      if ("error" in result) {
+        showPopup(persistentError("Delete Failed", result.error))
+        return
+      }
 
-    setAttachedReel(null)
-    setPendingReelFile(null)
-  }, [attachedReel, showPopup])
+      setAttachedReel(null)
+      setPendingReelFile(null)
+    },
+    [showPopup]
+  )
+
+  const {
+    requestDelete: requestDeleteAttachedReel,
+    confirmModalProps: deleteAttachedReelConfirmProps,
+  } = useDeleteReelConfirmation(performDeleteAttachedReel)
 
   const syncTradeReplayAfterSave = useCallback(
-    async (userId: string, tradeId: string): Promise<string | null> => {
-      if (!pendingReelFile) return null
+    async (
+      userId: string,
+      tradeId: string,
+      reelFile?: File | null
+    ): Promise<string | null> => {
+      const file = reelFile ?? pendingReelFileRef.current
+      if (!file) {
+        console.log("[InputTradeForm] no replay file at save time")
+        return null
+      }
+
+      console.log("[InputTradeForm] replay upload starting", {
+        tradeId,
+        userId,
+        fileName: file.name,
+        replacing: Boolean(attachedReel),
+      })
 
       if (attachedReel) {
         const result = await replaceTradeReelVideo(supabase, {
           reelId: attachedReel.id,
           userId,
-          file: pendingReelFile,
+          file,
         })
-        if ("error" in result) return result.error
+        if ("error" in result) {
+          console.error("[InputTradeForm] replay replace failed", result.error)
+          return result.error
+        }
         setAttachedReel(result.reel)
         setPendingReelFile(null)
+        console.log("[InputTradeForm] replay replace succeeded", {
+          reelId: result.reel.id,
+          tradeId: result.reel.trade_id,
+        })
         return null
       }
 
       const result = await publishTradeReel(supabase, {
         tradeId,
         userId,
-        file: pendingReelFile,
+        file,
       })
-      if ("error" in result) return result.error
+      if ("error" in result) {
+        console.error("[InputTradeForm] replay upload failed", result.error)
+        return result.error
+      }
       setAttachedReel(result.reel)
       setPendingReelFile(null)
+      console.log("[InputTradeForm] replay upload succeeded", {
+        reelId: result.reel.id,
+        tradeId: result.reel.trade_id,
+      })
       return null
     },
-    [attachedReel, pendingReelFile]
+    [attachedReel]
   )
 
   async function handleSubmit() {
@@ -640,6 +680,8 @@ export default function InputTradeForm({
       releaseSubmit()
       return
     }
+
+    const reelFileAtSubmit = pendingReelFileRef.current ?? pendingReelFile
 
     const { data: profileRow } = await supabase
       .from("profiles")
@@ -924,7 +966,8 @@ export default function InputTradeForm({
 
       const replayError = await syncTradeReplayAfterSave(
         user.id,
-        String(existingTrade.id)
+        String(existingTrade.id),
+        reelFileAtSubmit
       )
       if (replayError) {
         showPopup(
@@ -1029,6 +1072,10 @@ export default function InputTradeForm({
 
     if (newTradeData) {
       prependTradeInCache(user.id, newTradeData)
+      console.log("[InputTradeForm] trade created", {
+        tradeId: newTradeData.id,
+        isPublic,
+      })
     }
 
     if (isPublic && newTradeData) {
@@ -1053,7 +1100,8 @@ export default function InputTradeForm({
 
       const replayError = await syncTradeReplayAfterSave(
         user.id,
-        String(newTradeData.id)
+        String(newTradeData.id),
+        reelFileAtSubmit
       )
       if (replayError) {
         showPopup(
@@ -1077,7 +1125,8 @@ export default function InputTradeForm({
     if (newTradeData?.id) {
       const replayErrorPrivate = await syncTradeReplayAfterSave(
         user.id,
-        String(newTradeData.id)
+        String(newTradeData.id),
+        reelFileAtSubmit
       )
       if (replayErrorPrivate) {
         showPopup(
@@ -2156,7 +2205,9 @@ export default function InputTradeForm({
             onPendingFileChange={setPendingReelFile}
             attachedReel={isEditMode ? attachedReel : null}
             onDeleteAttached={
-              isEditMode ? () => void handleDeleteAttachedReel() : undefined
+              isEditMode && attachedReel
+                ? () => requestDeleteAttachedReel(attachedReel)
+                : undefined
             }
             deleteBusy={reelDeleteBusy}
           />
@@ -2398,6 +2449,9 @@ export default function InputTradeForm({
   )
 
   const feedbackModal = <FeedbackModal {...feedbackModalProps} />
+  const deleteAttachedReelModal = (
+    <ConfirmModal {...deleteAttachedReelConfirmProps} />
+  )
   const communitySharePreviewModal = (
     <CommunitySharePreviewModal
       open={communityPreviewOpen}
@@ -2455,6 +2509,7 @@ export default function InputTradeForm({
         </div>
         {settingsModal}
         {feedbackModal}
+        {deleteAttachedReelModal}
         {communitySharePreviewModal}
         <CreateAccountModal
           open={showCreateModal}
@@ -2490,6 +2545,7 @@ export default function InputTradeForm({
       {formBody}
       {settingsModal}
       {feedbackModal}
+      {deleteAttachedReelModal}
       {communitySharePreviewModal}
       <CreateAccountModal
         open={showCreateModal}

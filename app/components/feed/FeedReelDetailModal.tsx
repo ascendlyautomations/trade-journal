@@ -188,7 +188,10 @@ export default function FeedReelDetailModal({
       engagementClassName="shrink-0 border-b border-white/10 px-4 py-2"
       collapsibleContent={
         <div className="space-y-3 border-b border-white/10 px-4 py-4 text-sm">
-          <TradeReelSummaryStrip post={post} />
+          <TradeReelSummaryStrip
+            post={post}
+            viewerUserId={user?.id ?? null}
+          />
           {modalDetails.caption ? (
             <p className="whitespace-pre-wrap leading-relaxed text-white">
               {modalDetails.caption}

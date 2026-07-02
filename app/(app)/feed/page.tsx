@@ -86,7 +86,7 @@ import {
   removeFeedReelFromSessionsForUser,
   type FeedSessionSnapshot,
 } from "@/lib/feedSessionCache"
-import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
+import { ConfirmModal, FeedbackModal, useDeleteReelConfirmation, useFeedbackPopup } from "@/app/components/ui"
 import EmptyState from "@/app/components/ui/EmptyState"
 import { SkeletonFeedPage } from "@/app/components/ui/skeletons"
 import { publishStory } from "@/lib/publishStory"
@@ -1673,18 +1673,10 @@ function FeedPageContent() {
     [patchFeedReel]
   )
 
-  const handleDeleteReel = useCallback(
+  const performDeleteReel = useCallback(
     async (post: any) => {
       if (guardDemoFeedWrite("delete")) return
       if (!user?.id || String(post.user_id) !== String(user.id)) return
-      if (
-        !window.confirm(
-          isTradeAttachedReel(post)
-            ? "Remove replay from this trade?"
-            : "Delete this reel?"
-        )
-      )
-        return
 
       const reelId = String(post.id)
       const result = await deleteReel(supabase, {
@@ -1720,6 +1712,11 @@ function FeedPageContent() {
     },
     [user?.id, persistFeedSnapshot, selectedPostId, showPopup, clearFeedDeepLinkParams]
   )
+
+  const {
+    requestDelete: requestDeleteReel,
+    confirmModalProps: deleteReelConfirmProps,
+  } = useDeleteReelConfirmation(performDeleteReel)
 
   const toggleLike = useCallback(
     async (post: any) => {
@@ -2420,6 +2417,7 @@ function FeedPageContent() {
   return (
     <div className="w-full text-white">
       <FeedbackModal {...feedbackModalProps} />
+      <ConfirmModal {...deleteReelConfirmProps} />
       <div className="flex justify-center px-4 py-6 sm:py-8 pb-10">
         <div className="w-full max-w-xl space-y-6">
           <FeedModeToggle mode={mode} onModeChange={setMode} />
@@ -2491,7 +2489,7 @@ function FeedPageContent() {
               openReelMenuId={openReelMenuId}
               onReelMenuToggle={handleReelMenuToggle}
               onEditReel={handleStartEditReel}
-              onDeleteReel={(post) => void handleDeleteReel(post)}
+              onDeleteReel={requestDeleteReel}
               onReplaceReelVideo={handleReplaceReelVideo}
             />
           ) : null}
@@ -2552,7 +2550,7 @@ function FeedPageContent() {
           openReelMenuId={openReelMenuId}
           onReelMenuToggle={handleReelMenuToggle}
           onEditReel={handleStartEditReel}
-          onDeleteReel={(post) => void handleDeleteReel(post)}
+          onDeleteReel={requestDeleteReel}
           onReplaceReelVideo={handleReplaceReelVideo}
         />
       ) : null}
