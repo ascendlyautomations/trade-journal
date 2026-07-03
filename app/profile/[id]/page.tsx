@@ -44,8 +44,10 @@ import MobileCommentFocusLayout from "@/app/components/comments/MobileCommentFoc
 import {
   FEED_COMMENT_INSERT_SELECT,
   FEED_POSTS_SELECT,
+  postImageSrc,
   postTradeOwnerUserId,
   queryFeedComments,
+  reelDetailFeedItem,
   withInsertedParentCommentId,
 } from "../../components/feed/feedPostHelpers"
 import FeedRoomShareCard from "../../components/feed/FeedRoomShareCard"
@@ -138,7 +140,6 @@ import ReelComposerModal from "../../components/profile/ReelComposerModal"
 import ProfileReelCard from "../../components/profile/ProfileReelCard"
 import FeedReelDetailModal from "../../components/feed/FeedReelDetailModal"
 import { type ReelRow, deleteReel, fetchReelsByTradeIds, fetchUserProfileReels, replaceTradeReelVideo, isTradeAttachedReel } from "@/lib/reels"
-import { reelDetailFeedItem } from "../../components/feed/feedPostHelpers"
 import {
   patchFeedReelInSessionsForUser,
   removeFeedReelFromSessionsForUser,
@@ -229,15 +230,6 @@ function PrivateProfileTabMessage({
   )
 }
 
-function postImageSrc(imageUrl: string | null | undefined): string | null {
-  const raw = imageUrl != null ? String(imageUrl).trim() : ""
-  if (!raw) return null
-  if (raw.startsWith("http")) return raw
-  const base = process.env.NEXT_PUBLIC_SUPABASE_URL
-  if (!base) return null
-  return `${base}/storage/v1/object/public/screenshots/${raw}`
-}
-
 function formatPostFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
@@ -247,7 +239,8 @@ function formatPostFileSize(bytes: number): string {
 function profileWallImageSrc(imageUrl: string | null | undefined): string | null {
   const raw = imageUrl != null ? String(imageUrl).trim() : ""
   if (!raw) return null
-  if (raw.startsWith("http")) return raw
+  if (raw.startsWith("http") || raw.startsWith("blob:")) return raw
+  if (raw.startsWith("/")) return raw
   const base = process.env.NEXT_PUBLIC_SUPABASE_URL
   if (!base) return null
   return `${base}/storage/v1/object/public/profile_posts/${raw}`

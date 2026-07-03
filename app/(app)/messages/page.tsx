@@ -32,6 +32,7 @@ import MessagesConversationList from "../../components/messages/MessagesConversa
 import EmptyState from "../../components/ui/EmptyState"
 import { SkeletonMessagesConversationList } from "../../components/ui/skeletons"
 import { useUserProfile } from "@/lib/UserProfileProvider"
+import { DELETED_USER_LABEL, isDirectConversationPeerDeleted } from "@/lib/deletedUserDisplay"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 import {
@@ -342,9 +343,14 @@ export default function MessagesPage() {
       const profile = Array.isArray(rawProfile) ? rawProfile[0] : rawProfile
 
       const isGroup = convoMeta?.is_group === true
-      const displayName = isGroup
-        ? convoMeta?.name || "Group Chat"
-        : profile?.username || "user"
+      const hasHistory = Boolean(convoMeta?.last_message?.trim())
+      const peerDeleted = isDirectConversationPeerDeleted(
+        isGroup,
+        profile?.username,
+        hasHistory
+      )
+      const peerLabel = peerDeleted ? DELETED_USER_LABEL : profile?.username || "user"
+      const displayName = isGroup ? convoMeta?.name || "Group Chat" : peerLabel
 
       return {
         id: convoId,
@@ -352,11 +358,13 @@ export default function MessagesPage() {
         is_pinned: convoMeta?.is_pinned === true,
         name: convoMeta?.name || null,
         displayName,
-        username: profile?.username || "user",
-        otherUserId: isGroup ? null : (profile?.id ?? otherUser?.user_id ?? null),
+        username: peerLabel,
+        otherUserId: isGroup ? null : peerDeleted ? null : (profile?.id ?? otherUser?.user_id ?? null),
         profileUserId: isGroup
           ? null
-          : (profile?.id ?? otherUser?.user_id ?? null),
+          : peerDeleted
+            ? null
+            : (profile?.id ?? otherUser?.user_id ?? null),
         avatar_url: isGroup
           ? convoMeta?.avatar_url ?? null
           : profile?.avatar_url ?? null,

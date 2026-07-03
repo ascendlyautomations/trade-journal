@@ -52,11 +52,15 @@ import {
   SHARED_TRADE_UNAVAILABLE,
 } from "@/lib/sharedContentNavigation"
 import {
-  ProfileAvatarLink,
   ProfileLink,
   ProfileUsernameLink,
 } from "@/app/components/ProfileLink"
+import { DmSenderNameLine } from "@/app/components/messages/DmSenderNameLine"
 import { ProfileAvatarImg } from "@/app/components/SafeProfileAvatar"
+import {
+  DELETED_USER_LABEL,
+  isDirectConversationPeerDeleted,
+} from "@/lib/deletedUserDisplay"
 import { profilePostPublicUrl } from "@/lib/storagePublicUrl"
 import { normalizeProfileUsername } from "@/lib/profileUsername"
 import { isTradeOwnedByUser } from "@/lib/tradeShareAccess"
@@ -2167,11 +2171,18 @@ export default function DMPage() {
     setActiveMenuId(null)
   }
 
+  const peerDeleted = isDirectConversationPeerDeleted(
+    Boolean(conversation?.is_group),
+    otherUser?.username,
+    messages.length > 0
+  )
   const title = conversation?.is_group
     ? conversation?.name || "Group Chat"
-    : otherUser?.username
-      ? `@${otherUser.username}`
-      : "Loading..."
+    : peerDeleted
+      ? DELETED_USER_LABEL
+      : otherUser?.username
+        ? `@${otherUser.username}`
+        : "Loading..."
   const memberCount = participants.length
   const members = participants.map((m: any) => ({
     ...m,
@@ -2260,7 +2271,7 @@ export default function DMPage() {
                   <span className="text-sm font-semibold">
                     {conversation?.name || "Group Chat"}
                   </span>
-                ) : otherUser?.id ? (
+                ) : otherUser?.id && !peerDeleted ? (
                   <ProfileUsernameLink
                     userId={otherUser.id}
                     username={otherUser.username}
@@ -2346,12 +2357,6 @@ export default function DMPage() {
                 : ""
               const showTimestamp = shouldShowDmClusterTimestamp(messages, i)
 
-              const profileRow = Array.isArray(message.profiles)
-                ? message.profiles[0]
-                : message.profiles
-              const profileUsername =
-                profileRow?.username ?? message.profiles?.username
-
               if (message.type === "trade") {
                 return (
                   <Fragment key={message.id}>
@@ -2359,12 +2364,8 @@ export default function DMPage() {
                       <ConversationDateDivider label={dateDividerLabel} />
                     ) : null}
                     <div className={rowClass}>
-                      {showName && profileUsername ? (
-                        <ProfileUsernameLink
-                          userId={message.sender_id}
-                          username={profileUsername}
-                          className="mb-1 ml-1 inline-block text-xs text-gray-400 hover:text-gray-300"
-                        />
+                      {showName ? (
+                        <DmSenderNameLine message={message} />
                       ) : null}
                       <TradeMessageBubble
                         message={message}
@@ -2406,12 +2407,8 @@ export default function DMPage() {
                       <ConversationDateDivider label={dateDividerLabel} />
                     ) : null}
                     <div className={rowClass}>
-                      {showName && profileUsername ? (
-                        <ProfileUsernameLink
-                          userId={message.sender_id}
-                          username={profileUsername}
-                          className="mb-1 ml-1 inline-block text-xs text-gray-400 hover:text-gray-300"
-                        />
+                      {showName ? (
+                        <DmSenderNameLine message={message} />
                       ) : null}
                       <StoryReplyMessageBubble
                         message={message}
@@ -2450,12 +2447,8 @@ export default function DMPage() {
                       <ConversationDateDivider label={dateDividerLabel} />
                     ) : null}
                     <div className={rowClass}>
-                      {showName && profileUsername ? (
-                        <ProfileUsernameLink
-                          userId={message.sender_id}
-                          username={profileUsername}
-                          className="mb-1 ml-1 inline-block text-xs text-gray-400 hover:text-gray-300"
-                        />
+                      {showName ? (
+                        <DmSenderNameLine message={message} />
                       ) : null}
                       <PostMessageBubble
                         message={message}
@@ -2497,12 +2490,8 @@ export default function DMPage() {
                     <ConversationDateDivider label={dateDividerLabel} />
                   ) : null}
                   <div className={rowClass}>
-                    {showName && profileUsername ? (
-                      <ProfileUsernameLink
-                        userId={message.sender_id}
-                        username={profileUsername}
-                        className="mb-1 ml-1 inline-block text-xs text-gray-400 hover:text-gray-300"
-                      />
+                    {showName ? (
+                      <DmSenderNameLine message={message} />
                     ) : null}
                     <div
                       id={dmMessageElementId(message.id)}

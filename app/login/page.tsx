@@ -629,6 +629,7 @@ export default function LoginPage() {
         )}
 
         <form
+          className="flex flex-col gap-3 md:gap-2.5"
           onSubmit={(e) => {
             e.preventDefault()
             if (isLogin) handleLogin()
@@ -638,7 +639,7 @@ export default function LoginPage() {
             type="email"
             placeholder="Email"
             autoComplete="email"
-            className="mb-4 w-full rounded-xl border border-white/10 bg-white/10 px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 md:mb-3 md:py-2.5"
+            className="w-full rounded-xl border border-white/10 bg-white/10 px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 md:py-2.5"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
@@ -646,9 +647,7 @@ export default function LoginPage() {
           <AuthPasswordInput
             placeholder="Password"
             autoComplete={isLogin ? "current-password" : "new-password"}
-            className={`w-full rounded-xl border border-white/10 bg-white/10 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder-gray-400 md:py-2.5 ${
-              isLogin ? "mb-6 md:mb-4" : "mb-4 md:mb-3"
-            }`}
+            className="w-full rounded-xl border border-white/10 bg-white/10 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder-gray-400 md:py-2.5"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
@@ -657,7 +656,7 @@ export default function LoginPage() {
             <button
               type="button"
               onClick={() => setShowReset(!showReset)}
-              className="text-sm text-blue-400 hover:underline -mt-3 mb-4"
+              className="self-start p-0 text-sm text-blue-400 hover:underline"
             >
               Forgot password?
             </button>

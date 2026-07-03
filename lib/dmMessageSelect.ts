@@ -3,6 +3,7 @@ export const DM_MESSAGE_CORE_SELECT = [
   "id",
   "conversation_id",
   "sender_id",
+  "sender_anonymized",
   "content",
   "created_at",
   "seen_by",

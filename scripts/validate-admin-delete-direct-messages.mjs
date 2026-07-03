@@ -1,5 +1,5 @@
 /**
- * Validates legacy direct_messages cleanup in deleteUserAdmin.
+ * Validates DM preservation during deleteUserAdmin (messages anonymized, not removed).
  * WARNING: permanently deletes seeded test users.
  */
 import { createClient } from "@supabase/supabase-js"
@@ -62,7 +62,7 @@ async function createTestUser(label) {
     updated_at: new Date().toISOString(),
   })
 
-  return data.user.id
+  return { userId: data.user.id, conversationId: null }
 }
 
 async function findOtherProfileId(excludeId) {
@@ -95,12 +95,31 @@ async function countDirectMessages(userId) {
   return count ?? 0
 }
 
-async function countMessages(userId) {
+async function countMessagesBySender(userId) {
   const { count, error } = await supabase
     .from("messages")
     .select("*", { count: "exact", head: true })
-    .or(`sender_id.eq.${userId},user_id.eq.${userId}`)
-  if (error) throw new Error(`count messages: ${error.message}`)
+    .eq("sender_id", userId)
+  if (error) throw new Error(`count messages by sender: ${error.message}`)
+  return count ?? 0
+}
+
+async function countAnonymizedMessages(conversationId) {
+  const { count, error } = await supabase
+    .from("messages")
+    .select("*", { count: "exact", head: true })
+    .eq("conversation_id", conversationId)
+    .eq("sender_anonymized", true)
+  if (error) throw new Error(`count anonymized messages: ${error.message}`)
+  return count ?? 0
+}
+
+async function countConversationMessages(conversationId) {
+  const { count, error } = await supabase
+    .from("messages")
+    .select("*", { count: "exact", head: true })
+    .eq("conversation_id", conversationId)
+  if (error) throw new Error(`count conversation messages: ${error.message}`)
   return count ?? 0
 }
 
@@ -121,6 +140,7 @@ const SCENARIOS = {
       content: "legacy dm as recipient",
     })
     if (recvErr) throw new Error(`seed direct_messages recipient: ${recvErr.message}`)
+    return conversationId
   },
   modern_messages: async (targetId, otherId) => {
     const conversationId = await createConversation()
@@ -135,14 +155,15 @@ const SCENARIOS = {
       content: "modern dm message",
     })
     if (error) throw new Error(`seed messages: ${error.message}`)
+    return conversationId
   },
   both: async (targetId, otherId) => {
     await SCENARIOS.legacy_direct_messages(targetId, otherId)
-    await SCENARIOS.modern_messages(targetId, otherId)
+    return SCENARIOS.modern_messages(targetId, otherId)
   },
 }
 
-async function verifyDeleted(userId) {
+async function verifyDeleted(userId, conversationId, scenario) {
   const { data: profile } = await supabase
     .from("profiles")
     .select("id")
@@ -150,7 +171,13 @@ async function verifyDeleted(userId) {
     .maybeSingle()
   const { data: authData } = await supabase.auth.admin.getUserById(userId)
   const directMessagesLeft = await countDirectMessages(userId)
-  const messagesLeft = await countMessages(userId)
+  const messagesBySenderLeft = await countMessagesBySender(userId)
+  const anonymizedCount = conversationId
+    ? await countAnonymizedMessages(conversationId)
+    : 0
+  const conversationMessagesLeft = conversationId
+    ? await countConversationMessages(conversationId)
+    : 0
   const { data: audit } = await supabase
     .from("admin_audit_log")
     .select("id, action, target_id")
@@ -159,12 +186,18 @@ async function verifyDeleted(userId) {
     .order("created_at", { ascending: false })
     .limit(1)
 
+  const expectsModernPreservation =
+    scenario === "modern_messages" || scenario === "both"
+
   return {
     profileRemoved: !profile?.id,
     authRemoved: !authData?.user?.id,
     directMessagesLeft,
-    messagesLeft,
+    messagesBySenderLeft,
+    anonymizedCount,
+    conversationMessagesLeft,
     auditCreated: Boolean(audit?.length),
+    expectsModernPreservation,
   }
 }
 
@@ -182,15 +215,17 @@ async function main() {
   for (const scenario of keys) {
     console.log(`\n=== ${scenario} ===`)
     let userId = null
+    let conversationId = null
     try {
-      userId = await createTestUser(scenario)
+      const created = await createTestUser(scenario)
+      userId = created.userId
       const otherId = await findOtherProfileId(userId)
       if (!otherId) throw new Error("no other profile for message seed")
 
-      await SCENARIOS[scenario](userId, otherId)
+      conversationId = await SCENARIOS[scenario](userId, otherId)
       const dmBefore = await countDirectMessages(userId)
-      const msgBefore = await countMessages(userId)
-      console.log("seeded direct_messages:", dmBefore, "messages:", msgBefore)
+      const msgBefore = await countMessagesBySender(userId)
+      console.log("seeded direct_messages:", dmBefore, "messages by sender:", msgBefore)
 
       await deleteUserAdmin(supabase, {
         adminUserId,
@@ -198,13 +233,16 @@ async function main() {
         stripe: null,
       })
 
-      const verification = await verifyDeleted(userId)
+      const verification = await verifyDeleted(userId, conversationId, scenario)
       const ok =
         verification.profileRemoved &&
         verification.authRemoved &&
         verification.directMessagesLeft === 0 &&
-        verification.messagesLeft === 0 &&
-        verification.auditCreated
+        verification.messagesBySenderLeft === 0 &&
+        verification.auditCreated &&
+        (!verification.expectsModernPreservation ||
+          (verification.anonymizedCount >= 1 &&
+            verification.conversationMessagesLeft >= 1))
 
       console.log("verification:", verification)
       results.push({ scenario, ok, verification })

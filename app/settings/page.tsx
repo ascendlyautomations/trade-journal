@@ -666,7 +666,7 @@ export default function SettingsPage() {
       }
 
       await supabase.auth.signOut()
-      window.location.href = "/login"
+      window.location.href = "/"
     } catch (err) {
       console.error(err)
       showPopup(

@@ -1,66 +1,46 @@
 import Stripe from "stripe"
 import { NextResponse } from "next/server"
-import { createClient } from "@supabase/supabase-js"
+import { getRouteUser, supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
+import { deleteUserAccount } from "@/lib/deleteUserAccount"
+import {
+  AdminUserDeletionError,
+  AdminUserDeletionStepError,
+} from "@/lib/deleteUserAdmin"
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string)
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+const stripe = process.env.STRIPE_SECRET_KEY
+  ? new Stripe(process.env.STRIPE_SECRET_KEY)
+  : null
 
 export async function POST(req: Request) {
-  const authHeader = req.headers.get("authorization")
+  const user = await getRouteUser(req)
 
-  if (!authHeader) {
-    return NextResponse.json({ error: "No auth header" }, { status: 401 })
-  }
-
-  const token = authHeader.replace("Bearer ", "")
-
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser(token)
-
-  console.log("User:", user)
-
-  if (!user || userError) {
+  if (!user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("stripe_customer_id")
-    .eq("id", user.id)
-    .single()
-
-  // OPTIONAL: cancel Stripe subscription
-  if (profile?.stripe_customer_id) {
-    try {
-      const subs = await stripe.subscriptions.list({
-        customer: profile.stripe_customer_id,
-        status: "all",
-        limit: 1,
-      })
-
-      if (subs.data.length > 0) {
-        await stripe.subscriptions.cancel(subs.data[0].id)
-      }
-    } catch (err) {
-      console.error("Stripe cancel error:", err)
+  try {
+    await deleteUserAccount(supabaseServiceRole, {
+      userId: user.id,
+      stripe,
+    })
+  } catch (err) {
+    if (err instanceof AdminUserDeletionError) {
+      const status =
+        err.code === "NOT_FOUND" ? 404 : err.code === "ADMIN_TARGET" ? 403 : 400
+      return NextResponse.json({ error: err.message }, { status })
     }
-  }
-
-  // Delete profile
-  await supabase.from("profiles").delete().eq("id", user.id)
-
-  // Delete auth user
-  const { error: deleteError } = await supabase.auth.admin.deleteUser(
-    user.id
-  )
-
-  if (deleteError) {
-    return NextResponse.json({ error: deleteError.message }, { status: 500 })
+    if (err instanceof AdminUserDeletionStepError) {
+      console.error("[api/delete-account]", err.step, err.table, err.message)
+      return NextResponse.json(
+        { error: "Account deletion failed. Please contact support." },
+        { status: 500 }
+      )
+    }
+    console.error("[api/delete-account]", err)
+    return NextResponse.json(
+      { error: "Account deletion failed. Please contact support." },
+      { status: 500 }
+    )
   }
 
   return NextResponse.json({ success: true })

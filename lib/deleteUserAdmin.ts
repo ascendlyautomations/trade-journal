@@ -1,5 +1,6 @@
 import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js"
 import Stripe from "stripe"
+import { deleteUserStorageFiles } from "@/lib/deleteUserStorage"
 
 export class AdminUserDeletionError extends Error {
   readonly code: "SELF_DELETE" | "ADMIN_TARGET" | "NOT_FOUND" | "DELETE_FAILED"
@@ -32,6 +33,8 @@ export type DeleteUserAdminInput = {
   adminUserId: string
   targetUserId: string
   stripe?: Stripe | null
+  /** Self-service account deletion from settings (skips admin-only guards). */
+  selfService?: boolean
 }
 
 export type DeleteUserAdminResult = {
@@ -319,12 +322,6 @@ async function deleteEngagementOnOwnedTrades(
     tradeIds
   )
   await deleteWhereIn(
-    step(targetUserId, "DM trade share cleanup", "messages"),
-    supabase,
-    "trade_id",
-    tradeIds
-  )
-  await deleteWhereIn(
     step(targetUserId, "Room trade message cleanup", "room_messages"),
     supabase,
     "trade_id",
@@ -423,6 +420,65 @@ export async function assertAdminCanDeleteTarget(
   }
 }
 
+async function assertCanDeleteTarget(
+  supabase: SupabaseClient,
+  input: DeleteUserAdminInput
+) {
+  if (input.selfService) {
+    if (input.adminUserId !== input.targetUserId) {
+      throw new AdminUserDeletionError(
+        "DELETE_FAILED",
+        "Account deletion must be performed by the signed-in user."
+      )
+    }
+
+    const { data: targetAdmin } = await supabase
+      .from("admin_users")
+      .select("user_id")
+      .eq("user_id", input.targetUserId)
+      .maybeSingle()
+
+    if (targetAdmin?.user_id) {
+      throw new AdminUserDeletionError(
+        "ADMIN_TARGET",
+        "Admin accounts cannot be deleted from settings."
+      )
+    }
+    return
+  }
+
+  await assertAdminCanDeleteTarget(
+    supabase,
+    input.adminUserId,
+    input.targetUserId
+  )
+}
+
+async function anonymizeUserDirectMessages(
+  supabase: SupabaseClient,
+  targetUserId: string
+) {
+  logStep({
+    targetUserId,
+    step: "DM sender anonymization",
+    table: "messages",
+  })
+
+  const { error } = await supabase
+    .from("messages")
+    .update({ sender_anonymized: true, sender_id: null, user_id: null })
+    .eq("sender_id", targetUserId)
+    .not("conversation_id", "is", null)
+
+  if (error) {
+    throw new AdminUserDeletionStepError(
+      "DM sender anonymization",
+      "messages",
+      error.message
+    )
+  }
+}
+
 function step(
   targetUserId: string,
   stepName: string,
@@ -439,13 +495,13 @@ export async function deleteUserAdmin(
   supabase: SupabaseClient,
   input: DeleteUserAdminInput
 ): Promise<DeleteUserAdminResult> {
-  const { adminUserId, targetUserId, stripe } = input
+  const { adminUserId, targetUserId, stripe, selfService = false } = input
 
   console.log(
-    `[deleteUserAdmin] start adminUserId=${adminUserId} targetUserId=${targetUserId}`
+    `[deleteUserAdmin] start adminUserId=${adminUserId} targetUserId=${targetUserId} selfService=${selfService}`
   )
 
-  await assertAdminCanDeleteTarget(supabase, adminUserId, targetUserId)
+  await assertCanDeleteTarget(supabase, input)
 
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
@@ -473,6 +529,13 @@ export async function deleteUserAdmin(
     stripe,
     profile?.stripe_customer_id
   )
+
+  logStep({
+    targetUserId,
+    step: "Storage cleanup",
+    table: "storage.objects",
+  })
+  await deleteUserStorageFiles(supabase, targetUserId)
 
   const { postIds, tradeIds } = await fetchUserContentIds(supabase, targetUserId)
 
@@ -608,11 +671,24 @@ export async function deleteUserAdmin(
     supabase,
     `sender_id.eq.${targetUserId},recipient_id.eq.${targetUserId}`
   )
-  await deleteOr(
-    step(targetUserId, "Messages cleanup", "messages"),
-    supabase,
-    `sender_id.eq.${targetUserId},user_id.eq.${targetUserId}`
-  )
+  await anonymizeUserDirectMessages(supabase, targetUserId)
+  logStep({
+    targetUserId,
+    step: "Lobby message cleanup",
+    table: "messages",
+  })
+  const { error: lobbyError } = await supabase
+    .from("messages")
+    .delete()
+    .eq("user_id", targetUserId)
+    .is("conversation_id", null)
+  if (lobbyError) {
+    throw new AdminUserDeletionStepError(
+      "Lobby message cleanup",
+      "messages",
+      lobbyError.message
+    )
+  }
   await deleteWhere(
     step(targetUserId, "Conversation participant cleanup", "conversation_participants"),
     supabase,
@@ -672,6 +748,79 @@ export async function deleteUserAdmin(
   )
   await deleteWhere(
     step(targetUserId, "Saved trades cleanup", "saved_trades"),
+    supabase,
+    "user_id",
+    targetUserId
+  )
+
+  await tryDeleteWhere(
+    step(targetUserId, "Reel likes cleanup", "reel_likes"),
+    supabase,
+    "user_id",
+    targetUserId
+  )
+  await tryDeleteWhere(
+    step(targetUserId, "Reel comments cleanup", "reel_comments"),
+    supabase,
+    "user_id",
+    targetUserId
+  )
+  await tryDeleteWhere(
+    step(targetUserId, "Reels cleanup", "reels"),
+    supabase,
+    "user_id",
+    targetUserId
+  )
+  await tryDeleteWhere(
+    step(targetUserId, "User reviews cleanup", "user_reviews"),
+    supabase,
+    "user_id",
+    targetUserId
+  )
+  await tryDeleteWhere(
+    step(targetUserId, "Achievement posts cleanup", "achievement_posts"),
+    supabase,
+    "user_id",
+    targetUserId
+  )
+  await tryDeleteWhere(
+    step(targetUserId, "Profile post likes cleanup", "profile_post_likes"),
+    supabase,
+    "user_id",
+    targetUserId
+  )
+  await tryDeleteWhere(
+    step(targetUserId, "Profile post comments cleanup", "profile_post_comments"),
+    supabase,
+    "user_id",
+    targetUserId
+  )
+  await tryDeleteWhere(
+    step(targetUserId, "Comment likes cleanup", "comment_likes"),
+    supabase,
+    "user_id",
+    targetUserId
+  )
+  await tryDeleteWhere(
+    step(targetUserId, "Room message reactions cleanup", "room_message_reactions"),
+    supabase,
+    "user_id",
+    targetUserId
+  )
+  await tryDeleteWhere(
+    step(targetUserId, "Room channel preferences cleanup", "room_member_channel_preferences"),
+    supabase,
+    "user_id",
+    targetUserId
+  )
+  await tryDeleteWhere(
+    step(targetUserId, "Beta testimonials cleanup", "beta_testimonials"),
+    supabase,
+    "user_id",
+    targetUserId
+  )
+  await tryDeleteWhere(
+    step(targetUserId, "Account payout cycles cleanup", "account_payout_cycles"),
     supabase,
     "user_id",
     targetUserId
@@ -797,31 +946,33 @@ export async function deleteUserAdmin(
 
   await clearReviewerReferences(supabase, targetUserId)
 
-  logStep({
-    targetUserId,
-    step: "Audit log",
-    table: "admin_audit_log",
-  })
-  const { error: auditError } = await supabase.from("admin_audit_log").insert({
-    admin_user_id: adminUserId,
-    target_user_id: targetUserId,
-    action: "delete_user",
-    target_type: "user",
-    target_id: targetUserId,
-    details: {
-      username,
-      email,
-      deleted_at: new Date().toISOString(),
-    },
-  })
+  if (!selfService) {
+    logStep({
+      targetUserId,
+      step: "Audit log",
+      table: "admin_audit_log",
+    })
+    const { error: auditError } = await supabase.from("admin_audit_log").insert({
+      admin_user_id: adminUserId,
+      target_user_id: targetUserId,
+      action: "delete_user",
+      target_type: "user",
+      target_id: targetUserId,
+      details: {
+        username,
+        email,
+        deleted_at: new Date().toISOString(),
+      },
+    })
 
-  if (auditError) {
-    console.error("[deleteUserAdmin] audit log:", auditError.message)
-    throw new AdminUserDeletionStepError(
-      "Audit log",
-      "admin_audit_log",
-      auditError.message
-    )
+    if (auditError) {
+      console.error("[deleteUserAdmin] audit log:", auditError.message)
+      throw new AdminUserDeletionStepError(
+        "Audit log",
+        "admin_audit_log",
+        auditError.message
+      )
+    }
   }
 
   if (profile?.id) {
@@ -834,6 +985,19 @@ export async function deleteUserAdmin(
   }
 
   if (authUser?.id) {
+    logStep({
+      targetUserId,
+      step: "Auth session revoke",
+      table: "auth.sessions",
+    })
+    const { error: signOutError } = await supabase.auth.admin.signOut(
+      targetUserId,
+      "global"
+    )
+    if (signOutError) {
+      console.warn("[deleteUserAdmin] global signOut:", signOutError.message)
+    }
+
     logStep({
       targetUserId,
       step: "Auth user delete",
