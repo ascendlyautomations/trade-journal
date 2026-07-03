@@ -18,11 +18,13 @@ import {
   shouldShowTrialInfo,
 } from "@/lib/getMembershipStatus"
 import { isProActive } from "../../lib/subscription"
+import { getTraxProSubscriptionDisplay } from "@/lib/traxProBillingPlans"
+import TraxProBillingIntervalPicker from "@/app/components/TraxProBillingIntervalPicker"
 import {
-  TRAXPRO_BILLING_LABEL,
-  TRAXPRO_PLAN_NAME,
-  TRAXPRO_PRICE_DISPLAY,
-} from "@/lib/traxProPricing"
+  TRAXPRO_DEFAULT_BILLING_INTERVAL,
+  type TraxProBillingIntervalId,
+} from "@/lib/traxProBillingPlans"
+import { setCheckoutBillingInterval } from "@/lib/signupFlow"
 import {
   canChangeProfileUsername,
   isProfilesUsernameConflict,
@@ -223,6 +225,8 @@ export default function SettingsPage() {
   const [confirmText, setConfirmText] = useState("")
   const [manageLoading, setManageLoading] = useState(false)
   const [checkoutLoading, setCheckoutLoading] = useState(false)
+  const [upgradeBillingInterval, setUpgradeBillingInterval] =
+    useState<TraxProBillingIntervalId>(TRAXPRO_DEFAULT_BILLING_INTERVAL)
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const [newPassword, setNewPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
@@ -753,6 +757,7 @@ export default function SettingsPage() {
     if (!user) return
 
     setCheckoutLoading(true)
+    setCheckoutBillingInterval(upgradeBillingInterval)
     try {
       const token = await getAccessToken()
       if (!token) {
@@ -768,6 +773,7 @@ export default function SettingsPage() {
         },
         body: JSON.stringify({
           userId: user.id,
+          billingInterval: upgradeBillingInterval,
           referralCode:
             typeof window !== "undefined"
               ? localStorage.getItem("referral_code")
@@ -929,6 +935,11 @@ export default function SettingsPage() {
     displayStatus === "active" ||
     displayStatus === "trialing" ||
     isProActive(profile)
+  const proPlanDisplay = isProActive(profile)
+    ? getTraxProSubscriptionDisplay(
+        profile?.billing_interval as string | null | undefined
+      )
+    : null
 
   return (
     <>
@@ -1539,11 +1550,26 @@ export default function SettingsPage() {
                 <div className="space-y-4">
                   <div className="rounded-xl border border-white/10 bg-black/20 p-4">
                     <p className="text-xs text-gray-500">Plan name</p>
-                    <p className="mt-1 font-semibold text-white">
-                      {isProActive(profile)
-                        ? `${TRAXPRO_PLAN_NAME} (${TRAXPRO_PRICE_DISPLAY} ${TRAXPRO_BILLING_LABEL.toLowerCase()})`
-                        : "Free Plan"}
-                    </p>
+                    {proPlanDisplay ? (
+                      <div className="mt-1">
+                        <p className="font-semibold text-white">
+                          {proPlanDisplay.productName}
+                        </p>
+                        {proPlanDisplay.planLabel ? (
+                          <p className="mt-0.5 text-sm font-medium text-gray-300">
+                            {proPlanDisplay.planLabel}
+                          </p>
+                        ) : null}
+                        {proPlanDisplay.billedLabel ? (
+                          <p className="mt-2 text-sm text-gray-400">
+                            <span className="text-gray-500">Billed: </span>
+                            {proPlanDisplay.billedLabel}
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <p className="mt-1 font-semibold text-white">Free Plan</p>
+                    )}
                   </div>
 
                   <div className="rounded-xl border border-white/10 bg-black/20 p-4 space-y-3">
@@ -1618,14 +1644,25 @@ export default function SettingsPage() {
                 </div>
 
                 {!isSubscribed ? (
-                  <button
-                    type="button"
-                    onClick={() => void startTraxProCheckout()}
-                    disabled={checkoutLoading}
-                    className="w-full rounded-xl bg-gradient-to-r from-blue-500 to-emerald-500 py-3 font-semibold disabled:opacity-50"
-                  >
-                    {checkoutLoading ? "Redirecting…" : "Upgrade to TraxPro"}
-                  </button>
+                  <>
+                    <TraxProBillingIntervalPicker
+                      value={upgradeBillingInterval}
+                      onChange={(interval) => {
+                        setUpgradeBillingInterval(interval)
+                        setCheckoutBillingInterval(interval)
+                      }}
+                      disabled={checkoutLoading}
+                      name="settings-upgrade-billing"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void startTraxProCheckout()}
+                      disabled={checkoutLoading}
+                      className="mt-4 w-full rounded-xl bg-gradient-to-r from-blue-500 to-emerald-500 py-3 font-semibold disabled:opacity-50"
+                    >
+                      {checkoutLoading ? "Redirecting…" : "Upgrade to TraxPro"}
+                    </button>
+                  </>
                 ) : null}
 
                 {isSubscribed || profile?.stripe_customer_id ? (

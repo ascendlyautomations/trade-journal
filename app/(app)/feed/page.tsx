@@ -187,6 +187,7 @@ function FeedPageContent() {
   commentsByPostRef.current = commentsByPost
   const [commentSubmitting, setCommentSubmitting] = useState<Record<string, boolean>>({})
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null)
+  const [tradeExpandSignal, setTradeExpandSignal] = useState(0)
   /** Modal-owned post data for URL deep links — independent of the feed array. */
   const [feedModalPost, setFeedModalPost] = useState<FeedItem | null>(null)
   const [sharePostId, setSharePostId] = useState<string | null>(null)
@@ -289,6 +290,7 @@ function FeedPageContent() {
 
   const draftSyncRef = useRef<Record<string, string>>({})
   const openCommentsRef = useRef<Record<string, boolean>>({})
+  const openTradeRef = useRef<Record<string, boolean>>({})
   const feedDeepLinkHandledRef = useRef<string | null>(null)
   const likeBusyRef = useRef<Set<string>>(new Set())
   const commentSubmittingRef = useRef<Set<string>>(new Set())
@@ -1546,6 +1548,22 @@ function FeedPageContent() {
     [clearFeedDeepLinkParams]
   )
 
+  const handleOpenLinkedTrade = useCallback(
+    (post: any) => {
+      const pid = String(post.id)
+      openTradeRef.current[pid] = true
+      if (selectedPostId === pid) {
+        setTradeExpandSignal((value) => value + 1)
+        return
+      }
+      setFeedModalPost(null)
+      feedDeepLinkHandledRef.current = null
+      clearFeedDeepLinkParams()
+      setSelectedPostId(pid)
+    },
+    [clearFeedDeepLinkParams, selectedPostId]
+  )
+
   const handleSharePost = useCallback((post: any) => {
     if (guardDemoFeedWrite("default")) return
     setSharePostId(String(post.id))
@@ -2483,6 +2501,7 @@ function FeedPageContent() {
               draftSyncRef={draftSyncRef}
               onSelectPost={handleSelectPost}
               onOpenComments={handleOpenPostComments}
+              onOpenLinkedTrade={handleOpenLinkedTrade}
               onToggleLike={toggleLike}
               onSubmitComment={submitComment}
               onSharePost={handleSharePost}
@@ -2541,6 +2560,8 @@ function FeedPageContent() {
           selectedPostCommentSubmitting={selectedPostCommentSubmitting}
           draftSyncRef={draftSyncRef}
           openCommentsRef={openCommentsRef}
+          openTradeRef={openTradeRef}
+          tradeExpandSignal={tradeExpandSignal}
           onCloseDetailModal={handleCloseDetailModal}
           onCloseShareOverlay={handleCloseShareOverlay}
           onToggleLike={toggleLike}

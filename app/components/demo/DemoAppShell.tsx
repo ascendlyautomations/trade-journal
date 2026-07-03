@@ -1,26 +1,55 @@
 "use client"
 
+import { usePathname } from "next/navigation"
 import { useEffect, useState, type ReactNode } from "react"
 import DemoBanner from "@/app/demo/components/DemoBanner"
 import { DemoModeProvider } from "@/lib/demo/DemoModeContext"
+import { isStandaloneFlowRoute } from "@/lib/authRoutes"
+import { shouldShowCustomerHomeChrome } from "@/lib/marketingAccess"
+import { useUserProfile } from "@/lib/useUserProfile"
 import {
   isDemoModeActive,
   subscribeDemoModeChanges,
 } from "@/lib/demo/demoMode"
+import { syncDemoBannerLayout } from "@/lib/demo/demoLayout"
 
 function DemoBannerInset({ children }: { children: ReactNode }) {
-  const [active, setActive] = useState(false)
+  const pathname = usePathname()
+  const standaloneFlow = isStandaloneFlowRoute(pathname)
+  const { user, profile, loading } = useUserProfile()
+  const [demoMode, setDemoMode] = useState(false)
+
+  const bannerVisible =
+    demoMode &&
+    !standaloneFlow &&
+    !shouldShowCustomerHomeChrome(user, profile, loading)
 
   useEffect(() => {
-    const sync = () => setActive(isDemoModeActive())
+    const sync = () => {
+      setDemoMode(isDemoModeActive())
+    }
     sync()
     return subscribeDemoModeChanges(sync)
   }, [])
 
+  useEffect(() => {
+    syncDemoBannerLayout(bannerVisible)
+  }, [bannerVisible])
+
+  useEffect(() => {
+    if (standaloneFlow) {
+      syncDemoBannerLayout(false)
+    }
+  }, [standaloneFlow])
+
+  useEffect(() => {
+    return () => syncDemoBannerLayout(false)
+  }, [])
+
   return (
     <>
-      {active ? <DemoBanner /> : null}
-      <div className={active ? "pt-12" : undefined}>{children}</div>
+      {bannerVisible ? <DemoBanner /> : null}
+      {children}
     </>
   )
 }

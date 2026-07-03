@@ -33,6 +33,7 @@ import {
   subscribeGettingStartedSignalsRefresh,
   type GettingStartedRefreshDetail,
 } from "@/lib/gettingStartedProgressSync"
+import { subscribeStripeReconciliationComplete } from "@/lib/stripeReconciliation"
 import { applyStickyGettingStartedProgress } from "@/lib/gettingStartedSticky"
 import {
   GETTING_STARTED_INTRO_POPUP_TITLE,
@@ -100,7 +101,8 @@ export function GettingStartedProgressProvider({
 }: {
   children: ReactNode
 }) {
-  const { user, profile, loading: profileLoading } = useUserProfile()
+  const { user, profile, loading: profileLoading, membershipReconciling } =
+    useUserProfile()
   const { showPopup, closePopup, feedbackModalProps } = useFeedbackPopup()
   const [signals, setSignals] =
     useState<GettingStartedChecklistSignals>(EMPTY_SIGNALS)
@@ -374,6 +376,13 @@ export function GettingStartedProgressProvider({
   )
 
   useEffect(() => {
+    return subscribeStripeReconciliationComplete(() => {
+      if (!userIdRef.current) return
+      void refreshChecklistSignals({ fromUserAction: true })
+    })
+  }, [refreshChecklistSignals])
+
+  useEffect(() => {
     const nextUserId = user?.id ?? null
 
     if (nextUserId !== prevMountedUserIdRef.current) {
@@ -397,6 +406,7 @@ export function GettingStartedProgressProvider({
     }
 
     if (profileLoading && !profile) return
+    if (membershipReconciling) return
 
     void refreshChecklistSignals().then(() => {
       if (pendingRefreshRef.current) {
@@ -404,7 +414,16 @@ export function GettingStartedProgressProvider({
         void refreshChecklistSignals({ fromUserAction: true })
       }
     })
-  }, [user?.id, profileLoading, refreshChecklistSignals])
+  }, [
+    user?.id,
+    profileLoading,
+    membershipReconciling,
+    profile?.onboarding_completed,
+    profile?.subscription_status,
+    profile?.trial_end,
+    profile?.is_pro,
+    refreshChecklistSignals,
+  ])
 
   useEffect(() => {
     return subscribeGettingStartedSignalsRefresh(

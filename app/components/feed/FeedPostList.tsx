@@ -20,6 +20,7 @@ type FeedPostListProps = {
   draftSyncRef: MutableRefObject<Record<string, string>>
   onSelectPost: (post: any) => void
   onOpenComments: (post: any) => void
+  onOpenLinkedTrade?: (post: any) => void
   onToggleLike: (post: any) => void
   onSubmitComment: (post: any, text: string) => Promise<boolean>
   onSharePost: (post: any) => void
@@ -40,6 +41,7 @@ function FeedPostList({
   draftSyncRef,
   onSelectPost,
   onOpenComments,
+  onOpenLinkedTrade,
   onToggleLike,
   onSubmitComment,
   onSharePost,
@@ -110,6 +112,7 @@ function FeedPostList({
               onReplaceReelVideo={() => onReplaceReelVideo?.(post)}
               onSelectPost={onSelectPost}
               onOpenComments={onOpenComments}
+              onOpenLinkedTrade={onOpenLinkedTrade}
               onToggleLike={onToggleLike}
               onSharePost={onSharePost}
             />

@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import Navbar from "@/app/components/Navbar"
+import BetaTestimonialModal from "@/app/components/beta/BetaTestimonialModal"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { BETA_ROOM_SLUG } from "@/lib/betaHub"
 import { supabase } from "@/lib/supabaseClient"
@@ -35,6 +36,8 @@ export default function BetaHubPage() {
   const router = useRouter()
   const { feedbackModalProps } = useFeedbackPopup({ autoDismissMs: 3000 })
   const [checking, setChecking] = useState(true)
+  const [userId, setUserId] = useState<string | null>(null)
+  const [testimonialModalOpen, setTestimonialModalOpen] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -61,6 +64,7 @@ export default function BetaHubPage() {
         return
       }
 
+      setUserId(user.id)
       setChecking(false)
     })()
 
@@ -88,6 +92,11 @@ export default function BetaHubPage() {
     <>
       <Navbar />
       <FeedbackModal {...feedbackModalProps} />
+      <BetaTestimonialModal
+        open={testimonialModalOpen}
+        userId={userId}
+        onClose={() => setTestimonialModalOpen(false)}
+      />
 
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] p-4 text-gray-100 md:p-8">
         <div className="mx-auto max-w-3xl space-y-6">
@@ -152,6 +161,19 @@ export default function BetaHubPage() {
           </section>
 
           <div className="grid gap-4 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => setTestimonialModalOpen(true)}
+              className={ACTION_CARD_CLASS}
+            >
+              <p className="font-semibold text-white">⭐ Leave Beta Feedback</p>
+              <p className="mt-2 mb-5 flex-1 text-sm text-gray-400">
+                Tell us what you love, what needs work, and help shape TradeTraxs before launch.
+              </p>
+              <span className={ACTION_CTA_CLASS}>
+                Share Testimonial
+              </span>
+            </button>
             <Link href="/feedback" className={ACTION_CARD_CLASS}>
               <p className="font-semibold text-white">Submit Feedback</p>
               <p className="mt-2 mb-5 flex-1 text-sm text-gray-400">

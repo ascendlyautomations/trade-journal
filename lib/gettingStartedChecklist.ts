@@ -153,15 +153,21 @@ export function shouldOfferGettingStartedChecklist(
 
 /**
  * Whether the dashboard should embed the checklist automatically.
- * Single rule: only while profile onboarding is not yet complete.
+ * Show after profile onboarding is complete while getting-started tasks remain.
  */
 export function shouldAutoShowGettingStartedChecklist(
   userId: string | null | undefined,
   options: {
     onboardingCompleted: boolean
+    allComplete?: boolean
+    hasSeenOnboardingCompletePopup?: boolean
   }
 ): boolean {
-  if (!userId || options.onboardingCompleted) {
+  if (!userId || !options.onboardingCompleted) {
+    return false
+  }
+
+  if (options.allComplete || options.hasSeenOnboardingCompletePopup) {
     return false
   }
 

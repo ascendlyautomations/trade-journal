@@ -1,6 +1,7 @@
 "use client"
 
 import { LANDING_BRAND_TAGLINE } from "@/lib/landingFlagships"
+import { TRAXPRO_TRIAL_HEADLINE } from "@/lib/traxProPricing"
 
 type Props = {
   checkoutLoading: boolean
@@ -27,7 +28,7 @@ export default function LandingFinalCtaSection({ checkoutLoading, onStartTrial }
           onClick={onStartTrial}
           className="min-w-[220px] rounded-xl bg-emerald-500 px-8 py-3.5 text-base font-semibold text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {checkoutLoading ? "Starting trial…" : "Start Free Trial"}
+          {checkoutLoading ? "Starting trial…" : `Start ${TRAXPRO_TRIAL_HEADLINE}!`}
         </button>
       </div>
     </section>

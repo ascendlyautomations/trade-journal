@@ -1,17 +1,22 @@
 "use client"
 
+import { useState } from "react"
 import {
   LANDING_FREE_FEATURES,
   LANDING_PRO_PRICING_HIGHLIGHTS,
-  TRAXPRO_BILLING_LABEL,
   TRAXPRO_CHECKOUT_FINE_PRINT,
   TRAXPRO_PLAN_NAME,
-  TRAXPRO_PRICE_DISPLAY,
   TRAXPRO_TRIAL_HEADLINE,
 } from "@/lib/traxProPricing"
 import {
+  TRAXPRO_DEFAULT_BILLING_INTERVAL,
+  type TraxProBillingIntervalId,
+} from "@/lib/traxProBillingPlans"
+import { setCheckoutBillingInterval } from "@/lib/signupFlow"
+import TraxProBillingIntervalPicker from "@/app/components/TraxProBillingIntervalPicker"
+import TraxProSelectedPlanPrice from "@/app/components/TraxProSelectedPlanPrice"
+import {
   LANDING_HEADLINE_SM,
-  LANDING_LEAD,
   LANDING_SECTION_BORDER,
   LANDING_SECTION_SHELL,
   LANDING_SECTION_SPACING,
@@ -20,15 +25,26 @@ import {
 
 type Props = {
   checkoutLoading: boolean
-  onStartTrial: () => void
+  onStartTrial: (billingInterval: TraxProBillingIntervalId) => void
   onStartFree: () => void
+  showMarketingCTAs?: boolean
 }
 
 export default function LandingPricingSection({
   checkoutLoading,
   onStartTrial,
   onStartFree,
+  showMarketingCTAs = true,
 }: Props) {
+  const [billingInterval, setBillingInterval] = useState<TraxProBillingIntervalId>(
+    TRAXPRO_DEFAULT_BILLING_INTERVAL
+  )
+
+  function handleIntervalChange(interval: TraxProBillingIntervalId) {
+    setBillingInterval(interval)
+    setCheckoutBillingInterval(interval)
+  }
+
   return (
     <section
       id="pricing"
@@ -41,7 +57,6 @@ export default function LandingPricingSection({
             Start Free.{" "}
             <span className={LANDING_TITLE_GRADIENT}>Upgrade When You&apos;re Ready.</span>
           </h2>
-          
         </header>
 
         <div className="mx-auto grid max-w-5xl gap-8 lg:grid-cols-2 lg:items-stretch lg:gap-10">
@@ -61,13 +76,15 @@ export default function LandingPricingSection({
                 </li>
               ))}
             </ul>
-            <button
-              type="button"
-              onClick={onStartFree}
-              className="mt-10 w-full rounded-xl border border-white/15 bg-white/[0.06] px-6 py-3.5 font-semibold text-white transition-[transform,box-shadow] duration-200 hover:scale-[1.02] hover:border-emerald-400/25 hover:bg-white/[0.10] hover:shadow-[0_0_24px_rgba(52,211,153,0.12)] motion-reduce:hover:scale-100"
-            >
-              Start Free
-            </button>
+            {showMarketingCTAs ? (
+              <button
+                type="button"
+                onClick={onStartFree}
+                className="mt-10 w-full rounded-xl border border-white/15 bg-white/[0.06] px-6 py-3.5 font-semibold text-white transition-[transform,box-shadow] duration-200 hover:scale-[1.02] hover:border-emerald-400/25 hover:bg-white/[0.10] hover:shadow-[0_0_24px_rgba(52,211,153,0.12)] motion-reduce:hover:scale-100"
+              >
+                Start Free
+              </button>
+            ) : null}
           </div>
 
           <div className="relative flex h-full flex-col lg:-translate-y-1 lg:justify-center">
@@ -81,11 +98,12 @@ export default function LandingPricingSection({
               <p className="mt-2 text-sm font-semibold uppercase tracking-wide text-emerald-300/90">
                 {TRAXPRO_TRIAL_HEADLINE}
               </p>
-              <p className="mt-2 text-4xl font-bold tracking-tight text-white md:text-[2.35rem]">
-                {TRAXPRO_PRICE_DISPLAY}
-              </p>
-              <p className="mt-1 text-sm font-medium text-gray-400">{TRAXPRO_BILLING_LABEL}</p>
-              <ul className="mt-8 flex flex-1 flex-col gap-3 text-left text-sm text-gray-100">
+              <TraxProSelectedPlanPrice
+                interval={billingInterval}
+                variant="full"
+                className="mt-2 text-white"
+              />
+              <ul className="mt-6 flex flex-1 flex-col gap-3 text-left text-sm text-gray-100">
                 {LANDING_PRO_PRICING_HIGHLIGHTS.map((line) => (
                   <li key={line} className="flex gap-3">
                     <span className="mt-0.5 shrink-0 text-emerald-400" aria-hidden>
@@ -95,17 +113,28 @@ export default function LandingPricingSection({
                   </li>
                 ))}
               </ul>
-              <button
-                type="button"
-                disabled={checkoutLoading}
-                onClick={onStartTrial}
-                className="mt-10 w-full rounded-xl bg-gradient-to-r from-blue-500 to-emerald-500 px-6 py-3.5 font-semibold text-white shadow-lg shadow-emerald-500/20 transition-[transform,box-shadow] duration-200 hover:scale-[1.02] hover:from-blue-600 hover:to-emerald-600 hover:shadow-[0_0_28px_rgba(52,211,153,0.35)] disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:hover:scale-100"
-              >
-                {checkoutLoading ? "Starting trial…" : "Start Free Trial"}
-              </button>
-              <p className="mt-4 text-center text-xs leading-relaxed text-gray-500">
-                {TRAXPRO_CHECKOUT_FINE_PRINT}
-              </p>
+              {showMarketingCTAs ? (
+                <>
+                  <div className="mt-6">
+                    <TraxProBillingIntervalPicker
+                      value={billingInterval}
+                      onChange={handleIntervalChange}
+                      disabled={checkoutLoading}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    disabled={checkoutLoading}
+                    onClick={() => onStartTrial(billingInterval)}
+                    className="mt-6 w-full rounded-xl bg-gradient-to-r from-blue-500 to-emerald-500 px-6 py-3.5 font-semibold text-white shadow-lg shadow-emerald-500/20 transition-[transform,box-shadow] duration-200 hover:scale-[1.02] hover:from-blue-600 hover:to-emerald-600 hover:shadow-[0_0_28px_rgba(52,211,153,0.35)] disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:hover:scale-100"
+                  >
+                    {checkoutLoading ? "Starting trial…" : `Start ${TRAXPRO_TRIAL_HEADLINE}!`}
+                  </button>
+                  <p className="mt-4 text-center text-xs leading-relaxed text-gray-500">
+                    {TRAXPRO_CHECKOUT_FINE_PRINT}
+                  </p>
+                </>
+              ) : null}
             </div>
           </div>
         </div>

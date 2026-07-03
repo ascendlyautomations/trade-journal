@@ -47,6 +47,15 @@ import { clearAllSettingsProfileCaches } from "./settingsProfileCache"
 import { clearAllTradingAccountsSettingsCaches } from "./tradingAccountsSettingsCache"
 import { clearAllNotificationPreferencesCaches } from "./notificationPreferencesCache"
 import { auditLogProfileLoaded } from "./onboardingChecklistAudit"
+import { isProActive } from "./subscription"
+import { syncMembershipAfterStripeCheckout as runMembershipSync } from "./syncMembershipAfterStripeCheckout"
+import {
+  captureStripeCheckoutSuccessFromUrl,
+  clearStripeReconciliationSignals,
+  dispatchStripeReconciliationComplete,
+  markStripeReconciliationPending,
+  shouldReconcileStripeMembership,
+} from "./stripeReconciliation"
 import { isDemoModeActive, disableDemoMode, subscribeDemoModeChanges } from "./demo/demoMode"
 import {
   getDemoAuthUser,
@@ -61,7 +70,7 @@ import { DEMO_USER_ID, isDemoUserId } from "./demo/constants"
  * Avoids duplicate `profiles` reads across Navbar, checklist, and key pages.
  */
 export const USER_PROFILE_SELECT =
-  "id, name, username, bio, is_private, avatar_url, trading_style, trading_model, trader_type, primary_market, started_trading, username_change_count, referral_code, referral_count, is_pro, subscription_status, cancel_at_period_end, cancel_at, trial_end, current_period_end, stripe_customer_id, is_banned, banned_reason, is_beta_tester, onboarding_completed, has_seen_getting_started_intro, has_seen_onboarding_complete_popup, max_drawdown_limit, has_email_password" as const
+  "id, name, username, bio, is_private, avatar_url, trading_style, trading_model, trader_type, primary_market, started_trading, username_change_count, referral_code, referral_count, is_pro, subscription_status, cancel_at_period_end, cancel_at, trial_end, current_period_end, stripe_customer_id, is_banned, banned_reason, is_beta_tester, use_free_tier, onboarding_completed, has_seen_getting_started_intro, has_seen_onboarding_complete_popup, max_drawdown_limit, has_email_password" as const
 
 export type UserProfileSlice = {
   id: string
@@ -69,10 +78,12 @@ export type UserProfileSlice = {
   avatar_url: string | null
   is_pro: boolean | null
   subscription_status: string | null
+  trial_end: string | null
   is_banned: boolean | null
   banned_reason: string | null
   referral_code: string | null
   is_beta_tester: boolean | null
+  use_free_tier: boolean | null
   onboarding_completed: boolean | null
   has_seen_getting_started_intro: boolean | null
   has_seen_onboarding_complete_popup: boolean | null
@@ -99,10 +110,12 @@ function pickUserProfileFields(row: unknown): UserProfileSlice | null {
     is_pro: typeof o.is_pro === "boolean" ? o.is_pro : null,
     subscription_status:
       o.subscription_status != null ? String(o.subscription_status) : null,
+    trial_end: o.trial_end != null ? String(o.trial_end) : null,
     is_banned: typeof o.is_banned === "boolean" ? o.is_banned : null,
     banned_reason: o.banned_reason != null ? String(o.banned_reason) : null,
     referral_code: o.referral_code != null ? String(o.referral_code) : null,
     is_beta_tester: typeof o.is_beta_tester === "boolean" ? o.is_beta_tester : null,
+    use_free_tier: typeof o.use_free_tier === "boolean" ? o.use_free_tier : null,
     onboarding_completed:
       typeof o.onboarding_completed === "boolean" ? o.onboarding_completed : null,
     has_seen_getting_started_intro:
@@ -134,9 +147,13 @@ type UserProfileContextValue = {
   user: any
   profile: UserProfileSlice | null
   loading: boolean
+  /** True while post-Stripe membership/profile reconciliation is in flight. */
+  membershipReconciling: boolean
   setProfile: Dispatch<SetStateAction<UserProfileSlice | null>>
   /** Re-fetch shared profile slice from Supabase (e.g. after ensure-profile upsert). */
   refreshProfile: () => Promise<void>
+  /** After Stripe checkout — poll until trial/subscription is active; returns true when reconciled. */
+  syncMembershipAfterStripeCheckout: () => Promise<boolean>
 }
 
 const UserProfileContext = createContext<UserProfileContextValue | null>(null)
@@ -150,6 +167,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<any>(null)
   const [profile, setProfileState] = useState<UserProfileSlice | null>(null)
   const [loading, setLoading] = useState(true)
+  const [membershipReconciling, setMembershipReconciling] = useState(false)
   const realtimeTopicSuffix = useId().replace(/:/g, "")
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const profileRef = useRef<UserProfileSlice | null>(null)
@@ -177,6 +195,34 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
     if (picked) {
       setProfileState(picked)
       writeUserBootstrapProfile(userId, picked)
+    }
+  }, [user?.id])
+
+  const profileReconcileInFlightRef = useRef(false)
+
+  const syncMembershipAfterStripeCheckout = useCallback(async (): Promise<boolean> => {
+    const userId = user?.id ?? profileRef.current?.id
+    if (!userId || isDemoUserId(userId)) return false
+
+    setMembershipReconciling(true)
+    markStripeReconciliationPending(userId)
+
+    try {
+      const { profile: slice, reconciled } = await runMembershipSync(supabase, userId, {
+        pickProfile: (row) => pickUserProfileFields(row),
+      })
+
+      if (reconciled && slice) {
+        setProfileState(slice)
+        clearStripeReconciliationSignals()
+        warmAppDataCaches(supabase, userId)
+        dispatchStripeReconciliationComplete()
+        return true
+      }
+
+      return false
+    } finally {
+      setMembershipReconciling(false)
     }
   }, [user?.id])
 
@@ -241,6 +287,10 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
           const picked = pickUserProfileFields(payload.new)
           if (picked) {
             setProfileState(picked)
+            if (isProActive(picked) && shouldReconcileStripeMembership(sessionUserId)) {
+              clearStripeReconciliationSignals()
+              dispatchStripeReconciliationComplete()
+            }
             writeUserBootstrapProfile(sessionUserId, picked)
             if (payload.new && typeof payload.new === "object") {
               writeSettingsProfileCache(
@@ -322,10 +372,6 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
 
       if (!mounted || generation !== loadGeneration) return
 
-      if (sessionUser) {
-        disableDemoMode()
-      }
-
       sessionUserIdRef.current = sessionUser?.id ?? null
       setUser(sessionUser)
 
@@ -343,9 +389,18 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
         readSettingsProfileCache(sessionUser.id) ??
         readUserBootstrapProfile(sessionUser.id)
       const cachedPicked = pickUserProfileFields(cachedRow)
+      const billingProfilePending =
+        cachedPicked?.onboarding_completed === true &&
+        !isProActive({
+          is_pro: cachedPicked.is_pro,
+          subscription_status: cachedPicked.subscription_status,
+          trial_end: cachedPicked.trial_end,
+        })
       if (cachedPicked) {
         setProfileState(cachedPicked)
-        setLoading(false)
+        if (!billingProfilePending) {
+          setLoading(false)
+        }
         auditLogProfileLoaded({
           userId: sessionUser.id,
           onboarding_completed: cachedPicked.onboarding_completed,
@@ -353,14 +408,16 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
             cachedPicked.has_seen_getting_started_intro,
           has_seen_onboarding_complete_popup:
             cachedPicked.has_seen_onboarding_complete_popup,
-          profileLoading: false,
-          profileLoaded: true,
+          profileLoading: billingProfilePending,
+          profileLoaded: !billingProfilePending,
         })
       } else if (!profileRef.current) {
         setLoading(true)
       }
 
-      warmAppDataCaches(supabase, sessionUser.id)
+      if (!shouldReconcileStripeMembership(sessionUser.id)) {
+        warmAppDataCaches(supabase, sessionUser.id)
+      }
 
       let resolvedProfile = await fetchSettingsProfileRow(supabase, sessionUser.id)
 
@@ -397,6 +454,13 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
       if (picked) {
         setProfileState(picked)
         writeUserBootstrapProfile(sessionUser.id, picked)
+        if (
+          isProActive(picked) &&
+          shouldReconcileStripeMembership(sessionUser.id)
+        ) {
+          clearStripeReconciliationSignals()
+          dispatchStripeReconciliationComplete()
+        }
         auditLogProfileLoaded({
           userId: sessionUser.id,
           onboarding_completed: picked.onboarding_completed,
@@ -440,6 +504,11 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
         ) {
           return
         }
+        // Fresh sign-in (logged out → logged in) exits preview; never clear preview
+        // during session recovery or while profile is still loading.
+        if (event === "SIGNED_IN" && nextUserId && !sessionUserIdRef.current) {
+          disableDemoMode()
+        }
         void applyAuthSession(session)
       }
     })
@@ -457,6 +526,10 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
       }
     })
 
+    if (isDemoModeActive() && !sessionUserIdRef.current) {
+      void applyDemoAuthSession(++loadGeneration)
+    }
+
     return () => {
       mounted = false
       loadGeneration += 1
@@ -467,40 +540,47 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
   }, [realtimeTopicSuffix])
 
   useEffect(() => {
-    let cancelled = false
-
-    async function refetchProfileAfterCheckout() {
-      if (typeof window === "undefined") return
-      const params = new URLSearchParams(window.location.search)
-      if (params.get("checkout") !== "success") return
-
-      const { data: { session } } = await supabase.auth.getSession()
-      const userId = session?.user?.id
-      if (!userId || cancelled) return
-
-      const profileData = await fetchSettingsProfileRow(supabase, userId, {
-        force: true,
-      })
-
-      if (!cancelled && profileData) {
-        const picked = pickUserProfileFields(profileData)
-        if (picked) {
-          setProfileState(picked)
-          writeUserBootstrapProfile(userId, picked)
-        }
-      }
-    }
-
-    void refetchProfileAfterCheckout()
-
-    return () => {
-      cancelled = true
-    }
+    captureStripeCheckoutSuccessFromUrl()
   }, [])
 
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const userId = user?.id
+    if (!userId || isDemoUserId(userId)) return
+
+    const attemptReconcile = () => {
+      if (!shouldReconcileStripeMembership(userId)) return
+      if (profileReconcileInFlightRef.current) return
+      profileReconcileInFlightRef.current = true
+      void syncMembershipAfterStripeCheckout().finally(() => {
+        profileReconcileInFlightRef.current = false
+      })
+    }
+
+    attemptReconcile()
+    window.addEventListener("focus", attemptReconcile)
+    return () => window.removeEventListener("focus", attemptReconcile)
+  }, [user?.id, syncMembershipAfterStripeCheckout])
+
   const value = useMemo(
-    () => ({ user, profile, loading, setProfile, refreshProfile }),
-    [user, profile, loading, setProfile, refreshProfile]
+    () => ({
+      user,
+      profile,
+      loading,
+      membershipReconciling,
+      setProfile,
+      refreshProfile,
+      syncMembershipAfterStripeCheckout,
+    }),
+    [
+      user,
+      profile,
+      loading,
+      membershipReconciling,
+      setProfile,
+      refreshProfile,
+      syncMembershipAfterStripeCheckout,
+    ]
   )
 
   return (

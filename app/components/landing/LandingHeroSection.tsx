@@ -41,7 +41,7 @@ export default function LandingHeroSection({
               onClick={onStartTrial}
               className={`${LANDING_PRIMARY_BUTTON} min-w-[220px] px-8`}
             >
-              {checkoutLoading ? "Starting trial…" : "Start Free Trial"}
+              {checkoutLoading ? "Starting trial…" : `Start ${TRAXPRO_TRIAL_HEADLINE}`}
             </button>
             <button
               type="button"

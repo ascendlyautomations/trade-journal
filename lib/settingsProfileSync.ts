@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import type { UserProfileSlice } from "@/lib/UserProfileProvider"
 import { normalizeTraderType } from "@/lib/traderType"
 import { writeUserBootstrapProfile } from "@/lib/userBootstrapCache"
+import { isProActive } from "@/lib/subscription"
 import {
   readSettingsProfileCache,
   writeSettingsProfileCache,
@@ -9,8 +10,24 @@ import {
 import { isDemoUserId } from "@/lib/demo/constants"
 import { DEMO_PROFILE } from "@/lib/demo/fixtures"
 
+/** Cached row may predate Stripe checkout — re-fetch when billing could have changed. */
+function shouldBypassSettingsProfileCache(
+  cached: Record<string, unknown>
+): boolean {
+  if (cached.onboarding_completed !== true) return false
+  return !isProActive({
+    is_pro: typeof cached.is_pro === "boolean" ? cached.is_pro : null,
+    subscription_status:
+      cached.subscription_status != null
+        ? String(cached.subscription_status)
+        : null,
+    trial_end:
+      cached.trial_end != null ? String(cached.trial_end) : null,
+  })
+}
+
 export const APP_PROFILE_SELECT =
-  "id, name, username, bio, is_private, avatar_url, trading_style, trading_model, trader_type, primary_market, started_trading, username_change_count, referral_code, referral_count, referral_earnings, is_pro, subscription_status, cancel_at_period_end, cancel_at, trial_end, current_period_end, stripe_customer_id, is_banned, banned_reason, is_beta_tester, onboarding_completed, has_seen_getting_started_intro, has_seen_onboarding_complete_popup, max_drawdown_limit, has_email_password" as const
+  "id, name, username, bio, is_private, avatar_url, trading_style, trading_model, trader_type, primary_market, started_trading, username_change_count, referral_code, referral_count, referral_earnings, is_pro, subscription_status, cancel_at_period_end, cancel_at, trial_end, current_period_end, stripe_customer_id, stripe_price_id, billing_interval, is_banned, banned_reason, is_beta_tester, use_free_tier, onboarding_completed, has_seen_getting_started_intro, has_seen_onboarding_complete_popup, max_drawdown_limit, has_email_password" as const
 
 /** @deprecated Use APP_PROFILE_SELECT — kept for imports that expect this name. */
 export const SETTINGS_PROFILE_SELECT = APP_PROFILE_SELECT
@@ -23,7 +40,7 @@ const settingsProfileInFlight = new Map<
 export async function fetchSettingsProfileRow(
   client: SupabaseClient,
   userId: string,
-  options?: { force?: boolean }
+  options?: { force?: boolean; skipCacheWrite?: boolean }
 ): Promise<Record<string, unknown> | null> {
   const key = userId.trim()
   if (!key) return null
@@ -37,7 +54,9 @@ export async function fetchSettingsProfileRow(
 
   if (!options?.force) {
     const cached = readSettingsProfileCache(key)
-    if (cached) return cached
+    if (cached && !shouldBypassSettingsProfileCache(cached)) {
+      return cached
+    }
   }
 
   const existing = settingsProfileInFlight.get(key)
@@ -50,7 +69,7 @@ export async function fetchSettingsProfileRow(
       .eq("id", key)
       .single()
 
-    if (data) {
+    if (data && !options?.skipCacheWrite) {
       writeSettingsProfileCache(key, data)
       writeUserBootstrapProfile(key, data)
     }

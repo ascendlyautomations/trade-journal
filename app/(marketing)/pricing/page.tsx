@@ -3,18 +3,24 @@
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
-import PublicNavbar from "../components/PublicNavbar"
 import { supabase } from "@/lib/supabaseClient"
+import { enterSignupFlow, setCheckoutBillingInterval } from "@/lib/signupFlow"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { feedbackPresets } from "@/lib/feedbackPresets"
 import {
   LANDING_FREE_FEATURES,
   LANDING_PRO_FEATURES,
-  TRAXPRO_BILLING_LABEL,
   TRAXPRO_CHECKOUT_FINE_PRINT,
   TRAXPRO_PLAN_NAME,
-  TRAXPRO_PRICE_DISPLAY,
+  TRAXPRO_PRICE_STARTING_AT,
+  TRAXPRO_TRIAL_HEADLINE,
 } from "@/lib/traxProPricing"
+import {
+  TRAXPRO_DEFAULT_BILLING_INTERVAL,
+  type TraxProBillingIntervalId,
+} from "@/lib/traxProBillingPlans"
+import TraxProBillingIntervalPicker from "@/app/components/TraxProBillingIntervalPicker"
+import TraxProSelectedPlanPrice from "@/app/components/TraxProSelectedPlanPrice"
 
 const whyTraxPro = [
   "See your real win rate",
@@ -42,16 +48,27 @@ export default function PricingPage() {
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const router = useRouter()
   const [checkoutLoading, setCheckoutLoading] = useState(false)
+  const [billingInterval, setBillingInterval] = useState<TraxProBillingIntervalId>(
+    TRAXPRO_DEFAULT_BILLING_INTERVAL
+  )
+
+  function handleIntervalChange(interval: TraxProBillingIntervalId) {
+    setBillingInterval(interval)
+    setCheckoutBillingInterval(interval)
+  }
 
   async function handleTraxProCheckout() {
     setCheckoutLoading(true)
+    setCheckoutBillingInterval(billingInterval)
     try {
       const {
         data: { user },
       } = await supabase.auth.getUser()
 
       if (!user) {
-        showPopup({ type: "info", message: "Please log in first" })
+        enterSignupFlow()
+        setCheckoutLoading(false)
+        router.push("/login?tab=signup")
         return
       }
 
@@ -62,6 +79,7 @@ export default function PricingPage() {
         },
         body: JSON.stringify({
           userId: user.id,
+          billingInterval,
           referralCode:
             typeof window !== "undefined"
               ? localStorage.getItem("referral_code")
@@ -90,11 +108,9 @@ export default function PricingPage() {
 
   return (
     <>
-      <PublicNavbar />
       <FeedbackModal {...feedbackModalProps} />
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 py-14 text-white sm:px-6 sm:py-20">
         <div className="mx-auto flex max-w-5xl flex-col items-center">
-          {/* Top section */}
           <h1 className="max-w-3xl text-center text-3xl font-bold leading-tight tracking-tight sm:text-4xl md:text-5xl">
             Take Your Trading to the Next Level
           </h1>
@@ -107,7 +123,6 @@ export default function PricingPage() {
           </p>
 
           <div className="mt-14 grid w-full max-w-4xl gap-8 md:grid-cols-2 md:items-center md:gap-10">
-            {/* Free — secondary emphasis */}
             <div className="order-2 flex flex-col rounded-2xl border border-white/10 bg-white/[0.06] p-8 opacity-90 shadow-lg backdrop-blur-md md:order-1">
               <h2 className="text-lg font-semibold text-gray-200">Free</h2>
               <p className="mt-2 text-3xl font-bold tracking-tight text-gray-100">
@@ -135,17 +150,14 @@ export default function PricingPage() {
               </button>
             </div>
 
-            {/* TraxPro — dominant */}
             <div className="relative z-10 order-1 flex flex-col rounded-2xl border-2 border-blue-500 bg-white/10 p-6 shadow-lg backdrop-blur-md scale-105 max-md:scale-100 md:shadow-2xl">
               <span className="absolute -top-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-gradient-to-r from-blue-500 to-teal-400 px-4 py-1.5 text-xs font-bold uppercase tracking-wide text-white shadow-lg">
                 🔥 Most Popular
               </span>
 
               <h2 className="mt-0 text-xl font-bold text-white">{TRAXPRO_PLAN_NAME}</h2>
-              <p className="mt-2 text-4xl font-bold tracking-tight sm:text-5xl">
-                {TRAXPRO_PRICE_DISPLAY}
-              </p>
-              <p className="mt-1 text-sm font-medium text-gray-300">{TRAXPRO_BILLING_LABEL}</p>
+              <TraxProSelectedPlanPrice interval={billingInterval} variant="full" className="text-white" />
+              <p className="mt-1 text-xs text-gray-400">{TRAXPRO_PRICE_STARTING_AT}</p>
               <p className="mt-3 text-sm leading-relaxed text-gray-200 sm:text-base">
                 Everything you need to become a consistently profitable trader.
               </p>
@@ -159,13 +171,21 @@ export default function PricingPage() {
                 ))}
               </ul>
 
+              <div className="mt-5">
+                <TraxProBillingIntervalPicker
+                  value={billingInterval}
+                  onChange={handleIntervalChange}
+                  disabled={checkoutLoading}
+                />
+              </div>
+
               <button
                 type="button"
                 disabled={checkoutLoading}
                 onClick={handleTraxProCheckout}
                 className="mt-5 w-full rounded-xl bg-gradient-to-r from-blue-500 to-teal-400 py-4 text-center text-base font-bold text-white shadow-lg transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60 sm:py-[1.125rem] sm:text-lg"
               >
-                {checkoutLoading ? "Loading…" : "Start Free Trial"}
+                {checkoutLoading ? "Loading…" : `Start ${TRAXPRO_TRIAL_HEADLINE}`}
               </button>
               <div className="mt-4 space-y-1.5 text-center text-xs text-gray-300 sm:text-sm">
                 <p>{TRAXPRO_CHECKOUT_FINE_PRINT}</p>
@@ -178,7 +198,6 @@ export default function PricingPage() {
             data.
           </p>
 
-          {/* Why TraxPro */}
           <section
             className="mt-16 w-full max-w-2xl rounded-2xl border border-white/10 bg-white/5 p-8 backdrop-blur-sm sm:p-10"
             aria-labelledby="why-traxpro-heading"

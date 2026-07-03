@@ -1,7 +1,5 @@
 import {
-  TRAXPRO_BILLING_LABEL,
   TRAXPRO_PLAN_NAME,
-  TRAXPRO_PRICE_DISPLAY,
   TRAXPRO_TRIAL_LABEL,
 } from "@/lib/traxProPricing"
 import { FREE_PLAN_ACCOUNT_LIMIT } from "@/lib/tradingAccounts"
@@ -35,7 +33,7 @@ export const LANDING_FAQ_ITEMS: LandingFaqItem[] = [
   },
   {
     q: "Do I need to pay to use TradeTraxs?",
-    a: `No. TradeTraxs has a generous Free plan. ${TRAXPRO_PLAN_NAME} is ${TRAXPRO_PRICE_DISPLAY}, ${TRAXPRO_BILLING_LABEL.toLowerCase()}, and includes a ${TRAXPRO_TRIAL_LABEL.toLowerCase()}.`,
+    a: `No. TradeTraxs has a generous Free plan. ${TRAXPRO_PLAN_NAME} starts at $23.99/month and includes a ${TRAXPRO_TRIAL_LABEL.toLowerCase()}.`,
   },
   {
     q: "Is my data private?",

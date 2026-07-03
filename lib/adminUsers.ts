@@ -55,6 +55,52 @@ export type AdminCheckResult = {
   } | null
 }
 
+export async function getAdminCheckResultForUser(
+  userId: string | null | undefined,
+  email?: string | null
+): Promise<AdminCheckResult> {
+  if (!userId) {
+    return {
+      isAdmin: false,
+      userId: null,
+      email: email ?? null,
+      row: null,
+      error: null,
+    }
+  }
+
+  if (isDemoUserId(userId)) {
+    return {
+      isAdmin: false,
+      userId,
+      email: email ?? null,
+      row: null,
+      error: null,
+    }
+  }
+
+  const { data, error } = await supabase
+    .from("admin_users")
+    .select("user_id, role")
+    .eq("user_id", userId)
+    .maybeSingle()
+
+  return {
+    isAdmin: Boolean(data?.user_id) && !error,
+    userId,
+    email: email ?? null,
+    row: data ?? null,
+    error: error
+      ? {
+          message: error.message,
+          code: error.code ?? null,
+          details: error.details ?? null,
+          hint: error.hint ?? null,
+        }
+      : null,
+  }
+}
+
 export async function getCurrentAdminCheckResult(): Promise<AdminCheckResult> {
   const {
     data: { user },
@@ -78,35 +124,6 @@ export async function getCurrentAdminCheckResult(): Promise<AdminCheckResult> {
     }
   }
 
-  if (isDemoUserId(user.id)) {
-    return {
-      isAdmin: false,
-      userId: user.id,
-      email: user.email ?? null,
-      row: null,
-      error: null,
-    }
-  }
-
-  const { data, error } = await supabase
-    .from("admin_users")
-    .select("user_id, role")
-    .eq("user_id", user.id)
-    .maybeSingle()
-
-  return {
-    isAdmin: Boolean(data?.user_id) && !error,
-    userId: user.id,
-    email: user.email ?? null,
-    row: data ?? null,
-    error: error
-      ? {
-          message: error.message,
-          code: error.code ?? null,
-          details: error.details ?? null,
-          hint: error.hint ?? null,
-        }
-      : null,
-  }
+  return getAdminCheckResultForUser(user.id, user.email)
 }
 

@@ -12,6 +12,14 @@ import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import AuthPasswordInput from "@/app/components/ui/AuthPasswordInput"
 import { isBetaReferralRef } from "@/lib/betaReferralCode"
 import { persistReferralCodeFromUrl } from "@/lib/referralPersistence"
+import { enterSignupFlow, setCheckoutBillingInterval, setSignupIntent, type SignupIntent } from "@/lib/signupFlow"
+import { TRAXPRO_TRIAL_HEADLINE } from "@/lib/traxProPricing"
+import { markProfileUseFreeTier } from "@/lib/markFreeTierSignup"
+import TraxProBillingIntervalPicker from "@/app/components/TraxProBillingIntervalPicker"
+import {
+  TRAXPRO_DEFAULT_BILLING_INTERVAL,
+  type TraxProBillingIntervalId,
+} from "@/lib/traxProBillingPlans"
 
 function getSafeNextPath(): string | null {
   if (typeof window === "undefined") return null
@@ -41,16 +49,15 @@ export default function LoginPage() {
   const checkoutInFlightRef = useRef(false)
   const [isBetaSignup, setIsBetaSignup] = useState(false)
   const [betaWelcomeExpanded, setBetaWelcomeExpanded] = useState(false)
+  const [billingInterval, setBillingInterval] = useState<TraxProBillingIntervalId>(
+    TRAXPRO_DEFAULT_BILLING_INTERVAL
+  )
   const { showPopup, feedbackModalProps } = useFeedbackPopup({ autoDismissMs: 3000 })
 
   const router = useRouter()
 
   function handleBack() {
-    if (typeof window !== "undefined" && window.history.length > 1) {
-      router.back()
-    } else {
-      router.push("/")
-    }
+    router.push("/")
   }
 
   const shouldStartCheckout = () => {
@@ -58,7 +65,10 @@ export default function LoginPage() {
     return new URLSearchParams(window.location.search).get("next") === "checkout"
   }
 
-  async function startCheckoutAfterAuth(userId: string) {
+  async function startCheckoutAfterAuth(
+    userId: string,
+    interval: TraxProBillingIntervalId = billingInterval
+  ) {
     if (checkoutInFlightRef.current) return
     checkoutInFlightRef.current = true
 
@@ -81,6 +91,7 @@ export default function LoginPage() {
       },
       body: JSON.stringify({
         userId,
+        billingInterval: interval,
         referralCode,
       }),
     })
@@ -105,6 +116,10 @@ export default function LoginPage() {
   useEffect(() => {
     if (typeof window === "undefined") return
     const ref = persistReferralCodeFromUrl()
+    const params = new URLSearchParams(window.location.search)
+    if (params.get("tab") === "signup") {
+      setIsLogin(false)
+    }
     if (!ref) return
     if (isBetaReferralRef(ref)) {
       setIsLogin(false)
@@ -163,8 +178,11 @@ export default function LoginPage() {
     }
   }, [router])
 
-  async function handleSignUp(e: React.MouseEvent<HTMLButtonElement>) {
-    console.log("Signup clicked")
+  async function handleSignUp(
+    e: React.MouseEvent<HTMLButtonElement>,
+    intent: SignupIntent
+  ) {
+    console.log("Signup clicked", intent)
     e.preventDefault()
     if (loading) return
 
@@ -175,6 +193,20 @@ export default function LoginPage() {
           "You must agree to the Terms of Service and Privacy Policy before creating an account.",
       })
       return
+    }
+
+    if (!email.trim() || !password) {
+      showPopup({
+        type: "error",
+        message: "Please enter your email and password.",
+      })
+      return
+    }
+
+    setSignupIntent(intent)
+    if (intent === "trial") {
+      enterSignupFlow()
+      setCheckoutBillingInterval(billingInterval)
     }
 
     setLoading(true)
@@ -245,6 +277,13 @@ export default function LoginPage() {
         notifyAffiliateReferralAttribution()
       }
 
+      if (intent === "free") {
+        const freeResult = await markProfileUseFreeTier(supabase, user.id)
+        if (!freeResult.ok) {
+          console.error("Failed to mark free tier at signup:", freeResult.error)
+        }
+      }
+
       if (shouldStartCheckout()) {
         try {
           await startCheckoutAfterAuth(user.id)
@@ -258,7 +297,7 @@ export default function LoginPage() {
         }
       }
 
-      router.push(getSafeNextPath() ?? "/dashboard")
+      router.push(getSafeNextPath() ?? "/onboarding")
     } catch (err) {
       console.error(
         "ERROR:",
@@ -335,7 +374,11 @@ export default function LoginPage() {
     setGoogleLoading(true)
 
     try {
-    let redirectPath = "/dashboard"
+    if (!isLogin) {
+      setSignupIntent("trial")
+      enterSignupFlow()
+    }
+    let redirectPath = isLogin ? "/dashboard" : "/onboarding"
     if (shouldStartCheckout()) {
       redirectPath = "/login?next=checkout"
     } else {
@@ -377,7 +420,7 @@ export default function LoginPage() {
   }
 
   return (
-  <div className="relative -mt-16 flex min-h-screen items-center justify-center text-white">
+  <div className="relative flex min-h-screen items-center justify-center text-white">
 
     {/* 🔥 FULL BACKGROUND IMAGE */}
     <img
@@ -393,10 +436,10 @@ export default function LoginPage() {
       type="button"
       onClick={handleBack}
       className="absolute left-3 top-3 z-20 inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/10 text-base leading-none text-gray-200 backdrop-blur-md transition hover:bg-white/15 hover:text-white md:left-6 md:top-6 md:h-auto md:min-h-[44px] md:w-auto md:gap-2 md:px-4 md:py-2 md:text-sm md:font-medium"
-      aria-label="Go back"
+      aria-label="Go home"
     >
       <span aria-hidden="true">←</span>
-      <span className="hidden md:inline">Back</span>
+      <span className="hidden md:inline">Home</span>
     </button>
 
     {/* 🔥 CONTENT */}
@@ -502,11 +545,11 @@ export default function LoginPage() {
       </div>
 
       {/* RIGHT LOGIN CARD */}
-      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-white/10 p-8 shadow-2xl backdrop-blur-xl">
+      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-white/10 p-8 shadow-2xl backdrop-blur-xl md:py-6 md:px-8">
 
         {/* Toggle */}
         <div
-          className="flex bg-white/10 rounded-xl p-1 mb-6"
+          className="mb-6 flex rounded-xl bg-white/10 p-1 md:mb-4"
           role="tablist"
           aria-label="Login or sign up"
         >
@@ -516,7 +559,7 @@ export default function LoginPage() {
               setIsLogin(true)
               setAgreedToTerms(false)
             }}
-            className={`flex-1 py-2 rounded-lg font-semibold transition ${
+            className={`flex-1 rounded-lg py-2 font-semibold transition md:py-1.5 ${
               isLogin ? "bg-white text-black" : "text-white"
             }`}
           >
@@ -524,8 +567,10 @@ export default function LoginPage() {
           </button>
           <button
             type="button"
-            onClick={() => setIsLogin(false)}
-            className={`flex-1 py-2 rounded-lg font-semibold transition ${
+            onClick={() => {
+              setIsLogin(false)
+            }}
+            className={`flex-1 rounded-lg py-2 font-semibold transition md:py-1.5 ${
               !isLogin ? "bg-white text-black" : "text-white"
             }`}
           >
@@ -533,12 +578,12 @@ export default function LoginPage() {
           </button>
         </div>
 
-        <h2 className="text-xl font-semibold mb-6 text-center">
+        <h2 className="mb-6 text-center text-xl font-semibold md:mb-4">
           {isLogin ? "Sign in to continue" : "Create your account"}
         </h2>
 
         {!isLogin && (
-          <label className="mb-5 flex cursor-pointer items-start gap-3 text-left text-sm leading-snug text-gray-300">
+          <label className="mb-5 flex cursor-pointer items-start gap-3 text-left text-sm leading-snug text-gray-300 md:mb-3">
             <input
               type="checkbox"
               checked={agreedToTerms}
@@ -575,18 +620,18 @@ export default function LoginPage() {
           type="button"
           onClick={handleGoogleLogin}
           disabled={googleLoading || loading || (!isLogin && !agreedToTerms)}
-          className="mb-4 w-full rounded-xl bg-white py-3 font-medium text-black transition hover:scale-105 disabled:cursor-not-allowed disabled:opacity-50"
+          className="mb-4 w-full rounded-xl bg-white py-3 font-medium text-black transition hover:scale-105 disabled:cursor-not-allowed disabled:opacity-50 md:mb-3 md:py-2.5"
         >
           {googleLoading ? "Redirecting…" : "Continue with Google"}
         </button>
 
-        <div className="text-center text-gray-400 text-sm mb-4">or</div>
+        <div className="mb-4 text-center text-sm text-gray-400 md:mb-3">or</div>
 
         {!isLogin && (
           <input
             type="text"
             placeholder="Full Name"
-            className="w-full mb-4 px-4 py-3 rounded-xl bg-white/10 border border-white/10 focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder-gray-400"
+            className="mb-4 w-full rounded-xl border border-white/10 bg-white/10 px-4 py-3 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 md:mb-3 md:py-2.5"
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
@@ -602,7 +647,7 @@ export default function LoginPage() {
             type="email"
             placeholder="Email"
             autoComplete="email"
-            className="w-full mb-4 px-4 py-3 rounded-xl bg-white/10 border border-white/10 text-white focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder-gray-400"
+            className="mb-4 w-full rounded-xl border border-white/10 bg-white/10 px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 md:mb-3 md:py-2.5"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
@@ -610,7 +655,9 @@ export default function LoginPage() {
           <AuthPasswordInput
             placeholder="Password"
             autoComplete={isLogin ? "current-password" : "new-password"}
-            className="w-full mb-6 px-4 py-3 rounded-xl bg-white/10 border border-white/10 focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder-gray-400"
+            className={`w-full rounded-xl border border-white/10 bg-white/10 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder-gray-400 md:py-2.5 ${
+              isLogin ? "mb-6 md:mb-4" : "mb-4 md:mb-3"
+            }`}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
@@ -625,15 +672,77 @@ export default function LoginPage() {
             </button>
           )}
 
-          <button
-            type={isLogin ? "submit" : "button"}
-            disabled={loading || (!isLogin && !agreedToTerms)}
-            onClick={isLogin ? undefined : handleSignUp}
-            className="w-full bg-gradient-to-r from-blue-500 to-teal-400 py-3 rounded-xl font-semibold hover:scale-105 transition disabled:opacity-60 disabled:hover:scale-100"
-          >
-            {loading ? "Loading..." : isLogin ? "Login" : "Create Account"}
-          </button>
+          {isLogin ? (
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full rounded-xl bg-gradient-to-r from-blue-500 to-teal-400 py-3 font-semibold transition hover:scale-105 disabled:opacity-60 disabled:hover:scale-100 md:py-2.5"
+            >
+              {loading ? "Loading..." : "Login"}
+            </button>
+          ) : null}
         </form>
+
+        {!isLogin ? (
+          <div className="mt-6 md:mt-4">
+            <div className="relative mb-6 md:mb-4">
+              <div className="absolute inset-0 flex items-center" aria-hidden>
+                <div className="w-full border-t border-white/10" />
+              </div>
+              <p className="relative mx-auto w-fit bg-transparent px-3 text-center text-xs text-gray-400">
+                Choose how you&apos;d like to get started
+              </p>
+            </div>
+
+            <div className="space-y-3 md:space-y-2.5">
+              <div className="relative rounded-xl border border-emerald-400/40 bg-gradient-to-b from-emerald-500/10 to-white/[0.04] p-4 md:p-3">
+                <span className="absolute -top-2.5 right-3 rounded-full bg-emerald-500 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+                  Recommended
+                </span>
+                <p className="text-sm font-semibold text-white">
+                  ⭐ Start {TRAXPRO_TRIAL_HEADLINE}
+                </p>
+                <p className="mt-1 text-xs leading-relaxed text-gray-400 md:text-[11px]">
+                  Unlock every TradeTraxs feature free for 14 days.
+                </p>
+                <div className="mt-3">
+                  <TraxProBillingIntervalPicker
+                    value={billingInterval}
+                    onChange={(interval) => {
+                      setBillingInterval(interval)
+                      setCheckoutBillingInterval(interval)
+                    }}
+                    disabled={loading || !agreedToTerms}
+                    name="login-signup-billing"
+                  />
+                </div>
+                <button
+                  type="button"
+                  disabled={loading || !agreedToTerms}
+                  onClick={(e) => void handleSignUp(e, "trial")}
+                  className="mt-4 w-full rounded-xl bg-gradient-to-r from-blue-500 to-teal-400 py-3 text-sm font-semibold text-white transition hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100 md:mt-3 md:py-2.5"
+                >
+                  {loading ? "Loading..." : "Start Free Trial"}
+                </button>
+              </div>
+
+              <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4 md:p-3">
+                <p className="text-sm font-semibold text-white">Continue with Free Account</p>
+                <p className="mt-1 text-xs leading-relaxed text-gray-400 md:text-[11px]">
+                  Create a free account with limited features and upgrade anytime.
+                </p>
+                <button
+                  type="button"
+                  disabled={loading || !agreedToTerms}
+                  onClick={(e) => void handleSignUp(e, "free")}
+                  className="mt-4 w-full rounded-xl border border-white/15 bg-white/[0.06] py-3 text-sm font-semibold text-white transition hover:border-white/25 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60 md:mt-3 md:py-2.5"
+                >
+                  {loading ? "Loading..." : "Continue Free"}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         {isLogin && showReset && (
           <div className="mt-4 rounded-lg border border-white/10 bg-white/5 p-4">
@@ -660,7 +769,7 @@ export default function LoginPage() {
           </div>
         )}
 
-        <p className="mt-6 text-center text-xs text-gray-500">
+        <p className="mt-6 text-center text-xs text-gray-500 md:mt-4">
           <a
             href="/privacy"
             className="text-gray-400 transition hover:text-gray-300 hover:underline"

@@ -6,6 +6,11 @@ export function isDemoModeActive(): boolean {
   return sessionStorage.getItem(DEMO_MODE_STORAGE_KEY) === "1"
 }
 
+/** Preview/Demo UI (e.g. "Return to App") — session flag only, never pathname-based. */
+export function isPreviewExperienceActive(): boolean {
+  return isDemoModeActive()
+}
+
 export function enableDemoMode(): void {
   if (typeof window === "undefined") return
   sessionStorage.setItem(DEMO_MODE_STORAGE_KEY, "1")

@@ -38,6 +38,9 @@ export function profileNeedsOnboarding(
   )
 }
 
+/** Marketing routes reachable while onboarding is still required (exact paths only). */
+export const ONBOARDING_ALLOWED_EXACT_PATHS = [] as const
+
 /** Routes reachable while onboarding is still required. */
 export const ONBOARDING_ALLOWED_PATH_PREFIXES = [
   "/onboarding",
@@ -45,10 +48,16 @@ export const ONBOARDING_ALLOWED_PATH_PREFIXES = [
   "/reset-password",
   "/privacy",
   "/terms",
-  "/demo",
 ] as const
 
 export function isAllowedPathDuringOnboarding(pathname: string): boolean {
+  if (
+    ONBOARDING_ALLOWED_EXACT_PATHS.includes(
+      pathname as (typeof ONBOARDING_ALLOWED_EXACT_PATHS)[number]
+    )
+  ) {
+    return true
+  }
   return ONBOARDING_ALLOWED_PATH_PREFIXES.some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
   )

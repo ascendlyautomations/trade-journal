@@ -76,6 +76,7 @@ export default function AdminPage() {
   const [unviewedSupportCount, setUnviewedSupportCount] = useState<number>(0)
   const [openBugReportCount, setOpenBugReportCount] = useState<number>(0)
   const [openFeatureRequestCount, setOpenFeatureRequestCount] = useState<number>(0)
+  const [pendingBetaTestimonialCount, setPendingBetaTestimonialCount] = useState<number>(0)
   const [newCsvSupportCount, setNewCsvSupportCount] = useState<number>(0)
   const [affiliateApplicationCounts, setAffiliateApplicationCounts] =
     useState<AdminAffiliateApplicationCounts | null>(null)
@@ -141,6 +142,12 @@ export default function AdminPage() {
           .select("*", { count: "exact", head: true })
           .eq("status", "open")
         if (!cancelled) setOpenFeatureRequestCount(openFeatures || 0)
+
+        const { count: pendingTestimonials } = await supabase
+          .from("beta_testimonials")
+          .select("*", { count: "exact", head: true })
+          .eq("approved", false)
+        if (!cancelled) setPendingBetaTestimonialCount(pendingTestimonials || 0)
 
         const { count: newCsvSupport } = await supabase
           .from("csv_support_requests")
@@ -274,6 +281,17 @@ export default function AdminPage() {
               badge={
                 <span className="rounded bg-blue-500 px-2 py-0.5 text-xs font-semibold text-white tabular-nums">
                   {newCsvSupportCount} new
+                </span>
+              }
+            />
+            <AdminModuleCard
+              href="/admin/beta-testimonials"
+              title="Beta Testimonials"
+              description="Review beta tester feedback before it appears on the homepage."
+              variant="emerald"
+              badge={
+                <span className="rounded bg-amber-500 px-2 py-0.5 text-xs font-semibold text-white tabular-nums">
+                  {pendingBetaTestimonialCount} pending
                 </span>
               }
             />

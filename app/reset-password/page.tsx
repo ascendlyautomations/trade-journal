@@ -142,7 +142,7 @@ export default function ResetPasswordPage() {
     !isSubmitting
 
   return (
-    <div className="relative -mt-16 flex min-h-screen items-center justify-center text-white">
+    <div className="relative flex min-h-screen items-center justify-center text-white">
       <img
         src="/tradetrax-bg.png"
         alt=""

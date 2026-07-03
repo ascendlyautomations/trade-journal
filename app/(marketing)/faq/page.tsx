@@ -1,11 +1,8 @@
 "use client"
 
 import { useState } from "react"
-import PublicNavbar from "../components/PublicNavbar"
 import {
-  TRAXPRO_BILLING_LABEL,
   TRAXPRO_PLAN_NAME,
-  TRAXPRO_PRICE_DISPLAY,
   TRAXPRO_TRIAL_LABEL,
 } from "@/lib/traxProPricing"
 import { FREE_PLAN_ACCOUNT_LIMIT } from "@/lib/tradingAccounts"
@@ -53,7 +50,7 @@ const faqs = [
   },
   {
     q: "Do I need to pay to use TradeTraxs?",
-    a: `No. TradeTraxs has a generous Free plan. ${TRAXPRO_PLAN_NAME} is ${TRAXPRO_PRICE_DISPLAY}, ${TRAXPRO_BILLING_LABEL.toLowerCase()}, and includes a ${TRAXPRO_TRIAL_LABEL.toLowerCase()}.`,
+    a: `No. TradeTraxs has a generous Free plan. ${TRAXPRO_PLAN_NAME} starts at $23.99/month and includes a ${TRAXPRO_TRIAL_LABEL.toLowerCase()}.`,
   },
   {
     q: "Is my data private?",
@@ -66,7 +63,6 @@ export default function FAQPage() {
 
   return (
     <>
-      <PublicNavbar />
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white px-6 py-12">
         <h1 className="mb-2 text-center text-3xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
           FAQ

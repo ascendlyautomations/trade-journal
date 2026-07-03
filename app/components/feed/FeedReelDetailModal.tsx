@@ -33,6 +33,8 @@ type FeedReelDetailModalProps = {
   commentSubmitting: boolean
   draftSyncRef: MutableRefObject<Record<string, string>>
   openCommentsRef: MutableRefObject<Record<string, boolean>>
+  openTradeRef?: MutableRefObject<Record<string, boolean>>
+  tradeExpandSignal?: number
   onClose: () => void
   onToggleLike: (post: any) => void
   onSubmitComment: (post: any, text: string) => Promise<boolean>
@@ -56,6 +58,8 @@ export default function FeedReelDetailModal({
   commentSubmitting,
   draftSyncRef,
   openCommentsRef,
+  openTradeRef,
+  tradeExpandSignal = 0,
   onClose,
   onToggleLike,
   onSubmitComment,
@@ -99,6 +103,11 @@ export default function FeedReelDetailModal({
       openCommentsRef.current[pid] = false
     }
   }, [openCommentsRef, pid, scrollCommentsIntoView])
+
+  useEffect(() => {
+    if (!openTradeRef?.current[pid] && tradeExpandSignal === 0) return
+    setCommentsFocused(false)
+  }, [openTradeRef, pid, tradeExpandSignal])
 
   useEffect(() => {
     return () => {
@@ -191,6 +200,8 @@ export default function FeedReelDetailModal({
           <TradeReelSummaryStrip
             post={post}
             viewerUserId={user?.id ?? null}
+            openTradeRef={openTradeRef}
+            tradeExpandSignal={tradeExpandSignal}
           />
           {modalDetails.caption ? (
             <p className="whitespace-pre-wrap leading-relaxed text-white">

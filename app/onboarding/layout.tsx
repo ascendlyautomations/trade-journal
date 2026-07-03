@@ -6,12 +6,11 @@ export const metadata: Metadata = {
 }
 
 /**
- * Full-screen onboarding — no Navbar, no app shell.
- * Root layout `pt-16` is cancelled so the form fills the viewport.
+ * Full-screen onboarding — standalone app flow (no marketing or app navbar).
  */
 export default function OnboardingLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="-mt-16 min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46]">
+    <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46]">
       {children}
     </div>
   )

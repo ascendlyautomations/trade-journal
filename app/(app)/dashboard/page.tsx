@@ -91,6 +91,10 @@ import {
   notifyGettingStartedChecklistMaybeCompleted,
 } from "@/lib/gettingStartedProgressSync"
 import {
+  markStripeReconciliationPending,
+  subscribeStripeReconciliationComplete,
+} from "@/lib/stripeReconciliation"
+import {
   shouldAutoShowGettingStartedChecklist,
 } from "@/lib/gettingStartedChecklist"
 import {
@@ -529,7 +533,6 @@ export default function Dashboard() {
     profile,
     loading: profileLoading,
     setProfile,
-    refreshProfile,
   } = useUserProfile()
   const { trades, loading: tradesLoading } = useCachedTrades(user?.id)
   const { accounts: accountRows, loading: accountsLoading } =
@@ -644,6 +647,10 @@ export default function Dashboard() {
     auditLogDashboardMounted(user?.id ?? null)
   }, [user?.id])
 
+  const hasSeenOnboardingCompletePopup =
+    profile?.has_seen_onboarding_complete_popup === true ||
+    checklistSignals.hasSeenOnboardingCompletePopup
+
   useEffect(() => {
     if (!user?.id) return
 
@@ -657,6 +664,8 @@ export default function Dashboard() {
       onboardingResolved &&
       shouldAutoShowGettingStartedChecklist(user.id, {
         onboardingCompleted,
+        allComplete: gettingStartedProgress.allComplete,
+        hasSeenOnboardingCompletePopup,
       })
 
     auditLogDashboardDecision({
@@ -666,11 +675,14 @@ export default function Dashboard() {
       renderChecklist,
       reason: !onboardingResolved
         ? "waiting for profile or checklist signals"
-        : onboardingCompleted
-          ? "onboarding_completed is true"
-          : renderChecklist
-            ? "active onboarding — auto-show allowed"
-            : "session dismissed or no user",
+        : !onboardingCompleted
+          ? "profile onboarding incomplete"
+          : gettingStartedProgress.allComplete ||
+              hasSeenOnboardingCompletePopup
+            ? "getting started complete or popup seen"
+            : renderChecklist
+              ? "active getting started — auto-show allowed"
+              : "session dismissed or no user",
     })
   }, [
     user?.id,
@@ -678,14 +690,34 @@ export default function Dashboard() {
     profileLoading,
     checklistSignalsReady,
     checklistSignals.onboardingCompleted,
+    checklistSignals.hasSeenOnboardingCompletePopup,
+    gettingStartedProgress.allComplete,
+    hasSeenOnboardingCompletePopup,
   ])
 
   useEffect(() => {
     if (typeof window === "undefined") return
     const params = new URLSearchParams(window.location.search)
     if (params.get("checkout") !== "success") return
-    void refreshDashboardData()
-  }, [refreshDashboardData])
+
+    if (user?.id) {
+      markStripeReconciliationPending(user.id)
+    }
+
+    const url = new URL(window.location.href)
+    url.searchParams.delete("checkout")
+    window.history.replaceState({}, "", `${url.pathname}${url.search}`)
+  }, [user?.id])
+
+  useEffect(() => {
+    return subscribeStripeReconciliationComplete(() => {
+      void (async () => {
+        await refreshChecklistSignals({ fromUserAction: true })
+        dispatchGettingStartedSignalsRefresh()
+        void refreshDashboardData()
+      })()
+    })
+  }, [refreshChecklistSignals, refreshDashboardData])
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -1329,11 +1361,16 @@ const biggestLoss = losses.length > 0
   const onboardingCompletedForAutoShow = profile
     ? profile.onboarding_completed === true
     : checklistSignals.onboardingCompleted
+  const hasSeenOnboardingCompletePopupForAutoShow =
+    profile?.has_seen_onboarding_complete_popup === true ||
+    checklistSignals.hasSeenOnboardingCompletePopup
 
   const showOnboardingSection =
     onboardingCompletedResolved &&
     shouldAutoShowGettingStartedChecklist(user?.id, {
       onboardingCompleted: onboardingCompletedForAutoShow,
+      allComplete: gettingStartedProgress.allComplete,
+      hasSeenOnboardingCompletePopup: hasSeenOnboardingCompletePopupForAutoShow,
     })
 
   const gettingStartedSection =
@@ -1663,14 +1700,8 @@ const biggestLoss = losses.length > 0
         <h2 className="bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-2xl font-semibold text-transparent md:text-3xl">
           Welcome to TradeTraxs
         </h2>
-        <p className="mt-3 text-base font-medium text-gray-100 md:text-lg">
-          Track every trade.
-          <br />
-          Discover your edge.
-          <br />
-          Improve your performance.
-        </p>
-        <p className="mt-3 max-w-2xl text-sm text-gray-400 md:text-base">
+        
+        <p className="mt-3 max-w-2xl text-sm text-gray-300 md:text-base">
           Get started by logging your first trade or importing your trading history.
         </p>
         <div className="mt-6 flex flex-wrap items-center gap-3">

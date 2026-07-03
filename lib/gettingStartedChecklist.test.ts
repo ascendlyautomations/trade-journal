@@ -144,16 +144,32 @@ describe("getting started visibility", () => {
     )
   })
 
-  it("auto-shows only while profile onboarding is incomplete", () => {
+  it("auto-shows after profile onboarding while tasks remain", () => {
     assert.equal(
       shouldAutoShowGettingStartedChecklist("user-1", {
         onboardingCompleted: false,
+      }),
+      false
+    )
+    assert.equal(
+      shouldAutoShowGettingStartedChecklist("user-1", {
+        onboardingCompleted: true,
+        allComplete: false,
+        hasSeenOnboardingCompletePopup: false,
       }),
       true
     )
     assert.equal(
       shouldAutoShowGettingStartedChecklist("user-1", {
         onboardingCompleted: true,
+        allComplete: true,
+      }),
+      false
+    )
+    assert.equal(
+      shouldAutoShowGettingStartedChecklist("user-1", {
+        onboardingCompleted: true,
+        hasSeenOnboardingCompletePopup: true,
       }),
       false
     )
@@ -174,5 +190,54 @@ describe("getting started visibility", () => {
       }),
       false
     )
+  })
+})
+
+describe("applyStickyGettingStartedProgress", () => {
+  const localStorageMock = new Map<string, string>()
+  if (typeof globalThis.window === "undefined") {
+    ;(globalThis as typeof globalThis & { window: Window }).window = {
+      localStorage: {
+        getItem: (key: string) => localStorageMock.get(key) ?? null,
+        setItem: (key: string, value: string) => {
+          localStorageMock.set(key, value)
+        },
+        removeItem: (key: string) => {
+          localStorageMock.delete(key)
+        },
+      },
+    } as unknown as Window
+  }
+
+  const {
+    applyStickyGettingStartedProgress,
+    writeStickyCompletedItemIds,
+  } = require("./gettingStartedSticky.ts")
+  const { computeGettingStartedProgress } = require("./gettingStartedChecklist.ts")
+
+  const userId = "test-user-sticky"
+
+  it("does not let stale sticky inflate a fresh account to 5/6", () => {
+    localStorageMock.clear()
+    writeStickyCompletedItemIds(
+      userId,
+      new Set(["trade", "post", "follow", "room"])
+    )
+
+    const serverProgress = computeGettingStartedProgress({
+      onboardingCompleted: true,
+      tradeCount: 0,
+      profilePostCount: 0,
+      followCount: 0,
+      hasEverJoinedOtherRoom: false,
+      hasPublicTrade: false,
+    })
+
+    const merged = applyStickyGettingStartedProgress(serverProgress, userId, {
+      profilePostCount: 0,
+    })
+
+    assert.equal(merged.completedCount, 1)
+    assert.equal(merged.items.find((i) => i.id === "trade")?.complete, false)
   })
 })

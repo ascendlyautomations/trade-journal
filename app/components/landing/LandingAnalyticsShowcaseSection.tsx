@@ -30,13 +30,15 @@ export default function LandingAnalyticsShowcaseSection() {
           </p>
         </div>
 
-        <div className="mt-14 flex justify-center">
-          <LandingShowcaseImage
-            src="/images/Know_Your_Edge.png"
-            alt="TradeTraxs analytics — know your edge with performance insights"
-            objectPositionClass="object-top"
-            size="large"
-          />
+        <div className="mt-14 flex justify-center md:mt-16">
+          <div className="w-[94%] max-w-full sm:w-[92%] md:w-[90%] lg:w-[87%]">
+            <LandingShowcaseImage
+              src="/images/Know_Your_Edge.png"
+              alt="TradeTraxs analytics — know your edge with performance insights"
+              objectPositionClass="object-top"
+              size="large"
+            />
+          </div>
         </div>
       </div>
     </section>

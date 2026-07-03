@@ -6,7 +6,7 @@ import { supabase } from "../../lib/supabaseClient"
 import { useRouter, usePathname } from "next/navigation"
 import { useUserProfile } from "../../lib/useUserProfile"
 import { isProActive } from "../../lib/subscription"
-import { getCurrentAdminCheckResult } from "../../lib/adminUsers"
+import { getAdminCheckResultForUser } from "../../lib/adminUsers"
 import { fetchTotalUnreadMessageCount } from "../../lib/messageUnread"
 import { NOTIFICATION_INBOX_TYPES } from "../../lib/notificationEngagementTypes"
 import { profilePath } from "../../lib/profileRoutes"
@@ -16,11 +16,16 @@ import BugReportModal from "./BugReportModal"
 import GettingStartedMobileEntry from "./GettingStartedMobileEntry"
 import { isDemoUserId } from "@/lib/demo/constants"
 import { getDemoUnreadNotificationCount } from "@/lib/demo/demoNotifications"
-import { exitDemoMode, isDemoModeActive, subscribeDemoModeChanges } from "@/lib/demo/demoMode"
+import { exitDemoMode, isDemoModeActive, disableDemoMode, subscribeDemoModeChanges } from "@/lib/demo/demoMode"
 import { isDemoSupabaseBlocked } from "@/lib/demo/demoSupabaseGuard"
+import { isStandaloneFlowRoute } from "@/lib/authRoutes"
+import { clearSignupFlow } from "@/lib/signupFlow"
 
 export default function Navbar() {
-  const { user, profile, loading } = useUserProfile()
+  const pathname = usePathname()
+  if (isStandaloneFlowRoute(pathname)) return null
+
+  const { user, profile, loading, membershipReconciling } = useUserProfile()
   const profileHref =
     profile != null
       ? profilePath(profile)
@@ -42,25 +47,28 @@ export default function Navbar() {
   const [hasFetchedAdmin, setHasFetchedAdmin] = useState(false)
 
   const router = useRouter()
-  const pathname = usePathname()
   const isHomePage = pathname === "/"
-  const isPreviewAppRoute = pathname === "/app"
+  const isAuthenticatedUser = !!user && !isDemoUserId(user.id)
   const [demoActive, setDemoActive] = useState(false)
-  const showReturnToApp =
-    !!user && (isHomePage || isPreviewAppRoute || demoActive)
+  const showMobileNav = !!user || demoActive
+  const showReturnToApp = isAuthenticatedUser && isHomePage
+  const returnToAppButtonClassName = isHomePage
+    ? "inline-flex shrink-0 rounded bg-blue-500 px-4 py-1.5 text-sm font-medium text-white transition hover:bg-blue-600"
+    : "hidden shrink-0 rounded bg-blue-500 px-4 py-1.5 text-sm font-medium text-white transition hover:bg-blue-600 md:inline-flex"
   const isActive = (path: string) => pathname === path
   const isGroupActive = (paths: string[]) =>
     paths.some((p) => pathname.startsWith(p))
 
   function handleLogoClick(e: MouseEvent<HTMLAnchorElement>) {
-    if (!isDemoModeActive()) return
     e.preventDefault()
-    exitDemoMode()
     setIsOpen(false)
     setActiveMenu(null)
     setAccountMenuOpen(false)
-    setUnreadCount(0)
-    setUnreadMessagesCount(0)
+    if (isDemoModeActive()) {
+      exitDemoMode()
+      setUnreadCount(0)
+      setUnreadMessagesCount(0)
+    }
     router.push("/")
   }
 
@@ -77,6 +85,18 @@ export default function Navbar() {
     },
     [router]
   )
+
+  const handleSignOut = useCallback(async () => {
+    setIsOpen(false)
+    setActiveMenu(null)
+    setAccountMenuOpen(false)
+    disableDemoMode()
+    clearSignupFlow()
+    if (user) {
+      await supabase.auth.signOut()
+    }
+    router.push("/")
+  }, [router, user])
 
   useEffect(() => {
     const syncDemo = () => setDemoActive(isDemoModeActive())
@@ -201,7 +221,7 @@ export default function Navbar() {
   }, [fetchUnreadMessages])
 
   useEffect(() => {
-    if (!user?.id) return
+    if (!user?.id || loading || membershipReconciling) return
 
     let cancelled = false
 
@@ -218,17 +238,19 @@ export default function Navbar() {
     return () => {
       cancelled = true
     }
-  }, [user?.id, fetchUnread, fetchUnreadMessages])
+  }, [user?.id, loading, membershipReconciling, fetchUnread, fetchUnreadMessages])
 
   useEffect(() => {
-    if (!user?.id) return
+    if (!user?.id || loading || membershipReconciling) return
     prefetchAppRoutes(router)
-  }, [user?.id, router])
+  }, [user?.id, loading, membershipReconciling, router])
 
   useEffect(() => {
-    if (!user?.id) {
-      setIsAdmin(false)
-      setHasFetchedAdmin(false)
+    if (!user?.id || loading || membershipReconciling) {
+      if (!user?.id) {
+        setIsAdmin(false)
+        setHasFetchedAdmin(false)
+      }
       return
     }
 
@@ -241,7 +263,7 @@ export default function Navbar() {
     let cancelled = false
 
     void (async () => {
-      const check = await getCurrentAdminCheckResult()
+      const check = await getAdminCheckResultForUser(user.id, user.email)
       if (process.env.NODE_ENV !== "production") {
         console.debug("[admin-check][navbar] resolved", {
           userId: check.userId,
@@ -260,7 +282,7 @@ export default function Navbar() {
     return () => {
       cancelled = true
     }
-  }, [user?.id])
+  }, [user?.id, user?.email, loading, membershipReconciling])
 
   const toggleSection = (section: string) => {
     setOpenSection((prev) => (prev === section ? null : section))
@@ -290,7 +312,7 @@ export default function Navbar() {
     setAccountMenuOpen((open) => !open)
 
     if (!hasFetchedAdmin && user?.id) {
-      const check = await getCurrentAdminCheckResult()
+      const check = await getAdminCheckResultForUser(user.id, user.email)
       if (process.env.NODE_ENV !== "production") {
         console.debug("[admin-check][navbar] resolved", {
           userId: check.userId,
@@ -407,7 +429,7 @@ export default function Navbar() {
   )
 
   return (
-    <div ref={navRef} className="fixed top-0 left-0 z-[9999] w-full overflow-visible text-gray-100">
+    <div ref={navRef} className="fixed left-0 top-0 z-[9999] w-full overflow-visible text-gray-100">
       <div className="flex h-16 w-full shrink-0 items-center border-b border-white/5 bg-[#0b1f3a]">
         <div className="flex h-full w-full items-center justify-between px-4 md:px-6">
         {/* LEFT */}
@@ -631,21 +653,20 @@ export default function Navbar() {
 
         {/* RIGHT */}
         <div className="flex shrink-0 items-center gap-3 md:gap-4">
-        {user ? (
+        {showReturnToApp ? (
+          <button
+            type="button"
+            onClick={handleReturnToApp}
+            className={returnToAppButtonClassName}
+          >
+            Return to App
+          </button>
+        ) : null}
+        {showMobileNav ? (
           <>
-            {showReturnToApp ? (
-              <button
-                type="button"
-                onClick={handleReturnToApp}
-                className="hidden shrink-0 rounded bg-blue-500 px-4 py-1.5 text-sm font-medium text-white transition hover:bg-blue-600 md:inline-flex"
-              >
-                Return to App
-              </button>
-            ) : null}
+            {user ? <GettingStartedMobileEntry /> : null}
 
-            <GettingStartedMobileEntry />
-
-            {isAdmin ? (
+            {user && isAdmin ? (
               <Link
                 href="/admin"
                 className={`md:hidden shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${
@@ -659,7 +680,7 @@ export default function Navbar() {
             ) : null}
 
             <div className="flex items-center gap-2.5 md:hidden">
-              {!isHomePage
+              {!isHomePage && user
                 ? notificationBellControl(
                     "text-xl leading-none",
                     "inline-flex items-center justify-center px-1 py-1",
@@ -685,7 +706,7 @@ export default function Navbar() {
               </button>
             </div>
 
-            {!isHomePage ? (
+            {!isHomePage && user ? (
               <div className="hidden items-center gap-3 md:flex">
                 {isAdmin ? (
                   <Link href="/admin" className="text-sm hover:text-blue-400">
@@ -766,10 +787,8 @@ export default function Navbar() {
 
                       <button
                         type="button"
-                        onClick={async () => {
-                          setAccountMenuOpen(false)
-                          await supabase.auth.signOut()
-                          router.push("/")
+                        onClick={() => {
+                          void handleSignOut()
                         }}
                         className="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-red-500/10"
                       >
@@ -782,13 +801,15 @@ export default function Navbar() {
             ) : null}
           </>
         ) : isHomePage ? (
+          loading ? null : (
           <Link
             href="/login"
             className="shrink-0 rounded bg-blue-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-600"
           >
             Login
           </Link>
-        ) : (
+          )
+        ) : loading ? null : (
           <div className="flex shrink-0 items-center gap-3">
             <Link href="/faq" className="md:hidden text-sm text-gray-200 hover:text-blue-400 transition">
               FAQ
@@ -802,8 +823,8 @@ export default function Navbar() {
         </div>
       </div>
 
-      {isOpen && user ? (
-        <div className="max-h-[calc(100vh-4rem)] w-full overflow-y-auto border-t border-white/5 bg-[#0b1f3a] md:hidden">
+      {isOpen && showMobileNav ? (
+        <div className="max-h-[calc(100vh-var(--app-header-offset))] w-full overflow-y-auto border-t border-white/5 bg-[#0b1f3a] md:hidden">
           <div className="flex w-full flex-col gap-2 px-4 pb-3 pt-1.5 text-sm text-white md:px-6">
           {showReturnToApp ? (
             <button
@@ -1065,10 +1086,8 @@ export default function Navbar() {
             <button
               type="button"
               className="w-full rounded-lg px-3 py-2 text-left text-sm text-red-400 hover:text-red-300"
-              onClick={async () => {
-                closeMobile()
-                await supabase.auth.signOut()
-                router.push("/")
+              onClick={() => {
+                void handleSignOut()
               }}
             >
               Sign Out

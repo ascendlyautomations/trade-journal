@@ -5,6 +5,19 @@
   --background: #ffffff;
   --foreground: #171717;
   --navbar-height: 4rem;
+  --demo-banner-height: 0px;
+  --app-header-offset: var(--navbar-height);
+}
+
+html.tradetraxs-demo-banner-active {
+  --demo-banner-height: 2.5rem;
+  --app-header-offset: calc(var(--navbar-height) + var(--demo-banner-height));
+}
+
+@media (min-width: 640px) {
+  html.tradetraxs-demo-banner-active {
+    --demo-banner-height: 3.5rem;
+  }
 }
 
 /* Tailwind theme mapping */

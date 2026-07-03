@@ -18,6 +18,8 @@ import { DEMO_USER_ID } from "@/lib/demo/constants"
 import {
   registerDemoSignupHandler,
 } from "@/lib/demo/requestDemoSignup"
+import { TRAXPRO_TRIAL_HEADLINE } from "@/lib/traxProPricing"
+import { enterSignupFlow } from "@/lib/signupFlow"
 
 export type DemoSignupReason =
   | "default"
@@ -157,10 +159,11 @@ export function DemoModeProvider({ children }: { children: ReactNode }) {
                 Keep Exploring
               </button>
               <a
-                href="/login"
+                href="/login?tab=signup"
+                onClick={() => enterSignupFlow()}
                 className="rounded-lg bg-emerald-500 px-4 py-2.5 text-center text-sm font-semibold text-white hover:bg-emerald-600"
               >
-                Start Free Trial
+                Start {TRAXPRO_TRIAL_HEADLINE}
               </a>
             </div>
           </div>

@@ -1,5 +1,5 @@
 import type { Metadata } from "next"
-import LandingPageClient from "./components/LandingPageClient"
+import LandingPageClient from "@/app/components/LandingPageClient"
 import {
   DEFAULT_OG_IMAGE_PATH,
   DEFAULT_SITE_DESCRIPTION,

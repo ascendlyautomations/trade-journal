@@ -1,7 +1,7 @@
 "use client"
 
 import { memo, useCallback, useMemo } from "react"
-import FeedPostActions from "./FeedPostActions"
+import FeedReelCardActions from "./FeedReelCardActions"
 import FeedPostHeader from "./FeedPostHeader"
 import FeedReelOwnerMenu from "./FeedReelOwnerMenu"
 import type { FeedLikeMeta } from "./FeedPostCard"
@@ -22,6 +22,7 @@ type FeedReelCardProps = {
   onReplaceReelVideo?: () => void
   onSelectPost: (post: any) => void
   onOpenComments: (post: any) => void
+  onOpenLinkedTrade?: (post: any) => void
   onToggleLike: (post: any) => void
   onSharePost: (post: any) => void
 }
@@ -48,6 +49,7 @@ function FeedReelCard({
   onReplaceReelVideo,
   onSelectPost,
   onOpenComments,
+  onOpenLinkedTrade,
   onToggleLike,
   onSharePost,
 }: FeedReelCardProps) {
@@ -68,6 +70,10 @@ function FeedReelCard({
     },
     [onSelectPost, post]
   )
+
+  const handleOpenLinkedTrade = useCallback(() => {
+    onOpenLinkedTrade?.(post)
+  }, [onOpenLinkedTrade, post])
 
   const avatarUrl = useMemo(() => {
     const raw = post.profiles?.avatar_url
@@ -139,15 +145,17 @@ function FeedReelCard({
         ) : null}
       </div>
 
-      <FeedPostActions
+      <FeedReelCardActions
         post={post}
         user={user}
         comments={comments}
         likeMeta={likeMeta}
         likeBusy={likeBusy}
+        showLinkedTradeBadge={tradeAttached}
         onToggleLike={onToggleLike}
         onOpenComments={handleOpenComments}
         onSharePost={onSharePost}
+        onOpenLinkedTrade={onOpenLinkedTrade ? handleOpenLinkedTrade : undefined}
       />
     </article>
   )

@@ -20,6 +20,8 @@ type FeedPostOverlaysProps = {
   selectedPostCommentSubmitting: boolean
   draftSyncRef: MutableRefObject<Record<string, string>>
   openCommentsRef: MutableRefObject<Record<string, boolean>>
+  openTradeRef?: MutableRefObject<Record<string, boolean>>
+  tradeExpandSignal?: number
   onCloseDetailModal: () => void
   onCloseShareOverlay: () => void
   onToggleLike: (post: any) => void
@@ -45,6 +47,8 @@ function FeedPostOverlays({
   selectedPostCommentSubmitting,
   draftSyncRef,
   openCommentsRef,
+  openTradeRef,
+  tradeExpandSignal = 0,
   onCloseDetailModal,
   onCloseShareOverlay,
   onToggleLike,
@@ -71,6 +75,8 @@ function FeedPostOverlays({
             commentSubmitting={selectedPostCommentSubmitting}
             draftSyncRef={draftSyncRef}
             openCommentsRef={openCommentsRef}
+            openTradeRef={openTradeRef}
+            tradeExpandSignal={tradeExpandSignal}
             onClose={onCloseDetailModal}
             onToggleLike={onToggleLike}
             onSubmitComment={onSubmitComment}

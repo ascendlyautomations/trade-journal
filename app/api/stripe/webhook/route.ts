@@ -7,6 +7,7 @@ import {
   createAffiliateCommissionNotification,
   createAffiliateReferralNotification,
 } from "@/lib/server/affiliateReferralNotifications"
+import { resolveTraxProBillingIntervalFromStripePriceId } from "@/lib/traxProBillingPlans.server"
 
 export const runtime = "nodejs"
 
@@ -39,13 +40,15 @@ function stripeCustomerId(
 function buildSubscriptionProfileUpdatePayload(
   subscription: Stripe.Subscription
 ): Record<string, unknown> {
+  const status = subscription.status
   const updatePayload: Record<string, unknown> = {
-    subscription_status: subscription.status,
+    subscription_status: status,
     cancel_at_period_end: subscription.cancel_at_period_end ?? false,
     cancel_at:
       subscription.cancel_at != null
         ? new Date(subscription.cancel_at * 1000)
         : null,
+    is_pro: status === "active" || status === "trialing",
   }
 
   if (subscription.trial_end) {
@@ -62,6 +65,24 @@ function buildSubscriptionProfileUpdatePayload(
     updatePayload.current_period_end = new Date(periodEnd * 1000)
   } else if (subscription.trial_end && subscription.status !== "active") {
     updatePayload.current_period_end = new Date(subscription.trial_end * 1000)
+  }
+
+  const priceId = subscription.items?.data?.[0]?.price?.id ?? null
+  if (priceId) {
+    updatePayload.stripe_price_id = priceId
+    const billingInterval = resolveTraxProBillingIntervalFromStripePriceId(priceId)
+    if (billingInterval) {
+      updatePayload.billing_interval = billingInterval
+    }
+  }
+
+  const metadataInterval = subscription.metadata?.billing_interval
+  if (
+    typeof metadataInterval === "string" &&
+    metadataInterval.trim() &&
+    !updatePayload.billing_interval
+  ) {
+    updatePayload.billing_interval = metadataInterval.trim()
   }
 
   return updatePayload
@@ -404,13 +425,36 @@ export async function POST(req: Request) {
           console.log("🔥 Activating subscription for:", userId)
 
           try {
-            console.log("🛠 Updating user to PRO:", userId)
+            let subscriptionPayload: Record<string, unknown> = {
+              ...SUBSCRIPTION_ACTIVE,
+              ...(customerId ? { stripe_customer_id: customerId } : {}),
+            }
+
+            const subscriptionId =
+              typeof session.subscription === "string"
+                ? session.subscription
+                : session.subscription?.id ?? null
+
+            if (subscriptionId) {
+              try {
+                const subscription =
+                  await stripe.subscriptions.retrieve(subscriptionId)
+                subscriptionPayload = {
+                  ...buildSubscriptionProfileUpdatePayload(subscription),
+                  ...(customerId ? { stripe_customer_id: customerId } : {}),
+                }
+              } catch (subErr) {
+                console.error(
+                  "⚠️ checkout.session.completed: subscription retrieve failed, using active fallback:",
+                  subErr
+                )
+              }
+            }
+
+            console.log("🛠 Updating user subscription:", userId, subscriptionPayload)
             const { error: upErr } = await supabase
               .from("profiles")
-              .update({
-                ...SUBSCRIPTION_ACTIVE,
-                ...(customerId ? { stripe_customer_id: customerId } : {}),
-              })
+              .update(subscriptionPayload)
               .eq("id", userId)
 
             if (upErr) {

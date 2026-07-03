@@ -3,7 +3,6 @@
 import Link from "next/link"
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import PublicNavbar from "./PublicNavbar"
 import LandingComparisonSection from "./LandingComparisonSection"
 import LandingFeatureShowcaseSections from "./LandingFeatureShowcaseSections"
 import LandingFinalCtaSection from "./LandingFinalCtaSection"
@@ -14,14 +13,57 @@ import LandingTestimonialsSection from "./landing/LandingTestimonialsSection"
 import LandingFaqSection from "./landing/LandingFaqSection"
 import { supabase } from "../../lib/supabaseClient"
 import { LANDING_BRAND_TAGLINE } from "@/lib/landingFlagships"
-import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
+import { ConfirmModal, FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { LEGAL_CONTACT_EMAIL } from "@/lib/legal/contact"
 import { TRAXPRO_TRIAL_HEADLINE } from "@/lib/traxProPricing"
+import { useUserProfile } from "@/lib/useUserProfile"
+import { isDemoUserId } from "@/lib/demo/constants"
+import { isBetaReferralRef } from "@/lib/betaReferralCode"
+import { profileNeedsOnboarding } from "@/lib/profileOnboardingGate"
+import {
+  hasActiveMembership,
+  isSubscriptionGateSuspended,
+  needsSubscriptionCheckout,
+} from "@/lib/subscriptionAccess"
+import { clearSignupFlow, enterSignupFlow, getCheckoutBillingInterval, setCheckoutBillingInterval } from "@/lib/signupFlow"
+import type { TraxProBillingIntervalId } from "@/lib/traxProBillingPlans"
 
 export default function LandingPageClient() {
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const router = useRouter()
+  const { user, profile, loading, membershipReconciling } = useUserProfile()
   const [checkoutLoading, setCheckoutLoading] = useState(false)
+  const [loggedInDemoModalOpen, setLoggedInDemoModalOpen] = useState(false)
+  const [loggedInTrialModalOpen, setLoggedInTrialModalOpen] = useState(false)
+
+  const isAuthenticatedUser = !!user && !isDemoUserId(user.id)
+  const hasActiveMembershipAccess =
+    isAuthenticatedUser && !!profile && hasActiveMembership(profile)
+  const trialCtaLabel = `Start ${TRAXPRO_TRIAL_HEADLINE}!`
+
+  useEffect(() => {
+    if (hasActiveMembershipAccess) clearSignupFlow()
+  }, [hasActiveMembershipAccess])
+
+  useEffect(() => {
+    if (loading || !isAuthenticatedUser) return
+    if (isSubscriptionGateSuspended(user.id, { membershipReconciling })) return
+    if (profile && profileNeedsOnboarding(profile)) {
+      router.replace("/onboarding")
+      return
+    }
+    if (profile && needsSubscriptionCheckout(profile)) {
+      router.replace("/finish-trial")
+    }
+  }, [loading, isAuthenticatedUser, user?.id, profile, router, membershipReconciling])
+
+  function handleExploreDemo() {
+    if (isAuthenticatedUser) {
+      setLoggedInDemoModalOpen(true)
+      return
+    }
+    router.push("/demo")
+  }
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -30,13 +72,13 @@ export default function LandingPageClient() {
       const params = new URLSearchParams(window.location.search)
       const ref = params.get("ref")
 
-      if (!ref) return
+      if (!ref || isBetaReferralRef(ref)) return
 
       const {
-        data: { user },
+        data: { user: authUser },
       } = await supabase.auth.getUser()
 
-      if (!user) return
+      if (!authUser) return
 
       fetch("/api/create-checkout-session", {
         method: "POST",
@@ -44,7 +86,7 @@ export default function LandingPageClient() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          userId: user.id,
+          userId: authUser.id,
           referralCode: localStorage.getItem("referral_code"),
         }),
       })
@@ -68,19 +110,58 @@ export default function LandingPageClient() {
     void runReferralCheckout()
   }, [])
 
-  const handleSubscribe = async () => {
+  const handleStartTrial = () => {
+    if (isAuthenticatedUser) {
+      if (profile && hasActiveMembership(profile)) {
+        setLoggedInTrialModalOpen(true)
+        return
+      }
+      if (profile && profileNeedsOnboarding(profile)) {
+        router.push("/onboarding")
+        return
+      }
+      if (profile && needsSubscriptionCheckout(profile)) {
+        router.push("/finish-trial")
+        return
+      }
+      router.push("/dashboard")
+      return
+    }
+
+    const qs = new URLSearchParams(window.location.search)
+    const ref = qs.get("ref")
+    const next = new URLSearchParams({ tab: "signup" })
+    if (ref) next.set("ref", ref)
+    enterSignupFlow()
+    router.push(`/login?${next.toString()}`)
+  }
+
+  const handleSubscribe = async (billingInterval?: TraxProBillingIntervalId) => {
+    const interval = billingInterval ?? getCheckoutBillingInterval()
+    setCheckoutBillingInterval(interval)
     setCheckoutLoading(true)
     try {
       const {
-        data: { user },
+        data: { user: authUser },
       } = await supabase.auth.getUser()
 
-      if (!user) {
-        const qs = new URLSearchParams(window.location.search)
-        const ref = qs.get("ref")
-        const next = new URLSearchParams({ next: "checkout" })
-        if (ref) next.set("ref", ref)
-        router.push(`/login?${next.toString()}`)
+      if (!authUser) {
+        handleStartTrial()
+        return
+      }
+
+      if (profile && hasActiveMembership(profile)) {
+        setLoggedInTrialModalOpen(true)
+        return
+      }
+
+      if (profile && profileNeedsOnboarding(profile)) {
+        router.push("/onboarding")
+        return
+      }
+
+      if (profile && needsSubscriptionCheckout(profile)) {
+        router.push("/finish-trial")
         return
       }
 
@@ -96,7 +177,8 @@ export default function LandingPageClient() {
           ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         },
         body: JSON.stringify({
-          userId: user.id,
+          userId: authUser.id,
+          billingInterval: interval,
           referralCode: localStorage.getItem("referral_code"),
         }),
       })
@@ -123,8 +205,31 @@ export default function LandingPageClient() {
 
   return (
     <>
-      <PublicNavbar />
       <FeedbackModal {...feedbackModalProps} />
+      <ConfirmModal
+        open={loggedInDemoModalOpen}
+        title="Already Logged In"
+        description="You're already signed in. Please sign out first if you'd like to explore the demo experience."
+        cancelLabel="Cancel"
+        confirmLabel="Return to App"
+        onCancel={() => setLoggedInDemoModalOpen(false)}
+        onConfirm={() => {
+          setLoggedInDemoModalOpen(false)
+          router.push("/dashboard")
+        }}
+      />
+      <ConfirmModal
+        open={loggedInTrialModalOpen}
+        title="You're Already Covered"
+        description="You already have an active 14-day free trial or subscription. Return to the app to continue trading."
+        cancelLabel="Cancel"
+        confirmLabel="Return to App"
+        onCancel={() => setLoggedInTrialModalOpen(false)}
+        onConfirm={() => {
+          setLoggedInTrialModalOpen(false)
+          router.push("/dashboard")
+        }}
+      />
 
       <div className="relative min-h-screen overflow-hidden text-gray-100">
         <div
@@ -159,22 +264,21 @@ export default function LandingPageClient() {
             <div className="z-10 flex flex-wrap justify-center gap-4">
               <button
                 type="button"
-                disabled={checkoutLoading}
+                disabled={checkoutLoading || loading}
                 onClick={() => void handleSubscribe()}
                 className="min-w-[220px] rounded-xl bg-emerald-500 px-8 py-3.5 font-semibold text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {checkoutLoading ? "Starting trial…" : "Start Free Trial"}
+                {checkoutLoading ? "Starting trial…" : trialCtaLabel}
               </button>
 
               <button
                 type="button"
-                onClick={() => router.push("/demo")}
+                onClick={handleExploreDemo}
                 className="min-w-[220px] rounded-lg border border-white/20 px-8 py-3.5 font-semibold transition hover:bg-white/10"
               >
                 Explore the Demo
               </button>
             </div>
-
           </div>
 
           <LandingProblemSection />
@@ -183,8 +287,11 @@ export default function LandingPageClient() {
           <LandingComparisonSection />
           <LandingPricingSection
             checkoutLoading={checkoutLoading}
-            onStartTrial={() => void handleSubscribe()}
-            onStartFree={() => router.push("/login")}
+            onStartTrial={(interval) => void handleSubscribe(interval)}
+            onStartFree={() => {
+              enterSignupFlow()
+              router.push("/login?tab=signup")
+            }}
           />
           <LandingTestimonialsSection />
           <LandingFaqSection />

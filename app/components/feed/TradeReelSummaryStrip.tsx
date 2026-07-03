@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState, type MutableRefObject } from "react"
 import SharedTradeMessageCard from "@/app/components/SharedTradeMessageCard"
 import { formatRR } from "@/lib/formatDisplay"
 import { formatPnlCurrency } from "@/lib/formatMoney"
@@ -12,20 +12,37 @@ import {
 
 type TradeReelSummaryStripProps = {
   post: {
+    id?: string | number | null
     trade_id?: string | null
     trades?: LinkedTradeSummary | LinkedTradeSummary[] | null
   }
   viewerUserId?: string | null
   className?: string
+  openTradeRef?: MutableRefObject<Record<string, boolean>>
+  tradeExpandSignal?: number
 }
 
 export default function TradeReelSummaryStrip({
   post,
   viewerUserId = null,
   className = "",
+  openTradeRef,
+  tradeExpandSignal = 0,
 }: TradeReelSummaryStripProps) {
-  const [tradeExpanded, setTradeExpanded] = useState(false)
-  const [tradePanelMounted, setTradePanelMounted] = useState(false)
+  const reelId = post.id != null ? String(post.id) : ""
+  const [tradeExpanded, setTradeExpanded] = useState(
+    () => Boolean(reelId && openTradeRef?.current[reelId])
+  )
+  const [tradePanelMounted, setTradePanelMounted] = useState(
+    () => Boolean(reelId && openTradeRef?.current[reelId])
+  )
+
+  useEffect(() => {
+    if (!reelId || !openTradeRef?.current[reelId]) return
+    setTradeExpanded(true)
+    setTradePanelMounted(true)
+    openTradeRef.current[reelId] = false
+  }, [openTradeRef, reelId, tradeExpandSignal])
 
   if (!isTradeAttachedReel(post)) return null
 

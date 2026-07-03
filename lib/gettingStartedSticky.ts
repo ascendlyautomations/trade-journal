@@ -23,6 +23,20 @@ const ALL_ITEM_IDS: GettingStartedChecklistItemId[] = [
   "public",
 ]
 
+const ACTION_ITEM_IDS: GettingStartedChecklistItemId[] = [
+  "trade",
+  "post",
+  "follow",
+  "room",
+  "public",
+]
+
+function serverActionTasksComplete(progress: GettingStartedProgress): number {
+  return progress.items.filter(
+    (item) => ACTION_ITEM_IDS.includes(item.id) && item.complete
+  ).length
+}
+
 function scopedKey(base: string, userId: string): string {
   return `${base}:${userId}`
 }
@@ -156,6 +170,16 @@ export function applyStickyGettingStartedProgress(
   if (options?.profilePostCount === 0 && sticky.has("post")) {
     sticky.delete("post")
     stickyChanged = true
+  }
+
+  // DB is source of truth when no action tasks are complete — discard stale sticky.
+  if (serverActionTasksComplete(progress) === 0) {
+    for (const id of ACTION_ITEM_IDS) {
+      if (sticky.has(id)) {
+        sticky.delete(id)
+        stickyChanged = true
+      }
+    }
   }
 
   for (const item of progress.items) {

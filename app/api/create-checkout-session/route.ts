@@ -6,12 +6,15 @@ import { mirrorBillingAccountsStripeCustomerId } from "@/lib/profileSplitMirrorW
 import { ensureProfileForUser } from "@/lib/ensureProfileForUser"
 import { createAffiliateReferralNotification, resolveAffiliateUserIdFromCode } from "@/lib/server/affiliateReferralNotifications"
 import { isProActive } from "@/lib/subscription"
+import {
+  parseCheckoutBillingInterval,
+  resolveTraxProBillingIntervalFromStripePriceId,
+  resolveTraxProStripePriceId,
+} from "@/lib/traxProBillingPlans.server"
 
 export const runtime = "nodejs"
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string)
-const STRIPE_PRICE_ID =
-  process.env.STRIPE_PRICE_ID || "price_1TOWLoFtHxLxKCWEtD6AhvDl"
 let TRIAL_DAYS = Number(process.env.STRIPE_TRIAL_DAYS ?? 14)
 if (Number.isNaN(TRIAL_DAYS) || TRIAL_DAYS < 0) {
   TRIAL_DAYS = 14
@@ -80,8 +83,10 @@ export async function POST(req: Request) {
     const userEmail = user.email ?? undefined
 
     let referralCodeFromBody: string | null = null
+    let billingInterval = parseCheckoutBillingInterval(null)
     try {
       const body = await req.json()
+      billingInterval = parseCheckoutBillingInterval(body)
       const raw =
         body && typeof body === "object" && "referralCode" in body
           ? body.referralCode
@@ -91,6 +96,16 @@ export async function POST(req: Request) {
       }
     } catch {
       /* empty body is fine */
+    }
+
+    let stripePriceId: string
+    try {
+      stripePriceId = resolveTraxProStripePriceId(billingInterval)
+    } catch (priceErr) {
+      const message =
+        priceErr instanceof Error ? priceErr.message : "Missing Stripe price configuration"
+      console.error("ERROR:", message)
+      return Response.json({ error: message }, { status: 500 })
     }
 
     const { data: initialProfile, error: profileError } = await supabase
@@ -235,7 +250,8 @@ export async function POST(req: Request) {
       process.env.NEXT_PUBLIC_BASE_URL?.trim() || new URL(req.url).origin
 
     console.log("💳 Checkout config:", {
-      priceId: STRIPE_PRICE_ID,
+      priceId: stripePriceId,
+      billingInterval,
       baseUrl,
       trialDays: TRIAL_DAYS,
       userId: user.id,
@@ -248,21 +264,23 @@ export async function POST(req: Request) {
       allow_promotion_codes: true,
       line_items: [
         {
-          price: STRIPE_PRICE_ID,
+          price: stripePriceId,
           quantity: 1,
         },
       ],
       success_url: `${baseUrl}/dashboard?checkout=success`,
-      cancel_url: `${baseUrl}/?checkout=cancelled`,
+      cancel_url: `${baseUrl}/finish-trial`,
       metadata: {
         user_id: user.id,
         userId: user.id,
+        billing_interval: billingInterval,
       },
       subscription_data: {
         trial_period_days: TRIAL_DAYS,
         metadata: {
           user_id: user.id,
           userId: user.id,
+          billing_interval: billingInterval,
         },
       },
     }
