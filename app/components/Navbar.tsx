@@ -381,10 +381,10 @@ export default function Navbar() {
 
   const affiliateLinks: { label: string; href: string }[] = hasAffiliateAccess
     ? [
-        { label: "Affiliate Dashboard", href: "/affiliate" },
+        { label: "Affiliate Dashboard", href: "/affiliate/dashboard" },
         { label: "Affiliate Payouts", href: "/payouts" },
       ]
-    : [{ label: "Become an Affiliate", href: "/affiliate?apply=true" }]
+    : [{ label: "Become an Affiliate", href: "/affiliate" }]
 
   const closeMobile = () => {
     setIsOpen(false)
@@ -622,7 +622,7 @@ export default function Navbar() {
                   type="button"
                   onClick={() => toggleMenu("affiliate")}
                   className={`shrink-0 rounded px-2 py-1 transition ${
-                    isGroupActive(["/affiliate", "/payouts"])
+                    isGroupActive(["/affiliate/dashboard", "/affiliate/payout-setup", "/payouts"])
                       ? "bg-blue-500/20 text-blue-300"
                       : "text-gray-300 hover:text-white"
                   }`}
@@ -986,7 +986,7 @@ export default function Navbar() {
             <button
               type="button"
               className={`flex w-full items-center justify-between rounded-lg px-3 py-2 transition ${
-                isGroupActive(["/affiliate", "/payouts"])
+                isGroupActive(["/affiliate/dashboard", "/affiliate/payout-setup", "/payouts"])
                   ? "bg-blue-500/20 text-blue-300"
                   : "text-gray-300 hover:text-white"
               }`}

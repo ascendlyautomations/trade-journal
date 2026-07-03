@@ -12,9 +12,8 @@ import LandingPricingSection from "./landing/LandingPricingSection"
 import LandingTestimonialsSection from "./landing/LandingTestimonialsSection"
 import LandingFaqSection from "./landing/LandingFaqSection"
 import { supabase } from "../../lib/supabaseClient"
-import { LANDING_BRAND_TAGLINE } from "@/lib/landingFlagships"
 import { ConfirmModal, FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
-import { LEGAL_CONTACT_EMAIL } from "@/lib/legal/contact"
+import MarketingFooter from "./marketing/MarketingFooter"
 import { TRAXPRO_TRIAL_HEADLINE } from "@/lib/traxProPricing"
 import { useUserProfile } from "@/lib/useUserProfile"
 import { isDemoUserId } from "@/lib/demo/constants"
@@ -300,40 +299,7 @@ export default function LandingPageClient() {
             onStartTrial={() => void handleSubscribe()}
           />
 
-          <footer className="border-t border-white/10 py-10">
-            <div className="mx-auto max-w-4xl px-6">
-              <p className="text-center text-sm text-gray-500">{LANDING_BRAND_TAGLINE}</p>
-              <nav
-                aria-label="Legal and resources"
-                className="mt-6 flex flex-col items-center gap-3 sm:flex-row sm:flex-wrap sm:justify-center sm:gap-x-6 sm:gap-y-2"
-              >
-                <Link
-                  href="/privacy"
-                  className="text-sm text-gray-400 transition hover:text-gray-300"
-                >
-                  Privacy Policy
-                </Link>
-                <Link
-                  href="/terms"
-                  className="text-sm text-gray-400 transition hover:text-gray-300"
-                >
-                  Terms of Service
-                </Link>
-                <Link
-                  href="/faq"
-                  className="text-sm text-gray-400 transition hover:text-gray-300"
-                >
-                  FAQ
-                </Link>
-                <a
-                  href={`mailto:${LEGAL_CONTACT_EMAIL}`}
-                  className="text-sm text-gray-400 transition hover:text-gray-300"
-                >
-                  Contact Support
-                </a>
-              </nav>
-            </div>
-          </footer>
+          <MarketingFooter />
         </div>
       </div>
     </>

@@ -300,7 +300,7 @@ export default function AffiliatePayoutsPage() {
         <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:p-10">
           <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
             <div>
-              <Link href="/affiliate" className="text-sm text-blue-300 hover:text-blue-200">
+              <Link href="/affiliate/dashboard" className="text-sm text-blue-300 hover:text-blue-200">
                 ← Affiliate dashboard
               </Link>
               <h1 className="mt-2 text-2xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent sm:text-3xl">
@@ -421,7 +421,7 @@ export default function AffiliatePayoutsPage() {
               {!isActiveAffiliate ? (
                 <div className="mb-8 rounded-xl border border-amber-500/35 bg-amber-500/10 px-4 py-4 text-sm text-amber-50">
                   You need an active affiliate referral code before you can request payouts.{" "}
-                  <Link href="/affiliate" className="font-medium text-blue-300 underline hover:text-blue-200">
+                  <Link href="/affiliate/dashboard" className="font-medium text-blue-300 underline hover:text-blue-200">
                     Open the Affiliate Dashboard
                   </Link>{" "}
                   to apply or finish setup.
@@ -429,7 +429,7 @@ export default function AffiliatePayoutsPage() {
               ) : referralCode && !affiliateRowId ? (
                 <div className="mb-8 rounded-xl border border-amber-500/35 bg-amber-500/10 px-4 py-4 text-sm text-amber-50">
                   Your affiliate profile isn&apos;t fully linked yet. Contact support or visit{" "}
-                  <Link href="/affiliate" className="font-medium text-blue-300 underline hover:text-blue-200">
+                  <Link href="/affiliate/dashboard" className="font-medium text-blue-300 underline hover:text-blue-200">
                     Affiliate Dashboard
                   </Link>{" "}
                   — payout requests unlock once your account is connected.
@@ -440,7 +440,7 @@ export default function AffiliatePayoutsPage() {
                 <div className="mb-8 rounded-xl border border-violet-500/35 bg-violet-500/10 px-4 py-3 text-sm text-violet-100">
                   Complete <strong className="text-white">Stripe payout setup</strong> before requesting a
                   payout.{" "}
-                  <Link href="/affiliate" className="font-medium text-blue-300 underline hover:text-blue-200">
+                  <Link href="/affiliate/dashboard" className="font-medium text-blue-300 underline hover:text-blue-200">
                     Open Affiliate Dashboard
                   </Link>{" "}
                   and use <span className="font-medium text-white">Complete payout setup</span>.

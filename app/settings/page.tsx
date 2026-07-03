@@ -19,6 +19,12 @@ import {
 } from "@/lib/getMembershipStatus"
 import { isProActive } from "../../lib/subscription"
 import { getTraxProSubscriptionDisplay } from "@/lib/traxProBillingPlans"
+import {
+  TRADETRAXS_FREE_PLAN,
+  TRADETRAXS_PRO_PLAN,
+  TRADETRAXS_PRO_FEATURES_HEADING,
+  getPlanFeaturesSectionHeading,
+} from "@/lib/tradeTraxsPlans"
 import TraxProBillingIntervalPicker from "@/app/components/TraxProBillingIntervalPicker"
 import {
   TRAXPRO_DEFAULT_BILLING_INTERVAL,
@@ -1210,7 +1216,7 @@ export default function SettingsPage() {
                     <p className="mt-1 text-sm text-gray-400">
                       Apply, track status, and manage your referral link.{" "}
                       <a
-                        href="/affiliate"
+                        href="/affiliate/dashboard"
                         className="text-blue-300 underline hover:text-blue-200"
                       >
                         Open Affiliate Dashboard
@@ -1566,9 +1572,19 @@ export default function SettingsPage() {
                             {proPlanDisplay.billedLabel}
                           </p>
                         ) : null}
+                        <p className="mt-2 text-sm leading-relaxed text-gray-400">
+                          {TRADETRAXS_PRO_PLAN.description}
+                        </p>
                       </div>
                     ) : (
-                      <p className="mt-1 font-semibold text-white">Free Plan</p>
+                      <div className="mt-1">
+                        <p className="font-semibold text-white">
+                          {TRADETRAXS_FREE_PLAN.name}
+                        </p>
+                        <p className="mt-2 text-sm leading-relaxed text-gray-400">
+                          {TRADETRAXS_FREE_PLAN.description}
+                        </p>
+                      </div>
                     )}
                   </div>
 
@@ -1614,37 +1630,59 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="rounded-xl border border-white/10 bg-black/20 p-4">
-                  <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                    Feature access
-                  </p>
+                  {isProActive(profile) ? (
+                    <p className="text-sm font-medium text-gray-200">
+                      {TRADETRAXS_PRO_FEATURES_HEADING}
+                    </p>
+                  ) : (
+                    <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                      {getPlanFeaturesSectionHeading("free")}
+                    </p>
+                  )}
                   <ul className="mt-3 space-y-2">
-                    <li className="flex items-center justify-between gap-4 text-sm text-gray-200">
-                      <span>Basic Dashboard Analytics</span>
-                      <span aria-hidden>✅</span>
-                    </li>
-                    <li className="flex items-center justify-between gap-4 text-sm text-gray-200">
-                      <span>Advanced Dashboard Insights</span>
-                      <span aria-hidden>
-                        {isProActive(profile) ? "✅" : "❌"}
-                      </span>
-                    </li>
-                    <li className="flex items-center justify-between gap-4 text-sm text-gray-200">
-                      <span>AI Analyst</span>
-                      <span aria-hidden>
-                        {isProActive(profile) ? "✅" : "❌"}
-                      </span>
-                    </li>
-                    <li className="flex items-center justify-between gap-4 text-sm text-gray-200">
-                      <span>Unlimited Accounts</span>
-                      <span aria-hidden>
-                        {isProActive(profile) ? "✅" : "❌"}
-                      </span>
-                    </li>
+                    {(isProActive(profile)
+                      ? TRADETRAXS_PRO_PLAN.features
+                      : TRADETRAXS_FREE_PLAN.features
+                    ).map((feature) => (
+                      <li
+                        key={feature}
+                        className="flex items-start gap-3 text-sm text-gray-200"
+                      >
+                        <span className="mt-0.5 shrink-0 text-emerald-400" aria-hidden>
+                          ✓
+                        </span>
+                        <span>{feature}</span>
+                      </li>
+                    ))}
                   </ul>
                 </div>
 
                 {!isSubscribed ? (
                   <>
+                    <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+                      <p className="text-xs font-medium uppercase tracking-wide text-emerald-400/90">
+                        {TRADETRAXS_PRO_PLAN.name}
+                      </p>
+                      <p className="mt-2 text-sm leading-relaxed text-gray-300">
+                        {TRADETRAXS_PRO_PLAN.description}
+                      </p>
+                      <p className="mt-4 text-sm font-medium text-gray-200">
+                        {TRADETRAXS_PRO_FEATURES_HEADING}
+                      </p>
+                      <ul className="mt-3 space-y-2">
+                        {TRADETRAXS_PRO_PLAN.features.map((feature) => (
+                          <li
+                            key={feature}
+                            className="flex items-start gap-3 text-sm text-gray-200"
+                          >
+                            <span className="mt-0.5 shrink-0 text-emerald-400" aria-hidden>
+                              ✓
+                            </span>
+                            <span>{feature}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
                     <TraxProBillingIntervalPicker
                       value={upgradeBillingInterval}
                       onChange={(interval) => {
@@ -1660,7 +1698,7 @@ export default function SettingsPage() {
                       disabled={checkoutLoading}
                       className="mt-4 w-full rounded-xl bg-gradient-to-r from-blue-500 to-emerald-500 py-3 font-semibold disabled:opacity-50"
                     >
-                      {checkoutLoading ? "Redirecting…" : "Upgrade to TraxPro"}
+                      {checkoutLoading ? "Redirecting…" : `Upgrade to ${TRADETRAXS_PRO_PLAN.name}`}
                     </button>
                   </>
                 ) : null}

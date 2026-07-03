@@ -1,3 +1,5 @@
+import { TRADETRAXS_PRO_PLAN } from "./tradeTraxsPlans.ts"
+
 /** TraxPro billing interval registry — extend {@link TRAXPRO_BILLING_PLANS} for new cadences. */
 
 export type TraxProBillingIntervalId = "monthly" | "six_month" | "yearly"
@@ -29,7 +31,7 @@ export type TraxProBillingPlan = {
 /** Canonical monthly list price — all intervals derive from this. */
 export const TRAXPRO_MONTHLY_LIST_PRICE = 23.99
 
-export const TRAXPRO_PRODUCT_DISPLAY_NAME = "TradeTraxs Pro"
+export const TRAXPRO_PRODUCT_DISPLAY_NAME = TRADETRAXS_PRO_PLAN.name
 
 export const TRAXPRO_BILLING_PLANS: readonly TraxProBillingPlan[] = [
   {
@@ -122,13 +124,13 @@ export function formatTraxProBillingIntervalLabel(
   return getTraxProBillingPlan(interval).label
 }
 
-/** Settings / subscription plan line, e.g. "TraxPro (Monthly)". */
+/** Settings / subscription plan line, e.g. "TradeTraxs Pro (Monthly)". */
 export function formatTraxProSubscriptionPlanLine(
   interval: TraxProBillingIntervalId | string | null | undefined
 ): string {
   const label = formatTraxProBillingIntervalLabel(interval)
-  if (label) return `TraxPro (${label})`
-  return "TraxPro"
+  if (label) return `${TRADETRAXS_PRO_PLAN.name} (${label})`
+  return TRADETRAXS_PRO_PLAN.name
 }
 
 export type TraxProSubscriptionDisplay = {

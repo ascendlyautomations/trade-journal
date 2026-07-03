@@ -3,11 +3,10 @@
 import Link from "next/link"
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import { supabase } from "../../lib/supabaseClient"
-import Navbar from "../components/Navbar"
+import { supabase } from "@/lib/supabaseClient"
 import { ProfileAvatarImg } from "@/app/components/SafeProfileAvatar"
-import AffiliateApplyModal from "../components/AffiliateApplyModal"
-import AffiliatePayoutSetupCard from "../components/AffiliatePayoutSetupCard"
+import AffiliateApplyModal from "@/app/components/AffiliateApplyModal"
+import AffiliatePayoutSetupCard from "@/app/components/AffiliatePayoutSetupCard"
 import {
   COMMISSION_RATE,
   recordedAffiliateEarnings,
@@ -214,7 +213,7 @@ export default function AffiliateDashboard() {
       setShowAffiliateModal(true)
     }
     if (returningFromStripe || openApply) {
-      window.history.replaceState({}, "", "/affiliate")
+      window.history.replaceState({}, "", "/affiliate/dashboard")
     }
   }, [])
 
@@ -295,8 +294,6 @@ export default function AffiliateDashboard() {
 
   return (
     <>
-      <Navbar />
-
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white">
         <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:p-10">
           {loading ? (

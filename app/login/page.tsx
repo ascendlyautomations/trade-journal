@@ -14,6 +14,10 @@ import { isBetaReferralRef } from "@/lib/betaReferralCode"
 import { persistReferralCodeFromUrl } from "@/lib/referralPersistence"
 import { enterSignupFlow, setCheckoutBillingInterval, setSignupIntent, type SignupIntent } from "@/lib/signupFlow"
 import { TRAXPRO_TRIAL_HEADLINE } from "@/lib/traxProPricing"
+import {
+  TRADETRAXS_FREE_PLAN,
+  TRADETRAXS_PRO_PLAN,
+} from "@/lib/tradeTraxsPlans"
 import { markProfileUseFreeTier } from "@/lib/markFreeTierSignup"
 import TraxProBillingIntervalPicker from "@/app/components/TraxProBillingIntervalPicker"
 import {
@@ -703,7 +707,7 @@ export default function LoginPage() {
                   ⭐ Start {TRAXPRO_TRIAL_HEADLINE}
                 </p>
                 <p className="mt-1 text-xs leading-relaxed text-gray-400 md:text-[11px]">
-                  Unlock every TradeTraxs feature free for 14 days.
+                  {TRADETRAXS_PRO_PLAN.description}
                 </p>
                 <div className="mt-3">
                   <TraxProBillingIntervalPicker
@@ -727,9 +731,9 @@ export default function LoginPage() {
               </div>
 
               <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4 md:p-3">
-                <p className="text-sm font-semibold text-white">Continue with Free Account</p>
+                <p className="text-sm font-semibold text-white">{TRADETRAXS_FREE_PLAN.name}</p>
                 <p className="mt-1 text-xs leading-relaxed text-gray-400 md:text-[11px]">
-                  Create a free account with limited features and upgrade anytime.
+                  {TRADETRAXS_FREE_PLAN.description}
                 </p>
                 <button
                   type="button"

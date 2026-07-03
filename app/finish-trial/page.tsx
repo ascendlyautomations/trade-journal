@@ -12,6 +12,7 @@ import {
   resolvePostAuthAppPath,
 } from "@/lib/subscriptionAccess"
 import { TRAXPRO_TRIAL_HEADLINE } from "@/lib/traxProPricing"
+import { TRADETRAXS_PRO_PLAN } from "@/lib/tradeTraxsPlans"
 import TraxProBillingIntervalPicker from "@/app/components/TraxProBillingIntervalPicker"
 import {
   TRAXPRO_DEFAULT_BILLING_INTERVAL,
@@ -87,8 +88,8 @@ export default function FinishTrialPage() {
         </p>
         <h1 className="mt-2 text-3xl font-bold text-white">You&apos;re almost done!</h1>
         <p className="mt-4 text-sm leading-relaxed text-gray-300">
-          Start your {TRAXPRO_TRIAL_HEADLINE.toLowerCase()} to access TradeTraxs — journaling,
-          analytics, community, and everything in one place.
+          Start your {TRAXPRO_TRIAL_HEADLINE.toLowerCase()} to access {TRADETRAXS_PRO_PLAN.name}.{" "}
+          {TRADETRAXS_PRO_PLAN.description}
         </p>
 
         <div className="mt-6">

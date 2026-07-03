@@ -8,7 +8,17 @@ export const ONBOARDING_ROUTE_PREFIXES = ["/onboarding"] as const
 export const PRE_CHECKOUT_ROUTE_PREFIXES = ["/finish-trial"] as const
 
 /** Marketing site pages (logged-out experience). */
-export const MARKETING_EXACT_PATHS = ["/", "/faq", "/pricing"] as const
+export const MARKETING_EXACT_PATHS = [
+  "/",
+  "/faq",
+  "/pricing",
+  "/about",
+  "/legal",
+  "/community-guidelines",
+  "/creator-guidelines",
+  "/affiliate",
+  "/contact",
+] as const
 
 /** Legal pages that share the marketing navbar when logged out. */
 export const PUBLIC_LEGAL_EXACT_PATHS = ["/privacy", "/terms"] as const

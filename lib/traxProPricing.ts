@@ -1,7 +1,23 @@
 import { TRAXPRO_MONTHLY_LIST_PRICE } from "@/lib/traxProBillingPlans"
+import {
+  TRADETRAXS_FREE_PLAN,
+  TRADETRAXS_PRO_PLAN,
+} from "@/lib/tradeTraxsPlans"
 
-/** Canonical TraxPro marketing / billing copy (matches Stripe + Settings). */
-export const TRAXPRO_PLAN_NAME = "TraxPro"
+export {
+  TRADETRAXS_FREE_PLAN,
+  TRADETRAXS_PRO_PLAN,
+  TRADETRAXS_PRO_FEATURES_HEADING,
+  getTradeTraxsPlan,
+  getPlanFeaturesSectionHeading,
+  formatPlanFeaturesList,
+  type TradeTraxsPlan,
+  type TradeTraxsPlanId,
+} from "@/lib/tradeTraxsPlans"
+
+/** Canonical Pro plan display name (matches Settings + Stripe). */
+export const TRAXPRO_PLAN_NAME = TRADETRAXS_PRO_PLAN.name
+
 export const TRAXPRO_PRICE_AMOUNT = TRAXPRO_MONTHLY_LIST_PRICE
 export const TRAXPRO_PRICE_DISPLAY = "$23.99"
 export const TRAXPRO_BILLING_LABEL = "Billed monthly"
@@ -19,32 +35,11 @@ export const TRAXPRO_TRIAL_HEADLINE = "14-Day Free Trial"
 export const TRAXPRO_CHECKOUT_FINE_PRINT =
   "✓ 14-day free trial ✓ Cancel anytime ✓ Billed via Stripe"
 
-/** Homepage + /pricing Free tier (aligned with product gates). */
-export const LANDING_FREE_FEATURES = [
-  "3 Trading Accounts",
-  "Unlimited Trades",
-  "Basic Analytics",
-  "Community Access",
-  "Rooms & Messaging",
-  "1 CSV Import",
-] as const
+/** @deprecated Use {@link TRADETRAXS_FREE_PLAN.features} */
+export const LANDING_FREE_FEATURES = TRADETRAXS_FREE_PLAN.features
 
-/** Homepage + /pricing TraxPro tier (aligned with product gates). */
-export const LANDING_PRO_FEATURES = [
-  "Unlimited Accounts",
-  "AI Trade Analyst",
-  "Backtest Lab",
-  "Prop Firm Dashboard",
-  "Advanced Analytics",
-  "Unlimited CSV Imports",
-] as const
+/** @deprecated Use {@link TRADETRAXS_PRO_PLAN.features} */
+export const LANDING_PRO_FEATURES = TRADETRAXS_PRO_PLAN.features
 
-/** Homepage V2 pricing card — TraxPro highlights. */
-export const LANDING_PRO_PRICING_HIGHLIGHTS = [
-  "Unlimited trades",
-  "Advanced Analytics",
-  "AI Analyst",
-  "Prop Firm Dashboard",
-  "Backtest Lab",
-  "Priority Features",
-] as const
+/** @deprecated Use {@link TRADETRAXS_PRO_PLAN.features} */
+export const LANDING_PRO_PRICING_HIGHLIGHTS = TRADETRAXS_PRO_PLAN.features

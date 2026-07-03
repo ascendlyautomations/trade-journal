@@ -1,5 +1,9 @@
 import type { Metadata } from "next"
 import { DEFAULT_OG_IMAGE_PATH, SITE_NAME, SITE_URL } from "@/lib/site"
+import {
+  TRADETRAXS_FREE_PLAN,
+  TRADETRAXS_PRO_PLAN,
+} from "@/lib/tradeTraxsPlans"
 
 type PublicRouteMetaInput = {
   path: `/${string}`
@@ -60,8 +64,7 @@ export const LEADERBOARD_PAGE_METADATA = buildPublicRouteMetadata({
 export const PRICING_PAGE_METADATA = buildPublicRouteMetadata({
   path: "/pricing",
   title: "Pricing",
-  description:
-    "TradeTraxs pricing: start free with 3 accounts and unlimited trades, or upgrade to TraxPro (starting at $23.99/month) for AI insights, advanced analytics, and unlimited accounts.",
+  description: `TradeTraxs pricing: ${TRADETRAXS_FREE_PLAN.description} ${TRADETRAXS_PRO_PLAN.name} starts at $23.99/month with a 14-day free trial.`,
 })
 
 export const FAQ_PAGE_METADATA = buildPublicRouteMetadata({
@@ -69,6 +72,13 @@ export const FAQ_PAGE_METADATA = buildPublicRouteMetadata({
   title: "FAQ",
   description:
     "Frequently asked questions about TradeTraxs — trading journal features, accounts, public trades, messaging, and pricing.",
+})
+
+export const ABOUT_PAGE_METADATA = buildPublicRouteMetadata({
+  path: "/about",
+  title: "About TradeTraxs",
+  description:
+    "Learn why TradeTraxs was created and discover the mission behind the all-in-one trading journal, analytics platform, and trading community.",
 })
 
 export const HELP_PAGE_METADATA = buildPublicRouteMetadata({
@@ -90,4 +100,39 @@ export const TERMS_PAGE_METADATA = buildPublicRouteMetadata({
   title: "Terms of Service",
   description:
     "TradeTraxs Terms of Service — account rules, subscriptions, user content, and platform disclaimers.",
+})
+
+export const LEGAL_HUB_PAGE_METADATA = buildPublicRouteMetadata({
+  path: "/legal",
+  title: "Legal",
+  description:
+    "TradeTraxs legal documents — privacy policy, terms of service, and platform policies.",
+})
+
+export const COMMUNITY_GUIDELINES_PAGE_METADATA = buildPublicRouteMetadata({
+  path: "/community-guidelines",
+  title: "Community Guidelines",
+  description:
+    "TradeTraxs community guidelines — respectful trading discussions, feedback, and platform conduct.",
+})
+
+export const CREATOR_GUIDELINES_PAGE_METADATA = buildPublicRouteMetadata({
+  path: "/creator-guidelines",
+  title: "Creator Guidelines",
+  description:
+    "TradeTraxs creator guidelines for sharing trades, posts, and reels with transparency and professionalism.",
+})
+
+export const AFFILIATE_PROGRAM_PAGE_METADATA = buildPublicRouteMetadata({
+  path: "/affiliate",
+  title: "Affiliate Program",
+  description:
+    "Join the live TradeTraxs Affiliate Program — earn recurring commissions by referring traders to the platform.",
+})
+
+export const CONTACT_PAGE_METADATA = buildPublicRouteMetadata({
+  path: "/contact",
+  title: "Contact",
+  description:
+    "Contact TradeTraxs for billing, partnerships, business inquiries, and general questions at support@tradetraxs.com.",
 })

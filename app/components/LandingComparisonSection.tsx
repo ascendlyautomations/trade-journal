@@ -7,61 +7,25 @@ import {
   LANDING_SECTION_SPACING,
   LANDING_TITLE_GRADIENT,
 } from "@/lib/landingPageUi"
+import {
+  LANDING_COMPARISON_COLUMNS,
+  LANDING_COMPARISON_ROWS,
+  type ComparisonTriState,
+} from "@/lib/landingComparison"
 
-type TriState = "full" | "partial" | "none"
-
-type CompareRow = {
-  feature: string
-  tt: TriState
-  tz: TriState
-  ts: TriState
-  excel: TriState
-  discord: TriState
-}
-
-function emojiFor(s: TriState): string {
+function emojiFor(s: ComparisonTriState): string {
   if (s === "full") return "✅"
   if (s === "partial") return "⚠️"
   return "❌"
 }
 
-function Cell({ state }: { state: TriState }) {
+function Cell({ state }: { state: ComparisonTriState }) {
   return (
     <span className="text-base leading-none" aria-hidden>
       {emojiFor(state)}
     </span>
   )
 }
-
-const ROWS: CompareRow[] = [
-  { feature: "Trade Journal", tt: "full", tz: "full", ts: "full", excel: "partial", discord: "none" },
-  { feature: "Analytics", tt: "full", tz: "full", ts: "full", excel: "partial", discord: "none" },
-  { feature: "Community", tt: "full", tz: "none", ts: "none", excel: "none", discord: "full" },
-  { feature: "Trade Rooms", tt: "full", tz: "none", ts: "none", excel: "none", discord: "partial" },
-  { feature: "Reels", tt: "full", tz: "none", ts: "none", excel: "none", discord: "none" },
-  { feature: "Achievements", tt: "full", tz: "none", ts: "none", excel: "none", discord: "none" },
-  { feature: "AI Trade Analysis", tt: "full", tz: "partial", ts: "partial", excel: "none", discord: "none" },
-  { feature: "Trading Calendar", tt: "full", tz: "full", ts: "partial", excel: "none", discord: "none" },
-  { feature: "Prop Firm Mode", tt: "full", tz: "partial", ts: "partial", excel: "none", discord: "none" },
-  { feature: "Social Feed", tt: "full", tz: "none", ts: "none", excel: "none", discord: "partial" },
-  { feature: "Leaderboards", tt: "full", tz: "none", ts: "none", excel: "none", discord: "none" },
-  {
-    feature: "Mobile Experience",
-    tt: "partial",
-    tz: "partial",
-    ts: "partial",
-    excel: "none",
-    discord: "partial",
-  },
-]
-
-const COLUMNS = [
-  { key: "tt" as const, label: "TradeTraxs", highlight: true },
-  { key: "tz" as const, label: "TradeZella", highlight: false },
-  { key: "ts" as const, label: "TraderSync", highlight: false },
-  { key: "excel" as const, label: "Excel", highlight: false },
-  { key: "discord" as const, label: "Discord", highlight: false },
-]
 
 export default function LandingComparisonSection() {
   return (
@@ -88,7 +52,7 @@ export default function LandingComparisonSection() {
                 >
                   Feature
                 </th>
-                {COLUMNS.map((col) => (
+                {LANDING_COMPARISON_COLUMNS.map((col) => (
                   <th
                     key={col.key}
                     scope="col"
@@ -102,7 +66,7 @@ export default function LandingComparisonSection() {
               </tr>
             </thead>
             <tbody>
-              {ROWS.map((row) => (
+              {LANDING_COMPARISON_ROWS.map((row) => (
                 <tr key={row.feature} className="border-b border-white/10 last:border-b-0">
                   <th
                     scope="row"
@@ -110,7 +74,7 @@ export default function LandingComparisonSection() {
                   >
                     {row.feature}
                   </th>
-                  {COLUMNS.map((col) => (
+                  {LANDING_COMPARISON_COLUMNS.map((col) => (
                     <td
                       key={col.key}
                       className={`border-l border-white/10 px-3 py-3.5 text-center align-middle md:px-4 ${

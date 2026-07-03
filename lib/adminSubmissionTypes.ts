@@ -5,6 +5,10 @@ export type AdminSubmissionType =
   | "csv_support_request"
   | "feedback_submission"
   | "affiliate_application"
+  | "contact_general"
+  | "contact_billing"
+  | "contact_partnership"
+  | "contact_business"
 
 export const ADMIN_SUBMISSION_EMAIL_SUBJECTS: Record<AdminSubmissionType, string> = {
   bug_report: "[TradeTraxs] New Bug Report",
@@ -13,6 +17,10 @@ export const ADMIN_SUBMISSION_EMAIL_SUBJECTS: Record<AdminSubmissionType, string
   csv_support_request: "[TradeTraxs] New CSV Support Request",
   feedback_submission: "[TradeTraxs] New Feedback Submission",
   affiliate_application: "New Affiliate Application",
+  contact_general: "[General] Question About TradeTraxs",
+  contact_billing: "[Billing] Subscription Question",
+  contact_partnership: "[Partnership] Partnership Inquiry",
+  contact_business: "[Business] Business Inquiry",
 }
 
 export const ADMIN_SUBMISSION_ADMIN_PATHS: Record<AdminSubmissionType, string> = {
@@ -22,6 +30,10 @@ export const ADMIN_SUBMISSION_ADMIN_PATHS: Record<AdminSubmissionType, string> =
   csv_support_request: "/admin/csv-support",
   feedback_submission: "/admin/feedback",
   affiliate_application: "/admin/affiliates",
+  contact_general: "/contact",
+  contact_billing: "/contact",
+  contact_partnership: "/contact",
+  contact_business: "/contact",
 }
 
 export const ADMIN_SUBMISSION_LABELS: Record<AdminSubmissionType, string> = {
@@ -31,4 +43,18 @@ export const ADMIN_SUBMISSION_LABELS: Record<AdminSubmissionType, string> = {
   csv_support_request: "CSV Support Request",
   feedback_submission: "Feedback Submission",
   affiliate_application: "Affiliate Application",
+  contact_general: "Public Contact — General",
+  contact_billing: "Public Contact — Billing",
+  contact_partnership: "Public Contact — Partnership",
+  contact_business: "Public Contact — Business",
+}
+
+export function isPublicContactSubmissionType(
+  type: AdminSubmissionType
+): type is
+  | "contact_general"
+  | "contact_billing"
+  | "contact_partnership"
+  | "contact_business" {
+  return type.startsWith("contact_")
 }

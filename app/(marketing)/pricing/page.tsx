@@ -8,10 +8,12 @@ import { enterSignupFlow, setCheckoutBillingInterval } from "@/lib/signupFlow"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { feedbackPresets } from "@/lib/feedbackPresets"
 import {
-  LANDING_FREE_FEATURES,
-  LANDING_PRO_FEATURES,
+  TRADETRAXS_FREE_PLAN,
+  TRADETRAXS_PRO_PLAN,
+  TRADETRAXS_PRO_FEATURES_HEADING,
+} from "@/lib/tradeTraxsPlans"
+import {
   TRAXPRO_CHECKOUT_FINE_PRINT,
-  TRAXPRO_PLAN_NAME,
   TRAXPRO_PRICE_STARTING_AT,
   TRAXPRO_TRIAL_HEADLINE,
 } from "@/lib/traxProPricing"
@@ -21,13 +23,19 @@ import {
 } from "@/lib/traxProBillingPlans"
 import TraxProBillingIntervalPicker from "@/app/components/TraxProBillingIntervalPicker"
 import TraxProSelectedPlanPrice from "@/app/components/TraxProSelectedPlanPrice"
-
-const whyTraxPro = [
-  "See your real win rate",
-  "Identify what setups work",
-  "Eliminate bad trades",
-  "Improve faster with AI feedback",
-]
+import {
+  PRICING_CARD_FEATURE_ITEM,
+  PRICING_CARD_FEATURE_LIST,
+  PRICING_CARD_PLAN_DESCRIPTION,
+  PRICING_CARD_PRO_FEATURE_LIST,
+  PRICING_CARD_PRO_FEATURES_HEADING_ALT,
+  PRICING_CARD_PRO_PLAN_DESCRIPTION_LIGHT,
+  PRICING_PAGE_CTA_FINE_PRINT,
+  PRICING_PAGE_PRIMARY_CTA,
+  PRICING_PAGE_WHY_PRO_BULLETS,
+  PRICING_PAGE_WHY_PRO_ITEM,
+  PRICING_PAGE_WHY_PRO_LIST,
+} from "@/lib/pricingPlanCardUi"
 
 function CheckIcon({ bright = false }: { bright?: boolean }) {
   return (
@@ -122,19 +130,19 @@ export default function PricingPage() {
             Trusted by growing traders every day
           </p>
 
-          <div className="mt-14 grid w-full max-w-4xl gap-8 md:grid-cols-2 md:items-center md:gap-10">
-            <div className="order-2 flex flex-col rounded-2xl border border-white/10 bg-white/[0.06] p-8 opacity-90 shadow-lg backdrop-blur-md md:order-1">
-              <h2 className="text-lg font-semibold text-gray-200">Free</h2>
+          <div className="mt-14 grid w-full max-w-4xl gap-8 md:grid-cols-2 md:items-start md:gap-10">
+            <div className="order-2 flex w-full flex-col self-start rounded-2xl border border-white/10 bg-white/[0.06] px-8 pt-8 pb-6 opacity-90 shadow-lg backdrop-blur-md md:order-1">
+              <h2 className="text-lg font-semibold text-gray-200">{TRADETRAXS_FREE_PLAN.name}</h2>
               <p className="mt-2 text-3xl font-bold tracking-tight text-gray-100">
                 $0
               </p>
-              <p className="mt-3 text-sm leading-relaxed text-gray-400">
-                Perfect for getting started with trade tracking.
+              <p className={PRICING_CARD_PLAN_DESCRIPTION}>
+                {TRADETRAXS_FREE_PLAN.description}
               </p>
 
-              <ul className="mt-8 flex flex-1 flex-col gap-3 text-sm text-gray-400">
-                {LANDING_FREE_FEATURES.map((f) => (
-                  <li key={f} className="flex gap-3">
+              <ul className={`${PRICING_CARD_FEATURE_LIST} grow-0 text-gray-400`}>
+                {TRADETRAXS_FREE_PLAN.features.map((f) => (
+                  <li key={f} className={PRICING_CARD_FEATURE_ITEM}>
                     <CheckIcon />
                     <span>{f}</span>
                   </li>
@@ -144,7 +152,7 @@ export default function PricingPage() {
               <button
                 type="button"
                 onClick={() => router.push("/login")}
-                className="mt-8 w-full rounded-xl bg-white py-3 text-center text-sm font-semibold text-black transition hover:bg-gray-100"
+                className="mt-3 w-full rounded-xl bg-white py-3 text-center text-sm font-semibold text-black transition hover:bg-gray-100"
               >
                 Start Free
               </button>
@@ -155,23 +163,26 @@ export default function PricingPage() {
                 🔥 Most Popular
               </span>
 
-              <h2 className="mt-0 text-xl font-bold text-white">{TRAXPRO_PLAN_NAME}</h2>
+              <h2 className="mt-0 text-xl font-bold text-white">{TRADETRAXS_PRO_PLAN.name}</h2>
               <TraxProSelectedPlanPrice interval={billingInterval} variant="full" className="text-white" />
               <p className="mt-1 text-xs text-gray-400">{TRAXPRO_PRICE_STARTING_AT}</p>
-              <p className="mt-3 text-sm leading-relaxed text-gray-200 sm:text-base">
-                Everything you need to become a consistently profitable trader.
+              <p className={PRICING_CARD_PRO_PLAN_DESCRIPTION_LIGHT}>
+                {TRADETRAXS_PRO_PLAN.description}
               </p>
 
-              <ul className="mt-4 flex flex-1 flex-col gap-3.5 text-sm text-gray-100 sm:text-[0.95rem]">
-                {LANDING_PRO_FEATURES.map((f) => (
-                  <li key={f} className="flex gap-3">
+              <p className={PRICING_CARD_PRO_FEATURES_HEADING_ALT}>
+                {TRADETRAXS_PRO_FEATURES_HEADING}
+              </p>
+              <ul className={PRICING_CARD_PRO_FEATURE_LIST}>
+                {TRADETRAXS_PRO_PLAN.features.map((f) => (
+                  <li key={f} className={PRICING_CARD_FEATURE_ITEM}>
                     <CheckIcon bright />
                     <span>{f}</span>
                   </li>
                 ))}
               </ul>
 
-              <div className="mt-5">
+              <div className="mt-4">
                 <TraxProBillingIntervalPicker
                   value={billingInterval}
                   onChange={handleIntervalChange}
@@ -183,34 +194,34 @@ export default function PricingPage() {
                 type="button"
                 disabled={checkoutLoading}
                 onClick={handleTraxProCheckout}
-                className="mt-5 w-full rounded-xl bg-gradient-to-r from-blue-500 to-teal-400 py-4 text-center text-base font-bold text-white shadow-lg transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60 sm:py-[1.125rem] sm:text-lg"
+                className={PRICING_PAGE_PRIMARY_CTA}
               >
                 {checkoutLoading ? "Loading…" : `Start ${TRAXPRO_TRIAL_HEADLINE}`}
               </button>
-              <div className="mt-4 space-y-1.5 text-center text-xs text-gray-300 sm:text-sm">
+              <div className={PRICING_PAGE_CTA_FINE_PRINT}>
                 <p>{TRAXPRO_CHECKOUT_FINE_PRINT}</p>
               </div>
             </div>
           </div>
 
-          <p className="mt-14 max-w-lg text-center text-sm italic text-gray-400 sm:text-base">
+          <p className="mt-12 max-w-lg text-center text-sm italic text-gray-400 sm:text-base">
             Most traders upgrade within their first week after seeing their
             data.
           </p>
 
           <section
-            className="mt-16 w-full max-w-2xl rounded-2xl border border-white/10 bg-white/5 p-8 backdrop-blur-sm sm:p-10"
+            className="mt-12 w-full max-w-3xl rounded-2xl border border-white/10 bg-white/5 p-8 backdrop-blur-sm sm:p-10"
             aria-labelledby="why-traxpro-heading"
           >
             <h2
               id="why-traxpro-heading"
               className="text-center text-xl font-bold text-white sm:text-2xl"
             >
-              Why TraxPro?
+              Why {TRADETRAXS_PRO_PLAN.name}?
             </h2>
-            <ul className="mt-8 flex flex-col gap-4 text-left text-sm text-gray-200 sm:text-base">
-              {whyTraxPro.map((line) => (
-                <li key={line} className="flex gap-3">
+            <ul className={PRICING_PAGE_WHY_PRO_LIST}>
+              {PRICING_PAGE_WHY_PRO_BULLETS.map((line) => (
+                <li key={line} className={PRICING_PAGE_WHY_PRO_ITEM}>
                   <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-teal-400" />
                   <span>{line}</span>
                 </li>

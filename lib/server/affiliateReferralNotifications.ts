@@ -81,7 +81,7 @@ export async function createAffiliateReferralNotification(
   const content: AffiliateNotificationContent = {
     title: "🎉 New Referral!",
     body: formatReferralBody(username),
-    href: "/affiliate",
+    href: "/affiliate/dashboard",
   }
 
   const { error } = await admin.from("notifications").insert({
@@ -123,7 +123,7 @@ export async function createAffiliateCommissionNotification(
   const content: AffiliateNotificationContent = {
     title: "💰 Commission Earned!",
     body: formatCommissionBody(username, commissionAmount),
-    href: "/affiliate",
+    href: "/affiliate/dashboard",
   }
 
   const { error } = await admin.from("notifications").insert({

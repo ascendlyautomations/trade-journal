@@ -182,7 +182,7 @@ export default function ReferralsPage() {
               </p>
             </div>
             <Link
-              href="/affiliate"
+              href="/affiliate/dashboard"
               className="text-sm text-blue-300 hover:text-blue-200"
             >
               Affiliate dashboard →
@@ -222,7 +222,7 @@ export default function ReferralsPage() {
             {!referralCode ? (
               <p className="mt-4 text-sm text-amber-200/90">
                 You don&apos;t have a referral code on your profile yet. Visit{" "}
-                <Link href="/affiliate" className="underline hover:text-white">
+                <Link href="/affiliate/dashboard" className="underline hover:text-white">
                   Affiliate
                 </Link>{" "}
                 to get set up.

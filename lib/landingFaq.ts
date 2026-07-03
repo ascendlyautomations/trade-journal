@@ -2,7 +2,11 @@ import {
   TRAXPRO_PLAN_NAME,
   TRAXPRO_TRIAL_LABEL,
 } from "@/lib/traxProPricing"
-import { FREE_PLAN_ACCOUNT_LIMIT } from "@/lib/tradingAccounts"
+import {
+  formatPlanFeaturesList,
+  TRADETRAXS_FREE_PLAN,
+  TRADETRAXS_PRO_PLAN,
+} from "@/lib/tradeTraxsPlans"
 
 export type LandingFaqItem = { q: string; a: string }
 
@@ -13,27 +17,31 @@ export const LANDING_FAQ_ITEMS: LandingFaqItem[] = [
   },
   {
     q: "Can I track multiple trading accounts?",
-    a: `The Free plan includes up to ${FREE_PLAN_ACCOUNT_LIMIT} trading accounts. ${TRAXPRO_PLAN_NAME} includes unlimited trading accounts.`,
+    a: `${TRADETRAXS_PRO_PLAN.name} includes unlimited trading accounts. ${TRADETRAXS_FREE_PLAN.name} is designed for getting started with manual trade journaling and community features.`,
   },
   {
     q: "What does the Free plan include?",
-    a: `Free includes: up to ${FREE_PLAN_ACCOUNT_LIMIT} trading accounts; unlimited trade logging; basic dashboard analytics; community access; trade rooms and messaging; public profiles and feed posts; and 1 lifetime CSV import. Upgrade to ${TRAXPRO_PLAN_NAME} for AI Analyst, Backtest Lab, Prop Firm Dashboard, advanced analytics, and unlimited CSV imports.`,
+    a: `${TRADETRAXS_FREE_PLAN.description} Includes: ${formatPlanFeaturesList(TRADETRAXS_FREE_PLAN)}.`,
+  },
+  {
+    q: "What does TradeTraxs Pro include?",
+    a: `${TRADETRAXS_PRO_PLAN.description} Includes: ${formatPlanFeaturesList(TRADETRAXS_PRO_PLAN)}.`,
   },
   {
     q: "What stats does TradeTraxs show?",
-    a: `You can see P&L, win rate, risk-reward ratio, session performance, equity curve, and more on the Free plan. Advanced dashboard insights require ${TRAXPRO_PLAN_NAME}.`,
+    a: `${TRADETRAXS_FREE_PLAN.name} includes basic trading statistics. ${TRAXPRO_PLAN_NAME} unlocks advanced performance analytics, AI Trade Analyst, Backtest Lab, Prop Firm Mode, and advanced trade insights.`,
   },
   {
     q: "Can I import trades from a CSV?",
-    a: `The Free plan includes 1 lifetime CSV import. ${TRAXPRO_PLAN_NAME} includes unlimited CSV imports.`,
+    a: `CSV import and advanced trade insights are included with ${TRAXPRO_PLAN_NAME}.`,
   },
   {
     q: "Does TradeTraxs support prop firm accounts?",
-    a: `Yes. You can mark accounts as Eval, Funded, or Live. ${TRAXPRO_PLAN_NAME} includes Prop Firm Mode analytics to track rule progress.`,
+    a: `Yes. ${TRAXPRO_PLAN_NAME} includes Prop Firm Mode to track rule progress on Eval, Funded, and Live accounts.`,
   },
   {
     q: "Do I need to pay to use TradeTraxs?",
-    a: `No. TradeTraxs has a generous Free plan. ${TRAXPRO_PLAN_NAME} starts at $23.99/month and includes a ${TRAXPRO_TRIAL_LABEL.toLowerCase()}.`,
+    a: `No. ${TRADETRAXS_FREE_PLAN.name} lets you explore the platform at no cost. ${TRAXPRO_PLAN_NAME} starts at $23.99/month and includes a ${TRAXPRO_TRIAL_LABEL.toLowerCase()}.`,
   },
   {
     q: "Is my data private?",

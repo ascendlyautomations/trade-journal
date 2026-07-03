@@ -817,7 +817,7 @@ export function affiliateNotificationBody(notification: NotificationRecord): str
 export function affiliateNotificationHref(notification: NotificationRecord): string {
   const meta = parseAffiliateNotificationContent(notification.content)
   const href = meta.href?.trim()
-  return href || "/affiliate"
+  return href || "/affiliate/dashboard"
 }
 
 export function formatRoomJoinMessage(username: string): string {
