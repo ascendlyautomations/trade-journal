@@ -17,13 +17,13 @@ const LEGAL_DOCUMENTS = [
     title: "Cookie Policy",
     description:
       "How TradeTraxs uses cookies and similar technologies to operate and improve the service.",
-    comingSoon: true,
+    href: "/cookie-policy",
   },
   {
     title: "Acceptable Use Policy",
     description:
       "Standards for acceptable behavior, content, and platform use across TradeTraxs products.",
-    comingSoon: true,
+    href: "/acceptable-use",
   },
 ] as const
 

@@ -5,6 +5,7 @@ export type AdminSubmissionType =
   | "csv_support_request"
   | "feedback_submission"
   | "affiliate_application"
+  | "user_review"
   | "contact_general"
   | "contact_billing"
   | "contact_partnership"
@@ -17,6 +18,7 @@ export const ADMIN_SUBMISSION_EMAIL_SUBJECTS: Record<AdminSubmissionType, string
   csv_support_request: "[TradeTraxs] New CSV Support Request",
   feedback_submission: "[TradeTraxs] New Feedback Submission",
   affiliate_application: "New Affiliate Application",
+  user_review: "[Review] New Beta Review Submitted",
   contact_general: "[General] Question About TradeTraxs",
   contact_billing: "[Billing] Subscription Question",
   contact_partnership: "[Partnership] Partnership Inquiry",
@@ -30,6 +32,7 @@ export const ADMIN_SUBMISSION_ADMIN_PATHS: Record<AdminSubmissionType, string> =
   csv_support_request: "/admin/csv-support",
   feedback_submission: "/admin/feedback",
   affiliate_application: "/admin/affiliates",
+  user_review: "/admin/reviews",
   contact_general: "/contact",
   contact_billing: "/contact",
   contact_partnership: "/contact",
@@ -43,6 +46,7 @@ export const ADMIN_SUBMISSION_LABELS: Record<AdminSubmissionType, string> = {
   csv_support_request: "CSV Support Request",
   feedback_submission: "Feedback Submission",
   affiliate_application: "Affiliate Application",
+  user_review: "User Review",
   contact_general: "Public Contact — General",
   contact_billing: "Public Contact — Billing",
   contact_partnership: "Public Contact — Partnership",

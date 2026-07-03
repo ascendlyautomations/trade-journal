@@ -18,6 +18,8 @@ import {
   computePropfirmAccountMetrics,
   computePropfirmEquityCurveYDomain,
   computePropfirmEquityCurveYTicks,
+  computePropfirmEvalDisplayStatus,
+  computePropfirmFundedDisplayStatus,
   computePayoutDrawdownFloor,
   formatPropfirmUsd,
   parseAccountSizeToNumber,
@@ -105,10 +107,10 @@ import {
 const SECTION_PANEL = dashboardInsightCardClass
 
 const INNER_ROW_CLASS =
-  "flex items-center justify-between rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 transition-colors hover:bg-white/[0.07]"
+  "flex items-center justify-between rounded-lg border border-white/10 bg-white/5 px-2.5 py-2 transition-colors hover:bg-white/[0.07] md:px-3 md:py-2.5"
 
 const RULE_CHIP_CLASS =
-  "flex items-center gap-2.5 rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-sm transition-colors hover:bg-white/[0.07]"
+  "flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-2.5 py-2 text-xs transition-colors hover:bg-white/[0.07] md:gap-2.5 md:px-3 md:py-2.5 md:text-sm"
 
 function PropfirmStat({
   title,
@@ -127,7 +129,7 @@ function PropfirmStat({
   if (positive === true) color = "text-green-400"
   if (positive === false) color = "text-red-400"
 
-  const className = `flex min-h-[90px] w-full flex-col items-center justify-center rounded-xl border border-white/10 bg-white/10 p-3 text-center backdrop-blur-md md:p-4${
+  const className = `flex min-h-[76px] w-full flex-col items-center justify-center rounded-xl border border-white/10 bg-white/10 p-2.5 text-center backdrop-blur-md md:min-h-[90px] md:p-4${
     onClick
       ? " cursor-pointer transition hover:border-white/20 hover:bg-white/[0.14] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
       : ""
@@ -135,9 +137,9 @@ function PropfirmStat({
 
   const content = (
     <>
-      <p className="mb-1 text-xs text-gray-400 md:text-sm">{title}</p>
+      <p className="mb-1 text-[11px] text-gray-400 md:text-sm">{title}</p>
       <span
-        className={`block whitespace-nowrap text-base font-semibold leading-tight tabular-nums md:text-lg lg:text-xl ${color}`}
+        className={`block whitespace-nowrap text-sm font-semibold leading-tight tabular-nums md:text-lg lg:text-xl ${color}`}
       >
         {value}
       </span>
@@ -195,10 +197,10 @@ function PropfirmEquityCurve({ data }: { data: PropfirmEquityCurvePoint[] }) {
     <div className={SECTION_PANEL}>
       <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 className="text-sm font-semibold text-blue-300 md:text-base">
+          <h2 className="text-xs font-semibold text-blue-300 md:text-base">
             Equity Curve
           </h2>
-          <p className="mt-0.5 text-xs text-gray-400 md:text-sm">
+          <p className="mt-0.5 text-[11px] text-gray-400 md:text-sm">
             Lifetime account balance progression by trading day
           </p>
         </div>
@@ -893,8 +895,7 @@ export default function PropFirmPage() {
   const isEmptyAccounts = accountsLoaded && accounts.length === 0
 
   const drawdownUsed = cycleTrailingMetrics.maxDrawdownUsed
-  const { progressPercent, status, ddPercent } = cycleProgress
-  const statusLabel = status === "IN PROGRESS" ? "ACTIVE" : status
+  const { progressPercent, ddPercent } = cycleProgress
   const maxDdLimit = Number(selectedAccount?.max_drawdown) || 0
   const dailyDrawdownBreached =
     worstDailyLossUsed > Number(selectedAccount?.daily_drawdown)
@@ -907,24 +908,53 @@ export default function PropFirmPage() {
     !winningDaysRequired ||
     winningDays >= Number(selectedAccount?.winning_days)
 
+  const payoutQualificationInput = {
+    cycleProgress,
+    dailyDrawdownBreached,
+    winningDaysRequired,
+    winningDaysTargetMet,
+    consistencyRequired,
+    consistencyMet: cycleConsistencyMetrics.isConsistent,
+  }
+
+  const evalDisplayStatus = isEvalAccountSelected
+    ? computePropfirmEvalDisplayStatus(cycleProgress)
+    : null
+
+  const fundedDisplayStatus = isFundedAccountSelected
+    ? computePropfirmFundedDisplayStatus(payoutQualificationInput)
+    : null
+
   return (
     <PropfirmPageShell>
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-blue-300">
             Analytics
           </p>
-          <h1 className="mt-0.5 bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-2xl font-semibold text-transparent md:text-3xl">
+          <h1 className="mt-0.5 bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-xl font-semibold text-transparent md:text-3xl">
             Prop Firm Mode
           </h1>
-          <p className="mt-1 max-w-2xl text-sm text-gray-400 md:text-base">
+          <p className="mt-1 max-w-2xl text-xs text-gray-400 md:text-base">
             Track rule progress, drawdown room, and account balance from one
             stabilized view.
           </p>
         </div>
 
         <div className={SECTION_PANEL}>
-          <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-              <div className="min-w-0 flex-1 basis-0">
+          <div
+            className={
+              isEvalAccountSelected
+                ? "grid min-w-0 grid-cols-[minmax(0,1fr)_auto] grid-rows-[auto_auto] gap-x-2 gap-y-2.5 sm:flex sm:flex-row sm:items-center sm:gap-3"
+                : "flex min-w-0 flex-col gap-2.5 sm:flex-row sm:items-center sm:gap-3"
+            }
+          >
+              <div
+                className={
+                  isEvalAccountSelected
+                    ? "col-start-1 row-start-1 min-w-0 sm:flex-1 sm:basis-0"
+                    : "min-w-0 w-full sm:flex-1 sm:basis-0"
+                }
+              >
                 <CustomSelect
                   value={accountFilter}
                   onChange={(value) => {
@@ -945,27 +975,46 @@ export default function PropFirmPage() {
                 />
               </div>
 
-              {showPayoutHistoryButton ? (
+              {evalDisplayStatus && isEvalAccountSelected ? (
+                <div
+                  className={`col-start-2 row-start-1 inline-flex w-[108px] shrink-0 items-center justify-center self-center rounded-full border px-2.5 py-1.5 text-xs font-semibold md:px-3 md:text-sm ${
+                    evalDisplayStatus === "PASSED"
+                      ? "border-green-500/30 bg-green-500/10 text-green-400"
+                      : evalDisplayStatus === "FAILED"
+                        ? "border-red-500/30 bg-red-500/10 text-red-400"
+                        : "border-amber-500/30 bg-amber-500/10 text-amber-300"
+                  }`}
+                >
+                  {evalDisplayStatus}
+                </div>
+              ) : null}
+
+              <div
+                className={
+                  isEvalAccountSelected
+                    ? "col-span-2 row-start-2 flex w-full sm:col-span-1 sm:row-start-1 sm:w-auto"
+                    : "flex min-w-0 w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap sm:gap-3"
+                }
+              >
+              {!isEvalAccountSelected && showPayoutHistoryButton ? (
                 <button
                   type="button"
                   onClick={openPayoutHistory}
-                  className="shrink-0 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-sm font-semibold text-gray-200 transition hover:bg-white/10"
+                  className="shrink-0 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-semibold text-gray-200 transition hover:bg-white/10 max-sm:min-w-0 max-sm:flex-1 md:px-3 md:text-sm"
                 >
                   Payouts
                 </button>
               ) : null}
 
-              {showAccountDashboard ? (
-                <div
-                  className={`inline-flex w-[108px] shrink-0 items-center justify-center rounded-full border px-3 py-1.5 text-sm font-semibold ${
-                    status === "PASSED"
-                      ? "border-green-500/30 bg-green-500/10 text-green-400"
-                      : status === "FAILED"
-                        ? "border-red-500/30 bg-red-500/10 text-red-400"
-                        : "border-amber-500/30 bg-amber-500/10 text-amber-300"
-                  }`}
-                >
-                  {statusLabel}
+              {!isEvalAccountSelected && fundedDisplayStatus === "FAILED" ? (
+                <div className="inline-flex shrink-0 items-center justify-center rounded-full border border-red-500/30 bg-red-500/10 px-2.5 py-1.5 text-xs font-semibold text-red-400 md:px-3 md:text-sm">
+                  ❌ Failed
+                </div>
+              ) : null}
+
+              {!isEvalAccountSelected && fundedDisplayStatus === "PAYOUT_READY" ? (
+                <div className="inline-flex shrink-0 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1.5 text-xs font-semibold text-emerald-300 md:px-3 md:text-sm">
+                  💰 Payout Ready
                 </div>
               ) : null}
 
@@ -973,7 +1022,7 @@ export default function PropFirmPage() {
                 <button
                   type="button"
                   onClick={openPassEvalWorkflow}
-                  className="shrink-0 rounded-lg border border-blue-500/30 bg-blue-500/10 px-3.5 py-1.5 text-sm font-semibold text-blue-300 transition hover:bg-blue-500/20"
+                  className="w-full shrink-0 rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 py-1.5 text-xs font-semibold text-blue-300 transition hover:bg-blue-500/20 sm:w-auto md:px-3.5 md:text-sm"
                 >
                   Pass Evaluation
                 </button>
@@ -983,11 +1032,12 @@ export default function PropFirmPage() {
                 <button
                   type="button"
                   onClick={openPayoutWorkflow}
-                  className="shrink-0 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-1.5 text-sm font-semibold text-emerald-300 transition hover:bg-emerald-500/20"
+                  className="w-full shrink-0 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/20 sm:w-auto md:px-3.5 md:text-sm"
                 >
                   Record Payout
                 </button>
               ) : null}
+              </div>
           </div>
         </div>
 
@@ -1320,7 +1370,7 @@ export default function PropFirmPage() {
         {showAccountDashboard && (
           <div className={SECTION_PANEL}>
             <h2 className={`${dashboardInsightTitleClass} mb-3`}>
-              Progress <span className="text-xs font-normal text-gray-500">(current cycle)</span>
+              Progress <span className="text-[10px] font-normal text-gray-500 md:text-xs">(current cycle)</span>
             </h2>
 
             <div className={`grid gap-x-6 gap-y-2.5 sm:grid-cols-2 ${dashboardInsightBodyClass}`}>
@@ -1399,7 +1449,7 @@ export default function PropFirmPage() {
 
             <div className="mt-4 space-y-3">
               <div>
-                <div className="mb-1.5 flex justify-between text-xs text-gray-400 md:text-sm">
+                <div className="mb-1.5 flex justify-between text-[11px] text-gray-400 md:text-sm">
                   <span>Profit target (cycle)</span>
                   <span className="tabular-nums">{progressPercent.toFixed(0)}%</span>
                 </div>
@@ -1412,7 +1462,7 @@ export default function PropFirmPage() {
               </div>
 
               <div>
-                <div className="mb-1.5 flex justify-between text-xs text-gray-400 md:text-sm">
+                <div className="mb-1.5 flex justify-between text-[11px] text-gray-400 md:text-sm">
                   <span>Drawdown used (cycle)</span>
                   <span className="tabular-nums">{ddPercent.toFixed(0)}%</span>
                 </div>
@@ -1428,14 +1478,14 @@ export default function PropFirmPage() {
             {showAccountDashboard &&
               maxDdLimit > 0 &&
               cycleTrailingMetrics.breachedTrailingDD && (
-                <div className="mt-4 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2.5 text-sm text-red-400">
+                <div className="mt-4 rounded-lg border border-red-500/20 bg-red-500/10 px-2.5 py-2 text-xs text-red-400 md:px-3 md:py-2.5 md:text-sm">
                   Trailing max drawdown breached (balance below drawdown floor)
                 </div>
               )}
 
             {showAccountDashboard &&
               dailyDrawdownBreached && (
-                <div className="mt-2 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2.5 text-sm text-red-400">
+                <div className="mt-2 rounded-lg border border-red-500/20 bg-red-500/10 px-2.5 py-2 text-xs text-red-400 md:px-3 md:py-2.5 md:text-sm">
                   Daily drawdown exceeded
                 </div>
               )}
@@ -1455,7 +1505,7 @@ export default function PropFirmPage() {
             </span>
           </div>
 
-          <div className="max-h-64 space-y-1.5 overflow-y-auto pr-1 text-sm">
+          <div className="max-h-64 space-y-1.5 overflow-y-auto pr-1 text-xs md:text-sm">
             {lifetimeDailyRows.length > 0 ? (
               lifetimeDailyRows.map(([date, pnl]) => (
                 <div
@@ -1478,7 +1528,7 @@ export default function PropFirmPage() {
                 </div>
               ))
             ) : (
-              <div className="rounded-lg border border-dashed border-white/10 bg-white/5 px-4 py-6 text-center text-sm text-gray-400">
+              <div className="rounded-lg border border-dashed border-white/10 bg-white/5 px-3 py-5 text-center text-xs text-gray-400 md:py-6 md:text-sm">
                 No daily performance yet.
               </div>
             )}

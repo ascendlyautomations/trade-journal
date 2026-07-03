@@ -1,6 +1,5 @@
 "use client"
 
-import Navbar from "../../components/Navbar"
 import DmStyleComposer from "../../components/DmStyleComposer"
 import SharedTradeMessageCard from "@/app/components/SharedTradeMessageCard"
 import FeedPostScreenshot from "@/app/components/feed/FeedPostScreenshot"
@@ -2209,7 +2208,6 @@ export default function DMPage() {
 
   return (
     <>
-      <Navbar />
       <FeedbackModal {...feedbackModalProps} />
 
       {pageAccess !== "allowed" ? (

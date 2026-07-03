@@ -90,7 +90,7 @@ export default function DashboardFilters({
   return (
     <div>
       <TradeFilterBar
-        className="mt-2.5 mb-3 md:mb-4"
+        className="mt-2 mb-2.5 md:mt-2.5 md:mb-4"
         mobileThreeRowLayout
         leading={<DashboardPlanIndicator isPro={isPro} />}
         leadingOverlay
@@ -111,7 +111,7 @@ export default function DashboardFilters({
           <button
             type="button"
             onClick={onTogglePublicOnly}
-            className={`h-[34px] w-full whitespace-nowrap rounded-md border px-4 py-2 text-sm md:h-[34px] md:w-auto md:px-2 md:py-1 md:text-xs md:hidden ${
+            className={`inline-flex min-h-[44px] w-full items-center justify-center whitespace-nowrap rounded-md border px-3 py-2 text-xs md:h-[34px] md:w-auto md:px-2 md:py-1 md:text-xs md:hidden ${
               showPublicOnly
                 ? "border-emerald-400 bg-emerald-500 text-white hover:bg-emerald-600"
                 : "border-white/10 bg-[#0f172a] text-white hover:bg-[#1e293b]"
@@ -128,7 +128,7 @@ export default function DashboardFilters({
             <button
               type="button"
               onClick={onOpenPerformanceShare}
-              className="inline-flex h-[34px] w-full items-center justify-center whitespace-nowrap rounded-md bg-white/10 px-4 py-2 text-sm text-white hover:bg-white/20 md:hidden"
+              className="inline-flex min-h-[44px] w-full items-center justify-center whitespace-nowrap rounded-md bg-white/10 px-3 py-2 text-xs text-white hover:bg-white/20 md:hidden"
               title="Share performance"
               aria-label="Share performance"
             >

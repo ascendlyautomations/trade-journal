@@ -21,25 +21,35 @@ function FeedContentToggle({
   ]
 
   return (
-    <div className="flex justify-center mb-4">
-      <div className="flex gap-1 sm:gap-2 bg-white/5 p-1 rounded-xl border border-white/10">
+    <div className="mb-4 flex w-full min-w-0 justify-center px-1">
+      <div className="flex max-w-full flex-nowrap justify-center gap-1 bg-white/5 p-1 rounded-xl border border-white/10 sm:gap-2">
         {options.map(({ id, label }) => (
           <button
             key={id}
             type="button"
             onClick={() => onContentTypeChange(id)}
-            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+            aria-label={id === "achievements" ? "Achievements" : undefined}
+            title={id === "achievements" ? "Achievements" : undefined}
+            className={`inline-flex shrink-0 items-center justify-center rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors sm:px-4 sm:text-sm ${
               contentType === id
                 ? "bg-green-500 text-white shadow-sm"
                 : "text-gray-400 hover:text-gray-200"
             }`}
           >
-            {label}
+            {id === "achievements" ? (
+              <>
+                <span className="text-base leading-none sm:hidden" aria-hidden>
+                  🏆
+                </span>
+                <span className="hidden sm:inline">Achievements</span>
+              </>
+            ) : (
+              label
+            )}
           </button>
         ))}
       </div>
     </div>
   )
 }
-
 export default memo(FeedContentToggle)

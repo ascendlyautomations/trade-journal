@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import LandingComparisonSection from "./LandingComparisonSection"
+import LandingFeaturedTradesSection from "./landing/LandingFeaturedTradesSection"
 import LandingFeatureShowcaseSections from "./LandingFeatureShowcaseSections"
 import LandingFinalCtaSection from "./LandingFinalCtaSection"
 import LandingProblemSection from "./landing/LandingProblemSection"
@@ -284,6 +285,7 @@ export default function LandingPageClient() {
           <LandingFeatureShowcaseSections />
           <LandingAnalyticsShowcaseSection />
           <LandingComparisonSection />
+          <LandingFeaturedTradesSection />
           <LandingPricingSection
             checkoutLoading={checkoutLoading}
             onStartTrial={(interval) => void handleSubscribe(interval)}

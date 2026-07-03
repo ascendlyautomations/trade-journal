@@ -13,9 +13,12 @@ export const NOTIFICATION_AFFILIATE_TYPES = [
   "affiliate_commission_earned",
 ] as const
 
+export const NOTIFICATION_TRADING_REPORT_TYPES = ["trading_report"] as const
+
 export const NOTIFICATION_INBOX_TYPES = [
   ...NOTIFICATION_ENGAGEMENT_TYPES,
   ...NOTIFICATION_AFFILIATE_TYPES,
+  ...NOTIFICATION_TRADING_REPORT_TYPES,
 ] as const
 
 export type NotificationEngagementType =

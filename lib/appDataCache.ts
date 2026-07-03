@@ -105,11 +105,29 @@ export function isAccountsCacheLoading(userId: string | null | undefined): boole
   return accountsByUser.get(userId)?.loading === true
 }
 
+function notifyStreaksInvalidated(userId: string) {
+  void import("./userStreaksCache")
+    .then(({ invalidateUserStreaksCache }) => invalidateUserStreaksCache(userId))
+    .catch(() => {})
+}
+
+function notifyTradingReportsInvalidated(userId: string) {
+  void import("./tradingReports/tradingReportCache")
+    .then(({ invalidateTradingReportsCache }) => invalidateTradingReportsCache(userId))
+    .catch(() => {})
+}
+
 export function invalidateTradesCache(userId: string) {
   const entry = tradesByUser.get(userId)
-  if (!entry || entry.invalidated) return
+  if (!entry || entry.invalidated) {
+    notifyStreaksInvalidated(userId)
+    notifyTradingReportsInvalidated(userId)
+    return
+  }
   tradesByUser.set(userId, { ...entry, invalidated: true })
   notify()
+  notifyStreaksInvalidated(userId)
+  notifyTradingReportsInvalidated(userId)
 }
 
 export function invalidateAccountsCache(userId: string) {
@@ -183,6 +201,8 @@ export function upsertTradeInCache(userId: string, trade: Record<string, unknown
       : [{ ...trade }, ...current]
 
   setTradesCache(userId, next)
+  notifyStreaksInvalidated(userId)
+  notifyTradingReportsInvalidated(userId)
 }
 
 export function prependTradeInCache(userId: string, trade: Record<string, unknown>) {
@@ -196,6 +216,8 @@ export function prependTradeInCache(userId: string, trade: Record<string, unknow
     return
   }
   setTradesCache(userId, [{ ...trade }, ...current])
+  notifyStreaksInvalidated(userId)
+  notifyTradingReportsInvalidated(userId)
 }
 
 export function removeTradeFromCache(userId: string, tradeId: string) {
@@ -206,6 +228,8 @@ export function removeTradeFromCache(userId: string, tradeId: string) {
     userId,
     entry.data.filter((t) => tradeIdKey(t.id) !== id)
   )
+  notifyStreaksInvalidated(userId)
+  notifyTradingReportsInvalidated(userId)
 }
 
 export function mergeTradesInCache(userId: string, imported: any[]) {

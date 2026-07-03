@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import Navbar from "../components/Navbar"
 import { supabase } from "../../lib/supabaseClient"
 import {
   recordedAffiliateEarnings,
@@ -158,7 +157,6 @@ export default function ReferralsPage() {
   if (loading) {
     return (
       <>
-        <Navbar />
         <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white">
           Loading…
         </div>
@@ -168,7 +166,6 @@ export default function ReferralsPage() {
 
   return (
     <>
-      <Navbar />
 
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 py-8 text-white sm:px-6 lg:px-8">
         <div className="mx-auto max-w-5xl">

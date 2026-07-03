@@ -1,6 +1,5 @@
 "use client"
 
-import Navbar from "../components/Navbar"
 import { Card, EmptyState } from "@/app/components/ui"
 import { useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
@@ -45,7 +44,6 @@ export default function SearchPage() {
 
   return (
     <>
-      <Navbar />
 
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white p-6">
 

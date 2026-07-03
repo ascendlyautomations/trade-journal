@@ -85,6 +85,58 @@ export type PropfirmProgressResult = {
   distanceDanger: boolean
 }
 
+export type PropfirmEvalDisplayStatus = "ACTIVE" | "PASSED" | "FAILED"
+
+export type PropfirmFundedDisplayStatus = "FAILED" | "PAYOUT_READY"
+
+export type PropfirmPayoutQualificationInput = {
+  cycleProgress: PropfirmProgressResult
+  dailyDrawdownBreached: boolean
+  winningDaysRequired: boolean
+  winningDaysTargetMet: boolean
+  consistencyRequired: boolean
+  consistencyMet: boolean
+}
+
+/** Evaluation badge priority: Passed > Failed > Active. */
+export function computePropfirmEvalDisplayStatus(
+  cycleProgress: PropfirmProgressResult
+): PropfirmEvalDisplayStatus {
+  if (cycleProgress.isPassed) return "PASSED"
+  if (cycleProgress.isFailed) return "FAILED"
+  return "ACTIVE"
+}
+
+/** True when all payout-cycle rules are satisfied for a funded account. */
+export function isPropfirmPayoutReady(
+  input: PropfirmPayoutQualificationInput
+): boolean {
+  const {
+    cycleProgress,
+    dailyDrawdownBreached,
+    winningDaysRequired,
+    winningDaysTargetMet,
+    consistencyRequired,
+    consistencyMet,
+  } = input
+
+  if (cycleProgress.isFailed) return false
+  if (dailyDrawdownBreached) return false
+  if (!cycleProgress.isPassed) return false
+  if (winningDaysRequired && !winningDaysTargetMet) return false
+  if (consistencyRequired && !consistencyMet) return false
+  return true
+}
+
+/** Funded badge priority: Failed > Payout Ready > no badge. */
+export function computePropfirmFundedDisplayStatus(
+  input: PropfirmPayoutQualificationInput
+): PropfirmFundedDisplayStatus | null {
+  if (input.cycleProgress.isFailed) return "FAILED"
+  if (isPropfirmPayoutReady(input)) return "PAYOUT_READY"
+  return null
+}
+
 export type PayoutDrawdownBehavior = "reset_to_account" | "keep_trailing"
 
 export type PropfirmPayoutCycleContext = {

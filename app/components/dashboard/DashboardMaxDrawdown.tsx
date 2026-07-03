@@ -19,15 +19,15 @@ export default function DashboardMaxDrawdown({
 
   if (variant === "compact") {
     return (
-      <div className="rounded-xl border border-white/10 bg-white/10 p-3 md:p-4 backdrop-blur-md">
-        <h3 className="mb-2 text-xs md:text-sm text-gray-300">Max Drawdown</h3>
+      <div className="rounded-xl border border-white/10 bg-white/10 p-2.5 backdrop-blur-md md:p-4">
+        <h3 className="mb-1.5 text-[11px] text-gray-300 md:mb-2 md:text-sm">Max Drawdown</h3>
         {showEmpty ? (
-          <p className="text-gray-400 text-xs md:text-sm">
+          <p className="text-[11px] text-gray-400 md:text-sm">
             Add more trades to unlock this metric.
           </p>
         ) : (
           <>
-            <p className="text-sm md:text-lg font-semibold tabular-nums text-red-400">
+            <p className="text-xs font-semibold tabular-nums text-red-400 md:text-lg">
               {formatCurrency(maxDrawdown)}
             </p>
             <p className="mt-1 text-[11px] md:text-xs text-gray-400">

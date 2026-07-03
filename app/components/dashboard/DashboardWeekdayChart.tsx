@@ -29,15 +29,15 @@ export default function DashboardWeekdayChart({
   const showEmpty = totalTrades === 0
 
   return (
-    <div className="flex min-h-[300px] h-full flex-col rounded-xl border border-white/10 bg-white/10 p-3 md:p-4 backdrop-blur-md">
-      <h2 className="mb-3 text-sm md:text-base font-semibold text-blue-300">
+    <div className="flex min-h-[260px] h-full flex-col rounded-xl border border-white/10 bg-white/10 p-2.5 backdrop-blur-md md:min-h-[300px] md:p-4">
+      <h2 className="mb-2 text-xs font-semibold text-blue-300 md:mb-3 md:text-base">
         P&amp;L by Weekday
       </h2>
       {showEmpty ? (
         <EmptyState
           title="Not Enough Data Yet"
           description="Add more trades to unlock detailed analytics."
-          className="py-8"
+          className="py-5 md:py-8"
         />
       ) : (
       <div className="w-full overflow-hidden">

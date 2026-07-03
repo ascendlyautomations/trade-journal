@@ -5,6 +5,8 @@ const {
   buildPropfirmEquityCurveData,
   buildPropfirmEquityEvents,
   computePropfirmAccountMetrics,
+  computePropfirmEvalDisplayStatus,
+  computePropfirmFundedDisplayStatus,
   computePropfirmEquityCurveYDomain,
   computePropfirmEquityCurveYTicks,
   computeConsistencyRule,
@@ -664,5 +666,112 @@ describe("getPropfirmTradingDay", () => {
     const map = buildDailyPnLMap(trades)
     assert.equal(map["2024-01-08"], 100)
     assert.equal(map["2024-01-09"], 50)
+  })
+})
+
+describe("propfirm account display status", () => {
+  const passedProgress = {
+    totalPnL: 3000,
+    progressPercent: 100,
+    isPassed: true,
+    isFailed: false,
+    status: "PASSED" as const,
+    ddPercent: 10,
+    distanceDanger: false,
+  }
+
+  const failedProgress = {
+    totalPnL: -500,
+    progressPercent: 0,
+    isPassed: false,
+    isFailed: true,
+    status: "FAILED" as const,
+    ddPercent: 100,
+    distanceDanger: false,
+  }
+
+  const activeProgress = {
+    totalPnL: 500,
+    progressPercent: 16,
+    isPassed: false,
+    isFailed: false,
+    status: "IN PROGRESS" as const,
+    ddPercent: 5,
+    distanceDanger: false,
+  }
+
+  it("eval status priority: passed > failed > active", () => {
+    assert.equal(computePropfirmEvalDisplayStatus(passedProgress), "PASSED")
+    assert.equal(computePropfirmEvalDisplayStatus(failedProgress), "FAILED")
+    assert.equal(computePropfirmEvalDisplayStatus(activeProgress), "ACTIVE")
+  })
+
+  it("funded status shows failed when max loss is exceeded", () => {
+    assert.equal(
+      computePropfirmFundedDisplayStatus({
+        cycleProgress: failedProgress,
+        dailyDrawdownBreached: false,
+        winningDaysRequired: false,
+        winningDaysTargetMet: true,
+        consistencyRequired: false,
+        consistencyMet: true,
+      }),
+      "FAILED"
+    )
+  })
+
+  it("funded status shows payout ready when all payout rules pass", () => {
+    assert.equal(
+      computePropfirmFundedDisplayStatus({
+        cycleProgress: passedProgress,
+        dailyDrawdownBreached: false,
+        winningDaysRequired: true,
+        winningDaysTargetMet: true,
+        consistencyRequired: true,
+        consistencyMet: true,
+      }),
+      "PAYOUT_READY"
+    )
+  })
+
+  it("funded status omits badge when profit target is not met", () => {
+    assert.equal(
+      computePropfirmFundedDisplayStatus({
+        cycleProgress: activeProgress,
+        dailyDrawdownBreached: false,
+        winningDaysRequired: false,
+        winningDaysTargetMet: true,
+        consistencyRequired: false,
+        consistencyMet: true,
+      }),
+      null
+    )
+  })
+
+  it("funded status omits badge when passed profit target but daily dd breached", () => {
+    assert.equal(
+      computePropfirmFundedDisplayStatus({
+        cycleProgress: passedProgress,
+        dailyDrawdownBreached: true,
+        winningDaysRequired: false,
+        winningDaysTargetMet: true,
+        consistencyRequired: false,
+        consistencyMet: true,
+      }),
+      null
+    )
+  })
+
+  it("funded status never returns passed", () => {
+    const fundedStatus = computePropfirmFundedDisplayStatus({
+      cycleProgress: passedProgress,
+      dailyDrawdownBreached: false,
+      winningDaysRequired: false,
+      winningDaysTargetMet: true,
+      consistencyRequired: false,
+      consistencyMet: true,
+    })
+    assert.notEqual(fundedStatus, "PASSED")
+    assert.equal(fundedStatus, "PAYOUT_READY")
   })
 })

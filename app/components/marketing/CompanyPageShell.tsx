@@ -1,5 +1,11 @@
 import type { ReactNode } from "react"
 import Link from "next/link"
+import {
+  COMPANY_PAGE_BACK_GAP,
+  COMPANY_PAGE_HEADER_MARGIN,
+  COMPANY_PAGE_SHELL,
+  COMPANY_PAGE_TOP,
+} from "@/lib/companyPageUi"
 
 type CompanyPageShellProps = {
   title: string
@@ -8,6 +14,7 @@ type CompanyPageShellProps = {
   backHref?: string
   backLabel?: string
   maxWidthClass?: string
+  heroActions?: ReactNode
 }
 
 export function CompanySectionCard({
@@ -84,22 +91,25 @@ export default function CompanyPageShell({
   backHref = "/",
   backLabel = "← Back to home",
   maxWidthClass = "max-w-3xl",
+  heroActions,
 }: CompanyPageShellProps) {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 pb-12 pt-28 text-white sm:px-6 sm:pb-16 sm:pt-32">
+    <div className={`${COMPANY_PAGE_SHELL} ${COMPANY_PAGE_TOP}`}>
       <div className={`mx-auto w-full ${maxWidthClass}`}>
-        <p className="mb-8 text-center">
-          <Link href={backHref} className="text-sm text-gray-400 transition hover:text-gray-200">
+        <header className={`${COMPANY_PAGE_HEADER_MARGIN} text-center`}>
+          <Link
+            href={backHref}
+            className={`${COMPANY_PAGE_BACK_GAP} inline-block text-sm text-gray-400 transition hover:text-gray-200`}
+          >
             {backLabel}
           </Link>
-        </p>
-        <header className="mb-10 text-center md:mb-12">
           <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent md:text-4xl">
             {title}
           </h1>
           <p className="mx-auto mt-4 max-w-2xl text-sm leading-relaxed text-gray-400 sm:text-base">
             {subtitle}
           </p>
+          {heroActions}
         </header>
         {children}
       </div>

@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
-import Navbar from "../components/Navbar"
 import { useRouter } from "next/navigation"
 import InputTradeForm from "../components/InputTradeForm"
 import { formatEST } from "@/lib/formatEST"
@@ -67,7 +66,6 @@ export default function ReviewPage() {
   if (loading) {
     return (
       <>
-        <Navbar />
         <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white p-10">
           Loading trades...
         </div>
@@ -78,7 +76,6 @@ export default function ReviewPage() {
   if (!trades.length) {
     return (
       <>
-        <Navbar />
         <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white">
           <div className="text-center">
             <h1 className="text-2xl font-bold">No trades left to review 🎉</h1>
@@ -97,7 +94,6 @@ export default function ReviewPage() {
 
   return (
     <>
-      <Navbar />
 
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white">
         <div className="max-w-6xl mx-auto p-4 md:p-8">

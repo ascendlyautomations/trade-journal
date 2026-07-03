@@ -63,8 +63,11 @@ export default function LandingPricingSection({
       aria-labelledby="pricing-heading"
     >
       <div className={LANDING_SECTION_SHELL}>
-        <header className="mx-auto mb-8 max-w-2xl text-center md:mb-16">
-          <h2 id="pricing-heading" className={`${LANDING_HEADLINE_SM}`}>
+        <header className="mx-auto mb-8 max-w-4xl text-center md:mb-16">
+          <h2
+            id="pricing-heading"
+            className={`${LANDING_HEADLINE_SM} md:whitespace-nowrap`}
+          >
             Start Free.{" "}
             <span className={LANDING_TITLE_GRADIENT}>Upgrade When You&apos;re Ready.</span>
           </h2>

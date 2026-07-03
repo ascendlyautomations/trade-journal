@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useId, useRef, useState } from "react"
+import { useCallback, useEffect, useId, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import TradeShareCard from "./TradeShareCard"
 import ShareToConversationsModal from "./ShareToConversationsModal"
@@ -41,6 +41,7 @@ export default function ShareTradeButton({
   const [busy, setBusy] = useState(false)
   const [isOpen, setIsOpen] = useState(false)
   const [conversationOpen, setConversationOpen] = useState(false)
+  const [exportHostReady, setExportHostReady] = useState(false)
   const lockRef = useRef(false)
   const instanceId = useId().replace(/:/g, "")
   const exportDomId = tradeShareExportDomId(trade, instanceId)
@@ -48,6 +49,10 @@ export default function ShareTradeButton({
     trade?.id != null && String(trade.id).trim() !== ""
       ? String(trade.id)
       : null
+
+  useEffect(() => {
+    setExportHostReady(true)
+  }, [])
 
   const handleDownload = useCallback(async () => {
     if (lockRef.current) return
@@ -94,20 +99,29 @@ export default function ShareTradeButton({
   return (
     <>
       <FeedbackModal {...feedbackModalProps} />
-      {mode === "full" ? (
-        <div
-          className="pointer-events-none fixed top-0 overflow-hidden"
-          style={{
-            left: 0,
-            width: TRADE_SHARE_EXPORT_WIDTH,
-            opacity: 0,
-            zIndex: -1,
-          }}
-          aria-hidden
-        >
-          <TradeShareCard trade={trade} exportId={exportDomId} profile={profile} />
-        </div>
-      ) : null}
+      {mode === "full" && exportHostReady
+        ? createPortal(
+            <div
+              className="pointer-events-none fixed left-0 top-0 overflow-hidden"
+              style={{
+                width: 0,
+                height: 0,
+                opacity: 0,
+                zIndex: -1,
+              }}
+              aria-hidden
+            >
+              <div style={{ width: TRADE_SHARE_EXPORT_WIDTH }}>
+                <TradeShareCard
+                  trade={trade}
+                  exportId={exportDomId}
+                  profile={profile}
+                />
+              </div>
+            </div>,
+            document.body
+          )
+        : null}
 
       <button
         type="button"

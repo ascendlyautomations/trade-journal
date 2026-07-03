@@ -7,7 +7,14 @@ import { useGettingStartedProgress } from "@/lib/GettingStartedProgressProvider"
 import { shouldOfferGettingStartedChecklist } from "@/lib/gettingStartedChecklist"
 import { useUserProfile } from "@/lib/useUserProfile"
 
-export default function GettingStartedMobileEntry() {
+type GettingStartedMobileEntryProps = {
+  /** Header chip crowds the hamburger on small screens — use `menu` in the slide-out nav. */
+  placement?: "header" | "menu"
+}
+
+export default function GettingStartedMobileEntry({
+  placement = "header",
+}: GettingStartedMobileEntryProps) {
   const pathname = usePathname()
   const { user } = useUserProfile()
   const {
@@ -60,8 +67,20 @@ export default function GettingStartedMobileEntry() {
 
   const { completedCount, totalCount } = progress
 
-  return (
-    <>
+  const openButton =
+    placement === "menu" ? (
+      <button
+        type="button"
+        onClick={() => setDrawerOpen(true)}
+        className="w-full rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-left text-sm font-medium text-emerald-200 transition hover:bg-emerald-500/20"
+        aria-label={`Complete setup, ${completedCount} of ${totalCount} tasks done`}
+      >
+        Complete Setup
+        <span className="ml-1 tabular-nums text-emerald-300/80">
+          ({completedCount}/{totalCount})
+        </span>
+      </button>
+    ) : (
       <button
         type="button"
         onClick={() => setDrawerOpen(true)}
@@ -73,6 +92,11 @@ export default function GettingStartedMobileEntry() {
           ({completedCount}/{totalCount})
         </span>
       </button>
+    )
+
+  return (
+    <>
+      {openButton}
 
       {drawerOpen ? (
         <div

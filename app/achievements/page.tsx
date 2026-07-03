@@ -1,11 +1,11 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import Navbar from "../components/Navbar"
 import AchievementCard from "../components/AchievementCard"
 import AchievementUploadModal, {
   type AchievementUploadInitialValues,
 } from "../components/AchievementUploadModal"
+import SystemMilestonesSection from "@/app/components/milestones/SystemMilestonesSection"
 import { ConfirmModal, useDeleteAchievementConfirmation } from "../components/ui"
 import { supabase } from "../../lib/supabaseClient"
 import {
@@ -20,10 +20,12 @@ import {
 import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 import { useUserProfile } from "@/lib/UserProfileProvider"
+import { useUserStreaks } from "@/lib/useUserStreaks"
 
 export default function AchievementsPage() {
   const { user, loading: profileLoading } = useUserProfile()
   const userId = user?.id ?? null
+  const { snapshot: streakSnapshot, loading: streaksLoading } = useUserStreaks(userId)
   const [achievements, setAchievements] = useState<Achievement[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -68,9 +70,14 @@ export default function AchievementsPage() {
   }, [achievements, filter])
 
   const featured = useMemo(
-    () => achievements.filter((a) => a.is_featured),
+    () =>
+      achievements.filter(
+        (a) => a.is_featured && !achievementMatchesPageFilter(a, "milestones")
+      ),
     [achievements]
   )
+
+  const showMilestonesTab = filter === "milestones"
 
   const visible = filteredAchievements
 
@@ -123,7 +130,6 @@ export default function AchievementsPage() {
 
   return (
     <>
-      <Navbar />
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 py-8 text-gray-100 sm:px-6">
         <div className="mx-auto max-w-6xl space-y-5">
           <div className="flex flex-col gap-3 rounded-xl border border-white/10 bg-white/5 p-5 sm:flex-row sm:items-center sm:justify-between">
@@ -132,7 +138,7 @@ export default function AchievementsPage() {
                 Achievements
               </h1>
               <p className="text-sm text-gray-300">
-                Track payouts, milestones, and consistency wins.
+                Track payouts, passed evals, and trading milestones.
               </p>
             </div>
             <button
@@ -181,7 +187,29 @@ export default function AchievementsPage() {
             </div>
           ) : null}
 
-          {!loading && featured.length > 0 ? (
+          {showMilestonesTab ? (
+            <>
+              <SystemMilestonesSection
+                userId={userId}
+                signals={streakSnapshot?.milestoneSignals}
+                loading={profileLoading || streaksLoading}
+              />
+              {!loading && visible.length > 0 ? (
+                <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {visible.map((a) => (
+                    <AchievementCard
+                      key={a.id}
+                      achievement={a}
+                      onEdit={() => openEdit(a)}
+                      onDelete={() => requestDelete(a.id)}
+                    />
+                  ))}
+                </section>
+              ) : null}
+            </>
+          ) : null}
+
+          {!showMilestonesTab && !loading && featured.length > 0 ? (
             <section className="space-y-3">
               <div className="flex items-center justify-between">
                 <h2 className="text-lg font-semibold text-white">Featured</h2>
@@ -200,7 +228,7 @@ export default function AchievementsPage() {
             </section>
           ) : null}
 
-          {loading ? (
+          {showMilestonesTab ? null : loading ? (
             <div className="rounded-xl border border-white/10 bg-white/5 p-6 text-center text-gray-300">
               Loading achievements...
             </div>
@@ -213,7 +241,7 @@ export default function AchievementsPage() {
               </p>
               <p className="mt-2 text-sm text-gray-400">
                 {achievements.length === 0
-                  ? "Add milestones like first payout, passed eval, profit targets, or consistency streaks."
+                  ? "Add payouts, passed evals, and milestone moments you want to remember."
                   : "Try another filter or add a new achievement."}
               </p>
             </div>

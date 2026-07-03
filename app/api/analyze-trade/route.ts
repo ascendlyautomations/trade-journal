@@ -1,6 +1,11 @@
 import OpenAI from "openai"
 import { createClient } from "@supabase/supabase-js"
 import { NextResponse } from "next/server"
+import {
+  ANALYZE_TRADE_SYSTEM_PROMPT,
+  buildAnalyzeTradeHistoryContext,
+  buildTradeAnalysisPrompt,
+} from "@/lib/analyzeTradePrompt"
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -41,77 +46,6 @@ function isOpenAiImageFetchError(error: unknown): boolean {
   )
 }
 
-function buildTradePrompt(trade: Record<string, unknown>) {
-  return `
-You are a strict trading performance coach.
-
-You must analyze this trade using ONLY the data provided.
-Do NOT assume anything that is not explicitly given.
-
-Be critical, direct, and specific. Avoid generic praise.
-
----
-
-TRADE DATA:
-
-P&L: ${trade.pnl}
-RR: ${trade.rr}
-Direction: ${trade.direction}
-
-Entry Price: ${trade.entry_price}
-Exit Price: ${trade.exit_price}
-
-Trader Notes:
-${trade.notes || "None provided"}
-
-Top Confluences:
-${trade.confluences || trade.top_confluences || "None provided"}
-
-Mistakes:
-${trade.mistakes || "None provided"}
-
-Psychology:
-${trade.psychology || trade.psychology_notes || "None provided"}
-
----
-
-RULES:
-
-* If notes are empty → explicitly say the trade lacks context
-* If mistakes are empty → question whether the trader reviewed the trade properly
-* Do NOT assume strategy (e.g. Fibonacci, breakout) unless stated
-* Do NOT praise without explanation
-* If RR is high → evaluate whether it was skill or luck
-* If trade is profitable → still identify flaws
-
----
-
-OUTPUT FORMAT:
-
-1. EXECUTION
-   Was the entry and exit actually justified based on the trader's notes?
-
-2. RISK MANAGEMENT
-   Was the RR realistic and planned, or just outcome-based?
-
-3. PSYCHOLOGY
-   What does the trader's input reveal about discipline or emotion?
-
-4. WHAT YOU DID WRONG
-   Be direct. Identify real issues.
-
-5. WHAT TO IMPROVE
-   Give specific, actionable improvements.
-
-6. FINAL VERDICT
-   Short, blunt summary (1–2 sentences max).
-
----
-
-Be concise. Be honest. Be critical.
-`
-}
-
 function buildOpenAiMessages(
   prompt: string,
   imageUrl: string | null,
@@ -120,8 +54,7 @@ function buildOpenAiMessages(
   return [
     {
       role: "system" as const,
-      content:
-        "Follow the user message: use only supplied trade fields, obey the rules and numbered output format.",
+      content: ANALYZE_TRADE_SYSTEM_PROMPT,
     },
     {
       role: "user" as const,
@@ -255,7 +188,23 @@ export async function POST(req: Request) {
     }
 
     const imageUrl = resolveScreenshotPublicUrl(existingTrade.image_url)
-    const prompt = buildTradePrompt(trade)
+
+    const { data: historyRows } = await supabaseAdmin
+      .from("trades")
+      .select(
+        "id, ticker, pnl, rr, direction, session, strategy, created_at, duration_seconds, duration_text, entry_time, exit_time"
+      )
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(120)
+
+    const historyContext = buildAnalyzeTradeHistoryContext(
+      historyRows ?? [],
+      String(tradeId)
+    )
+    const prompt = buildTradeAnalysisPrompt(trade, historyContext, {
+      hasScreenshot: Boolean(imageUrl),
+    })
     const priorMessages = Array.isArray(messages) ? messages : []
 
     const response = await createTradeAnalysisCompletion(

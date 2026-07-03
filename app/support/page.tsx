@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import Navbar from "../components/Navbar"
 import { supabase } from "../../lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
 import { notifyAdminSubmission } from "@/lib/notifyAdminSubmission"
@@ -166,7 +165,6 @@ export default function SupportPage() {
 
   return (
     <>
-      <Navbar />
       <div className={submissionPageShell}>
         <div className={submissionPageContainer}>
           <form onSubmit={handleSubmit} className={submissionFormCard}>

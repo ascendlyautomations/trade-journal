@@ -10,7 +10,6 @@ import {
   type ChangeEvent,
 } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import Navbar from "../components/Navbar"
 import PopularTradeRoomsPanel from "../components/dashboard/PopularTradeRoomsPanel"
 import EmptyState from "../components/ui/EmptyState"
 import {
@@ -2911,7 +2910,6 @@ function CommunityContent() {
 
   return (
     <>
-      <Navbar />
       <FeedbackModal {...feedbackModalProps} />
       <RoomNotificationSettingsSheet
         open={showRoomNotificationSettings}
@@ -4573,7 +4571,6 @@ export default function CommunityPage() {
     <Suspense
       fallback={
         <>
-          <Navbar />
           <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] p-4 text-white md:p-6">
             <SkeletonCommunityPage />
           </div>

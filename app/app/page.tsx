@@ -1,6 +1,5 @@
 "use client"
 
-import Navbar from "../components/Navbar"
 import InputTradeForm from "../components/InputTradeForm"
 import QuickTradeModal from "../components/QuickTradeModal"
 import CsvImportFailureModal from "../components/CsvImportFailureModal"
@@ -286,7 +285,6 @@ export default function Home() {
 
   return (
     <>
-      <Navbar />
       <FeedbackModal {...feedbackModalProps} />
       <CsvImportFailureModal
         open={failureModalOpen}

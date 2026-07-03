@@ -2,7 +2,6 @@
 
 import { Suspense, useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import Navbar from "@/app/components/Navbar"
 import { supabase } from "@/lib/supabaseClient"
 import { CSV_SUPPORT_BROKERS } from "@/lib/csvBrokerHint"
 import { submitCsvSupportRequest } from "@/lib/submitCsvSupportRequest"
@@ -167,7 +166,6 @@ function CsvSupportForm() {
 export default function CsvSupportPage() {
   return (
     <>
-      <Navbar />
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 py-8 md:px-6 text-white">
         <div className="mx-auto w-full max-w-2xl">
           <Suspense

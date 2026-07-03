@@ -21,7 +21,12 @@ export const MARKETING_EXACT_PATHS = [
 ] as const
 
 /** Legal pages that share the marketing navbar when logged out. */
-export const PUBLIC_LEGAL_EXACT_PATHS = ["/privacy", "/terms"] as const
+export const PUBLIC_LEGAL_EXACT_PATHS = [
+  "/privacy",
+  "/terms",
+  "/cookie-policy",
+  "/acceptable-use",
+] as const
 
 function matchesPrefix(pathname: string, prefixes: readonly string[]): boolean {
   return prefixes.some(

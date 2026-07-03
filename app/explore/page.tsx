@@ -2,7 +2,6 @@
 
 import Link from "next/link"
 import { ProfileAvatarImg } from "@/app/components/SafeProfileAvatar"
-import Navbar from "../components/Navbar"
 import FollowButton from "../components/FollowButton"
 import EmptyState from "../components/ui/EmptyState"
 import { SkeletonExplorePage, SkeletonTraderCard } from "../components/ui/skeletons"
@@ -562,7 +561,6 @@ export default function ExplorePage() {
 
   return (
     <>
-      <Navbar />
 
       <div className="w-full text-white px-2 pb-3 pt-0 md:px-4 md:pb-10">
         <div className="relative z-0 mx-auto mt-2.5 flex w-full max-w-[1600px] flex-col gap-3 px-1 md:gap-4 md:px-6">

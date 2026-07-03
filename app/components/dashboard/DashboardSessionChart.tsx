@@ -47,20 +47,20 @@ export default function DashboardSessionChart({
   const showEmpty = totalTrades === 0
 
   return (
-    <div className="flex min-h-[300px] h-full flex-col rounded-xl border border-white/10 bg-white/10 p-3 md:p-4 backdrop-blur-md">
-      <h2 className="mb-3 text-sm md:text-base font-semibold text-blue-300">
+    <div className="flex min-h-[260px] h-full flex-col rounded-xl border border-white/10 bg-white/10 p-2.5 backdrop-blur-md md:min-h-[300px] md:p-4">
+      <h2 className="mb-2 text-xs font-semibold text-blue-300 md:mb-3 md:text-base">
         Session Performance
       </h2>
       {showEmpty ? (
         <EmptyState
           title="Not Enough Data Yet"
           description="Add more trades to unlock detailed analytics."
-          className="py-8"
+          className="py-5 md:py-8"
         />
       ) : (
-      <div className="flex flex-1 flex-col gap-4">
-        <div className="flex min-h-[240px] flex-col">
-          <p className="mb-2 text-xs md:text-sm text-gray-300">Trades by Session</p>
+      <div className="flex flex-1 flex-col gap-3 md:gap-4">
+        <div className="flex min-h-[220px] flex-col md:min-h-[240px]">
+          <p className="mb-1.5 text-[11px] text-gray-300 md:mb-2 md:text-sm">Trades by Session</p>
           <div className="min-h-0 flex-1 w-full overflow-hidden">
             <ResponsiveContainer width="100%" height={240}>
               <PieChart>
@@ -91,8 +91,8 @@ export default function DashboardSessionChart({
           </div>
         </div>
         <div className="flex flex-col">
-          <p className="mb-2 text-xs md:text-sm text-gray-300">Session breakdown</p>
-          <div className="grid grid-cols-3 gap-2 md:gap-3">
+          <p className="mb-1.5 text-[11px] text-gray-300 md:mb-2 md:text-sm">Session breakdown</p>
+          <div className="grid grid-cols-3 gap-1.5 md:gap-3">
             {DASHBOARD_SESSION_DISPLAY_ORDER.map((name) => {
               const s = sessionBuckets[name]
               const wr = s.totalTrades ? (s.wins / s.totalTrades) * 100 : 0
@@ -105,9 +105,9 @@ export default function DashboardSessionChart({
               return (
                 <div
                   key={name}
-                  className="rounded-lg border border-white/10 bg-white/5 p-2 md:p-3 text-center text-xs md:text-sm"
+                  className="rounded-lg border border-white/10 bg-white/5 p-1.5 text-center text-[10px] md:p-3 md:text-sm"
                 >
-                  <p className={`mb-2 font-semibold ${titleColor}`}>{name}</p>
+                  <p className={`mb-1 font-semibold md:mb-2 ${titleColor}`}>{name}</p>
                   <p className="text-gray-300">
                     <span className="text-gray-400">Trades:</span>{" "}
                     {formatNumber(s.totalTrades)}
@@ -116,7 +116,7 @@ export default function DashboardSessionChart({
                     <span className="text-gray-400">Win rate:</span> {wr.toFixed(1)}%
                   </p>
                   <p
-                    className={`mt-1 text-sm md:text-lg font-semibold tabular-nums ${
+                    className={`mt-0.5 text-xs font-semibold tabular-nums md:mt-1 md:text-lg ${
                       s.totalPnL >= 0 ? "text-green-400" : "text-red-400"
                     }`}
                   >

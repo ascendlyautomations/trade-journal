@@ -2,7 +2,6 @@
 
 import { useRouter } from "next/navigation"
 import { useEffect } from "react"
-import Navbar from "../components/Navbar"
 import { supabase } from "../../lib/supabaseClient"
 import { useUserProfile } from "../../lib/useUserProfile"
 
@@ -29,7 +28,6 @@ export default function BannedPage() {
 
   return (
     <>
-      <Navbar />
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 py-12 text-white">
         <div className="mx-auto max-w-lg rounded-2xl border border-red-500/30 bg-red-950/40 p-8 text-center shadow-2xl backdrop-blur-xl">
           <h1 className="text-2xl font-semibold text-red-200">Account restricted</h1>

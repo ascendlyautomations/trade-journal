@@ -10,6 +10,7 @@ import {
   TRADETRAXS_FREE_PLAN,
   TRADETRAXS_PRO_PLAN,
 } from "@/lib/tradeTraxsPlans"
+import { COMPANY_PAGE_TOP } from "@/lib/companyPageUi"
 
 const faqs = [
   {
@@ -71,7 +72,9 @@ export default function FAQPage() {
 
   return (
     <>
-      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white px-6 py-12">
+      <div
+        className={`min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-6 pb-12 text-white ${COMPANY_PAGE_TOP}`}
+      >
         <h1 className="mb-2 text-center text-3xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
           FAQ
         </h1>

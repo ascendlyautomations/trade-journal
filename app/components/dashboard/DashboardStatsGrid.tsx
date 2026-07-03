@@ -86,11 +86,11 @@ function Stat({
       : String(value ?? "")
 
   return (
-    <div className="flex min-h-[90px] w-full flex-col items-center justify-center rounded-xl border border-white/10 bg-white/10 p-3 text-center backdrop-blur-md md:p-4">
-      <p className="text-xs md:text-sm text-gray-300 mb-1">{title}</p>
+    <div className="flex min-h-[76px] w-full flex-col items-center justify-center rounded-xl border border-white/10 bg-white/10 p-2.5 text-center backdrop-blur-md md:min-h-[90px] md:p-4">
+      <p className="mb-0.5 text-[11px] text-gray-300 md:mb-1 md:text-sm">{title}</p>
       <div className="w-full text-center">
         <span
-          className={`block font-semibold text-base md:text-lg lg:text-xl text-center leading-tight whitespace-nowrap tabular-nums ${color}`}
+          className={`block text-center text-sm font-semibold leading-tight whitespace-nowrap tabular-nums md:text-lg lg:text-xl ${color}`}
         >
           {displayValue}
         </span>
@@ -121,8 +121,8 @@ export default function DashboardStatsGrid({
   maxDrawdownSlot,
 }: DashboardStatsGridProps) {
   return (
-    <div className="flex flex-col gap-4 md:block md:space-y-4">
-      <div className="grid grid-cols-2 gap-3 md:gap-3">
+    <div className="flex flex-col gap-3 md:block md:space-y-4">
+      <div className="grid grid-cols-2 gap-2 md:gap-3">
         <Stat title="Trades" value={formatNumber(totalTrades)} />
         <Stat title="Win %" value={`${winRate.toFixed(1)}%`} />
         <Stat title="Avg RR" value={formatRR(avgRR)} />
@@ -150,14 +150,14 @@ export default function DashboardStatsGrid({
         <Stat title="Worst Day" value={formatCurrency(worstDay)} positive={false} />
       </div>
 
-      <div className="rounded-xl border border-white/10 bg-white/10 p-3 md:p-4 backdrop-blur-md">
-        <h3 className="text-xs md:text-sm text-gray-300">
+      <div className="rounded-xl border border-white/10 bg-white/10 p-2.5 backdrop-blur-md md:p-4">
+        <h3 className="text-[11px] text-gray-300 md:text-sm">
           Expectancy
           {expectancyData ? (
             <>
               {" "}
               <span
-                className={`font-semibold tabular-nums text-sm md:text-lg ${
+                className={`text-xs font-semibold tabular-nums md:text-lg ${
                   expectancyData.expectancy >= 0
                     ? "text-green-400"
                     : "text-red-400"
@@ -170,18 +170,18 @@ export default function DashboardStatsGrid({
         </h3>
 
         {!expectancyData ? (
-          <p className="mt-2 text-gray-400 text-xs md:text-sm">
+          <p className="mt-1.5 text-[11px] text-gray-400 md:mt-2 md:text-sm">
             Add more trades to unlock this metric.
           </p>
         ) : null}
       </div>
 
-      <div className="rounded-xl border border-white/10 bg-white/10 p-3 md:p-4 backdrop-blur-md">
-        <h3 className="mb-2 text-xs md:text-sm text-gray-300">Streaks</h3>
+      <div className="rounded-xl border border-white/10 bg-white/10 p-2.5 backdrop-blur-md md:p-4">
+        <h3 className="mb-1.5 text-[11px] text-gray-300 md:mb-2 md:text-sm">Streaks</h3>
 
         {streakData ? (
           <>
-            <p className="text-sm md:text-lg font-semibold text-white">
+            <p className="text-xs font-semibold text-white md:text-lg">
               Current: {streakData.currentStreak}{" "}
               <span
                 className={
@@ -196,13 +196,13 @@ export default function DashboardStatsGrid({
               </span>
             </p>
 
-            <div className="text-[11px] md:text-xs text-gray-400 mt-2 space-y-1">
+            <div className="mt-1.5 space-y-0.5 text-[10px] text-gray-400 md:mt-2 md:space-y-1 md:text-xs">
               <p>Max Wins: {streakData.maxWinStreak}</p>
               <p>Max Losses: {streakData.maxLossStreak}</p>
             </div>
           </>
         ) : (
-          <p className="text-gray-400 text-xs md:text-sm">
+          <p className="text-[11px] text-gray-400 md:text-sm">
             Not enough trading history yet.
           </p>
         )}
@@ -212,23 +212,23 @@ export default function DashboardStatsGrid({
         {showSessions ? mobileSessionsSlot : null}
       </div>
 
-      <div className="rounded-xl border border-white/10 bg-white/10 p-3 md:p-4 backdrop-blur-md">
-        <h3 className="mb-2 text-xs md:text-sm text-gray-300">Trading Hours</h3>
+      <div className="rounded-xl border border-white/10 bg-white/10 p-2.5 backdrop-blur-md md:p-4">
+        <h3 className="mb-1.5 text-[11px] text-gray-300 md:mb-2 md:text-sm">Trading Hours</h3>
 
         {hourData === null ? (
-          <p className="text-gray-400 text-xs md:text-sm">
+          <p className="text-[11px] text-gray-400 md:text-sm">
             Track additional trades to view insights.
           </p>
         ) : !hourData.hasValidTradingHoursData ? (
-          <p className="text-white/60 text-sm">
+          <p className="text-xs text-white/60 md:text-sm">
             Add entry/exit times to unlock trading hour insights
           </p>
         ) : (
           <>
-            <p className="text-green-400">
+            <p className="text-xs text-green-400 md:text-sm">
               {`Best: ${formatHour(hourData.bestHour!)} (${formatCurrency(hourData.hourlyMap[hourData.bestHour!])})`}
             </p>
-            <p className="text-red-400">
+            <p className="text-xs text-red-400 md:text-sm">
               {`Worst: ${formatHour(hourData.worstHour!)} (${formatCurrency(hourData.hourlyMap[hourData.worstHour!])})`}
             </p>
           </>

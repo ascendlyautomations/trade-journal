@@ -3,7 +3,6 @@
 import Link from "next/link"
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import Navbar from "@/app/components/Navbar"
 import AffiliatePayoutSetupCard from "@/app/components/AffiliatePayoutSetupCard"
 import AffiliatePayoutRequestModal from "@/app/components/AffiliatePayoutRequestModal"
 import {
@@ -294,7 +293,6 @@ export default function AffiliatePayoutsPage() {
 
   return (
     <>
-      <Navbar />
 
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white">
         <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:p-10">

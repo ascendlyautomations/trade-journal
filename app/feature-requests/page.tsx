@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import Navbar from "../components/Navbar"
 import { supabase } from "../../lib/supabaseClient"
 import { submitFeatureRequest } from "@/lib/featureRequests"
 import {
@@ -118,7 +117,6 @@ export default function FeatureRequestsPage() {
 
   return (
     <>
-      <Navbar />
       <div className={submissionPageShell}>
         <div className={submissionPageContainer}>
           <form onSubmit={handleSubmit} className={submissionFormCard}>

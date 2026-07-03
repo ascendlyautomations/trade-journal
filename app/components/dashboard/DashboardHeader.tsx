@@ -14,7 +14,7 @@ export function DashboardPlanIndicator({
   className = "",
 }: DashboardPlanIndicatorProps) {
   return (
-    <div className={`shrink-0 text-sm text-white/70 ${className}`}>
+    <div className={`shrink-0 text-xs text-white/70 md:text-sm ${className}`}>
       Plan:{" "}
       <span
         className={`font-medium ${isPro ? "text-green-400" : "text-gray-300"}`}
@@ -31,8 +31,8 @@ export default function DashboardHeader({
   return (
     <>
       {showFreePlanAccountBanner ? (
-        <div className="mb-4 rounded border border-yellow-500/20 bg-yellow-500/10 p-3 md:p-4">
-          <p className="text-xs md:text-sm text-yellow-300">
+        <div className="mb-3 rounded border border-yellow-500/20 bg-yellow-500/10 p-2.5 md:mb-4 md:p-4">
+          <p className="text-[11px] text-yellow-300 md:text-sm">
             Free plan: up to 3 accounts. Upgrade for unlimited accounts.
           </p>
         </div>

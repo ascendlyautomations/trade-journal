@@ -3,7 +3,6 @@
 import Link from "next/link"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import Navbar from "@/app/components/Navbar"
 import {
   activityRowKey,
   betaActivityKindLabel,
@@ -162,7 +161,6 @@ export default function AdminBetaDashboardPage() {
   if (checking || !allowed) {
     return (
       <>
-        <Navbar />
         <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] p-8 text-white">
           Checking admin access...
         </div>
@@ -174,7 +172,6 @@ export default function AdminBetaDashboardPage() {
 
   return (
     <>
-      <Navbar />
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100 p-4 md:p-8">
         <div className="mx-auto max-w-6xl space-y-8">
           <div className="flex flex-wrap items-end justify-between gap-3">

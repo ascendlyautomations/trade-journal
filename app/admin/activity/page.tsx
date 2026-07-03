@@ -3,7 +3,6 @@
 import Link from "next/link"
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import Navbar from "@/app/components/Navbar"
 import { type AdminAuditFeedItem, fetchAdminRecentAudit } from "@/lib/adminAnalytics"
 import { getCurrentAdminCheckResult } from "@/lib/adminUsers"
 import { supabase } from "@/lib/supabaseClient"
@@ -54,7 +53,6 @@ export default function AdminActivityPage() {
   if (checking || !allowed) {
     return (
       <>
-        <Navbar />
         <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] p-8 text-white">
           Checking admin access…
         </div>
@@ -64,7 +62,6 @@ export default function AdminActivityPage() {
 
   return (
     <>
-      <Navbar />
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] p-4 text-gray-100 md:p-8">
         <div className="mx-auto max-w-4xl space-y-6">
           <div className="flex flex-wrap items-center justify-between gap-3">

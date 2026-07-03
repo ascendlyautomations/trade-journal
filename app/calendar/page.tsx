@@ -1,6 +1,5 @@
 "use client"
 import Link from "next/link"
-import Navbar from "../components/Navbar"
 import EmptyState from "../components/ui/EmptyState"
 import { SkeletonCalendarPage } from "../components/ui/skeletons"
 import TradesPageTradeCard from "../components/TradesPageTradeCard"
@@ -324,7 +323,6 @@ export default function CalendarPage() {
 
   return (
     <>
-      <Navbar />
 
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white py-6">
 

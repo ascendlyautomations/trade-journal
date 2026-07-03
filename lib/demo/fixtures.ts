@@ -79,23 +79,28 @@ export const DEMO_ACCOUNTS = [
   },
 ] as const
 
-export const DEMO_AI_FEEDBACK = `## EXECUTION
-Strong opening-drive long aligned with higher-timeframe bullish structure. Entry followed a clear liquidity sweep and 1m break of structure with confirmation.
+export const DEMO_AI_FEEDBACK = `## Summary
+This was a high-quality opening-drive long with disciplined risk and a strong reward relative to your typical NQ trades. The result aligns with your best-performing session and setup patterns.
 
-## RISK MANAGEMENT
-Risk-to-reward exceeded the 2:1 plan with a defined stop below the sweep low. Position size matched the eval daily loss budget.
+## Strengths
+- RR exceeded your historical average, showing intentional risk placement rather than outcome-chasing.
+- Entry followed a clear liquidity sweep and break-of-structure sequence noted in your journal.
+- Position sizing stayed within normal eval risk parameters for a trade of this size.
 
-## PSYCHOLOGY
-Patient and disciplined — waited for the full setup instead of anticipating the move. No revenge trading after yesterday's scratch.
+## Areas for Improvement
+- Entry was slightly late after the BOS confirmation candle — a few ticks of slippage reduced optimal RR.
+- Partial profit could have been more aggressive when momentum stalled at the first extension target.
 
-## WHAT YOU DID WRONG
-Entry was roughly 2 ticks late after the BOS candle closed. Partial exit could have been more aggressive when price stalled at the first extension target.
+## Behavior Observed
+You waited for confirmation instead of anticipating the move, which matches your strongest recent NY session behavior. Patience and process were consistent with your recent winning streak.
 
-## WHAT TO IMPROVE
-Set alerts at the trigger level to reduce late entries. Consider scaling 50% at VWAP extension when momentum slows on the 5m.
+## Recommendations
+1. Set alerts at the trigger level to tighten entry timing on similar opening-drive setups.
+2. Scale 50% at the first extension when 5m momentum slows, then manage the remainder to plan.
+3. Repeat this workflow on comparable liquidity-sweep contexts during the NY open.
 
-## FINAL VERDICT
-This is a high-quality A-setup with solid process. Repeat this workflow on similar opening-drive contexts while tightening entry timing.`
+## Questions That Could Improve Future Analysis
+What was your planned invalidation level before entry — did price ever threaten that level after you were in?`
 
 type TradeSeed = {
   id: string

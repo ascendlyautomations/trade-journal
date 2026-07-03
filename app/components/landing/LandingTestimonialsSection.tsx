@@ -4,12 +4,15 @@ import { useEffect, useMemo, useState } from "react"
 import { SafeProfileAvatar } from "@/app/components/SafeProfileAvatar"
 import StarRatingDisplay from "@/app/components/beta/StarRatingDisplay"
 import {
-  computeBetaTestimonialStats,
-  fetchPublicBetaTestimonials,
-  formatTradingExperienceLabel,
-  selectHomepageTestimonials,
-  type PublicBetaTestimonial,
-} from "@/lib/betaTestimonials"
+  SAMPLE_USER_REVIEWS,
+  computeUserReviewStats,
+  fetchPublicUserReviews,
+  formatUserReviewDisplayName,
+  formatUserReviewUsername,
+  resolvePublicReviewAvatar,
+  selectFeaturedHomepageReviews,
+  type PublicUserReview,
+} from "@/lib/userReviews"
 import {
   LANDING_CARD_FULL,
   LANDING_HEADLINE_SM,
@@ -21,9 +24,22 @@ import {
   LANDING_SECTION_SPACING,
 } from "@/lib/landingPageUi"
 
-function TestimonialCard({ testimonial }: { testimonial: PublicBetaTestimonial }) {
-  const username = testimonial.username?.trim() || "Beta Tester"
-  const experience = formatTradingExperienceLabel(testimonial)
+function formatReviewDate(iso: string): string {
+  try {
+    return new Date(iso).toLocaleDateString(undefined, {
+      month: "short",
+      year: "numeric",
+    })
+  } catch {
+    return ""
+  }
+}
+
+function TestimonialCard({ testimonial }: { testimonial: PublicUserReview }) {
+  const displayName = formatUserReviewDisplayName(testimonial)
+  const username = formatUserReviewUsername(testimonial)
+  const dateLabel = formatReviewDate(testimonial.created_at)
+  const avatarSrc = resolvePublicReviewAvatar(testimonial)
 
   return (
     <article className={`${LANDING_CARD_FULL} flex min-h-[220px] flex-col p-5 md:min-h-[280px] md:p-8`}>
@@ -34,51 +50,44 @@ function TestimonialCard({ testimonial }: { testimonial: PublicBetaTestimonial }
         </span>
       </div>
 
-      <h3 className="mt-3 text-base font-semibold text-white md:mt-4 md:text-lg">{testimonial.title}</h3>
-      <p className="mt-2 flex-1 text-sm leading-relaxed text-gray-300 md:mt-3 md:text-base">
+      {testimonial.title?.trim() ? (
+        <h3 className="mt-3 text-base font-semibold text-white md:mt-4 md:text-lg">
+          {testimonial.title}
+        </h3>
+      ) : null}
+      <p
+        className={`${testimonial.title?.trim() ? "mt-2" : "mt-3 md:mt-4"} flex-1 text-sm leading-relaxed text-gray-300 md:text-base`}
+      >
         &ldquo;{testimonial.review}&rdquo;
       </p>
 
       <footer className="mt-4 flex items-center gap-3 border-t border-white/10 pt-3 md:mt-6 md:pt-4">
         <SafeProfileAvatar
-          src={testimonial.avatar_url}
-          alt={username}
-          className="h-10 w-10 shrink-0"
+          src={avatarSrc}
+          alt={displayName}
+          className="h-10 w-10 shrink-0 rounded-full"
         />
         <div className="min-w-0">
-          <p className="truncate font-medium text-white">{username}</p>
-          {experience ? (
-            <p className="mt-0.5 truncate text-sm text-gray-500">{experience}</p>
-          ) : null}
+          <p className="truncate font-medium text-white">{displayName}</p>
+          <p className="mt-0.5 truncate text-sm text-gray-500">
+            {[username, dateLabel].filter(Boolean).join(" · ")}
+          </p>
         </div>
       </footer>
     </article>
   )
 }
 
-function TestimonialPlaceholder({ index }: { index: number }) {
-  return (
-    <article className={`${LANDING_CARD_FULL} flex min-h-[220px] flex-col p-5 md:min-h-[280px] md:p-8`}>
-      <div className="flex flex-1 flex-col items-center justify-center text-center">
-        <p className="text-sm font-medium text-gray-500">Beta testimonial {index}</p>
-        <p className="mt-2 max-w-[220px] text-xs leading-relaxed text-gray-600">
-          Beta feedback will appear here as testers share their experience.
-        </p>
-      </div>
-    </article>
-  )
-}
-
 export default function LandingTestimonialsSection() {
-  const [testimonials, setTestimonials] = useState<PublicBetaTestimonial[]>([])
+  const [approvedReviews, setApprovedReviews] = useState<PublicUserReview[]>([])
   const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
     let cancelled = false
     void (async () => {
-      const rows = await fetchPublicBetaTestimonials()
+      const rows = await fetchPublicUserReviews()
       if (!cancelled) {
-        setTestimonials(rows)
+        setApprovedReviews(rows)
         setLoaded(true)
       }
     })()
@@ -88,21 +97,21 @@ export default function LandingTestimonialsSection() {
   }, [])
 
   const stats = useMemo(
-    () => computeBetaTestimonialStats(testimonials),
-    [testimonials]
+    () => computeUserReviewStats(approvedReviews),
+    [approvedReviews]
   )
 
-  const featuredCards = useMemo(
-    () => selectHomepageTestimonials(testimonials, 3),
-    [testimonials]
+  const featuredLive = useMemo(
+    () => selectFeaturedHomepageReviews(approvedReviews, 3),
+    [approvedReviews]
   )
 
   const displayCards =
-    featuredCards.length > 0
-      ? featuredCards
+    featuredLive.length > 0
+      ? featuredLive
       : loaded
-        ? []
-        : [null, null, null]
+        ? SAMPLE_USER_REVIEWS.slice(0, 3)
+        : []
 
   return (
     <section
@@ -131,31 +140,25 @@ export default function LandingTestimonialsSection() {
                 </span>
               </div>
               <p className="text-sm text-gray-500">
-                Based on {stats.count} Beta Tester{stats.count === 1 ? "" : "s"}
+                Based on {stats.count} approved review{stats.count === 1 ? "" : "s"}
               </p>
             </div>
           ) : loaded ? (
             <p className="mt-4 text-sm text-gray-500 md:mt-6">
-              Beta testimonials will appear here as they are approved.
+              Community reviews will appear here as they are approved.
             </p>
           ) : null}
         </div>
 
         <div className={`${LANDING_SECTION_CONTENT_GAP} grid gap-4 md:grid-cols-3 md:gap-5`}>
           {displayCards.length > 0 ? (
-            displayCards.map((testimonial, index) =>
-              testimonial ? (
-                <TestimonialCard key={testimonial.id} testimonial={testimonial} />
-              ) : (
-                <TestimonialPlaceholder key={`placeholder-${index}`} index={index + 1} />
-              )
-            )
+            displayCards.map((testimonial) => (
+              <TestimonialCard key={testimonial.id} testimonial={testimonial} />
+            ))
           ) : (
             <div className="md:col-span-3">
               <div className={`${LANDING_CARD_FULL} px-5 py-8 text-center md:px-6 md:py-10`}>
-                <p className="text-sm text-gray-500">
-                  Beta testimonials will appear here soon.
-                </p>
+                <p className="text-sm text-gray-500">Loading community reviews…</p>
               </div>
             </div>
           )}

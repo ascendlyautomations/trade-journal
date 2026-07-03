@@ -1,0 +1,70 @@
+"use client"
+
+import Link from "next/link"
+import { useEffect, useState } from "react"
+import {
+  hasCookieConsentChoice,
+  saveCookieConsent,
+  type CookieConsentChoice,
+} from "@/lib/cookieConsent"
+
+export default function CookieConsentBanner() {
+  const [visible, setVisible] = useState(false)
+
+  useEffect(() => {
+    setVisible(!hasCookieConsentChoice())
+  }, [])
+
+  function handleChoice(choice: CookieConsentChoice) {
+    saveCookieConsent(choice)
+    setVisible(false)
+  }
+
+  if (!visible) return null
+
+  return (
+    <div
+      className="fixed inset-x-0 bottom-0 z-[9990] border-t border-white/10 bg-[#0b1f3a]/95 px-4 py-4 text-white shadow-[0_-8px_32px_rgba(0,0,0,0.35)] backdrop-blur-md sm:px-6"
+      role="dialog"
+      aria-labelledby="cookie-consent-title"
+      aria-describedby="cookie-consent-description"
+    >
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0 text-left">
+          <p id="cookie-consent-title" className="text-sm font-semibold text-white">
+            🍪 We use cookies
+          </p>
+          <p
+            id="cookie-consent-description"
+            className="mt-1 text-xs leading-relaxed text-gray-300 sm:text-sm"
+          >
+            TradeTraxs uses essential cookies to keep you securely signed in, process
+            subscriptions, remember your preferences, and improve your experience.
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
+          <button
+            type="button"
+            onClick={() => handleChoice("all")}
+            className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-600"
+          >
+            Accept All
+          </button>
+          <button
+            type="button"
+            onClick={() => handleChoice("essential")}
+            className="rounded-lg border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/15"
+          >
+            Essential Only
+          </button>
+          <Link
+            href="/cookie-policy"
+            className="rounded-lg px-3 py-2 text-sm font-medium text-blue-300 transition hover:text-blue-200"
+          >
+            Cookie Policy
+          </Link>
+        </div>
+      </div>
+    </div>
+  )
+}

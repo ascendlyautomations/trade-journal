@@ -10,6 +10,8 @@ export const APP_PREFETCH_ROUTES = [
   "/explore",
   "/settings",
   "/calendar",
+  "/streaks",
+  "/achievements",
   "/community",
 ] as const
 

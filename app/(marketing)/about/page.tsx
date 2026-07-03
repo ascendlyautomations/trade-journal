@@ -33,6 +33,7 @@ import {
   LANDING_SECTION_SPACING,
   LANDING_TITLE_GRADIENT,
 } from "@/lib/landingPageUi"
+import { COMPANY_PAGE_TOP } from "@/lib/companyPageUi"
 
 function ProseSection({
   heading,
@@ -168,9 +169,9 @@ export default function AboutPage() {
         />
 
         <div className="relative z-10">
-          <header className={`${LANDING_SECTION_SHELL} px-4 pt-28 text-center md:pt-36`}>
+          <header className={`${LANDING_SECTION_SHELL} px-4 ${COMPANY_PAGE_TOP} text-center`}>
             <p className={LANDING_EYEBROW}>{ABOUT_PAGE_EYEBROW}</p>
-            <h1 className="mt-4 text-4xl font-bold tracking-tight text-white md:text-5xl lg:text-6xl">
+            <h1 className="mt-3 text-4xl font-bold tracking-tight text-white md:text-5xl lg:text-6xl">
               {ABOUT_HERO.heading}
             </h1>
             <p className={`${LANDING_LEAD} mx-auto mt-6 max-w-3xl`}>

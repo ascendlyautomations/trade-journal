@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { useCallback, useEffect, useState, useRef, type MouseEvent } from "react"
+import { createPortal } from "react-dom"
 import { supabase } from "../../lib/supabaseClient"
 import { useRouter, usePathname } from "next/navigation"
 import { useUserProfile } from "../../lib/useUserProfile"
@@ -20,10 +21,11 @@ import { exitDemoMode, isDemoModeActive, disableDemoMode, subscribeDemoModeChang
 import { isDemoSupabaseBlocked } from "@/lib/demo/demoSupabaseGuard"
 import { isStandaloneFlowRoute } from "@/lib/authRoutes"
 import { clearSignupFlow } from "@/lib/signupFlow"
+import { NAVBAR_BRAND_LINK_CLASS } from "@/lib/navbarBrand"
 
 export default function Navbar() {
   const pathname = usePathname()
-  if (isStandaloneFlowRoute(pathname)) return null
+  const isStandalone = isStandaloneFlowRoute(pathname)
 
   const { user, profile, loading, membershipReconciling } = useUserProfile()
   const profileHref =
@@ -45,6 +47,7 @@ export default function Navbar() {
   const [hasFetchedNotifications, setHasFetchedNotifications] = useState(false)
   const [hasFetchedMessages, setHasFetchedMessages] = useState(false)
   const [hasFetchedAdmin, setHasFetchedAdmin] = useState(false)
+  const [mounted, setMounted] = useState(false)
 
   const router = useRouter()
   const isHomePage = pathname === "/"
@@ -102,6 +105,10 @@ export default function Navbar() {
     const syncDemo = () => setDemoActive(isDemoModeActive())
     syncDemo()
     return subscribeDemoModeChanges(syncDemo)
+  }, [])
+
+  useEffect(() => {
+    setMounted(true)
   }, [])
 
   const navRef = useRef<HTMLDivElement>(null)
@@ -341,10 +348,11 @@ export default function Navbar() {
     beta?: boolean
   }[] = [
     { label: "Calendar", href: "/calendar" },
-    { label: "Achievements", href: "/achievements" },
     { label: "Prop Firm Mode", href: "/analytics/propfirm", proOnly: true },
     { label: "AI Analyst", href: "/analyst", proOnly: true },
+    { label: "Achievements", href: "/achievements" },
     { label: "Backtest Lab", href: "/backtest", proOnly: true },
+    { label: "Streaks", href: "/streaks" },
   ]
 
   const betaBadge = (
@@ -428,16 +436,18 @@ export default function Navbar() {
     </div>
   )
 
-  return (
+  if (isStandalone) return null
+
+  const navbar = (
     <div ref={navRef} className="fixed left-0 top-0 z-[9999] w-full overflow-visible text-gray-100">
       <div className="flex h-16 w-full shrink-0 items-center border-b border-white/5 bg-[#0b1f3a]">
-        <div className="flex h-full w-full items-center justify-between px-4 md:px-6">
+        <div className="flex h-full w-full items-center gap-2 px-4 md:gap-3 md:px-6">
         {/* LEFT */}
         <div className="flex min-w-0 items-center gap-3">
           <Link
             href="/"
             onClick={handleLogoClick}
-            className="font-bold text-xl shrink-0 bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent"
+            className={NAVBAR_BRAND_LINK_CLASS}
           >
             TradeTraxs
           </Link>
@@ -549,6 +559,7 @@ export default function Navbar() {
                       "/analytics",
                       "/backtest",
                       "/calendar",
+                      "/streaks",
                       "/achievements",
                       "/analyst",
                     ])
@@ -562,7 +573,7 @@ export default function Navbar() {
                   <div className="absolute top-full z-[9999] mt-2 w-56 rounded border border-white/10 bg-[#1e293b] shadow-lg">
                     {analyticsLinks.map((item) => (
                         <Link
-                          key={item.href}
+                          key={item.label}
                           href={item.href}
                           className={`flex w-full items-center justify-between gap-2 rounded px-3 py-2 ${
                             isActive(item.href)
@@ -652,7 +663,7 @@ export default function Navbar() {
         </div>
 
         {/* RIGHT */}
-        <div className="flex shrink-0 items-center gap-3 md:gap-4">
+        <div className="ml-auto flex shrink-0 items-center justify-end gap-2 md:gap-4">
         {showReturnToApp ? (
           <button
             type="button"
@@ -664,8 +675,6 @@ export default function Navbar() {
         ) : null}
         {showMobileNav ? (
           <>
-            {user ? <GettingStartedMobileEntry /> : null}
-
             {user && isAdmin ? (
               <Link
                 href="/admin"
@@ -679,7 +688,7 @@ export default function Navbar() {
               </Link>
             ) : null}
 
-            <div className="flex items-center gap-2.5 md:hidden">
+            <div className="flex shrink-0 items-center gap-2.5 md:hidden">
               {!isHomePage && user
                 ? notificationBellControl(
                     "text-xl leading-none",
@@ -689,7 +698,7 @@ export default function Navbar() {
                 : null}
               <button
                 type="button"
-                className="text-2xl leading-none text-white px-1 py-1"
+                className="shrink-0 text-2xl leading-none text-white px-1 py-1"
                 aria-expanded={isOpen}
                 aria-label={isOpen ? "Close menu" : "Open menu"}
                 onClick={() => {
@@ -835,6 +844,7 @@ export default function Navbar() {
               Return to App
             </button>
           ) : null}
+          {user ? <GettingStartedMobileEntry placement="menu" /> : null}
           <Link
             href="/app"
             className={`rounded-lg px-3 py-2 transition ${
@@ -915,6 +925,7 @@ export default function Navbar() {
                   "/analytics",
                   "/backtest",
                   "/calendar",
+                  "/streaks",
                   "/achievements",
                   "/analyst",
                 ])
@@ -930,7 +941,7 @@ export default function Navbar() {
               <div className="mt-1.5 space-y-1 pl-3 text-sm">
                 {analyticsLinks.map((item) => (
                     <Link
-                      key={item.href}
+                      key={item.label}
                       href={item.href}
                       className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-1.5 ${
                         isActive(item.href)
@@ -1100,4 +1111,8 @@ export default function Navbar() {
       <BugReportModal open={bugReportOpen} onClose={() => setBugReportOpen(false)} />
     </div>
   )
+
+  if (!mounted) return null
+
+  return createPortal(navbar, document.body)
 }

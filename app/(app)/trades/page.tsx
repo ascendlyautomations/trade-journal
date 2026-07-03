@@ -321,7 +321,7 @@ export default function TradesPage() {
     <>
       <div className="w-full text-white px-2 pb-3 pt-0 md:px-4 md:pb-10">
 
-        <div className="relative z-50 w-full px-1 md:px-6 md:max-w-[1600px] md:mx-auto">
+        <div className="w-full px-1 md:px-6 md:max-w-[1600px] md:mx-auto">
           <TradesPageMainContent
             loading={loading}
             accounts={accounts}

@@ -3,7 +3,6 @@
 import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import Navbar from "@/app/components/Navbar"
 import { getCurrentAdminCheckResult } from "@/lib/adminUsers"
 import {
   CSV_SUPPORT_STATUS_OPTIONS,
@@ -203,7 +202,6 @@ export default function AdminCsvSupportPage() {
   if (checking || !allowed) {
     return (
       <>
-        <Navbar />
         <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] p-8 text-white">
           Checking admin access...
         </div>
@@ -227,7 +225,6 @@ export default function AdminCsvSupportPage() {
 
   return (
     <>
-      <Navbar />
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] p-4 text-gray-100 md:p-8">
         <div className="mx-auto max-w-6xl space-y-6">
           <div className="flex flex-wrap items-center justify-between gap-3">

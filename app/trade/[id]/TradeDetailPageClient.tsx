@@ -3,7 +3,6 @@
 import Link from "next/link"
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import Navbar from "../../components/Navbar"
 import FeedPostHeader from "@/app/components/feed/FeedPostHeader"
 import FeedPostMetaRow from "@/app/components/feed/FeedPostMetaRow"
 import { CommentFocusCompactStrip } from "@/app/components/comments/CommentFocusCompactStrip"
@@ -205,7 +204,6 @@ export default function TradeDetailPageClient({
   if (!tradeId) {
     return (
       <>
-        <Navbar />
         <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] p-6 text-white">
           <p className="text-center text-gray-400">Invalid trade link.</p>
         </div>
@@ -216,7 +214,6 @@ export default function TradeDetailPageClient({
   if (loading) {
     return (
       <>
-        <Navbar />
         <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white">
           <div>Loading...</div>
         </div>
@@ -227,7 +224,6 @@ export default function TradeDetailPageClient({
   if (!trade) {
     return (
       <>
-        <Navbar />
         <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] p-6 text-white">
           <div className="mx-auto max-w-xl space-y-4 text-center">
             <p className="text-gray-400">This trade is unavailable.</p>
@@ -246,7 +242,6 @@ export default function TradeDetailPageClient({
 
   return (
     <>
-      <Navbar />
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] p-6 text-white">
         <div className="mx-auto max-w-xl space-y-4">
           <button

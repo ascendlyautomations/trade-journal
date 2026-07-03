@@ -102,6 +102,20 @@ export const TERMS_PAGE_METADATA = buildPublicRouteMetadata({
     "TradeTraxs Terms of Service — account rules, subscriptions, user content, and platform disclaimers.",
 })
 
+export const COOKIE_POLICY_PAGE_METADATA = buildPublicRouteMetadata({
+  path: "/cookie-policy",
+  title: "Cookie Policy",
+  description:
+    "TradeTraxs Cookie Policy — how we use cookies and similar technologies for authentication, billing, and preferences.",
+})
+
+export const ACCEPTABLE_USE_PAGE_METADATA = buildPublicRouteMetadata({
+  path: "/acceptable-use",
+  title: "Acceptable Use Policy",
+  description:
+    "TradeTraxs Acceptable Use Policy — standards for lawful, respectful, and safe platform use.",
+})
+
 export const LEGAL_HUB_PAGE_METADATA = buildPublicRouteMetadata({
   path: "/legal",
   title: "Legal",

@@ -53,8 +53,8 @@ export default function DashboardEquityCurve({
 
   if (variant === "mobile") {
     return (
-      <div className="col-span-2 block md:hidden overflow-visible rounded-xl border border-white/10 bg-white/10 p-3 backdrop-blur-md">
-        <h2 className="mb-3 text-sm font-semibold text-blue-300">Equity Curve</h2>
+      <div className="col-span-2 block overflow-visible rounded-xl border border-white/10 bg-white/10 p-2.5 backdrop-blur-md md:hidden">
+        <h2 className="mb-2 text-xs font-semibold text-blue-300 md:mb-3 md:text-sm">Equity Curve</h2>
         {showEmpty ? (
           <ChartEmptyState />
         ) : (

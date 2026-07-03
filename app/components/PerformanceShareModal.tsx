@@ -316,25 +316,27 @@ export default function PerformanceShareModal({
         </div>
 
         <div
-          className="pointer-events-none fixed top-0 overflow-hidden"
+          className="pointer-events-none fixed left-0 top-0 overflow-hidden"
           style={{
-            left: 0,
-            width: PERFORMANCE_SHARE_EXPORT_WIDTH,
+            width: 0,
+            height: 0,
             opacity: 0,
             zIndex: -1,
           }}
           aria-hidden
         >
-          <PerformanceShareCard
-            exportId={exportId}
-            equityCurve={equityCurve}
-            timeframeTitle={timeframeUpper}
-            profile={profile}
-            stats={stats}
-            rangeStart={rangeBounds?.start ?? null}
-            rangeEnd={rangeBounds?.end ?? null}
-            dateRangeFallback={dateRangeLabel}
-          />
+          <div style={{ width: PERFORMANCE_SHARE_EXPORT_WIDTH }}>
+            <PerformanceShareCard
+              exportId={exportId}
+              equityCurve={equityCurve}
+              timeframeTitle={timeframeUpper}
+              profile={profile}
+              stats={stats}
+              rangeStart={rangeBounds?.start ?? null}
+              rangeEnd={rangeBounds?.end ?? null}
+              dateRangeFallback={dateRangeLabel}
+            />
+          </div>
         </div>
 
         <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">

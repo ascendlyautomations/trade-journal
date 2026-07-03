@@ -1,12 +1,10 @@
 "use client"
 
 import Link from "next/link"
-import Navbar from "@/app/components/Navbar"
 
 export default function AffiliatePayoutSetupRefreshPage() {
   return (
     <>
-      <Navbar />
       <div className="mx-auto max-w-lg px-4 py-16 text-center text-white">
         <div className="rounded-xl border border-amber-500/35 bg-amber-500/10 px-6 py-8">
           <h1 className="text-lg font-semibold text-amber-100">Onboarding link expired</h1>

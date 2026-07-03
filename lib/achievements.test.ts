@@ -184,6 +184,7 @@ describe("achievement type filters", () => {
     }
 
     assert.equal(achievementMatchesTypeFilter(propFirmPayout, "all"), true)
+    assert.equal(achievementMatchesTypeFilter(milestone, "all"), false)
     assert.equal(achievementMatchesTypeFilter(propFirmPayout, "prop_firm_payout"), true)
     assert.equal(achievementMatchesTypeFilter(propFirmPayout, "live_trading_payout"), false)
 

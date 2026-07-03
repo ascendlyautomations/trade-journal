@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
-import Navbar from "../components/Navbar"
 import { Button, Modal, cn } from "@/app/components/ui"
 
 export default function InputPage() {
@@ -83,7 +82,6 @@ export default function InputPage() {
 
   return (
     <>
-      <Navbar />
 
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white flex items-center justify-center">
 

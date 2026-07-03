@@ -342,7 +342,7 @@ export function achievementMatchesCategoryFilter(
   achievement: Pick<Achievement, "achievement_type" | "category">,
   filter: AchievementCategoryFilter
 ): boolean {
-  if (filter === "all") return true
+  if (filter === "all") return !isMilestoneAchievement(achievement)
 
   const stored = String(achievement.category ?? "")
     .trim()
@@ -366,17 +366,32 @@ export function achievementMatchesCategoryFilter(
   }
 
   if (filter === "milestones") {
-    return bucket === "milestones"
+    return isMilestoneAchievement(achievement)
   }
 
   return false
+}
+
+export function isMilestoneAchievement(
+  achievement: Pick<Achievement, "achievement_type" | "category">
+): boolean {
+  const stored = String(achievement.category ?? "")
+    .trim()
+    .toLowerCase()
+  const derived = String(categoryFromType(achievement.achievement_type))
+    .trim()
+    .toLowerCase()
+  const bucket = stored || derived
+  const canonical = canonicalAchievementType(achievement.achievement_type)
+
+  return canonical === ACHIEVEMENT_TYPE.MILESTONE || bucket === "milestones"
 }
 
 export function achievementMatchesTypeFilter(
   achievement: Pick<Achievement, "achievement_type" | "category">,
   filter: AchievementTypeFilter
 ): boolean {
-  if (filter === "all") return true
+  if (filter === "all") return !isMilestoneAchievement(achievement)
 
   const stored = String(achievement.category ?? "")
     .trim()
@@ -413,7 +428,7 @@ export function achievementMatchesTypeFilter(
   }
 
   if (filter === "milestones") {
-    return canonical === ACHIEVEMENT_TYPE.MILESTONE || bucket === "milestones"
+    return isMilestoneAchievement(achievement)
   }
 
   return false

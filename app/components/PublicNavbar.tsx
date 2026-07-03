@@ -7,25 +7,24 @@ import { useUserProfile } from "@/lib/useUserProfile"
 import { shouldShowMarketingNavbar } from "@/lib/marketingAccess"
 import { hasActiveMembership } from "@/lib/subscriptionAccess"
 import { isDemoUserId } from "@/lib/demo/constants"
+import { NAVBAR_BRAND_LINK_CLASS_NOWRAP } from "@/lib/navbarBrand"
 
 const DESKTOP_NAV_LINKS = [
   { href: "/faq", label: "FAQ" },
   { href: "/pricing", label: "Pricing" },
-  { href: "/about", label: "About" },
-  { href: "/contact", label: "Contact" },
   { href: "/affiliate", label: "Affiliate" },
+  { href: "/contact", label: "Contact" },
   { href: "/legal", label: "Legal" },
+  { href: "/about", label: "About" },
 ] as const
 
 const MOBILE_NAV_LINKS = [
   { href: "/faq", label: "FAQ" },
   { href: "/pricing", label: "Pricing" },
-  { href: "/about", label: "About" },
+  { href: "/affiliate", label: "Affiliate" },
   { href: "/contact", label: "Contact" },
-  { href: "/affiliate", label: "Affiliate Program" },
   { href: "/legal", label: "Legal" },
-  { href: "/privacy", label: "Privacy Policy" },
-  { href: "/terms", label: "Terms of Service" },
+  { href: "/about", label: "About" },
 ] as const
 
 function isNavLinkActive(pathname: string, href: string): boolean {
@@ -76,7 +75,7 @@ export default function PublicNavbar() {
           <div className="flex h-full w-full items-center justify-between px-4 md:px-6">
             <Link
               href="/"
-              className="shrink-0 whitespace-nowrap bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-lg font-bold text-transparent"
+              className={NAVBAR_BRAND_LINK_CLASS_NOWRAP}
             >
               TradeTraxs
             </Link>
@@ -104,7 +103,7 @@ export default function PublicNavbar() {
           <div className="flex min-w-0 items-center gap-2 whitespace-nowrap sm:gap-3">
             <Link
               href="/"
-              className="shrink-0 whitespace-nowrap bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-lg font-bold text-transparent"
+              className={NAVBAR_BRAND_LINK_CLASS_NOWRAP}
             >
               TradeTraxs
             </Link>
@@ -174,6 +173,14 @@ export default function PublicNavbar() {
             >
               Sign Up
             </Link>
+            <Link
+              href="/login"
+              className="rounded-lg px-3 py-2 font-semibold text-gray-200 transition hover:text-white"
+              onClick={() => setMenuOpen(false)}
+            >
+              Login
+            </Link>
+            <div className="my-1 border-t border-white/10" aria-hidden />
             {MOBILE_NAV_LINKS.map((link) => (
               <Link
                 key={link.href}

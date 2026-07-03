@@ -1,7 +1,6 @@
 "use client"
 
 import Link from "next/link"
-import Navbar from "@/app/components/Navbar"
 import {
   submissionPageShell,
   submissionSubtitle,
@@ -114,7 +113,6 @@ function HelpOptionCard({
 export default function HelpCenterPage() {
   return (
     <>
-      <Navbar />
       <div className={submissionPageShell}>
         <div className="mx-auto w-full max-w-5xl space-y-8">
           <header className="text-center">

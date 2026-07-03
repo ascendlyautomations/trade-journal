@@ -3,7 +3,6 @@
 import Link from "next/link"
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import Navbar from "../components/Navbar"
 import { type AdminAuditFeedItem, fetchAdminRecentAudit } from "@/lib/adminAnalytics"
 import {
   type AdminAffiliateApplicationCounts,
@@ -143,11 +142,11 @@ export default function AdminPage() {
           .eq("status", "open")
         if (!cancelled) setOpenFeatureRequestCount(openFeatures || 0)
 
-        const { count: pendingTestimonials } = await supabase
-          .from("beta_testimonials")
+        const { count: pendingReviews } = await supabase
+          .from("user_reviews")
           .select("*", { count: "exact", head: true })
-          .eq("approved", false)
-        if (!cancelled) setPendingBetaTestimonialCount(pendingTestimonials || 0)
+          .eq("status", "pending")
+        if (!cancelled) setPendingBetaTestimonialCount(pendingReviews || 0)
 
         const { count: newCsvSupport } = await supabase
           .from("csv_support_requests")
@@ -188,7 +187,6 @@ export default function AdminPage() {
   if (checking || !allowed) {
     return (
       <>
-        <Navbar />
         <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white p-8">
           Checking admin access...
         </div>
@@ -198,7 +196,6 @@ export default function AdminPage() {
 
   return (
     <>
-      <Navbar />
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100 p-4 md:p-8">
         <div className="mx-auto max-w-6xl space-y-8">
           <div>
@@ -285,9 +282,9 @@ export default function AdminPage() {
               }
             />
             <AdminModuleCard
-              href="/admin/beta-testimonials"
-              title="Beta Testimonials"
-              description="Review beta tester feedback before it appears on the homepage."
+              href="/admin/reviews"
+              title="Reviews"
+              description="Approve, reject, and feature user reviews for the homepage."
               variant="emerald"
               badge={
                 <span className="rounded bg-amber-500 px-2 py-0.5 text-xs font-semibold text-white tabular-nums">

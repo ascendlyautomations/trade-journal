@@ -221,5 +221,38 @@ export async function loadAdminSubmissionEmailContext(
     }
   }
 
+  if (type === "user_review") {
+    const { data, error } = await admin
+      .from("user_reviews")
+      .select(
+        "id, user_id, rating, title, review, would_recommend, status, featured, created_at, display_name, username_snapshot"
+      )
+      .eq("id", recordId)
+      .maybeSingle()
+
+    if (error || !data || data.user_id !== userId) {
+      return { ok: false, status: 404, error: "Review not found" }
+    }
+
+    return {
+      ok: true,
+      context: {
+        ...base,
+        createdAt: data.created_at,
+        title: data.title || "User Review",
+        description: data.review,
+        subjectOverride: "[Review] New Beta Review Submitted",
+        extraFields: [
+          { label: "Rating", value: `${data.rating}/5` },
+          { label: "Title", value: data.title },
+          { label: "Would recommend", value: data.would_recommend ? "Yes" : "No" },
+          { label: "Display name", value: data.display_name },
+          { label: "Username", value: data.username_snapshot },
+          { label: "Status", value: data.status },
+        ],
+      },
+    }
+  }
+
   return { ok: false, status: 400, error: "Unknown submission type" }
 }

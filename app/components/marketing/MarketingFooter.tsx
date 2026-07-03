@@ -176,6 +176,12 @@ export default function MarketingFooter() {
                   <FooterLink href="/terms">Terms of Service</FooterLink>
                 </li>
                 <li>
+                  <FooterLink href="/cookie-policy">Cookie Policy</FooterLink>
+                </li>
+                <li>
+                  <FooterLink href="/acceptable-use">Acceptable Use Policy</FooterLink>
+                </li>
+                <li>
                   <FooterLink href="/legal">Legal</FooterLink>
                 </li>
               </ul>
@@ -231,6 +237,12 @@ export default function MarketingFooter() {
             </li>
             <li>
               <FooterLink href="/terms">Terms of Service</FooterLink>
+            </li>
+            <li>
+              <FooterLink href="/cookie-policy">Cookie Policy</FooterLink>
+            </li>
+            <li>
+              <FooterLink href="/acceptable-use">Acceptable Use Policy</FooterLink>
             </li>
             <li>
               <FooterLink href="/legal">Legal</FooterLink>

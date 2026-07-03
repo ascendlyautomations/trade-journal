@@ -33,10 +33,10 @@ type SideCardProps = {
 
 function SideCard({ label, accentClass, stats }: SideCardProps) {
   return (
-    <div className="rounded-lg border border-white/10 bg-white/5 p-3 md:p-4 text-xs md:text-sm">
-      <p className={`mb-3 font-semibold ${accentClass}`}>{label}</p>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-x-4">
-        <div className="space-y-1.5 text-gray-300">
+    <div className="rounded-lg border border-white/10 bg-white/5 p-2.5 text-[11px] md:p-4 md:text-sm">
+      <p className={`mb-2 font-semibold md:mb-3 ${accentClass}`}>{label}</p>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-x-4 md:gap-3">
+        <div className="space-y-1 text-gray-300 md:space-y-1.5">
           <p>
             <span className="text-gray-400">Trades:</span>{" "}
             {formatNumber(stats.totalTrades)}
@@ -77,7 +77,7 @@ function SideCard({ label, accentClass, stats }: SideCardProps) {
           ) : null}
         </div>
 
-        <div className="space-y-1.5 text-gray-300">
+        <div className="space-y-1 text-gray-300 md:space-y-1.5">
           <p>
             <span className="text-gray-400">Win rate:</span>{" "}
             {stats.winRate.toFixed(1)}%
@@ -127,11 +127,11 @@ function DirectionEdgePanel({ edge }: { edge: DirectionEdge }) {
           : "text-gray-400"
 
   return (
-    <div className="rounded-lg border border-white/10 bg-white/5 p-3 md:p-4">
-      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-300">
+    <div className="rounded-lg border border-white/10 bg-white/5 p-2.5 md:p-4">
+      <h3 className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-300 md:mb-2 md:text-xs">
         Direction Edge
       </h3>
-      <p className={`text-sm font-medium leading-snug ${verdictClass}`}>
+      <p className={`text-xs font-medium leading-snug md:text-sm ${verdictClass}`}>
         {edge.message}
       </p>
       <div className="mt-3 space-y-1 text-[11px] md:text-xs text-gray-400">
@@ -162,15 +162,15 @@ export default function DashboardLongShort({
   const showEmpty = totalTrades === 0
 
   return (
-    <div className="flex min-h-[200px] h-full flex-col rounded-xl border border-white/10 bg-white/10 p-3 md:p-4 backdrop-blur-md">
-      <h2 className="mb-3 text-sm md:text-base font-semibold text-blue-300">
+    <div className="flex min-h-[180px] h-full flex-col rounded-xl border border-white/10 bg-white/10 p-2.5 backdrop-blur-md md:min-h-[200px] md:p-4">
+      <h2 className="mb-2 text-xs font-semibold text-blue-300 md:mb-3 md:text-base">
         Long vs Short
       </h2>
       {showEmpty ? (
         <EmptyState
           title="Not Enough Data Yet"
           description="Add more trades to unlock detailed analytics."
-          className="py-8"
+          className="py-5 md:py-8"
         />
       ) : !performance.hasDirectionData ? (
         <EmptyState
@@ -179,7 +179,7 @@ export default function DashboardLongShort({
           className="py-8"
         />
       ) : (
-        <div className="grid grid-cols-1 gap-3">
+        <div className="grid grid-cols-1 gap-2 md:gap-3">
           {performance.long ? (
             <SideCard
               label="Long"

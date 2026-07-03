@@ -6,6 +6,7 @@ import {
   uploadReelVideoFile,
   validateReelVideoFile,
 } from "@/lib/reelVideo"
+import { invalidateUserStreaksCache } from "@/lib/userStreaksCache"
 
 export type ReelVisibility = "public" | "private"
 
@@ -276,6 +277,8 @@ export async function publishReel(
     return { error: formatReelMutationError(error) }
   }
 
+  invalidateUserStreaksCache(input.userId)
+
   return { reel: data as ReelRow }
 }
 
@@ -420,6 +423,7 @@ export async function publishTradeReel(
     reelId: reel.id,
     tradeId: reel.trade_id,
   })
+  invalidateUserStreaksCache(input.userId)
   return { reel }
 }
 

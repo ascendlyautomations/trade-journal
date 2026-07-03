@@ -133,6 +133,11 @@ export type AffiliateNotificationItem = {
   notification: NotificationRecord
 }
 
+export type TradingReportNotificationItem = {
+  kind: "trading_report_notification"
+  notification: NotificationRecord
+}
+
 export type GroupedNotificationCard =
   | LikeNotificationGroup
   | CommentNotificationGroup
@@ -141,6 +146,7 @@ export type GroupedNotificationCard =
   | RoomJoinNotificationItem
   | RoomMessageNotificationGroup
   | AffiliateNotificationItem
+  | TradingReportNotificationItem
 
 /** @deprecated Use GroupedNotificationCard */
 export type SingleNotificationItem = {
@@ -513,6 +519,9 @@ export function buildGroupedNotificationCards(
     (row) =>
       row.type === "affiliate_referral" || row.type === "affiliate_commission_earned"
   )
+  const tradingReportNotifications = rows.filter(
+    (row) => row.type === "trading_report"
+  )
 
   const cards: GroupedNotificationCard[] = [
     ...groupLikeNotifications(likes),
@@ -529,6 +538,12 @@ export function buildGroupedNotificationCards(
     ...affiliateNotifications.map(
       (notification): AffiliateNotificationItem => ({
         kind: "affiliate_notification",
+        notification,
+      })
+    ),
+    ...tradingReportNotifications.map(
+      (notification): TradingReportNotificationItem => ({
+        kind: "trading_report_notification",
         notification,
       })
     ),
@@ -603,6 +618,7 @@ export function groupCardsByTimeSection(cards: GroupedNotificationCard[]) {
 export function groupedCardCreatedAt(card: GroupedNotificationCard): string {
   if (card.kind === "room_join") return card.notification.created_at
   if (card.kind === "affiliate_notification") return card.notification.created_at
+  if (card.kind === "trading_report_notification") return card.notification.created_at
   if (card.kind === "room_message_group") return card.latestAt
   return card.latestAt
 }
@@ -610,6 +626,7 @@ export function groupedCardCreatedAt(card: GroupedNotificationCard): string {
 export function groupedCardIsUnread(card: GroupedNotificationCard): boolean {
   if (card.kind === "room_join") return !card.notification.read
   if (card.kind === "affiliate_notification") return !card.notification.read
+  if (card.kind === "trading_report_notification") return !card.notification.read
   if (card.kind === "room_message_group") return !card.read
   return !card.read
 }
@@ -617,6 +634,7 @@ export function groupedCardIsUnread(card: GroupedNotificationCard): boolean {
 export function groupedCardNotificationIds(card: GroupedNotificationCard): string[] {
   if (card.kind === "room_join") return [card.notification.id]
   if (card.kind === "affiliate_notification") return [card.notification.id]
+  if (card.kind === "trading_report_notification") return [card.notification.id]
   if (card.kind === "room_message_group") return card.notificationIds
   return card.notificationIds
 }
@@ -820,6 +838,46 @@ export function affiliateNotificationHref(notification: NotificationRecord): str
   return href || "/affiliate/dashboard"
 }
 
+export function parseTradingReportNotificationContent(
+  content: string | null | undefined
+): { title?: string; body?: string; href?: string } {
+  if (!content?.trim()) return {}
+  try {
+    const parsed = JSON.parse(content) as {
+      title?: string
+      body?: string
+      href?: string
+    }
+    return parsed && typeof parsed === "object" ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+export function tradingReportNotificationTitle(
+  notification: NotificationRecord
+): string {
+  const meta = parseTradingReportNotificationContent(notification.content)
+  if (meta.title?.trim()) return meta.title.trim()
+  return "📈 Your Trading Report is Ready"
+}
+
+export function tradingReportNotificationBody(
+  notification: NotificationRecord
+): string {
+  const meta = parseTradingReportNotificationContent(notification.content)
+  if (meta.body?.trim()) return meta.body.trim()
+  return "Your trading summary is ready to review."
+}
+
+export function tradingReportNotificationHref(
+  notification: NotificationRecord
+): string {
+  const meta = parseTradingReportNotificationContent(notification.content)
+  const href = meta.href?.trim()
+  return href || "/dashboard?report=weekly_last"
+}
+
 export function formatRoomJoinMessage(username: string): string {
   return `${username} joined your room`
 }
@@ -912,6 +970,10 @@ export function getGroupedNotificationHref(
 ): string {
   if (card.kind === "affiliate_notification") {
     return affiliateNotificationHref(card.notification)
+  }
+
+  if (card.kind === "trading_report_notification") {
+    return tradingReportNotificationHref(card.notification)
   }
 
   if (card.kind === "like_group") {
@@ -1051,6 +1113,10 @@ export function getNotificationHref(
   if (n.type === "follow" && n.sender_id) {
     const sender = sendersById[n.sender_id]
     return profilePath({ id: n.sender_id, username: sender?.username })
+  }
+
+  if (n.type === "trading_report") {
+    return tradingReportNotificationHref(n)
   }
 
   return "/notifications"

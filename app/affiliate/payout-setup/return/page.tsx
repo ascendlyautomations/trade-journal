@@ -2,7 +2,6 @@
 
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
-import Navbar from "@/app/components/Navbar"
 import { supabaseBearerHeaders } from "@/lib/supabaseBearerFetch"
 
 export default function AffiliatePayoutSetupReturnPage() {
@@ -43,7 +42,6 @@ export default function AffiliatePayoutSetupReturnPage() {
 
   return (
     <>
-      <Navbar />
       <div className="flex min-h-[50vh] flex-col items-center justify-center bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 text-center text-white">
         <p className="text-sm text-gray-300">{message}</p>
       </div>

@@ -9,7 +9,6 @@ import {
 } from "@/app/components/ProfileLink"
 import { ProfileAvatarImg } from "@/app/components/SafeProfileAvatar"
 import { supabase } from "../../lib/supabaseClient"
-import Navbar from "../components/Navbar"
 import FollowRequestsPanel from "../components/FollowRequestsPanel"
 import EmptyState from "../components/ui/EmptyState"
 import { SkeletonNotificationsPage } from "../components/ui/skeletons"
@@ -30,6 +29,8 @@ import {
 import {
   affiliateNotificationBody,
   affiliateNotificationTitle,
+  tradingReportNotificationBody,
+  tradingReportNotificationTitle,
   buildGroupedNotificationCards,
   commentPreview,
   filterGroupedCardsByTab,
@@ -120,6 +121,8 @@ function cardStableKey(card: GroupedNotificationCard): string {
       return `room_message_group:${card.key}`
     case "affiliate_notification":
       return `affiliate:${card.notification.id}`
+    case "trading_report_notification":
+      return `trading_report:${card.notification.id}`
   }
 }
 
@@ -313,11 +316,15 @@ function GroupedNotificationCardView({
       ? sendersById[card.notification.sender_id]
       : undefined
     avatarUrl = sender?.avatar_url
+  } else if (card.kind === "trading_report_notification") {
+    title = tradingReportNotificationTitle(card.notification)
   }
 
   const subtitle =
     card.kind === "affiliate_notification"
       ? affiliateNotificationBody(card.notification)
+      : card.kind === "trading_report_notification"
+        ? tradingReportNotificationBody(card.notification)
       : card.kind === "room_message_group"
         ? formatRoomMessageGroupSubtitle(card.totalMessages)
         : null
@@ -864,7 +871,6 @@ export default function NotificationsPage() {
   if ((profileLoading && !profile) || (loading && notifications.length === 0)) {
     return (
       <>
-        <Navbar />
         <div className="w-full text-white px-2 pb-3 pt-0 md:px-4 md:pb-10">
           <div className="relative z-0 mx-auto mt-2.5 flex w-full max-w-xl flex-col gap-3 px-1 md:gap-4 md:px-2">
             <SkeletonNotificationsPage />
@@ -876,7 +882,6 @@ export default function NotificationsPage() {
 
   return (
     <>
-      <Navbar />
 
       <div className="w-full text-white px-2 pb-3 pt-0 md:px-4 md:pb-10">
         <div className="relative z-0 mx-auto mt-2.5 flex w-full max-w-xl flex-col gap-3 px-1 md:gap-4 md:px-2">

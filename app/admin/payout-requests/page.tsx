@@ -3,7 +3,6 @@
 import Link from "next/link"
 import { useCallback, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import Navbar from "@/app/components/Navbar"
 import {
   fetchAdminPayoutRequests,
   fetchAdminPayoutStatusCounts,
@@ -244,7 +243,6 @@ export default function AdminPayoutRequestsPage() {
   if (checking || !allowed) {
     return (
       <>
-        <Navbar />
         <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] p-8 text-white">
           Checking admin access…
         </div>
@@ -254,7 +252,6 @@ export default function AdminPayoutRequestsPage() {
 
   return (
     <>
-      <Navbar />
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100 p-4 md:p-8">
         <div className="mx-auto max-w-5xl space-y-6">
           <div className="flex flex-wrap items-start justify-between gap-4">

@@ -1,7 +1,6 @@
 "use client"
 
 import { useState } from "react"
-import Navbar from "../components/Navbar"
 import { supabase } from "../../lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
 import { useToast } from "@/app/components/ui"
@@ -68,7 +67,6 @@ export default function SuggestionsPage() {
 
   return (
     <>
-      <Navbar />
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-6 py-10 text-white">
         <div className="mx-auto w-full max-w-xl">
           <form

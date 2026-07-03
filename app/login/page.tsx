@@ -451,7 +451,7 @@ export default function LoginPage() {
 
       {/* LEFT TEXT */}
       <div
-        className={`max-w-lg text-center md:text-left ${
+        className={`max-w-lg text-center max-md:pt-3 md:text-left ${
           isBetaSignup ? "mb-4 md:mb-0" : "mb-10 md:mb-0"
         }`}
       >
@@ -525,7 +525,7 @@ export default function LoginPage() {
                 type="button"
                 onClick={() => setBetaWelcomeExpanded((open) => !open)}
                 aria-expanded={betaWelcomeExpanded}
-                className="mt-2 text-sm font-medium text-amber-300/90 underline-offset-2 transition hover:text-amber-200 hover:underline"
+                className="mt-4 text-sm font-medium text-amber-300/90 underline-offset-2 transition hover:text-amber-200 hover:underline"
               >
                 {betaWelcomeExpanded ? "Read Less" : "Read More"}
               </button>
@@ -533,7 +533,7 @@ export default function LoginPage() {
           </>
         ) : (
           <>
-            <p className="text-sm tracking-widest text-blue-300 mb-4">
+            <p className="text-sm tracking-widest text-blue-300 mb-5">
               WELCOME TO
             </p>
 

@@ -1,7 +1,6 @@
 "use client"
 
 import Link from "next/link"
-import Navbar from "../../components/Navbar"
 import EmptyState from "../../components/ui/EmptyState"
 import { SkeletonProfilePage, SkeletonTradeCard } from "../../components/ui/skeletons"
 import AchievementCard from "../../components/AchievementCard"
@@ -18,6 +17,7 @@ import {
 } from "react"
 import { supabase } from "../../../lib/supabaseClient"
 import { deleteUserTrade } from "@/lib/deleteTrade"
+import { invalidateUserStreaksCache } from "@/lib/userStreaksCache"
 import { compressImage } from "@/lib/compressImage"
 import { normalizeTraderType } from "@/lib/traderType"
 import { useParams, useRouter, useSearchParams } from "next/navigation"
@@ -2579,6 +2579,8 @@ function ProfilePageContent() {
       return
     }
 
+    if (currentUserId) invalidateUserStreaksCache(currentUserId)
+
     setShowCreatePost(false)
     setPostContent("")
     setPostImage(null)
@@ -4035,7 +4037,6 @@ function ProfilePageContent() {
   if (!profileId) {
     return (
       <>
-        <Navbar />
         <div className="w-full flex items-center justify-center text-red-400">
           Invalid profile
         </div>
@@ -4046,7 +4047,6 @@ function ProfilePageContent() {
   if (loading) {
     return (
       <>
-        <Navbar />
         <SkeletonProfilePage />
       </>
     )
@@ -4060,7 +4060,6 @@ function ProfilePageContent() {
     if (showFetchDebug) {
       return (
         <>
-          <Navbar />
           <div className="mx-auto max-w-lg px-4 py-8 text-center text-red-400">
             <div>Profile not found (debug)</div>
             {lastProfileFetchError ? (
@@ -4080,7 +4079,6 @@ function ProfilePageContent() {
 
     return (
       <>
-        <Navbar />
         <div className="w-full flex items-center justify-center text-red-400">
           User not found
         </div>
@@ -4106,7 +4104,6 @@ function ProfilePageContent() {
 
   return (
     <>
-      <Navbar />
       <FeedbackModal {...feedbackModalProps} />
       <ConfirmModal {...deleteTradeConfirmProps} />
       <ConfirmModal {...deleteReelConfirmProps} />
@@ -5716,7 +5713,6 @@ export default function ProfilePage() {
     <Suspense
       fallback={
         <>
-          <Navbar />
           <SkeletonProfilePage />
         </>
       }

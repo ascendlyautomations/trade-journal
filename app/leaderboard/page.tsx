@@ -1,7 +1,6 @@
 "use client"
 
 import Link from "next/link"
-import Navbar from "../components/Navbar"
 import { ProfileAvatarImg } from "@/app/components/SafeProfileAvatar"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
@@ -356,7 +355,6 @@ export default function Leaderboard() {
   if (tradesLoading) {
     return (
       <>
-        <Navbar />
         <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100 px-4 py-6 md:px-8 md:py-8">
           <SkeletonLeaderboardPage />
         </div>
@@ -366,7 +364,6 @@ export default function Leaderboard() {
 
   return (
     <>
-      <Navbar />
 
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100 px-4 py-6 md:px-8 md:py-8">
         <div className="mx-auto max-w-7xl space-y-4">

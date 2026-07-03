@@ -1,6 +1,5 @@
 "use client"
 
-import Navbar from "../components/Navbar"
 import { formatEST } from "@/lib/formatEST"
 import { useEffect, useState, useRef } from "react"
 import { supabase } from "../../lib/supabaseClient"
@@ -184,7 +183,6 @@ export default function ChatPage() {
 
   return (
     <>
-      <Navbar />
       <FeedbackModal {...feedbackModalProps} />
 
       <div className="h-screen w-full flex flex-col md:flex-row overflow-hidden">
