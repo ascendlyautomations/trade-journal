@@ -53,6 +53,7 @@ export default function CsvImportDiagnosticsPanel({
     rowFailureSamples,
     explanation,
     successPreview,
+    rrImportNote,
   } = diagnostics
 
   const heavyUnknownFields = unknownColumnCount >= 3
@@ -180,6 +181,22 @@ export default function CsvImportDiagnosticsPanel({
               ))}
             </ul>
           </div>
+        ) : null}
+
+        {rrImportNote ? (
+          <p
+            className={`mt-3 text-xs ${
+              rrImportNote.startsWith("✓")
+                ? successPreview
+                  ? "text-emerald-200/90"
+                  : "text-emerald-200/90"
+                : successPreview
+                  ? "text-emerald-100/70"
+                  : "text-red-100/70"
+            }`}
+          >
+            {rrImportNote}
+          </p>
         ) : null}
 
         {calculatedFields.length > 0 ? (

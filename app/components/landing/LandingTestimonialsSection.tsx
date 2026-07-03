@@ -14,7 +14,9 @@ import {
   LANDING_CARD_FULL,
   LANDING_HEADLINE_SM,
   LANDING_LEAD,
+  LANDING_LEAD_GAP,
   LANDING_SECTION_BORDER,
+  LANDING_SECTION_CONTENT_GAP,
   LANDING_SECTION_SHELL,
   LANDING_SECTION_SPACING,
 } from "@/lib/landingPageUi"
@@ -24,20 +26,20 @@ function TestimonialCard({ testimonial }: { testimonial: PublicBetaTestimonial }
   const experience = formatTradingExperienceLabel(testimonial)
 
   return (
-    <article className={`${LANDING_CARD_FULL} flex min-h-[280px] flex-col p-6 md:p-8`}>
-      <div className="flex items-start justify-between gap-3">
-        <StarRatingDisplay rating={testimonial.rating} className="text-base md:text-lg" />
+    <article className={`${LANDING_CARD_FULL} flex min-h-[220px] flex-col p-5 md:min-h-[280px] md:p-8`}>
+      <div className="flex items-start justify-between gap-2 md:gap-3">
+        <StarRatingDisplay rating={testimonial.rating} className="text-sm md:text-lg" />
         <span className="shrink-0 rounded-full border border-amber-400/30 bg-amber-500/15 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-amber-200">
           Verified Beta Tester
         </span>
       </div>
 
-      <h3 className="mt-4 text-lg font-semibold text-white">{testimonial.title}</h3>
-      <p className="mt-3 flex-1 text-base leading-relaxed text-gray-300">
+      <h3 className="mt-3 text-base font-semibold text-white md:mt-4 md:text-lg">{testimonial.title}</h3>
+      <p className="mt-2 flex-1 text-sm leading-relaxed text-gray-300 md:mt-3 md:text-base">
         &ldquo;{testimonial.review}&rdquo;
       </p>
 
-      <footer className="mt-6 flex items-center gap-3 border-t border-white/10 pt-4">
+      <footer className="mt-4 flex items-center gap-3 border-t border-white/10 pt-3 md:mt-6 md:pt-4">
         <SafeProfileAvatar
           src={testimonial.avatar_url}
           alt={username}
@@ -56,7 +58,7 @@ function TestimonialCard({ testimonial }: { testimonial: PublicBetaTestimonial }
 
 function TestimonialPlaceholder({ index }: { index: number }) {
   return (
-    <article className={`${LANDING_CARD_FULL} flex min-h-[280px] flex-col p-8`}>
+    <article className={`${LANDING_CARD_FULL} flex min-h-[220px] flex-col p-5 md:min-h-[280px] md:p-8`}>
       <div className="flex flex-1 flex-col items-center justify-center text-center">
         <p className="text-sm font-medium text-gray-500">Beta testimonial {index}</p>
         <p className="mt-2 max-w-[220px] text-xs leading-relaxed text-gray-600">
@@ -113,18 +115,18 @@ export default function LandingTestimonialsSection() {
           <h2 id="testimonials-heading" className={LANDING_HEADLINE_SM}>
             Real Stories From The Community
           </h2>
-          <p className={`${LANDING_LEAD} mx-auto mt-5`}>
+          <p className={`${LANDING_LEAD} mx-auto ${LANDING_LEAD_GAP}`}>
             Traders are making TradeTraxs home.
           </p>
 
           {stats.count > 0 ? (
-            <div className="mt-8 flex flex-col items-center gap-2">
-              <div className="flex flex-wrap items-center justify-center gap-3">
+            <div className="mt-5 flex flex-col items-center gap-1.5 md:mt-8 md:gap-2">
+              <div className="flex flex-wrap items-center justify-center gap-2 md:gap-3">
                 <StarRatingDisplay
                   rating={Math.round(stats.averageRating)}
-                  className="text-xl"
+                  className="text-lg md:text-xl"
                 />
-                <span className="text-lg font-semibold text-white tabular-nums">
+                <span className="text-base font-semibold text-white tabular-nums md:text-lg">
                   {stats.averageRating.toFixed(1)}/5
                 </span>
               </div>
@@ -133,13 +135,13 @@ export default function LandingTestimonialsSection() {
               </p>
             </div>
           ) : loaded ? (
-            <p className="mt-6 text-sm text-gray-500">
+            <p className="mt-4 text-sm text-gray-500 md:mt-6">
               Beta testimonials will appear here as they are approved.
             </p>
           ) : null}
         </div>
 
-        <div className="mt-14 grid gap-5 md:grid-cols-3">
+        <div className={`${LANDING_SECTION_CONTENT_GAP} grid gap-4 md:grid-cols-3 md:gap-5`}>
           {displayCards.length > 0 ? (
             displayCards.map((testimonial, index) =>
               testimonial ? (
@@ -150,7 +152,7 @@ export default function LandingTestimonialsSection() {
             )
           ) : (
             <div className="md:col-span-3">
-              <div className={`${LANDING_CARD_FULL} px-6 py-10 text-center`}>
+              <div className={`${LANDING_CARD_FULL} px-5 py-8 text-center md:px-6 md:py-10`}>
                 <p className="text-sm text-gray-500">
                   Beta testimonials will appear here soon.
                 </p>

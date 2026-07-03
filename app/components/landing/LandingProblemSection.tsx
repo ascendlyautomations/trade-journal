@@ -4,10 +4,12 @@ import {
   LANDING_CARD_FULL,
   LANDING_HEADLINE_SM,
   LANDING_LEAD,
+  LANDING_LEAD_GAP,
   LANDING_REVEAL_FROM,
   LANDING_REVEAL_TO,
   LANDING_REVEAL_TRANSITION,
   LANDING_SECTION_BORDER,
+  LANDING_SECTION_CONTENT_GAP,
   LANDING_SECTION_SHELL,
   LANDING_SECTION_SPACING,
   useLandingReveal,
@@ -39,42 +41,42 @@ export default function LandingProblemSection() {
           <h2 id="problem-heading" className={LANDING_HEADLINE_SM}>
             Trading has never had a true home.
           </h2>
-          <p className={`${LANDING_LEAD} mx-auto mt-5`}>
+          <p className={`${LANDING_LEAD} mx-auto ${LANDING_LEAD_GAP}`}>
             Traders bounce between journals, charts, social medias, and spreadsheets - with no single
             place to learn, share, and grow.
           </p>
         </div>
 
         <div
-          className={`mx-auto mt-14 max-w-3xl ${LANDING_REVEAL_TRANSITION} transition-all duration-500 delay-100 ${visible ? LANDING_REVEAL_TO : LANDING_REVEAL_FROM}`}
+          className={`mx-auto max-w-3xl ${LANDING_SECTION_CONTENT_GAP} ${LANDING_REVEAL_TRANSITION} transition-all duration-500 delay-100 ${visible ? LANDING_REVEAL_TO : LANDING_REVEAL_FROM}`}
         >
-          <div className={`${LANDING_CARD_FULL} p-8 md:p-10`}>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <div className={`${LANDING_CARD_FULL} p-5 md:p-10`}>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3">
               {DISCONNECTED_PLATFORMS.map((platform) => (
                 <div
                   key={platform.label}
-                  className="flex flex-col items-center gap-2 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-5 text-center"
+                  className="flex flex-col items-center gap-1.5 rounded-xl border border-white/[0.06] bg-white/[0.02] px-2 py-3 text-center sm:gap-2 sm:px-3 sm:py-5"
                 >
-                  <span className="text-2xl" aria-hidden>
+                  <span className="text-xl sm:text-2xl" aria-hidden>
                     {platform.icon}
                   </span>
-                  <span className="text-sm text-gray-400">{platform.label}</span>
+                  <span className="text-xs text-gray-400 sm:text-sm">{platform.label}</span>
                 </div>
               ))}
             </div>
           </div>
 
-          <div className="flex justify-center py-6 text-gray-600" aria-hidden>
-            <span className="text-3xl">↓</span>
+          <div className="flex justify-center py-4 text-gray-600 md:py-6" aria-hidden>
+            <span className="text-2xl md:text-3xl">↓</span>
           </div>
 
           <div
-            className={`${LANDING_CARD_FULL} border-emerald-400/20 bg-emerald-500/[0.04] p-8 text-center md:p-10`}
+            className={`${LANDING_CARD_FULL} border-emerald-400/20 bg-emerald-500/[0.04] p-5 text-center md:p-10`}
           >
-            <p className="text-3xl font-medium uppercase tracking-widest text-emerald-400/80">
+            <p className="text-2xl font-medium uppercase tracking-widest text-emerald-400/80 md:text-3xl">
               TradeTraxs
             </p>
-            <h3 className="mt-2 text-sm text-white md:text-xl">
+            <h3 className="mt-1.5 text-sm text-white md:mt-2 md:text-xl">
               One connected home for traders.
             </h3>
           </div>

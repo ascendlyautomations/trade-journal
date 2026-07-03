@@ -1,7 +1,8 @@
-import { parseCsvNumeric } from "./parseCsvNumeric"
-import { normalizeFuturesSymbol } from "./normalizeFuturesSymbol"
-import { getSessionFromDate } from "./getSession"
-import { calculateDirectionalPoints } from "./resolveTradePoints"
+import { parseCsvNumeric } from "./parseCsvNumeric.ts"
+import { normalizeFuturesSymbol } from "./normalizeFuturesSymbol.ts"
+import { getSessionFromDate } from "./getSession.ts"
+import { calculateDirectionalPoints } from "./resolveTradePoints.ts"
+import { CSV_RR_HEADER_ALIASES, parseCsvRrValue } from "./csvRrAliases.ts"
 
 export type CsvRow = Record<string, string>
 
@@ -162,15 +163,7 @@ function buildHeaderAliasMap(): Map<string, LogicalField> {
       "position size",
     ],
     points: ["points", "net points", "tick gain", "ticks"],
-    rr: [
-      "rr",
-      "r r",
-      "risk reward",
-      "risk reward ratio",
-      "reward risk",
-      "reward ratio",
-      "realized rr",
-    ],
+    rr: [...CSV_RR_HEADER_ALIASES],
     session: ["session", "market session", "trading session"],
     account_type: ["account type", "acct type"],
     mode: ["mode", "account mode", "trading mode"],
@@ -257,6 +250,24 @@ function buildHeaderAliasMap(): Map<string, LogicalField> {
 
 export function resolveCsvHeaderField(rawHeader: string): LogicalField | null {
   return HEADER_ALIAS_TO_FIELD.get(normalizeHeaderKey(rawHeader)) ?? null
+}
+
+/** First RR column header on the row, if any alias matches (value may be empty). */
+export function findCsvRrColumnHeader(row: CsvRow): string | null {
+  for (const rawKey of Object.keys(row)) {
+    if (resolveCsvHeaderField(rawKey) === "rr") return rawKey.trim()
+  }
+  return null
+}
+
+/** RR cell value from the row when a recognized RR column has non-empty content. */
+export function getCsvRrCellFromRow(row: CsvRow): string | null {
+  for (const [rawKey, val] of Object.entries(row)) {
+    if (resolveCsvHeaderField(rawKey) !== "rr") continue
+    const s = val == null ? "" : String(val).trim()
+    if (s !== "") return s
+  }
+  return null
 }
 
 export function stripBom(s: string): string {
@@ -477,7 +488,7 @@ const TRADEZELLA_FIELD_ALIASES = {
   exit_time: ["close time"],
   direction: ["side"],
   contracts: ["executions", "quantity"],
-  rr: ["reward ratio", "realized rr"],
+  rr: CSV_RR_HEADER_ALIASES.map((a) => a.toLowerCase().trim()),
   points: ["points"],
 } as const
 
@@ -653,7 +664,7 @@ function parseTradeZellaRow(
     ? 1
     : Math.max(1, Math.round(contractsQ))
 
-  const rr = cleanNumberTradeZella(getValueForTradeZella(normalized, "rr"))
+  const rr = parseCsvRrValue(getCsvRrCellFromRow(normalized as CsvRow))
   const points = cleanNumberTradeZella(
     getValueForTradeZella(normalized, "points")
   )
@@ -968,6 +979,8 @@ export function parseTradovateRow(row: CsvRow, userId: string): CsvTradeInsert {
     tickSize: getCellByAliases(row, ["_tickSize", "tickSize", "tick size"]),
   })
 
+  const rr = parseCsvRrValue(getCsvRrCellFromRow(row))
+
   return {
     user_id: userId,
     ticker: normalizedTicker || (symbolRaw ?? ""),
@@ -978,7 +991,7 @@ export function parseTradovateRow(row: CsvRow, userId: string): CsvTradeInsert {
     direction,
     pnl,
     contracts,
-    rr: null,
+    rr,
     points,
     date: normalized.entry_time,
     created_at: normalized.entry_time,
@@ -1368,6 +1381,8 @@ function parseEnteredExitedFormatRow(
         : "Short"
       : "Short")
 
+  const rr = parseCsvRrValue(getCsvRrCellFromRow(row))
+
   const trade: CsvTradeInsert = {
     user_id: userId,
     ticker: normalizedTicker || contractName || "",
@@ -1395,7 +1410,7 @@ function parseEnteredExitedFormatRow(
     account_id: null,
     account_name: null,
     reviewed: false,
-    rr: null,
+    rr,
     points: null,
     duration_seconds: executionTimes.duration_seconds,
     duration_text: null,
@@ -1462,15 +1477,7 @@ function buildFlexibleTradeInsert(
   }
   if (contracts === 0) contracts = 1
 
-  let rr: number | null = null
-  if (f.rr != null && f.rr !== "") {
-    rr = parseCsvNumeric(f.rr)
-    if (rr === null) {
-      const cleaned = f.rr.replace(/[^0-9.\-]/g, "")
-      const r = Number(cleaned)
-      if (Number.isFinite(r)) rr = r
-    }
-  }
+  const rr = parseCsvRrValue(f.rr ?? null)
 
   let points: number | null = null
   if (f.points != null && f.points !== "") {

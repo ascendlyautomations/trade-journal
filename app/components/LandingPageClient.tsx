@@ -241,13 +241,13 @@ export default function LandingPageClient() {
         />
 
         <div className="relative z-10">
-          <div className="relative flex flex-col items-center px-6 pt-28 pb-20 text-center md:pt-36 md:pb-28">
+          <div className="relative flex flex-col items-center px-4 pt-24 pb-14 text-center md:px-6 md:pt-36 md:pb-28">
             <div
               className="pointer-events-none absolute inset-0 bg-gradient-to-r from-blue-500/10 via-emerald-500/10 to-transparent blur-3xl opacity-30"
               aria-hidden
             />
 
-            <h1 className="z-10 mb-6 text-5xl font-bold leading-tight md:text-6xl lg:text-7xl">
+            <h1 className="z-10 mb-4 text-3xl font-bold leading-tight sm:text-4xl md:mb-6 md:text-6xl lg:text-7xl">
               The First Social Platform
               <br />
               <span className="bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
@@ -255,17 +255,17 @@ export default function LandingPageClient() {
               </span>
             </h1>
 
-            <p className="z-10 mb-10 max-w-2xl text-lg leading-relaxed text-gray-400 md:text-xl">
+            <p className="z-10 mb-6 max-w-2xl text-base leading-relaxed text-gray-400 md:mb-10 md:text-xl">
               TradeTraxs brings together journaling, analytics, community, education, and AI into
               one connected home where traders can learn, improve, and grow together.
             </p>
 
-            <div className="z-10 flex flex-wrap justify-center gap-4">
+            <div className="z-10 flex flex-wrap justify-center gap-3 md:gap-4">
               <button
                 type="button"
                 disabled={checkoutLoading || loading}
                 onClick={() => void handleSubscribe()}
-                className="min-w-[220px] rounded-xl bg-emerald-500 px-8 py-3.5 font-semibold text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
+                className="min-w-[200px] rounded-xl bg-emerald-500 px-6 py-3 font-semibold text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60 md:min-w-[220px] md:px-8 md:py-3.5"
               >
                 {checkoutLoading ? "Starting trial…" : trialCtaLabel}
               </button>
@@ -273,7 +273,7 @@ export default function LandingPageClient() {
               <button
                 type="button"
                 onClick={handleExploreDemo}
-                className="min-w-[220px] rounded-lg border border-white/20 px-8 py-3.5 font-semibold transition hover:bg-white/10"
+                className="min-w-[200px] rounded-lg border border-white/20 px-6 py-3 font-semibold transition hover:bg-white/10 md:min-w-[220px] md:px-8 md:py-3.5"
               >
                 Explore the Demo
               </button>

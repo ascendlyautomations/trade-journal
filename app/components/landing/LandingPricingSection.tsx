@@ -63,17 +63,17 @@ export default function LandingPricingSection({
       aria-labelledby="pricing-heading"
     >
       <div className={LANDING_SECTION_SHELL}>
-        <header className="mx-auto mb-12 max-w-2xl text-center md:mb-16">
+        <header className="mx-auto mb-8 max-w-2xl text-center md:mb-16">
           <h2 id="pricing-heading" className={`${LANDING_HEADLINE_SM}`}>
             Start Free.{" "}
             <span className={LANDING_TITLE_GRADIENT}>Upgrade When You&apos;re Ready.</span>
           </h2>
         </header>
 
-        <div className="mx-auto grid max-w-5xl gap-8 lg:grid-cols-2 lg:items-start lg:gap-10">
-          <div className="flex w-full flex-col self-start rounded-2xl border border-white/10 bg-white/[0.04] p-8 shadow-lg shadow-black/25 backdrop-blur-md md:p-9">
-            <h3 className="text-xl font-semibold text-gray-100">{TRADETRAXS_FREE_PLAN.name}</h3>
-            <p className="mt-2 text-4xl font-bold tracking-tight text-white">$0</p>
+        <div className="mx-auto grid max-w-5xl gap-5 md:gap-8 lg:grid-cols-2 lg:items-start lg:gap-10">
+          <div className="flex w-full flex-col self-start rounded-2xl border border-white/10 bg-white/[0.04] p-5 shadow-lg shadow-black/25 backdrop-blur-md md:p-9">
+            <h3 className="text-lg font-semibold text-gray-100 md:text-xl">{TRADETRAXS_FREE_PLAN.name}</h3>
+            <p className="mt-1.5 text-3xl font-bold tracking-tight text-white md:mt-2 md:text-4xl">$0</p>
             <p className={PRICING_CARD_PLAN_DESCRIPTION}>
               {TRADETRAXS_FREE_PLAN.description}
             </p>
@@ -91,7 +91,7 @@ export default function LandingPricingSection({
               <button
                 type="button"
                 onClick={onStartFree}
-                className="mt-3 w-full rounded-xl border border-white/15 bg-white/[0.06] px-6 py-3.5 font-semibold text-white transition-[transform,box-shadow] duration-200 hover:scale-[1.02] hover:border-emerald-400/25 hover:bg-white/[0.10] hover:shadow-[0_0_24px_rgba(52,211,153,0.12)] motion-reduce:hover:scale-100"
+                className="mt-3 w-full rounded-xl border border-white/15 bg-white/[0.06] px-6 py-3 font-semibold text-white transition-[transform,box-shadow] duration-200 hover:scale-[1.02] hover:border-emerald-400/25 hover:bg-white/[0.10] hover:shadow-[0_0_24px_rgba(52,211,153,0.12)] motion-reduce:hover:scale-100 md:py-3.5"
               >
                 Start Free
               </button>
@@ -104,9 +104,9 @@ export default function LandingPricingSection({
                 Most Popular
               </span>
             </div>
-            <div className="flex h-full flex-col rounded-2xl border border-emerald-400/45 bg-gradient-to-b from-white/[0.1] to-emerald-950/30 p-8 pb-9 pt-12 shadow-[0_8px_48px_rgba(0,0,0,0.35),0_0_52px_rgba(52,211,153,0.2)] backdrop-blur-md transition-[transform,box-shadow] duration-300 ease-out hover:z-[1] hover:scale-[1.02] hover:border-emerald-400/60 hover:shadow-[0_12px_56px_rgba(0,0,0,0.4),0_0_64px_rgba(52,211,153,0.32)] motion-reduce:transition-none motion-reduce:hover:scale-100 md:p-10 md:pb-10 md:pt-14">
-              <h3 className="text-xl font-semibold text-emerald-200">{TRADETRAXS_PRO_PLAN.name}</h3>
-              <p className="mt-2 text-sm font-semibold uppercase tracking-wide text-emerald-300/90">
+            <div className="flex h-full flex-col rounded-2xl border border-emerald-400/45 bg-gradient-to-b from-white/[0.1] to-emerald-950/30 p-5 pb-7 pt-10 shadow-[0_8px_48px_rgba(0,0,0,0.35),0_0_52px_rgba(52,211,153,0.2)] backdrop-blur-md transition-[transform,box-shadow] duration-300 ease-out hover:z-[1] hover:scale-[1.02] hover:border-emerald-400/60 hover:shadow-[0_12px_56px_rgba(0,0,0,0.4),0_0_64px_rgba(52,211,153,0.32)] motion-reduce:transition-none motion-reduce:hover:scale-100 md:p-10 md:pb-10 md:pt-14">
+              <h3 className="text-lg font-semibold text-emerald-200 md:text-xl">{TRADETRAXS_PRO_PLAN.name}</h3>
+              <p className="mt-1.5 text-sm font-semibold uppercase tracking-wide text-emerald-300/90 md:mt-2">
                 {TRAXPRO_TRIAL_HEADLINE}
               </p>
               <TraxProSelectedPlanPrice
@@ -132,7 +132,7 @@ export default function LandingPricingSection({
               </ul>
               {showMarketingCTAs ? (
                 <>
-                  <div className="mt-6">
+                  <div className="mt-4 md:mt-6">
                     <TraxProBillingIntervalPicker
                       value={billingInterval}
                       onChange={handleIntervalChange}
@@ -143,11 +143,11 @@ export default function LandingPricingSection({
                     type="button"
                     disabled={checkoutLoading}
                     onClick={() => onStartTrial(billingInterval)}
-                    className="mt-6 w-full rounded-xl bg-gradient-to-r from-blue-500 to-emerald-500 px-6 py-3.5 font-semibold text-white shadow-lg shadow-emerald-500/20 transition-[transform,box-shadow] duration-200 hover:scale-[1.02] hover:from-blue-600 hover:to-emerald-600 hover:shadow-[0_0_28px_rgba(52,211,153,0.35)] disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:hover:scale-100"
+                    className="mt-4 w-full rounded-xl bg-gradient-to-r from-blue-500 to-emerald-500 px-6 py-3 font-semibold text-white shadow-lg shadow-emerald-500/20 transition-[transform,box-shadow] duration-200 hover:scale-[1.02] hover:from-blue-600 hover:to-emerald-600 hover:shadow-[0_0_28px_rgba(52,211,153,0.35)] disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:hover:scale-100 md:mt-6 md:py-3.5"
                   >
                     {checkoutLoading ? "Starting trial…" : `Start ${TRAXPRO_TRIAL_HEADLINE}!`}
                   </button>
-                  <p className="mt-4 text-center text-xs leading-relaxed text-gray-500">
+                  <p className="mt-3 text-center text-xs leading-relaxed text-gray-500 md:mt-4">
                     {TRAXPRO_CHECKOUT_FINE_PRINT}
                   </p>
                 </>

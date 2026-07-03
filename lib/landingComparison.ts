@@ -1,166 +1,156 @@
 /**
- * "Nothing Else Comes Close" comparison table — audited feature rows.
+ * "Nothing Else Comes Close" comparison — audited feature rows.
  *
  * TradeTraxs (tt): platform capability (Pro unlocks premium analytics, AI, etc.).
- * Competitors: conservative ratings from public product pages (2026); use partial
- * when capability exists but is narrower than TradeTraxs or tier-limited.
+ * Other Journals: conservative rollup of typical trading-journal apps (audited 2026).
+ * Excel / Notion: spreadsheet / notes workflows.
  *
  * Wording aligns with {@link TRADETRAXS_PRO_PLAN} / pricing page where applicable.
  */
 
-import {
-  TRADETRAXS_FREE_PLAN,
-  TRADETRAXS_PRO_PLAN,
-} from "./tradeTraxsPlans.ts"
+import { TRADETRAXS_PRO_PLAN } from "./tradeTraxsPlans.ts"
 
 export type ComparisonTriState = "full" | "partial" | "none"
 
+export type LandingComparisonColumnKey = "tt" | "otherJournals" | "excelNotion"
+
 export type LandingComparisonRow = {
+  id: string
   feature: string
   tt: ComparisonTriState
-  tz: ComparisonTriState
-  ts: ComparisonTriState
-  excel: ComparisonTriState
-  discord: ComparisonTriState
+  otherJournals: ComparisonTriState
+  excelNotion: ComparisonTriState
 }
 
-/** Row labels — strongest differentiators first; names match pricing copy. */
+export const LANDING_COMPARISON_SUBTITLE =
+  "TradeTraxs combines powerful analytics, AI-powered insights, social trading, and professional journaling into one complete platform—something most trading journals simply don't offer."
+
+export const LANDING_COMPARISON_MOBILE_PREVIEW_COUNT = 3
+
+/** Benefit-focused labels — strongest differentiators first. */
 export const LANDING_COMPARISON_FEATURE_LABELS = {
-  performanceAnalytics: TRADETRAXS_PRO_PLAN.features[1],
   aiTradeAnalyst: TRADETRAXS_PRO_PLAN.features[2],
-  backtestLab: TRADETRAXS_PRO_PLAN.features[3],
   propFirmMode: TRADETRAXS_PRO_PLAN.features[4],
-  tradingCommunity: "Trading Community",
-  tradeRooms: TRADETRAXS_FREE_PLAN.features[2],
+  communityTradeRooms: "Community & Trade Rooms",
+  performanceAnalytics: "Professional Performance Analytics",
+  tradeReplayVideos: TRADETRAXS_PRO_PLAN.features[5],
+  backtestLab: TRADETRAXS_PRO_PLAN.features[3],
+  unlimitedTradeJournaling: TRADETRAXS_PRO_PLAN.features[0],
+  multipleTradingAccounts: "Unlimited Trading Accounts",
+  screenshotUploads: "Screenshot Uploads",
   tradingReels: "Trading Reels",
   directMessaging: "Direct Messaging",
-  tradeReplayVideos: TRADETRAXS_PRO_PLAN.features[5],
-  unlimitedTradeJournaling: TRADETRAXS_PRO_PLAN.features[0],
-  multipleTradingAccounts: "Track Multiple Trading Accounts",
-  screenshotUploads: "Screenshot Uploads",
-  mobileFriendly: "Mobile-Friendly Experience",
   continuousUpdates: "Continuous Feature Updates",
 } as const
 
 export const LANDING_COMPARISON_ROWS: readonly LandingComparisonRow[] = [
   {
-    feature: LANDING_COMPARISON_FEATURE_LABELS.performanceAnalytics,
-    tt: "full",
-    tz: "full",
-    ts: "full",
-    excel: "partial",
-    discord: "none",
-  },
-  {
+    id: "ai-trade-analyst",
     feature: LANDING_COMPARISON_FEATURE_LABELS.aiTradeAnalyst,
     tt: "full",
-    tz: "full",
-    ts: "partial",
-    excel: "none",
-    discord: "none",
+    otherJournals: "partial",
+    excelNotion: "none",
   },
   {
-    feature: LANDING_COMPARISON_FEATURE_LABELS.backtestLab,
-    tt: "full",
-    tz: "full",
-    ts: "full",
-    excel: "none",
-    discord: "none",
-  },
-  {
+    id: "prop-firm-mode",
     feature: LANDING_COMPARISON_FEATURE_LABELS.propFirmMode,
     tt: "full",
-    tz: "full",
-    ts: "partial",
-    excel: "none",
-    discord: "none",
+    otherJournals: "none",
+    excelNotion: "none",
   },
   {
-    feature: LANDING_COMPARISON_FEATURE_LABELS.tradingCommunity,
+    id: "community-trade-rooms",
+    feature: LANDING_COMPARISON_FEATURE_LABELS.communityTradeRooms,
     tt: "full",
-    tz: "partial",
-    ts: "partial",
-    excel: "none",
-    discord: "full",
+    otherJournals: "none",
+    excelNotion: "none",
   },
   {
-    feature: LANDING_COMPARISON_FEATURE_LABELS.tradeRooms,
+    id: "performance-analytics",
+    feature: LANDING_COMPARISON_FEATURE_LABELS.performanceAnalytics,
     tt: "full",
-    tz: "partial",
-    ts: "none",
-    excel: "none",
-    discord: "partial",
+    otherJournals: "full",
+    excelNotion: "partial",
   },
   {
-    feature: LANDING_COMPARISON_FEATURE_LABELS.tradingReels,
-    tt: "full",
-    tz: "none",
-    ts: "none",
-    excel: "none",
-    discord: "none",
-  },
-  {
-    feature: LANDING_COMPARISON_FEATURE_LABELS.directMessaging,
-    tt: "full",
-    tz: "partial",
-    ts: "partial",
-    excel: "none",
-    discord: "full",
-  },
-  {
+    id: "trade-replay-videos",
     feature: LANDING_COMPARISON_FEATURE_LABELS.tradeReplayVideos,
     tt: "full",
-    tz: "full",
-    ts: "full",
-    excel: "none",
-    discord: "none",
+    otherJournals: "none",
+    excelNotion: "none",
   },
   {
+    id: "backtest-lab",
+    feature: LANDING_COMPARISON_FEATURE_LABELS.backtestLab,
+    tt: "full",
+    otherJournals: "full",
+    excelNotion: "none",
+  },
+  {
+    id: "unlimited-trade-journaling",
     feature: LANDING_COMPARISON_FEATURE_LABELS.unlimitedTradeJournaling,
     tt: "full",
-    tz: "full",
-    ts: "full",
-    excel: "partial",
-    discord: "none",
+    otherJournals: "full",
+    excelNotion: "partial",
   },
   {
+    id: "unlimited-trading-accounts",
     feature: LANDING_COMPARISON_FEATURE_LABELS.multipleTradingAccounts,
     tt: "full",
-    tz: "full",
-    ts: "full",
-    excel: "partial",
-    discord: "none",
+    otherJournals: "full",
+    excelNotion: "partial",
   },
   {
+    id: "screenshot-uploads",
     feature: LANDING_COMPARISON_FEATURE_LABELS.screenshotUploads,
     tt: "full",
-    tz: "full",
-    ts: "full",
-    excel: "partial",
-    discord: "partial",
+    otherJournals: "full",
+    excelNotion: "partial",
   },
   {
-    feature: LANDING_COMPARISON_FEATURE_LABELS.mobileFriendly,
-    tt: "partial",
-    tz: "partial",
-    ts: "partial",
-    excel: "none",
-    discord: "partial",
+    id: "trading-reels",
+    feature: LANDING_COMPARISON_FEATURE_LABELS.tradingReels,
+    tt: "full",
+    otherJournals: "none",
+    excelNotion: "none",
   },
   {
+    id: "direct-messaging",
+    feature: LANDING_COMPARISON_FEATURE_LABELS.directMessaging,
+    tt: "full",
+    otherJournals: "none",
+    excelNotion: "none",
+  },
+  {
+    id: "continuous-updates",
     feature: LANDING_COMPARISON_FEATURE_LABELS.continuousUpdates,
     tt: "full",
-    tz: "partial",
-    ts: "partial",
-    excel: "none",
-    discord: "partial",
+    otherJournals: "partial",
+    excelNotion: "none",
   },
 ]
 
 export const LANDING_COMPARISON_COLUMNS = [
   { key: "tt" as const, label: "TradeTraxs", highlight: true },
-  { key: "tz" as const, label: "TradeZella", highlight: false },
-  { key: "ts" as const, label: "TraderSync", highlight: false },
-  { key: "excel" as const, label: "Excel", highlight: false },
-  { key: "discord" as const, label: "Discord", highlight: false },
-]
+  { key: "otherJournals" as const, label: "Other Journals", highlight: false },
+  { key: "excelNotion" as const, label: "Excel / Notion", highlight: false },
+] as const
+
+export function comparisonStateEmoji(state: ComparisonTriState): string {
+  if (state === "full") return "✅"
+  if (state === "partial") return "⚠️"
+  return "❌"
+}
+
+export function comparisonStateLabel(state: ComparisonTriState): string {
+  if (state === "full") return "Included"
+  if (state === "partial") return "Limited"
+  return "Not Included"
+}
+
+export function getComparisonCellState(
+  row: LandingComparisonRow,
+  columnKey: LandingComparisonColumnKey
+): ComparisonTriState {
+  return row[columnKey]
+}

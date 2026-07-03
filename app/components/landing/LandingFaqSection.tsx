@@ -7,6 +7,7 @@ import {
   LANDING_CARD_FULL,
   LANDING_HEADLINE_SM,
   LANDING_SECTION_BORDER,
+  LANDING_SECTION_CONTENT_GAP,
   LANDING_SECTION_SHELL,
   LANDING_SECTION_SPACING,
 } from "@/lib/landingPageUi"
@@ -27,7 +28,7 @@ export default function LandingFaqSection() {
           </h2>
         </div>
 
-        <div className="mx-auto mt-12 max-w-2xl space-y-3">
+        <div className={`mx-auto max-w-2xl ${LANDING_SECTION_CONTENT_GAP} space-y-2 md:space-y-3`}>
           {LANDING_FAQ_ITEMS.map((item, i) => {
             const isOpen = openIndex === i
             return (
@@ -35,7 +36,7 @@ export default function LandingFaqSection() {
                 <button
                   type="button"
                   onClick={() => setOpenIndex(isOpen ? null : i)}
-                  className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left text-sm font-medium text-white transition hover:bg-white/[0.03] md:px-6 md:py-5 md:text-base"
+                  className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left text-sm font-medium text-white transition hover:bg-white/[0.03] md:gap-4 md:px-6 md:py-5 md:text-base"
                   aria-expanded={isOpen}
                 >
                   <span>{item.q}</span>
@@ -44,7 +45,7 @@ export default function LandingFaqSection() {
                   </span>
                 </button>
                 {isOpen ? (
-                  <div className="border-t border-white/10 px-5 py-4 text-sm leading-relaxed text-gray-400 md:px-6 md:py-5">
+                  <div className="border-t border-white/10 px-4 py-3.5 text-sm leading-relaxed text-gray-400 md:px-6 md:py-5">
                     {item.a}
                   </div>
                 ) : null}
@@ -53,7 +54,7 @@ export default function LandingFaqSection() {
           })}
         </div>
 
-        <p className="mt-8 text-center text-sm text-gray-500">
+        <p className="mt-6 text-center text-sm text-gray-500 md:mt-8">
           <Link href="/faq" className="text-emerald-400 transition hover:text-emerald-300">
             View full FAQ →
           </Link>

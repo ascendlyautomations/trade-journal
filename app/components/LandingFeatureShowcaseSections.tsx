@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import { LANDING_FLAGSHIPS } from "@/lib/landingFlagships"
 import LandingShowcaseImage from "@/app/components/landing/LandingShowcaseImage"
 import {
+  LANDING_HEADLINE_SECTION,
   LANDING_REVEAL_FROM,
   LANDING_REVEAL_TO,
   LANDING_REVEAL_TRANSITION,
@@ -52,21 +53,21 @@ function FlagshipBlock({
     <section
       ref={ref}
       id={flagship.id}
-      className={`relative z-10 scroll-mt-24 border-t border-white/10 px-6 py-16 md:py-20 lg:py-24 transition-[opacity,transform] duration-[400ms] ease-out ${LANDING_REVEAL_TRANSITION} ${
+      className={`relative z-10 scroll-mt-24 border-t border-white/10 px-4 py-10 transition-[opacity,transform] duration-[400ms] ease-out md:px-6 md:py-20 lg:py-24 ${LANDING_REVEAL_TRANSITION} ${
         visible ? LANDING_REVEAL_TO : LANDING_REVEAL_FROM
       }`}
       aria-labelledby={`${flagship.id}-heading`}
     >
       <div className="mx-auto max-w-6xl">
-        <div className={`flex gap-10 lg:items-center lg:gap-14 ${layoutClassForIndex(index)}`}>
-          <div className="min-w-0 flex-1 space-y-4 text-left">
+        <div className={`flex gap-6 lg:items-center md:gap-10 lg:gap-14 ${layoutClassForIndex(index)}`}>
+          <div className="min-w-0 flex-1 space-y-3 text-left md:space-y-4">
             <h3
               id={`${flagship.id}-heading`}
-              className="text-3xl font-extrabold tracking-tight text-white drop-shadow-lg md:text-4xl"
+              className="text-2xl font-extrabold tracking-tight text-white drop-shadow-lg md:text-4xl"
             >
               {flagship.title}
             </h3>
-            <p className="text-base leading-relaxed text-gray-400 md:text-lg">{flagship.tagline}</p>
+            <p className="text-sm leading-relaxed text-gray-400 md:text-lg">{flagship.tagline}</p>
             {flagship.bonuses ? (
               <p className="text-sm text-gray-500">{flagship.bonuses}</p>
             ) : null}
@@ -91,11 +92,11 @@ export default function LandingFeatureShowcaseSections() {
     <div id="grow" className="relative z-10">
       <section
         ref={ref}
-        className={`border-t border-white/10 px-6 pt-20 pb-8 text-center md:pt-28 md:pb-10 ${LANDING_REVEAL_TRANSITION} ${visible ? LANDING_REVEAL_TO : LANDING_REVEAL_FROM}`}
+        className={`border-t border-white/10 px-4 pt-12 pb-6 text-center md:px-6 md:pt-28 md:pb-10 ${LANDING_REVEAL_TRANSITION} ${visible ? LANDING_REVEAL_TO : LANDING_REVEAL_FROM}`}
         aria-labelledby="grow-heading"
       >
         <div className="mx-auto max-w-3xl">
-          <h2 id="grow-heading" className="text-3xl font-extrabold tracking-tight text-white drop-shadow-lg md:text-4xl lg:text-5xl">
+          <h2 id="grow-heading" className={LANDING_HEADLINE_SECTION}>
             Everything You Need to{" "}
             <span className={LANDING_TITLE_GRADIENT}>Grow as a Trader</span>
           </h2>

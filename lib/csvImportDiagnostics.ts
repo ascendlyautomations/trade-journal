@@ -4,13 +4,14 @@ import {
   type CsvRow,
   type LogicalField,
   detectCsvFileFormat,
+  findCsvRrColumnHeader,
   getCellByAliases,
   isRecognizedCsvHeader,
   isTradovateBrokerMetadataHeader,
   mapCsvHeadersToFields,
   resolveCsvHeaderField,
   tradovateSupportedColumnLabel,
-} from "@/lib/csvTradeParsers"
+} from "./csvTradeParsers.ts"
 
 export type CsvImportDiagnostics = {
   format: CsvFileFormat
@@ -25,6 +26,8 @@ export type CsvImportDiagnostics = {
   explanation: string
   /** Tradovate import parsed successfully with no unknown columns. */
   successPreview: boolean
+  /** RR column detection for import diagnostics. */
+  rrImportNote: string
 }
 
 const FORMAT_LABELS: Record<CsvFileFormat, string> = {
@@ -158,6 +161,7 @@ const OPTIONAL_FLEX_FIELDS: LogicalField[] = [
   "entry_price",
   "exit_price",
   "contracts",
+  "rr",
   "entryTime",
   "exitTime",
   "session",
@@ -165,6 +169,12 @@ const OPTIONAL_FLEX_FIELDS: LogicalField[] = [
   "commission",
   "fees",
 ]
+
+function buildRrImportNote(row: CsvRow): string {
+  const header = findCsvRrColumnHeader(row)
+  if (header) return `✓ Risk:Reward column detected (${header})`
+  return "Risk:Reward not found — skipped."
+}
 
 function collectDetectedColumns(row: CsvRow, format: CsvFileFormat): string[] {
   const labels = new Set<string>()
@@ -289,5 +299,6 @@ export function buildCsvImportDiagnostics(
     rowFailureSamples,
     explanation,
     successPreview,
+    rrImportNote: buildRrImportNote(firstRow),
   }
 }
