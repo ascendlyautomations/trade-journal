@@ -33,19 +33,16 @@ import { clearImageUrlCache } from "./imageUrlCache"
 import { invalidateStoriesSession } from "./storiesSessionCache"
 import { resetRoutePrefetchSession } from "./routePrefetch"
 import { warmAppDataCaches, resetDataPrefetchSession } from "./dataPrefetch"
+import { resetNotificationRealtimeSession } from "./notificationRealtime"
 import { fetchSettingsProfileRow } from "./settingsProfileSync"
 import { readSettingsProfileCache, writeSettingsProfileCache } from "./settingsProfileCache"
 import { clearAllMessagesInboxSessions } from "./messagesInboxSessionCache"
 import { clearAllRoomSessions } from "./roomSessionCache"
+import { clearAllSessionUserDataCaches } from "./sessionUserCache"
 import {
-  clearAllUserBootstrapProfiles,
-  clearUserBootstrapProfile,
   readUserBootstrapProfile,
   writeUserBootstrapProfile,
 } from "./userBootstrapCache"
-import { clearAllSettingsProfileCaches } from "./settingsProfileCache"
-import { clearAllTradingAccountsSettingsCaches } from "./tradingAccountsSettingsCache"
-import { clearAllNotificationPreferencesCaches } from "./notificationPreferencesCache"
 import { auditLogProfileLoaded } from "./onboardingChecklistAudit"
 import { isProActive } from "./subscription"
 import { syncMembershipAfterStripeCheckout as runMembershipSync } from "./syncMembershipAfterStripeCheckout"
@@ -249,14 +246,11 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
       clearImageUrlCache()
       resetRoutePrefetchSession()
       resetDataPrefetchSession()
+      resetNotificationRealtimeSession()
       clearAllMessagesInboxSessions()
       clearAllRoomSessions()
-      clearAllUserBootstrapProfiles()
-      clearAllSettingsProfileCaches()
-      clearAllTradingAccountsSettingsCaches()
-      clearAllNotificationPreferencesCaches()
+      clearAllSessionUserDataCaches()
       if (signedOutUserId) {
-        clearUserBootstrapProfile(signedOutUserId)
         clearFeedSessionsForUser(signedOutUserId)
         clearConversationSessionsForUser(signedOutUserId)
       }

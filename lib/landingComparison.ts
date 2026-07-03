@@ -8,7 +8,10 @@
  * Wording aligns with {@link TRADETRAXS_PRO_PLAN} / pricing page where applicable.
  */
 
-import { TRADETRAXS_PRO_PLAN } from "./tradeTraxsPlans.ts"
+import {
+  TRADETRAXS_FEATURE_LABELS,
+  TRADETRAXS_PRO_FEATURE_LABELS,
+} from "./tradeTraxsPlans.ts"
 
 export type ComparisonTriState = "full" | "partial" | "none"
 
@@ -29,14 +32,14 @@ export const LANDING_COMPARISON_MOBILE_PREVIEW_COUNT = 3
 
 /** Benefit-focused labels — strongest differentiators first. */
 export const LANDING_COMPARISON_FEATURE_LABELS = {
-  aiTradeAnalyst: TRADETRAXS_PRO_PLAN.features[2],
-  propFirmMode: TRADETRAXS_PRO_PLAN.features[4],
+  aiTradeAnalyst: TRADETRAXS_PRO_FEATURE_LABELS.aiTradeAnalyst,
+  propFirmMode: TRADETRAXS_PRO_FEATURE_LABELS.propFirmMode,
   communityTradeRooms: "Community & Trade Rooms",
-  performanceAnalytics: "Professional Performance Analytics",
-  tradeReplayVideos: TRADETRAXS_PRO_PLAN.features[5],
-  backtestLab: TRADETRAXS_PRO_PLAN.features[3],
-  unlimitedTradeJournaling: TRADETRAXS_PRO_PLAN.features[0],
-  multipleTradingAccounts: "Unlimited Trading Accounts",
+  performanceAnalytics: TRADETRAXS_FEATURE_LABELS.premiumAnalytics,
+  brandedShareCards: TRADETRAXS_FEATURE_LABELS.performanceImageExports,
+  backtestLab: TRADETRAXS_PRO_FEATURE_LABELS.backtestLab,
+  unlimitedTradeJournaling: TRADETRAXS_PRO_FEATURE_LABELS.unlimitedTrades,
+  multipleTradingAccounts: TRADETRAXS_PRO_FEATURE_LABELS.unlimitedTradingAccounts,
   screenshotUploads: "Screenshot Uploads",
   tradingReels: "Trading Reels",
   directMessaging: "Direct Messaging",
@@ -73,8 +76,8 @@ export const LANDING_COMPARISON_ROWS: readonly LandingComparisonRow[] = [
     excelNotion: "partial",
   },
   {
-    id: "trade-replay-videos",
-    feature: LANDING_COMPARISON_FEATURE_LABELS.tradeReplayVideos,
+    id: "branded-share-cards",
+    feature: LANDING_COMPARISON_FEATURE_LABELS.brandedShareCards,
     tt: "full",
     otherJournals: "none",
     excelNotion: "none",

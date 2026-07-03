@@ -32,6 +32,7 @@ import {
   commentLikeNotificationParentFromTradeId,
 } from "@/lib/commentLikes"
 import { useCommentLikes } from "@/lib/useCommentLikes"
+import { useHydrationReady } from "@/lib/useHydrationReady"
 import {
   readTradeSocial,
   writeTradeSocial,
@@ -501,6 +502,8 @@ export function TradeSocialEngagementBar({
     currentUserId,
     likeBusy,
   } = useTradeSocial()
+  const hydrationReady = useHydrationReady()
+  const likeDisabled = !hydrationReady || !currentUserId || likeBusy
 
   const handleCommentClick = useCallback(() => {
     onCommentsFocus?.()
@@ -535,7 +538,7 @@ export function TradeSocialEngagementBar({
         icon={<span>{liked ? "❤️" : "🤍"}</span>}
         count={likes}
         ariaLabel={liked ? "Unlike" : "Like"}
-        disabled={!currentUserId || likeBusy}
+        disabled={likeDisabled}
         onClick={(e) => {
           e.stopPropagation()
           void handleLike()

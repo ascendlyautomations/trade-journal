@@ -20,5 +20,5 @@ export function formatEngagementCount(value: number): string {
 /** Full count for aria-labels and tooltips when display is abbreviated. */
 export function formatEngagementCountAccessible(value: number): string {
   const n = Math.max(0, Math.floor(Number(value) || 0))
-  return n.toLocaleString()
+  return n.toLocaleString("en-US")
 }

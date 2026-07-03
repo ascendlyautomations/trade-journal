@@ -2,38 +2,25 @@
 
 import { useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { supabase } from "@/lib/supabaseClient"
 import { isDemoUserId } from "@/lib/demo/constants"
 import { enableDemoMode } from "@/lib/demo/demoMode"
+import { useUserProfile } from "@/lib/useUserProfile"
 
 export default function DemoIndexPage() {
   const router = useRouter()
+  const { user, loading } = useUserProfile()
 
   useEffect(() => {
-    let cancelled = false
+    if (loading) return
 
-    async function enterDemo() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-
-      if (cancelled) return
-
-      if (user && !isDemoUserId(user.id)) {
-        router.replace("/dashboard")
-        return
-      }
-
-      enableDemoMode()
+    if (user && !isDemoUserId(user.id)) {
       router.replace("/dashboard")
+      return
     }
 
-    void enterDemo()
-
-    return () => {
-      cancelled = true
-    }
-  }, [router])
+    enableDemoMode()
+    router.replace("/dashboard")
+  }, [loading, user, router])
 
   return null
 }

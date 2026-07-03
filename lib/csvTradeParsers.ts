@@ -3,6 +3,7 @@ import { normalizeFuturesSymbol } from "./normalizeFuturesSymbol.ts"
 import { getSessionFromDate } from "./getSession.ts"
 import { calculateDirectionalPoints } from "./resolveTradePoints.ts"
 import { CSV_RR_HEADER_ALIASES, parseCsvRrValue } from "./csvRrAliases.ts"
+import { sanitizeCsvTextField } from "./csvFormulaSanitize.ts"
 
 export type CsvRow = Record<string, string>
 
@@ -1551,7 +1552,7 @@ function buildFlexibleTradeInsert(
   if (commission !== null) importCostNotes.push(`Commission: ${commission}`)
   if (fees !== null) importCostNotes.push(`Fees: ${fees}`)
   if (swap !== null) importCostNotes.push(`Swap: ${swap}`)
-  const baseNotes = f.notes?.trim() ?? ""
+  const baseNotes = sanitizeCsvTextField(f.notes?.trim() ?? "")
   const notes =
     importCostNotes.length > 0
       ? [baseNotes, importCostNotes.join(" | ")].filter(Boolean).join("\n")

@@ -15,7 +15,7 @@ import {
   type TraxProBillingIntervalId,
 } from "@/lib/traxProBillingPlans"
 import { setCheckoutBillingInterval } from "@/lib/signupFlow"
-import TraxProBillingIntervalPicker from "@/app/components/TraxProBillingIntervalPicker"
+import TradeTraxsProFeatureGroupsList from "@/app/components/pricing/TradeTraxsProFeatureGroupsList"
 import TraxProSelectedPlanPrice from "@/app/components/TraxProSelectedPlanPrice"
 import {
   LANDING_HEADLINE_SM,
@@ -29,10 +29,12 @@ import {
   PRICING_CARD_FEATURE_LIST,
   PRICING_CARD_FEATURE_TEXT,
   PRICING_CARD_PLAN_DESCRIPTION,
+  PRICING_CARD_PRO_FEATURE_GROUP_HEADING_LANDING,
   PRICING_CARD_PRO_FEATURE_LIST,
   PRICING_CARD_PRO_FEATURES_HEADING,
   PRICING_CARD_PRO_PLAN_DESCRIPTION,
 } from "@/lib/pricingPlanCardUi"
+import TraxProBillingIntervalPicker from "@/app/components/TraxProBillingIntervalPicker"
 
 type Props = {
   checkoutLoading: boolean
@@ -123,16 +125,16 @@ export default function LandingPricingSection({
               <p className={PRICING_CARD_PRO_FEATURES_HEADING}>
                 {TRADETRAXS_PRO_FEATURES_HEADING}
               </p>
-              <ul className={PRICING_CARD_PRO_FEATURE_LIST}>
-                {TRADETRAXS_PRO_PLAN.features.map((line) => (
-                  <li key={line} className={PRICING_CARD_FEATURE_ITEM}>
-                    <span className="mt-0.5 shrink-0 text-emerald-400" aria-hidden>
-                      ✓
-                    </span>
-                    <span className={PRICING_CARD_FEATURE_TEXT}>{line}</span>
-                  </li>
-                ))}
-              </ul>
+              <TradeTraxsProFeatureGroupsList
+                groupHeadingClassName={PRICING_CARD_PRO_FEATURE_GROUP_HEADING_LANDING}
+                listClassName={PRICING_CARD_PRO_FEATURE_LIST}
+                itemClassName={PRICING_CARD_FEATURE_ITEM}
+                renderCheck={() => (
+                  <span className="mt-0.5 shrink-0 text-emerald-400" aria-hidden>
+                    ✓
+                  </span>
+                )}
+              />
               {showMarketingCTAs ? (
                 <>
                   <div className="mt-4 md:mt-6">

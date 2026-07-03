@@ -1,11 +1,15 @@
 "use client"
 
-import { useCallback, useEffect, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
 import { isImageUrlLoaded, markImageUrlLoaded } from "@/lib/imageUrlCache"
+import {
+  inferAvatarPixelSize,
+  normalizeImageSrc,
+  optimizeAvatarUrl,
+} from "@/lib/optimizedStorageImage"
 
 export function normalizeAvatarSrc(src: string | null | undefined): string | null {
-  const t = typeof src === "string" ? src.trim() : ""
-  return t.length > 0 ? t : null
+  return normalizeImageSrc(src)
 }
 
 /** Lucide User-style silhouette — neutral default for missing profile photos. */
@@ -49,6 +53,8 @@ export type ProfileAvatarImgProps = {
   className?: string
   fallback?: ReactNode
   priority?: boolean
+  /** Override inferred Tailwind size for Supabase transform (2× retina px). */
+  displaySizePx?: number
 }
 
 function outerAvatarClassName(className: string): string {
@@ -63,27 +69,39 @@ export function SafeProfileAvatar({
   className = "",
   fallback,
   priority = false,
+  displaySizePx,
 }: ProfileAvatarImgProps) {
-  const [displaySrc, setDisplaySrc] = useState<string | null>(() =>
-    normalizeAvatarSrc(src)
+  const originalSrc = useMemo(() => normalizeAvatarSrc(src), [src])
+  const pixelSize = displaySizePx ?? inferAvatarPixelSize(className)
+  const optimizedSrc = useMemo(
+    () => optimizeAvatarUrl(originalSrc, pixelSize),
+    [originalSrc, pixelSize]
+  )
+
+  const [requestSrc, setRequestSrc] = useState<string | null>(
+    () => optimizedSrc ?? originalSrc
   )
   const [failed, setFailed] = useState(false)
 
   useEffect(() => {
-    setDisplaySrc(normalizeAvatarSrc(src))
+    setRequestSrc(optimizedSrc ?? originalSrc)
     setFailed(false)
-  }, [src])
+  }, [optimizedSrc, originalSrc])
 
   const onError = useCallback(() => {
+    if (originalSrc && requestSrc !== originalSrc) {
+      setRequestSrc(originalSrc)
+      return
+    }
     setFailed(true)
-    setDisplaySrc(null)
-  }, [])
+    setRequestSrc(null)
+  }, [originalSrc, requestSrc])
 
   const onLoad = useCallback(() => {
-    if (displaySrc) markImageUrlLoaded(displaySrc)
-  }, [displaySrc])
+    if (requestSrc) markImageUrlLoaded(requestSrc)
+  }, [requestSrc])
 
-  const showImage = Boolean(displaySrc && !failed)
+  const showImage = Boolean(requestSrc && !failed)
   const fallbackNode = fallback ?? <DefaultAvatarFallback />
   const outerClass = outerAvatarClassName(className)
 
@@ -94,9 +112,13 @@ export function SafeProfileAvatar({
   return (
     <div className={outerClass}>
       <img
-        src={displaySrc!}
+        src={requestSrc!}
         alt={alt}
-        loading={priority || isImageUrlLoaded(displaySrc!) ? "eager" : "lazy"}
+        width={pixelSize}
+        height={pixelSize}
+        loading={
+          priority || isImageUrlLoaded(requestSrc!) ? "eager" : "lazy"
+        }
         decoding="async"
         fetchPriority={priority ? "high" : undefined}
         className="h-full w-full object-cover"

@@ -1,5 +1,12 @@
 import type { Metadata } from "next"
+import { Suspense } from "react"
 import LandingPageClient from "@/app/components/LandingPageClient"
+import {
+  SkeletonFeaturedTradesSection,
+  SkeletonTestimonialsSection,
+} from "@/app/components/ui/skeletons"
+import LandingFeaturedTradesSectionLoader from "@/app/components/landing/LandingFeaturedTradesSectionLoader"
+import LandingTestimonialsSectionLoader from "@/app/components/landing/LandingTestimonialsSectionLoader"
 import {
   DEFAULT_OG_IMAGE_PATH,
   DEFAULT_SITE_DESCRIPTION,
@@ -37,6 +44,22 @@ export const metadata: Metadata = {
   },
 }
 
+/** Static shell (hero, features, FAQ) — daily ISR; reviews/trades stream from Suspense loaders. */
+export const revalidate = 86_400
+
 export default function HomePage() {
-  return <LandingPageClient />
+  return (
+    <LandingPageClient
+      featuredTradesSection={
+        <Suspense fallback={<SkeletonFeaturedTradesSection />}>
+          <LandingFeaturedTradesSectionLoader />
+        </Suspense>
+      }
+      testimonialsSection={
+        <Suspense fallback={<SkeletonTestimonialsSection />}>
+          <LandingTestimonialsSectionLoader />
+        </Suspense>
+      }
+    />
+  )
 }

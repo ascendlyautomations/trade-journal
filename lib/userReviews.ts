@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabaseClient"
 import { notifyAdminSubmission } from "@/lib/notifyAdminSubmission"
+import { isRateLimitExceededError, formatRateLimitExceededMessage } from "@/lib/rateLimitErrors"
 import type { PostgrestError } from "@supabase/supabase-js"
 import type { PublicUserReview } from "@/lib/userReviewDisplay"
 
@@ -177,6 +178,14 @@ export async function saveUserReview(
       return {
         ok: false,
         message: "You already submitted a review. Edit your existing review instead.",
+      }
+    }
+    if (isRateLimitExceededError(error.message)) {
+      return {
+        ok: false,
+        message: formatRateLimitExceededMessage(
+          "Too many review submissions today. Try again tomorrow."
+        ),
       }
     }
     return { ok: false, message: error.message }

@@ -16,6 +16,7 @@ import {
   submissionSubmitButton,
   submissionTextarea,
 } from "@/lib/submissionFormStyles"
+import { useUserProfile } from "@/lib/useUserProfile"
 
 const REVIEW_MIN = 50
 const REVIEW_MAX = 400
@@ -34,6 +35,7 @@ export default function UserReviewModal({
   onSaved,
 }: UserReviewModalProps) {
   const router = useRouter()
+  const { user, profile } = useUserProfile()
   const submittingRef = useRef(false)
   const [loading, setLoading] = useState(false)
   const [existing, setExisting] = useState<UserReviewRow | null>(null)
@@ -113,37 +115,30 @@ export default function UserReviewModal({
     setError(null)
 
     try {
-      const {
-        data: { user },
-        error: authError,
-      } = await supabase.auth.getUser()
-
-      if (authError || !user) {
+      const authUserId = userId ?? user?.id
+      if (!authUserId) {
         onClose()
         router.push("/login")
         return
       }
 
-      const { data: profile, error: profileError } = await supabase
-        .from("profiles")
-        .select("name, username, avatar_url")
-        .eq("id", user.id)
-        .maybeSingle()
-
-      if (profileError || !profile) {
+      if (!profile?.username) {
         setError("Could not load your profile. Try again.")
         return
       }
 
       const result = await saveUserReview(
-        user.id,
+        authUserId,
         {
           rating,
           title,
           review,
           would_recommend: wouldRecommend,
         },
-        profile,
+        {
+          username: profile.username,
+          avatar_url: profile.avatar_url,
+        },
         existing
       )
 

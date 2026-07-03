@@ -6,6 +6,7 @@ import {
   logPostgrestErrorDev,
 } from "@/lib/postgrestError"
 import { notifyAdminSubmission } from "@/lib/notifyAdminSubmission"
+import { isRateLimitExceededError, formatRateLimitExceededMessage } from "@/lib/rateLimitErrors"
 
 const MAX_INT4 = 2_147_483_647
 
@@ -239,6 +240,14 @@ export async function submitAffiliateApplication(
   if (error) {
     logPostgrestErrorDev("submitAffiliateApplication insert", error)
     console.error("INSERT ERROR:", error)
+    if (isRateLimitExceededError(error.message)) {
+      return {
+        ok: false,
+        error: formatRateLimitExceededMessage(
+          "Too many affiliate applications this week. Try again later."
+        ),
+      }
+    }
     return { ok: false, error: formatPostgrestErrorMessage(error) }
   }
 

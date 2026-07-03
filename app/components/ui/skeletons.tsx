@@ -284,32 +284,151 @@ export function SkeletonTradesPageContent({ tradeCount = 6 }: { tradeCount?: num
 export function SkeletonDashboardPage() {
   return (
     <div className="w-full px-3 pb-3 pt-0 text-white md:px-10 md:pb-10">
-      <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 px-4 md:gap-8 md:px-6">
-        <Skeleton className="h-4 w-24" />
-        <div className="grid gap-4 overflow-visible lg:grid-cols-3 md:gap-6">
-          <div className="grid grid-cols-2 gap-3 lg:col-span-1 md:grid-cols-3 lg:grid-cols-2">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <SkeletonStatsCard key={i} />
-            ))}
-          </div>
-          <div className="space-y-4 lg:col-span-2 md:space-y-6">
-            <SkeletonChart />
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-              <SkeletonCard className="space-y-3">
-                <Skeleton className="h-4 w-28" />
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <SkeletonTradeCard key={i} className="border-0 bg-black/20 p-3" />
-                ))}
-              </SkeletonCard>
-              <SkeletonChart className="hidden md:block" />
-            </div>
-          </div>
+      <SkeletonDashboardShell />
+    </div>
+  )
+}
+
+/** Dashboard stats + charts placeholder — used while trades cache warms. */
+export function SkeletonDashboardShell() {
+  return (
+    <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 px-4 md:gap-8 md:px-6">
+      <Skeleton className="h-4 w-24" />
+      <div className="grid gap-4 overflow-visible lg:grid-cols-3 md:gap-6">
+        <div className="grid grid-cols-2 gap-3 lg:col-span-1 md:grid-cols-3 lg:grid-cols-2">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <SkeletonStatsCard key={i} />
+          ))}
         </div>
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 md:gap-6">
-          <SkeletonTable className="lg:col-span-2" />
-          <SkeletonChart className="hidden md:block" />
+        <div className="space-y-4 lg:col-span-2 md:space-y-6">
+          <SkeletonChart />
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <SkeletonCard className="space-y-3">
+              <Skeleton className="h-4 w-28" />
+              {Array.from({ length: 3 }).map((_, i) => (
+                <SkeletonTradeCard key={i} className="border-0 bg-black/20 p-3" />
+              ))}
+            </SkeletonCard>
+            <SkeletonChart className="hidden md:block" />
+          </div>
         </div>
       </div>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 md:gap-6">
+        <SkeletonTable className="lg:col-span-2" />
+        <SkeletonChart className="hidden md:block" />
+      </div>
+    </div>
+  )
+}
+
+export function SkeletonAchievementsGrid({ count = 6 }: { count?: number }) {
+  return (
+    <div
+      aria-busy="true"
+      aria-label="Loading achievements"
+      className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
+    >
+      {Array.from({ length: count }).map((_, i) => (
+        <SkeletonTradeCard key={i} />
+      ))}
+    </div>
+  )
+}
+
+export function SkeletonMessagesConversationList({ count = 6 }: { count?: number }) {
+  return (
+    <div aria-busy="true" aria-label="Loading conversations" className="space-y-2">
+      {Array.from({ length: count }).map((_, i) => (
+        <div key={i} className="flex items-center gap-3 rounded-lg p-3">
+          <Skeleton className="h-12 w-12 shrink-0 rounded-full" />
+          <div className="min-w-0 flex-1 space-y-2">
+            <Skeleton className="h-4 w-32" />
+            <Skeleton className="h-3 w-full max-w-xs" />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+export function SkeletonBacktestPageContent() {
+  return (
+    <div aria-busy="true" aria-label="Loading backtests" className="space-y-4">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <SkeletonStatsCard key={i} />
+        ))}
+      </div>
+      <SkeletonCard className="h-14" />
+      <SkeletonChart />
+      <SkeletonTable rows={4} />
+    </div>
+  )
+}
+
+export function SkeletonFeaturedTradesSection() {
+  return (
+    <section
+      aria-busy="true"
+      aria-label="Loading featured trades"
+      className="relative z-10 border-t border-white/10 px-4 py-10 md:px-6 md:py-20"
+    >
+      <div className="mx-auto max-w-6xl space-y-6">
+        <div className="mx-auto max-w-3xl space-y-3 text-center">
+          <Skeleton className="mx-auto h-8 w-64" />
+          <Skeleton className="mx-auto h-4 w-96 max-w-full" />
+        </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          <Skeleton className="min-h-[280px] w-full rounded-xl md:min-h-[320px]" />
+          <Skeleton className="min-h-[280px] w-full rounded-xl md:min-h-[320px]" />
+        </div>
+      </div>
+    </section>
+  )
+}
+
+export function SkeletonTestimonialsSection() {
+  return (
+    <section
+      aria-busy="true"
+      aria-label="Loading testimonials"
+      className="relative z-10 border-t border-white/10 px-4 py-10 md:px-6 md:py-20"
+    >
+      <div className="mx-auto max-w-6xl space-y-6">
+        <div className="mx-auto max-w-3xl space-y-3 text-center">
+          <Skeleton className="mx-auto h-8 w-72" />
+          <Skeleton className="mx-auto h-4 w-80 max-w-full" />
+        </div>
+        <div className="grid gap-4 md:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <SkeletonCard key={i} className="min-h-[220px] md:min-h-[280px]" />
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+export function SkeletonAnalystPanel({ count = 4 }: { count?: number }) {
+  return (
+    <div
+      aria-busy="true"
+      aria-label="Loading AI analyst"
+      className="grid grid-cols-1 gap-8 lg:grid-cols-2"
+    >
+      <div className="max-h-[80vh] space-y-3 overflow-hidden rounded-xl border border-white/10 bg-white/5 p-4">
+        {Array.from({ length: count }).map((_, i) => (
+          <SkeletonTradeCard key={i} className="border-white/10" />
+        ))}
+      </div>
+      <SkeletonCard className="min-h-[400px]">
+        <Skeleton className="mb-4 h-5 w-40" />
+        <div className="space-y-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-16 w-full rounded-lg" />
+          ))}
+        </div>
+      </SkeletonCard>
     </div>
   )
 }

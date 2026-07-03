@@ -11,6 +11,7 @@ import {
   ResponsiveContainer,
 } from "recharts"
 import EmptyState from "@/app/components/ui/EmptyState"
+import LockedFeature from "@/app/components/LockedFeature"
 import { formatEST } from "@/lib/formatEST"
 import { formatCurrency } from "@/lib/formatCurrency"
 import { formatDecimal } from "@/lib/formatDisplay"
@@ -23,6 +24,7 @@ export type EquityChartPoint = {
 export type DashboardEquityCurveProps = {
   data: EquityChartPoint[]
   variant: "mobile" | "desktop"
+  isPro?: boolean
   profitFactor?: number
   currentStreak?: number
   avgDay?: number
@@ -43,6 +45,7 @@ function ChartEmptyState() {
 export default function DashboardEquityCurve({
   data,
   variant,
+  isPro = true,
   profitFactor = 0,
   currentStreak = 0,
   avgDay = 0,
@@ -214,6 +217,7 @@ export default function DashboardEquityCurve({
         </ResponsiveContainer>
       </div>
 
+      {isPro ? (
       <div className="flex flex-wrap gap-3 mt-4">
         <div
           className={`px-3 py-2 rounded-lg text-sm font-medium backdrop-blur-md transition-all duration-200 hover:scale-[1.03] ${
@@ -262,6 +266,11 @@ export default function DashboardEquityCurve({
           Consistency: {consistency.toFixed(0)}%
         </div>
       </div>
+      ) : (
+        <div className="mt-4">
+          <LockedFeature title="Profit Factor" className="min-h-[120px]" />
+        </div>
+      )}
       </>
       )}
     </div>

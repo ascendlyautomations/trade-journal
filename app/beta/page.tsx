@@ -6,7 +6,7 @@ import { useEffect, useState } from "react"
 import UserReviewModal from "@/app/components/beta/UserReviewModal"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { BETA_ROOM_SLUG } from "@/lib/betaHub"
-import { supabase } from "@/lib/supabaseClient"
+import { useUserProfile } from "@/lib/useUserProfile"
 
 const ACTION_CARD_CLASS =
   "group flex h-full cursor-pointer flex-col rounded-xl border border-white/15 bg-white/[0.06] p-5 text-left shadow-md transition-all duration-200 hover:scale-[1.02] hover:border-white/25 hover:bg-white/[0.12] hover:shadow-lg motion-reduce:hover:scale-100"
@@ -33,44 +33,28 @@ function DiscussionIcon({ className }: { className?: string }) {
 
 export default function BetaHubPage() {
   const router = useRouter()
+  const { user, profile, loading } = useUserProfile()
   const { feedbackModalProps } = useFeedbackPopup({ autoDismissMs: 3000 })
   const [checking, setChecking] = useState(true)
   const [userId, setUserId] = useState<string | null>(null)
   const [reviewModalOpen, setReviewModalOpen] = useState(false)
 
   useEffect(() => {
-    let cancelled = false
-    void (async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
+    if (loading) return
 
-      if (!user) {
-        router.replace("/login")
-        return
-      }
-
-      const { data: profile, error } = await supabase
-        .from("profiles")
-        .select("is_beta_tester")
-        .eq("id", user.id)
-        .maybeSingle()
-
-      if (cancelled) return
-
-      if (error || !profile?.is_beta_tester) {
-        router.replace("/dashboard")
-        return
-      }
-
-      setUserId(user.id)
-      setChecking(false)
-    })()
-
-    return () => {
-      cancelled = true
+    if (!user) {
+      router.replace("/login")
+      return
     }
-  }, [router])
+
+    if (!profile?.is_beta_tester) {
+      router.replace("/dashboard")
+      return
+    }
+
+    setUserId(user.id)
+    setChecking(false)
+  }, [loading, user, profile?.is_beta_tester, router])
 
   function joinBetaDiscussion() {
     router.push(`/trade-rooms?room=${encodeURIComponent(BETA_ROOM_SLUG)}`)

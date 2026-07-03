@@ -62,8 +62,19 @@ export const PUBLIC_TRADE_SELECT = [
   "reviewed",
 ].join(", ")
 
+/** Owner trade columns for app cache (dashboard, trades, calendar, analyst). */
+export const TRADES_APP_SELECT = [
+  PUBLIC_TRADE_SELECT,
+  "account_name",
+  "account_id",
+  "account_size",
+  "account_category",
+  "top_confluences",
+  "is_initial_import",
+].join(", ")
+
 export function tradeSelectForViewer(isOwner: boolean): string {
-  return isOwner ? "*" : PUBLIC_TRADE_SELECT
+  return isOwner ? TRADES_APP_SELECT : PUBLIC_TRADE_SELECT
 }
 
 /** Human-readable badge label from account_type / mode only (never account_name). */

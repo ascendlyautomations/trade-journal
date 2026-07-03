@@ -17,7 +17,10 @@ function getServerSnapshot(): UserStreaksSnapshot | null {
   return EMPTY_SNAPSHOT
 }
 
-export function useUserStreaks(userId: string | null | undefined) {
+export function useUserStreaks(
+  userId: string | null | undefined,
+  hints?: { onboardingCompleted?: boolean | null }
+) {
   const subscribe = useCallback(
     (listener: () => void) => {
       const unsubStreaks = subscribeUserStreaksCache(listener)
@@ -44,13 +47,18 @@ export function useUserStreaks(userId: string | null | undefined) {
 
   useEffect(() => {
     if (!userId) return
-    void ensureUserStreaksLoaded(supabase, userId)
-  }, [userId, snapshot])
+    void ensureUserStreaksLoaded(supabase, userId, {
+      onboardingCompleted: hints?.onboardingCompleted,
+    })
+  }, [userId, snapshot, hints?.onboardingCompleted])
 
   const refresh = useCallback(async () => {
     if (!userId) return null
-    return ensureUserStreaksLoaded(supabase, userId, { force: true })
-  }, [userId])
+    return ensureUserStreaksLoaded(supabase, userId, {
+      force: true,
+      onboardingCompleted: hints?.onboardingCompleted,
+    })
+  }, [userId, hints?.onboardingCompleted])
 
   return { snapshot, loading, refresh }
 }

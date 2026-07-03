@@ -713,11 +713,7 @@ export default function SettingsPage() {
     setCreatingRoom(true)
 
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-
-      if (!user) throw new Error("Not logged in")
+      if (!user?.id) throw new Error("Not logged in")
 
       const { data: existing } = await supabase
         .from("rooms")
@@ -730,13 +726,9 @@ export default function SettingsPage() {
         return
       }
 
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("username")
-        .eq("id", user.id)
-        .single()
-
-      const room = await createUserRoom(user.id, profile?.username || "user")
+      const username =
+        String(sharedProfile?.username ?? profile?.username ?? "").trim() || "user"
+      const room = await createUserRoom(user.id, username)
       const slug =
         room && typeof room === "object" && "slug" in room
           ? String((room as { slug?: string }).slug ?? "").trim()

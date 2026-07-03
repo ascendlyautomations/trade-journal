@@ -7,8 +7,10 @@ import { useUserStreaks } from "@/lib/useUserStreaks"
 
 export default function StreaksPage() {
   useScrollPageTopOnMount()
-  const { user, loading: profileLoading } = useUserProfile()
-  const { snapshot, loading: streaksLoading } = useUserStreaks(user?.id)
+  const { user, profile, loading: profileLoading } = useUserProfile()
+  const { snapshot, loading: streaksLoading } = useUserStreaks(user?.id, {
+    onboardingCompleted: profile?.onboarding_completed,
+  })
 
   const loading = profileLoading || streaksLoading
 

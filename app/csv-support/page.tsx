@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { supabase } from "@/lib/supabaseClient"
 import { CSV_SUPPORT_BROKERS } from "@/lib/csvBrokerHint"
 import { submitCsvSupportRequest } from "@/lib/submitCsvSupportRequest"
+import { useUserProfile } from "@/lib/useUserProfile"
 
 const SUCCESS_MESSAGE =
   "Thank you for helping improve TradeTraxs. Your CSV sample has been submitted and may be used to support additional brokers/platforms in future updates."
@@ -19,6 +20,7 @@ function brokerFromQuery(raw: string | null): string {
 
 function CsvSupportForm() {
   const router = useRouter()
+  const { user } = useUserProfile()
   const searchParams = useSearchParams()
   const [brokerName, setBrokerName] = useState("")
   const [notes, setNotes] = useState("")
@@ -48,12 +50,7 @@ function CsvSupportForm() {
 
     setLoading(true)
 
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
-
-    if (authError || !user) {
+    if (!user?.id) {
       setLoading(false)
       router.push("/login")
       return
@@ -63,6 +60,7 @@ function CsvSupportForm() {
       csvFile,
       brokerName: broker,
       notes: notes.trim() || null,
+      userId: user.id,
     })
 
     if (!result.ok) {

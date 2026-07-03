@@ -5,7 +5,7 @@ const {
   LANDING_COMPARISON_FEATURE_LABELS,
   LANDING_COMPARISON_ROWS,
 } = require("./landingComparison.ts")
-const { TRADETRAXS_PRO_PLAN } = require("./tradeTraxsPlans.ts")
+const { TRADETRAXS_FEATURE_LABELS } = require("./tradeTraxsPlans.ts")
 
 describe("landingComparison", () => {
   it("rows follow recommended selling order", () => {
@@ -14,7 +14,7 @@ describe("landingComparison", () => {
       LANDING_COMPARISON_FEATURE_LABELS.propFirmMode,
       LANDING_COMPARISON_FEATURE_LABELS.communityTradeRooms,
       LANDING_COMPARISON_FEATURE_LABELS.performanceAnalytics,
-      LANDING_COMPARISON_FEATURE_LABELS.tradeReplayVideos,
+      LANDING_COMPARISON_FEATURE_LABELS.brandedShareCards,
       LANDING_COMPARISON_FEATURE_LABELS.backtestLab,
       LANDING_COMPARISON_FEATURE_LABELS.unlimitedTradeJournaling,
       LANDING_COMPARISON_FEATURE_LABELS.multipleTradingAccounts,
@@ -41,11 +41,11 @@ describe("landingComparison", () => {
   it("reuses pricing plan names for core Pro features", () => {
     assert.equal(
       LANDING_COMPARISON_FEATURE_LABELS.aiTradeAnalyst,
-      TRADETRAXS_PRO_PLAN.features[2]
+      TRADETRAXS_FEATURE_LABELS.aiTradeAnalyst
     )
     assert.equal(
       LANDING_COMPARISON_FEATURE_LABELS.backtestLab,
-      TRADETRAXS_PRO_PLAN.features[3]
+      TRADETRAXS_FEATURE_LABELS.backtestLab
     )
   })
 

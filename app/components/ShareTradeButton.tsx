@@ -12,6 +12,9 @@ import {
 import { copyFeedDeepLinkToClipboard } from "@/lib/feedDeepLink"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import ShareCopyLinkButton from "@/app/components/ShareCopyLinkButton"
+import ProUpgradeModal from "@/app/components/ProUpgradeModal"
+import { useUserProfile } from "@/lib/UserProfileProvider"
+import { isProActive } from "@/lib/subscription"
 
 export type ShareTradeButtonProps = {
   trade: any
@@ -37,9 +40,12 @@ export default function ShareTradeButton({
   mode = "full",
   onSendClick,
 }: ShareTradeButtonProps) {
+  const { profile: userProfile } = useUserProfile()
+  const isPro = isProActive(userProfile)
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const [busy, setBusy] = useState(false)
   const [isOpen, setIsOpen] = useState(false)
+  const [showExportUpgradeModal, setShowExportUpgradeModal] = useState(false)
   const [conversationOpen, setConversationOpen] = useState(false)
   const [exportHostReady, setExportHostReady] = useState(false)
   const lockRef = useRef(false)
@@ -55,6 +61,11 @@ export default function ShareTradeButton({
   }, [])
 
   const handleDownload = useCallback(async () => {
+    if (!isPro) {
+      setIsOpen(false)
+      setShowExportUpgradeModal(true)
+      return
+    }
     if (lockRef.current) return
     lockRef.current = true
     setBusy(true)
@@ -64,7 +75,7 @@ export default function ShareTradeButton({
       lockRef.current = false
       setBusy(false)
     }
-  }, [trade, instanceId])
+  }, [isPro, trade, instanceId])
 
   const openMessageShare = useCallback(() => {
     setIsOpen(false)
@@ -99,6 +110,10 @@ export default function ShareTradeButton({
   return (
     <>
       <FeedbackModal {...feedbackModalProps} />
+      <ProUpgradeModal
+        open={showExportUpgradeModal}
+        onClose={() => setShowExportUpgradeModal(false)}
+      />
       {mode === "full" && exportHostReady
         ? createPortal(
             <div

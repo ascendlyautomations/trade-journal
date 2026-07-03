@@ -626,10 +626,7 @@ export default function QuickTradeModal({
 
     const reelFile = pendingReelFileRef.current ?? pendingReelFile
     if (reelFile && result.trade?.id) {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      const authUserId = user?.id ?? userId
+      const authUserId = userId
 
       if (!authUserId) {
         setBusy(false)

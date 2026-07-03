@@ -14,6 +14,7 @@ import {
   submitAffiliateApplication,
   type AffiliateApplicationRow,
 } from "@/lib/affiliateApplication"
+import { useUserProfile } from "@/lib/useUserProfile"
 
 export type AffiliateApplyFormHandle = {
   focusFirstField: () => void
@@ -58,6 +59,7 @@ function AffiliateApplyFormInner(
   }: AffiliateApplyFormProps,
   ref: Ref<AffiliateApplyFormHandle>
 ) {
+  const { user } = useUserProfile()
   const socialHandleRef = useRef<HTMLInputElement>(null)
   const [socialHandle, setSocialHandle] = useState("")
   const [followers, setFollowers] = useState("")
@@ -190,9 +192,6 @@ function AffiliateApplyFormInner(
     }
 
     setBusy(true)
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
     if (!user?.id) {
       setFormError("Not signed in.")
       setBusy(false)

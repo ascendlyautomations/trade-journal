@@ -476,25 +476,23 @@ export default function PropFirmPage() {
       return
     }
 
+    if (!user?.id) {
+      setHasProAccess(false)
+      setPlanChecked(true)
+      return
+    }
+
     async function checkPlan() {
-      const {
-        data: { user: authUser },
-      } = await supabase.auth.getUser()
-      if (!authUser?.id) {
-        setHasProAccess(false)
-        setPlanChecked(true)
-        return
-      }
       const { data: profileRow } = await supabase
         .from("profiles")
         .select("is_pro, subscription_status")
-        .eq("id", authUser.id)
+        .eq("id", user!.id)
         .maybeSingle()
       setHasProAccess(isProActive(profileRow))
       setPlanChecked(true)
     }
     void checkPlan()
-  }, [profile])
+  }, [profile, user?.id])
 
   useEffect(() => {
     if (!planChecked || !hasProAccess) return
@@ -505,11 +503,7 @@ export default function PropFirmPage() {
         return
       }
 
-      const {
-        data: { user: authUser },
-      } = await supabase.auth.getUser()
-
-      if (!authUser) {
+      if (!user?.id) {
         setAccountsLoaded(true)
         return
       }
@@ -517,7 +511,7 @@ export default function PropFirmPage() {
       const { data, error } = await supabase
         .from("accounts")
         .select(PROPFIRM_ACCOUNT_FIELDS)
-        .eq("user_id", authUser.id)
+        .eq("user_id", user.id)
         .eq("category", "Prop Firm")
 
       if (error) {

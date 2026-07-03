@@ -30,11 +30,13 @@ import {
   type CsvImportDiagnostics,
 } from "@/lib/csvImportDiagnostics"
 import CsvImportDiagnosticsPanel from "@/app/components/CsvImportDiagnosticsPanel"
-import { buildCsvSupportNotes } from "@/lib/csvImportSupportNotes"
+import { consumeAppRateLimit } from "@/lib/consumeAppRateLimit"
+import { validateCsvUpload } from "@/lib/uploadValidation"
 import { submitCsvSupportRequest } from "@/lib/submitCsvSupportRequest"
 import { mirrorAccountSettingsHasUsedInitialImport } from "@/lib/profileSplitMirrorWrites"
 import { csvTradesHaveFutureDate } from "@/lib/tradeDateValidation"
 import { notifyGettingStartedChecklistMaybeCompleted } from "@/lib/gettingStartedProgressSync"
+import { useUserProfile } from "@/lib/useUserProfile"
 
 export type CsvImportPanelProps = {
   /** Smaller preview + less chrome (e.g. onboarding modal) */
@@ -73,6 +75,7 @@ export default function CsvImportPanel({
   importSource = "csv_import_panel",
 }: CsvImportPanelProps) {
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
+  const { user } = useUserProfile()
   const [parsed, setParsed] = useState<CsvRow[]>([])
   const [loading, setLoading] = useState(false)
   const [unrecognized, setUnrecognized] = useState(false)
@@ -147,6 +150,14 @@ export default function CsvImportPanel({
     setCsvSupportFile(file)
     setFailureModalOpen(false)
 
+    const csvValidationError = validateCsvUpload(file)
+    if (csvValidationError) {
+      clearCsvState()
+      lastCsvFileRef.current = file
+      openFailureModal(csvValidationError)
+      return
+    }
+
     if (file.size === 0) {
       clearCsvState()
       lastCsvFileRef.current = file
@@ -220,11 +231,7 @@ export default function CsvImportPanel({
 
     setSubmittingSupport(true)
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (!user) {
+    if (!user?.id) {
       showPopup(feedbackPresets.importFailed("Please log in first."))
       setSubmittingSupport(false)
       return
@@ -241,6 +248,7 @@ export default function CsvImportPanel({
       csvFile: file,
       brokerName: brokerHint ?? "Unknown",
       notes,
+      userId: user.id,
     })
 
     setSubmittingSupport(false)
@@ -292,17 +300,22 @@ export default function CsvImportPanel({
     importingRef.current = true
     setLoading(true)
 
-    const { data: userData } = await supabase.auth.getUser()
-    const user = userData.user
-    if (!user) {
+    if (!user?.id) {
       showPopup(feedbackPresets.importFailed("Please log in first."))
+      endImport()
+      return
+    }
+
+    const rateLimit = await consumeAppRateLimit("csv_import")
+    if (!rateLimit.ok) {
+      showPopup(feedbackPresets.importFailed(rateLimit.message))
       endImport()
       return
     }
 
     const { data: profile, error: profileErr } = await supabase
       .from("profiles")
-      .select("is_pro, has_used_initial_import")
+      .select("has_used_initial_import")
       .eq("id", user.id)
       .single()
 

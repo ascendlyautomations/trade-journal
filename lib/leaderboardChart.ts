@@ -1,7 +1,7 @@
 /**
  * Leaderboard chart pipeline: performance windows, daily chart buckets (NY calendar).
  * Chart emits only days with trades (no zero-fill). Data source: public-profile users
- * via leaderboard_trade_rows RPC (all trades, not is_public).
+ * via leaderboard_trade_rows RPC (public trades from public profiles only).
  */
 
 export type LeaderboardView = "7D" | "30D" | "90D" | "YTD" | "ALL" | "Custom"

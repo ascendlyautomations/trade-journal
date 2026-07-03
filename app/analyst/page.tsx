@@ -15,7 +15,7 @@ import {
 import { useUserProfile } from "@/lib/UserProfileProvider"
 import { useCachedTrades } from "@/lib/useAppDataCache"
 import { getCachedTrades, upsertTradeInCache } from "@/lib/appDataCache"
-import { SkeletonTradesPageContent } from "../components/ui/skeletons"
+import { SkeletonAnalystPanel } from "../components/ui/skeletons"
 import { NAVBAR_HEIGHT_CLASS } from "@/app/components/ui/DetailModalShell"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
@@ -460,11 +460,12 @@ export default function AnalystPage() {
   return (
     <Suspense
       fallback={
-        <>
-          <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] p-10">
-            <SkeletonTradesPageContent tradeCount={4} />
-          </div>
-        </>
+        <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] p-10">
+          <h1 className="mb-8 text-center text-3xl bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
+            AI Trade Analyst
+          </h1>
+          <SkeletonAnalystPanel count={4} />
+        </div>
       }
     >
       <AnalystPageContent />
@@ -749,7 +750,7 @@ function AnalystPageContent() {
         </h1>
 
         {!pageReady ? (
-          <SkeletonTradesPageContent tradeCount={4} />
+          <SkeletonAnalystPanel count={4} />
         ) : !pro ? (
           <div className="mx-auto max-w-lg">
             <LockedFeature title="AI Analyst" />

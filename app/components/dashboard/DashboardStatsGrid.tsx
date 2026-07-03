@@ -1,6 +1,7 @@
 "use client"
 
 import type { ReactNode } from "react"
+import LockedFeature from "@/app/components/LockedFeature"
 import { formatCurrency } from "@/lib/formatCurrency"
 import { formatRR } from "@/lib/formatDisplay"
 
@@ -44,6 +45,7 @@ type TradingHoursSummary = {
 }
 
 export type DashboardStatsGridProps = {
+  isPro?: boolean
   totalTrades: number
   winRate: number
   avgRR: number | null
@@ -100,6 +102,7 @@ function Stat({
 }
 
 export default function DashboardStatsGrid({
+  isPro = true,
   totalTrades,
   winRate,
   avgRR,
@@ -125,31 +128,47 @@ export default function DashboardStatsGrid({
       <div className="grid grid-cols-2 gap-2 md:gap-3">
         <Stat title="Trades" value={formatNumber(totalTrades)} />
         <Stat title="Win %" value={`${winRate.toFixed(1)}%`} />
-        <Stat title="Avg RR" value={formatRR(avgRR)} />
+        {isPro ? <Stat title="Avg RR" value={formatRR(avgRR)} /> : null}
         <Stat
           title="P&L"
           value={formatCurrency(totalPnL)}
           positive={totalPnL >= 0}
         />
+        {!isPro ? (
+          <div className="col-span-2">
+            <LockedFeature title="Avg RR" className="min-h-[76px] md:min-h-[90px]" />
+          </div>
+        ) : null}
         {showEquity ? mobileEquitySlot : null}
-        <div className="col-span-2 block md:hidden">{mobileWeekdayPnlSlot}</div>
-        <Stat title="Avg Win" value={formatCurrency(avgWin)} positive />
-        <Stat
-          title="Best Trade"
-          value={formatCurrency(bestTrade)}
-          positive={bestTrade >= 0}
-        />
-        <Stat title="Avg Loss" value={formatCurrency(avgLoss)} positive={false} />
-        <Stat
-          title="Big Loss"
-          value={formatCurrency(biggestLoss)}
-          positive={false}
-        />
-
-        <Stat title="Best Day" value={formatCurrency(bestDay)} positive />
-        <Stat title="Worst Day" value={formatCurrency(worstDay)} positive={false} />
+        {isPro ? (
+          <div className="col-span-2 block md:hidden">{mobileWeekdayPnlSlot}</div>
+        ) : (
+          <div className="col-span-2 block md:hidden">
+            <LockedFeature title="Weekday Performance" className="min-h-[220px]" />
+          </div>
+        )}
+        {isPro ? (
+          <>
+            <Stat title="Avg Win" value={formatCurrency(avgWin)} positive />
+            <Stat
+              title="Best Trade"
+              value={formatCurrency(bestTrade)}
+              positive={bestTrade >= 0}
+            />
+            <Stat title="Avg Loss" value={formatCurrency(avgLoss)} positive={false} />
+            <Stat
+              title="Big Loss"
+              value={formatCurrency(biggestLoss)}
+              positive={false}
+            />
+            <Stat title="Best Day" value={formatCurrency(bestDay)} positive />
+            <Stat title="Worst Day" value={formatCurrency(worstDay)} positive={false} />
+          </>
+        ) : null}
       </div>
 
+      {isPro ? (
+        <>
       <div className="rounded-xl border border-white/10 bg-white/10 p-2.5 backdrop-blur-md md:p-4">
         <h3 className="text-[11px] text-gray-300 md:text-sm">
           Expectancy
@@ -207,11 +226,25 @@ export default function DashboardStatsGrid({
           </p>
         )}
       </div>
+        </>
+      ) : (
+        <>
+          <LockedFeature title="Expectancy" className="min-h-[120px]" />
+          <LockedFeature title="Trading Hours" className="min-h-[120px]" />
+        </>
+      )}
 
       <div className="block md:hidden">
-        {showSessions ? mobileSessionsSlot : null}
+        {showSessions ? (
+          isPro ? (
+            mobileSessionsSlot
+          ) : (
+            <LockedFeature title="Session Performance" className="min-h-[220px]" />
+          )
+        ) : null}
       </div>
 
+      {isPro ? (
       <div className="rounded-xl border border-white/10 bg-white/10 p-2.5 backdrop-blur-md md:p-4">
         <h3 className="mb-1.5 text-[11px] text-gray-300 md:mb-2 md:text-sm">Trading Hours</h3>
 
@@ -234,8 +267,9 @@ export default function DashboardStatsGrid({
           </>
         )}
       </div>
+      ) : null}
 
-      {maxDrawdownSlot}
+      {isPro ? maxDrawdownSlot : <LockedFeature title="Max Drawdown" className="min-h-[120px]" />}
     </div>
   )
 }

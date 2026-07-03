@@ -83,6 +83,11 @@ export function invalidateUserStreaksCache(userId: string) {
   notify()
 }
 
+export function clearAllUserStreaksCaches() {
+  streaksByUser.clear()
+  notify()
+}
+
 export function getUserStreaksSnapshot(
   userId: string | null | undefined
 ): UserStreaksSnapshot | null {
@@ -101,9 +106,22 @@ export function isUserStreaksLoading(userId: string | null | undefined): boolean
 async function fetchMilestoneSignals(
   supabase: SupabaseClient,
   userId: string,
-  trades: readonly any[]
+  trades: readonly any[],
+  hints?: { onboardingCompleted?: boolean | null }
 ): Promise<MilestoneSignals> {
   const tradeIds = trades.map((t) => String(t.id))
+  const hasOnboardingHint = typeof hints?.onboardingCompleted === "boolean"
+
+  const profilePromise = hasOnboardingHint
+    ? Promise.resolve({
+        data: { onboarding_completed: hints!.onboardingCompleted },
+        error: null,
+      })
+    : supabase
+        .from("profiles")
+        .select("onboarding_completed")
+        .eq("id", userId)
+        .maybeSingle()
 
   const [
     profileRes,
@@ -114,11 +132,7 @@ async function fetchMilestoneSignals(
     profilePostsListRes,
     tradeLikesRes,
   ] = await Promise.all([
-    supabase
-      .from("profiles")
-      .select("onboarding_completed")
-      .eq("id", userId)
-      .maybeSingle(),
+    profilePromise,
     supabase
       .from("profile_posts")
       .select("id", { count: "exact", head: true })
@@ -241,7 +255,7 @@ function computeSnapshot(
 export async function ensureUserStreaksLoaded(
   supabase: SupabaseClient,
   userId: string,
-  options?: { force?: boolean }
+  options?: { force?: boolean; onboardingCompleted?: boolean | null }
 ): Promise<UserStreaksSnapshot> {
   if (!options?.force) {
     const cached = getUserStreaksSnapshot(userId)
@@ -264,7 +278,9 @@ export async function ensureUserStreaksLoaded(
   const trades = [...getTradesSnapshot(userId)]
   const [postingTimestamps, milestoneSignals] = await Promise.all([
     fetchPostingTimestamps(supabase, userId, trades),
-    fetchMilestoneSignals(supabase, userId, trades),
+    fetchMilestoneSignals(supabase, userId, trades, {
+      onboardingCompleted: options?.onboardingCompleted,
+    }),
   ])
 
   const snapshot = computeSnapshot(trades, postingTimestamps, milestoneSignals)

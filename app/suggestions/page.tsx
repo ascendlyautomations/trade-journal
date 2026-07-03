@@ -4,9 +4,11 @@ import { useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
 import { useToast } from "@/app/components/ui"
+import { useUserProfile } from "@/lib/useUserProfile"
 
 export default function SuggestionsPage() {
   const toast = useToast()
+  const { user } = useUserProfile()
   const [note, setNote] = useState("")
   const [image, setImage] = useState<File | null>(null)
   const [loading, setLoading] = useState(false)
@@ -17,11 +19,7 @@ export default function SuggestionsPage() {
 
     setLoading(true)
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (!user) {
+    if (!user?.id) {
       toast.error("Please log in first.")
       setLoading(false)
       return

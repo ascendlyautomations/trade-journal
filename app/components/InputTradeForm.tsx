@@ -4,10 +4,14 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabaseClient"
 import { compressScreenshot } from "@/lib/compressImage"
+import { validateImageUpload } from "@/lib/uploadValidation"
+import { consumeAppRateLimit } from "@/lib/consumeAppRateLimit"
 import {
   assertCanCreateTradingAccount,
 } from "@/lib/tradingAccounts"
 import { ensureManualUserAccountRegistered } from "@/lib/ensureManualUserAccount"
+import { ACCOUNTS_SELECT } from "@/lib/appDataCache"
+import { useUserProfile } from "@/lib/UserProfileProvider"
 import { isProActive } from "@/lib/subscription"
 import { insertCsvTradesWithAccount } from "@/lib/insertCsvTradesWithAccount"
 import { feedbackPresets, persistentError } from "@/lib/feedbackPresets"
@@ -125,6 +129,8 @@ export default function InputTradeForm({
   onParsedTradesClear,
 }: InputTradeFormProps) {
   const router = useRouter()
+  const { user, profile: contextProfile } = useUserProfile()
+  const userId = user?.id ?? null
   const isEditMode = Boolean(existingTrade?.id)
   const showAsModal = isEditMode && Boolean(onClose)
 
@@ -228,29 +234,43 @@ export default function InputTradeForm({
     username?: string | null
     avatar_url?: string | null
   } | null>(null)
-  const [authUserId, setAuthUserId] = useState<string | null>(null)
   const [accountFieldsLocked, setAccountFieldsLocked] = useState(false)
   const [communityPreviewOpen, setCommunityPreviewOpen] = useState(false)
   const [screenshotPreviewUrl, setScreenshotPreviewUrl] = useState<string | null>(
     null
   )
 
-  const applyPlanAndAccountLock = useCallback(async (userId: string | null) => {
-    if (!userId) {
+  const applyPlanAndAccountLock = useCallback(async (uid: string | null) => {
+    if (!uid) {
       setPlanProfile(null)
-      setAuthUserId(null)
       setAccountFieldsLocked(false)
       return
     }
-    setAuthUserId(userId)
-    const { data: prof } = await supabase
+
+    const fromContext =
+      contextProfile?.id === uid
+        ? {
+            is_pro: contextProfile.is_pro,
+            subscription_status: contextProfile.subscription_status,
+            username: contextProfile.username,
+            avatar_url: contextProfile.avatar_url,
+          }
+        : null
+
+    const { data: lockedRow } = await supabase
       .from("profiles")
       .select(
         "is_pro, subscription_status, locked_account_type, locked_account_size, locked_account_name, locked_account_number, username, avatar_url"
       )
-      .eq("id", userId)
+      .eq("id", uid)
       .maybeSingle()
-    setPlanProfile(prof ?? null)
+
+    const prof = {
+      ...fromContext,
+      ...(lockedRow ?? {}),
+    }
+    setPlanProfile(Object.keys(prof).length ? prof : null)
+
     if (isProActive(prof)) {
       setAccountFieldsLocked(false)
       return
@@ -258,18 +278,18 @@ export default function InputTradeForm({
     const { data: rows } = await supabase
       .from("user_accounts")
       .select("account_type")
-      .eq("user_id", userId)
+      .eq("user_id", uid)
     const manualCount = (rows ?? []).filter(
       (t) =>
         String(t.account_type ?? "").toLowerCase().trim() !== "imported"
     ).length
     setAccountFieldsLocked(manualCount >= 1)
-  }, [])
+  }, [contextProfile])
 
   const fetchAccountsForUser = useCallback(async (userId: string) => {
     const { data, error } = await supabase
       .from("accounts")
-      .select("*")
+      .select(ACCOUNTS_SELECT)
       .eq("user_id", userId)
 
     if (error) {
@@ -292,41 +312,20 @@ export default function InputTradeForm({
   }, [])
 
   const refreshPlanAndAccountLock = useCallback(async () => {
-    if (authUserId) {
-      await applyPlanAndAccountLock(authUserId)
-      return
-    }
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    await applyPlanAndAccountLock(user?.id ?? null)
-  }, [applyPlanAndAccountLock, authUserId])
+    await applyPlanAndAccountLock(userId)
+  }, [applyPlanAndAccountLock, userId])
 
   useEffect(() => {
-    let cancelled = false
-
-    void (async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      const userId = user?.id ?? null
-      if (cancelled) return
-
-      await Promise.all([
-        applyPlanAndAccountLock(userId),
-        userId ? fetchAccountsForUser(userId) : Promise.resolve(),
-      ])
-    })()
-
-    return () => {
-      cancelled = true
+    void applyPlanAndAccountLock(userId)
+    if (userId) {
+      void fetchAccountsForUser(userId)
     }
-  }, [applyPlanAndAccountLock, fetchAccountsForUser])
+  }, [userId, applyPlanAndAccountLock, fetchAccountsForUser])
 
   useEffect(() => {
-    if (!authUserId) return
-    void applyPlanAndAccountLock(authUserId)
-  }, [existingTrade?.id, authUserId, applyPlanAndAccountLock])
+    if (!userId) return
+    void applyPlanAndAccountLock(userId)
+  }, [existingTrade?.id, userId, applyPlanAndAccountLock])
 
   useEffect(() => {
     if (!image) {
@@ -359,9 +358,9 @@ export default function InputTradeForm({
   }, [])
 
   useEffect(() => {
-    if (!showSettings || !authUserId) return
-    void fetchAccountsForUser(authUserId)
-  }, [showSettings, authUserId, fetchAccountsForUser])
+    if (!showSettings || !userId) return
+    void fetchAccountsForUser(userId)
+  }, [showSettings, userId, fetchAccountsForUser])
 
   useEffect(() => {
     if (showSettings) return
@@ -551,15 +550,12 @@ export default function InputTradeForm({
 
   const performDeleteAttachedReel = useCallback(
     async (post: ReelRow) => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      if (!user?.id) return
+      if (!userId) return
 
       setReelDeleteBusy(true)
       const result = await deleteReel(supabase, {
         reelId: post.id,
-        userId: user.id,
+        userId,
       })
       setReelDeleteBusy(false)
 
@@ -571,7 +567,7 @@ export default function InputTradeForm({
       setAttachedReel(null)
       setPendingReelFile(null)
     },
-    [showPopup]
+    [showPopup, userId]
   )
 
   const {
@@ -669,11 +665,7 @@ export default function InputTradeForm({
     submittingRef.current = true
     setSubmitting(true)
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (!user?.id) {
+    if (!userId) {
       showPopup(
         persistentError("Sign In Required", "Please log in to save your trade.")
       )
@@ -683,23 +675,24 @@ export default function InputTradeForm({
 
     const reelFileAtSubmit = pendingReelFileRef.current ?? pendingReelFile
 
-    const { data: profileRow } = await supabase
-      .from("profiles")
-      .select(
-        "is_pro, subscription_status, locked_account_type, locked_account_size, locked_account_name, locked_account_number"
-      )
-      .eq("id", user.id)
-      .maybeSingle()
+    const profileRow = planProfile ?? contextProfile
     const userIsPro = isProActive(profileRow)
 
     let screenshotUrl: string | null = null
 
     if (image) {
+      const imageValidationError = validateImageUpload(image)
+      if (imageValidationError) {
+        showPopup(persistentError("Invalid Image", imageValidationError))
+        releaseSubmit()
+        return
+      }
+
       let uploadFile: File = image
       if (image.type?.startsWith("image/")) {
         uploadFile = await compressScreenshot(image)
       }
-      const fileName = `${user.id}/${Date.now()}-${uploadFile.name}`
+      const fileName = `${userId}/${Date.now()}-${uploadFile.name}`
       const { error: upErr } = await supabase.storage
         .from("screenshots")
         .upload(fileName, uploadFile)
@@ -767,7 +760,7 @@ export default function InputTradeForm({
         const { error: lockErr } = await supabase
           .from("profiles")
           .update(lockedAccountPatch)
-          .eq("id", user.id)
+          .eq("id", userId)
         if (lockErr) {
           console.error("locked account update:", lockErr)
           showPopup(
@@ -778,7 +771,7 @@ export default function InputTradeForm({
         }
         const { error: mirrorErr } = await mirrorAccountSettingsLockedAccount(
           supabase,
-          user.id,
+          userId,
           lockedAccountPatch
         )
         if (mirrorErr) {
@@ -788,7 +781,7 @@ export default function InputTradeForm({
         const { data: lockedAccountMatch } = await supabase
           .from("accounts")
           .select("id")
-          .eq("user_id", user.id)
+          .eq("user_id", userId)
           .eq("account_number", lockedNumber)
           .maybeSingle()
 
@@ -830,7 +823,7 @@ export default function InputTradeForm({
       rowAcct.type === "backtest" || rowAcct.type === "imported"
 
     const ensured = await ensureManualUserAccountRegistered(supabase, {
-      userId: user.id,
+      userId: userId,
       accountName: rowAcct.name ?? "",
       tradeAccountType: rowAcct.type,
       isPro: userIsPro,
@@ -854,7 +847,7 @@ export default function InputTradeForm({
         const { count: publicTradeCount } = await supabase
           .from("trades")
           .select("id", { count: "exact", head: true })
-          .eq("user_id", user.id)
+          .eq("user_id", userId)
           .eq("is_public", true)
         redirectToProfileAfterFirstPublic = (publicTradeCount ?? 0) === 0
       }
@@ -930,7 +923,7 @@ export default function InputTradeForm({
         return
       }
 
-      upsertTradeInCache(user.id, {
+      upsertTradeInCache(userId, {
         ...existingTrade,
         ...updateRow,
         id: existingTrade.id,
@@ -940,7 +933,7 @@ export default function InputTradeForm({
         const { error: postErr } = await supabase.from("posts").upsert(
           {
             trade_id: existingTrade.id,
-            user_id: user.id,
+            user_id: userId,
             image_url: imageUrlOut,
             pnl: parsedPnl,
             rr: parsedRR,
@@ -965,7 +958,7 @@ export default function InputTradeForm({
       }
 
       const replayError = await syncTradeReplayAfterSave(
-        user.id,
+        userId,
         String(existingTrade.id),
         reelFileAtSubmit
       )
@@ -988,11 +981,11 @@ export default function InputTradeForm({
         const { data: navProfile } = await supabase
           .from("profiles")
           .select("username")
-          .eq("id", user.id)
+          .eq("id", userId)
           .maybeSingle()
         router.push(
           `${profilePath({
-            id: user.id,
+            id: userId,
             username: navProfile?.username,
           })}?trade=${encodeURIComponent(String(existingTrade.id))}`
         )
@@ -1035,7 +1028,7 @@ export default function InputTradeForm({
       account_category: rowAcct.category ?? null,
       account_type: rowAcct.type,
       strategy: strategy || null,
-      user_id: user.id,
+      user_id: userId,
       created_at: now.toISOString(),
       date: now.toISOString(),
       trade_date: selectedDate,
@@ -1071,7 +1064,7 @@ export default function InputTradeForm({
     }
 
     if (newTradeData) {
-      prependTradeInCache(user.id, newTradeData)
+      prependTradeInCache(userId, newTradeData)
       console.log("[InputTradeForm] trade created", {
         tradeId: newTradeData.id,
         isPublic,
@@ -1081,7 +1074,7 @@ export default function InputTradeForm({
     if (isPublic && newTradeData) {
       const { error: postError } = await supabase.from("posts").insert([
         {
-          user_id: user.id,
+          user_id: userId,
           trade_id: newTradeData.id,
           image_url: screenshotUrl,
           pnl: parsedPnl,
@@ -1099,7 +1092,7 @@ export default function InputTradeForm({
       }
 
       const replayError = await syncTradeReplayAfterSave(
-        user.id,
+        userId,
         String(newTradeData.id),
         reelFileAtSubmit
       )
@@ -1124,7 +1117,7 @@ export default function InputTradeForm({
 
     if (newTradeData?.id) {
       const replayErrorPrivate = await syncTradeReplayAfterSave(
-        user.id,
+        userId,
         String(newTradeData.id),
         reelFileAtSubmit
       )
@@ -1152,10 +1145,19 @@ export default function InputTradeForm({
     setIsPublic(nextIsPublic)
   }
 
+  function selectTradeImage(file: File | undefined) {
+    if (!file) return
+    const validationError = validateImageUpload(file)
+    if (validationError) {
+      showPopup(persistentError("Invalid Image", validationError))
+      return
+    }
+    setImage(file)
+  }
+
   function handleDrop(e: React.DragEvent<HTMLDivElement>) {
     e.preventDefault()
-    const file = e.dataTransfer.files[0]
-    if (file) setImage(file)
+    selectTradeImage(e.dataTransfer.files[0])
   }
 
   function handleClickUpload() {
@@ -1183,18 +1185,21 @@ export default function InputTradeForm({
     setCsvImporting(true)
 
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      if (!user?.id) {
+      if (!userId) {
         showPopup(feedbackPresets.importFailed("Please log in first."))
+        return
+      }
+
+      const rateLimit = await consumeAppRateLimit("csv_import")
+      if (!rateLimit.ok) {
+        showPopup(feedbackPresets.importFailed(rateLimit.message))
         return
       }
 
       const { data: profile, error: profileErr } = await supabase
         .from("profiles")
         .select("is_pro, has_used_csv_import")
-        .eq("id", user.id)
+        .eq("id", userId)
         .single()
       if (profileErr || !profile) {
         console.error("Profile fetch failed:", profileErr)
@@ -1232,13 +1237,13 @@ export default function InputTradeForm({
         const { error: flagErr } = await supabase
           .from("profiles")
           .update({ has_used_csv_import: true })
-          .eq("id", user.id)
+          .eq("id", userId)
         if (flagErr) {
           console.error("markProfileCsvImportUsed:", flagErr)
         } else {
           const { error: mirrorErr } = await mirrorAccountSettingsHasUsedCsvImport(
             supabase,
-            user.id,
+            userId,
             true
           )
           if (mirrorErr) {
@@ -1249,7 +1254,7 @@ export default function InputTradeForm({
 
       onParsedTradesClear?.()
       setSelectedAccount(null)
-      invalidateTradesCache(user.id)
+      invalidateTradesCache(userId)
     } catch (err) {
       console.error(err)
       showPopup(
@@ -1306,19 +1311,11 @@ export default function InputTradeForm({
     setCreatingAccount(true)
 
     try {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+    if (!userId) return
 
-    if (!user) return
+    const profile = planProfile ?? contextProfile
 
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("is_pro, subscription_status")
-      .eq("id", user.id)
-      .maybeSingle()
-
-    const gate = await assertCanCreateTradingAccount(supabase, user.id, profile)
+    const gate = await assertCanCreateTradingAccount(supabase, userId, profile)
     if (!gate.ok) {
       showPopup(feedbackPresets.accountLimit())
       return
@@ -1328,7 +1325,7 @@ export default function InputTradeForm({
       .from("accounts")
       .insert([
         {
-          user_id: user.id,
+          user_id: userId,
           name: newAccount.name,
           account_size: newAccount.size,
           account_number: newAccount.id,
@@ -1357,7 +1354,7 @@ export default function InputTradeForm({
 
     if (!data) return
 
-    upsertAccountInCache(user.id, data)
+    upsertAccountInCache(userId, data)
 
     setAccounts((prev) => [
       ...prev,
@@ -1437,7 +1434,7 @@ export default function InputTradeForm({
   }, [screenshotPreviewUrl, existingTrade?.image_url])
 
   const communityPreviewPost = useMemo(() => {
-    if (!authUserId) return null
+    if (!userId) return null
     const previewEntryTime = entryTime
       ? buildDateTime(entryDate, entryTime)
       : null
@@ -1445,7 +1442,7 @@ export default function InputTradeForm({
       ? buildDateTime(exitDate, exitTime)
       : null
     return buildCommunitySharePreviewPost({
-      userId: authUserId,
+      userId,
       username: String(planProfile?.username ?? "").trim() || "User",
       avatarUrl: planProfile?.avatar_url ?? null,
       pnl,
@@ -1469,7 +1466,7 @@ export default function InputTradeForm({
       tradeDate: entryDate,
     })
   }, [
-    authUserId,
+    userId,
     planProfile?.username,
     planProfile?.avatar_url,
     planProfile?.locked_account_type,
@@ -1493,8 +1490,8 @@ export default function InputTradeForm({
   ])
 
   const communityPreviewUser = useMemo(
-    () => (authUserId ? { id: authUserId } : null),
-    [authUserId]
+    () => (userId ? { id: userId } : null),
+    [userId]
   )
 
   const tradeTimeframeOptions = [
@@ -2192,8 +2189,7 @@ export default function InputTradeForm({
               className="hidden"
               accept="image/*"
               onChange={(e) => {
-                const file = e.target.files?.[0]
-                if (file) setImage(file)
+                selectTradeImage(e.target.files?.[0])
               }}
             />
           </div>

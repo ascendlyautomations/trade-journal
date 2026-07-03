@@ -114,15 +114,7 @@ import {
   fetchDemoConversationMessages,
   resolveDemoConversationIdFromSegment,
 } from "@/lib/demo/demoMessages"
-
-/** Includes parent_message_id via *; no self-referencing parent embed (PGRST200). */
-const DM_MESSAGE_SELECT = `
-  *,
-  profiles!sender_id (
-    username,
-    avatar_url
-  )
-`
+import { DM_MESSAGE_SELECT } from "@/lib/dmMessageSelect"
 
 const DM_SHARE_CARD_CLASS = "w-full max-w-[min(100%,22rem)]"
 

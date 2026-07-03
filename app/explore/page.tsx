@@ -390,10 +390,7 @@ export default function ExplorePage() {
       return
     }
 
-    const {
-      data: { user: authUser },
-    } = await supabase.auth.getUser()
-    setCurrentUserId(authUser?.id ?? null)
+    setCurrentUserId(user?.id ?? null)
 
     const profilePoolLimit = EXPLORE_NEW_LIMIT + EXPLORE_ACTIVE_LIMIT
 
@@ -406,24 +403,24 @@ export default function ExplorePage() {
         .neq("is_private", true)
         .order("created_at", { ascending: false })
         .limit(profilePoolLimit),
-      authUser?.id
+      user?.id
         ? supabase
             .from("followers")
             .select("following_id")
-            .eq("follower_id", authUser.id)
+            .eq("follower_id", user.id)
         : Promise.resolve({ data: null }),
-      authUser?.id
+      user?.id
         ? supabase
             .from("follow_requests")
             .select("target_id")
-            .eq("requester_id", authUser.id)
+            .eq("requester_id", user.id)
             .eq("status", "pending")
         : Promise.resolve({ data: null }),
-      authUser?.id
+      user?.id
         ? supabase
             .from("followers")
             .select("follower_id")
-            .eq("following_id", authUser.id)
+            .eq("following_id", user.id)
         : Promise.resolve({ data: null }),
     ])
 
@@ -453,7 +450,7 @@ export default function ExplorePage() {
     const tradesByView = readExploreSession()?.tradesByView ?? {}
 
     writeExploreSession({
-      currentUserId: authUser?.id ?? null,
+      currentUserId: user?.id ?? null,
       profiles: pool,
       followingIds: followingIdsArr,
       requestedIds: requestedIdsArr,

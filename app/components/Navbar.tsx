@@ -1,6 +1,6 @@
 "use client"
 
-import Link from "next/link"
+import IntentPrefetchLink from "@/lib/IntentPrefetchLink"
 import { useCallback, useEffect, useState, useRef, type MouseEvent } from "react"
 import { createPortal } from "react-dom"
 import { supabase } from "../../lib/supabaseClient"
@@ -11,7 +11,9 @@ import { getAdminCheckResultForUser } from "../../lib/adminUsers"
 import { fetchTotalUnreadMessageCount } from "../../lib/messageUnread"
 import { NOTIFICATION_INBOX_TYPES } from "../../lib/notificationEngagementTypes"
 import { profilePath } from "../../lib/profileRoutes"
-import { prefetchAppRoutes } from "../../lib/routePrefetch"
+import { prefetchCriticalAppRoutes } from "../../lib/routePrefetch"
+import { scheduleDeferredWork } from "../../lib/scheduleDeferredWork"
+import { subscribeNotificationChanges } from "../../lib/notificationRealtime"
 import { ProfileAvatarImg } from "./SafeProfileAvatar"
 import BugReportModal from "./BugReportModal"
 import GettingStartedMobileEntry from "./GettingStartedMobileEntry"
@@ -180,29 +182,9 @@ export default function Navbar() {
 
     const uid = user.id
 
-    const channel = supabase.channel(`notif-${uid}`)
-
-    channel.on(
-      "postgres_changes",
-      {
-        event: "*",
-        schema: "public",
-        table: "notifications",
-        filter: `user_id=eq.${uid}`,
-      },
-      (payload: { new?: { user_id?: string }; old?: { user_id?: string } }) => {
-        const row = payload.new ?? payload.old
-        if (row?.user_id === uid) {
-          void fetchUnread()
-        }
-      }
-    )
-
-    channel.subscribe()
-
-    return () => {
-      void supabase.removeChannel(channel)
-    }
+    return subscribeNotificationChanges(uid, () => {
+      void fetchUnread()
+    })
   }, [user, fetchUnread])
 
   useEffect(() => {
@@ -232,15 +214,17 @@ export default function Navbar() {
 
     let cancelled = false
 
-    void (async () => {
-      await fetchUnread()
-      if (!cancelled) setHasFetchedNotifications(true)
-    })()
+    scheduleDeferredWork(() => {
+      void (async () => {
+        await fetchUnread()
+        if (!cancelled) setHasFetchedNotifications(true)
+      })()
 
-    void (async () => {
-      await fetchUnreadMessages()
-      if (!cancelled) setHasFetchedMessages(true)
-    })()
+      void (async () => {
+        await fetchUnreadMessages()
+        if (!cancelled) setHasFetchedMessages(true)
+      })()
+    })
 
     return () => {
       cancelled = true
@@ -249,7 +233,7 @@ export default function Navbar() {
 
   useEffect(() => {
     if (!user?.id || loading || membershipReconciling) return
-    prefetchAppRoutes(router)
+    prefetchCriticalAppRoutes(router)
   }, [user?.id, loading, membershipReconciling, router])
 
   useEffect(() => {
@@ -269,22 +253,24 @@ export default function Navbar() {
 
     let cancelled = false
 
-    void (async () => {
-      const check = await getAdminCheckResultForUser(user.id, user.email)
-      if (process.env.NODE_ENV !== "production") {
-        console.debug("[admin-check][navbar] resolved", {
-          userId: check.userId,
-          email: check.email,
-          adminRow: check.row,
-          error: check.error,
-          isAdmin: check.isAdmin,
-        })
-      }
-      if (!cancelled) {
-        setIsAdmin(check.isAdmin)
-        setHasFetchedAdmin(true)
-      }
-    })()
+    scheduleDeferredWork(() => {
+      void (async () => {
+        const check = await getAdminCheckResultForUser(user.id, user.email)
+        if (process.env.NODE_ENV !== "production") {
+          console.debug("[admin-check][navbar] resolved", {
+            userId: check.userId,
+            email: check.email,
+            adminRow: check.row,
+            error: check.error,
+            isAdmin: check.isAdmin,
+          })
+        }
+        if (!cancelled) {
+          setIsAdmin(check.isAdmin)
+          setHasFetchedAdmin(true)
+        }
+      })()
+    })
 
     return () => {
       cancelled = true
@@ -444,23 +430,23 @@ export default function Navbar() {
         <div className="flex h-full w-full items-center gap-2 px-4 md:gap-3 md:px-6">
         {/* LEFT */}
         <div className="flex min-w-0 items-center gap-3">
-          <Link
+          <IntentPrefetchLink
             href="/"
             onClick={handleLogoClick}
             className={NAVBAR_BRAND_LINK_CLASS}
           >
             TradeTraxs
-          </Link>
+          </IntentPrefetchLink>
 
           {!user && !isHomePage ? (
-            <Link href="/faq" className="hidden md:inline text-sm text-gray-200 hover:text-blue-400 transition">
+            <IntentPrefetchLink href="/faq" className="hidden md:inline text-sm text-gray-200 hover:text-blue-400 transition">
               FAQ
-            </Link>
+            </IntentPrefetchLink>
           ) : null}
 
           {isHomePage && user ? (
             <div className="hidden min-w-0 items-center gap-3 text-sm md:flex">
-              <Link
+              <IntentPrefetchLink
                 href="/faq"
                 className={`shrink-0 rounded px-2 py-1 transition ${
                   isActive("/faq")
@@ -469,8 +455,8 @@ export default function Navbar() {
                 }`}
               >
                 FAQ
-              </Link>
-              <Link
+              </IntentPrefetchLink>
+              <IntentPrefetchLink
                 href="/pricing"
                 className={`shrink-0 rounded px-2 py-1 transition ${
                   isActive("/pricing")
@@ -479,13 +465,13 @@ export default function Navbar() {
                 }`}
               >
                 Pricing
-              </Link>
+              </IntentPrefetchLink>
             </div>
           ) : null}
 
           {!isHomePage && user ? (
             <div className="hidden min-w-0 items-center gap-3 text-sm md:flex">
-              <Link
+              <IntentPrefetchLink
                 href="/app"
                 className={`shrink-0 rounded px-2 py-1 transition ${
                   isActive("/app")
@@ -494,8 +480,8 @@ export default function Navbar() {
                 }`}
               >
                 Input Trade
-              </Link>
-              <Link
+              </IntentPrefetchLink>
+              <IntentPrefetchLink
                 href="/dashboard"
                 className={`shrink-0 rounded px-2 py-1 transition ${
                   isActive("/dashboard")
@@ -504,8 +490,8 @@ export default function Navbar() {
                 }`}
               >
                 Dashboard
-              </Link>
-              <Link
+              </IntentPrefetchLink>
+              <IntentPrefetchLink
                 href="/trades"
                 className={`shrink-0 rounded px-2 py-1 transition ${
                   isActive("/trades")
@@ -514,9 +500,9 @@ export default function Navbar() {
                 }`}
               >
                 Trades
-              </Link>
+              </IntentPrefetchLink>
               {profileHref ? (
-                <Link
+                <IntentPrefetchLink
                   href={profileHref}
                   className={`shrink-0 rounded px-2 py-1 transition ${
                     isGroupActive(["/profile"])
@@ -525,13 +511,13 @@ export default function Navbar() {
                   }`}
                 >
                   Profile
-                </Link>
+                </IntentPrefetchLink>
               ) : (
                 <span className="shrink-0 rounded px-2 py-1 text-gray-500">
                   Profile
                 </span>
               )}
-              <Link
+              <IntentPrefetchLink
                 href="/messages"
                 className={`inline-flex shrink-0 items-center gap-2 rounded px-2 py-1 transition ${
                   isActive("/messages")
@@ -548,7 +534,7 @@ export default function Navbar() {
                     {unreadMessagesCount > 9 ? "9+" : unreadMessagesCount}
                   </span>
                 ) : null}
-              </Link>
+              </IntentPrefetchLink>
 
               <div className="relative">
                 <button
@@ -572,7 +558,7 @@ export default function Navbar() {
                 {activeMenu === "analytics" ? (
                   <div className="absolute top-full z-[9999] mt-2 w-56 rounded border border-white/10 bg-[#1e293b] shadow-lg">
                     {analyticsLinks.map((item) => (
-                        <Link
+                        <IntentPrefetchLink
                           key={item.label}
                           href={item.href}
                           className={`flex w-full items-center justify-between gap-2 rounded px-3 py-2 ${
@@ -585,7 +571,7 @@ export default function Navbar() {
                         >
                           {analyticsLinkLabel(item)}
                           {item.proOnly && !isProActive(profile) ? proBadge : null}
-                        </Link>
+                        </IntentPrefetchLink>
                       ))}
                   </div>
                 ) : null}
@@ -612,7 +598,7 @@ export default function Navbar() {
                 {activeMenu === "community" ? (
                   <div className="absolute top-full z-[9999] mt-2 w-56 rounded border border-white/10 bg-[#1e293b] shadow-lg">
                     {communityLinks.map((item) => (
-                      <Link
+                      <IntentPrefetchLink
                         key={item.href}
                         href={item.href}
                         className={`block rounded px-3 py-2 ${
@@ -622,7 +608,7 @@ export default function Navbar() {
                         }`}
                       >
                         {item.label}
-                      </Link>
+                      </IntentPrefetchLink>
                     ))}
                   </div>
                 ) : null}
@@ -643,7 +629,7 @@ export default function Navbar() {
                 {activeMenu === "affiliate" ? (
                   <div className="absolute top-full z-[9999] mt-2 w-56 rounded border border-white/10 bg-[#1e293b] shadow-lg">
                     {affiliateLinks.map((item) => (
-                      <Link
+                      <IntentPrefetchLink
                         key={item.href}
                         href={item.href}
                         className={`block rounded px-3 py-2 ${
@@ -653,7 +639,7 @@ export default function Navbar() {
                         }`}
                       >
                         {item.label}
-                      </Link>
+                      </IntentPrefetchLink>
                     ))}
                   </div>
                 ) : null}
@@ -676,7 +662,7 @@ export default function Navbar() {
         {showMobileNav ? (
           <>
             {user && isAdmin ? (
-              <Link
+              <IntentPrefetchLink
                 href="/admin"
                 className={`md:hidden shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${
                   isGroupActive(["/admin"])
@@ -685,7 +671,7 @@ export default function Navbar() {
                 }`}
               >
                 Admin
-              </Link>
+              </IntentPrefetchLink>
             ) : null}
 
             <div className="flex shrink-0 items-center gap-2.5 md:hidden">
@@ -718,15 +704,15 @@ export default function Navbar() {
             {!isHomePage && user ? (
               <div className="hidden items-center gap-3 md:flex">
                 {isAdmin ? (
-                  <Link href="/admin" className="text-sm hover:text-blue-400">
+                  <IntentPrefetchLink href="/admin" className="text-sm hover:text-blue-400">
                     Admin
-                  </Link>
+                  </IntentPrefetchLink>
                 ) : null}
 
                 {notificationBellControl("text-xl", "mr-2")}
 
                 {profile?.is_beta_tester ? (
-                  <Link
+                  <IntentPrefetchLink
                     href="/beta"
                     className={`shrink-0 rounded border px-3 py-1.5 text-sm font-medium transition ${
                       isActive("/beta")
@@ -735,7 +721,7 @@ export default function Navbar() {
                     }`}
                   >
                     Beta Hub
-                  </Link>
+                  </IntentPrefetchLink>
                 ) : null}
 
                 <div className="profile-menu relative">
@@ -811,18 +797,18 @@ export default function Navbar() {
           </>
         ) : isHomePage ? (
           loading ? null : (
-          <Link
+          <IntentPrefetchLink
             href="/login"
             className="shrink-0 rounded bg-blue-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-600"
           >
             Login
-          </Link>
+          </IntentPrefetchLink>
           )
         ) : loading ? null : (
           <div className="flex shrink-0 items-center gap-3">
-            <Link href="/faq" className="md:hidden text-sm text-gray-200 hover:text-blue-400 transition">
+            <IntentPrefetchLink href="/faq" className="md:hidden text-sm text-gray-200 hover:text-blue-400 transition">
               FAQ
-            </Link>
+            </IntentPrefetchLink>
             <button type="button" onClick={() => router.push("/login")} className="border px-4 py-2 rounded shrink-0">
               Login
             </button>
@@ -845,7 +831,7 @@ export default function Navbar() {
             </button>
           ) : null}
           {user ? <GettingStartedMobileEntry placement="menu" /> : null}
-          <Link
+          <IntentPrefetchLink
             href="/app"
             className={`rounded-lg px-3 py-2 transition ${
               isActive("/app")
@@ -855,9 +841,9 @@ export default function Navbar() {
             onClick={closeMobile}
           >
             Input Trade
-          </Link>
+          </IntentPrefetchLink>
 
-          <Link
+          <IntentPrefetchLink
             href="/dashboard"
             className={`rounded-lg px-3 py-2 transition ${
               isActive("/dashboard")
@@ -867,9 +853,9 @@ export default function Navbar() {
             onClick={closeMobile}
           >
             Dashboard
-          </Link>
+          </IntentPrefetchLink>
 
-          <Link
+          <IntentPrefetchLink
             href="/trades"
             className={`rounded-lg px-3 py-2 transition ${
               isActive("/trades")
@@ -879,10 +865,10 @@ export default function Navbar() {
             onClick={closeMobile}
           >
             Trades
-          </Link>
+          </IntentPrefetchLink>
 
           {profileHref ? (
-            <Link
+            <IntentPrefetchLink
               href={profileHref}
               className={`rounded-lg px-3 py-2 transition ${
                 isGroupActive(["/profile"])
@@ -892,12 +878,12 @@ export default function Navbar() {
               onClick={closeMobile}
             >
               Profile
-            </Link>
+            </IntentPrefetchLink>
           ) : (
             <span className="rounded-lg px-3 py-2 text-gray-500">Profile</span>
           )}
 
-          <Link
+          <IntentPrefetchLink
             href="/messages"
             className={`flex items-center justify-between rounded-lg px-3 py-2 transition ${
               isActive("/messages")
@@ -915,7 +901,7 @@ export default function Navbar() {
                 {unreadMessagesCount > 9 ? "9+" : unreadMessagesCount}
               </span>
             ) : null}
-          </Link>
+          </IntentPrefetchLink>
 
           <div>
             <button
@@ -940,7 +926,7 @@ export default function Navbar() {
             {openSection === "analytics" ? (
               <div className="mt-1.5 space-y-1 pl-3 text-sm">
                 {analyticsLinks.map((item) => (
-                    <Link
+                    <IntentPrefetchLink
                       key={item.label}
                       href={item.href}
                       className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-1.5 ${
@@ -954,7 +940,7 @@ export default function Navbar() {
                     >
                       {analyticsLinkLabel(item)}
                       {item.proOnly && !isProActive(profile) ? proBadge : null}
-                    </Link>
+                    </IntentPrefetchLink>
                   ))}
               </div>
             ) : null}
@@ -976,7 +962,7 @@ export default function Navbar() {
             {openSection === "community" ? (
               <div className="mt-1.5 space-y-1 pl-3 text-sm">
                 {communityLinks.map((item) => (
-                  <Link
+                  <IntentPrefetchLink
                     key={item.href}
                     href={item.href}
                     className={`block rounded-lg px-3 py-1.5 ${
@@ -987,7 +973,7 @@ export default function Navbar() {
                     onClick={closeMobile}
                   >
                     {item.label}
-                  </Link>
+                  </IntentPrefetchLink>
                 ))}
               </div>
             ) : null}
@@ -1009,7 +995,7 @@ export default function Navbar() {
             {openSection === "affiliate" ? (
               <div className="mt-1.5 space-y-1 pl-3 text-sm">
                 {affiliateLinks.map((item) => (
-                  <Link
+                  <IntentPrefetchLink
                     key={item.href}
                     href={item.href}
                     className={`block rounded-lg px-3 py-1.5 ${
@@ -1020,14 +1006,14 @@ export default function Navbar() {
                     onClick={closeMobile}
                   >
                     {item.label}
-                  </Link>
+                  </IntentPrefetchLink>
                 ))}
               </div>
             ) : null}
           </div>
 
           {profile?.is_beta_tester ? (
-            <Link
+            <IntentPrefetchLink
               href="/beta"
               className={`flex items-center gap-2 rounded-lg px-3 py-2 transition ${
                 isActive("/beta")
@@ -1038,34 +1024,34 @@ export default function Navbar() {
             >
               <span>Beta Hub</span>
               {betaBadge}
-            </Link>
+            </IntentPrefetchLink>
           ) : null}
 
           <div className="flex flex-col gap-1 border-t border-white/5 pt-1.5">
             {isAdmin ? (
-              <Link
+              <IntentPrefetchLink
                 href="/admin"
                 className="rounded-lg px-3 py-2 text-white hover:text-blue-400"
                 onClick={closeMobile}
               >
                 Admin
-              </Link>
+              </IntentPrefetchLink>
             ) : null}
 
-            <Link
+            <IntentPrefetchLink
               href="/settings#account"
               className="rounded-lg px-3 py-2 text-white hover:text-blue-400"
               onClick={closeMobile}
             >
               Settings
-            </Link>
-            <Link
+            </IntentPrefetchLink>
+            <IntentPrefetchLink
               href="/help"
               className="rounded-lg px-3 py-2 text-white hover:text-blue-400"
               onClick={closeMobile}
             >
               Help Center
-            </Link>
+            </IntentPrefetchLink>
             <button
               type="button"
               className="rounded-lg px-3 py-2 text-left text-white hover:text-blue-400"

@@ -13,6 +13,7 @@ import {
   searchPublicTradeRooms,
   type PopularTradeRoom,
 } from "@/lib/popularTradeRooms"
+import { useUserProfile } from "@/lib/useUserProfile"
 
 export type PopularTradeRoomsPanelProps = {
   /** When true, loads and displays recommended rooms. */
@@ -100,6 +101,7 @@ export default function PopularTradeRoomsPanel({
   className = "",
   listClassName = "max-h-[min(60vh,24rem)] space-y-3 overflow-y-auto pr-1",
 }: PopularTradeRoomsPanelProps) {
+  const { user } = useUserProfile()
   const [popularRooms, setPopularRooms] = useState<PopularTradeRoom[]>([])
   const [searchResults, setSearchResults] = useState<PopularTradeRoom[]>([])
   const [searchQuery, setSearchQuery] = useState("")
@@ -186,10 +188,6 @@ export default function PopularTradeRoomsPanel({
       setJoiningId(room.id)
       setError(null)
 
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-
       if (!user?.id) {
         setError("Sign in to join a room.")
         setJoiningId(null)
@@ -206,7 +204,7 @@ export default function PopularTradeRoomsPanel({
 
       onJoined?.(room)
     },
-    [onJoined]
+    [onJoined, user?.id]
   )
 
   const listLoading = isSearchActive ? searching : loadingPopular

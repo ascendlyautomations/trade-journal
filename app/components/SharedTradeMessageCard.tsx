@@ -11,6 +11,7 @@ import {
 import { formatPostedTimestamp } from "@/lib/formatRelativeTime"
 import {
   PUBLIC_TRADE_SELECT,
+  TRADES_APP_SELECT,
   sanitizeTradeForViewer,
 } from "@/lib/publicAccountPrivacy"
 import { SHARED_TRADE_UNAVAILABLE } from "@/lib/sharedContentNavigation"
@@ -102,7 +103,7 @@ export default function SharedTradeMessageCard({
       if (isOwner) {
         const { data: full } = await supabase
           .from("trades")
-          .select("*")
+          .select(TRADES_APP_SELECT)
           .eq("id", resolvedTradeId)
           .maybeSingle()
         resolved = full ?? data

@@ -57,6 +57,7 @@ async function fetchViaJoin(): Promise<TradeForLeaderboard[]> {
     const { data, error } = await supabaseServiceRole
       .from("trades")
       .select("user_id, pnl, rr, created_at, account_type, mode")
+      .eq("is_public", true)
       .order("created_at", { ascending: true })
       .range(from, from + PAGE_SIZE - 1)
 
@@ -77,7 +78,7 @@ async function fetchViaJoin(): Promise<TradeForLeaderboard[]> {
   return allTrades
 }
 
-/** Aggregated leaderboard inputs: all trades from public-profile users only. */
+/** Aggregated leaderboard inputs: public trades from public-profile users only. */
 export async function GET() {
   const trades = (await fetchViaRpc()) ?? (await fetchViaJoin())
   return NextResponse.json(trades)

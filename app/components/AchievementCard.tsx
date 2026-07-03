@@ -10,6 +10,7 @@ import {
   tierClassName,
 } from "../../lib/achievements"
 import { achievementImagePublicUrl } from "../../lib/storagePublicUrl"
+import StorageImage from "@/app/components/ui/StorageImage"
 
 type AchievementCardProps = {
   achievement: Achievement
@@ -77,8 +78,10 @@ export default function AchievementCard({
             className="group mt-2 block w-full text-left"
             aria-label={`Open image for ${achievement.title}`}
           >
-            <img
+            <StorageImage
               src={imageSrc}
+              originalSrc={imageSrc}
+              preset="achievement"
               alt={achievement.title}
               className={`w-full rounded-md border border-white/10 object-cover transition group-hover:brightness-110 ${
                 featured ? "max-h-44" : "max-h-40"
@@ -86,8 +89,10 @@ export default function AchievementCard({
             />
           </button>
         ) : (
-          <img
+          <StorageImage
             src={imageSrc}
+            originalSrc={imageSrc}
+            preset="achievement"
             alt={achievement.title}
             className={`mt-2 w-full rounded-md border border-white/10 object-cover ${
               featured ? "max-h-44" : "max-h-40"

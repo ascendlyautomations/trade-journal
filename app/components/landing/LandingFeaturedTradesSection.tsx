@@ -9,10 +9,7 @@ import FeedPostCard, {
 import FeedPostDetailModal from "@/app/components/feed/FeedPostDetailModal"
 import { queryFeedComments } from "@/app/components/feed/feedPostHelpers"
 import type { FeedItem } from "@/app/components/feed/feedPostHelpers"
-import {
-  fetchFeaturedTradesWeek,
-  type FeaturedTradesWeekResponse,
-} from "@/lib/featuredTradesWeek"
+import type { FeaturedTradesWeekResponse } from "@/lib/featuredTradesWeek"
 import {
   LANDING_CARD_FULL,
   LANDING_HEADLINE_SM,
@@ -128,13 +125,14 @@ async function loadTradePostEngagement(
   }
 }
 
-export default function LandingFeaturedTradesSection() {
+export default function LandingFeaturedTradesSection({
+  initialFeatured,
+}: {
+  initialFeatured: FeaturedTradesWeekResponse
+}) {
   const { user } = useUserProfile()
-  const [featured, setFeatured] = useState<FeaturedTradesWeekResponse>({
-    bestPnlPost: null,
-    highestRrPost: null,
-  })
-  const [loaded, setLoaded] = useState(false)
+  const [featured, setFeatured] = useState<FeaturedTradesWeekResponse>(initialFeatured)
+  const [loaded, setLoaded] = useState(true)
   const [selectedPost, setSelectedPost] = useState<FeedItem | null>(null)
   const [likeMeta, setLikeMeta] = useState<FeedLikeMeta>(EMPTY_LIKE_META)
   const [comments, setComments] = useState<any[]>(EMPTY_COMMENTS)
@@ -143,18 +141,9 @@ export default function LandingFeaturedTradesSection() {
   const openCommentsRef = useRef<Record<string, boolean>>({})
 
   useEffect(() => {
-    let cancelled = false
-    void (async () => {
-      const data = await fetchFeaturedTradesWeek()
-      if (!cancelled) {
-        setFeatured(data)
-        setLoaded(true)
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [])
+    setFeatured(initialFeatured)
+    setLoaded(true)
+  }, [initialFeatured])
 
   const slots: FeaturedSlot[] = SLOTS.map((slot) => ({
     ...slot,

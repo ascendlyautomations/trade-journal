@@ -1,7 +1,6 @@
-/** Extended settings profile row — memory + sessionStorage for instant Settings revisit. */
+/** Extended settings profile row — memory + sessionStorage for the session (event invalidation). */
 
 const STORAGE_KEY = "tj_settings_profile_v1"
-const DEFAULT_STALE_MS = 30 * 60 * 1000
 
 type SettingsProfileEntry = {
   userId: string
@@ -32,9 +31,8 @@ function writeStorage(entries: Record<string, SettingsProfileEntry>) {
   }
 }
 
-function isFresh(entry: SettingsProfileEntry | undefined): entry is SettingsProfileEntry {
-  if (!entry) return false
-  return Date.now() - entry.fetchedAt <= DEFAULT_STALE_MS
+function hasEntry(entry: SettingsProfileEntry | undefined): entry is SettingsProfileEntry {
+  return entry != null
 }
 
 export function readSettingsProfileCache(
@@ -44,10 +42,10 @@ export function readSettingsProfileCache(
   if (!key) return null
 
   const mem = memory.get(key)
-  if (isFresh(mem)) return mem.profile
+  if (hasEntry(mem)) return mem.profile
 
   const stored = readStorage()[key]
-  if (isFresh(stored)) {
+  if (hasEntry(stored)) {
     memory.set(key, stored)
     return stored.profile
   }

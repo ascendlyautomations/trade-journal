@@ -9,6 +9,9 @@ import {
   resolveRecordedAffiliateEarnings,
 } from "@/lib/affiliateEarnings"
 import { useToast } from "@/app/components/ui"
+import { useUserProfile } from "@/lib/useUserProfile"
+import { fetchSettingsProfileRow } from "@/lib/settingsProfileSync"
+import { readSettingsProfileCache } from "@/lib/settingsProfileCache"
 
 type ProfileRow = {
   id: string
@@ -49,6 +52,7 @@ function statusClass(status: string | null | undefined): string {
 export default function ReferralsPage() {
   const toast = useToast()
   const router = useRouter()
+  const { user, profile: contextProfile } = useUserProfile()
   const [loading, setLoading] = useState(true)
   const [profile, setProfile] = useState<ProfileRow | null>(null)
   const [referrals, setReferrals] = useState<ReferredProfile[]>([])
@@ -58,24 +62,17 @@ export default function ReferralsPage() {
   const load = useCallback(async () => {
     setLoading(true)
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
     if (!user) {
       setLoading(false)
       router.push("/login")
       return
     }
 
-    const { data: prof, error: profErr } = await supabase
-      .from("profiles")
-      .select("id, referral_code, referral_earnings")
-      .eq("id", user.id)
-      .single()
+    const cachedProfile =
+      readSettingsProfileCache(user.id) ??
+      (await fetchSettingsProfileRow(supabase, user.id).catch(() => null))
 
-    if (profErr || !prof) {
-      console.error(profErr)
+    if (!cachedProfile) {
       setProfile(null)
       setReferrals([])
       setLedgerTotal(0)
@@ -83,7 +80,11 @@ export default function ReferralsPage() {
       return
     }
 
-    setProfile(prof as ProfileRow)
+    const mergedProfile: ProfileRow = {
+      id: user.id,
+      referral_code: contextProfile?.referral_code ?? null,
+    }
+    setProfile(mergedProfile)
 
     const { data: ledger, error: ledgerErr } = await supabase
       .from("referrals")
@@ -92,17 +93,20 @@ export default function ReferralsPage() {
 
     if (ledgerErr) {
       console.error("referrals ledger:", ledgerErr)
-      setLedgerTotal(recordedAffiliateEarnings(prof.referral_earnings))
+      setLedgerTotal(recordedAffiliateEarnings(cachedProfile.referral_earnings as number | null))
     } else {
       setLedgerTotal(
         resolveRecordedAffiliateEarnings(
-          (prof as { referral_earnings?: number | null }).referral_earnings,
+          cachedProfile.referral_earnings as number | null | undefined,
           ledger
         )
       )
     }
 
-    const code = prof.referral_code != null ? String(prof.referral_code).trim() : ""
+    const code =
+      contextProfile?.referral_code != null
+        ? String(contextProfile.referral_code).trim()
+        : ""
     if (!code) {
       setReferrals([])
       setLoading(false)
@@ -122,7 +126,7 @@ export default function ReferralsPage() {
     }
 
     setLoading(false)
-  }, [router])
+  }, [router, user, contextProfile?.referral_code])
 
   useEffect(() => {
     void load()

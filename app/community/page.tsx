@@ -78,7 +78,7 @@ import {
   upsertRoomChannelNotificationPref,
 } from "@/lib/roomChannelNotificationPreferences"
 import { notifyGettingStartedChecklistMaybeCompleted } from "@/lib/gettingStartedProgressSync"
-import { isCurrentUserAdmin } from "@/lib/adminUsers"
+import { isUserAdmin } from "@/lib/adminUsers"
 import { isBetaAnnouncementsSection } from "@/lib/betaHub"
 import { isProfileUuidSegment } from "@/lib/profileRoutes"
 import {
@@ -981,7 +981,7 @@ function CommunityContent() {
       setIsAdmin(false)
       return
     }
-    void isCurrentUserAdmin().then(setIsAdmin)
+    void isUserAdmin(user.id).then(setIsAdmin)
   }, [user?.id])
 
   useEffect(() => {

@@ -25,11 +25,14 @@ import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { feedbackPresets, persistentSuccess } from "@/lib/feedbackPresets"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
+import { useUserProfile } from "@/lib/useUserProfile"
 
 const INPUT_TRADE_CSV_INPUT_ID = "input-trade-csv-upload"
 
 export default function Home() {
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
+  const { user } = useUserProfile()
+  const userId = user?.id ?? null
   const [loading, setLoading] = useState(false)
   const [reviewCount, setReviewCount] = useState(0)
   const [parsedTrades, setParsedTrades] = useState<any[]>([])
@@ -42,17 +45,13 @@ export default function Home() {
   const [failureReason, setFailureReason] = useState("")
   const [submittingSupport, setSubmittingSupport] = useState(false)
   const [showQuickTrade, setShowQuickTrade] = useState(false)
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
 
   const csvInputRef = useRef<HTMLInputElement>(null)
   const lastCsvFileRef = useRef<File | null>(null)
 
   useEffect(() => {
     void fetchReviewCount()
-    void supabase.auth.getUser().then(({ data: { user } }) => {
-      setCurrentUserId(user?.id ?? null)
-    })
-  }, [])
+  }, [userId])
 
   function resetCsvInput() {
     if (csvInputRef.current) csvInputRef.current.value = ""
@@ -83,11 +82,7 @@ export default function Home() {
     setFailureModalOpen(false)
     setLoading(true)
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (!user?.id) {
+    if (!userId) {
       showPopup({ type: "info", message: "Please log in first" })
       setLoading(false)
       return
@@ -96,7 +91,7 @@ export default function Home() {
     const { data: profile, error: profileErr } = await supabase
       .from("profiles")
       .select("is_pro, has_used_csv_import")
-      .eq("id", user.id)
+      .eq("id", userId)
       .single()
 
     if (profileErr || !profile) {
@@ -206,11 +201,7 @@ export default function Home() {
 
     setSubmittingSupport(true)
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (!user) {
+    if (!userId) {
       showPopup(feedbackPresets.importFailed("Please log in first."))
       setSubmittingSupport(false)
       return
@@ -227,6 +218,7 @@ export default function Home() {
       csvFile: file,
       brokerName: csvBrokerHint ?? "Unknown",
       notes,
+      userId,
     })
 
     setSubmittingSupport(false)
@@ -269,14 +261,15 @@ export default function Home() {
   }
 
   async function fetchReviewCount() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+    if (!userId) {
+      setReviewCount(0)
+      return
+    }
 
     const { count } = await supabase
       .from("trades")
       .select("*", { count: "exact", head: true })
-      .eq("user_id", user?.id)
+      .eq("user_id", userId)
       .eq("is_initial_import", true)
       .eq("reviewed", false)
 
@@ -341,7 +334,7 @@ export default function Home() {
 
       <QuickTradeModal
         open={showQuickTrade}
-        userId={currentUserId}
+        userId={userId}
         onClose={() => setShowQuickTrade(false)}
         onSaved={() => {
           void fetchReviewCount()

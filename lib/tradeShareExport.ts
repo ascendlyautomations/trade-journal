@@ -1,5 +1,3 @@
-import { toPng } from "html-to-image"
-
 /** Design canvas width — export at `pixelRatio` 2 → 1080px PNG width. */
 export const TRADE_SHARE_EXPORT_WIDTH = 540
 
@@ -45,7 +43,6 @@ function ensureExportDimensions(root: HTMLElement): {
     root.style.visibility = "visible"
   }
 
-  // Force layout
   void root.offsetHeight
 
   let height = root.offsetHeight
@@ -116,6 +113,7 @@ export async function downloadTradeShareCardPng(
     return
   }
 
+  const { toPng } = await import("html-to-image")
   const dataUrl = await toPng(root, {
     width,
     height,

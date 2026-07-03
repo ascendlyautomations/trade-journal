@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabaseClient"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 import { compressImage } from "@/lib/compressImage"
+import { validateImageUpload } from "@/lib/uploadValidation"
 import NativeDateInput from "@/app/components/ui/NativeDateInput"
 import {
   normalizeAchievementDateInputValue,
@@ -191,6 +192,13 @@ export default function AchievementUploadModal({
     }
 
     if (file) {
+      const validationError = validateImageUpload(file)
+      if (validationError) {
+        setBusy(false)
+        setError(validationError)
+        return
+      }
+
       const ext = file.name.includes(".")
         ? file.name.split(".").pop()?.toLowerCase() || "jpg"
         : "bin"
@@ -368,8 +376,17 @@ export default function AchievementUploadModal({
                 accept="image/*"
                 onChange={(e) => {
                   const selected = e.target.files?.[0] ?? null
+                  if (selected) {
+                    const validationError = validateImageUpload(selected)
+                    if (validationError) {
+                      setError(validationError)
+                      setFile(null)
+                      e.target.value = ""
+                      return
+                    }
+                    setRemoveImage(false)
+                  }
                   setFile(selected)
-                  if (selected) setRemoveImage(false)
                 }}
                 className="hidden"
               />

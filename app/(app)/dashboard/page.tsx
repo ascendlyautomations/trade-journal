@@ -4,13 +4,11 @@ import DashboardFilters from "../../components/dashboard/DashboardFilters"
 import DashboardHeader from "../../components/dashboard/DashboardHeader"
 import GettingStartedChecklist from "../../components/dashboard/GettingStartedChecklist"
 import DashboardStatsGrid from "../../components/dashboard/DashboardStatsGrid"
-import DashboardEquityCurve from "../../components/dashboard/DashboardEquityCurve"
-import DashboardWeekdayChart from "../../components/dashboard/DashboardWeekdayChart"
-import DashboardSessionChart from "../../components/dashboard/DashboardSessionChart"
 import DashboardLongShort from "../../components/dashboard/DashboardLongShort"
 import DashboardHoldTime from "../../components/dashboard/DashboardHoldTime"
 import DashboardMaxDrawdown from "../../components/dashboard/DashboardMaxDrawdown"
 import TradingReportsSection from "@/app/components/trading-reports/TradingReportsSection"
+import dynamic from "next/dynamic"
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   dashboardInsightBodyClass,
@@ -49,12 +47,10 @@ import {
   resolveTradeAccountSize,
   tradeMatchesAccountFilter,
 } from "@/lib/tradeAccountDisplay"
-import PerformanceShareModal from "../../components/PerformanceShareModal"
-import PostSetupImportModal from "../../components/PostSetupImportModal"
-import TradesPageOverlays from "../../components/TradesPageOverlays"
 import LockedFeature from "../../components/LockedFeature"
+import ProUpgradeModal from "../../components/ProUpgradeModal"
 import EmptyState from "../../components/ui/EmptyState"
-import { SkeletonDashboardPage } from "../../components/ui/skeletons"
+import { SkeletonDashboardShell } from "../../components/ui/skeletons"
 import Link from "next/link"
 import {
   mirrorAccountSettingsMaxDrawdownLimit,
@@ -104,6 +100,8 @@ import {
 } from "@/lib/onboardingChecklistAudit"
 import { useGettingStartedProgress } from "@/lib/GettingStartedProgressProvider"
 import { useUserProfile } from "@/lib/UserProfileProvider"
+import { profilePath } from "@/lib/profileRoutes"
+import { usePrefetchSecondaryRoutesWhenReady } from "@/lib/usePrefetchSecondaryRoutesWhenReady"
 import { useCachedAccounts, useCachedTrades } from "@/lib/useAppDataCache"
 import {
   ensureAccountsLoaded,
@@ -111,6 +109,32 @@ import {
   getCachedTrades,
 } from "@/lib/appDataCache"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
+
+const DashboardEquityCurve = dynamic(
+  () => import("../../components/dashboard/DashboardEquityCurve"),
+  { loading: () => <div className="h-48 animate-pulse rounded-lg bg-white/5" /> }
+)
+const DashboardWeekdayChart = dynamic(
+  () => import("../../components/dashboard/DashboardWeekdayChart"),
+  { loading: () => <div className="h-48 animate-pulse rounded-lg bg-white/5" /> }
+)
+const DashboardSessionChart = dynamic(
+  () => import("../../components/dashboard/DashboardSessionChart"),
+  { loading: () => <div className="h-48 animate-pulse rounded-lg bg-white/5" /> }
+)
+const PerformanceShareModal = dynamic(
+  () => import("../../components/PerformanceShareModal"),
+  { ssr: false }
+)
+const PostSetupImportModal = dynamic(
+  () => import("../../components/PostSetupImportModal"),
+  { ssr: false }
+)
+const TradesPageOverlays = dynamic(
+  () => import("../../components/TradesPageOverlays"),
+  { ssr: false }
+)
+
 const DASHBOARD_GEAR_PREFS_KEY = "tradetrax_dashboard_prefs_v1"
 
 function loadDashboardGearPrefs(): Partial<DashboardGearPersistedPrefs> | null {
@@ -558,6 +582,7 @@ export default function Dashboard() {
   const [ddInputFocused, setDdInputFocused] = useState(false)
   const [savingGearSettings, setSavingGearSettings] = useState(false)
   const [showPerformanceShare, setShowPerformanceShare] = useState(false)
+  const [showExportUpgradeModal, setShowExportUpgradeModal] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
   const [editingTrade, setEditingTrade] = useState<any | null>(null)
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
@@ -893,7 +918,6 @@ export default function Dashboard() {
         }
       })
     const accounts = Array.from(accountMap.values())
-    console.log("Accounts:", accounts)
 
     /** Public trades: DB flag and/or non-empty public note (matches InputTradeForm / feed). */
     function tradeIsPublic(t: any) {
@@ -939,7 +963,6 @@ export default function Dashboard() {
         .trim()
       const selectedAcct = accountTypeFilter.toLowerCase().trim()
       if (accountTypeFilter !== "all") {
-        console.log("Filtering:", trade.account_type, accountTypeFilter)
         if (tradeAcct !== selectedAcct) {
           return false
         }
@@ -1351,11 +1374,22 @@ const biggestLoss = losses.length > 0
   const dashboardHasCachedData =
     user?.id != null && getCachedTrades(user.id) != null
 
-  if (pageDataLoading && !dashboardHasCachedData) {
-    return <SkeletonDashboardPage />
-  }
+  const statsStillLoading = pageDataLoading && !dashboardHasCachedData
 
-  const hasNoTrades = tradesExcludingBacktest.length === 0
+  const dashboardInteractive =
+    user?.id != null && (!pageDataLoading || dashboardHasCachedData)
+
+  usePrefetchSecondaryRoutesWhenReady(
+    dashboardInteractive,
+    profile
+      ? profilePath(profile)
+      : user?.id
+        ? profilePath({ id: user.id })
+        : null
+  )
+
+  const hasNoTrades =
+    !statsStillLoading && tradesExcludingBacktest.length === 0
 
   const onboardingCompletedResolved =
     profile != null || checklistSignalsReady
@@ -1650,7 +1684,7 @@ const biggestLoss = losses.length > 0
       <div className="w-full px-3 pb-3 pt-0 text-white md:px-10 md:pb-10">
 
         <div className="relative z-50 mx-auto w-full max-w-[1600px] px-4 md:px-6">
-          {!hasNoTrades ? (
+          {!hasNoTrades && !statsStillLoading ? (
             <DashboardFilters
               isPro={isPro}
               accounts={accounts}
@@ -1670,6 +1704,10 @@ const biggestLoss = losses.length > 0
               onOpenPerformanceShare={() => {
                 if (isDemoModeActive()) {
                   requestDemoSignup("upload")
+                  return
+                }
+                if (!isPro) {
+                  setShowExportUpgradeModal(true)
                   return
                 }
                 setShowPerformanceShare(true)
@@ -1695,7 +1733,9 @@ const biggestLoss = losses.length > 0
 
           <div className="relative z-0 mx-auto flex w-full max-w-[1600px] flex-col gap-4 overflow-visible px-4 md:gap-8 md:px-6">
 
-  {hasNoTrades ? (
+  {statsStillLoading ? (
+    <SkeletonDashboardShell />
+  ) : hasNoTrades ? (
     <>
       <div className="rounded-xl border border-white/10 bg-white/5 p-5 backdrop-blur-md md:p-8">
         <h2 className="bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-xl font-semibold text-transparent md:text-3xl">
@@ -1753,6 +1793,7 @@ const biggestLoss = losses.length > 0
     <>
       {gettingStartedSection}
       {user?.id ? (
+        dashboardUserIsPro ? (
         <Suspense fallback={null}>
           <TradingReportsSection
             userId={user.id}
@@ -1760,12 +1801,16 @@ const biggestLoss = losses.length > 0
             onViewTrade={(trade) => setEditingTrade(trade)}
           />
         </Suspense>
+        ) : (
+          <LockedFeature title="Trading Reports" className="min-h-[160px]" />
+        )
       ) : null}
   {/* TOP: STATS + CHART */}
   <div className="grid gap-3 overflow-visible md:gap-6 lg:grid-cols-3">
 
     {/* LEFT: STATS */}
     <DashboardStatsGrid
+      isPro={dashboardUserIsPro}
       totalTrades={totalTrades}
       winRate={winRate}
       avgRR={avgRR}
@@ -1800,6 +1845,7 @@ const biggestLoss = losses.length > 0
       {showEquity ? (
         <DashboardEquityCurve
           variant="desktop"
+          isPro={dashboardUserIsPro}
           data={equityDrawdownChartData}
           profitFactor={profitFactor}
           currentStreak={currentStreak}
@@ -1813,7 +1859,13 @@ const biggestLoss = losses.length > 0
         {showSessions ? (
           <>
             <div className="hidden md:block">{recentTradesSection}</div>
-            <div className="hidden md:block">{sessionPerformanceSection}</div>
+            <div className="hidden md:block">
+              {dashboardUserIsPro ? (
+                sessionPerformanceSection
+              ) : (
+                <LockedFeature title="Session Performance" className="min-h-[280px]" />
+              )}
+            </div>
           </>
         ) : (
           <div className="hidden md:block lg:col-span-2">{recentTradesSection}</div>
@@ -1827,6 +1879,8 @@ const biggestLoss = losses.length > 0
   <div className="grid grid-cols-1 gap-3 md:gap-6 lg:grid-cols-3 lg:items-stretch">
 
     <div className="h-full overflow-x-auto rounded-xl border border-white/10 bg-white/10 p-2.5 md:p-4 lg:col-span-2">
+      {dashboardUserIsPro ? (
+      <>
       <h3 className={dashboardInsightTitleClass}>Symbol Performance</h3>
 
       {symbolPerformanceRows.length === 0 ? (
@@ -1865,13 +1919,25 @@ const biggestLoss = losses.length > 0
         </tbody>
       </table>
       )}
+      </>
+      ) : (
+        <LockedFeature title="Advanced Insights" className="min-h-[280px]" />
+      )}
     </div>
 
-    <div className="hidden md:block">{pnlByWeekdaySection}</div>
+    <div className="hidden md:block">
+      {dashboardUserIsPro ? (
+        pnlByWeekdaySection
+      ) : (
+        <LockedFeature title="Weekday Performance" className="min-h-[280px]" />
+      )}
+    </div>
 
   </div>
 
   <div className="grid grid-cols-1 gap-3 md:gap-6 lg:grid-cols-3 lg:items-stretch">
+    {dashboardUserIsPro ? (
+      <>
     <DashboardLongShort
       performance={longShortPerformance}
       totalTrades={totalTrades}
@@ -1879,6 +1945,15 @@ const biggestLoss = losses.length > 0
     <div className="lg:col-span-2">
       <DashboardHoldTime stats={holdTimeStats} totalTrades={totalTrades} />
     </div>
+      </>
+    ) : (
+      <>
+        <LockedFeature title="Long vs Short" className="min-h-[220px]" />
+        <div className="lg:col-span-2">
+          <LockedFeature title="Hold Time" className="min-h-[220px]" />
+        </div>
+      </>
+    )}
   </div>
 
           {(showInsights || showBestSetup) ? (
@@ -2112,6 +2187,10 @@ const biggestLoss = losses.length > 0
         profile={profile}
         initialCustomRangeStart={customRangeStart}
         initialCustomRangeEnd={customRangeEnd}
+      />
+      <ProUpgradeModal
+        open={showExportUpgradeModal}
+        onClose={() => setShowExportUpgradeModal(false)}
       />
       <TradesPageOverlays
         selectedImage={selectedImage}

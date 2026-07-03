@@ -1,16 +1,13 @@
 "use client"
 
-import Link from "next/link"
-import { useEffect, useState } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
 import LandingComparisonSection from "./LandingComparisonSection"
-import LandingFeaturedTradesSection from "./landing/LandingFeaturedTradesSection"
 import LandingFeatureShowcaseSections from "./LandingFeatureShowcaseSections"
 import LandingFinalCtaSection from "./LandingFinalCtaSection"
 import LandingProblemSection from "./landing/LandingProblemSection"
 import LandingAnalyticsShowcaseSection from "./landing/LandingAnalyticsShowcaseSection"
 import LandingPricingSection from "./landing/LandingPricingSection"
-import LandingTestimonialsSection from "./landing/LandingTestimonialsSection"
 import LandingFaqSection from "./landing/LandingFaqSection"
 import { supabase } from "../../lib/supabaseClient"
 import { ConfirmModal, FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
@@ -28,7 +25,15 @@ import {
 import { clearSignupFlow, enterSignupFlow, getCheckoutBillingInterval, setCheckoutBillingInterval } from "@/lib/signupFlow"
 import type { TraxProBillingIntervalId } from "@/lib/traxProBillingPlans"
 
-export default function LandingPageClient() {
+type LandingPageClientProps = {
+  featuredTradesSection: ReactNode
+  testimonialsSection: ReactNode
+}
+
+export default function LandingPageClient({
+  featuredTradesSection,
+  testimonialsSection,
+}: LandingPageClientProps) {
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const router = useRouter()
   const { user, profile, loading, membershipReconciling } = useUserProfile()
@@ -74,11 +79,7 @@ export default function LandingPageClient() {
 
       if (!ref || isBetaReferralRef(ref)) return
 
-      const {
-        data: { user: authUser },
-      } = await supabase.auth.getUser()
-
-      if (!authUser) return
+      if (!user?.id) return
 
       fetch("/api/create-checkout-session", {
         method: "POST",
@@ -86,7 +87,7 @@ export default function LandingPageClient() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          userId: authUser.id,
+          userId: user.id,
           referralCode: localStorage.getItem("referral_code"),
         }),
       })
@@ -108,7 +109,7 @@ export default function LandingPageClient() {
     }
 
     void runReferralCheckout()
-  }, [])
+  }, [user?.id])
 
   const handleStartTrial = () => {
     if (isAuthenticatedUser) {
@@ -141,11 +142,7 @@ export default function LandingPageClient() {
     setCheckoutBillingInterval(interval)
     setCheckoutLoading(true)
     try {
-      const {
-        data: { user: authUser },
-      } = await supabase.auth.getUser()
-
-      if (!authUser) {
+      if (!user?.id) {
         handleStartTrial()
         return
       }
@@ -177,7 +174,7 @@ export default function LandingPageClient() {
           ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         },
         body: JSON.stringify({
-          userId: authUser.id,
+          userId: user.id,
           billingInterval: interval,
           referralCode: localStorage.getItem("referral_code"),
         }),
@@ -285,7 +282,7 @@ export default function LandingPageClient() {
           <LandingFeatureShowcaseSections />
           <LandingAnalyticsShowcaseSection />
           <LandingComparisonSection />
-          <LandingFeaturedTradesSection />
+          {featuredTradesSection}
           <LandingPricingSection
             checkoutLoading={checkoutLoading}
             onStartTrial={(interval) => void handleSubscribe(interval)}
@@ -294,7 +291,7 @@ export default function LandingPageClient() {
               router.push("/login?tab=signup")
             }}
           />
-          <LandingTestimonialsSection />
+          {testimonialsSection}
           <LandingFaqSection />
           <LandingFinalCtaSection
             checkoutLoading={checkoutLoading}

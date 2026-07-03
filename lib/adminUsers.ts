@@ -24,7 +24,12 @@ export async function isUserAdmin(userId: string | null | undefined): Promise<bo
   return Boolean(data?.user_id)
 }
 
-export async function isCurrentUserAdmin(): Promise<boolean> {
+export async function isCurrentUserAdmin(
+  userId?: string | null
+): Promise<boolean> {
+  if (userId !== undefined) {
+    return isUserAdmin(userId)
+  }
   const {
     data: { user },
     error,
@@ -101,7 +106,14 @@ export async function getAdminCheckResultForUser(
   }
 }
 
-export async function getCurrentAdminCheckResult(): Promise<AdminCheckResult> {
+export async function getCurrentAdminCheckResult(
+  userId?: string | null,
+  email?: string | null
+): Promise<AdminCheckResult> {
+  if (userId !== undefined) {
+    return getAdminCheckResultForUser(userId, email)
+  }
+
   const {
     data: { user },
     error: authError,

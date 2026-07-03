@@ -1,7 +1,6 @@
-/** Persist last-known profile slice for instant post-login bootstrap (memory + sessionStorage). */
+/** Persist last-known profile slice for instant post-login bootstrap (session lifetime). */
 
 const STORAGE_KEY = "tj_user_bootstrap_v1"
-const DEFAULT_STALE_MS = 30 * 60 * 1000
 
 type BootstrapEntry = {
   userId: string
@@ -32,9 +31,8 @@ function writeStorage(entries: Record<string, BootstrapEntry>) {
   }
 }
 
-function isFresh(entry: BootstrapEntry | undefined): entry is BootstrapEntry {
-  if (!entry) return false
-  return Date.now() - entry.fetchedAt <= DEFAULT_STALE_MS
+function hasEntry(entry: BootstrapEntry | undefined): entry is BootstrapEntry {
+  return entry != null
 }
 
 export function readUserBootstrapProfile(userId: string): unknown | null {
@@ -42,10 +40,10 @@ export function readUserBootstrapProfile(userId: string): unknown | null {
   if (!key) return null
 
   const mem = memory.get(key)
-  if (isFresh(mem)) return mem.profile
+  if (hasEntry(mem)) return mem.profile
 
   const stored = readStorage()[key]
-  if (isFresh(stored)) {
+  if (hasEntry(stored)) {
     memory.set(key, stored)
     return stored.profile
   }

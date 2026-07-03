@@ -24,6 +24,8 @@ import {
   TRAXPRO_DEFAULT_BILLING_INTERVAL,
   type TraxProBillingIntervalId,
 } from "@/lib/traxProBillingPlans"
+import { useUserProfile } from "@/lib/useUserProfile"
+import { prefetchCriticalAppRoutes } from "@/lib/routePrefetch"
 
 function getSafeNextPath(): string | null {
   if (typeof window === "undefined") return null
@@ -39,6 +41,7 @@ function getSafeNextPath(): string | null {
 }
 
 export default function LoginPage() {
+  const { user, loading: authLoading } = useUserProfile()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [name, setName] = useState("")
@@ -59,6 +62,12 @@ export default function LoginPage() {
   const { showPopup, feedbackModalProps } = useFeedbackPopup({ autoDismissMs: 3000 })
 
   const router = useRouter()
+
+  function maybePrefetchDashboardBeforeNav(path: string) {
+    if (path === "/dashboard" || path.startsWith("/dashboard/")) {
+      prefetchCriticalAppRoutes(router)
+    }
+  }
 
   function handleBack() {
     router.push("/")
@@ -132,16 +141,11 @@ export default function LoginPage() {
   }, [])
 
   useEffect(() => {
-    if (!shouldStartCheckout()) return
+    if (!shouldStartCheckout() || authLoading) return
+    if (!user?.id) return
 
     let cancelled = false
-    const run = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-
-      if (!user || cancelled) return
-
+    void (async () => {
       try {
         setLoading(true)
         await startCheckoutAfterAuth(user.id)
@@ -152,35 +156,22 @@ export default function LoginPage() {
       } finally {
         if (!cancelled) setLoading(false)
       }
-    }
+    })()
 
-    void run()
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [user?.id, authLoading])
 
   useEffect(() => {
-    if (shouldStartCheckout()) return
+    if (shouldStartCheckout() || authLoading) return
 
-    let cancelled = false
-    const run = async () => {
-      const next = getSafeNextPath()
-      if (!next) return
+    const next = getSafeNextPath()
+    if (!next || !user?.id) return
 
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-
-      if (!user || cancelled) return
-      router.replace(next)
-    }
-
-    void run()
-    return () => {
-      cancelled = true
-    }
-  }, [router])
+    maybePrefetchDashboardBeforeNav(next)
+    router.replace(next)
+  }, [user?.id, authLoading, router])
 
   async function handleSignUp(
     e: React.MouseEvent<HTMLButtonElement>,
@@ -324,7 +315,7 @@ export default function LoginPage() {
     if (loading) return
     setLoading(true)
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data: signInData, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     })
@@ -337,29 +328,25 @@ export default function LoginPage() {
       return
     }
 
-    if (shouldStartCheckout()) {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-
-      if (user) {
-        try {
-          await startCheckoutAfterAuth(user.id)
-          setLoading(false)
-          return
-        } catch (e) {
-          console.error("Checkout after login failed:", e)
-          showPopup({
-            type: "error",
-            message: "Logged in, but checkout failed. Please try again from Pricing.",
-          })
-          setLoading(false)
-          return
-        }
+    if (shouldStartCheckout() && signInData.user) {
+      try {
+        await startCheckoutAfterAuth(signInData.user.id)
+        setLoading(false)
+        return
+      } catch (e) {
+        console.error("Checkout after login failed:", e)
+        showPopup({
+          type: "error",
+          message: "Logged in, but checkout failed. Please try again from Pricing.",
+        })
+        setLoading(false)
+        return
       }
     }
 
-    router.push(getSafeNextPath() ?? "/dashboard")
+    const dest = getSafeNextPath() ?? "/dashboard"
+    maybePrefetchDashboardBeforeNav(dest)
+    router.push(dest)
     setLoading(false)
   }
 

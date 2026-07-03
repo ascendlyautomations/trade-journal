@@ -2,6 +2,11 @@
 
 export type TradeTraxsPlanId = "free" | "pro"
 
+export type TradeTraxsPlanFeatureGroup = {
+  heading: string
+  features: readonly string[]
+}
+
 export type TradeTraxsPlan = {
   id: TradeTraxsPlanId
   name: string
@@ -9,44 +14,104 @@ export type TradeTraxsPlan = {
   features: readonly string[]
   /** Label above the feature list (Pro: incremental value over Free). */
   featuresHeading?: string
+  /** Grouped Pro features for pricing cards (headings + bullets). */
+  featureGroups?: readonly TradeTraxsPlanFeatureGroup[]
 }
+
+/** Stable labels referenced by marketing comparison tables. */
+export const TRADETRAXS_FEATURE_LABELS = {
+  basicAnalytics: "Basic Analytics",
+  premiumAnalytics: "Premium Analytics & Performance Insights",
+  unlimitedTrades: "Unlimited Trades",
+  unlimitedTradingAccounts: "Unlimited Trading Accounts",
+  csvImport: "CSV Import",
+  aiTradeAnalyst: "AI Trade Analyst",
+  weeklyMonthlyReports: "Weekly & Monthly Trading Reports",
+  backtestLab: "Backtest Lab",
+  propFirmMode: "Prop Firm Mode",
+  performanceImageExports: "Performance Image Exports",
+} as const
+
+/** @deprecated Prefer {@link TRADETRAXS_FEATURE_LABELS}. */
+export const TRADETRAXS_PRO_FEATURE_LABELS = {
+  ...TRADETRAXS_FEATURE_LABELS,
+  weeklyReports: "Weekly Reports",
+  monthlyReports: "Monthly Reports",
+  profitFactor: "Profit Factor",
+  brandedShareCards: "Branded Share Cards",
+  advancedPerformanceInsights: TRADETRAXS_FEATURE_LABELS.premiumAnalytics,
+} as const
 
 export const TRADETRAXS_FREE_PLAN: TradeTraxsPlan = {
   id: "free",
   name: "TradeTraxs Free",
   description:
-    "Get started with TradeTraxs by tracking your trades, exploring the community, and discovering what makes your trading unique.",
+    "Track trades manually, explore the community, and review core performance stats — no credit card required.",
   features: [
-    "Manual Trade Journaling",
-    "Community Feed",
-    "Trade Rooms",
+    "Manual Trade Entry",
+    TRADETRAXS_FEATURE_LABELS.basicAnalytics,
+    "Basic Calendar",
     "Public & Private Profiles",
-    "Basic Trading Statistics",
-    "Up to 5 Trades Per Day",
+    "Feed, Posts & Reels",
+    "Trade Rooms",
+    "Direct Messages",
+    "Following, Comments & Likes",
+    "Public Trade Sharing",
   ],
 }
 
 /** Pro feature list heading — shown above incremental Pro features on pricing surfaces. */
 export const TRADETRAXS_PRO_FEATURES_HEADING = "Everything in Free, plus:"
 
+export const TRADETRAXS_PRO_FEATURE_GROUPS: readonly TradeTraxsPlanFeatureGroup[] =
+  [
+    {
+      heading: "Unlimited Trading",
+      features: [
+        TRADETRAXS_FEATURE_LABELS.unlimitedTrades,
+        TRADETRAXS_FEATURE_LABELS.unlimitedTradingAccounts,
+        TRADETRAXS_FEATURE_LABELS.csvImport,
+      ],
+    },
+    {
+      heading: "AI Tools",
+      features: [
+        TRADETRAXS_FEATURE_LABELS.aiTradeAnalyst,
+        TRADETRAXS_FEATURE_LABELS.weeklyMonthlyReports,
+      ],
+    },
+    {
+      heading: "Advanced Analytics",
+      features: [TRADETRAXS_FEATURE_LABELS.premiumAnalytics],
+    },
+    {
+      heading: "Professional Tools",
+      features: [
+        TRADETRAXS_FEATURE_LABELS.backtestLab,
+        TRADETRAXS_FEATURE_LABELS.propFirmMode,
+        TRADETRAXS_FEATURE_LABELS.performanceImageExports,
+      ],
+    },
+    {
+      heading: "Everything in Free",
+      features: [],
+    },
+  ]
+
+function flattenProFeatureGroups(
+  groups: readonly TradeTraxsPlanFeatureGroup[]
+): string[] {
+  return groups.flatMap((group) => [...group.features])
+}
+
 export const TRADETRAXS_PRO_PLAN: TradeTraxsPlan = {
   id: "pro",
   name: "TradeTraxs Pro",
   description:
-    "Unlock the complete TradeTraxs experience with unlimited journaling, professional analytics, AI-powered insights, and every premium feature designed to help you become a more consistent trader.",
+    "Unlock unlimited journaling, AI-powered analysis, premium analytics, and professional tools built to help you trade with consistency.",
   featuresHeading: TRADETRAXS_PRO_FEATURES_HEADING,
-  features: [
-    "Unlimited Trade Journaling",
-    "Advanced Performance Analytics",
-    "AI Trade Analyst",
-    "Backtest Lab",
-    "Prop Firm Mode",
-    "Trade Replay Videos",
-    "Unlimited Screenshot Uploads",
-    "Unlimited Trading Accounts",
-    "Advanced Trade Insights & Performance Reports",
-    "Priority Access to New Features",
-  ],
+  featureGroups: TRADETRAXS_PRO_FEATURE_GROUPS,
+  features: flattenProFeatureGroups(TRADETRAXS_PRO_FEATURE_GROUPS),
 }
 
 const PLANS: Record<TradeTraxsPlanId, TradeTraxsPlan> = {

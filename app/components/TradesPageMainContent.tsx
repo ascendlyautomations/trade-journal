@@ -5,7 +5,10 @@ import { memo, type Dispatch, type SetStateAction } from "react"
 import EmptyState from "./ui/EmptyState"
 import TradeFilterBar from "./TradeFilterBar"
 import TradesPageTradeCard from "./TradesPageTradeCard"
-import { SkeletonTradesPageContent } from "./ui/skeletons"
+import {
+  SkeletonStatsCard,
+  SkeletonTradesPageTradeCard,
+} from "./ui/skeletons"
 import { formatMoneyUnknown, formatRR } from "@/lib/formatDisplay"
 
 type TradeStats = {
@@ -99,10 +102,6 @@ function TradesPageMainContent({
   onLoadMore,
   onImportCsv,
 }: TradesPageMainContentProps) {
-  if (loading) {
-    return <SkeletonTradesPageContent tradeCount={6} />
-  }
-
   return (
     <>
       <div className="w-full mt-2.5 mb-1.5">
@@ -243,77 +242,102 @@ function TradesPageMainContent({
         />
       </div>
 
-      <div className="w-full grid grid-cols-2 md:grid-cols-4 gap-2 mb-3 mt-0">
-        <Stat
-          title="Trades"
-          value={tradeStats.totalTrades.toLocaleString(undefined, {
-            maximumFractionDigits: 0,
-          })}
-        />
-        <Stat title="Win %" value={`${tradeStats.winRate.toFixed(1)}%`} />
-        <Stat
-          title="P&L"
-          value={formatMoneyUnknown(tradeStats.totalPnL)}
-          positive={tradeStats.totalPnL >= 0}
-        />
-        <Stat title="Avg RR" value={formatRR(tradeStats.avgRR)} />
-      </div>
-
-      <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-4">
-        {displayedTrades.length === 0 ? (
-          <div className="md:col-span-2">
-            <EmptyState
-              title="No Trades Yet"
-              description="Start tracking your performance by logging your first trade."
-              action={
-                <div className="flex flex-wrap items-center justify-center gap-3">
-                  <Link
-                    href="/app"
-                    className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600"
-                  >
-                    Add Trade
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={onImportCsv}
-                    className="rounded-lg border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/15"
-                  >
-                    Import CSV
-                  </button>
-                </div>
-              }
-              className="py-10"
-            />
-          </div>
-        ) : (
-          displayedTrades.map((trade) => (
-            <TradesPageTradeCard
-              key={trade.id}
-              trade={trade}
-              showAdvanced={showAdvanced}
-              accountRow={accountById[String(trade.account_id ?? "")]}
-              shareProfile={gateProfile}
-              onEdit={onEditTrade}
-              onDelete={onDeleteTrade}
-              onSendClick={onSendTrade}
-              onAnalyze={onAnalyzeTrade}
-              onImageClick={onImageClick}
-            />
-          ))
-        )}
-      </div>
-
-      {visibleCount < visibleTradesLength ? (
-        <div className="flex justify-center mt-4">
-          <button
-            type="button"
-            onClick={onLoadMore}
-            className="px-4 py-2 rounded-lg bg-blue-500 hover:bg-blue-600 transition"
+      {loading ? (
+        <>
+          <div
+            aria-busy="true"
+            aria-label="Loading trade statistics"
+            className="w-full grid grid-cols-2 md:grid-cols-4 gap-2 mb-3 mt-0"
           >
-            Load More
-          </button>
-        </div>
-      ) : null}
+            {Array.from({ length: 4 }).map((_, i) => (
+              <SkeletonStatsCard key={i} />
+            ))}
+          </div>
+          <div
+            aria-busy="true"
+            aria-label="Loading trades"
+            className="w-full grid grid-cols-1 md:grid-cols-2 gap-4"
+          >
+            {Array.from({ length: 6 }).map((_, i) => (
+              <SkeletonTradesPageTradeCard key={i} />
+            ))}
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="w-full grid grid-cols-2 md:grid-cols-4 gap-2 mb-3 mt-0">
+            <Stat
+              title="Trades"
+              value={tradeStats.totalTrades.toLocaleString(undefined, {
+                maximumFractionDigits: 0,
+              })}
+            />
+            <Stat title="Win %" value={`${tradeStats.winRate.toFixed(1)}%`} />
+            <Stat
+              title="P&L"
+              value={formatMoneyUnknown(tradeStats.totalPnL)}
+              positive={tradeStats.totalPnL >= 0}
+            />
+            <Stat title="Avg RR" value={formatRR(tradeStats.avgRR)} />
+          </div>
+
+          <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-4">
+            {displayedTrades.length === 0 ? (
+              <div className="md:col-span-2">
+                <EmptyState
+                  title="No Trades Yet"
+                  description="Start tracking your performance by logging your first trade."
+                  action={
+                    <div className="flex flex-wrap items-center justify-center gap-3">
+                      <Link
+                        href="/app"
+                        className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600"
+                      >
+                        Add Trade
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={onImportCsv}
+                        className="rounded-lg border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/15"
+                      >
+                        Import CSV
+                      </button>
+                    </div>
+                  }
+                  className="py-10"
+                />
+              </div>
+            ) : (
+              displayedTrades.map((trade) => (
+                <TradesPageTradeCard
+                  key={trade.id}
+                  trade={trade}
+                  showAdvanced={showAdvanced}
+                  accountRow={accountById[String(trade.account_id ?? "")]}
+                  shareProfile={gateProfile}
+                  onEdit={onEditTrade}
+                  onDelete={onDeleteTrade}
+                  onSendClick={onSendTrade}
+                  onAnalyze={onAnalyzeTrade}
+                  onImageClick={onImageClick}
+                />
+              ))
+            )}
+          </div>
+
+          {visibleCount < visibleTradesLength ? (
+            <div className="flex justify-center mt-4">
+              <button
+                type="button"
+                onClick={onLoadMore}
+                className="px-4 py-2 rounded-lg bg-blue-500 hover:bg-blue-600 transition"
+              >
+                Load More
+              </button>
+            </div>
+          ) : null}
+        </>
+      )}
     </>
   )
 }

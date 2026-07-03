@@ -23,6 +23,7 @@ import {
   submissionTextarea,
   submissionTitle,
 } from "@/lib/submissionFormStyles"
+import { useUserProfile } from "@/lib/useUserProfile"
 
 const CATEGORIES = [
   { value: "bug", label: "Bug" },
@@ -42,6 +43,7 @@ type SupportRow = {
 
 export default function SupportPage() {
   const router = useRouter()
+  const { user, loading: profileLoading } = useUserProfile()
   const [category, setCategory] = useState<string>("general")
   const [subject, setSubject] = useState("")
   const [message, setMessage] = useState("")
@@ -71,23 +73,14 @@ export default function SupportPage() {
   }, [])
 
   useEffect(() => {
-    let cancelled = false
-    void (async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      if (cancelled) return
-      if (!user) {
-        setHistory([])
-        setHistoryLoading(false)
-        return
-      }
-      await loadHistory(user.id)
-    })()
-    return () => {
-      cancelled = true
+    if (profileLoading) return
+    if (!user?.id) {
+      setHistory([])
+      setHistoryLoading(false)
+      return
     }
-  }, [loadHistory])
+    void loadHistory(user.id)
+  }, [loadHistory, profileLoading, user?.id])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -97,12 +90,7 @@ export default function SupportPage() {
     setSuccess("")
     setError("")
 
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
-
-    if (authError || !user) {
+    if (!user?.id) {
       setLoading(false)
       router.push("/login")
       return

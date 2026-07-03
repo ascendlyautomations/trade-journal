@@ -1,8 +1,7 @@
 import type { TradeForLeaderboard } from "./leaderboardChart"
 
 /**
- * All trades from users with public profiles (profiles.is_private = false).
- * Trade visibility (is_public) does not affect inclusion.
+ * Public trades from users with public profiles (is_public + !is_private).
  * Fetched server-side — returns aggregation fields only, not trade details.
  */
 export async function fetchLeaderboardTrades(): Promise<TradeForLeaderboard[]> {

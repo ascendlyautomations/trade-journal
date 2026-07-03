@@ -18,7 +18,6 @@ import {
   type AffiliateConnectRow,
 } from "@/lib/affiliateStripeConnect"
 import { fetchLatestAffiliateApplication, type AffiliateApplicationRow } from "@/lib/affiliateApplication"
-import { isPostgrestRowCardinalityError } from "@/lib/postgrestError"
 import {
   classifyReferredSubscriberStatus,
   formatAffiliateReferralJoinDate,
@@ -33,6 +32,9 @@ import { AFFILIATE_PRIMARY_BUTTON_CLASS } from "@/lib/affiliateUi"
 import {
   SkeletonAffiliateDashboardPage,
 } from "@/app/components/ui/skeletons"
+import { useUserProfile } from "@/lib/useUserProfile"
+import { fetchSettingsProfileRow } from "@/lib/settingsProfileSync"
+import { readSettingsProfileCache } from "@/lib/settingsProfileCache"
 
 type MeProfile = {
   id: string
@@ -55,6 +57,7 @@ type ReferredUserDisplayRow = ReferredProfileRow & {
 
 export default function AffiliateDashboard() {
   const router = useRouter()
+  const { user, profile: contextProfile } = useUserProfile()
   const [loading, setLoading] = useState(true)
   const [latestApp, setLatestApp] = useState<AffiliateApplicationRow | null>(null)
   const [referralCode, setReferralCode] = useState<string | null>(null)
@@ -81,22 +84,17 @@ export default function AffiliateDashboard() {
   const load = useCallback(async () => {
     setLoading(true)
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
     if (!user) {
       setLoading(false)
       router.push("/login")
       return
     }
 
-    const [profileRes, appRes, affConnRes] = await Promise.all([
-      supabase
-        .from("profiles")
-        .select("id, referral_code, referral_earnings, name")
-        .eq("id", user.id)
-        .maybeSingle(),
+    const cachedProfile =
+      readSettingsProfileCache(user.id) ??
+      (await fetchSettingsProfileRow(supabase, user.id).catch(() => null))
+
+    const [appRes, affConnRes] = await Promise.all([
       fetchLatestAffiliateApplication(supabase, user.id),
       supabase.from("affiliates").select(AFFILIATE_CONNECT_SELECT).eq("user_id", user.id).maybeSingle(),
     ])
@@ -128,14 +126,9 @@ export default function AffiliateDashboard() {
 
     setAffiliateConnect(connectRow)
 
-    const profile = profileRes.data as MeProfile | null
-    const profErr = profileRes.error
+    const profile = cachedProfile as MeProfile | null
 
-    if (profErr && !isPostgrestRowCardinalityError(profErr)) {
-      console.error("[affiliate dashboard] profile fetch", profErr)
-    }
-
-    if (!profile) {
+    if (!profile && !contextProfile?.referral_code) {
       setReferralCode(null)
       setRecordedEarnings(0)
       setReferredProfiles([])
@@ -145,16 +138,18 @@ export default function AffiliateDashboard() {
     }
 
     const code =
-      profile.referral_code != null ? String(profile.referral_code).trim() : ""
+      contextProfile?.referral_code != null
+        ? String(contextProfile.referral_code).trim()
+        : ""
     setReferralCode(code || null)
 
-    let earnings = recordedAffiliateEarnings(profile.referral_earnings)
+    let earnings = recordedAffiliateEarnings(profile?.referral_earnings)
     if (code && earnings === 0) {
       const { data: ledger } = await supabase
         .from("referrals")
         .select("amount_earned")
         .eq("referrer_user_id", user.id)
-      earnings = resolveRecordedAffiliateEarnings(profile.referral_earnings, ledger)
+      earnings = resolveRecordedAffiliateEarnings(profile?.referral_earnings, ledger)
     }
     setRecordedEarnings(earnings)
 
@@ -193,7 +188,7 @@ export default function AffiliateDashboard() {
     }
 
     setLoading(false)
-  }, [router])
+  }, [router, user, contextProfile?.referral_code])
 
   useEffect(() => {
     void load()

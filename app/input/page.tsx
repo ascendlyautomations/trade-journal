@@ -3,8 +3,10 @@
 import { useEffect, useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { Button, Modal, cn } from "@/app/components/ui"
+import { useUserProfile } from "@/lib/useUserProfile"
 
 export default function InputPage() {
+  const { user } = useUserProfile()
   const [ticker, setTicker] = useState("")
   const [pnl, setPnl] = useState("")
   const [direction, setDirection] = useState("Long")
@@ -26,10 +28,6 @@ export default function InputPage() {
     e.preventDefault()
 
     setLoading(true)
-
-    const {
-      data: { user }
-    } = await supabase.auth.getUser()
 
     const sessionToSave = (session && String(session).trim()) || "NY"
 

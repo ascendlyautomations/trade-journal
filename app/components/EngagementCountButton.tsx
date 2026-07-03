@@ -31,6 +31,7 @@ export default function EngagementCountButton({
   const display = formatEngagementCount(count)
   const accessible = formatEngagementCountAccessible(count)
   const abbreviated = display !== accessible
+  const isDisabled = disabled === true
 
   const variantClass =
     variant === "boxed"
@@ -40,7 +41,7 @@ export default function EngagementCountButton({
   return (
     <button
       type="button"
-      disabled={disabled}
+      {...(isDisabled ? { disabled: true } : {})}
       onClick={onClick}
       aria-label={`${ariaLabel}, ${accessible}`}
       title={abbreviated ? accessible : undefined}

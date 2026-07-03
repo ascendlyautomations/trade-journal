@@ -13,7 +13,7 @@ import {
 } from "recharts"
 import type { EquityCurvePoint, PerformanceStats } from "@/lib/performanceShare"
 import { SITE_NAME } from "@/lib/site"
-import { PERFORMANCE_SHARE_EXPORT_WIDTH } from "@/lib/shareImageCapture"
+import { PERFORMANCE_SHARE_EXPORT_WIDTH } from "@/lib/shareImageCaptureConstants"
 import { formatHoldDurationSeconds } from "@/lib/tradeTimingDisplay"
 
 export type PerformanceShareCardProps = {

@@ -7,6 +7,7 @@ import { prependTradeInCache } from "@/lib/appDataCache"
 import { isProActive } from "@/lib/subscription"
 import { parseOptionalRr } from "@/lib/tradeRr"
 import { compressScreenshot } from "@/lib/compressImage"
+import { validateImageUpload } from "@/lib/uploadValidation"
 
 export type ManualTradeAccount = {
   name: string
@@ -69,6 +70,11 @@ async function uploadTradeScreenshot(
   userId: string,
   file: File
 ): Promise<{ path: string | null; error: string | null }> {
+  const validationError = validateImageUpload(file)
+  if (validationError) {
+    return { path: null, error: validationError }
+  }
+
   let uploadFile: File = file
   if (file.type?.startsWith("image/")) {
     uploadFile = await compressScreenshot(file)

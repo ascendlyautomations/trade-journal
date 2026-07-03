@@ -1,18 +1,14 @@
-"use client"
-
-import { useEffect, useMemo, useState } from "react"
 import { SafeProfileAvatar } from "@/app/components/SafeProfileAvatar"
 import StarRatingDisplay from "@/app/components/beta/StarRatingDisplay"
 import {
-  SAMPLE_USER_REVIEWS,
   computeUserReviewStats,
-  fetchPublicUserReviews,
   formatUserReviewDisplayName,
   formatUserReviewUsername,
   resolvePublicReviewAvatar,
   selectFeaturedHomepageReviews,
   type PublicUserReview,
-} from "@/lib/userReviews"
+} from "@/lib/userReviewDisplay"
+import { SAMPLE_USER_REVIEWS } from "@/lib/demo/sampleUserReviews"
 import {
   LANDING_CARD_FULL,
   LANDING_HEADLINE_SM,
@@ -78,40 +74,17 @@ function TestimonialCard({ testimonial }: { testimonial: PublicUserReview }) {
   )
 }
 
-export default function LandingTestimonialsSection() {
-  const [approvedReviews, setApprovedReviews] = useState<PublicUserReview[]>([])
-  const [loaded, setLoaded] = useState(false)
+type LandingTestimonialsSectionProps = {
+  reviews: PublicUserReview[]
+}
 
-  useEffect(() => {
-    let cancelled = false
-    void (async () => {
-      const rows = await fetchPublicUserReviews()
-      if (!cancelled) {
-        setApprovedReviews(rows)
-        setLoaded(true)
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  const stats = useMemo(
-    () => computeUserReviewStats(approvedReviews),
-    [approvedReviews]
-  )
-
-  const featuredLive = useMemo(
-    () => selectFeaturedHomepageReviews(approvedReviews, 3),
-    [approvedReviews]
-  )
-
+export default function LandingTestimonialsSection({
+  reviews,
+}: LandingTestimonialsSectionProps) {
+  const stats = computeUserReviewStats(reviews)
+  const featuredLive = selectFeaturedHomepageReviews(reviews, 3)
   const displayCards =
-    featuredLive.length > 0
-      ? featuredLive
-      : loaded
-        ? SAMPLE_USER_REVIEWS.slice(0, 3)
-        : []
+    featuredLive.length > 0 ? featuredLive : SAMPLE_USER_REVIEWS.slice(0, 3)
 
   return (
     <section
@@ -143,25 +116,17 @@ export default function LandingTestimonialsSection() {
                 Based on {stats.count} approved review{stats.count === 1 ? "" : "s"}
               </p>
             </div>
-          ) : loaded ? (
+          ) : (
             <p className="mt-4 text-sm text-gray-500 md:mt-6">
               Community reviews will appear here as they are approved.
             </p>
-          ) : null}
+          )}
         </div>
 
         <div className={`${LANDING_SECTION_CONTENT_GAP} grid gap-4 md:grid-cols-3 md:gap-5`}>
-          {displayCards.length > 0 ? (
-            displayCards.map((testimonial) => (
-              <TestimonialCard key={testimonial.id} testimonial={testimonial} />
-            ))
-          ) : (
-            <div className="md:col-span-3">
-              <div className={`${LANDING_CARD_FULL} px-5 py-8 text-center md:px-6 md:py-10`}>
-                <p className="text-sm text-gray-500">Loading community reviews…</p>
-              </div>
-            </div>
-          )}
+          {displayCards.map((testimonial) => (
+            <TestimonialCard key={testimonial.id} testimonial={testimonial} />
+          ))}
         </div>
       </div>
     </section>

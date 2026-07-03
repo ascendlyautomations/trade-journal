@@ -6,6 +6,7 @@ import {
   buildAnalyzeTradeHistoryContext,
   buildTradeAnalysisPrompt,
 } from "@/lib/analyzeTradePrompt"
+import { isProActive } from "@/lib/subscription"
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -21,10 +22,15 @@ const aiCallByUser = new Map<string, number>()
 
 function resolveScreenshotPublicUrl(imagePath: string | null | undefined) {
   if (!imagePath?.trim()) return null
-  if (imagePath.startsWith("http://") || imagePath.startsWith("https://")) {
-    return imagePath
+  const trimmed = imagePath.trim()
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+    return null
   }
-  return `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/screenshots/${imagePath}`
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "")
+  if (!base) return null
+  const normalized = trimmed.replace(/^\/+/, "")
+  if (normalized.includes("..")) return null
+  return `${base}/storage/v1/object/public/screenshots/${normalized}`
 }
 
 function isOpenAiImageFetchError(error: unknown): boolean {
@@ -109,7 +115,6 @@ async function createTradeAnalysisCompletion(
 }
 
 export async function POST(req: Request) {
-  console.log("AI API HIT")
   const token = req.headers.get("authorization")?.replace("Bearer ", "")
 
   const supabase = createClient(
@@ -128,10 +133,8 @@ export async function POST(req: Request) {
   } = await supabase.auth.getUser()
 
   if (!user) {
-    console.error("AI AUTH FAILED")
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
-  console.log("AI AUTH USER:", user.id)
 
   const lastCall = aiCallByUser.get(user.id) ?? 0
   if (Date.now() - lastCall < 3000) {
@@ -141,7 +144,6 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json()
-    console.log("AI BACKEND INPUT:", body)
     const { trade, messages } = body
     const tradeId = trade?.id
     if (!tradeId) {
@@ -150,22 +152,18 @@ export async function POST(req: Request) {
 
     const { data: profile, error: profileError } = await supabaseAdmin
       .from("profiles")
-      .select("is_pro, subscription_status")
+      .select("is_pro, subscription_status, trial_end")
       .eq("id", user.id)
       .single()
 
     if (profileError) {
-      console.error("ERROR:", JSON.stringify(profileError, null, 2))
       return NextResponse.json(
         { error: "Could not verify subscription" },
         { status: 500 }
       )
     }
 
-    const pro =
-      profile?.is_pro === true ||
-      profile?.subscription_status === "active"
-    if (!pro) {
+    if (!isProActive(profile)) {
       return NextResponse.json(
         { error: "Pro required", reply: "AI Analyst is a Pro feature." },
         { status: 403 }
@@ -219,6 +217,7 @@ export async function POST(req: Request) {
       .from("trades")
       .update({ ai_feedback: aiResult })
       .eq("id", tradeId)
+      .eq("user_id", user.id)
 
     if (aiResult) {
       return NextResponse.json({

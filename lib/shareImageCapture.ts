@@ -1,17 +1,14 @@
-import { toPng } from "html-to-image"
+import {
+  PERFORMANCE_SHARE_EXPORT_WIDTH,
+  PERFORMANCE_SHARE_EXPORT_MIN_HEIGHT,
+  type CaptureShareCardOptions,
+} from "@/lib/shareImageCaptureConstants"
 
-/** Design canvas width — export at `pixelRatio` 2 → 1040px PNG width. */
-export const PERFORMANCE_SHARE_EXPORT_WIDTH = 520
-
-/** Minimum height if layout has not resolved before capture. */
-export const PERFORMANCE_SHARE_EXPORT_MIN_HEIGHT = 720
-
-export type CaptureShareCardOptions = {
-  /** Extra wait for Recharts/SVG layout (ms). */
-  warmupMs?: number
-  /** Label for console logging. */
-  logContext?: string
-}
+export {
+  PERFORMANCE_SHARE_EXPORT_WIDTH,
+  PERFORMANCE_SHARE_EXPORT_MIN_HEIGHT,
+  type CaptureShareCardOptions,
+} from "@/lib/shareImageCaptureConstants"
 
 function logCaptureTarget(
   exportId: string,
@@ -94,6 +91,7 @@ export async function captureShareCardElementToPng(
   }
 
   try {
+    const { toPng } = await import("html-to-image")
     const dataUrl = await toPng(root, {
       width,
       height,

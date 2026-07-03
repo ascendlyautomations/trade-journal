@@ -1,5 +1,6 @@
 import { getRouteUser, supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
 import { isServerCommentNotificationAllowed } from "@/lib/serverNotificationPreferences"
+import { resolveCommentNotificationRecipient } from "@/lib/server/resolveCommentNotificationRecipient"
 import type { CommentNotificationKind } from "@/lib/notificationPreferences"
 
 type CommentTargetBody = {
@@ -63,17 +64,50 @@ export async function POST(req: Request) {
     return Response.json({ error: "Invalid JSON body" }, { status: 400 })
   }
 
-  const recipientUserId = body.recipientUserId?.trim()
+  const recipientUserIdFromClient = body.recipientUserId?.trim()
   const commentId = body.commentId?.trim()
   const content = body.content?.trim().slice(0, 200) ?? ""
 
-  if (!recipientUserId || !commentId || recipientUserId === user.id) {
+  if (!commentId) {
     return Response.json({ error: "Invalid notification payload" }, { status: 400 })
   }
 
   const authored = await commentAuthoredByUser(commentId, user.id)
   if (!authored) {
     return Response.json({ error: "Comment not found" }, { status: 404 })
+  }
+
+  const hasTarget =
+    body.profilePostId ||
+    body.achievementPostId ||
+    body.reelId ||
+    body.postId ||
+    body.tradeId
+
+  if (!hasTarget) {
+    return Response.json({ error: "Missing comment target" }, { status: 400 })
+  }
+
+  const recipientUserId = await resolveCommentNotificationRecipient({
+    postId: body.postId,
+    tradeId: body.tradeId,
+    profilePostId: body.profilePostId,
+    achievementPostId: body.achievementPostId,
+    reelId: body.reelId,
+  })
+
+  if (!recipientUserId || recipientUserId === user.id) {
+    return Response.json({ error: "Invalid notification recipient" }, { status: 400 })
+  }
+
+  if (
+    recipientUserIdFromClient &&
+    recipientUserIdFromClient !== recipientUserId
+  ) {
+    console.warn("[api/notifications/comment] client recipient mismatch", {
+      client: recipientUserIdFromClient,
+      resolved: recipientUserId,
+    })
   }
 
   const isAchievement = Boolean(body.achievementPostId)

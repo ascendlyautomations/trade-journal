@@ -2,6 +2,7 @@
 
 import FeedCommentItem from "@/app/components/feed/FeedCommentItem"
 import EngagementCountButton from "@/app/components/EngagementCountButton"
+import { useHydrationReady } from "@/lib/useHydrationReady"
 
 type LikeMeta = {
   count: number
@@ -47,6 +48,10 @@ export function PostInteractionsEngagement({
   className = "",
 }: PostInteractionsBaseProps & { className?: string }) {
   const pid = String(post.id)
+  const hydrationReady = useHydrationReady()
+  // Auth is unavailable during SSR; defer auth-gated disabled until after hydration.
+  const likeDisabled = !hydrationReady || !user || likeBusy
+
   return (
     <div className={`text-sm ${className}`.trim()} {...guard(stopPropagation)}>
       <div className="flex items-center gap-3">
@@ -55,7 +60,7 @@ export function PostInteractionsEngagement({
           icon={<span>{likeMeta.liked ? "❤️" : "🤍"}</span>}
           count={likeMeta.count}
           ariaLabel={likeMeta.liked ? "Unlike" : "Like"}
-          disabled={!user || likeBusy}
+          disabled={likeDisabled}
           onClick={(e) => {
             if (stopPropagation) e.stopPropagation()
             onToggleLike(post)

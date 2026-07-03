@@ -20,6 +20,13 @@ export const PRICING_CARD_PRO_FEATURES_HEADING =
 export const PRICING_CARD_PRO_FEATURES_HEADING_ALT =
   "mt-3 text-xs font-medium text-gray-100 md:mt-4 md:text-[13px]"
 
+/** Subheading for grouped Pro feature sections inside pricing cards. */
+export const PRICING_CARD_PRO_FEATURE_GROUP_HEADING =
+  "mt-3 text-[11px] font-semibold uppercase tracking-wide text-teal-300/90 first:mt-2 md:mt-3.5 md:text-xs"
+
+export const PRICING_CARD_PRO_FEATURE_GROUP_HEADING_LANDING =
+  "mt-3 text-[11px] font-semibold uppercase tracking-wide text-emerald-300/90 first:mt-2 md:mt-3.5 md:text-xs"
+
 /** Compact feature list — Pro cards use the tighter gap. */
 export const PRICING_CARD_FEATURE_LIST =
   "mt-6 flex flex-1 flex-col gap-2 text-left text-xs text-gray-300 md:mt-7 md:gap-2.5 md:text-[13px]"
@@ -41,14 +48,12 @@ export const PRICING_PAGE_CTA_FINE_PRINT =
 
 /** "Why TradeTraxs Pro?" value bullets — pricing page. */
 export const PRICING_PAGE_WHY_PRO_BULLETS = [
-  "See your real win rate",
-  "Identify what setups work",
-  "Eliminate bad trades",
-  "Improve faster with AI feedback",
-  "Professional-Grade Performance Dashboard with actionable insights",
-  "Build Consistency with detailed journaling and trade review tools",
-  "Learn from the Community by sharing trades and connecting with other traders",
-  "Constantly Evolving Platform with frequent feature releases and improvements",
+  "Unlimited trades and trading accounts",
+  "AI Trade Analyst and weekly & monthly trading reports",
+  "Premium analytics and performance insights",
+  "Backtest Lab and Prop Firm Mode",
+  "Performance image exports for sharing your results",
+  "Full social experience included on every plan",
 ] as const
 
 export const PRICING_PAGE_WHY_PRO_LIST =

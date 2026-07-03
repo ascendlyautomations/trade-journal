@@ -21,6 +21,7 @@ import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 import { isDemoUserId } from "@/lib/demo/constants"
 import { isDemoSupabaseBlocked } from "@/lib/demo/demoSupabaseGuard"
+import { subscribeNotificationChanges } from "@/lib/notificationRealtime"
 import {
   fetchDemoNotifications,
   getDemoNotificationSenderProfiles,
@@ -578,66 +579,47 @@ export default function NotificationsPage() {
     if (!userId) return
     if (isDemoSupabaseBlocked()) return
 
-    const channel = supabase.channel(`notifications-page-${userId}`)
-
-    channel.on(
-      "postgres_changes",
-      {
-        event: "*",
-        schema: "public",
-        table: "notifications",
-        filter: `user_id=eq.${userId}`,
-      },
-      (payload: {
-        eventType: string
-        new: NotificationRecord | null
-        old: { id?: string } | null
-      }) => {
-        if (payload.eventType === "DELETE" && payload.old?.id) {
+    return subscribeNotificationChanges(userId, (payload) => {
+      if (payload.eventType === "DELETE" && payload.old?.id) {
+        setNotifications((prev) =>
+          prev.filter((row) => row.id !== payload.old?.id)
+        )
+        return
+      }
+      if (payload.eventType === "INSERT" && payload.new) {
+        const row = payload.new as NotificationRecord
+        if (!isInboxNotification(row)) return
+        setNotifications((prev) => {
+          if (prev.some((existing) => existing.id === row.id)) return prev
+          return sortNotificationsDesc([row, ...prev]).slice(0, 200)
+        })
+        if (row.sender_id) {
+          void ensureSenderProfiles([row.sender_id])
+        }
+        return
+      }
+      if (payload.eventType === "UPDATE" && payload.new) {
+        const row = payload.new as NotificationRecord
+        if (!isInboxNotification(row)) {
           setNotifications((prev) =>
-            prev.filter((row) => row.id !== payload.old?.id)
+            prev.filter((existing) => existing.id !== row.id)
           )
           return
         }
-        if (payload.eventType === "INSERT" && payload.new) {
-          const row = payload.new as NotificationRecord
-          if (!isInboxNotification(row)) return
-          setNotifications((prev) => {
-            if (prev.some((existing) => existing.id === row.id)) return prev
+        setNotifications((prev) => {
+          const index = prev.findIndex((existing) => existing.id === row.id)
+          if (index < 0) {
             return sortNotificationsDesc([row, ...prev]).slice(0, 200)
-          })
-          if (row.sender_id) {
-            void ensureSenderProfiles([row.sender_id])
           }
-          return
-        }
-        if (payload.eventType === "UPDATE" && payload.new) {
-          const row = payload.new as NotificationRecord
-          if (!isInboxNotification(row)) {
-            setNotifications((prev) => prev.filter((existing) => existing.id !== row.id))
-            return
-          }
-          setNotifications((prev) => {
-            const index = prev.findIndex((existing) => existing.id === row.id)
-            if (index < 0) {
-              return sortNotificationsDesc([row, ...prev]).slice(0, 200)
-            }
-            const next = [...prev]
-            next[index] = row
-            return sortNotificationsDesc(next)
-          })
-          if (row.sender_id) {
-            void ensureSenderProfiles([row.sender_id])
-          }
+          const next = [...prev]
+          next[index] = row
+          return sortNotificationsDesc(next)
+        })
+        if (row.sender_id) {
+          void ensureSenderProfiles([row.sender_id])
         }
       }
-    )
-
-    channel.subscribe()
-
-    return () => {
-      void supabase.removeChannel(channel)
-    }
+    })
   }, [userId, ensureSenderProfiles])
 
   useEffect(() => {

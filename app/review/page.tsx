@@ -6,9 +6,12 @@ import { useRouter } from "next/navigation"
 import InputTradeForm from "../components/InputTradeForm"
 import { formatEST } from "@/lib/formatEST"
 import { useToast } from "@/app/components/ui"
+import { TRADES_APP_SELECT } from "@/lib/publicAccountPrivacy"
+import { useUserProfile } from "@/lib/useUserProfile"
 
 export default function ReviewPage() {
   const toast = useToast()
+  const { user, loading: profileLoading } = useUserProfile()
   const [trades, setTrades] = useState<any[]>([])
   const [editingTrade, setEditingTrade] = useState<any | null>(null)
   const [showApproveAllConfirm, setShowApproveAllConfirm] = useState(false)
@@ -18,17 +21,14 @@ export default function ReviewPage() {
   const router = useRouter()
 
   useEffect(() => {
+    if (profileLoading) return
     fetchTrades()
-  }, [])
+  }, [profileLoading, user?.id])
 
   async function fetchTrades() {
-    const {
-      data: { user }
-    } = await supabase.auth.getUser()
-
     const { data } = await supabase
       .from("trades")
-      .select("*")
+      .select(TRADES_APP_SELECT)
       .eq("user_id", user?.id)
       .eq("is_initial_import", true)
       .eq("reviewed", false)
@@ -39,9 +39,6 @@ export default function ReviewPage() {
   }
 
   async function handleApproveAll() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
     if (!user?.id) return
 
     setBulkApproving(true)

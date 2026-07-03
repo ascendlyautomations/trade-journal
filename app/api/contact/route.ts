@@ -1,5 +1,9 @@
 import { getRouteUser, supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
 import {
+  clientIpFromRequest,
+  checkSimpleRouteRateLimit,
+} from "@/lib/server/simpleRouteRateLimit"
+import {
   PUBLIC_CONTACT_CATEGORY_LABELS,
   PUBLIC_CONTACT_SUBJECTS,
   publicContactAdminType,
@@ -19,6 +23,18 @@ const VALID_CATEGORIES = new Set<PublicContactCategory>([
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 export async function POST(req: Request) {
+  const ip = clientIpFromRequest(req)
+  const rate = checkSimpleRouteRateLimit(`contact:${ip}`, 5, 60 * 60 * 1000)
+  if (!rate.allowed) {
+    return Response.json(
+      { error: "Too many submissions. Try again later." },
+      {
+        status: 429,
+        headers: { "Retry-After": String(rate.retryAfterSec) },
+      }
+    )
+  }
+
   let body: {
     category?: string
     name?: string

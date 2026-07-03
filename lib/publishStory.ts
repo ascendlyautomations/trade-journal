@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
+import { validateImageUpload } from "@/lib/uploadValidation"
 
 export async function publishStory(
   supabase: SupabaseClient,
@@ -8,6 +9,11 @@ export async function publishStory(
 ): Promise<{ ok: true } | { ok: false; message: string }> {
   if (!userId || !file) {
     return { ok: false, message: "Missing story image" }
+  }
+
+  const validationError = validateImageUpload(file)
+  if (validationError) {
+    return { ok: false, message: validationError }
   }
 
   const fileName = `${userId}/${Date.now()}-${file.name}`

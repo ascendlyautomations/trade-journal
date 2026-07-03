@@ -26,13 +26,7 @@ import { supabase } from "@/lib/supabaseClient"
 import { supabaseBearerHeaders } from "@/lib/supabaseBearerFetch"
 import { AFFILIATE_PRIMARY_BUTTON_CLASS } from "@/lib/affiliateUi"
 import { SkeletonPayoutsPage } from "@/app/components/ui/skeletons"
-
-type MeProfile = {
-  id: string
-  username?: string | null
-  name?: string | null
-  referral_code?: string | null
-}
+import { useUserProfile } from "@/lib/useUserProfile"
 
 function formatMoney(n: number): string {
   return n.toFixed(2)
@@ -93,6 +87,7 @@ function PayoutRequestCard({ row }: { row: AffiliatePayoutRequestRow }) {
 
 export default function AffiliatePayoutsPage() {
   const router = useRouter()
+  const { user, profile: contextProfile } = useUserProfile()
   const [loading, setLoading] = useState(true)
   const [referralCode, setReferralCode] = useState<string | null>(null)
   const [payoutBalance, setPayoutBalance] = useState<AffiliatePayoutBalance | null>(null)
@@ -107,28 +102,17 @@ export default function AffiliatePayoutsPage() {
   const load = useCallback(async () => {
     setLoading(true)
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
     if (!user) {
       setLoading(false)
       router.push("/login")
       return
     }
 
-    const [balRes, profileRes, affRes, payoutsRes] = await Promise.all([
+    const [balRes, affRes, payoutsRes] = await Promise.all([
       fetchAffiliatePayoutBalance(supabase, user.id),
-      supabase
-        .from("profiles")
-        .select("id, username, name, referral_code")
-        .eq("id", user.id)
-        .maybeSingle(),
       supabase.from("affiliates").select(AFFILIATE_CONNECT_SELECT).eq("user_id", user.id).maybeSingle(),
       fetchMyAffiliatePayoutRequests(supabase, user.id),
     ])
-
-    const profile = profileRes.data as MeProfile | null
 
     let connectRow: AffiliateConnectRow | null = null
     if (affRes.data && typeof affRes.data === "object") {
@@ -156,7 +140,9 @@ export default function AffiliatePayoutsPage() {
     setAffiliateConnectRow(connectRow)
 
     const profileCode =
-      profile?.referral_code != null ? String(profile.referral_code).trim() : ""
+      contextProfile?.referral_code != null
+        ? String(contextProfile.referral_code).trim()
+        : ""
     const affiliateCode =
       connectRow?.code != null ? String(connectRow.code).trim() : ""
     /** Shown everywhere we previously used `referralCode` — profile wins, then `affiliates.code`. */
@@ -182,7 +168,7 @@ export default function AffiliatePayoutsPage() {
     setAffiliateRowId(connectRow?.id != null ? String(connectRow.id) : null)
     setPayoutRows(payoutRowsSafe)
     setLoading(false)
-  }, [router])
+  }, [router, user, contextProfile?.referral_code])
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- page data load
@@ -235,10 +221,7 @@ export default function AffiliatePayoutsPage() {
   )
 
   async function handleSubmitRequest(amount: number): Promise<{ error: string | null }> {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user || !affiliateRowId) {
+    if (!user?.id || !affiliateRowId) {
       return { error: "You must be an active affiliate to request a payout." }
     }
     if (amount <= 0 || !Number.isFinite(amount)) {

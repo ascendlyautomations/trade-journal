@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import { supabase } from "@/lib/supabaseClient"
 import {
   BUG_REPORT_SEVERITY_OPTIONS,
   captureBrowserInfo,
@@ -22,6 +21,7 @@ import {
   submissionTextarea,
   submissionTitle,
 } from "@/lib/submissionFormStyles"
+import { useUserProfile } from "@/lib/useUserProfile"
 
 const SUCCESS_AUTO_CLOSE_MS = 1000
 
@@ -37,6 +37,7 @@ export default function BugReportModal({
   onSubmitted,
 }: BugReportModalProps) {
   const router = useRouter()
+  const { user } = useUserProfile()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const submittingRef = useRef(false)
   const [title, setTitle] = useState("")
@@ -101,12 +102,7 @@ export default function BugReportModal({
     setError(null)
 
     try {
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
-
-    if (authError || !user) {
+    if (!user?.id) {
       onClose()
       router.push("/login")
       return

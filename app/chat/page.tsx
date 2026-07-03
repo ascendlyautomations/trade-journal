@@ -9,14 +9,14 @@ import { logSupabaseError } from "@/lib/logSupabaseError"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { useRouter } from "next/navigation"
 import { profilePath } from "@/lib/profileRoutes"
+import { useUserProfile } from "@/lib/useUserProfile"
 
 export default function ChatPage() {
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
+  const { user, profile, loading: authLoading } = useUserProfile()
   const [messages, setMessages] = useState<any[]>([])
   const [input, setInput] = useState("")
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [user, setUser] = useState<any>(null)
-  const [profile, setProfile] = useState<any>(null)
   const [channel, setChannel] = useState<"random" | "trades">("random")
 
   const [isAtBottom, setIsAtBottom] = useState(true)
@@ -33,33 +33,15 @@ export default function ChatPage() {
   ]
 
   useEffect(() => {
-    init()
-  }, [])
+    if (authLoading) return
+    if (!user) {
+      router.push("/login")
+    }
+  }, [authLoading, user, router])
 
   useEffect(() => {
     fetchMessages()
   }, [channel])
-
-  async function init() {
-    const {
-      data: { user }
-    } = await supabase.auth.getUser()
-
-    if (!user) {
-      router.push("/login")
-      return
-    }
-
-    setUser(user)
-
-    const { data: prof } = await supabase
-      .from("profiles")
-      .select("username")
-      .eq("id", user.id)
-      .single()
-
-    setProfile(prof)
-  }
 
   async function fetchMessages() {
     const { data } = await supabase

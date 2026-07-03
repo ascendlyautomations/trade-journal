@@ -1,10 +1,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { notifyAdminSubmission } from "@/lib/notifyAdminSubmission"
+import { validateCsvUpload } from "@/lib/uploadValidation"
+import { isRateLimitExceededError, formatRateLimitExceededMessage } from "@/lib/rateLimitErrors"
 
 export type SubmitCsvSupportInput = {
   csvFile: File
   brokerName: string
   notes?: string | null
+  /** When provided, skips client auth lookup (caller already has user id). */
+  userId?: string
 }
 
 /** Matches /csv-support page + csv_support_requests_insert_own RLS (user_id = auth.uid()). */
@@ -39,13 +43,17 @@ export async function submitCsvSupportRequest(
   supabase: SupabaseClient,
   input: SubmitCsvSupportInput
 ): Promise<{ ok: true; filePath: string } | { ok: false; message: string }> {
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser()
+  let userId = input.userId?.trim() || null
+  if (!userId) {
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser()
 
-  if (authError || !user?.id) {
-    return { ok: false, message: "You must be logged in to submit a CSV." }
+    if (authError || !user?.id) {
+      return { ok: false, message: "You must be logged in to submit a CSV." }
+    }
+    userId = user.id
   }
 
   const { data: sessionData } = await supabase.auth.getSession()
@@ -57,7 +65,11 @@ export async function submitCsvSupportRequest(
     }
   }
 
-  const userId = user.id
+  const csvValidationError = validateCsvUpload(input.csvFile)
+  if (csvValidationError) {
+    return { ok: false, message: csvValidationError }
+  }
+
   const safeName = sanitizeCsvSupportFilename(input.csvFile.name)
   const filePath = `${userId}/${Date.now()}-${safeName}`
   const insertPayload = buildCsvSupportRequestInsertPayload(
@@ -93,6 +105,14 @@ export async function submitCsvSupportRequest(
     .single()
 
   if (insertError) {
+    if (isRateLimitExceededError(insertError.message)) {
+      return {
+        ok: false,
+        message: formatRateLimitExceededMessage(
+          "Too many CSV support submissions. Try again in an hour."
+        ),
+      }
+    }
     return { ok: false, message: insertError.message }
   }
 

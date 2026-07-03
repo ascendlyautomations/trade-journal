@@ -3,6 +3,7 @@
 import type { ReactNode } from "react"
 import type { StoryBarProfile } from "./FeedStoriesBar"
 import { ProfileAvatarImg } from "@/app/components/SafeProfileAvatar"
+import StorageImage from "@/app/components/ui/StorageImage"
 import { formatSocialTimestamp } from "@/lib/formatRelativeTime"
 
 export function storyTimeAgo(iso: string): string {
@@ -63,12 +64,12 @@ export default function StoryFrame({
           hasFooter ? "pb-[4.75rem]" : ""
         }`}
       >
-        <img
+        <StorageImage
           key={imageKey ?? imageUrl}
           src={imageUrl}
+          originalSrc={imageUrl}
+          preset="story"
           alt=""
-          loading="lazy"
-          decoding="async"
           className="block max-h-full max-w-full animate-[storyFadeIn_0.28s_ease-out] object-contain"
           draggable={false}
         />

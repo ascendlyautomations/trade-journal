@@ -19,7 +19,6 @@ import { profileNeedsOnboarding } from "@/lib/profileOnboardingGate"
 import { hasActiveMembership } from "@/lib/subscriptionAccess"
 import { enterSignupFlow, setCheckoutBillingInterval } from "@/lib/signupFlow"
 import { TRAXPRO_DEFAULT_BILLING_INTERVAL } from "@/lib/traxProBillingPlans"
-import { supabase } from "@/lib/supabaseClient"
 import { useUserProfile } from "@/lib/useUserProfile"
 import {
   LANDING_BODY,
@@ -81,11 +80,7 @@ export default function AboutPage() {
     setCheckoutLoading(true)
     setCheckoutBillingInterval(TRAXPRO_DEFAULT_BILLING_INTERVAL)
     try {
-      const {
-        data: { user: authUser },
-      } = await supabase.auth.getUser()
-
-      if (!authUser) {
+      if (!user) {
         enterSignupFlow()
         router.push("/login?tab=signup")
         return
@@ -95,7 +90,7 @@ export default function AboutPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          userId: authUser.id,
+          userId: user.id,
           billingInterval: TRAXPRO_DEFAULT_BILLING_INTERVAL,
           referralCode:
             typeof window !== "undefined"

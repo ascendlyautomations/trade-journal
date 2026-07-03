@@ -1,5 +1,6 @@
 "use client"
 
+import dynamic from "next/dynamic"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
@@ -8,8 +9,6 @@ import { isProActive } from "@/lib/subscription"
 import LockedFeature from "../components/LockedFeature"
 import TradesPageTradeCard from "../components/TradesPageTradeCard"
 import Calendar from "@/components/Calendar"
-import InputTradeForm from "../components/InputTradeForm"
-import PerformanceShareModal from "../components/PerformanceShareModal"
 import { formatPnlCurrency } from "@/lib/formatMoney"
 import { formatRR } from "@/lib/formatDisplay"
 import { averageRrFromTrades } from "@/lib/tradeRr"
@@ -19,7 +18,17 @@ import { isDemoSupabaseBlocked } from "@/lib/demo/demoSupabaseGuard"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 import { getDemoBacktestTrades } from "@/lib/demo/demoBacktest"
 import { DEMO_PROFILE } from "@/lib/demo/fixtures"
+import { TRADES_APP_SELECT } from "@/lib/publicAccountPrivacy"
 import { useUserProfile } from "@/lib/UserProfileProvider"
+import { SkeletonBacktestPageContent } from "../components/ui/skeletons"
+
+const InputTradeForm = dynamic(() => import("../components/InputTradeForm"), {
+  ssr: false,
+})
+const PerformanceShareModal = dynamic(
+  () => import("../components/PerformanceShareModal"),
+  { ssr: false }
+)
 
 type BacktestTrade = Record<string, unknown> & {
   id: string
@@ -31,7 +40,7 @@ type BacktestTrade = Record<string, unknown> & {
 
 export default function BacktestPage() {
   const router = useRouter()
-  const { user } = useUserProfile()
+  const { user, profile: contextProfile } = useUserProfile()
   const [trades, setTrades] = useState<BacktestTrade[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedStrategy, setSelectedStrategy] = useState("all")
@@ -58,31 +67,36 @@ export default function BacktestPage() {
       return
     }
 
-    const {
-      data: { user: authUser },
-    } = await supabase.auth.getUser()
-    if (!authUser?.id) {
+    if (!user?.id) {
       router.push("/login")
       setLoading(false)
       return
     }
 
-    const { data: profileRow } = await supabase
-      .from("profiles")
-      .select("is_pro, subscription_status, referral_code")
-      .eq("id", authUser.id)
-      .maybeSingle()
-    if (!isProActive(profileRow)) {
-      setProLocked(true)
-      setLoading(false)
-      return
+    if (contextProfile && isProActive(contextProfile)) {
+      setShareProfile(
+        contextProfile.referral_code != null
+          ? { referral_code: contextProfile.referral_code }
+          : null
+      )
+    } else {
+      const { data: profileRow } = await supabase
+        .from("profiles")
+        .select("is_pro, subscription_status, referral_code")
+        .eq("id", user.id)
+        .maybeSingle()
+      if (!isProActive(profileRow)) {
+        setProLocked(true)
+        setLoading(false)
+        return
+      }
+      setShareProfile(profileRow ?? null)
     }
-    setShareProfile(profileRow ?? null)
 
     const { data, error } = await supabase
       .from("trades")
-      .select("*")
-      .eq("user_id", authUser.id)
+      .select(TRADES_APP_SELECT)
+      .eq("user_id", user.id)
       .eq("mode", "backtest")
       .order("created_at", { ascending: false })
 
@@ -181,10 +195,6 @@ export default function BacktestPage() {
             Isolated backtests, does not affect dashboard or trade history.
           </p>
 
-          {loading ? (
-            <p className="mb-2 text-center text-gray-400">Loading...</p>
-          ) : null}
-
           <div className="mb-3 flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-4">
               <select
@@ -219,6 +229,10 @@ export default function BacktestPage() {
             </div>
           </div>
 
+          {loading ? (
+            <SkeletonBacktestPageContent />
+          ) : (
+            <>
           <div className="mb-4 grid grid-cols-2 gap-4 md:grid-cols-4">
             <div className="rounded-xl bg-gradient-to-br from-blue-500/20 to-blue-600/10 p-4">
               <p className="text-sm text-gray-400">Trades</p>
@@ -329,6 +343,8 @@ export default function BacktestPage() {
               </p>
             ) : null}
           </div>
+            </>
+          )}
         </div>
       </div>
 

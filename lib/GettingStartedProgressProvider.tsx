@@ -34,6 +34,7 @@ import {
   type GettingStartedRefreshDetail,
 } from "@/lib/gettingStartedProgressSync"
 import { subscribeStripeReconciliationComplete } from "@/lib/stripeReconciliation"
+import { scheduleDeferredWork } from "@/lib/scheduleDeferredWork"
 import { applyStickyGettingStartedProgress } from "@/lib/gettingStartedSticky"
 import {
   GETTING_STARTED_INTRO_POPUP_TITLE,
@@ -408,11 +409,13 @@ export function GettingStartedProgressProvider({
     if (profileLoading && !profile) return
     if (membershipReconciling) return
 
-    void refreshChecklistSignals().then(() => {
-      if (pendingRefreshRef.current) {
-        pendingRefreshRef.current = false
-        void refreshChecklistSignals({ fromUserAction: true })
-      }
+    scheduleDeferredWork(() => {
+      void refreshChecklistSignals().then(() => {
+        if (pendingRefreshRef.current) {
+          pendingRefreshRef.current = false
+          void refreshChecklistSignals({ fromUserAction: true })
+        }
+      })
     })
   }, [
     user?.id,

@@ -11,6 +11,8 @@ import {
 import { formatEST } from "@/lib/formatEST"
 import { formatMoneyUnknown, formatNumberUnknown, formatTradePoints } from "@/lib/formatDisplay"
 import { safeAccountNumberLabel, formatTradeAccountNameSizeLine } from "@/lib/tradeAccountDisplay"
+import { tradeScreenshotPublicUrl } from "@/lib/storagePublicUrl"
+import StorageImage from "@/app/components/ui/StorageImage"
 
 export type TradesPageTradeCardProps = {
   trade: any
@@ -70,19 +72,10 @@ function TradesPageTradeCard({
     [accountNameSizeLine, accountRow?.account_number, accountNumberDisplay]
   )
 
-  const imageSrc = useMemo(() => {
-    if (!trade.image_url) return null
-    const raw = String(trade.image_url).trim()
-    if (raw.startsWith("/")) return raw
-    return raw.startsWith("http")
-      ? raw
-      : `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/screenshots/${raw}`
-  }, [trade.image_url])
-
-  const imageLightboxUrl = useMemo(() => {
-    if (!trade.image_url) return null
-    return `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/screenshots/${trade.image_url}`
-  }, [trade.image_url])
+  const screenshotUrl = useMemo(
+    () => tradeScreenshotPublicUrl(trade.image_url),
+    [trade.image_url]
+  )
 
   if (process.env.NODE_ENV !== "production" && showAdvanced) {
     console.debug("[trades-page-duration-ui]", {
@@ -395,14 +388,14 @@ function TradesPageTradeCard({
         </div>
       </div>
 
-      {imageSrc ? (
-        <img
-          src={imageSrc}
+      {screenshotUrl ? (
+        <StorageImage
+          src={screenshotUrl}
+          originalSrc={screenshotUrl}
+          preset="trade-thumb"
           alt=""
-          loading="lazy"
-          decoding="async"
-          className="w-full mt-4 rounded-lg border border-white/10 cursor-pointer"
-          onClick={() => imageLightboxUrl && onImageClick(imageLightboxUrl)}
+          className="mt-4 w-full cursor-pointer rounded-lg border border-white/10"
+          onClick={() => onImageClick(screenshotUrl)}
         />
       ) : null}
 

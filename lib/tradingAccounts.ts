@@ -10,6 +10,8 @@ import {
   formatAccountNameWithSizeDisplay,
 } from "@/lib/tradeAccountDisplay"
 
+import { ACCOUNTS_SELECT } from "./appDataCache"
+
 export type TradingAccountPropFirmRules = {
   consistency: number | null
   maxDrawdown: number | null
@@ -145,7 +147,7 @@ export async function loadTradingAccounts(
 ): Promise<{ accounts: TradingAccountListItem[]; error: Error | null }> {
   const { data, error } = await client
     .from("accounts")
-    .select("*")
+    .select(ACCOUNTS_SELECT)
     .eq("user_id", userId)
 
   if (error) {

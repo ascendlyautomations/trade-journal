@@ -29,6 +29,7 @@ import FeedPostScreenshot from "@/app/components/feed/FeedPostScreenshot"
 import { postImageSrc } from "@/app/components/feed/feedPostHelpers"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
+import { useUserProfile } from "@/lib/useUserProfile"
 
 export type ShareToConversationsModalProps = {
   open: boolean
@@ -62,6 +63,7 @@ export default function ShareToConversationsModal({
   showCancel = true,
 }: ShareToConversationsModalProps) {
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
+  const { user } = useUserProfile()
   const [shareMessage, setShareMessage] = useState("")
   const [shareConversations, setShareConversations] = useState<
     ShareConversationRow[]
@@ -74,7 +76,6 @@ export default function ShareToConversationsModal({
   const [userResults, setUserResults] = useState<ShareProfileRow[]>([])
   const [userSearchLoading, setUserSearchLoading] = useState(false)
   const [shareLoading, setShareLoading] = useState(false)
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const { phase, isBusy, markSending, markSuccessAndDismiss, reset } =
     useShareSuccessDismiss(onClose)
 
@@ -118,7 +119,6 @@ export default function ShareToConversationsModal({
       setUserResults([])
       setUserSearchLoading(false)
       setShareLoading(false)
-      setCurrentUserId(null)
       reset()
       return
     }
@@ -126,12 +126,8 @@ export default function ShareToConversationsModal({
     let cancelled = false
 
     async function load() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
       if (!user?.id || cancelled) return
 
-      setCurrentUserId(user.id)
       setShareLoading(true)
       const list = await fetchShareConversations(supabase, user.id)
       if (!cancelled) {
@@ -145,10 +141,10 @@ export default function ShareToConversationsModal({
     return () => {
       cancelled = true
     }
-  }, [open, reset])
+  }, [open, reset, user?.id])
 
   useEffect(() => {
-    if (!open || !currentUserId) return
+    if (!open || !user?.id) return
 
     const query = searchQuery.trim()
     if (!query) {
@@ -162,7 +158,7 @@ export default function ShareToConversationsModal({
 
     void searchProfilesForShare(
       supabase,
-      currentUserId,
+      user.id,
       query,
       dmPartnerIds
     ).then((rows) => {
@@ -175,7 +171,7 @@ export default function ShareToConversationsModal({
     return () => {
       cancelled = true
     }
-  }, [currentUserId, dmPartnerIds, open, searchQuery])
+  }, [user?.id, dmPartnerIds, open, searchQuery])
 
   const toggleConversation = useCallback((id: string) => {
     setSelectedConversations((prev) =>
@@ -208,9 +204,6 @@ export default function ShareToConversationsModal({
     }
     if (!hasRecipients || isBusy) return
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
     if (!user?.id) return
 
     markSending()
@@ -293,6 +286,7 @@ export default function ShareToConversationsModal({
     shareMessage,
     showPopup,
     tradeId,
+    user?.id,
   ])
 
   if (!open) return null

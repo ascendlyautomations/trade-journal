@@ -22,6 +22,7 @@ import {
   submissionTextarea,
   submissionTitle,
 } from "@/lib/submissionFormStyles"
+import { useUserProfile } from "@/lib/useUserProfile"
 
 type FeedbackRow = {
   id: string
@@ -41,6 +42,7 @@ function feedbackRowLabel(row: FeedbackRow): string {
 
 export default function FeedbackPage() {
   const router = useRouter()
+  const { user, loading: profileLoading } = useUserProfile()
   const [subject, setSubject] = useState("")
   const [message, setMessage] = useState("")
   const [image, setImage] = useState<File | null>(null)
@@ -70,23 +72,14 @@ export default function FeedbackPage() {
   }, [])
 
   useEffect(() => {
-    let cancelled = false
-    void (async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      if (cancelled) return
-      if (!user) {
-        setHistory([])
-        setHistoryLoading(false)
-        return
-      }
-      await loadHistory(user.id)
-    })()
-    return () => {
-      cancelled = true
+    if (profileLoading) return
+    if (!user?.id) {
+      setHistory([])
+      setHistoryLoading(false)
+      return
     }
-  }, [loadHistory])
+    void loadHistory(user.id)
+  }, [loadHistory, profileLoading, user?.id])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -98,12 +91,7 @@ export default function FeedbackPage() {
     setError("")
 
     try {
-      const {
-        data: { user },
-        error: authError,
-      } = await supabase.auth.getUser()
-
-      if (authError || !user) {
+      if (!user?.id) {
         router.push("/login")
         return
       }

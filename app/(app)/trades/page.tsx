@@ -21,6 +21,8 @@ import { useCachedAccounts, useCachedTrades } from "@/lib/useAppDataCache"
 import { getCachedAccounts, getCachedTrades } from "@/lib/appDataCache"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
+import { isProActive } from "@/lib/subscription"
+import ProUpgradeModal from "../../components/ProUpgradeModal"
 
 export default function TradesPage() {
   const { user, profile: gateProfile, loading: profileLoading } = useUserProfile()
@@ -54,6 +56,7 @@ export default function TradesPage() {
   const [selectedDate, setSelectedDate] = useState("")
   const [editingTrade, setEditingTrade] = useState<any | null>(null)
   const [showPerformanceShare, setShowPerformanceShare] = useState(false)
+  const [showExportUpgradeModal, setShowExportUpgradeModal] = useState(false)
   const [sendTradeId, setSendTradeId] = useState<string | null>(null)
   const [visibleCount, setVisibleCount] = useState(10)
   const router = useRouter()
@@ -167,8 +170,12 @@ export default function TradesPage() {
       requestDemoSignup("upload")
       return
     }
+    if (!isProActive(gateProfile)) {
+      setShowExportUpgradeModal(true)
+      return
+    }
     setShowPerformanceShare(true)
-  }, [])
+  }, [gateProfile])
 
   const handleToggleAdvanced = useCallback(() => {
     setShowAdvanced((prev) => !prev)
@@ -376,6 +383,10 @@ export default function TradesPage() {
       />
 
       <ConfirmModal {...confirmModalProps} />
+      <ProUpgradeModal
+        open={showExportUpgradeModal}
+        onClose={() => setShowExportUpgradeModal(false)}
+      />
     </>
   )
 }

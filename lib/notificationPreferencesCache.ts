@@ -8,7 +8,6 @@ import {
 } from "./notificationPreferences"
 
 const STORAGE_KEY = "tj_notification_preferences_v1"
-const DEFAULT_STALE_MS = 30 * 60 * 1000
 
 type PreferencesEntry = {
   userId: string
@@ -40,10 +39,6 @@ function writeStorage(entries: Record<string, PreferencesEntry>) {
   }
 }
 
-function isFresh(fetchedAt: number, staleMs = DEFAULT_STALE_MS): boolean {
-  return Date.now() - fetchedAt <= staleMs
-}
-
 function notify() {
   for (const listener of listeners) {
     listener()
@@ -62,12 +57,12 @@ export function getCachedNotificationPreferences(
   const key = userId.trim()
 
   const mem = memory.get(key)
-  if (mem && isFresh(mem.fetchedAt)) {
+  if (mem) {
     return mem.preferences
   }
 
   const stored = readStorage()[key]
-  if (stored && isFresh(stored.fetchedAt)) {
+  if (stored) {
     memory.set(key, stored)
     return stored.preferences
   }

@@ -1,6 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { isDemoUserId } from "@/lib/demo/constants"
 import { DEMO_TRADES } from "@/lib/demo/fixtures"
+import { getCachedTrades } from "./appDataCache"
+import {
+  deriveTradeChecklistSignalsFromTrades,
+  type TradeChecklistSignals,
+} from "./deriveTradeChecklistSignals"
+
+export { deriveTradeChecklistSignalsFromTrades, type TradeChecklistSignals }
 
 export type GettingStartedChecklistSignals = {
   onboardingCompleted: boolean
@@ -41,6 +48,11 @@ export async function fetchGettingStartedChecklistSignals(
     }
   }
 
+  const cachedTrades = getCachedTrades(userId)
+  const cachedTradeSignals = cachedTrades
+    ? deriveTradeChecklistSignalsFromTrades(cachedTrades)
+    : null
+
   const [
     profileRes,
     tradesRes,
@@ -68,10 +80,12 @@ export async function fetchGettingStartedChecklistSignals(
           )
           .eq("id", userId)
           .maybeSingle(),
-    supabase
-      .from("trades")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", userId),
+    cachedTradeSignals
+      ? Promise.resolve({ count: cachedTradeSignals.tradeCount, error: null })
+      : supabase
+          .from("trades")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", userId),
     supabase
       .from("profile_posts")
       .select("id", { count: "exact", head: true })
@@ -84,20 +98,32 @@ export async function fetchGettingStartedChecklistSignals(
       .from("room_members")
       .select("room_id, rooms(owner_user_id)")
       .eq("user_id", userId),
-    supabase
-      .from("trades")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", userId)
-      .eq("is_public", true),
-    supabase
-      .from("trades")
-      .select("id")
-      .eq("user_id", userId)
-      .eq("is_public", false)
-      .neq("mode", "backtest")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
+    cachedTradeSignals
+      ? Promise.resolve({
+          count: cachedTradeSignals.hasPublicTrade ? 1 : 0,
+          error: null,
+        })
+      : supabase
+          .from("trades")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", userId)
+          .eq("is_public", true),
+    cachedTradeSignals
+      ? Promise.resolve({
+          data: cachedTradeSignals.firstPrivateTradeId
+            ? { id: cachedTradeSignals.firstPrivateTradeId }
+            : null,
+          error: null,
+        })
+      : supabase
+          .from("trades")
+          .select("id")
+          .eq("user_id", userId)
+          .eq("is_public", false)
+          .neq("mode", "backtest")
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
   ])
 
   if (profileRes.error) {

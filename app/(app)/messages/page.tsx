@@ -30,7 +30,7 @@ import { markConversationOpenFromInbox } from "@/lib/conversationOpenIntent"
 import { useRouter } from "next/navigation"
 import MessagesConversationList from "../../components/messages/MessagesConversationList"
 import EmptyState from "../../components/ui/EmptyState"
-import { SkeletonMessagesPage } from "../../components/ui/skeletons"
+import { SkeletonMessagesConversationList } from "../../components/ui/skeletons"
 import { useUserProfile } from "@/lib/UserProfileProvider"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
@@ -821,7 +821,7 @@ export default function MessagesPage() {
 
           <div className="min-h-0 flex-1 overflow-y-auto">
             {!authUser?.id || (loading && conversations.length === 0) ? (
-              <SkeletonMessagesPage />
+              <SkeletonMessagesConversationList />
             ) : filteredConversations.length === 0 ? (
               conversations.length === 0 ? (
                 <EmptyState

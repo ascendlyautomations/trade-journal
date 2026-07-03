@@ -15,6 +15,7 @@ import {
   useRef,
   useState,
 } from "react"
+import dynamic from "next/dynamic"
 import { supabase } from "../../../lib/supabaseClient"
 import { deleteUserTrade } from "@/lib/deleteTrade"
 import { invalidateUserStreaksCache } from "@/lib/userStreaksCache"
@@ -88,30 +89,23 @@ import {
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import { feedbackPresets, persistentError } from "@/lib/feedbackPresets"
 import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  CartesianGrid,
-} from "recharts"
-import {
   TradeSocialProvider,
   TradeSocialEngagementBar,
   TradeSocialCommentsSection,
 } from "../../components/TradeSocialLayer"
 import ShareTradeButton from "../../components/ShareTradeButton"
 import ShareToConversationsModal from "../../components/ShareToConversationsModal"
-import InputTradeForm from "../../components/InputTradeForm"
 import Calendar from "../../components/Calendar"
 import {
   type Achievement,
-  fetchOwnAchievements,
   fetchVisibleProfileAchievements,
   formatAchievementDate,
   sumPayoutAchievementTotals,
 } from "../../../lib/achievements"
+import {
+  ensureOwnAchievementsLoaded,
+  getOwnAchievementsSnapshot,
+} from "@/lib/userAchievementsCache"
 import { formatPnlCurrency } from "../../../lib/formatMoney"
 import { formatRR, formatTradePoints } from "@/lib/formatDisplay"
 import { averageRrFromTrades } from "@/lib/tradeRr"
@@ -194,6 +188,18 @@ import {
   sanitizeTradesForViewer,
   tradeSelectForViewer,
 } from "@/lib/publicAccountPrivacy"
+
+const ProfileEquityLineChart = dynamic(
+  () => import("@/app/components/profile/ProfileEquityLineChart"),
+  {
+    loading: () => (
+      <div className="h-full min-h-[280px] animate-pulse rounded-lg bg-white/5" />
+    ),
+  }
+)
+const InputTradeForm = dynamic(() => import("../../components/InputTradeForm"), {
+  ssr: false,
+})
 
 /** Public profile columns only — never fetch billing, referral, or moderation fields here. */
 const PUBLIC_PROFILE_SELECT =
@@ -1601,6 +1607,7 @@ function ProfilePageContent() {
         .select(tradeSelectForViewer(isOwner))
         .eq("user_id", forProfileId)
         .eq("is_public", true)
+        .order("created_at", { ascending: false })
 
       if (error) {
         console.error("all trades fetch:", error)
@@ -1919,9 +1926,18 @@ function ProfilePageContent() {
     async function fetchProfileAchievements() {
       const isOwner =
         currentUserId != null && String(currentUserId) === String(profile.id)
-      const query = isOwner
-        ? await fetchOwnAchievements(profile.id)
-        : await fetchVisibleProfileAchievements(profile.id)
+      if (isOwner) {
+        const cached = getOwnAchievementsSnapshot(profile.id)
+        if (cached) {
+          if (!cancelled) setAchievements(cached)
+          return
+        }
+        const data = await ensureOwnAchievementsLoaded(supabase, profile.id)
+        if (cancelled) return
+        setAchievements(data)
+        return
+      }
+      const query = await fetchVisibleProfileAchievements(profile.id)
       const { data, error } = query
       if (cancelled) return
       if (error) {
@@ -2407,16 +2423,12 @@ function ProfilePageContent() {
     setCreatingRoom(true)
 
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-
-      if (!user) return
+      if (!viewerUser?.id) return
 
       const { data: existing, error: existingErr } = await supabase
         .from("rooms")
         .select("*")
-        .eq("owner_user_id", user.id)
+        .eq("owner_user_id", viewerUser.id)
         .maybeSingle()
 
       if (existingErr) {
@@ -2431,13 +2443,9 @@ function ProfilePageContent() {
         return
       }
 
-      const { data: profileRow } = await supabase
-        .from("profiles")
-        .select("username")
-        .eq("id", user.id)
-        .single()
-
-      const newRoom = await createUserRoom(user.id, profileRow?.username || "user")
+      const username =
+        String(viewerContextProfile?.username ?? "").trim() || "user"
+      const newRoom = await createUserRoom(viewerUser.id, username)
       setRoom(newRoom)
       router.push(
         `/trade-rooms?room=${encodeURIComponent(String(newRoom.slug))}&setup=true`
@@ -4978,71 +4986,10 @@ function ProfilePageContent() {
                             : "h-72"
                         }`}
                       >
-                        <ResponsiveContainer width="100%" height="100%">
-                          <LineChart
-                            data={equityData}
-                            margin={
-                              equityChartNarrow
-                                ? { top: 12, right: 8, left: 4, bottom: 12 }
-                                : { top: 8, right: 16, left: 12, bottom: 8 }
-                            }
-                          >
-                            <CartesianGrid stroke="rgba(148, 163, 184, 0.08)" />
-                            <XAxis dataKey="index" hide />
-                            <YAxis
-                              width={equityChartNarrow ? 50 : undefined}
-                              tickCount={equityChartNarrow ? 5 : 7}
-                              axisLine={{
-                                stroke: "rgba(148, 163, 184, 0.1)",
-                              }}
-                              tickLine={{
-                                stroke: "rgba(148, 163, 184, 0.08)",
-                              }}
-                              tick={{
-                                fill: "#cbd5e1",
-                                fontSize: equityChartNarrow ? 10 : 12,
-                              }}
-                              tickFormatter={(value) => {
-                                const n = Number(value)
-                                if (!Number.isFinite(n)) return "$0"
-                                if (n < 0) {
-                                  return `-$${Math.abs(n).toLocaleString()}`
-                                }
-                                return `$${n.toLocaleString()}`
-                              }}
-                            />
-                            <Tooltip
-                              contentStyle={{
-                                backgroundColor: "#0f172a",
-                                border: "1px solid rgba(255,255,255,0.12)",
-                                borderRadius: "0.5rem",
-                              }}
-                              labelStyle={{ color: "#cbd5e1" }}
-                              formatter={(value) => {
-                                const n = Number(value)
-                                if (!Number.isFinite(n)) return ["$0", "Equity"]
-                                const formatted =
-                                  n < 0
-                                    ? `-$${Math.abs(n).toLocaleString(undefined, {
-                                        minimumFractionDigits: 2,
-                                        maximumFractionDigits: 2,
-                                      })}`
-                                    : `$${n.toLocaleString(undefined, {
-                                        minimumFractionDigits: 2,
-                                        maximumFractionDigits: 2,
-                                      })}`
-                                return [formatted, "Equity"]
-                              }}
-                            />
-                            <Line
-                              type="monotone"
-                              dataKey="equity"
-                              stroke="#22c55e"
-                              strokeWidth={equityChartNarrow ? 2.5 : 2}
-                              dot={false}
-                            />
-                          </LineChart>
-                        </ResponsiveContainer>
+                        <ProfileEquityLineChart
+                          data={equityData}
+                          narrow={equityChartNarrow}
+                        />
                       </div>
                     </div>
                   </>

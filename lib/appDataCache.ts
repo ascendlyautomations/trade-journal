@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { isDemoUserId } from "./demo/constants"
 import { DEMO_ACCOUNTS, DEMO_TRADES } from "./demo/fixtures"
+import { TRADES_APP_SELECT } from "./publicAccountPrivacy"
 
 /** Shared client-side cache for trades and accounts (module-level, survives route remounts). */
 
@@ -371,7 +372,7 @@ export async function ensureTradesLoaded(
 
   const { data } = await supabase
     .from("trades")
-    .select("*")
+    .select(TRADES_APP_SELECT)
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
 

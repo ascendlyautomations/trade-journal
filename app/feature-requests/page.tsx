@@ -19,6 +19,7 @@ import {
   submissionTextarea,
   submissionTitle,
 } from "@/lib/submissionFormStyles"
+import { useUserProfile } from "@/lib/useUserProfile"
 
 type FeatureRequestRow = {
   id: string
@@ -29,6 +30,7 @@ type FeatureRequestRow = {
 
 export default function FeatureRequestsPage() {
   const router = useRouter()
+  const { user, loading: profileLoading } = useUserProfile()
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
   const [loading, setLoading] = useState(false)
@@ -57,23 +59,14 @@ export default function FeatureRequestsPage() {
   }, [])
 
   useEffect(() => {
-    let cancelled = false
-    void (async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      if (cancelled) return
-      if (!user) {
-        setHistory([])
-        setHistoryLoading(false)
-        return
-      }
-      await loadHistory(user.id)
-    })()
-    return () => {
-      cancelled = true
+    if (profileLoading) return
+    if (!user?.id) {
+      setHistory([])
+      setHistoryLoading(false)
+      return
     }
-  }, [loadHistory])
+    void loadHistory(user.id)
+  }, [loadHistory, profileLoading, user?.id])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -85,12 +78,7 @@ export default function FeatureRequestsPage() {
     setError("")
 
     try {
-      const {
-        data: { user },
-        error: authError,
-      } = await supabase.auth.getUser()
-
-      if (authError || !user) {
+      if (!user?.id) {
         router.push("/login")
         return
       }

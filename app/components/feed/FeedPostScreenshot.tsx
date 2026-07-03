@@ -1,6 +1,7 @@
 "use client"
 
 import { memo, useCallback } from "react"
+import StorageImage from "@/app/components/ui/StorageImage"
 import { logRenderedImageDimensions } from "@/lib/compressImage"
 
 const VARIANT_CLASSES = {
@@ -46,11 +47,11 @@ function FeedPostScreenshot({
   )
 
   const img = (
-    <img
+    <StorageImage
       src={imageSrc}
+      originalSrc={imageSrc}
+      preset={variant === "detail" ? "feed-detail" : "feed-thumb"}
       alt=""
-      loading="lazy"
-      decoding="async"
       className={resolvedClassName}
       onLoad={handleLoad}
       onClick={

@@ -1,10 +1,17 @@
 "use client"
 
+import dynamic from "next/dynamic"
 import { memo } from "react"
-import InputTradeForm from "./InputTradeForm"
-import PerformanceShareModal from "./PerformanceShareModal"
-import ShareToConversationsModal from "@/app/components/ShareToConversationsModal"
 import ImageLightbox from "@/app/components/ui/ImageLightbox"
+
+const InputTradeForm = dynamic(() => import("./InputTradeForm"), { ssr: false })
+const PerformanceShareModal = dynamic(() => import("./PerformanceShareModal"), {
+  ssr: false,
+})
+const ShareToConversationsModal = dynamic(
+  () => import("@/app/components/ShareToConversationsModal"),
+  { ssr: false }
+)
 
 type TradesPageOverlaysProps = {
   selectedImage: string | null

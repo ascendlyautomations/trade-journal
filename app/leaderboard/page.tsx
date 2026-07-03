@@ -217,11 +217,7 @@ export default function Leaderboard() {
         return
       }
 
-      const {
-        data: { user: authUser },
-      } = await supabase.auth.getUser()
-
-      if (authUser) setUserId(authUser.id)
+      setUserId(user?.id ?? null)
 
       const allTrades = await fetchLeaderboardTrades()
 

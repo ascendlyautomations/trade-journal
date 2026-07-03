@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 import AchievementCard from "../components/AchievementCard"
 import AchievementUploadModal, {
   type AchievementUploadInitialValues,
@@ -15,20 +15,28 @@ import {
   achievementMatchesPageFilter,
   achievementPageMobileFilterActive,
   type AchievementPageFilter,
-  fetchOwnAchievements,
 } from "../../lib/achievements"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 import { useUserProfile } from "@/lib/UserProfileProvider"
 import { useUserStreaks } from "@/lib/useUserStreaks"
+import { useUserAchievements } from "@/lib/useUserAchievements"
+import { patchUserAchievementsCache } from "@/lib/userAchievementsCache"
+import { SkeletonAchievementsGrid } from "../components/ui/skeletons"
 
 export default function AchievementsPage() {
-  const { user, loading: profileLoading } = useUserProfile()
+  const { user, profile, loading: profileLoading } = useUserProfile()
   const userId = user?.id ?? null
-  const { snapshot: streakSnapshot, loading: streaksLoading } = useUserStreaks(userId)
-  const [achievements, setAchievements] = useState<Achievement[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const { snapshot: streakSnapshot, loading: streaksLoading } = useUserStreaks(
+    userId,
+    { onboardingCompleted: profile?.onboarding_completed }
+  )
+  const {
+    achievements,
+    loading,
+    error,
+    refresh: refreshAchievements,
+  } = useUserAchievements(userId)
   const [filter, setFilter] = useState<AchievementPageFilter>("all")
   const [showForm, setShowForm] = useState(false)
   const [editingAchievement, setEditingAchievement] = useState<Achievement | null>(
@@ -38,32 +46,13 @@ export default function AchievementsPage() {
     AchievementUploadInitialValues | undefined
   >(undefined)
 
-  const loadAchievements = useCallback(async (uid: string) => {
-    setLoading(true)
-    setError(null)
-    const { data, error: fetchErr } = await fetchOwnAchievements(uid)
-    if (fetchErr) {
-      console.error("[achievements] fetch failed", fetchErr)
-      setAchievements([])
-      setError(fetchErr.message || "Could not load achievements.")
-      setLoading(false)
-      return
-    }
-    setAchievements((data || []) as Achievement[])
-    setLoading(false)
-  }, [])
 
-  useEffect(() => {
-    if (profileLoading) return
-    if (!userId) {
-      if (!isDemoModeActive()) {
-        setError("Please log in to view achievements.")
-      }
-      setLoading(false)
-      return
-    }
-    void loadAchievements(userId)
-  }, [loadAchievements, profileLoading, userId])
+  const authError =
+    !profileLoading && !userId && !isDemoModeActive()
+      ? "Please log in to view achievements."
+      : null
+  const displayError = authError ?? error
+  const pageLoading = profileLoading || loading
 
   const filteredAchievements = useMemo(() => {
     return achievements.filter((a) => achievementMatchesPageFilter(a, filter))
@@ -100,7 +89,7 @@ export default function AchievementsPage() {
   }
 
   async function handleSaved() {
-    if (userId) await loadAchievements(userId)
+    if (userId) await refreshAchievements()
   }
 
   const handleDeleteAchievement = useCallback(
@@ -117,10 +106,11 @@ export default function AchievementsPage() {
         .eq("user_id", userId)
       if (delErr) {
         console.error("[achievements] delete failed", delErr)
-        setError(delErr.message || "Could not delete achievement.")
         throw delErr
       }
-      setAchievements((prev) => prev.filter((row) => row.id !== achievementId))
+      patchUserAchievementsCache(userId, (prev) =>
+        prev.filter((row) => row.id !== achievementId)
+      )
     },
     [userId]
   )
@@ -181,9 +171,9 @@ export default function AchievementsPage() {
             ))}
           </div>
 
-          {error ? (
+          {displayError ? (
             <div className="rounded-lg border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-200">
-              {error}
+              {displayError}
             </div>
           ) : null}
 
@@ -194,7 +184,7 @@ export default function AchievementsPage() {
                 signals={streakSnapshot?.milestoneSignals}
                 loading={profileLoading || streaksLoading}
               />
-              {!loading && visible.length > 0 ? (
+              {!pageLoading && visible.length > 0 ? (
                 <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {visible.map((a) => (
                     <AchievementCard
@@ -209,7 +199,7 @@ export default function AchievementsPage() {
             </>
           ) : null}
 
-          {!showMilestonesTab && !loading && featured.length > 0 ? (
+          {!showMilestonesTab && !pageLoading && featured.length > 0 ? (
             <section className="space-y-3">
               <div className="flex items-center justify-between">
                 <h2 className="text-lg font-semibold text-white">Featured</h2>
@@ -228,10 +218,8 @@ export default function AchievementsPage() {
             </section>
           ) : null}
 
-          {showMilestonesTab ? null : loading ? (
-            <div className="rounded-xl border border-white/10 bg-white/5 p-6 text-center text-gray-300">
-              Loading achievements...
-            </div>
+          {showMilestonesTab ? null : pageLoading ? (
+            <SkeletonAchievementsGrid count={6} />
           ) : visible.length === 0 ? (
             <div className="rounded-xl border border-white/10 bg-white/5 p-8 text-center">
               <p className="text-base text-white">

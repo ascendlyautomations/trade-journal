@@ -2,6 +2,7 @@
 
 import { memo, useCallback, useMemo } from "react"
 import FeedReelCardActions from "./FeedReelCardActions"
+import StorageImage from "@/app/components/ui/StorageImage"
 import FeedPostHeader from "./FeedPostHeader"
 import FeedReelOwnerMenu from "./FeedReelOwnerMenu"
 import type { FeedLikeMeta } from "./FeedPostCard"
@@ -121,10 +122,11 @@ function FeedReelCard({
 
       <div className="px-4 pt-3">
         <div className="relative mx-auto max-w-[280px] overflow-hidden rounded-xl border border-white/10 bg-black/40">
-          <img
+          <StorageImage
             src={String(post.thumbnail_url)}
+            originalSrc={String(post.thumbnail_url)}
+            preset="reel-thumb"
             alt=""
-            loading="lazy"
             className="aspect-[9/16] w-full object-cover"
           />
           <div className="absolute inset-0 flex items-center justify-center bg-black/20">

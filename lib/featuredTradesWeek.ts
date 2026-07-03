@@ -14,7 +14,9 @@ export {
 
 export async function fetchFeaturedTradesWeek(): Promise<FeaturedTradesWeekResponse> {
   try {
-    const res = await fetch("/api/featured-trades", { cache: "no-store" })
+    const res = await fetch("/api/featured-trades", {
+      next: { revalidate: 600 },
+    })
     if (!res.ok) {
       console.error("[featured-trades] fetch failed", res.status, res.statusText)
       return { bestPnlPost: null, highestRrPost: null }

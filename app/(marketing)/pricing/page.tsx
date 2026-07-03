@@ -3,8 +3,8 @@
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
-import { supabase } from "@/lib/supabaseClient"
 import { enterSignupFlow, setCheckoutBillingInterval } from "@/lib/signupFlow"
+import { useUserProfile } from "@/lib/useUserProfile"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { feedbackPresets } from "@/lib/feedbackPresets"
 import {
@@ -23,10 +23,12 @@ import {
 } from "@/lib/traxProBillingPlans"
 import TraxProBillingIntervalPicker from "@/app/components/TraxProBillingIntervalPicker"
 import TraxProSelectedPlanPrice from "@/app/components/TraxProSelectedPlanPrice"
+import TradeTraxsProFeatureGroupsList from "../../components/pricing/TradeTraxsProFeatureGroupsList"
 import {
   PRICING_CARD_FEATURE_ITEM,
   PRICING_CARD_FEATURE_LIST,
   PRICING_CARD_PLAN_DESCRIPTION,
+  PRICING_CARD_PRO_FEATURE_GROUP_HEADING,
   PRICING_CARD_PRO_FEATURE_LIST,
   PRICING_CARD_PRO_FEATURES_HEADING_ALT,
   PRICING_CARD_PRO_PLAN_DESCRIPTION_LIGHT,
@@ -54,6 +56,7 @@ function CheckIcon({ bright = false }: { bright?: boolean }) {
 
 export default function PricingPage() {
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
+  const { user } = useUserProfile()
   const router = useRouter()
   const [checkoutLoading, setCheckoutLoading] = useState(false)
   const [billingInterval, setBillingInterval] = useState<TraxProBillingIntervalId>(
@@ -69,10 +72,6 @@ export default function PricingPage() {
     setCheckoutLoading(true)
     setCheckoutBillingInterval(billingInterval)
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-
       if (!user) {
         enterSignupFlow()
         setCheckoutLoading(false)
@@ -173,14 +172,12 @@ export default function PricingPage() {
               <p className={PRICING_CARD_PRO_FEATURES_HEADING_ALT}>
                 {TRADETRAXS_PRO_FEATURES_HEADING}
               </p>
-              <ul className={PRICING_CARD_PRO_FEATURE_LIST}>
-                {TRADETRAXS_PRO_PLAN.features.map((f) => (
-                  <li key={f} className={PRICING_CARD_FEATURE_ITEM}>
-                    <CheckIcon bright />
-                    <span>{f}</span>
-                  </li>
-                ))}
-              </ul>
+              <TradeTraxsProFeatureGroupsList
+                groupHeadingClassName={PRICING_CARD_PRO_FEATURE_GROUP_HEADING}
+                listClassName={PRICING_CARD_PRO_FEATURE_LIST}
+                itemClassName={PRICING_CARD_FEATURE_ITEM}
+                renderCheck={({ bright } = {}) => <CheckIcon bright={bright} />}
+              />
 
               <div className="mt-4">
                 <TraxProBillingIntervalPicker

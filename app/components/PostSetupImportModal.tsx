@@ -1,7 +1,7 @@
 "use client"
 
+import dynamic from "next/dynamic"
 import { useCallback, useEffect, useRef, useState } from "react"
-import CsvImportPanel from "@/app/components/CsvImportPanel"
 import TradeAccountPicker, {
   type TradeAccountOption,
 } from "@/app/components/TradeAccountPicker"
@@ -13,6 +13,11 @@ import { isProActive } from "@/lib/subscription"
 import { FREE_PLAN_ACCOUNT_LIMIT } from "@/lib/tradingAccounts"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { feedbackPresets, persistentError } from "@/lib/feedbackPresets"
+import { useUserProfile } from "@/lib/useUserProfile"
+
+const CsvImportPanel = dynamic(() => import("@/app/components/CsvImportPanel"), {
+  ssr: false,
+})
 
 const CSV_INPUT_ID = "post-setup-csv-import"
 
@@ -25,6 +30,7 @@ type Props = {
 
 export default function PostSetupImportModal({ open, onComplete }: Props) {
   const { showPopup, closePopup, feedbackModalProps } = useFeedbackPopup()
+  const { user, profile } = useUserProfile()
   const importCompletePendingRef = useRef(false)
   const creatingAccountRef = useRef(false)
   const [entered, setEntered] = useState(false)
@@ -46,9 +52,6 @@ export default function PostSetupImportModal({ open, onComplete }: Props) {
     if (!open) return
 
     async function loadAccounts() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
       if (!user?.id) return
 
       const { data, error } = await supabase
@@ -71,18 +74,12 @@ export default function PostSetupImportModal({ open, onComplete }: Props) {
       }))
 
       setAccounts(formatted)
-
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("is_pro, subscription_status")
-        .eq("id", user.id)
-        .maybeSingle()
       const userIsPro = isProActive(profile)
       setCanCreateMoreAccounts(userIsPro || formatted.length < FREE_PLAN_ACCOUNT_LIMIT)
     }
 
     void loadAccounts()
-  }, [open])
+  }, [open, user?.id, profile])
 
   async function handleSkip() {
     await onComplete()
@@ -113,16 +110,8 @@ export default function PostSetupImportModal({ open, onComplete }: Props) {
     creatingAccountRef.current = true
 
     try {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) return
+    if (!user?.id) return
 
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("is_pro, subscription_status")
-      .eq("id", user.id)
-      .maybeSingle()
     const userIsPro = isProActive(profile)
     if (!userIsPro) {
       const { data: existingAccounts, error: countErr } = await supabase

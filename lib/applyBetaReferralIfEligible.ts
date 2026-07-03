@@ -52,13 +52,29 @@ export async function applyBetaReferralIfEligible(
     return { applied: false }
   }
 
-  const { error: updateErr } = await supabase
-    .from("profiles")
-    .update({ referred_by: BETA_REFERRAL_CODE })
-    .eq("id", userId)
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+  const accessToken = session?.access_token
+  if (!accessToken) {
+    return { applied: false }
+  }
 
-  if (updateErr) {
-    console.error("applyBetaReferralIfEligible update:", updateErr)
+  const res = await fetch("/api/profile/apply-beta-referral", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ code: BETA_REFERRAL_CODE }),
+  })
+
+  if (!res.ok) {
+    const payload = (await res.json().catch(() => null)) as { error?: string } | null
+    console.error(
+      "applyBetaReferralIfEligible update:",
+      payload?.error ?? res.statusText
+    )
     return { applied: false }
   }
 
