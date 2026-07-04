@@ -65,7 +65,7 @@ export default function TradingReportModal({
       backdropClassName="bg-black/70 backdrop-blur-sm"
     >
       <div className="space-y-6">
-        <header className="space-y-2 border-b border-white/10 pb-4">
+        <header className="space-y-2 border-b border-white/10 pb-4 pr-12">
           <p className="text-xs font-medium uppercase tracking-wider text-blue-300/90">
             Intelligence Report
           </p>

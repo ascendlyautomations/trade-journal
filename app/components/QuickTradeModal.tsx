@@ -22,6 +22,7 @@ import TradeAccountPicker, {
 import { MODAL_FIXED_BELOW_NAVBAR_CLASS } from "@/app/components/ui/DetailModalShell"
 import NativeDateInput from "@/app/components/ui/NativeDateInput"
 import { FeedbackModal, useFeedbackPopup, buttonVariants } from "@/app/components/ui"
+import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
 import {
   parseQuickCsvImport,
   type QuickTradeCsvFormPatch,
@@ -700,13 +701,17 @@ export default function QuickTradeModal({
         onClick={handleClose}
       >
         <div
-          className="max-h-[min(92vh,calc(100dvh-5rem))] w-full max-w-lg overflow-y-auto rounded-2xl border border-white/10 bg-gradient-to-br from-[#0f172a] via-[#0b1532] to-[#0a2230] p-4 shadow-2xl shadow-blue-900/20 sm:max-w-xl sm:p-6 md:max-w-2xl"
+          className="relative max-h-[min(92vh,calc(100dvh-5rem))] w-full max-w-lg overflow-y-auto rounded-2xl border border-white/10 bg-gradient-to-br from-[#0f172a] via-[#0b1532] to-[#0a2230] p-4 shadow-2xl shadow-blue-900/20 sm:max-w-xl sm:p-6 md:max-w-2xl"
           onClick={(e) => e.stopPropagation()}
           role="dialog"
           aria-modal="true"
           aria-label="Quick Trade"
         >
-          <div className="mb-5 border-b border-white/10 pb-4">
+          <ModalCloseButton
+            onClick={handleClose}
+            className="absolute right-4 top-4 z-10"
+          />
+          <div className="mb-5 border-b border-white/10 pb-4 pr-12">
             <h2 className="text-xl font-semibold tracking-tight text-white">
               Quick Trade
             </h2>

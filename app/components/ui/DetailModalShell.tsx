@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, type ReactNode } from "react"
+import ModalCloseButton from "./ModalCloseButton"
 
 /** Matches Navbar `h-16` / root layout `pt-16`. */
 export const NAVBAR_HEIGHT_CLASS = "top-16"
@@ -138,14 +138,7 @@ export default function DetailModalShell({
           <p className="min-w-0 truncate text-sm font-semibold text-white">
             {title || "\u00a0"}
           </p>
-          <button
-            type="button"
-            onClick={onClose}
-            className="shrink-0 rounded-md bg-white/10 px-2.5 py-1.5 text-sm font-medium text-white transition hover:bg-white/20"
-            aria-label="Close"
-          >
-            ✕
-          </button>
+          <ModalCloseButton onClick={onClose} />
         </header>
 
         {body}

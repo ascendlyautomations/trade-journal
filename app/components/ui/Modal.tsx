@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from "react"
 import { createPortal } from "react-dom"
 import { cn } from "./cn"
 import { MODAL_FIXED_BELOW_NAVBAR_CLASS } from "./DetailModalShell"
+import ModalCloseButton from "./ModalCloseButton"
 
 export type ModalProps = {
   open: boolean
@@ -15,6 +16,8 @@ export type ModalProps = {
   size?: "sm" | "md" | "lg"
   /** Anchor overlay below the fixed navbar (top-16), top-aligned on all breakpoints. */
   belowNavbar?: boolean
+  /** Disable the top-right close control (e.g. while saving). */
+  closeDisabled?: boolean
   className?: string
   panelClassName?: string
   backdropClassName?: string
@@ -34,6 +37,7 @@ export default function Modal({
   footer,
   size = "md",
   belowNavbar = false,
+  closeDisabled = false,
   className,
   panelClassName,
   backdropClassName,
@@ -93,8 +97,13 @@ export default function Modal({
         )}
         onClick={(e) => e.stopPropagation()}
       >
+        <ModalCloseButton
+          onClick={onClose}
+          disabled={closeDisabled}
+          className="absolute right-4 top-4 z-10"
+        />
         {title ? (
-          <h2 className="mb-4 text-lg font-semibold text-white">{title}</h2>
+          <h2 className="mb-4 pr-12 text-lg font-semibold text-white">{title}</h2>
         ) : null}
         <div>{children}</div>
         {footer ? <div className="mt-4">{footer}</div> : null}

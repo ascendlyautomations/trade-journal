@@ -2,6 +2,7 @@
 
 import { useEffect } from "react"
 import { createPortal } from "react-dom"
+import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
 
 type SectionRow = { id: string; name?: string | null }
 
@@ -76,14 +77,7 @@ export default function RoomNotificationSettingsSheet({
             </h2>
             <p className="truncate text-xs text-gray-400">{label}</p>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="shrink-0 rounded-md p-2 text-gray-400 hover:bg-white/10 hover:text-white"
-            aria-label="Close notification settings"
-          >
-            ✕
-          </button>
+          <ModalCloseButton onClick={onClose} />
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">

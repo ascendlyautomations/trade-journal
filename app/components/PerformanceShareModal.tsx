@@ -7,6 +7,7 @@ import {
   PERFORMANCE_SHARE_EXPORT_WIDTH,
   captureShareCardElementToPng,
 } from "@/lib/shareImageCapture"
+import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
 import {
   type PerformanceWindow,
   type PerformanceWindowOptions,
@@ -228,13 +229,7 @@ export default function PerformanceShareModal({
               <p className="mt-2 text-xs text-gray-500">{subtitle}</p>
             ) : null}
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="shrink-0 rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-sm text-gray-300 transition hover:bg-white/10"
-          >
-            Close
-          </button>
+          <ModalCloseButton onClick={onClose} />
         </div>
 
         <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">

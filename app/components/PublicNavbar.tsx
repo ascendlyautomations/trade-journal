@@ -4,6 +4,7 @@ import IntentPrefetchLink from "@/lib/IntentPrefetchLink"
 import { usePathname, useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import { useUserProfile } from "@/lib/useUserProfile"
+import { isLoginRoute } from "@/lib/authRoutes"
 import { shouldShowMarketingNavbar } from "@/lib/marketingAccess"
 import { hasActiveMembership } from "@/lib/subscriptionAccess"
 import { isDemoUserId } from "@/lib/demo/constants"
@@ -59,6 +60,7 @@ export default function PublicNavbar() {
 
   const isAuthenticatedUser = !!user && !isDemoUserId(user.id)
   const showCustomerHomeChrome =
+    !isLoginRoute(pathname) &&
     isAuthenticatedUser &&
     !loading &&
     !!profile &&
@@ -67,6 +69,10 @@ export default function PublicNavbar() {
   useEffect(() => {
     setMenuOpen(false)
   }, [pathname])
+
+  if (isLoginRoute(pathname)) {
+    return null
+  }
 
   if (showCustomerHomeChrome) {
     return (

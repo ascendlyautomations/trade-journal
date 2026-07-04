@@ -63,6 +63,7 @@ import {
 } from "@/lib/reels"
 import { postImageSrc } from "@/app/components/feed/feedPostHelpers"
 import { ConfirmModal, FeedbackModal, useDeleteReelConfirmation, useFeedbackPopup } from "@/app/components/ui"
+import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
 import { formatAccountNameWithSizeDisplay } from "@/lib/tradeAccountDisplay"
 import {
   invalidateTradesCache,
@@ -2492,13 +2493,7 @@ export default function InputTradeForm({
               >
                 Edit Trade
               </h2>
-              <button
-                type="button"
-                onClick={() => onClose?.()}
-                className="px-3 py-1 rounded bg-white/10 hover:bg-white/20 text-sm"
-              >
-                Close
-              </button>
+              <ModalCloseButton onClick={() => onClose?.()} />
             </div>
             {formBody}
           </div>

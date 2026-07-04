@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { usePathname } from "next/navigation"
 import GettingStartedChecklist from "@/app/components/dashboard/GettingStartedChecklist"
+import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
 import { useGettingStartedProgress } from "@/lib/GettingStartedProgressProvider"
 import { shouldOfferGettingStartedChecklist } from "@/lib/gettingStartedChecklist"
 import { useUserProfile } from "@/lib/useUserProfile"
@@ -114,14 +115,7 @@ export default function GettingStartedMobileEntry({
           >
             <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3">
               <h2 className="text-base font-semibold text-white">Complete Setup</h2>
-              <button
-                type="button"
-                onClick={closeDrawer}
-                className="rounded-lg px-2 py-1 text-lg leading-none text-gray-400 transition hover:bg-white/10 hover:text-white"
-                aria-label="Close setup checklist"
-              >
-                ×
-              </button>
+              <ModalCloseButton onClick={closeDrawer} />
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto p-4">
               <GettingStartedChecklist

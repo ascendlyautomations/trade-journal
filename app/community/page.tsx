@@ -47,6 +47,7 @@ import {
 import { formatMoneyUnknown, formatRR } from "@/lib/formatDisplay"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
+import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
 import ImageLightbox from "@/app/components/ui/ImageLightbox"
 import { createRoomJoinNotification } from "@/lib/createRoomJoinNotification"
 import { createRoomMessageNotifications } from "@/lib/createRoomMessageNotifications"
@@ -4339,7 +4340,14 @@ function CommunityContent() {
             className="relative w-full max-w-[400px] rounded-lg bg-[#0b1f3a] p-6 text-white shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="mb-3 text-lg font-semibold">Room Settings</h2>
+            <ModalCloseButton
+              onClick={() => {
+                if (deletingSectionId || deleteSectionConfirm) return
+                setShowRoomSettings(false)
+              }}
+              className="absolute right-4 top-4 z-10"
+            />
+            <h2 className="mb-3 pr-12 text-lg font-semibold">Room Settings</h2>
 
             <input
               type="text"

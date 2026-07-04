@@ -2,6 +2,7 @@
 
 import { useEffect } from "react"
 import CommunitySharePreviewPanel from "@/app/components/CommunitySharePreviewPanel"
+import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
 
 type CommunitySharePreviewModalProps = {
   open: boolean
@@ -76,14 +77,7 @@ export default function CommunitySharePreviewModal({
               {subtitle}
             </p>
           </div>
-          <button
-            type="button"
-            disabled={submitting}
-            onClick={onClose}
-            className="shrink-0 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Close
-          </button>
+          <ModalCloseButton onClick={onClose} disabled={submitting} />
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4">

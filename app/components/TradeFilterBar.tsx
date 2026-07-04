@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
+import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
 
 const MANAGE_ACCOUNTS_VALUE = "__manage_accounts__"
 
@@ -343,8 +344,12 @@ export default function TradeFilterBar({
 
       {timeframeOpen ? (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="w-full max-w-md bg-[#0b1f3a] rounded-2xl p-6 border border-white/10 shadow-xl">
-            <h2 className="text-lg font-semibold text-white mb-4">
+          <div className="relative w-full max-w-md bg-[#0b1f3a] rounded-2xl p-6 border border-white/10 shadow-xl">
+            <ModalCloseButton
+              onClick={() => setTimeframeOpen(false)}
+              className="absolute right-4 top-4 z-10"
+            />
+            <h2 className="text-lg font-semibold text-white mb-4 pr-12">
               Select Timeframe
             </h2>
 

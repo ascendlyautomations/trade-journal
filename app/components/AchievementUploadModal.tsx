@@ -21,6 +21,7 @@ import {
   isPayoutAchievementType,
 } from "@/lib/achievements"
 import { MODAL_FIXED_BELOW_NAVBAR_CLASS } from "@/app/components/ui/DetailModalShell"
+import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
 
 export type AchievementFormState = {
   achievement_type: string
@@ -296,13 +297,18 @@ export default function AchievementUploadModal({
       onClick={handleClose}
     >
       <div
-        className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-white/10 bg-gradient-to-br from-[#0f172a] via-[#0b1532] to-[#0a2230] p-4 shadow-2xl shadow-blue-900/20 sm:p-6"
+        className="relative max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-white/10 bg-gradient-to-br from-[#0f172a] via-[#0b1532] to-[#0a2230] p-4 shadow-2xl shadow-blue-900/20 sm:p-6"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label={heading}
       >
-        <div className="mb-3 border-b border-white/10 pb-3">
+        <ModalCloseButton
+          onClick={handleClose}
+          disabled={busy}
+          className="absolute right-4 top-4 z-10"
+        />
+        <div className="mb-3 border-b border-white/10 pb-3 pr-12">
           <h2 className="text-xl font-semibold tracking-tight text-white">{heading}</h2>
           <p className="mt-0.5 text-sm text-slate-300">{subheading}</p>
         </div>

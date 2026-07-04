@@ -32,6 +32,7 @@ export default function ConfirmModal({
     <Modal
       open={open}
       onClose={loading ? () => {} : onCancel}
+      closeDisabled={loading}
       title={title}
       size="sm"
       footer={

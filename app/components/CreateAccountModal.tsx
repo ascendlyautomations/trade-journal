@@ -16,6 +16,7 @@ import {
   type AccountType,
 } from "@/lib/createAccountForm"
 import type { TradingAccountPropFirmRules } from "@/lib/tradingAccounts"
+import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
 
 export type PropFirmRules = TradingAccountPropFirmRules
 
@@ -275,14 +276,19 @@ export default function CreateAccountModal({
       }`}
     >
       <div
-        className="w-full max-w-lg sm:max-w-xl rounded-2xl border border-white/10 bg-[#152238] p-6 text-gray-100 shadow-2xl max-h-[min(90vh,720px)] overflow-y-auto"
+        className="relative w-full max-w-lg sm:max-w-xl rounded-2xl border border-white/10 bg-[#152238] p-6 text-gray-100 shadow-2xl max-h-[min(90vh,720px)] overflow-y-auto"
         role="dialog"
         aria-modal="true"
         aria-labelledby="create-account-modal-title"
       >
+        <ModalCloseButton
+          onClick={handleCancel}
+          disabled={isSaving}
+          className="absolute right-4 top-4 z-10"
+        />
         <h2
           id="create-account-modal-title"
-          className="text-lg font-semibold text-emerald-300"
+          className="pr-12 text-lg font-semibold text-emerald-300"
         >
           {heading}
         </h2>

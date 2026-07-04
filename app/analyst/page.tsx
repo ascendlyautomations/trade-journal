@@ -17,6 +17,7 @@ import { useCachedTrades } from "@/lib/useAppDataCache"
 import { getCachedTrades, upsertTradeInCache } from "@/lib/appDataCache"
 import { SkeletonAnalystPanel } from "../components/ui/skeletons"
 import { NAVBAR_HEIGHT_CLASS } from "@/app/components/ui/DetailModalShell"
+import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 
@@ -432,14 +433,7 @@ function AnalystMobileAnalysisSheet({
           formatCurrency={formatCurrency}
           formatTradeSummaryDate={formatTradeSummaryDate}
         />
-        <button
-          type="button"
-          onClick={onClose}
-          className="shrink-0 rounded-md bg-white/10 px-2.5 py-1.5 text-sm font-medium text-white transition hover:bg-white/20"
-          aria-label="Close"
-        >
-          ✕
-        </button>
+        <ModalCloseButton onClick={onClose} />
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">

@@ -1,6 +1,7 @@
 "use client"
 
 import { cn } from "./cn"
+import ModalCloseButton from "./ModalCloseButton"
 import type { FeedbackPopupType } from "./feedback-popup-types"
 
 const panelStyles: Record<FeedbackPopupType, string> = {
@@ -63,8 +64,12 @@ export default function FeedbackModal({
           panelStyles[type]
         )}
       >
+        <ModalCloseButton
+          onClick={onClose}
+          className="absolute right-3 top-3 z-10"
+        />
         {title ? (
-          <h3 className="mb-2 text-base font-semibold text-white">{title}</h3>
+          <h3 className="mb-2 pr-10 text-base font-semibold text-white">{title}</h3>
         ) : null}
         <p
           className={cn(

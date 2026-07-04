@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { createPortal } from "react-dom"
+import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
 
 type Props = {
   open: boolean
@@ -62,8 +63,13 @@ export default function CsvImportFailureModal({
         className="relative flex w-full max-w-md max-h-[min(85vh,560px)] flex-col overflow-hidden rounded-t-2xl border border-amber-500/40 bg-[#0f172a] shadow-xl md:max-h-[min(90vh,520px)] md:rounded-xl"
         onClick={(e) => e.stopPropagation()}
       >
+        <ModalCloseButton
+          onClick={onCancel}
+          disabled={submitting}
+          className="absolute right-4 top-4 z-10"
+        />
         <div className="overflow-y-auto overscroll-contain px-5 py-5 md:px-6">
-          <h3 id="csv-import-failure-title" className="text-base font-semibold text-white">
+          <h3 id="csv-import-failure-title" className="pr-12 text-base font-semibold text-white">
             {TITLE}
           </h3>
           <p className="mt-3 text-sm leading-relaxed text-amber-100/90">{BODY}</p>

@@ -1,6 +1,7 @@
 "use client"
 
 import AffiliateApplyForm from "@/app/components/AffiliateApplyForm"
+import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
 import type { AffiliateApplicationRow } from "@/lib/affiliateApplication"
 
 type Props = {
@@ -23,11 +24,16 @@ export default function AffiliateApplyModal({
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
       <div
-        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-white/10 bg-[#152238] p-6 text-white shadow-2xl"
+        className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-white/10 bg-[#152238] p-6 text-white shadow-2xl"
         role="dialog"
         aria-modal="true"
       >
-        <AffiliateApplyForm
+        <ModalCloseButton
+          onClick={onClose}
+          className="absolute right-4 top-4 z-10"
+        />
+        <div className="pr-12">
+          <AffiliateApplyForm
           active={open}
           prefillFrom={prefillFrom}
           title={title}
@@ -35,6 +41,7 @@ export default function AffiliateApplyModal({
           onCancel={onClose}
           showCancel
         />
+        </div>
       </div>
     </div>
   )

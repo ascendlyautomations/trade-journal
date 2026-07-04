@@ -39,6 +39,11 @@ export function isAuthRoute(pathname: string | null | undefined): boolean {
   return matchesPrefix(pathname, AUTH_ROUTE_PREFIXES)
 }
 
+export function isLoginRoute(pathname: string | null | undefined): boolean {
+  if (!pathname) return false
+  return pathname === "/login"
+}
+
 export function isOnboardingRoute(pathname: string | null | undefined): boolean {
   if (!pathname) return false
   return matchesPrefix(pathname, ONBOARDING_ROUTE_PREFIXES)

@@ -17,6 +17,7 @@ import {
   submissionTextarea,
   submissionTitle,
 } from "@/lib/submissionFormStyles"
+import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
 
 const SUCCESS_AUTO_CLOSE_MS = 2500
 
@@ -153,15 +154,7 @@ export default function ContactFormModal({
               {category.description}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={busy || success}
-            className="shrink-0 rounded px-2 py-1 text-gray-400 hover:bg-white/10 hover:text-white disabled:opacity-50"
-            aria-label="Close"
-          >
-            ✕
-          </button>
+          <ModalCloseButton onClick={onClose} disabled={busy || success} />
         </div>
 
         {success ? (
