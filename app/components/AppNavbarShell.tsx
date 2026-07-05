@@ -9,6 +9,8 @@ import { shouldRenderGlobalAppNavbar } from "@/lib/appNavbarShell"
  * Marketing/legal/demo routes supply their own chrome.
  * Navbar portals to document.body so page stacking (e.g. trades filter bar
  * backdrop-blur) cannot cover the fixed header on mobile.
+ *
+ * Root layout uses AppChrome, which applies the same mount rules.
  */
 export default function AppNavbarShell() {
   const pathname = usePathname()

@@ -16,6 +16,7 @@ import { ConfirmModal, useDeleteTradeConfirmation } from "../components/ui"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { isDemoSupabaseBlocked } from "@/lib/demo/demoSupabaseGuard"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
+import { tradeAnalysisHref } from "@/lib/tradeAnalysisNavigation"
 import { getDemoBacktestTrades } from "@/lib/demo/demoBacktest"
 import { DEMO_PROFILE } from "@/lib/demo/fixtures"
 import { TRADES_APP_SELECT } from "@/lib/publicAccountPrivacy"
@@ -168,6 +169,17 @@ export default function BacktestPage() {
       requestDemoSignup("trade")
     }
   }, [])
+
+  const handleAnalyzeTrade = useCallback(
+    (trade: BacktestTrade) => {
+      if (isDemoModeActive()) {
+        requestDemoSignup("ai")
+        return
+      }
+      router.push(tradeAnalysisHref(trade.id))
+    },
+    [router]
+  )
 
   const { requestDelete: deleteTrade, confirmModalProps } =
     useDeleteTradeConfirmation(performDeleteTrade)
@@ -334,6 +346,7 @@ export default function BacktestPage() {
                 onEdit={handleEditTrade}
                 onDelete={(id) => void deleteTrade(id)}
                 onSendClick={handleSendTrade}
+                onAnalyze={handleAnalyzeTrade}
                 onImageClick={(url) => setSelectedImage(url)}
               />
             ))}

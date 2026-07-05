@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
 import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
+import { DASHBOARD_MOBILE_TIMEFRAME_BTN_CLASS } from "@/app/components/dashboard/dashboardHeaderMobileUi"
 
 const MANAGE_ACCOUNTS_VALUE = "__manage_accounts__"
 
@@ -253,7 +254,7 @@ export default function TradeFilterBar({
 
             {settingsNextToModes || publicNextToModes ? (
               <div
-                className={`flex w-full min-w-0 items-center gap-2 md:block md:w-auto ${
+                className={`flex w-full min-w-0 items-stretch gap-2 md:block md:w-auto ${
                   mobileThreeRowLayout ? "justify-stretch" : "justify-center"
                 }`}
               >
@@ -275,7 +276,7 @@ export default function TradeFilterBar({
                 </div>
                 {publicNextToModes ? (
                   <div
-                    className={`flex items-center justify-center md:hidden ${
+                    className={`flex min-w-0 items-stretch justify-center md:hidden ${
                       mobileThreeRowLayout ? "flex-1" : "shrink-0"
                     }`}
                   >
@@ -284,8 +285,8 @@ export default function TradeFilterBar({
                 ) : null}
                 {settingsNextToModes ? (
                   <div
-                    className={`flex items-center justify-center md:hidden ${
-                      mobileThreeRowLayout ? "hidden" : "shrink-0"
+                    className={`flex items-stretch justify-center md:hidden ${
+                      mobileThreeRowLayout ? "shrink-0" : "shrink-0"
                     }`}
                   >
                     {settingsNextToModes}
@@ -306,22 +307,19 @@ export default function TradeFilterBar({
             )}
 
             {mobileThreeRowLayout ? (
-              <div className="flex w-full items-center gap-2 md:contents">
-                <div className="flex-1 md:w-auto md:flex-none">
+              <div className="flex w-full items-stretch gap-2 md:contents">
+                <div className="min-w-0 flex-1 md:w-auto md:flex-none">
                   <button
                     type="button"
                     onClick={() => setTimeframeOpen(true)}
-                    className="w-full rounded-lg bg-white/10 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/20 md:w-auto"
+                    className={`${DASHBOARD_MOBILE_TIMEFRAME_BTN_CLASS} md:h-auto md:w-auto md:rounded-lg md:px-4 md:py-2`}
                   >
                     {timeframeButtonLabel}
                   </button>
                 </div>
-                <div className="flex-1 md:contents">{trailing}</div>
-                {settingsNextToModes ? (
-                  <div className="flex h-[34px] w-12 items-center justify-center md:hidden">
-                    {settingsNextToModes}
-                  </div>
-                ) : null}
+                <div className="flex min-w-0 flex-1 items-stretch gap-2 md:contents">
+                  {trailing}
+                </div>
               </div>
             ) : (
               <>

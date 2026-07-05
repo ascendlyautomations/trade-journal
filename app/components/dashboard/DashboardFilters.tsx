@@ -5,8 +5,13 @@ import Link from "next/link"
 import TradeFilterBar, {
   type TradeFilterBarProps,
 } from "@/app/components/TradeFilterBar"
+import PerformanceShareButton from "@/app/components/PerformanceShareButton"
 import DashboardGearSettings from "./DashboardGearSettings"
 import { DashboardPlanIndicator } from "./DashboardHeader"
+import {
+  DASHBOARD_MOBILE_ACTION_BTN_CLASS,
+  DASHBOARD_MOBILE_PUBLIC_BTN_BASE,
+} from "./dashboardHeaderMobileUi"
 import type { GearDraftState } from "./dashboardGearTypes"
 
 export type DashboardFiltersProps = {
@@ -26,6 +31,9 @@ export type DashboardFiltersProps = {
   showPublicOnly: boolean
   onTogglePublicOnly: () => void
   onOpenPerformanceShare: () => void
+  /** Opens the trading report modal (mobile header row 3). */
+  onOpenTradingReport?: () => void
+  showTradingReportButton?: boolean
   showControls: boolean
   onToggleShowControls: () => void
   gearDraft: GearDraftState | null
@@ -59,6 +67,8 @@ export default function DashboardFilters({
   showPublicOnly,
   onTogglePublicOnly,
   onOpenPerformanceShare,
+  onOpenTradingReport,
+  showTradingReportButton = false,
   showControls,
   onToggleShowControls,
   gearDraft,
@@ -111,7 +121,7 @@ export default function DashboardFilters({
           <button
             type="button"
             onClick={onTogglePublicOnly}
-            className={`inline-flex min-h-[44px] w-full items-center justify-center whitespace-nowrap rounded-md border px-3 py-2 text-xs md:h-[34px] md:w-auto md:px-2 md:py-1 md:text-xs md:hidden ${
+            className={`${DASHBOARD_MOBILE_PUBLIC_BTN_BASE} md:hidden ${
               showPublicOnly
                 ? "border-emerald-400 bg-emerald-500 text-white hover:bg-emerald-600"
                 : "border-white/10 bg-[#0f172a] text-white hover:bg-[#1e293b]"
@@ -124,16 +134,20 @@ export default function DashboardFilters({
         settingsNextToModes={<div className="md:hidden">{gearSettings}</div>}
         trailing={
           <>
+            {showTradingReportButton && onOpenTradingReport ? (
+              <button
+                type="button"
+                onClick={onOpenTradingReport}
+                className={`${DASHBOARD_MOBILE_ACTION_BTN_CLASS} min-w-0 flex-1 md:hidden`}
+              >
+                Report
+              </button>
+            ) : null}
             {showShareControls ? (
-            <button
-              type="button"
-              onClick={onOpenPerformanceShare}
-              className="inline-flex min-h-[44px] w-full items-center justify-center whitespace-nowrap rounded-md bg-white/10 px-3 py-2 text-xs text-white hover:bg-white/20 md:hidden"
-              title="Share performance"
-              aria-label="Share performance"
-            >
-              📤 Share
-            </button>
+              <PerformanceShareButton
+                onClick={onOpenPerformanceShare}
+                size="dashboard"
+              />
             ) : null}
             {showShareControls ? (
             <button
@@ -146,17 +160,6 @@ export default function DashboardFilters({
               }`}
             >
               Public Trades
-            </button>
-            ) : null}
-            {showShareControls ? (
-            <button
-              type="button"
-              onClick={onOpenPerformanceShare}
-              className="hidden md:inline-flex h-[34px] shrink-0 items-center whitespace-nowrap rounded-md bg-white/10 px-3 py-1 text-sm text-white hover:bg-white/20"
-              title="Share performance"
-              aria-label="Share performance"
-            >
-              📤 Share
             </button>
             ) : null}
 

@@ -85,7 +85,7 @@ export const ABOUT_FOUNDER_NOTE = {
     "Whether you're just getting started or managing funded accounts, I hope TradeTraxs becomes a platform that genuinely helps you grow as a trader.",
     "Thank you for being part of the journey.",
   ],
-  signature: "Nick Rivard",
+  signature: "Nick Rivard-Lentz",
   role: "Founder, TradeTraxs",
 } as const
 

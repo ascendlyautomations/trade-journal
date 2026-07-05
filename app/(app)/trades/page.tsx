@@ -22,6 +22,7 @@ import { getCachedAccounts, getCachedTrades } from "@/lib/appDataCache"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 import { isProActive } from "@/lib/subscription"
+import { tradeAnalysisHref } from "@/lib/tradeAnalysisNavigation"
 import ProUpgradeModal from "../../components/ProUpgradeModal"
 
 export default function TradesPage() {
@@ -132,7 +133,7 @@ export default function TradesPage() {
         requestDemoSignup("ai")
         return
       }
-      router.push(`/analyst?trade=${encodeURIComponent(String(trade.id))}`)
+      router.push(tradeAnalysisHref(trade.id))
     },
     [router]
   )
@@ -358,8 +359,8 @@ export default function TradesPage() {
             gateProfile={gateProfile}
             onEditTrade={handleEditTrade}
             onDeleteTrade={handleDeleteTrade}
-            onSendClick={handleSendTrade}
-            onAnalyze={handleAnalyzeTrade}
+            onSendTrade={handleSendTrade}
+            onAnalyzeTrade={handleAnalyzeTrade}
             onImageClick={handleImageClick}
             onLoadMore={handleLoadMore}
           />

@@ -8,6 +8,7 @@ import {
   formatDrawdownLimitForDisplay,
   sanitizeDrawdownLimitInput,
 } from "./dashboardGearUtils"
+import { DASHBOARD_MOBILE_GEAR_BTN_CLASS } from "./dashboardHeaderMobileUi"
 
 export type DashboardGearSettingsProps = {
   showControls: boolean
@@ -39,7 +40,7 @@ export default function DashboardGearSettings({
       <button
         type="button"
         onClick={onToggleShowControls}
-        className="flex items-center justify-center rounded-lg bg-[#1f2937] p-2 text-white transition hover:bg-[#1f2937]/90 md:bg-transparent md:hover:bg-white/10"
+        className={`${DASHBOARD_MOBILE_GEAR_BTN_CLASS} md:rounded-lg md:bg-transparent md:p-2 md:hover:bg-white/10`}
         aria-label="Dashboard controls"
         aria-expanded={showControls}
       >

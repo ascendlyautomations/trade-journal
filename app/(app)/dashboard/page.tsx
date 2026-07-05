@@ -7,7 +7,9 @@ import DashboardStatsGrid from "../../components/dashboard/DashboardStatsGrid"
 import DashboardLongShort from "../../components/dashboard/DashboardLongShort"
 import DashboardHoldTime from "../../components/dashboard/DashboardHoldTime"
 import DashboardMaxDrawdown from "../../components/dashboard/DashboardMaxDrawdown"
-import TradingReportsSection from "@/app/components/trading-reports/TradingReportsSection"
+import TradingReportsSection, {
+  type TradingReportsSectionHandle,
+} from "@/app/components/trading-reports/TradingReportsSection"
 import dynamic from "next/dynamic"
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
@@ -583,6 +585,7 @@ export default function Dashboard() {
   const [savingGearSettings, setSavingGearSettings] = useState(false)
   const [showPerformanceShare, setShowPerformanceShare] = useState(false)
   const [showExportUpgradeModal, setShowExportUpgradeModal] = useState(false)
+  const tradingReportsRef = useRef<TradingReportsSectionHandle>(null)
   const [showImportModal, setShowImportModal] = useState(false)
   const [editingTrade, setEditingTrade] = useState<any | null>(null)
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
@@ -1723,6 +1726,8 @@ const biggestLoss = losses.length > 0
               onSaveGear={() => void saveDashboardGearPanel()}
               onCancelGear={cancelDashboardGearPanel}
               showShareControls={totalTrades > 0}
+              showTradingReportButton={Boolean(user?.id && dashboardUserIsPro && totalTrades > 0)}
+              onOpenTradingReport={() => tradingReportsRef.current?.openReport()}
               showPropFirmLink={showPropFirmLink}
             />
           ) : null}
@@ -1796,6 +1801,7 @@ const biggestLoss = losses.length > 0
         dashboardUserIsPro ? (
         <Suspense fallback={null}>
           <TradingReportsSection
+            ref={tradingReportsRef}
             userId={user.id}
             trades={[...tradesExcludingBacktest]}
             onViewTrade={(trade) => setEditingTrade(trade)}

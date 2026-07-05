@@ -9,8 +9,7 @@ import ReferralPersistence from "./components/ReferralPersistence"
 import SentryIdentifyUser from "./components/SentryIdentifyUser"
 import ToastRoot from "./components/ToastRoot"
 import DemoAppShell from "./components/demo/DemoAppShell"
-import AppNavbarShell from "./components/AppNavbarShell"
-import AppShellPadding from "./components/AppShellPadding"
+import AppChrome from "./components/AppChrome"
 import CookieConsentBanner from "./components/CookieConsentBanner"
 import SubscriptionGateShell from "./components/SubscriptionGateShell"
 import { UserProfileProvider } from "@/lib/UserProfileProvider"
@@ -80,8 +79,7 @@ export default function RootLayout({
               <OnboardingGateShell>
                 <DemoAppShell>
                   <SubscriptionGateShell>
-                    <AppNavbarShell />
-                    <AppShellPadding>{children}</AppShellPadding>
+                    <AppChrome>{children}</AppChrome>
                     <CookieConsentBanner />
                   </SubscriptionGateShell>
                 </DemoAppShell>

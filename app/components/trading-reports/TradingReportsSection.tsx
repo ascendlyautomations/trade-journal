@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react"
+import { forwardRef, Suspense, useCallback, useEffect, useImperativeHandle, useMemo, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import TradingReportModal from "@/app/components/trading-reports/TradingReportModal"
 import TradingReportsDashboardCard from "@/app/components/trading-reports/TradingReportsDashboardCard"
@@ -27,11 +27,17 @@ type TradingReportsSectionProps = {
   onViewTrade: (trade: { id?: string | null }) => void
 }
 
-export default function TradingReportsSection({
-  userId,
-  trades,
-  onViewTrade,
-}: TradingReportsSectionProps) {
+export type TradingReportsSectionHandle = {
+  openReport: () => void
+}
+
+const TradingReportsSection = forwardRef<
+  TradingReportsSectionHandle,
+  TradingReportsSectionProps
+>(function TradingReportsSection(
+  { userId, trades, onViewTrade },
+  ref
+) {
   const searchParams = useSearchParams()
   const { snapshot, loading, newBadge, getReport, markSeen } = useTradingReports(
     userId,
@@ -65,6 +71,20 @@ export default function TradingReportsSection({
     [markSeen, periodKey, userId]
   )
 
+  const openDefaultReport = useCallback(() => {
+    openModal(
+      newBadge?.kind === "monthly"
+        ? "monthly_last"
+        : newBadge?.kind === "weekly"
+          ? "weekly_last"
+          : "weekly_this"
+    )
+  }, [newBadge, openModal])
+
+  useImperativeHandle(ref, () => ({ openReport: openDefaultReport }), [
+    openDefaultReport,
+  ])
+
   useEffect(() => {
     const fromUrl = parsePeriodKey(searchParams.get("report"))
     if (fromUrl) {
@@ -83,17 +103,9 @@ export default function TradingReportsSection({
 
   return (
     <>
-      <div className="md:-mb-3">
+      <div className="hidden md:-mb-3 md:block">
         <TradingReportsDashboardCard
-          onOpen={() =>
-            openModal(
-              newBadge?.kind === "monthly"
-                ? "monthly_last"
-                : newBadge?.kind === "weekly"
-                  ? "weekly_last"
-                  : "weekly_this"
-            )
-          }
+          onOpen={openDefaultReport}
           loading={loading && !snapshot}
           newBadge={newBadge}
         />
@@ -111,4 +123,6 @@ export default function TradingReportsSection({
       />
     </>
   )
-}
+})
+
+export default TradingReportsSection

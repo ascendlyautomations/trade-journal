@@ -23,6 +23,7 @@ export type TradeCardProps = {
   showAdvanced?: boolean
   onEdit?: () => void
   onDelete?: () => void
+  onAnalyze?: () => void
   onImageClick?: (fullImageUrl: string) => void
   /** Parent-loaded profile snippet for share export affiliate code */
   shareProfile?: { referral_code?: string | null } | null
@@ -35,6 +36,7 @@ export default function TradeCard({
   showAdvanced = false,
   onEdit,
   onDelete,
+  onAnalyze,
   onImageClick,
   shareProfile = null,
 }: TradeCardProps) {
@@ -202,6 +204,16 @@ export default function TradeCard({
                 className="rounded bg-white/10 px-2 py-1 text-sm text-white transition hover:bg-white/20"
               >
                 Edit
+              </button>
+            ) : null}
+            {onAnalyze ? (
+              <button
+                type="button"
+                onClick={onAnalyze}
+                className="rounded bg-white/10 px-2 py-1 text-sm text-white transition hover:bg-white/20"
+                aria-label="Analyze trade"
+              >
+                Analyze
               </button>
             ) : null}
             <ShareTradeButton

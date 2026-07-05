@@ -4,6 +4,7 @@ import Link from "next/link"
 import { memo, type Dispatch, type SetStateAction } from "react"
 import EmptyState from "./ui/EmptyState"
 import TradeFilterBar from "./TradeFilterBar"
+import PerformanceShareButton from "./PerformanceShareButton"
 import TradesPageTradeCard from "./TradesPageTradeCard"
 import {
   SkeletonStatsCard,
@@ -215,28 +216,7 @@ function TradesPageMainContent({
               >
                 Public
               </button>
-              <button
-                type="button"
-                onClick={onOpenPerformanceShare}
-                className="order-3 h-10 w-10 rounded bg-white/10 hover:bg-white/20 flex items-center justify-center md:order-2 md:h-[34px] md:w-auto md:rounded-md md:px-3 md:py-1 md:text-sm md:text-white"
-                title="Share performance"
-                aria-label="Share performance"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-4 w-4 text-blue-300"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M4 12v7a1 1 0 001 1h14a1 1 0 001-1v-7M16 6l-4-4m0 0L8 6m4-4v12"
-                  />
-                </svg>
-              </button>
+              <PerformanceShareButton onClick={onOpenPerformanceShare} />
             </div>
           }
         />

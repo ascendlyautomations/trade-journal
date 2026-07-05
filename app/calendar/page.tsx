@@ -14,6 +14,7 @@ import { formatDecimal, formatRR } from "@/lib/formatDisplay"
 import { averageRrFromTrades } from "@/lib/tradeRr"
 import { resolveTradePoints } from "@/lib/resolveTradePoints"
 import { useEffect, useMemo, useState, useCallback } from "react"
+import { useRouter } from "next/navigation"
 import { supabase } from "../../lib/supabaseClient"
 import { deleteUserTrade } from "@/lib/deleteTrade"
 import { formatTradeAccountNameSizeLine } from "@/lib/tradeAccountDisplay"
@@ -22,8 +23,12 @@ import { ConfirmModal, useDeleteTradeConfirmation } from "../components/ui"
 import { useUserProfile } from "@/lib/UserProfileProvider"
 import { useCachedAccounts, useCachedTrades } from "@/lib/useAppDataCache"
 import { getCachedTrades } from "@/lib/appDataCache"
+import { isDemoModeActive } from "@/lib/demo/demoMode"
+import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
+import { tradeAnalysisHref } from "@/lib/tradeAnalysisNavigation"
 export default function CalendarPage() {
   useScrollPageTopOnMount()
+  const router = useRouter()
   const { user, profile: shareProfile, loading: profileLoading } = useUserProfile()
   const { trades, loading: tradesLoading } = useCachedTrades(user?.id)
   const { accounts: accountRows, loading: accountsLoading } = useCachedAccounts(
@@ -72,6 +77,17 @@ export default function CalendarPage() {
 
   const { requestDelete: handleDeleteTrade, confirmModalProps } =
     useDeleteTradeConfirmation(performDeleteTrade)
+
+  const handleAnalyzeTrade = useCallback(
+    (trade: any) => {
+      if (isDemoModeActive()) {
+        requestDemoSignup("ai")
+        return
+      }
+      router.push(tradeAnalysisHref(trade.id))
+    },
+    [router]
+  )
 
   function formatPNL(value: number) {
     return `${value < 0 ? "-" : ""}$${Math.abs(value).toLocaleString()}`
@@ -551,6 +567,7 @@ export default function CalendarPage() {
                           onEdit={(t) => setEditingTrade({ ...t })}
                           onDelete={handleDeleteTrade}
                           onSendClick={(t) => setSendTradeId(String(t.id))}
+                          onAnalyze={handleAnalyzeTrade}
                           onImageClick={setSelectedImage}
                         />
                       </div>

@@ -13,14 +13,14 @@ export type PublicContactCategoryConfig = {
 export const PUBLIC_CONTACT_CATEGORIES: PublicContactCategoryConfig[] = [
   {
     category: "general",
-    title: "❓ General Questions",
+    title: "General Questions",
     description: "Questions about TradeTraxs before getting started.",
     subject: "[General] Question About TradeTraxs",
     cta: "Ask a Question",
   },
   {
     category: "billing",
-    title: "💳 Billing",
+    title: "Billing",
     description:
       "Questions about subscriptions, invoices, payments, or billing.",
     subject: "[Billing] Subscription Question",
@@ -28,14 +28,14 @@ export const PUBLIC_CONTACT_CATEGORIES: PublicContactCategoryConfig[] = [
   },
   {
     category: "partnership",
-    title: "🤝 Partnerships",
+    title: "Partnerships",
     description: "Interested in partnering with TradeTraxs?",
     subject: "[Partnership] Partnership Inquiry",
     cta: "Contact Us",
   },
   {
     category: "business",
-    title: "💼 Business Inquiries",
+    title: "Business Inquiries",
     description: "Business opportunities, media, or general inquiries.",
     subject: "[Business] Business Inquiry",
     cta: "Email Us",
