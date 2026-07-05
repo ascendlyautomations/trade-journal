@@ -8,8 +8,13 @@ const SECURITY_HEADERS: Record<string, string> = {
   "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
 }
 
-export function proxy(_request: NextRequest) {
-  const response = NextResponse.next()
+export function proxy(request: NextRequest) {
+  const requestHeaders = new Headers(request.headers)
+  requestHeaders.set("x-pathname", request.nextUrl.pathname)
+
+  const response = NextResponse.next({
+    request: { headers: requestHeaders },
+  })
 
   for (const [key, value] of Object.entries(SECURITY_HEADERS)) {
     response.headers.set(key, value)

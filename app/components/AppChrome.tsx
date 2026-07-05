@@ -1,8 +1,8 @@
 "use client"
 
-import { usePathname } from "next/navigation"
+import { usePathname, useSelectedLayoutSegments } from "next/navigation"
 import type { ReactNode } from "react"
-import { shouldRenderGlobalAppNavbar } from "@/lib/appNavbarShell"
+import { shouldMountGlobalAppNavbar } from "@/lib/layoutChrome"
 import Navbar from "./Navbar"
 
 /**
@@ -11,7 +11,8 @@ import Navbar from "./Navbar"
  */
 export default function AppChrome({ children }: { children: ReactNode }) {
   const pathname = usePathname()
-  const showAppNavbar = shouldRenderGlobalAppNavbar(pathname)
+  const segments = useSelectedLayoutSegments()
+  const showAppNavbar = shouldMountGlobalAppNavbar(pathname, segments)
 
   if (!showAppNavbar) {
     return <div className="flex w-full flex-col">{children}</div>
