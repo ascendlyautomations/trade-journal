@@ -7,6 +7,12 @@ import { prependTradeInCache } from "@/lib/appDataCache"
 import { isProActive } from "@/lib/subscription"
 import { parseOptionalRr } from "@/lib/tradeRr"
 import { compressScreenshot } from "@/lib/compressImage"
+import { uploadToSupabaseStorageWithProgress } from "@/lib/supabaseStorageUploadWithProgress"
+import {
+  createMonotonicReporter,
+  mapUploadBytesToPercent,
+} from "@/lib/uploadProgress/reportProgress"
+import type { UploadProgressOptions } from "@/lib/uploadProgress/types"
 import { validateImageUpload } from "@/lib/uploadValidation"
 
 export type ManualTradeAccount = {
@@ -68,25 +74,62 @@ function inferDirection(
 async function uploadTradeScreenshot(
   client: SupabaseClient,
   userId: string,
-  file: File
+  file: File,
+  options?: UploadProgressOptions
 ): Promise<{ path: string | null; error: string | null }> {
+  const report = createMonotonicReporter(options?.onProgress, {
+    min: 10,
+    max: 65,
+  })
+
   const validationError = validateImageUpload(file)
   if (validationError) {
     return { path: null, error: validationError }
   }
+
+  report({ percent: 12, stage: "Processing image…" })
 
   let uploadFile: File = file
   if (file.type?.startsWith("image/")) {
     uploadFile = await compressScreenshot(file)
   }
   const fileName = `${userId}/${Date.now()}-${uploadFile.name}`
-  const { error: upErr } = await client.storage
-    .from("screenshots")
-    .upload(fileName, uploadFile)
-  if (upErr) {
-    console.error("[saveManualTrade] upload error:", upErr)
-    return { path: null, error: upErr.message || "Could not upload image." }
+
+  report({ percent: 18, stage: "Uploading media…" })
+
+  if (options?.onProgress) {
+    const { error: upErr } = await uploadToSupabaseStorageWithProgress(
+      client,
+      {
+        bucket: "screenshots",
+        path: fileName,
+        file: uploadFile,
+        contentType: uploadFile.type || "image/jpeg",
+        onProgress: (loaded, total) => {
+          report({
+            percent: mapUploadBytesToPercent(loaded, total, {
+              start: 20,
+              end: 65,
+            }),
+            stage: "Uploading media…",
+          })
+        },
+      }
+    )
+    if (upErr) {
+      console.error("[saveManualTrade] upload error:", upErr)
+      return { path: null, error: upErr || "Could not upload image." }
+    }
+  } else {
+    const { error: upErr } = await client.storage
+      .from("screenshots")
+      .upload(fileName, uploadFile)
+    if (upErr) {
+      console.error("[saveManualTrade] upload error:", upErr)
+      return { path: null, error: upErr.message || "Could not upload image." }
+    }
   }
+
   return { path: fileName, error: null }
 }
 
@@ -200,8 +243,16 @@ export async function saveManualTrade(
   client: SupabaseClient,
   userId: string,
   account: ManualTradeAccount,
-  input: SaveManualTradeInput
+  input: SaveManualTradeInput,
+  options?: UploadProgressOptions
 ): Promise<SaveManualTradeResult> {
+  const report = createMonotonicReporter(options?.onProgress, {
+    min: 0,
+    max: 99,
+  })
+
+  report({ percent: 5, stage: "Preparing…" })
+
   const { data: profileRow } = await client
     .from("profiles")
     .select(
@@ -248,13 +299,18 @@ export async function saveManualTrade(
     const uploaded = await uploadTradeScreenshot(
       client,
       userId,
-      input.imageFile
+      input.imageFile,
+      options
     )
     if (uploaded.error) {
       return { ok: false, code: "upload", message: uploaded.error }
     }
     screenshotUrl = uploaded.path
+  } else {
+    report({ percent: 40, stage: "Saving trade…" })
   }
+
+  report({ percent: 70, stage: "Creating trade record…" })
 
   const direction =
     input.direction?.trim() ||
@@ -331,6 +387,7 @@ export async function saveManualTrade(
   }
 
   if (input.isPublic && newTradeData) {
+    report({ percent: 85, stage: "Publishing…" })
     const { error: postError } = await client.from("posts").insert([
       {
         user_id: userId,
@@ -352,6 +409,7 @@ export async function saveManualTrade(
     return { ok: true, trade: newTradeData, posted: true }
   }
 
+  report({ percent: 95, stage: "Finishing…" })
   return { ok: true, trade: newTradeData, posted: false }
 }
 

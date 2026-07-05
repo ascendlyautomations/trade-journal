@@ -20,6 +20,12 @@ import { supabase } from "../../../lib/supabaseClient"
 import { deleteUserTrade } from "@/lib/deleteTrade"
 import { invalidateUserStreaksCache } from "@/lib/userStreaksCache"
 import { compressImage } from "@/lib/compressImage"
+import { uploadToSupabaseStorageWithProgress } from "@/lib/supabaseStorageUploadWithProgress"
+import {
+  createMonotonicReporter,
+  mapUploadBytesToPercent,
+} from "@/lib/uploadProgress/reportProgress"
+import { useUploadProgress } from "@/lib/uploadProgress/UploadProgressProvider"
 import { normalizeTraderType } from "@/lib/traderType"
 import { useParams, useRouter, useSearchParams } from "next/navigation"
 import FeedPostDetailModal from "../../components/feed/FeedPostDetailModal"
@@ -1376,6 +1382,9 @@ function ProfilePageContent() {
   const feedOpenCommentsRef = useRef<Record<string, boolean>>({})
   const creatingRoomRef = useRef(false)
   const creatingPostRef = useRef(false)
+  const uploadingPostRef = useRef(false)
+  const uploadingStoryRef = useRef(false)
+  const { runUpload } = useUploadProgress()
   const postingStoryRef = useRef(false)
   const STORY_SLIDE_MS = 7000
   const [profileStoryOpen, setProfileStoryOpen] = useState(false)
@@ -1546,26 +1555,45 @@ function ProfilePageContent() {
   )
 
   const handlePostStory = useCallback(async () => {
-    if (!pendingStoryFile || !currentUserId || postingStoryRef.current || postingStory) {
+    if (
+      !pendingStoryFile ||
+      !currentUserId ||
+      postingStoryRef.current ||
+      postingStory ||
+      uploadingStoryRef.current
+    ) {
       return
     }
-    postingStoryRef.current = true
-    setPostingStory(true)
+
+    const storyFile = pendingStoryFile
+    uploadingStoryRef.current = true
 
     try {
-      const result = await publishStory(supabase, currentUserId, pendingStoryFile)
+      await runUpload({
+        title: "Uploading Story",
+        onDismissCompose: closeStoryCompose,
+        execute: async (report) => {
+          postingStoryRef.current = true
+          setPostingStory(true)
 
-      if (!result.ok) {
-        showPopup({ type: "error", message: result.message })
-        return
-      }
+          const result = await publishStory(supabase, currentUserId, storyFile, {
+            onProgress: report,
+          })
 
-      showPopup({ type: "success", message: "Story uploaded!" })
-      closeStoryCompose()
-      await loadProfileStories()
+          if (!result.ok) {
+            throw new Error(result.message)
+          }
+
+          showPopup({ type: "success", message: "Story uploaded!" })
+          await loadProfileStories()
+        },
+      })
+    } catch {
+      // Overlay handles retry/cancel.
     } finally {
       postingStoryRef.current = false
       setPostingStory(false)
+      uploadingStoryRef.current = false
     }
   }, [
     pendingStoryFile,
@@ -1574,6 +1602,7 @@ function ProfilePageContent() {
     showPopup,
     closeStoryCompose,
     loadProfileStories,
+    runUpload,
   ])
 
   const fetchTradesForProfile = useCallback(
@@ -2512,7 +2541,9 @@ function ProfilePageContent() {
       requestDemoSignup("comment")
       return
     }
-    if (creatingPostRef.current || creatingPost) return
+    if (creatingPostRef.current || creatingPost || uploadingPostRef.current) {
+      return
+    }
 
     const text = postContent.trim()
     if (!text && !postImage && !pendingRoomShare) {
@@ -2520,77 +2551,113 @@ function ProfilePageContent() {
       return
     }
 
-    creatingPostRef.current = true
-    setCreatingPost(true)
+    uploadingPostRef.current = true
+    const snapshotText = text
+    const snapshotImage = postImage
+    const snapshotRoomShare = pendingRoomShare
 
     try {
-    let imageUrl: string | null = null
+      await runUpload({
+        title: snapshotImage ? "Uploading Post" : "Creating Post",
+        onDismissCompose: () => {
+          setShowCreatePost(false)
+          setPostContent("")
+          setPostImage(null)
+          setPendingRoomShare(null)
+        },
+        execute: async (report) => {
+          creatingPostRef.current = true
+          setCreatingPost(true)
 
-    if (postImage) {
-      let uploadFile: File = postImage
-      if (postImage.type?.startsWith("image/")) {
-        uploadFile = await compressImage(postImage)
-      }
-      const fileName = `${currentUserId}/${Date.now()}-${uploadFile.name}`
+          let imageUrl: string | null = null
 
-      const { error: upErr } = await supabase.storage
-        .from("profile_posts")
-        .upload(fileName, uploadFile, { upsert: true })
+          if (snapshotImage) {
+            report({ percent: 10, stage: "Processing image…" })
+            let uploadFile: File = snapshotImage
+            if (snapshotImage.type?.startsWith("image/")) {
+              uploadFile = await compressImage(snapshotImage)
+            }
+            const fileName = `${currentUserId}/${Date.now()}-${uploadFile.name}`
 
-      if (upErr) {
-        console.error(upErr)
-        showPopup(persistentError("Post Failed", upErr.message))
-        return
-      }
+            report({ percent: 18, stage: "Uploading media…" })
+            const mediaReport = createMonotonicReporter(report, {
+              min: 18,
+              max: 72,
+            })
+            const { error: upErr } = await uploadToSupabaseStorageWithProgress(
+              supabase,
+              {
+                bucket: "profile_posts",
+                path: fileName,
+                file: uploadFile,
+                upsert: true,
+                onProgress: (loaded, total) => {
+                  mediaReport({
+                    percent: mapUploadBytesToPercent(loaded, total, {
+                      start: 20,
+                      end: 72,
+                    }),
+                    stage: "Uploading media…",
+                  })
+                },
+              }
+            )
 
-      const base = process.env.NEXT_PUBLIC_SUPABASE_URL
-      imageUrl = base
-        ? `${base}/storage/v1/object/public/profile_posts/${fileName}`
-        : null
-    }
+            if (upErr) {
+              throw new Error(upErr)
+            }
 
-    const insertPayload = pendingRoomShare
-      ? buildRoomSharePostInsert(
-          currentUserId,
-          pendingRoomShare,
-          text,
-          imageUrl
-        )
-      : {
-          user_id: currentUserId,
-          content: text || null,
-          image_url: imageUrl,
-        }
+            const base = process.env.NEXT_PUBLIC_SUPABASE_URL
+            imageUrl = base
+              ? `${base}/storage/v1/object/public/profile_posts/${fileName}`
+              : null
+          } else {
+            report({ percent: 40, stage: "Creating post…" })
+          }
 
-    const { error } = await supabase.from("profile_posts").insert(insertPayload)
+          const insertPayload = snapshotRoomShare
+            ? buildRoomSharePostInsert(
+                currentUserId,
+                snapshotRoomShare,
+                snapshotText,
+                imageUrl
+              )
+            : {
+                user_id: currentUserId,
+                content: snapshotText || null,
+                image_url: imageUrl,
+              }
 
-    if (error) {
-      console.error(error)
-      showPopup(
-        persistentError("Post Failed", handleSupabaseError(error))
-      )
-      return
-    }
+          report({ percent: 82, stage: "Publishing…" })
 
-    if (currentUserId) invalidateUserStreaksCache(currentUserId)
+          const { error } = await supabase
+            .from("profile_posts")
+            .insert(insertPayload)
 
-    setShowCreatePost(false)
-    setPostContent("")
-    setPostImage(null)
-    setPendingRoomShare(null)
+          if (error) {
+            throw new Error(handleSupabaseError(error))
+          }
 
-    const { data } = await supabase
-      .from("profile_posts")
-      .select("*")
-      .eq("user_id", profile.id)
-      .order("created_at", { ascending: false })
+          if (currentUserId) invalidateUserStreaksCache(currentUserId)
 
-    setWallPosts(data || [])
-    showPopup(feedbackPresets.postPublished())
-    notifyGettingStartedChecklistMaybeCompleted()
+          const { data } = await supabase
+            .from("profile_posts")
+            .select("*")
+            .eq("user_id", profile.id)
+            .order("created_at", { ascending: false })
+
+          setWallPosts(data || [])
+          showPopup(feedbackPresets.postPublished())
+          notifyGettingStartedChecklistMaybeCompleted()
+          report({ percent: 95, stage: "Finishing…" })
+        },
+      })
+    } catch {
+      // Overlay handles retry/cancel.
     } finally {
       creatingPostRef.current = false
       setCreatingPost(false)
+      uploadingPostRef.current = false
     }
   }
 
@@ -2673,42 +2740,53 @@ function ProfilePageContent() {
       if (!file || !replacingReelPost || !currentUserId) return
 
       const reelId = String(replacingReelPost.id)
-      const result = await replaceTradeReelVideo(supabase, {
-        reelId,
-        userId: currentUserId,
-        file,
-      })
+      const snapshotPost = replacingReelPost
       setReplacingReelPost(null)
 
-      if ("error" in result) {
-        showPopup({ type: "error", message: result.error })
-        return
-      }
+      try {
+        await runUpload({
+          title: "Uploading Reel",
+          execute: async (report) => {
+            const result = await replaceTradeReelVideo(supabase, {
+              reelId,
+              userId: currentUserId,
+              file,
+              onProgress: report,
+            })
 
-      const updated = result.reel
-      setProfileReels((prev) =>
-        prev.map((row) => (String(row.id) === reelId ? updated : row))
-      )
-      if (updated.trade_id) {
-        setTradeReelsByTradeId((prev) => ({
-          ...prev,
-          [String(updated.trade_id)]: updated,
-        }))
+            if ("error" in result) {
+              throw new Error(result.error)
+            }
+
+            const updated = result.reel
+            setProfileReels((prev) =>
+              prev.map((row) => (String(row.id) === reelId ? updated : row))
+            )
+            if (updated.trade_id) {
+              setTradeReelsByTradeId((prev) => ({
+                ...prev,
+                [String(updated.trade_id)]: updated,
+              }))
+            }
+            if (selectedReelDetail && String(selectedReelDetail.id) === reelId) {
+              setSelectedReelDetail(
+                reelDetailFeedItem(updated as Record<string, unknown>, profile)
+              )
+            }
+            applyReelPatch(reelId, updated)
+          },
+        })
+      } catch {
+        setReplacingReelPost(snapshotPost)
       }
-      if (selectedReelDetail && String(selectedReelDetail.id) === reelId) {
-        setSelectedReelDetail(
-          reelDetailFeedItem(updated as Record<string, unknown>, profile)
-        )
-      }
-      applyReelPatch(reelId, updated)
     },
     [
       applyReelPatch,
       currentUserId,
       profile,
       replacingReelPost,
+      runUpload,
       selectedReelDetail,
-      showPopup,
     ]
   )
 
@@ -5241,10 +5319,10 @@ function ProfilePageContent() {
               <button
                 type="button"
                 onClick={() => void handleCreatePost()}
-                disabled={creatingPost}
+                disabled={creatingPost || uploadingPostRef.current}
                 className="w-full rounded-lg bg-blue-500 px-3 py-2 text-sm font-medium text-white hover:bg-blue-600 disabled:opacity-50"
               >
-                {creatingPost ? "Posting…" : "Post"}
+                Post
               </button>
             </div>
           </div>

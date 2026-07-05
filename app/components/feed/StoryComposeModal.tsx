@@ -53,7 +53,7 @@ export default function StoryComposeModal({
             onClick={onPost}
             className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-500 disabled:opacity-50"
           >
-            {posting ? "Posting…" : "Post Story"}
+            Post Story
           </button>
         </div>
       }

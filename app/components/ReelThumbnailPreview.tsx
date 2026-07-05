@@ -1,8 +1,10 @@
 "use client"
 
 import { memo } from "react"
+import ReelNativeVideoThumb from "@/app/components/ReelNativeVideoThumb"
 import StorageImage from "@/app/components/ui/StorageImage"
 import { formatReelDuration, type ReelRow } from "@/lib/reels"
+import { isReelVideoMediaUrl } from "@/lib/reelVideo"
 
 export type ReelThumbnailPreviewProps = {
   reel: Pick<ReelRow, "thumbnail_url" | "duration_seconds">
@@ -19,6 +21,8 @@ function ReelThumbnailPreview({
   maxWidthClass = "max-w-[280px]",
 }: ReelThumbnailPreviewProps) {
   const interactive = onClick != null
+  const thumbUrl = String(reel.thumbnail_url)
+  const useVideoThumb = isReelVideoMediaUrl(thumbUrl)
 
   return (
     <button
@@ -35,13 +39,20 @@ function ReelThumbnailPreview({
       } ${className}`}
       aria-label={interactive ? "Watch linked reel" : undefined}
     >
-      <StorageImage
-        src={String(reel.thumbnail_url)}
-        originalSrc={String(reel.thumbnail_url)}
-        preset="reel-thumb"
-        alt=""
-        className="aspect-[9/16] w-full object-cover"
-      />
+      {useVideoThumb ? (
+        <ReelNativeVideoThumb
+          src={thumbUrl}
+          className="aspect-[9/16] w-full object-cover"
+        />
+      ) : (
+        <StorageImage
+          src={thumbUrl}
+          originalSrc={thumbUrl}
+          preset="reel-thumb"
+          alt=""
+          className="aspect-[9/16] w-full object-cover"
+        />
+      )}
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/20">
         <span className="flex h-12 w-12 items-center justify-center rounded-full border border-white/20 bg-black/50 text-lg text-white backdrop-blur-sm">
           ▶

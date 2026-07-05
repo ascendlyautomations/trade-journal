@@ -22,6 +22,12 @@ import {
 } from "@/lib/achievements"
 import { MODAL_FIXED_BELOW_NAVBAR_CLASS } from "@/app/components/ui/DetailModalShell"
 import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
+import { uploadToSupabaseStorageWithProgress } from "@/lib/supabaseStorageUploadWithProgress"
+import {
+  createMonotonicReporter,
+  mapUploadBytesToPercent,
+} from "@/lib/uploadProgress/reportProgress"
+import { useUploadProgress } from "@/lib/uploadProgress/UploadProgressProvider"
 
 export type AchievementFormState = {
   achievement_type: string
@@ -97,6 +103,8 @@ export default function AchievementUploadModal({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [removeImage, setRemoveImage] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const uploadingRef = useRef(false)
+  const { runUpload } = useUploadProgress()
 
   const resetForm = useCallback(() => {
     if (editingAchievement) {
@@ -163,7 +171,7 @@ export default function AchievementUploadModal({
   }, [open])
 
   function handleClose() {
-    if (busy) return
+    if (busy || uploadingRef.current) return
     onClose()
   }
 
@@ -173,6 +181,8 @@ export default function AchievementUploadModal({
       return
     }
     if (!userId || !form.title.trim() || !form.achievement_type.trim()) return
+    if (uploadingRef.current) return
+
     const achievementType = canonicalAchievementType(form.achievement_type)
     const payoutAmount = isPayoutAchievementType(achievementType)
       ? Number(form.payout_amount)
@@ -184,102 +194,148 @@ export default function AchievementUploadModal({
       setError("Please enter a valid payout amount.")
       return
     }
-    setBusy(true)
+
     setError(null)
+    uploadingRef.current = true
 
-    let imageUrl = form.image_url
-    if (removeImage) {
-      imageUrl = null
+    const snapshotForm = { ...form }
+    const snapshotFile = file
+    const snapshotRemoveImage = removeImage
+    const snapshotEditingId = editingId
+
+    try {
+      await runUpload({
+        title: snapshotFile
+          ? editingId
+            ? "Updating Achievement"
+            : "Uploading Achievement"
+          : editingId
+            ? "Updating Achievement"
+            : "Saving Achievement",
+        onDismissCompose: onClose,
+        execute: async (report) => {
+          let imageUrl = snapshotForm.image_url
+          if (snapshotRemoveImage) {
+            imageUrl = null
+          }
+
+          if (snapshotFile) {
+            const validationError = validateImageUpload(snapshotFile)
+            if (validationError) {
+              throw new Error(validationError)
+            }
+
+            report({ percent: 10, stage: "Processing image…" })
+
+            const ext = snapshotFile.name.includes(".")
+              ? snapshotFile.name.split(".").pop()?.toLowerCase() || "jpg"
+              : "bin"
+            const safeBase = snapshotFile.name
+              .replace(/\.[^/.]+$/, "")
+              .toLowerCase()
+              .replace(/[^a-z0-9-_]+/g, "-")
+              .replace(/-+/g, "-")
+              .replace(/^-|-$/g, "")
+            let uploadFile: File = snapshotFile
+            if (snapshotFile.type?.startsWith("image/")) {
+              uploadFile = await compressImage(snapshotFile)
+            }
+            const uploadName = uploadFile.type?.startsWith("image/")
+              ? uploadFile.name
+              : `${safeBase || "image"}.${ext}`
+            const filePath = `achievements/${userId}/${Date.now()}-${uploadName}`
+
+            report({ percent: 18, stage: "Uploading media…" })
+            const stageReport = createMonotonicReporter(report, {
+              min: 18,
+              max: 72,
+            })
+            const { error: uploadErr } = await uploadToSupabaseStorageWithProgress(
+              supabase,
+              {
+                bucket: "screenshots",
+                path: filePath,
+                file: uploadFile,
+                upsert: true,
+                onProgress: (loaded, total) => {
+                  stageReport({
+                    percent: mapUploadBytesToPercent(loaded, total, {
+                      start: 20,
+                      end: 72,
+                    }),
+                    stage: "Uploading media…",
+                  })
+                },
+              }
+            )
+            if (uploadErr) {
+              throw new Error(uploadErr)
+            }
+
+            const { data: publicData } = supabase.storage
+              .from("screenshots")
+              .getPublicUrl(filePath)
+            imageUrl = publicData.publicUrl
+          } else {
+            report({ percent: 40, stage: "Saving achievement…" })
+          }
+
+          const payload = {
+            user_id: userId,
+            achievement_type: achievementType,
+            title: snapshotForm.title.trim(),
+            description: snapshotForm.description.trim() || null,
+            badge_key: badgeKeyFromType(achievementType),
+            category: categoryFromType(achievementType),
+            tier: null,
+            value_numeric: isPayoutAchievementType(achievementType)
+              ? payoutAmount
+              : null,
+            value_text:
+              isPayoutAchievementType(achievementType) && payoutAmount != null
+                ? `+$${Math.abs(payoutAmount).toLocaleString(undefined, {
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: 2,
+                  })}`
+                : null,
+            currency: isPayoutAchievementType(achievementType) ? "USD" : null,
+            account_type: null,
+            account_name: snapshotForm.account_name?.trim() || null,
+            account_size: snapshotForm.account_size?.trim() || null,
+            mode: null,
+            firm: snapshotForm.firm?.trim() || null,
+            achieved_at: snapshotForm.achieved_at || null,
+            image_url: imageUrl,
+            is_public: snapshotForm.is_public,
+            is_featured: snapshotForm.is_featured,
+            metadata: snapshotForm.metadata ?? null,
+          }
+
+          report({ percent: 82, stage: "Creating record…" })
+
+          const query = snapshotEditingId
+            ? supabase
+                .from("achievements")
+                .update(payload)
+                .eq("id", snapshotEditingId)
+                .eq("user_id", userId)
+            : supabase.from("achievements").insert(payload)
+
+          const { error: saveErr } = await query
+          if (saveErr) {
+            console.error("[achievements] save failed", saveErr)
+            throw new Error(saveErr.message || "Could not save achievement.")
+          }
+
+          report({ percent: 95, stage: "Finishing…" })
+          await onSaved?.()
+        },
+      })
+    } catch {
+      // Overlay handles retry/cancel.
+    } finally {
+      uploadingRef.current = false
     }
-
-    if (file) {
-      const validationError = validateImageUpload(file)
-      if (validationError) {
-        setBusy(false)
-        setError(validationError)
-        return
-      }
-
-      const ext = file.name.includes(".")
-        ? file.name.split(".").pop()?.toLowerCase() || "jpg"
-        : "bin"
-      const safeBase = file.name
-        .replace(/\.[^/.]+$/, "")
-        .toLowerCase()
-        .replace(/[^a-z0-9-_]+/g, "-")
-        .replace(/-+/g, "-")
-        .replace(/^-|-$/g, "")
-      let uploadFile: File = file
-      if (file.type?.startsWith("image/")) {
-        uploadFile = await compressImage(file)
-      }
-      const uploadName = uploadFile.type?.startsWith("image/")
-        ? uploadFile.name
-        : `${safeBase || "image"}.${ext}`
-      const filePath = `achievements/${userId}/${Date.now()}-${uploadName}`
-
-      const { error: uploadErr } = await supabase.storage
-        .from("screenshots")
-        .upload(filePath, uploadFile, { upsert: true })
-      if (uploadErr) {
-        setBusy(false)
-        setError(uploadErr.message || "Could not upload image.")
-        return
-      }
-
-      const { data: publicData } = supabase.storage
-        .from("screenshots")
-        .getPublicUrl(filePath)
-      imageUrl = publicData.publicUrl
-    }
-
-    const payload = {
-      user_id: userId,
-      achievement_type: achievementType,
-      title: form.title.trim(),
-      description: form.description.trim() || null,
-      badge_key: badgeKeyFromType(achievementType),
-      category: categoryFromType(achievementType),
-      tier: null,
-      value_numeric: isPayoutAchievementType(achievementType) ? payoutAmount : null,
-      value_text:
-        isPayoutAchievementType(achievementType) && payoutAmount != null
-          ? `+$${Math.abs(payoutAmount).toLocaleString(undefined, {
-              minimumFractionDigits: 0,
-              maximumFractionDigits: 2,
-            })}`
-          : null,
-      currency: isPayoutAchievementType(achievementType) ? "USD" : null,
-      account_type: null,
-      account_name: form.account_name?.trim() || null,
-      account_size: form.account_size?.trim() || null,
-      mode: null,
-      firm: form.firm?.trim() || null,
-      achieved_at: form.achieved_at || null,
-      image_url: imageUrl,
-      is_public: form.is_public,
-      is_featured: form.is_featured,
-      metadata: form.metadata ?? null,
-    }
-
-    const query = editingId
-      ? supabase
-          .from("achievements")
-          .update(payload)
-          .eq("id", editingId)
-          .eq("user_id", userId)
-      : supabase.from("achievements").insert(payload)
-
-    const { error: saveErr } = await query
-    setBusy(false)
-    if (saveErr) {
-      console.error("[achievements] save failed", saveErr)
-      setError(saveErr.message || "Could not save achievement.")
-      return
-    }
-
-    await onSaved?.()
-    onClose()
   }
 
   if (!open) return null
@@ -289,7 +345,7 @@ export default function AchievementUploadModal({
     dialogSubtitle ??
     "Capture your achievements with a quick summary and image."
   const submitLabel =
-    saveLabel ?? (busy ? "Saving..." : editingId ? "Update Achievement" : "Save Achievement")
+    saveLabel ?? (editingId ? "Update Achievement" : "Save Achievement")
 
   return (
     <div

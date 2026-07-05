@@ -39,6 +39,7 @@ import CommunitySharePreviewPanel from "@/app/components/CommunitySharePreviewPa
 import TradePublicShareToggle from "@/app/components/TradePublicShareToggle"
 import TradeReelAttachment from "@/app/components/TradeReelAttachment"
 import { publishTradeReel } from "@/lib/reels"
+import { useUploadProgress } from "@/lib/uploadProgress/UploadProgressProvider"
 import { buildCommunitySharePreviewPost } from "@/lib/buildCommunitySharePreviewPost"
 import { buildDateTime } from "@/lib/inputTradeDateTime"
 import { isProActive } from "@/lib/subscription"
@@ -171,6 +172,8 @@ export default function QuickTradeModal({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const csvFileInputRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
+  const uploadingRef = useRef(false)
+  const { runUpload } = useUploadProgress()
   const [error, setError] = useState<string | null>(null)
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [accounts, setAccounts] = useState<TradeAccountOption[]>([])
@@ -567,8 +570,10 @@ export default function QuickTradeModal({
       return
     }
 
-    setBusy(true)
-    setError(null)
+    if (uploadingRef.current) return
+
+    const reelFile = pendingReelFileRef.current ?? pendingReelFile
+    uploadingRef.current = true
 
     const parsedPnl = Number(String(pnl).replace(/,/g, "").replace(/\$/g, ""))
     const parsedPoints = Number(String(points).replace(/,/g, ""))
@@ -585,106 +590,90 @@ export default function QuickTradeModal({
         ? null
         : Number(exitPrice.replace(/,/g, "").replace(/\$/g, ""))
 
-    const result = await saveManualTrade(
-      supabase,
-      userId,
-      toManualTradeAccount(selectedAccount),
-      {
-      ticker: ticker.trim().toUpperCase(),
-      pnl: parsedPnl,
-      points: parsedPoints,
-      contracts: parsedContracts,
-      entryDate,
-      exitDate,
-      entryTime: entryTime || undefined,
-      exitTime: exitTime || undefined,
-      entryPrice:
-        entryVal != null && Number.isFinite(entryVal) ? entryVal : null,
-      exitPrice: exitVal != null && Number.isFinite(exitVal) ? exitVal : null,
-      rr: parseOptionalRr(rr),
-      publicDescription: description,
-      isPublic,
-      imageFile: image,
-    }
-    )
+    const uploadTitle = isPublic
+      ? reelFile || image
+        ? "Uploading Trade"
+        : "Posting Trade"
+      : reelFile || image
+        ? "Uploading Trade"
+        : "Saving Trade"
 
-    if (!result.ok) {
-      setBusy(false)
-      if (result.code === "account_limit") {
-        showPopup(feedbackPresets.accountLimit())
-      } else if (result.code === "account_locked") {
-        showPopup(feedbackPresets.accountLocked())
-      } else {
-        showPopup(persistentError("Save Failed", result.message))
-      }
-      return
-    }
-
-    console.log("[QuickTradeModal] trade created", {
-      tradeId: result.trade?.id,
-      posted: result.posted,
-    })
-
-    const reelFile = pendingReelFileRef.current ?? pendingReelFile
-    if (reelFile && result.trade?.id) {
-      const authUserId = userId
-
-      if (!authUserId) {
-        setBusy(false)
-        showPopup(
-          persistentError(
-            "Replay Upload Failed",
-            "Trade saved, but you must be signed in to upload a replay."
+    try {
+      await runUpload({
+        title: uploadTitle,
+        onDismissCompose: onClose,
+        execute: async (report) => {
+          const result = await saveManualTrade(
+            supabase,
+            userId,
+            toManualTradeAccount(selectedAccount),
+            {
+              ticker: ticker.trim().toUpperCase(),
+              pnl: parsedPnl,
+              points: parsedPoints,
+              contracts: parsedContracts,
+              entryDate,
+              exitDate,
+              entryTime: entryTime || undefined,
+              exitTime: exitTime || undefined,
+              entryPrice:
+                entryVal != null && Number.isFinite(entryVal) ? entryVal : null,
+              exitPrice:
+                exitVal != null && Number.isFinite(exitVal) ? exitVal : null,
+              rr: parseOptionalRr(rr),
+              publicDescription: description,
+              isPublic,
+              imageFile: image,
+            },
+            { onProgress: report }
           )
-        )
-        onSaved?.()
-        onClose()
-        return
-      }
 
-      console.log("[QuickTradeModal] replay upload starting", {
-        tradeId: result.trade.id,
-        userId: authUserId,
-        fileName: reelFile.name,
-      })
+          if (!result.ok) {
+            if (result.code === "account_limit") {
+              showPopup(feedbackPresets.accountLimit())
+              throw new Error("Account limit reached.")
+            }
+            if (result.code === "account_locked") {
+              showPopup(feedbackPresets.accountLocked())
+              throw new Error("Account is locked.")
+            }
+            throw new Error(result.message)
+          }
 
-      const reelResult = await publishTradeReel(supabase, {
-        tradeId: String(result.trade.id),
-        userId: authUserId,
-        file: reelFile,
-      })
-      if ("error" in reelResult) {
-        setBusy(false)
-        console.error("[QuickTradeModal] replay upload failed", reelResult.error)
-        showPopup(
-          persistentError(
-            "Replay Upload Failed",
-            `Trade saved, but replay could not be uploaded: ${reelResult.error}`
+          if (reelFile && result.trade?.id) {
+            report({ percent: 68, stage: "Uploading replay…" })
+            const reelResult = await publishTradeReel(supabase, {
+              tradeId: String(result.trade.id),
+              userId,
+              file: reelFile,
+              onProgress: (update) => {
+                report({
+                  percent: 68 + (update.percent / 100) * 28,
+                  stage: update.stage,
+                })
+              },
+            })
+            if ("error" in reelResult) {
+              throw new Error(
+                `Trade saved, but replay could not be uploaded: ${reelResult.error}`
+              )
+            }
+          }
+
+          notifyGettingStartedChecklistMaybeCompleted()
+          showPopup(
+            result.posted
+              ? feedbackPresets.postPublished()
+              : feedbackPresets.tradeSaveSuccess()
           )
-        )
-        onSaved?.()
-        onClose()
-        return
-      }
-
-      console.log("[QuickTradeModal] replay upload succeeded", {
-        reelId: reelResult.reel.id,
-        tradeId: reelResult.reel.trade_id,
+          onSaved?.()
+        },
       })
-    } else if (!reelFile) {
-      console.log("[QuickTradeModal] no replay file attached at save time")
+    } catch {
+      // Error UI handled by upload progress overlay (retry/cancel).
+    } finally {
+      uploadingRef.current = false
     }
-
-    setBusy(false)
-
-    notifyGettingStartedChecklistMaybeCompleted()
-    showPopup(
-      result.posted
-        ? feedbackPresets.postPublished()
-        : feedbackPresets.tradeSaveSuccess()
-    )
-    onSaved?.()
-    onClose()
   }
 
   if (!open) return null
@@ -1042,17 +1031,11 @@ export default function QuickTradeModal({
             </button>
             <button
               type="button"
-              disabled={busy || accountLoading}
+              disabled={accountLoading || uploadingRef.current}
               onClick={() => void handleSave()}
               className={QUICK_TRADE_PRIMARY_BUTTON_CLASS}
             >
-              {busy
-                ? isPublic
-                  ? "Posting..."
-                  : "Saving..."
-                : isPublic
-                  ? "Post Trade"
-                  : "Save Trade"}
+              {isPublic ? "Post Trade" : "Save Trade"}
             </button>
           </div>
         </div>

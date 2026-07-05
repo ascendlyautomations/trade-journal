@@ -1,6 +1,8 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
+import ReelNativeVideoThumb from "@/app/components/ReelNativeVideoThumb"
+import ReelVideoFilePreview from "@/app/components/ReelVideoFilePreview"
 import type { ReelRow } from "@/lib/reels"
 import {
   TRADE_OPTIONAL_ATTACHMENT_LABEL_CLASS,
@@ -9,6 +11,7 @@ import {
 import {
   readReelVideoMetadata,
   REEL_MAX_DURATION_LABEL,
+  isReelVideoMediaUrl,
   validateReelVideoFile,
 } from "@/lib/reelVideo"
 
@@ -43,32 +46,17 @@ export default function TradeReelAttachment({
   labelClassName,
 }: TradeReelAttachmentProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const previewUrlRef = useRef<string | null>(null)
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [durationSeconds, setDurationSeconds] = useState<number | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [validating, setValidating] = useState(false)
 
-  const revokePreview = useCallback(() => {
-    if (previewUrlRef.current?.startsWith("blob:")) {
-      URL.revokeObjectURL(previewUrlRef.current)
-    }
-    previewUrlRef.current = null
-  }, [])
-
   useEffect(() => {
     if (!pendingFile) {
-      revokePreview()
-      setPreviewUrl(null)
       setDurationSeconds(null)
       return
     }
 
     let cancelled = false
-    revokePreview()
-    const nextPreview = URL.createObjectURL(pendingFile)
-    previewUrlRef.current = nextPreview
-    setPreviewUrl(nextPreview)
 
     void readReelVideoMetadata(pendingFile)
       .then((meta) => {
@@ -81,11 +69,7 @@ export default function TradeReelAttachment({
     return () => {
       cancelled = true
     }
-  }, [pendingFile, revokePreview])
-
-  useEffect(() => {
-    return () => revokePreview()
-  }, [revokePreview])
+  }, [pendingFile])
 
   const handleFileSelect = async (file: File | null) => {
     if (!file || disabled) return
@@ -148,11 +132,18 @@ export default function TradeReelAttachment({
         <div className="mt-2 space-y-3">
           <div className="flex items-center gap-3">
             <div className="relative h-20 w-14 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-black/40">
-              <img
-                src={attachedReel.thumbnail_url}
-                alt=""
-                className="h-full w-full object-cover"
-              />
+              {isReelVideoMediaUrl(attachedReel.thumbnail_url) ? (
+                <ReelNativeVideoThumb
+                  src={attachedReel.thumbnail_url}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <img
+                  src={attachedReel.thumbnail_url}
+                  alt=""
+                  className="h-full w-full object-cover"
+                />
+              )}
               {attachedReel.duration_seconds != null ? (
                 <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1 text-[9px] text-white tabular-nums">
                   {formatDuration(attachedReel.duration_seconds)}
@@ -182,23 +173,16 @@ export default function TradeReelAttachment({
             ) : null}
           </div>
         </div>
-      ) : pendingFile && previewUrl ? (
+      ) : pendingFile ? (
         <div className="mt-2 space-y-3">
-          <div
-            className={
+          <ReelVideoFilePreview
+            file={pendingFile}
+            containerClassName={
               variant === "quick"
-                ? "mx-auto max-w-[200px] overflow-hidden rounded-lg border border-white/10 bg-black"
-                : "mx-auto max-w-[220px] overflow-hidden rounded-lg border border-white/10 bg-black"
+                ? "mx-auto max-w-[200px] overflow-hidden rounded-lg border border-white/10 bg-black/40"
+                : "mx-auto max-w-[220px] overflow-hidden rounded-lg border border-white/10 bg-black/40"
             }
-          >
-            <video
-              src={previewUrl}
-              className="aspect-[9/16] w-full object-cover"
-              controls
-              playsInline
-              preload="metadata"
-            />
-          </div>
+          />
           {durationSeconds != null ? (
             <p className="text-center text-xs text-gray-400 tabular-nums">
               Duration: {formatDuration(durationSeconds)}

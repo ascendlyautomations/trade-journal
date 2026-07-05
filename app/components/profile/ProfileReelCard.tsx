@@ -1,7 +1,9 @@
 "use client"
 
+import ReelNativeVideoThumb from "@/app/components/ReelNativeVideoThumb"
 import type { ReelRow } from "@/lib/reels"
 import { resolveReelCaption } from "@/lib/reels"
+import { isReelVideoMediaUrl } from "@/lib/reelVideo"
 import { formatRelativeTime } from "@/lib/formatRelativeTime"
 
 type ProfileReelCardProps = {
@@ -19,12 +21,19 @@ export default function ProfileReelCard({ reel, onOpen }: ProfileReelCardProps) 
       className="group w-full overflow-hidden rounded-xl border border-white/10 bg-white/5 text-left transition hover:border-emerald-400/30 hover:bg-white/[0.07]"
     >
       <div className="relative aspect-[9/16] w-full overflow-hidden bg-black/40">
-        <img
-          src={reel.thumbnail_url}
-          alt=""
-          loading="lazy"
-          className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]"
-        />
+        {isReelVideoMediaUrl(reel.thumbnail_url) ? (
+          <ReelNativeVideoThumb
+            src={reel.thumbnail_url}
+            className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]"
+          />
+        ) : (
+          <img
+            src={reel.thumbnail_url}
+            alt=""
+            loading="lazy"
+            className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]"
+          />
+        )}
         <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 transition group-hover:opacity-100">
           <span className="flex h-11 w-11 items-center justify-center rounded-full border border-white/20 bg-black/50 text-white backdrop-blur-sm">
             ▶

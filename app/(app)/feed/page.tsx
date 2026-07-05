@@ -92,6 +92,7 @@ import { ConfirmModal, FeedbackModal, useDeleteReelConfirmation, useFeedbackPopu
 import EmptyState from "@/app/components/ui/EmptyState"
 import { SkeletonFeedPage } from "@/app/components/ui/skeletons"
 import { publishStory } from "@/lib/publishStory"
+import { useUploadProgress } from "@/lib/uploadProgress/UploadProgressProvider"
 import {
   createStoryPreviewUrl,
   prepareStoryImageFile,
@@ -297,6 +298,8 @@ function FeedPageContent() {
   const likeBusyRef = useRef<Set<string>>(new Set())
   const commentSubmittingRef = useRef<Set<string>>(new Set())
   const postingStoryRef = useRef(false)
+  const uploadingStoryRef = useRef(false)
+  const { runUpload } = useUploadProgress()
   const [likeBusyByPost, setLikeBusyByPost] = useState<Record<string, boolean>>({})
 
   const {
@@ -468,26 +471,45 @@ function FeedPageContent() {
 
   const handlePostStory = useCallback(async () => {
     if (guardDemoFeedWrite("upload")) return
-    if (!pendingStoryFile || !user?.id || postingStoryRef.current || postingStory) {
+    if (
+      !pendingStoryFile ||
+      !user?.id ||
+      postingStoryRef.current ||
+      postingStory ||
+      uploadingStoryRef.current
+    ) {
       return
     }
-    postingStoryRef.current = true
-    setPostingStory(true)
+
+    const storyFile = pendingStoryFile
+    uploadingStoryRef.current = true
 
     try {
-      const result = await publishStory(supabase, user.id, pendingStoryFile)
+      await runUpload({
+        title: "Uploading Story",
+        onDismissCompose: closeStoryCompose,
+        execute: async (report) => {
+          postingStoryRef.current = true
+          setPostingStory(true)
 
-      if (!result.ok) {
-        showPopup({ type: "error", message: result.message })
-        return
-      }
+          const result = await publishStory(supabase, user.id, storyFile, {
+            onProgress: report,
+          })
 
-      showPopup({ type: "success", message: "Story uploaded!" })
-      closeStoryCompose()
-      await reloadActiveStories()
+          if (!result.ok) {
+            throw new Error(result.message)
+          }
+
+          showPopup({ type: "success", message: "Story uploaded!" })
+          await reloadActiveStories()
+        },
+      })
+    } catch {
+      // Overlay handles retry/cancel.
     } finally {
       postingStoryRef.current = false
       setPostingStory(false)
+      uploadingStoryRef.current = false
     }
   }, [
     pendingStoryFile,
@@ -496,6 +518,7 @@ function FeedPageContent() {
     showPopup,
     closeStoryCompose,
     reloadActiveStories,
+    runUpload,
   ])
 
   const openStory = useCallback((userId: string) => {
@@ -1679,32 +1702,43 @@ function FeedPageContent() {
       if (!file || !replacingReelPost || !user?.id) return
 
       const reelId = String(replacingReelPost.id)
-      const result = await replaceTradeReelVideo(supabase, {
-        reelId,
-        userId: user.id,
-        file,
-      })
+      const snapshotPost = replacingReelPost
       setReplacingReelPost(null)
 
-      if ("error" in result) {
-        showPopup({ type: "error", message: result.error })
-        return
-      }
+      try {
+        await runUpload({
+          title: "Uploading Reel",
+          execute: async (report) => {
+            const result = await replaceTradeReelVideo(supabase, {
+              reelId,
+              userId: user.id,
+              file,
+              onProgress: report,
+            })
 
-      const updated = result.reel
-      patchFeedReel(reelId, {
-        video_url: updated.video_url,
-        thumbnail_url: updated.thumbnail_url,
-        duration_seconds: updated.duration_seconds,
-        updated_at: updated.updated_at,
-      })
-      if (selectedPostId === reelId) {
-        setFeedModalPost((prev) =>
-          prev && String(prev.id) === reelId ? { ...prev, ...updated } : prev
-        )
+            if ("error" in result) {
+              throw new Error(result.error)
+            }
+
+            const updated = result.reel
+            patchFeedReel(reelId, {
+              video_url: updated.video_url,
+              thumbnail_url: updated.thumbnail_url,
+              duration_seconds: updated.duration_seconds,
+              updated_at: updated.updated_at,
+            })
+            if (selectedPostId === reelId) {
+              setFeedModalPost((prev) =>
+                prev && String(prev.id) === reelId ? { ...prev, ...updated } : prev
+              )
+            }
+          },
+        })
+      } catch {
+        setReplacingReelPost(snapshotPost)
       }
     },
-    [patchFeedReel, replacingReelPost, selectedPostId, showPopup, user?.id]
+    [patchFeedReel, replacingReelPost, runUpload, selectedPostId, user?.id]
   )
 
   const handleReelSaved = useCallback(

@@ -8,6 +8,7 @@ import OnboardingGateShell from "./components/OnboardingGateShell"
 import ReferralPersistence from "./components/ReferralPersistence"
 import SentryIdentifyUser from "./components/SentryIdentifyUser"
 import ToastRoot from "./components/ToastRoot"
+import { UploadProgressProvider } from "@/lib/uploadProgress/UploadProgressProvider"
 import DemoAppShell from "./components/demo/DemoAppShell"
 import AppChrome from "./components/AppChrome"
 import MarketingNavbarRoot from "./components/MarketingNavbarRoot"
@@ -72,6 +73,7 @@ export default function RootLayout({
     >
       <body className="flex flex-col">
         <ToastRoot>
+          <UploadProgressProvider>
           <ReferralPersistence />
           <UserProfileProvider>
             <GettingStartedProgressProvider>
@@ -89,6 +91,7 @@ export default function RootLayout({
             </BannedAccountShell>
             </GettingStartedProgressProvider>
           </UserProfileProvider>
+          </UploadProgressProvider>
         </ToastRoot>
         <Analytics />
         <SpeedInsights />

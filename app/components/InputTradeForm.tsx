@@ -61,6 +61,13 @@ import {
   replaceTradeReelVideo,
   type ReelRow,
 } from "@/lib/reels"
+import { uploadToSupabaseStorageWithProgress } from "@/lib/supabaseStorageUploadWithProgress"
+import {
+  createMonotonicReporter,
+  mapUploadBytesToPercent,
+} from "@/lib/uploadProgress/reportProgress"
+import type { UploadProgressReporter } from "@/lib/uploadProgress/types"
+import { useUploadProgress } from "@/lib/uploadProgress/UploadProgressProvider"
 import { postImageSrc } from "@/app/components/feed/feedPostHelpers"
 import { ConfirmModal, FeedbackModal, useDeleteReelConfirmation, useFeedbackPopup } from "@/app/components/ui"
 import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
@@ -156,6 +163,8 @@ export default function InputTradeForm({
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const [editingAccount, setEditingAccount] = useState<any | null>(null)
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
+  const uploadReportRef = useRef<UploadProgressReporter | null>(null)
+  const { runUpload } = useUploadProgress()
 
   function releaseSubmit() {
     submittingRef.current = false
@@ -580,7 +589,8 @@ export default function InputTradeForm({
     async (
       userId: string,
       tradeId: string,
-      reelFile?: File | null
+      reelFile?: File | null,
+      onProgress?: UploadProgressReporter
     ): Promise<string | null> => {
       const file = reelFile ?? pendingReelFileRef.current
       if (!file) {
@@ -596,6 +606,7 @@ export default function InputTradeForm({
       })
 
       if (attachedReel) {
+        onProgress?.({ percent: 70, stage: "Uploading replay…" })
         const result = await replaceTradeReelVideo(supabase, {
           reelId: attachedReel.id,
           userId,
@@ -614,10 +625,12 @@ export default function InputTradeForm({
         return null
       }
 
+      onProgress?.({ percent: 68, stage: "Uploading replay…" })
       const result = await publishTradeReel(supabase, {
         tradeId,
         userId,
         file,
+        onProgress,
       })
       if ("error" in result) {
         console.error("[InputTradeForm] replay upload failed", result.error)
@@ -662,19 +675,33 @@ export default function InputTradeForm({
     }
 
     const acct = selectedAccount
+    const reelFileAtSubmit = pendingReelFileRef.current ?? pendingReelFile
+    const uploadTitle = isPublic
+      ? image || reelFileAtSubmit
+        ? "Uploading Trade"
+        : "Posting Trade"
+      : image || reelFileAtSubmit
+        ? "Uploading Trade"
+        : "Saving Trade"
 
-    submittingRef.current = true
-    setSubmitting(true)
+    try {
+      await runUpload({
+        title: uploadTitle,
+        onDismissCompose: () => {
+          setCommunityPreviewOpen(false)
+          onClose?.()
+        },
+        execute: async (report) => {
+          uploadReportRef.current = report
+          submittingRef.current = true
+          setSubmitting(true)
 
     if (!userId) {
       showPopup(
         persistentError("Sign In Required", "Please log in to save your trade.")
       )
-      releaseSubmit()
-      return
+      throw new Error("Please log in to save your trade.")
     }
-
-    const reelFileAtSubmit = pendingReelFileRef.current ?? pendingReelFile
 
     const profileRow = planProfile ?? contextProfile
     const userIsPro = isProActive(profileRow)
@@ -685,23 +712,44 @@ export default function InputTradeForm({
       const imageValidationError = validateImageUpload(image)
       if (imageValidationError) {
         showPopup(persistentError("Invalid Image", imageValidationError))
-        releaseSubmit()
-        return
+        throw new Error(imageValidationError)
       }
+
+      report({ percent: 10, stage: "Processing image…" })
 
       let uploadFile: File = image
       if (image.type?.startsWith("image/")) {
         uploadFile = await compressScreenshot(image)
       }
       const fileName = `${userId}/${Date.now()}-${uploadFile.name}`
-      const { error: upErr } = await supabase.storage
-        .from("screenshots")
-        .upload(fileName, uploadFile)
+
+      report({ percent: 18, stage: "Uploading media…" })
+      const mediaReport = createMonotonicReporter(report, { min: 18, max: 62 })
+      const { error: upErr } = await uploadToSupabaseStorageWithProgress(
+        supabase,
+        {
+          bucket: "screenshots",
+          path: fileName,
+          file: uploadFile,
+          contentType: uploadFile.type || "image/jpeg",
+          onProgress: (loaded, total) => {
+            mediaReport({
+              percent: mapUploadBytesToPercent(loaded, total, {
+                start: 20,
+                end: 62,
+              }),
+              stage: "Uploading media…",
+            })
+          },
+        }
+      )
       if (upErr) {
         console.error("Upload error:", upErr)
-      } else {
-        screenshotUrl = fileName
+        throw new Error(upErr)
       }
+      screenshotUrl = fileName
+    } else {
+      report({ percent: 35, stage: "Saving trade…" })
     }
 
     const parsedPnl = parseFloat(pnl) || 0
@@ -767,8 +815,7 @@ export default function InputTradeForm({
           showPopup(
             persistentError("Save Failed", handleSupabaseError(lockErr))
           )
-          releaseSubmit()
-          return
+          throw new Error(handleSupabaseError(lockErr))
         }
         const { error: mirrorErr } = await mirrorAccountSettingsLockedAccount(
           supabase,
@@ -838,8 +885,7 @@ export default function InputTradeForm({
           "Could not complete save. Please try again."
         )
       )
-      releaseSubmit()
-      return
+      throw new Error("Could not complete save. Please try again.")
     }
 
     if (isEditMode && existingTrade?.id) {
@@ -920,8 +966,7 @@ export default function InputTradeForm({
         showPopup(
         persistentError("Save Failed", handleSupabaseError(error))
       )
-        releaseSubmit()
-        return
+        throw new Error(handleSupabaseError(error))
       }
 
       upsertTradeInCache(userId, {
@@ -947,8 +992,7 @@ export default function InputTradeForm({
           showPopup(
             persistentError("Post Failed", handleSupabaseError(postErr))
           )
-          releaseSubmit()
-          return
+          throw new Error(handleSupabaseError(postErr))
         }
       } else {
         const { error: delErr } = await supabase
@@ -961,7 +1005,8 @@ export default function InputTradeForm({
       const replayError = await syncTradeReplayAfterSave(
         userId,
         String(existingTrade.id),
-        reelFileAtSubmit
+        reelFileAtSubmit,
+        report
       )
       if (replayError) {
         showPopup(
@@ -1060,8 +1105,7 @@ export default function InputTradeForm({
       showPopup(
         persistentError("Save Failed", handleSupabaseError(error))
       )
-      releaseSubmit()
-      return
+      throw new Error(handleSupabaseError(error))
     }
 
     if (newTradeData) {
@@ -1088,14 +1132,14 @@ export default function InputTradeForm({
         showPopup(
           persistentError("Post Failed", handleSupabaseError(postError))
         )
-        releaseSubmit()
-        return
+        throw new Error(handleSupabaseError(postError))
       }
 
       const replayError = await syncTradeReplayAfterSave(
         userId,
         String(newTradeData.id),
-        reelFileAtSubmit
+        reelFileAtSubmit,
+        report
       )
       if (replayError) {
         showPopup(
@@ -1120,7 +1164,8 @@ export default function InputTradeForm({
       const replayErrorPrivate = await syncTradeReplayAfterSave(
         userId,
         String(newTradeData.id),
-        reelFileAtSubmit
+        reelFileAtSubmit,
+        report
       )
       if (replayErrorPrivate) {
         showPopup(
@@ -1139,6 +1184,13 @@ export default function InputTradeForm({
     showPopup(feedbackPresets.tradeSaveSuccess())
     notifyGettingStartedChecklistMaybeCompleted()
     releaseSubmit()
+        },
+      })
+    } catch {
+      // Upload overlay handles retry/cancel.
+    } finally {
+      releaseSubmit()
+    }
   }
 
   async function handlePublicToggle() {
@@ -2236,13 +2288,11 @@ export default function InputTradeForm({
             }}
             className="w-full py-3 text-lg font-semibold rounded bg-green-500 hover:bg-green-600 text-white disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {submitting
-              ? "Saving…"
-              : isEditMode
-                ? "Save changes"
-                : isPublic
-                  ? "Preview Post"
-                  : "Save Trade"}
+            {isEditMode
+              ? "Save changes"
+              : isPublic
+                ? "Preview Post"
+                : "Save Trade"}
           </button>
           </div>
         </div>
@@ -2465,7 +2515,7 @@ export default function InputTradeForm({
       postTradeLabel={
         isEditMode ? "Save changes" : isPublic ? "Post Trade" : "Save Trade"
       }
-      submittingLabel={isPublic ? "Posting…" : "Saving…"}
+      submittingLabel={isPublic ? "Post Trade" : "Save Trade"}
       post={communityPreviewPost}
       user={communityPreviewUser}
     />
