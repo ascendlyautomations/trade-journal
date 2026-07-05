@@ -113,6 +113,26 @@ export default function Navbar() {
     setMounted(true)
   }, [])
 
+  const mobileMenuOpen = isOpen && showMobileNav
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return
+    if (typeof window === "undefined") return
+    const mq = window.matchMedia("(max-width: 767px)")
+    if (!mq.matches) return
+
+    const html = document.documentElement
+    const body = document.body
+    const prevHtmlOverflow = html.style.overflow
+    const prevBodyOverflow = body.style.overflow
+    html.style.overflow = "hidden"
+    body.style.overflow = "hidden"
+    return () => {
+      html.style.overflow = prevHtmlOverflow
+      body.style.overflow = prevBodyOverflow
+    }
+  }, [mobileMenuOpen])
+
   const navRef = useRef<HTMLDivElement>(null)
   const badgeText = (count: number) => (count > 99 ? "99+" : String(count))
 
@@ -425,7 +445,14 @@ export default function Navbar() {
   if (isStandalone) return null
 
   const navbar = (
-    <div ref={navRef} className="fixed left-0 top-0 z-[9999] w-full overflow-visible text-gray-100">
+    <div
+      ref={navRef}
+      className={`fixed left-0 top-0 z-[9999] w-full text-gray-100 ${
+        mobileMenuOpen
+          ? "flex max-h-[100dvh] flex-col overflow-hidden md:block md:max-h-none md:overflow-visible"
+          : "overflow-visible"
+      }`}
+    >
       <div className="flex h-16 w-full shrink-0 items-center border-b border-white/5 bg-[#0b1f3a]">
         <div className="flex h-full w-full items-center gap-2 px-4 md:gap-3 md:px-6">
         {/* LEFT */}
@@ -677,9 +704,9 @@ export default function Navbar() {
             <div className="flex shrink-0 items-center gap-2.5 md:hidden">
               {!isHomePage && user
                 ? notificationBellControl(
-                    "text-xl leading-none",
+                    "text-lg leading-none",
                     "inline-flex items-center justify-center px-1 py-1",
-                    "absolute -right-1 -top-0.5 min-w-[1rem] rounded-full bg-red-500 px-1 py-px text-center text-[10px] leading-tight tabular-nums text-white"
+                    "absolute -right-0.5 -top-0.5 min-w-[1rem] rounded-full bg-red-500 px-1 py-px text-center text-[10px] leading-tight tabular-nums text-white"
                   )
                 : null}
               <button
@@ -818,9 +845,9 @@ export default function Navbar() {
         </div>
       </div>
 
-      {isOpen && showMobileNav ? (
-        <div className="max-h-[calc(100vh-var(--app-header-offset))] w-full overflow-y-auto border-t border-white/5 bg-[#0b1f3a] md:hidden">
-          <div className="flex w-full flex-col gap-2 px-4 pb-3 pt-1.5 text-sm text-white md:px-6">
+      {mobileMenuOpen ? (
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain border-t border-white/5 bg-[#0b1f3a] [webkit-overflow-scrolling:touch] md:hidden">
+          <div className="flex w-full flex-col gap-2 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] pt-1.5 text-sm text-white md:px-6">
           {showReturnToApp ? (
             <button
               type="button"

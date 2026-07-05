@@ -1411,19 +1411,30 @@ const biggestLoss = losses.length > 0
       hasSeenOnboardingCompletePopup: hasSeenOnboardingCompletePopupForAutoShow,
     })
 
-  const gettingStartedSection =
+  const renderGettingStartedChecklist = () =>
     showOnboardingSection && user?.id ? (
-      <div className="hidden md:block">
-        <GettingStartedChecklist
-          progress={gettingStartedProgress}
-          userId={user.id}
-          profileId={user.id ?? profile?.id}
-          firstPrivateTradeId={checklistSignals.firstPrivateTradeId}
-          onChecklistRefresh={() => void refreshChecklistSignals()}
-          defaultExpanded
-        />
-      </div>
+      <GettingStartedChecklist
+        progress={gettingStartedProgress}
+        userId={user.id}
+        profileId={user.id ?? profile?.id}
+        firstPrivateTradeId={checklistSignals.firstPrivateTradeId}
+        onChecklistRefresh={() => void refreshChecklistSignals()}
+        defaultExpanded
+      />
     ) : null
+
+  /** Desktop auto-show — unchanged. */
+  const gettingStartedSection = (() => {
+    const checklist = renderGettingStartedChecklist()
+    return checklist ? <div className="hidden md:block">{checklist}</div> : null
+  })()
+
+  /** Mobile only: inline checklist for brand-new users with no trades yet. */
+  const gettingStartedSectionMobile = (() => {
+    if (!hasNoTrades || statsStillLoading) return null
+    const checklist = renderGettingStartedChecklist()
+    return checklist ? <div className="md:hidden">{checklist}</div> : null
+  })()
 
   const currentStreak =
     streakData?.currentType === "loss"
@@ -1737,6 +1748,8 @@ const biggestLoss = losses.length > 0
         </div>
 
           <div className="relative z-0 mx-auto flex w-full max-w-[1600px] flex-col gap-4 overflow-visible px-4 md:gap-8 md:px-6">
+
+  {gettingStartedSectionMobile}
 
   {statsStillLoading ? (
     <SkeletonDashboardShell />
