@@ -11,6 +11,7 @@ import {
 } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import PopularTradeRoomsPanel from "../components/dashboard/PopularTradeRoomsPanel"
+import CreateFirstTradeRoomCard from "../components/CreateFirstTradeRoomCard"
 import EmptyState from "../components/ui/EmptyState"
 import {
   SkeletonCommunityPage,
@@ -20,6 +21,12 @@ import {
 import DmStyleComposer from "../components/DmStyleComposer"
 import { supabase } from "../../lib/supabaseClient"
 import { compressImage, compressScreenshot } from "@/lib/compressImage"
+import { uploadToSupabaseStorageWithProgress } from "@/lib/supabaseStorageUploadWithProgress"
+import {
+  createMonotonicReporter,
+  mapUploadBytesToPercent,
+} from "@/lib/uploadProgress/reportProgress"
+import { useUploadProgress } from "@/lib/uploadProgress/UploadProgressProvider"
 import { formatRelativeTime } from "@/lib/formatRelativeTime"
 import { feedbackPresets, persistentError } from "@/lib/feedbackPresets"
 import { useUserProfile } from "@/lib/UserProfileProvider"
@@ -51,6 +58,7 @@ import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
 import ImageLightbox from "@/app/components/ui/ImageLightbox"
 import { createRoomJoinNotification } from "@/lib/createRoomJoinNotification"
 import { createRoomMessageNotifications } from "@/lib/createRoomMessageNotifications"
+import { createUserRoom } from "@/lib/createUserRoom"
 import RoomNotificationSettingsSheet from "@/app/components/RoomNotificationSettingsSheet"
 import ReplyComposerStrip from "@/app/components/replies/ReplyComposerStrip"
 import ReplyReferenceBlock from "@/app/components/replies/ReplyReferenceBlock"
@@ -116,6 +124,14 @@ function pickInitialTradeRoomId(rooms: Room[], userId: string): string | null {
   const owned = rooms.find((r) => r.owner_user_id === userId)
   return owned?.id ?? rooms[0].id
 }
+
+/** Shared sizing for owner room header actions (desktop main header). */
+const ROOM_OWNER_HEADER_ACTION_CLASS =
+  "inline-flex h-8 shrink-0 items-center justify-center rounded-md bg-white/10 text-xs leading-none text-gray-200 transition hover:bg-white/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400/50"
+
+/** Shared sizing for compact mobile sidebar header icon actions. */
+const ROOM_MOBILE_HEADER_ICON_CLASS =
+  "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-base leading-none text-gray-300 transition hover:bg-white/10 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400/50"
 
 type RoomMessage = {
   id: string
@@ -381,6 +397,7 @@ function CommunityContent() {
   )
   const searchParams = useSearchParams()
   const { user, profile, loading: profileLoading } = useUserProfile()
+  const { runUpload } = useUploadProgress()
   const username = profile?.username?.trim() || "User"
   const roomParam = searchParams.get("room")
   const sectionParam = searchParams.get("section")
@@ -394,6 +411,8 @@ function CommunityContent() {
     Record<string, { pinned: RoomMessage[]; main: RoomMessage[] }>
   >({})
   const [loadingRooms, setLoadingRooms] = useState(true)
+  const [creatingRoom, setCreatingRoom] = useState(false)
+  const creatingRoomRef = useRef(false)
   const [loadingMessages, setLoadingMessages] = useState(false)
   const [draft, setDraft] = useState("")
   const [activeUsers, setActiveUsers] = useState<ActivePresence[]>([])
@@ -660,6 +679,16 @@ function CommunityContent() {
     if (roomParam?.trim()) return false
     return true
   }, [loadingRooms, rooms.length, needsJoin, roomParam])
+
+  const userOwnsRoom = useMemo(() => {
+    if (!user?.id) return false
+    return rooms.some((room) => room.owner_user_id === user.id)
+  }, [rooms, user?.id])
+
+  const showCreateFirstRoomCard = useMemo(() => {
+    if (loadingRooms || !user?.id) return false
+    return !userOwnsRoom
+  }, [loadingRooms, user?.id, userOwnsRoom])
 
   const filteredManageMembers = useMemo(() => {
     const q = memberSearchQuery.trim().toLowerCase()
@@ -2189,47 +2218,122 @@ function CommunityContent() {
     router.push("/trade-rooms")
   }
 
+  async function handleCreateRoom() {
+    if (isDemoModeActive()) {
+      requestDemoSignup("room")
+      return
+    }
+    if (creatingRoomRef.current || creatingRoom) return
+
+    creatingRoomRef.current = true
+    setCreatingRoom(true)
+
+    try {
+      if (!user?.id) return
+
+      const { data: existing, error: existingErr } = await supabase
+        .from("rooms")
+        .select("id, slug")
+        .eq("owner_user_id", user.id)
+        .maybeSingle()
+
+      if (existingErr) {
+        console.error(existingErr)
+      }
+
+      if (existing) {
+        router.push(
+          `/trade-rooms?room=${encodeURIComponent(String(existing.slug ?? existing.id))}`
+        )
+        return
+      }
+
+      const username = String(profile?.username ?? "").trim() || "user"
+      const newRoom = await createUserRoom(user.id, username)
+      const slug = String(newRoom.slug ?? newRoom.id)
+
+      setRooms((prev) => [...prev, newRoom as Room])
+      setSelectedRoomId(String(newRoom.id))
+      setMobileRoomsOpen(false)
+
+      router.push(
+        `/trade-rooms?room=${encodeURIComponent(slug)}&setup=true`
+      )
+    } catch (err) {
+      console.error(err)
+      showPopup({ type: "error", message: "Failed to create room" })
+    } finally {
+      creatingRoomRef.current = false
+      setCreatingRoom(false)
+    }
+  }
+
   async function handleRoomImageUpload(file: File) {
     if (!selectedRoomId) return
 
-    let uploadFile: File = file
-    if (file.type?.startsWith("image/")) {
-      uploadFile = await compressImage(file)
+    try {
+      await runUpload({
+        title: "Uploading Room Avatar",
+        execute: async (report) => {
+          report({ percent: 10, stage: "Processing…" })
+          let uploadFile: File = file
+          if (file.type?.startsWith("image/")) {
+            uploadFile = await compressImage(file)
+          }
+
+          const filePath = `room-images/${Date.now()}-${uploadFile.name}`
+          report({ percent: 18, stage: "Uploading…" })
+          const mediaReport = createMonotonicReporter(report, { min: 18, max: 72 })
+          const { error: upErr } = await uploadToSupabaseStorageWithProgress(
+            supabase,
+            {
+              bucket: "avatars",
+              path: filePath,
+              file: uploadFile,
+              upsert: true,
+              onProgress: (loaded, total) => {
+                mediaReport({
+                  percent: mapUploadBytesToPercent(loaded, total, {
+                    start: 20,
+                    end: 72,
+                  }),
+                  stage: "Uploading…",
+                })
+              },
+            }
+          )
+
+          if (upErr) {
+            throw new Error(upErr)
+          }
+
+          const { data: urlData } = supabase.storage
+            .from("avatars")
+            .getPublicUrl(filePath)
+
+          const publicUrl = urlData.publicUrl
+
+          report({ percent: 82, stage: "Saving…" })
+          const { error: updErr } = await supabase
+            .from("rooms")
+            .update({ image_url: publicUrl })
+            .eq("id", selectedRoomId)
+
+          if (updErr) {
+            throw new Error(handleSupabaseError(updErr))
+          }
+
+          setRoomImage(publicUrl)
+          setRooms((prev) =>
+            prev.map((r) =>
+              r.id === selectedRoomId ? { ...r, image_url: publicUrl } : r
+            )
+          )
+        },
+      })
+    } catch {
+      // Upload manager handles retry/cancel.
     }
-
-    const filePath = `room-images/${Date.now()}-${uploadFile.name}`
-
-    const { error: upErr } = await supabase.storage
-      .from("avatars")
-      .upload(filePath, uploadFile)
-
-    if (upErr) {
-      console.error(upErr)
-      return
-    }
-
-    const { data: urlData } = supabase.storage
-      .from("avatars")
-      .getPublicUrl(filePath)
-
-    const publicUrl = urlData.publicUrl
-
-    const { error: updErr } = await supabase
-      .from("rooms")
-      .update({ image_url: publicUrl })
-      .eq("id", selectedRoomId)
-
-    if (updErr) {
-      console.error(updErr)
-      return
-    }
-
-    setRoomImage(publicUrl)
-    setRooms((prev) =>
-      prev.map((r) =>
-        r.id === selectedRoomId ? { ...r, image_url: publicUrl } : r
-      )
-    )
   }
 
   useEffect(() => {
@@ -2733,68 +2837,102 @@ function CommunityContent() {
     const content = draft.trim()
     if (!content && !selectedComposerImage) return
 
+    if (selectedComposerImage) {
+      const imageFile = selectedComposerImage
+      const messageContent = content
+
+      try {
+        await runUpload({
+          title: "Uploading Room Image",
+          execute: async (report) => {
+            sendingMessageRef.current = true
+            setSendingMessage(true)
+
+            report({ percent: 10, stage: "Processing…" })
+            let uploadFile: File = imageFile
+            if (imageFile.type?.startsWith("image/")) {
+              uploadFile = await compressScreenshot(imageFile)
+            }
+            const filePath = `room-images/${Date.now()}-${uploadFile.name}`
+
+            report({ percent: 18, stage: "Uploading…" })
+            const mediaReport = createMonotonicReporter(report, {
+              min: 18,
+              max: 72,
+            })
+            const { error: uploadError } = await uploadToSupabaseStorageWithProgress(
+              supabase,
+              {
+                bucket: "screenshots",
+                path: filePath,
+                file: uploadFile,
+                onProgress: (loaded, total) => {
+                  mediaReport({
+                    percent: mapUploadBytesToPercent(loaded, total, {
+                      start: 20,
+                      end: 72,
+                    }),
+                    stage: "Uploading…",
+                  })
+                },
+              }
+            )
+
+            if (uploadError) {
+              throw new Error(handleSupabaseError(uploadError))
+            }
+
+            const { data } = supabase.storage
+              .from("screenshots")
+              .getPublicUrl(filePath)
+
+            report({ percent: 82, stage: "Publishing…" })
+
+            const { sectionId: insertSectionId } = resolveInsertSectionId()
+
+            const { data: insertedRow, error } = await supabase
+              .from("room_messages")
+              .insert({
+                room_id: selectedRoomId,
+                user_id: user.id,
+                type: "image" as const,
+                image_url: data.publicUrl,
+                content: messageContent || "",
+                section_id: insertSectionId,
+                ...(roomMessageParentId()
+                  ? { parent_message_id: roomMessageParentId() }
+                  : {}),
+              })
+              .select(ROOM_MESSAGE_REALTIME_SELECT)
+              .single()
+
+            if (error) {
+              throw new Error(handleSupabaseError(error))
+            }
+
+            if (insertedRow) {
+              appendRoomMessageToState(insertedRow as RoomMessage)
+              void createRoomMessageNotifications(supabase, insertedRow.id)
+            }
+
+            setDraft("")
+            setReplyTarget(null)
+            clearComposerImage()
+          },
+        })
+      } catch {
+        // Upload manager handles retry/cancel.
+      } finally {
+        sendingMessageRef.current = false
+        setSendingMessage(false)
+      }
+      return
+    }
+
     sendingMessageRef.current = true
     setSendingMessage(true)
 
     try {
-    if (selectedComposerImage) {
-      let uploadFile: File = selectedComposerImage
-      if (selectedComposerImage.type?.startsWith("image/")) {
-        uploadFile = await compressScreenshot(selectedComposerImage)
-      }
-      const filePath = `room-images/${Date.now()}-${uploadFile.name}`
-
-      const { error: uploadError } = await supabase.storage
-        .from("screenshots")
-        .upload(filePath, uploadFile)
-
-      if (uploadError) {
-        console.error("room image upload:", uploadError)
-        showPopup({ type: "error", message: handleSupabaseError(uploadError) })
-        return
-      }
-
-      const { data } = supabase.storage
-        .from("screenshots")
-        .getPublicUrl(filePath)
-
-      const { sectionId: insertSectionId, source: sectionIdSource } =
-        resolveInsertSectionId()
-      console.log("[room_messages insert]", {
-        selectedRoomId,
-        selectedSectionId,
-        insertSectionId,
-        sectionIdSource,
-        activeFetchSectionId: activeFetchSectionId(),
-        messageType: "image",
-      })
-
-      const { data: insertedRow, error } = await supabase
-        .from("room_messages")
-        .insert({
-          room_id: selectedRoomId,
-          user_id: user.id,
-          type: "image" as const,
-          image_url: data.publicUrl,
-          content: content || "",
-          section_id: insertSectionId,
-          ...(roomMessageParentId()
-            ? { parent_message_id: roomMessageParentId() }
-            : {}),
-        })
-        .select(ROOM_MESSAGE_REALTIME_SELECT)
-        .single()
-      if (error) {
-        console.error("room_messages insert:", error)
-        showPopup({ type: "error", message: handleSupabaseError(error) })
-        return
-      }
-
-      if (insertedRow) {
-        appendRoomMessageToState(insertedRow as RoomMessage)
-        void createRoomMessageNotifications(supabase, insertedRow.id)
-      }
-    } else {
       const { sectionId: insertSectionId, source: sectionIdSource } =
         resolveInsertSectionId()
       console.log("[room_messages insert]", {
@@ -2829,11 +2967,10 @@ function CommunityContent() {
         appendRoomMessageToState(insertedRow as RoomMessage)
         void createRoomMessageNotifications(supabase, insertedRow.id)
       }
-    }
 
-    setDraft("")
-    setReplyTarget(null)
-    clearComposerImage()
+      setDraft("")
+      setReplyTarget(null)
+      clearComposerImage()
     } finally {
       sendingMessageRef.current = false
       setSendingMessage(false)
@@ -2969,9 +3106,9 @@ function CommunityContent() {
                         ? "Notifications enabled"
                         : "Notifications muted"
                     }
-                    className="shrink-0 rounded-md p-2 text-gray-300 hover:bg-white/10 hover:text-white"
+                    className={`${ROOM_MOBILE_HEADER_ICON_CLASS} shrink-0`}
                   >
-                    {roomBellEnabled ? "🔔" : "🔕"}
+                    <span aria-hidden>{roomBellEnabled ? "🔔" : "🔕"}</span>
                   </button>
                 ) : null}
                 {isOwner && selectedRoomId && !needsJoin ? (
@@ -2980,9 +3117,9 @@ function CommunityContent() {
                       type="button"
                       aria-label="Room settings"
                       onClick={() => setShowRoomSettings(true)}
-                      className="flex items-center justify-center rounded-md p-2 text-gray-300 hover:bg-white/10 hover:text-white"
+                      className={ROOM_MOBILE_HEADER_ICON_CLASS}
                     >
-                      ⚙️
+                      <span aria-hidden>⚙️</span>
                     </button>
                     <ShareRoomMenu
                       room={selectedRoom!}
@@ -2995,6 +3132,8 @@ function CommunityContent() {
                       onCopyLink={() =>
                         showPopup(feedbackPresets.roomLinkCopied())
                       }
+                      triggerClassName={ROOM_MOBILE_HEADER_ICON_CLASS}
+                      iconClassName="h-4 w-4 text-blue-300"
                     />
                   </div>
                 ) : null}
@@ -3026,10 +3165,20 @@ function CommunityContent() {
                         </div>
                       ))}
                     </div>
-                  ) : rooms.length === 0 ? (
+                  ) : rooms.length === 0 && !showCreateFirstRoomCard ? (
                     <p className="px-2 py-3 text-sm text-gray-400">No rooms found.</p>
                   ) : (
-                    sortedSidebarRooms.map((room) => {
+                    <>
+                      {showCreateFirstRoomCard ? (
+                        <CreateFirstTradeRoomCard
+                          onClick={() => void handleCreateRoom()}
+                          disabled={creatingRoom}
+                          className={
+                            showRecommendedRooms ? "hidden md:flex" : undefined
+                          }
+                        />
+                      ) : null}
+                      {sortedSidebarRooms.map((room) => {
                       const selected = room.id === selectedRoomId
                       const isOwnRoom =
                         user?.id != null && room.owner_user_id === user.id
@@ -3083,7 +3232,8 @@ function CommunityContent() {
                           </div>
                         </button>
                       )
-                    })
+                    })}
+                    </>
                   )}
                 </div>
               </div>
@@ -3094,6 +3244,13 @@ function CommunityContent() {
             {showRecommendedRooms ? (
               <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-6 md:px-8 md:py-10">
                 <div className="mx-auto w-full max-w-2xl">
+                  {showCreateFirstRoomCard ? (
+                    <CreateFirstTradeRoomCard
+                      onClick={() => void handleCreateRoom()}
+                      disabled={creatingRoom}
+                      className="mb-4 md:hidden"
+                    />
+                  ) : null}
                   <PopularTradeRoomsPanel
                     active
                     heading="Recommended Trade Rooms"
@@ -3138,9 +3295,11 @@ function CommunityContent() {
                             ? "Notifications enabled"
                             : "Notifications muted"
                         }
-                        className="flex items-center gap-1 rounded-md bg-white/10 px-2 py-1 text-xs text-gray-200 hover:bg-white/20"
+                        className={`${ROOM_OWNER_HEADER_ACTION_CLASS} gap-1.5 px-2.5`}
                       >
-                        <span aria-hidden>{roomBellEnabled ? "🔔" : "🔕"}</span>
+                        <span className="text-base leading-none" aria-hidden>
+                          {roomBellEnabled ? "🔔" : "🔕"}
+                        </span>
                         <span className="hidden sm:inline">
                           {roomBellEnabled
                             ? "Notifications Enabled"
@@ -3165,9 +3324,11 @@ function CommunityContent() {
                           type="button"
                           aria-label="Room settings"
                           onClick={() => setShowRoomSettings(true)}
-                          className="flex items-center justify-center rounded-md bg-white/10 p-2 hover:bg-white/20"
+                          className={`${ROOM_OWNER_HEADER_ACTION_CLASS} w-8`}
                         >
-                          ⚙️
+                          <span className="text-base leading-none" aria-hidden>
+                            ⚙️
+                          </span>
                         </button>
                         <ShareRoomMenu
                           room={selectedRoom!}
@@ -3180,8 +3341,8 @@ function CommunityContent() {
                           onCopyLink={() =>
                             showPopup(feedbackPresets.roomLinkCopied())
                           }
-                          triggerClassName="flex items-center justify-center rounded-md bg-white/10 p-2 hover:bg-white/20"
-                          iconClassName="h-5 w-5 text-blue-300"
+                          triggerClassName={`${ROOM_OWNER_HEADER_ACTION_CLASS} w-8`}
+                          iconClassName="h-4 w-4 text-blue-300"
                         />
                       </div>
                     ) : null}
@@ -3960,7 +4121,7 @@ function CommunityContent() {
 
       {editingSection ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
           onClick={() => {
             if (deletingSectionId) return
             setEditingSection(null)
@@ -4402,18 +4563,31 @@ function CommunityContent() {
                 {sections.map((section) => (
                   <div
                     key={section.id}
-                    className="flex items-center justify-between rounded-lg bg-white/5 p-2"
+                    className="flex items-center justify-between gap-2 rounded-lg bg-white/5 p-2"
                   >
-                    <span className="text-sm text-white">{section.name}</span>
+                    <span className="min-w-0 flex-1 truncate text-sm text-white">
+                      {section.name}
+                    </span>
 
-                    <button
-                      type="button"
-                      disabled={deletingSectionId != null}
-                      onClick={() => void promptDeleteSection(section.id)}
-                      className="text-red-400 hover:text-red-500 disabled:opacity-50"
-                    >
-                      {deletingSectionId === section.id ? "…" : "🗑"}
-                    </button>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <button
+                        type="button"
+                        disabled={deletingSectionId != null}
+                        onClick={() => openChannelSettings(section)}
+                        className="rounded px-2 py-1 text-xs text-gray-300 transition hover:bg-white/10 hover:text-white disabled:opacity-50"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        disabled={deletingSectionId != null}
+                        onClick={() => void promptDeleteSection(section.id)}
+                        className="rounded px-2 py-1 text-red-400 transition hover:bg-red-500/10 hover:text-red-500 disabled:opacity-50"
+                        aria-label={`Delete ${section.name}`}
+                      >
+                        {deletingSectionId === section.id ? "…" : "🗑"}
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>

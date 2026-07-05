@@ -5,7 +5,7 @@ export type UploadProgressUpdate = {
 
 export type UploadProgressReporter = (update: UploadProgressUpdate) => void
 
-export type UploadJobStatus = "running" | "success" | "error"
+export type UploadJobStatus = "queued" | "running" | "success" | "error"
 
 export type UploadJob = {
   id: string

@@ -8,6 +8,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "../../lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
+import { uploadAvatarFile } from "@/lib/avatarUpload"
+import { useUploadProgress } from "@/lib/uploadProgress/UploadProgressProvider"
 import {
   formatMembershipStatusLabel,
   formatSubscriptionDateTime,
@@ -233,6 +235,7 @@ export default function SettingsPage() {
   const [upgradeBillingInterval, setUpgradeBillingInterval] =
     useState<TraxProBillingIntervalId>(TRAXPRO_DEFAULT_BILLING_INTERVAL)
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
+  const { runUpload } = useUploadProgress()
   const [newPassword, setNewPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [showAffiliateModal, setShowAffiliateModal] = useState(false)
@@ -481,9 +484,23 @@ export default function SettingsPage() {
     try {
 
     let avatarUrl = avatarPreview
-    if (avatarFile) {
-      const uploaded = await uploadAvatar()
-      if (uploaded) avatarUrl = uploaded
+    if (avatarFile && user) {
+      try {
+        await runUpload({
+          title: "Uploading Profile Picture",
+          execute: async (report) => {
+            const uploaded = await uploadAvatarFile(user.id, avatarFile, {
+              onProgress: report,
+            })
+            if (!uploaded) {
+              throw new Error("Could not upload profile picture.")
+            }
+            avatarUrl = uploaded
+          },
+        })
+      } catch {
+        return
+      }
     }
 
     const cleanUsername = normalizeProfileUsername(username)

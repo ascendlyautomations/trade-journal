@@ -37,6 +37,7 @@ import { mirrorAccountSettingsHasUsedInitialImport } from "@/lib/profileSplitMir
 import { csvTradesHaveFutureDate } from "@/lib/tradeDateValidation"
 import { notifyGettingStartedChecklistMaybeCompleted } from "@/lib/gettingStartedProgressSync"
 import { useUserProfile } from "@/lib/useUserProfile"
+import { useUploadProgress } from "@/lib/uploadProgress/UploadProgressProvider"
 
 export type CsvImportPanelProps = {
   /** Smaller preview + less chrome (e.g. onboarding modal) */
@@ -76,6 +77,7 @@ export default function CsvImportPanel({
 }: CsvImportPanelProps) {
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const { user } = useUserProfile()
+  const { runUpload } = useUploadProgress()
   const [parsed, setParsed] = useState<CsvRow[]>([])
   const [loading, setLoading] = useState(false)
   const [unrecognized, setUnrecognized] = useState(false)
@@ -297,160 +299,172 @@ export default function CsvImportPanel({
       return
     }
 
-    importingRef.current = true
-    setLoading(true)
+    try {
+      await runUpload({
+        title: "Importing Trades",
+        execute: async (report) => {
+          importingRef.current = true
+          setLoading(true)
+          report({ percent: 5, stage: "Preparing…" })
 
-    if (!user?.id) {
-      showPopup(feedbackPresets.importFailed("Please log in first."))
-      endImport()
-      return
-    }
-
-    const rateLimit = await consumeAppRateLimit("csv_import")
-    if (!rateLimit.ok) {
-      showPopup(feedbackPresets.importFailed(rateLimit.message))
-      endImport()
-      return
-    }
-
-    const { data: profile, error: profileErr } = await supabase
-      .from("profiles")
-      .select("has_used_initial_import")
-      .eq("id", user.id)
-      .single()
-
-    if (profileErr || !profile) {
-      console.error("Profile fetch failed:", profileErr)
-      showPopup(feedbackPresets.importFailed("Could not verify account. Try again."))
-      endImport()
-      return
-    }
-
-    const hasUsedInitialImport = profile.has_used_initial_import === true
-
-    const parseResult = buildTradesFromParsedCsv(parsed, user.id)
-    const { parsedTrades, summary, rowResults } = parseResult
-
-    if (!parsedTrades.length) {
-      setUnrecognized(isCsvFormatUnrecognized(summary))
-      setBrokerHint(detectCsvBrokerHint(parsed))
-      setDiagnostics(buildCsvImportDiagnostics(parsed, parseResult))
-      openFailureModal("No trades could be imported from this CSV.")
-      endImport()
-      return
-    }
-
-    if (csvTradesHaveFutureDate(parsedTrades)) {
-      showPopup(feedbackPresets.csvImportFutureTradeDate())
-      endImport()
-      return
-    }
-
-    setUnrecognized(false)
-    if (summary.failed > 0) {
-      setDiagnostics(buildCsvImportDiagnostics(parsed, parseResult))
-    } else {
-      setDiagnostics(null)
-    }
-
-    let tradesToInsert = parsedTrades
-
-    if (!tradesToInsert.length) {
-      showPopup(feedbackPresets.importFailed("No trades could be imported from this file."))
-      endImport()
-      return
-    }
-
-    const isInitialImportOnRows = !hasUsedInitialImport
-
-    let error: { message?: string; details?: string; hint?: string } | null = null
-
-    if (selectedAccount) {
-      const res = await insertCsvTradesWithAccount(
-        supabase,
-        tradesToInsert,
-        selectedAccount,
-        { isInitialImport: isInitialImportOnRows }
-      )
-      error = res.error
-    } else {
-      const rowsToInsert = tradesInsertRowsPrivate(tradesToInsert, {
-        isInitialImport: isInitialImportOnRows,
-      })
-
-      const { error: importAcctErr } = await ensureImportedCsvAccountRegistered(
-        supabase,
-        user.id
-      )
-      if (importAcctErr) {
-        console.error(importAcctErr)
-        showPopup(
-          feedbackPresets.importFailed(
-            "Could not register imported account row. Try again."
-          )
-        )
-        endImport()
-        return
-      }
-
-      const ins = await supabase.from("trades").insert(rowsToInsert)
-      error = ins.error
-    }
-
-    if (error) {
-      console.error("INSERT ERROR:", error)
-      showPopup(feedbackPresets.importFailed(handleSupabaseError(error)))
-    } else {
-      if (!hasUsedInitialImport) {
-        const { error: initialImportFlagErr } = await supabase
-          .from("profiles")
-          .update({ has_used_initial_import: true })
-          .eq("id", user.id)
-        if (initialImportFlagErr) {
-          console.error("mark has_used_initial_import:", initialImportFlagErr)
-        } else {
-          const { error: mirrorErr } = await mirrorAccountSettingsHasUsedInitialImport(
-            supabase,
-            user.id,
-            true
-          )
-          if (mirrorErr) {
-            console.error("mirror account_settings.has_used_initial_import:", mirrorErr)
+          if (!user?.id) {
+            throw new Error("Please log in first.")
           }
-        }
-      }
 
-      const skipped = summary.failed
-      const errLines = rowResults
-        .filter((r): r is { ok: false; rowNumber: number; reason: string } => !r.ok)
-        .slice(0, 5)
-        .map((r) => `Row ${r.rowNumber}: ${r.reason}`)
-        .join("\n")
-      const importedCount = tradesToInsert.length
-      const successFeedback = feedbackPresets.importSuccess(importedCount, skipped)
-      let message = successFeedback.message as string
-      if (errLines) message += `\n\n${errLines}`
+          const rateLimit = await consumeAppRateLimit("csv_import")
+          if (!rateLimit.ok) {
+            throw new Error(rateLimit.message)
+          }
 
-      if (!delegateSuccessFeedback) {
-        showPopup({ ...successFeedback, message })
-      }
+          report({ percent: 12, stage: "Processing…" })
 
-      setParsed([])
-      setUnrecognized(false)
-      setBrokerHint(null)
-      setDiagnostics(null)
-      setCsvSupportFile(null)
-      lastCsvFileRef.current = null
-      resetFileInput()
-      notifyGettingStartedChecklistMaybeCompleted()
-      onImportSuccess?.({
-        count: importedCount,
-        skipped,
-        errorSummary: errLines || undefined,
+          const { data: profile, error: profileErr } = await supabase
+            .from("profiles")
+            .select("has_used_initial_import")
+            .eq("id", user.id)
+            .single()
+
+          if (profileErr || !profile) {
+            console.error("Profile fetch failed:", profileErr)
+            throw new Error("Could not verify account. Try again.")
+          }
+
+          const hasUsedInitialImport = profile.has_used_initial_import === true
+
+          const parseResult = buildTradesFromParsedCsv(parsed, user.id)
+          const { parsedTrades, summary, rowResults } = parseResult
+
+          if (!parsedTrades.length) {
+            setUnrecognized(isCsvFormatUnrecognized(summary))
+            setBrokerHint(detectCsvBrokerHint(parsed))
+            setDiagnostics(buildCsvImportDiagnostics(parsed, parseResult))
+            openFailureModal("No trades could be imported from this CSV.")
+            throw new Error("No trades could be imported from this CSV.")
+          }
+
+          if (csvTradesHaveFutureDate(parsedTrades)) {
+            showPopup(feedbackPresets.csvImportFutureTradeDate())
+            throw new Error("Trades cannot have future dates.")
+          }
+
+          setUnrecognized(false)
+          if (summary.failed > 0) {
+            setDiagnostics(buildCsvImportDiagnostics(parsed, parseResult))
+          } else {
+            setDiagnostics(null)
+          }
+
+          const tradesToInsert = parsedTrades
+
+          if (!tradesToInsert.length) {
+            throw new Error("No trades could be imported from this file.")
+          }
+
+          const isInitialImportOnRows = !hasUsedInitialImport
+
+          report({ percent: 40, stage: "Importing…" })
+
+          let error: { message?: string; details?: string; hint?: string } | null =
+            null
+
+          if (selectedAccount) {
+            const res = await insertCsvTradesWithAccount(
+              supabase,
+              tradesToInsert,
+              selectedAccount,
+              { isInitialImport: isInitialImportOnRows }
+            )
+            error = res.error
+          } else {
+            const rowsToInsert = tradesInsertRowsPrivate(tradesToInsert, {
+              isInitialImport: isInitialImportOnRows,
+            })
+
+            const { error: importAcctErr } = await ensureImportedCsvAccountRegistered(
+              supabase,
+              user.id
+            )
+            if (importAcctErr) {
+              console.error(importAcctErr)
+              throw new Error(
+                "Could not register imported account row. Try again."
+              )
+            }
+
+            const ins = await supabase.from("trades").insert(rowsToInsert)
+            error = ins.error
+          }
+
+          if (error) {
+            console.error("INSERT ERROR:", error)
+            throw new Error(handleSupabaseError(error))
+          }
+
+          report({ percent: 85, stage: "Finishing…" })
+
+          if (!hasUsedInitialImport) {
+            const { error: initialImportFlagErr } = await supabase
+              .from("profiles")
+              .update({ has_used_initial_import: true })
+              .eq("id", user.id)
+            if (initialImportFlagErr) {
+              console.error("mark has_used_initial_import:", initialImportFlagErr)
+            } else {
+              const { error: mirrorErr } =
+                await mirrorAccountSettingsHasUsedInitialImport(
+                  supabase,
+                  user.id,
+                  true
+                )
+              if (mirrorErr) {
+                console.error(
+                  "mirror account_settings.has_used_initial_import:",
+                  mirrorErr
+                )
+              }
+            }
+          }
+
+          const skipped = summary.failed
+          const errLines = rowResults
+            .filter(
+              (r): r is { ok: false; rowNumber: number; reason: string } => !r.ok
+            )
+            .slice(0, 5)
+            .map((r) => `Row ${r.rowNumber}: ${r.reason}`)
+            .join("\n")
+          const importedCount = tradesToInsert.length
+          const successFeedback = feedbackPresets.importSuccess(
+            importedCount,
+            skipped
+          )
+          let message = successFeedback.message as string
+          if (errLines) message += `\n\n${errLines}`
+
+          if (!delegateSuccessFeedback) {
+            showPopup({ ...successFeedback, message })
+          }
+
+          setParsed([])
+          setUnrecognized(false)
+          setBrokerHint(null)
+          setDiagnostics(null)
+          setCsvSupportFile(null)
+          lastCsvFileRef.current = null
+          resetFileInput()
+          notifyGettingStartedChecklistMaybeCompleted()
+          onImportSuccess?.({
+            count: importedCount,
+            skipped,
+            errorSummary: errLines || undefined,
+          })
+        },
       })
+    } catch {
+      // Upload manager handles retry/cancel.
+    } finally {
+      endImport()
     }
-
-    endImport()
   }
 
   const isTradovateFormat = parsed.length > 0 && isTradovateCsvRow(parsed[0])

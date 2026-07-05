@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import { profileNeedsUsername } from "@/lib/profileOnboardingGate"
 import { supabase } from "@/lib/supabaseClient"
 import { uploadAvatarFile } from "@/lib/avatarUpload"
+import { useUploadProgress } from "@/lib/uploadProgress/UploadProgressProvider"
 import { ProfileAvatarImg } from "@/app/components/SafeProfileAvatar"
 import {
   isProfilesUsernameConflict,
@@ -75,6 +76,7 @@ export default function ProfileOnboarding({
   onComplete,
 }: ProfileOnboardingProps) {
   const { showPopup, ...feedbackModalProps } = useFeedbackPopup()
+  const { runUpload } = useUploadProgress()
   const [username, setUsername] = useState(() =>
     sanitizeUsernameInputForTyping(
       initialUsername ? String(initialUsername) : ""
@@ -188,8 +190,22 @@ export default function ProfileOnboarding({
     try {
       let avatarUrl: string | null = avatarPreview
       if (avatarFile) {
-        const uploaded = await uploadAvatarFile(userId, avatarFile)
-        if (uploaded) avatarUrl = uploaded
+        try {
+          await runUpload({
+            title: "Uploading Profile Picture",
+            execute: async (report) => {
+              const uploaded = await uploadAvatarFile(userId, avatarFile, {
+                onProgress: report,
+              })
+              if (!uploaded) {
+                throw new Error("Could not upload profile picture.")
+              }
+              avatarUrl = uploaded
+            },
+          })
+        } catch {
+          return
+        }
       }
 
       const patch = {
