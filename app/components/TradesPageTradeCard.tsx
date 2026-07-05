@@ -13,12 +13,15 @@ import { formatMoneyUnknown, formatNumberUnknown, formatTradePoints } from "@/li
 import { safeAccountNumberLabel, formatTradeAccountNameSizeLine } from "@/lib/tradeAccountDisplay"
 import { tradeScreenshotPublicUrl } from "@/lib/storagePublicUrl"
 import StorageImage from "@/app/components/ui/StorageImage"
+import { type ReelRow } from "@/lib/reels"
 
 export type TradesPageTradeCardProps = {
   trade: any
   showAdvanced: boolean
   accountRow?: any | null
   shareProfile?: { referral_code?: string | null } | null
+  attachedReel?: ReelRow | null
+  onOpenReplay?: () => void
   onEdit: (trade: any) => void
   onDelete: (tradeId: string) => void
   onSendClick: (trade: any) => void
@@ -36,6 +39,8 @@ function TradesPageTradeCard({
   onSendClick,
   onAnalyze,
   onImageClick,
+  attachedReel = null,
+  onOpenReplay,
 }: TradesPageTradeCardProps) {
   const entryPrice = trade.entry_price ?? trade.entry ?? null
   const exitPrice = trade.exit_price ?? trade.exit ?? null
@@ -191,7 +196,12 @@ function TradesPageTradeCard({
             {tradeTitle}
           </h2>
 
-          <TradeCardTimingBlock trade={trade} />
+          <TradeCardTimingBlock
+            trade={trade}
+            onViewReel={
+              attachedReel && onOpenReplay ? onOpenReplay : undefined
+            }
+          />
 
           <div
             className={`inline-block px-3 py-1 rounded-lg text-lg font-bold mt-1 ${

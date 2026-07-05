@@ -1,5 +1,6 @@
 import type { FeedItem, FeedItemKind, FeedScope } from "@/app/components/feed/feedPostHelpers"
 import {
+  dedupeFeedItems,
   normalizeAchievementFeedItem,
   normalizeProfileFeedItem,
   normalizeReelFeedItem,
@@ -88,6 +89,16 @@ const RAW_FEED_ROWS: Record<string, unknown>[] = [
       duration_text: "18m",
       public_description:
         "Clean opening drive long — waited for liquidity sweep, entered on 1m BOS. Took partials at VWAP extension.",
+      reels: {
+        id: "demo-reel-1",
+        user_id: DEMO_USER_ID,
+        video_url:
+          "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+        thumbnail_url: demoReelThumbnailUrl("demo-reel-1"),
+        duration_seconds: 42,
+        trade_id: "dt-24",
+        visibility: "public",
+      },
     },
   },
   {
@@ -568,7 +579,7 @@ export function topUpDemoMergedFeedBuffer(options: {
   pageSize?: number
 }) {
   const pageSize = options.pageSize ?? FEED_PAGE_SIZE
-  let buffer = [...options.buffer]
+  let buffer = dedupeFeedItems([...options.buffer])
   let tradePage = options.tradePage
   let profilePage = options.profilePage
   let achievementPage = options.achievementPage
@@ -639,14 +650,7 @@ export function topUpDemoMergedFeedBuffer(options: {
 
     if (batch.length === 0) break
 
-    const merged = sortFeedItemsDesc([...buffer, ...batch])
-    const seen = new Set<string>()
-    buffer = merged.filter((item) => {
-      const key = `${item.feedKind}:${item.id}`
-      if (seen.has(key)) return false
-      seen.add(key)
-      return true
-    })
+    buffer = dedupeFeedItems(sortFeedItemsDesc([...buffer, ...batch]))
   }
 
   return {

@@ -19,6 +19,7 @@ type FeedPostBodyProps = {
   rr: unknown
   publicDesc: string | null
   timingTrade: Record<string, unknown> | null
+  onViewReel?: () => void
 }
 
 function FeedPostBody({
@@ -31,6 +32,7 @@ function FeedPostBody({
   rr,
   publicDesc,
   timingTrade,
+  onViewReel,
 }: FeedPostBodyProps) {
   const resolvedPoints = resolveTradePoints(timingTrade)
   return (
@@ -75,9 +77,12 @@ function FeedPostBody({
         <p className="px-1 text-sm leading-relaxed text-white">{publicDesc}</p>
       ) : null}
 
-      {timingTrade ? (
+      {timingTrade || onViewReel ? (
         <div className="px-1">
-          <TradeCardTimingBlock trade={timingTrade} />
+          <TradeCardTimingBlock
+            trade={timingTrade ?? {}}
+            onViewReel={onViewReel}
+          />
         </div>
       ) : null}
     </div>

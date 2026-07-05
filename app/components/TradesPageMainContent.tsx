@@ -53,6 +53,8 @@ type TradesPageMainContentProps = {
   onImageClick: (imageUrl: string) => void
   onLoadMore: () => void
   onImportCsv: () => void
+  tradeReelsByTradeId?: Record<string, import("@/lib/reels").ReelRow>
+  onOpenTradeReplay?: (trade: any) => void
 }
 
 function Stat({ title, value, positive }: any) {
@@ -102,6 +104,8 @@ function TradesPageMainContent({
   onImageClick,
   onLoadMore,
   onImportCsv,
+  tradeReelsByTradeId = {},
+  onOpenTradeReplay,
 }: TradesPageMainContentProps) {
   return (
     <>
@@ -295,6 +299,12 @@ function TradesPageMainContent({
                   showAdvanced={showAdvanced}
                   accountRow={accountById[String(trade.account_id ?? "")]}
                   shareProfile={gateProfile}
+                  attachedReel={tradeReelsByTradeId[String(trade.id)] ?? null}
+                  onOpenReplay={
+                    onOpenTradeReplay
+                      ? () => onOpenTradeReplay(trade)
+                      : undefined
+                  }
                   onEdit={onEditTrade}
                   onDelete={onDeleteTrade}
                   onSendClick={onSendTrade}

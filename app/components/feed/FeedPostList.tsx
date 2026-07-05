@@ -21,6 +21,7 @@ type FeedPostListProps = {
   onSelectPost: (post: any) => void
   onOpenComments: (post: any) => void
   onOpenLinkedTrade?: (post: any) => void
+  onOpenAttachedReel?: (post: any, reel: import("@/lib/reels").ReelRow) => void
   onToggleLike: (post: any) => void
   onSubmitComment: (post: any, text: string) => Promise<boolean>
   onSharePost: (post: any) => void
@@ -42,6 +43,7 @@ function FeedPostList({
   onSelectPost,
   onOpenComments,
   onOpenLinkedTrade,
+  onOpenAttachedReel,
   onToggleLike,
   onSubmitComment,
   onSharePost,
@@ -131,6 +133,7 @@ function FeedPostList({
             draftSyncRef={draftSyncRef}
             onSelectPost={onSelectPost}
             onOpenComments={onOpenComments}
+            onOpenAttachedReel={onOpenAttachedReel}
             onToggleLike={onToggleLike}
             onSubmitComment={onSubmitComment}
             onSharePost={onSharePost}

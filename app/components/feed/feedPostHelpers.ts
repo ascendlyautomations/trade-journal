@@ -3,6 +3,11 @@ import {
   normalizeFeedAccountType,
   resolveFeedTradeAccountType,
 } from "@/lib/feedAccountType"
+import {
+  resolveTradeAttachedReel,
+  TRADE_ATTACHED_REEL_CARD_SELECT,
+  type ReelRow,
+} from "@/lib/reels"
 
 export { normalizeFeedAccountType, resolveFeedTradeAccountType }
 
@@ -18,8 +23,26 @@ export type FeedItem = {
   [key: string]: unknown
 }
 
+const FEED_TRADE_JOIN_SELECT = [
+  "created_at",
+  "public_description",
+  "user_id",
+  "ticker",
+  "direction",
+  "account_type",
+  "points",
+  "entry_time",
+  "exit_time",
+  "entry_price",
+  "exit_price",
+  "trade_date",
+  "duration_seconds",
+  "duration_text",
+  `reels(${TRADE_ATTACHED_REEL_CARD_SELECT})`,
+].join(", ")
+
 export const FEED_POSTS_SELECT =
-  "id, user_id, trade_id, created_at, pnl, rr, image_url, profiles(username, avatar_url), trades(created_at, public_description, user_id, ticker, direction, account_type, points, entry_time, exit_time, entry_price, exit_price, trade_date, duration_seconds, duration_text)"
+  `id, user_id, trade_id, created_at, pnl, rr, image_url, profiles(username, avatar_url), trades(${FEED_TRADE_JOIN_SELECT})`
 
 /** Trade owner for notifications (not always same as post author). */
 export function postTradeOwnerUserId(post: {
@@ -118,13 +141,6 @@ export function sortFeedItemsDesc(items: FeedItem[]): FeedItem[] {
 }
 
 export function dedupeFeedItems(items: FeedItem[]): FeedItem[] {
-  const tradeIdsWithReel = new Set<string>()
-  for (const item of items) {
-    if (item.feedKind === "reel" && item.trade_id != null) {
-      tradeIdsWithReel.add(String(item.trade_id))
-    }
-  }
-
   const seen = new Set<string>()
   const out: FeedItem[] = []
 
@@ -132,10 +148,11 @@ export function dedupeFeedItems(items: FeedItem[]): FeedItem[] {
     const key = `${item.feedKind}:${item.id}`
     if (seen.has(key)) continue
 
+    // Trade-attached reels render on the trade card — skip duplicate reel feed items.
     if (
-      item.feedKind === "trade" &&
+      item.feedKind === "reel" &&
       item.trade_id != null &&
-      tradeIdsWithReel.has(String(item.trade_id))
+      String(item.trade_id).trim() !== ""
     ) {
       continue
     }
@@ -214,6 +231,11 @@ export function postTradeJoin(post: any) {
   const t = post?.trades
   if (!t) return null
   return Array.isArray(t) ? t[0] : t
+}
+
+/** Linked replay for a trade feed post (from embedded trades.reels join). */
+export function postAttachedReel(post: any): ReelRow | null {
+  return resolveTradeAttachedReel(postTradeJoin(post))
 }
 
 /** When the trade was posted — prefers trade.created_at over post.created_at. */

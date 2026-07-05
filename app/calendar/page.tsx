@@ -4,6 +4,8 @@ import EmptyState from "../components/ui/EmptyState"
 import { SkeletonCalendarPage } from "../components/ui/skeletons"
 import TradesPageTradeCard from "../components/TradesPageTradeCard"
 import TradesPageOverlays from "../components/TradesPageOverlays"
+import ReelViewer from "../components/profile/ReelViewer"
+import { fetchReelsByTradeIds, type ReelRow } from "@/lib/reels"
 import { formatEST } from "@/lib/formatEST"
 import {
   getTradingDayKey,
@@ -43,6 +45,10 @@ export default function CalendarPage() {
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [selectedTrades, setSelectedTrades] = useState<any[]>([])
+  const [tradeReelsByTradeId, setTradeReelsByTradeId] = useState<
+    Record<string, ReelRow>
+  >({})
+  const [selectedReplay, setSelectedReplay] = useState<ReelRow | null>(null)
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
   const [editingTrade, setEditingTrade] = useState<any | null>(null)
   const [sendTradeId, setSendTradeId] = useState<string | null>(null)
@@ -54,6 +60,31 @@ export default function CalendarPage() {
     })
     return m
   }, [accountRows])
+
+  useEffect(() => {
+    if (selectedTrades.length === 0) {
+      setTradeReelsByTradeId({})
+      return
+    }
+
+    let cancelled = false
+    const tradeIds = selectedTrades
+      .map((trade) => String(trade.id))
+      .filter((id) => id.trim() !== "")
+
+    void fetchReelsByTradeIds(supabase, tradeIds).then((map) => {
+      if (cancelled) return
+      const record: Record<string, ReelRow> = {}
+      map.forEach((reel, tradeId) => {
+        record[tradeId] = reel
+      })
+      setTradeReelsByTradeId(record)
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [selectedTrades])
 
   async function handleTradeFormSaved() {
     if (selectedDate) {
@@ -564,6 +595,11 @@ export default function CalendarPage() {
                           showAdvanced={false}
                           accountRow={accountById[String(trade.account_id ?? "")]}
                           shareProfile={shareProfile}
+                          attachedReel={tradeReelsByTradeId[String(trade.id)] ?? null}
+                          onOpenReplay={() => {
+                            const reel = tradeReelsByTradeId[String(trade.id)]
+                            if (reel) setSelectedReplay(reel)
+                          }}
                           onEdit={(t) => setEditingTrade({ ...t })}
                           onDelete={handleDeleteTrade}
                           onSendClick={(t) => setSendTradeId(String(t.id))}
@@ -598,6 +634,19 @@ export default function CalendarPage() {
         onTradeFormSaved={() => void handleTradeFormSaved()}
         onClosePerformanceShare={() => {}}
         onCloseSendModal={() => setSendTradeId(null)}
+      />
+      <ReelViewer
+        reel={selectedReplay}
+        creator={
+          shareProfile
+            ? {
+                username: shareProfile.username,
+                avatar_url: shareProfile.avatar_url,
+                name: shareProfile.name,
+              }
+            : null
+        }
+        onClose={() => setSelectedReplay(null)}
       />
       <ConfirmModal {...confirmModalProps} />
     </>

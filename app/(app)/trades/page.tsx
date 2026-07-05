@@ -15,7 +15,9 @@ import {
 import { useRouter } from "next/navigation"
 import TradesPageMainContent from "../../components/TradesPageMainContent"
 import TradesPageOverlays from "../../components/TradesPageOverlays"
+import ReelViewer from "../../components/profile/ReelViewer"
 import { ConfirmModal, useDeleteTradeConfirmation } from "../../components/ui"
+import { fetchReelsByTradeIds, type ReelRow } from "@/lib/reels"
 import { useUserProfile } from "@/lib/UserProfileProvider"
 import { useCachedAccounts, useCachedTrades } from "@/lib/useAppDataCache"
 import { getCachedAccounts, getCachedTrades } from "@/lib/appDataCache"
@@ -60,6 +62,10 @@ export default function TradesPage() {
   const [showExportUpgradeModal, setShowExportUpgradeModal] = useState(false)
   const [sendTradeId, setSendTradeId] = useState<string | null>(null)
   const [visibleCount, setVisibleCount] = useState(10)
+  const [tradeReelsByTradeId, setTradeReelsByTradeId] = useState<
+    Record<string, ReelRow>
+  >({})
+  const [selectedReplay, setSelectedReplay] = useState<ReelRow | null>(null)
   const router = useRouter()
 
   const accountById = useMemo(() => {
@@ -79,6 +85,31 @@ export default function TradesPage() {
   useEffect(() => {
     setVisibleCount(10)
   }, [timeframe, accountFilter, accountTypeFilter, resultFilter])
+
+  useEffect(() => {
+    if (trades.length === 0) {
+      setTradeReelsByTradeId({})
+      return
+    }
+
+    let cancelled = false
+    const tradeIds = trades
+      .map((trade) => String(trade.id))
+      .filter((id) => id.trim() !== "")
+
+    void fetchReelsByTradeIds(supabase, tradeIds).then((map) => {
+      if (cancelled) return
+      const record: Record<string, ReelRow> = {}
+      map.forEach((reel, tradeId) => {
+        record[tradeId] = reel
+      })
+      setTradeReelsByTradeId(record)
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [trades])
 
   useEffect(() => {
     if (typeof window === "undefined" || loading || trades.length === 0) return
@@ -126,6 +157,14 @@ export default function TradesPage() {
     }
     setSendTradeId(String(trade.id))
   }, [])
+
+  const handleOpenTradeReplay = useCallback(
+    (trade: any) => {
+      const reel = tradeReelsByTradeId[String(trade.id)]
+      if (reel) setSelectedReplay(reel)
+    },
+    [tradeReelsByTradeId]
+  )
 
   const handleAnalyzeTrade = useCallback(
     (trade: any) => {
@@ -363,6 +402,8 @@ export default function TradesPage() {
             onAnalyzeTrade={handleAnalyzeTrade}
             onImageClick={handleImageClick}
             onLoadMore={handleLoadMore}
+            tradeReelsByTradeId={tradeReelsByTradeId}
+            onOpenTradeReplay={handleOpenTradeReplay}
           />
         </div>
       </div>
@@ -387,6 +428,20 @@ export default function TradesPage() {
       <ProUpgradeModal
         open={showExportUpgradeModal}
         onClose={() => setShowExportUpgradeModal(false)}
+      />
+
+      <ReelViewer
+        reel={selectedReplay}
+        creator={
+          gateProfile
+            ? {
+                username: gateProfile.username,
+                avatar_url: gateProfile.avatar_url,
+                name: gateProfile.name,
+              }
+            : null
+        }
+        onClose={() => setSelectedReplay(null)}
       />
     </>
   )

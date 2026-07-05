@@ -362,7 +362,7 @@ function TradeCard({
   showInteractions?: boolean
   onOpenDetail?: () => void
   onOpenComments?: () => void
-  attachedReel?: { id: string } | null
+  attachedReel?: ReelRow | null
   onOpenReplay?: () => void
   commentsExpanded?: boolean
   scrollToCommentsOnMount?: boolean
@@ -475,20 +475,12 @@ function TradeCard({
       {desc ? (
         <p className="px-1 text-sm leading-relaxed text-white">{desc}</p>
       ) : null}
-      {attachedReel && onOpenReplay ? (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation()
-            onOpenReplay()
-          }}
-          className="inline-flex items-center gap-1.5 px-1 text-xs font-medium text-violet-300/90 transition hover:text-violet-200"
-        >
-          <span aria-hidden>▶</span>
-          Watch Reel
-        </button>
-      ) : null}
-      <TradeCardTimingBlock trade={trade} />
+      <TradeCardTimingBlock
+        trade={trade}
+        onViewReel={
+          attachedReel && onOpenReplay ? onOpenReplay : undefined
+        }
+      />
     </>
   )
 

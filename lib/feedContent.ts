@@ -12,6 +12,7 @@ import {
   FEED_ACHIEVEMENT_POSTS_SELECT,
 } from "@/lib/achievementPostEngagement"
 import { FEED_REELS_SELECT } from "@/lib/reelEngagement"
+import { fetchReelsByTradeIds } from "@/lib/reels"
 import {
   FEED_POSTS_SELECT,
   type FeedContentFilter,
@@ -22,6 +23,8 @@ import {
   normalizeProfileFeedItem,
   normalizeReelFeedItem,
   normalizeTradeFeedItem,
+  postAttachedReel,
+  postTradeJoin,
   sortFeedItemsDesc,
 } from "@/app/components/feed/feedPostHelpers"
 
@@ -73,6 +76,39 @@ function applyScopeFilter<T extends { neq: Function; in: Function; not: Function
   return scoped
 }
 
+async function hydrateTradeFeedItemsWithReels(
+  supabase: SupabaseClient,
+  items: FeedItem[]
+): Promise<FeedItem[]> {
+  const tradeIds = items
+    .filter((item) => item.feedKind === "trade" && !postAttachedReel(item))
+    .map((item) =>
+      item.trade_id != null ? String(item.trade_id) : String(item.id)
+    )
+    .filter((id) => id.trim() !== "")
+
+  if (tradeIds.length === 0) return items
+
+  const reelMap = await fetchReelsByTradeIds(supabase, tradeIds)
+  if (reelMap.size === 0) return items
+
+  return items.map((item) => {
+    if (item.feedKind !== "trade" || postAttachedReel(item)) return item
+    const tradeId =
+      item.trade_id != null ? String(item.trade_id) : String(item.id)
+    const reel = reelMap.get(tradeId)
+    if (!reel) return item
+
+    const trade = postTradeJoin(item)
+    if (!trade) return item
+
+    return {
+      ...item,
+      trades: { ...trade, reels: reel },
+    }
+  })
+}
+
 export async function fetchTradeFeedBatch(
   supabase: SupabaseClient,
   options: {
@@ -113,11 +149,46 @@ export async function fetchTradeFeedBatch(
   }
 
   const { data, error } = await scoped
-  if (error) throw error
 
-  return {
-    items: (data ?? []).map((row) => normalizeTradeFeedItem(row as Record<string, unknown>)),
+  let rows = data
+
+  if (error) {
+    const fallbackSelect = FEED_POSTS_SELECT.replace(
+      /, reels\([^)]+\)/,
+      ""
+    )
+    const retry = supabase
+      .from("posts")
+      .select(fallbackSelect)
+      .order("created_at", { ascending: false })
+      .range(from, to)
+    const retryScoped = applyScopeFilter(
+      retry,
+      options.scope,
+      options.userId,
+      options.followingIds
+    )
+    if (!retryScoped) {
+      return { items: [], emptyFollowing: true }
+    }
+    const retryResult = await retryScoped
+    if (retryResult.error) throw retryResult.error
+    rows = retryResult.data
   }
+
+  let items = (rows ?? []).map((row) =>
+    normalizeTradeFeedItem(row as Record<string, unknown>)
+  )
+
+  if (
+    items.some(
+      (item) => item.feedKind === "trade" && !postAttachedReel(item)
+    )
+  ) {
+    items = await hydrateTradeFeedItemsWithReels(supabase, items)
+  }
+
+  return { items }
 }
 
 export async function fetchProfileFeedBatch(
@@ -467,6 +538,8 @@ export async function topUpMergedFeedBuffer(
 
     buffer = sortFeedItemsDesc(buffer)
   }
+
+  buffer = await hydrateTradeFeedItemsWithReels(supabase, buffer)
 
   return {
     buffer,

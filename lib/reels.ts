@@ -45,6 +45,43 @@ export const REEL_TRADE_EMBED =
 export const REEL_ROW_SELECT =
   "id, user_id, caption, video_url, thumbnail_url, duration_seconds, visibility, trade_id, kind, created_at, updated_at"
 
+/** Minimal reel fields embedded on trade joins for card previews. */
+export const TRADE_ATTACHED_REEL_CARD_SELECT =
+  "id, user_id, video_url, thumbnail_url, duration_seconds, trade_id, visibility"
+
+export function formatReelDuration(totalSeconds: number): string {
+  const seconds = Math.max(0, Math.floor(totalSeconds))
+  const mins = Math.floor(seconds / 60)
+  const secs = seconds % 60
+  return `${mins}:${String(secs).padStart(2, "0")}`
+}
+
+/** Reel from a trade join (`trades.reels`) or a direct reel row. */
+export function resolveTradeAttachedReel(
+  source:
+    | { reels?: ReelRow | ReelRow[] | null }
+    | ReelRow
+    | null
+    | undefined
+): ReelRow | null {
+  if (!source) return null
+
+  if (
+    "video_url" in source &&
+    "thumbnail_url" in source &&
+    source.id != null &&
+    String(source.id).trim() !== ""
+  ) {
+    return source as ReelRow
+  }
+
+  const trade = source as { reels?: ReelRow | ReelRow[] | null }
+  if (!trade.reels) return null
+  const row = Array.isArray(trade.reels) ? trade.reels[0] : trade.reels
+  if (!row?.id) return null
+  return row
+}
+
 export const PROFILE_REELS_SELECT = `${REEL_ROW_SELECT}, ${REEL_TRADE_EMBED}`
 
 export const FEED_REELS_SELECT =

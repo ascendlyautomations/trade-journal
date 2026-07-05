@@ -25,6 +25,9 @@ import { resolveTradePoints } from "@/lib/resolveTradePoints"
 import { profilePath } from "@/lib/profileRoutes"
 import { profileSeoDisplayName } from "@/lib/publicSeo"
 import { readTradeDetail, writeTradeDetail } from "@/lib/tradeDetailCache"
+import TradeCardTimingBlock from "@/app/components/TradeCardTimingBlock"
+import ReelViewer from "@/app/components/profile/ReelViewer"
+import { fetchTradeReel, type ReelRow } from "@/lib/reels"
 
 function tradeScreenshotSrc(url: string | null | undefined): string | null {
   const raw = url != null ? String(url).trim() : ""
@@ -50,6 +53,8 @@ export default function TradeDetailPageClient({
   const [userId, setUserId] = useState<string | undefined>(cached?.sessionUserId)
   const [loading, setLoading] = useState(!cached)
   const [commentsFocused, setCommentsFocused] = useState(false)
+  const [attachedReel, setAttachedReel] = useState<ReelRow | null>(null)
+  const [selectedReplay, setSelectedReplay] = useState<ReelRow | null>(null)
 
   useEffect(() => {
     if (!tradeId) {
@@ -116,6 +121,13 @@ export default function TradeDetailPageClient({
         ownerProfile: owner,
         sessionUserId,
       })
+
+      if (resolvedTrade?.id) {
+        const reel = await fetchTradeReel(supabase, String(resolvedTrade.id))
+        if (!cancelled) setAttachedReel(reel)
+      } else if (!cancelled) {
+        setAttachedReel(null)
+      }
 
       setLoading(false)
     })()
@@ -197,6 +209,14 @@ export default function TradeDetailPageClient({
           {trade.public_description}
         </p>
       ) : null}
+      <TradeCardTimingBlock
+        trade={trade}
+        onViewReel={
+          attachedReel
+            ? () => setSelectedReplay(attachedReel)
+            : undefined
+        }
+      />
       </div>
     </div>
   ) : null
@@ -317,6 +337,20 @@ export default function TradeDetailPageClient({
           </div>
         </div>
       </div>
+
+      <ReelViewer
+        reel={selectedReplay}
+        creator={
+          ownerProfile
+            ? {
+                username: ownerProfile.username,
+                avatar_url: ownerProfile.avatar_url,
+                name: ownerProfile.name,
+              }
+            : null
+        }
+        onClose={() => setSelectedReplay(null)}
+      />
     </>
   )
 }

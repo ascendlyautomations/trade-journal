@@ -2,7 +2,7 @@
 
 import { memo, useCallback, useMemo } from "react"
 import FeedReelCardActions from "./FeedReelCardActions"
-import StorageImage from "@/app/components/ui/StorageImage"
+import ReelThumbnailPreview from "@/app/components/ReelThumbnailPreview"
 import FeedPostHeader from "./FeedPostHeader"
 import FeedReelOwnerMenu from "./FeedReelOwnerMenu"
 import type { FeedLikeMeta } from "./FeedPostCard"
@@ -26,13 +26,6 @@ type FeedReelCardProps = {
   onOpenLinkedTrade?: (post: any) => void
   onToggleLike: (post: any) => void
   onSharePost: (post: any) => void
-}
-
-function formatReelDuration(totalSeconds: number): string {
-  const seconds = Math.max(0, Math.floor(totalSeconds))
-  const mins = Math.floor(seconds / 60)
-  const secs = seconds % 60
-  return `${mins}:${String(secs).padStart(2, "0")}`
 }
 
 function FeedReelCard({
@@ -121,25 +114,7 @@ function FeedReelCard({
       </div>
 
       <div className="px-4 pt-3">
-        <div className="relative mx-auto max-w-[280px] overflow-hidden rounded-xl border border-white/10 bg-black/40">
-          <StorageImage
-            src={String(post.thumbnail_url)}
-            originalSrc={String(post.thumbnail_url)}
-            preset="reel-thumb"
-            alt=""
-            className="aspect-[9/16] w-full object-cover"
-          />
-          <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-            <span className="flex h-12 w-12 items-center justify-center rounded-full border border-white/20 bg-black/50 text-lg text-white backdrop-blur-sm">
-              ▶
-            </span>
-          </div>
-          {post.duration_seconds != null ? (
-            <span className="absolute bottom-2 right-2 rounded-md bg-black/70 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-white">
-              {formatReelDuration(Number(post.duration_seconds))}
-            </span>
-          ) : null}
-        </div>
+        <ReelThumbnailPreview reel={post} onClick={handleArticleClick} />
         {caption ? (
           <p className="mt-3 line-clamp-3 whitespace-pre-wrap text-sm text-gray-200">
             {caption}

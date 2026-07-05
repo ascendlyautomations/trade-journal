@@ -13,6 +13,8 @@ import FeedPostActions from "./FeedPostActions"
 import FeedPostBody from "./FeedPostBody"
 import FeedPostHeader from "./FeedPostHeader"
 import FeedPostScreenshot from "./FeedPostScreenshot"
+import { postAttachedReel } from "./feedPostHelpers"
+import type { ReelRow } from "@/lib/reels"
 
 export type FeedLikeMeta = { count: number; liked: boolean }
 
@@ -34,6 +36,7 @@ export type FeedPostCardProps = {
   onToggleLike: (post: any) => void
   onSubmitComment: (post: any, text: string) => Promise<boolean>
   onSharePost: (post: any) => void
+  onOpenAttachedReel?: (post: any, reel: ReelRow) => void
 }
 
 function FeedPostCard({
@@ -50,6 +53,7 @@ function FeedPostCard({
   onToggleLike,
   onSubmitComment: _onSubmitComment,
   onSharePost,
+  onOpenAttachedReel,
 }: FeedPostCardProps) {
   const handleOpenComments = useCallback(() => {
     onOpenComments(post)
@@ -78,6 +82,7 @@ function FeedPostCard({
   }, [post.profiles?.avatar_url])
   const profileUsername = post.profiles?.username || "User"
   const tradeRow = useMemo(() => postTradeJoin(post), [post.trades])
+  const attachedReel = useMemo(() => postAttachedReel(post), [post])
   const publicDesc = useMemo(() => postPublicDescription(post), [post.trades])
   const pnl = useMemo(() => Number(post.pnl), [post.pnl])
   const pnlPositive = !Number.isNaN(pnl) && pnl >= 0
@@ -137,6 +142,11 @@ function FeedPostCard({
         rr={post.rr}
         publicDesc={publicDesc}
         timingTrade={tradeRow}
+        onViewReel={
+          attachedReel && onOpenAttachedReel
+            ? () => onOpenAttachedReel(post, attachedReel)
+            : undefined
+        }
       />
     </article>
   )

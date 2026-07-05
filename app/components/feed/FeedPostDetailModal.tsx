@@ -22,10 +22,12 @@ import FeedPostMetaRow from "./FeedPostMetaRow"
 import {
   feedCommentTarget,
   getModeStyles,
+  postAttachedReel,
   postImageSrc,
   postPublicDescription,
   postTradeJoin,
 } from "./feedPostHelpers"
+import type { ReelRow } from "@/lib/reels"
 import { formatPublicAccountTypeLabel } from "@/lib/publicAccountPrivacy"
 import type { FeedLikeMeta } from "./FeedPostCard"
 
@@ -43,6 +45,7 @@ type FeedPostDetailModalProps = {
   onSubmitComment: (post: any, text: string) => Promise<boolean>
   onDeleteComment?: (comment: any) => Promise<boolean>
   onSharePost: (post: any) => void
+  onOpenAttachedReel?: (post: any, reel: ReelRow) => void
 }
 
 export default function FeedPostDetailModal({
@@ -59,6 +62,7 @@ export default function FeedPostDetailModal({
   onSubmitComment,
   onDeleteComment,
   onSharePost,
+  onOpenAttachedReel,
 }: FeedPostDetailModalProps) {
   const pid = String(post.id)
   const commentsScrollRef = useRef<HTMLDivElement>(null)
@@ -113,6 +117,8 @@ export default function FeedPostDetailModal({
       username: post.profiles?.username || "User",
     }
   }, [post])
+
+  const attachedReel = useMemo(() => postAttachedReel(post), [post])
 
   const pnlMeta = (
     <>
@@ -227,8 +233,15 @@ export default function FeedPostDetailModal({
             </p>
           ) : null}
 
-          {modalPostDetails.timingTrade ? (
-            <TradeCardTimingBlock trade={modalPostDetails.timingTrade} />
+          {modalPostDetails.timingTrade || attachedReel ? (
+            <TradeCardTimingBlock
+              trade={modalPostDetails.timingTrade ?? {}}
+              onViewReel={
+                attachedReel && onOpenAttachedReel
+                  ? () => onOpenAttachedReel(post, attachedReel)
+                  : undefined
+              }
+            />
           ) : null}
         </div>
       }

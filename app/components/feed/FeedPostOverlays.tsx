@@ -33,6 +33,7 @@ type FeedPostOverlaysProps = {
   onEditReel?: (post: any) => void
   onDeleteReel?: (post: any) => void
   onReplaceReelVideo?: (post: any) => void
+  onOpenAttachedReel?: (post: any, reel: import("@/lib/reels").ReelRow) => void
 }
 
 function FeedPostOverlays({
@@ -60,6 +61,7 @@ function FeedPostOverlays({
   onEditReel,
   onDeleteReel,
   onReplaceReelVideo,
+  onOpenAttachedReel,
 }: FeedPostOverlaysProps) {
   return (
     <>
@@ -127,6 +129,7 @@ function FeedPostOverlays({
             onSubmitComment={onSubmitComment}
             onDeleteComment={onDeleteComment}
             onSharePost={onSharePost}
+            onOpenAttachedReel={onOpenAttachedReel}
           />
         )
       ) : null}

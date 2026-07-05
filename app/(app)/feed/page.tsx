@@ -57,8 +57,10 @@ import {
   normalizeProfileFeedItem,
   normalizeReelFeedItem,
   normalizeTradeFeedItem,
+  postAttachedReel,
   postTradeOwnerUserId,
   queryFeedComments,
+  reelDetailFeedItem,
   withInsertedParentCommentId,
   type FeedContentFilter,
   type FeedItem,
@@ -655,9 +657,19 @@ function FeedPageContent() {
     const achievementIds = postList
       .filter((p) => isAchievementFeedPost(p))
       .map((p) => p.id)
-    const reelIds = postList
-      .filter((p) => isReelFeedPost(p))
-      .map((p) => p.id)
+    const reelIds = [
+      ...postList.filter((p) => isReelFeedPost(p)).map((p) => String(p.id)),
+      ...postList
+        .filter(
+          (p) =>
+            !isProfileFeedPost(p) &&
+            !isAchievementFeedPost(p) &&
+            !isReelFeedPost(p)
+        )
+        .map((p) => postAttachedReel(p)?.id)
+        .filter((id): id is string => id != null && String(id).trim() !== "")
+        .map(String),
+    ].filter((id, index, arr) => arr.indexOf(id) === index)
 
     const [
       { data: tradeLikesRows },
@@ -1562,6 +1574,23 @@ function FeedPageContent() {
       setSelectedPostId(pid)
     },
     [clearFeedDeepLinkParams, selectedPostId]
+  )
+
+  const handleOpenAttachedReel = useCallback(
+    (post: any, reel: ReelRow) => {
+      const reelPost = reelDetailFeedItem(
+        {
+          ...reel,
+          user_id: reel.user_id ?? post.user_id,
+        },
+        post.profiles
+      )
+      setFeedModalPost(reelPost)
+      feedDeepLinkHandledRef.current = null
+      clearFeedDeepLinkParams()
+      setSelectedPostId(String(reel.id))
+    },
+    [clearFeedDeepLinkParams]
   )
 
   const handleSharePost = useCallback((post: any) => {
@@ -2502,6 +2531,7 @@ function FeedPageContent() {
               onSelectPost={handleSelectPost}
               onOpenComments={handleOpenPostComments}
               onOpenLinkedTrade={handleOpenLinkedTrade}
+              onOpenAttachedReel={handleOpenAttachedReel}
               onToggleLike={toggleLike}
               onSubmitComment={submitComment}
               onSharePost={handleSharePost}
@@ -2573,6 +2603,7 @@ function FeedPageContent() {
           onEditReel={handleStartEditReel}
           onDeleteReel={requestDeleteReel}
           onReplaceReelVideo={handleReplaceReelVideo}
+          onOpenAttachedReel={handleOpenAttachedReel}
         />
       ) : null}
 
