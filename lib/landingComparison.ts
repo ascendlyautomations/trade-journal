@@ -41,7 +41,7 @@ export const LANDING_COMPARISON_FEATURE_LABELS = {
   unlimitedTradeJournaling: TRADETRAXS_PRO_FEATURE_LABELS.unlimitedTrades,
   multipleTradingAccounts: TRADETRAXS_PRO_FEATURE_LABELS.unlimitedTradingAccounts,
   screenshotUploads: "Screenshot Uploads",
-  tradingReels: "Trading Reels",
+  tradingReels: "Trading Clips",
   directMessaging: "Direct Messaging",
   continuousUpdates: "Continuous Feature Updates",
 } as const

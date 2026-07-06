@@ -352,7 +352,7 @@ export async function publishReel(
     return { error: videoUpload.error }
   }
 
-  report({ percent: 90, stage: "Creating reel…" })
+  report({ percent: 90, stage: "Creating clip…" })
 
   const caption = input.caption?.trim() ?? ""
 
@@ -495,7 +495,7 @@ export async function publishTradeReel(
     tradeId: input.tradeId,
     userId: input.userId,
   })
-  report({ percent: 90, stage: "Creating reel…" })
+  report({ percent: 90, stage: "Creating clip…" })
 
   const { data, error } = await supabase
     .from("reels")
@@ -733,7 +733,7 @@ export async function replaceTradeReelVideo(
   const previousThumbnailUrl = (existing as ReelRow).thumbnail_url
   await deleteReelStorageFiles(supabase, existing as ReelRow)
 
-  report({ percent: 90, stage: "Updating reel…" })
+  report({ percent: 90, stage: "Updating clip…" })
   const { data, error } = await supabase
     .from("reels")
     .update({

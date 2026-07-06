@@ -97,8 +97,8 @@ export const SYSTEM_MILESTONES: readonly SystemMilestone[] = [
   },
   {
     id: "first_reel",
-    title: "First Reel",
-    description: "Published your first trading reel.",
+    title: "First Clip",
+    description: "Published your first trading clip.",
     icon: "🎬",
     isUnlocked: (s) => s.reelCount >= 1,
   },

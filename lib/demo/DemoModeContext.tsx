@@ -70,7 +70,7 @@ const SIGNUP_MESSAGES: Record<DemoSignupReason, { title: string; message: string
   },
   upload: {
     title: "Share your trading journey",
-    message: "Sign up to post reels, screenshots, and trade breakdowns.",
+    message: "Sign up to post clips, screenshots, and trade breakdowns.",
   },
   room: {
     title: "Join Trade Rooms",

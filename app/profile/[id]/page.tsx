@@ -214,7 +214,7 @@ const PUBLIC_PROFILE_SELECT =
 
 const PRIVATE_PROFILE_TAB_COPY = {
   trades: "This trader has chosen to keep their trades private.",
-  reels: "Reels are only visible to approved followers.",
+  reels: "Clips are only visible to approved followers.",
   posts: "Posts are only visible to approved followers.",
 } as const
 
@@ -2745,7 +2745,7 @@ function ProfilePageContent() {
 
       try {
         await runUpload({
-          title: "Uploading Reel",
+          title: "Uploading Clip",
           execute: async (report) => {
             const result = await replaceTradeReelVideo(supabase, {
               reelId,
@@ -4605,7 +4605,7 @@ function ProfilePageContent() {
               }`}
               onClick={() => setActiveTab("reels")}
             >
-              Reels
+              Clips
             </button>
 
             <button
@@ -4760,7 +4760,7 @@ function ProfilePageContent() {
                 ) : profileReels.length === 0 ? (
                   isOwnProfile ? (
                     <EmptyState
-                      title="No Reels Yet"
+                      title="No Clips Yet"
                       description="Share short vertical videos with your followers."
                       action={
                         <button
@@ -4768,7 +4768,7 @@ function ProfilePageContent() {
                           onClick={openCreateReelModal}
                           className="text-sm font-medium text-blue-300 hover:text-blue-200"
                         >
-                          Create Reel →
+                          Create Clip →
                         </button>
                       }
                       className="py-10"
@@ -4777,7 +4777,7 @@ function ProfilePageContent() {
                     <PrivateProfileTabMessage variant="reels" />
                   ) : (
                     <p className="text-center text-sm text-gray-400">
-                      No reels yet.
+                      No clips yet.
                     </p>
                   )
                 ) : (

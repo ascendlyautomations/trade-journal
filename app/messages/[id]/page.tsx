@@ -596,7 +596,7 @@ function PostMessageBubble({
   const reelCaption =
     isReelShare && post.caption != null ? String(post.caption).trim() : ""
   const shareLabel = isReelShare
-    ? "Shared Reel"
+    ? "Shared Clip"
     : isAchievementShare
       ? "Shared Achievement"
       : isProfileShare
@@ -696,7 +696,7 @@ function PostMessageBubble({
             >
               View{" "}
               {isReelShare
-                ? "reel"
+                ? "clip"
                 : isAchievementShare
                   ? "achievement"
                   : "post"}{" "}

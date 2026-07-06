@@ -12,6 +12,7 @@ import {
 import { useRouter, useSearchParams } from "next/navigation"
 import PopularTradeRoomsPanel from "../components/dashboard/PopularTradeRoomsPanel"
 import CreateFirstTradeRoomCard from "../components/CreateFirstTradeRoomCard"
+import ExploreMoreTradeRoomsCard from "../components/ExploreMoreTradeRoomsCard"
 import EmptyState from "../components/ui/EmptyState"
 import {
   SkeletonCommunityPage,
@@ -672,13 +673,37 @@ function CommunityContent() {
     )
   }, [inviteTargetRoom, selectedRoomId, rooms])
 
-  const showRecommendedRooms = useMemo(() => {
+  const canShowRoomDiscovery = useMemo(() => {
     if (loadingRooms) return false
-    if (rooms.length > 0) return false
     if (needsJoin) return false
     if (roomParam?.trim()) return false
     return true
-  }, [loadingRooms, rooms.length, needsJoin, roomParam])
+  }, [loadingRooms, needsJoin, roomParam])
+
+  const showRecommendedRoomsFullView = useMemo(
+    () => canShowRoomDiscovery && rooms.length === 0,
+    [canShowRoomDiscovery, rooms.length]
+  )
+
+  const showRecommendedRoomsBelowChat = useMemo(
+    () => canShowRoomDiscovery && rooms.length > 0,
+    [canShowRoomDiscovery, rooms.length]
+  )
+
+  const memberRoomIds = useMemo(
+    () => new Set(rooms.map((room) => room.id)),
+    [rooms]
+  )
+
+  const scrollToRecommendedRooms = useCallback(() => {
+    setMobileRoomsOpen(false)
+    requestAnimationFrame(() => {
+      document.getElementById("recommended-trade-rooms")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      })
+    })
+  }, [])
 
   const userOwnsRoom = useMemo(() => {
     if (!user?.id) return false
@@ -3069,7 +3094,9 @@ function CommunityContent() {
         <div className="mx-auto flex h-full min-h-0 w-full max-w-6xl flex-col overflow-visible rounded-2xl border border-white/10 bg-black/25 md:flex-row md:overflow-hidden">
           <aside className="shrink-0 border-b border-white/10 bg-[#0b1220]/80 md:w-72 md:border-b-0 md:border-r">
             <div className="border-b border-white/10 px-3 py-1.5 md:px-4 md:py-3">
-              <h1 className="hidden text-lg font-semibold md:block">Trade Rooms</h1>
+              <h1 className="hidden text-lg font-semibold md:block">
+                {rooms.length > 0 ? "My Trade Rooms" : "Trade Rooms"}
+              </h1>
               <div className="flex items-center gap-1 md:hidden">
                 <button
                   type="button"
@@ -3174,7 +3201,9 @@ function CommunityContent() {
                           onClick={() => void handleCreateRoom()}
                           disabled={creatingRoom}
                           className={
-                            showRecommendedRooms ? "hidden md:flex" : undefined
+                            showRecommendedRoomsFullView
+                              ? "hidden md:flex"
+                              : undefined
                           }
                         />
                       ) : null}
@@ -3233,6 +3262,12 @@ function CommunityContent() {
                         </button>
                       )
                     })}
+                      {showRecommendedRoomsBelowChat ? (
+                        <ExploreMoreTradeRoomsCard
+                          onClick={scrollToRecommendedRooms}
+                          className="mb-1"
+                        />
+                      ) : null}
                     </>
                   )}
                 </div>
@@ -3240,9 +3275,16 @@ function CommunityContent() {
             </div>
           </aside>
 
-          <section className="flex min-h-0 w-full min-w-0 flex-1 flex-col">
-            {showRecommendedRooms ? (
-              <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-6 md:px-8 md:py-10">
+          <section
+            className={`flex min-h-0 w-full min-w-0 flex-1 flex-col${
+              showRecommendedRoomsBelowChat ? " overflow-y-auto" : ""
+            }`}
+          >
+            {showRecommendedRoomsFullView ? (
+              <div
+                id="recommended-trade-rooms"
+                className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-6 md:px-8 md:py-10"
+              >
                 <div className="mx-auto w-full max-w-2xl">
                   {showCreateFirstRoomCard ? (
                     <CreateFirstTradeRoomCard
@@ -3256,12 +3298,20 @@ function CommunityContent() {
                     heading="Recommended Trade Rooms"
                     subheading="Join a Trade Room to start chatting, sharing trades, and connecting with other traders."
                     listClassName="space-y-3"
+                    memberRoomIds={memberRoomIds}
                     onJoined={(room) => void handleRecommendedRoomJoined(room)}
                   />
                 </div>
               </div>
             ) : (
             <>
+            <div
+              className={
+                showRecommendedRoomsBelowChat
+                  ? "flex min-h-[min(55vh,520px)] min-w-0 shrink-0 flex-col"
+                  : "flex min-h-0 min-w-0 flex-1 flex-col"
+              }
+            >
             <div className="hidden border-b border-white/10 px-4 py-3 md:block">
               <div className="flex items-center gap-3">
                 <img
@@ -4062,6 +4112,24 @@ function CommunityContent() {
                 )}
               </>
             )}
+            </div>
+            {showRecommendedRoomsBelowChat ? (
+              <div
+                id="recommended-trade-rooms"
+                className="shrink-0 border-t border-white/10 px-4 py-6 md:px-6 md:py-8"
+              >
+                <div className="mx-auto w-full max-w-2xl">
+                  <PopularTradeRoomsPanel
+                    active
+                    heading="Recommended Trade Rooms"
+                    subheading="Discover public Trade Rooms and join other trading communities."
+                    listClassName="space-y-3"
+                    memberRoomIds={memberRoomIds}
+                    onJoined={(room) => void handleRecommendedRoomJoined(room)}
+                  />
+                </div>
+              </div>
+            ) : null}
             </>
             )}
           </section>

@@ -17,6 +17,7 @@ import {
 } from "@/lib/createAccountForm"
 import type { TradingAccountPropFirmRules } from "@/lib/tradingAccounts"
 import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
+import { cn } from "@/app/components/ui/cn"
 
 export type PropFirmRules = TradingAccountPropFirmRules
 
@@ -50,6 +51,8 @@ export interface Props {
   /** Lock account type / mode selectors (prop firm milestone flows). */
   lockCategory?: AccountType
   lockMode?: string
+  /** Override stacking when nested above another modal (default z-[100]). */
+  overlayClassName?: string
 }
 
 const emptyForm = {
@@ -99,6 +102,7 @@ export default function CreateAccountModal({
   saveLabel,
   lockCategory,
   lockMode,
+  overlayClassName,
 }: Props) {
   const [name, setName] = useState("")
   const [size, setSize] = useState("")
@@ -269,11 +273,14 @@ export default function CreateAccountModal({
 
   return (
     <div
-      className={`fixed inset-0 z-[100] flex justify-center bg-black/60 p-4 backdrop-blur-sm ${
+      className={cn(
+        "fixed inset-0 flex justify-center bg-black/60 p-4 backdrop-blur-sm",
+        overlayClassName ?? "z-[100]",
         belowNavbarOnMobile
           ? "items-start pt-[calc(4rem+1rem+6px)] md:items-center md:pt-4"
           : "items-center"
-      }`}
+      )}
+      onClick={(e) => e.stopPropagation()}
     >
       <div
         className="relative w-full max-w-lg sm:max-w-xl rounded-2xl border border-white/10 bg-[#152238] p-6 text-gray-100 shadow-2xl max-h-[min(90vh,720px)] overflow-y-auto"

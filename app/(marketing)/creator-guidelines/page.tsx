@@ -7,7 +7,7 @@ const SECTIONS = [
     body: (
       <>
         <p>
-          TradeTraxs creators share trades, posts, and reels to educate, document progress, and
+          TradeTraxs creators share trades, posts, and clips to educate, document progress, and
           build authentic trading journeys. Your content helps others learn — and reflects on the
           community as a whole.
         </p>
@@ -103,7 +103,7 @@ export default function CreatorGuidelinesPage() {
   return (
     <CompanyPageShell
       title="Creator Guidelines"
-      subtitle="Best practices for sharing trades, posts, and reels on TradeTraxs with integrity."
+      subtitle="Best practices for sharing trades, posts, and clips on TradeTraxs with integrity."
     >
       <div className="space-y-5">
         {SECTIONS.map((section) => (

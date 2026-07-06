@@ -106,7 +106,7 @@ export default function ReelComposerModal({
 
     try {
       await runUpload({
-        title: "Uploading Reel",
+        title: "Uploading Clip",
         onDismissCompose: handleClose,
         execute: async (report) => {
           const result = await publishReel(supabase, {
@@ -173,7 +173,7 @@ export default function ReelComposerModal({
     <Modal
       open={open}
       onClose={handleClose}
-      title={isTradeReplayEdit ? "Trade Replay" : isEditMode ? "Edit Reel" : "Create Reel"}
+      title={isTradeReplayEdit ? "Trade Replay" : isEditMode ? "Edit Clip" : "Create Clip"}
       size="md"
       panelClassName="max-w-lg p-4 sm:p-6"
       footer={
@@ -241,7 +241,7 @@ export default function ReelComposerModal({
           {isTradeReplayEdit ? (
             <p className="text-center text-sm text-gray-400">
               Caption comes from your trade description. Use Replace Video from
-              the reel menu to change the video.
+              the clip menu to change the video.
             </p>
           ) : (
             <>

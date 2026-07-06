@@ -123,7 +123,7 @@ export default function ProfileCreateMenu({
     },
     {
       id: "reel",
-      label: "Reel",
+      label: "Clip",
       icon: <ReelIcon />,
       onSelect: onCreateReel,
     },

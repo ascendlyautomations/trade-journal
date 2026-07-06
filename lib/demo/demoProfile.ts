@@ -268,7 +268,7 @@ const DEMO_WALL_POSTS: Record<string, Record<string, unknown>[]> = {
       id: "demo-wall-maya-3",
       user_id: DEMO_USER_ID,
       content:
-        "Posted today's NQ long breakdown on the feed — liquidity sweep + 1m BOS. Link in reels tab too.",
+        "Posted today's NQ long breakdown on the feed — liquidity sweep + 1m BOS. Link in Clips tab too.",
       image_url: demoTradeScreenshotUrl("dt-24", { direction: "Long", pnl: 1050 }),
       room_id: null,
       created_at: isoDemoDaysAgo(0, 11),
@@ -287,7 +287,7 @@ const DEMO_WALL_POSTS: Record<string, Record<string, unknown>[]> = {
     {
       id: "demo-wall-alex-2",
       user_id: DEMO_USER_ALEX,
-      content: "ES reversal from overnight high — full chart markup in today's reel.",
+      content: "ES reversal from overnight high — full chart markup in today's clip.",
       image_url: demoTradeScreenshotUrl("demo-trade-alex-1", { direction: "Short", pnl: 720 }),
       room_id: null,
       created_at: isoDemoDaysAgo(1, 14),

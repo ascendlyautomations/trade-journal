@@ -116,11 +116,7 @@ export default function LandingTestimonialsSection({
                 Based on {stats.count} approved review{stats.count === 1 ? "" : "s"}
               </p>
             </div>
-          ) : (
-            <p className="mt-4 text-sm text-gray-500 md:mt-6">
-              Community reviews will appear here as they are approved.
-            </p>
-          )}
+          ) : null}
         </div>
 
         <div className={`${LANDING_SECTION_CONTENT_GAP} grid gap-4 md:grid-cols-3 md:gap-5`}>

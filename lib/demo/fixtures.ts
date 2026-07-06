@@ -266,7 +266,7 @@ export const DEMO_ACHIEVEMENTS = [
   { id: "a2", title: "100 Trades Logged", description: "Consistency builds edge", icon: "📊", earned: "Feb 2026" },
   { id: "a3", title: "Prop Firm Passed", description: "Apex 150K evaluation cleared", icon: "🎯", earned: "Jan 2026" },
   { id: "a4", title: "Community Helper", description: "50 helpful comments", icon: "💬", earned: "Dec 2025" },
-  { id: "a5", title: "Reel Creator", description: "10 trade breakdown reels", icon: "🎬", earned: "Nov 2025" },
+  { id: "a5", title: "Clip Creator", description: "10 trade breakdown clips", icon: "🎬", earned: "Nov 2025" },
   { id: "a6", title: "Risk Discipline", description: "30 days within daily loss limit", icon: "🛡️", earned: "Oct 2025" },
 ] as const
 

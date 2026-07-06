@@ -52,7 +52,7 @@ export const TRADETRAXS_FREE_PLAN: TradeTraxsPlan = {
     TRADETRAXS_FEATURE_LABELS.basicAnalytics,
     "Basic Calendar",
     "Public & Private Profiles",
-    "Feed, Posts & Reels",
+    "Feed, Posts & Clips",
     "Trade Rooms",
     "Direct Messages",
     "Following, Comments & Likes",

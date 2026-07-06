@@ -65,7 +65,7 @@ export const ABOUT_DIFFERENTIATORS: readonly AboutDifferentiator[] = [
     icon: "🌍",
     title: "Trading Community",
     description:
-      "Share trades, reels, ideas, and learn from traders around the world.",
+      "Share trades, clips, ideas, and learn from traders around the world.",
   },
 ]
 

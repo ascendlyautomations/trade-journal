@@ -17,7 +17,7 @@ const BLOCKS = [
   },
   {
     title: "Learn From Real Traders",
-    body: "Watch how others enter, manage, and exit—no cherry-picked highlight reels.",
+    body: "Watch how others enter, manage, and exit—no cherry-picked highlight clips.",
     Icon: IconUsers,
   },
   {

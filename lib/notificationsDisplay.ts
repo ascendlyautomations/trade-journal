@@ -216,6 +216,12 @@ export function engagementTarget(
   return "post"
 }
 
+/** User-facing label for engagement notifications (internal target stays `reel`). */
+export function engagementTargetLabel(target: EngagementTarget): string {
+  if (target === "reel") return "clip"
+  return target
+}
+
 export function formatLikeGroupMessage(
   names: string[],
   totalLikes: number,
@@ -228,12 +234,14 @@ export function formatLikeGroupMessage(
 ): string {
   const noun = commentId
     ? "comment"
-    : engagementTarget(
-        postId,
-        tradeId,
-        profilePostId,
-        achievementPostId,
-        reelId
+    : engagementTargetLabel(
+        engagementTarget(
+          postId,
+          tradeId,
+          profilePostId,
+          achievementPostId,
+          reelId
+        )
       )
   const ordered = names.filter(Boolean)
   if (totalLikes <= 0) return `Someone liked your ${noun}`
@@ -306,12 +314,14 @@ export function formatCommentGroupTitle(
   achievementPostId?: string | null,
   reelId?: string | null
 ): string {
-  const noun = engagementTarget(
-    postId,
-    tradeId,
-    profilePostId,
-    achievementPostId,
-    reelId
+  const noun = engagementTargetLabel(
+    engagementTarget(
+      postId,
+      tradeId,
+      profilePostId,
+      achievementPostId,
+      reelId
+    )
   )
   const n = Math.max(0, totalComments)
   if (n === 0) return `Someone commented on your ${noun}`

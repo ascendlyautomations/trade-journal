@@ -232,7 +232,7 @@ export default function LandingFeaturedTradesSection({
         <div className={LANDING_SECTION_SHELL}>
           <div className="mx-auto max-w-3xl text-center">
             <h2 id="featured-trades-heading" className={LANDING_HEADLINE_SM}>
-              🏆 Featured Trades of the Week
+              Featured Trades of the Week
             </h2>
             <p className={`${LANDING_LEAD} mx-auto ${LANDING_LEAD_GAP}`}>
               Discover some of the community&apos;s best trades from this week.

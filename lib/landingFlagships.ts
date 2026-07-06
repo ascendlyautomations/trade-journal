@@ -35,11 +35,11 @@ export const LANDING_FLAGSHIPS: LandingFlagship[] = [
   },
   {
     id: "flagship-reels",
-    title: "Trading Reels",
+    title: "Trading Clips",
     tagline:
       "Watch short-form trade breakdowns, educational content, and market insights from traders around the world.",
     imageSrc: "/images/Trading_Reels.png",
-    imageAlt: "Trading reels and short-form content on TradeTraxs",
+    imageAlt: "Trading clips and short-form content on TradeTraxs",
     imageObjectPosition: "object-top",
   },
   {

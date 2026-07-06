@@ -109,7 +109,7 @@ export default function TradeReelAttachment({
       : "block text-xs text-gray-400 mb-1")
 
   const resolvedLabel =
-    label ?? (variant === "quick" ? "🎥 Add Reel (Optional)" : "Add Reel (Optional)")
+    label ?? (variant === "quick" ? "🎥 Add Clip (Optional)" : "Add Clip (Optional)")
 
   return (
     <div className="border-t border-white/10 pt-4 mt-4">
@@ -217,7 +217,7 @@ export default function TradeReelAttachment({
           onClick={() => fileInputRef.current?.click()}
           className={uploadButtonClass}
         >
-          {validating ? "Checking video…" : "Upload Reel"}
+          {validating ? "Checking video…" : "Upload Clip"}
         </button>
       )}
 

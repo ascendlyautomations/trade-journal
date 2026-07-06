@@ -29,7 +29,7 @@ function FeedReelOwnerMenu({
           onMenuToggle()
         }}
         className="px-1 text-gray-400 hover:text-white"
-        aria-label="Reel options"
+        aria-label="Clip options"
       >
         •••
       </button>
@@ -71,7 +71,7 @@ function FeedReelOwnerMenu({
                 }}
                 className="block w-full px-4 py-2 text-left text-sm hover:bg-white/10"
               >
-                Edit Reel
+                Edit Clip
               </button>
               <button
                 type="button"
@@ -81,7 +81,7 @@ function FeedReelOwnerMenu({
                 }}
                 className="block w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-white/10"
               >
-                Delete Reel
+                Delete Clip
               </button>
             </>
           )}

@@ -146,7 +146,7 @@ export default function ReelViewer({ reel, creator, onClose }: ReelViewerProps) 
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Reel viewer"
+        aria-label="Clip viewer"
         className="relative flex h-full w-full max-w-md flex-col"
         onClick={(e) => e.stopPropagation()}
       >

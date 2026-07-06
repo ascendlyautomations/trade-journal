@@ -277,7 +277,7 @@ function noReelRowDeletedError(): PostgrestError {
   return {
     name: "CommentDeleteError",
     message:
-      "Reel comment was not deleted. Ensure the reel_comments DELETE policy and grant are applied in Supabase.",
+      "Clip comment was not deleted. Ensure the reel_comments DELETE policy and grant are applied in Supabase.",
     code: "PGRST116",
     details: "No rows deleted — likely missing RLS DELETE policy or DELETE grant.",
     hint: "Apply migration 20260628130000_reel_engagement.sql",

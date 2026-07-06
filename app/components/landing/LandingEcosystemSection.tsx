@@ -16,7 +16,7 @@ import {
 
 const ECOSYSTEM_FLOW = [
   { step: "Connect", features: "Feed · Profiles · Follow" },
-  { step: "Collaborate", features: "Rooms · Reels · Comments" },
+  { step: "Collaborate", features: "Rooms · Clips · Comments" },
   { step: "Track", features: "Journal · Calendar" },
   { step: "Improve", features: "Analytics · AI · Prop Firm" },
 ] as const
@@ -33,7 +33,7 @@ const ECOSYSTEM = [
     tag: "Social",
   },
   {
-    title: "Reels",
+    title: "Clips",
     description: "Watch and share short-form trading content that moves fast.",
     tag: "Social",
   },

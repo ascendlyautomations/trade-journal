@@ -23,6 +23,7 @@ import {
 } from "@/lib/inputTradePageTitle"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { feedbackPresets, persistentSuccess } from "@/lib/feedbackPresets"
+import { assertCsvImportAllowedForFreePlan } from "@/lib/csvImportGate"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 import { useUserProfile } from "@/lib/useUserProfile"
@@ -88,21 +89,9 @@ export default function Home() {
       return
     }
 
-    const { data: profile, error: profileErr } = await supabase
-      .from("profiles")
-      .select("is_pro, has_used_csv_import")
-      .eq("id", userId)
-      .single()
-
-    if (profileErr || !profile) {
-      console.error("Profile fetch failed:", profileErr)
-      showPopup({ type: "error", message: "Could not verify account. Try again." })
-      setLoading(false)
-      return
-    }
-
-    if (!profile.is_pro && profile.has_used_csv_import) {
-      showPopup(feedbackPresets.csvImportUnavailable())
+    const csvGate = await assertCsvImportAllowedForFreePlan(supabase, userId)
+    if (!csvGate.ok) {
+      showPopup(feedbackPresets.csvImportUnavailable(csvGate.daysUntilNextImport))
       setLoading(false)
       resetCsvInput()
       return

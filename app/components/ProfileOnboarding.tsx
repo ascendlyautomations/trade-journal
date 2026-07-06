@@ -324,7 +324,7 @@ export default function ProfileOnboarding({
             <input
               type="text"
               required
-              placeholder="e.g. Scalping, swing, futures"
+              placeholder="e.g. Scalping, swing, Investor..."
               className={`${inputClass} mb-4`}
               value={tradingStyle}
               onChange={(e) => setTradingStyle(e.target.value)}

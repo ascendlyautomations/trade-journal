@@ -148,7 +148,7 @@ export default function FeedReelDetailModal({
               userId={post.user_id}
               avatarUrl={modalDetails.avatarUrl}
               username={modalDetails.username}
-              metaLabel="Reel"
+              metaLabel="Clip"
               metaLabelClassName="font-medium text-violet-400/90"
               postedAt={post.created_at}
             />
@@ -174,7 +174,7 @@ export default function FeedReelDetailModal({
           avatarUrl={modalDetails.avatarUrl}
           meta={
             <FeedPostMetaRow
-              label="Reel"
+              label="Clip"
               labelClassName="font-medium text-violet-400/90"
               createdAt={post.created_at}
             />
@@ -229,8 +229,8 @@ export default function FeedReelDetailModal({
 
   return (
     <DetailModalShell
-      ariaLabel="Reel details"
-      title="Reel"
+      ariaLabel="Clip details"
+      title="Clip"
       layout="split"
       onClose={onClose}
       splitMedia={splitMedia}

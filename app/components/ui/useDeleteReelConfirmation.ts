@@ -13,10 +13,10 @@ export const DELETE_REPLAY_CONFIRM_COPY = {
 } as const
 
 export const DELETE_REEL_CONFIRM_COPY = {
-  title: "Delete Reel?",
+  title: "Delete Clip?",
   description:
-    "Are you sure you want to delete this reel? This action cannot be undone.",
-  confirmLabel: "Delete Reel",
+    "Are you sure you want to delete this clip? This action cannot be undone.",
+  confirmLabel: "Delete Clip",
   cancelLabel: "Cancel",
 } as const
 

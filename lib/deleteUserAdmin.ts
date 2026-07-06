@@ -754,19 +754,19 @@ export async function deleteUserAdmin(
   )
 
   await tryDeleteWhere(
-    step(targetUserId, "Reel likes cleanup", "reel_likes"),
+    step(targetUserId, "Clip likes cleanup", "reel_likes"),
     supabase,
     "user_id",
     targetUserId
   )
   await tryDeleteWhere(
-    step(targetUserId, "Reel comments cleanup", "reel_comments"),
+    step(targetUserId, "Clip comments cleanup", "reel_comments"),
     supabase,
     "user_id",
     targetUserId
   )
   await tryDeleteWhere(
-    step(targetUserId, "Reels cleanup", "reels"),
+    step(targetUserId, "Clips cleanup", "reels"),
     supabase,
     "user_id",
     targetUserId

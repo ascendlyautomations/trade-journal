@@ -37,7 +37,7 @@ function ReelThumbnailPreview({
           ? "cursor-pointer transition hover:border-violet-400/30 hover:bg-black/50"
           : "cursor-default"
       } ${className}`}
-      aria-label={interactive ? "Watch linked reel" : undefined}
+      aria-label={interactive ? "Watch linked clip" : undefined}
     >
       {useVideoThumb ? (
         <ReelNativeVideoThumb

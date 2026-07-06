@@ -2,7 +2,6 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import { ensureManualUserAccountRegistered } from "@/lib/ensureManualUserAccount"
 import { getSessionFromDate } from "@/lib/getSession"
 import { buildDateTime } from "@/lib/inputTradeDateTime"
-import { mirrorAccountSettingsLockedAccount } from "@/lib/profileSplitMirrorWrites"
 import { prependTradeInCache } from "@/lib/appDataCache"
 import { isProActive } from "@/lib/subscription"
 import { parseOptionalRr } from "@/lib/tradeRr"
@@ -137,20 +136,20 @@ async function resolveRowAccount(
   client: SupabaseClient,
   userId: string,
   account: ManualTradeAccount,
-  profileRow: {
+  _profileRow: {
     locked_account_type?: string | null
     locked_account_size?: string | null
     locked_account_name?: string | null
     locked_account_number?: string | null
   } | null,
-  userIsPro: boolean
+  _userIsPro: boolean
 ): Promise<
   | { ok: true; rowAcct: ManualTradeAccount & { type: string } }
   | { ok: false; code: "account_locked"; message: string }
 > {
   const modeLower = String(account.mode ?? "live").trim().toLowerCase()
 
-  let rowAcct = {
+  const rowAcct = {
     type: modeLower,
     name: String(account.name ?? "").trim() || null,
     size: String(account.size ?? "").trim() || null,
@@ -158,81 +157,6 @@ async function resolveRowAccount(
     account_number: String(account.account_number ?? "").trim() || null,
     mode: String(account.mode ?? "live"),
     category: account.category ?? null,
-  }
-
-  if (!userIsPro && modeLower !== "backtest" && modeLower !== "imported") {
-    const lockedType = String(profileRow?.locked_account_type ?? "")
-      .trim()
-      .toLowerCase()
-    const lockedSize = String(profileRow?.locked_account_size ?? "").trim()
-    const lockedName = String(profileRow?.locked_account_name ?? "").trim()
-    const lockedNumber = String(profileRow?.locked_account_number ?? "").trim()
-    const incomingType = modeLower
-    const incomingSize = String(rowAcct.size ?? "").trim()
-    const incomingName = String(rowAcct.name ?? "").trim()
-    const incomingNumber = String(rowAcct.account_number ?? "").trim()
-
-    if (!lockedType) {
-      const lockedAccountPatch = {
-        locked_account_type: incomingType || null,
-        locked_account_size: incomingSize || null,
-        locked_account_name: incomingName || null,
-        locked_account_number: incomingNumber || null,
-      }
-      const { error: lockErr } = await client
-        .from("profiles")
-        .update(lockedAccountPatch)
-        .eq("id", userId)
-      if (lockErr) {
-        console.error("[saveManualTrade] locked account update:", lockErr)
-        return {
-          ok: false,
-          code: "account_locked",
-          message: lockErr.message || "Could not save trade.",
-        }
-      }
-      await mirrorAccountSettingsLockedAccount(
-        client,
-        userId,
-        lockedAccountPatch
-      )
-    } else {
-      const { data: lockedAccountMatch } = await client
-        .from("accounts")
-        .select("id")
-        .eq("user_id", userId)
-        .eq("account_number", lockedNumber)
-        .maybeSingle()
-
-      const lockedAccountId =
-        lockedAccountMatch?.id != null
-          ? String(lockedAccountMatch.id).trim()
-          : null
-
-      rowAcct = {
-        type: lockedType || modeLower,
-        size: lockedSize || null,
-        name: lockedName || null,
-        id: lockedAccountId,
-        account_number: lockedNumber || null,
-        mode: lockedType || modeLower,
-        category: rowAcct.category,
-      }
-
-      if (
-        incomingType !== lockedType ||
-        incomingSize !== lockedSize ||
-        incomingName !== lockedName ||
-        incomingNumber !== lockedNumber
-      ) {
-        return {
-          ok: false,
-          code: "account_locked",
-          message:
-            "Your account is locked on the free plan. Use your registered account to save trades.",
-        }
-      }
-    }
   }
 
   return { ok: true, rowAcct }

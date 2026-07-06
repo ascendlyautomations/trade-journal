@@ -12,10 +12,10 @@ import {
 
 const COMMUNITY_ITEMS = [
   {
-    title: "Feed & reels",
+    title: "Feed & Clips",
     img: "/images/social-feed.png",
     objectPosition: "object-top",
-    bullets: ["Share trades with full context", "Watch short-form trading reels"],
+    bullets: ["Share trades with full context", "Watch short-form trading clips"],
   },
   {
     title: "Trader profiles",

@@ -31,7 +31,7 @@ import { feedbackPresets, persistentError } from "@/lib/feedbackPresets"
 import { handleTradeNumericInput } from "@/lib/formatMoney"
 import TradeFormCurrencyInput from "@/app/components/trade/TradeFormCurrencyInput"
 import { TRADE_OPTIONAL_ATTACHMENT_LABEL_CLASS } from "@/lib/tradeFormUi"
-import { assertCanCreateTradingAccount } from "@/lib/tradingAccounts"
+import { assertCanCreateTradingAccount, FREE_PLAN_ACCOUNT_LIMIT } from "@/lib/tradingAccounts"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import { upsertAccountInCache } from "@/lib/appDataCache"
 import { parseOptionalRr } from "@/lib/tradeRr"
@@ -683,6 +683,9 @@ export default function QuickTradeModal({
     exitTime &&
     isExitBeforeEntry(entryDate, entryTime, exitDate, exitTime)
 
+  const canCreateMoreAccounts =
+    isProActive(planProfile) || accounts.length < FREE_PLAN_ACCOUNT_LIMIT
+
   return (
     <>
       <div
@@ -724,6 +727,7 @@ export default function QuickTradeModal({
                 selectedAccount={selectedAccount}
                 onSelect={setSelectedAccount}
                 onOpenCreate={() => setShowCreateAccountModal(true)}
+                disableCreate={!canCreateMoreAccounts}
                 showExternalCreateButton={false}
               />
             </div>
@@ -1044,6 +1048,7 @@ export default function QuickTradeModal({
         open={showCreateAccountModal}
         onClose={() => setShowCreateAccountModal(false)}
         onSave={handleCreateAccountSave}
+        overlayClassName="z-[160]"
       />
       <FeedbackModal {...feedbackModalProps} overlayClassName="z-[200]" />
     </>

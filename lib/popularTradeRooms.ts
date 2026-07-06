@@ -1,8 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
-import {
-  isExcludedDiscoveryRoomSlug,
-  isPublicDiscoveryRoom,
-} from "@/lib/betaHub"
+import { isPublicDiscoveryRoom } from "@/lib/betaHub"
 import { filterRoomsWithPublicOwners } from "@/lib/publicProfileDiscovery"
 import { isDemoSupabaseBlocked } from "@/lib/demo/demoSupabaseGuard"
 import {
@@ -58,10 +55,12 @@ function mapRoomRow(
     member_count?: number | null
     image_url?: string | null
     avatar_url?: string | null
+    show_on_profile?: boolean | null
+    is_private?: boolean | null
   },
   memberCount?: number
 ): PopularTradeRoom | null {
-  if (isExcludedDiscoveryRoomSlug(row.slug)) return null
+  if (!isPublicDiscoveryRoom(row)) return null
   return {
     id: row.id,
     name: row.name,
@@ -140,7 +139,9 @@ export async function fetchPopularTradeRooms(
 
   const { data: rooms, error } = await supabase
     .from("rooms")
-    .select("id, name, description, slug, show_on_profile, image_url, owner_user_id")
+    .select(
+      "id, name, description, slug, show_on_profile, is_private, image_url, owner_user_id"
+    )
     .not("owner_user_id", "is", null)
     .limit(capped * 3)
 
@@ -205,7 +206,9 @@ export async function searchPublicTradeRooms(
 
   const { data: rooms, error } = await supabase
     .from("rooms")
-    .select("id, name, description, slug, image_url, show_on_profile, owner_user_id")
+    .select(
+      "id, name, description, slug, image_url, show_on_profile, is_private, owner_user_id"
+    )
     .not("owner_user_id", "is", null)
     .or(`name.ilike.${pattern},slug.ilike.${pattern}`)
     .order("name", { ascending: true })

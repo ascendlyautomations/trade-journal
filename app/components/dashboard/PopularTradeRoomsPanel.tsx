@@ -19,6 +19,8 @@ export type PopularTradeRoomsPanelProps = {
   /** When true, loads and displays recommended rooms. */
   active: boolean
   onJoined?: (room: PopularTradeRoom) => void
+  /** Room ids the viewer is already a member of — hidden from recommendations. */
+  memberRoomIds?: ReadonlySet<string>
   heading?: string
   subheading?: string
   className?: string
@@ -96,6 +98,7 @@ function RoomListItem({
 export default function PopularTradeRoomsPanel({
   active,
   onJoined,
+  memberRoomIds,
   heading,
   subheading,
   className = "",
@@ -113,9 +116,18 @@ export default function PopularTradeRoomsPanel({
 
   const isSearchActive = debouncedSearch.trim().length > 0
 
+  const filterMemberRooms = useCallback(
+    (list: PopularTradeRoom[]) => {
+      if (!memberRoomIds || memberRoomIds.size === 0) return list
+      return list.filter((room) => !memberRoomIds.has(room.id))
+    },
+    [memberRoomIds]
+  )
+
   const displayRooms = useMemo(
-    () => (isSearchActive ? searchResults : popularRooms),
-    [isSearchActive, popularRooms, searchResults]
+    () =>
+      filterMemberRooms(isSearchActive ? searchResults : popularRooms),
+    [filterMemberRooms, isSearchActive, popularRooms, searchResults]
   )
 
   useEffect(() => {

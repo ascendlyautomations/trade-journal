@@ -1707,7 +1707,7 @@ function FeedPageContent() {
 
       try {
         await runUpload({
-          title: "Uploading Reel",
+          title: "Uploading Clip",
           execute: async (report) => {
             const result = await replaceTradeReelVideo(supabase, {
               reelId,

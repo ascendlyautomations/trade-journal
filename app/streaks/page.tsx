@@ -52,7 +52,7 @@ export default function StreaksPage() {
               <StreakCard
                 icon="📝"
                 title="Posting Streak"
-                description="Share at least one public trade, post, or reel each weekday. Weekends are free."
+                description="Share at least one public trade, post, or clip each weekday. Weekends are free."
                 stats={
                   snapshot?.posting ?? {
                     current: 0,

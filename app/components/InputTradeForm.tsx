@@ -8,7 +8,13 @@ import { validateImageUpload } from "@/lib/uploadValidation"
 import { consumeAppRateLimit } from "@/lib/consumeAppRateLimit"
 import {
   assertCanCreateTradingAccount,
+  FREE_PLAN_ACCOUNT_LIMIT,
 } from "@/lib/tradingAccounts"
+import {
+  assertCsvImportAllowedForFreePlan,
+  FREE_PLAN_CSV_IMPORT_COOLDOWN_DAYS,
+  markProfileCsvImportUsed,
+} from "@/lib/csvImportGate"
 import { ensureManualUserAccountRegistered } from "@/lib/ensureManualUserAccount"
 import { ACCOUNTS_SELECT } from "@/lib/appDataCache"
 import { useUserProfile } from "@/lib/UserProfileProvider"
@@ -16,10 +22,6 @@ import { isProActive } from "@/lib/subscription"
 import { insertCsvTradesWithAccount } from "@/lib/insertCsvTradesWithAccount"
 import { feedbackPresets, persistentError } from "@/lib/feedbackPresets"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
-import {
-  mirrorAccountSettingsHasUsedCsvImport,
-  mirrorAccountSettingsLockedAccount,
-} from "@/lib/profileSplitMirrorWrites"
 import { getSessionFromDate } from "@/lib/getSession"
 import {
   buildDateTime,
@@ -245,6 +247,10 @@ export default function InputTradeForm({
     avatar_url?: string | null
   } | null>(null)
   const [accountFieldsLocked, setAccountFieldsLocked] = useState(false)
+  const [csvImportBlocked, setCsvImportBlocked] = useState(false)
+  const [csvDaysUntilNextImport, setCsvDaysUntilNextImport] = useState<
+    number | null
+  >(null)
   const [communityPreviewOpen, setCommunityPreviewOpen] = useState(false)
   const [screenshotPreviewUrl, setScreenshotPreviewUrl] = useState<string | null>(
     null
@@ -254,6 +260,8 @@ export default function InputTradeForm({
     if (!uid) {
       setPlanProfile(null)
       setAccountFieldsLocked(false)
+      setCsvImportBlocked(false)
+      setCsvDaysUntilNextImport(null)
       return
     }
 
@@ -270,7 +278,7 @@ export default function InputTradeForm({
     const { data: lockedRow } = await supabase
       .from("profiles")
       .select(
-        "is_pro, subscription_status, locked_account_type, locked_account_size, locked_account_name, locked_account_number, username, avatar_url"
+        "is_pro, subscription_status, trial_end, locked_account_type, locked_account_size, locked_account_name, locked_account_number, username, avatar_url, last_csv_import_at"
       )
       .eq("id", uid)
       .maybeSingle()
@@ -283,17 +291,31 @@ export default function InputTradeForm({
 
     if (isProActive(prof)) {
       setAccountFieldsLocked(false)
+      setCsvImportBlocked(false)
+      setCsvDaysUntilNextImport(null)
       return
     }
-    const { data: rows } = await supabase
-      .from("user_accounts")
-      .select("account_type")
+
+    const { count, error: countErr } = await supabase
+      .from("accounts")
+      .select("id", { count: "exact", head: true })
       .eq("user_id", uid)
-    const manualCount = (rows ?? []).filter(
-      (t) =>
-        String(t.account_type ?? "").toLowerCase().trim() !== "imported"
-    ).length
-    setAccountFieldsLocked(manualCount >= 1)
+
+    if (countErr) {
+      console.error(countErr)
+      setAccountFieldsLocked(false)
+    } else {
+      setAccountFieldsLocked((count ?? 0) >= FREE_PLAN_ACCOUNT_LIMIT)
+    }
+
+    const csvGate = await assertCsvImportAllowedForFreePlan(supabase, uid)
+    if (!csvGate.ok) {
+      setCsvImportBlocked(true)
+      setCsvDaysUntilNextImport(csvGate.daysUntilNextImport)
+    } else {
+      setCsvImportBlocked(false)
+      setCsvDaysUntilNextImport(null)
+    }
   }, [contextProfile])
 
   const fetchAccountsForUser = useCallback(async (userId: string) => {
@@ -778,7 +800,7 @@ export default function InputTradeForm({
 
     const modeLower = String(acct.mode ?? "live").trim().toLowerCase()
 
-    let rowAcct = {
+    const rowAcct = {
       type: modeLower,
       name: String(acct.name ?? "").trim() || null,
       size: String(acct.size ?? "").trim() || null,
@@ -787,84 +809,6 @@ export default function InputTradeForm({
         String(acct.account_number ?? "").trim() || null,
       mode: String(acct.mode ?? "live"),
       category: acct.category ?? null,
-    }
-
-    if (!userIsPro && modeLower !== "backtest" && modeLower !== "imported") {
-      const lockedType = String(profileRow?.locked_account_type ?? "").trim().toLowerCase()
-      const lockedSize = String(profileRow?.locked_account_size ?? "").trim()
-      const lockedName = String(profileRow?.locked_account_name ?? "").trim()
-      const lockedNumber = String(profileRow?.locked_account_number ?? "").trim()
-      const incomingType = String(modeLower).trim().toLowerCase()
-      const incomingSize = String(rowAcct.size ?? "").trim()
-      const incomingName = String(rowAcct.name ?? "").trim()
-      const incomingNumber = String(rowAcct.account_number ?? "").trim()
-
-      if (!lockedType) {
-        const lockedAccountPatch = {
-          locked_account_type: incomingType || null,
-          locked_account_size: incomingSize || null,
-          locked_account_name: incomingName || null,
-          locked_account_number: incomingNumber || null,
-        }
-        const { error: lockErr } = await supabase
-          .from("profiles")
-          .update(lockedAccountPatch)
-          .eq("id", userId)
-        if (lockErr) {
-          console.error("locked account update:", lockErr)
-          showPopup(
-            persistentError("Save Failed", handleSupabaseError(lockErr))
-          )
-          throw new Error(handleSupabaseError(lockErr))
-        }
-        const { error: mirrorErr } = await mirrorAccountSettingsLockedAccount(
-          supabase,
-          userId,
-          lockedAccountPatch
-        )
-        if (mirrorErr) {
-          console.error("mirror account_settings locked_account_*:", mirrorErr)
-        }
-      } else {
-        const { data: lockedAccountMatch } = await supabase
-          .from("accounts")
-          .select("id")
-          .eq("user_id", userId)
-          .eq("account_number", lockedNumber)
-          .maybeSingle()
-
-        const lockedAccountId =
-          lockedAccountMatch?.id != null
-            ? String(lockedAccountMatch.id).trim()
-            : null
-
-        rowAcct = {
-          type: lockedType || modeLower,
-          size: lockedSize || null,
-          name: lockedName || null,
-          id: lockedAccountId,
-          account_number: lockedNumber || null,
-          mode: lockedType || modeLower,
-          category: rowAcct.category,
-        }
-
-        if (
-          incomingType !== lockedType ||
-          incomingSize !== lockedSize ||
-          incomingName !== lockedName ||
-          incomingNumber !== lockedNumber
-        ) {
-          showPopup(feedbackPresets.accountLocked())
-          setSelectedAccount({
-            name: lockedName,
-            size: lockedSize,
-            id: lockedAccountId ?? "",
-            account_number: lockedNumber,
-            mode: lockedType || modeLower,
-            category: rowAcct.category ?? undefined,
-          })
-        }
-      }
     }
 
     const skipAccountRegistry =
@@ -879,6 +823,10 @@ export default function InputTradeForm({
     })
 
     if (!ensured.ok) {
+      if (ensured.reason === "limit") {
+        showPopup(feedbackPresets.accountLimit())
+        throw new Error("Account limit reached.")
+      }
       showPopup(
         persistentError(
           "Save Failed",
@@ -1219,6 +1167,10 @@ export default function InputTradeForm({
 
   function handleUploadCsvGuardClick() {
     if (!onUploadCsvClick) return
+    if (csvImportBlocked) {
+      showPopup(feedbackPresets.csvSubscriptionLimit(csvDaysUntilNextImport ?? undefined))
+      return
+    }
     // Mobile Safari requires file input activation in the same user gesture — no await before click().
     onUploadCsvClick()
   }
@@ -1249,18 +1201,13 @@ export default function InputTradeForm({
         return
       }
 
-      const { data: profile, error: profileErr } = await supabase
-        .from("profiles")
-        .select("is_pro, has_used_csv_import")
-        .eq("id", userId)
-        .single()
-      if (profileErr || !profile) {
-        console.error("Profile fetch failed:", profileErr)
-        showPopup(feedbackPresets.importFailed("Could not verify account. Try again."))
-        return
-      }
-      if (!isProActive(profile) && profile.has_used_csv_import) {
-        showPopup(feedbackPresets.csvSubscriptionLimit())
+      const csvGate = await assertCsvImportAllowedForFreePlan(supabase, userId)
+      if (!csvGate.ok) {
+        setCsvImportBlocked(true)
+        setCsvDaysUntilNextImport(csvGate.daysUntilNextImport)
+        showPopup(
+          feedbackPresets.csvSubscriptionLimit(csvGate.daysUntilNextImport)
+        )
         return
       }
 
@@ -1286,22 +1233,13 @@ export default function InputTradeForm({
       showPopup(feedbackPresets.importSuccess(parsedTrades.length))
       notifyGettingStartedChecklistMaybeCompleted()
 
-      if (!isProActive(profile)) {
-        const { error: flagErr } = await supabase
-          .from("profiles")
-          .update({ has_used_csv_import: true })
-          .eq("id", userId)
+      if (!isProActive(planProfile ?? contextProfile)) {
+        const { error: flagErr } = await markProfileCsvImportUsed(supabase, userId)
         if (flagErr) {
           console.error("markProfileCsvImportUsed:", flagErr)
         } else {
-          const { error: mirrorErr } = await mirrorAccountSettingsHasUsedCsvImport(
-            supabase,
-            userId,
-            true
-          )
-          if (mirrorErr) {
-            console.error("mirror account_settings.has_used_csv_import:", mirrorErr)
-          }
+          setCsvImportBlocked(true)
+          setCsvDaysUntilNextImport(FREE_PLAN_CSV_IMPORT_COOLDOWN_DAYS)
         }
       }
 
@@ -1435,6 +1373,7 @@ export default function InputTradeForm({
     })
 
     setShowCreateModal(false)
+    void refreshPlanAndAccountLock()
     } finally {
       creatingAccountRef.current = false
       setCreatingAccount(false)
@@ -1600,7 +1539,7 @@ export default function InputTradeForm({
             <button
               type="button"
               onClick={handleUploadCsvGuardClick}
-              disabled={!onUploadCsvClick || csvLoading}
+              disabled={!onUploadCsvClick || csvLoading || csvImportBlocked}
               className="shrink-0 flex-1 px-3 py-2 text-sm rounded-lg bg-blue-500 disabled:opacity-60"
             >
               Upload CSV
@@ -1664,7 +1603,7 @@ export default function InputTradeForm({
             <button
               type="button"
               onClick={handleUploadCsvGuardClick}
-              disabled={!onUploadCsvClick || csvLoading}
+              disabled={!onUploadCsvClick || csvLoading || csvImportBlocked}
               className="shrink-0 px-4 py-2 text-sm rounded-lg bg-blue-500 disabled:opacity-60"
             >
               Upload CSV

@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import Papa from "papaparse"
 import { supabase } from "@/lib/supabaseClient"
 import {
@@ -38,6 +38,14 @@ import { csvTradesHaveFutureDate } from "@/lib/tradeDateValidation"
 import { notifyGettingStartedChecklistMaybeCompleted } from "@/lib/gettingStartedProgressSync"
 import { useUserProfile } from "@/lib/useUserProfile"
 import { useUploadProgress } from "@/lib/uploadProgress/UploadProgressProvider"
+import {
+  assertCsvImportAllowedForFreePlan,
+  csvImportLimitMessage,
+  FREE_PLAN_CSV_IMPORT_COOLDOWN_DAYS,
+  fetchCsvImportGateStatus,
+  markProfileCsvImportUsed,
+} from "@/lib/csvImportGate"
+import { isProActive } from "@/lib/subscription"
 
 export type CsvImportPanelProps = {
   /** Smaller preview + less chrome (e.g. onboarding modal) */
@@ -76,7 +84,7 @@ export default function CsvImportPanel({
   importSource = "csv_import_panel",
 }: CsvImportPanelProps) {
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
-  const { user } = useUserProfile()
+  const { user, profile } = useUserProfile()
   const { runUpload } = useUploadProgress()
   const [parsed, setParsed] = useState<CsvRow[]>([])
   const [loading, setLoading] = useState(false)
@@ -87,6 +95,10 @@ export default function CsvImportPanel({
   const [failureModalOpen, setFailureModalOpen] = useState(false)
   const [failureReason, setFailureReason] = useState("")
   const [submittingSupport, setSubmittingSupport] = useState(false)
+  const [csvImportBlocked, setCsvImportBlocked] = useState(false)
+  const [csvDaysUntilNextImport, setCsvDaysUntilNextImport] = useState<
+    number | null
+  >(null)
   const importingRef = useRef(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const lastCsvFileRef = useRef<File | null>(null)
@@ -94,6 +106,49 @@ export default function CsvImportPanel({
   function endImport() {
     importingRef.current = false
     setLoading(false)
+  }
+
+  useEffect(() => {
+    if (!user?.id) {
+      setCsvImportBlocked(false)
+      setCsvDaysUntilNextImport(null)
+      return
+    }
+
+    void fetchCsvImportGateStatus(supabase, user.id).then((status) => {
+      if (status.allowed) {
+        setCsvImportBlocked(false)
+        setCsvDaysUntilNextImport(null)
+        return
+      }
+      setCsvImportBlocked(true)
+      setCsvDaysUntilNextImport(status.daysUntilNextImport)
+    })
+  }, [user?.id])
+
+  function showCsvSubscriptionLimit(daysUntilNextImport?: number) {
+    showPopup(
+      feedbackPresets.csvSubscriptionLimit(
+        daysUntilNextImport ?? csvDaysUntilNextImport ?? undefined
+      )
+    )
+  }
+
+  async function ensureCsvImportAllowed(): Promise<boolean> {
+    if (!user?.id) {
+      showPopup(feedbackPresets.importFailed("Please log in first."))
+      return false
+    }
+
+    const gate = await assertCsvImportAllowedForFreePlan(supabase, user.id)
+    if (!gate.ok) {
+      setCsvImportBlocked(true)
+      setCsvDaysUntilNextImport(gate.daysUntilNextImport)
+      showCsvSubscriptionLimit(gate.daysUntilNextImport)
+      return false
+    }
+
+    return true
   }
 
   function resetFileInput() {
@@ -148,6 +203,15 @@ export default function CsvImportPanel({
   }
 
   async function handleFile(file: File) {
+    if (csvImportBlocked) {
+      showCsvSubscriptionLimit()
+      return
+    }
+
+    if (!(await ensureCsvImportAllowed())) {
+      return
+    }
+
     lastCsvFileRef.current = file
     setCsvSupportFile(file)
     setFailureModalOpen(false)
@@ -311,6 +375,10 @@ export default function CsvImportPanel({
             throw new Error("Please log in first.")
           }
 
+          if (!(await ensureCsvImportAllowed())) {
+            throw new Error("CSV import unavailable.")
+          }
+
           const rateLimit = await consumeAppRateLimit("csv_import")
           if (!rateLimit.ok) {
             throw new Error(rateLimit.message)
@@ -425,6 +493,19 @@ export default function CsvImportPanel({
             }
           }
 
+          if (!isProActive(profile)) {
+            const { error: csvFlagErr } = await markProfileCsvImportUsed(
+              supabase,
+              user.id
+            )
+            if (csvFlagErr) {
+              console.error("markProfileCsvImportUsed:", csvFlagErr)
+            } else {
+              setCsvImportBlocked(true)
+              setCsvDaysUntilNextImport(FREE_PLAN_CSV_IMPORT_COOLDOWN_DAYS)
+            }
+          }
+
           const skipped = summary.failed
           const errLines = rowResults
             .filter(
@@ -491,8 +572,15 @@ export default function CsvImportPanel({
           brokerName={brokerHint ?? diagnostics.formatLabel}
           importedRowCount={parsed.length}
           importableRowCount={parsed.length}
-          canImport={!requireSelectedAccount || Boolean(selectedAccount)}
-          importDisabledHint="Select an account before importing."
+          canImport={
+            !csvImportBlocked &&
+            (!requireSelectedAccount || Boolean(selectedAccount))
+          }
+          importDisabledHint={
+            csvImportBlocked
+              ? "Free plan CSV import limit reached."
+              : "Select an account before importing."
+          }
           importing={loading}
           onImportRows={() => void handleImport()}
         />
@@ -503,12 +591,19 @@ export default function CsvImportPanel({
         id={fileInputId}
         type="file"
         accept=".csv"
+        disabled={csvImportBlocked || loading}
         onChange={(e) => {
           const file = e.target.files?.[0]
           if (file) void handleFile(file)
         }}
-        className="block w-full text-sm text-gray-300 file:mr-3 file:min-h-[44px] file:rounded-lg file:border-0 file:bg-emerald-500/20 file:px-3 file:py-2.5 file:text-sm file:text-emerald-200"
+        className="block w-full text-sm text-gray-300 file:mr-3 file:min-h-[44px] file:rounded-lg file:border-0 file:bg-emerald-500/20 file:px-3 file:py-2.5 file:text-sm file:text-emerald-200 disabled:cursor-not-allowed disabled:opacity-60"
       />
+
+      {csvImportBlocked ? (
+        <p className="whitespace-pre-line text-xs leading-relaxed text-amber-200/90">
+          {csvImportLimitMessage(csvDaysUntilNextImport ?? undefined)}
+        </p>
+      ) : null}
 
       {parsed.length > 0 ? (
         <p className="text-xs text-gray-400">
@@ -582,7 +677,9 @@ export default function CsvImportPanel({
           type="button"
           onClick={() => void handleImport()}
           disabled={
-            loading || (requireSelectedAccount && !selectedAccount)
+            loading ||
+            csvImportBlocked ||
+            (requireSelectedAccount && !selectedAccount)
           }
           className="w-full rounded-xl bg-emerald-500 px-4 py-2.5 font-semibold text-white transition hover:bg-emerald-600 disabled:opacity-60"
         >

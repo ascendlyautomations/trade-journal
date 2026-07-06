@@ -15,7 +15,7 @@ export const REEL_MAX_FILE_BYTES = 100 * 1024 * 1024
 /** User-facing duration limit copy (keep in sync across validation + UI). */
 export const REEL_MAX_DURATION_LABEL = "1 min 30 sec"
 export const REEL_DURATION_LIMIT_MESSAGE =
-  "Reels must be 90 seconds (1 minute 30 seconds) or less."
+  "Clips must be 90 seconds (1 minute 30 seconds) or less."
 
 const ACCEPTED_VIDEO_MIME_TYPES = new Set([
   "video/mp4",
@@ -62,7 +62,7 @@ export function validateReelVideoFile(file: File): ReelVideoValidationError | nu
   if (!isAcceptedReelVideoFile(file)) {
     return {
       title: "Unsupported Format",
-      message: "Reels support MP4 and MOV videos only.",
+      message: "Clips support MP4 and MOV videos only.",
     }
   }
 

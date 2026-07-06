@@ -1,6 +1,7 @@
 import type { FeedbackPopupInput } from "@/app/components/ui/feedback-popup-types"
 import { GETTING_STARTED_INTRO_POPUP_TITLE } from "@/lib/gettingStartedIntro"
 import { ONBOARDING_COMPLETE_POPUP_TITLE } from "@/lib/gettingStartedOnboardingComplete"
+import { csvImportLimitMessage } from "@/lib/csvImportGate"
 import { FREE_PLAN_ACCOUNT_LIMIT_MESSAGE } from "@/lib/tradingAccounts"
 
 export function persistentError(
@@ -25,16 +26,16 @@ export function persistentSuccess(
 }
 
 export const feedbackPresets = {
-  csvSubscriptionLimit: (): FeedbackPopupInput =>
+  csvSubscriptionLimit: (daysUntilNextImport?: number): FeedbackPopupInput =>
     persistentWarning(
       "CSV Import Unavailable",
-      "Free plan includes 1 CSV import. Upgrade to Pro for unlimited CSV imports."
+      csvImportLimitMessage(daysUntilNextImport)
     ),
 
-  csvImportUnavailable: (): FeedbackPopupInput =>
+  csvImportUnavailable: (daysUntilNextImport?: number): FeedbackPopupInput =>
     persistentWarning(
       "CSV Import Unavailable",
-      "Free plan includes one CSV import only. Upgrade to Pro for unlimited imports."
+      csvImportLimitMessage(daysUntilNextImport)
     ),
 
   accountLimit: (): FeedbackPopupInput =>
@@ -42,8 +43,8 @@ export const feedbackPresets = {
 
   accountLocked: (): FeedbackPopupInput =>
     persistentError(
-      "Account Locked",
-      "Your free plan is locked to one account. Switch back to that account to save."
+      "Account Limit Reached",
+      FREE_PLAN_ACCOUNT_LIMIT_MESSAGE
     ),
 
   importFailed: (detail: string): FeedbackPopupInput =>
@@ -89,8 +90,8 @@ export const feedbackPresets = {
 
   reelPublished: (): FeedbackPopupInput =>
     persistentSuccess(
-      "Reel Published",
-      "Your reel is now visible on your profile."
+      "Clip Published",
+      "Your clip is now visible on your profile."
     ),
 
   roomLinkCopied: (): FeedbackPopupInput =>

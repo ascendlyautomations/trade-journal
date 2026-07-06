@@ -373,12 +373,87 @@ export default function Navbar() {
     </span>
   )
 
+  const closeMobile = () => {
+    setIsOpen(false)
+    setOpenSection(null)
+  }
+
   function analyticsLinkLabel(item: { label: string; beta?: boolean }) {
     return (
       <div className="flex min-w-0 flex-1 items-center gap-2">
         <span className="truncate">{item.label}</span>
         {item.beta ? betaBadge : null}
       </div>
+    )
+  }
+
+  type AnalyticsLinkItem = (typeof analyticsLinks)[number]
+  const isProUser = isProActive(profile)
+
+  function analyticsLinkClassName(
+    item: AnalyticsLinkItem,
+    layout: "desktop" | "mobile"
+  ) {
+    const base =
+      layout === "desktop"
+        ? "flex w-full items-center justify-between gap-2 rounded px-3 py-2"
+        : "flex w-full items-center justify-between gap-2 rounded-lg px-3 py-1.5"
+    const state = isActive(item.href)
+      ? "bg-blue-500/20 text-blue-300"
+      : item.proOnly && !isProUser
+        ? "text-gray-400 hover:bg-white/10"
+        : layout === "desktop"
+          ? "text-gray-300 hover:bg-white/10"
+          : "hover:bg-white/10 text-gray-300"
+    return `${base} ${state}`
+  }
+
+  function renderAnalyticsNavLink(
+    item: AnalyticsLinkItem,
+    layout: "desktop" | "mobile"
+  ) {
+    return (
+      <IntentPrefetchLink
+        key={item.label}
+        href={item.href}
+        className={analyticsLinkClassName(item, layout)}
+        onClick={layout === "mobile" ? closeMobile : undefined}
+      >
+        {analyticsLinkLabel(item)}
+        {item.proOnly && !isProUser ? proBadge : null}
+      </IntentPrefetchLink>
+    )
+  }
+
+  function renderAnalyticsDropdown(layout: "desktop" | "mobile") {
+    if (isProUser) {
+      return analyticsLinks.map((item) => renderAnalyticsNavLink(item, layout))
+    }
+
+    const freeLinks = analyticsLinks.filter((item) => !item.proOnly)
+    const proLinks = analyticsLinks.filter((item) => item.proOnly)
+
+    return (
+      <>
+        {freeLinks.map((item) => renderAnalyticsNavLink(item, layout))}
+        {proLinks.length > 0 ? (
+          <>
+            <div
+              className={
+                layout === "desktop"
+                  ? "mx-2 my-1 border-t border-white/10 px-1 pt-2 pb-1"
+                  : "mx-1 my-1 border-t border-white/10 px-2 pt-2 pb-1"
+              }
+              role="presentation"
+            >
+              <span className="text-[10px] font-medium uppercase tracking-wide text-gray-500">
+                TradeTraxs Pro
+              </span>
+            </div>
+            {proLinks.map((item) => renderAnalyticsNavLink(item, layout))}
+          </>
+        ) : null}
+      </>
     )
   }
 
@@ -399,11 +474,6 @@ export default function Navbar() {
         { label: "Affiliate Payouts", href: "/payouts" },
       ]
     : [{ label: "Become an Affiliate", href: "/affiliate" }]
-
-  const closeMobile = () => {
-    setIsOpen(false)
-    setOpenSection(null)
-  }
 
   const notificationBellControl = (
     iconClassName: string,
@@ -584,22 +654,7 @@ export default function Navbar() {
                 </button>
                 {activeMenu === "analytics" ? (
                   <div className="absolute top-full z-[9999] mt-2 w-56 rounded border border-white/10 bg-[#1e293b] shadow-lg">
-                    {analyticsLinks.map((item) => (
-                        <IntentPrefetchLink
-                          key={item.label}
-                          href={item.href}
-                          className={`flex w-full items-center justify-between gap-2 rounded px-3 py-2 ${
-                            isActive(item.href)
-                              ? "bg-blue-500/20 text-blue-300"
-                              : item.proOnly && !isProActive(profile)
-                                ? "text-gray-400 hover:bg-white/10"
-                                : "text-gray-300 hover:bg-white/10"
-                          }`}
-                        >
-                          {analyticsLinkLabel(item)}
-                          {item.proOnly && !isProActive(profile) ? proBadge : null}
-                        </IntentPrefetchLink>
-                      ))}
+                    {renderAnalyticsDropdown("desktop")}
                   </div>
                 ) : null}
               </div>
@@ -952,23 +1007,7 @@ export default function Navbar() {
             </button>
             {openSection === "analytics" ? (
               <div className="mt-1.5 space-y-1 pl-3 text-sm">
-                {analyticsLinks.map((item) => (
-                    <IntentPrefetchLink
-                      key={item.label}
-                      href={item.href}
-                      className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-1.5 ${
-                        isActive(item.href)
-                          ? "bg-blue-500/20 text-blue-300"
-                          : item.proOnly && !isProActive(profile)
-                            ? "text-gray-400 hover:bg-white/10"
-                            : "hover:bg-white/10 text-gray-300"
-                      }`}
-                      onClick={closeMobile}
-                    >
-                      {analyticsLinkLabel(item)}
-                      {item.proOnly && !isProActive(profile) ? proBadge : null}
-                    </IntentPrefetchLink>
-                  ))}
+                {renderAnalyticsDropdown("mobile")}
               </div>
             ) : null}
           </div>

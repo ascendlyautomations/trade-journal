@@ -134,7 +134,7 @@ export const CREATOR_GUIDELINES_PAGE_METADATA = buildPublicRouteMetadata({
   path: "/creator-guidelines",
   title: "Creator Guidelines",
   description:
-    "TradeTraxs creator guidelines for sharing trades, posts, and reels with transparency and professionalism.",
+    "TradeTraxs creator guidelines for sharing trades, posts, and clips with transparency and professionalism.",
 })
 
 export const AFFILIATE_PROGRAM_PAGE_METADATA = buildPublicRouteMetadata({

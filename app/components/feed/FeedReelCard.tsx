@@ -94,7 +94,7 @@ function FeedReelCard({
             userId={post.user_id}
             avatarUrl={avatarUrl}
             username={profileUsername}
-            metaLabel="Reel"
+            metaLabel="Clip"
             metaLabelClassName="font-medium text-violet-400/90"
             postedAt={post.created_at}
           />
