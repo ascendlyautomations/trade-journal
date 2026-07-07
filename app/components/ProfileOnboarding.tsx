@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react"
 import { profileNeedsUsername } from "@/lib/profileOnboardingGate"
 import { supabase } from "@/lib/supabaseClient"
 import { uploadAvatarFile } from "@/lib/avatarUpload"
+import ImageCropModal from "@/app/components/ImageCropModal"
+import { useImageCropUpload } from "@/lib/useImageCropUpload"
 import { useUploadProgress } from "@/lib/uploadProgress/UploadProgressProvider"
 import { ProfileAvatarImg } from "@/app/components/SafeProfileAvatar"
 import {
@@ -101,6 +103,14 @@ export default function ProfileOnboarding({
   const [avatarPreview, setAvatarPreview] = useState<string | null>(
     initialAvatarUrl
   )
+  const avatarCrop = useImageCropUpload({
+    preset: "avatar",
+    onCropped: (cropped) => {
+      setAvatarFile(cropped)
+      setAvatarPreview(URL.createObjectURL(cropped))
+    },
+    onValidationError: setError,
+  })
   const [saving, setSaving] = useState(false)
   const savingRef = useRef(false)
   const [error, setError] = useState<string | null>(null)
@@ -136,10 +146,7 @@ export default function ProfileOnboarding({
   }
 
   function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0]
-    if (!f) return
-    setAvatarFile(f)
-    setAvatarPreview(URL.createObjectURL(f))
+    avatarCrop.handleFileSelected(e.target.files?.[0])
   }
 
   function handleStartedTradingChange(next: string) {
@@ -395,6 +402,13 @@ export default function ProfileOnboarding({
           </div>
         </form>
       </div>
+      <ImageCropModal
+        open={avatarCrop.cropSourceFile != null}
+        file={avatarCrop.cropSourceFile}
+        preset="avatar"
+        onCancel={avatarCrop.handleCropCancel}
+        onSave={avatarCrop.handleCropSave}
+      />
     </>
   )
 }

@@ -27,7 +27,7 @@ export function isInAppEntryFlow(
   return profileNeedsOnboarding(profile) || needsSubscriptionCheckout(profile)
 }
 
-/** Logged-out marketing navbar on public marketing pages only. */
+/** Marketing navbar on public marketing pages (logged-out or completed members). */
 export function shouldShowMarketingNavbar(
   pathname: string | null | undefined,
   user: MarketingUser,
@@ -37,8 +37,12 @@ export function shouldShowMarketingNavbar(
   if (!pathname || isStandaloneFlowRoute(pathname)) return false
   if (isSignupFlowActive()) return false
   if (isInAppEntryFlow(user, profile, loading)) return false
-  if (user || loading) return false
-  return isMarketingRoute(pathname) || isPublicLegalRoute(pathname)
+  if (!isMarketingRoute(pathname) && !isPublicLegalRoute(pathname)) {
+    return false
+  }
+  if (!user && !loading) return true
+  if (loading) return false
+  return shouldShowCustomerHomeChrome(user, profile, loading)
 }
 
 export function hasCompletedAppEntry(

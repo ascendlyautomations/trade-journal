@@ -6,6 +6,7 @@ import {
   buildAnalyzeTradeHistoryContext,
   buildTradeAnalysisPrompt,
 } from "@/lib/analyzeTradePrompt"
+import { tradeScreenshotPublicUrl } from "@/lib/storagePublicUrl"
 import { isProActive } from "@/lib/subscription"
 
 const openai = new OpenAI({
@@ -21,16 +22,7 @@ const supabaseAdmin = createClient(
 const aiCallByUser = new Map<string, number>()
 
 function resolveScreenshotPublicUrl(imagePath: string | null | undefined) {
-  if (!imagePath?.trim()) return null
-  const trimmed = imagePath.trim()
-  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
-    return null
-  }
-  const base = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "")
-  if (!base) return null
-  const normalized = trimmed.replace(/^\/+/, "")
-  if (normalized.includes("..")) return null
-  return `${base}/storage/v1/object/public/screenshots/${normalized}`
+  return tradeScreenshotPublicUrl(imagePath)
 }
 
 function isOpenAiImageFetchError(error: unknown): boolean {

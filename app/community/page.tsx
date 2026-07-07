@@ -28,6 +28,8 @@ import {
   mapUploadBytesToPercent,
 } from "@/lib/uploadProgress/reportProgress"
 import { useUploadProgress } from "@/lib/uploadProgress/UploadProgressProvider"
+import ImageCropModal from "../components/ImageCropModal"
+import { useImageCropUpload } from "@/lib/useImageCropUpload"
 import { formatRelativeTime } from "@/lib/formatRelativeTime"
 import { feedbackPresets, persistentError } from "@/lib/feedbackPresets"
 import { useUserProfile } from "@/lib/UserProfileProvider"
@@ -485,13 +487,31 @@ function CommunityContent() {
   const [editAllowChat, setEditAllowChat] = useState(true)
   const typingChannelRef = useRef<any>(null)
   const messagesScrollRef = useRef<HTMLDivElement | null>(null)
-  const composerFileRef = useRef<HTMLInputElement>(null)
   const [selectedComposerImage, setSelectedComposerImage] = useState<File | null>(
     null
   )
   const [composerPreviewUrl, setComposerPreviewUrl] = useState<string | null>(
     null
   )
+  const composerImageCrop = useImageCropUpload({
+    preset: "content",
+    onCropped: (file) => {
+      if (composerPreviewUrl) URL.revokeObjectURL(composerPreviewUrl)
+      setSelectedComposerImage(file)
+      setComposerPreviewUrl(URL.createObjectURL(file))
+    },
+    onValidationError: (message) => showPopup({ type: "error", message }),
+  })
+  const roomImageUploadRef = useRef<(file: File) => Promise<void>>(
+    async () => {}
+  )
+  const roomImageCrop = useImageCropUpload({
+    preset: "room",
+    onCropped: (file) => {
+      void roomImageUploadRef.current(file)
+    },
+    onValidationError: (message) => showPopup({ type: "error", message }),
+  })
   const [lightboxImageUrl, setLightboxImageUrl] = useState<string | null>(null)
   const sectionFilterRef = useRef<{ len: number; id: string | null }>({
     len: 0,
@@ -2356,6 +2376,7 @@ function CommunityContent() {
       // Upload manager handles retry/cancel.
     }
   }
+  roomImageUploadRef.current = handleRoomImageUpload
 
   useEffect(() => {
     if (!user?.id) {
@@ -2757,7 +2778,9 @@ function CommunityContent() {
     setSelectedComposerImage(null)
     if (composerPreviewUrl) URL.revokeObjectURL(composerPreviewUrl)
     setComposerPreviewUrl(null)
-    if (composerFileRef.current) composerFileRef.current.value = ""
+    if (composerImageCrop.fileInputRef.current) {
+      composerImageCrop.fileInputRef.current.value = ""
+    }
   }
 
   useEffect(() => {
@@ -2772,7 +2795,9 @@ function CommunityContent() {
       if (prev) URL.revokeObjectURL(prev)
       return null
     })
-    if (composerFileRef.current) composerFileRef.current.value = ""
+    if (composerImageCrop.fileInputRef.current) {
+      composerImageCrop.fileInputRef.current.value = ""
+    }
   }, [selectedRoomId, selectedSectionId])
 
   function handleComposerImageChange(e: ChangeEvent<HTMLInputElement>) {
@@ -2780,11 +2805,7 @@ function CommunityContent() {
 
     const file = e.target.files?.[0]
     e.target.value = ""
-    if (!file) return
-
-    if (composerPreviewUrl) URL.revokeObjectURL(composerPreviewUrl)
-    setSelectedComposerImage(file)
-    setComposerPreviewUrl(URL.createObjectURL(file))
+    composerImageCrop.handleFileSelected(file)
   }
 
   function scrollToRoomMessage(messageId: string): boolean {
@@ -3401,7 +3422,7 @@ function CommunityContent() {
                           onChange={(e) => {
                             const file = e.target.files?.[0]
                             e.target.value = ""
-                            if (file) void handleRoomImageUpload(file)
+                            roomImageCrop.handleFileSelected(file)
                           }}
                         />
                       </label>
@@ -4037,7 +4058,7 @@ function CommunityContent() {
                     }
                     onImageChange={handleComposerImageChange}
                     imageDisabled={!canPostInRoom}
-                    fileInputRef={composerFileRef}
+                    fileInputRef={composerImageCrop.fileInputRef}
                     onTradeClick={() => setSelectTrade(true)}
                     tradeDisabled={!canPostInRoom}
                     beforeRow={
@@ -4538,7 +4559,7 @@ function CommunityContent() {
                   onChange={(e) => {
                     const file = e.target.files?.[0]
                     e.target.value = ""
-                    if (file) void handleRoomImageUpload(file)
+                    roomImageCrop.handleFileSelected(file)
                   }}
                 />
               </label>
@@ -4716,6 +4737,20 @@ function CommunityContent() {
           </div>
         </div>
       ) : null}
+      <ImageCropModal
+        open={composerImageCrop.cropSourceFile != null}
+        file={composerImageCrop.cropSourceFile}
+        preset="content"
+        onCancel={composerImageCrop.handleCropCancel}
+        onSave={composerImageCrop.handleCropSave}
+      />
+      <ImageCropModal
+        open={roomImageCrop.cropSourceFile != null}
+        file={roomImageCrop.cropSourceFile}
+        preset="room"
+        onCancel={roomImageCrop.handleCropCancel}
+        onSave={roomImageCrop.handleCropSave}
+      />
       <ImageLightbox
         open={lightboxImageUrl != null}
         imageUrl={lightboxImageUrl}

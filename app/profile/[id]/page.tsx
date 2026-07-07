@@ -34,6 +34,7 @@ import DetailModalShell, {
 } from "../../components/ui/DetailModalShell"
 import DropdownMenu from "@/app/components/ui/DropdownMenu"
 import DetailModalImage from "../../components/ui/DetailModalImage"
+import TradeScreenshotImage from "@/app/components/trade/TradeScreenshotImage"
 import ImageLightbox from "../../components/ui/ImageLightbox"
 import { EMPTY_LIKE_META } from "../../components/feed/FeedPostCard"
 import FeedCommentList from "../../components/feed/FeedCommentList"
@@ -161,9 +162,10 @@ import {
 } from "@/lib/reelEngagement"
 import { ProfileAvatarImg } from "../../components/SafeProfileAvatar"
 import StoryComposeModal from "../../components/feed/StoryComposeModal"
+import ImageCropModal from "../../components/ImageCropModal"
+import { useImageCropUpload } from "@/lib/useImageCropUpload"
 import FeedStoryViewer from "../../components/feed/FeedStoryViewer"
 import StoryAvatarRing from "../../components/feed/StoryAvatarRing"
-import { isImageUrlLoaded, markImageUrlLoaded } from "@/lib/imageUrlCache"
 import { publishStory } from "@/lib/publishStory"
 import {
   getActiveStoriesForUser,
@@ -297,47 +299,6 @@ function formatMoney(v: number) {
     : `$${v.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
 }
 
-function ProfileTradeScreenshot({
-  src,
-  onImageClick,
-}: {
-  src: string
-  onImageClick?: (url: string) => void
-}) {
-  const [loaded, setLoaded] = useState(() => isImageUrlLoaded(src))
-
-  return (
-    <div className="relative aspect-[4/3] w-full bg-black/30">
-      {!loaded ? (
-        <div
-          className="absolute inset-0 animate-pulse bg-gradient-to-br from-white/[0.06] to-white/[0.02]"
-          aria-hidden
-        />
-      ) : null}
-      <img
-        src={src}
-        alt=""
-        loading="lazy"
-        decoding="async"
-        className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-300 ${
-          loaded ? "opacity-100" : "opacity-0"
-        }`}
-        onLoad={() => {
-          setLoaded(true)
-          markImageUrlLoaded(src)
-        }}
-        onClick={
-          onImageClick
-            ? (e) => {
-                e.stopPropagation()
-                onImageClick(src)
-              }
-            : undefined
-        }
-      />
-    </div>
-  )
-}
 
 function TradeCard({
   trade,
@@ -670,12 +631,14 @@ function TradeCard({
       {tradeAuthorHeader}
 
       {imageSrc ? (
-        <ProfileTradeScreenshot
+        <TradeScreenshotImage
           src={imageSrc}
-          onImageClick={onImageClick}
+          preset="feed-thumb"
+          onClick={onImageClick}
+          logContext="profile-trade-card"
         />
       ) : (
-        <div className="flex aspect-[4/3] w-full items-center justify-center bg-gradient-to-br from-white/5 to-white/[0.02] text-xs text-gray-500">
+        <div className="flex min-h-[5rem] w-full items-center justify-center bg-gradient-to-br from-white/5 to-white/[0.02] py-8 text-xs text-gray-500">
           No screenshot
         </div>
       )}
@@ -1337,6 +1300,11 @@ function ProfilePageContent() {
   const [postingStory, setPostingStory] = useState(false)
   const [postContent, setPostContent] = useState("")
   const [postImage, setPostImage] = useState<File | null>(null)
+  const postImageCrop = useImageCropUpload({
+    preset: "content",
+    onCropped: setPostImage,
+    onValidationError: (message) => showPopup({ type: "error", message }),
+  })
   const [postImagePreviewUrl, setPostImagePreviewUrl] = useState<string | null>(
     null
   )
@@ -5313,7 +5281,7 @@ function ProfilePageContent() {
                 type="file"
                 accept="image/*"
                 onChange={(e) =>
-                  setPostImage(e.target.files?.[0] ?? null)
+                  postImageCrop.handleFileSelected(e.target.files?.[0])
                 }
                 className="mb-3 block w-full text-sm text-gray-300 file:mr-2 file:rounded file:border-0 file:bg-white/10 file:px-3 file:py-1.5 file:text-sm file:text-gray-100"
               />
@@ -5716,6 +5684,13 @@ function ProfilePageContent() {
         </div>
       )}
 
+      <ImageCropModal
+        open={postImageCrop.cropSourceFile != null}
+        file={postImageCrop.cropSourceFile}
+        preset="content"
+        onCancel={postImageCrop.handleCropCancel}
+        onSave={postImageCrop.handleCropSave}
+      />
     </>
   )
 }

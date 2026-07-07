@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabaseClient"
-import { compressScreenshot } from "@/lib/compressImage"
+import { compressContentImage, CONTENT_IMAGE_CROP_PRESET } from "@/lib/contentImagePipeline"
 import { validateImageUpload } from "@/lib/uploadValidation"
 import { consumeAppRateLimit } from "@/lib/consumeAppRateLimit"
 import {
@@ -48,6 +48,8 @@ import { buildCommunitySharePreviewPost } from "@/lib/buildCommunitySharePreview
 import CommunitySharePreviewModal from "@/app/components/CommunitySharePreviewModal"
 import TradePublicShareToggle from "@/app/components/TradePublicShareToggle"
 import TradeReelAttachment from "@/app/components/TradeReelAttachment"
+import ImageCropModal from "@/app/components/ImageCropModal"
+import { useImageCropUpload } from "@/lib/useImageCropUpload"
 import TradeFormCurrencyInput from "@/app/components/trade/TradeFormCurrencyInput"
 import {
   getTradeFormCurrencyInputDisplayValue,
@@ -221,6 +223,12 @@ export default function InputTradeForm({
   const [postToFeed, setPostToFeed] = useState(false)
   const [isPublic, setIsPublic] = useState(false)
   const [image, setImage] = useState<File | null>(null)
+  const imageCrop = useImageCropUpload({
+    preset: CONTENT_IMAGE_CROP_PRESET,
+    onCropped: setImage,
+    onValidationError: (message) =>
+      showPopup(persistentError("Invalid Image", message)),
+  })
   const [pendingReelFile, setPendingReelFile] = useState<File | null>(null)
   const pendingReelFileRef = useRef<File | null>(null)
   const [attachedReel, setAttachedReel] = useState<ReelRow | null>(null)
@@ -233,7 +241,7 @@ export default function InputTradeForm({
   const [contracts, setContracts] = useState("")
   const [entryTime, setEntryTime] = useState("")
   const [exitTime, setExitTime] = useState("")
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const fileInputRef = imageCrop.fileInputRef
   const entryDateRef = useRef<HTMLInputElement>(null)
   const exitDateRef = useRef<HTMLInputElement>(null)
 
@@ -742,7 +750,7 @@ export default function InputTradeForm({
 
       let uploadFile: File = image
       if (image.type?.startsWith("image/")) {
-        uploadFile = await compressScreenshot(image)
+        uploadFile = await compressContentImage(image)
       }
       const fileName = `${userId}/${Date.now()}-${uploadFile.name}`
 
@@ -1148,13 +1156,15 @@ export default function InputTradeForm({
   }
 
   function selectTradeImage(file: File | undefined) {
-    if (!file) return
-    const validationError = validateImageUpload(file)
-    if (validationError) {
-      showPopup(persistentError("Invalid Image", validationError))
-      return
-    }
-    setImage(file)
+    imageCrop.handleFileSelected(file)
+  }
+
+  function handleCropCancel() {
+    imageCrop.handleCropCancel()
+  }
+
+  function handleCropSave(cropped: File) {
+    imageCrop.handleCropSave(cropped)
   }
 
   function handleDrop(e: React.DragEvent<HTMLDivElement>) {
@@ -2490,6 +2500,13 @@ export default function InputTradeForm({
         {feedbackModal}
         {deleteAttachedReelModal}
         {communitySharePreviewModal}
+        <ImageCropModal
+          open={imageCrop.cropSourceFile != null}
+          file={imageCrop.cropSourceFile}
+          preset={CONTENT_IMAGE_CROP_PRESET}
+          onCancel={handleCropCancel}
+          onSave={handleCropSave}
+        />
         <CreateAccountModal
           open={showCreateModal}
           onClose={() => setShowCreateModal(false)}
@@ -2526,6 +2543,14 @@ export default function InputTradeForm({
       {feedbackModal}
       {deleteAttachedReelModal}
       {communitySharePreviewModal}
+      <ImageCropModal
+        open={imageCrop.cropSourceFile != null}
+        file={imageCrop.cropSourceFile}
+        preset={CONTENT_IMAGE_CROP_PRESET}
+        onCancel={handleCropCancel}
+        onSave={handleCropSave}
+      />
+
       <CreateAccountModal
         open={showCreateModal}
         onClose={() => setShowCreateModal(false)}

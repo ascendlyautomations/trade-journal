@@ -1,6 +1,8 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import ImageCropModal from "@/app/components/ImageCropModal"
+import { useImageCropUpload } from "@/lib/useImageCropUpload"
 import { useRouter } from "next/navigation"
 import { supabase } from "../../lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
@@ -51,6 +53,11 @@ export default function SupportPage() {
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState("")
   const [error, setError] = useState("")
+  const imageCrop = useImageCropUpload({
+    preset: "content",
+    onCropped: setImage,
+    onValidationError: setError,
+  })
   const [history, setHistory] = useState<SupportRow[]>([])
   const [historyLoading, setHistoryLoading] = useState(true)
 
@@ -199,7 +206,7 @@ export default function SupportPage() {
               <input
                 type="file"
                 accept="image/*"
-                onChange={(e) => setImage(e.target.files?.[0] || null)}
+                onChange={(e) => imageCrop.handleFileSelected(e.target.files?.[0])}
                 className="hidden"
               />
             </label>
@@ -245,6 +252,13 @@ export default function SupportPage() {
           </section>
         </div>
       </div>
+      <ImageCropModal
+        open={imageCrop.cropSourceFile != null}
+        file={imageCrop.cropSourceFile}
+        preset="content"
+        onCancel={imageCrop.handleCropCancel}
+        onSave={imageCrop.handleCropSave}
+      />
     </>
   )
 }

@@ -22,6 +22,8 @@ import {
   submissionTitle,
 } from "@/lib/submissionFormStyles"
 import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
+import ImageCropModal from "@/app/components/ImageCropModal"
+import { useImageCropUpload } from "@/lib/useImageCropUpload"
 import { useUserProfile } from "@/lib/useUserProfile"
 
 const SUCCESS_AUTO_CLOSE_MS = 1000
@@ -39,7 +41,6 @@ export default function BugReportModal({
 }: BugReportModalProps) {
   const router = useRouter()
   const { user } = useUserProfile()
-  const fileInputRef = useRef<HTMLInputElement>(null)
   const submittingRef = useRef(false)
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
@@ -50,6 +51,12 @@ export default function BugReportModal({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
+  const imageCrop = useImageCropUpload({
+    preset: "content",
+    onCropped: setScreenshot,
+    onValidationError: setError,
+  })
+  const fileInputRef = imageCrop.fileInputRef
 
   const resetForm = useCallback(() => {
     setTitle("")
@@ -223,7 +230,7 @@ export default function BugReportModal({
                 type="file"
                 accept="image/*"
                 disabled={busy || success}
-                onChange={(e) => setScreenshot(e.target.files?.[0] ?? null)}
+                onChange={(e) => imageCrop.handleFileSelected(e.target.files?.[0])}
                 className="hidden"
               />
             </label>
@@ -263,6 +270,13 @@ export default function BugReportModal({
           </form>
         )}
       </div>
+      <ImageCropModal
+        open={imageCrop.cropSourceFile != null}
+        file={imageCrop.cropSourceFile}
+        preset="content"
+        onCancel={imageCrop.handleCropCancel}
+        onSave={imageCrop.handleCropSave}
+      />
     </div>
   )
 }

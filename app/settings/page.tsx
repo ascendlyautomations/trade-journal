@@ -9,6 +9,8 @@ import { useRouter } from "next/navigation"
 import { supabase } from "../../lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
 import { uploadAvatarFile } from "@/lib/avatarUpload"
+import ImageCropModal from "@/app/components/ImageCropModal"
+import { useImageCropUpload } from "@/lib/useImageCropUpload"
 import { useUploadProgress } from "@/lib/uploadProgress/UploadProgressProvider"
 import {
   formatMembershipStatusLabel,
@@ -251,6 +253,14 @@ export default function SettingsPage() {
   const [isPrivate, setIsPrivate] = useState(false)
 
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
+  const avatarCrop = useImageCropUpload({
+    preset: "avatar",
+    onCropped: (cropped) => {
+      setAvatarFile(cropped)
+      setAvatarPreview(URL.createObjectURL(cropped))
+    },
+    onValidationError: (message) => showPopup({ type: "error", message }),
+  })
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
 
   const [tradingStyle, setTradingStyle] = useState("")
@@ -1032,10 +1042,7 @@ export default function SettingsPage() {
                       accept="image/*"
                       aria-labelledby="settings-avatar-label"
                       onChange={(e) => {
-                        const file = e.target.files?.[0]
-                        if (!file) return
-                        setAvatarFile(file)
-                        setAvatarPreview(URL.createObjectURL(file))
+                        avatarCrop.handleFileSelected(e.target.files?.[0])
                       }}
                       className="max-w-full text-sm text-gray-300 file:mr-2 file:rounded-lg file:border-0 file:bg-white/10 file:px-3 file:py-2 file:text-sm file:text-gray-100 hover:file:bg-white/20"
                     />
@@ -1805,6 +1812,13 @@ export default function SettingsPage() {
               "Password created successfully. You can now sign in using either Google or your email and password.",
           })
         }}
+      />
+      <ImageCropModal
+        open={avatarCrop.cropSourceFile != null}
+        file={avatarCrop.cropSourceFile}
+        preset="avatar"
+        onCancel={avatarCrop.handleCropCancel}
+        onSave={avatarCrop.handleCropSave}
       />
       <FeedbackModal {...feedbackModalProps} />
     </>

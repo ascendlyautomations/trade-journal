@@ -46,6 +46,8 @@ import { buildDateTime } from "@/lib/inputTradeDateTime"
 import { isProActive } from "@/lib/subscription"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
+import ImageCropModal from "@/app/components/ImageCropModal"
+import { useImageCropUpload } from "@/lib/useImageCropUpload"
 
 type CreateAccountSavePayload = Parameters<CreateAccountModalProps["onSave"]>[0]
 
@@ -170,7 +172,6 @@ export default function QuickTradeModal({
   userId,
   onSaved,
 }: QuickTradeModalProps) {
-  const fileInputRef = useRef<HTMLInputElement>(null)
   const csvFileInputRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
   const uploadingRef = useRef(false)
@@ -199,7 +200,15 @@ export default function QuickTradeModal({
   const [exitPrice, setExitPrice] = useState("")
   const [description, setDescription] = useState("")
   const [isPublic, setIsPublic] = useState(false)
+  const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const [image, setImage] = useState<File | null>(null)
+  const imageCrop = useImageCropUpload({
+    preset: "content",
+    onCropped: setImage,
+    onValidationError: (message) =>
+      showPopup(persistentError("Invalid Image", message)),
+  })
+  const fileInputRef = imageCrop.fileInputRef
   const [pendingReelFile, setPendingReelFile] = useState<File | null>(null)
   const pendingReelFileRef = useRef<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
@@ -213,8 +222,6 @@ export default function QuickTradeModal({
     username?: string | null
     avatar_url?: string | null
   } | null>(null)
-
-  const { showPopup, feedbackModalProps } = useFeedbackPopup()
 
   const resetForm = useCallback(() => {
     const today = getESTDate()
@@ -232,6 +239,7 @@ export default function QuickTradeModal({
     setDescription("")
     setIsPublic(false)
     setImage(null)
+    imageCrop.resetFileInput()
     setPendingReelFile(null)
     setPreviewUrl(null)
     setAdvancedOpen(false)
@@ -693,6 +701,18 @@ export default function QuickTradeModal({
   const canCreateMoreAccounts =
     isProActive(planProfile) || accounts.length < FREE_PLAN_ACCOUNT_LIMIT
 
+  function selectTradeImage(file: File | undefined) {
+    imageCrop.handleFileSelected(file)
+  }
+
+  function handleCropCancel() {
+    imageCrop.handleCropCancel()
+  }
+
+  function handleCropSave(cropped: File) {
+    imageCrop.handleCropSave(cropped)
+  }
+
   return (
     <>
       <div
@@ -976,7 +996,7 @@ export default function QuickTradeModal({
                 type="file"
                 accept="image/*"
                 className="hidden"
-                onChange={(e) => setImage(e.target.files?.[0] ?? null)}
+                onChange={(e) => selectTradeImage(e.target.files?.[0])}
               />
               <button
                 type="button"
@@ -989,7 +1009,7 @@ export default function QuickTradeModal({
                 <img
                   src={previewUrl}
                   alt="Trade screenshot preview"
-                  className="mt-3 max-h-32 w-full rounded-lg border border-white/10 object-cover"
+                  className="mt-3 w-full rounded-lg border border-white/10"
                 />
               ) : null}
 
@@ -1058,6 +1078,13 @@ export default function QuickTradeModal({
         overlayClassName="z-[160]"
       />
       <FeedbackModal {...feedbackModalProps} overlayClassName="z-[200]" />
+      <ImageCropModal
+        open={imageCrop.cropSourceFile != null}
+        file={imageCrop.cropSourceFile}
+        preset="content"
+        onCancel={handleCropCancel}
+        onSave={handleCropSave}
+      />
     </>
   )
 }

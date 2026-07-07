@@ -10,7 +10,8 @@ import {
   tierClassName,
 } from "../../lib/achievements"
 import { achievementImagePublicUrl } from "../../lib/storagePublicUrl"
-import StorageImage from "@/app/components/ui/StorageImage"
+import { CONTENT_IMAGE_DISPLAY_PRESET } from "@/lib/contentImagePipeline"
+import TradeScreenshotImage from "@/app/components/trade/TradeScreenshotImage"
 
 type AchievementCardProps = {
   achievement: Achievement
@@ -36,6 +37,16 @@ export default function AchievementCard({
     isPayout && valueText
       ? `${achievementTypeLabel(achievement.achievement_type)} • ${valueText}`
       : achievementTypeLabel(achievement.achievement_type)
+
+  const imageNode = imageSrc ? (
+    <TradeScreenshotImage
+      src={imageSrc}
+      preset={CONTENT_IMAGE_DISPLAY_PRESET}
+      alt={achievement.title}
+      className="rounded-md border border-white/10"
+      logContext="achievement-card"
+    />
+  ) : null
 
   return (
     <article className={`rounded-xl border p-4 ${tierClassName(achievement.tier ?? null)}`}>
@@ -70,34 +81,18 @@ export default function AchievementCard({
         {!featured && showVisibility ? ` • ${achievement.is_public ? "Public" : "Private"}` : ""}
       </p>
 
-      {imageSrc ? (
+      {imageNode ? (
         onImageClick ? (
           <button
             type="button"
-            onClick={() => onImageClick(imageSrc, achievement)}
-            className="group mt-2 block w-full text-left"
+            onClick={() => onImageClick(imageSrc!, achievement)}
+            className="group mt-2 block w-full text-left transition group-hover:brightness-110"
             aria-label={`Open image for ${achievement.title}`}
           >
-            <StorageImage
-              src={imageSrc}
-              originalSrc={imageSrc}
-              preset="achievement"
-              alt={achievement.title}
-              className={`w-full rounded-md border border-white/10 object-cover transition group-hover:brightness-110 ${
-                featured ? "max-h-44" : "max-h-40"
-              }`}
-            />
+            {imageNode}
           </button>
         ) : (
-          <StorageImage
-            src={imageSrc}
-            originalSrc={imageSrc}
-            preset="achievement"
-            alt={achievement.title}
-            className={`mt-2 w-full rounded-md border border-white/10 object-cover ${
-              featured ? "max-h-44" : "max-h-40"
-            }`}
-          />
+          <div className="mt-2">{imageNode}</div>
         )
       ) : null}
 

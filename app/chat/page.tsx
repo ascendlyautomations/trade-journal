@@ -4,6 +4,8 @@ import { formatEST } from "@/lib/formatEST"
 import { useEffect, useState, useRef } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { compressScreenshot } from "@/lib/compressImage"
+import ImageCropModal from "@/app/components/ImageCropModal"
+import { useImageCropUpload } from "@/lib/useImageCropUpload"
 import { feedbackPresets } from "@/lib/feedbackPresets"
 import { logSupabaseError } from "@/lib/logSupabaseError"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
@@ -17,13 +19,15 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<any[]>([])
   const [input, setInput] = useState("")
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const imageCrop = useImageCropUpload({
+    preset: "content",
+    onCropped: setSelectedFile,
+  })
+  const fileRef = imageCrop.fileInputRef
   const [channel, setChannel] = useState<"random" | "trades">("random")
-
   const [isAtBottom, setIsAtBottom] = useState(true)
   const [newMessages, setNewMessages] = useState(0)
-
   const scrollRef = useRef<HTMLDivElement>(null)
-  const fileRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
   const selectedRoom = channel
   const setSelectedRoom = setChannel
@@ -120,6 +124,7 @@ export default function ChatPage() {
     setInput("")
     setSelectedFile(null)
     if (fileRef.current) fileRef.current.value = ""
+    imageCrop.resetFileInput()
   }
 
   async function react(messageId: string, type: string) {
@@ -166,6 +171,13 @@ export default function ChatPage() {
   return (
     <>
       <FeedbackModal {...feedbackModalProps} />
+      <ImageCropModal
+        open={imageCrop.cropSourceFile != null}
+        file={imageCrop.cropSourceFile}
+        preset="content"
+        onCancel={imageCrop.handleCropCancel}
+        onSave={imageCrop.handleCropSave}
+      />
 
       <div className="h-screen w-full flex flex-col md:flex-row overflow-hidden">
         {/* SIDEBAR (ROOM LIST) */}
@@ -322,7 +334,7 @@ export default function ChatPage() {
               <input
                 ref={fileRef}
                 type="file"
-                onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                onChange={(e) => imageCrop.handleFileSelected(e.target.files?.[0])}
                 className="text-sm"
               />
 

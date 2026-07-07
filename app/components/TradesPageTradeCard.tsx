@@ -12,7 +12,7 @@ import { formatEST } from "@/lib/formatEST"
 import { formatMoneyUnknown, formatNumberUnknown, formatTradePoints } from "@/lib/formatDisplay"
 import { safeAccountNumberLabel, formatTradeAccountNameSizeLine } from "@/lib/tradeAccountDisplay"
 import { tradeScreenshotPublicUrl } from "@/lib/storagePublicUrl"
-import StorageImage from "@/app/components/ui/StorageImage"
+import TradeScreenshotImage from "@/app/components/trade/TradeScreenshotImage"
 import { type ReelRow } from "@/lib/reels"
 
 export type TradesPageTradeCardProps = {
@@ -399,13 +399,12 @@ function TradesPageTradeCard({
       </div>
 
       {screenshotUrl ? (
-        <StorageImage
+        <TradeScreenshotImage
           src={screenshotUrl}
-          originalSrc={screenshotUrl}
           preset="trade-thumb"
-          alt=""
-          className="mt-4 w-full cursor-pointer rounded-lg border border-white/10"
+          className="mt-4 rounded-lg border border-white/10"
           onClick={() => onImageClick(screenshotUrl)}
+          logContext="trades-page-card"
         />
       ) : null}
 

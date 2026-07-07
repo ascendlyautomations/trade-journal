@@ -1,4 +1,9 @@
 import { formatRelativeTime } from "@/lib/formatRelativeTime"
+import type { DashboardSessionBucket } from "@/lib/dashboardSessionBuckets"
+import { normalizeSessionBucket } from "@/lib/dashboardSessionBuckets"
+import { supabase } from "@/lib/supabaseClient"
+import { isDemoModeActive } from "@/lib/demo/demoMode"
+import { normalizeTraderType } from "@/lib/traderType"
 
 export type ExploreProfile = {
   id: string
@@ -8,6 +13,23 @@ export type ExploreProfile = {
   bio: string | null
   is_private?: boolean | null
   created_at: string
+  trader_type?: string | null
+  trading_style?: string | null
+  trading_model?: string | null
+  primary_market?: string | null
+  started_trading?: string | null
+  followers_count?: number
+  following_count?: number
+}
+
+export type TraderTradeMeta = {
+  dominantSession: DashboardSessionBucket | null
+  topSymbols: string[]
+}
+
+export type ExploreSocialCounts = {
+  followers: Record<string, number>
+  following: Record<string, number>
 }
 
 export type UserTradeSummary = {
@@ -24,9 +46,12 @@ export type UserPostSummary = {
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
-export const EXPLORE_TOP_LIMIT = 6
-export const EXPLORE_ACTIVE_LIMIT = 8
-export const EXPLORE_NEW_LIMIT = 8
+export const EXPLORE_TOP_LIMIT = 8
+export const EXPLORE_ACTIVE_LIMIT = 12
+export const EXPLORE_NEW_LIMIT = 12
+export const EXPLORE_PAGE_SIZE = 16
+export const EXPLORE_PROFILE_POOL_LIMIT = EXPLORE_PAGE_SIZE
+export const EXPLORE_MIN_SECTION_SIZE = 2
 /** Cap rows pulled for Explore ranking — full leaderboard lives on /leaderboard. */
 export const EXPLORE_TRADE_ROW_LIMIT = 3000
 
@@ -80,6 +105,10 @@ export function scoreActiveTrader(
   if (hasAvatar(profile.avatar_url)) score += 2
   if (profile.bio?.trim()) score += 2
   if (profile.is_private !== true) score += 1
+  if (profile.trader_type?.trim()) score += 1
+  if (profile.trading_style?.trim() || profile.trading_model?.trim()) score += 1
+  if (profile.primary_market?.trim()) score += 1
+  if (profile.started_trading) score += 1
 
   if (trades && trades.tradeCount > 0) score += 3
   if (trades?.lastTradeAt && isRecent(trades.lastTradeAt, 30, now)) score += 4
@@ -207,4 +236,221 @@ export function bioPreview(bio: string | null | undefined, maxLen = 96): string 
   if (!text) return "No bio yet"
   if (text.length <= maxLen) return text
   return `${text.slice(0, maxLen).trim()}…`
+}
+
+/** Years + months trading label (matches public profile display). */
+export function formatTradingExperience(
+  startedTrading: string | null | undefined
+): string | null {
+  if (!startedTrading) return null
+  const start = new Date(startedTrading)
+  if (Number.isNaN(start.getTime())) return null
+
+  const now = new Date()
+  const months =
+    (now.getFullYear() - start.getFullYear()) * 12 +
+    (now.getMonth() - start.getMonth())
+  const years = Math.floor(months / 12)
+  const remainingMonths = months % 12
+
+  if (years <= 0 && remainingMonths <= 0) return "< 1 mo"
+  if (years <= 0) return `${remainingMonths} mo`
+  if (remainingMonths === 0) return `${years} yr`
+  return `${years}y ${remainingMonths}m`
+}
+
+export function enrichExploreProfilesWithSocialCounts(
+  profiles: ExploreProfile[],
+  counts: ExploreSocialCounts
+): ExploreProfile[] {
+  return profiles.map((profile) => ({
+    ...profile,
+    followers_count: counts.followers[profile.id] ?? profile.followers_count ?? 0,
+    following_count: counts.following[profile.id] ?? profile.following_count ?? 0,
+  }))
+}
+
+export async function fetchExploreSocialCounts(
+  profileIds: string[]
+): Promise<ExploreSocialCounts> {
+  const followers: Record<string, number> = {}
+  const following: Record<string, number> = {}
+
+  if (!profileIds.length || isDemoModeActive()) {
+    return { followers, following }
+  }
+
+  const unique = [...new Set(profileIds)]
+  const [followersRes, followingRes] = await Promise.all([
+    supabase.from("followers").select("following_id").in("following_id", unique),
+    supabase.from("followers").select("follower_id").in("follower_id", unique),
+  ])
+
+  for (const row of followersRes.data ?? []) {
+    const id = String(row.following_id)
+    followers[id] = (followers[id] ?? 0) + 1
+  }
+
+  for (const row of followingRes.data ?? []) {
+    const id = String(row.follower_id)
+    following[id] = (following[id] ?? 0) + 1
+  }
+
+  return { followers, following }
+}
+
+export function buildTraderTradeMeta(
+  trades: {
+    user_id: string
+    session?: string | null
+    ticker?: string | null
+  }[]
+): Record<string, TraderTradeMeta> {
+  const sessionCounts: Record<string, Record<string, number>> = {}
+  const symbolCounts: Record<string, Record<string, number>> = {}
+
+  for (const trade of trades) {
+    const userId = trade.user_id
+    if (!userId) continue
+
+    const session = normalizeSessionBucket(trade.session)
+    if (session) {
+      if (!sessionCounts[userId]) sessionCounts[userId] = {}
+      sessionCounts[userId][session] = (sessionCounts[userId][session] ?? 0) + 1
+    }
+
+    const ticker = String(trade.ticker ?? "").trim().toUpperCase()
+    if (ticker) {
+      if (!symbolCounts[userId]) symbolCounts[userId] = {}
+      symbolCounts[userId][ticker] = (symbolCounts[userId][ticker] ?? 0) + 1
+    }
+  }
+
+  const result: Record<string, TraderTradeMeta> = {}
+
+  for (const userId of new Set([
+    ...Object.keys(sessionCounts),
+    ...Object.keys(symbolCounts),
+  ])) {
+    const sessions = sessionCounts[userId] ?? {}
+    const dominantSession = (
+      Object.entries(sessions).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
+    ) as DashboardSessionBucket | null
+
+    const symbols = Object.entries(symbolCounts[userId] ?? {})
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([symbol]) => symbol)
+
+    result[userId] = { dominantSession, topSymbols: symbols }
+  }
+
+  return result
+}
+
+export function rankProfilesByTraderType(
+  profiles: ExploreProfile[],
+  traderType: "Futures" | "Options" | "Investor",
+  tradeSummaries: Record<string, UserTradeSummary>,
+  options: { excludeUserIds?: Set<string>; limit?: number } = {}
+): ExploreProfile[] {
+  const { excludeUserIds = new Set(), limit = 12 } = options
+
+  return profiles
+    .filter(
+      (profile) =>
+        profile.username?.trim() &&
+        profile.is_private !== true &&
+        !excludeUserIds.has(profile.id) &&
+        normalizeTraderType(profile.trader_type) === traderType
+    )
+    .map((profile) => ({
+      profile,
+      score: scoreActiveTrader(profile, tradeSummaries[profile.id], undefined),
+      lastTradeMs: tradeSummaries[profile.id]?.lastTradeAt
+        ? new Date(tradeSummaries[profile.id]!.lastTradeAt!).getTime()
+        : 0,
+      joinedMs: new Date(profile.created_at).getTime(),
+    }))
+    .sort(
+      (a, b) =>
+        b.score - a.score ||
+        b.lastTradeMs - a.lastTradeMs ||
+        b.joinedMs - a.joinedMs
+    )
+    .slice(0, limit)
+    .map((row) => row.profile)
+}
+
+export function rankNewTraders(
+  profiles: ExploreProfile[],
+  tradeSummaries: Record<string, UserTradeSummary>,
+  postSummaries: Record<string, UserPostSummary>,
+  options: {
+    excludeUserIds?: Set<string>
+    limit?: number
+  } = {}
+): ExploreProfile[] {
+  const { excludeUserIds = new Set(), limit = 12 } = options
+  const now = Date.now()
+
+  return profiles
+    .filter(
+      (profile) =>
+        profile.username?.trim() &&
+        profile.is_private !== true &&
+        !excludeUserIds.has(profile.id)
+    )
+    .map((profile) => ({
+      profile,
+      joinedMs: new Date(profile.created_at).getTime(),
+      score: scoreActiveTrader(
+        profile,
+        tradeSummaries[profile.id],
+        postSummaries[profile.id],
+        now
+      ),
+    }))
+    .sort((a, b) => b.joinedMs - a.joinedMs || b.score - a.score)
+    .slice(0, limit)
+    .map((row) => row.profile)
+}
+
+/** Single discover list — activity-ranked, no section splits. */
+export function rankExploreDiscoverList(
+  profiles: ExploreProfile[],
+  tradeSummaries: Record<string, UserTradeSummary>,
+  postSummaries: Record<string, UserPostSummary>,
+  options: { excludeUserIds?: Set<string> } = {}
+): ExploreProfile[] {
+  const { excludeUserIds = new Set() } = options
+  const now = Date.now()
+
+  return profiles
+    .filter(
+      (profile) =>
+        profile.username?.trim() &&
+        profile.is_private !== true &&
+        !excludeUserIds.has(profile.id)
+    )
+    .map((profile) => ({
+      profile,
+      score: scoreActiveTrader(
+        profile,
+        tradeSummaries[profile.id],
+        postSummaries[profile.id],
+        now
+      ),
+      lastActivityMs: Math.max(
+        tradeSummaries[profile.id]?.lastTradeAt
+          ? new Date(tradeSummaries[profile.id]!.lastTradeAt!).getTime()
+          : 0,
+        postSummaries[profile.id]?.lastPostAt
+          ? new Date(postSummaries[profile.id]!.lastPostAt!).getTime()
+          : 0,
+        new Date(profile.created_at).getTime()
+      ),
+    }))
+    .sort((a, b) => b.score - a.score || b.lastActivityMs - a.lastActivityMs)
+    .map((row) => row.profile)
 }

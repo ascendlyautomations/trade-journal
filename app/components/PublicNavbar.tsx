@@ -5,9 +5,10 @@ import { usePathname, useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import { useUserProfile } from "@/lib/useUserProfile"
 import { isAuthRoute } from "@/lib/authRoutes"
-import { shouldShowMarketingNavbar } from "@/lib/marketingAccess"
-import { hasActiveMembership } from "@/lib/subscriptionAccess"
-import { isDemoUserId } from "@/lib/demo/constants"
+import {
+  shouldShowCustomerHomeChrome,
+  shouldShowMarketingNavbar,
+} from "@/lib/marketingAccess"
 import { NAVBAR_BRAND_LINK_CLASS_NOWRAP } from "@/lib/navbarBrand"
 
 const DESKTOP_NAV_LINKS = [
@@ -51,20 +52,14 @@ function mobileNavLinkClass(pathname: string, href: string): string {
   }`
 }
 
-/** Logged-out marketing navbar — never shown during auth/onboarding/app flow. */
+/** Marketing navbar — logged-out visitors and completed members on public pages. */
 export default function PublicNavbar() {
   const { user, profile, loading } = useUserProfile()
   const pathname = usePathname()
   const router = useRouter()
   const [menuOpen, setMenuOpen] = useState(false)
 
-  const isAuthenticatedUser = !!user && !isDemoUserId(user.id)
-  const showCustomerHomeChrome =
-    !isAuthRoute(pathname) &&
-    isAuthenticatedUser &&
-    !loading &&
-    !!profile &&
-    hasActiveMembership(profile)
+  const showReturnToApp = shouldShowCustomerHomeChrome(user, profile, loading)
 
   useEffect(() => {
     setMenuOpen(false)
@@ -74,32 +69,13 @@ export default function PublicNavbar() {
     return null
   }
 
-  if (showCustomerHomeChrome) {
-    return (
-      <div className="fixed left-0 top-0 z-[9999] w-full overflow-visible text-white">
-        <div className="flex h-16 w-full shrink-0 items-center border-b border-white/5 bg-[#0b1f3a]">
-          <div className="flex h-full w-full items-center justify-between px-4 md:px-6">
-            <IntentPrefetchLink
-              href="/"
-              className={NAVBAR_BRAND_LINK_CLASS_NOWRAP}
-            >
-              TradeTraxs
-            </IntentPrefetchLink>
-            <button
-              type="button"
-              onClick={() => router.push("/dashboard")}
-              className="rounded bg-blue-500 px-4 py-1.5 text-sm font-medium text-white transition hover:bg-blue-600"
-            >
-              Return to App
-            </button>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
   if (!shouldShowMarketingNavbar(pathname, user, profile, loading)) {
     return null
+  }
+
+  function handleReturnToApp() {
+    setMenuOpen(false)
+    router.push("/dashboard")
   }
 
   return (
@@ -130,28 +106,40 @@ export default function PublicNavbar() {
           </div>
 
           <div className="flex shrink-0 items-center gap-2 whitespace-nowrap sm:gap-3">
-            <div className="hidden items-center gap-2 sm:gap-3 md:flex">
-              <IntentPrefetchLink
-                href="/login"
-                className="rounded border border-white/20 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-white/10 sm:px-4"
+            {showReturnToApp ? (
+              <button
+                type="button"
+                onClick={handleReturnToApp}
+                className="hidden rounded bg-blue-500 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-blue-600 sm:px-4 md:inline-flex"
               >
-                Login
-              </IntentPrefetchLink>
-              <IntentPrefetchLink
-                href="/login?tab=signup"
-                className="rounded bg-blue-500 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-blue-600 sm:px-4"
-              >
-                Sign Up
-              </IntentPrefetchLink>
-            </div>
+                Return to App
+              </button>
+            ) : (
+              <div className="hidden items-center gap-2 sm:gap-3 md:flex">
+                <IntentPrefetchLink
+                  href="/login"
+                  className="rounded border border-white/20 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-white/10 sm:px-4"
+                >
+                  Login
+                </IntentPrefetchLink>
+                <IntentPrefetchLink
+                  href="/login?tab=signup"
+                  className="rounded bg-blue-500 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-blue-600 sm:px-4"
+                >
+                  Sign Up
+                </IntentPrefetchLink>
+              </div>
+            )}
 
             <div className="flex items-center gap-2 md:hidden">
-              <IntentPrefetchLink
-                href="/login"
-                className="rounded border border-white/20 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-white/10"
-              >
-                Login
-              </IntentPrefetchLink>
+              {!showReturnToApp ? (
+                <IntentPrefetchLink
+                  href="/login"
+                  className="rounded border border-white/20 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-white/10"
+                >
+                  Login
+                </IntentPrefetchLink>
+              ) : null}
               <button
                 type="button"
                 className="px-1 py-1 text-2xl leading-none text-white"
@@ -172,21 +160,36 @@ export default function PublicNavbar() {
             className="flex w-full flex-col gap-2 px-4 pb-3 pt-1.5 text-sm text-white md:px-6"
             aria-label="Marketing menu"
           >
-            <IntentPrefetchLink
-              href="/login?tab=signup"
-              className="rounded-lg px-3 py-2 font-semibold text-gray-200 transition hover:text-white"
-              onClick={() => setMenuOpen(false)}
-            >
-              Sign Up
-            </IntentPrefetchLink>
-            <IntentPrefetchLink
-              href="/login"
-              className="rounded-lg px-3 py-2 font-semibold text-gray-200 transition hover:text-white"
-              onClick={() => setMenuOpen(false)}
-            >
-              Login
-            </IntentPrefetchLink>
-            <div className="my-1 border-t border-white/10" aria-hidden />
+            {showReturnToApp ? (
+              <>
+                <button
+                  type="button"
+                  onClick={handleReturnToApp}
+                  className="rounded-lg px-3 py-2 text-left font-semibold text-gray-200 transition hover:text-white"
+                >
+                  Return to App
+                </button>
+                <div className="my-1 border-t border-white/10" aria-hidden />
+              </>
+            ) : (
+              <>
+                <IntentPrefetchLink
+                  href="/login?tab=signup"
+                  className="rounded-lg px-3 py-2 font-semibold text-gray-200 transition hover:text-white"
+                  onClick={() => setMenuOpen(false)}
+                >
+                  Sign Up
+                </IntentPrefetchLink>
+                <IntentPrefetchLink
+                  href="/login"
+                  className="rounded-lg px-3 py-2 font-semibold text-gray-200 transition hover:text-white"
+                  onClick={() => setMenuOpen(false)}
+                >
+                  Login
+                </IntentPrefetchLink>
+                <div className="my-1 border-t border-white/10" aria-hidden />
+              </>
+            )}
             {MOBILE_NAV_LINKS.map((link) => (
               <IntentPrefetchLink
                 key={link.href}

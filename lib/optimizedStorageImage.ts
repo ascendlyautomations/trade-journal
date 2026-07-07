@@ -24,16 +24,16 @@ type TransformOptions = {
 
 const PRESET_TRANSFORMS: Record<
   StorageImagePreset,
-  Required<Pick<TransformOptions, "quality" | "resize">> &
-    Pick<TransformOptions, "width" | "height">
+  Required<Pick<TransformOptions, "quality">> &
+    Pick<TransformOptions, "width" | "height" | "resize">
 > = {
   avatar: { width: 96, height: 96, quality: 80, resize: "cover" },
-  "feed-thumb": { width: 800, quality: 75, resize: "contain" },
-  "feed-detail": { width: 1280, quality: 82, resize: "contain" },
+  "feed-thumb": { width: 800, quality: 75 },
+  "feed-detail": { width: 1280, quality: 82 },
   story: { width: 1080, quality: 80, resize: "contain" },
   "reel-thumb": { width: 560, height: 996, quality: 75, resize: "cover" },
-  achievement: { width: 640, quality: 80, resize: "cover" },
-  "trade-thumb": { width: 800, quality: 75, resize: "contain" },
+  achievement: { width: 800, quality: 75 },
+  "trade-thumb": { width: 800, quality: 75 },
 }
 
 export function isSupabaseStoragePublicUrl(url: string): boolean {
@@ -98,7 +98,7 @@ export function optimizeStorageImageUrl(
     width,
     height,
     quality: base.quality,
-    resize: base.resize,
+    ...(base.resize ? { resize: base.resize } : {}),
   })
 }
 

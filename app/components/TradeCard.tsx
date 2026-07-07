@@ -12,7 +12,7 @@ import { formatMoneyUnknown, formatNumberUnknown, formatTradePoints } from "@/li
 import { formatTradeAccountNameSizeLine } from "@/lib/tradeAccountDisplay"
 import { publicAccountBadgeFromTrade } from "@/lib/publicAccountPrivacy"
 import { tradeScreenshotPublicUrl } from "@/lib/storagePublicUrl"
-import StorageImage from "@/app/components/ui/StorageImage"
+import TradeScreenshotImage from "@/app/components/trade/TradeScreenshotImage"
 
 export type TradeCardProps = {
   trade: any
@@ -299,13 +299,12 @@ export default function TradeCard({
       </div>
 
       {screenshotUrl ? (
-        <StorageImage
+        <TradeScreenshotImage
           src={screenshotUrl}
-          originalSrc={screenshotUrl}
           preset="trade-thumb"
-          alt=""
-          className="mt-4 w-full cursor-pointer rounded-lg border border-white/10"
+          className="mt-4 rounded-lg border border-white/10"
           onClick={() => onImageClick?.(screenshotUrl)}
+          logContext="trade-card"
         />
       ) : null}
 

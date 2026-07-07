@@ -24,6 +24,8 @@ import { compressImage, compressScreenshot } from "@/lib/compressImage"
 import { feedbackPresets } from "@/lib/feedbackPresets"
 import { logSupabaseError } from "@/lib/logSupabaseError"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
+import ImageCropModal from "@/app/components/ImageCropModal"
+import { useImageCropUpload } from "@/lib/useImageCropUpload"
 import EmptyState from "@/app/components/ui/EmptyState"
 import { useParams, useRouter } from "next/navigation"
 import {
@@ -889,8 +891,66 @@ export default function DMPage() {
   const [pageAccess, setPageAccess] =
     useState<ConversationPageAccess>("loading")
 
+  const uploadGroupAvatar = useCallback(
+    async (file: File) => {
+      if (pageAccess !== "allowed" || !user?.id || !conversation?.id) return
+
+      setGroupImage(file)
+      let uploadFile: File = file
+      if (file.type?.startsWith("image/")) {
+        uploadFile = await compressImage(file)
+      }
+
+      const fileName = `${conversation.id}-${Date.now()}-${uploadFile.name}`
+      const { error: uploadError } = await supabase.storage
+        .from("group-avatars")
+        .upload(fileName, uploadFile, {
+          cacheControl: "3600",
+          upsert: true,
+        })
+
+      if (uploadError) {
+        console.error("Upload error:", uploadError)
+        return
+      }
+
+      const { data: publicUrlData } = supabase.storage
+        .from("group-avatars")
+        .getPublicUrl(fileName)
+
+      const publicUrl = publicUrlData.publicUrl
+
+      await supabase
+        .from("conversations")
+        .update({ avatar_url: publicUrl })
+        .eq("id", conversation.id)
+
+      setConversation((prev: any) =>
+        prev?.avatar_url === publicUrl ? prev : { ...prev, avatar_url: publicUrl }
+      )
+    },
+    [conversation, pageAccess, user?.id]
+  )
+
+  const dmImageCrop = useImageCropUpload({
+    preset: "content",
+    onCropped: (file) => {
+      setSelectedImage(file)
+      setSelectedFile(file)
+      setPreviewUrl(URL.createObjectURL(file))
+    },
+    onValidationError: (message) => showPopup({ type: "error", message }),
+  })
+  const groupImageCrop = useImageCropUpload({
+    preset: "avatar",
+    onCropped: (file) => {
+      void uploadGroupAvatar(file)
+    },
+    onValidationError: (message) => showPopup({ type: "error", message }),
+  })
+  const fileRef = dmImageCrop.fileInputRef
+
   const scrollRef = useRef<HTMLDivElement>(null)
-  const fileRef = useRef<HTMLInputElement>(null)
   const userIdRef = useRef<string | null>(null)
   const conversationIdRef = useRef<string | null>(null)
   const messagesChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(
@@ -1798,65 +1858,19 @@ export default function DMPage() {
     setSelectedFile(null)
     setSelectedImage(null)
     setPreviewUrl(null)
-    if (fileRef.current) fileRef.current.value = ""
+    dmImageCrop.resetFileInput()
   }
 
   function handleImageChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
-
-    setSelectedImage(file)
-    setSelectedFile(file)
-    setPreviewUrl(URL.createObjectURL(file))
+    dmImageCrop.handleFileSelected(file)
   }
 
-  async function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
-    if (pageAccess !== "allowed" || !user?.id) return
-
+  function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
-    if (!file || !conversation?.id) return
-
-    setGroupImage(file)
-    let uploadFile: File = file
-    if (file.type?.startsWith("image/")) {
-      uploadFile = await compressImage(file)
-    }
-
-    const fileName = `${conversation.id}-${Date.now()}-${uploadFile.name}`
-    const filePath = `${fileName}`
-
-    const { error: uploadError } = await supabase.storage
-      .from("group-avatars")
-      .upload(filePath, uploadFile, {
-        cacheControl: "3600",
-        upsert: true
-      })
-
-    if (uploadError) {
-      console.error("Upload error:", uploadError)
-      return
-    }
-
-    const { data: publicUrlData } = supabase.storage
-      .from("group-avatars")
-      .getPublicUrl(filePath)
-
-    const publicUrl = publicUrlData.publicUrl
-
-    await supabase
-      .from("conversations")
-      .update({
-        avatar_url: publicUrl
-      })
-      .eq("id", conversation.id)
-
-    if (conversation.avatar_url !== publicUrl) {
-      setConversation((prev: any) => ({
-        ...prev,
-        avatar_url: publicUrl
-      }))
-    }
-    console.log("Saved avatar URL:", publicUrl)
+    if (!file) return
+    groupImageCrop.handleFileSelected(file)
   }
 
   async function sendMessage() {
@@ -2211,6 +2225,20 @@ export default function DMPage() {
 
   return (
     <>
+      <ImageCropModal
+        open={dmImageCrop.cropSourceFile != null}
+        file={dmImageCrop.cropSourceFile}
+        preset="content"
+        onCancel={dmImageCrop.handleCropCancel}
+        onSave={dmImageCrop.handleCropSave}
+      />
+      <ImageCropModal
+        open={groupImageCrop.cropSourceFile != null}
+        file={groupImageCrop.cropSourceFile}
+        preset="avatar"
+        onCancel={groupImageCrop.handleCropCancel}
+        onSave={groupImageCrop.handleCropSave}
+      />
       <FeedbackModal {...feedbackModalProps} />
 
       {pageAccess !== "allowed" ? (

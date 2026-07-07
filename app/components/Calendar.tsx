@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react"
 import { formatPnlCurrency, formatPnlWholeDollars } from "../../lib/formatMoney"
 import { tradeScreenshotPublicUrl } from "@/lib/storagePublicUrl"
+import TradeScreenshotImage from "@/app/components/trade/TradeScreenshotImage"
 import { formatEST } from "@/lib/formatEST"
 import { formatRR, formatTradePoints } from "@/lib/formatDisplay"
 import { resolveTradePoints } from "@/lib/resolveTradePoints"
@@ -467,12 +468,12 @@ export default function Calendar({
               return (
                 <>
                   {img ? (
-                    <img
+                    <TradeScreenshotImage
                       src={img}
-                      alt=""
-                      loading="lazy"
-                      decoding="async"
-                      className="mb-3 max-h-48 w-full rounded-lg border border-white/10 object-contain"
+                      preset="trade-thumb"
+                      maxHeightPx={192}
+                      className="mb-3 rounded-lg border border-white/10"
+                      logContext="calendar-trade"
                     />
                   ) : null}
                   <p className="text-sm text-gray-300">

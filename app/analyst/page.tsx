@@ -20,6 +20,9 @@ import { NAVBAR_HEIGHT_CLASS } from "@/app/components/ui/DetailModalShell"
 import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
+import AnalyzeTradeProgressModal from "../components/analyst/AnalyzeTradeProgressModal"
+import { createAnalyzeProgressController } from "@/lib/analyzeTradeProgress"
+import { tradeScreenshotPublicUrl } from "@/lib/storagePublicUrl"
 
 type AnalyzeTradeApiPayload = {
   reply?: string
@@ -75,6 +78,7 @@ type AnalystTradeDetailPanelProps = {
   setTradePanelExpanded: Dispatch<SetStateAction<boolean>>
   messages: any[]
   loading: boolean
+  analysisInProgress?: boolean
   input: string
   setInput: (value: string) => void
   onRunAnalysis: () => void
@@ -134,6 +138,7 @@ function AnalystTradeDetailPanel({
   setTradePanelExpanded,
   messages,
   loading,
+  analysisInProgress = false,
   input,
   setInput,
   onRunAnalysis,
@@ -298,15 +303,15 @@ function AnalystTradeDetailPanel({
           <button
             type="button"
             onClick={onRunAnalysis}
-            disabled={loading}
+            disabled={loading || analysisInProgress}
             className="rounded-lg bg-emerald-500 px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {loading ? "Analyzing…" : "Analyze Trade"}
+            {analysisInProgress ? "Analyzing…" : "Analyze Trade"}
           </button>
         </div>
       )}
 
-      {(messages.length > 0 || loading) && (
+      {messages.length > 0 && (
         <div
           className={`mb-4 flex flex-col space-y-4 ${
             embeddedInScrollContainer
@@ -327,7 +332,7 @@ function AnalystTradeDetailPanel({
             </div>
           ))}
 
-          {loading ? <p className="text-gray-400">Analyzing...</p> : null}
+          {loading ? <p className="text-gray-400">Thinking...</p> : null}
         </div>
       )}
 
@@ -478,6 +483,11 @@ function AnalystPageContent() {
   const [messages, setMessages] = useState<any[]>([])
   const [input, setInput] = useState("")
   const [loading, setLoading] = useState(false)
+  const [analysisInProgress, setAnalysisInProgress] = useState(false)
+  const [progressOpen, setProgressOpen] = useState(false)
+  const [progressPercent, setProgressPercent] = useState(0)
+  const [progressLabel, setProgressLabel] = useState("Preparing analysis...")
+  const analysisRunningRef = useRef(false)
   const [tradePanelExpanded, setTradePanelExpanded] = useState(true)
   const [mobileAnalysisOpen, setMobileAnalysisOpen] = useState(false)
   const searchParams = useSearchParams()
@@ -488,9 +498,7 @@ function AnalystPageContent() {
   }
 
   function tradeScreenshotUrl(trade: any) {
-    if (!trade?.image_url) return null
-    if (String(trade.image_url).startsWith("http")) return trade.image_url
-    return `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/screenshots/${trade.image_url}`
+    return tradeScreenshotPublicUrl(trade?.image_url)
   }
 
   function formatTradeSummaryDate(createdAt: string) {
@@ -560,76 +568,76 @@ function AnalystPageContent() {
   }, [pageReady, trades, searchParams, selectedTrade?.id, selectTradeForReview])
 
   async function runTradeAnalysis() {
-    if (!selectedTrade || !isProActive(profile) || loading) return
+    if (!selectedTrade || !isProActive(profile)) return
     if (selectedTrade.ai_feedback) return
+    if (analysisRunningRef.current || analysisInProgress || loading) return
     if (isDemoModeActive()) {
       requestDemoSignup("ai")
       return
     }
 
     const trade = selectedTrade
-    setLoading(true)
+    const hasScreenshot = Boolean(tradeScreenshotUrl(trade))
+    analysisRunningRef.current = true
+    setAnalysisInProgress(true)
     setTradePanelExpanded(false)
+    setProgressPercent(0)
+    setProgressLabel("Preparing analysis...")
+    setProgressOpen(true)
+
+    const controller = createAnalyzeProgressController(
+      hasScreenshot,
+      (percent, label) => {
+        setProgressPercent(percent)
+        setProgressLabel(label)
+      }
+    )
+    controller.start()
 
     const {
       data: { session },
     } = await supabase.auth.getSession()
-    console.log("AI TOKEN:", session?.access_token)
 
-    const pnl = trade?.pnl
-    const rr = trade?.rr
-    const notes = trade?.notes
-    const confluences = trade?.confluences ?? trade?.top_confluences
-    const mistakes = trade?.mistakes
-    const psychology = trade?.psychology ?? trade?.psychology_notes
-    const entry_price = trade?.entry_price
-    const exit_price = trade?.exit_price
-    const direction = trade?.direction
-    console.log("AI INPUT:", {
-      pnl,
-      rr,
-      notes,
-      confluences,
-      mistakes,
-      psychology,
-      entry_price,
-      exit_price,
-      direction,
-    })
+    try {
+      const res = await fetch("/api/analyze-trade", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({
+          trade,
+          messages: [],
+        }),
+      })
 
-    const res = await fetch("/api/analyze-trade", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${session?.access_token}`,
-      },
-      body: JSON.stringify({
-        trade,
-        messages: [],
-      }),
-    })
+      const { ok, data } = await parseAnalyzeTradeResponse(res)
 
-    const { ok, data } = await parseAnalyzeTradeResponse(res)
+      if (!ok || !data?.reply) {
+        const errorMessage = analyzeTradeErrorMessage(
+          data,
+          "We couldn't complete the analysis. Please try again."
+        )
+        setMessages([{ role: "assistant", content: errorMessage }])
+        return
+      }
 
-    if (!ok || !data?.reply) {
-      const errorMessage = analyzeTradeErrorMessage(
-        data,
-        "We couldn't complete the analysis. Please try again."
+      const reply = data.reply
+      setMessages([{ role: "assistant", content: reply }])
+      if (user?.id) {
+        upsertTradeInCache(user.id, { ...trade, ai_feedback: reply })
+      }
+      setSelectedTrade((s) =>
+        s && String(s.id) === String(trade.id) ? { ...s, ai_feedback: reply } : s
       )
-      setMessages([{ role: "assistant", content: errorMessage }])
-      setLoading(false)
-      return
+    } finally {
+      controller.markApiComplete()
+      await controller.waitForCompletion()
+      controller.stop()
+      setProgressOpen(false)
+      setAnalysisInProgress(false)
+      analysisRunningRef.current = false
     }
-
-    const reply = data.reply
-    setMessages([{ role: "assistant", content: reply }])
-    if (user?.id) {
-      upsertTradeInCache(user.id, { ...trade, ai_feedback: reply })
-    }
-    setSelectedTrade((s) =>
-      s && String(s.id) === String(trade.id) ? { ...s, ai_feedback: reply } : s
-    )
-    setLoading(false)
   }
 
   async function sendMessage() {
@@ -726,6 +734,7 @@ function AnalystPageContent() {
     setTradePanelExpanded,
     messages,
     loading,
+    analysisInProgress,
     input,
     setInput,
     onRunAnalysis: () => void runTradeAnalysis(),
@@ -737,6 +746,11 @@ function AnalystPageContent() {
 
   return (
     <>
+      <AnalyzeTradeProgressModal
+        open={progressOpen}
+        percent={progressPercent}
+        status={progressLabel}
+      />
 
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100 p-10">
         <h1 className="mb-8 text-center text-3xl bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">

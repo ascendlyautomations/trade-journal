@@ -4,7 +4,8 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { supabase } from "@/lib/supabaseClient"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
-import { compressImage } from "@/lib/compressImage"
+import { compressContentImage, CONTENT_IMAGE_CROP_PRESET, CONTENT_IMAGE_DISPLAY_PRESET } from "@/lib/contentImagePipeline"
+import TradeScreenshotImage from "@/app/components/trade/TradeScreenshotImage"
 import { validateImageUpload } from "@/lib/uploadValidation"
 import NativeDateInput from "@/app/components/ui/NativeDateInput"
 import {
@@ -29,6 +30,8 @@ import {
   mapUploadBytesToPercent,
 } from "@/lib/uploadProgress/reportProgress"
 import { useUploadProgress } from "@/lib/uploadProgress/UploadProgressProvider"
+import ImageCropModal from "@/app/components/ImageCropModal"
+import { useImageCropUpload } from "@/lib/useImageCropUpload"
 
 export type AchievementFormState = {
   achievement_type: string
@@ -103,7 +106,15 @@ export default function AchievementUploadModal({
   const [file, setFile] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [removeImage, setRemoveImage] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const imageCrop = useImageCropUpload({
+    preset: CONTENT_IMAGE_CROP_PRESET,
+    onCropped: (cropped) => {
+      setRemoveImage(false)
+      setFile(cropped)
+    },
+    onValidationError: setError,
+  })
+  const fileInputRef = imageCrop.fileInputRef
   const uploadingRef = useRef(false)
   const { runUpload } = useUploadProgress()
 
@@ -172,9 +183,11 @@ export default function AchievementUploadModal({
   }, [open])
 
   function handleClose() {
-    if (busy || uploadingRef.current) return
+    if (busy || uploadingRef.current || imageCrop.cropSourceFile) return
     onClose()
   }
+
+  const cropModalOpen = imageCrop.cropSourceFile != null
 
   async function saveAchievement() {
     if (isDemoModeActive()) {
@@ -239,7 +252,7 @@ export default function AchievementUploadModal({
               .replace(/^-|-$/g, "")
             let uploadFile: File = snapshotFile
             if (snapshotFile.type?.startsWith("image/")) {
-              uploadFile = await compressImage(snapshotFile)
+              uploadFile = await compressContentImage(snapshotFile)
             }
             const uploadName = uploadFile.type?.startsWith("image/")
               ? uploadFile.name
@@ -349,6 +362,7 @@ export default function AchievementUploadModal({
     saveLabel ?? (editingId ? "Update Achievement" : "Save Achievement")
 
   return (
+    <>
     <div
       className={`${MODAL_FIXED_BELOW_NAVBAR_CLASS} z-[150] bg-black/75 p-3 backdrop-blur-md sm:p-4`}
       onClick={handleClose}
@@ -439,17 +453,8 @@ export default function AchievementUploadModal({
                 accept="image/*"
                 onChange={(e) => {
                   const selected = e.target.files?.[0] ?? null
-                  if (selected) {
-                    const validationError = validateImageUpload(selected)
-                    if (validationError) {
-                      setError(validationError)
-                      setFile(null)
-                      e.target.value = ""
-                      return
-                    }
-                    setRemoveImage(false)
-                  }
-                  setFile(selected)
+                  if (!selected) return
+                  imageCrop.handleFileSelected(selected)
                 }}
                 className="hidden"
               />
@@ -468,17 +473,21 @@ export default function AchievementUploadModal({
                 className="mt-2 w-full rounded-md border border-white/10 bg-[#0b1220] px-2 py-1.5 text-xs text-slate-300"
               />
               {previewUrl ? (
-                <img
+                <TradeScreenshotImage
                   src={previewUrl}
+                  preset={CONTENT_IMAGE_DISPLAY_PRESET}
                   alt="Selected preview"
-                  className="mt-2 max-h-40 w-full rounded-md border border-white/10 object-cover"
+                  className="mt-2 rounded-md border border-white/10"
+                  logContext="achievement-upload-preview"
                 />
               ) : form.image_url && !removeImage ? (
                 <div className="mt-2 space-y-2">
-                  <img
+                  <TradeScreenshotImage
                     src={form.image_url}
+                    preset={CONTENT_IMAGE_DISPLAY_PRESET}
                     alt="Current achievement image"
-                    className="max-h-40 w-full rounded-md border border-white/10 object-cover"
+                    className="rounded-md border border-white/10"
+                    logContext="achievement-upload-existing"
                   />
                   <button
                     type="button"
@@ -545,5 +554,13 @@ export default function AchievementUploadModal({
         </div>
       </div>
     </div>
+      <ImageCropModal
+        open={cropModalOpen}
+        file={imageCrop.cropSourceFile}
+        preset={CONTENT_IMAGE_CROP_PRESET}
+        onCancel={imageCrop.handleCropCancel}
+        onSave={imageCrop.handleCropSave}
+      />
+    </>
   )
 }

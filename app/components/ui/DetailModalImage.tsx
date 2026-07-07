@@ -1,29 +1,22 @@
 "use client"
 
-import StorageImage from "@/app/components/ui/StorageImage"
+import TradeScreenshotImage from "@/app/components/trade/TradeScreenshotImage"
 
 type DetailModalImageProps = {
   src: string
   onClick?: (url: string) => void
 }
 
-/** Modal screenshot: stacked on mobile, fill left panel on md+. */
+/** Modal screenshot: natural aspect in feed, capped height for very tall images. */
 export default function DetailModalImage({ src, onClick }: DetailModalImageProps) {
   return (
-    <StorageImage
+    <TradeScreenshotImage
       src={src}
-      originalSrc={src}
       preset="feed-detail"
-      alt=""
-      className="block w-full max-h-[60dvh] cursor-pointer bg-black/30 object-contain md:max-h-full md:max-w-full md:bg-transparent"
-      onClick={
-        onClick
-          ? (e) => {
-              e.stopPropagation()
-              onClick(src)
-            }
-          : undefined
-      }
+      maxHeightPx={720}
+      onClick={onClick}
+      logContext="detail-modal-screenshot"
+      className="md:max-h-full"
     />
   )
 }

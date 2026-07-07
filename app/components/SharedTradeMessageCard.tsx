@@ -17,6 +17,7 @@ import {
 import { SHARED_TRADE_UNAVAILABLE } from "@/lib/sharedContentNavigation"
 import { supabase } from "@/lib/supabaseClient"
 import ImageLightbox from "@/app/components/ui/ImageLightbox"
+import TradeScreenshotImage from "@/app/components/trade/TradeScreenshotImage"
 
 function tradeScreenshotSrc(url: string | null | undefined): string | null {
   const raw = url != null ? String(url).trim() : ""
@@ -152,10 +153,6 @@ export default function SharedTradeMessageCard({
   }
 
   const imgSrc = tradeScreenshotSrc(trade.image_url)
-  const screenshotClassName =
-    layout === "dm"
-      ? "max-h-[min(60dvh,360px)] w-full rounded-lg border border-gray-700 bg-black/30 object-contain"
-      : "h-28 w-full rounded-lg border border-gray-700 object-cover"
   const pnlNum = Number(trade.pnl)
   const pnlNonNeg = !Number.isNaN(pnlNum) && pnlNum >= 0
   const directionRaw =
@@ -216,13 +213,22 @@ export default function SharedTradeMessageCard({
             className="mt-2 block w-full cursor-zoom-in"
             aria-label="View trade screenshot full screen"
           >
-            <img
-              src={imgSrc}
-              alt=""
-              loading="lazy"
-              decoding="async"
-              className={screenshotClassName}
-            />
+            {layout === "dm" ? (
+              <TradeScreenshotImage
+                src={imgSrc}
+                maxHeightPx={360}
+                className="rounded-lg border border-gray-700"
+                logContext="shared-trade-dm"
+              />
+            ) : (
+              <img
+                src={imgSrc}
+                alt=""
+                loading="lazy"
+                decoding="async"
+                className="h-28 w-full rounded-lg border border-gray-700 object-cover"
+              />
+            )}
           </button>
         ) : null}
 
