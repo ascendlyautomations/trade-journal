@@ -1,6 +1,8 @@
 const assert = require("node:assert/strict")
 const { describe, it } = require("node:test")
 const {
+  buildAccountFilterKeyFromRow,
+  buildAccountFilterOptionsFromRows,
   buildTradeAccountFilterKey,
   formatAccountBalanceForDisplay,
   formatAccountLabelForDisplay,
@@ -69,6 +71,76 @@ describe("resolveTradeAccountName", () => {
       resolveTradeAccountName({ account_name: "Cached Name" }, null),
       "Cached Name"
     )
+  })
+})
+
+describe("buildAccountFilterKeyFromRow", () => {
+  it("uses account row fields", () => {
+    assert.equal(
+      buildAccountFilterKeyFromRow({
+        id: "uuid-1",
+        name: "Main",
+        account_size: "50000",
+      }),
+      "Main|50000|uuid-1"
+    )
+  })
+})
+
+describe("buildAccountFilterOptionsFromRows", () => {
+  it("includes active accounts with zero trades", () => {
+    const options = buildAccountFilterOptionsFromRows([
+      {
+        id: "a1",
+        name: "Empty Sim",
+        account_size: "25000",
+        mode: "sim",
+        is_active: true,
+      },
+      {
+        id: "a2",
+        name: "Archived",
+        account_size: "50000",
+        is_active: false,
+      },
+    ])
+    assert.equal(options.length, 1)
+    assert.equal(options[0].value, "Empty Sim|25000|a1")
+    assert.equal(options[0].label, "Empty Sim 25k")
+    assert.equal(options[0].accountType, "sim")
+  })
+
+  it("includes account number in label when present", () => {
+    const options = buildAccountFilterOptionsFromRows([
+      {
+        id: "a1",
+        name: "Funded",
+        account_size: "100000",
+        account_number: "12345",
+        mode: "funded",
+        is_active: true,
+      },
+    ])
+    assert.equal(options[0].label, "Funded 100k • #12345")
+  })
+
+  it("matches trade filter keys for linked trades", () => {
+    const row = {
+      id: "uuid-1",
+      name: "Renamed",
+      account_size: "50000",
+      is_active: true,
+    }
+    const tradeKey = buildTradeAccountFilterKey(
+      {
+        account_name: "Old",
+        account_size: "50000",
+        account_id: "uuid-1",
+      },
+      row
+    )
+    const rowKey = buildAccountFilterKeyFromRow(row)
+    assert.equal(tradeKey, rowKey)
   })
 })
 

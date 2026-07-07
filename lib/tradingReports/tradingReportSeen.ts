@@ -1,4 +1,7 @@
-import type { TradingReportPeriodKey } from "./tradingReportTypes"
+import type {
+  NewTradingReportBadge,
+  TradingReportPeriodKey,
+} from "./tradingReportTypes"
 import {
   isMonthlyReportReleaseDay,
   isWeeklyReportReleaseDay,
@@ -6,6 +9,17 @@ import {
 } from "./tradingReportPeriods"
 
 const STORAGE_KEY = "tradetraxs_trading_reports_seen_v1"
+
+/** Stable references for useSyncExternalStore getSnapshot (must not allocate per call). */
+export const WEEKLY_TRADING_REPORT_BADGE: NewTradingReportBadge = {
+  kind: "weekly",
+  label: "🟢 New Weekly Report",
+}
+
+export const MONTHLY_TRADING_REPORT_BADGE: NewTradingReportBadge = {
+  kind: "monthly",
+  label: "🟣 Monthly Report Ready",
+}
 
 type SeenState = Partial<Record<TradingReportPeriodKey, string>>
 
@@ -61,7 +75,7 @@ export function resolveNewTradingReportBadge(
   userId: string | null | undefined,
   hasTradesInPeriod: { weeklyLast: boolean; monthlyLast: boolean },
   now = new Date()
-): import("./tradingReportTypes").NewTradingReportBadge {
+): NewTradingReportBadge {
   if (!userId) return null
 
   if (
@@ -69,7 +83,7 @@ export function resolveNewTradingReportBadge(
     hasTradesInPeriod.weeklyLast &&
     isTradingReportUnread(userId, "weekly_last", now)
   ) {
-    return { kind: "weekly", label: "🟢 New Weekly Report" }
+    return WEEKLY_TRADING_REPORT_BADGE
   }
 
   if (
@@ -77,7 +91,7 @@ export function resolveNewTradingReportBadge(
     hasTradesInPeriod.monthlyLast &&
     isTradingReportUnread(userId, "monthly_last", now)
   ) {
-    return { kind: "monthly", label: "🟣 Monthly Report Ready" }
+    return MONTHLY_TRADING_REPORT_BADGE
   }
 
   return null

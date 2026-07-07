@@ -33,6 +33,7 @@ import TradeFormCurrencyInput from "@/app/components/trade/TradeFormCurrencyInpu
 import { TRADE_OPTIONAL_ATTACHMENT_LABEL_CLASS } from "@/lib/tradeFormUi"
 import { assertCanCreateTradingAccount, FREE_PLAN_ACCOUNT_LIMIT } from "@/lib/tradingAccounts"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
+import { supabaseMutationFeedback } from "@/lib/supabaseMutationFeedback"
 import { upsertAccountInCache } from "@/lib/appDataCache"
 import { parseOptionalRr } from "@/lib/tradeRr"
 import CommunitySharePreviewPanel from "@/app/components/CommunitySharePreviewPanel"
@@ -494,7 +495,7 @@ export default function QuickTradeModal({
       if (insertErr) {
         console.error(insertErr)
         showPopup(
-          persistentError("Save Failed", handleSupabaseError(insertErr))
+          supabaseMutationFeedback(insertErr, "Save Failed")
         )
         return
       }
@@ -637,6 +638,12 @@ export default function QuickTradeModal({
               showPopup(feedbackPresets.accountLocked())
               throw new Error("Account is locked.")
             }
+            showPopup(
+              persistentError(
+                result.code === "post" ? "Post Failed" : "Save Failed",
+                result.message
+              )
+            )
             throw new Error(result.message)
           }
 

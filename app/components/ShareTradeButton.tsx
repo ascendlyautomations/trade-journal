@@ -113,6 +113,7 @@ export default function ShareTradeButton({
       <ProUpgradeModal
         open={showExportUpgradeModal}
         onClose={() => setShowExportUpgradeModal(false)}
+        variant="custom"
       />
       {mode === "full" && exportHostReady
         ? createPortal(

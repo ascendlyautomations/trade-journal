@@ -58,6 +58,7 @@ import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import AuthPasswordInput from "@/app/components/ui/AuthPasswordInput"
 import NativeDateInput from "@/app/components/ui/NativeDateInput"
 import { feedbackPresets, persistentError } from "@/lib/feedbackPresets"
+import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import {
   getLocalTodayDateInputValue,
   isStartedTradingDateInFuture,
@@ -536,7 +537,10 @@ export default function SettingsPage() {
         .maybeSingle()
 
       if (usernameLookupErr) {
-        showPopup({ type: "error", message: "Something went wrong" })
+        showPopup({
+          type: "error",
+          message: handleSupabaseError(usernameLookupErr),
+        })
         return
       }
 
@@ -574,7 +578,7 @@ export default function SettingsPage() {
       if (error.code === "23505" && isProfilesUsernameConflict(error)) {
         showPopup({ type: "error", message: "Username already in use" })
       } else {
-        showPopup({ type: "error", message: "Something went wrong" })
+        showPopup({ type: "error", message: handleSupabaseError(error) })
       }
       return
     }
@@ -654,7 +658,7 @@ export default function SettingsPage() {
     if (error) {
       showPopup({
         type: "error",
-        message: "Something went wrong. Please try again.",
+        message: handleSupabaseError(error),
       })
       return
     }

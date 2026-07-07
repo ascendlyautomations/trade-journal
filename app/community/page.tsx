@@ -10,7 +10,7 @@ import {
   type ChangeEvent,
 } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import PopularTradeRoomsPanel from "../components/dashboard/PopularTradeRoomsPanel"
+import TradeRoomsDiscoverView from "../components/TradeRoomsDiscoverView"
 import CreateFirstTradeRoomCard from "../components/CreateFirstTradeRoomCard"
 import ExploreMoreTradeRoomsCard from "../components/ExploreMoreTradeRoomsCard"
 import EmptyState from "../components/ui/EmptyState"
@@ -90,7 +90,7 @@ import {
 import { notifyGettingStartedChecklistMaybeCompleted } from "@/lib/gettingStartedProgressSync"
 import { isUserAdmin } from "@/lib/adminUsers"
 import { isBetaAnnouncementsSection } from "@/lib/betaHub"
-import { isProfileUuidSegment } from "@/lib/profileRoutes"
+import { createRoomPresenceSession } from "@/lib/roomPresence"
 import {
   patchRoomMessageReactions,
   type RoomMessageReactionEmoji,
@@ -404,6 +404,7 @@ function CommunityContent() {
   const sectionParam = searchParams.get("section")
   const messageParam = searchParams.get("message")
   const setupMode = searchParams.get("setup") === "true"
+  const createMode = searchParams.get("create") === "true"
   const [rooms, setRooms] = useState<Room[]>([])
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null)
   const [messages, setMessages] = useState<RoomMessage[]>([])
@@ -673,37 +674,24 @@ function CommunityContent() {
     )
   }, [inviteTargetRoom, selectedRoomId, rooms])
 
-  const canShowRoomDiscovery = useMemo(() => {
+  const showCreateDiscoverView = useMemo(() => {
     if (loadingRooms) return false
     if (needsJoin) return false
     if (roomParam?.trim()) return false
-    return true
-  }, [loadingRooms, needsJoin, roomParam])
-
-  const showRecommendedRoomsFullView = useMemo(
-    () => canShowRoomDiscovery && rooms.length === 0,
-    [canShowRoomDiscovery, rooms.length]
-  )
-
-  const showRecommendedRoomsBelowChat = useMemo(
-    () => canShowRoomDiscovery && rooms.length > 0,
-    [canShowRoomDiscovery, rooms.length]
-  )
+    if (createMode) return true
+    return rooms.length === 0
+  }, [loadingRooms, needsJoin, roomParam, createMode, rooms.length])
 
   const memberRoomIds = useMemo(
     () => new Set(rooms.map((room) => room.id)),
     [rooms]
   )
 
-  const scrollToRecommendedRooms = useCallback(() => {
+  const navigateToCreateDiscover = useCallback(() => {
     setMobileRoomsOpen(false)
-    requestAnimationFrame(() => {
-      document.getElementById("recommended-trade-rooms")?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      })
-    })
-  }, [])
+    setSelectedRoomId(null)
+    router.push("/trade-rooms?create=true")
+  }, [router])
 
   const userOwnsRoom = useMemo(() => {
     if (!user?.id) return false
@@ -746,6 +734,7 @@ function CommunityContent() {
   const usernameRef = useRef("")
   const reactionBusyRef = useRef(new Set<string>())
   const roomMessageIdsRef = useRef(new Set<string>())
+  const presenceStopRef = useRef<(() => Promise<void>) | null>(null)
   userIdRef.current = user?.id ?? null
   roomsRef.current = rooms
   needsJoinRef.current = needsJoin
@@ -2220,6 +2209,12 @@ function CommunityContent() {
 
     const leftRoomId = selectedRoomId
 
+    const stopPresence = presenceStopRef.current
+    presenceStopRef.current = null
+    if (stopPresence) {
+      await stopPresence()
+    }
+
     const { error } = await supabase
       .from("room_members")
       .update({ left_at: new Date().toISOString() })
@@ -2234,6 +2229,7 @@ function CommunityContent() {
 
     setRooms((prev) => prev.filter((r) => r.id !== leftRoomId))
     setSelectedRoomId(null)
+    setActiveUsers([])
 
     const nextRooms = await loadMemberRooms(authUser.id)
     setRooms(nextRooms)
@@ -2391,7 +2387,8 @@ function CommunityContent() {
       })
 
       const rp = searchParams.get("room")
-      if (nextRooms.length > 0 && !rp) {
+      const createRp = searchParams.get("create") === "true"
+      if (nextRooms.length > 0 && !rp && !createRp) {
         const defaultRoomId = pickInitialTradeRoomId(nextRooms, user.id)
         if (defaultRoomId) setSelectedRoomId(defaultRoomId)
       }
@@ -2532,6 +2529,9 @@ function CommunityContent() {
 
   useEffect(() => {
     if (!selectedRoomId || needsJoin || !user?.id) {
+      const stopPresence = presenceStopRef.current
+      presenceStopRef.current = null
+      if (stopPresence) void stopPresence()
       setActiveUsers([])
       return
     }
@@ -2541,74 +2541,25 @@ function CommunityContent() {
       return
     }
 
-    let cancelled = false
     const roomId = selectedRoomId
+    const userId = user.id
 
-    const updatePresenceAndCount = async () => {
-      if (needsJoinRef.current || !userIdRef.current) return
+    const session = createRoomPresenceSession(supabase, {
+      roomId,
+      userId,
+      onActiveUsers: (users) => {
+        setActiveUsers(users as ActivePresence[])
+      },
+      onError: (error) => {
+        console.error("room_presence:", error)
+      },
+    })
 
-      const payload = {
-        room_id: roomId,
-        user_id: userIdRef.current,
-        last_seen: new Date().toISOString(),
-      }
-
-      console.log("Presence payload:", payload)
-
-      if (!payload.room_id || !payload.user_id) {
-        console.warn("Skipping presence update: missing IDs", payload)
-        return
-      }
-
-      const { error: upsertError } = await supabase
-        .from("room_presence")
-        .upsert(payload, {
-          onConflict: "room_id,user_id",
-        })
-
-      if (upsertError) {
-        console.error(
-          "room_presence upsert FULL:",
-          JSON.stringify(upsertError, null, 2)
-        )
-      }
-
-      const threshold = new Date(Date.now() - 30000).toISOString()
-      const { data, error } = await supabase
-        .from("room_presence")
-        .select(
-          `
-          user_id,
-          profiles (
-            id,
-            username,
-            avatar_url
-          )
-        `
-        )
-        .eq("room_id", roomId)
-        .gt("last_seen", threshold)
-
-      if (error) {
-        console.error("room_presence fetch:", error)
-        if (!cancelled) setActiveUsers([])
-        return
-      }
-
-      const uniqueUsers = Array.from(
-        new Map(((data ?? []) as ActivePresence[]).map((u) => [u.user_id, u])).values()
-      )
-      if (!cancelled) setActiveUsers(uniqueUsers)
-    }
-
-    void updatePresenceAndCount()
-    const intervalId = window.setInterval(() => {
-      void updatePresenceAndCount()
-    }, 10000)
+    presenceStopRef.current = session.stop
 
     return () => {
-      cancelled = true
-      window.clearInterval(intervalId)
+      presenceStopRef.current = null
+      void session.stop()
     }
   }, [selectedRoomId, needsJoin, user?.id])
 
@@ -3120,7 +3071,9 @@ function CommunityContent() {
                     <path d="M6 9l6 6 6-6" />
                   </svg>
                   <span className="truncate text-sm font-semibold text-white">
-                    {selectedRoom?.name || "Select room"}
+                    {showCreateDiscoverView
+                      ? "Create & Explore"
+                      : selectedRoom?.name || "Select room"}
                   </span>
                 </button>
                 {selectedRoomId && !needsJoin ? (
@@ -3198,17 +3151,16 @@ function CommunityContent() {
                     <>
                       {showCreateFirstRoomCard ? (
                         <CreateFirstTradeRoomCard
-                          onClick={() => void handleCreateRoom()}
+                          onClick={navigateToCreateDiscover}
                           disabled={creatingRoom}
-                          className={
-                            showRecommendedRoomsFullView
-                              ? "hidden md:flex"
-                              : undefined
+                          selected={
+                            showCreateDiscoverView && showCreateFirstRoomCard
                           }
                         />
                       ) : null}
                       {sortedSidebarRooms.map((room) => {
-                      const selected = room.id === selectedRoomId
+                      const selected =
+                        room.id === selectedRoomId && !showCreateDiscoverView
                       const isOwnRoom =
                         user?.id != null && room.owner_user_id === user.id
                       const itemClass =
@@ -3235,6 +3187,10 @@ function CommunityContent() {
                           onClick={() => {
                             setSelectedRoomId(room.id)
                             setMobileRoomsOpen(false)
+                            const target = String(room.slug ?? room.id)
+                            router.push(
+                              `/trade-rooms?room=${encodeURIComponent(target)}`
+                            )
                           }}
                           className={itemClass}
                         >
@@ -3262,9 +3218,12 @@ function CommunityContent() {
                         </button>
                       )
                     })}
-                      {showRecommendedRoomsBelowChat ? (
+                      {!loadingRooms && !needsJoin ? (
                         <ExploreMoreTradeRoomsCard
-                          onClick={scrollToRecommendedRooms}
+                          onClick={navigateToCreateDiscover}
+                          selected={
+                            showCreateDiscoverView && !showCreateFirstRoomCard
+                          }
                           className="mb-1"
                         />
                       ) : null}
@@ -3275,43 +3234,28 @@ function CommunityContent() {
             </div>
           </aside>
 
-          <section
-            className={`flex min-h-0 w-full min-w-0 flex-1 flex-col${
-              showRecommendedRoomsBelowChat ? " overflow-y-auto" : ""
-            }`}
-          >
-            {showRecommendedRoomsFullView ? (
-              <div
-                id="recommended-trade-rooms"
-                className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-6 md:px-8 md:py-10"
-              >
-                <div className="mx-auto w-full max-w-2xl">
-                  {showCreateFirstRoomCard ? (
-                    <CreateFirstTradeRoomCard
-                      onClick={() => void handleCreateRoom()}
-                      disabled={creatingRoom}
-                      className="mb-4 md:hidden"
-                    />
-                  ) : null}
-                  <PopularTradeRoomsPanel
-                    active
-                    heading="Recommended Trade Rooms"
-                    subheading="Join a Trade Room to start chatting, sharing trades, and connecting with other traders."
-                    listClassName="space-y-3"
-                    memberRoomIds={memberRoomIds}
-                    onJoined={(room) => void handleRecommendedRoomJoined(room)}
-                  />
-                </div>
-              </div>
+          <section className="flex min-h-0 w-full min-w-0 flex-1 flex-col">
+            {showCreateDiscoverView ? (
+              <TradeRoomsDiscoverView
+                showCreateSection={showCreateFirstRoomCard}
+                creatingRoom={creatingRoom}
+                onCreateRoom={() => void handleCreateRoom()}
+                memberRoomIds={memberRoomIds}
+                onJoined={(room) => void handleRecommendedRoomJoined(room)}
+                exploreHeading={
+                  rooms.length === 0
+                    ? "Recommended Trade Rooms"
+                    : "Explore More Trade Rooms"
+                }
+                exploreSubheading={
+                  rooms.length === 0
+                    ? "Join a Trade Room to start chatting, sharing trades, and connecting with other traders."
+                    : "Discover public Trade Rooms and join other trading communities."
+                }
+              />
             ) : (
             <>
-            <div
-              className={
-                showRecommendedRoomsBelowChat
-                  ? "flex min-h-[min(55vh,520px)] min-w-0 shrink-0 flex-col"
-                  : "flex min-h-0 min-w-0 flex-1 flex-col"
-              }
-            >
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             <div className="hidden border-b border-white/10 px-4 py-3 md:block">
               <div className="flex items-center gap-3">
                 <img
@@ -3432,100 +3376,112 @@ function CommunityContent() {
             </div>
 
             {setupMode && isOwner && selectedRoomId ? (
-              <div className="border-b border-green-500/15 px-4 pb-4">
-                <div className="rounded-lg border border-green-500/20 bg-green-500/10 p-4">
-                  <h2 className="mb-2 text-lg font-semibold text-green-300">
+              <div className="border-b border-white/10 px-4 py-5 md:px-6">
+                <div className="mx-auto w-full max-w-2xl rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm">
+                  <h2 className="text-xl font-semibold text-white">
                     Set up your Trade Room
                   </h2>
 
-                  <p className="mb-3 text-sm text-gray-400">
+                  <p className="mt-2 text-sm leading-relaxed text-gray-400">
                     Customize your room, create channels, and share your invite
                     link.
                   </p>
 
-                  <div className="mb-3">
-                    <p className="mb-1 text-sm font-medium text-gray-300">
-                      Trade Room Picture
-                    </p>
-                    <label className="inline-flex cursor-pointer items-center rounded-md border border-white/10 bg-white/10 px-3 py-2 text-sm font-medium text-gray-200 transition hover:bg-white/15">
-                      Choose Trade Room Picture
+                  <div className="mt-6 space-y-5">
+                    <div>
+                      <p className="mb-2 text-sm font-medium text-gray-300">
+                        Trade Room Picture
+                      </p>
+                      <label className="inline-flex cursor-pointer items-center rounded-xl border border-white/10 bg-black/20 px-4 py-2.5 text-sm font-medium text-gray-200 transition hover:bg-white/10">
+                        Choose Trade Room Picture
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="sr-only"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0]
+                            e.target.value = ""
+                            if (file) void handleRoomImageUpload(file)
+                          }}
+                        />
+                      </label>
+                    </div>
+
+                    <div>
+                      <label className="mb-2 block text-sm font-medium text-gray-300">
+                        Room name
+                      </label>
                       <input
-                        type="file"
-                        accept="image/*"
-                        className="sr-only"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0]
-                          e.target.value = ""
-                          if (file) void handleRoomImageUpload(file)
-                        }}
+                        type="text"
+                        value={roomName}
+                        onChange={(e) => setRoomName(e.target.value)}
+                        className="w-full rounded-xl border border-white/10 bg-black/30 p-3 text-sm text-white placeholder:text-gray-500"
+                        placeholder="Room name"
                       />
-                    </label>
-                  </div>
-
-                  <input
-                    type="text"
-                    value={roomName}
-                    onChange={(e) => setRoomName(e.target.value)}
-                    className="mb-2 w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-gray-500"
-                    placeholder="Room name"
-                  />
-
-                  <button
-                    type="button"
-                    onClick={() => void handleRenameRoom()}
-                    className="rounded-md bg-green-500/20 px-3 py-1 text-sm text-green-200 hover:bg-green-500/30"
-                  >
-                    Save Name
-                  </button>
-
-                  <label className="mt-3 flex items-center gap-2 text-sm text-gray-300">
-                    <input
-                      type="checkbox"
-                      checked={showOnProfile}
-                      onChange={(e) => setShowOnProfile(e.target.checked)}
-                    />
-                    Show on my profile
-                  </label>
-
-                  <p className="mt-1 text-xs text-gray-500">
-                    If off, users can only join via invite link.
-                  </p>
-
-                  <div className="mt-3">
-                    <p className="mb-1 text-xs text-gray-400">Invite link</p>
-
-                    <div className="flex gap-2">
-                      <input
-                        readOnly
-                        value={inviteLinkDisplay}
-                        className="flex-1 rounded border border-white/10 bg-black/30 px-2 py-1 text-xs text-gray-200"
-                      />
-
                       <button
                         type="button"
-                        onClick={() => {
-                          if (!inviteLinkDisplay) return
-                          void navigator.clipboard.writeText(inviteLinkDisplay)
-                        }}
-                        className="rounded bg-white/10 px-2 py-1 text-xs text-gray-200 hover:bg-white/15"
+                        onClick={() => void handleRenameRoom()}
+                        className="mt-3 rounded-xl border border-emerald-500/30 bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-500/25"
                       >
-                        Copy
+                        Save Name
                       </button>
                     </div>
-                  </div>
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!inviteRoomKey) return
-                      router.push(
-                        `/trade-rooms?room=${encodeURIComponent(inviteRoomKey)}`
-                      )
-                    }}
-                    className="mt-3 rounded-md bg-green-500/20 px-3 py-1 text-sm text-green-200 hover:bg-green-500/30"
-                  >
-                    Finish Setting Up
-                  </button>
+                    <div className="rounded-xl border border-white/10 bg-black/20 p-4">
+                      <label className="flex items-start gap-3 text-sm text-gray-300">
+                        <input
+                          type="checkbox"
+                          checked={showOnProfile}
+                          onChange={(e) => setShowOnProfile(e.target.checked)}
+                          className="mt-0.5"
+                        />
+                        <span>
+                          <span className="font-medium text-white">
+                            Show on my profile
+                          </span>
+                          <span className="mt-1 block text-xs leading-relaxed text-gray-500">
+                            If off, users can only join via invite link.
+                          </span>
+                        </span>
+                      </label>
+                    </div>
+
+                    <div>
+                      <p className="mb-2 text-sm font-medium text-gray-300">
+                        Invite link
+                      </p>
+                      <div className="flex flex-col gap-2 sm:flex-row">
+                        <input
+                          readOnly
+                          value={inviteLinkDisplay}
+                          className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/30 px-3 py-2.5 text-xs text-gray-200"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!inviteLinkDisplay) return
+                            void navigator.clipboard.writeText(inviteLinkDisplay)
+                          }}
+                          className="shrink-0 rounded-xl border border-white/10 bg-white/10 px-4 py-2.5 text-sm font-medium text-gray-200 transition hover:bg-white/15"
+                        >
+                          Copy
+                        </button>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!inviteRoomKey) return
+                        router.push(
+                          `/trade-rooms?room=${encodeURIComponent(inviteRoomKey)}`
+                        )
+                      }}
+                      className="w-full rounded-xl bg-gradient-to-r from-blue-500 to-emerald-500 py-3 text-sm font-semibold text-white transition hover:opacity-95 sm:w-auto sm:px-6"
+                    >
+                      Finish Setting Up
+                    </button>
+                  </div>
                 </div>
               </div>
             ) : null}
@@ -4113,23 +4069,6 @@ function CommunityContent() {
               </>
             )}
             </div>
-            {showRecommendedRoomsBelowChat ? (
-              <div
-                id="recommended-trade-rooms"
-                className="shrink-0 border-t border-white/10 px-4 py-6 md:px-6 md:py-8"
-              >
-                <div className="mx-auto w-full max-w-2xl">
-                  <PopularTradeRoomsPanel
-                    active
-                    heading="Recommended Trade Rooms"
-                    subheading="Discover public Trade Rooms and join other trading communities."
-                    listClassName="space-y-3"
-                    memberRoomIds={memberRoomIds}
-                    onJoined={(room) => void handleRecommendedRoomJoined(room)}
-                  />
-                </div>
-              </div>
-            ) : null}
             </>
             )}
           </section>
@@ -4665,7 +4604,7 @@ function CommunityContent() {
                 onClick={() => void handleAddSection()}
                 className="mt-3 w-full rounded-lg bg-blue-500 py-2 text-sm text-white hover:bg-blue-600"
               >
-                + Add Page
+                + Add Channel
               </button>
             </div>
 

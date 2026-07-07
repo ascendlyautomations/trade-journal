@@ -1766,7 +1766,7 @@ function FeedPageContent() {
       })
 
       if ("error" in result) {
-        showPopup({ type: "error", message: result.error })
+        showPopup({ type: "error", message: handleSupabaseError(result.error) })
         return
       }
 

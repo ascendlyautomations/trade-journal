@@ -43,13 +43,10 @@ import {
   shouldShowPropFirmDashboardLink,
 } from "../../components/dashboard/dashboardGearUtils"
 import {
-  buildTradeAccountFilterKey,
-  formatAccountNameWithSizeDisplay,
-  resolveTradeAccountName,
-  resolveTradeAccountSize,
+  buildAccountFilterOptionsFromRows,
   tradeMatchesAccountFilter,
 } from "@/lib/tradeAccountDisplay"
-import LockedFeature from "../../components/LockedFeature"
+import DashboardPremiumPreviewSection from "../../components/dashboard/DashboardPremiumPreviewSection"
 import ProUpgradeModal from "../../components/ProUpgradeModal"
 import EmptyState from "../../components/ui/EmptyState"
 import { SkeletonDashboardShell } from "../../components/ui/skeletons"
@@ -584,7 +581,10 @@ export default function Dashboard() {
   const [ddInputFocused, setDdInputFocused] = useState(false)
   const [savingGearSettings, setSavingGearSettings] = useState(false)
   const [showPerformanceShare, setShowPerformanceShare] = useState(false)
-  const [showExportUpgradeModal, setShowExportUpgradeModal] = useState(false)
+  const [showProUpgradeModal, setShowProUpgradeModal] = useState(false)
+  const openExportUpgradeModal = useCallback(() => {
+    setShowProUpgradeModal(true)
+  }, [])
   const tradingReportsRef = useRef<TradingReportsSectionHandle>(null)
   const [showImportModal, setShowImportModal] = useState(false)
   const [editingTrade, setEditingTrade] = useState<any | null>(null)
@@ -799,6 +799,7 @@ export default function Dashboard() {
     } = sanitizeHydratedDashboardFilters({
       prefs: p,
       trades: tradesExcludingBacktest,
+      accountRows,
       accountById,
     })
 
@@ -836,7 +837,12 @@ export default function Dashboard() {
         showWarnings: typeof p.showWarnings === "boolean" ? p.showWarnings : true,
       })
     }
-  }, [pageDataLoading, tradesExcludingBacktest])
+  }, [pageDataLoading, tradesExcludingBacktest, accountRows, accountById])
+
+  const accounts = useMemo(
+    () => buildAccountFilterOptionsFromRows(accountRows),
+    [accountRows]
+  )
 
   function formatNumber(value: number) {
     if (value === null || value === undefined) return "-"
@@ -846,7 +852,6 @@ export default function Dashboard() {
   // 🔥 MEMOIZED CALCULATIONS (PERFORMANCE BOOST)
   const {
     filteredTrades,
-    accounts,
     totalTrades,
     winRate,
     totalPnL,
@@ -888,39 +893,6 @@ export default function Dashboard() {
       if (tradesExcludingBacktest.length)
         console.log("Sample trade:", tradesExcludingBacktest[0])
     }
-
-    const accountMap = new Map<
-      string,
-      { value: string; label: string; accountType?: string | null }
-    >()
-    tradesExcludingBacktest
-      .filter((t) => t.account_id)
-      .forEach((t) => {
-        const id = String(t.account_id || "").trim()
-        const accRow = accountById[id]
-        if (accRow?.is_active === false) return
-        const accountName = resolveTradeAccountName(t, accRow)
-        const size = resolveTradeAccountSize(t, accRow)
-        if (!accountName || !size || !id) return
-        const value = buildTradeAccountFilterKey(t, accRow)
-        const num = accRow?.account_number
-        const label = [
-          formatAccountNameWithSizeDisplay(accountName, size),
-          num ? `• #${num}` : "",
-        ]
-          .filter((x) => x !== "")
-          .join(" ")
-          .replace(/\s+/g, " ")
-          .trim()
-        if (!accountMap.has(value)) {
-          accountMap.set(value, {
-            value,
-            label,
-            accountType: t.mode ?? t.account_type,
-          })
-        }
-      })
-    const accounts = Array.from(accountMap.values())
 
     /** Public trades: DB flag and/or non-empty public note (matches InputTradeForm / feed). */
     function tradeIsPublic(t: any) {
@@ -1300,7 +1272,6 @@ const biggestLoss = losses.length > 0
 
     return {
       filteredTrades,
-      accounts,
       totalTrades,
       winRate,
       totalPnL,
@@ -1442,6 +1413,8 @@ const biggestLoss = losses.length > 0
       : streakData?.currentType === "win"
         ? Number(streakData.currentStreak || 0)
         : 0
+
+  const bestWinStreak = streakData?.maxWinStreak ?? 0
 
   const grossProfit = filteredTrades
     .filter((t) => (Number(t.pnl) || 0) > 0)
@@ -1721,7 +1694,7 @@ const biggestLoss = losses.length > 0
                   return
                 }
                 if (!isPro) {
-                  setShowExportUpgradeModal(true)
+                  openExportUpgradeModal()
                   return
                 }
                 setShowPerformanceShare(true)
@@ -1810,30 +1783,29 @@ const biggestLoss = losses.length > 0
   ) : (
     <>
       {gettingStartedSection}
+      {dashboardUserIsPro ? (
+        <>
       {user?.id ? (
-        dashboardUserIsPro ? (
         <Suspense fallback={null}>
           <TradingReportsSection
             ref={tradingReportsRef}
             userId={user.id}
-            trades={[...tradesExcludingBacktest]}
+            trades={tradesExcludingBacktest}
             onViewTrade={(trade) => setEditingTrade(trade)}
           />
         </Suspense>
-        ) : (
-          <LockedFeature title="Trading Reports" className="min-h-[160px]" />
-        )
       ) : null}
   {/* TOP: STATS + CHART */}
   <div className="grid gap-3 overflow-visible md:gap-6 lg:grid-cols-3">
 
     {/* LEFT: STATS */}
     <DashboardStatsGrid
-      isPro={dashboardUserIsPro}
+      isPro
       totalTrades={totalTrades}
       winRate={winRate}
       avgRR={avgRR}
       totalPnL={totalPnL}
+      profitFactor={profitFactor}
       avgWin={avgWin}
       bestTrade={bestTrade}
       avgLoss={avgLoss}
@@ -1848,6 +1820,7 @@ const biggestLoss = losses.length > 0
       hourData={hourData}
       showSessions={showSessions}
       mobileSessionsSlot={sessionPerformanceSection}
+      bestWinStreak={bestWinStreak}
       maxDrawdownSlot={
         showDrawdown ? (
           <DashboardMaxDrawdown
@@ -1864,7 +1837,7 @@ const biggestLoss = losses.length > 0
       {showEquity ? (
         <DashboardEquityCurve
           variant="desktop"
-          isPro={dashboardUserIsPro}
+          isPro
           data={equityDrawdownChartData}
           profitFactor={profitFactor}
           currentStreak={currentStreak}
@@ -1878,13 +1851,7 @@ const biggestLoss = losses.length > 0
         {showSessions ? (
           <>
             <div className="hidden md:block">{recentTradesSection}</div>
-            <div className="hidden md:block">
-              {dashboardUserIsPro ? (
-                sessionPerformanceSection
-              ) : (
-                <LockedFeature title="Session Performance" className="min-h-[280px]" />
-              )}
-            </div>
+            <div className="hidden md:block">{sessionPerformanceSection}</div>
           </>
         ) : (
           <div className="hidden md:block lg:col-span-2">{recentTradesSection}</div>
@@ -1898,8 +1865,6 @@ const biggestLoss = losses.length > 0
   <div className="grid grid-cols-1 gap-3 md:gap-6 lg:grid-cols-3 lg:items-stretch">
 
     <div className="h-full overflow-x-auto rounded-xl border border-white/10 bg-white/10 p-2.5 md:p-4 lg:col-span-2">
-      {dashboardUserIsPro ? (
-      <>
       <h3 className={dashboardInsightTitleClass}>Symbol Performance</h3>
 
       {symbolPerformanceRows.length === 0 ? (
@@ -1938,25 +1903,13 @@ const biggestLoss = losses.length > 0
         </tbody>
       </table>
       )}
-      </>
-      ) : (
-        <LockedFeature title="Advanced Insights" className="min-h-[280px]" />
-      )}
     </div>
 
-    <div className="hidden md:block">
-      {dashboardUserIsPro ? (
-        pnlByWeekdaySection
-      ) : (
-        <LockedFeature title="Weekday Performance" className="min-h-[280px]" />
-      )}
-    </div>
+    <div className="hidden md:block">{pnlByWeekdaySection}</div>
 
   </div>
 
   <div className="grid grid-cols-1 gap-3 md:gap-6 lg:grid-cols-3 lg:items-stretch">
-    {dashboardUserIsPro ? (
-      <>
     <DashboardLongShort
       performance={longShortPerformance}
       totalTrades={totalTrades}
@@ -1964,23 +1917,12 @@ const biggestLoss = losses.length > 0
     <div className="lg:col-span-2">
       <DashboardHoldTime stats={holdTimeStats} totalTrades={totalTrades} />
     </div>
-      </>
-    ) : (
-      <>
-        <LockedFeature title="Long vs Short" className="min-h-[220px]" />
-        <div className="lg:col-span-2">
-          <LockedFeature title="Hold Time" className="min-h-[220px]" />
-        </div>
-      </>
-    )}
   </div>
 
           {(showInsights || showBestSetup) ? (
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-6">
             {showInsights ? (
             <div className={dashboardInsightCardClass}>
-                {dashboardUserIsPro ? (
-                  <>
                 <h3 className={dashboardInsightTitleClass}>Performance Insights</h3>
                 <p className={dashboardInsightHelperClass}>
                   Data-driven highlights (min. 3 trades per session, symbol, or
@@ -2029,10 +1971,6 @@ const biggestLoss = losses.length > 0
                     symbol, or direction bucket (with current filters).
                   </p>
                 )}
-                  </>
-                ) : (
-                  <LockedFeature title="Performance Insights" />
-                )}
             </div>
             ) : null}
 
@@ -2040,8 +1978,6 @@ const biggestLoss = losses.length > 0
             <div
               className={`${dashboardInsightCardClass} ${!showInsights ? "md:col-span-2" : ""}`}
             >
-              {dashboardUserIsPro ? (
-                <>
               <h3 className={dashboardInsightTitleClass}>
                 Best Performing Strategy
               </h3>
@@ -2089,10 +2025,6 @@ const biggestLoss = losses.length > 0
                   Need at least 3 trades with the same strategy to rank setups.
                 </p>
               )}
-                </>
-              ) : (
-                <LockedFeature title="Best Performing Strategy" />
-              )}
             </div>
             ) : null}
           </div>
@@ -2102,8 +2034,6 @@ const biggestLoss = losses.length > 0
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-6">
             {showInsights ? (
             <div className={dashboardInsightCardClass}>
-                {dashboardUserIsPro ? (
-                  <>
                 <h3 className={dashboardInsightTitleClass}>Advanced Edge</h3>
                 <p className={dashboardInsightHelperClass}>
                   Strongest combined setup (pairs or triples, min. 3 trades). Same
@@ -2126,17 +2056,11 @@ const biggestLoss = losses.length > 0
                     session, symbol, and direction data.
                   </p>
                 )}
-                  </>
-                ) : (
-                  <LockedFeature title="Advanced Edge" />
-                )}
             </div>
             ) : null}
 
             {showWorstSetup ? (
             <div className={dashboardInsightCardClass}>
-              {dashboardUserIsPro ? (
-                <>
               <h3 className={dashboardInsightTitleClass}>Risk Insights</h3>
               <p className={dashboardInsightHelperClass}>
                 Lowest-performing combined setup (same 3+ trade rule as Advanced Edge).
@@ -2150,17 +2074,11 @@ const biggestLoss = losses.length > 0
                   No combined setup to rank yet, or filters removed too much data.
                 </p>
               )}
-                </>
-              ) : (
-                <LockedFeature title="Risk Insights" />
-              )}
             </div>
             ) : null}
 
             {showWarnings ? (
             <div className={`${dashboardInsightCardClass} md:col-span-2`}>
-              {dashboardUserIsPro ? (
-                <>
               <h3 className={dashboardInsightTitleClass}>Behavior Warnings</h3>
               <p className={dashboardInsightHelperClass}>
                 Post–loss streak win rate (next 5 trades) and RR sample comparison.
@@ -2181,17 +2099,54 @@ const biggestLoss = losses.length > 0
                   No behavioral flags for the current trade set.
                 </p>
               )}
-                </>
-              ) : (
-                <LockedFeature title="Behavior Warnings" />
-              )}
             </div>
             ) : null}
           </div>
           ) : null}
 
           <div className="md:hidden">{recentTradesSection}</div>
-
+        </>
+      ) : (
+        <>
+          <div className="grid gap-3 overflow-visible md:gap-6 lg:grid-cols-3">
+            <DashboardStatsGrid
+              isPro={false}
+              totalTrades={totalTrades}
+              winRate={winRate}
+              avgRR={avgRR}
+              totalPnL={totalPnL}
+              profitFactor={profitFactor}
+              avgWin={avgWin}
+              bestTrade={bestTrade}
+              avgLoss={avgLoss}
+              biggestLoss={biggestLoss}
+              bestDay={bestDay}
+              worstDay={worstDay}
+              showEquity={showEquity}
+              mobileEquitySlot={mobileEquityChartSlot}
+              mobileWeekdayPnlSlot={pnlByWeekdaySection}
+              expectancyData={expectancyData}
+              streakData={streakData}
+              hourData={hourData}
+              showSessions={showSessions}
+              mobileSessionsSlot={sessionPerformanceSection}
+              bestWinStreak={bestWinStreak}
+            />
+            <div className="space-y-3 overflow-visible md:space-y-6 lg:col-span-2">
+              {showEquity ? (
+                <DashboardEquityCurve
+                  variant="desktop"
+                  isPro={false}
+                  data={equityDrawdownChartData}
+                  totalTrades={totalTrades}
+                />
+              ) : null}
+            </div>
+          </div>
+          {recentTradesSection}
+          <DashboardPremiumPreviewSection />
+        </>
+      )}
     </>
   )}
 
@@ -2208,8 +2163,9 @@ const biggestLoss = losses.length > 0
         initialCustomRangeEnd={customRangeEnd}
       />
       <ProUpgradeModal
-        open={showExportUpgradeModal}
-        onClose={() => setShowExportUpgradeModal(false)}
+        open={showProUpgradeModal}
+        onClose={() => setShowProUpgradeModal(false)}
+        variant="custom"
       />
       <TradesPageOverlays
         selectedImage={selectedImage}

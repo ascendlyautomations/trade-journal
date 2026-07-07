@@ -7,10 +7,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { supabase } from "../../../lib/supabaseClient"
 import { deleteUserTrade } from "@/lib/deleteTrade"
 import {
-  buildTradeAccountFilterKey,
-  formatAccountNameWithSizeDisplay,
-  resolveTradeAccountName,
-  resolveTradeAccountSize,
+  buildAccountFilterOptionsFromRows,
 } from "@/lib/tradeAccountDisplay"
 import { useRouter } from "next/navigation"
 import TradesPageMainContent from "../../components/TradesPageMainContent"
@@ -252,40 +249,10 @@ export default function TradesPage() {
     setTimeframe("custom")
   }, [])
 
-  const accounts = useMemo(() => {
-    const accountFilterMap = new Map<
-      string,
-      { value: string; label: string; accountType?: string | null }
-    >()
-    trades
-      .filter((t) => t.account_id)
-      .forEach((t) => {
-        const id = String(t.account_id || "").trim()
-        const accRow = accountById[id]
-        if (accRow?.is_active === false) return
-        const accountName = resolveTradeAccountName(t, accRow)
-        const size = resolveTradeAccountSize(t, accRow)
-        if (!accountName || !size || !id) return
-        const value = buildTradeAccountFilterKey(t, accRow)
-        const num = accRow?.account_number
-        const label = [
-          formatAccountNameWithSizeDisplay(accountName, size),
-          num ? `• #${num}` : "",
-        ]
-          .filter((x) => x !== "")
-          .join(" ")
-          .replace(/\s+/g, " ")
-          .trim()
-        if (!accountFilterMap.has(value)) {
-          accountFilterMap.set(value, {
-            value,
-            label,
-            accountType: t.mode ?? t.account_type,
-          })
-        }
-      })
-    return Array.from(accountFilterMap.values())
-  }, [trades, accountById])
+  const accounts = useMemo(
+    () => buildAccountFilterOptionsFromRows(accountRows),
+    [accountRows]
+  )
 
   useEffect(() => {
     if (accountFilter === "all") return
@@ -428,6 +395,7 @@ export default function TradesPage() {
       <ProUpgradeModal
         open={showExportUpgradeModal}
         onClose={() => setShowExportUpgradeModal(false)}
+        variant="custom"
       />
 
       <ReelViewer

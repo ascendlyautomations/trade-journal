@@ -1,11 +1,8 @@
 import { supabase } from "@/lib/supabaseClient"
-import { formatRateLimitExceededMessage, isRateLimitExceededError } from "@/lib/rateLimitErrors"
+import { isRateLimitExceededError } from "@/lib/rateLimitErrors"
+import { toUserFacingErrorMessage } from "@/lib/userFacingError"
 
 export type AppRateLimitAction = "csv_import"
-
-const ACTION_MESSAGES: Record<AppRateLimitAction, string> = {
-  csv_import: "Too many CSV imports. Try again in an hour.",
-}
 
 export async function consumeAppRateLimit(
   action: AppRateLimitAction
@@ -18,10 +15,10 @@ export async function consumeAppRateLimit(
     if (isRateLimitExceededError(error.message)) {
       return {
         ok: false,
-        message: formatRateLimitExceededMessage(ACTION_MESSAGES[action]),
+        message: toUserFacingErrorMessage(error),
       }
     }
-    return { ok: false, message: error.message || "Could not verify rate limit." }
+    return { ok: false, message: toUserFacingErrorMessage(error) }
   }
 
   return { ok: true }

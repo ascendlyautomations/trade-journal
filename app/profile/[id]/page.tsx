@@ -95,6 +95,7 @@ import {
   withInsertedAchievementPostParentCommentId,
 } from "@/lib/achievementPostEngagement"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
+import { supabaseMutationFeedback } from "@/lib/supabaseMutationFeedback"
 import { feedbackPresets, persistentError } from "@/lib/feedbackPresets"
 import {
   TradeSocialProvider,
@@ -2635,6 +2636,7 @@ function ProfilePageContent() {
             .insert(insertPayload)
 
           if (error) {
+            showPopup(supabaseMutationFeedback(error, "Post Failed"))
             throw new Error(handleSupabaseError(error))
           }
 
@@ -2802,7 +2804,7 @@ function ProfilePageContent() {
       })
 
       if ("error" in result) {
-        showPopup({ type: "error", message: result.error })
+        showPopup({ type: "error", message: handleSupabaseError(result.error) })
         return
       }
 
@@ -4473,9 +4475,9 @@ function ProfilePageContent() {
                       <div className="mt-3 flex flex-wrap items-center justify-center gap-2 sm:justify-start">
                         <button
                           type="button"
-                          onClick={() => void handleCreateRoom()}
+                          onClick={() => router.push("/trade-rooms?create=true")}
                           disabled={creatingRoom}
-                          className="px-6 py-2 rounded-lg bg-green-500 font-semibold text-sm text-white hover:bg-green-600 disabled:opacity-60"
+                          className="rounded-xl bg-gradient-to-r from-blue-500 to-emerald-500 px-6 py-2.5 text-sm font-semibold text-white transition hover:opacity-95 disabled:opacity-60"
                         >
                           {creatingRoom ? "Creating…" : "Create Trade Room"}
                         </button>

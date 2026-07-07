@@ -1,7 +1,9 @@
+import { USER_FACING_ERROR_MESSAGES } from "@/lib/userFacingError"
+
 export function isRateLimitExceededError(message: string | undefined | null): boolean {
-  return Boolean(message?.includes("rate_limit_exceeded"))
+  return Boolean(message?.toLowerCase().includes("rate_limit_exceeded"))
 }
 
-export function formatRateLimitExceededMessage(fallback: string): string {
-  return fallback
+export function formatRateLimitExceededMessage(_fallback?: string): string {
+  return USER_FACING_ERROR_MESSAGES.RATE_LIMIT_EXCEEDED
 }

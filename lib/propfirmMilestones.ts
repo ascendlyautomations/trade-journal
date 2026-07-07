@@ -82,6 +82,7 @@ export function buildPropFirmMilestoneAchievementInitials(
     firm: firm || undefined,
     account_size: accountSize || undefined,
     is_public: true,
+    metadata: { source: "prop_firm_mode" },
   }
 }
 

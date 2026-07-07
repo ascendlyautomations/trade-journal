@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useSyncExternalStore } from "react"
+import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from "react"
 import { subscribeAppDataCache } from "@/lib/appDataCache"
 import {
   ensureTradingReportsLoaded,
@@ -9,6 +9,7 @@ import {
   getTradingReportsSnapshot,
   isTradingReportsLoading,
   subscribeTradingReportsCache,
+  tradingReportsTradeFingerprint,
 } from "@/lib/tradingReports/tradingReportCache"
 import { markTradingReportSeen, subscribeTradingReportSeen } from "@/lib/tradingReports/tradingReportSeen"
 import type { TradingReportPeriodKey } from "@/lib/tradingReports/tradingReportTypes"
@@ -17,6 +18,14 @@ export function useTradingReports(
   userId: string | null | undefined,
   trades: any[]
 ) {
+  const tradesRef = useRef(trades)
+  tradesRef.current = trades
+
+  const tradesFingerprint = useMemo(
+    () => tradingReportsTradeFingerprint(trades),
+    [trades]
+  )
+
   const subscribe = useCallback(
     (listener: () => void) => {
       const unsubReports = subscribeTradingReportsCache(listener)
@@ -51,8 +60,8 @@ export function useTradingReports(
 
   useEffect(() => {
     if (!userId) return
-    ensureTradingReportsLoaded(trades, userId)
-  }, [userId, trades])
+    ensureTradingReportsLoaded(tradesRef.current, userId)
+  }, [userId, tradesFingerprint])
 
   const getReport = useCallback(
     (periodKey: TradingReportPeriodKey) =>

@@ -172,6 +172,16 @@ export type Achievement = {
   metadata: Record<string, unknown> | null
 }
 
+/** Ensures achievement inserts/updates satisfy NOT NULL metadata (jsonb). */
+export function normalizeAchievementMetadata(
+  metadata: Record<string, unknown> | null | undefined
+): Record<string, unknown> {
+  if (metadata == null || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return {}
+  }
+  return metadata
+}
+
 export const ACHIEVEMENT_SELECT = `
   id,
   user_id,

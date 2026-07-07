@@ -19,6 +19,7 @@ import {
   canonicalAchievementType,
   categoryFromType,
   isPayoutAchievementType,
+  normalizeAchievementMetadata,
 } from "@/lib/achievements"
 import { MODAL_FIXED_BELOW_NAVBAR_CLASS } from "@/app/components/ui/DetailModalShell"
 import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
@@ -308,7 +309,7 @@ export default function AchievementUploadModal({
             image_url: imageUrl,
             is_public: snapshotForm.is_public,
             is_featured: snapshotForm.is_featured,
-            metadata: snapshotForm.metadata ?? null,
+            metadata: normalizeAchievementMetadata(snapshotForm.metadata),
           }
 
           report({ percent: 82, stage: "Creating record…" })

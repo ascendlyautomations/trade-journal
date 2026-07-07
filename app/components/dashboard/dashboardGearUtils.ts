@@ -1,9 +1,6 @@
 import type { AccountRowForDisplay } from "@/lib/tradeAccountDisplay"
 import {
-  buildTradeAccountFilterKey,
-  formatAccountNameWithSizeDisplay,
-  resolveTradeAccountName,
-  resolveTradeAccountSize,
+  buildAccountFilterOptionsFromRows,
   tradeMatchesAccountFilter,
 } from "@/lib/tradeAccountDisplay"
 import type { DashboardGearPersistedPrefs } from "./dashboardGearTypes"
@@ -107,29 +104,23 @@ export function sanitizeDashboardAccountFilter(
     : "all"
 }
 
+export function buildDashboardAccountOptionsFromAccounts(
+  accountRows: readonly AccountRowForDisplay[]
+): DashboardAccountOption[] {
+  return buildAccountFilterOptionsFromRows(accountRows, {
+    includeAccountNumberInLabel: false,
+  })
+}
+
+/** @deprecated Prefer `buildDashboardAccountOptionsFromAccounts`. */
 export function buildDashboardAccountOptionsFromTrades(
-  trades: TradeForAccountFilter[],
+  _trades: TradeForAccountFilter[],
   accountById?: Record<string, AccountRowForDisplay | null | undefined> | null
 ): DashboardAccountOption[] {
-  const accountMap = new Map<string, DashboardAccountOption>()
-  trades
-    .filter((t) => t.account_id)
-    .forEach((t) => {
-      const id = String(t.account_id ?? "").trim()
-      const accountRow = id && accountById ? accountById[id] : null
-      if (accountRow?.is_active === false) return
-      const accountName = resolveTradeAccountName(t, accountRow)
-      const size = resolveTradeAccountSize(t, accountRow)
-      if (!accountName || !size || !id) return
-      const value = buildTradeAccountFilterKey(t, accountRow)
-      if (!accountMap.has(value)) {
-        accountMap.set(value, {
-          value,
-          label: formatAccountNameWithSizeDisplay(accountName, size),
-        })
-      }
-    })
-  return Array.from(accountMap.values())
+  const rows = accountById ? Object.values(accountById).filter(Boolean) : []
+  return buildDashboardAccountOptionsFromAccounts(
+    rows as AccountRowForDisplay[]
+  )
 }
 
 export function tradeMatchesDashboardAccountFilters(
@@ -186,15 +177,13 @@ export function shouldShowPropFirmDashboardLink(args: {
 export function sanitizeHydratedDashboardFilters(args: {
   prefs: Partial<DashboardGearPersistedPrefs>
   trades: TradeForAccountFilter[]
+  accountRows: readonly AccountRowForDisplay[]
   accountById?: Record<string, AccountRowForDisplay | null | undefined> | null
 }): Pick<
   DashboardGearPersistedPrefs,
   "timeFilter" | "accountFilter" | "accountTypeFilter"
 > {
-  const accountOptions = buildDashboardAccountOptionsFromTrades(
-    args.trades,
-    args.accountById
-  )
+  const accountOptions = buildDashboardAccountOptionsFromAccounts(args.accountRows)
 
   let timeFilter = sanitizeDashboardTimeFilter(args.prefs.timeFilter)
   let accountFilter = sanitizeDashboardAccountFilter(

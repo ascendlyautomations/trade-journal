@@ -11,7 +11,6 @@ import {
   ResponsiveContainer,
 } from "recharts"
 import EmptyState from "@/app/components/ui/EmptyState"
-import LockedFeature from "@/app/components/LockedFeature"
 import { formatEST } from "@/lib/formatEST"
 import { formatCurrency } from "@/lib/formatCurrency"
 import { formatDecimal } from "@/lib/formatDisplay"
@@ -266,11 +265,7 @@ export default function DashboardEquityCurve({
           Consistency: {consistency.toFixed(0)}%
         </div>
       </div>
-      ) : (
-        <div className="mt-4">
-          <LockedFeature title="Profit Factor" className="min-h-[120px]" />
-        </div>
-      )}
+      ) : null}
       </>
       )}
     </div>

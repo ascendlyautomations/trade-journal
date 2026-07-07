@@ -12,6 +12,7 @@ import {
 } from "@/lib/uploadProgress/reportProgress"
 import type { UploadProgressReporter } from "@/lib/uploadProgress/types"
 import { invalidateUserStreaksCache } from "@/lib/userStreaksCache"
+import { toUserFacingErrorMessage } from "@/lib/userFacingError"
 
 export type ReelVisibility = "public" | "private"
 
@@ -116,7 +117,7 @@ function logTradeReelError(step: string, error: unknown) {
 /** Surface actionable reel DB errors instead of masking them. */
 export function formatReelMutationError(error: unknown): string {
   const e = error as SupabaseErr | null | undefined
-  if (!e?.message) return "Could not save replay. Please try again."
+  if (!e?.message) return toUserFacingErrorMessage(error)
 
   const msg = String(e.message)
   const lower = msg.toLowerCase()
@@ -138,11 +139,7 @@ export function formatReelMutationError(error: unknown): string {
     return "Invalid replay data for this trade."
   }
 
-  if (e.code === "42501" || lower.includes("row-level security")) {
-    return `Replay upload blocked: ${msg}`
-  }
-
-  return msg.length > 240 ? `${msg.slice(0, 240)}…` : msg
+  return toUserFacingErrorMessage(error)
 }
 
 function normalizeTradeJoin(

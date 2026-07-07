@@ -11,6 +11,21 @@ const {
   sumPayoutAchievementTotals,
 } = require("./achievementTypes.ts")
 
+describe("achievement metadata", () => {
+  const { normalizeAchievementMetadata } = require("./achievementTypes.ts")
+
+  it("defaults nullish metadata to an empty object for inserts", () => {
+    assert.deepEqual(normalizeAchievementMetadata(null), {})
+    assert.deepEqual(normalizeAchievementMetadata(undefined), {})
+  })
+
+  it("preserves object metadata", () => {
+    assert.deepEqual(normalizeAchievementMetadata({ source: "prop_firm_mode" }), {
+      source: "prop_firm_mode",
+    })
+  })
+})
+
 describe("achievement payout types", () => {
   it("labels prop firm and live trading payouts separately", () => {
     assert.equal(

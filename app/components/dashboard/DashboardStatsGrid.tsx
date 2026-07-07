@@ -1,9 +1,8 @@
 "use client"
 
 import type { ReactNode } from "react"
-import LockedFeature from "@/app/components/LockedFeature"
 import { formatCurrency } from "@/lib/formatCurrency"
-import { formatRR } from "@/lib/formatDisplay"
+import { formatDecimal, formatRR } from "@/lib/formatDisplay"
 
 function formatNumber(value: number) {
   if (value === null || value === undefined) return "-"
@@ -27,7 +26,7 @@ function formatHour(h: number) {
 }
 
 type ExpectancySummary = {
-  expectancy:       number
+  expectancy: number
 }
 
 type StreakSummary = {
@@ -50,6 +49,7 @@ export type DashboardStatsGridProps = {
   winRate: number
   avgRR: number | null
   totalPnL: number
+  profitFactor?: number
   avgWin: number
   bestTrade: number
   avgLoss: number
@@ -65,16 +65,20 @@ export type DashboardStatsGridProps = {
   showSessions: boolean
   mobileSessionsSlot: ReactNode
   maxDrawdownSlot?: ReactNode
+  /** Longest consecutive winning streak (from streakData.maxWinStreak). */
+  bestWinStreak: number
 }
 
 function Stat({
   title,
   value,
   positive,
+  subtitle,
 }: {
   title: string
   value: string | number
   positive?: boolean
+  subtitle?: string
 }) {
   let color = "text-white"
   if (positive === true) color = "text-green-400"
@@ -96,7 +100,61 @@ function Stat({
         >
           {displayValue}
         </span>
+        {subtitle ? (
+          <p className="mt-0.5 text-[10px] text-gray-400 md:text-xs">{subtitle}</p>
+        ) : null}
       </div>
+    </div>
+  )
+}
+
+function bestWinStreakSubtitle(count: number) {
+  return count === 1 ? "Winning Trade" : "Winning Trades"
+}
+
+function FreeDashboardKpis({
+  totalTrades,
+  winRate,
+  avgRR,
+  totalPnL,
+  profitFactor = 0,
+  bestWinStreak,
+  showEquity,
+  mobileEquitySlot,
+}: Pick<
+  DashboardStatsGridProps,
+  | "totalTrades"
+  | "winRate"
+  | "avgRR"
+  | "totalPnL"
+  | "profitFactor"
+  | "bestWinStreak"
+  | "showEquity"
+  | "mobileEquitySlot"
+>) {
+  return (
+    <div className="flex flex-col gap-3 md:block md:space-y-4">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:gap-3 lg:grid-cols-1 xl:grid-cols-2">
+        <Stat
+          title="Net P/L"
+          value={formatCurrency(totalPnL)}
+          positive={totalPnL >= 0}
+        />
+        <Stat title="Win Rate" value={`${winRate.toFixed(1)}%`} />
+        <Stat
+          title="Best Win Streak"
+          value={bestWinStreak}
+          subtitle={bestWinStreakSubtitle(bestWinStreak)}
+        />
+        <Stat title="Total Trades" value={formatNumber(totalTrades)} />
+        <Stat title="Avg RR" value={formatRR(avgRR)} />
+        <Stat
+          title="Profit Factor"
+          value={formatDecimal(profitFactor)}
+          positive={profitFactor >= 1 ? true : profitFactor > 0 ? false : undefined}
+        />
+      </div>
+      {showEquity ? mobileEquitySlot : null}
     </div>
   )
 }
@@ -107,6 +165,7 @@ export default function DashboardStatsGrid({
   winRate,
   avgRR,
   totalPnL,
+  profitFactor = 0,
   avgWin,
   bestTrade,
   avgLoss,
@@ -122,53 +181,57 @@ export default function DashboardStatsGrid({
   showSessions,
   mobileSessionsSlot,
   maxDrawdownSlot,
+  bestWinStreak,
 }: DashboardStatsGridProps) {
+  if (!isPro) {
+    return (
+      <FreeDashboardKpis
+        totalTrades={totalTrades}
+        winRate={winRate}
+        avgRR={avgRR}
+        totalPnL={totalPnL}
+        profitFactor={profitFactor}
+        bestWinStreak={bestWinStreak}
+        showEquity={showEquity}
+        mobileEquitySlot={mobileEquitySlot}
+      />
+    )
+  }
+
   return (
     <div className="flex flex-col gap-3 md:block md:space-y-4">
       <div className="grid grid-cols-2 gap-2 md:gap-3">
         <Stat title="Trades" value={formatNumber(totalTrades)} />
         <Stat title="Win %" value={`${winRate.toFixed(1)}%`} />
-        {isPro ? <Stat title="Avg RR" value={formatRR(avgRR)} /> : null}
+        <Stat
+          title="Best Win Streak"
+          value={bestWinStreak}
+          subtitle={bestWinStreakSubtitle(bestWinStreak)}
+        />
+        <Stat title="Avg RR" value={formatRR(avgRR)} />
         <Stat
           title="P&L"
           value={formatCurrency(totalPnL)}
           positive={totalPnL >= 0}
         />
-        {!isPro ? (
-          <div className="col-span-2">
-            <LockedFeature title="Avg RR" className="min-h-[76px] md:min-h-[90px]" />
-          </div>
-        ) : null}
         {showEquity ? mobileEquitySlot : null}
-        {isPro ? (
-          <div className="col-span-2 block md:hidden">{mobileWeekdayPnlSlot}</div>
-        ) : (
-          <div className="col-span-2 block md:hidden">
-            <LockedFeature title="Weekday Performance" className="min-h-[220px]" />
-          </div>
-        )}
-        {isPro ? (
-          <>
-            <Stat title="Avg Win" value={formatCurrency(avgWin)} positive />
-            <Stat
-              title="Best Trade"
-              value={formatCurrency(bestTrade)}
-              positive={bestTrade >= 0}
-            />
-            <Stat title="Avg Loss" value={formatCurrency(avgLoss)} positive={false} />
-            <Stat
-              title="Big Loss"
-              value={formatCurrency(biggestLoss)}
-              positive={false}
-            />
-            <Stat title="Best Day" value={formatCurrency(bestDay)} positive />
-            <Stat title="Worst Day" value={formatCurrency(worstDay)} positive={false} />
-          </>
-        ) : null}
+        <div className="col-span-2 block md:hidden">{mobileWeekdayPnlSlot}</div>
+        <Stat title="Avg Win" value={formatCurrency(avgWin)} positive />
+        <Stat
+          title="Best Trade"
+          value={formatCurrency(bestTrade)}
+          positive={bestTrade >= 0}
+        />
+        <Stat title="Avg Loss" value={formatCurrency(avgLoss)} positive={false} />
+        <Stat
+          title="Big Loss"
+          value={formatCurrency(biggestLoss)}
+          positive={false}
+        />
+        <Stat title="Best Day" value={formatCurrency(bestDay)} positive />
+        <Stat title="Worst Day" value={formatCurrency(worstDay)} positive={false} />
       </div>
 
-      {isPro ? (
-        <>
       <div className="rounded-xl border border-white/10 bg-white/10 p-2.5 backdrop-blur-md md:p-4">
         <h3 className="text-[11px] text-gray-300 md:text-sm">
           Expectancy
@@ -226,25 +289,11 @@ export default function DashboardStatsGrid({
           </p>
         )}
       </div>
-        </>
-      ) : (
-        <>
-          <LockedFeature title="Expectancy" className="min-h-[120px]" />
-          <LockedFeature title="Trading Hours" className="min-h-[120px]" />
-        </>
-      )}
 
       <div className="block md:hidden">
-        {showSessions ? (
-          isPro ? (
-            mobileSessionsSlot
-          ) : (
-            <LockedFeature title="Session Performance" className="min-h-[220px]" />
-          )
-        ) : null}
+        {showSessions ? mobileSessionsSlot : null}
       </div>
 
-      {isPro ? (
       <div className="rounded-xl border border-white/10 bg-white/10 p-2.5 backdrop-blur-md md:p-4">
         <h3 className="mb-1.5 text-[11px] text-gray-300 md:mb-2 md:text-sm">Trading Hours</h3>
 
@@ -267,9 +316,8 @@ export default function DashboardStatsGrid({
           </>
         )}
       </div>
-      ) : null}
 
-      {isPro ? maxDrawdownSlot : <LockedFeature title="Max Drawdown" className="min-h-[120px]" />}
+      {maxDrawdownSlot}
     </div>
   )
 }

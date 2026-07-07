@@ -6,6 +6,7 @@ import CreateAccountModal, {
 } from "@/components/CreateAccountModal"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { feedbackPresets } from "@/lib/feedbackPresets"
+import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import { supabase } from "@/lib/supabaseClient"
 import {
   ensureAccountsLoaded,
@@ -118,7 +119,7 @@ export default function TradingAccountsSettingsSection({
         setAccounts(mapCachedAccountRows(rows))
       } catch (error) {
         console.error(error)
-        showPopup({ type: "error", message: "Something went wrong" })
+        showPopup({ type: "error", message: handleSupabaseError(error) })
       } finally {
         setLoading(false)
       }
@@ -165,7 +166,7 @@ export default function TradingAccountsSettingsSection({
 
     if (error) {
       console.error(error)
-      showPopup({ type: "error", message: "Something went wrong" })
+      showPopup({ type: "error", message: handleSupabaseError(error) })
       return
     }
 
@@ -209,7 +210,7 @@ export default function TradingAccountsSettingsSection({
         message:
           error.message === "An account with this name already exists"
             ? error.message
-            : "Something went wrong",
+            : handleSupabaseError(error),
       })
       return
     }
@@ -247,7 +248,7 @@ export default function TradingAccountsSettingsSection({
         message:
           error.message === "An account with this name already exists"
             ? error.message
-            : "Something went wrong",
+            : handleSupabaseError(error),
       })
       return
     }
@@ -273,7 +274,7 @@ export default function TradingAccountsSettingsSection({
 
     if (error) {
       console.error(error)
-      showPopup({ type: "error", message: "Something went wrong" })
+      showPopup({ type: "error", message: handleSupabaseError(error) })
       return
     }
 

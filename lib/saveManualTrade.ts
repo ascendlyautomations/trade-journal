@@ -12,7 +12,7 @@ import {
   mapUploadBytesToPercent,
 } from "@/lib/uploadProgress/reportProgress"
 import type { UploadProgressOptions } from "@/lib/uploadProgress/types"
-import { validateImageUpload } from "@/lib/uploadValidation"
+import { toUserFacingErrorMessage } from "@/lib/userFacingError"
 
 export type ManualTradeAccount = {
   name: string
@@ -302,7 +302,7 @@ export async function saveManualTrade(
     return {
       ok: false,
       code: "save",
-      message: error.message || "Could not save trade.",
+      message: handleSupabaseError(error),
     }
   }
 
@@ -327,7 +327,7 @@ export async function saveManualTrade(
       return {
         ok: false,
         code: "post",
-        message: postError.message || "Trade saved but post could not be created.",
+        message: handleSupabaseError(postError),
       }
     }
     return { ok: true, trade: newTradeData, posted: true }

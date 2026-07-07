@@ -9,6 +9,7 @@ import {
 import { notifyAffiliateReferralAttribution } from "@/lib/notifyAffiliateReferralAttribution"
 import { useRouter } from "next/navigation"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
+import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import AuthPasswordInput from "@/app/components/ui/AuthPasswordInput"
 import { isBetaReferralRef } from "@/lib/betaReferralCode"
 import { persistReferralCodeFromUrl } from "@/lib/referralPersistence"
@@ -222,7 +223,7 @@ export default function LoginPage() {
 
       if (authError) {
         if (/already registered/i.test(authError.message || "")) {
-          showPopup({ type: "error", message: authError.message })
+          showPopup({ type: "error", message: handleSupabaseError(authError) })
           return
         }
         console.error(
@@ -237,7 +238,7 @@ export default function LoginPage() {
             2
           )
         )
-        showPopup({ type: "error", message: authError.message })
+        showPopup({ type: "error", message: handleSupabaseError(authError) })
         return
       }
 

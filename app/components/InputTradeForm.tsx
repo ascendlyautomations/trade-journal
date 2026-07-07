@@ -22,6 +22,7 @@ import { isProActive } from "@/lib/subscription"
 import { insertCsvTradesWithAccount } from "@/lib/insertCsvTradesWithAccount"
 import { feedbackPresets, persistentError } from "@/lib/feedbackPresets"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
+import { supabaseMutationFeedback } from "@/lib/supabaseMutationFeedback"
 import { getSessionFromDate } from "@/lib/getSession"
 import {
   buildDateTime,
@@ -382,7 +383,7 @@ export default function InputTradeForm({
     if (error) {
       console.error(error)
       showPopup(
-        persistentError("Save Failed", handleSupabaseError(error))
+        supabaseMutationFeedback(error, "Save Failed")
       )
       return false
     }
@@ -912,7 +913,7 @@ export default function InputTradeForm({
       if (error) {
         console.error("UPDATE ERROR:", error)
         showPopup(
-        persistentError("Save Failed", handleSupabaseError(error))
+        supabaseMutationFeedback(error, "Save Failed")
       )
         throw new Error(handleSupabaseError(error))
       }
@@ -938,7 +939,7 @@ export default function InputTradeForm({
         if (postErr) {
           console.error("posts upsert:", postErr)
           showPopup(
-            persistentError("Post Failed", handleSupabaseError(postErr))
+            supabaseMutationFeedback(postErr, "Post Failed")
           )
           throw new Error(handleSupabaseError(postErr))
         }
@@ -1051,7 +1052,7 @@ export default function InputTradeForm({
     if (error) {
       console.error("Trade insert error:", error)
       showPopup(
-        persistentError("Save Failed", handleSupabaseError(error))
+        supabaseMutationFeedback(error, "Save Failed")
       )
       throw new Error(handleSupabaseError(error))
     }
@@ -1078,7 +1079,7 @@ export default function InputTradeForm({
       if (postError) {
         console.error("Post insert error:", postError)
         showPopup(
-          persistentError("Post Failed", handleSupabaseError(postError))
+          supabaseMutationFeedback(postError, "Post Failed")
         )
         throw new Error(handleSupabaseError(postError))
       }
@@ -1248,9 +1249,7 @@ export default function InputTradeForm({
       invalidateTradesCache(userId)
     } catch (err) {
       console.error(err)
-      showPopup(
-        persistentError("Import Failed", handleSupabaseError(err))
-      )
+      showPopup(supabaseMutationFeedback(err, "Import Failed"))
     } finally {
       csvImportingRef.current = false
       setCsvImporting(false)
@@ -1271,7 +1270,7 @@ export default function InputTradeForm({
     if (error) {
       console.error(error)
       showPopup(
-        persistentError("Save Failed", handleSupabaseError(error))
+        supabaseMutationFeedback(error, "Save Failed")
       )
       setTogglingAccountId(null)
       return
@@ -1338,7 +1337,7 @@ export default function InputTradeForm({
     if (error) {
       console.error(error)
       showPopup(
-        persistentError("Save Failed", handleSupabaseError(error))
+        supabaseMutationFeedback(error, "Save Failed")
       )
       return
     }

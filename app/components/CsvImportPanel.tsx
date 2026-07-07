@@ -18,6 +18,7 @@ import {
 } from "@/lib/insertCsvTradesWithAccount"
 import { feedbackPresets, persistentSuccess } from "@/lib/feedbackPresets"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
+import { supabaseMutationFeedback } from "@/lib/supabaseMutationFeedback"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import CsvImportUnsupportedBanner from "@/app/components/CsvImportUnsupportedBanner"
 import CsvImportFailureModal from "@/app/components/CsvImportFailureModal"
@@ -465,6 +466,7 @@ export default function CsvImportPanel({
 
           if (error) {
             console.error("INSERT ERROR:", error)
+            showPopup(supabaseMutationFeedback(error, "Import Failed"))
             throw new Error(handleSupabaseError(error))
           }
 

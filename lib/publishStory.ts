@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
-import { handleSupabaseError } from "@/lib/handleSupabaseError"
+import { toUserFacingErrorMessage } from "@/lib/userFacingError"
 import { uploadToSupabaseStorageWithProgress } from "@/lib/supabaseStorageUploadWithProgress"
 import {
   createMonotonicReporter,
@@ -52,7 +52,12 @@ export async function publishStory(
     )
     if (uploadError) {
       console.error("[publishStory] upload failed", uploadError)
-      return { ok: false, message: uploadError }
+      return {
+        ok: false,
+        message: toUserFacingErrorMessage(
+          typeof uploadError === "string" ? uploadError : { message: uploadError }
+        ),
+      }
     }
   } else {
     const { error: uploadError } = await supabase.storage
@@ -61,7 +66,7 @@ export async function publishStory(
 
     if (uploadError) {
       console.error("[publishStory] upload failed", uploadError)
-      return { ok: false, message: uploadError.message }
+      return { ok: false, message: toUserFacingErrorMessage(uploadError) }
     }
   }
 
@@ -81,7 +86,7 @@ export async function publishStory(
 
   if (insertError) {
     console.error("[publishStory] insert failed", insertError)
-    return { ok: false, message: handleSupabaseError(insertError) }
+    return { ok: false, message: toUserFacingErrorMessage(insertError) }
   }
 
   report({ percent: 95, stage: "Finishing…" })

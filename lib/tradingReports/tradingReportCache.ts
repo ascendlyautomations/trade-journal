@@ -26,6 +26,7 @@ type CacheEntry = {
 const reportsByUser = new Map<string, CacheEntry>()
 const listeners = new Set<() => void>()
 const notifiedPeriods = new Set<string>()
+const badgeByUser = new Map<string, NewTradingReportBadge>()
 
 function notify() {
   for (const listener of listeners) {
@@ -40,6 +41,8 @@ function tradeFingerprint(trades: any[]): string {
   return `${trades.length}:${head}:${tail}`
 }
 
+export { tradeFingerprint as tradingReportsTradeFingerprint }
+
 export function subscribeTradingReportsCache(listener: () => void): () => void {
   listeners.add(listener)
   return () => listeners.delete(listener)
@@ -49,6 +52,7 @@ export function invalidateTradingReportsCache(userId: string) {
   const entry = reportsByUser.get(userId)
   if (!entry) return
   reportsByUser.set(userId, { ...entry, invalidated: true })
+  badgeByUser.delete(userId)
   notify()
 }
 
@@ -77,16 +81,32 @@ export function getTradingReportFromSnapshot(
 export function getNewTradingReportBadge(
   userId: string | null | undefined
 ): NewTradingReportBadge {
+  if (!userId) return null
+
   const snapshot = getTradingReportsSnapshot(userId)
-  if (!userId || !snapshot) return null
+  if (!snapshot) {
+    badgeByUser.delete(userId)
+    return null
+  }
 
   const weeklyLastTrades = snapshot.reports.weekly_last.metrics.tradesTaken > 0
   const monthlyLastTrades = snapshot.reports.monthly_last.metrics.tradesTaken > 0
 
-  return resolveNewTradingReportBadge(userId, {
+  const next = resolveNewTradingReportBadge(userId, {
     weeklyLast: weeklyLastTrades,
     monthlyLast: monthlyLastTrades,
   })
+
+  const cached = badgeByUser.get(userId)
+  if (cached === next) return cached
+
+  if (next === null) {
+    badgeByUser.delete(userId)
+    return null
+  }
+
+  badgeByUser.set(userId, next)
+  return next
 }
 
 function maybeQueueNotifications(userId: string, snapshot: TradingReportsSnapshot) {

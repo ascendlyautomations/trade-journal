@@ -3,12 +3,14 @@
 type CreateFirstTradeRoomCardProps = {
   onClick: () => void
   disabled?: boolean
+  selected?: boolean
   className?: string
 }
 
 export default function CreateFirstTradeRoomCard({
   onClick,
   disabled = false,
+  selected = false,
   className = "",
 }: CreateFirstTradeRoomCardProps) {
   return (
@@ -16,9 +18,13 @@ export default function CreateFirstTradeRoomCard({
       type="button"
       onClick={onClick}
       disabled={disabled}
+      aria-current={selected ? "page" : undefined}
       className={
-        `mb-1 flex min-h-[44px] w-full items-center gap-3 rounded-lg border border-blue-400/30 bg-blue-500/10 px-3 py-2 text-left text-sm transition hover:bg-blue-500/15 disabled:cursor-not-allowed disabled:opacity-60 ` +
-        className
+        `mb-1 flex min-h-[44px] w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left text-sm transition disabled:cursor-not-allowed disabled:opacity-60 ` +
+        (selected
+          ? "border-blue-400/40 bg-blue-500/25 font-semibold text-blue-100"
+          : "border-blue-400/30 bg-blue-500/10 hover:bg-blue-500/15") +
+        ` ${className}`
       }
     >
       <div
@@ -29,7 +35,7 @@ export default function CreateFirstTradeRoomCard({
       </div>
       <div className="min-w-0 flex-1">
         <span className="block truncate font-semibold text-blue-100">
-          Create Your First Trade Room!
+          Create Your Own Trade Room
         </span>
         <span className="mt-0.5 line-clamp-2 text-xs font-normal leading-snug text-blue-200/75">
           Build your own community, chat with traders, share trades, and grow
