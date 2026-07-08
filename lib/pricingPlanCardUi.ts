@@ -40,7 +40,7 @@ export const PRICING_CARD_FEATURE_TEXT = "leading-snug"
 
 /** Pricing page — compact primary trial CTA (Pro card). */
 export const PRICING_PAGE_PRIMARY_CTA =
-  "mt-4 w-full rounded-xl bg-gradient-to-r from-blue-500 to-teal-400 py-3 text-center text-[15px] font-bold text-white shadow-lg transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60 sm:py-3.5 sm:text-base"
+  "mt-4 w-full rounded-xl bg-blue-500 py-3 text-center text-[15px] font-bold text-white shadow-lg transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-blue-500 sm:py-3.5 sm:text-base"
 
 /** Fine print directly under the trial CTA. */
 export const PRICING_PAGE_CTA_FINE_PRINT =

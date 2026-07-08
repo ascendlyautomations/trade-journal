@@ -5,12 +5,8 @@ import { buildDateTime } from "@/lib/inputTradeDateTime"
 import { prependTradeInCache } from "@/lib/appDataCache"
 import { isProActive } from "@/lib/subscription"
 import { parseOptionalRr } from "@/lib/tradeRr"
-import { compressScreenshot } from "@/lib/compressImage"
-import { uploadToSupabaseStorageWithProgress } from "@/lib/supabaseStorageUploadWithProgress"
-import {
-  createMonotonicReporter,
-  mapUploadBytesToPercent,
-} from "@/lib/uploadProgress/reportProgress"
+import { uploadContentImageToStorage } from "@/lib/contentImagePipeline"
+import { createMonotonicReporter } from "@/lib/uploadProgress/reportProgress"
 import type { UploadProgressOptions } from "@/lib/uploadProgress/types"
 import { toUserFacingErrorMessage } from "@/lib/userFacingError"
 
@@ -76,60 +72,12 @@ async function uploadTradeScreenshot(
   file: File,
   options?: UploadProgressOptions
 ): Promise<{ path: string | null; error: string | null }> {
-  const report = createMonotonicReporter(options?.onProgress, {
-    min: 10,
-    max: 65,
+  return uploadContentImageToStorage(client, userId, file, {
+    onProgress: options?.onProgress,
+    processingPercent: 12,
+    uploadingPercent: 18,
+    uploadProgressRange: { start: 20, end: 65 },
   })
-
-  const validationError = validateImageUpload(file)
-  if (validationError) {
-    return { path: null, error: validationError }
-  }
-
-  report({ percent: 12, stage: "Processing image…" })
-
-  let uploadFile: File = file
-  if (file.type?.startsWith("image/")) {
-    uploadFile = await compressScreenshot(file)
-  }
-  const fileName = `${userId}/${Date.now()}-${uploadFile.name}`
-
-  report({ percent: 18, stage: "Uploading media…" })
-
-  if (options?.onProgress) {
-    const { error: upErr } = await uploadToSupabaseStorageWithProgress(
-      client,
-      {
-        bucket: "screenshots",
-        path: fileName,
-        file: uploadFile,
-        contentType: uploadFile.type || "image/jpeg",
-        onProgress: (loaded, total) => {
-          report({
-            percent: mapUploadBytesToPercent(loaded, total, {
-              start: 20,
-              end: 65,
-            }),
-            stage: "Uploading media…",
-          })
-        },
-      }
-    )
-    if (upErr) {
-      console.error("[saveManualTrade] upload error:", upErr)
-      return { path: null, error: upErr || "Could not upload image." }
-    }
-  } else {
-    const { error: upErr } = await client.storage
-      .from("screenshots")
-      .upload(fileName, uploadFile)
-    if (upErr) {
-      console.error("[saveManualTrade] upload error:", upErr)
-      return { path: null, error: upErr.message || "Could not upload image." }
-    }
-  }
-
-  return { path: fileName, error: null }
 }
 
 async function resolveRowAccount(
@@ -337,21 +285,3 @@ export async function saveManualTrade(
   return { ok: true, trade: newTradeData, posted: false }
 }
 
-export function validateQuickTradeInput(input: {
-  ticker: string
-  pnl: string
-  points: string
-  contracts: string
-}): string | null {
-  if (!input.ticker.trim()) return "Symbol is required."
-  const pnl = Number(String(input.pnl).replace(/,/g, ""))
-  if (input.pnl.trim() === "" || !Number.isFinite(pnl)) return "P&L is required."
-  if (input.points.trim() === "") return "Points is required."
-  const points = Number(String(input.points).replace(/,/g, ""))
-  if (!Number.isFinite(points)) return "Enter a valid points value."
-  const contracts = Number.parseInt(String(input.contracts).replace(/,/g, ""), 10)
-  if (!Number.isFinite(contracts) || input.contracts.trim() === "") {
-    return "Contracts is required."
-  }
-  return null
-}

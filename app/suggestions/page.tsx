@@ -106,7 +106,7 @@ export default function SuggestionsPage() {
             <button
               type="submit"
               disabled={loading || !note.trim() || !image}
-              className="w-full rounded-xl bg-gradient-to-r from-blue-500 to-teal-400 py-3 font-semibold transition hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100"
+              className="w-full rounded-xl bg-blue-500 py-3 font-semibold text-white transition hover:bg-blue-600 hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-blue-500 disabled:hover:scale-100"
             >
               {loading ? "Submitting..." : "Submit"}
             </button>

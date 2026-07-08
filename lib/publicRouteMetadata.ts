@@ -116,6 +116,13 @@ export const ACCEPTABLE_USE_PAGE_METADATA = buildPublicRouteMetadata({
     "TradeTraxs Acceptable Use Policy — standards for lawful, respectful, and safe platform use.",
 })
 
+export const COPYRIGHT_PAGE_METADATA = buildPublicRouteMetadata({
+  path: "/copyright",
+  title: "Copyright & DMCA Policy",
+  description:
+    "TradeTraxs Copyright & DMCA Policy — report infringing content, submit counter-notifications, and understand our repeat infringer policy.",
+})
+
 export const LEGAL_HUB_PAGE_METADATA = buildPublicRouteMetadata({
   path: "/legal",
   title: "Legal",

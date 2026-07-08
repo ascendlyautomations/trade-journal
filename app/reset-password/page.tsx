@@ -184,7 +184,7 @@ export default function ResetPasswordPage() {
               </p>
               <Link
                 href="/login"
-                className="mt-6 block w-full rounded-xl bg-gradient-to-r from-blue-500 to-teal-400 py-3 text-center font-semibold transition hover:scale-105"
+                className="mt-6 block w-full rounded-xl bg-blue-500 py-3 text-center font-semibold text-white transition hover:bg-blue-600 hover:scale-105"
               >
                 Request New Reset Link
               </Link>
@@ -206,7 +206,7 @@ export default function ResetPasswordPage() {
               <button
                 type="button"
                 onClick={() => void goToLogin()}
-                className="mt-6 w-full rounded-xl bg-gradient-to-r from-blue-500 to-teal-400 py-3 font-semibold transition hover:scale-105"
+                className="mt-6 w-full rounded-xl bg-blue-500 py-3 font-semibold text-white transition hover:bg-blue-600 hover:scale-105"
               >
                 Return to Login
               </button>
@@ -272,7 +272,7 @@ export default function ResetPasswordPage() {
                 <button
                   type="submit"
                   disabled={!canSubmit}
-                  className="w-full rounded-xl bg-gradient-to-r from-blue-500 to-teal-400 py-3 font-semibold transition hover:scale-105 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100"
+                  className="w-full rounded-xl bg-blue-500 py-3 font-semibold text-white transition hover:bg-blue-600 hover:scale-105 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-blue-500 disabled:hover:scale-100"
                 >
                   {isSubmitting ? "Updating…" : "Update Password"}
                 </button>

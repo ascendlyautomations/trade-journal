@@ -89,6 +89,7 @@ import {
   type FeedSessionSnapshot,
 } from "@/lib/feedSessionCache"
 import { ConfirmModal, FeedbackModal, useDeleteReelConfirmation, useFeedbackPopup } from "@/app/components/ui"
+import { useModalScrollLock } from "@/app/components/ui/modalLayout"
 import EmptyState from "@/app/components/ui/EmptyState"
 import { SkeletonFeedPage } from "@/app/components/ui/skeletons"
 import { publishStory } from "@/lib/publishStory"
@@ -642,16 +643,8 @@ function FeedPageContent() {
     return () => window.removeEventListener("keydown", onKey)
   }, [activeStoryUser, nextStory, prevStory])
 
-  useEffect(() => {
-    if (selectedPostId || activeStoryUser) {
-      document.body.style.overflow = "hidden"
-      return () => {
-        document.body.style.overflow = ""
-      }
-    }
-    document.body.style.overflow = ""
-    return undefined
-  }, [selectedPostId, activeStoryUser])
+  const feedOverlayOpen = Boolean(selectedPostId || activeStoryUser)
+  useModalScrollLock(feedOverlayOpen)
 
   const loadEngagementForPosts = useCallback(async (postList: any[], currentUser: any) => {
     if (!postList.length) {

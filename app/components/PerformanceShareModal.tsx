@@ -9,6 +9,13 @@ import {
 } from "@/lib/shareImageCapture"
 import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
 import {
+  MODAL_BODY_SCROLL_CLASS,
+  MODAL_FOOTER_CLASS,
+  MODAL_PANEL_MAX_HEIGHT_CLASS,
+  MODAL_PANEL_SHELL_CLASS,
+  useModalScrollLock,
+} from "@/app/components/ui/modalLayout"
+import {
   type PerformanceWindow,
   type PerformanceWindowOptions,
   buildEquityCurveFromTrades,
@@ -60,6 +67,7 @@ export default function PerformanceShareModal({
   const [perfDmOpen, setPerfDmOpen] = useState(false)
   const lockRef = useRef(false)
   const exportId = useId().replace(/:/g, "")
+  useModalScrollLock(open)
 
   const windowOptions = useMemo((): PerformanceWindowOptions => {
     if (windowKey !== "custom") return {}
@@ -132,14 +140,7 @@ export default function PerformanceShareModal({
     return () => window.removeEventListener("keydown", onKey)
   }, [open, onClose])
 
-  useEffect(() => {
-    if (!open) return
-    const prev = document.body.style.overflow
-    document.body.style.overflow = "hidden"
-    return () => {
-      document.body.style.overflow = prev
-    }
-  }, [open])
+  useModalScrollLock(open)
 
   useEffect(() => {
     if (!open) {
@@ -212,26 +213,30 @@ export default function PerformanceShareModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="performance-share-title"
-        className="relative z-10 max-h-[min(92vh,880px)] w-full max-w-lg overflow-y-auto rounded-2xl border border-white/15 bg-[#0f172a]/98 p-5 shadow-2xl backdrop-blur-xl md:p-6"
+        className={`relative z-10 w-full max-w-lg ${MODAL_PANEL_SHELL_CLASS} ${MODAL_PANEL_MAX_HEIGHT_CLASS} border-white/15 bg-[#0f172a]/98 backdrop-blur-xl`}
+        onClick={(e) => e.stopPropagation()}
       >
-        <div className="mb-5 flex items-start justify-between gap-3">
-          <div>
-            <h2
-              id="performance-share-title"
-              className="text-lg font-semibold text-white md:text-xl"
-            >
-              Share performance
-            </h2>
-            <p className="mt-1 text-sm text-gray-400">
-              Pick a window, then download a PNG for Instagram or X.
-            </p>
-            {subtitle ? (
-              <p className="mt-2 text-xs text-gray-500">{subtitle}</p>
-            ) : null}
+        <div className="shrink-0 border-b border-white/10 px-5 py-4 md:px-6">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2
+                id="performance-share-title"
+                className="text-lg font-semibold text-white md:text-xl"
+              >
+                Share performance
+              </h2>
+              <p className="mt-1 text-sm text-gray-400">
+                Pick a window, then download a PNG for Instagram or X.
+              </p>
+              {subtitle ? (
+                <p className="mt-2 text-xs text-gray-500">{subtitle}</p>
+              ) : null}
+            </div>
+            <ModalCloseButton onClick={onClose} />
           </div>
-          <ModalCloseButton onClick={onClose} />
         </div>
 
+        <div className={`${MODAL_BODY_SCROLL_CLASS} px-5 py-4 md:px-6`}>
         <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">
           Timeframe
         </p>
@@ -334,7 +339,9 @@ export default function PerformanceShareModal({
           </div>
         </div>
 
-        <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+        </div>
+
+        <div className={`${MODAL_FOOTER_CLASS} flex flex-col gap-2 px-5 py-4 sm:flex-row sm:justify-end md:px-6`}>
           <button
             type="button"
             onClick={onClose}
@@ -346,7 +353,7 @@ export default function PerformanceShareModal({
             type="button"
             disabled={busy}
             onClick={() => void handleDownload()}
-            className="rounded-xl bg-gradient-to-r from-blue-500 to-emerald-500 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-emerald-500/10 transition hover:from-blue-600 hover:to-emerald-600 disabled:opacity-50"
+            className="rounded-xl bg-blue-500 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-blue-500/10 transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-blue-500"
           >
             {busy ? "Saving…" : "Download PNG"}
           </button>

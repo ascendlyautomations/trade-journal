@@ -491,7 +491,7 @@ export default function AdminPayoutRequestsPage() {
                       type="button"
                       disabled={actionBusy}
                       onClick={() => void handleApprove()}
-                      className="rounded-lg bg-gradient-to-r from-emerald-500 to-blue-500 px-4 py-2 text-sm font-semibold disabled:opacity-50"
+                      className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-blue-500"
                     >
                       Approve
                     </button>

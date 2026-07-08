@@ -18,6 +18,7 @@ import { SHARED_TRADE_UNAVAILABLE } from "@/lib/sharedContentNavigation"
 import { supabase } from "@/lib/supabaseClient"
 import ImageLightbox from "@/app/components/ui/ImageLightbox"
 import TradeScreenshotImage from "@/app/components/trade/TradeScreenshotImage"
+import ExpandableText from "@/app/components/ui/ExpandableText"
 
 function tradeScreenshotSrc(url: string | null | undefined): string | null {
   const raw = url != null ? String(url).trim() : ""
@@ -198,9 +199,13 @@ export default function SharedTradeMessageCard({
         </div>
 
         {trade.public_description ? (
-          <p className="mt-2 text-xs leading-snug text-gray-300">
+          <ExpandableText
+            className="mt-2 text-xs leading-snug text-gray-300"
+            textClassName="text-gray-300"
+            stopPropagation
+          >
             {trade.public_description}
-          </p>
+          </ExpandableText>
         ) : null}
 
         {imgSrc ? (

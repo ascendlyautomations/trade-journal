@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { createPortal } from "react-dom"
 import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
+import { useModalScrollLock } from "@/app/components/ui/modalLayout"
 
 type Props = {
   open: boolean
@@ -34,14 +35,7 @@ export default function CsvImportFailureModal({
     setMounted(true)
   }, [])
 
-  useEffect(() => {
-    if (!open) return
-    const prev = document.body.style.overflow
-    document.body.style.overflow = "hidden"
-    return () => {
-      document.body.style.overflow = prev
-    }
-  }, [open])
+  useModalScrollLock(open)
 
   if (!open || !mounted) return null
 
@@ -78,7 +72,7 @@ export default function CsvImportFailureModal({
               type="button"
               disabled={submitting}
               onClick={onSubmit}
-              className={`${buttonBase} bg-gradient-to-r from-blue-500 to-teal-400 text-white hover:scale-[1.01]`}
+              className={`${buttonBase} bg-blue-500 text-white transition hover:bg-blue-600 hover:scale-[1.01] disabled:hover:bg-blue-500`}
             >
               {submitting ? "Submitting..." : "Submit CSV to TradeTraxs"}
             </button>

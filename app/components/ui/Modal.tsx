@@ -5,6 +5,15 @@ import { createPortal } from "react-dom"
 import { cn } from "./cn"
 import { MODAL_FIXED_BELOW_NAVBAR_CLASS } from "./DetailModalShell"
 import ModalCloseButton from "./ModalCloseButton"
+import {
+  MODAL_BODY_SCROLL_CLASS,
+  MODAL_FOOTER_CLASS,
+  MODAL_HEADER_CLASS,
+  MODAL_PANEL_MAX_HEIGHT_BELOW_NAV_CLASS,
+  MODAL_PANEL_MAX_HEIGHT_CLASS,
+  MODAL_PANEL_SHELL_CLASS,
+  useModalScrollLock,
+} from "./modalLayout"
 
 export type ModalProps = {
   open: boolean
@@ -21,6 +30,7 @@ export type ModalProps = {
   className?: string
   panelClassName?: string
   backdropClassName?: string
+  bodyClassName?: string
 }
 
 const sizeClasses = {
@@ -41,30 +51,23 @@ export default function Modal({
   className,
   panelClassName,
   backdropClassName,
+  bodyClassName,
 }: ModalProps) {
   const [mounted, setMounted] = useState(false)
+  useModalScrollLock(open)
 
   useEffect(() => {
     setMounted(true)
   }, [])
 
   useEffect(() => {
-    if (!open) return
+    if (!open || closeDisabled) return
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") onClose()
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [open, onClose])
-
-  useEffect(() => {
-    if (!open) return
-    const prev = document.body.style.overflow
-    document.body.style.overflow = "hidden"
-    return () => {
-      document.body.style.overflow = prev
-    }
-  }, [open])
+  }, [open, onClose, closeDisabled])
 
   if (!open || !mounted) return null
 
@@ -73,11 +76,11 @@ export default function Modal({
       className={cn(
         belowNavbar
           ? `${MODAL_FIXED_BELOW_NAVBAR_CLASS} z-[10050] p-4`
-          : "fixed inset-0 z-[10050] flex items-center justify-center p-4",
+          : "fixed inset-0 z-[10050] flex items-start justify-center overflow-y-auto overscroll-contain p-4 sm:items-center",
         className
       )}
       role="presentation"
-      onClick={onClose}
+      onClick={closeDisabled ? undefined : onClose}
     >
       <div
         className={cn(
@@ -91,7 +94,11 @@ export default function Modal({
         aria-modal="true"
         aria-label={title}
         className={cn(
-          "relative w-full rounded-xl border border-white/10 bg-[#0f172a] p-6 text-gray-100 shadow-xl",
+          "relative my-auto w-full p-0",
+          MODAL_PANEL_SHELL_CLASS,
+          belowNavbar
+            ? MODAL_PANEL_MAX_HEIGHT_BELOW_NAV_CLASS
+            : MODAL_PANEL_MAX_HEIGHT_CLASS,
           sizeClasses[size],
           panelClassName
         )}
@@ -103,10 +110,22 @@ export default function Modal({
           className="absolute right-4 top-4 z-10"
         />
         {title ? (
-          <h2 className="mb-4 pr-12 text-lg font-semibold text-white">{title}</h2>
+          <div className={cn(MODAL_HEADER_CLASS, "px-6 py-4 pr-12")}>
+            <h2 className="text-lg font-semibold text-white">{title}</h2>
+          </div>
         ) : null}
-        <div>{children}</div>
-        {footer ? <div className="mt-4">{footer}</div> : null}
+        <div
+          className={cn(
+            MODAL_BODY_SCROLL_CLASS,
+            title ? "px-6 py-4" : "p-6 pt-12",
+            bodyClassName
+          )}
+        >
+          {children}
+        </div>
+        {footer ? (
+          <div className={cn(MODAL_FOOTER_CLASS, "px-6 py-4")}>{footer}</div>
+        ) : null}
       </div>
     </div>,
     document.body

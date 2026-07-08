@@ -26,6 +26,7 @@ import { profilePath } from "@/lib/profileRoutes"
 import { profileSeoDisplayName } from "@/lib/publicSeo"
 import { readTradeDetail, writeTradeDetail } from "@/lib/tradeDetailCache"
 import TradeCardTimingBlock from "@/app/components/TradeCardTimingBlock"
+import ExpandableText from "@/app/components/ui/ExpandableText"
 import ReelViewer from "@/app/components/profile/ReelViewer"
 import { fetchTradeReel, type ReelRow } from "@/lib/reels"
 
@@ -205,9 +206,12 @@ export default function TradeDetailPageClient({
         </Link>
       ) : null}
       {trade.public_description ? (
-        <p className="text-sm leading-relaxed text-gray-300">
+        <ExpandableText
+          className="text-sm leading-relaxed text-gray-300"
+          textClassName="text-gray-300"
+        >
           {trade.public_description}
-        </p>
+        </ExpandableText>
       ) : null}
       <TradeCardTimingBlock
         trade={trade}

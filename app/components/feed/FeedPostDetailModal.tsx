@@ -8,6 +8,7 @@ import DetailModalImage from "@/app/components/ui/DetailModalImage"
 import ImageLightbox from "@/app/components/ui/ImageLightbox"
 import { PostInteractionsEngagement } from "@/app/components/PostInteractions"
 import TradeCardTimingBlock from "@/app/components/TradeCardTimingBlock"
+import ExpandableText from "@/app/components/ui/ExpandableText"
 import { CommentFocusCompactStrip } from "@/app/components/comments/CommentFocusCompactStrip"
 import MobileCommentFocusLayout from "@/app/components/comments/MobileCommentFocusLayout"
 import {
@@ -228,9 +229,12 @@ export default function FeedPostDetailModal({
           </div>
 
           {modalPostDetails.publicDesc ? (
-            <p className="text-sm leading-relaxed text-white">
+            <ExpandableText
+              className="text-sm leading-relaxed text-white"
+              textClassName="text-white"
+            >
               {modalPostDetails.publicDesc}
-            </p>
+            </ExpandableText>
           ) : null}
 
           {modalPostDetails.timingTrade || attachedReel ? (

@@ -2,9 +2,13 @@
 
 import { useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
+import ReelClipPlayback, {
+  type ReelClipPlaybackHandle,
+} from "@/app/components/ReelClipPlayback"
 import { ProfileAvatarImg } from "@/app/components/SafeProfileAvatar"
 import type { ReelRow } from "@/lib/reels"
 import { formatRelativeTime } from "@/lib/formatRelativeTime"
+import { useModalScrollLock } from "@/app/components/ui/modalLayout"
 
 type ReelViewerProps = {
   reel: ReelRow | null
@@ -14,22 +18,6 @@ type ReelViewerProps = {
     name?: string | null
   } | null
   onClose: () => void
-}
-
-function PlayIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-      <path d="M8 5v14l11-7z" />
-    </svg>
-  )
-}
-
-function PauseIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-      <path d="M6 5h4v14H6V5zm8 0h4v14h-4V5z" />
-    </svg>
-  )
 }
 
 function VolumeOnIcon({ className }: { className?: string }) {
@@ -68,7 +56,7 @@ const controlButtonClass =
   "flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-black/55 text-white shadow-lg backdrop-blur-sm transition hover:bg-white/15"
 
 export default function ReelViewer({ reel, creator, onClose }: ReelViewerProps) {
-  const videoRef = useRef<HTMLVideoElement>(null)
+  const playbackRef = useRef<ReelClipPlaybackHandle>(null)
   const [mounted, setMounted] = useState(false)
   const [playing, setPlaying] = useState(false)
   const [muted, setMuted] = useState(true)
@@ -84,14 +72,7 @@ export default function ReelViewer({ reel, creator, onClose }: ReelViewerProps) 
     }
   }, [reel])
 
-  useEffect(() => {
-    if (!reel) return
-    const prev = document.body.style.overflow
-    document.body.style.overflow = "hidden"
-    return () => {
-      document.body.style.overflow = prev
-    }
-  }, [reel])
+  useModalScrollLock(Boolean(reel))
 
   useEffect(() => {
     if (!reel) return
@@ -103,12 +84,15 @@ export default function ReelViewer({ reel, creator, onClose }: ReelViewerProps) 
   }, [reel, onClose])
 
   useEffect(() => {
-    const video = videoRef.current
-    if (!video || !reel) return
-    video.pause()
-    video.currentTime = 0
+    playbackRef.current?.pause()
     setPlaying(false)
   }, [reel?.id])
+
+  useEffect(() => {
+    const video = playbackRef.current?.getVideoElement()
+    if (!video) return
+    video.muted = muted
+  }, [muted, reel?.id, playing])
 
   if (!reel || !mounted) return null
 
@@ -117,24 +101,8 @@ export default function ReelViewer({ reel, creator, onClose }: ReelViewerProps) 
     creator?.name?.trim() ||
     "Trader"
 
-  const togglePlay = () => {
-    const video = videoRef.current
-    if (!video) return
-    if (video.paused) {
-      void video.play()
-      setPlaying(true)
-    } else {
-      video.pause()
-      setPlaying(false)
-    }
-  }
-
   const toggleMute = () => {
-    const video = videoRef.current
-    if (!video) return
-    const next = !muted
-    video.muted = next
-    setMuted(next)
+    setMuted((prev) => !prev)
   }
 
   return createPortal(
@@ -173,33 +141,13 @@ export default function ReelViewer({ reel, creator, onClose }: ReelViewerProps) 
           </button>
         </div>
 
-        <div className="relative mx-auto flex min-h-0 w-full max-w-sm flex-1 items-center justify-center">
-          <video
-            ref={videoRef}
-            src={reel.video_url}
-            poster={reel.thumbnail_url}
-            className="max-h-[calc(100dvh-8rem)] w-full rounded-xl object-contain"
-            playsInline
-            preload="none"
-            muted={muted}
-            onPlay={() => setPlaying(true)}
-            onPause={() => setPlaying(false)}
-            onEnded={() => setPlaying(false)}
-          />
-
-          <button
-            type="button"
-            onClick={togglePlay}
-            className="absolute inset-0 flex items-center justify-center"
-            aria-label={playing ? "Pause" : "Play"}
-          >
-            {!playing ? (
-              <span className={`${controlButtonClass} h-14 w-14`}>
-                <PlayIcon className="h-7 w-7" />
-              </span>
-            ) : null}
-          </button>
-        </div>
+        <ReelClipPlayback
+          ref={playbackRef}
+          videoUrl={reel.video_url}
+          thumbnailUrl={reel.thumbnail_url}
+          muted={muted}
+          onPlayingChange={setPlaying}
+        />
 
         <div className="mt-3 shrink-0 rounded-xl border border-white/10 bg-[#0b1f3a]/90 p-4 backdrop-blur-sm">
           <div className="flex items-center gap-3">

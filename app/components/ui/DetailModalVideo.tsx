@@ -1,27 +1,28 @@
 "use client"
 
 import { forwardRef, type Ref } from "react"
+import ReelClipPlayback, {
+  type ReelClipPlaybackHandle,
+} from "@/app/components/ReelClipPlayback"
 
 type DetailModalVideoProps = {
   src: string
   poster?: string | null
 }
 
-/** Modal reel video: stacked on mobile, fill left panel on md+. */
+/** Modal clip: poster frame until play, then native controls. */
 const DetailModalVideo = forwardRef(function DetailModalVideo(
   { src, poster }: DetailModalVideoProps,
-  ref: Ref<HTMLVideoElement>
+  ref: Ref<ReelClipPlaybackHandle>
 ) {
   return (
-    <video
+    <ReelClipPlayback
       ref={ref}
-      src={src}
-      poster={poster ?? undefined}
-      className="block w-full max-h-[60dvh] rounded-lg bg-black/30 object-contain md:max-h-full md:max-w-full md:bg-transparent"
-      style={{ aspectRatio: "9/16" }}
-      playsInline
-      controls
-      preload="metadata"
+      videoUrl={src}
+      thumbnailUrl={poster}
+      nativeControls
+      className="relative w-full"
+      videoClassName="block w-full max-h-[60dvh] rounded-lg bg-black/30 object-contain md:max-h-full md:max-w-full md:bg-transparent"
     />
   )
 })

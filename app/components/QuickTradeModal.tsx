@@ -4,25 +4,26 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { supabase } from "@/lib/supabaseClient"
 import {
   getESTDate,
-  isExitBeforeEntry,
 } from "@/lib/inputTradeDateTime"
-import { tradeFormHasFutureDate } from "@/lib/tradeDateValidation"
 import { notifyGettingStartedChecklistMaybeCompleted } from "@/lib/gettingStartedProgressSync"
 import {
   saveManualTrade,
-  validateQuickTradeInput,
   type ManualTradeAccount,
 } from "@/lib/saveManualTrade"
+import {
+  validateQuickTradeForm,
+  type QuickTradeValidationFailure,
+} from "@/lib/validateQuickTradeForm"
+import { focusQuickTradeField } from "@/lib/quickTradeFieldFocus"
 import CreateAccountModal, {
   type Props as CreateAccountModalProps,
 } from "@/components/CreateAccountModal"
 import TradeAccountPicker, {
   type TradeAccountOption,
 } from "@/app/components/TradeAccountPicker"
-import { MODAL_FIXED_BELOW_NAVBAR_CLASS } from "@/app/components/ui/DetailModalShell"
+import ScrollableModalShell from "@/app/components/ui/ScrollableModalShell"
 import NativeDateInput from "@/app/components/ui/NativeDateInput"
 import { FeedbackModal, useFeedbackPopup, buttonVariants } from "@/app/components/ui"
-import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
 import {
   parseQuickCsvImport,
   type QuickTradeCsvFormPatch,
@@ -47,7 +48,8 @@ import { isProActive } from "@/lib/subscription"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 import ImageCropModal from "@/app/components/ImageCropModal"
-import { useImageCropUpload } from "@/lib/useImageCropUpload"
+import { CONTENT_IMAGE_CROP_PRESET } from "@/lib/contentImagePipeline"
+import { useTradeImageCropUpload } from "@/lib/useTradeImageCropUpload"
 
 type CreateAccountSavePayload = Parameters<CreateAccountModalProps["onSave"]>[0]
 
@@ -176,7 +178,6 @@ export default function QuickTradeModal({
   const [busy, setBusy] = useState(false)
   const uploadingRef = useRef(false)
   const { runUpload } = useUploadProgress()
-  const [error, setError] = useState<string | null>(null)
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [accounts, setAccounts] = useState<TradeAccountOption[]>([])
   const [selectedAccount, setSelectedAccount] =
@@ -202,8 +203,7 @@ export default function QuickTradeModal({
   const [isPublic, setIsPublic] = useState(false)
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const [image, setImage] = useState<File | null>(null)
-  const imageCrop = useImageCropUpload({
-    preset: "content",
+  const imageCrop = useTradeImageCropUpload({
     onCropped: setImage,
     onValidationError: (message) =>
       showPopup(persistentError("Invalid Image", message)),
@@ -243,7 +243,6 @@ export default function QuickTradeModal({
     setPendingReelFile(null)
     setPreviewUrl(null)
     setAdvancedOpen(false)
-    setError(null)
     setSelectedAccount(null)
     setCsvPasteOpen(false)
     setCsvPasteText("")
@@ -316,15 +315,6 @@ export default function QuickTradeModal({
     return () => URL.revokeObjectURL(url)
   }, [image])
 
-  useEffect(() => {
-    if (!open) return
-    const prev = document.body.style.overflow
-    document.body.style.overflow = "hidden"
-    return () => {
-      document.body.style.overflow = prev
-    }
-  }, [open])
-
   const previewDirection = useMemo(
     () => inferPreviewDirection(entryPrice, exitPrice),
     [entryPrice, exitPrice]
@@ -384,6 +374,32 @@ export default function QuickTradeModal({
     [userId]
   )
 
+  const showQuickTradeValidationFailure = useCallback(
+    (failure: QuickTradeValidationFailure) => {
+      const focusField = () =>
+        focusQuickTradeField(failure.field, {
+          openAdvanced: () => setAdvancedOpen(true),
+        })
+
+      if (failure.kind === "missing") {
+        showPopup({
+          ...feedbackPresets.missingRequiredInformation(failure.message),
+          onDismiss: focusField,
+        })
+        return
+      }
+
+      showPopup({
+        type: "error",
+        title: failure.title ?? "Invalid Input",
+        message: failure.message,
+        persist: true,
+        onDismiss: focusField,
+      })
+    },
+    [showPopup]
+  )
+
   function handleClose() {
     if (busy) return
     onClose()
@@ -391,7 +407,6 @@ export default function QuickTradeModal({
 
   function applyQuickCsvPatch(patch: QuickTradeCsvFormPatch) {
     setCsvImportError(null)
-    setError(null)
     setTicker(patch.ticker)
     setPnl(patch.pnl)
     setPoints(patch.points)
@@ -537,45 +552,21 @@ export default function QuickTradeModal({
     }
     if (busy || !userId) return
 
-    if (!selectedAccount) {
-      showPopup({
-        type: "error",
-        title: "Trading Account Required",
-        message:
-          "Please select the Trading Account you would like to save this trade to before continuing.",
-        persist: true,
-        dismissLabel: "OK",
-      })
-      return
-    }
-
-    const validationError = validateQuickTradeInput({
+    const validation = validateQuickTradeForm({
+      hasAccount: !!selectedAccount,
       ticker,
       pnl,
       points,
       contracts,
+      rr,
+      entryDate,
+      exitDate,
+      entryTime,
+      exitTime,
+      decimalError,
     })
-    if (validationError) {
-      setError(validationError)
-      return
-    }
-
-    if (rr.trim() !== "" && parseOptionalRr(rr) === null) {
-      setError("Enter a valid RR value.")
-      return
-    }
-
-    if (
-      entryTime &&
-      exitTime &&
-      isExitBeforeEntry(entryDate, entryTime, exitDate, exitTime)
-    ) {
-      setError("Exit date and time must be after entry date and time.")
-      return
-    }
-
-    if (tradeFormHasFutureDate({ entryDate, exitDate })) {
-      setError("Trade date cannot be in the future.")
+    if (!validation.ok) {
+      showQuickTradeValidationFailure(validation)
       return
     }
 
@@ -693,11 +684,6 @@ export default function QuickTradeModal({
 
   if (!open) return null
 
-  const invalidTimeRange =
-    entryTime &&
-    exitTime &&
-    isExitBeforeEntry(entryDate, entryTime, exitDate, exitTime)
-
   const canCreateMoreAccounts =
     isProActive(planProfile) || accounts.length < FREE_PLAN_ACCOUNT_LIMIT
 
@@ -715,41 +701,55 @@ export default function QuickTradeModal({
 
   return (
     <>
-      <div
-        className={`${MODAL_FIXED_BELOW_NAVBAR_CLASS} z-[150] bg-black/75 p-3 backdrop-blur-md sm:p-4`}
-        onClick={handleClose}
-      >
-        <div
-          className="relative max-h-[min(92vh,calc(100dvh-5rem))] w-full max-w-lg overflow-y-auto rounded-2xl border border-white/10 bg-gradient-to-br from-[#0f172a] via-[#0b1532] to-[#0a2230] p-4 shadow-2xl shadow-blue-900/20 sm:max-w-xl sm:p-6 md:max-w-2xl"
-          onClick={(e) => e.stopPropagation()}
-          role="dialog"
-          aria-modal="true"
-          aria-label="Quick Trade"
-        >
-          <ModalCloseButton
-            onClick={handleClose}
-            className="absolute right-4 top-4 z-10"
-          />
-          <div className="mb-5 border-b border-white/10 pb-4 pr-12">
+      <ScrollableModalShell
+        open={open}
+        onClose={handleClose}
+        ariaLabel="Quick Trade"
+        belowNavbar
+        closeDisabled={busy}
+        overlayClassName="z-[150] bg-black/75 backdrop-blur-md"
+        backdropClassName="bg-transparent"
+        panelClassName="max-w-lg rounded-2xl border-white/10 bg-gradient-to-br from-[#0f172a] via-[#0b1532] to-[#0a2230] shadow-2xl shadow-blue-900/20 sm:max-w-xl md:max-w-2xl"
+        headerClassName="border-white/10 px-4 pb-4 pt-4 sm:px-6"
+        bodyClassName="px-4 sm:px-6"
+        footerClassName="border-white/10 px-4 py-4 sm:px-6"
+        header={
+          <>
             <h2 className="text-xl font-semibold tracking-tight text-white">
               Quick Trade
             </h2>
             <p className="mt-1 text-sm text-slate-300">
               Log the essentials in under 30 seconds.
             </p>
+          </>
+        }
+        footer={
+          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={handleClose}
+              className="h-11 rounded-lg border border-white/20 bg-white/5 px-4 text-sm font-medium text-slate-200 transition hover:bg-white/10 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={accountLoading || uploadingRef.current}
+              onClick={() => void handleSave()}
+              className={QUICK_TRADE_PRIMARY_BUTTON_CLASS}
+            >
+              {isPublic ? "Post Trade" : "Save Trade"}
+            </button>
           </div>
-
-          {error ? (
-            <div className="mb-4 rounded-lg border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-200">
-              {error}
-            </div>
-          ) : null}
-
-          <div className="space-y-5">
+        }
+      >
+        <div className="space-y-5">
             <div>
               <FieldLabel>Trading Account</FieldLabel>
               <TradeAccountPicker
                 className="mt-2"
+                triggerId="quick-trade-account-trigger"
                 accounts={accounts}
                 selectedAccount={selectedAccount}
                 onSelect={setSelectedAccount}
@@ -939,11 +939,6 @@ export default function QuickTradeModal({
                 onChange={setExitTime}
               />
             </div>
-            {invalidTimeRange ? (
-              <p className="-mt-2 text-xs text-red-400">
-                Exit must be after entry.
-              </p>
-            ) : null}
 
             {/* Advanced */}
             <div className="rounded-xl border border-white/10 bg-white/[0.03]">
@@ -1049,28 +1044,8 @@ export default function QuickTradeModal({
                 user={communityPreviewUser}
               />
             ) : null}
-          </div>
-
-          <div className="mt-6 flex flex-col-reverse gap-3 border-t border-white/10 pt-5 sm:flex-row sm:justify-end">
-            <button
-              type="button"
-              disabled={busy}
-              onClick={handleClose}
-              className="h-11 rounded-lg border border-white/20 bg-white/5 px-4 text-sm font-medium text-slate-200 transition hover:bg-white/10 disabled:opacity-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              disabled={accountLoading || uploadingRef.current}
-              onClick={() => void handleSave()}
-              className={QUICK_TRADE_PRIMARY_BUTTON_CLASS}
-            >
-              {isPublic ? "Post Trade" : "Save Trade"}
-            </button>
-          </div>
         </div>
-      </div>
+      </ScrollableModalShell>
       <CreateAccountModal
         open={showCreateAccountModal}
         onClose={() => setShowCreateAccountModal(false)}
@@ -1081,7 +1056,7 @@ export default function QuickTradeModal({
       <ImageCropModal
         open={imageCrop.cropSourceFile != null}
         file={imageCrop.cropSourceFile}
-        preset="content"
+        preset={CONTENT_IMAGE_CROP_PRESET}
         onCancel={handleCropCancel}
         onSave={handleCropSave}
       />

@@ -1,7 +1,7 @@
 "use client"
 
 import AffiliateApplyForm from "@/app/components/AffiliateApplyForm"
-import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
+import ScrollableModalShell from "@/app/components/ui/ScrollableModalShell"
 import type { AffiliateApplicationRow } from "@/lib/affiliateApplication"
 
 type Props = {
@@ -19,30 +19,26 @@ export default function AffiliateApplyModal({
   title = "Affiliate application",
   prefillFrom = null,
 }: Props) {
-  if (!open) return null
-
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-      <div
-        className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-white/10 bg-[#152238] p-6 text-white shadow-2xl"
-        role="dialog"
-        aria-modal="true"
-      >
-        <ModalCloseButton
-          onClick={onClose}
-          className="absolute right-4 top-4 z-10"
-        />
-        <div className="pr-12">
-          <AffiliateApplyForm
-          active={open}
-          prefillFrom={prefillFrom}
-          title={title}
-          onSubmit={onSubmit}
-          onCancel={onClose}
-          showCancel
-        />
-        </div>
-      </div>
-    </div>
+    <ScrollableModalShell
+      open={open}
+      onClose={onClose}
+      ariaLabel={title}
+      overlayClassName="z-[100] bg-black/60 backdrop-blur-sm"
+      backdropClassName="bg-transparent"
+      panelClassName="max-w-lg rounded-2xl border-white/10 bg-[#152238]"
+      headerClassName="border-white/10 px-6 py-4"
+      bodyClassName="px-6 pb-6"
+      header={<span className="sr-only">{title}</span>}
+    >
+      <AffiliateApplyForm
+        active={open}
+        prefillFrom={prefillFrom}
+        title={title}
+        onSubmit={onSubmit}
+        onCancel={onClose}
+        showCancel
+      />
+    </ScrollableModalShell>
   )
 }

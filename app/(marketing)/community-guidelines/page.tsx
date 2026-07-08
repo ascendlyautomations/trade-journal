@@ -1,4 +1,9 @@
 import CompanyPageShell, { CompanySectionCard } from "@/app/components/marketing/CompanyPageShell"
+import Link from "next/link"
+import {
+  LEGAL_CONTACT_EMAIL,
+  LEGAL_COPYRIGHT_EMAIL,
+} from "@/lib/legal/contact"
 
 const SECTIONS = [
   {
@@ -99,17 +104,59 @@ const SECTIONS = [
     ),
   },
   {
+    id: "intellectual-property",
+    title: "Respect Intellectual Property",
+    body: (
+      <>
+        <p>
+          Only upload charts, screenshots, videos, and other media that you created or have
+          permission to share. Do not repost content from other traders, platforms, or creators
+          without authorization.
+        </p>
+        <p>
+          Respect the copyrights and trademarks of brokers, charting platforms, and other third
+          parties. When in doubt, use your own captures or licensed material.
+        </p>
+        <p>
+          To report copyright infringement, see our{" "}
+          <Link href="/copyright" className="text-blue-300 hover:text-blue-200">
+            Copyright &amp; DMCA Policy
+          </Link>
+          .
+        </p>
+      </>
+    ),
+  },
+  {
     id: "reporting",
     title: "Reporting Violations",
     body: (
-      <p>
-        If you see behavior that violates these guidelines, report it through support or contact
-        our team at{" "}
-        <a href="mailto:support@tradetraxs.com" className="text-blue-300 hover:text-blue-200">
-          support@tradetraxs.com
-        </a>
-        . Include links, screenshots, and context when possible.
-      </p>
+      <>
+        <p>
+          If you see behavior that violates these guidelines, contact our team at{" "}
+          <a
+            href={`mailto:${LEGAL_CONTACT_EMAIL}`}
+            className="text-blue-300 hover:text-blue-200"
+          >
+            {LEGAL_CONTACT_EMAIL}
+          </a>
+          . Include links, screenshots, and context when possible.
+        </p>
+        <p>
+          To report copyright or trademark infringement, email{" "}
+          <a
+            href={`mailto:${LEGAL_COPYRIGHT_EMAIL}`}
+            className="text-blue-300 hover:text-blue-200"
+          >
+            {LEGAL_COPYRIGHT_EMAIL}
+          </a>{" "}
+          or use the process described on our{" "}
+          <Link href="/copyright" className="text-blue-300 hover:text-blue-200">
+            Copyright &amp; DMCA Policy
+          </Link>{" "}
+          page.
+        </p>
+      </>
     ),
   },
   {

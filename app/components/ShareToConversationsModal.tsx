@@ -22,6 +22,7 @@ import {
 } from "@/lib/feedDeepLink"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import { FeedbackModal, ShareModalSendButton, useFeedbackPopup } from "@/app/components/ui"
+import ScrollableModalShell from "@/app/components/ui/ScrollableModalShell"
 import { useShareSuccessDismiss } from "@/lib/shareSuccessDismiss"
 import ShareCopyLinkButton from "@/app/components/ShareCopyLinkButton"
 import ShareRecipientPicker from "@/app/components/ShareRecipientPicker"
@@ -294,17 +295,40 @@ export default function ShareToConversationsModal({
   return (
     <>
       <FeedbackModal {...feedbackModalProps} />
-      <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm"
-      onClick={handleClose}
-      role="presentation"
-    >
-      <div
-        className="w-full max-w-[400px] rounded-xl border border-white/10 bg-[#0f172a] p-4 text-white"
-        onClick={(e) => e.stopPropagation()}
+      <ScrollableModalShell
+        open={open}
+        onClose={handleClose}
+        ariaLabel={title}
+        showCloseButton={false}
+        overlayClassName="z-[9999] bg-black/50 backdrop-blur-sm"
+        backdropClassName="bg-transparent"
+        panelClassName="max-w-[400px] rounded-xl border-white/10 bg-[#0f172a]"
+        headerClassName="border-white/10 px-4 py-4"
+        bodyClassName="px-4"
+        footerClassName="border-white/10 px-4 py-4"
+        closeDisabled={isBusy}
+        header={<h2 className="text-lg font-semibold text-white">{title}</h2>}
+        footer={
+          <>
+            <ShareModalSendButton
+              phase={phase}
+              onClick={() => void handleSend()}
+              disabled={!hasRecipients || shareLoading}
+              successLabel={successLabel}
+            />
+            {showCancel ? (
+              <button
+                type="button"
+                onClick={handleClose}
+                disabled={isBusy}
+                className="mt-2 w-full text-sm text-gray-400 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Cancel
+              </button>
+            ) : null}
+          </>
+        }
       >
-          <h2 className="mb-3 text-lg font-semibold">{title}</h2>
-
           {deepLinkTarget ? (
             <ShareCopyLinkButton
               className="mb-3"
@@ -346,26 +370,7 @@ export default function ShareToConversationsModal({
             onToggleConversation={toggleConversation}
             onToggleUser={toggleUser}
           />
-
-          <ShareModalSendButton
-            phase={phase}
-            onClick={() => void handleSend()}
-            disabled={!hasRecipients || shareLoading}
-            successLabel={successLabel}
-          />
-
-          {showCancel ? (
-            <button
-              type="button"
-              onClick={handleClose}
-              disabled={isBusy}
-              className="mt-2 w-full text-sm text-gray-400 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              Cancel
-            </button>
-          ) : null}
-        </div>
-      </div>
+      </ScrollableModalShell>
     </>
   )
 }

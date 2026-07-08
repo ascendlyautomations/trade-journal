@@ -2,6 +2,7 @@
 
 import { memo } from "react"
 import TradeCardTimingBlock from "@/app/components/TradeCardTimingBlock"
+import ExpandableText from "@/app/components/ui/ExpandableText"
 import {
   formatPoints,
   formatRR,
@@ -74,7 +75,12 @@ function FeedPostBody({
       </div>
 
       {publicDesc ? (
-        <p className="px-1 text-sm leading-relaxed text-white">{publicDesc}</p>
+        <ExpandableText
+          className="px-1 text-sm leading-relaxed text-white"
+          textClassName="text-white"
+        >
+          {publicDesc}
+        </ExpandableText>
       ) : null}
 
       {timingTrade || onViewReel ? (

@@ -1,13 +1,12 @@
 "use client"
 
 import { memo } from "react"
-import ReelNativeVideoThumb from "@/app/components/ReelNativeVideoThumb"
-import StorageImage from "@/app/components/ui/StorageImage"
+import ReelClipPlayOverlay from "@/app/components/ReelClipPlayOverlay"
+import ReelVideoPosterFrame from "@/app/components/ReelVideoPosterFrame"
 import { formatReelDuration, type ReelRow } from "@/lib/reels"
-import { isReelVideoMediaUrl } from "@/lib/reelVideo"
 
 export type ReelThumbnailPreviewProps = {
-  reel: Pick<ReelRow, "thumbnail_url" | "duration_seconds">
+  reel: Pick<ReelRow, "thumbnail_url" | "video_url" | "duration_seconds">
   onClick?: () => void
   className?: string
   /** Defaults to max-w-[280px] — use a smaller width on compact trade cards. */
@@ -21,8 +20,6 @@ function ReelThumbnailPreview({
   maxWidthClass = "max-w-[280px]",
 }: ReelThumbnailPreviewProps) {
   const interactive = onClick != null
-  const thumbUrl = String(reel.thumbnail_url)
-  const useVideoThumb = isReelVideoMediaUrl(thumbUrl)
 
   return (
     <button
@@ -39,25 +36,12 @@ function ReelThumbnailPreview({
       } ${className}`}
       aria-label={interactive ? "Watch linked clip" : undefined}
     >
-      {useVideoThumb ? (
-        <ReelNativeVideoThumb
-          src={thumbUrl}
-          className="aspect-[9/16] w-full object-cover"
-        />
-      ) : (
-        <StorageImage
-          src={thumbUrl}
-          originalSrc={thumbUrl}
-          preset="reel-thumb"
-          alt=""
-          className="aspect-[9/16] w-full object-cover"
-        />
-      )}
-      <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/20">
-        <span className="flex h-12 w-12 items-center justify-center rounded-full border border-white/20 bg-black/50 text-lg text-white backdrop-blur-sm">
-          ▶
-        </span>
-      </div>
+      <ReelVideoPosterFrame
+        thumbnailUrl={reel.thumbnail_url}
+        videoUrl={reel.video_url}
+        className="aspect-[9/16] w-full object-cover"
+      />
+      <ReelClipPlayOverlay />
       {reel.duration_seconds != null ? (
         <span className="pointer-events-none absolute bottom-2 right-2 rounded-md bg-black/70 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-white">
           {formatReelDuration(Number(reel.duration_seconds))}

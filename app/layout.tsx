@@ -13,6 +13,7 @@ import DemoAppShell from "./components/demo/DemoAppShell"
 import AppChrome from "./components/AppChrome"
 import MarketingNavbarRoot from "./components/MarketingNavbarRoot"
 import CookieConsentBanner from "./components/CookieConsentBanner"
+import ScrollLockRouteReset from "./components/ScrollLockRouteReset"
 import SubscriptionGateShell from "./components/SubscriptionGateShell"
 import { UserProfileProvider } from "@/lib/UserProfileProvider"
 import { GettingStartedProgressProvider } from "@/lib/GettingStartedProgressProvider"
@@ -72,6 +73,7 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="flex flex-col">
+        <ScrollLockRouteReset />
         <ToastRoot>
           <UploadProgressProvider>
           <ReferralPersistence />

@@ -12,6 +12,7 @@ import { supabase } from "@/lib/supabaseClient"
 import { isProActive } from "@/lib/subscription"
 import { FREE_PLAN_ACCOUNT_LIMIT } from "@/lib/tradingAccounts"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
+import { MODAL_PANEL_MAX_HEIGHT_CLASS, useModalScrollLock } from "@/app/components/ui/modalLayout"
 import { feedbackPresets, persistentError } from "@/lib/feedbackPresets"
 import { useUserProfile } from "@/lib/useUserProfile"
 
@@ -38,6 +39,7 @@ export default function PostSetupImportModal({ open, onComplete }: Props) {
   const [selectedAccount, setSelectedAccount] = useState<TradeAccountOption | null>(null)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [canCreateMoreAccounts, setCanCreateMoreAccounts] = useState(true)
+  useModalScrollLock(open)
 
   useEffect(() => {
     if (!open) {
@@ -218,7 +220,7 @@ export default function PostSetupImportModal({ open, onComplete }: Props) {
         aria-modal="true"
         aria-labelledby="post-setup-import-title"
       >
-        <div className="max-h-[min(90vh,760px)] overflow-x-hidden overflow-y-auto rounded-2xl border border-white/15 bg-[#0f172a]/95 p-6 shadow-2xl backdrop-blur-xl md:p-8">
+        <div className={`${MODAL_PANEL_MAX_HEIGHT_CLASS} overflow-x-hidden overflow-y-auto overscroll-contain rounded-2xl border border-white/15 bg-[#0f172a]/95 p-6 shadow-2xl backdrop-blur-xl md:p-8`}>
           <h2
             id="post-setup-import-title"
             className="text-center text-xl font-semibold tracking-tight text-white md:text-2xl"

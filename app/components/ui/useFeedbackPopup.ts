@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import type { FeedbackModalProps } from "./FeedbackModal"
 import type { FeedbackPopupInput, FeedbackPopupType } from "./feedback-popup-types"
 
@@ -29,8 +29,17 @@ export function useFeedbackPopup(options?: UseFeedbackPopupOptions) {
     persist: false,
   })
 
+  const onDismissRef = useRef<(() => void) | null>(null)
+
   const closePopup = useCallback(() => {
     setState((prev) => ({ ...prev, isOpen: false }))
+    const onDismiss = onDismissRef.current
+    onDismissRef.current = null
+    if (onDismiss) {
+      window.requestAnimationFrame(() => {
+        onDismiss()
+      })
+    }
   }, [])
 
   const showPopup = useCallback((input: FeedbackPopupInput) => {
@@ -40,6 +49,7 @@ export function useFeedbackPopup(options?: UseFeedbackPopupOptions) {
     ) {
       console.log("[getting-started] useFeedbackPopup showPopup", input.title)
     }
+    onDismissRef.current = input.onDismiss ?? null
     setState({
       isOpen: true,
       message: input.message,

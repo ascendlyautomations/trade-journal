@@ -25,6 +25,12 @@ const LEGAL_DOCUMENTS = [
       "Standards for acceptable behavior, content, and platform use across TradeTraxs products.",
     href: "/acceptable-use",
   },
+  {
+    title: "Copyright & DMCA Policy",
+    description:
+      "How to report copyright infringement, submit counter-notifications, and understand our repeat infringer policy.",
+    href: "/copyright",
+  },
 ] as const
 
 export default function LegalHubPage() {

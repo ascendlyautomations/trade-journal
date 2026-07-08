@@ -190,7 +190,7 @@ export default function DashboardGearSettings({
                       onSaveGear()
                     }}
                     disabled={savingGearSettings || !hasUser}
-                    className="flex-1 rounded-lg bg-gradient-to-r from-blue-500 to-emerald-600 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:from-blue-600 hover:to-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="flex-1 rounded-lg bg-blue-500 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-blue-500"
                   >
                     {savingGearSettings ? "Saving…" : "Save"}
                   </button>

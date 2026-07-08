@@ -24,6 +24,7 @@ import { isDemoSupabaseBlocked } from "@/lib/demo/demoSupabaseGuard"
 import { isStandaloneFlowRoute } from "@/lib/authRoutes"
 import { clearSignupFlow } from "@/lib/signupFlow"
 import { NAVBAR_BRAND_LINK_CLASS } from "@/lib/navbarBrand"
+import { useModalScrollLock } from "@/app/components/ui/modalLayout"
 
 export default function Navbar() {
   const pathname = usePathname()
@@ -115,23 +116,7 @@ export default function Navbar() {
 
   const mobileMenuOpen = isOpen && showMobileNav
 
-  useEffect(() => {
-    if (!mobileMenuOpen) return
-    if (typeof window === "undefined") return
-    const mq = window.matchMedia("(max-width: 767px)")
-    if (!mq.matches) return
-
-    const html = document.documentElement
-    const body = document.body
-    const prevHtmlOverflow = html.style.overflow
-    const prevBodyOverflow = body.style.overflow
-    html.style.overflow = "hidden"
-    body.style.overflow = "hidden"
-    return () => {
-      html.style.overflow = prevHtmlOverflow
-      body.style.overflow = prevBodyOverflow
-    }
-  }, [mobileMenuOpen])
+  useModalScrollLock(mobileMenuOpen)
 
   const navRef = useRef<HTMLDivElement>(null)
   const badgeText = (count: number) => (count > 99 ? "99+" : String(count))

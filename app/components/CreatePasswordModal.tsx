@@ -136,7 +136,7 @@ export default function CreatePasswordModal({
             type="button"
             onClick={() => void handleSave()}
             disabled={saving}
-            className="rounded-xl bg-gradient-to-r from-blue-500 to-emerald-500 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+            className="rounded-xl bg-blue-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-blue-500"
           >
             {saving ? "Saving…" : "Save"}
           </button>

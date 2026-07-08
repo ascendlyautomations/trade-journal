@@ -1,9 +1,9 @@
 "use client"
 
-import ReelNativeVideoThumb from "@/app/components/ReelNativeVideoThumb"
+import ReelClipPlayOverlay from "@/app/components/ReelClipPlayOverlay"
+import ReelVideoPosterFrame from "@/app/components/ReelVideoPosterFrame"
 import type { ReelRow } from "@/lib/reels"
 import { resolveReelCaption } from "@/lib/reels"
-import { isReelVideoMediaUrl } from "@/lib/reelVideo"
 import { formatRelativeTime } from "@/lib/formatRelativeTime"
 
 type ProfileReelCardProps = {
@@ -21,23 +21,16 @@ export default function ProfileReelCard({ reel, onOpen }: ProfileReelCardProps) 
       className="group w-full overflow-hidden rounded-xl border border-white/10 bg-white/5 text-left transition hover:border-emerald-400/30 hover:bg-white/[0.07]"
     >
       <div className="relative aspect-[9/16] w-full overflow-hidden bg-black/40">
-        {isReelVideoMediaUrl(reel.thumbnail_url) ? (
-          <ReelNativeVideoThumb
-            src={reel.thumbnail_url}
-            className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]"
+        <ReelVideoPosterFrame
+          thumbnailUrl={reel.thumbnail_url}
+          videoUrl={reel.video_url}
+          className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]"
+        />
+        <div className="opacity-0 transition group-hover:opacity-100">
+          <ReelClipPlayOverlay
+            buttonClassName="h-11 w-11"
+            dimClassName="bg-black/20"
           />
-        ) : (
-          <img
-            src={reel.thumbnail_url}
-            alt=""
-            loading="lazy"
-            className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]"
-          />
-        )}
-        <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 transition group-hover:opacity-100">
-          <span className="flex h-11 w-11 items-center justify-center rounded-full border border-white/20 bg-black/50 text-white backdrop-blur-sm">
-            ▶
-          </span>
         </div>
         {reel.duration_seconds != null ? (
           <span className="absolute bottom-2 right-2 rounded-md bg-black/70 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-white">

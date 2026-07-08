@@ -3,6 +3,7 @@
 import { useEffect } from "react"
 import CommunitySharePreviewPanel from "@/app/components/CommunitySharePreviewPanel"
 import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
+import { useModalScrollLock } from "@/app/components/ui/modalLayout"
 
 type CommunitySharePreviewModalProps = {
   open: boolean
@@ -31,14 +32,7 @@ export default function CommunitySharePreviewModal({
   post,
   user,
 }: CommunitySharePreviewModalProps) {
-  useEffect(() => {
-    if (!open) return
-    const prev = document.body.style.overflow
-    document.body.style.overflow = "hidden"
-    return () => {
-      document.body.style.overflow = prev
-    }
-  }, [open])
+  useModalScrollLock(open)
 
   useEffect(() => {
     if (!open || submitting) return
@@ -62,7 +56,7 @@ export default function CommunitySharePreviewModal({
       }}
     >
       <div
-        className="w-full max-w-lg max-h-[min(92vh,900px)] flex flex-col overflow-hidden rounded-xl border border-white/10 bg-[#0b1220] shadow-2xl"
+        className="w-full max-w-lg max-h-[min(90dvh,calc(100dvh-2rem))] flex flex-col overflow-hidden rounded-xl border border-white/10 bg-[#0b1220] shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 px-4 py-3">

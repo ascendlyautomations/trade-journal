@@ -76,6 +76,9 @@ export const feedbackPresets = {
     return persistentSuccess("Import Complete", message)
   },
 
+  missingRequiredInformation: (detail: string): FeedbackPopupInput =>
+    persistentError("Missing Required Information", detail),
+
   tradeSaveSuccess: (): FeedbackPopupInput =>
     persistentSuccess("Trade Saved", "Your trade was saved successfully."),
 

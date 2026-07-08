@@ -182,6 +182,9 @@ export default function MarketingFooter() {
                   <FooterLink href="/acceptable-use">Acceptable Use Policy</FooterLink>
                 </li>
                 <li>
+                  <FooterLink href="/copyright">Copyright &amp; DMCA</FooterLink>
+                </li>
+                <li>
                   <FooterLink href="/legal">Legal</FooterLink>
                 </li>
               </ul>
@@ -243,6 +246,9 @@ export default function MarketingFooter() {
             </li>
             <li>
               <FooterLink href="/acceptable-use">Acceptable Use Policy</FooterLink>
+            </li>
+            <li>
+              <FooterLink href="/copyright">Copyright &amp; DMCA</FooterLink>
             </li>
             <li>
               <FooterLink href="/legal">Legal</FooterLink>

@@ -3498,7 +3498,7 @@ function CommunityContent() {
                           `/trade-rooms?room=${encodeURIComponent(inviteRoomKey)}`
                         )
                       }}
-                      className="w-full rounded-xl bg-gradient-to-r from-blue-500 to-emerald-500 py-3 text-sm font-semibold text-white transition hover:opacity-95 sm:w-auto sm:px-6"
+                      className="w-full rounded-xl bg-blue-500 py-3 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:hover:bg-blue-500 sm:w-auto sm:px-6"
                     >
                       Finish Setting Up
                     </button>
@@ -4157,7 +4157,7 @@ function CommunityContent() {
           role="presentation"
         >
           <div
-            className="w-full max-w-[400px] rounded-lg bg-[#0b1f3a] p-6 text-white shadow-xl"
+            className="w-full max-w-[400px] max-h-[min(90dvh,calc(100dvh-2rem))] flex flex-col overflow-hidden rounded-lg bg-[#0b1f3a] p-6 text-white shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <h2 className="mb-3 text-lg font-semibold">Channel Settings</h2>

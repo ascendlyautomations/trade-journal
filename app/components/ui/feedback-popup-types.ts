@@ -8,4 +8,6 @@ export type FeedbackPopupInput = {
   persist?: boolean
   /** Primary dismiss button label (default "Close"). */
   dismissLabel?: string
+  /** Runs after the popup closes (e.g. focus the invalid field). */
+  onDismiss?: () => void
 }

@@ -112,6 +112,30 @@ function bestWinStreakSubtitle(count: number) {
   return count === 1 ? "Winning Trade" : "Winning Trades"
 }
 
+function ExpectancyStat({
+  expectancyData,
+}: {
+  expectancyData: ExpectancySummary | null
+}) {
+  if (!expectancyData) {
+    return (
+      <Stat
+        title="Expectancy"
+        value="—"
+        subtitle="Add more trades to unlock this metric."
+      />
+    )
+  }
+
+  return (
+    <Stat
+      title="Expectancy"
+      value={formatMoney(expectancyData.expectancy)}
+      positive={expectancyData.expectancy >= 0}
+    />
+  )
+}
+
 function FreeDashboardKpis({
   totalTrades,
   winRate,
@@ -228,11 +252,14 @@ export default function DashboardStatsGrid({
           value={formatCurrency(biggestLoss)}
           positive={false}
         />
+        <div className="hidden md:contents">
+          <ExpectancyStat expectancyData={expectancyData} />
+        </div>
         <Stat title="Best Day" value={formatCurrency(bestDay)} positive />
         <Stat title="Worst Day" value={formatCurrency(worstDay)} positive={false} />
       </div>
 
-      <div className="rounded-xl border border-white/10 bg-white/10 p-2.5 backdrop-blur-md md:p-4">
+      <div className="rounded-xl border border-white/10 bg-white/10 p-2.5 backdrop-blur-md md:hidden md:p-4">
         <h3 className="text-[11px] text-gray-300 md:text-sm">
           Expectancy
           {expectancyData ? (
@@ -278,7 +305,7 @@ export default function DashboardStatsGrid({
               </span>
             </p>
 
-            <div className="mt-1.5 space-y-0.5 text-[10px] text-gray-400 md:mt-2 md:space-y-1 md:text-xs">
+            <div className="mt-1.5 space-y-0.5 text-[10px] text-gray-400 md:mt-2 md:flex md:gap-4 md:space-y-0 md:text-xs">
               <p>Max Wins: {streakData.maxWinStreak}</p>
               <p>Max Losses: {streakData.maxLossStreak}</p>
             </div>

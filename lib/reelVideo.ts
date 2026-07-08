@@ -8,6 +8,10 @@ import {
   mapUploadBytesToPercent,
 } from "@/lib/uploadProgress/reportProgress"
 import type { UploadProgressOptions } from "@/lib/uploadProgress/types"
+import {
+  cacheReelPosterObjectUrl,
+  getCachedReelPosterObjectUrl,
+} from "@/lib/reelPosterCache"
 
 export const REEL_MAX_DURATION_SECONDS = 90
 export const REEL_MAX_FILE_BYTES = 100 * 1024 * 1024
@@ -270,30 +274,9 @@ export async function captureReelVideoThumbnail(
 
   try {
     await loadVideoElement(video, objectUrl)
+    const blob = await capturePosterBlobFromLoadedVideo(video, seekSeconds)
     const metadata = buildVideoMetadata(video)
-    const candidates = buildSeekCandidates(video.duration, seekSeconds)
-
-    let fallback: Blob | null = null
-
-    for (const time of candidates) {
-      await seekVideoTo(video, time)
-      await waitForPaintedVideoFrame(video)
-
-      const captured = await captureVideoFrame(video, metadata)
-      if (!captured) continue
-
-      if (!fallback) fallback = captured.blob
-
-      if (!isMostlyBlackImageData(captured.sample)) {
-        return { blob: captured.blob, metadata }
-      }
-    }
-
-    if (fallback) {
-      return { blob: fallback, metadata }
-    }
-
-    throw new Error("Could not generate a thumbnail.")
+    return { blob, metadata }
   } finally {
     URL.revokeObjectURL(objectUrl)
     video.removeAttribute("src")
@@ -319,6 +302,85 @@ export function isReelVideoMediaUrl(url: string | null | undefined): boolean {
   return (
     /\.(mp4|mov|m4v)(\?|#|$)/i.test(lower) || lower.includes("/videos/")
   )
+}
+
+/** Returns a stored JPEG poster URL when thumbnail_url is an image. */
+export function getReelPosterImageUrl(
+  thumbnailUrl: string | null | undefined
+): string | null {
+  const raw = String(thumbnailUrl ?? "").trim()
+  if (!raw || isReelVideoMediaUrl(raw)) return null
+  return raw
+}
+
+/** Video URL to load when no image poster exists yet. */
+export function getReelVideoFrameSource(
+  thumbnailUrl: string | null | undefined,
+  videoUrl?: string | null
+): string | null {
+  const video = String(videoUrl ?? "").trim()
+  const thumb = String(thumbnailUrl ?? "").trim()
+
+  if (thumb && isReelVideoMediaUrl(thumb)) return thumb
+  if (video) return video
+  return null
+}
+
+async function capturePosterBlobFromLoadedVideo(
+  video: HTMLVideoElement,
+  preferredSeek?: number
+): Promise<Blob> {
+  const metadata = buildVideoMetadata(video)
+  const candidates = buildSeekCandidates(video.duration, preferredSeek)
+
+  let fallback: Blob | null = null
+
+  for (const time of candidates) {
+    await seekVideoTo(video, time)
+    await waitForPaintedVideoFrame(video)
+
+    const captured = await captureVideoFrame(video, metadata)
+    if (!captured) continue
+
+    if (!fallback) fallback = captured.blob
+
+    if (!isMostlyBlackImageData(captured.sample)) {
+      return captured.blob
+    }
+  }
+
+  if (fallback) return fallback
+  throw new Error("Could not generate a poster frame.")
+}
+
+/** Capture and cache a poster object URL from a remote video (public storage URL). */
+export async function captureReelPosterFromUrl(
+  videoUrl: string
+): Promise<string> {
+  const trimmed = videoUrl.trim()
+  if (!trimmed) {
+    throw new Error("Missing video URL.")
+  }
+
+  const cached = getCachedReelPosterObjectUrl(trimmed)
+  if (cached) return cached
+
+  const video = document.createElement("video")
+  video.crossOrigin = "anonymous"
+  video.muted = true
+  video.playsInline = true
+  video.preload = "auto"
+
+  try {
+    await loadVideoElement(video, trimmed)
+    const blob = await capturePosterBlobFromLoadedVideo(video)
+    const objectUrl = URL.createObjectURL(blob)
+    cacheReelPosterObjectUrl(trimmed, objectUrl)
+    return objectUrl
+  } finally {
+    video.removeAttribute("src")
+    video.load()
+  }
 }
 
 export function reelStoragePublicUrl(storagePath: string): string {

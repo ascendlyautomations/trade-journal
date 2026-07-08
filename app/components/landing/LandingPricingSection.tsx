@@ -148,7 +148,7 @@ export default function LandingPricingSection({
                     type="button"
                     disabled={checkoutLoading}
                     onClick={() => onStartTrial(billingInterval)}
-                    className="mt-4 w-full rounded-xl bg-gradient-to-r from-blue-500 to-emerald-500 px-6 py-3 font-semibold text-white shadow-lg shadow-emerald-500/20 transition-[transform,box-shadow] duration-200 hover:scale-[1.02] hover:from-blue-600 hover:to-emerald-600 hover:shadow-[0_0_28px_rgba(52,211,153,0.35)] disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:hover:scale-100 md:mt-6 md:py-3.5"
+                    className="mt-4 w-full rounded-xl bg-blue-500 px-6 py-3 font-semibold text-white shadow-lg shadow-blue-500/20 transition-[transform,box-shadow] duration-200 hover:bg-blue-600 hover:scale-[1.02] hover:shadow-[0_0_28px_rgba(59,130,246,0.35)] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-blue-500 disabled:hover:scale-100 motion-reduce:hover:scale-100 md:mt-6 md:py-3.5"
                   >
                     {checkoutLoading ? "Starting trial…" : `Start ${TRAXPRO_TRIAL_HEADLINE}!`}
                   </button>

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { createPortal } from "react-dom"
+import { useModalScrollLock } from "@/app/components/ui/modalLayout"
 
 type AnalyzeTradeProgressModalProps = {
   open: boolean
@@ -21,14 +22,7 @@ export default function AnalyzeTradeProgressModal({
     setMounted(true)
   }, [])
 
-  useEffect(() => {
-    if (!open) return
-    const prev = document.body.style.overflow
-    document.body.style.overflow = "hidden"
-    return () => {
-      document.body.style.overflow = prev
-    }
-  }, [open])
+  useModalScrollLock(open)
 
   if (!open || !mounted) return null
 

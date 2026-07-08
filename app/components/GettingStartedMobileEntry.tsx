@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react"
 import { usePathname } from "next/navigation"
 import GettingStartedChecklist from "@/app/components/dashboard/GettingStartedChecklist"
 import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
+import { useModalScrollLock } from "@/app/components/ui/modalLayout"
 import { useGettingStartedProgress } from "@/lib/GettingStartedProgressProvider"
 import { shouldOfferGettingStartedChecklist } from "@/lib/gettingStartedChecklist"
 import { useUserProfile } from "@/lib/useUserProfile"
@@ -50,19 +51,7 @@ export default function GettingStartedMobileEntry({
     return () => window.removeEventListener("keydown", onKey)
   }, [drawerOpen, closeDrawer])
 
-  useEffect(() => {
-    if (!drawerOpen) return
-    const html = document.documentElement
-    const body = document.body
-    const prevHtmlOverflow = html.style.overflow
-    const prevBodyOverflow = body.style.overflow
-    html.style.overflow = "hidden"
-    body.style.overflow = "hidden"
-    return () => {
-      html.style.overflow = prevHtmlOverflow
-      body.style.overflow = prevBodyOverflow
-    }
-  }, [drawerOpen])
+  useModalScrollLock(drawerOpen)
 
   if (!visible || !user?.id) return null
 

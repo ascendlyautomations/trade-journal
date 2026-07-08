@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { createPortal } from "react-dom"
+import { PROFILE_PRIMARY_ACTION_BUTTON_CLASS } from "@/app/components/profile/profileActionButton"
+import { useModalScrollLock } from "@/app/components/ui/modalLayout"
 
 type CreateMenuEntry = {
   id: string
@@ -166,14 +168,7 @@ export default function ProfileCreateMenu({
     return () => window.removeEventListener("keydown", onKey)
   }, [open, close])
 
-  useEffect(() => {
-    if (!open || !isMobile) return
-    const prev = document.body.style.overflow
-    document.body.style.overflow = "hidden"
-    return () => {
-      document.body.style.overflow = prev
-    }
-  }, [open, isMobile])
+  useModalScrollLock(open && isMobile)
 
   useEffect(() => {
     if (!open || isMobile) return
@@ -197,10 +192,7 @@ export default function ProfileCreateMenu({
         onClick={() => setOpen((prev) => !prev)}
         aria-expanded={open}
         aria-haspopup="menu"
-        className={
-          className ??
-          "inline-flex min-h-10 items-center justify-center rounded-md bg-blue-500 px-2.5 py-1.5 text-xs font-medium text-white transition hover:bg-blue-600 sm:min-h-0 sm:px-3 sm:py-2 sm:text-sm"
-        }
+        className={className ?? PROFILE_PRIMARY_ACTION_BUTTON_CLASS}
       >
         + Create
       </button>

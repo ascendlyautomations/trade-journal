@@ -18,6 +18,7 @@ import { getCachedTrades, upsertTradeInCache } from "@/lib/appDataCache"
 import { SkeletonAnalystPanel } from "../components/ui/skeletons"
 import { NAVBAR_HEIGHT_CLASS } from "@/app/components/ui/DetailModalShell"
 import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
+import { useModalScrollLock } from "@/app/components/ui/modalLayout"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 import AnalyzeTradeProgressModal from "../components/analyst/AnalyzeTradeProgressModal"
@@ -384,19 +385,7 @@ function AnalystMobileAnalysisSheet({
     setMounted(true)
   }, [])
 
-  useEffect(() => {
-    if (!open) return
-    const html = document.documentElement
-    const body = document.body
-    const prevHtmlOverflow = html.style.overflow
-    const prevBodyOverflow = body.style.overflow
-    html.style.overflow = "hidden"
-    body.style.overflow = "hidden"
-    return () => {
-      html.style.overflow = prevHtmlOverflow
-      body.style.overflow = prevBodyOverflow
-    }
-  }, [open])
+  useModalScrollLock(open)
 
   useEffect(() => {
     if (!open) return

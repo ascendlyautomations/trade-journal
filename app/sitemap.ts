@@ -20,6 +20,7 @@ const STATIC_PATHS: Array<{
   { path: "/help", changeFrequency: "monthly", priority: 0.5 },
   { path: "/privacy", changeFrequency: "monthly", priority: 0.5 },
   { path: "/terms", changeFrequency: "monthly", priority: 0.5 },
+  { path: "/copyright", changeFrequency: "monthly", priority: 0.5 },
 ]
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {

@@ -53,7 +53,11 @@ const SECTIONS = [
     body: (
       <p>
         Only upload content you have the right to share. Do not repost charts, videos, or media
-        from other creators or platforms without permission.
+        from other creators or platforms without permission. To report infringement, see our{" "}
+        <a href="/copyright" className="text-blue-300 hover:text-blue-200">
+          Copyright &amp; DMCA Policy
+        </a>
+        .
       </p>
     ),
   },

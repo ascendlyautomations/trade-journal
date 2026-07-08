@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { createPortal } from "react-dom"
 import { NAVBAR_HEIGHT_CLASS } from "./DetailModalShell"
+import { useModalScrollLock } from "./modalLayout"
 
 type ImageLightboxProps = {
   imageUrl: string | null
@@ -43,14 +44,7 @@ export default function ImageLightbox({
     return () => window.removeEventListener("keydown", onKey, true)
   }, [isOpen, onClose])
 
-  useEffect(() => {
-    if (!isOpen) return
-    const prev = document.body.style.overflow
-    document.body.style.overflow = "hidden"
-    return () => {
-      document.body.style.overflow = prev
-    }
-  }, [isOpen])
+  useModalScrollLock(isOpen)
 
   useEffect(() => {
     if (!isOpen) {

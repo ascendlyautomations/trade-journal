@@ -22,8 +22,7 @@ import {
   isPayoutAchievementType,
   normalizeAchievementMetadata,
 } from "@/lib/achievements"
-import { MODAL_FIXED_BELOW_NAVBAR_CLASS } from "@/app/components/ui/DetailModalShell"
-import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
+import ScrollableModalShell from "@/app/components/ui/ScrollableModalShell"
 import { uploadToSupabaseStorageWithProgress } from "@/lib/supabaseStorageUploadWithProgress"
 import {
   createMonotonicReporter,
@@ -172,15 +171,6 @@ export default function AchievementUploadModal({
     setPreviewUrl(nextPreviewUrl)
     return () => URL.revokeObjectURL(nextPreviewUrl)
   }, [file])
-
-  useEffect(() => {
-    if (!open) return
-    const prev = document.body.style.overflow
-    document.body.style.overflow = "hidden"
-    return () => {
-      document.body.style.overflow = prev
-    }
-  }, [open])
 
   function handleClose() {
     if (busy || uploadingRef.current || imageCrop.cropSourceFile) return
@@ -363,27 +353,45 @@ export default function AchievementUploadModal({
 
   return (
     <>
-    <div
-      className={`${MODAL_FIXED_BELOW_NAVBAR_CLASS} z-[150] bg-black/75 p-3 backdrop-blur-md sm:p-4`}
-      onClick={handleClose}
-    >
-      <div
-        className="relative max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-white/10 bg-gradient-to-br from-[#0f172a] via-[#0b1532] to-[#0a2230] p-4 shadow-2xl shadow-blue-900/20 sm:p-6"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-label={heading}
-      >
-        <ModalCloseButton
-          onClick={handleClose}
-          disabled={busy}
-          className="absolute right-4 top-4 z-10"
-        />
-        <div className="mb-3 border-b border-white/10 pb-3 pr-12">
+    <ScrollableModalShell
+      open={open}
+      onClose={handleClose}
+      ariaLabel={heading}
+      belowNavbar
+      closeDisabled={busy}
+      overlayClassName="z-[150] bg-black/75 backdrop-blur-md"
+      backdropClassName="bg-transparent"
+      panelClassName="max-w-3xl rounded-2xl border-white/10 bg-gradient-to-br from-[#0f172a] via-[#0b1532] to-[#0a2230] shadow-2xl shadow-blue-900/20"
+      headerClassName="border-white/10 px-4 pb-3 pt-4 sm:px-6"
+      bodyClassName="px-4 sm:px-6"
+      footerClassName="border-white/10 px-4 py-4 sm:px-6"
+      header={
+        <>
           <h2 className="text-xl font-semibold tracking-tight text-white">{heading}</h2>
           <p className="mt-0.5 text-sm text-slate-300">{subheading}</p>
+        </>
+      }
+      footer={
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={handleClose}
+            className="h-10 rounded-lg border border-white/20 bg-white/5 px-4 text-sm font-medium text-slate-200 transition hover:bg-white/10 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void saveAchievement()}
+            className="h-10 rounded-lg bg-blue-500 px-4 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-blue-500"
+          >
+            {submitLabel}
+          </button>
         </div>
-
+      }
+    >
         {error ? (
           <div className="mb-4 rounded-lg border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-200">
             {error}
@@ -533,27 +541,7 @@ export default function AchievementUploadModal({
             </label>
           </div>
         </div>
-
-        <div className="mt-5 flex flex-col-reverse gap-2 border-t border-white/10 pt-4 sm:flex-row sm:justify-end">
-          <button
-            type="button"
-            disabled={busy}
-            onClick={handleClose}
-            className="h-10 rounded-lg border border-white/20 bg-white/5 px-4 text-sm font-medium text-slate-200 transition hover:bg-white/10 disabled:opacity-50"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void saveAchievement()}
-            className="h-10 rounded-lg bg-gradient-to-r from-blue-500 to-emerald-500 px-4 text-sm font-semibold text-white transition hover:from-blue-400 hover:to-emerald-400 disabled:opacity-60"
-          >
-            {submitLabel}
-          </button>
-        </div>
-      </div>
-    </div>
+    </ScrollableModalShell>
       <ImageCropModal
         open={cropModalOpen}
         file={imageCrop.cropSourceFile}

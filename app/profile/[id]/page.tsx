@@ -121,6 +121,7 @@ import { formatRR, formatTradePoints } from "@/lib/formatDisplay"
 import { averageRrFromTrades } from "@/lib/tradeRr"
 import { resolveTradePoints } from "@/lib/resolveTradePoints"
 import TradeCardTimingBlock from "../../components/TradeCardTimingBlock"
+import ExpandableText from "../../components/ui/ExpandableText"
 import FeedPostMetaRow from "@/app/components/feed/FeedPostMetaRow"
 import { createUserRoom } from "@/lib/createUserRoom"
 import { loadFollowUiSnapshot } from "@/lib/followActions"
@@ -142,7 +143,9 @@ import { logSupabaseError } from "@/lib/logSupabaseError"
 import { ensureDmConversation } from "@/lib/dmConversation"
 import { dmThreadPath } from "@/lib/messageRoutes"
 import { ConfirmModal, FeedbackModal, useDeleteTradeConfirmation, useDeleteReelConfirmation, useFeedbackPopup } from "@/app/components/ui"
+import { useModalScrollLock } from "@/app/components/ui/modalLayout"
 import ProfileCreateMenu from "../../components/profile/ProfileCreateMenu"
+import { PROFILE_PRIMARY_ACTION_BUTTON_CLASS } from "../../components/profile/profileActionButton"
 import QuickTradeModal from "../../components/QuickTradeModal"
 import ReelComposerModal from "../../components/profile/ReelComposerModal"
 import ProfileReelCard from "../../components/profile/ProfileReelCard"
@@ -441,7 +444,13 @@ function TradeCard({
         </div>
       </div>
       {desc ? (
-        <p className="px-1 text-sm leading-relaxed text-white">{desc}</p>
+        <ExpandableText
+          className="px-1 text-sm leading-relaxed text-white"
+          textClassName="text-white"
+          stopPropagation
+        >
+          {desc}
+        </ExpandableText>
       ) : null}
       <TradeCardTimingBlock
         trade={trade}
@@ -1981,40 +1990,19 @@ function ProfilePageContent() {
     return () => window.removeEventListener("scroll", onScroll)
   }, [profileId, loading])
 
-  useEffect(() => {
-    if (
-      showCreatePost ||
-      showReelComposer ||
-      showQuickTrade ||
-      editingReel ||
-      selectedReelDetail ||
-      editingPost ||
-      selectedAchievementImage ||
-      selectedTradeDetail ||
-      selectedPostDetail ||
-      feedDeepLinkPost ||
-      sharePost
-    ) {
-      document.body.style.overflow = "hidden"
-      return () => {
-        document.body.style.overflow = ""
-      }
-    }
-    document.body.style.overflow = ""
-    return undefined
-  }, [
-    showCreatePost,
-    showReelComposer,
-    showQuickTrade,
-    editingReel,
-    selectedReelDetail,
-    editingPost,
-    selectedAchievementImage,
-    selectedTradeDetail,
-    selectedPostDetail,
-    feedDeepLinkPost,
-    sharePost,
-  ])
+  const profileOverlayOpen =
+    showCreatePost ||
+    showReelComposer ||
+    showQuickTrade ||
+    editingReel ||
+    selectedReelDetail ||
+    editingPost ||
+    selectedAchievementImage ||
+    selectedTradeDetail ||
+    selectedPostDetail ||
+    feedDeepLinkPost ||
+    sharePost
+  useModalScrollLock(profileOverlayOpen)
 
   useEffect(() => {
     if (
@@ -4427,7 +4415,7 @@ function ProfilePageContent() {
                               )}`
                             )
                           }
-                          className="px-6 py-2 rounded-lg bg-green-500 font-semibold text-sm text-white hover:bg-green-600"
+                          className={PROFILE_PRIMARY_ACTION_BUTTON_CLASS}
                         >
                           View Trade Room
                         </button>
@@ -4445,7 +4433,7 @@ function ProfilePageContent() {
                           type="button"
                           onClick={() => router.push("/trade-rooms?create=true")}
                           disabled={creatingRoom}
-                          className="rounded-xl bg-gradient-to-r from-blue-500 to-emerald-500 px-6 py-2.5 text-sm font-semibold text-white transition hover:opacity-95 disabled:opacity-60"
+                          className="rounded-xl bg-blue-500 px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-blue-500"
                         >
                           {creatingRoom ? "Creating…" : "Create Trade Room"}
                         </button>
@@ -4469,7 +4457,7 @@ function ProfilePageContent() {
                             )}`
                           )
                         }
-                        className="px-6 py-2 rounded-lg bg-green-500 font-semibold text-sm text-white hover:bg-green-600"
+                        className={PROFILE_PRIMARY_ACTION_BUTTON_CLASS}
                       >
                         View Trade Room
                       </button>

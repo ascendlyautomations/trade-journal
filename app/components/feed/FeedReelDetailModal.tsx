@@ -1,17 +1,11 @@
 "use client"
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type MutableRefObject,
-} from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react"
 import DetailModalShell, {
   scrollModalCommentsPane,
 } from "@/app/components/ui/DetailModalShell"
 import DetailModalVideo from "@/app/components/ui/DetailModalVideo"
+import type { ReelClipPlaybackHandle } from "@/app/components/ReelClipPlayback"
 import { PostInteractionsEngagement } from "@/app/components/PostInteractions"
 import { CommentFocusCompactStrip } from "@/app/components/comments/CommentFocusCompactStrip"
 import MobileCommentFocusLayout from "@/app/components/comments/MobileCommentFocusLayout"
@@ -74,7 +68,7 @@ export default function FeedReelDetailModal({
   isTradeAttachedReel = false,
 }: FeedReelDetailModalProps) {
   const pid = String(post.id)
-  const videoRef = useRef<HTMLVideoElement>(null)
+  const playbackRef = useRef<ReelClipPlaybackHandle>(null)
   const commentsScrollRef = useRef<HTMLDivElement>(null)
   const [commentsFocused, setCommentsFocused] = useState(
     () => Boolean(openCommentsRef.current[pid])
@@ -111,7 +105,7 @@ export default function FeedReelDetailModal({
 
   useEffect(() => {
     return () => {
-      videoRef.current?.pause()
+      playbackRef.current?.pause()
     }
   }, [])
 
@@ -132,7 +126,7 @@ export default function FeedReelDetailModal({
 
   const splitMedia = (
     <DetailModalVideo
-      ref={videoRef}
+      ref={playbackRef}
       src={String(post.video_url)}
       poster={String(post.thumbnail_url)}
     />

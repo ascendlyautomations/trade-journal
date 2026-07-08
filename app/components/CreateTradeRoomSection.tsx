@@ -31,7 +31,7 @@ export default function CreateTradeRoomSection({
           type="button"
           onClick={onCreate}
           disabled={disabled || creating}
-          className="w-full rounded-xl bg-gradient-to-r from-blue-500 to-emerald-500 py-3 text-sm font-semibold text-white transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
+          className="w-full rounded-xl bg-blue-500 py-3 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-blue-500"
         >
           {creating ? "Creating…" : "Create Your Own Trade Room"}
         </button>

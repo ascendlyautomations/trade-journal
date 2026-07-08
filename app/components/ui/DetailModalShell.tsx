@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, type ReactNode } from "react"
 import ModalCloseButton from "./ModalCloseButton"
+import { useModalScrollLock } from "./modalLayout"
 
 /** Matches Navbar `h-16` / root layout `pt-16`. */
 export const NAVBAR_HEIGHT_CLASS = "top-16"
@@ -57,6 +58,8 @@ export default function DetailModalShell({
   zIndexClass = "z-[9000]",
   backdropClassName = "bg-black/70",
 }: DetailModalShellProps) {
+  useModalScrollLock(true)
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") onClose()
@@ -64,19 +67,6 @@ export default function DetailModalShell({
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
   }, [onClose])
-
-  useEffect(() => {
-    const html = document.documentElement
-    const body = document.body
-    const prevHtmlOverflow = html.style.overflow
-    const prevBodyOverflow = body.style.overflow
-    html.style.overflow = "hidden"
-    body.style.overflow = "hidden"
-    return () => {
-      html.style.overflow = prevHtmlOverflow
-      body.style.overflow = prevBodyOverflow
-    }
-  }, [])
 
   const stopPropagation = useCallback((e: React.MouseEvent) => {
     e.stopPropagation()

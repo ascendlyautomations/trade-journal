@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from "react"
+import { GoogleSignInButton, FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { supabase } from "@/lib/supabaseClient"
 import {
   ensureProfileForUser,
@@ -8,7 +9,6 @@ import {
 } from "@/lib/ensureProfileForUser"
 import { notifyAffiliateReferralAttribution } from "@/lib/notifyAffiliateReferralAttribution"
 import { useRouter } from "next/navigation"
-import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import AuthPasswordInput from "@/app/components/ui/AuthPasswordInput"
 import { isBetaReferralRef } from "@/lib/betaReferralCode"
@@ -608,14 +608,13 @@ export default function LoginPage() {
           </label>
         )}
 
-        <button
-          type="button"
+        <GoogleSignInButton
+          label={isLogin ? "sign-in" : "sign-up"}
           onClick={handleGoogleLogin}
-          disabled={googleLoading || loading || (!isLogin && !agreedToTerms)}
-          className="mb-4 w-full rounded-xl bg-white py-3 font-medium text-black transition hover:scale-105 disabled:cursor-not-allowed disabled:opacity-50 md:mb-3 md:py-2.5"
-        >
-          {googleLoading ? "Redirecting…" : "Continue with Google"}
-        </button>
+          disabled={loading || (!isLogin && !agreedToTerms)}
+          loading={googleLoading}
+          className="mb-4 md:mb-3"
+        />
 
         <div className="mb-4 text-center text-sm text-gray-400 md:mb-3">or</div>
 
@@ -667,7 +666,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-xl bg-gradient-to-r from-blue-500 to-teal-400 py-3 font-semibold transition hover:scale-105 disabled:opacity-60 disabled:hover:scale-100 md:py-2.5"
+              className="w-full rounded-xl bg-blue-500 py-3 font-semibold transition hover:bg-blue-600 hover:scale-105 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-blue-500 disabled:hover:scale-100 md:py-2.5"
             >
               {loading ? "Loading..." : "Login"}
             </button>
@@ -711,7 +710,7 @@ export default function LoginPage() {
                   type="button"
                   disabled={loading || !agreedToTerms}
                   onClick={(e) => void handleSignUp(e, "trial")}
-                  className="mt-4 w-full rounded-xl bg-gradient-to-r from-blue-500 to-teal-400 py-3 text-sm font-semibold text-white transition hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100 md:mt-3 md:py-2.5"
+                  className="mt-4 w-full rounded-xl bg-blue-500 py-3 text-sm font-semibold text-white transition hover:bg-blue-600 hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-blue-500 disabled:hover:scale-100 md:mt-3 md:py-2.5"
                 >
                   {loading ? "Loading..." : "Start Free Trial"}
                 </button>

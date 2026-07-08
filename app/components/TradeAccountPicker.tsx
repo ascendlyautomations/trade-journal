@@ -54,6 +54,7 @@ type Props = {
   /** Hide settings link (e.g. onboarding account creation). */
   hideManageAccounts?: boolean
   className?: string
+  triggerId?: string
 }
 
 export default function TradeAccountPicker({
@@ -65,6 +66,7 @@ export default function TradeAccountPicker({
   showExternalCreateButton = true,
   hideManageAccounts = false,
   className = "",
+  triggerId,
 }: Props) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
@@ -91,6 +93,7 @@ export default function TradeAccountPicker({
     >
       <div className="relative min-w-0 flex-1 trade-account-picker">
         <button
+          id={triggerId}
           type="button"
           onClick={() => setOpen(!open)}
           className={ACCOUNT_DROPDOWN_TRIGGER_CLASS}

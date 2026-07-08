@@ -22,6 +22,7 @@ import {
   submissionTitle,
 } from "@/lib/submissionFormStyles"
 import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
+import { useModalScrollLock } from "@/app/components/ui/modalLayout"
 import ImageCropModal from "@/app/components/ImageCropModal"
 import { useImageCropUpload } from "@/lib/useImageCropUpload"
 import { useUserProfile } from "@/lib/useUserProfile"
@@ -51,6 +52,7 @@ export default function BugReportModal({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
+  useModalScrollLock(open)
   const imageCrop = useImageCropUpload({
     preset: "content",
     onCropped: setScreenshot,

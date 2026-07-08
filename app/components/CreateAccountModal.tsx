@@ -16,7 +16,7 @@ import {
   type AccountType,
 } from "@/lib/createAccountForm"
 import type { TradingAccountPropFirmRules } from "@/lib/tradingAccounts"
-import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
+import ScrollableModalShell from "@/app/components/ui/ScrollableModalShell"
 import { cn } from "@/app/components/ui/cn"
 
 export type PropFirmRules = TradingAccountPropFirmRules
@@ -272,40 +272,66 @@ export default function CreateAccountModal({
   }
 
   return (
-    <div
-      className={cn(
-        "fixed inset-0 flex justify-center bg-black/60 p-4 backdrop-blur-sm",
-        overlayClassName ?? "z-[100]",
-        belowNavbarOnMobile
-          ? "items-start pt-[calc(4rem+1rem+6px)] md:items-center md:pt-4"
-          : "items-center"
-      )}
-      onClick={(e) => e.stopPropagation()}
+    <ScrollableModalShell
+      open={open}
+      onClose={handleCancel}
+      ariaLabel={heading}
+      belowNavbar={belowNavbarOnMobile}
+      closeDisabled={isSaving}
+      overlayClassName={cn("bg-black/60 backdrop-blur-sm", overlayClassName)}
+      backdropClassName="bg-transparent"
+      panelClassName="max-w-lg rounded-2xl border-white/10 bg-[#152238] sm:max-w-xl"
+      headerClassName="border-white/10 px-6 pb-4 pt-6"
+      bodyClassName="px-6"
+      footerClassName="border-white/10 px-6 py-4"
+      onOverlayClick={() => {}}
+      header={
+        <>
+          <h2
+            id="create-account-modal-title"
+            className="text-lg font-semibold text-emerald-300"
+          >
+            {heading}
+          </h2>
+          {subheading ? (
+            <p className="mt-1 text-sm leading-relaxed text-gray-400">
+              {subheading}
+            </p>
+          ) : null}
+        </>
+      }
+      footer={
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={handleCancel}
+            disabled={isSaving}
+            className="rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-medium text-gray-200 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleSave()}
+            disabled={isSaving || !name.trim()}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isSaving ? (
+              <>
+                <span
+                  className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent"
+                  aria-hidden
+                />
+                Saving…
+              </>
+            ) : (
+              primaryLabel
+            )}
+          </button>
+        </div>
+      }
     >
-      <div
-        className="relative w-full max-w-lg sm:max-w-xl rounded-2xl border border-white/10 bg-[#152238] p-6 text-gray-100 shadow-2xl max-h-[min(90vh,720px)] overflow-y-auto"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="create-account-modal-title"
-      >
-        <ModalCloseButton
-          onClick={handleCancel}
-          disabled={isSaving}
-          className="absolute right-4 top-4 z-10"
-        />
-        <h2
-          id="create-account-modal-title"
-          className="pr-12 text-lg font-semibold text-emerald-300"
-        >
-          {heading}
-        </h2>
-        {subheading ? (
-          <p className="mt-1 text-sm leading-relaxed text-gray-400">
-            {subheading}
-          </p>
-        ) : null}
-
-        <div className="mt-5 space-y-4">
+        <div className="space-y-4">
           <label className="block">
             <span className="text-xs text-gray-400">Account type</span>
             <select
@@ -545,36 +571,6 @@ export default function CreateAccountModal({
             </>
           )}
         </div>
-
-        <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <button
-            type="button"
-            onClick={handleCancel}
-            disabled={isSaving}
-            className="rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-medium text-gray-200 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleSave()}
-            disabled={isSaving || !name.trim()}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {isSaving ? (
-              <>
-                <span
-                  className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent"
-                  aria-hidden
-                />
-                Saving…
-              </>
-            ) : (
-              primaryLabel
-            )}
-          </button>
-        </div>
-      </div>
-    </div>
+    </ScrollableModalShell>
   )
 }

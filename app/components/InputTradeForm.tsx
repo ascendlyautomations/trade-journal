@@ -3,8 +3,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabaseClient"
-import { compressContentImage, CONTENT_IMAGE_CROP_PRESET } from "@/lib/contentImagePipeline"
-import { validateImageUpload } from "@/lib/uploadValidation"
+import { uploadContentImageToStorage, CONTENT_IMAGE_CROP_PRESET } from "@/lib/contentImagePipeline"
 import { consumeAppRateLimit } from "@/lib/consumeAppRateLimit"
 import {
   assertCanCreateTradingAccount,
@@ -49,7 +48,7 @@ import CommunitySharePreviewModal from "@/app/components/CommunitySharePreviewMo
 import TradePublicShareToggle from "@/app/components/TradePublicShareToggle"
 import TradeReelAttachment from "@/app/components/TradeReelAttachment"
 import ImageCropModal from "@/app/components/ImageCropModal"
-import { useImageCropUpload } from "@/lib/useImageCropUpload"
+import { useTradeImageCropUpload } from "@/lib/useTradeImageCropUpload"
 import TradeFormCurrencyInput from "@/app/components/trade/TradeFormCurrencyInput"
 import {
   getTradeFormCurrencyInputDisplayValue,
@@ -66,15 +65,11 @@ import {
   replaceTradeReelVideo,
   type ReelRow,
 } from "@/lib/reels"
-import { uploadToSupabaseStorageWithProgress } from "@/lib/supabaseStorageUploadWithProgress"
-import {
-  createMonotonicReporter,
-  mapUploadBytesToPercent,
-} from "@/lib/uploadProgress/reportProgress"
 import type { UploadProgressReporter } from "@/lib/uploadProgress/types"
 import { useUploadProgress } from "@/lib/uploadProgress/UploadProgressProvider"
 import { postImageSrc } from "@/app/components/feed/feedPostHelpers"
-import { ConfirmModal, FeedbackModal, useDeleteReelConfirmation, useFeedbackPopup } from "@/app/components/ui"
+import { ConfirmModal, FeedbackModal, Modal, useDeleteReelConfirmation, useFeedbackPopup } from "@/app/components/ui"
+import ScrollableModalShell from "@/app/components/ui/ScrollableModalShell"
 import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
 import { formatAccountNameWithSizeDisplay } from "@/lib/tradeAccountDisplay"
 import {
@@ -176,17 +171,6 @@ export default function InputTradeForm({
     setSubmitting(false)
   }
 
-  const [inputSettings, setInputSettings] = useState({
-    showRR: true,
-    showPoints: true,
-    showContracts: true,
-    showEntryExit: true,
-    showPsychology: true,
-    showMistakes: true,
-    showContext: true,
-    showNotes: true,
-  })
-
   const [emotion, setEmotion] = useState("")
   const [followedPlan, setFollowedPlan] = useState(false)
   const [mistakeType, setMistakeType] = useState("")
@@ -223,8 +207,7 @@ export default function InputTradeForm({
   const [postToFeed, setPostToFeed] = useState(false)
   const [isPublic, setIsPublic] = useState(false)
   const [image, setImage] = useState<File | null>(null)
-  const imageCrop = useImageCropUpload({
-    preset: CONTENT_IMAGE_CROP_PRESET,
+  const imageCrop = useTradeImageCropUpload({
     onCropped: setImage,
     onValidationError: (message) =>
       showPopup(persistentError("Invalid Image", message)),
@@ -740,45 +723,22 @@ export default function InputTradeForm({
     let screenshotUrl: string | null = null
 
     if (image) {
-      const imageValidationError = validateImageUpload(image)
-      if (imageValidationError) {
-        showPopup(persistentError("Invalid Image", imageValidationError))
-        throw new Error(imageValidationError)
+      const uploaded = await uploadContentImageToStorage(supabase, userId, image, {
+        onProgress: report,
+        uploadProgressRange: { start: 20, end: 62 },
+      })
+      if (uploaded.error) {
+        showPopup(
+          persistentError(
+            uploaded.error.includes("image") || uploaded.error.includes("Image")
+              ? "Invalid Image"
+              : "Upload Failed",
+            uploaded.error
+          )
+        )
+        throw new Error(uploaded.error)
       }
-
-      report({ percent: 10, stage: "Processing image…" })
-
-      let uploadFile: File = image
-      if (image.type?.startsWith("image/")) {
-        uploadFile = await compressContentImage(image)
-      }
-      const fileName = `${userId}/${Date.now()}-${uploadFile.name}`
-
-      report({ percent: 18, stage: "Uploading media…" })
-      const mediaReport = createMonotonicReporter(report, { min: 18, max: 62 })
-      const { error: upErr } = await uploadToSupabaseStorageWithProgress(
-        supabase,
-        {
-          bucket: "screenshots",
-          path: fileName,
-          file: uploadFile,
-          contentType: uploadFile.type || "image/jpeg",
-          onProgress: (loaded, total) => {
-            mediaReport({
-              percent: mapUploadBytesToPercent(loaded, total, {
-                start: 20,
-                end: 62,
-              }),
-              stage: "Uploading media…",
-            })
-          },
-        }
-      )
-      if (upErr) {
-        console.error("Upload error:", upErr)
-        throw new Error(upErr)
-      }
-      screenshotUrl = fileName
+      screenshotUrl = uploaded.path
     } else {
       report({ percent: 35, stage: "Saving trade…" })
     }
@@ -1762,78 +1722,68 @@ export default function InputTradeForm({
           </div>
           </div>
 
-          {(inputSettings.showRR || inputSettings.showPoints) && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2">
-              {inputSettings.showRR && (
-                <div>
-                  <label className={fieldLabelClass}>Risk Reward</label>
-                  <input
-                    placeholder="e.g. 2.5"
-                    type="text"
-                    tabIndex={6}
-                    value={rr}
-                    onChange={(e) =>
-                      handleTradeNumericInput(e.target.value, setRR, {
-                        allowDecimal: true,
-                        onDecimalError: setDecimalError,
-                      })
-                    }
-                    className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
-                  />
-                </div>
-              )}
-              {inputSettings.showPoints && (
-                <div>
-                  <label className={fieldLabelClass}>Points</label>
-                  <input
-                    placeholder="e.g. 15.5"
-                    type="text"
-                    tabIndex={7}
-                    value={getTradeFormCurrencyInputDisplayValue(points)}
-                    onChange={(e) =>
-                      handleTradeNumericInput(e.target.value, setPoints, {
-                        allowDecimal: true,
-                        allowNegative: true,
-                        onDecimalError: setDecimalError,
-                      })
-                    }
-                    className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
-                  />
-                </div>
-              )}
-            </div>
-          )}
-
-          {inputSettings.showContracts && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2">
             <div>
-              <label className={fieldLabelClass}>Contracts</label>
+              <label className={fieldLabelClass}>Risk Reward</label>
               <input
-                placeholder="e.g. 4"
+                placeholder="e.g. 2.5"
                 type="text"
-                tabIndex={8}
-                value={formatWithCommas(contracts)}
+                tabIndex={6}
+                value={rr}
                 onChange={(e) =>
-                  handleTradeNumericInput(e.target.value, setContracts, {
+                  handleTradeNumericInput(e.target.value, setRR, {
+                    allowDecimal: true,
                     onDecimalError: setDecimalError,
                   })
                 }
                 className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
               />
             </div>
-          )}
-
-          {inputSettings.showNotes && (
             <div>
-              <label className={fieldLabelClass}>Top Confluences</label>
-              <textarea
-                placeholder="What confirmations led to this trade?"
-                tabIndex={9}
-                value={confluences}
-                onChange={(e) => setConfluences(e.target.value)}
-                className="w-full p-2 lg:p-2.5 h-20 lg:h-24 rounded bg-[#0f172a] border border-white/10"
+              <label className={fieldLabelClass}>Points</label>
+              <input
+                placeholder="e.g. 15.5"
+                type="text"
+                tabIndex={7}
+                value={getTradeFormCurrencyInputDisplayValue(points)}
+                onChange={(e) =>
+                  handleTradeNumericInput(e.target.value, setPoints, {
+                    allowDecimal: true,
+                    allowNegative: true,
+                    onDecimalError: setDecimalError,
+                  })
+                }
+                className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
               />
             </div>
-          )}
+          </div>
+
+          <div>
+            <label className={fieldLabelClass}>Contracts</label>
+            <input
+              placeholder="e.g. 4"
+              type="text"
+              tabIndex={8}
+              value={formatWithCommas(contracts)}
+              onChange={(e) =>
+                handleTradeNumericInput(e.target.value, setContracts, {
+                  onDecimalError: setDecimalError,
+                })
+              }
+              className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
+            />
+          </div>
+
+          <div>
+            <label className={fieldLabelClass}>Top Confluences</label>
+            <textarea
+              placeholder="What confirmations led to this trade?"
+              tabIndex={9}
+              value={confluences}
+              onChange={(e) => setConfluences(e.target.value)}
+              className="w-full p-2 lg:p-2.5 h-20 lg:h-24 rounded bg-[#0f172a] border border-white/10"
+            />
+          </div>
 
           </div>
         </div>
@@ -1841,143 +1791,133 @@ export default function InputTradeForm({
         <div className="px-4 pb-4 pt-3 rounded-xl bg-[#0b1220]/60 border border-white/5">
           <h3 className="text-sm text-gray-400 mb-2">Execution</h3>
           <div className="space-y-2">
-          {inputSettings.showEntryExit && (
-            <div className="space-y-2 mb-4">
-              <div>
-                <label className={fieldLabelClass}>Entry Price</label>
-                <TradeFormCurrencyInput
-                  value={entryPrice}
-                  onChange={setEntryPrice}
-                  onDecimalError={setDecimalError}
-                  tabIndex={inputSettings.showNotes ? 10 : 9}
-                  inputClassName="w-full pl-8 pr-3 py-2 rounded bg-[#0f172a] border border-white/10 focus:border-green-500 outline-none"
-                />
-              </div>
-              <div>
-                <label className={fieldLabelClass}>Exit Price</label>
-                <TradeFormCurrencyInput
-                  value={exitPrice}
-                  onChange={setExitPrice}
-                  onDecimalError={setDecimalError}
-                  tabIndex={inputSettings.showNotes ? 11 : 10}
-                  inputClassName="w-full pl-8 pr-3 py-2 rounded bg-[#0f172a] border border-white/10 focus:border-green-500 outline-none"
-                />
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2">
-                <div>
-                  <label className={fieldLabelClass}>Entry Date</label>
-                  <div
-                    className="relative w-full cursor-pointer"
-                    onClick={() => entryDateRef.current?.showPicker?.()}
-                  >
-                    <input
-                      ref={entryDateRef}
-                      id="entry-date"
-                      type="date"
-                      tabIndex={inputSettings.showNotes ? 12 : 11}
-                      value={entryDate}
-                      onChange={(e) => handleEntryDateChange(e.target.value)}
-                      className="w-full p-2 pr-10 rounded bg-[#0f172a] border border-white/10 text-white"
-                    />
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-white pointer-events-none">
-                      📅
-                    </div>
-                  </div>
-                </div>
-                <div>
-                  <label className={fieldLabelClass}>Entry Time</label>
-                  <div
-                    className="relative w-full cursor-pointer"
-                    onClick={() =>
-                      (
-                        document.getElementById("entry-time") as HTMLInputElement | null
-                      )?.showPicker?.()
-                    }
-                  >
-                    <input
-                      id="entry-time"
-                      type="time"
-                      tabIndex={inputSettings.showNotes ? 13 : 12}
-                      value={entryTime}
-                      onChange={(e) => setEntryTime(e.target.value)}
-                      className="w-full p-2 pr-10 rounded bg-[#0f172a] border border-white/10 text-white"
-                    />
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-white pointer-events-none">
-                      🕒
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2">
-                <div>
-                  <label className={fieldLabelClass}>Exit Date</label>
-                  <div
-                    className="relative w-full cursor-pointer"
-                    onClick={() => exitDateRef.current?.showPicker?.()}
-                  >
-                    <input
-                      ref={exitDateRef}
-                      id="exit-date"
-                      type="date"
-                      tabIndex={inputSettings.showNotes ? 14 : 13}
-                      value={exitDate}
-                      onChange={(e) => handleExitDateChange(e.target.value)}
-                      className="w-full p-2 pr-10 rounded bg-[#0f172a] border border-white/10 text-white"
-                    />
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-white pointer-events-none">
-                      📅
-                    </div>
-                  </div>
-                </div>
-                <div>
-                  <label className={fieldLabelClass}>Exit Time</label>
-                  <div
-                    className="relative w-full cursor-pointer"
-                    onClick={() =>
-                      (
-                        document.getElementById("exit-time") as HTMLInputElement | null
-                      )?.showPicker?.()
-                    }
-                  >
-                    <input
-                      id="exit-time"
-                      type="time"
-                      tabIndex={inputSettings.showNotes ? 15 : 14}
-                      value={exitTime}
-                      onChange={(e) => setExitTime(e.target.value)}
-                      className="w-full p-2 pr-10 rounded bg-[#0f172a] border border-white/10 text-white"
-                    />
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-white pointer-events-none">
-                      🕒
-                    </div>
-                  </div>
-                </div>
-              </div>
-              {duration && (
-                <p className="text-xs text-gray-400">
-                  Duration: {duration}
-                </p>
-              )}
-              {invalidTimeRange && (
-                <p className="text-xs text-red-400">
-                  Exit date and time must be after entry date and time
-                </p>
-              )}
+          <div className="space-y-2 mb-4">
+            <div>
+              <label className={fieldLabelClass}>Entry Price</label>
+              <TradeFormCurrencyInput
+                value={entryPrice}
+                onChange={setEntryPrice}
+                onDecimalError={setDecimalError}
+                tabIndex={10}
+                inputClassName="w-full pl-8 pr-3 py-2 rounded bg-[#0f172a] border border-white/10 focus:border-green-500 outline-none"
+              />
             </div>
-          )}
+            <div>
+              <label className={fieldLabelClass}>Exit Price</label>
+              <TradeFormCurrencyInput
+                value={exitPrice}
+                onChange={setExitPrice}
+                onDecimalError={setDecimalError}
+                tabIndex={11}
+                inputClassName="w-full pl-8 pr-3 py-2 rounded bg-[#0f172a] border border-white/10 focus:border-green-500 outline-none"
+              />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2">
+              <div>
+                <label className={fieldLabelClass}>Entry Date</label>
+                <div
+                  className="relative w-full cursor-pointer"
+                  onClick={() => entryDateRef.current?.showPicker?.()}
+                >
+                  <input
+                    ref={entryDateRef}
+                    id="entry-date"
+                    type="date"
+                    tabIndex={12}
+                    value={entryDate}
+                    onChange={(e) => handleEntryDateChange(e.target.value)}
+                    className="w-full p-2 pr-10 rounded bg-[#0f172a] border border-white/10 text-white"
+                  />
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 text-white pointer-events-none">
+                    📅
+                  </div>
+                </div>
+              </div>
+              <div>
+                <label className={fieldLabelClass}>Entry Time</label>
+                <div
+                  className="relative w-full cursor-pointer"
+                  onClick={() =>
+                    (
+                      document.getElementById("entry-time") as HTMLInputElement | null
+                    )?.showPicker?.()
+                  }
+                >
+                  <input
+                    id="entry-time"
+                    type="time"
+                    tabIndex={13}
+                    value={entryTime}
+                    onChange={(e) => setEntryTime(e.target.value)}
+                    className="w-full p-2 pr-10 rounded bg-[#0f172a] border border-white/10 text-white"
+                  />
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 text-white pointer-events-none">
+                    🕒
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2">
+              <div>
+                <label className={fieldLabelClass}>Exit Date</label>
+                <div
+                  className="relative w-full cursor-pointer"
+                  onClick={() => exitDateRef.current?.showPicker?.()}
+                >
+                  <input
+                    ref={exitDateRef}
+                    id="exit-date"
+                    type="date"
+                    tabIndex={14}
+                    value={exitDate}
+                    onChange={(e) => handleExitDateChange(e.target.value)}
+                    className="w-full p-2 pr-10 rounded bg-[#0f172a] border border-white/10 text-white"
+                  />
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 text-white pointer-events-none">
+                    📅
+                  </div>
+                </div>
+              </div>
+              <div>
+                <label className={fieldLabelClass}>Exit Time</label>
+                <div
+                  className="relative w-full cursor-pointer"
+                  onClick={() =>
+                    (
+                      document.getElementById("exit-time") as HTMLInputElement | null
+                    )?.showPicker?.()
+                  }
+                >
+                  <input
+                    id="exit-time"
+                    type="time"
+                    tabIndex={15}
+                    value={exitTime}
+                    onChange={(e) => setExitTime(e.target.value)}
+                    className="w-full p-2 pr-10 rounded bg-[#0f172a] border border-white/10 text-white"
+                  />
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 text-white pointer-events-none">
+                    🕒
+                  </div>
+                </div>
+              </div>
+            </div>
+            {duration && (
+              <p className="text-xs text-gray-400">
+                Duration: {duration}
+              </p>
+            )}
+            {invalidTimeRange && (
+              <p className="text-xs text-red-400">
+                Exit date and time must be after entry date and time
+              </p>
+            )}
+          </div>
 
           <div className="mt-0">
             <label className={fieldLabelClass}>Public Description</label>
             <textarea
-              tabIndex={
-                inputSettings.showEntryExit
-                  ? inputSettings.showNotes
-                    ? 16
-                    : 15
-                  : inputSettings.showNotes
-                    ? 10
-                    : 9
-              }
+              tabIndex={16}
               value={publicDescription}
               onChange={(e) => setPublicDescription(e.target.value)}
               placeholder="Insert public thoughts..."
@@ -2000,15 +1940,7 @@ export default function InputTradeForm({
           <div>
             <label className={fieldLabelClass}>Confidence</label>
             <select
-              tabIndex={
-                inputSettings.showEntryExit
-                  ? inputSettings.showNotes
-                    ? 18
-                    : 17
-                  : inputSettings.showNotes
-                    ? 12
-                    : 11
-              }
+              tabIndex={18}
               value={confidence}
               onChange={(e) => setConfidence(e.target.value)}
               className="w-full p-2 lg:p-2.5 bg-[#0f172a] border border-white/10 rounded"
@@ -2024,15 +1956,7 @@ export default function InputTradeForm({
           <div>
             <label className={fieldLabelClass}>Timeframe</label>
             <select
-              tabIndex={
-                inputSettings.showEntryExit
-                  ? inputSettings.showNotes
-                    ? 21
-                    : 20
-                  : inputSettings.showNotes
-                    ? 15
-                    : 14
-              }
+              tabIndex={21}
               value={timeframe}
               onChange={(e) => setTimeframe(e.target.value)}
               className="w-full p-2 lg:p-2.5 bg-[#0f172a] border border-white/10 rounded"
@@ -2053,15 +1977,7 @@ export default function InputTradeForm({
           <div>
             <label className={fieldLabelClass}>Emotion</label>
             <select
-              tabIndex={
-                inputSettings.showEntryExit
-                  ? inputSettings.showNotes
-                    ? 19
-                    : 18
-                  : inputSettings.showNotes
-                    ? 13
-                    : 12
-              }
+              tabIndex={19}
               value={emotion}
               onChange={(e) => setEmotion(e.target.value)}
               className="w-full p-2 lg:p-2.5 bg-[#0f172a] border border-white/10 rounded"
@@ -2081,15 +1997,7 @@ export default function InputTradeForm({
             <label className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
-                tabIndex={
-                  inputSettings.showEntryExit
-                    ? inputSettings.showNotes
-                      ? 22
-                      : 21
-                    : inputSettings.showNotes
-                      ? 16
-                      : 15
-                }
+                tabIndex={22}
                 checked={followedPlan}
                 onChange={(e) => setFollowedPlan(e.target.checked)}
               />
@@ -2098,15 +2006,7 @@ export default function InputTradeForm({
             <label className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
-                tabIndex={
-                  inputSettings.showEntryExit
-                    ? inputSettings.showNotes
-                      ? 23
-                      : 22
-                    : inputSettings.showNotes
-                      ? 17
-                      : 16
-                }
+                tabIndex={23}
                 checked={newsEvent}
                 onChange={(e) => setNewsEvent(e.target.checked)}
               />
@@ -2116,15 +2016,7 @@ export default function InputTradeForm({
           <div>
             <label className={fieldLabelClass}>Market</label>
             <select
-              tabIndex={
-                inputSettings.showEntryExit
-                  ? inputSettings.showNotes
-                    ? 20
-                    : 19
-                  : inputSettings.showNotes
-                    ? 14
-                    : 13
-              }
+              tabIndex={20}
               value={market}
               onChange={(e) => setMarket(e.target.value)}
               className="w-full p-2 lg:p-2.5 bg-[#0f172a] border border-white/10 rounded"
@@ -2145,15 +2037,7 @@ export default function InputTradeForm({
             <label className={fieldLabelClass}>Psychology Notes</label>
             <textarea
               placeholder="What were you thinking in the moment?"
-              tabIndex={
-                inputSettings.showEntryExit
-                  ? inputSettings.showNotes
-                    ? 24
-                    : 23
-                  : inputSettings.showNotes
-                    ? 18
-                    : 17
-              }
+              tabIndex={24}
               value={psychologyNotes}
               onChange={(e) => setPsychologyNotes(e.target.value)}
               className="w-full p-2 lg:p-2.5 h-20 lg:h-24 xl:h-28 rounded bg-[#0f172a] border border-white/10 text-white"
@@ -2163,15 +2047,7 @@ export default function InputTradeForm({
           <div>
             <label className={fieldLabelClass}>Screenshot</label>
             <div
-              tabIndex={
-                inputSettings.showEntryExit
-                  ? inputSettings.showNotes
-                    ? 25
-                    : 24
-                  : inputSettings.showNotes
-                    ? 19
-                    : 18
-              }
+              tabIndex={25}
               onClick={handleClickUpload}
               onDrop={handleDrop}
               onDragOver={(e) => e.preventDefault()}
@@ -2213,15 +2089,7 @@ export default function InputTradeForm({
 
           <button
             type="button"
-            tabIndex={
-              inputSettings.showEntryExit
-                ? inputSettings.showNotes
-                  ? 26
-                  : 25
-                : inputSettings.showNotes
-                  ? 20
-                  : 19
-            }
+            tabIndex={26}
             disabled={
               submitting ||
               invalidFutureDate ||
@@ -2279,11 +2147,24 @@ export default function InputTradeForm({
     setEditingAccount(null)
   }
 
-  const settingsModal = showSettings && (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[110]">
-      <div className="bg-[#0f172a] border border-white/10 rounded-xl p-6 w-[min(440px,92vw)] space-y-4 max-h-[90vh] overflow-y-auto">
-        <h2 className="text-lg font-semibold text-white">Input Settings</h2>
-        <div className="rounded-lg border border-white/10 bg-white/5 p-3 space-y-2">
+  const settingsModal = (
+    <Modal
+      open={showSettings}
+      onClose={() => setShowSettings(false)}
+      title="Account Settings"
+      size="sm"
+      panelClassName="w-[min(440px,92vw)]"
+      footer={
+        <button
+          type="button"
+          onClick={() => setShowSettings(false)}
+          className="w-full rounded-lg bg-blue-500 py-2 font-semibold text-white transition hover:bg-blue-600"
+        >
+          Done
+        </button>
+      }
+    >
+      <div className="rounded-lg border border-white/10 bg-white/5 p-3 space-y-2">
           <p className="text-sm font-medium text-white">Accounts</p>
           <p className="text-xs text-gray-500">
             Inactive accounts stay linked to trades but are hidden from the account picker.
@@ -2407,40 +2288,7 @@ export default function InputTradeForm({
             </>
           )}
         </div>
-        {Object.entries(inputSettings).map(([key, value]) => (
-          <div key={key} className="flex items-center justify-between">
-            <span className="text-sm text-gray-300 capitalize">
-              {key.replace("show", "")}
-            </span>
-            <button
-              type="button"
-              onClick={() =>
-                setInputSettings((prev) => ({
-                  ...prev,
-                  [key]: !prev[key as keyof typeof prev],
-                }))
-              }
-              className={`w-12 h-6 flex items-center rounded-full p-1 transition ${
-                value ? "bg-emerald-500" : "bg-red-500"
-              }`}
-            >
-              <div
-                className={`bg-white w-4 h-4 rounded-full shadow-md transform transition ${
-                  value ? "translate-x-6" : "translate-x-0"
-                }`}
-              />
-            </button>
-          </div>
-        ))}
-        <button
-          type="button"
-          onClick={() => setShowSettings(false)}
-          className="w-full bg-blue-500 hover:bg-blue-600 py-2 rounded font-semibold mt-4"
-        >
-          Done
-        </button>
-      </div>
-    </div>
+    </Modal>
   )
 
   const feedbackModal = <FeedbackModal {...feedbackModalProps} />
@@ -2472,19 +2320,18 @@ export default function InputTradeForm({
   if (showAsModal) {
     return (
       <>
-        <div
-          className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 overflow-y-auto py-4 md:py-6 px-3 sm:px-4 lg:px-6"
-          onClick={() => onClose?.()}
-          role="presentation"
-        >
-          <div
-            className="w-full max-w-md md:max-w-4xl xl:max-w-7xl mx-auto rounded-xl p-4 md:p-6 lg:p-7 bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100 shadow-xl max-h-[92vh] overflow-y-auto my-auto translate-y-5"
-            onClick={(e) => e.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="input-trade-modal-title"
-          >
-            <div className="flex justify-between items-center gap-4 mb-2">
+        <ScrollableModalShell
+          open
+          onClose={() => onClose?.()}
+          ariaLabel="Edit Trade"
+          showCloseButton={false}
+          overlayClassName="z-50 bg-black/70 py-4 backdrop-blur-sm md:py-6"
+          backdropClassName="bg-transparent"
+          panelClassName="max-w-md rounded-xl bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] md:max-w-4xl xl:max-w-7xl"
+          headerClassName="border-white/10 px-4 py-3 md:px-6 lg:px-7"
+          bodyClassName="px-4 md:px-6 lg:px-7"
+          header={
+            <div className="flex items-center justify-between gap-4">
               <h2
                 id="input-trade-modal-title"
                 className="text-xl font-semibold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent"
@@ -2493,9 +2340,10 @@ export default function InputTradeForm({
               </h2>
               <ModalCloseButton onClick={() => onClose?.()} />
             </div>
-            {formBody}
-          </div>
-        </div>
+          }
+        >
+          {formBody}
+        </ScrollableModalShell>
         {settingsModal}
         {feedbackModal}
         {deleteAttachedReelModal}

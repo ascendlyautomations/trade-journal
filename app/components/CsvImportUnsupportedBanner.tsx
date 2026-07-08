@@ -22,7 +22,7 @@ export default function CsvImportUnsupportedBanner({ brokerHint, className = "" 
       </p>
       <Link
         href={csvSupportUrl(brokerHint)}
-        className="mt-4 inline-flex w-full items-center justify-center rounded-xl bg-gradient-to-r from-blue-500 to-teal-400 px-4 py-2.5 text-center font-semibold text-white transition hover:scale-[1.01] sm:w-auto"
+        className="mt-4 inline-flex w-full items-center justify-center rounded-xl bg-blue-500 px-4 py-2.5 text-center font-semibold text-white transition hover:bg-blue-600 hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-blue-500 sm:w-auto"
       >
         Submit CSV Sample
       </Link>

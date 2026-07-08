@@ -16,7 +16,7 @@ export default function AffiliatePayoutSetupRefreshPage() {
           <div className="mt-6 flex flex-wrap justify-center gap-3">
             <Link
               href="/payouts"
-              className="inline-block rounded-lg bg-gradient-to-r from-emerald-500 to-blue-500 px-5 py-2.5 text-sm font-semibold text-white"
+              className="inline-block rounded-lg bg-blue-500 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-600"
             >
               Payouts
             </Link>

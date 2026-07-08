@@ -1219,7 +1219,7 @@ export default function SettingsPage() {
                   type="button"
                   onClick={() => void saveProfileTab()}
                   disabled={savingProfile || invalidStartedTradingDate}
-                  className="w-full rounded-xl bg-gradient-to-r from-blue-500 to-emerald-500 py-3 font-semibold disabled:opacity-50"
+                  className="w-full rounded-xl bg-blue-500 py-3 font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-blue-500"
                 >
                   {savingProfile ? "Saving…" : "Save Profile"}
                 </button>
@@ -1251,7 +1251,7 @@ export default function SettingsPage() {
                       className={
                         affiliateApplicationLocked
                           ? "shrink-0 rounded-xl bg-white/10 px-4 py-2 text-sm font-semibold text-white/60 hover:bg-white/15"
-                          : "shrink-0 rounded-xl bg-gradient-to-r from-emerald-500 to-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-lg hover:opacity-95"
+                          : "shrink-0 rounded-xl bg-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-lg transition hover:bg-blue-600 disabled:hover:bg-blue-500"
                       }
                     >
                       {affiliateApplicationLocked
@@ -1395,7 +1395,7 @@ export default function SettingsPage() {
                       <button
                         type="button"
                         onClick={() => setShowCreatePasswordModal(true)}
-                        className="mt-4 w-full rounded-xl bg-gradient-to-r from-blue-500 to-emerald-500 py-3 font-semibold disabled:opacity-50"
+                        className="mt-4 w-full rounded-xl bg-blue-500 py-3 font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-blue-500"
                       >
                         Create password
                       </button>
@@ -1442,7 +1442,7 @@ export default function SettingsPage() {
                         type="button"
                         onClick={() => void updatePassword()}
                         disabled={savingPassword}
-                        className="mt-4 w-full rounded-xl bg-gradient-to-r from-blue-500 to-emerald-500 py-3 font-semibold disabled:opacity-50"
+                        className="mt-4 w-full rounded-xl bg-blue-500 py-3 font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-blue-500"
                       >
                         {savingPassword ? "Updating…" : "Update password"}
                       </button>
@@ -1488,7 +1488,7 @@ export default function SettingsPage() {
                         type="button"
                         onClick={() => void updatePassword()}
                         disabled={savingPassword}
-                        className="mt-4 w-full rounded-xl bg-gradient-to-r from-blue-500 to-emerald-500 py-3 font-semibold disabled:opacity-50"
+                        className="mt-4 w-full rounded-xl bg-blue-500 py-3 font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-blue-500"
                       >
                         {savingPassword ? "Updating…" : "Update password"}
                       </button>
@@ -1713,7 +1713,7 @@ export default function SettingsPage() {
                       type="button"
                       onClick={() => void startTraxProCheckout()}
                       disabled={checkoutLoading}
-                      className="mt-4 w-full rounded-xl bg-gradient-to-r from-blue-500 to-emerald-500 py-3 font-semibold disabled:opacity-50"
+                      className="mt-4 w-full rounded-xl bg-blue-500 py-3 font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-blue-500"
                     >
                       {checkoutLoading ? "Redirecting…" : `Upgrade to ${TRADETRAXS_PRO_PLAN.name}`}
                     </button>

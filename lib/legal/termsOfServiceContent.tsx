@@ -109,26 +109,56 @@ export const TERMS_OF_SERVICE_SECTIONS: LegalSection[] = [
     content: (
       <>
         <p>
-          &quot;User Content&quot; means content you submit, including trades, notes, screenshots,
-          posts, comments, messages, room messages, profile information, and feedback.
+          &quot;User Content&quot; means content you submit to the Service, including trades,
+          notes, images, videos, chart screenshots, reels, posts, comments, messages, room
+          messages, profile information, and feedback.
         </p>
         <p>
-          You retain ownership of your User Content. By submitting User Content, you grant{" "}
-          {LEGAL_ENTITY_NAME} a worldwide, non-exclusive, royalty-free license to host, store,
-          reproduce, display, distribute, and adapt it solely to operate, improve, and promote the
-          Service — including showing public content to other users as you direct through product
-          features.
+          <strong>You retain ownership of your User Content.</strong> TradeTraxs does not claim
+          ownership of material you upload.
         </p>
-        <p>You represent that:</p>
+        <p>
+          By uploading or submitting User Content, you represent and warrant that you{" "}
+          <strong>own the content</strong> or <strong>have all necessary permission</strong> to
+          upload, share, and display it on the Service.
+        </p>
+        <p>
+          You are solely responsible for your User Content, including but not limited to:
+        </p>
         <ul>
-          <li>You have the rights to submit User Content;</li>
-          <li>Your content does not violate law or third-party rights;</li>
-          <li>Public trade claims you make are truthful to the best of your knowledge; and</li>
-          <li>You will not upload malware, spam, or deceptive content.</li>
+          <li>Images and chart screenshots;</li>
+          <li>Videos and reels;</li>
+          <li>Posts, comments, and messages; and</li>
+          <li>Any other media or text you submit.</li>
         </ul>
         <p>
-          We may remove or restrict User Content that violates these Terms or applicable law, or
-          that we reasonably believe harms the community, without prior notice in urgent cases.
+          By submitting User Content, you grant {LEGAL_ENTITY_NAME} a worldwide, non-exclusive,
+          royalty-free license to host, store, reproduce, display, distribute, and adapt it solely
+          to operate, improve, and promote the Service — including showing public content to other
+          users as you direct through product features.
+        </p>
+        <p>You further represent that your User Content:</p>
+        <ul>
+          <li>Does not violate applicable law or third-party rights;</li>
+          <li>Public trade claims you make are truthful to the best of your knowledge; and</li>
+          <li>Does not include malware, spam, or deceptive content.</li>
+        </ul>
+        <p>
+          {LEGAL_ENTITY_NAME} reserves the right to remove or restrict User Content that, in our
+          reasonable judgment:
+        </p>
+        <ul>
+          <li>Infringes copyright or other intellectual property rights;</li>
+          <li>Infringes trademarks or other proprietary rights;</li>
+          <li>Violates applicable law; or</li>
+          <li>Violates these Terms or our{" "}
+            <Link href="/community-guidelines">Community Guidelines</Link>.
+          </li>
+        </ul>
+        <p>
+          We may take these actions without prior notice in urgent cases. Copyright owners may
+          report alleged infringement as described in our{" "}
+          <Link href="/copyright">Copyright &amp; DMCA Policy</Link>.
         </p>
       </>
     ),

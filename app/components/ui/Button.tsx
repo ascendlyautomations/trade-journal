@@ -3,24 +3,20 @@
 import type { ButtonHTMLAttributes } from "react"
 import { cn } from "./cn"
 
-export type ButtonVariant =
-  | "primary"
-  | "secondary"
-  | "accent"
-  | "gradient"
-  | "ghost"
+export type ButtonVariant = "primary" | "secondary" | "accent" | "ghost"
 
 export type ButtonSize = "sm" | "md" | "lg"
 
+/** Solid primary fill/hover — compose with padding/radius at call sites. */
+export const SOLID_PRIMARY_BUTTON_CORE =
+  "bg-blue-500 text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-blue-500"
+
 const variantClasses: Record<ButtonVariant, string> = {
-  primary:
-    "bg-blue-500 text-white hover:bg-blue-600 disabled:hover:bg-blue-500",
+  primary: SOLID_PRIMARY_BUTTON_CORE,
   secondary:
     "border border-white/10 bg-white/5 text-gray-100 hover:bg-white/10 disabled:hover:bg-white/5",
   accent:
     "bg-emerald-500 text-white hover:bg-emerald-600 disabled:hover:bg-emerald-500",
-  gradient:
-    "bg-gradient-to-r from-blue-500 to-teal-400 text-white hover:opacity-95 disabled:hover:opacity-100",
   ghost:
     "bg-transparent text-gray-300 hover:text-white hover:bg-white/5 disabled:hover:bg-transparent",
 }

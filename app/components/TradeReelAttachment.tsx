@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import ReelNativeVideoThumb from "@/app/components/ReelNativeVideoThumb"
+import ReelVideoPosterFrame from "@/app/components/ReelVideoPosterFrame"
 import ReelVideoFilePreview from "@/app/components/ReelVideoFilePreview"
 import type { ReelRow } from "@/lib/reels"
 import {
@@ -11,7 +11,6 @@ import {
 import {
   readReelVideoMetadata,
   REEL_MAX_DURATION_LABEL,
-  isReelVideoMediaUrl,
   validateReelVideoFile,
 } from "@/lib/reelVideo"
 
@@ -132,18 +131,11 @@ export default function TradeReelAttachment({
         <div className="mt-2 space-y-3">
           <div className="flex items-center gap-3">
             <div className="relative h-20 w-14 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-black/40">
-              {isReelVideoMediaUrl(attachedReel.thumbnail_url) ? (
-                <ReelNativeVideoThumb
-                  src={attachedReel.thumbnail_url}
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                <img
-                  src={attachedReel.thumbnail_url}
-                  alt=""
-                  className="h-full w-full object-cover"
-                />
-              )}
+              <ReelVideoPosterFrame
+                thumbnailUrl={attachedReel.thumbnail_url}
+                videoUrl={attachedReel.video_url}
+                className="h-full w-full object-cover"
+              />
               {attachedReel.duration_seconds != null ? (
                 <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1 text-[9px] text-white tabular-nums">
                   {formatDuration(attachedReel.duration_seconds)}

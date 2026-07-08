@@ -3,6 +3,7 @@
 import { useEffect } from "react"
 import { createPortal } from "react-dom"
 import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
+import { useModalScrollLock } from "@/app/components/ui/modalLayout"
 
 type SectionRow = { id: string; name?: string | null }
 
@@ -31,14 +32,7 @@ export default function RoomNotificationSettingsSheet({
   onToggleRoomLevel,
   onToggleChannel,
 }: RoomNotificationSettingsSheetProps) {
-  useEffect(() => {
-    if (!open) return
-    const prev = document.body.style.overflow
-    document.body.style.overflow = "hidden"
-    return () => {
-      document.body.style.overflow = prev
-    }
-  }, [open])
+  useModalScrollLock(open)
 
   useEffect(() => {
     if (!open) return

@@ -85,14 +85,46 @@ export const ACCEPTABLE_USE_POLICY_SECTIONS: LegalSection[] = [
     ),
   },
   {
-    id: "malicious-uploads",
-    title: "No Malicious Uploads",
+    id: "intellectual-property-violations",
+    title: "Intellectual Property Violations",
     content: (
-      <p>
-        Do not upload malware, exploit code, or files intended to harm users, systems, or third
-        parties. Do not attempt to bypass security controls or access data you are not authorized
-        to view.
-      </p>
+      <>
+        <p>You may not upload, post, or share content that:</p>
+        <ul>
+          <li>
+            Infringes copyrights — including chart screenshots, images, videos, or other media you
+            do not have permission to use;
+          </li>
+          <li>
+            Infringes trademarks, trade dress, or other proprietary rights of others;
+          </li>
+          <li>
+            Is pirated, unlawfully copied, or distributed without authorization; or
+          </li>
+          <li>Otherwise violates intellectual property laws.</li>
+        </ul>
+        <p>
+          Only share material you created or are authorized to use. See our{" "}
+          <Link href="/copyright">Copyright &amp; DMCA Policy</Link> to report infringement.
+        </p>
+      </>
+    ),
+  },
+  {
+    id: "malicious-and-illegal-content",
+    title: "Malicious and Illegal Content",
+    content: (
+      <>
+        <p>You may not upload or distribute:</p>
+        <ul>
+          <li>Malware, viruses, exploit code, or files intended to harm users or systems;</li>
+          <li>Illegal material or content that facilitates unlawful activity; or</li>
+          <li>Material that violates applicable export, sanctions, or other regulations.</li>
+        </ul>
+        <p>
+          Do not attempt to bypass security controls or access data you are not authorized to view.
+        </p>
+      </>
     ),
   },
   {
@@ -120,8 +152,9 @@ export const ACCEPTABLE_USE_POLICY_SECTIONS: LegalSection[] = [
     title: "No Copyright Violations",
     content: (
       <p>
-        Do not post content that infringes copyrights, trademarks, or other intellectual property
-        rights. Only share material you have the right to use.
+        Do not post content that infringes copyrights or other intellectual property rights. See
+        the{" "}
+        <Link href="/copyright">Copyright &amp; DMCA Policy</Link> for how to report infringement.
       </p>
     ),
   },

@@ -13,6 +13,7 @@ import { formatTradeAccountNameSizeLine } from "@/lib/tradeAccountDisplay"
 import { publicAccountBadgeFromTrade } from "@/lib/publicAccountPrivacy"
 import { tradeScreenshotPublicUrl } from "@/lib/storagePublicUrl"
 import TradeScreenshotImage from "@/app/components/trade/TradeScreenshotImage"
+import ExpandableText from "@/app/components/ui/ExpandableText"
 
 export type TradeCardProps = {
   trade: any
@@ -147,21 +148,32 @@ export default function TradeCard({
           </div>
 
           {trade.public_description ? (
-            <div className="mt-2 px-0">
-              <p className="text-sm text-gray-300">
-                <span className="text-gray-400">Public Description:</span>{" "}
-                {trade.public_description}
-              </p>
-            </div>
+            <ExpandableText
+              className="mt-2 text-sm text-gray-300"
+              label="Public Description:"
+              stopPropagation
+            >
+              {trade.public_description}
+            </ExpandableText>
           ) : null}
 
           {trade.strategy ? (
             <p className="text-xs text-gray-400">Strategy: {trade.strategy}</p>
           ) : null}
 
-          <p className="text-sm">
-            <span className="text-gray-400">Notes:</span> {trade.notes || "-"}
-          </p>
+          {trade.notes ? (
+            <ExpandableText
+              className="text-sm text-gray-300"
+              label="Notes:"
+              stopPropagation
+            >
+              {trade.notes}
+            </ExpandableText>
+          ) : (
+            <p className="text-sm">
+              <span className="text-gray-400">Notes:</span> -
+            </p>
+          )}
 
           {showAdvanced ? (
             <div className="mt-3 space-y-1 border-t border-white/10 pt-3 text-sm text-gray-300">
@@ -288,10 +300,13 @@ export default function TradeCard({
                 )}
               {trade.psychology_notes != null &&
                 String(trade.psychology_notes).trim() !== "" && (
-                  <p className="mt-2 text-sm text-gray-300">
-                    <span className="text-gray-400">Psych Notes:</span>{" "}
+                  <ExpandableText
+                    className="mt-2 text-sm text-gray-300"
+                    label="Psych Notes:"
+                    stopPropagation
+                  >
                     {trade.psychology_notes}
-                  </p>
+                  </ExpandableText>
                 )}
             </div>
           ) : null}

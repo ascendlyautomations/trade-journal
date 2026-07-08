@@ -61,6 +61,7 @@ import { excludeBacktestTrades } from "@/lib/tradeModeFilters"
 import { formatEST } from "@/lib/formatEST"
 import { formatCurrency } from "@/lib/formatCurrency"
 import { formatRR } from "@/lib/formatDisplay"
+import ExpandableText from "../../components/ui/ExpandableText"
 import {
   getTradingSession,
   getTradingWeekday,
@@ -1567,10 +1568,17 @@ const biggestLoss = losses.length > 0
           />
         ) : (
           recentTradesList.map((trade) => (
-            <button
+            <div
               key={trade.id}
-              type="button"
+              role="button"
+              tabIndex={0}
               onClick={() => setEditingTrade(trade)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault()
+                  setEditingTrade(trade)
+                }
+              }}
               className="w-full cursor-pointer rounded-lg border border-white/10 bg-white/5 p-2.5 text-left text-xs backdrop-blur-sm transition hover:border-white/20 hover:bg-white/[0.07] md:p-3 md:text-sm"
             >
               <div className="flex items-start justify-between gap-2">
@@ -1623,14 +1631,18 @@ const biggestLoss = losses.length > 0
                 </div>
               </div>
               {trade.public_description ? (
-                <p className="mt-1.5 line-clamp-2 text-xs text-gray-200 md:mt-2 md:text-sm">
+                <ExpandableText
+                  className="mt-1.5 text-xs text-gray-200 md:mt-2 md:text-sm"
+                  textClassName="text-gray-200"
+                  stopPropagation
+                >
                   {trade.public_description}
-                </p>
+                </ExpandableText>
               ) : null}
               {trade.strategy ? (
                 <p className="mt-1 text-[10px] text-gray-300 md:text-xs">Strategy: {trade.strategy}</p>
               ) : null}
-            </button>
+            </div>
           ))
         )}
       </div>

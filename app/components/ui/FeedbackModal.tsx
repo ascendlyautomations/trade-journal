@@ -2,6 +2,7 @@
 
 import { cn } from "./cn"
 import ModalCloseButton from "./ModalCloseButton"
+import { useModalScrollLock } from "./modalLayout"
 import type { FeedbackPopupType } from "./feedback-popup-types"
 
 const panelStyles: Record<FeedbackPopupType, string> = {
@@ -40,6 +41,8 @@ export default function FeedbackModal({
   dismissLabel = "Close",
   overlayClassName,
 }: FeedbackModalProps) {
+  useModalScrollLock(isOpen)
+
   if (
     process.env.NODE_ENV !== "production" &&
     isOpen &&

@@ -14,6 +14,7 @@ import {
   type ImageCropMode,
   type ImageCropOffset,
 } from "@/lib/renderImageCrop"
+import { useModalScrollLock } from "@/app/components/ui/modalLayout"
 
 type ImageCropModalProps = {
   open: boolean
@@ -53,19 +54,11 @@ export default function ImageCropModal({
   const dragRef = useRef<DragState | null>(null)
 
   const showModeToggle = preset.modes.length > 1
+  useModalScrollLock(open)
 
   useEffect(() => {
     setMounted(true)
   }, [])
-
-  useEffect(() => {
-    if (!open) return
-    const prev = document.body.style.overflow
-    document.body.style.overflow = "hidden"
-    return () => {
-      document.body.style.overflow = prev
-    }
-  }, [open])
 
   useEffect(() => {
     if (!open || !file) {
@@ -207,7 +200,7 @@ export default function ImageCropModal({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[10070] flex items-start justify-center overflow-y-auto p-4 sm:items-center"
+      className="fixed inset-0 z-[10070] flex items-start justify-center overscroll-contain p-4 sm:items-center"
       role="presentation"
       onClick={(e) => e.stopPropagation()}
       onMouseDown={(e) => e.stopPropagation()}
@@ -322,7 +315,7 @@ export default function ImageCropModal({
               type="button"
               disabled={saving || !imageSize}
               onClick={() => void handleSave()}
-              className="h-11 rounded-lg bg-gradient-to-r from-blue-500 to-emerald-500 px-5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+              className="h-11 rounded-lg bg-blue-500 px-5 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-blue-500"
             >
               {saving ? "Saving…" : "Save"}
             </button>
