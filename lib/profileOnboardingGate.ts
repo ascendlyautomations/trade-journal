@@ -44,6 +44,7 @@ export const ONBOARDING_ALLOWED_EXACT_PATHS = [] as const
 /** Routes reachable while onboarding is still required. */
 export const ONBOARDING_ALLOWED_PATH_PREFIXES = [
   "/onboarding",
+  "/choose-plan",
   "/login",
   "/reset-password",
   "/privacy",

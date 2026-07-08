@@ -6,6 +6,7 @@ export const STANDALONE_LAYOUT_SEGMENTS = new Set([
   "login",
   "reset-password",
   "onboarding",
+  "choose-plan",
   "finish-trial",
 ])
 

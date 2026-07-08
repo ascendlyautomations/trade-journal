@@ -22,7 +22,7 @@ import {
   isSubscriptionGateSuspended,
   needsSubscriptionCheckout,
 } from "@/lib/subscriptionAccess"
-import { clearSignupFlow, enterSignupFlow, getCheckoutBillingInterval, setCheckoutBillingInterval } from "@/lib/signupFlow"
+import { clearSignupFlow, enterSignupFlow, getCheckoutBillingInterval, resolveSignupProfileSetupPath, setCheckoutBillingInterval } from "@/lib/signupFlow"
 import type { TraxProBillingIntervalId } from "@/lib/traxProBillingPlans"
 
 type LandingPageClientProps = {
@@ -54,7 +54,7 @@ export default function LandingPageClient({
     if (loading || !isAuthenticatedUser) return
     if (isSubscriptionGateSuspended(user.id, { membershipReconciling })) return
     if (profile && profileNeedsOnboarding(profile)) {
-      router.replace("/onboarding")
+      router.replace(resolveSignupProfileSetupPath())
       return
     }
     if (profile && needsSubscriptionCheckout(profile)) {
@@ -118,7 +118,7 @@ export default function LandingPageClient({
         return
       }
       if (profile && profileNeedsOnboarding(profile)) {
-        router.push("/onboarding")
+        router.push(resolveSignupProfileSetupPath())
         return
       }
       if (profile && needsSubscriptionCheckout(profile)) {
@@ -153,7 +153,7 @@ export default function LandingPageClient({
       }
 
       if (profile && profileNeedsOnboarding(profile)) {
-        router.push("/onboarding")
+        router.push(resolveSignupProfileSetupPath())
         return
       }
 

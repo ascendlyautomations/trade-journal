@@ -7,6 +7,7 @@ import {
   isAllowedPathDuringOnboarding,
   profileNeedsOnboarding,
 } from "@/lib/profileOnboardingGate"
+import { resolveSignupProfileSetupPath } from "@/lib/signupFlow"
 
 /**
  * Redirects users with incomplete profiles to /onboarding.
@@ -32,7 +33,7 @@ export default function OnboardingGateShell({
 
     if (needsOnboarding) {
       if (isAllowedPathDuringOnboarding(pathname)) return
-      router.replace("/onboarding")
+      router.replace(resolveSignupProfileSetupPath())
       return
     }
 

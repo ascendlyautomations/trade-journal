@@ -13,14 +13,9 @@ import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import AuthPasswordInput from "@/app/components/ui/AuthPasswordInput"
 import { isBetaReferralRef } from "@/lib/betaReferralCode"
 import { persistReferralCodeFromUrl } from "@/lib/referralPersistence"
-import { enterSignupFlow, setCheckoutBillingInterval, setSignupIntent, type SignupIntent } from "@/lib/signupFlow"
-import { TRAXPRO_TRIAL_HEADLINE } from "@/lib/traxProPricing"
-import {
-  TRADETRAXS_FREE_PLAN,
-  TRADETRAXS_PRO_PLAN,
-} from "@/lib/tradeTraxsPlans"
+import { enterSignupFlow, setCheckoutBillingInterval, setSignupIntent, clearSignupIntent, type SignupIntent } from "@/lib/signupFlow"
+import SignupPlanPicker from "@/app/components/SignupPlanPicker"
 import { markProfileUseFreeTier } from "@/lib/markFreeTierSignup"
-import TraxProBillingIntervalPicker from "@/app/components/TraxProBillingIntervalPicker"
 import {
   TRAXPRO_DEFAULT_BILLING_INTERVAL,
   type TraxProBillingIntervalId,
@@ -174,12 +169,8 @@ export default function LoginPage() {
     router.replace(next)
   }, [user?.id, authLoading, router])
 
-  async function handleSignUp(
-    e: React.MouseEvent<HTMLButtonElement>,
-    intent: SignupIntent
-  ) {
+  async function handleSignUp(intent: SignupIntent) {
     console.log("Signup clicked", intent)
-    e.preventDefault()
     if (loading) return
 
     if (!agreedToTerms) {
@@ -367,10 +358,10 @@ export default function LoginPage() {
 
     try {
     if (!isLogin) {
-      setSignupIntent("trial")
+      clearSignupIntent()
       enterSignupFlow()
     }
-    let redirectPath = isLogin ? "/dashboard" : "/onboarding"
+    let redirectPath = isLogin ? "/dashboard" : "/choose-plan"
     if (shouldStartCheckout()) {
       redirectPath = "/login?next=checkout"
     } else {
@@ -685,51 +676,18 @@ export default function LoginPage() {
             </div>
 
             <div className="space-y-3 md:space-y-2.5">
-              <div className="relative rounded-xl border border-emerald-400/40 bg-gradient-to-b from-emerald-500/10 to-white/[0.04] p-4 md:p-3">
-                <span className="absolute -top-2.5 right-3 rounded-full bg-emerald-500 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
-                  Recommended
-                </span>
-                <p className="text-sm font-semibold text-white">
-                  ⭐ Start {TRAXPRO_TRIAL_HEADLINE}
-                </p>
-                <p className="mt-1 text-xs leading-relaxed text-gray-400 md:text-[11px]">
-                  {TRADETRAXS_PRO_PLAN.description}
-                </p>
-                <div className="mt-3">
-                  <TraxProBillingIntervalPicker
-                    value={billingInterval}
-                    onChange={(interval) => {
-                      setBillingInterval(interval)
-                      setCheckoutBillingInterval(interval)
-                    }}
-                    disabled={loading || !agreedToTerms}
-                    name="login-signup-billing"
-                  />
-                </div>
-                <button
-                  type="button"
-                  disabled={loading || !agreedToTerms}
-                  onClick={(e) => void handleSignUp(e, "trial")}
-                  className="mt-4 w-full rounded-xl bg-blue-500 py-3 text-sm font-semibold text-white transition hover:bg-blue-600 hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-blue-500 disabled:hover:scale-100 md:mt-3 md:py-2.5"
-                >
-                  {loading ? "Loading..." : "Start Free Trial"}
-                </button>
-              </div>
-
-              <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4 md:p-3">
-                <p className="text-sm font-semibold text-white">{TRADETRAXS_FREE_PLAN.name}</p>
-                <p className="mt-1 text-xs leading-relaxed text-gray-400 md:text-[11px]">
-                  {TRADETRAXS_FREE_PLAN.description}
-                </p>
-                <button
-                  type="button"
-                  disabled={loading || !agreedToTerms}
-                  onClick={(e) => void handleSignUp(e, "free")}
-                  className="mt-4 w-full rounded-xl border border-white/15 bg-white/[0.06] py-3 text-sm font-semibold text-white transition hover:border-white/25 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60 md:mt-3 md:py-2.5"
-                >
-                  {loading ? "Loading..." : "Continue Free"}
-                </button>
-              </div>
+              <SignupPlanPicker
+                billingInterval={billingInterval}
+                onBillingIntervalChange={(interval) => {
+                  setBillingInterval(interval)
+                  setCheckoutBillingInterval(interval)
+                }}
+                onSelectTrial={() => void handleSignUp("trial")}
+                onSelectFree={() => void handleSignUp("free")}
+                disabled={!agreedToTerms}
+                loading={loading}
+                billingPickerName="login-signup-billing"
+              />
             </div>
           </div>
         ) : null}

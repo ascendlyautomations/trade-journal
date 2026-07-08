@@ -4,6 +4,7 @@ import {
   profileNeedsOnboarding,
   type ProfileOnboardingGateFields,
 } from "./profileOnboardingGate"
+import { resolveSignupProfileSetupPath } from "./signupFlow"
 import { shouldReconcileStripeMembership } from "./stripeReconciliation"
 import { isProActive } from "./subscription"
 
@@ -65,6 +66,7 @@ export const SUBSCRIPTION_GATE_EXACT_PATHS = ["/finish-trial"] as const
 export const SUBSCRIPTION_GATE_PATH_PREFIXES = [
   "/login",
   "/onboarding",
+  "/choose-plan",
   "/reset-password",
   "/privacy",
   "/terms",
@@ -87,8 +89,8 @@ export function isAllowedPathWithoutSubscription(pathname: string): boolean {
 /** Post-auth destination for standard app entry (not explicit checkout upgrade). */
 export function resolvePostAuthAppPath(
   profile: SubscriptionAccessProfile | null | undefined
-): "/onboarding" | "/finish-trial" | "/dashboard" {
-  if (!profile || profileNeedsOnboarding(profile)) return "/onboarding"
+): "/choose-plan" | "/onboarding" | "/finish-trial" | "/dashboard" {
+  if (!profile || profileNeedsOnboarding(profile)) return resolveSignupProfileSetupPath()
   if (needsSubscriptionCheckout(profile)) return "/finish-trial"
   return "/dashboard"
 }

@@ -25,6 +25,13 @@ export default function OnboardingPage() {
     }
   }, [loading, user, router])
 
+  useEffect(() => {
+    if (loading || !user) return
+    if (!getSignupIntent()) {
+      router.replace("/choose-plan")
+    }
+  }, [loading, user, router])
+
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center px-4 text-gray-300">
@@ -76,6 +83,11 @@ export default function OnboardingPage() {
         }
 
         const signupIntent = getSignupIntent()
+        if (!signupIntent) {
+          router.replace("/choose-plan")
+          router.refresh()
+          return
+        }
         if (signupIntent === "free") {
           const result = await markProfileUseFreeTier(supabase, user.id)
           if (!result.ok) {

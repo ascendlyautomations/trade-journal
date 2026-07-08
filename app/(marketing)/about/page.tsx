@@ -17,7 +17,7 @@ import {
 import { isDemoUserId } from "@/lib/demo/constants"
 import { profileNeedsOnboarding } from "@/lib/profileOnboardingGate"
 import { hasActiveMembership } from "@/lib/subscriptionAccess"
-import { enterSignupFlow, setCheckoutBillingInterval } from "@/lib/signupFlow"
+import { enterSignupFlow, resolveSignupProfileSetupPath, setCheckoutBillingInterval } from "@/lib/signupFlow"
 import { TRAXPRO_DEFAULT_BILLING_INTERVAL } from "@/lib/traxProBillingPlans"
 import { useUserProfile } from "@/lib/useUserProfile"
 import {
@@ -72,7 +72,7 @@ export default function AboutPage() {
         return
       }
       if (profile && profileNeedsOnboarding(profile)) {
-        router.push("/onboarding")
+        router.push(resolveSignupProfileSetupPath())
         return
       }
     }

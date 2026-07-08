@@ -42,8 +42,8 @@ export default function FinishTrialPage() {
     if (!profile) return
 
     const destination = resolvePostAuthAppPath(profile)
-    if (destination === "/onboarding") {
-      router.replace("/onboarding")
+    if (destination === "/choose-plan" || destination === "/onboarding") {
+      router.replace(destination)
       return
     }
     if (destination === "/dashboard") {

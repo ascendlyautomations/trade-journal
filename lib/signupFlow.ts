@@ -69,6 +69,11 @@ export function clearSignupIntent(): void {
   }
 }
 
+/** Where new users go for profile setup — plan selection first when intent is unset. */
+export function resolveSignupProfileSetupPath(): "/choose-plan" | "/onboarding" {
+  return getSignupIntent() ? "/onboarding" : "/choose-plan"
+}
+
 export function setCheckoutBillingInterval(interval: TraxProBillingIntervalId): void {
   if (typeof window === "undefined") return
   try {

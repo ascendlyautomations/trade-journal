@@ -2,7 +2,7 @@
 export const AUTH_ROUTE_PREFIXES = ["/login", "/reset-password"] as const
 
 /** Profile setup before app access. */
-export const ONBOARDING_ROUTE_PREFIXES = ["/onboarding"] as const
+export const ONBOARDING_ROUTE_PREFIXES = ["/onboarding", "/choose-plan"] as const
 
 /** Stripe checkout step after profile setup. */
 export const PRE_CHECKOUT_ROUTE_PREFIXES = ["/finish-trial"] as const

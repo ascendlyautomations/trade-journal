@@ -10,6 +10,7 @@ import {
   needsSubscriptionCheckout,
   resolvePostAuthAppPath,
 } from "@/lib/subscriptionAccess"
+import { resolveSignupProfileSetupPath } from "@/lib/signupFlow"
 import { useUserProfile } from "@/lib/useUserProfile"
 
 /**
@@ -34,7 +35,7 @@ export default function MarketingGateShell({ children }: { children: ReactNode }
     if (gateSuspended) return
 
     if (profileNeedsOnboarding(profile ?? {})) {
-      router.replace("/onboarding")
+      router.replace(resolveSignupProfileSetupPath())
       return
     }
 
