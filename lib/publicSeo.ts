@@ -1,8 +1,12 @@
 import type { Metadata } from "next"
+import {
+  isExcludedPublicUserId,
+  isExcludedPublicUsername,
+} from "@/lib/publicIndexExclusions"
 import { isProfileUuidSegment } from "@/lib/profileRoutes"
 import { normalizeProfileUsername } from "@/lib/profileUsername"
 import { createSupabaseAdmin } from "@/lib/supabaseAdmin"
-import { DEFAULT_OG_IMAGE_PATH, SITE_NAME, SITE_URL } from "@/lib/site"
+import { DEFAULT_OG_IMAGE_ALT, DEFAULT_OG_IMAGE_PATH, SITE_NAME, SITE_URL } from "@/lib/site"
 
 const PROFILE_SEO_SELECT = "id, username, name, is_private, created_at" as const
 const TRADE_SEO_SELECT = "id, ticker, is_public, user_id, created_at" as const
@@ -50,11 +54,25 @@ export function profileCanonicalPath(profile: {
 }
 
 export function isPublicProfileForIndexing(profile: {
+  id?: string | null
   username?: string | null
   is_private?: boolean | null
 }): boolean {
   if (profile.is_private === true) return false
+  if (isExcludedPublicUserId(profile.id)) return false
+  if (isExcludedPublicUsername(profile.username)) return false
   return normalizeProfileUsername(profile.username ?? "").length > 0
+}
+
+export function isPublicTradeForIndexing(
+  trade: { is_public?: boolean | null; user_id?: string | null },
+  owner: { username?: string | null; is_private?: boolean | null } | null
+): boolean {
+  if (trade.is_public !== true) return false
+  if (isExcludedPublicUserId(trade.user_id)) return false
+  if (owner?.is_private === true) return false
+  if (owner && isExcludedPublicUsername(owner.username)) return false
+  return true
 }
 
 export async function fetchProfileForSeo(
@@ -134,7 +152,7 @@ export function buildProfileMetadata(profile: ProfileSeoData | null): Metadata {
       title: ogTitle,
       description: ogDescription,
       siteName: SITE_NAME,
-      images: [{ url: DEFAULT_OG_IMAGE_PATH, alt: SITE_NAME }],
+      images: [{ url: DEFAULT_OG_IMAGE_PATH, alt: DEFAULT_OG_IMAGE_ALT }],
       ...(canonicalPath ? { url: `${SITE_URL}${canonicalPath}` } : {}),
     },
     twitter: {
@@ -158,7 +176,7 @@ export function buildTradeMetadata(
   trade: TradeSeoData | null,
   owner: TradeOwnerSeoData | null
 ): Metadata {
-  if (!trade || trade.is_public !== true) {
+  if (!trade || !isPublicTradeForIndexing(trade, owner)) {
     return {
       title: { absolute: `Trade | ${SITE_NAME}` },
       description: "This trade is not publicly available on TradeTraxs.",
@@ -183,7 +201,7 @@ export function buildTradeMetadata(
       title,
       description,
       siteName: SITE_NAME,
-      images: [{ url: DEFAULT_OG_IMAGE_PATH, alt: SITE_NAME }],
+      images: [{ url: DEFAULT_OG_IMAGE_PATH, alt: DEFAULT_OG_IMAGE_ALT }],
     },
     twitter: {
       card: "summary_large_image",
@@ -202,7 +220,7 @@ export async function fetchPublicProfilesForSitemap(): Promise<
 
   const { data, error } = await admin
     .from("profiles")
-    .select("username, created_at")
+    .select("id, username, created_at")
     .neq("is_private", true)
     .not("username", "is", null)
     .limit(SITEMAP_PROFILE_LIMIT)
@@ -225,14 +243,19 @@ export async function fetchPublicTradesForSitemap(): Promise<
 
   const { data, error } = await admin
     .from("trades")
-    .select("id, created_at")
+    .select("id, created_at, user_id, is_public, profiles(username, is_private)")
     .eq("is_public", true)
     .limit(SITEMAP_TRADE_LIMIT)
 
   if (error || !data) return []
 
-  return data.map((row) => ({
-    path: `/trade/${row.id}`,
-    lastModified: row.created_at ? new Date(row.created_at) : new Date(),
-  }))
+  return data
+    .filter((row) => {
+      const owner = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles
+      return isPublicTradeForIndexing(row, owner ?? null)
+    })
+    .map((row) => ({
+      path: `/trade/${row.id}`,
+      lastModified: row.created_at ? new Date(row.created_at) : new Date(),
+    }))
 }

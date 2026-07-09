@@ -1,160 +1,138 @@
-import type { Metadata } from "next"
+import { buildSeoMetadata } from "@/lib/seoMetadata"
 import { SUPPORT_EMAIL } from "@/lib/contactEmails"
-import { DEFAULT_OG_IMAGE_PATH, SITE_NAME, SITE_URL } from "@/lib/site"
 import {
   TRADETRAXS_FREE_PLAN,
   TRADETRAXS_PRO_PLAN,
 } from "@/lib/tradeTraxsPlans"
+import { SITE_KEYWORDS } from "@/lib/site"
 
-type PublicRouteMetaInput = {
-  path: `/${string}`
-  title: string
+function publicPage(
+  path: `/${string}`,
+  title: string,
   description: string
+) {
+  return buildSeoMetadata({ path, title, description })
 }
 
-function buildPublicRouteMetadata({
-  path,
-  title,
-  description,
-}: PublicRouteMetaInput): Metadata {
-  const absoluteTitle = `${title} | ${SITE_NAME}`
-  const url = `${SITE_URL}${path}`
+export const EXPLORE_PAGE_METADATA = publicPage(
+  "/explore",
+  "Explore Traders",
+  "Discover active traders on TradeTraxs. Search profiles, find top performers, and follow traders in the trading journal community."
+)
 
-  return {
-    title: { absolute: absoluteTitle },
-    description,
-    alternates: {
-      canonical: path,
-    },
-    openGraph: {
-      type: "website",
-      url,
-      title: absoluteTitle,
-      description,
-      siteName: SITE_NAME,
-      images: [
-        {
-          url: DEFAULT_OG_IMAGE_PATH,
-          alt: SITE_NAME,
-        },
-      ],
-    },
-    twitter: {
-      card: "summary_large_image",
-      title: absoluteTitle,
-      description,
-      images: [DEFAULT_OG_IMAGE_PATH],
-    },
-  }
-}
+export const LEADERBOARD_PAGE_METADATA = publicPage(
+  "/leaderboard",
+  "Trading Leaderboard",
+  "Compare trading performance on the TradeTraxs leaderboard. View P&L rankings, win rate, and community stats from our trading journal app."
+)
 
-export const EXPLORE_PAGE_METADATA = buildPublicRouteMetadata({
-  path: "/explore",
-  title: "Explore Traders",
-  description:
-    "Discover active traders, top performers, and new members on TradeTraxs. Search profiles and find traders to follow.",
-})
-
-export const LEADERBOARD_PAGE_METADATA = buildPublicRouteMetadata({
-  path: "/leaderboard",
-  title: "Trading Leaderboard",
-  description:
-    "Compare trading performance on the TradeTraxs leaderboard. View rankings, P&L, win rate, and community stats.",
-})
-
-export const PRICING_PAGE_METADATA = buildPublicRouteMetadata({
+export const PRICING_PAGE_METADATA = buildSeoMetadata({
   path: "/pricing",
   title: "Pricing",
-  description: `TradeTraxs pricing: ${TRADETRAXS_FREE_PLAN.description} ${TRADETRAXS_PRO_PLAN.name} starts at $23.99/month with a 14-day free trial.`,
+  description: `TradeTraxs pricing for trading journal software. ${TRADETRAXS_FREE_PLAN.description} ${TRADETRAXS_PRO_PLAN.name} from $23.99/month with a 14-day free trial.`,
 })
 
-export const FAQ_PAGE_METADATA = buildPublicRouteMetadata({
-  path: "/faq",
-  title: "FAQ",
+export const FAQ_PAGE_METADATA = publicPage(
+  "/faq",
+  "FAQ",
+  "Frequently asked questions about TradeTraxs — the AI trading journal app for futures traders, accounts, public trades, messaging, and pricing."
+)
+
+export const ABOUT_PAGE_METADATA = publicPage(
+  "/about",
+  "About TradeTraxs",
+  "Learn about TradeTraxs — the social trading journal and trade analysis platform built for active and futures traders."
+)
+
+export const HELP_PAGE_METADATA = publicPage(
+  "/help",
+  "Help Center",
+  "Get help with TradeTraxs trading journal software. Contact support, submit feedback, report bugs, or browse the FAQ."
+)
+
+export const PRIVACY_PAGE_METADATA = publicPage(
+  "/privacy",
+  "Privacy Policy",
+  "TradeTraxs Privacy Policy — how we collect, use, and protect account, trading journal, and community data."
+)
+
+export const TERMS_PAGE_METADATA = publicPage(
+  "/terms",
+  "Terms of Service",
+  "TradeTraxs Terms of Service — account rules, subscriptions, user content, and platform disclaimers."
+)
+
+export const COOKIE_POLICY_PAGE_METADATA = publicPage(
+  "/cookie-policy",
+  "Cookie Policy",
+  "TradeTraxs Cookie Policy — how we use cookies for authentication, billing, and preferences on the trading journal app."
+)
+
+export const ACCEPTABLE_USE_PAGE_METADATA = publicPage(
+  "/acceptable-use",
+  "Acceptable Use Policy",
+  "TradeTraxs Acceptable Use Policy — standards for lawful, respectful, and safe use of the trading journal platform."
+)
+
+export const COPYRIGHT_PAGE_METADATA = publicPage(
+  "/copyright",
+  "Copyright & DMCA Policy",
+  "TradeTraxs Copyright & DMCA Policy — report infringing content and understand our repeat infringer policy."
+)
+
+export const LEGAL_HUB_PAGE_METADATA = publicPage(
+  "/legal",
+  "Legal",
+  "TradeTraxs legal documents — privacy policy, terms of service, and platform policies."
+)
+
+export const COMMUNITY_GUIDELINES_PAGE_METADATA = publicPage(
+  "/community-guidelines",
+  "Community Guidelines",
+  "TradeTraxs community guidelines for respectful trading discussions, feedback, and platform conduct."
+)
+
+export const CREATOR_GUIDELINES_PAGE_METADATA = publicPage(
+  "/creator-guidelines",
+  "Creator Guidelines",
+  "TradeTraxs creator guidelines for sharing trades, posts, and clips with transparency on the trading journal app."
+)
+
+export const AFFILIATE_PROGRAM_PAGE_METADATA = publicPage(
+  "/affiliate",
+  "Affiliate Program",
+  "Join the TradeTraxs Affiliate Program — earn recurring commissions by referring traders to our trading journal software."
+)
+
+export const CONTACT_PAGE_METADATA = publicPage(
+  "/contact",
+  "Contact",
+  `Contact TradeTraxs for billing, partnerships, and questions about our trading journal app at ${SUPPORT_EMAIL}.`
+)
+
+export const LOGIN_PAGE_METADATA = buildSeoMetadata({
+  path: "/login",
+  title: "Sign In",
   description:
-    "Frequently asked questions about TradeTraxs — trading journal features, accounts, public trades, messaging, and pricing.",
+    "Sign in to TradeTraxs — your AI trading journal app for logging trades, analyzing performance, and connecting with traders.",
+  index: false,
 })
 
-export const ABOUT_PAGE_METADATA = buildPublicRouteMetadata({
-  path: "/about",
-  title: "About TradeTraxs",
+export const DEMO_PAGE_METADATA = buildSeoMetadata({
+  path: "/demo",
+  title: "Interactive Demo",
   description:
-    "Learn why TradeTraxs was created and discover the mission behind the all-in-one trading journal, analytics platform, and trading community.",
+    "Try the TradeTraxs interactive demo. Explore the trading journal app, analytics, and community features before you sign up.",
+  index: true,
 })
 
-export const HELP_PAGE_METADATA = buildPublicRouteMetadata({
-  path: "/help",
-  title: "Help Center",
+export const CSV_SUPPORT_PAGE_METADATA = buildSeoMetadata({
+  path: "/csv-support",
+  title: "CSV Import Support",
   description:
-    "Get help with TradeTraxs. Contact support, submit feedback, report bugs, or find answers in the FAQ.",
+    "Get help importing broker CSV files into TradeTraxs — the trading journal software with CSV import on Pro.",
+  index: false,
 })
 
-export const PRIVACY_PAGE_METADATA = buildPublicRouteMetadata({
-  path: "/privacy",
-  title: "Privacy Policy",
-  description:
-    "TradeTraxs Privacy Policy — how we collect, use, and protect account, trading, and community data.",
-})
-
-export const TERMS_PAGE_METADATA = buildPublicRouteMetadata({
-  path: "/terms",
-  title: "Terms of Service",
-  description:
-    "TradeTraxs Terms of Service — account rules, subscriptions, user content, and platform disclaimers.",
-})
-
-export const COOKIE_POLICY_PAGE_METADATA = buildPublicRouteMetadata({
-  path: "/cookie-policy",
-  title: "Cookie Policy",
-  description:
-    "TradeTraxs Cookie Policy — how we use cookies and similar technologies for authentication, billing, and preferences.",
-})
-
-export const ACCEPTABLE_USE_PAGE_METADATA = buildPublicRouteMetadata({
-  path: "/acceptable-use",
-  title: "Acceptable Use Policy",
-  description:
-    "TradeTraxs Acceptable Use Policy — standards for lawful, respectful, and safe platform use.",
-})
-
-export const COPYRIGHT_PAGE_METADATA = buildPublicRouteMetadata({
-  path: "/copyright",
-  title: "Copyright & DMCA Policy",
-  description:
-    "TradeTraxs Copyright & DMCA Policy — report infringing content, submit counter-notifications, and understand our repeat infringer policy.",
-})
-
-export const LEGAL_HUB_PAGE_METADATA = buildPublicRouteMetadata({
-  path: "/legal",
-  title: "Legal",
-  description:
-    "TradeTraxs legal documents — privacy policy, terms of service, and platform policies.",
-})
-
-export const COMMUNITY_GUIDELINES_PAGE_METADATA = buildPublicRouteMetadata({
-  path: "/community-guidelines",
-  title: "Community Guidelines",
-  description:
-    "TradeTraxs community guidelines — respectful trading discussions, feedback, and platform conduct.",
-})
-
-export const CREATOR_GUIDELINES_PAGE_METADATA = buildPublicRouteMetadata({
-  path: "/creator-guidelines",
-  title: "Creator Guidelines",
-  description:
-    "TradeTraxs creator guidelines for sharing trades, posts, and clips with transparency and professionalism.",
-})
-
-export const AFFILIATE_PROGRAM_PAGE_METADATA = buildPublicRouteMetadata({
-  path: "/affiliate",
-  title: "Affiliate Program",
-  description:
-    "Join the live TradeTraxs Affiliate Program — earn recurring commissions by referring traders to the platform.",
-})
-
-export const CONTACT_PAGE_METADATA = buildPublicRouteMetadata({
-  path: "/contact",
-  title: "Contact",
-  description:
-    `Contact TradeTraxs for billing, partnerships, business inquiries, and general questions at ${SUPPORT_EMAIL}.`,
-})
+/** Keywords for indexable marketing pages. */
+export const MARKETING_KEYWORDS = [...SITE_KEYWORDS]

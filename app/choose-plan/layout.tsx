@@ -1,9 +1,8 @@
 import type { Metadata } from "next"
 import type { ReactNode } from "react"
+import { CHOOSE_PLAN_PAGE_METADATA } from "@/lib/seoAppPages"
 
-export const metadata: Metadata = {
-  title: "Choose your plan",
-}
+export const metadata: Metadata = CHOOSE_PLAN_PAGE_METADATA
 
 /**
  * Post-auth plan selection for Google signups — standalone flow (no app navbar).

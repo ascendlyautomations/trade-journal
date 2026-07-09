@@ -147,6 +147,25 @@ export default function MarketingFooter() {
           </div>
 
           <div className="mt-4 grid grid-cols-2 gap-x-5 gap-y-3">
+            <nav aria-label="Product" className="text-left">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                Product
+              </p>
+              <ul className="mt-2 space-y-1.5">
+                <li>
+                  <FooterLink href="/pricing">Pricing</FooterLink>
+                </li>
+                <li>
+                  <FooterLink href="/faq">FAQ</FooterLink>
+                </li>
+                <li>
+                  <FooterLink href="/explore">Explore</FooterLink>
+                </li>
+                <li>
+                  <FooterLink href="/leaderboard">Leaderboard</FooterLink>
+                </li>
+              </ul>
+            </nav>
             <nav aria-label="Company" className="text-left">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
                 Company
@@ -218,6 +237,12 @@ export default function MarketingFooter() {
             </li>
             <li>
               <FooterLink href="/faq">FAQ</FooterLink>
+            </li>
+            <li>
+              <FooterLink href="/explore">Explore</FooterLink>
+            </li>
+            <li>
+              <FooterLink href="/leaderboard">Leaderboard</FooterLink>
             </li>
             <li>
               <FooterLink href="/affiliate">Affiliate Program</FooterLink>

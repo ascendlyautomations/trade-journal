@@ -8,18 +8,25 @@ import {
 import LandingFeaturedTradesSectionLoader from "@/app/components/landing/LandingFeaturedTradesSectionLoader"
 import LandingTestimonialsSectionLoader from "@/app/components/landing/LandingTestimonialsSectionLoader"
 import {
+  DEFAULT_OG_IMAGE_ALT,
   DEFAULT_OG_IMAGE_PATH,
   DEFAULT_SITE_DESCRIPTION,
   HOME_PAGE_TITLE,
+  OG_IMAGE_HEIGHT,
+  OG_IMAGE_WIDTH,
   SITE_NAME,
   SITE_URL,
 } from "@/lib/site"
+import { MARKETING_KEYWORDS } from "@/lib/publicRouteMetadata"
+import JsonLd from "@/app/components/JsonLd"
+import { homePageJsonLd } from "@/lib/structuredData"
 
 export const metadata: Metadata = {
   title: {
     absolute: HOME_PAGE_TITLE,
   },
   description: DEFAULT_SITE_DESCRIPTION,
+  keywords: MARKETING_KEYWORDS,
   alternates: {
     canonical: "/",
   },
@@ -32,7 +39,9 @@ export const metadata: Metadata = {
     images: [
       {
         url: DEFAULT_OG_IMAGE_PATH,
-        alt: SITE_NAME,
+        width: OG_IMAGE_WIDTH,
+        height: OG_IMAGE_HEIGHT,
+        alt: DEFAULT_OG_IMAGE_ALT,
       },
     ],
   },
@@ -49,7 +58,9 @@ export const revalidate = 86_400
 
 export default function HomePage() {
   return (
-    <LandingPageClient
+    <>
+      <JsonLd data={homePageJsonLd()} />
+      <LandingPageClient
       featuredTradesSection={
         <Suspense fallback={<SkeletonFeaturedTradesSection />}>
           <LandingFeaturedTradesSectionLoader />
@@ -61,5 +72,6 @@ export default function HomePage() {
         </Suspense>
       }
     />
+    </>
   )
 }

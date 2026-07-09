@@ -9,7 +9,8 @@
     "lint": "eslint",
     "test:propfirm": "node --experimental-strip-types --test lib/propfirmMetrics.test.ts",
     "test:achievements": "node --experimental-strip-types --test lib/achievements.test.ts",
-    "test:user-facing-error": "node --experimental-strip-types --test lib/userFacingError.test.ts"
+    "test:user-facing-error": "node --experimental-strip-types --test lib/userFacingError.test.ts",
+    "generate:og-image": "node scripts/generate-og-image.mjs"
   },
   "dependencies": {
     "@sentry/nextjs": "^10.57.0",

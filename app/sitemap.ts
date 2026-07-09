@@ -11,16 +11,23 @@ const STATIC_PATHS: Array<{
   priority: number
 }> = [
   { path: "/", changeFrequency: "weekly", priority: 1 },
-  { path: "/pricing", changeFrequency: "monthly", priority: 0.9 },
-  { path: "/faq", changeFrequency: "monthly", priority: 0.8 },
-  { path: "/explore", changeFrequency: "daily", priority: 0.85 },
-  { path: "/leaderboard", changeFrequency: "daily", priority: 0.85 },
-  { path: "/login", changeFrequency: "monthly", priority: 0.6 },
-  { path: "/csv-support", changeFrequency: "monthly", priority: 0.5 },
-  { path: "/help", changeFrequency: "monthly", priority: 0.5 },
-  { path: "/privacy", changeFrequency: "monthly", priority: 0.5 },
-  { path: "/terms", changeFrequency: "monthly", priority: 0.5 },
-  { path: "/copyright", changeFrequency: "monthly", priority: 0.5 },
+  { path: "/pricing", changeFrequency: "monthly", priority: 0.95 },
+  { path: "/faq", changeFrequency: "monthly", priority: 0.9 },
+  { path: "/about", changeFrequency: "monthly", priority: 0.85 },
+  { path: "/contact", changeFrequency: "monthly", priority: 0.75 },
+  { path: "/affiliate", changeFrequency: "monthly", priority: 0.8 },
+  { path: "/explore", changeFrequency: "daily", priority: 0.9 },
+  { path: "/leaderboard", changeFrequency: "daily", priority: 0.9 },
+  { path: "/demo", changeFrequency: "monthly", priority: 0.85 },
+  { path: "/help", changeFrequency: "monthly", priority: 0.65 },
+  { path: "/legal", changeFrequency: "yearly", priority: 0.5 },
+  { path: "/privacy", changeFrequency: "yearly", priority: 0.5 },
+  { path: "/terms", changeFrequency: "yearly", priority: 0.5 },
+  { path: "/cookie-policy", changeFrequency: "yearly", priority: 0.45 },
+  { path: "/acceptable-use", changeFrequency: "yearly", priority: 0.45 },
+  { path: "/copyright", changeFrequency: "yearly", priority: 0.45 },
+  { path: "/community-guidelines", changeFrequency: "yearly", priority: 0.45 },
+  { path: "/creator-guidelines", changeFrequency: "yearly", priority: 0.45 },
 ]
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {

@@ -1,9 +1,8 @@
 import type { Metadata } from "next"
 import type { ReactNode } from "react"
+import { ONBOARDING_PAGE_METADATA } from "@/lib/seoAppPages"
 
-export const metadata: Metadata = {
-  title: "Set up your account",
-}
+export const metadata: Metadata = ONBOARDING_PAGE_METADATA
 
 /**
  * Full-screen onboarding — standalone app flow (no marketing or app navbar).

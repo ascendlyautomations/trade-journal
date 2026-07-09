@@ -18,11 +18,19 @@ import SubscriptionGateShell from "./components/SubscriptionGateShell"
 import { UserProfileProvider } from "@/lib/UserProfileProvider"
 import { GettingStartedProgressProvider } from "@/lib/GettingStartedProgressProvider"
 import {
+  DEFAULT_OG_IMAGE_ALT,
   DEFAULT_OG_IMAGE_PATH,
   DEFAULT_SITE_DESCRIPTION,
+  HOME_PAGE_TITLE,
+  OG_IMAGE_HEIGHT,
+  OG_IMAGE_WIDTH,
+  SITE_KEYWORDS,
   SITE_NAME,
   SITE_URL,
+  TWITTER_HANDLE,
 } from "@/lib/site"
+import JsonLd from "./components/JsonLd"
+import { organizationJsonLd, websiteJsonLd } from "@/lib/structuredData"
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -41,26 +49,58 @@ export const metadata: Metadata = {
     template: `%s | ${SITE_NAME}`,
   },
   description: DEFAULT_SITE_DESCRIPTION,
+  keywords: [...SITE_KEYWORDS],
+  applicationName: SITE_NAME,
+  authors: [{ name: SITE_NAME, url: SITE_URL }],
+  creator: SITE_NAME,
+  publisher: SITE_NAME,
+  formatDetection: {
+    email: false,
+    address: false,
+    telephone: false,
+  },
+  icons: {
+    icon: [
+      { url: "/favicon.ico" },
+      { url: "/logo.png", type: "image/png", sizes: "512x512" },
+    ],
+    apple: [{ url: "/logo.png", sizes: "180x180", type: "image/png" }],
+  },
+  manifest: "/manifest.webmanifest",
+  alternates: {
+    canonical: "/",
+  },
   openGraph: {
     type: "website",
     locale: "en_US",
     siteName: SITE_NAME,
-    title: SITE_NAME,
+    title: HOME_PAGE_TITLE,
     description: DEFAULT_SITE_DESCRIPTION,
     url: SITE_URL,
     images: [
       {
         url: DEFAULT_OG_IMAGE_PATH,
-        alt: SITE_NAME,
+        width: OG_IMAGE_WIDTH,
+        height: OG_IMAGE_HEIGHT,
+        alt: DEFAULT_OG_IMAGE_ALT,
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: SITE_NAME,
+    site: TWITTER_HANDLE,
+    creator: TWITTER_HANDLE,
+    title: HOME_PAGE_TITLE,
     description: DEFAULT_SITE_DESCRIPTION,
     images: [DEFAULT_OG_IMAGE_PATH],
   },
+  ...(process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION
+    ? {
+        verification: {
+          google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION,
+        },
+      }
+    : {}),
 }
 export default function RootLayout({
   children,
@@ -73,6 +113,7 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="flex flex-col">
+        <JsonLd data={[organizationJsonLd(), websiteJsonLd()]} />
         <ScrollLockRouteReset />
         <ToastRoot>
           <UploadProgressProvider>
