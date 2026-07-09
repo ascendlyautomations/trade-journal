@@ -118,7 +118,7 @@ export default function PricingPage() {
       <FeedbackModal {...feedbackModalProps} />
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 py-14 text-white sm:px-6 sm:py-20">
         <div className="mx-auto flex max-w-5xl flex-col items-center">
-          <h1 className="max-w-3xl text-center text-3xl font-bold leading-tight tracking-tight sm:text-4xl md:text-5xl">
+          <h1 className="max-w-3xl text-center text-3xl font-bold leading-tight tracking-tight text-blue-300 sm:text-4xl md:text-5xl">
             Take Your Trading to the Next Level
           </h1>
           <p className="mt-4 max-w-2xl text-center text-base text-gray-200 sm:text-lg md:text-xl">

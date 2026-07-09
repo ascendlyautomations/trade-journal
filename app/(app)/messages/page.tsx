@@ -8,6 +8,7 @@ import {
   newConversationId,
 } from "../../../lib/conversationAccess"
 import { ensureDmConversation } from "@/lib/dmConversation"
+import { devLog } from "@/lib/devLog"
 import { buildDmThreadPath, groupThreadPath } from "@/lib/messageRoutes"
 import { ProfileAvatarImg } from "@/app/components/SafeProfileAvatar"
 import { normalizeProfileUsername } from "@/lib/profileUsername"
@@ -171,7 +172,7 @@ export default function MessagesPage() {
     async (currentUserId: string, reason: "page-open" | "chat-open") => {
       if (isDemoSupabaseBlocked()) return
 
-      console.log("[messages] mark read start", {
+      devLog("[messages] mark read start", {
         reason,
         userId: currentUserId,
         type: "message",
@@ -194,7 +195,7 @@ export default function MessagesPage() {
         return
       }
 
-      console.log("[messages] mark read success", {
+      devLog("[messages] mark read success", {
         reason,
         userId: currentUserId,
         updated: count ?? data?.length ?? 0,
@@ -798,7 +799,7 @@ export default function MessagesPage() {
 
         <div className="mx-auto flex h-full min-h-0 w-full max-w-3xl flex-col">
 
-          <h1 className="mb-4 shrink-0 text-2xl font-semibold">
+          <h1 className="mb-4 shrink-0 text-2xl font-semibold text-blue-300">
             Messages
           </h1>
 

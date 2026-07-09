@@ -2413,10 +2413,12 @@ function FeedPageContent() {
         ),
       }))
 
-      console.log("[comment-delete] local state updated", {
-        commentId: String(comment.id),
-        postId,
-      })
+      if (process.env.NODE_ENV !== "production") {
+        console.log("[comment-delete] local state updated", {
+          commentId: String(comment.id),
+          postId,
+        })
+      }
 
       return true
     },
@@ -2490,6 +2492,7 @@ function FeedPageContent() {
 
   return (
     <div className="w-full text-white">
+      <h1 className="sr-only">Feed</h1>
       <FeedbackModal {...feedbackModalProps} />
       <ConfirmModal {...deleteReelConfirmProps} />
       <div className="flex justify-center px-4 py-6 sm:py-8 pb-10">

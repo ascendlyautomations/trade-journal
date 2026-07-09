@@ -20,6 +20,7 @@ import {
   shouldShowDmDateDivider,
 } from "@/lib/formatMessageTimestamp"
 import { supabase } from "../../../lib/supabaseClient"
+import { devLog } from "@/lib/devLog"
 import { compressImage, compressScreenshot } from "@/lib/compressImage"
 import { feedbackPresets } from "@/lib/feedbackPresets"
 import { logSupabaseError } from "@/lib/logSupabaseError"
@@ -1199,7 +1200,7 @@ export default function DMPage() {
   async function markMessageNotificationsRead(currentUserId: string) {
     if (isDemoSupabaseBlocked()) return
 
-    console.log("[messages/[id]] mark read start", {
+    devLog("[messages/[id]] mark read start", {
       userId: currentUserId,
       conversationId: activeConversationId,
       type: "message",
@@ -1222,7 +1223,7 @@ export default function DMPage() {
       return
     }
 
-    console.log("[messages/[id]] mark read success", {
+    devLog("[messages/[id]] mark read success", {
       userId: currentUserId,
       conversationId: activeConversationId,
       updated: count ?? data?.length ?? 0,
@@ -1271,7 +1272,7 @@ export default function DMPage() {
         filter: `conversation_id=eq.${activeConversationId}`
       },
       (payload) => {
-        console.log("Realtime event:", payload)
+        devLog("Realtime event:", payload)
 
         if (payload.eventType === "INSERT") {
           const raw = payload.new as { id?: string; sender_id?: string }

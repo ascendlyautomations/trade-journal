@@ -199,7 +199,7 @@ export default function AdminPage() {
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100 p-4 md:p-8">
         <div className="mx-auto max-w-6xl space-y-8">
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
+            <h1 className="text-2xl md:text-3xl font-bold text-blue-300">
               Admin Dashboard
             </h1>
             <p className="mt-1 text-sm text-gray-400">Choose a module. Queues and analytics open on dedicated pages.</p>

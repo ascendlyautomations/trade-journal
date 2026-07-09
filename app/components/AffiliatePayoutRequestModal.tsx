@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react"
 import { AFFILIATE_PRIMARY_BUTTON_CLASS } from "@/lib/affiliateUi"
+import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
+import { useModalScrollLock } from "@/app/components/ui/modalLayout"
 
 type Props = {
   open: boolean
@@ -36,6 +38,17 @@ export default function AffiliatePayoutRequestModal({
       setBusy(false)
     }
   }, [open])
+
+  useModalScrollLock(open)
+
+  useEffect(() => {
+    if (!open || busy) return
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose()
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [open, busy, onClose])
 
   if (!open) return null
 
@@ -72,25 +85,24 @@ export default function AffiliatePayoutRequestModal({
   }
 
   return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+    <div
+      className="fixed inset-0 z-[10050] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+      onClick={() => {
+        if (!busy) onClose()
+      }}
+    >
       <div
         className="w-full max-w-md rounded-2xl border border-white/10 bg-[#152238] p-6 text-white shadow-2xl"
         role="dialog"
         aria-modal="true"
         aria-labelledby="payout-modal-title"
+        onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-3">
           <h2 id="payout-modal-title" className="text-lg font-semibold text-emerald-300">
             Request payout
           </h2>
-          <button
-            type="button"
-            onClick={() => onClose()}
-            disabled={busy}
-            className="rounded-lg bg-white/10 px-3 py-1 text-sm hover:bg-white/20 disabled:opacity-50"
-          >
-            Close
-          </button>
+          <ModalCloseButton onClick={onClose} disabled={busy} />
         </div>
 
         <p className="mt-2 text-sm text-gray-400">

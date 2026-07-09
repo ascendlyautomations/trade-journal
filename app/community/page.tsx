@@ -1213,16 +1213,18 @@ function CommunityContent() {
       activeSectionId
     )
 
-    console.log("[room_messages fetch]", {
-      selectedRoomId: roomId,
-      activeSectionId,
-      selectedSectionId: sectionFilterRef.current.id,
-      sectionsCount: sectionsList.length,
-      sectionIds: sectionsList.map((s) => s.id),
-      bypassCache: options?.bypassCache ?? false,
-      cacheKey,
-      userId: userIdRef.current,
-    })
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[room_messages fetch]", {
+        selectedRoomId: roomId,
+        activeSectionId,
+        selectedSectionId: sectionFilterRef.current.id,
+        sectionsCount: sectionsList.length,
+        sectionIds: sectionsList.map((s) => s.id),
+        bypassCache: options?.bypassCache ?? false,
+        cacheKey,
+        userId: userIdRef.current,
+      })
+    }
 
     const loadGen = ++roomMessagesFetchGenRef.current
 
@@ -1312,13 +1314,15 @@ function CommunityContent() {
     const mainData = ((mainRes.data || []) as RoomMessage[]).slice().reverse()
     setMessages(mainData)
 
-    console.log("[room_messages fetch] result", {
-      selectedRoomId: roomId,
-      activeSectionId,
-      pinnedCount: pinnedData.length,
-      mainCount: mainData.length,
-      userId: userIdRef.current,
-    })
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[room_messages fetch] result", {
+        selectedRoomId: roomId,
+        activeSectionId,
+        pinnedCount: pinnedData.length,
+        mainCount: mainData.length,
+        userId: userIdRef.current,
+      })
+    }
 
     setMessagesByRoom((prev) => ({
       ...prev,
@@ -2932,14 +2936,16 @@ function CommunityContent() {
     try {
       const { sectionId: insertSectionId, source: sectionIdSource } =
         resolveInsertSectionId()
-      console.log("[room_messages insert]", {
-        selectedRoomId,
-        selectedSectionId,
-        insertSectionId,
-        sectionIdSource,
-        activeFetchSectionId: activeFetchSectionId(),
-        messageType: "text",
-      })
+      if (process.env.NODE_ENV !== "production") {
+        console.log("[room_messages insert]", {
+          selectedRoomId,
+          selectedSectionId,
+          insertSectionId,
+          sectionIdSource,
+          activeFetchSectionId: activeFetchSectionId(),
+          messageType: "text",
+        })
+      }
 
       const { data: insertedRow, error } = await supabase
         .from("room_messages")
@@ -3003,14 +3009,16 @@ function CommunityContent() {
 
     const { sectionId: insertSectionId, source: sectionIdSource } =
       resolveInsertSectionId()
-    console.log("[room_messages insert]", {
-      selectedRoomId,
-      selectedSectionId,
-      insertSectionId,
-      sectionIdSource,
-      activeFetchSectionId: activeFetchSectionId(),
-      messageType: "trade",
-    })
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[room_messages insert]", {
+        selectedRoomId,
+        selectedSectionId,
+        insertSectionId,
+        sectionIdSource,
+        activeFetchSectionId: activeFetchSectionId(),
+        messageType: "trade",
+      })
+    }
 
     const { data: insertedRow, error } = await supabase
       .from("room_messages")
@@ -3066,9 +3074,10 @@ function CommunityContent() {
         <div className="mx-auto flex h-full min-h-0 w-full max-w-6xl flex-col overflow-visible rounded-2xl border border-white/10 bg-black/25 md:flex-row md:overflow-hidden">
           <aside className="shrink-0 border-b border-white/10 bg-[#0b1220]/80 md:w-72 md:border-b-0 md:border-r">
             <div className="border-b border-white/10 px-3 py-1.5 md:px-4 md:py-3">
-              <h1 className="hidden text-lg font-semibold md:block">
+              <h1 className="sr-only">Trade Rooms</h1>
+              <p className="hidden text-lg font-semibold text-blue-300 md:block" aria-hidden>
                 {rooms.length > 0 ? "My Trade Rooms" : "Trade Rooms"}
-              </h1>
+              </p>
               <div className="flex items-center gap-1 md:hidden">
                 <button
                   type="button"
@@ -4149,7 +4158,7 @@ function CommunityContent() {
 
       {editingSection ? (
         <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+          className="fixed inset-0 z-[10050] flex items-center justify-center bg-black/50 p-4"
           onClick={() => {
             if (deletingSectionId) return
             setEditingSection(null)
@@ -4253,7 +4262,7 @@ function CommunityContent() {
 
       {showManageMembers && isOwner && selectedRoomId ? (
         <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+          className="fixed inset-0 z-[10050] flex items-center justify-center bg-black/50 p-4"
           onClick={() => {
             if (memberActionBusy || memberActionConfirm) return
             setShowManageMembers(false)

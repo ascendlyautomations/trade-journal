@@ -36,7 +36,7 @@ export default function LandingAnalyticsShowcaseSection() {
         <div className="mt-8 flex justify-center md:mt-16">
           <div className="w-[94%] max-w-full sm:w-[92%] md:w-[90%] lg:w-[87%]">
             <LandingShowcaseImage
-              src="/images/Know_Your_Edge.png"
+              src="/images/Know_Your_Edge.webp"
               alt="TradeTraxs analytics — know your edge with performance insights"
               objectPositionClass="object-top"
               size="large"

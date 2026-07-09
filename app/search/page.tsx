@@ -5,6 +5,7 @@ import { useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { useRouter } from "next/navigation"
 import { profilePath } from "@/lib/profileRoutes"
+import { devLog } from "@/lib/devLog"
 
 export default function SearchPage() {
   const [search, setSearch] = useState("")
@@ -35,7 +36,7 @@ export default function SearchPage() {
     }
 
     if (!data) {
-      console.log("No data returned from profile search")
+      devLog("No data returned from profile search")
     }
 
     setUsers(data || [])
@@ -49,7 +50,7 @@ export default function SearchPage() {
 
         <div className="max-w-2xl mx-auto">
 
-          <h1 className="text-2xl font-semibold mb-4">
+          <h1 className="mb-4 text-2xl font-semibold text-blue-300">
             Search Users
           </h1>
 

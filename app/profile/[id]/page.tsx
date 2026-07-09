@@ -18,6 +18,7 @@ import {
 } from "react"
 import dynamic from "next/dynamic"
 import { supabase } from "../../../lib/supabaseClient"
+import { devLog, devWarn } from "@/lib/devLog"
 import { deleteUserTrade } from "@/lib/deleteTrade"
 import { invalidateUserStreaksCache } from "@/lib/userStreaksCache"
 import { compressImage } from "@/lib/compressImage"
@@ -1064,7 +1065,7 @@ function PostCard({
       }}
       onConfirm={async () => {
         if (!pendingDelete || !onDeleteComment) return
-        console.log("[comment-delete] confirm", {
+        devLog("[comment-delete] confirm", {
           commentId: String(pendingDelete.id),
           postId: pendingDelete.post_id ?? post.id,
         })
@@ -1074,7 +1075,7 @@ function PostCard({
             ...pendingDelete,
             post_id: pendingDelete.post_id ?? post.id,
           })
-          console.log("[comment-delete] handler finished", {
+          devLog("[comment-delete] handler finished", {
             commentId: String(pendingDelete.id),
             ok,
           })
@@ -1694,7 +1695,7 @@ function ProfilePageContent() {
       return
     }
 
-    console.log("ProfileId from URL:", profileId)
+    devLog("ProfileId from URL:", profileId)
 
     setProfile(null)
     setAllTrades([])
@@ -2158,8 +2159,8 @@ function ProfilePageContent() {
       process.env.NEXT_PUBLIC_PROFILE_FETCH_DEBUG === "1"
 
     if (devProfileDebug) {
-      console.log("SUPABASE URL:", process.env.NEXT_PUBLIC_SUPABASE_URL)
-      console.log("FETCHING PROFILE SEGMENT:", segment, { lookupByUuid })
+      devLog("SUPABASE URL:", process.env.NEXT_PUBLIC_SUPABASE_URL)
+      devLog("FETCHING PROFILE SEGMENT:", segment, { lookupByUuid })
     }
 
     setLastProfileFetchError(null)
@@ -2225,7 +2226,7 @@ function ProfilePageContent() {
         .select(PUBLIC_PROFILE_SELECT)
         .limit(50)
         .then((listProbe) => {
-          console.log("PROFILE DEBUG (list up to 50 rows):", {
+          devLog("PROFILE DEBUG (list up to 50 rows):", {
             rowCount: listProbe.data?.length ?? 0,
             error: listProbe.error,
             sampleIds: listProbe.data?.slice(0, 5).map((r: { id: string }) => r.id),
@@ -2246,8 +2247,8 @@ function ProfilePageContent() {
     const { data: prof, error } = await profileQuery.maybeSingle()
 
     if (devProfileDebug) {
-      console.log("PROFILE DATA:", prof)
-      console.log("ERROR:", error)
+      devLog("PROFILE DATA:", prof)
+      devLog("ERROR:", error)
     }
 
     if (error) {
@@ -3195,11 +3196,11 @@ function ProfilePageContent() {
 
   async function deleteComment(comment: any) {
     if (!currentUserId) {
-      console.warn("[comment-delete] aborted: no user")
+      devWarn("[comment-delete] aborted: no user")
       return false
     }
     if (String(comment.user_id) !== String(currentUserId)) {
-      console.warn("[comment-delete] aborted: not author", {
+      devWarn("[comment-delete] aborted: not author", {
         commentUserId: comment.user_id,
         currentUserId,
       })
@@ -3297,7 +3298,7 @@ function ProfilePageContent() {
       )
     }
 
-    console.log("[comment-delete] local state updated", {
+    devLog("[comment-delete] local state updated", {
       commentId,
       stateKey,
     })

@@ -15,6 +15,7 @@ import {
 import { isProActive } from "@/lib/subscription"
 import { supabaseBearerHeaders } from "@/lib/supabaseBearerFetch"
 import { supabase } from "@/lib/supabaseClient"
+import { toUserFacingErrorMessage } from "@/lib/userFacingError"
 
 const PAGE_SIZE = 20
 
@@ -254,7 +255,7 @@ export default function AdminUsersPage() {
       offset,
     })
     if (error) {
-      setListError(error.message)
+      setListError(toUserFacingErrorMessage(error))
       setRows([])
       setTotal(0)
     } else {
@@ -305,13 +306,13 @@ export default function AdminUsersPage() {
         outcome.skipped.push({
           id: row.id,
           username: label,
-          reason: result.error.message,
+          reason: toUserFacingErrorMessage(result.error),
         })
       } else {
         outcome.failed.push({
           id: row.id,
           username: label,
-          message: result.error.message,
+          message: toUserFacingErrorMessage(result.error),
           step: result.error.step,
           table: result.error.table,
         })
@@ -336,7 +337,7 @@ export default function AdminUsersPage() {
       const { data, error } = await fetchUserActivityCounts(supabase, selected.id)
       if (cancelled) return
       if (error) {
-        setCountsError(error.message)
+        setCountsError(toUserFacingErrorMessage(error))
         setCounts(data)
       } else {
         setCounts(data)
@@ -400,7 +401,7 @@ export default function AdminUsersPage() {
         setDeleteError({
           step: result.error.step ?? null,
           table: result.error.table ?? null,
-          message: result.error.message,
+          message: toUserFacingErrorMessage(result.error),
         })
         return
       }
@@ -438,7 +439,7 @@ export default function AdminUsersPage() {
     })
     setModerationBusy(false)
     if (error) {
-      alert(error.message)
+      alert(toUserFacingErrorMessage(error))
       return
     }
     setSelected({ ...selected, is_banned: true, banned_reason: banReason.trim(), banned_at: new Date().toISOString() })
@@ -452,7 +453,7 @@ export default function AdminUsersPage() {
     const { error } = await unbanUser(supabase, { adminUserId, targetUserId: selected.id })
     setModerationBusy(false)
     if (error) {
-      alert(error.message)
+      alert(toUserFacingErrorMessage(error))
       return
     }
     setBanReason("")
@@ -493,7 +494,7 @@ export default function AdminUsersPage() {
         <div className="mx-auto max-w-6xl space-y-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent md:text-3xl">
+              <h1 className="text-2xl font-bold text-blue-300 md:text-3xl">
                 Users
               </h1>
               <p className="mt-1 text-sm text-gray-400">Search, filter, and moderate accounts.</p>

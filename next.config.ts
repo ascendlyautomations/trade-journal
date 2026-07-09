@@ -39,6 +39,7 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [
       { source: "/input-trade", destination: "/app", permanent: false },
+      { source: "/input", destination: "/app", permanent: false },
       { source: "/trade-history", destination: "/trades", permanent: false },
       { source: "/ai", destination: "/analyst", permanent: false },
       { source: "/trade-rooms", destination: "/community", permanent: false },

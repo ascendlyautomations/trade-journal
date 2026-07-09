@@ -19,7 +19,7 @@ export const LANDING_FLAGSHIPS: LandingFlagship[] = [
     tagline:
       "Capture every trade with notes, screenshots, and analytics so every trade becomes a learning opportunity.",
     bonuses: "Calendar · CSV Import · Saved Trades",
-    imageSrc: "/images/Trading_Journal.png",
+    imageSrc: "/images/Trading_Journal.webp",
     imageAlt: "TradeTraxs trading journal with trade entry and notes",
     imageObjectPosition: "object-top",
   },
@@ -29,7 +29,7 @@ export const LANDING_FLAGSHIPS: LandingFlagship[] = [
     tagline:
       "Showcase your trading journey, build credibility, and connect with traders who share your goals.",
     bonuses: "Achievements · Followers",
-    imageSrc: "/images/Trader_Profiles.png",
+    imageSrc: "/images/Trader_Profiles.webp",
     imageAlt: "Trader profiles on TradeTraxs",
     imageObjectPosition: "object-top",
   },
@@ -38,7 +38,7 @@ export const LANDING_FLAGSHIPS: LandingFlagship[] = [
     title: "Trading Clips",
     tagline:
       "Watch short-form trade breakdowns, educational content, and market insights from traders around the world.",
-    imageSrc: "/images/Trading_Reels.png",
+    imageSrc: "/images/Trading_Reels.webp",
     imageAlt: "Trading clips and short-form content on TradeTraxs",
     imageObjectPosition: "object-top",
   },
@@ -47,7 +47,7 @@ export const LANDING_FLAGSHIPS: LandingFlagship[] = [
     title: "Trade Rooms",
     tagline:
       "Discuss setups, share charts, and trade alongside other traders in real time. Build yours today!",
-    imageSrc: "/images/Trade_Rooms.png",
+    imageSrc: "/images/Trade_Rooms.webp",
     imageAlt: "TradeTraxs trade rooms for real-time trader chat",
     imageObjectPosition: "object-right",
   },
@@ -56,7 +56,7 @@ export const LANDING_FLAGSHIPS: LandingFlagship[] = [
     title: "Prop Firm Mode",
     tagline:
       "Track evaluations, monitor firm rules, drawdown, and payout progress so you stay funded with confidence.",
-    imageSrc: "/images/Prop_Firm_Mode.png",
+    imageSrc: "/images/Prop_Firm_Mode.webp",
     imageAlt: "TradeTraxs prop firm dashboard and rule tracking",
     imageObjectPosition: "object-center",
   },
@@ -66,7 +66,7 @@ export const LANDING_FLAGSHIPS: LandingFlagship[] = [
     tagline:
       "Discover patterns, uncover mistakes, and receive AI-powered insights that help you become a more consistent trader.",
     bonuses: "Advanced Analytics · Performance Insights",
-    imageSrc: "/images/AI_Trade_Analyst.png",
+    imageSrc: "/images/AI_Trade_Analyst.webp",
     imageAlt: "AI trade analysis and review in TradeTraxs",
     imageObjectPosition: "object-center",
   },

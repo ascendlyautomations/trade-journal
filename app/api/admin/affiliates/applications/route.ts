@@ -1,4 +1,5 @@
 import { getRouteUser, supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
+import { toUserFacingErrorMessage } from "@/lib/userFacingError"
 
 export const runtime = "nodejs"
 
@@ -35,10 +36,10 @@ export async function GET(req: Request) {
     .order("created_at", { ascending: false })
 
   if (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    })
+    return Response.json(
+      { error: toUserFacingErrorMessage(error) },
+      { status: 500 }
+    )
   }
 
   return new Response(JSON.stringify({ applications: data ?? [] }), {

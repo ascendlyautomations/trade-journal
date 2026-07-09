@@ -175,7 +175,7 @@ export default function ReferralsPage() {
         <div className="mx-auto max-w-5xl">
           <div className="mb-8 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-white sm:text-3xl">
+              <h1 className="text-2xl font-bold text-blue-300 sm:text-3xl">
                 Referral stats
               </h1>
               <p className="mt-1 text-sm text-gray-400">

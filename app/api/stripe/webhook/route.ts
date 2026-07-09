@@ -8,6 +8,7 @@ import {
   createAffiliateReferralNotification,
 } from "@/lib/server/affiliateReferralNotifications"
 import { resolveTraxProBillingIntervalFromStripePriceId } from "@/lib/traxProBillingPlans.server"
+import { devLog } from "@/lib/devLog"
 
 export const runtime = "nodejs"
 
@@ -97,7 +98,7 @@ async function syncSubscriptionToProfile(params: {
   const customerId = stripeCustomerId(subscription.customer)
 
   if (!customerId) {
-    console.log(`❌ subscription sync (${logContext}): missing customer id`)
+    devLog(`❌ subscription sync (${logContext}): missing customer id`)
     return false
   }
 
@@ -124,7 +125,7 @@ async function syncSubscriptionToProfile(params: {
 
   const updatePayload = buildSubscriptionProfileUpdatePayload(subscription)
 
-  console.log(`[subscription sync] (${logContext}) applying update:`, {
+  devLog(`[subscription sync] (${logContext}) applying update:`, {
     customerId,
     profileId: profile.id,
     status: subscription.status,
@@ -155,7 +156,7 @@ async function syncSubscriptionToProfile(params: {
     return false
   }
 
-  console.log(`✅ Subscription synced successfully (${logContext})`, {
+  devLog(`✅ Subscription synced successfully (${logContext})`, {
     customerId,
     profileId: profile.id,
     rowsUpdated: updatedRows.length,
@@ -175,7 +176,7 @@ async function trackAffiliateFromManualCheckoutDiscount(params: {
 }): Promise<void> {
   const { stripe, supabase, sessionId, buyerProfileId } = params
 
-  console.log(
+  devLog(
     "🎟️ checkout: resolving manual promotion codes for session",
     sessionId
   )
@@ -186,7 +187,7 @@ async function trackAffiliateFromManualCheckoutDiscount(params: {
       expand: ["total_details.breakdown.discounts", "discounts"],
     })
   } catch (e) {
-    console.log("⚠️ checkout sessions.retrieve (discounts) failed:", e)
+    devLog("⚠️ checkout sessions.retrieve (discounts) failed:", e)
     return
   }
 
@@ -226,13 +227,13 @@ async function trackAffiliateFromManualCheckoutDiscount(params: {
   }
 
   if (promoIds.size === 0) {
-    console.log(
+    devLog(
       "ℹ️ No promotion code discount on checkout — skip affiliate attribution"
     )
     return
   }
 
-  console.log("🎟️ Promotion code ids from checkout:", [...promoIds])
+  devLog("🎟️ Promotion code ids from checkout:", [...promoIds])
 
   for (const promoId of promoIds) {
     type AffiliateRow = {
@@ -265,17 +266,17 @@ async function trackAffiliateFromManualCheckoutDiscount(params: {
           if (byCode) affiliate = byCode as AffiliateRow
         }
       } catch (e) {
-        console.log("⚠️ promotionCodes.retrieve failed:", promoId, e)
+        devLog("⚠️ promotionCodes.retrieve failed:", promoId, e)
       }
     }
 
     if (!affiliate) {
-      console.log("⚠️ No affiliate row for promotion id:", promoId)
+      devLog("⚠️ No affiliate row for promotion id:", promoId)
       continue
     }
 
     if (affiliate.user_id === buyerProfileId) {
-      console.log("⚠️ Skip self-referral (buyer is affiliate owner)")
+      devLog("⚠️ Skip self-referral (buyer is affiliate owner)")
       continue
     }
 
@@ -287,7 +288,7 @@ async function trackAffiliateFromManualCheckoutDiscount(params: {
     if (buyerRefErr) {
       console.error("ERROR:", JSON.stringify(buyerRefErr, null, 2))
     } else {
-      console.log("✅ Buyer referred_by set from manual promo:", affiliate.code)
+      devLog("✅ Buyer referred_by set from manual promo:", affiliate.code)
       try {
         await createAffiliateReferralNotification(supabase, {
           affiliateUserId: affiliate.user_id,
@@ -305,9 +306,9 @@ async function trackAffiliateFromManualCheckoutDiscount(params: {
       .maybeSingle()
 
     if (refFetchErr) {
-      console.log("❌ Referrer profile fetch error:", refFetchErr)
+      devLog("❌ Referrer profile fetch error:", refFetchErr)
     } else if (!referrerProfile?.id) {
-      console.log(
+      devLog(
         "❌ Referrer profile missing for affiliate.user_id:",
         affiliate.user_id
       )
@@ -322,7 +323,7 @@ async function trackAffiliateFromManualCheckoutDiscount(params: {
       if (refUpErr) {
         console.error("ERROR:", JSON.stringify(refUpErr, null, 2))
       } else {
-        console.log("✅ referral_count incremented for:", affiliate.code)
+        devLog("✅ referral_count incremented for:", affiliate.code)
       }
     }
 
@@ -331,7 +332,7 @@ async function trackAffiliateFromManualCheckoutDiscount(params: {
 }
 
 export async function POST(req: Request) {
-  console.log("🔥 WEBHOOK HIT")
+  devLog("🔥 WEBHOOK HIT")
   try {
     const body = await req.text()
     const sig = req.headers.get("stripe-signature")
@@ -347,7 +348,7 @@ export async function POST(req: Request) {
     let event: Stripe.Event
 
     try {
-      console.log(
+      devLog(
         "🔐 Webhook secret exists:",
         !!process.env.STRIPE_WEBHOOK_SECRET
       )
@@ -370,14 +371,14 @@ export async function POST(req: Request) {
       return new Response("Invalid signature", { status: 400 })
     }
 
-    console.log("📩 Event received:", event.type)
-    console.log("📩 Stripe event:", event.type)
+    devLog("📩 Event received:", event.type)
+    devLog("📩 Stripe event:", event.type)
 
     switch (event.type) {
       case "checkout.session.completed":
       case "invoice.payment_succeeded":
       case "customer.subscription.created":
-        console.log("➡️ Handling event:", event.type)
+        devLog("➡️ Handling event:", event.type)
         break
       default:
         break
@@ -387,19 +388,19 @@ export async function POST(req: Request) {
     // ✅ CHECKOUT SESSION COMPLETED → link customer + Pro
     // ======================================================
     if (event.type === "checkout.session.completed") {
-      console.log("📦 Processing checkout.session.completed")
+      devLog("📦 Processing checkout.session.completed")
 
       try {
         const session = event.data.object as Stripe.Checkout.Session
         const customerId = stripeCustomerId(session.customer)
 
-        console.log("🔥 CHECKOUT COMPLETE — customerId:", customerId)
+        devLog("🔥 CHECKOUT COMPLETE — customerId:", customerId)
 
         let userId: string | null =
           session.metadata?.user_id ||
           session.metadata?.userId ||
           null
-        console.log("👤 User ID from metadata:", userId)
+        devLog("👤 User ID from metadata:", userId)
 
         if (!userId && customerId) {
           const { data: byCustomer, error: lookupErr } = await supabase
@@ -409,20 +410,20 @@ export async function POST(req: Request) {
             .maybeSingle()
 
           if (lookupErr) {
-            console.log("⚠️ checkout profile lookup by customer error:", lookupErr)
+            devLog("⚠️ checkout profile lookup by customer error:", lookupErr)
           }
           if (byCustomer?.id) {
             userId = byCustomer.id
-            console.log("👤 Profile resolved via stripe_customer_id:", userId)
+            devLog("👤 Profile resolved via stripe_customer_id:", userId)
           }
         }
 
         if (!userId) {
-          console.log(
+          devLog(
             "❌ checkout.session.completed: could not resolve user (no metadata user id, no stripe_customer_id match)"
           )
         } else {
-          console.log("🔥 Activating subscription for:", userId)
+          devLog("🔥 Activating subscription for:", userId)
 
           try {
             let subscriptionPayload: Record<string, unknown> = {
@@ -451,7 +452,7 @@ export async function POST(req: Request) {
               }
             }
 
-            console.log("🛠 Updating user subscription:", userId, subscriptionPayload)
+            devLog("🛠 Updating user subscription:", userId, subscriptionPayload)
             const { error: upErr } = await supabase
               .from("profiles")
               .update(subscriptionPayload)
@@ -460,7 +461,7 @@ export async function POST(req: Request) {
             if (upErr) {
               console.error("ERROR:", JSON.stringify(upErr, null, 2))
             } else {
-              console.log("✅ checkout.session.completed: profile updated to active")
+              devLog("✅ checkout.session.completed: profile updated to active")
               if (customerId) {
                 const { error: mirrorErr } =
                   await mirrorBillingAccountsStripeCustomerId(
@@ -523,7 +524,7 @@ export async function POST(req: Request) {
         const totalCents = Number(invoice.total ?? 0)
         const status = invoice.status ?? "unknown"
 
-        console.log("[invoice.paid] event received", {
+        devLog("[invoice.paid] event received", {
           invoiceId: invoice.id,
           customerId,
           subscriptionId,
@@ -565,7 +566,7 @@ export async function POST(req: Request) {
             break
           }
 
-          console.log(
+          devLog(
             `Waiting for profile stripe_customer_id=${customerId} attempt ${attempt + 1}/5`
           )
           await new Promise((res) => setTimeout(res, 1000))
@@ -579,7 +580,7 @@ export async function POST(req: Request) {
           return new Response("OK", { status: 200 })
         }
 
-        console.log("[invoice.paid] paying user:", payingUser.id)
+        devLog("[invoice.paid] paying user:", payingUser.id)
 
         try {
           if (subscriptionId) {
@@ -598,7 +599,7 @@ export async function POST(req: Request) {
             if (proErr) {
               console.error("Pro refresh failed (invoice.paid)", proErr)
             } else {
-              console.log("[invoice.paid] Pro subscription_status refreshed")
+              devLog("[invoice.paid] Pro subscription_status refreshed")
             }
           }
         } catch (e) {
@@ -614,13 +615,13 @@ export async function POST(req: Request) {
           referredRaw != null ? String(referredRaw).trim() : ""
 
         if (!referredBy) {
-          console.log(
+          devLog(
             "[invoice.paid] no referral on payer (referred_by empty), skip commission"
           )
           return new Response("OK", { status: 200 })
         }
 
-        console.log("🔗 Referral code used:", referredBy)
+        devLog("🔗 Referral code used:", referredBy)
 
         //----------------------------------------
         // STEP 3: Referrer profile
@@ -640,11 +641,11 @@ export async function POST(req: Request) {
         }
 
         if (referrer.id === payingUser.id) {
-          console.log("[invoice.paid] skip self-referral")
+          devLog("[invoice.paid] skip self-referral")
           return new Response("OK", { status: 200 })
         }
 
-        console.log("[invoice.paid] referrer:", referrer.id)
+        devLog("[invoice.paid] referrer:", referrer.id)
 
         if (!invoice.id) {
           console.error(
@@ -660,7 +661,7 @@ export async function POST(req: Request) {
           .maybeSingle()
 
         if (existing) {
-          console.log(
+          devLog(
             "[invoice.paid] referral already recorded for invoice, skipping:",
             invoice.id
           )
@@ -681,7 +682,7 @@ export async function POST(req: Request) {
 
         let basisCents = amountPaidCents
         if (basisCents <= 0 && status === "paid" && totalCents > 0) {
-          console.log(
+          devLog(
             "amount_paid was 0 but invoice is paid with total > 0 — using total as commission basis (cents):",
             totalCents
           )
@@ -692,14 +693,14 @@ export async function POST(req: Request) {
         const commissionRatePercent = Math.round(COMMISSION_RATE * 10000) / 100
         const currency = String(invoice.currency ?? "usd").toLowerCase()
 
-        console.log(
+        devLog(
           "[invoice.paid] commission basis (major units, after cents/100):",
           amountPaid,
           currency
         )
 
         if (amountPaid <= 0) {
-          console.log(
+          devLog(
             "[invoice.paid] commission basis is 0 — skip row (trial, $0, or unpaid shape)"
           )
           return new Response("OK", { status: 200 })
@@ -707,7 +708,7 @@ export async function POST(req: Request) {
 
         const commission = Math.round(amountPaid * COMMISSION_RATE * 100) / 100
 
-        console.log("[invoice.paid] commission 18%:", commission)
+        devLog("[invoice.paid] commission 18%:", commission)
 
         //----------------------------------------
         // STEP 5: Insert referral
@@ -730,7 +731,7 @@ export async function POST(req: Request) {
           return new Response("OK", { status: 200 })
         }
 
-        console.log("[invoice.paid] referral row inserted", {
+        devLog("[invoice.paid] referral row inserted", {
           transaction_amount: amountPaid,
           commission_rate: commissionRatePercent,
           amount_earned: commission,
@@ -759,7 +760,7 @@ export async function POST(req: Request) {
           return new Response("OK", { status: 200 })
         }
 
-        console.log("[invoice.paid] referrer referral_earnings →", newTotal)
+        devLog("[invoice.paid] referrer referral_earnings →", newTotal)
 
         if (isFirstCommissionForPair) {
           try {
@@ -800,14 +801,14 @@ export async function POST(req: Request) {
     // ❌ SUBSCRIPTION DELETED → revoke Pro
     // ======================================================
     if (event.type === "customer.subscription.deleted") {
-      console.log("📦 Processing customer.subscription.deleted")
+      devLog("📦 Processing customer.subscription.deleted")
 
       try {
         const sub = event.data.object as Stripe.Subscription
         const customerId = stripeCustomerId(sub.customer)
 
         if (!customerId) {
-          console.log("❌ subscription.deleted: no customer id")
+          devLog("❌ subscription.deleted: no customer id")
         } else {
           const { data: profile, error: findErr } = await supabase
             .from("profiles")
@@ -816,9 +817,9 @@ export async function POST(req: Request) {
             .maybeSingle()
 
           if (findErr) {
-            console.log("❌ subscription.deleted profile lookup error:", findErr)
+            devLog("❌ subscription.deleted profile lookup error:", findErr)
           } else if (!profile?.id) {
-            console.log(
+            devLog(
               "❌ No profile found for stripe_customer_id (subscription.deleted):",
               customerId
             )
@@ -835,7 +836,7 @@ export async function POST(req: Request) {
               if (upErr) {
                 console.error("ERROR:", JSON.stringify(upErr, null, 2))
               } else {
-                console.log("✅ Pro revoked (customer.subscription.deleted)")
+                devLog("✅ Pro revoked (customer.subscription.deleted)")
               }
             } catch (e) {
               console.error("❌ subscription.deleted update crash:", e)

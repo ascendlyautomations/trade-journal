@@ -449,7 +449,7 @@ export default function AnalystPage() {
     <Suspense
       fallback={
         <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] p-10">
-          <h1 className="mb-8 text-center text-3xl bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
+          <h1 className="mb-8 text-center text-3xl text-blue-300">
             AI Trade Analyst
           </h1>
           <SkeletonAnalystPanel count={4} />
@@ -646,29 +646,6 @@ function AnalystPageContent() {
     const {
       data: { session },
     } = await supabase.auth.getSession()
-    console.log("AI TOKEN:", session?.access_token)
-
-    const t = selectedTrade
-    const pnl = t?.pnl
-    const rr = t?.rr
-    const notes = t?.notes
-    const confluences = t?.confluences ?? t?.top_confluences
-    const mistakes = t?.mistakes
-    const psychology = t?.psychology ?? t?.psychology_notes
-    const entry_price = t?.entry_price
-    const exit_price = t?.exit_price
-    const direction = t?.direction
-    console.log("AI INPUT:", {
-      pnl,
-      rr,
-      notes,
-      confluences,
-      mistakes,
-      psychology,
-      entry_price,
-      exit_price,
-      direction,
-    })
 
     const res = await fetch("/api/analyze-trade", {
       method: "POST",
@@ -742,7 +719,7 @@ function AnalystPageContent() {
       />
 
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100 p-10">
-        <h1 className="mb-8 text-center text-3xl bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
+        <h1 className="mb-8 text-center text-3xl text-blue-300">
           AI Trade Analyst
         </h1>
 

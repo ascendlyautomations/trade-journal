@@ -127,7 +127,7 @@ export default function AchievementsPage() {
         <div className="mx-auto max-w-6xl space-y-5">
           <div className="flex flex-col gap-3 rounded-xl border border-white/10 bg-white/5 p-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h1 className="text-2xl font-semibold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
+              <h1 className="text-2xl font-semibold text-blue-300">
                 Achievements
               </h1>
               <p className="text-sm text-gray-300">

@@ -8,6 +8,7 @@ import {
   readStoredReferralCode,
 } from "@/lib/ensureProfileForUser"
 import { notifyAffiliateReferralAttribution } from "@/lib/notifyAffiliateReferralAttribution"
+import { devLog } from "@/lib/devLog"
 import { useRouter } from "next/navigation"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import AuthPasswordInput from "@/app/components/ui/AuthPasswordInput"
@@ -106,7 +107,7 @@ export default function LoginPage() {
     })
 
     const data = await res.json()
-    console.log("Checkout API response from login:", { status: res.status, data })
+    devLog("Checkout API response from login:", { status: res.status, data })
 
     if (!res.ok) {
       throw new Error(data?.error || "Checkout failed")
@@ -170,7 +171,7 @@ export default function LoginPage() {
   }, [user?.id, authLoading, router])
 
   async function handleSignUp(intent: SignupIntent) {
-    console.log("Signup clicked", intent)
+    devLog("Signup clicked", intent)
     if (loading) return
 
     if (!agreedToTerms) {
@@ -235,7 +236,7 @@ export default function LoginPage() {
 
       const user = data?.user
 
-      console.log("SIGNUP USER:", user)
+      devLog("SIGNUP USER:", user)
 
       if (!user) {
         showPopup({
@@ -258,7 +259,7 @@ export default function LoginPage() {
         return
       }
 
-      console.log("✅ PROFILE ENSURED")
+      devLog("✅ PROFILE ENSURED")
 
       if (ensureResult.created && referralCode?.trim()) {
         notifyAffiliateReferralAttribution()
@@ -303,7 +304,7 @@ export default function LoginPage() {
   }
 
   const handleLogin = async () => {
-    console.log("Login clicked")
+    devLog("Login clicked")
     if (loading) return
     setLoading(true)
 
@@ -407,7 +408,7 @@ export default function LoginPage() {
 
     {/* 🔥 FULL BACKGROUND IMAGE */}
     <img
-      src="/tradetrax-bg.png"
+      src="/tradetrax-bg.webp"
       alt="bg"
       className="absolute inset-0 w-full h-full object-cover"
     />
@@ -436,7 +437,7 @@ export default function LoginPage() {
       >
         {isBetaSignup ? (
           <>
-            <h1 className="mb-3 text-2xl font-bold leading-tight bg-gradient-to-r from-amber-300 to-emerald-400 bg-clip-text text-transparent sm:text-4xl md:mb-5 md:text-[2.5rem]">
+            <h1 className="mb-3 text-2xl font-bold leading-tight text-blue-300 sm:text-4xl md:mb-5 md:text-[2.5rem]">
               🎉 Welcome to the TradeTraxs Beta!
             </h1>
 
@@ -516,7 +517,7 @@ export default function LoginPage() {
               WELCOME TO
             </p>
 
-            <h1 className="text-5xl font-bold mb-4 bg-gradient-to-r from-blue-400 to-teal-300 bg-clip-text text-transparent">
+            <h1 className="text-5xl font-bold mb-4 text-blue-300">
               TradeTraxs
             </h1>
 

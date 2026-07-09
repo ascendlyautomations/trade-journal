@@ -1,4 +1,5 @@
 import type { ReactNode } from "react"
+import { PAGE_HEADING_COLOR_CLASS } from "@/lib/pageHeadingStyles"
 
 type DemoPageShellProps = {
   title: string
@@ -11,7 +12,7 @@ export default function DemoPageShell({ title, subtitle, children }: DemoPageShe
     <div className="mx-auto max-w-6xl px-4 py-8 md:px-6 md:py-10">
       <header className="mb-8">
         <p className="text-xs font-semibold uppercase tracking-wide text-blue-300">Demo</p>
-        <h1 className="mt-1 bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-2xl font-semibold text-transparent md:text-3xl">
+        <h1 className={`mt-1 text-2xl font-semibold md:text-3xl ${PAGE_HEADING_COLOR_CLASS}`}>
           {title}
         </h1>
         {subtitle ? (

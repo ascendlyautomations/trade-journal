@@ -11,6 +11,8 @@ import {
   resolveTraxProBillingIntervalFromStripePriceId,
   resolveTraxProStripePriceId,
 } from "@/lib/traxProBillingPlans.server"
+import { devLog } from "@/lib/devLog"
+import { toUserFacingErrorMessage, USER_FACING_ERROR_MESSAGES } from "@/lib/userFacingError"
 
 export const runtime = "nodejs"
 
@@ -19,7 +21,7 @@ let TRIAL_DAYS = Number(process.env.STRIPE_TRIAL_DAYS ?? 14)
 if (Number.isNaN(TRIAL_DAYS) || TRIAL_DAYS < 0) {
   TRIAL_DAYS = 14
 }
-console.log("[Stripe] Trial days:", TRIAL_DAYS)
+devLog("[Stripe] Trial days:", TRIAL_DAYS)
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -28,11 +30,11 @@ const supabase = createClient(
 
 export async function POST(req: Request) {
   try {
-    console.log("🚀 /api/create-checkout-session hit")
+    devLog("🚀 /api/create-checkout-session hit")
 
     if (!process.env.STRIPE_SECRET_KEY) {
       return Response.json(
-        { error: "Missing STRIPE_SECRET_KEY" },
+        { error: USER_FACING_ERROR_MESSAGES.BILLING_UNAVAILABLE },
         { status: 500 }
       )
     }
@@ -67,7 +69,7 @@ export async function POST(req: Request) {
           bearer
         )
         if (tokenErr) {
-          console.log("❌ Bearer token auth failed for checkout:", tokenErr.message)
+          devLog("❌ Bearer token auth failed for checkout:", tokenErr.message)
         } else if (tokenData.user) {
           user = tokenData.user
         }
@@ -75,7 +77,7 @@ export async function POST(req: Request) {
     }
 
     if (!user) {
-      console.log(
+      devLog(
         "❌ Unauthorized checkout attempt: no Supabase auth user in request cookies or bearer token"
       )
       return Response.json({ error: "Unauthorized" }, { status: 401 })
@@ -102,10 +104,11 @@ export async function POST(req: Request) {
     try {
       stripePriceId = resolveTraxProStripePriceId(billingInterval)
     } catch (priceErr) {
-      const message =
-        priceErr instanceof Error ? priceErr.message : "Missing Stripe price configuration"
-      console.error("ERROR:", message)
-      return Response.json({ error: message }, { status: 500 })
+      console.error("[api/create-checkout-session] price config", priceErr)
+      return Response.json(
+        { error: toUserFacingErrorMessage(priceErr, USER_FACING_ERROR_MESSAGES.BILLING_UNAVAILABLE) },
+        { status: 500 }
+      )
     }
 
     const { data: initialProfile, error: profileError } = await supabase
@@ -185,7 +188,7 @@ export async function POST(req: Request) {
     let customerId = profile?.stripe_customer_id as string | null | undefined
 
     if (!customerId) {
-      console.log("🆕 Creating Stripe customer (no stripe_customer_id on profile)")
+      devLog("🆕 Creating Stripe customer (no stripe_customer_id on profile)")
 
       try {
         const customer = await stripe.customers.create({
@@ -205,7 +208,7 @@ export async function POST(req: Request) {
         if (updateErr) {
           console.error("ERROR:", JSON.stringify(updateErr, null, 2))
         } else {
-          console.log("✅ Saved stripe_customer_id to profile:", customerId)
+          devLog("✅ Saved stripe_customer_id to profile:", customerId)
           const { error: mirrorErr } = await mirrorBillingAccountsStripeCustomerId(
             supabase,
             user.id,
@@ -235,7 +238,7 @@ export async function POST(req: Request) {
         )
       }
     } else {
-      console.log("♻️ Reusing existing Stripe customer:", customerId)
+      devLog("♻️ Reusing existing Stripe customer:", customerId)
     }
 
     if (!customerId) {
@@ -249,7 +252,7 @@ export async function POST(req: Request) {
     const baseUrl =
       process.env.NEXT_PUBLIC_BASE_URL?.trim() || new URL(req.url).origin
 
-    console.log("💳 Checkout config:", {
+    devLog("💳 Checkout config:", {
       priceId: stripePriceId,
       billingInterval,
       baseUrl,
@@ -287,21 +290,14 @@ export async function POST(req: Request) {
 
     const session = await stripe.checkout.sessions.create(sessionConfig)
 
-    console.log("🔥 SESSION CREATED:", session.id, session.metadata)
+    devLog("🔥 SESSION CREATED:", session.id, session.metadata)
 
     return Response.json({ url: session.url })
   } catch (err: unknown) {
-    console.error(
-      "ERROR:",
-      JSON.stringify(
-        err instanceof Error
-          ? { message: err.message, name: err.name }
-          : err,
-        null,
-        2
-      )
+    console.error("[api/create-checkout-session]", err)
+    return Response.json(
+      { error: toUserFacingErrorMessage(err, USER_FACING_ERROR_MESSAGES.BILLING_UNAVAILABLE) },
+      { status: 500 }
     )
-    const message = err instanceof Error ? err.message : "Stripe failed"
-    return Response.json({ error: message }, { status: 500 })
   }
 }

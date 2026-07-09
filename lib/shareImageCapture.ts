@@ -4,6 +4,8 @@ import {
   type CaptureShareCardOptions,
 } from "@/lib/shareImageCaptureConstants"
 
+import { devLog } from "./devLog"
+
 export {
   PERFORMANCE_SHARE_EXPORT_WIDTH,
   PERFORMANCE_SHARE_EXPORT_MIN_HEIGHT,
@@ -17,14 +19,14 @@ function logCaptureTarget(
 ) {
   const prefix = logContext ? `[${logContext}]` : "[shareImageCapture]"
   const style = getComputedStyle(root)
-  console.log(`${prefix} exportId:`, exportId)
-  console.log(`${prefix} document.getElementById:`, root)
-  console.log(`${prefix} clientWidth:`, root.clientWidth)
-  console.log(`${prefix} clientHeight:`, root.clientHeight)
-  console.log(`${prefix} offsetWidth:`, root.offsetWidth)
-  console.log(`${prefix} offsetHeight:`, root.offsetHeight)
-  console.log(`${prefix} display:`, style.display)
-  console.log(`${prefix} visibility:`, style.visibility)
+  devLog(`${prefix} exportId:`, exportId)
+  devLog(`${prefix} document.getElementById:`, root)
+  devLog(`${prefix} clientWidth:`, root.clientWidth)
+  devLog(`${prefix} clientHeight:`, root.clientHeight)
+  devLog(`${prefix} offsetWidth:`, root.offsetWidth)
+  devLog(`${prefix} offsetHeight:`, root.offsetHeight)
+  devLog(`${prefix} display:`, style.display)
+  devLog(`${prefix} visibility:`, style.visibility)
 }
 
 function ensurePerformanceShareDimensions(root: HTMLElement): {
@@ -68,7 +70,7 @@ export async function captureShareCardElementToPng(
     throw new Error(`captureShareCardElementToPng: missing #${exportId}`)
   }
 
-  console.log(`[${logContext}] card element found:`, exportId)
+  devLog(`[${logContext}] card element found:`, exportId)
 
   await new Promise<void>((resolve) => {
     requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
@@ -99,7 +101,7 @@ export async function captureShareCardElementToPng(
       cacheBust: true,
       backgroundColor: "#0b1a2a",
     })
-    console.log(`[${logContext}] capture success`, { width, height })
+    devLog(`[${logContext}] capture success`, { width, height })
     return dataUrl
   } catch (error) {
     console.error(`[${logContext}] capture failure:`, error)

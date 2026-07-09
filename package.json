@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "test:propfirm": "node --experimental-strip-types --test lib/propfirmMetrics.test.ts",
-    "test:achievements": "node --experimental-strip-types --test lib/achievements.test.ts"
+    "test:achievements": "node --experimental-strip-types --test lib/achievements.test.ts",
+    "test:user-facing-error": "node --experimental-strip-types --test lib/userFacingError.test.ts"
   },
   "dependencies": {
     "@sentry/nextjs": "^10.57.0",
@@ -35,6 +36,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.1",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "sharp": "^0.34.3"
   }
 }

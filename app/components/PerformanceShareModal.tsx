@@ -25,6 +25,7 @@ import {
   getPerformanceShareRangeBounds,
   performanceWindowLabel,
 } from "@/lib/performanceShare"
+import { devLog } from "@/lib/devLog"
 
 const WINDOWS: PerformanceWindow[] = [
   "daily",
@@ -106,7 +107,7 @@ export default function PerformanceShareModal({
 
   useEffect(() => {
     if (!open) return
-    console.log("[performanceShare]", {
+    devLog("[performanceShare]", {
       timeframe: windowKey,
       tradePoolCount: tradePool.length,
       filteredTradesCount: filtered.length,
@@ -154,7 +155,7 @@ export default function PerformanceShareModal({
     lockRef.current = true
     setBusy(true)
     try {
-      console.log("[performanceShare] download start", {
+      devLog("[performanceShare] download start", {
         timeframe: windowKey,
         filteredTradesCount: filtered.length,
         equityCurvePoints: equityCurve.length,
@@ -168,7 +169,7 @@ export default function PerformanceShareModal({
       link.download = `performance-${windowKey}-${Date.now()}.png`
       link.href = dataUrl
       link.click()
-      console.log("[performanceShare] download success")
+      devLog("[performanceShare] download success")
     } catch (e) {
       console.error("[performanceShare] download failure:", e)
     } finally {
@@ -179,7 +180,7 @@ export default function PerformanceShareModal({
 
   const capturePerformancePng = useCallback(async () => {
     try {
-      console.log("[performanceShare] DM capture start", {
+      devLog("[performanceShare] DM capture start", {
         timeframe: windowKey,
         exportId,
       })
@@ -187,7 +188,7 @@ export default function PerformanceShareModal({
         warmupMs: 520,
         logContext: "performanceShare",
       })
-      console.log("[performanceShare] DM capture success")
+      devLog("[performanceShare] DM capture success")
       return dataUrl
     } catch (e) {
       console.error("[performanceShare] DM capture failure:", e)

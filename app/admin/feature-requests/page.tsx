@@ -173,7 +173,7 @@ export default function AdminFeatureRequestsPage() {
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] p-4 text-gray-100 md:p-8">
         <div className="mx-auto max-w-6xl space-y-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h1 className="bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-2xl font-bold text-transparent md:text-3xl">
+            <h1 className="text-2xl font-bold text-blue-300 md:text-3xl">
               Feature requests
             </h1>
             <Link href="/admin" className="rounded bg-white/10 px-3 py-2 text-sm hover:bg-white/20">

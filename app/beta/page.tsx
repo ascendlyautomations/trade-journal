@@ -82,7 +82,7 @@ export default function BetaHubPage() {
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] p-4 text-gray-100 md:p-8">
         <div className="mx-auto max-w-3xl space-y-6">
           <div>
-            <h1 className="bg-gradient-to-r from-amber-300 to-emerald-400 bg-clip-text text-2xl font-bold text-transparent md:text-3xl">
+            <h1 className="text-2xl font-bold text-blue-300 md:text-3xl">
               TradeTraxs Beta Hub
             </h1>
             <p className="mt-2 text-sm text-gray-300">

@@ -228,7 +228,7 @@ export default function AdminReviewsPage() {
           <Link href="/admin" className="text-sm text-gray-400 hover:text-gray-200">
             ← Admin
           </Link>
-          <h1 className="mt-2 text-2xl font-bold">Reviews</h1>
+          <h1 className="mt-2 text-2xl font-bold text-blue-300">Reviews</h1>
           <p className="mt-1 text-sm text-gray-400">
             Approve, reject, and feature user reviews for the homepage.
           </p>

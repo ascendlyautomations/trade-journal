@@ -79,7 +79,7 @@ function CsvSupportForm() {
   if (success) {
     return (
       <div className="rounded-2xl border border-white/10 bg-white/10 p-6 md:p-8 shadow-2xl backdrop-blur-xl">
-        <h1 className="text-center text-2xl font-semibold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
+        <h1 className="text-center text-2xl font-semibold text-blue-300">
           CSV sample received
         </h1>
         <p className="mt-6 text-center text-sm leading-relaxed text-emerald-100/95">
@@ -101,7 +101,7 @@ function CsvSupportForm() {
       onSubmit={(e) => void handleSubmit(e)}
       className="rounded-2xl border border-white/10 bg-white/10 p-5 md:p-8 shadow-2xl backdrop-blur-xl"
     >
-      <h1 className="text-center text-2xl font-semibold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
+      <h1 className="text-center text-2xl font-semibold text-blue-300">
         CSV import support
       </h1>
       <p className="mt-2 mb-6 text-center text-sm text-gray-300">

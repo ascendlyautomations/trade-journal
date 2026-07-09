@@ -1,5 +1,6 @@
 import type { User } from "@supabase/supabase-js"
 import { supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
+import { toUserFacingErrorMessage } from "@/lib/userFacingError"
 
 type PendingRequest = {
   id: string
@@ -21,7 +22,7 @@ async function loadPendingRequestForTarget(
 
   if (error) {
     console.error("[follow-requests] lookup failed", error)
-    return { data: null, error: error.message }
+    return { data: null, error: toUserFacingErrorMessage(error) }
   }
 
   return { data: data as PendingRequest | null, error: null }
@@ -67,7 +68,7 @@ export async function approveFollowRequest(
 
   if (followErr && followErr.code !== "23505") {
     console.error("[follow-requests] followers insert failed", followErr)
-    return { ok: false, status: 500, error: followErr.message }
+    return { ok: false, status: 500, error: toUserFacingErrorMessage(followErr) }
   }
 
   const { error: deleteErr } = await supabaseServiceRole
@@ -77,7 +78,7 @@ export async function approveFollowRequest(
 
   if (deleteErr) {
     console.error("[follow-requests] request delete failed", deleteErr)
-    return { ok: false, status: 500, error: deleteErr.message }
+    return { ok: false, status: 500, error: toUserFacingErrorMessage(deleteErr) }
   }
 
   await removeFollowRequestNotification(req.target_id, req.requester_id)
@@ -91,7 +92,7 @@ export async function approveFollowRequest(
   if (notifErr) {
     if (notifErr.code !== "23505") {
       console.error("[follow-requests] follow notification insert failed", notifErr)
-      return { ok: false, status: 500, error: notifErr.message }
+      return { ok: false, status: 500, error: toUserFacingErrorMessage(notifErr) }
     }
   }
 
@@ -122,7 +123,7 @@ export async function declineFollowRequest(
 
   if (deleteErr) {
     console.error("[follow-requests] request delete failed", deleteErr)
-    return { ok: false, status: 500, error: deleteErr.message }
+    return { ok: false, status: 500, error: toUserFacingErrorMessage(deleteErr) }
   }
 
   await removeFollowRequestNotification(req.target_id, req.requester_id)

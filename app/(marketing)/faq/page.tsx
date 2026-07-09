@@ -75,7 +75,7 @@ export default function FAQPage() {
       <div
         className={`min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-6 pb-12 text-white ${COMPANY_PAGE_TOP}`}
       >
-        <h1 className="mb-2 text-center text-3xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
+        <h1 className="mb-2 text-center text-3xl font-bold text-blue-300">
           FAQ
         </h1>
         <p className="mb-10 text-center text-sm text-gray-400">

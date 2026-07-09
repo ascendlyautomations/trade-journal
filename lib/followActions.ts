@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { createFollowNotification } from "@/lib/createFollowNotification"
 import { createFollowRequestNotification } from "@/lib/createFollowRequestNotification"
+import { toUserFacingErrorMessage } from "@/lib/userFacingError"
 import {
   notifyGettingStartedChecklistMaybeCompleted,
 } from "@/lib/gettingStartedProgressSync"
@@ -126,7 +127,7 @@ export async function followOrRequest(
 
     if (error) {
       console.error("[follow] request insert failed", error)
-      return { ok: false, message: error.message }
+      return { ok: false, message: toUserFacingErrorMessage(error) }
     }
 
     await createFollowRequestNotification(supabase, followerId, target.id)
@@ -140,7 +141,7 @@ export async function followOrRequest(
 
   if (error) {
     console.error("[follow] insert failed", error)
-    return { ok: false, message: error.message }
+    return { ok: false, message: toUserFacingErrorMessage(error) }
   }
 
   await createFollowNotification(supabase, followerId, target.id)
@@ -172,7 +173,7 @@ export async function unfollowOrCancelRequest(
 
     if (error) {
       console.error("[follow] delete failed", error)
-      return { ok: false, message: error.message }
+      return { ok: false, message: toUserFacingErrorMessage(error) }
     }
 
     await removeFollowNotification(supabase, followerId, targetId)
@@ -189,7 +190,7 @@ export async function unfollowOrCancelRequest(
 
     if (error) {
       console.error("[follow] cancel request failed", error)
-      return { ok: false, message: error.message }
+      return { ok: false, message: toUserFacingErrorMessage(error) }
     }
 
     await removeFollowRequestNotification(supabase, followerId, targetId)

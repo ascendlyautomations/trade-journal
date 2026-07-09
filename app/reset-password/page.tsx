@@ -144,7 +144,7 @@ export default function ResetPasswordPage() {
   return (
     <div className="relative flex min-h-screen items-center justify-center text-white">
       <img
-        src="/tradetrax-bg.png"
+        src="/tradetrax-bg.webp"
         alt=""
         className="absolute inset-0 h-full w-full object-cover"
       />
@@ -162,7 +162,7 @@ export default function ResetPasswordPage() {
       <div className="relative z-10 flex w-full max-w-6xl flex-col items-center justify-between px-6 md:flex-row">
         <div className="mb-10 max-w-lg text-center md:mb-0 md:text-left">
           <p className="mb-4 text-sm tracking-widest text-blue-300">WELCOME TO</p>
-          <h1 className="mb-4 bg-gradient-to-r from-blue-400 to-teal-300 bg-clip-text text-5xl font-bold text-transparent">
+          <h1 className="mb-4 text-5xl font-bold text-blue-300">
             TradeTraxs
           </h1>
           <p className="text-lg text-gray-300">Track. Analyze. Socialize. Dominate your trading.</p>

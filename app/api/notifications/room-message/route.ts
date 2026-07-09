@@ -1,5 +1,6 @@
 import { getRouteUser, supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
 import { filterRecipientsByRoomMessagePreference } from "@/lib/serverNotificationPreferences"
+import { jsonUserFacingError } from "@/lib/userFacingError"
 
 type RoomMessageMeta = {
   message_id: string
@@ -43,8 +44,7 @@ export async function POST(req: Request) {
     .maybeSingle()
 
   if (messageErr) {
-    console.error("[api/notifications/room-message] message lookup failed", messageErr)
-    return Response.json({ error: messageErr.message }, { status: 500 })
+    return jsonUserFacingError(messageErr, 500, "[api/notifications/room-message] lookup")
   }
 
   if (!messageRow) {
@@ -64,11 +64,11 @@ export async function POST(req: Request) {
     .maybeSingle()
 
   if (senderMemberErr) {
-    console.error(
-      "[api/notifications/room-message] sender membership lookup failed",
-      senderMemberErr
+    return jsonUserFacingError(
+      senderMemberErr,
+      500,
+      "[api/notifications/room-message] sender membership"
     )
-    return Response.json({ error: senderMemberErr.message }, { status: 500 })
   }
 
   if (!senderMember) {

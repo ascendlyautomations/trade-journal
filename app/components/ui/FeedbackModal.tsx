@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect } from "react"
 import { cn } from "./cn"
 import ModalCloseButton from "./ModalCloseButton"
 import { useModalScrollLock } from "./modalLayout"
@@ -43,6 +44,15 @@ export default function FeedbackModal({
 }: FeedbackModalProps) {
   useModalScrollLock(isOpen)
 
+  useEffect(() => {
+    if (!isOpen) return
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose()
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [isOpen, onClose])
+
   if (
     process.env.NODE_ENV !== "production" &&
     isOpen &&
@@ -56,7 +66,7 @@ export default function FeedbackModal({
   return (
     <div
       className={cn(
-        "fixed inset-0 z-50 flex items-center justify-center",
+        "fixed inset-0 z-[10050] flex items-center justify-center",
         overlayClassName
       )}
     >

@@ -16,22 +16,22 @@ import {
 
 const SOCIAL_SHOTS = [
   {
-    src: "/images/social-feed.png",
+    src: "/images/social-feed.webp",
     alt: "TradeTraxs community feed with posts, likes, and comments",
     label: "Feed",
   },
   {
-    src: "/images/public-profiles.png",
+    src: "/images/public-profiles.webp",
     alt: "Trader profiles to build a following on TradeTraxs",
     label: "Profiles",
   },
   {
-    src: "/images/community-learning.png",
+    src: "/images/community-learning.webp",
     alt: "Traders learning and sharing on TradeTraxs",
     label: "Community",
   },
   {
-    src: "/images/messaging-ui-v2.png",
+    src: "/images/messaging-ui-v2.webp",
     alt: "Trade rooms and real-time trader chat",
     label: "Trade rooms",
   },

@@ -182,7 +182,7 @@ export default function ChatPage() {
       <div className="h-screen w-full flex flex-col md:flex-row overflow-hidden">
         {/* SIDEBAR (ROOM LIST) */}
         <aside className="hidden md:flex w-[250px] flex-col border-r border-white/10">
-          <h2 className="mb-4 text-xl font-semibold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
+          <h2 className="mb-4 text-xl font-semibold text-blue-300">
             Trade Rooms
           </h2>
           <div className="space-y-2">
@@ -221,7 +221,7 @@ export default function ChatPage() {
           </div>
 
           <div className="hidden border-b border-white/10 bg-black/20 px-6 py-4 md:block">
-            <h1 className="text-3xl font-semibold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
+            <h1 className="text-3xl font-semibold text-blue-300">
               Global Chat
             </h1>
           </div>

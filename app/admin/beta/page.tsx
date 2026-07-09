@@ -15,6 +15,7 @@ import {
 } from "@/lib/adminBetaDashboard"
 import { getCurrentAdminCheckResult } from "@/lib/adminUsers"
 import { supabase } from "@/lib/supabaseClient"
+import { toUserFacingErrorMessage } from "@/lib/userFacingError"
 
 function MetricCard({
   label,
@@ -94,7 +95,7 @@ export default function AdminBetaDashboardPage() {
       if (cancelled) return
       setLoading(false)
       if (error) {
-        setLoadError(error.message)
+        setLoadError(toUserFacingErrorMessage(error))
         setBundle(null)
         return
       }
@@ -140,7 +141,7 @@ export default function AdminBetaDashboardPage() {
       }
 
       if (error) {
-        setActivityError(error.message)
+        setActivityError(toUserFacingErrorMessage(error))
         if (!opts.append) setActivityRows([])
         setHasMoreActivity(false)
         return
@@ -179,7 +180,7 @@ export default function AdminBetaDashboardPage() {
               <Link href="/admin" className="text-sm text-blue-300 hover:text-blue-200">
                 ← Admin
               </Link>
-              <h1 className="mt-2 text-2xl font-bold bg-gradient-to-r from-amber-300 to-emerald-400 bg-clip-text text-transparent md:text-3xl">
+              <h1 className="mt-2 text-2xl font-bold text-blue-300 md:text-3xl">
                 Beta Dashboard
               </h1>
               <p className="mt-1 text-sm text-gray-400">

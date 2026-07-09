@@ -222,18 +222,6 @@ export default function Leaderboard() {
       const allTrades = await fetchLeaderboardTrades()
 
       setTrades(allTrades)
-
-      if (allTrades.length > 0) {
-        const earliest = allTrades[0]?.created_at
-        const latest = allTrades[allTrades.length - 1]?.created_at
-        console.log("[leaderboard] fetch", {
-          totalTradesFetched: allTrades.length,
-          earliestCreatedAt: earliest,
-          latestCreatedAt: latest,
-        })
-      } else {
-        console.log("[leaderboard] fetch", { totalTradesFetched: 0 })
-      }
     } finally {
       setTradesLoading(false)
     }
@@ -323,18 +311,6 @@ export default function Leaderboard() {
     }
   }, [rankedTraderIds])
 
-  useEffect(() => {
-    console.log("[leaderboard] render", {
-      selectedView: view,
-      chartDataLength: chartData.length,
-      hasData,
-      totalTradesFetched: trades.length,
-      earliestCreatedAt: trades[0]?.created_at ?? null,
-      latestCreatedAt:
-        trades.length > 0 ? trades[trades.length - 1]?.created_at ?? null : null,
-    })
-  }, [trades, view, chartData.length, hasData])
-
   const yAxisTickFormatter = useCallback((v: number) => {
     return formatPnlCurrency(Number(v), {
       minimumFractionDigits: 0,
@@ -364,7 +340,7 @@ export default function Leaderboard() {
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100 px-4 py-6 md:px-8 md:py-8">
         <div className="mx-auto max-w-7xl space-y-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <h1 className="bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-2xl font-semibold text-transparent md:text-3xl">
+            <h1 className="text-2xl font-semibold text-blue-300 md:text-3xl">
               Leaderboard
             </h1>
             <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">

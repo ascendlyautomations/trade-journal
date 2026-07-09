@@ -871,7 +871,7 @@ export default function NotificationsPage() {
             <p className="text-xs font-semibold uppercase tracking-wide text-blue-300">
               Activity
             </p>
-            <h1 className="mt-0.5 bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-2xl font-semibold text-transparent md:text-3xl">
+            <h1 className="mt-0.5 text-2xl font-semibold text-blue-300 md:text-3xl">
               Notifications
             </h1>
             <p className="mt-1 text-sm text-gray-400">

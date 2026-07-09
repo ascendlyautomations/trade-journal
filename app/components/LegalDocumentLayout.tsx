@@ -1,3 +1,4 @@
+import { PAGE_HEADING_LARGE_CLASS } from "@/lib/pageHeadingStyles"
 import Link from "next/link"
 import type { ReactNode } from "react"
 import LegalPageBackButton from "./LegalPageBackButton"
@@ -28,9 +29,7 @@ export default function LegalDocumentLayout({
         <article className="mx-auto max-w-3xl">
           <LegalPageBackButton />
           <header className="mb-10 text-center">
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent md:text-4xl">
-              {title}
-            </h1>
+            <h1 className={PAGE_HEADING_LARGE_CLASS}>{title}</h1>
             <p className="mt-3 text-sm text-gray-300">{subtitle}</p>
             <p className="mt-2 text-xs text-gray-500">Last updated: {LEGAL_LAST_UPDATED}</p>
           </header>

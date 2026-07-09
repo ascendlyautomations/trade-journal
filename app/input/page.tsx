@@ -87,7 +87,7 @@ export default function InputPage() {
           onSubmit={handleSubmit}
           className="bg-white/5 backdrop-blur-md border border-white/10 rounded-xl p-8 w-full max-w-md space-y-4"
         >
-          <h1 className="text-2xl font-bold text-center bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
+          <h1 className="text-2xl font-bold text-center text-blue-300">
             Input Trade
           </h1>
 

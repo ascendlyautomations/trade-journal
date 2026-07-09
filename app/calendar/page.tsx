@@ -410,7 +410,7 @@ export default function CalendarPage() {
                 &lt;
               </button>
 
-              <h2 className="flex-1 text-center text-lg md:text-2xl font-semibold md:font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent px-2">
+              <h2 className="flex-1 text-center text-lg md:text-2xl font-semibold md:font-bold text-blue-300 px-2">
                 {currentDate.toLocaleString("default", { month: "long" })} {year}
               </h2>
 

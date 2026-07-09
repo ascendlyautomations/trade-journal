@@ -1,6 +1,7 @@
 import { supabaseServiceRole, getRouteUser } from "@/app/api/_lib/getRouteUser"
 import { ensureStripeConnectAccountForUser } from "@/lib/stripeConnectAffiliateServer"
 import { getStripeServer, resolveAppUrl } from "@/lib/stripeServer"
+import { devLog } from "@/lib/devLog"
 
 export const runtime = "nodejs"
 
@@ -14,7 +15,7 @@ export async function POST(req: Request) {
     const user = await getRouteUser(req)
 
     if (isDev) {
-      console.log("[account-link] auth probe", {
+      devLog("[account-link] auth probe", {
         authUserId: user?.id ?? null,
         hasBearerToken: hasBearer,
         userResolved: Boolean(user?.id),
@@ -23,7 +24,7 @@ export async function POST(req: Request) {
 
     if (!user?.id) {
       if (isDev) {
-        console.log("[account-link] unauthorized", {
+        devLog("[account-link] unauthorized", {
           reason: hasBearer
             ? "bearer_token_missing_invalid_or_expired"
             : "no_session_cookie_and_no_bearer",
@@ -39,7 +40,7 @@ export async function POST(req: Request) {
       .maybeSingle()
 
     if (isDev) {
-      console.log("[account-link] affiliate row", {
+      devLog("[account-link] affiliate row", {
         found: Boolean(affiliateRow?.id),
         selectError: affiliateSelectErr?.message ?? null,
       })

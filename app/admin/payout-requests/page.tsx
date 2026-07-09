@@ -14,6 +14,7 @@ import { getCurrentAdminCheckResult } from "@/lib/adminUsers"
 import { logPostgrestErrorDev } from "@/lib/postgrestError"
 import { supabaseBearerHeaders } from "@/lib/supabaseBearerFetch"
 import { supabase } from "@/lib/supabaseClient"
+import { toUserFacingErrorMessage } from "@/lib/userFacingError"
 
 type TabId = AffiliatePayoutStatusFilter
 
@@ -84,7 +85,7 @@ export default function AdminPayoutRequestsPage() {
 
     if (listRes.error) {
       logPostgrestErrorDev("admin payout requests list", listRes.error as unknown as Error)
-      setListError(listRes.error.message)
+      setListError(toUserFacingErrorMessage(listRes.error))
       setRows([])
       setLoading(false)
       return []
@@ -175,7 +176,7 @@ export default function AdminPayoutRequestsPage() {
     setActionBusy(false)
     if (error) {
       logPostgrestErrorDev("admin payout approve", error)
-      setActionError(error.message)
+      setActionError(toUserFacingErrorMessage(error))
       return
     }
     const nextRows = await loadRows()
@@ -200,7 +201,7 @@ export default function AdminPayoutRequestsPage() {
     setActionBusy(false)
     if (error) {
       logPostgrestErrorDev("admin payout reject", error)
-      setActionError(error.message)
+      setActionError(toUserFacingErrorMessage(error))
       return
     }
     const nextRows = await loadRows()
@@ -259,7 +260,7 @@ export default function AdminPayoutRequestsPage() {
               <Link href="/admin" className="text-sm text-blue-300 hover:text-blue-200">
                 ← Admin home
               </Link>
-              <h1 className="mt-2 text-2xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent md:text-3xl">
+              <h1 className="mt-2 text-2xl font-bold text-blue-300 md:text-3xl">
                 Affiliate payout requests
               </h1>
               <p className="mt-1 text-sm text-gray-400">

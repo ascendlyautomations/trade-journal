@@ -25,8 +25,10 @@ import {
 import { supabase } from "@/lib/supabaseClient"
 import { supabaseBearerHeaders } from "@/lib/supabaseBearerFetch"
 import { AFFILIATE_PRIMARY_BUTTON_CLASS } from "@/lib/affiliateUi"
+import { devLog } from "@/lib/devLog"
 import { SkeletonPayoutsPage } from "@/app/components/ui/skeletons"
 import { useUserProfile } from "@/lib/useUserProfile"
+import { toUserFacingErrorMessage } from "@/lib/userFacingError"
 
 function formatMoney(n: number): string {
   return n.toFixed(2)
@@ -153,7 +155,7 @@ export default function AffiliatePayoutsPage() {
     setReferralCode(effectiveReferralCode)
 
     if (balRes.error) {
-      setBalanceRpcError(balRes.error.message)
+      setBalanceRpcError(toUserFacingErrorMessage(balRes.error))
       setPayoutBalance(null)
     } else {
       setBalanceRpcError(null)
@@ -161,8 +163,8 @@ export default function AffiliatePayoutsPage() {
     }
 
     if (process.env.NODE_ENV === "development") {
-      console.log("[payouts] affiliate_payout_balance raw RPC result", balRes.raw)
-      console.log("[payouts] affiliate_payout_balance mapped for UI", balRes.balance)
+      devLog("[payouts] affiliate_payout_balance raw RPC result", balRes.raw)
+      devLog("[payouts] affiliate_payout_balance mapped for UI", balRes.balance)
     }
 
     setAffiliateRowId(connectRow?.id != null ? String(connectRow.id) : null)
@@ -266,7 +268,7 @@ export default function AffiliatePayoutsPage() {
     })
 
     if (error) {
-      return { error: error.message }
+      return { error: toUserFacingErrorMessage(error) }
     }
 
     setSuccessBanner("Payout request submitted successfully")
@@ -284,7 +286,7 @@ export default function AffiliatePayoutsPage() {
               <Link href="/affiliate/dashboard" className="text-sm text-blue-300 hover:text-blue-200">
                 ← Affiliate dashboard
               </Link>
-              <h1 className="mt-2 text-2xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent sm:text-3xl">
+              <h1 className="mt-2 text-2xl font-bold text-blue-300 sm:text-3xl">
                 Payouts
               </h1>
               <p className="mt-1 text-sm text-gray-400">

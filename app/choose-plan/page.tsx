@@ -71,7 +71,7 @@ export default function ChoosePlanPage() {
   return (
     <div className="relative flex min-h-screen items-center justify-center px-4 py-10 text-white">
       <img
-        src="/tradetrax-bg.png"
+        src="/tradetrax-bg.webp"
         alt=""
         className="absolute inset-0 h-full w-full object-cover"
         aria-hidden
@@ -79,7 +79,7 @@ export default function ChoosePlanPage() {
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" aria-hidden />
 
       <div className="relative z-10 w-full max-w-md rounded-2xl border border-white/10 bg-white/10 p-8 shadow-2xl backdrop-blur-xl md:py-6 md:px-8">
-        <h1 className="mb-2 text-center text-2xl font-semibold text-white">
+        <h1 className="mb-2 text-center text-2xl font-semibold text-blue-300">
           Choose how you&apos;d like to get started
         </h1>
         <p className="mb-6 text-center text-sm text-gray-300 md:mb-4">

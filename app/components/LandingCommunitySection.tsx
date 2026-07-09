@@ -13,25 +13,25 @@ import {
 const COMMUNITY_ITEMS = [
   {
     title: "Feed & Clips",
-    img: "/images/social-feed.png",
+    img: "/images/social-feed.webp",
     objectPosition: "object-top",
     bullets: ["Share trades with full context", "Watch short-form trading clips"],
   },
   {
     title: "Trader profiles",
-    img: "/images/public-profiles.png",
+    img: "/images/public-profiles.webp",
     objectPosition: "object-top",
     bullets: ["Follow your favorite traders", "Build your reputation over time"],
   },
   {
     title: "Leaderboards",
-    img: "/images/leaderboard.png",
+    img: "/images/leaderboard.webp",
     objectPosition: "object-center",
     bullets: ["Celebrate milestones and achievements", "See how your stats stack up"],
   },
   {
     title: "Learn & discuss",
-    img: "/images/community-learning.png",
+    img: "/images/community-learning.webp",
     objectPosition: "object-center",
     bullets: ["Learn from wins and mistakes", "Discuss setups inside Trade Rooms"],
   },

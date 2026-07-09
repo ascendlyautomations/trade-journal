@@ -75,7 +75,7 @@ export default function FinishTrialPage() {
   return (
     <div className="relative flex min-h-screen items-center justify-center px-4 py-16 text-white">
       <img
-        src="/tradetrax-bg.png"
+        src="/tradetrax-bg.webp"
         alt=""
         className="absolute inset-0 h-full w-full object-cover"
         aria-hidden
@@ -86,7 +86,7 @@ export default function FinishTrialPage() {
         <p className="text-sm font-semibold uppercase tracking-wide text-blue-300">
           Finish Your Free Trial
         </p>
-        <h1 className="mt-2 text-3xl font-bold text-white">You&apos;re almost done!</h1>
+        <h1 className="mt-2 text-3xl font-bold text-blue-300">You&apos;re almost done!</h1>
         <p className="mt-4 text-sm leading-relaxed text-gray-300">
           Start your {TRAXPRO_TRIAL_HEADLINE.toLowerCase()} to access {TRADETRAXS_PRO_PLAN.name}.{" "}
           {TRADETRAXS_PRO_PLAN.description}

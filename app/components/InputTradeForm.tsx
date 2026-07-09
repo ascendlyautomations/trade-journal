@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabaseClient"
 import { uploadContentImageToStorage, CONTENT_IMAGE_CROP_PRESET } from "@/lib/contentImagePipeline"
 import { consumeAppRateLimit } from "@/lib/consumeAppRateLimit"
+import { devLog } from "@/lib/devLog"
 import {
   assertCanCreateTradingAccount,
   FREE_PLAN_ACCOUNT_LIMIT,
@@ -632,11 +633,11 @@ export default function InputTradeForm({
     ): Promise<string | null> => {
       const file = reelFile ?? pendingReelFileRef.current
       if (!file) {
-        console.log("[InputTradeForm] no replay file at save time")
+        devLog("[InputTradeForm] no replay file at save time")
         return null
       }
 
-      console.log("[InputTradeForm] replay upload starting", {
+      devLog("[InputTradeForm] replay upload starting", {
         tradeId,
         userId,
         fileName: file.name,
@@ -656,7 +657,7 @@ export default function InputTradeForm({
         }
         setAttachedReel(result.reel)
         setPendingReelFile(null)
-        console.log("[InputTradeForm] replay replace succeeded", {
+        devLog("[InputTradeForm] replay replace succeeded", {
           reelId: result.reel.id,
           tradeId: result.reel.trade_id,
         })
@@ -676,7 +677,7 @@ export default function InputTradeForm({
       }
       setAttachedReel(result.reel)
       setPendingReelFile(null)
-      console.log("[InputTradeForm] replay upload succeeded", {
+      devLog("[InputTradeForm] replay upload succeeded", {
         reelId: result.reel.id,
         tradeId: result.reel.trade_id,
       })
@@ -1088,7 +1089,7 @@ export default function InputTradeForm({
 
     const now = new Date()
 
-    console.log("FINAL SAVED DATE:", now.toISOString())
+    devLog("FINAL SAVED DATE:", now.toISOString())
 
     const parsedTrade = {
       pnl: pnl ? Number(pnl) : null,
@@ -1100,7 +1101,7 @@ export default function InputTradeForm({
     }
 
     const selectedDate = entryDate
-    console.log("Saving trade_date:", selectedDate)
+    devLog("Saving trade_date:", selectedDate)
 
     const tradeData = {
       ticker,
@@ -1156,7 +1157,7 @@ export default function InputTradeForm({
 
     if (newTradeData) {
       prependTradeInCache(userId, newTradeData)
-      console.log("[InputTradeForm] trade created", {
+      devLog("[InputTradeForm] trade created", {
         tradeId: newTradeData.id,
         isPublic,
       })
@@ -2462,7 +2463,7 @@ export default function InputTradeForm({
           onClose={() => onClose?.()}
           ariaLabel="Edit Trade"
           showCloseButton={false}
-          overlayClassName="z-50 bg-black/70 py-4 backdrop-blur-sm md:py-6"
+          overlayClassName="z-[10050] bg-black/70 py-4 backdrop-blur-sm md:py-6"
           backdropClassName="bg-transparent"
           panelClassName="max-w-md rounded-xl bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] md:max-w-4xl xl:max-w-7xl"
           headerClassName="border-white/10 px-4 py-3 md:px-6 lg:px-7"
@@ -2471,7 +2472,7 @@ export default function InputTradeForm({
             <div className="flex items-center justify-between gap-4">
               <h2
                 id="input-trade-modal-title"
-                className="text-xl font-semibold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent"
+                className="text-xl font-semibold text-blue-300"
               >
                 Edit Trade
               </h2>

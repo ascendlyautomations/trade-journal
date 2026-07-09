@@ -4,6 +4,7 @@ import { getSessionFromDate } from "./getSession.ts"
 import { calculateDirectionalPoints } from "./resolveTradePoints.ts"
 import { CSV_RR_HEADER_ALIASES, parseCsvRrValue } from "./csvRrAliases.ts"
 import { sanitizeCsvTextField } from "./csvFormulaSanitize.ts"
+import { devLog, devWarn, devDebug } from "./devLog"
 
 export type CsvRow = Record<string, string>
 
@@ -554,7 +555,7 @@ function cleanTimeTradeZella(
       : `${raw} UTC`
     const dateObj = new Date(full)
     if (Number.isNaN(dateObj.getTime())) {
-      console.warn("Time parse failed:", val)
+      devWarn("Time parse failed:", val)
       return raw
     }
     return dateObj.toLocaleTimeString("en-US", {
@@ -563,7 +564,7 @@ function cleanTimeTradeZella(
       hour12: true,
     })
   } catch (err) {
-    console.warn("Time parse failed:", val, err)
+    devWarn("Time parse failed:", val, err)
     return raw
   }
 }
@@ -754,10 +755,10 @@ function parseTradeZellaRow(
     is_public: false,
   }
 
-  console.log("Parsed Time:", entryTime, exitTime)
-  console.log("Contracts:", trade.contracts)
+  devLog("Parsed Time:", entryTime, exitTime)
+  devLog("Contracts:", trade.contracts)
   if (process.env.NODE_ENV === "development") {
-    console.log("Parsed Trade:", {
+    devLog("Parsed Trade:", {
       symbol: getValueForTradeZella(normalized, "symbol") || "UNKNOWN",
       pnl,
       entry_price: executionTimes.entry_price,
@@ -793,7 +794,7 @@ export function getCellByAliases(row: CsvRow, aliases: readonly string[]): strin
 
 function logCsvRowDebug(label: string, payload: Record<string, unknown>) {
   if (process.env.NODE_ENV === "production") return
-  console.debug(`[csv-import][${label}]`, payload)
+  devDebug(`[csv-import][${label}]`, payload)
 }
 
 export type CsvEntryExitNormalizeOptions = {

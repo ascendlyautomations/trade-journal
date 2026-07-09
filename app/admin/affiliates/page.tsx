@@ -11,6 +11,7 @@ import { getCurrentAdminCheckResult } from "@/lib/adminUsers"
 import { type AffiliateApplicationRow } from "@/lib/affiliateApplication"
 import { supabaseBearerHeaders } from "@/lib/supabaseBearerFetch"
 import { supabase } from "@/lib/supabaseClient"
+import { toUserFacingErrorMessage } from "@/lib/userFacingError"
 
 type TabId = "pending" | "approved" | "rejected"
 
@@ -219,7 +220,7 @@ export default function AdminAffiliateApplicationsPage() {
     })
     setPendingAction(null)
     if (error) {
-      setActionError(error.message)
+      setActionError(toUserFacingErrorMessage(error))
       return
     }
 
@@ -265,7 +266,7 @@ export default function AdminAffiliateApplicationsPage() {
     })
     setPendingAction(null)
     if (error) {
-      setActionError(error.message)
+      setActionError(toUserFacingErrorMessage(error))
       return
     }
     setSelected(null)
@@ -297,7 +298,7 @@ export default function AdminAffiliateApplicationsPage() {
               <Link href="/admin" className="text-sm text-blue-300 hover:text-blue-200">
                 ← Admin home
               </Link>
-              <h1 className="mt-2 text-2xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent md:text-3xl">
+              <h1 className="mt-2 text-2xl font-bold text-blue-300 md:text-3xl">
                 Affiliate applications
               </h1>
               <p className="mt-1 text-sm text-gray-400">

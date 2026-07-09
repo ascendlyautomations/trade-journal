@@ -13,6 +13,7 @@ import {
 import type { UploadProgressReporter } from "@/lib/uploadProgress/types"
 import { invalidateUserStreaksCache } from "@/lib/userStreaksCache"
 import { toUserFacingErrorMessage } from "@/lib/userFacingError"
+import { devLog, devWarn } from "@/lib/devLog"
 
 export type ReelVisibility = "public" | "private"
 
@@ -104,9 +105,9 @@ const TRADE_REEL_LOG = "[publishTradeReel]"
 
 function logTradeReel(step: string, detail?: Record<string, unknown>) {
   if (detail) {
-    console.log(TRADE_REEL_LOG, step, detail)
+    devLog(TRADE_REEL_LOG, step, detail)
   } else {
-    console.log(TRADE_REEL_LOG, step)
+    devLog(TRADE_REEL_LOG, step)
   }
 }
 
@@ -634,7 +635,7 @@ export async function fetchUserProfileReels(
 
   if (!error) {
     const reels = (data ?? []) as ReelRow[]
-    console.log("[fetchUserProfileReels] loaded", {
+    devLog("[fetchUserProfileReels] loaded", {
       userId,
       total: reels.length,
       tradeLinked: reels.filter((row) => row.trade_id).length,

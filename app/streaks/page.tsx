@@ -19,7 +19,7 @@ export default function StreaksPage() {
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 py-8 text-gray-100 sm:px-6">
         <div className="mx-auto max-w-6xl space-y-6">
           <header className="rounded-xl border border-white/10 bg-white/5 p-5 md:p-6">
-            <h1 className="text-2xl font-semibold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent md:text-3xl">
+            <h1 className="text-2xl font-semibold text-blue-300 md:text-3xl">
               🔥 Streaks
             </h1>
             <p className="mt-2 max-w-3xl text-sm leading-relaxed text-gray-300 md:text-base">

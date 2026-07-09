@@ -113,6 +113,7 @@ function TradesPageMainContent({
 }: TradesPageMainContentProps) {
   return (
     <>
+      <h1 className="sr-only">Trades</h1>
       <div className="w-full mt-2.5 mb-1.5">
         <TradeFilterBar
           variant="trades"

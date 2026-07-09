@@ -1,17 +1,18 @@
 import { getRouteUser, supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
 import { SITE_URL } from "@/lib/site"
 import { sendBetaSignupAdminEmail } from "@/lib/server/sendBetaSignupAdminEmail"
+import { devLog } from "@/lib/devLog"
 
 export async function POST(req: Request) {
-  console.log("[beta-signup-email] route hit")
+  devLog("[beta-signup-email] route hit")
 
   const user = await getRouteUser(req)
   if (!user) {
-    console.log("[beta-signup-email] skipped reason: unauthorized")
+    devLog("[beta-signup-email] skipped reason: unauthorized")
     return Response.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  console.log("[beta-signup-email] user id", user.id)
+  devLog("[beta-signup-email] user id", user.id)
 
   let signupMethod: string | null = null
   try {
@@ -34,7 +35,7 @@ export async function POST(req: Request) {
     return Response.json({ error: "Profile not found" }, { status: 404 })
   }
 
-  console.log("[beta-signup-email] profile fields", {
+  devLog("[beta-signup-email] profile fields", {
     userId: user.id,
     onboarding_completed: profile.onboarding_completed,
     beta_signup_notified_at: profile.beta_signup_notified_at,
@@ -42,7 +43,7 @@ export async function POST(req: Request) {
   })
 
   if (profile.beta_signup_notified_at) {
-    console.log("[beta-signup-email] skipped reason: already_notified", {
+    devLog("[beta-signup-email] skipped reason: already_notified", {
       userId: user.id,
       beta_signup_notified_at: profile.beta_signup_notified_at,
     })
@@ -74,14 +75,14 @@ export async function POST(req: Request) {
         error: emailResult.error,
       })
     } else {
-      console.log("[beta-signup-email] skipped reason: resend_not_configured", {
+      devLog("[beta-signup-email] skipped reason: resend_not_configured", {
         userId: user.id,
       })
     }
     return Response.json({ ok: true, emailSent: false })
   }
 
-  console.log("[beta-signup-email] sent email id", {
+  devLog("[beta-signup-email] sent email id", {
     userId: user.id,
     emailId: emailResult.emailId,
   })

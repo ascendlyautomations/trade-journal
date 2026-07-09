@@ -1,4 +1,6 @@
 /** Design canvas width — export at `pixelRatio` 2 → 1080px PNG width. */
+import { devLog } from "./devLog"
+
 export const TRADE_SHARE_EXPORT_WIDTH = 540
 
 /** Minimum height if layout has not resolved before capture. */
@@ -16,14 +18,14 @@ export function tradeShareExportDomId(
 
 function logExportTarget(exportDomId: string, root: HTMLElement) {
   const style = getComputedStyle(root)
-  console.log("[tradeShareExport] exportId:", exportDomId)
-  console.log("[tradeShareExport] document.getElementById:", root)
-  console.log("[tradeShareExport] clientWidth:", root.clientWidth)
-  console.log("[tradeShareExport] clientHeight:", root.clientHeight)
-  console.log("[tradeShareExport] offsetWidth:", root.offsetWidth)
-  console.log("[tradeShareExport] offsetHeight:", root.offsetHeight)
-  console.log("[tradeShareExport] display:", style.display)
-  console.log("[tradeShareExport] visibility:", style.visibility)
+  devLog("[tradeShareExport] exportId:", exportDomId)
+  devLog("[tradeShareExport] document.getElementById:", root)
+  devLog("[tradeShareExport] clientWidth:", root.clientWidth)
+  devLog("[tradeShareExport] clientHeight:", root.clientHeight)
+  devLog("[tradeShareExport] offsetWidth:", root.offsetWidth)
+  devLog("[tradeShareExport] offsetHeight:", root.offsetHeight)
+  devLog("[tradeShareExport] display:", style.display)
+  devLog("[tradeShareExport] visibility:", style.visibility)
 }
 
 /**

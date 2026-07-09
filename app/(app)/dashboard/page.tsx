@@ -55,6 +55,8 @@ import {
   mirrorAccountSettingsMaxDrawdownLimit,
 } from "@/lib/profileSplitMirrorWrites"
 import { supabase } from "../../../lib/supabaseClient"
+import { toUserFacingErrorMessage } from "@/lib/userFacingError"
+import { devLog } from "@/lib/devLog"
 import { isProActive } from "../../../lib/subscription"
 import { filterTradesForPerformanceSharePool } from "@/lib/performanceShare"
 import { excludeBacktestTrades } from "@/lib/tradeModeFilters"
@@ -906,9 +908,9 @@ export default function Dashboard() {
     hasTradingDayTimeSource,
   } = useMemo(() => {
     if (process.env.NODE_ENV === "development") {
-      console.log("Trades:", tradesExcludingBacktest)
+      devLog("Trades:", tradesExcludingBacktest)
       if (tradesExcludingBacktest.length)
-        console.log("Sample trade:", tradesExcludingBacktest[0])
+        devLog("Sample trade:", tradesExcludingBacktest[0])
     }
 
     /** Public trades: DB flag and/or non-empty public note (matches InputTradeForm / feed). */
@@ -1220,7 +1222,7 @@ const biggestLoss = losses.length > 0
       runningEquity += Number(trade.pnl) || 0
 
       if (process.env.NODE_ENV === "development" && index < 5) {
-        console.log({
+        devLog({
           equity: runningEquity,
         })
       }
@@ -1280,7 +1282,7 @@ const biggestLoss = losses.length > 0
     )
 
     if (process.env.NODE_ENV === "development") {
-      console.log(
+      devLog(
         filteredTrades.map((t) => ({
           pnl: t.pnl,
           session: getTradingSession(t.entry_time || t.exit_time),
@@ -1501,7 +1503,7 @@ const biggestLoss = losses.length > 0
     setSavingGearSettings(false)
 
     if (error) {
-      alert(error.message)
+      alert(toUserFacingErrorMessage(error))
       return
     }
 
@@ -1759,7 +1761,7 @@ const biggestLoss = losses.length > 0
   ) : hasNoTrades ? (
     <>
       <div className="rounded-xl border border-white/10 bg-white/5 p-5 backdrop-blur-md md:p-8">
-        <h2 className="bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-xl font-semibold text-transparent md:text-3xl">
+        <h2 className="text-xl font-semibold text-blue-300 md:text-3xl">
           Welcome to TradeTraxs
         </h2>
         

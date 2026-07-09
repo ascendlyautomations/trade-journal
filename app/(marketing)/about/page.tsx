@@ -155,7 +155,7 @@ export default function AboutPage() {
 
       <div className="relative min-h-screen overflow-hidden text-gray-100">
         <div
-          className="pointer-events-none absolute inset-0 z-0 bg-[url('/images/hero-bg.png')] bg-cover bg-center bg-no-repeat opacity-[0.45] blur-[1px]"
+          className="pointer-events-none absolute inset-0 z-0 bg-[url('/images/hero-bg.webp')] bg-cover bg-center bg-no-repeat opacity-[0.45] blur-[1px]"
           aria-hidden
         />
         <div

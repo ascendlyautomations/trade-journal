@@ -1,5 +1,6 @@
 import { getRouteUser, supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
 import { NOTIFICATION_INBOX_TYPES } from "@/lib/notificationEngagementTypes"
+import { jsonUserFacingError } from "@/lib/userFacingError"
 
 export async function DELETE(req: Request) {
   const user = await getRouteUser(req)
@@ -14,8 +15,7 @@ export async function DELETE(req: Request) {
     .in("type", [...NOTIFICATION_INBOX_TYPES])
 
   if (error) {
-    console.error("[api/notifications/clear] delete failed", error)
-    return Response.json({ error: error.message }, { status: 500 })
+    return jsonUserFacingError(error, 500, "[api/notifications/clear]")
   }
 
   return Response.json({ ok: true })

@@ -5,6 +5,7 @@ import { ProfileAvatarLink } from "@/app/components/ProfileLink"
 import { CommentAuthorLine } from "@/app/components/comments/CommentAuthorLine"
 import CommentDeleteMenu from "@/app/components/comments/CommentDeleteMenu"
 import CommentContent from "@/app/components/comments/CommentContent"
+import { devLog } from "@/lib/devLog"
 import CommentLikeActionButton from "@/app/components/comments/CommentLikeActionButton"
 import ReplyActionButton from "@/app/components/replies/ReplyActionButton"
 import { commentElementId } from "@/lib/replyReference"
@@ -71,7 +72,7 @@ function FeedCommentItem({
               <CommentDeleteMenu
                 menuClassName={deleteMenuClassName}
                 onDelete={() => {
-                  console.log("[comment-delete] clicked", String(comment.id))
+                  devLog("[comment-delete] clicked", String(comment.id))
                   onRequestDelete(comment)
                 }}
               />

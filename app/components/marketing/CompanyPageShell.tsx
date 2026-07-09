@@ -1,5 +1,6 @@
 import type { ReactNode } from "react"
 import Link from "next/link"
+import { PAGE_HEADING_LARGE_CLASS } from "@/lib/pageHeadingStyles"
 import {
   COMPANY_PAGE_BACK_GAP,
   COMPANY_PAGE_HEADER_MARGIN,
@@ -103,9 +104,7 @@ export default function CompanyPageShell({
           >
             {backLabel}
           </Link>
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent md:text-4xl">
-            {title}
-          </h1>
+          <h1 className={PAGE_HEADING_LARGE_CLASS}>{title}</h1>
           <p className="mx-auto mt-4 max-w-2xl text-sm leading-relaxed text-gray-400 sm:text-base">
             {subtitle}
           </p>

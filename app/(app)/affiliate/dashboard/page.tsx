@@ -296,7 +296,7 @@ export default function AffiliateDashboard() {
           ) : hasAffiliateAccess ? (
             <>
               <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
-                <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent sm:text-3xl">
+                <h1 className="text-2xl font-bold text-blue-300 sm:text-3xl">
                   Affiliate Dashboard
                 </h1>
                 <div className="flex items-center gap-2">
@@ -498,7 +498,7 @@ export default function AffiliateDashboard() {
           ) : (
             <>
               <div className="mb-8">
-                <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent sm:text-3xl">
+                <h1 className="text-2xl font-bold text-blue-300 sm:text-3xl">
                   Become an Affiliate
                 </h1>
                 <p className="mt-2 max-w-2xl text-sm text-gray-300">

@@ -17,6 +17,7 @@ import EngagementCountButton from "@/app/components/EngagementCountButton"
 import ReplyComposerStrip from "@/app/components/replies/ReplyComposerStrip"
 import { feedbackPresets } from "@/lib/feedbackPresets"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
+import { devLog, devWarn } from "@/lib/devLog"
 import {
   deleteLikeNotification,
   ensureLikeNotification,
@@ -384,14 +385,14 @@ export function TradeSocialProvider({
   const handleDeleteComment = useCallback(
     async (comment: any) => {
       if (!currentUserId || !resolvedId) {
-        console.warn("[comment-delete] aborted: missing user or trade", {
+        devWarn("[comment-delete] aborted: missing user or trade", {
           currentUserId,
           tradeId: resolvedId,
         })
         return false
       }
       if (String(comment.user_id) !== String(currentUserId)) {
-        console.warn("[comment-delete] aborted: not author")
+        devWarn("[comment-delete] aborted: not author")
         return false
       }
 
@@ -417,7 +418,7 @@ export function TradeSocialProvider({
         filterCommentsAfterDelete(prev, String(comment.id))
       )
 
-      console.log("[comment-delete] local state updated", {
+      devLog("[comment-delete] local state updated", {
         commentId: String(comment.id),
         tradeId: resolvedId,
       })
@@ -620,7 +621,7 @@ export function TradeSocialCommentsSection({
   const handleConfirmDelete = useCallback(async () => {
     if (!pendingDelete) return
 
-    console.log("[comment-delete] confirm", {
+    devLog("[comment-delete] confirm", {
       commentId: String(pendingDelete.id),
       tradeId,
       userId: pendingDelete.user_id,
@@ -632,7 +633,7 @@ export function TradeSocialCommentsSection({
         ...pendingDelete,
         trade_id: pendingDelete.trade_id ?? tradeId,
       })
-      console.log("[comment-delete] handler finished", {
+      devLog("[comment-delete] handler finished", {
         commentId: String(pendingDelete.id),
         ok,
       })

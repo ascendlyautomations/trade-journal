@@ -1,5 +1,7 @@
 /** Shared layout/styles for Feedback, Support, and related submission surfaces. */
 
+import { PAGE_HEADING_CENTERED_CLASS } from "@/lib/pageHeadingStyles"
+
 export const submissionPageShell =
   "min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 py-8 md:px-6 text-white"
 
@@ -11,8 +13,7 @@ export const submissionFormCard =
 export const submissionHistoryCard =
   "rounded-2xl border border-white/10 bg-white/5 p-5 md:p-6 backdrop-blur-sm"
 
-export const submissionTitle =
-  "text-center text-2xl font-semibold text-blue-400 md:text-3xl"
+export const submissionTitle = PAGE_HEADING_CENTERED_CLASS
 
 export const submissionSubtitle = "mt-2 mb-6 text-center text-sm text-gray-300"
 

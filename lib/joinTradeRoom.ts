@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { createRoomJoinNotification } from "@/lib/createRoomJoinNotification"
 import { notifyGettingStartedChecklistMaybeCompleted } from "@/lib/gettingStartedProgressSync"
+import { toUserFacingErrorMessage } from "@/lib/userFacingError"
 
 export type JoinTradeRoomResult =
   | { ok: true; alreadyMember: boolean }
@@ -30,7 +31,7 @@ export async function joinTradeRoom(
 
     if (error && error.code !== "23505") {
       console.error("joinTradeRoom insert:", error)
-      return { ok: false, error: error.message }
+      return { ok: false, error: toUserFacingErrorMessage(error) }
     }
   } else if (!alreadyActive) {
     const { error } = await supabase
@@ -41,7 +42,7 @@ export async function joinTradeRoom(
 
     if (error) {
       console.error("joinTradeRoom reactivate:", error)
-      return { ok: false, error: error.message }
+      return { ok: false, error: toUserFacingErrorMessage(error) }
     }
   }
 

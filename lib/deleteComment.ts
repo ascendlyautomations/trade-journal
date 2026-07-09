@@ -3,6 +3,7 @@ import {
   deleteCommentNotificationByCommentId,
   deleteLegacyCommentNotification,
 } from "./commentNotifications"
+import { devLog } from "./devLog"
 
 export type FeedCommentRow = {
   id: string
@@ -48,14 +49,16 @@ const LOG_PREFIX = "[comment-delete]"
 
 function logDeleteStep(step: string, details?: Record<string, unknown>) {
   if (details) {
-    console.log(LOG_PREFIX, step, details)
+    devLog(LOG_PREFIX, step, details)
   } else {
-    console.log(LOG_PREFIX, step)
+    devLog(LOG_PREFIX, step)
   }
 }
 
 function logDeleteError(step: string, details: Record<string, unknown>) {
-  console.error(LOG_PREFIX, step, details)
+  if (process.env.NODE_ENV !== "production") {
+    console.error(LOG_PREFIX, step, details)
+  }
 }
 
 function noRowDeletedError(table: "comments" | "trade_comments"): PostgrestError {

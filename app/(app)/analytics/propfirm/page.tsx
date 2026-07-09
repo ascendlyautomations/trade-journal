@@ -925,7 +925,7 @@ export default function PropFirmPage() {
           <p className="text-xs font-semibold uppercase tracking-wide text-blue-300">
             Analytics
           </p>
-          <h1 className="mt-0.5 bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-xl font-semibold text-transparent md:text-3xl">
+          <h1 className="mt-0.5 text-xl font-semibold text-blue-300 md:text-3xl">
             Prop Firm Mode
           </h1>
           <p className="mt-1 max-w-2xl text-xs text-gray-400 md:text-base">

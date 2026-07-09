@@ -1,4 +1,5 @@
 import { getRouteUser, supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
+import { jsonUserFacingError } from "@/lib/userFacingError"
 
 type NotifyBody = {
   periodKey?: string
@@ -58,8 +59,7 @@ export async function POST(req: Request) {
     .limit(1)
 
   if (existingErr) {
-    console.error("[api/trading-reports/notify] dedupe lookup failed", existingErr)
-    return Response.json({ error: existingErr.message }, { status: 500 })
+    return jsonUserFacingError(existingErr, 500, "[api/trading-reports/notify] dedupe")
   }
 
   if (existing && existing.length > 0) {
@@ -75,8 +75,7 @@ export async function POST(req: Request) {
   })
 
   if (error) {
-    console.error("[api/trading-reports/notify] insert failed", error)
-    return Response.json({ error: error.message }, { status: 500 })
+    return jsonUserFacingError(error, 500, "[api/trading-reports/notify] insert")
   }
 
   return Response.json({ ok: true })

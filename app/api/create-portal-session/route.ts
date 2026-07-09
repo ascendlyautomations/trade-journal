@@ -2,6 +2,8 @@ import Stripe from "stripe"
 import { createClient } from "@supabase/supabase-js"
 import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
+import { devLog } from "@/lib/devLog"
+import { toUserFacingErrorMessage, USER_FACING_ERROR_MESSAGES } from "@/lib/userFacingError"
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string)
 
@@ -12,7 +14,7 @@ const supabase = createClient(
 
 export async function POST(req: Request) {
   try {
-    console.log("🚀 /api/create-portal-session hit")
+    devLog("🚀 /api/create-portal-session hit")
 
     const cookieStore = await cookies()
     const supabaseAuth = createServerClient(
@@ -41,7 +43,7 @@ export async function POST(req: Request) {
           bearer
         )
         if (tokenErr) {
-          console.log("❌ Bearer token auth failed for portal:", tokenErr.message)
+          devLog("❌ Bearer token auth failed for portal:", tokenErr.message)
         } else if (tokenData.user) {
           user = tokenData.user
         }
@@ -49,7 +51,7 @@ export async function POST(req: Request) {
     }
 
     if (!user) {
-      console.log(
+      devLog(
         "❌ Unauthorized portal attempt: no Supabase auth user in request cookies or bearer token"
       )
       return Response.json({ error: "Unauthorized" }, { status: 401 })
@@ -71,9 +73,9 @@ export async function POST(req: Request) {
     }
 
     if (!profile.stripe_customer_id) {
-      console.log("❌ No stripe_customer_id on profile for portal:", user.id)
+      devLog("❌ No stripe_customer_id on profile for portal:", user.id)
       return Response.json(
-        { error: "No Stripe customer on file" },
+        { error: "No billing account is on file yet. Subscribe to Pro first." },
         { status: 400 }
       )
     }
@@ -88,17 +90,11 @@ export async function POST(req: Request) {
 
     return Response.json({ url: session.url })
   } catch (err) {
-    console.error(
-      "ERROR:",
-      JSON.stringify(
-        err instanceof Error
-          ? { message: err.message, name: err.name }
-          : err,
-        null,
-        2
-      )
+    console.error("[api/create-portal-session]", err)
+    return Response.json(
+      { error: toUserFacingErrorMessage(err, USER_FACING_ERROR_MESSAGES.BILLING_UNAVAILABLE) },
+      { status: 500 }
     )
-    return Response.json({ error: "Portal failed" }, { status: 500 })
   }
 }
 

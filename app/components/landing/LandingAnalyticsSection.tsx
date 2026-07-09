@@ -51,7 +51,7 @@ export default function LandingAnalyticsSection() {
           <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.02] p-2 shadow-2xl shadow-black/50">
             <div className="relative aspect-[16/9] w-full overflow-hidden rounded-xl md:aspect-[2/1]">
               <Image
-                src="/images/dashboard.png"
+                src="/images/dashboard.webp"
                 alt="TradeTraxs analytics dashboard with win rate and session data"
                 fill
                 className="object-cover object-top"
@@ -63,7 +63,7 @@ export default function LandingAnalyticsSection() {
           <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.02] p-2 shadow-2xl shadow-black/50">
             <div className="relative aspect-[16/9] w-full overflow-hidden rounded-xl md:aspect-[2/1]">
               <Image
-                src="/images/trade-history.png"
+                src="/images/trade-history.webp"
                 alt="Trade history and review in TradeTraxs"
                 fill
                 className="object-cover object-center"

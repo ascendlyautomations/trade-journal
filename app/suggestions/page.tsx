@@ -78,8 +78,8 @@ export default function SuggestionsPage() {
             onSubmit={handleSubmit}
             className="rounded-2xl border border-white/10 bg-white/10 p-8 shadow-2xl backdrop-blur-xl"
           >
-            <h1 className="mb-6 text-center text-2xl font-semibold">
-              Submit Feedback
+            <h1 className="mb-6 text-center text-2xl font-semibold text-blue-300">
+              Submit a Suggestion
             </h1>
 
             <label className="mb-2 block text-sm text-gray-300">

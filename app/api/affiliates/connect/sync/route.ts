@@ -5,6 +5,7 @@ import {
   stripeAccountToAffiliateConnectPatch,
 } from "@/lib/affiliateStripeConnect"
 import { getStripeServer } from "@/lib/stripeServer"
+import { devLog } from "@/lib/devLog"
 
 export const runtime = "nodejs"
 
@@ -22,7 +23,7 @@ export async function POST(req: Request) {
     const user = await getRouteUser(req)
 
     if (isDev) {
-      console.log("[connect/sync] auth probe", {
+      devLog("[connect/sync] auth probe", {
         authUserId: user?.id ?? null,
         hasBearerToken: hasBearer,
         userResolved: Boolean(user?.id),
@@ -31,7 +32,7 @@ export async function POST(req: Request) {
 
     if (!user?.id) {
       if (isDev) {
-        console.log("[connect/sync] unauthorized", {
+        devLog("[connect/sync] unauthorized", {
           reason: hasBearer
             ? "bearer_token_missing_invalid_or_expired"
             : "no_session_cookie_and_no_bearer",
@@ -60,7 +61,7 @@ export async function POST(req: Request) {
 
     if (!affiliate?.id) {
       if (isDev) {
-        console.log("[connect/sync] denied", {
+        devLog("[connect/sync] denied", {
           reason: "no_affiliate_row",
           authUserId: user.id,
         })
@@ -77,7 +78,7 @@ export async function POST(req: Request) {
         : ""
 
     if (isDev) {
-      console.log("[connect/sync] affiliate row", {
+      devLog("[connect/sync] affiliate row", {
         authUserId: user.id,
         affiliateRowFound: true,
         stripe_connected_account_id: acctId || null,
@@ -90,7 +91,7 @@ export async function POST(req: Request) {
 
     const account = await stripe.accounts.retrieve(acctId)
     if (isDev) {
-      console.log("[connect/sync] stripe.accounts.retrieve ok", {
+      devLog("[connect/sync] stripe.accounts.retrieve ok", {
         stripeAccountId: account.id,
         details_submitted: account.details_submitted,
         payouts_enabled: account.payouts_enabled,

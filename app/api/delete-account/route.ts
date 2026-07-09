@@ -6,6 +6,7 @@ import {
   AdminUserDeletionError,
   AdminUserDeletionStepError,
 } from "@/lib/deleteUserAdmin"
+import { toUserFacingErrorMessage } from "@/lib/userFacingError"
 
 const stripe = process.env.STRIPE_SECRET_KEY
   ? new Stripe(process.env.STRIPE_SECRET_KEY)
@@ -27,7 +28,10 @@ export async function POST(req: Request) {
     if (err instanceof AdminUserDeletionError) {
       const status =
         err.code === "NOT_FOUND" ? 404 : err.code === "ADMIN_TARGET" ? 403 : 400
-      return NextResponse.json({ error: err.message }, { status })
+      return NextResponse.json(
+        { error: toUserFacingErrorMessage(err) },
+        { status }
+      )
     }
     if (err instanceof AdminUserDeletionStepError) {
       console.error("[api/delete-account]", err.step, err.table, err.message)

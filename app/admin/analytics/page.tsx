@@ -11,6 +11,7 @@ import {
 } from "@/lib/adminAnalytics"
 import { getCurrentAdminCheckResult } from "@/lib/adminUsers"
 import { supabase } from "@/lib/supabaseClient"
+import { toUserFacingErrorMessage } from "@/lib/userFacingError"
 import {
   CartesianGrid,
   Line,
@@ -108,7 +109,7 @@ export default function AdminAnalyticsPage() {
       const { data, error } = await fetchAdminAnalyticsBundle(supabase, 14)
       if (cancelled) return
       if (error) {
-        setLoadError(error.message)
+        setLoadError(toUserFacingErrorMessage(error))
         setBundle(null)
         return
       }
@@ -148,7 +149,7 @@ export default function AdminAnalyticsPage() {
         <div className="mx-auto max-w-6xl space-y-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent md:text-3xl">
+              <h1 className="text-2xl font-bold text-blue-300 md:text-3xl">
                 Analytics
               </h1>
               <p className="mt-1 text-sm text-gray-400">
