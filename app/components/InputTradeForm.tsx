@@ -36,6 +36,11 @@ import { notifyGettingStartedChecklistMaybeCompleted } from "@/lib/gettingStarte
 import { profilePath } from "@/lib/profileRoutes"
 import { hasStoredTradePoints } from "@/lib/resolveTradePoints"
 import { parseOptionalRr } from "@/lib/tradeRr"
+import {
+  resolveCopyGroupAccounts,
+} from "@/lib/copyTradingGroups"
+import { insertCopyTradedTrades } from "@/lib/tradeCopyTrading"
+import { useCopyTradingGroups } from "@/lib/useCopyTradingGroups"
 import CreateAccountModal, {
   type Props as CreateAccountModalProps,
 } from "@/components/CreateAccountModal"
@@ -144,6 +149,9 @@ export default function InputTradeForm({
 
   const [accounts, setAccounts] = useState<any[]>([])
   const [selectedAccount, setSelectedAccount] = useState<any | null>(null)
+  const [selectedCopyGroupId, setSelectedCopyGroupId] = useState<string | null>(
+    null
+  )
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showAccountWarning, setShowAccountWarning] = useState(false)
 
@@ -437,8 +445,23 @@ export default function InputTradeForm({
     effectiveModeLower !== "backtest" &&
     !isProActive(planProfile)
   const isPro = isProActive(planProfile)
+  const { copyGroups } = useCopyTradingGroups(
+    userId,
+    isPro && !isEditMode
+  )
   const isLocked = !isPro && Boolean(planProfile?.locked_account_type)
   const lockedMode = modeLabelFromDb(planProfile?.locked_account_type)
+
+  useEffect(() => {
+    if (isEditMode) {
+      setSelectedCopyGroupId(null)
+      return
+    }
+    setSelectedCopyGroupId((prev) =>
+      prev && copyGroups.some((group) => group.id === prev) ? prev : null
+    )
+  }, [copyGroups, isEditMode])
+
   const displayedMode = isLocked
     ? lockedMode
     : modeLabelFromDb(
@@ -556,6 +579,7 @@ export default function InputTradeForm({
     setEntryTime("")
     setExitTime("")
     setSelectedAccount(null)
+    setSelectedCopyGroupId(null)
     setConfidence("")
     setEmotion("")
     setFollowedPlan(false)
@@ -664,7 +688,7 @@ export default function InputTradeForm({
   async function handleSubmit() {
     if (submittingRef.current || submitting) return
 
-    if (!selectedAccount) {
+    if (!selectedCopyGroupId && !selectedAccount) {
       setShowAccountWarning(true)
       return
     }
@@ -688,7 +712,6 @@ export default function InputTradeForm({
       return
     }
 
-    const acct = selectedAccount
     const reelFileAtSubmit = pendingReelFileRef.current ?? pendingReelFile
     const uploadTitle = isPublic
       ? image || reelFileAtSubmit
@@ -766,6 +789,112 @@ export default function InputTradeForm({
       psychologyNotes != null && String(psychologyNotes).trim() !== ""
         ? String(psychologyNotes).trim()
         : null
+
+    const selectedCopyGroup = selectedCopyGroupId
+      ? (copyGroups.find((group) => group.id === selectedCopyGroupId) ?? null)
+      : null
+
+    if (selectedCopyGroup && !isEditMode) {
+      const groupAccounts = resolveCopyGroupAccounts(selectedCopyGroup, accounts)
+      if (groupAccounts.length === 0) {
+        showPopup(
+          persistentError(
+            "Copy Group Empty",
+            "This copy trading group has no linked accounts."
+          )
+        )
+        throw new Error("Copy group empty")
+      }
+
+      const now = new Date()
+      const tradeTemplate = {
+        ticker,
+        direction,
+        pnl: pnl ? Number(pnl) : null,
+        rr: parsedRR,
+        points: hasStoredTradePoints(points) ? Number(points) : null,
+        contracts: contracts ? Number(contracts) : null,
+        session: sessionToSave,
+        notes: confluences || null,
+        public_description: publicDescription,
+        image_url: screenshotUrl,
+        strategy: strategy || null,
+        user_id: userId,
+        created_at: now.toISOString(),
+        date: now.toISOString(),
+        trade_date: entryDate,
+        entry_price: entryPrice ? Number(entryPrice) : null,
+        exit_price: exitPrice ? Number(exitPrice) : null,
+        entry_time: buildDateTime(entryDate, entryTime),
+        exit_time: buildDateTime(exitDate, exitTime),
+        psychology_notes: psychologyVal,
+        trade_type: tradeTypeToSave,
+        confidence: confidence ? Number(confidence) : null,
+        emotion: emotion || null,
+        followed_plan: followedPlan,
+        mistake_type: mistakeType || null,
+        market_condition: market || null,
+        news_event: newsEvent,
+        timeframe: timeframe || null,
+        is_public: isPublic,
+      }
+
+      const copyResult = await insertCopyTradedTrades({
+        client: supabase,
+        userId,
+        isPro: userIsPro,
+        groupId: selectedCopyGroup.id,
+        accounts: groupAccounts,
+        tradeTemplate,
+        isPublic,
+        postCaption: confluences,
+      })
+
+      if (!copyResult.ok) {
+        showPopup(
+          persistentError("Save Failed", copyResult.message)
+        )
+        throw new Error(copyResult.message)
+      }
+
+      for (const trade of copyResult.trades) {
+        const replayError = await syncTradeReplayAfterSave(
+          userId,
+          String(trade.id),
+          reelFileAtSubmit,
+          report
+        )
+        if (replayError) {
+          showPopup(
+            persistentError(
+              "Replay Upload Failed",
+              `Trades saved, but replay could not be uploaded for every account: ${replayError}`
+            )
+          )
+        }
+      }
+
+      void refreshPlanAndAccountLock()
+      setCommunityPreviewOpen(false)
+      resetCreateForm()
+      onSave?.()
+      showPopup(
+        isPublic
+          ? feedbackPresets.postPublished()
+          : feedbackPresets.tradeSaveSuccess()
+      )
+      notifyGettingStartedChecklistMaybeCompleted()
+      releaseSubmit()
+      return
+    }
+
+    const acct = selectedAccount
+    if (!acct) {
+      showPopup(
+        persistentError("Select an Account", "Choose a trading account before saving.")
+      )
+      throw new Error("No account selected")
+    }
 
     const modeLower = String(acct.mode ?? "live").trim().toLowerCase()
 
@@ -1477,10 +1606,14 @@ export default function InputTradeForm({
           <div className="flex items-center gap-2">
             {onUploadCsvClick ? (
               <TradeAccountPicker
-                className="min-w-0 flex-1"
+                className="min-w-0 flex-1 md:flex-none"
                 accounts={activeAccounts}
+                isPro={isPro}
+                copyGroups={copyGroups}
                 selectedAccount={selectedAccount}
+                selectedCopyGroupId={selectedCopyGroupId}
                 onSelect={setSelectedAccount}
+                onSelectCopyGroup={setSelectedCopyGroupId}
                 onOpenCreate={() => setShowCreateModal(true)}
                 disableCreate={accountFieldsLocked}
                 showExternalCreateButton={false}
@@ -1549,10 +1682,14 @@ export default function InputTradeForm({
           <div className="flex min-w-0 flex-1 items-center gap-3 flex-wrap">
             {onUploadCsvClick ? (
               <TradeAccountPicker
-                className="w-full max-w-[410px] shrink-0"
+                className="shrink-0"
                 accounts={activeAccounts}
+                isPro={isPro}
+                copyGroups={copyGroups}
                 selectedAccount={selectedAccount}
+                selectedCopyGroupId={selectedCopyGroupId}
                 onSelect={setSelectedAccount}
+                onSelectCopyGroup={setSelectedCopyGroupId}
                 onOpenCreate={() => setShowCreateModal(true)}
                 disableCreate={accountFieldsLocked}
                 showExternalCreateButton={false}

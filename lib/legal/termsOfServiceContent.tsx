@@ -1,6 +1,7 @@
 import Link from "next/link"
 import type { LegalSection } from "@/app/components/LegalDocumentLayout"
-import { LEGAL_CONTACT_EMAIL, LEGAL_ENTITY_NAME } from "@/lib/legal/contact"
+import { SUPPORT_EMAIL } from "@/lib/contactEmails"
+import { LEGAL_ENTITY_NAME } from "@/lib/legal/contact"
 import { SITE_NAME, SITE_URL } from "@/lib/site"
 
 export const TERMS_OF_SERVICE_SECTIONS: LegalSection[] = [
@@ -225,7 +226,7 @@ export const TERMS_OF_SERVICE_SECTIONS: LegalSection[] = [
         <p>
           Except where required by law, subscription fees are non-refundable once a billing period
           has begun. Contact{" "}
-          <a href={`mailto:${LEGAL_CONTACT_EMAIL}`}>{LEGAL_CONTACT_EMAIL}</a> for billing
+          <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> for billing
           questions.
         </p>
       </>
@@ -472,7 +473,7 @@ export const TERMS_OF_SERVICE_SECTIONS: LegalSection[] = [
         </p>
         <p>
           Before filing a formal claim, you agree to contact us at{" "}
-          <a href={`mailto:${LEGAL_CONTACT_EMAIL}`}>{LEGAL_CONTACT_EMAIL}</a> and attempt to resolve
+          <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> and attempt to resolve
           the dispute informally within thirty (30) days.
         </p>
       </>
@@ -500,7 +501,7 @@ export const TERMS_OF_SERVICE_SECTIONS: LegalSection[] = [
           <strong>{LEGAL_ENTITY_NAME}</strong>
           <br />
           <strong>Email:</strong>{" "}
-          <a href={`mailto:${LEGAL_CONTACT_EMAIL}`}>{LEGAL_CONTACT_EMAIL}</a>
+          <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>
         </p>
         <p>
           Support requests: <Link href="/support">Contact Support</Link>

@@ -28,6 +28,8 @@ export type TradeSharePoolOptions = {
     string,
     { name?: string | null; account_size?: string | null; is_active?: boolean | null }
   > | null
+  /** When filtering by a copy trading group */
+  copyGroupAccountIds?: readonly string[] | null
 }
 
 function tradeIsPublic(t: any): boolean {
@@ -50,6 +52,7 @@ export function filterTradesForPerformanceSharePool(
     resultFilter = "all",
     showPublicOnly,
     accountById,
+    copyGroupAccountIds,
   } = opts
 
   let pool = trades.filter((trade) => {
@@ -72,7 +75,10 @@ export function filterTradesForPerformanceSharePool(
       !tradeMatchesAccountFilter(
         trade,
         accountFilter,
-        accountRowForTrade(trade, accountById)
+        accountRowForTrade(trade, accountById),
+        {
+          copyGroupAccountIds: copyGroupAccountIds ?? undefined,
+        }
       )
     ) {
       return false

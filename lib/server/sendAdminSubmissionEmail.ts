@@ -1,4 +1,4 @@
-import { LEGAL_CONTACT_EMAIL } from "@/lib/legal/contact"
+import { NOTIFICATIONS_FROM_EMAIL, SUPPORT_EMAIL } from "@/lib/contactEmails"
 import {
   ADMIN_SUBMISSION_EMAIL_SUBJECTS,
   isPublicContactSubmissionType,
@@ -164,8 +164,7 @@ export async function sendAdminSubmissionEmail(
   }
 
   const from =
-    process.env.ADMIN_NOTIFY_FROM_EMAIL?.trim() ||
-    "TradeTraxs Notifications <notifications@tradetraxs.com>"
+    process.env.ADMIN_NOTIFY_FROM_EMAIL?.trim() || NOTIFICATIONS_FROM_EMAIL
 
   const subject =
     ctx.subjectOverride?.trim() || ADMIN_SUBMISSION_EMAIL_SUBJECTS[ctx.type]
@@ -180,7 +179,7 @@ export async function sendAdminSubmissionEmail(
       },
       body: JSON.stringify({
         from,
-        to: [LEGAL_CONTACT_EMAIL],
+        to: [SUPPORT_EMAIL],
         subject,
         html,
       }),

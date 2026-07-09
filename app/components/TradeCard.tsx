@@ -13,7 +13,9 @@ import { formatTradeAccountNameSizeLine } from "@/lib/tradeAccountDisplay"
 import { publicAccountBadgeFromTrade } from "@/lib/publicAccountPrivacy"
 import { tradeScreenshotPublicUrl } from "@/lib/storagePublicUrl"
 import TradeScreenshotImage from "@/app/components/trade/TradeScreenshotImage"
+import CopyTradedBadge from "@/app/components/trade/CopyTradedBadge"
 import ExpandableText from "@/app/components/ui/ExpandableText"
+import { isCopyTradedTrade } from "@/lib/tradeCopyTrading"
 
 export type TradeCardProps = {
   trade: any
@@ -120,6 +122,8 @@ export default function TradeCard({
             <span className="rounded bg-white/10 px-2 py-1 text-xs">
               Pts: {formatTradePoints(trade)}
             </span>
+
+            {isCopyTradedTrade(trade) ? <CopyTradedBadge /> : null}
           </div>
           <p className="text-sm">
             <span className="text-gray-400">Contracts:</span>{" "}

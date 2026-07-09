@@ -3,7 +3,12 @@ import {
   buildAccountFilterOptionsFromRows,
   tradeMatchesAccountFilter,
 } from "@/lib/tradeAccountDisplay"
-import type { DashboardGearPersistedPrefs } from "./dashboardGearTypes"
+import type { CopyTradingGroup } from "@/lib/copyTradingGroups"
+import {
+  isCopyGroupFilterValue,
+  parseCopyGroupFilterValue,
+  resolveCopyGroupAccountIdsForFilter,
+} from "@/lib/tradeAccountSelection"
 
 /** Strip to digits + one dot; max 2 decimal places (internal value for save). */
 export function sanitizeDrawdownLimitInput(raw: string): string {
@@ -96,9 +101,16 @@ export function sanitizeDashboardAccountTypeFilter(
 /** Same rule as dashboard gear Save: unknown account keys fall back to "all". */
 export function sanitizeDashboardAccountFilter(
   accountFilter: string | undefined,
-  accountOptions: DashboardAccountOption[]
+  accountOptions: DashboardAccountOption[],
+  copyGroups: readonly CopyTradingGroup[] = []
 ): string {
   if (!accountFilter || accountFilter === "all") return "all"
+  if (isCopyGroupFilterValue(accountFilter)) {
+    const groupId = parseCopyGroupFilterValue(accountFilter)
+    return groupId && copyGroups.some((group) => group.id === groupId)
+      ? accountFilter
+      : "all"
+  }
   return accountOptions.some((a) => a.value === accountFilter)
     ? accountFilter
     : "all"
@@ -127,11 +139,16 @@ export function tradeMatchesDashboardAccountFilters(
   trade: TradeForAccountFilter,
   accountFilter: string,
   accountTypeFilter: string,
-  accountById?: Record<string, AccountRowForDisplay | null | undefined> | null
+  accountById?: Record<string, AccountRowForDisplay | null | undefined> | null,
+  options?: { copyGroupAccountIds?: readonly string[] }
 ): boolean {
   const id = String(trade.account_id ?? "").trim()
   const accountRow = id && accountById ? accountById[id] : null
-  if (!tradeMatchesAccountFilter(trade, accountFilter, accountRow)) {
+  if (
+    !tradeMatchesAccountFilter(trade, accountFilter, accountRow, {
+      copyGroupAccountIds: options?.copyGroupAccountIds,
+    })
+  ) {
     return false
   }
   if (accountTypeFilter !== "all") {
@@ -179,16 +196,19 @@ export function sanitizeHydratedDashboardFilters(args: {
   trades: TradeForAccountFilter[]
   accountRows: readonly AccountRowForDisplay[]
   accountById?: Record<string, AccountRowForDisplay | null | undefined> | null
+  copyGroups?: readonly CopyTradingGroup[]
 }): Pick<
   DashboardGearPersistedPrefs,
   "timeFilter" | "accountFilter" | "accountTypeFilter"
 > {
   const accountOptions = buildDashboardAccountOptionsFromAccounts(args.accountRows)
+  const copyGroups = args.copyGroups ?? []
 
   let timeFilter = sanitizeDashboardTimeFilter(args.prefs.timeFilter)
   let accountFilter = sanitizeDashboardAccountFilter(
     args.prefs.accountFilter,
-    accountOptions
+    accountOptions,
+    copyGroups
   )
   let accountTypeFilter = sanitizeDashboardAccountTypeFilter(
     args.prefs.accountTypeFilter
@@ -203,7 +223,12 @@ export function sanitizeHydratedDashboardFilters(args: {
         t,
         accountFilter,
         accountTypeFilter,
-        args.accountById
+        args.accountById,
+        {
+          copyGroupAccountIds:
+            resolveCopyGroupAccountIdsForFilter(accountFilter, copyGroups) ??
+            undefined,
+        }
       )
     )
     if (hasAnyTrade && !matchesHydrated) {

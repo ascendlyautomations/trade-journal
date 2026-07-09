@@ -5,7 +5,11 @@ const FOOTER_DESCRIPTION =
   "The all-in-one platform to journal, analyze, and socialize your trading."
 
 const TRADETRAXS_INSTAGRAM_URL =
-  "https://www.instagram.com/tradetraxs"
+  "https://www.instagram.com/tradetraxs/"
+
+const TRADETRAXS_TIKTOK_URL = "https://www.tiktok.com/@tradetraxs"
+
+const TRADETRAXS_YOUTUBE_URL = "https://www.youtube.com/@TradeTraxs"
 
 const FOOTER_LINK_CLASS =
   "text-[13px] text-gray-400 transition hover:text-gray-300"
@@ -15,9 +19,6 @@ const FOOTER_HEADING_CLASS =
 
 const FOOTER_SOCIAL_ICON_BUTTON =
   "inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/[0.03] text-gray-400 transition duration-200 hover:scale-105 hover:border-emerald-400/30 hover:bg-white/[0.06] hover:text-emerald-300 motion-reduce:transition-none motion-reduce:hover:scale-100"
-
-const FOOTER_SOCIAL_ICON_BUTTON_DISABLED =
-  "inline-flex h-9 w-9 cursor-not-allowed items-center justify-center rounded-lg border border-white/10 bg-white/[0.03] text-gray-500 opacity-45"
 
 function InstagramIcon({ className = "h-4 w-4" }: { className?: string }) {
   return (
@@ -37,10 +38,10 @@ function InstagramIcon({ className = "h-4 w-4" }: { className?: string }) {
   )
 }
 
-function XIcon({ className = "h-4 w-4" }: { className?: string }) {
+function TikTokIcon({ className = "h-4 w-4" }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-      <path d="M17.3 3h3.4l-7.5 8.6L21.8 21h-6.1l-4.8-6.2L5.2 21H1.8l8-9.2L2.2 3h6.2l4.3 5.7L17.3 3zm-1.2 16.2h1.9L7.1 4.8H5.1l11 14.4z" />
+      <path d="M16.6 5.82s.51.5 0 0A4.28 4.28 0 0 1 15.54 3h-3.09v12.4a2.59 2.59 0 0 1-2.59 2.5c-1.42 0-2.6-1.16-2.6-2.6 0-1.72 1.66-3.01 3.37-2.48V9.66c-3.45-.46-6.5 2.05-6.5 5.64 0 3.33 2.76 5.7 5.69 5.7 3.14 0 5.69-2.55 5.69-5.7V9.01a7.35 7.35 0 0 0 4.3 1.38V7.3a4.1 4.1 0 0 1-1-.48z" />
     </svg>
   )
 }
@@ -101,22 +102,26 @@ function FooterSocialLinks({ className = "" }: { className?: string }) {
           </a>
         </li>
         <li>
-          <span
-            title="Coming soon"
-            aria-label="X (Coming soon)"
-            className={FOOTER_SOCIAL_ICON_BUTTON_DISABLED}
+          <a
+            href={TRADETRAXS_TIKTOK_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="TradeTraxs on TikTok"
+            className={FOOTER_SOCIAL_ICON_BUTTON}
           >
-            <XIcon />
-          </span>
+            <TikTokIcon />
+          </a>
         </li>
         <li>
-          <span
-            title="Coming soon"
-            aria-label="YouTube (Coming soon)"
-            className={FOOTER_SOCIAL_ICON_BUTTON_DISABLED}
+          <a
+            href={TRADETRAXS_YOUTUBE_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="TradeTraxs on YouTube"
+            className={FOOTER_SOCIAL_ICON_BUTTON}
           >
             <YouTubeIcon />
-          </span>
+          </a>
         </li>
       </ul>
     </div>

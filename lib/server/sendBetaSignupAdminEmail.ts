@@ -1,5 +1,5 @@
 import { BETA_REFERRAL_CODE } from "@/lib/betaReferralCode"
-import { LEGAL_CONTACT_EMAIL } from "@/lib/legal/contact"
+import { NOTIFICATIONS_FROM_EMAIL, SUPPORT_EMAIL } from "@/lib/contactEmails"
 import { SITE_URL } from "@/lib/site"
 
 export const BETA_SIGNUP_ADMIN_EMAIL_SUBJECT = "[TradeTraxs] New Beta User Signup"
@@ -81,8 +81,7 @@ export async function sendBetaSignupAdminEmail(
   }
 
   const from =
-    process.env.ADMIN_NOTIFY_FROM_EMAIL?.trim() ||
-    "TradeTraxs Notifications <notifications@tradetraxs.com>"
+    process.env.ADMIN_NOTIFY_FROM_EMAIL?.trim() || NOTIFICATIONS_FROM_EMAIL
 
   const html = buildBetaSignupAdminEmailHtml(ctx)
 
@@ -95,7 +94,7 @@ export async function sendBetaSignupAdminEmail(
       },
       body: JSON.stringify({
         from,
-        to: [LEGAL_CONTACT_EMAIL],
+        to: [SUPPORT_EMAIL],
         subject: BETA_SIGNUP_ADMIN_EMAIL_SUBJECT,
         html,
       }),

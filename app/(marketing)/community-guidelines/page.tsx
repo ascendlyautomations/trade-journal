@@ -1,9 +1,6 @@
 import CompanyPageShell, { CompanySectionCard } from "@/app/components/marketing/CompanyPageShell"
 import Link from "next/link"
-import {
-  LEGAL_CONTACT_EMAIL,
-  LEGAL_COPYRIGHT_EMAIL,
-} from "@/lib/legal/contact"
+import { COPYRIGHT_EMAIL, SUPPORT_EMAIL } from "@/lib/contactEmails"
 
 const SECTIONS = [
   {
@@ -135,20 +132,20 @@ const SECTIONS = [
         <p>
           If you see behavior that violates these guidelines, contact our team at{" "}
           <a
-            href={`mailto:${LEGAL_CONTACT_EMAIL}`}
+            href={`mailto:${SUPPORT_EMAIL}`}
             className="text-blue-300 hover:text-blue-200"
           >
-            {LEGAL_CONTACT_EMAIL}
+            {SUPPORT_EMAIL}
           </a>
           . Include links, screenshots, and context when possible.
         </p>
         <p>
           To report copyright or trademark infringement, email{" "}
           <a
-            href={`mailto:${LEGAL_COPYRIGHT_EMAIL}`}
+            href={`mailto:${COPYRIGHT_EMAIL}`}
             className="text-blue-300 hover:text-blue-200"
           >
-            {LEGAL_COPYRIGHT_EMAIL}
+            {COPYRIGHT_EMAIL}
           </a>{" "}
           or use the process described on our{" "}
           <Link href="/copyright" className="text-blue-300 hover:text-blue-200">

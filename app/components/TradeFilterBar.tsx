@@ -4,12 +4,12 @@ import { useEffect, useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
 import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
 import { DASHBOARD_MOBILE_TIMEFRAME_BTN_CLASS } from "@/app/components/dashboard/dashboardHeaderMobileUi"
-
-const MANAGE_ACCOUNTS_VALUE = "__manage_accounts__"
+import TradeAccountPicker from "@/app/components/TradeAccountPicker"
+import type { CopyTradingGroup } from "@/lib/copyTradingGroups"
 
 /** Shared with account pickers — same destination as the filter bar action. */
 export const MANAGE_ACCOUNTS_SETTINGS_HREF = "/settings#trading-accounts" as const
-export { MANAGE_ACCOUNTS_VALUE }
+export const MANAGE_ACCOUNTS_VALUE = "__manage_accounts__"
 
 export function navigateToManageAccounts(
   router: ReturnType<typeof useRouter>
@@ -71,6 +71,9 @@ export type TradeFilterBarProps = {
   leadingOverlay?: boolean
   /** Appended controls (e.g. Show Advanced, Public Trades, settings) */
   trailing?: ReactNode
+  /** PRO copy trading groups for unified account picker */
+  isPro?: boolean
+  copyGroups?: CopyTradingGroup[]
   /** Shown beside “All Modes” on small screens only */
   settingsNextToModes?: ReactNode
   /** Optional compact control shown beside “All Modes” on mobile */
@@ -107,8 +110,9 @@ export default function TradeFilterBar({
   variant: _variant,
   mobileThreeRowLayout = false,
   fullWidth = false,
+  isPro = false,
+  copyGroups = [],
 }: TradeFilterBarProps) {
-  const router = useRouter()
   const isTradesVariant = _variant === "trades"
   const [timeframeOpen, setTimeframeOpen] = useState(false)
   const [selectedTimeframe, setSelectedTimeframe] = useState(ALL_TIMEFRAME_LABEL)
@@ -150,33 +154,20 @@ export default function TradeFilterBar({
     }
   }
 
-  const accountSelectClassName =
-    "h-[34px] min-w-0 rounded-md border border-white/10 bg-[#0f172a] px-3 py-1 text-sm text-white hover:bg-[#1e293b] focus:outline-none focus:ring-2 focus:ring-blue-500 md:w-auto md:shrink-0"
-
-  function handleAccountFilterChange(value: string) {
-    if (value === MANAGE_ACCOUNTS_VALUE) {
-      navigateToManageAccounts(router)
-      return
-    }
-    onAccountChange(value)
-  }
-
-  function renderAccountSelect(className: string) {
+  function renderAccountSelect(className = "") {
     return (
-      <select
-        value={accountFilter}
-        onChange={(e) => handleAccountFilterChange(e.target.value)}
+      <TradeAccountPicker
         className={className}
-      >
-        <option value="all">All Accounts</option>
-        {accounts.map((acc) => (
-          <option key={acc.value} value={acc.value}>
-            {acc.label}
-          </option>
-        ))}
-        <option disabled>────────────────────</option>
-        <option value={MANAGE_ACCOUNTS_VALUE}>⚙️ Manage Accounts</option>
-      </select>
+        accounts={[]}
+        isPro={isPro}
+        copyGroups={copyGroups}
+        filterValue={accountFilter}
+        filterOptions={accounts}
+        onFilterChange={onAccountChange}
+        filterPlaceholder="All Accounts"
+        showExternalCreateButton={false}
+        hideManageAccounts={false}
+      />
     )
   }
 
@@ -209,7 +200,7 @@ export default function TradeFilterBar({
             <div className="flex justify-center md:justify-start">{renderLeading()}</div>
 
             <div className="w-full md:w-auto">
-              {renderAccountSelect(`${accountSelectClassName} w-full`)}
+              {renderAccountSelect()}
             </div>
 
             <div className="flex w-full gap-2 md:w-auto md:items-center">
@@ -250,7 +241,7 @@ export default function TradeFilterBar({
           >
             {renderLeading()}
 
-            {renderAccountSelect(`${accountSelectClassName} w-full`)}
+            {renderAccountSelect()}
 
             {settingsNextToModes || publicNextToModes ? (
               <div

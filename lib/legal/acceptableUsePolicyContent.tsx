@@ -1,6 +1,7 @@
 import Link from "next/link"
 import type { LegalSection } from "@/app/components/LegalDocumentLayout"
-import { LEGAL_CONTACT_EMAIL, LEGAL_ENTITY_NAME } from "@/lib/legal/contact"
+import { SUPPORT_EMAIL } from "@/lib/contactEmails"
+import { LEGAL_ENTITY_NAME } from "@/lib/legal/contact"
 import { SITE_URL } from "@/lib/site"
 
 export const ACCEPTABLE_USE_POLICY_SECTIONS: LegalSection[] = [
@@ -205,7 +206,7 @@ export const ACCEPTABLE_USE_POLICY_SECTIONS: LegalSection[] = [
     content: (
       <p>
         To report abuse or ask questions about this policy, contact us at{" "}
-        <a href={`mailto:${LEGAL_CONTACT_EMAIL}`}>{LEGAL_CONTACT_EMAIL}</a>.
+          <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.
       </p>
     ),
   },

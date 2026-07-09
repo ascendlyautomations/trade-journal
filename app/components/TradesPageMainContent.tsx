@@ -24,6 +24,8 @@ type TradesPageMainContentProps = {
   accounts: Array<{ value: string; label: string; accountType?: string | null }>
   accountFilter: string
   onAccountChange: (value: string) => void
+  isPro?: boolean
+  copyGroups?: import("@/lib/copyTradingGroups").CopyTradingGroup[]
   accountTypeFilter: string
   onAccountTypeChange: (value: string) => void
   timeframe: string
@@ -75,6 +77,8 @@ function TradesPageMainContent({
   accounts,
   accountFilter,
   onAccountChange,
+  isPro = false,
+  copyGroups = [],
   accountTypeFilter,
   onAccountTypeChange,
   timeframe,
@@ -116,6 +120,8 @@ function TradesPageMainContent({
           accounts={accounts}
           accountFilter={accountFilter}
           onAccountChange={onAccountChange}
+          isPro={isPro}
+          copyGroups={copyGroups}
           accountTypeFilter={accountTypeFilter}
           onAccountTypeChange={onAccountTypeChange}
           timeframe={timeframe}

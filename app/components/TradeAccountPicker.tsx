@@ -1,19 +1,35 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import { navigateToManageAccounts } from "./TradeFilterBar"
+import {
+  navigateToManageAccounts,
+} from "./TradeFilterBar"
 import {
   formatAccountNameWithSizeDisplay,
   safeAccountNumberLabel,
 } from "@/lib/tradeAccountDisplay"
+import type { CopyTradingGroup } from "@/lib/copyTradingGroups"
 import {
+  copyGroupFilterValue,
+  findCopyGroupByFilterValue,
+  findCopyGroupById,
+  isCopyGroupFilterValue,
+  MANAGE_COPY_GROUPS_SETTINGS_HREF,
+} from "@/lib/tradeAccountSelection"
+import {
+  ACCOUNT_DROPDOWN_ACTION_CLASS,
   ACCOUNT_DROPDOWN_DIVIDER_CLASS,
+  ACCOUNT_DROPDOWN_FILTER_TRIGGER_CLASS,
+  ACCOUNT_DROPDOWN_FILTER_WRAPPER_CLASS,
   ACCOUNT_DROPDOWN_ITEM_CLASS,
   ACCOUNT_DROPDOWN_MANAGE_CLASS,
   ACCOUNT_DROPDOWN_PANEL_CLASS,
+  ACCOUNT_DROPDOWN_ROW_TEXT_CLASS,
+  ACCOUNT_DROPDOWN_SUBMISSION_WRAPPER_CLASS,
   ACCOUNT_DROPDOWN_TRIGGER_CLASS,
 } from "@/lib/accountDropdownStyles"
+import { cn } from "@/app/components/ui/cn"
 
 /** Mirrors `InputTradeForm` account row shape after `accounts` fetch. */
 export type TradeAccountOption = {
@@ -24,6 +40,13 @@ export type TradeAccountOption = {
   mode: string | null
   category?: string | null
 }
+
+type FilterOption = {
+  value: string
+  label: string
+}
+
+type MenuView = "accounts" | "copy-groups"
 
 function accountNumberSuffix(acc: {
   account_number?: string | null
@@ -43,33 +66,174 @@ function formatMode(mode: unknown) {
   return String(mode)
 }
 
-type Props = {
+function formatAccountLine(acc: TradeAccountOption): string {
+  return `${formatAccountNameWithSizeDisplay(acc.name, acc.size)} • ${acc.category || "Personal"} • ${formatMode(acc.mode)}${accountNumberSuffix(acc)}`
+}
+
+type TradeAccountPickerProps = {
   accounts: TradeAccountOption[]
-  selectedAccount: TradeAccountOption | null
-  onSelect: (acc: TradeAccountOption) => void
-  onOpenCreate: () => void
-  disableCreate?: boolean
-  /** Side “+ Create Account” button; off on Input Trade compact rows. */
-  showExternalCreateButton?: boolean
-  /** Hide settings link (e.g. onboarding account creation). */
-  hideManageAccounts?: boolean
   className?: string
   triggerId?: string
+  triggerClassName?: string
+  /** Enables Copy Trading navigation when true. */
+  isPro?: boolean
+  copyGroups?: CopyTradingGroup[]
+  /** Submission mode */
+  selectedAccount?: TradeAccountOption | null
+  selectedCopyGroupId?: string | null
+  onSelect?: (acc: TradeAccountOption | null) => void
+  onSelectCopyGroup?: (groupId: string | null) => void
+  onOpenCreate?: () => void
+  disableCreate?: boolean
+  showExternalCreateButton?: boolean
+  hideManageAccounts?: boolean
+  /** Filter mode (dashboard / trades) */
+  filterValue?: string
+  filterOptions?: FilterOption[]
+  onFilterChange?: (value: string) => void
+  filterPlaceholder?: string
+}
+
+function RowText({ children }: { children: React.ReactNode }) {
+  return <span className={ACCOUNT_DROPDOWN_ROW_TEXT_CLASS}>{children}</span>
+}
+
+function ManageRow({
+  children,
+  onClick,
+}: {
+  children: React.ReactNode
+  onClick: () => void
+}) {
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault()
+          onClick()
+        }
+      }}
+      className={ACCOUNT_DROPDOWN_MANAGE_CLASS}
+    >
+      <RowText>{children}</RowText>
+    </div>
+  )
+}
+
+function ActionRow({
+  children,
+  onClick,
+}: {
+  children: React.ReactNode
+  onClick: () => void
+}) {
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault()
+          onClick()
+        }
+      }}
+      className={ACCOUNT_DROPDOWN_ACTION_CLASS}
+    >
+      <RowText>{children}</RowText>
+    </div>
+  )
+}
+
+function ItemRow({
+  children,
+  onClick,
+  className,
+}: {
+  children: React.ReactNode
+  onClick: () => void
+  className?: string
+}) {
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault()
+          onClick()
+        }
+      }}
+      className={className ?? ACCOUNT_DROPDOWN_ITEM_CLASS}
+    >
+      <RowText>{children}</RowText>
+    </div>
+  )
 }
 
 export default function TradeAccountPicker({
   accounts,
-  selectedAccount,
+  className = "",
+  triggerId,
+  triggerClassName,
+  isPro = false,
+  copyGroups = [],
+  selectedAccount = null,
+  selectedCopyGroupId = null,
   onSelect,
+  onSelectCopyGroup,
   onOpenCreate,
   disableCreate = false,
   showExternalCreateButton = true,
   hideManageAccounts = false,
-  className = "",
-  triggerId,
-}: Props) {
+  filterValue,
+  filterOptions = [],
+  onFilterChange,
+  filterPlaceholder = "All Accounts",
+}: TradeAccountPickerProps) {
   const router = useRouter()
+  const isFilterMode = onFilterChange != null
+  const showCopyTrading = isPro
+  const resolvedTriggerClassName =
+    triggerClassName ??
+    (isFilterMode
+      ? ACCOUNT_DROPDOWN_FILTER_TRIGGER_CLASS
+      : ACCOUNT_DROPDOWN_TRIGGER_CLASS)
+
   const [open, setOpen] = useState(false)
+  const [menuView, setMenuView] = useState<MenuView>("accounts")
+
+  const selectedCopyGroup = useMemo(
+    () =>
+      isFilterMode
+        ? findCopyGroupByFilterValue(filterValue, copyGroups)
+        : findCopyGroupById(selectedCopyGroupId, copyGroups),
+    [copyGroups, filterValue, isFilterMode, selectedCopyGroupId]
+  )
+
+  const triggerLabel = useMemo(() => {
+    if (isFilterMode) {
+      if (!filterValue || filterValue === "all") return filterPlaceholder
+      if (selectedCopyGroup) return selectedCopyGroup.name
+      const option = filterOptions.find((opt) => opt.value === filterValue)
+      return option?.label ?? filterPlaceholder
+    }
+
+    if (selectedCopyGroup) return selectedCopyGroup.name
+    if (selectedAccount) return formatAccountLine(selectedAccount)
+    return "Select Account"
+  }, [
+    filterOptions,
+    filterPlaceholder,
+    filterValue,
+    isFilterMode,
+    selectedAccount,
+    selectedCopyGroup,
+  ])
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -82,111 +246,207 @@ export default function TradeAccountPicker({
     return () => document.removeEventListener("mousedown", handleClickOutside)
   }, [])
 
+  useEffect(() => {
+    if (!open) {
+      setMenuView("accounts")
+    }
+  }, [open])
+
+  function closeMenu() {
+    setOpen(false)
+    setMenuView("accounts")
+  }
+
   function handleManageAccounts() {
     navigateToManageAccounts(router)
-    setOpen(false)
+    closeMenu()
   }
+
+  function handleManageCopyGroups() {
+    router.push(MANAGE_COPY_GROUPS_SETTINGS_HREF)
+    closeMenu()
+  }
+
+  function handleSelectAccount(acc: TradeAccountOption) {
+    if (isFilterMode) {
+      onFilterChange?.(
+        filterOptions.find((opt) => opt.value.includes(`|${acc.id}`))?.value ??
+          acc.id
+      )
+    } else {
+      onSelectCopyGroup?.(null)
+      onSelect?.(acc)
+    }
+    closeMenu()
+  }
+
+  function handleSelectFilterOption(value: string) {
+    onFilterChange?.(value)
+    closeMenu()
+  }
+
+  function handleSelectCopyGroup(group: CopyTradingGroup) {
+    if (isFilterMode) {
+      onFilterChange?.(copyGroupFilterValue(group.id))
+    } else {
+      onSelect?.(null)
+      onSelectCopyGroup?.(group.id)
+    }
+    closeMenu()
+  }
+
+  const accountRows = isFilterMode
+    ? filterOptions.map((opt) => ({
+        key: opt.value,
+        label: opt.label,
+        onClick: () => handleSelectFilterOption(opt.value),
+      }))
+    : accounts.map((acc) => ({
+        key: String(acc.id),
+        label: formatAccountLine(acc),
+        onClick: () => handleSelectAccount(acc),
+      }))
 
   return (
     <div
-      className={`flex min-w-0 flex-col gap-2 sm:flex-row sm:items-stretch ${className}`.trim()}
+      className={cn(
+        isFilterMode
+          ? ACCOUNT_DROPDOWN_FILTER_WRAPPER_CLASS
+          : "flex min-w-0 flex-col gap-2 sm:flex-row sm:items-stretch",
+        !isFilterMode && ACCOUNT_DROPDOWN_SUBMISSION_WRAPPER_CLASS,
+        className
+      )}
     >
-      <div className="relative min-w-0 flex-1 trade-account-picker">
+      <div
+        className={cn(
+          "relative w-full min-w-0 trade-account-picker",
+          !isFilterMode && "flex-1 md:flex-none"
+        )}
+      >
         <button
           id={triggerId}
           type="button"
-          onClick={() => setOpen(!open)}
-          className={ACCOUNT_DROPDOWN_TRIGGER_CLASS}
+          onClick={() => setOpen((prev) => !prev)}
+          className={resolvedTriggerClassName}
         >
-          <span className="truncate">
-            {selectedAccount
-              ? `${formatAccountNameWithSizeDisplay(selectedAccount.name, selectedAccount.size)} • ${selectedAccount.category || "Personal"} • ${formatMode(selectedAccount.mode)}${accountNumberSuffix(selectedAccount)}`
-              : "Select Account"}
+          <span className={cn(ACCOUNT_DROPDOWN_ROW_TEXT_CLASS, "text-left")}>
+            {triggerLabel}
           </span>
           <span className="shrink-0 text-gray-400">▾</span>
         </button>
+
         {open ? (
-          <div className={ACCOUNT_DROPDOWN_PANEL_CLASS}>
-            {accounts.map((acc, index) => {
-              const isLastBeforeFooter =
-                index === accounts.length - 1 && !hideManageAccounts
-              return (
+          <div className={cn(ACCOUNT_DROPDOWN_PANEL_CLASS, "overflow-hidden p-0")}>
+            <div className="relative overflow-hidden">
               <div
-                key={String(acc.id)}
-                role="button"
-                tabIndex={0}
-                onClick={() => {
-                  onSelect(acc)
-                  setOpen(false)
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault()
-                    onSelect(acc)
-                    setOpen(false)
-                  }
-                }}
-                className={
-                  isLastBeforeFooter
-                    ? "cursor-pointer px-3 pt-2 pb-0 text-sm text-white hover:bg-[#1f2937] max-md:truncate max-md:whitespace-nowrap"
-                    : ACCOUNT_DROPDOWN_ITEM_CLASS
-                }
+                className={cn(
+                  "flex w-[200%] transition-transform duration-200 ease-out",
+                  menuView === "copy-groups" ? "-translate-x-1/2" : "translate-x-0"
+                )}
               >
-                {formatAccountNameWithSizeDisplay(acc.name, acc.size)} • {acc.category || "Personal"} •{" "}
-                {formatMode(acc.mode)}
-                {accountNumberSuffix(acc)}
-              </div>
-            )})}
-            {!hideManageAccounts ? (
-              <>
-                <div className={ACCOUNT_DROPDOWN_DIVIDER_CLASS} aria-hidden="true">
-                  <span className="md:hidden">────────</span>
-                  <span className="hidden md:inline">────────────────────</span>
+                {/* Accounts view */}
+                <div className="w-1/2 shrink-0">
+                  {isFilterMode ? (
+                    <ItemRow onClick={() => handleSelectFilterOption("all")}>
+                      {filterPlaceholder}
+                    </ItemRow>
+                  ) : null}
+
+                  {showCopyTrading ? (
+                    <ActionRow onClick={() => setMenuView("copy-groups")}>
+                      Copy Trading
+                    </ActionRow>
+                  ) : null}
+
+                  {(isFilterMode || showCopyTrading) && accountRows.length > 0 ? (
+                    <div className={ACCOUNT_DROPDOWN_DIVIDER_CLASS} aria-hidden="true">
+                      <span className="md:hidden">────────</span>
+                      <span className="hidden md:inline">────────────────────</span>
+                    </div>
+                  ) : null}
+
+                  <div className="max-h-48 overflow-y-auto overscroll-contain">
+                    {accountRows.map((row) => (
+                      <ItemRow key={row.key} onClick={row.onClick}>
+                        {row.label}
+                      </ItemRow>
+                    ))}
+                  </div>
+
+                  {!hideManageAccounts ? (
+                    <>
+                      <div className={ACCOUNT_DROPDOWN_DIVIDER_CLASS} aria-hidden="true">
+                        <span className="md:hidden">────────</span>
+                        <span className="hidden md:inline">────────────────────</span>
+                      </div>
+                      <ManageRow onClick={handleManageAccounts}>
+                        ⚙️ Manage Accounts
+                      </ManageRow>
+                    </>
+                  ) : null}
+
+                  {!isFilterMode && onOpenCreate ? (
+                    !disableCreate ? (
+                      <ItemRow
+                        onClick={() => {
+                          onOpenCreate()
+                          closeMenu()
+                        }}
+                        className="cursor-pointer px-3 py-2 text-sm text-green-400 hover:bg-[#1f2937]"
+                      >
+                        <RowText>➕ Add Account</RowText>
+                      </ItemRow>
+                    ) : (
+                      <div className="px-3 py-2 text-sm text-amber-300/90">
+                        Upgrade to Pro to add more accounts
+                      </div>
+                    )
+                  ) : null}
                 </div>
-                <div
-                  role="button"
-                  tabIndex={0}
-                  onClick={handleManageAccounts}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault()
-                      handleManageAccounts()
-                    }
-                  }}
-                  className={ACCOUNT_DROPDOWN_MANAGE_CLASS}
-                >
-                  ⚙️ Manage Accounts
+
+                {/* Copy groups view */}
+                <div className="w-1/2 shrink-0">
+                  <ItemRow onClick={() => setMenuView("accounts")}>
+                    ← Single Accounts
+                  </ItemRow>
+
+                  <div className={ACCOUNT_DROPDOWN_DIVIDER_CLASS} aria-hidden="true">
+                    <span className="md:hidden">────────</span>
+                    <span className="hidden md:inline">────────────────────</span>
+                  </div>
+
+                  <div className="max-h-48 overflow-y-auto overscroll-contain">
+                    {copyGroups.length === 0 ? (
+                      <div className="px-3 py-2 text-sm text-gray-500">
+                        No copy trading groups yet.
+                      </div>
+                    ) : (
+                      copyGroups.map((group) => (
+                        <ItemRow
+                          key={group.id}
+                          onClick={() => handleSelectCopyGroup(group)}
+                        >
+                          {group.name}
+                        </ItemRow>
+                      ))
+                    )}
+                  </div>
+
+                  <div className={ACCOUNT_DROPDOWN_DIVIDER_CLASS} aria-hidden="true">
+                    <span className="md:hidden">────────</span>
+                    <span className="hidden md:inline">────────────────────</span>
+                  </div>
+                  <ManageRow onClick={handleManageCopyGroups}>
+                    ⚙️ Manage Copy Trading Groups
+                  </ManageRow>
                 </div>
-              </>
-            ) : null}
-            {!disableCreate ? (
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={() => {
-                  onOpenCreate()
-                  setOpen(false)
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault()
-                    onOpenCreate()
-                    setOpen(false)
-                  }
-                }}
-                className="cursor-pointer px-3 py-2 text-sm text-green-400 hover:bg-[#1f2937]"
-              >
-                ➕ Add Account
               </div>
-            ) : (
-              <div className="px-3 py-2 text-sm text-amber-300/90">
-                Upgrade to Pro to add more accounts
-              </div>
-            )}
+            </div>
           </div>
         ) : null}
       </div>
-      {showExternalCreateButton ? (
+
+      {!isFilterMode && showExternalCreateButton && onOpenCreate ? (
         <button
           type="button"
           onClick={onOpenCreate}
@@ -198,4 +458,10 @@ export default function TradeAccountPicker({
       ) : null}
     </div>
   )
+}
+
+export {
+  copyGroupFilterValue,
+  isCopyGroupFilterValue,
+  MANAGE_COPY_GROUPS_SETTINGS_HREF,
 }

@@ -44,6 +44,8 @@ export type DashboardFiltersProps = {
   hasUser: boolean
   onSaveGear: () => void
   onCancelGear: () => void
+  /** PRO copy trading groups for unified account picker */
+  copyGroups?: import("@/lib/copyTradingGroups").CopyTradingGroup[]
   /** When false, hides Public toggle and Share performance controls (zero-trade dashboard). */
   showShareControls?: boolean
   /** Subtle link when filters indicate prop firm context (account or Eval/Funded mode). */
@@ -81,6 +83,7 @@ export default function DashboardFilters({
   onCancelGear,
   showShareControls = true,
   showPropFirmLink = false,
+  copyGroups = [],
 }: DashboardFiltersProps) {
   const gearSettings = (
     <DashboardGearSettings
@@ -107,6 +110,8 @@ export default function DashboardFilters({
         accounts={accounts}
         accountFilter={accountFilter}
         onAccountChange={onAccountChange}
+        isPro={isPro}
+        copyGroups={copyGroups}
         accountTypeFilter={accountTypeFilter}
         onAccountTypeChange={onAccountTypeChange}
         timeframe={timeframe}

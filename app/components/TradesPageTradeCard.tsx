@@ -13,7 +13,9 @@ import { formatMoneyUnknown, formatNumberUnknown, formatTradePoints } from "@/li
 import { safeAccountNumberLabel, formatTradeAccountNameSizeLine } from "@/lib/tradeAccountDisplay"
 import { tradeScreenshotPublicUrl } from "@/lib/storagePublicUrl"
 import TradeScreenshotImage from "@/app/components/trade/TradeScreenshotImage"
+import CopyTradedBadge from "@/app/components/trade/CopyTradedBadge"
 import ExpandableText from "@/app/components/ui/ExpandableText"
+import { isCopyTradedTrade } from "@/lib/tradeCopyTrading"
 import { type ReelRow } from "@/lib/reels"
 
 export type TradesPageTradeCardProps = {
@@ -222,6 +224,8 @@ function TradesPageTradeCard({
             <span className="bg-white/10 px-2 py-1 rounded text-xs">
               Pts: {formatTradePoints(trade)}
             </span>
+
+            {isCopyTradedTrade(trade) ? <CopyTradedBadge /> : null}
           </div>
 
           <p className="text-sm">

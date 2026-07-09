@@ -21,6 +21,11 @@ import { getCachedAccounts, getCachedTrades } from "@/lib/appDataCache"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 import { isProActive } from "@/lib/subscription"
+import { useCopyTradingGroups } from "@/lib/useCopyTradingGroups"
+import {
+  isValidAccountFilterValue,
+  resolveCopyGroupAccountIdsForFilter,
+} from "@/lib/tradeAccountSelection"
 import { tradeAnalysisHref } from "@/lib/tradeAnalysisNavigation"
 import ProUpgradeModal from "../../components/ProUpgradeModal"
 
@@ -43,6 +48,9 @@ export default function TradesPage() {
     (profileLoading && !gateProfile) ||
     (tradesLoading && cachedTrades.length === 0 && !tradesHasCachedData) ||
     (accountsLoading && accountRows.length === 0 && !accountsHasCachedData)
+
+  const isPro = isProActive(gateProfile)
+  const { copyGroups } = useCopyTradingGroups(user?.id, isPro)
 
   const [resultFilter, setResultFilter] = useState<"all" | "wins" | "losses">("all")
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
@@ -254,12 +262,17 @@ export default function TradesPage() {
     [accountRows]
   )
 
+  const copyGroupAccountIds = useMemo(
+    () => resolveCopyGroupAccountIdsForFilter(accountFilter, copyGroups),
+    [accountFilter, copyGroups]
+  )
+
   useEffect(() => {
     if (accountFilter === "all") return
-    if (!accounts.some((a) => a.value === accountFilter)) {
+    if (!isValidAccountFilterValue(accountFilter, accounts, copyGroups)) {
       setAccountFilter("all")
     }
-  }, [accounts, accountFilter])
+  }, [accounts, accountFilter, copyGroups])
 
   const tradesForPerformanceSharePool = useMemo(
     () =>
@@ -269,8 +282,9 @@ export default function TradesPage() {
         accountTypeFilter,
         resultFilter,
         accountById,
+        copyGroupAccountIds,
       }),
-    [trades, selectedDate, accountFilter, accountTypeFilter, resultFilter]
+    [trades, selectedDate, accountFilter, accountTypeFilter, resultFilter, accountById, copyGroupAccountIds]
   )
 
   const filteredTrades = useMemo(() => {
@@ -341,6 +355,8 @@ export default function TradesPage() {
             accounts={accounts}
             accountFilter={accountFilter}
             onAccountChange={setAccountFilter}
+            isPro={isPro}
+            copyGroups={copyGroups}
             accountTypeFilter={accountTypeFilter}
             onAccountTypeChange={setAccountTypeFilter}
             timeframe={timeframe}

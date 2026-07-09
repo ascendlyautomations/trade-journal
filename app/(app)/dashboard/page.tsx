@@ -58,6 +58,11 @@ import { supabase } from "../../../lib/supabaseClient"
 import { isProActive } from "../../../lib/subscription"
 import { filterTradesForPerformanceSharePool } from "@/lib/performanceShare"
 import { excludeBacktestTrades } from "@/lib/tradeModeFilters"
+import { useCopyTradingGroups } from "@/lib/useCopyTradingGroups"
+import {
+  isValidAccountFilterValue,
+  resolveCopyGroupAccountIdsForFilter,
+} from "@/lib/tradeAccountSelection"
 import { formatEST } from "@/lib/formatEST"
 import { formatCurrency } from "@/lib/formatCurrency"
 import { formatRR } from "@/lib/formatDisplay"
@@ -562,6 +567,8 @@ export default function Dashboard() {
   const { trades, loading: tradesLoading } = useCachedTrades(user?.id)
   const { accounts: accountRows, loading: accountsLoading } =
     useCachedAccounts(user?.id)
+  const isPro = isProActive(profile)
+  const { copyGroups } = useCopyTradingGroups(user?.id, isPro)
   const [accountFilter, setAccountFilter] = useState("all")
   const [accountTypeFilter, setAccountTypeFilter] = useState("all")
   const [timeFilter, setTimeFilter] = useState("all")
@@ -607,6 +614,16 @@ export default function Dashboard() {
     return m
   }, [accountRows])
 
+  const accounts = useMemo(
+    () => buildAccountFilterOptionsFromRows(accountRows),
+    [accountRows]
+  )
+
+  const copyGroupAccountIds = useMemo(
+    () => resolveCopyGroupAccountIdsForFilter(accountFilter, copyGroups),
+    [accountFilter, copyGroups]
+  )
+
   const showPropFirmLink = useMemo(
     () =>
       shouldShowPropFirmDashboardLink({
@@ -645,6 +662,7 @@ export default function Dashboard() {
         accountTypeFilter,
         showPublicOnly,
         accountById,
+        copyGroupAccountIds,
       }),
     [
       tradesExcludingBacktest,
@@ -652,6 +670,8 @@ export default function Dashboard() {
       accountFilter,
       accountTypeFilter,
       showPublicOnly,
+      accountById,
+      copyGroupAccountIds,
     ]
   )
 
@@ -802,6 +822,7 @@ export default function Dashboard() {
       trades: tradesExcludingBacktest,
       accountRows,
       accountById,
+      copyGroups,
     })
 
     setTimeFilter(hydratedTimeFilter)
@@ -839,11 +860,6 @@ export default function Dashboard() {
       })
     }
   }, [pageDataLoading, tradesExcludingBacktest, accountRows, accountById])
-
-  const accounts = useMemo(
-    () => buildAccountFilterOptionsFromRows(accountRows),
-    [accountRows]
-  )
 
   function formatNumber(value: number) {
     if (value === null || value === undefined) return "-"
@@ -928,7 +944,8 @@ export default function Dashboard() {
         !tradeMatchesAccountFilter(
           trade,
           accountFilter,
-          accountById[String(trade.account_id ?? "").trim()]
+          accountById[String(trade.account_id ?? "").trim()],
+          { copyGroupAccountIds: copyGroupAccountIds ?? undefined }
         )
       ) {
         return false
@@ -1320,18 +1337,17 @@ const biggestLoss = losses.length > 0
     customRangeStart,
     customRangeEnd,
     accountById,
+    copyGroupAccountIds,
   ])
 
   useEffect(() => {
     if (accountFilter === "all") return
-    if (!accounts.some((a) => a.value === accountFilter)) {
+    if (!isValidAccountFilterValue(accountFilter, accounts, copyGroups)) {
       setAccountFilter("all")
     }
-  }, [accounts, accountFilter])
+  }, [accounts, accountFilter, copyGroups])
 
   // 🔥 LOADING STATE (FIXES GLITCH)
-  const isPro = isProActive(profile)
-
   const showFreePlanAccountBanner = useMemo(() => {
     if (isPro || !tradesExcludingBacktest.length) return false
     const keys = new Set(
@@ -1500,7 +1516,8 @@ const biggestLoss = losses.length > 0
 
     const nextAccount = sanitizeDashboardAccountFilter(
       gearDraft.accountFilter,
-      accounts
+      accounts,
+      copyGroups
     )
 
     setTimeFilter(gearDraft.timeFilter)
@@ -1689,6 +1706,7 @@ const biggestLoss = losses.length > 0
               accounts={accounts}
               accountFilter={accountFilter}
               onAccountChange={setAccountFilter}
+              copyGroups={copyGroups}
               accountTypeFilter={accountTypeFilter}
               onAccountTypeChange={setAccountTypeFilter}
               timeframe={timeFilter}

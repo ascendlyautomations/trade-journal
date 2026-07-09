@@ -1,6 +1,7 @@
 import Link from "next/link"
 import type { LegalSection } from "@/app/components/LegalDocumentLayout"
-import { LEGAL_CONTACT_EMAIL, LEGAL_ENTITY_NAME } from "@/lib/legal/contact"
+import { SUPPORT_EMAIL } from "@/lib/contactEmails"
+import { LEGAL_ENTITY_NAME } from "@/lib/legal/contact"
 import { SITE_URL } from "@/lib/site"
 
 export const COOKIE_POLICY_SECTIONS: LegalSection[] = [
@@ -18,7 +19,7 @@ export const COOKIE_POLICY_SECTIONS: LegalSection[] = [
         <p>
           This policy should be read together with our{" "}
           <Link href="/privacy">Privacy Policy</Link>. If you have questions, contact us at{" "}
-          <a href={`mailto:${LEGAL_CONTACT_EMAIL}`}>{LEGAL_CONTACT_EMAIL}</a>.
+          <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.
         </p>
       </>
     ),
@@ -195,7 +196,7 @@ export const COOKIE_POLICY_SECTIONS: LegalSection[] = [
         <p>
           For questions about this Cookie Policy or our use of cookies and similar technologies,
           contact {LEGAL_ENTITY_NAME} at{" "}
-          <a href={`mailto:${LEGAL_CONTACT_EMAIL}`}>{LEGAL_CONTACT_EMAIL}</a>.
+          <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.
         </p>
       </>
     ),

@@ -66,6 +66,7 @@ import {
   isStartedTradingDateInFuture,
 } from "@/lib/tradeDateValidation"
 import TradingAccountsSettingsSection from "@/app/components/TradingAccountsSettingsSection"
+import CopyTradingGroupsSection from "@/app/components/CopyTradingGroupsSection"
 import NotificationPreferencesSettingsSection from "@/app/components/NotificationPreferencesSettingsSection"
 import CreatePasswordModal from "@/app/components/CreatePasswordModal"
 import { useUserProfile } from "@/lib/UserProfileProvider"
@@ -1558,10 +1559,17 @@ export default function SettingsPage() {
             )}
 
             {activeTab === "trading-accounts" && (
-              <TradingAccountsSettingsSection
-                userId={user?.id}
-                isPro={isProActive(profile)}
-              />
+              <div className="space-y-6">
+                <TradingAccountsSettingsSection
+                  userId={user?.id}
+                  isPro={isProActive(profile)}
+                />
+                <CopyTradingGroupsSection
+                  userId={user?.id}
+                  isPro={isProActive(profile)}
+                  variant="settings"
+                />
+              </div>
             )}
 
             {activeTab === "notifications" && (

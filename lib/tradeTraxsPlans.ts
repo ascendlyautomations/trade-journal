@@ -30,6 +30,8 @@ export const TRADETRAXS_FEATURE_LABELS = {
   backtestLab: "Backtest Lab",
   propFirmMode: "Prop Firm Mode",
   performanceImageExports: "Performance Image Exports",
+  copyTradingGroups: "Copy Trading Groups",
+  copyTradingGroupsDetail: "Automatically journal the same trade across multiple accounts",
 } as const
 
 /** @deprecated Prefer {@link TRADETRAXS_FEATURE_LABELS}. */
@@ -90,6 +92,8 @@ export const TRADETRAXS_PRO_FEATURE_GROUPS: readonly TradeTraxsPlanFeatureGroup[
         TRADETRAXS_FEATURE_LABELS.backtestLab,
         TRADETRAXS_FEATURE_LABELS.propFirmMode,
         TRADETRAXS_FEATURE_LABELS.performanceImageExports,
+        TRADETRAXS_FEATURE_LABELS.copyTradingGroups,
+        TRADETRAXS_FEATURE_LABELS.copyTradingGroupsDetail,
       ],
     },
     {

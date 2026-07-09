@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { CompanySectionCard } from "@/app/components/marketing/CompanyPageShell"
 import ContactFormModal from "@/app/components/marketing/ContactFormModal"
-import { LEGAL_CONTACT_EMAIL } from "@/lib/legal/contact"
+import { SUPPORT_EMAIL } from "@/lib/contactEmails"
 import {
   PUBLIC_CONTACT_CATEGORIES,
   type PublicContactCategoryConfig,
@@ -20,7 +20,7 @@ export default function ContactPageContent() {
     <>
       <div className="mb-8 rounded-xl border border-white/10 bg-white/[0.06] p-6 text-center shadow-lg shadow-black/20">
         <p className="text-sm text-gray-400">Email us anytime</p>
-        <p className="mt-2 text-xl font-semibold text-blue-300">{LEGAL_CONTACT_EMAIL}</p>
+        <p className="mt-2 text-xl font-semibold text-blue-300">{SUPPORT_EMAIL}</p>
       </div>
 
       <div className="grid gap-5 md:grid-cols-2">

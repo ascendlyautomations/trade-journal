@@ -45,6 +45,12 @@ import { useUploadProgress } from "@/lib/uploadProgress/UploadProgressProvider"
 import { buildCommunitySharePreviewPost } from "@/lib/buildCommunitySharePreviewPost"
 import { buildDateTime } from "@/lib/inputTradeDateTime"
 import { isProActive } from "@/lib/subscription"
+import { useCopyTradingGroups } from "@/lib/useCopyTradingGroups"
+import {
+  resolveCopyGroupAccounts,
+} from "@/lib/copyTradingGroups"
+import { insertCopyTradedTrades } from "@/lib/tradeCopyTrading"
+import type { TradingAccountListItem } from "@/lib/tradingAccounts"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 import ImageCropModal from "@/app/components/ImageCropModal"
@@ -182,6 +188,9 @@ export default function QuickTradeModal({
   const [accounts, setAccounts] = useState<TradeAccountOption[]>([])
   const [selectedAccount, setSelectedAccount] =
     useState<TradeAccountOption | null>(null)
+  const [selectedCopyGroupId, setSelectedCopyGroupId] = useState<string | null>(
+    null
+  )
   const [accountLoading, setAccountLoading] = useState(false)
   const [showCreateAccountModal, setShowCreateAccountModal] = useState(false)
   const [creatingAccount, setCreatingAccount] = useState(false)
@@ -244,6 +253,7 @@ export default function QuickTradeModal({
     setPreviewUrl(null)
     setAdvancedOpen(false)
     setSelectedAccount(null)
+    setSelectedCopyGroupId(null)
     setCsvPasteOpen(false)
     setCsvPasteText("")
     setCsvImportError(null)
@@ -304,6 +314,36 @@ export default function QuickTradeModal({
     void loadAccounts(userId)
     void loadPlanProfile(userId)
   }, [open, userId, loadAccounts, loadPlanProfile])
+
+  const isPro = isProActive(planProfile)
+  const { copyGroups } = useCopyTradingGroups(userId, isPro && open)
+
+  useEffect(() => {
+    setSelectedCopyGroupId((prev) =>
+      prev && copyGroups.some((group) => group.id === prev) ? prev : null
+    )
+  }, [copyGroups])
+
+  const selectedCopyGroup = useMemo(
+    () => copyGroups.find((group) => group.id === selectedCopyGroupId) ?? null,
+    [copyGroups, selectedCopyGroupId]
+  )
+
+  const copyGroupListAccounts = useMemo(
+    (): TradingAccountListItem[] =>
+      accounts.map((account) => ({
+        id: account.id,
+        name: account.name,
+        size: account.size,
+        account_number: account.account_number ?? null,
+        mode: String(account.mode ?? "live"),
+        category: account.category ?? null,
+        is_active: true,
+        note: "",
+        rules: null,
+      })),
+    [accounts]
+  )
 
   useEffect(() => {
     if (!image) {
@@ -553,7 +593,7 @@ export default function QuickTradeModal({
     if (busy || !userId) return
 
     const validation = validateQuickTradeForm({
-      hasAccount: !!selectedAccount,
+      hasAccount: Boolean(selectedAccount || selectedCopyGroupId),
       ticker,
       pnl,
       points,
@@ -603,6 +643,82 @@ export default function QuickTradeModal({
         title: uploadTitle,
         onDismissCompose: onClose,
         execute: async (report) => {
+          if (selectedCopyGroup && userId) {
+            const groupAccounts = resolveCopyGroupAccounts(
+              selectedCopyGroup,
+              copyGroupListAccounts
+            )
+            if (groupAccounts.length === 0) {
+              showPopup(
+                persistentError(
+                  "Copy Group Empty",
+                  "This copy trading group has no linked accounts."
+                )
+              )
+              throw new Error("Copy group empty")
+            }
+
+            const now = new Date()
+            const tradeTemplate = {
+              ticker: ticker.trim().toUpperCase(),
+              direction: inferPreviewDirection(entryPrice, exitPrice),
+              pnl: parsedPnl,
+              rr: parseOptionalRr(rr),
+              points: parsedPoints,
+              contracts: parsedContracts,
+              session: "NY",
+              notes: description.trim() || null,
+              public_description: description.trim() || null,
+              image_url: null,
+              strategy: null,
+              user_id: userId,
+              created_at: now.toISOString(),
+              date: now.toISOString(),
+              trade_date: entryDate,
+              entry_price:
+                entryVal != null && Number.isFinite(entryVal) ? entryVal : null,
+              exit_price:
+                exitVal != null && Number.isFinite(exitVal) ? exitVal : null,
+              entry_time: buildDateTime(entryDate, entryTime || undefined),
+              exit_time: buildDateTime(exitDate, exitTime || undefined),
+              psychology_notes: null,
+              trade_type: null,
+              confidence: null,
+              emotion: null,
+              followed_plan: false,
+              mistake_type: null,
+              market_condition: null,
+              news_event: false,
+              timeframe: null,
+              is_public: isPublic,
+            }
+
+            const copyResult = await insertCopyTradedTrades({
+              client: supabase,
+              userId,
+              isPro,
+              groupId: selectedCopyGroup.id,
+              accounts: groupAccounts,
+              tradeTemplate,
+              isPublic,
+              postCaption: description.trim() || null,
+            })
+
+            if (!copyResult.ok) {
+              showPopup(persistentError("Save Failed", copyResult.message))
+              throw new Error(copyResult.message)
+            }
+
+            notifyGettingStartedChecklistMaybeCompleted()
+            showPopup(
+              isPublic
+                ? feedbackPresets.postPublished()
+                : feedbackPresets.tradeSaveSuccess()
+            )
+            onSaved?.()
+            return
+          }
+
           const result = await saveManualTrade(
             supabase,
             userId,
@@ -685,7 +801,7 @@ export default function QuickTradeModal({
   if (!open) return null
 
   const canCreateMoreAccounts =
-    isProActive(planProfile) || accounts.length < FREE_PLAN_ACCOUNT_LIMIT
+    isPro || accounts.length < FREE_PLAN_ACCOUNT_LIMIT
 
   function selectTradeImage(file: File | undefined) {
     imageCrop.handleFileSelected(file)
@@ -751,8 +867,12 @@ export default function QuickTradeModal({
                 className="mt-2"
                 triggerId="quick-trade-account-trigger"
                 accounts={accounts}
+                isPro={isPro}
+                copyGroups={copyGroups}
                 selectedAccount={selectedAccount}
+                selectedCopyGroupId={selectedCopyGroupId}
                 onSelect={setSelectedAccount}
+                onSelectCopyGroup={setSelectedCopyGroupId}
                 onOpenCreate={() => setShowCreateAccountModal(true)}
                 disableCreate={!canCreateMoreAccounts}
                 showExternalCreateButton={false}

@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import { SUPPORT_EMAIL } from "@/lib/contactEmails"
 import { DEFAULT_OG_IMAGE_PATH, SITE_NAME, SITE_URL } from "@/lib/site"
 import {
   TRADETRAXS_FREE_PLAN,
@@ -155,5 +156,5 @@ export const CONTACT_PAGE_METADATA = buildPublicRouteMetadata({
   path: "/contact",
   title: "Contact",
   description:
-    "Contact TradeTraxs for billing, partnerships, business inquiries, and general questions at support@tradetraxs.com.",
+    `Contact TradeTraxs for billing, partnerships, business inquiries, and general questions at ${SUPPORT_EMAIL}.`,
 })

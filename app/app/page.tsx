@@ -1,6 +1,7 @@
 "use client"
 
 import InputTradeForm from "../components/InputTradeForm"
+import CopyTradingGroupsSection from "../components/CopyTradingGroupsSection"
 import QuickTradeModal from "../components/QuickTradeModal"
 import CsvImportFailureModal from "../components/CsvImportFailureModal"
 import { useState, useRef, useEffect } from "react"
@@ -27,12 +28,13 @@ import { assertCsvImportAllowedForFreePlan } from "@/lib/csvImportGate"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 import { useUserProfile } from "@/lib/useUserProfile"
+import { isProActive } from "@/lib/subscription"
 
 const INPUT_TRADE_CSV_INPUT_ID = "input-trade-csv-upload"
 
 export default function Home() {
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
-  const { user } = useUserProfile()
+  const { user, profile } = useUserProfile()
   const userId = user?.id ?? null
   const [loading, setLoading] = useState(false)
   const [reviewCount, setReviewCount] = useState(0)
@@ -318,6 +320,14 @@ export default function Home() {
               fetchReviewCount()
             }}
           />
+
+          <div className="mt-6">
+            <CopyTradingGroupsSection
+              userId={userId ?? undefined}
+              isPro={isProActive(profile)}
+              variant="app"
+            />
+          </div>
         </div>
       </div>
 

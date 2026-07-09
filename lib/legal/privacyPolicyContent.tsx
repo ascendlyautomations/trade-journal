@@ -1,6 +1,7 @@
 import Link from "next/link"
 import type { LegalSection } from "@/app/components/LegalDocumentLayout"
-import { LEGAL_CONTACT_EMAIL, LEGAL_ENTITY_NAME } from "@/lib/legal/contact"
+import { SUPPORT_EMAIL } from "@/lib/contactEmails"
+import { LEGAL_ENTITY_NAME } from "@/lib/legal/contact"
 import { SITE_URL } from "@/lib/site"
 
 export const PRIVACY_POLICY_SECTIONS: LegalSection[] = [
@@ -402,7 +403,7 @@ export const PRIVACY_POLICY_SECTIONS: LegalSection[] = [
           <strong>{LEGAL_ENTITY_NAME}</strong>
           <br />
           <strong>Email:</strong>{" "}
-          <a href={`mailto:${LEGAL_CONTACT_EMAIL}`}>{LEGAL_CONTACT_EMAIL}</a>
+          <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>
         </p>
         <p>
           You may also use our{" "}

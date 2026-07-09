@@ -210,9 +210,16 @@ export function buildAccountFilterOptionsFromRows(
 export function tradeMatchesAccountFilter(
   trade: TradeAccountDisplayInput,
   accountFilter: string,
-  accountRow?: AccountRowForDisplay | null
+  accountRow?: AccountRowForDisplay | null,
+  options?: { copyGroupAccountIds?: readonly string[] }
 ): boolean {
   if (!accountFilter || accountFilter === "all") return true
+
+  if (options?.copyGroupAccountIds && options.copyGroupAccountIds.length > 0) {
+    const tradeAccountId = String(trade.account_id ?? "").trim()
+    return options.copyGroupAccountIds.includes(tradeAccountId)
+  }
+
   return buildTradeAccountFilterKey(trade, accountRow) === accountFilter
 }
 

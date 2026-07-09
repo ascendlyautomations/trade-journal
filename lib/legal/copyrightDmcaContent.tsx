@@ -1,10 +1,10 @@
 import Link from "next/link"
 import type { LegalSection } from "@/app/components/LegalDocumentLayout"
 import {
-  LEGAL_COPYRIGHT_EMAIL,
-  LEGAL_ENTITY_NAME,
-  LEGAL_SUPPORT_EMAIL,
-} from "@/lib/legal/contact"
+  COPYRIGHT_EMAIL,
+  SUPPORT_EMAIL,
+} from "@/lib/contactEmails"
+import { LEGAL_ENTITY_NAME } from "@/lib/legal/contact"
 import { SITE_URL } from "@/lib/site"
 
 export const COPYRIGHT_DMCA_SECTIONS: LegalSection[] = [
@@ -41,7 +41,7 @@ export const COPYRIGHT_DMCA_SECTIONS: LegalSection[] = [
         </p>
         <p>
           <strong>Email:</strong>{" "}
-          <a href={`mailto:${LEGAL_COPYRIGHT_EMAIL}`}>{LEGAL_COPYRIGHT_EMAIL}</a>
+          <a href={`mailto:${COPYRIGHT_EMAIL}`}>{COPYRIGHT_EMAIL}</a>
         </p>
         <p>
           Please include the information below so we can review your request promptly. Incomplete
@@ -122,7 +122,7 @@ export const COPYRIGHT_DMCA_SECTIONS: LegalSection[] = [
         <p>
           If your content was removed or disabled because of a copyright notice and you believe the
           removal was a mistake or misidentification, you may submit a counter-notification to{" "}
-          <a href={`mailto:${LEGAL_COPYRIGHT_EMAIL}`}>{LEGAL_COPYRIGHT_EMAIL}</a>.
+          <a href={`mailto:${COPYRIGHT_EMAIL}`}>{COPYRIGHT_EMAIL}</a>.
         </p>
         <p>Your counter-notification should include:</p>
         <ul>
@@ -177,7 +177,7 @@ export const COPYRIGHT_DMCA_SECTIONS: LegalSection[] = [
       <p>
         This page focuses on copyright. If you believe content on TradeTraxs infringes your
         trademark, contact us at{" "}
-        <a href={`mailto:${LEGAL_COPYRIGHT_EMAIL}`}>{LEGAL_COPYRIGHT_EMAIL}</a> with a description
+        <a href={`mailto:${COPYRIGHT_EMAIL}`}>{COPYRIGHT_EMAIL}</a> with a description
         of the mark, how it is being used on the Service, and why you believe the use is
         unauthorized. We may remove content that violates trademark law or our{" "}
         <Link href="/acceptable-use">Acceptable Use Policy</Link>.
@@ -191,7 +191,7 @@ export const COPYRIGHT_DMCA_SECTIONS: LegalSection[] = [
       <p>
         For harassment, spam, or other community violations that are not primarily copyright
         matters, contact{" "}
-        <a href={`mailto:${LEGAL_SUPPORT_EMAIL}`}>{LEGAL_SUPPORT_EMAIL}</a> or see our{" "}
+        <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> or see our{" "}
         <Link href="/community-guidelines">Community Guidelines</Link> and{" "}
         <Link href="/terms">Terms of Service</Link>. Platform rules are published at{" "}
         <a href={SITE_URL}>{SITE_URL}</a>.
