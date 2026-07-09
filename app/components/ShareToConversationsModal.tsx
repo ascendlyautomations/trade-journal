@@ -343,7 +343,6 @@ export default function ShareToConversationsModal({
             <div className="mb-3">
               <FeedPostScreenshot
                 imageSrc={sharePostImageSrc}
-                imgClassName="w-full h-40 object-cover rounded"
                 wrapperClassName=""
               />
             </div>

@@ -4,6 +4,7 @@ import Link from "next/link"
 import EmptyState from "../../components/ui/EmptyState"
 import { SkeletonProfilePage, SkeletonTradeCard } from "../../components/ui/skeletons"
 import AchievementCard from "../../components/AchievementCard"
+import AchievementDetailModal from "../../components/AchievementDetailModal"
 import ProfileAchievementSocialCard from "../../components/ProfileAchievementSocialCard"
 import FeedProfilePostDetailModal from "../../components/feed/FeedProfilePostDetailModal"
 import type { ChangeEvent } from "react"
@@ -1184,15 +1185,11 @@ function PostCard({
         </div>
       ) : imgSrc ? (
         <div className="w-full bg-black/30">
-          <img
+          <TradeScreenshotImage
             src={imgSrc}
-            alt=""
-            loading="lazy"
-            decoding="async"
-            className="block w-full max-h-[400px] object-cover"
-            onError={(e) => {
-              e.currentTarget.style.display = "none"
-            }}
+            preset="feed-thumb"
+            className="rounded-none"
+            logContext="profile-post-card"
           />
         </div>
       ) : null}
@@ -1344,12 +1341,8 @@ function ProfilePageContent() {
   const [screenshotLightboxUrl, setScreenshotLightboxUrl] = useState<string | null>(
     null
   )
-  const [selectedAchievementImage, setSelectedAchievementImage] = useState<{
-    src: string
-    title: string
-    achievedAt: string | null
-    description: string | null
-  } | null>(null)
+  const [selectedAchievementDetail, setSelectedAchievementDetail] =
+    useState<Achievement | null>(null)
   const [feedDeepLinkPost, setFeedDeepLinkPost] = useState<any | null>(null)
   const [sharePost, setSharePost] = useState<any | null>(null)
   const [feedDeepLinkLikeMeta, setFeedDeepLinkLikeMeta] = useState(EMPTY_LIKE_META)
@@ -1997,7 +1990,7 @@ function ProfilePageContent() {
     editingReel ||
     selectedReelDetail ||
     editingPost ||
-    selectedAchievementImage ||
+    selectedAchievementDetail ||
     selectedTradeDetail ||
     selectedPostDetail ||
     feedDeepLinkPost ||
@@ -2012,7 +2005,7 @@ function ProfilePageContent() {
       !editingReel &&
       !selectedReelDetail &&
       !editingPost &&
-      !selectedAchievementImage &&
+      !selectedAchievementDetail &&
       !selectedTradeDetail &&
       !selectedPostDetail &&
       !feedDeepLinkPost &&
@@ -2026,7 +2019,7 @@ function ProfilePageContent() {
         setEditingPost(null)
         setShowReelComposer(false)
         setEditingReel(null)
-        setSelectedAchievementImage(null)
+        setSelectedAchievementDetail(null)
         setSelectedTradeDetail(null)
         setSelectedPostDetail(null)
         setSelectedReelDetail(null)
@@ -2039,7 +2032,7 @@ function ProfilePageContent() {
   }, [
     showCreatePost,
     editingPost,
-    selectedAchievementImage,
+    selectedAchievementDetail,
     selectedTradeDetail,
     selectedPostDetail,
     feedDeepLinkPost,
@@ -5045,14 +5038,7 @@ function ProfilePageContent() {
                                     achievement={a}
                                     featured
                                     showVisibility={false}
-                                    onImageClick={(src, achievement) =>
-                                      setSelectedAchievementImage({
-                                        src,
-                                        title: achievement.title,
-                                        achievedAt: achievement.achieved_at,
-                                        description: achievement.description,
-                                      })
-                                    }
+                                    onOpenDetail={setSelectedAchievementDetail}
                                   />
                                 )
                               }
@@ -5091,14 +5077,6 @@ function ProfilePageContent() {
                                       ? () => handleShareAchievement(a, postId)
                                       : undefined
                                   }
-                                  onImageClick={(src, achievement) =>
-                                    setSelectedAchievementImage({
-                                      src,
-                                      title: achievement.title,
-                                      achievedAt: achievement.achieved_at,
-                                      description: achievement.description,
-                                    })
-                                  }
                                 />
                               )
                             })}
@@ -5115,14 +5093,7 @@ function ProfilePageContent() {
                               <AchievementCard
                                 key={a.id}
                                 achievement={a}
-                                onImageClick={(src, achievement) =>
-                                  setSelectedAchievementImage({
-                                    src,
-                                    title: achievement.title,
-                                    achievedAt: achievement.achieved_at,
-                                    description: achievement.description,
-                                  })
-                                }
+                                onOpenDetail={setSelectedAchievementDetail}
                               />
                             )
                           }
@@ -5158,14 +5129,6 @@ function ProfilePageContent() {
                                 currentUserId
                                   ? () => handleShareAchievement(a, postId)
                                   : undefined
-                              }
-                              onImageClick={(src, achievement) =>
-                                setSelectedAchievementImage({
-                                  src,
-                                  title: achievement.title,
-                                  achievedAt: achievement.achieved_at,
-                                  description: achievement.description,
-                                })
                               }
                             />
                           )
@@ -5286,51 +5249,11 @@ function ProfilePageContent() {
           </div>
         )}
 
-      {selectedAchievementImage ? (
-        <div
-          className="fixed inset-0 z-[210] flex items-center justify-center bg-black/80 p-3 backdrop-blur-md sm:p-5"
-          role="presentation"
-          onClick={() => setSelectedAchievementImage(null)}
-        >
-          <div
-            className="w-full max-w-4xl rounded-2xl border border-white/10 bg-gradient-to-br from-[#0f172a] via-[#0b1532] to-[#0a2230] p-3 shadow-2xl shadow-blue-900/20 sm:p-4"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Achievement image preview"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="mb-2 flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-white">
-                  {selectedAchievementImage.title}
-                </p>
-                <p className="text-xs text-gray-400">
-                  {formatAchievementDate(selectedAchievementImage.achievedAt)}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSelectedAchievementImage(null)}
-                className="rounded-md p-1.5 text-gray-300 hover:bg-white/10 hover:text-white"
-                aria-label="Close preview"
-              >
-                ✕
-              </button>
-            </div>
-            <img
-              src={selectedAchievementImage.src}
-              alt={selectedAchievementImage.title}
-              loading="lazy"
-              decoding="async"
-              className="max-h-[75vh] w-full rounded-xl border border-white/10 object-contain bg-black/30"
-            />
-            {selectedAchievementImage.description ? (
-              <p className="mt-2 text-sm text-gray-300">
-                {selectedAchievementImage.description}
-              </p>
-            ) : null}
-          </div>
-        </div>
+      {selectedAchievementDetail ? (
+        <AchievementDetailModal
+          achievement={selectedAchievementDetail}
+          onClose={() => setSelectedAchievementDetail(null)}
+        />
       ) : null}
 
       {selectedTradeDetail ? (

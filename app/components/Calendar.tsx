@@ -378,12 +378,11 @@ export default function Calendar({
                     className="flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-black/40 p-3 transition hover:bg-black/60 sm:gap-4 sm:p-4"
                   >
                     {img ? (
-                      <img
+                      <TradeScreenshotImage
                         src={img}
-                        alt=""
-                        loading="lazy"
-                        decoding="async"
-                        className="h-16 w-16 shrink-0 rounded-lg border border-white/10 object-cover sm:h-20 sm:w-20"
+                        preset="trade-thumb"
+                        className="h-16 w-auto shrink-0 rounded-lg border border-white/10 sm:h-20"
+                        logContext="calendar-trade-list"
                       />
                     ) : null}
 

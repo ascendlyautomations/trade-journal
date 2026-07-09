@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react"
 import AchievementCard from "../components/AchievementCard"
+import AchievementsPageDetailModal from "../components/AchievementsPageDetailModal"
 import AchievementUploadModal, {
   type AchievementUploadInitialValues,
 } from "../components/AchievementUploadModal"
@@ -45,6 +46,8 @@ export default function AchievementsPage() {
   const [createInitialValues, setCreateInitialValues] = useState<
     AchievementUploadInitialValues | undefined
   >(undefined)
+  const [selectedAchievementDetail, setSelectedAchievementDetail] =
+    useState<Achievement | null>(null)
 
 
   const authError =
@@ -190,6 +193,7 @@ export default function AchievementsPage() {
                     <AchievementCard
                       key={a.id}
                       achievement={a}
+                      onOpenDetail={setSelectedAchievementDetail}
                       onEdit={() => openEdit(a)}
                       onDelete={() => requestDelete(a.id)}
                     />
@@ -212,6 +216,7 @@ export default function AchievementsPage() {
                     achievement={a}
                     featured
                     showVisibility={false}
+                    onOpenDetail={setSelectedAchievementDetail}
                   />
                 ))}
               </div>
@@ -239,6 +244,7 @@ export default function AchievementsPage() {
                 <AchievementCard
                   key={a.id}
                   achievement={a}
+                  onOpenDetail={setSelectedAchievementDetail}
                   onEdit={() => openEdit(a)}
                   onDelete={() => requestDelete(a.id)}
                 />
@@ -262,6 +268,21 @@ export default function AchievementsPage() {
       />
 
       <ConfirmModal {...confirmModalProps} />
+
+      {selectedAchievementDetail ? (
+        <AchievementsPageDetailModal
+          achievement={selectedAchievementDetail}
+          onClose={() => setSelectedAchievementDetail(null)}
+          onEdit={() => {
+            openEdit(selectedAchievementDetail)
+            setSelectedAchievementDetail(null)
+          }}
+          onDelete={() => {
+            requestDelete(selectedAchievementDetail.id)
+            setSelectedAchievementDetail(null)
+          }}
+        />
+      ) : null}
     </>
   )
 }

@@ -22,6 +22,7 @@ import {
   sanitizeTradeForViewer,
 } from "@/lib/publicAccountPrivacy"
 import { resolveTradePoints } from "@/lib/resolveTradePoints"
+import TradeScreenshotImage from "@/app/components/trade/TradeScreenshotImage"
 import { profilePath } from "@/lib/profileRoutes"
 import { profileSeoDisplayName } from "@/lib/publicSeo"
 import { readTradeDetail, writeTradeDetail } from "@/lib/tradeDetailCache"
@@ -160,12 +161,11 @@ export default function TradeDetailPageClient({
 
   const tradeImage = imgSrc ? (
     <div className="w-full bg-black/30">
-      <img
+      <TradeScreenshotImage
         src={imgSrc}
-        alt=""
-        loading="lazy"
-        decoding="async"
-        className="block w-full max-h-[400px] object-cover"
+        preset="feed-detail"
+        maxHeightPx={720}
+        logContext="trade-detail-page"
       />
     </div>
   ) : null

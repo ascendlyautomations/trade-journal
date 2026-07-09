@@ -1,20 +1,25 @@
 import { getImageCropPreset } from "./imageCropPresets"
 import {
-  clampFillOffset,
   computeFillDrawRect,
   computeFitExportSize,
-  renderImageCrop,
-  type ImageCropMode,
-  type ImageCropOffset,
+  renderZoomPanCrop,
+  type ZoomPanTransform,
 } from "./renderImageCrop"
+import {
+  computeFitScale,
+  computeZoomPanDrawRect,
+  DEFAULT_ZOOM_PAN_TRANSFORM,
+} from "./zoomPanCrop"
 import {
   TRADE_IMAGE_ASPECT,
   TRADE_IMAGE_OUTPUT_HEIGHT,
   TRADE_IMAGE_OUTPUT_WIDTH,
 } from "./tradeImageAspect"
 
-export type TradeImageCropMode = ImageCropMode
-export type TradeImageCropOffset = ImageCropOffset
+/** @deprecated Use ZoomPanTransform */
+export type TradeImageCropMode = "fit" | "fill"
+/** @deprecated Use ZoomPanOffset */
+export type TradeImageCropOffset = { x: number; y: number }
 export type TradeImageDrawRect = {
   x: number
   y: number
@@ -30,29 +35,23 @@ export function computeFitDrawRect(
   frameWidth = TRADE_IMAGE_OUTPUT_WIDTH,
   frameHeight = TRADE_IMAGE_OUTPUT_HEIGHT
 ): TradeImageDrawRect {
-  const scale = Math.min(frameWidth / imageWidth, frameHeight / imageHeight)
-  const width = imageWidth * scale
-  const height = imageHeight * scale
-  return {
-    x: (frameWidth - width) / 2,
-    y: (frameHeight - height) / 2,
-    width,
-    height,
-  }
+  return computeZoomPanDrawRect(
+    imageWidth,
+    imageHeight,
+    frameWidth,
+    frameHeight,
+    1,
+    { x: 0, y: 0 }
+  )
 }
 
-export {
-  clampFillOffset,
-  computeFillDrawRect,
-  computeFitExportSize,
-}
+export { computeFillDrawRect, computeFitExportSize, computeFitScale }
 
 export async function renderTradeImageCrop(
   file: File,
-  mode: TradeImageCropMode,
-  offset: ImageCropOffset = { x: 0, y: 0 }
+  transform: ZoomPanTransform = DEFAULT_ZOOM_PAN_TRANSFORM
 ): Promise<File> {
-  return renderImageCrop(file, CONTENT_PRESET, mode, offset)
+  return renderZoomPanCrop(file, CONTENT_PRESET, transform)
 }
 
 export {

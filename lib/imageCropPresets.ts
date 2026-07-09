@@ -1,4 +1,6 @@
 import { TRADE_IMAGE_ASPECT, TRADE_IMAGE_OUTPUT_WIDTH } from "./tradeImageAspect"
+import { TRADE_IMAGE_LETTERBOX_COLOR } from "./tradeImageAspect"
+import { ZOOM_PAN_MAX } from "./zoomPanCrop"
 
 export type ImageCropPresetId = "content" | "avatar" | "story" | "room"
 
@@ -8,77 +10,75 @@ export type ImageCropPreset = {
   id: ImageCropPresetId
   title: string
   subtitle: string
-  /** Fill-frame width / height. */
+  /** Fixed crop frame width / height. */
   fillAspect: number
   outputWidth: number
   outputHeight: number
-  modes: Array<"fit" | "fill">
-  defaultMode: "fit" | "fill"
-  /** Fit mode exports the image at its natural aspect ratio. */
-  fitNatural: boolean
+  maxZoom: number
+  letterboxColor: string
   mask: ImageCropMask
-  fitHelp: string
-  fillHelp: string
+  /** @deprecated Legacy fit export */
+  fitNatural?: boolean
+  /** @deprecated */
+  modes?: Array<"fit" | "fill">
+  /** @deprecated */
+  defaultMode?: "fit" | "fill"
+  /** @deprecated */
+  fitHelp?: string
+  /** @deprecated */
+  fillHelp?: string
 }
 
 export const STORY_IMAGE_ASPECT = 400 / 700
+
+const sharedHelp =
+  "Drag to reposition. Pinch or use the slider to zoom. Reset returns to full image (Fit)."
 
 export const IMAGE_CROP_PRESETS: Record<ImageCropPresetId, ImageCropPreset> = {
   content: {
     id: "content",
     title: "Adjust image",
-    subtitle: "Choose how your image appears in the feed.",
+    subtitle: "Drag and zoom to choose what appears in your post.",
     fillAspect: TRADE_IMAGE_ASPECT,
     outputWidth: TRADE_IMAGE_OUTPUT_WIDTH,
     outputHeight: Math.round(TRADE_IMAGE_OUTPUT_WIDTH / TRADE_IMAGE_ASPECT),
-    modes: ["fit", "fill"],
-    defaultMode: "fit",
-    fitNatural: true,
+    maxZoom: ZOOM_PAN_MAX,
+    letterboxColor: TRADE_IMAGE_LETTERBOX_COLOR,
     mask: "none",
-    fitHelp: "Shows the full image at its natural proportions.",
-    fillHelp: "Drag the image to choose what fills the frame.",
+    fitNatural: true,
   },
   avatar: {
     id: "avatar",
     title: "Profile picture",
-    subtitle: "Drag to position your photo in the circle.",
+    subtitle: "Drag and zoom to position your photo.",
     fillAspect: 1,
     outputWidth: 512,
     outputHeight: 512,
-    modes: ["fill"],
-    defaultMode: "fill",
-    fitNatural: false,
+    maxZoom: ZOOM_PAN_MAX,
+    letterboxColor: TRADE_IMAGE_LETTERBOX_COLOR,
     mask: "circle",
-    fitHelp: "",
-    fillHelp: "Drag the image to center your face.",
   },
   story: {
     id: "story",
     title: "Story image",
-    subtitle: "Drag to position your story.",
+    subtitle: "Drag and zoom to position your story.",
     fillAspect: STORY_IMAGE_ASPECT,
     outputWidth: 1080,
     outputHeight: Math.round(1080 / STORY_IMAGE_ASPECT),
-    modes: ["fill"],
-    defaultMode: "fill",
-    fitNatural: false,
+    maxZoom: ZOOM_PAN_MAX,
+    letterboxColor: TRADE_IMAGE_LETTERBOX_COLOR,
     mask: "rounded",
-    fitHelp: "",
-    fillHelp: "Drag the image to choose what fills the story frame.",
   },
   room: {
     id: "room",
     title: "Room picture",
-    subtitle: "Drag to position your room image.",
+    subtitle: "Drag and zoom to position your room image.",
     fillAspect: 1,
     outputWidth: 512,
     outputHeight: 512,
-    modes: ["fill"],
-    defaultMode: "fill",
-    fitNatural: false,
+    maxZoom: ZOOM_PAN_MAX,
+    letterboxColor: TRADE_IMAGE_LETTERBOX_COLOR,
     mask: "circle",
-    fitHelp: "",
-    fillHelp: "Drag the image to center the picture.",
   },
 }
 
@@ -95,3 +95,5 @@ export function fillFrameSize(preset: ImageCropPreset): {
     height: Math.round(preset.outputWidth / preset.fillAspect),
   }
 }
+
+export const IMAGE_CROP_EDITOR_HELP = sharedHelp

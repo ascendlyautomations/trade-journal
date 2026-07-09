@@ -23,10 +23,12 @@ function formatCategoryLabel(achievement: Achievement): string {
 
 type FeedAchievementDetailMetaProps = {
   achievement: Achievement
+  showPrivacy?: boolean
 }
 
 export default function FeedAchievementDetailMeta({
   achievement,
+  showPrivacy = true,
 }: FeedAchievementDetailMetaProps) {
   const unlockDate = formatAchievementDate(achievement.achieved_at)
   const description =
@@ -49,6 +51,9 @@ export default function FeedAchievementDetailMeta({
       ) : null}
       <div className="space-y-0.5 pt-0.5 text-xs text-white/50">
         <p>Unlocked {unlockDate}</p>
+        {showPrivacy ? (
+          <p>{achievement.is_public ? "Public" : "Private"}</p>
+        ) : null}
       </div>
     </div>
   )

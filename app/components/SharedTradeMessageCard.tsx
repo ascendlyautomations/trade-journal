@@ -226,12 +226,11 @@ export default function SharedTradeMessageCard({
                 logContext="shared-trade-dm"
               />
             ) : (
-              <img
+              <TradeScreenshotImage
                 src={imgSrc}
-                alt=""
-                loading="lazy"
-                decoding="async"
-                className="h-28 w-full rounded-lg border border-gray-700 object-cover"
+                maxHeightPx={112}
+                className="rounded-lg border border-gray-700"
+                logContext="shared-trade-card"
               />
             )}
           </button>

@@ -17,8 +17,10 @@ type AchievementCardProps = {
   achievement: Achievement
   featured?: boolean
   showVisibility?: boolean
+  onOpenDetail?: (achievement: Achievement) => void
   onEdit?: () => void
   onDelete?: () => void
+  /** @deprecated Prefer onOpenDetail — opens the full achievement modal. */
   onImageClick?: (imageSrc: string, achievement: Achievement) => void
 }
 
@@ -26,6 +28,7 @@ export default function AchievementCard({
   achievement,
   featured = false,
   showVisibility = true,
+  onOpenDetail,
   onEdit,
   onDelete,
   onImageClick,
@@ -38,6 +41,12 @@ export default function AchievementCard({
       ? `${achievementTypeLabel(achievement.achievement_type)} • ${valueText}`
       : achievementTypeLabel(achievement.achievement_type)
 
+  const openDetail = onOpenDetail
+    ? () => onOpenDetail(achievement)
+    : onImageClick && imageSrc
+      ? () => onImageClick(imageSrc, achievement)
+      : undefined
+
   const imageNode = imageSrc ? (
     <TradeScreenshotImage
       src={imageSrc}
@@ -49,7 +58,26 @@ export default function AchievementCard({
   ) : null
 
   return (
-    <article className={`rounded-xl border p-4 ${tierClassName(achievement.tier ?? null)}`}>
+    <article
+      className={`rounded-xl border p-4 ${tierClassName(achievement.tier ?? null)} ${
+        openDetail
+          ? "cursor-pointer transition hover:border-white/20 hover:bg-white/[0.03]"
+          : ""
+      }`}
+      role={openDetail ? "button" : undefined}
+      tabIndex={openDetail ? 0 : undefined}
+      onClick={openDetail ? () => openDetail() : undefined}
+      onKeyDown={
+        openDetail
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault()
+                openDetail()
+              }
+            }
+          : undefined
+      }
+    >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="text-[11px] uppercase tracking-wide text-blue-200/80">
@@ -82,10 +110,15 @@ export default function AchievementCard({
       </p>
 
       {imageNode ? (
-        onImageClick ? (
+        onOpenDetail ? (
+          <div className="mt-2">{imageNode}</div>
+        ) : onImageClick ? (
           <button
             type="button"
-            onClick={() => onImageClick(imageSrc!, achievement)}
+            onClick={(e) => {
+              e.stopPropagation()
+              onImageClick(imageSrc!, achievement)
+            }}
             className="group mt-2 block w-full text-left transition group-hover:brightness-110"
             aria-label={`Open image for ${achievement.title}`}
           >
@@ -97,7 +130,11 @@ export default function AchievementCard({
       ) : null}
 
       {onEdit || onDelete ? (
-        <div className="mt-3 flex gap-2">
+        <div
+          className="mt-3 flex gap-2"
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
           {onEdit ? (
             <button
               type="button"
