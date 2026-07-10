@@ -19,42 +19,116 @@ export type ShareConversationRow = {
   other_user_id?: string | null
 }
 
-/** Same query shape as `app/feed/page.tsx` share-to-DM loader. */
-export async function fetchShareConversations(
+export type DmConversationParticipantProfile = {
+  id: string
+  username: string | null
+  avatar_url: string | null
+  name?: string | null
+}
+
+export type DmConversationParticipant = {
+  user_id: string
+  profiles: DmConversationParticipantProfile | null
+}
+
+/** Row shape from the shared two-step DM conversation loader. */
+export type DmConversationRow = {
+  id: string
+  is_group: boolean
+  is_pinned: boolean
+  name: string | null
+  avatar_url: string | null
+  last_message: string | null
+  last_message_at: string | null
+  participants: DmConversationParticipant[]
+}
+
+function normalizeEmbeddedProfile(
+  raw: unknown
+): DmConversationParticipantProfile | null {
+  if (!raw) return null
+  const row = Array.isArray(raw) ? raw[0] : raw
+  if (!row || typeof row !== "object") return null
+  const p = row as Record<string, unknown>
+  return {
+    id: String(p.id ?? ""),
+    username: (p.username as string | null) ?? null,
+    avatar_url: (p.avatar_url as string | null) ?? null,
+    name: (p.name as string | null) ?? null,
+  }
+}
+
+function normalizeDmConversationRow(conv: Record<string, unknown>): DmConversationRow {
+  const participantsRaw = Array.isArray(conv.participants) ? conv.participants : []
+  const participants: DmConversationParticipant[] = participantsRaw.map((p) => {
+    const row = p as Record<string, unknown>
+    return {
+      user_id: String(row.user_id ?? ""),
+      profiles: normalizeEmbeddedProfile(row.profiles),
+    }
+  })
+
+  return {
+    id: String(conv.id ?? ""),
+    is_group: conv.is_group === true,
+    is_pinned: conv.is_pinned === true,
+    name: (conv.name as string | null) ?? null,
+    avatar_url: (conv.avatar_url as string | null) ?? null,
+    last_message: (conv.last_message as string | null) ?? null,
+    last_message_at: (conv.last_message_at as string | null) ?? null,
+    participants,
+  }
+}
+
+/**
+ * Shared DM conversation loader (messages inbox + share-to-DM):
+ * 1) conversation_participants → conversation_id
+ * 2) conversations + participants embed
+ */
+export async function fetchUserDmConversations(
   supabase: SupabaseClient,
   userId: string
-): Promise<ShareConversationRow[]> {
+): Promise<{ rows: DmConversationRow[]; error: Error | null }> {
   const { data: membershipRows, error: membershipError } = await supabase
     .from("conversation_participants")
     .select("conversation_id")
     .eq("user_id", userId)
 
   if (membershipError) {
-    console.error("fetchShareConversations:", membershipError)
-    return []
+    console.error("fetchUserDmConversations participants:", membershipError)
+    return { rows: [], error: new Error(membershipError.message) }
   }
 
   const conversationIds = [
-    ...new Set((membershipRows || []).map((row: { conversation_id: string }) => row.conversation_id)),
+    ...new Set(
+      (membershipRows || []).map(
+        (row: { conversation_id: string }) => row.conversation_id
+      )
+    ),
   ]
 
-  if (conversationIds.length === 0) return []
+  if (conversationIds.length === 0) {
+    return { rows: [], error: null }
+  }
 
-  const { data: rows, error } = await supabase
+  const { data, error } = await supabase
     .from("conversations")
     .select(
       `
       id,
       is_group,
+      is_pinned,
       name,
       avatar_url,
+      last_message,
       last_message_at,
       participants:conversation_participants(
         user_id,
         profiles (
           id,
           username,
-          avatar_url
+          avatar_url,
+          name
         )
       )
     `
@@ -62,17 +136,32 @@ export async function fetchShareConversations(
     .in("id", conversationIds)
 
   if (error) {
-    console.error("fetchShareConversations conversations:", error)
+    console.error("fetchUserDmConversations conversations:", error)
+    return { rows: [], error: new Error(error.message) }
+  }
+
+  return {
+    rows: (data || []).map((row) =>
+      normalizeDmConversationRow(row as Record<string, unknown>)
+    ),
+    error: null,
+  }
+}
+
+/** Same query flow as the messages inbox — share modal display mapping only. */
+export async function fetchShareConversations(
+  supabase: SupabaseClient,
+  userId: string
+): Promise<ShareConversationRow[]> {
+  const { rows, error } = await fetchUserDmConversations(supabase, userId)
+
+  if (error) {
     return []
   }
 
-  const mapped = (rows || []).map((conv: any) => {
-    const participants = Array.isArray(conv.participants) ? conv.participants : []
-    const otherUser = participants.find((p: any) => p.user_id !== userId)
-    const otherProfileRaw = otherUser?.profiles
-    const otherProfile = Array.isArray(otherProfileRaw)
-      ? otherProfileRaw[0]
-      : otherProfileRaw
+  const mapped = rows.map((conv) => {
+    const otherUser = conv.participants.find((p) => p.user_id !== userId)
+    const otherProfile = otherUser?.profiles
 
     const displayName = conv.is_group
       ? conv.name || "Group Chat"
@@ -84,8 +173,8 @@ export async function fetchShareConversations(
     return {
       id: conv.id,
       name: displayName,
-      is_group: conv.is_group === true,
-      avatar_url: displayAvatar,
+      is_group: conv.is_group,
+      avatar_url: displayAvatar ?? "",
       last_message_at: conv.last_message_at ?? null,
       other_user_id: conv.is_group ? null : otherUser?.user_id ?? null,
     }

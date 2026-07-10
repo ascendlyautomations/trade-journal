@@ -46,6 +46,60 @@ import {
   readMessagesInboxSession,
   writeMessagesInboxSession,
 } from "@/lib/messagesInboxSessionCache"
+import {
+  fetchUserDmConversations,
+  type DmConversationRow,
+} from "@/lib/shareToConversations"
+import { traceMessagesInbox } from "@/lib/messagesInboxTrace"
+
+function mapDmRowToInboxConversation(
+  conv: DmConversationRow,
+  userId: string,
+  unreadCount: number
+) {
+  const participants = conv.participants.map((p) => ({
+    conversation_id: conv.id,
+    user_id: p.user_id,
+    profiles: p.profiles,
+  }))
+
+  const otherUser = conv.participants.find((p) => p.user_id !== userId)
+  const profile = otherUser?.profiles ?? null
+
+  const isGroup = conv.is_group
+  const hasHistory = Boolean(conv.last_message?.trim())
+  const peerDeleted = isDirectConversationPeerDeleted(
+    isGroup,
+    profile?.username,
+    hasHistory
+  )
+  const peerLabel = peerDeleted ? DELETED_USER_LABEL : profile?.username || "user"
+  const displayName = isGroup ? conv.name || "Group Chat" : peerLabel
+
+  return {
+    id: conv.id,
+    is_group: isGroup,
+    is_pinned: conv.is_pinned,
+    name: conv.name || null,
+    displayName,
+    username: peerLabel,
+    otherUserId: isGroup
+      ? null
+      : peerDeleted
+        ? null
+        : (profile?.id ?? otherUser?.user_id ?? null),
+    profileUserId: isGroup
+      ? null
+      : peerDeleted
+        ? null
+        : (profile?.id ?? otherUser?.user_id ?? null),
+    avatar_url: isGroup ? conv.avatar_url ?? null : profile?.avatar_url ?? null,
+    participants,
+    lastMessage: conv.last_message || "No messages yet",
+    last_message_at: conv.last_message_at || null,
+    unreadCount,
+  }
+}
 
 function sortConversationsDesc(list: any[]) {
   return [...list].sort(
@@ -270,57 +324,56 @@ export default function MessagesPage() {
     }
   }, [])
 
-  const fetchConversations = useCallback(async (userId: string) => {
+  const fetchConversations = useCallback(async (userId: string, source = "unknown") => {
+    traceMessagesInbox("fetch:start", { userId, source })
+
     if (isDemoUserId(userId)) {
       const sorted = fetchDemoConversations(userId)
+      traceMessagesInbox("fetch:demo-result", {
+        userId,
+        source,
+        conversationsLength: sorted.length,
+      })
       setConversations(sorted)
       writeMessagesInboxSession(userId, sorted)
       return sorted
     }
 
-    const { data: rows } = await supabase
-      .from("conversation_participants")
-      .select(`
-        conversation_id,
-        conversations (
-          id,
-          is_group,
-          is_pinned,
-          name,
-          avatar_url,
-          last_message,
-          last_message_at
-        )
-      `)
-      .eq("user_id", userId)
+    const { rows, error } = await fetchUserDmConversations(supabase, userId)
 
-    if (!rows || rows.length === 0) {
+    traceMessagesInbox("step:2-conversations", {
+      source,
+      error: error?.message ?? null,
+      rowCount: rows.length,
+      firstRow: rows[0] ?? null,
+    })
+
+    if (error) {
+      traceMessagesInbox("step:2-conversations:failed", {
+        source,
+        reason: "supabase_error",
+        message: error.message,
+      })
+      return null
+    }
+
+    if (rows.length === 0) {
+      traceMessagesInbox("step:2-conversations:failed", {
+        source,
+        reason: "zero_rows",
+      })
       setConversations([])
       writeMessagesInboxSession(userId, [])
       return []
     }
 
-    const convoIds = rows.map((p: any) => p.conversation_id)
+    const convoIds = rows.map((c) => c.id)
+    const msgRows = await fetchUnreadMessageRows(userId, convoIds)
 
-    const [{ data: participantRows }, msgRows] = await Promise.all([
-      supabase
-        .from("conversation_participants")
-        .select(`
-        conversation_id,
-        user_id,
-        profiles (id, username, avatar_url, name)
-      `)
-        .in("conversation_id", convoIds),
-      fetchUnreadMessageRows(userId, convoIds),
-    ])
-
-    const participantsByConvo = new Map<string, any[]>()
-    for (const row of participantRows || []) {
-      const cid = row.conversation_id as string
-      const list = participantsByConvo.get(cid) || []
-      list.push(row)
-      participantsByConvo.set(cid, list)
-    }
+    traceMessagesInbox("step:3-unread", {
+      source,
+      unreadMessageRowCount: msgRows?.length ?? 0,
+    })
 
     const unreadByConvo: Record<string, number> = {}
     for (const cid of convoIds) unreadByConvo[cid] = 0
@@ -332,59 +385,43 @@ export default function MessagesPage() {
       unreadByConvo[cid] = (unreadByConvo[cid] || 0) + 1
     }
 
-    const convoData = convoIds.map((convoId) => {
-      const convoRow = rows.find((r: any) => r.conversation_id === convoId)
-      const convoMeta = Array.isArray(convoRow?.conversations)
-        ? convoRow?.conversations?.[0]
-        : convoRow?.conversations
+    const convoData = rows.map((conv) =>
+      mapDmRowToInboxConversation(conv, userId, unreadByConvo[conv.id] ?? 0)
+    )
 
-      const participants = participantsByConvo.get(convoId) || []
-      const otherUser = participants.find((u: any) => u.user_id !== userId)
-      const rawProfile = otherUser?.profiles
-      const profile = Array.isArray(rawProfile) ? rawProfile[0] : rawProfile
-
-      const isGroup = convoMeta?.is_group === true
-      const hasHistory = Boolean(convoMeta?.last_message?.trim())
-      const peerDeleted = isDirectConversationPeerDeleted(
-        isGroup,
-        profile?.username,
-        hasHistory
-      )
-      const peerLabel = peerDeleted ? DELETED_USER_LABEL : profile?.username || "user"
-      const displayName = isGroup ? convoMeta?.name || "Group Chat" : peerLabel
-
-      return {
-        id: convoId,
-        is_group: isGroup,
-        is_pinned: convoMeta?.is_pinned === true,
-        name: convoMeta?.name || null,
-        displayName,
-        username: peerLabel,
-        otherUserId: isGroup ? null : peerDeleted ? null : (profile?.id ?? otherUser?.user_id ?? null),
-        profileUserId: isGroup
-          ? null
-          : peerDeleted
-            ? null
-            : (profile?.id ?? otherUser?.user_id ?? null),
-        avatar_url: isGroup
-          ? convoMeta?.avatar_url ?? null
-          : profile?.avatar_url ?? null,
-        participants,
-        lastMessage: convoMeta?.last_message || "No messages yet",
-        last_message_at: convoMeta?.last_message_at || null,
-        unreadCount: unreadByConvo[convoId] ?? 0,
-      }
+    const firstMapped = convoData[0]
+    traceMessagesInbox("step:4-last-message", {
+      source,
+      conversationId: firstMapped?.id ?? null,
+      lastMessageExists: Boolean(
+        firstMapped?.lastMessage &&
+          firstMapped.lastMessage !== "No messages yet"
+      ),
+      lastMessage: firstMapped?.lastMessage ?? null,
     })
 
     const sorted = sortConversationsDesc(
       applyInboxPatchesToConversations(convoData)
     )
+
+    traceMessagesInbox("step:5-before-setState", {
+      source,
+      conversationsLength: sorted.length,
+      firstConversationId: sorted[0]?.id ?? null,
+    })
+
     setConversations(sorted)
     writeMessagesInboxSession(userId, sorted)
     return sorted
   }, [])
 
   useEffect(() => {
+    traceMessagesInbox("effect:load", {
+      profileLoading,
+      authUserId: authUser?.id ?? null,
+      demoMode: isDemoModeActive(),
+    })
+
     if (!authUser?.id) {
       if (!profileLoading && !isDemoModeActive()) {
         router.push("/login")
@@ -392,13 +429,20 @@ export default function MessagesPage() {
       return
     }
 
-    const cached = readMessagesInboxSession(authUser.id)
+    const userId = authUser.id
+
+    const cached = readMessagesInboxSession(userId)
+    traceMessagesInbox("cache:read", {
+      userId,
+      cachedLength: cached?.conversations.length ?? 0,
+    })
+
     if (cached?.conversations.length) {
       setConversations(cached.conversations)
       setLoading(false)
     }
 
-    void fetchConversations(authUser.id).finally(() => setLoading(false))
+    void fetchConversations(userId, "initial-load").finally(() => setLoading(false))
   }, [authUser?.id, profileLoading, fetchConversations, router])
 
   const fetchUnreadCountForConversation = useCallback(
@@ -414,7 +458,7 @@ export default function MessagesPage() {
 
     const refresh = () => {
       if (document.hidden) return
-      void fetchConversations(uid)
+      void fetchConversations(uid, "refresh")
     }
 
     const onWindowFocus = () => refresh()
@@ -793,6 +837,41 @@ export default function MessagesPage() {
     }))
   }, [conversations, search])
 
+  const showSkeleton =
+    !authUser?.id || (loading && conversations.length === 0)
+  const showEmptyNoConversations =
+    !showSkeleton &&
+    filteredConversations.length === 0 &&
+    conversations.length === 0
+  const showEmptySearch =
+    !showSkeleton &&
+    filteredConversations.length === 0 &&
+    conversations.length > 0
+
+  useEffect(() => {
+    traceMessagesInbox("step:6-after-render", {
+      authUserId: authUser?.id ?? null,
+      profileLoading,
+      loading,
+      conversationsLength: conversations.length,
+      filteredConversationsLength: filteredConversations.length,
+      search: search.trim(),
+      showSkeleton,
+      showEmptyNoConversations,
+      showEmptySearch,
+    })
+  }, [
+    authUser?.id,
+    profileLoading,
+    loading,
+    conversations.length,
+    filteredConversations.length,
+    search,
+    showSkeleton,
+    showEmptyNoConversations,
+    showEmptySearch,
+  ])
+
   return (
     <>
       <div className="flex h-[calc(100dvh-4rem)] min-h-0 flex-col overflow-hidden bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white px-6 pb-6 pt-0">
@@ -829,7 +908,7 @@ export default function MessagesPage() {
           />
 
           <div className="min-h-0 flex-1 overflow-y-auto">
-            {!authUser?.id || (loading && conversations.length === 0) ? (
+            {showSkeleton ? (
               <SkeletonMessagesConversationList />
             ) : filteredConversations.length === 0 ? (
               conversations.length === 0 ? (
