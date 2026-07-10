@@ -5,6 +5,9 @@ import {
   updateConversationPreview,
 } from "@/lib/conversationInboxSync"
 import { ensureDmConversation } from "@/lib/dmConversation"
+import { feedbackPresets } from "@/lib/feedbackPresets"
+import { isFreePlanDailyDmLimitError } from "@/lib/freePlanMessagingLimits"
+import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import {
   encodeStoryReplyContent,
   STORY_REPLY_MESSAGE_TYPE,
@@ -69,7 +72,10 @@ export async function sendStoryReply(
 
   const { error: insertErr } = await client.from("messages").insert(insertPayload)
   if (insertErr) {
-    return { ok: false, error: insertErr.message || "Failed to send reply" }
+    if (isFreePlanDailyDmLimitError(insertErr)) {
+      return { ok: false, error: feedbackPresets.directMessageLimitReached().message }
+    }
+    return { ok: false, error: handleSupabaseError(insertErr) }
   }
 
   const preview = previewFromMessage({

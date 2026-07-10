@@ -5,6 +5,10 @@ import {
   FREE_PLAN_DAILY_POST_PRICING_LABEL,
   FREE_PLAN_DAILY_TRADE_PRICING_LABEL,
 } from "./freePlanDailyLimits.ts"
+import {
+  FREE_PLAN_DAILY_DM_PRICING_LABEL,
+  FREE_PLAN_UNLIMITED_TRADE_ROOM_MESSAGES_PRICING_LABEL,
+} from "./freePlanMessagingLimits.ts"
 
 export type TradeTraxsPlanId = "free" | "pro"
 
@@ -29,6 +33,7 @@ export const TRADETRAXS_FEATURE_LABELS = {
   basicAnalytics: "Basic Analytics",
   premiumAnalytics: "Premium Analytics & Performance Insights",
   unlimitedTrades: "Unlimited Trades",
+  unlimitedDirectMessages: "Unlimited Direct Messages",
   unlimitedTradingAccounts: "Unlimited Trading Accounts",
   csvImport: "CSV Import",
   aiTradeAnalyst: "AI Analyst",
@@ -59,13 +64,13 @@ export const TRADETRAXS_FREE_PLAN: TradeTraxsPlan = {
     FREE_PLAN_DAILY_TRADE_PRICING_LABEL,
     FREE_PLAN_DAILY_POST_PRICING_LABEL,
     FREE_PLAN_DAILY_CLIP_PRICING_LABEL,
+    FREE_PLAN_UNLIMITED_TRADE_ROOM_MESSAGES_PRICING_LABEL,
+    FREE_PLAN_DAILY_DM_PRICING_LABEL,
     "Manual Trade Entry",
     TRADETRAXS_FEATURE_LABELS.basicAnalytics,
     "Basic Calendar",
     "Public & Private Profiles",
     "Feed, Posts & Clips",
-    "Trade Rooms",
-    "Direct Messages",
     "Following, Comments & Likes",
     "Public Trade Sharing",
   ],
@@ -82,6 +87,7 @@ export const TRADETRAXS_PRO_FEATURE_GROUPS: readonly TradeTraxsPlanFeatureGroup[
         TRADETRAXS_FEATURE_LABELS.unlimitedTrades,
         TRADETRAXS_FEATURE_LABELS.unlimitedTradingAccounts,
         TRADETRAXS_FEATURE_LABELS.csvImport,
+        TRADETRAXS_FEATURE_LABELS.unlimitedDirectMessages,
       ],
     },
     {

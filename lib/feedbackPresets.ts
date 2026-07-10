@@ -2,6 +2,10 @@ import type { FeedbackPopupInput } from "@/app/components/ui/feedback-popup-type
 import { GETTING_STARTED_INTRO_POPUP_TITLE } from "@/lib/gettingStartedIntro"
 import { ONBOARDING_COMPLETE_POPUP_TITLE } from "@/lib/gettingStartedOnboardingComplete"
 import { csvImportLimitMessage } from "@/lib/csvImportGate"
+import {
+  FREE_PLAN_DAILY_DM_LIMIT_MESSAGE,
+  FREE_PLAN_DAILY_DM_LIMIT_TITLE,
+} from "@/lib/freePlanMessagingLimits"
 import { FREE_PLAN_ACCOUNT_LIMIT_MESSAGE } from "@/lib/tradingAccounts"
 
 export function persistentError(
@@ -45,6 +49,12 @@ export const feedbackPresets = {
     persistentError(
       "Account Limit Reached",
       FREE_PLAN_ACCOUNT_LIMIT_MESSAGE
+    ),
+
+  directMessageLimitReached: (): FeedbackPopupInput =>
+    persistentError(
+      FREE_PLAN_DAILY_DM_LIMIT_TITLE,
+      FREE_PLAN_DAILY_DM_LIMIT_MESSAGE
     ),
 
   importFailed: (detail: string): FeedbackPopupInput =>

@@ -13,6 +13,10 @@ const {
   FREE_PLAN_DAILY_POST_PRICING_LABEL,
   FREE_PLAN_DAILY_TRADE_PRICING_LABEL,
 } = require("./freePlanDailyLimits.ts")
+const {
+  FREE_PLAN_DAILY_DM_PRICING_LABEL,
+  FREE_PLAN_UNLIMITED_TRADE_ROOM_MESSAGES_PRICING_LABEL,
+} = require("./freePlanMessagingLimits.ts")
 
 describe("tradeTraxsPlans", () => {
   it("canonical plan names", () => {
@@ -22,7 +26,7 @@ describe("tradeTraxsPlans", () => {
 
   it("feature lists match current gating with simplified analytics copy", () => {
     assert.equal(TRADETRAXS_FREE_PLAN.features.length, 12)
-    assert.equal(TRADETRAXS_PRO_PLAN.features.length, 11)
+    assert.equal(TRADETRAXS_PRO_PLAN.features.length, 12)
     assert.equal(TRADETRAXS_PRO_FEATURE_GROUPS.length, 5)
     assert.equal(TRADETRAXS_PRO_PLAN.featuresHeading, "Everything in Free, plus:")
     assert.ok(
@@ -33,6 +37,19 @@ describe("tradeTraxsPlans", () => {
     )
     assert.ok(
       TRADETRAXS_FREE_PLAN.features.includes(FREE_PLAN_DAILY_CLIP_PRICING_LABEL)
+    )
+    assert.ok(
+      TRADETRAXS_FREE_PLAN.features.includes(
+        FREE_PLAN_UNLIMITED_TRADE_ROOM_MESSAGES_PRICING_LABEL
+      )
+    )
+    assert.ok(
+      TRADETRAXS_FREE_PLAN.features.includes(FREE_PLAN_DAILY_DM_PRICING_LABEL)
+    )
+    assert.ok(
+      TRADETRAXS_PRO_PLAN.features.includes(
+        TRADETRAXS_FEATURE_LABELS.unlimitedDirectMessages
+      )
     )
     assert.ok(
       TRADETRAXS_FREE_PLAN.features.includes(

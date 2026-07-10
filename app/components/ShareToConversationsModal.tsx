@@ -20,6 +20,7 @@ import {
   copyFeedDeepLinkToClipboard,
   feedDeepLinkTargetFromShareInput,
 } from "@/lib/feedDeepLink"
+import { dmSendFeedback } from "@/lib/dmSendFeedback"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import { FeedbackModal, ShareModalSendButton, useFeedbackPopup } from "@/app/components/ui"
 import ScrollableModalShell from "@/app/components/ui/ScrollableModalShell"
@@ -233,7 +234,7 @@ export default function ShareToConversationsModal({
           content: shareMessage.trim() || undefined,
         })
         if (error) {
-          showPopup({ type: "error", message: handleSupabaseError(error) })
+          showPopup(dmSendFeedback(error, "Share Failed"))
           reset()
           return
         }
@@ -245,7 +246,7 @@ export default function ShareToConversationsModal({
           content: shareMessage.trim() || undefined,
         })
         if (error) {
-          showPopup({ type: "error", message: handleSupabaseError(error) })
+          showPopup(dmSendFeedback(error, "Share Failed"))
           reset()
           return
         }
@@ -263,7 +264,7 @@ export default function ShareToConversationsModal({
           content: shareMessage.trim() || "",
         })
         if (error) {
-          showPopup({ type: "error", message: handleSupabaseError(error) })
+          showPopup(dmSendFeedback(error, "Share Failed"))
           reset()
           return
         }

@@ -3,6 +3,7 @@ import {
   FREE_PLAN_DAILY_POST_LIMIT_MESSAGE,
   FREE_PLAN_DAILY_TRADE_LIMIT_MESSAGE,
 } from "./freePlanDailyLimits.ts"
+import { FREE_PLAN_DAILY_DM_LIMIT_MESSAGE } from "./freePlanMessagingLimits.ts"
 
 /**
  * Central registry: map internal error codes → polished user-facing copy.
@@ -12,6 +13,7 @@ export const USER_FACING_ERROR_MESSAGES = {
   FREE_PLAN_DAILY_POST_LIMIT: FREE_PLAN_DAILY_POST_LIMIT_MESSAGE,
   FREE_PLAN_DAILY_TRADE_LIMIT: FREE_PLAN_DAILY_TRADE_LIMIT_MESSAGE,
   FREE_PLAN_DAILY_CLIP_LIMIT: FREE_PLAN_DAILY_CLIP_LIMIT_MESSAGE,
+  FREE_PLAN_DAILY_DM_LIMIT: FREE_PLAN_DAILY_DM_LIMIT_MESSAGE,
   /** @deprecated Prefer {@link USER_FACING_ERROR_MESSAGES.FREE_PLAN_DAILY_CLIP_LIMIT}. */
   FREE_PLAN_REELS_LIMIT: FREE_PLAN_DAILY_CLIP_LIMIT_MESSAGE,
   FREE_PLAN_ACCOUNT_LIMIT:
@@ -144,6 +146,21 @@ function mapFreePlanMessage(text: string): string | null {
       lower.includes("3"))
   ) {
     return USER_FACING_ERROR_MESSAGES.FREE_PLAN_DAILY_TRADE_LIMIT
+  }
+  if (
+    lower.includes("direct message") ||
+    lower.includes("free_plan_daily_dm_limit")
+  ) {
+    if (
+      lower.includes("24 hour") ||
+      lower.includes("every 24 hours") ||
+      lower.includes("daily") ||
+      lower.includes("limit") ||
+      lower.includes("free_plan_daily_dm_limit") ||
+      lower.includes("25")
+    ) {
+      return USER_FACING_ERROR_MESSAGES.FREE_PLAN_DAILY_DM_LIMIT
+    }
   }
   if (
     lower.includes("clip") ||

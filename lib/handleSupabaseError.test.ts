@@ -21,6 +21,10 @@ describe("toUserFacingErrorMessage", () => {
       toUserFacingErrorMessage({ message: "FREE_PLAN_DAILY_CLIP_LIMIT" }),
       USER_FACING_ERROR_MESSAGES.FREE_PLAN_DAILY_CLIP_LIMIT
     )
+    assert.equal(
+      toUserFacingErrorMessage({ message: "FREE_PLAN_DAILY_DM_LIMIT" }),
+      USER_FACING_ERROR_MESSAGES.FREE_PLAN_DAILY_DM_LIMIT
+    )
   })
 
   it("preserves human-readable postgres sentences", () => {

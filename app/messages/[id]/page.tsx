@@ -25,6 +25,7 @@ import { compressImage, compressScreenshot } from "@/lib/compressImage"
 import { feedbackPresets } from "@/lib/feedbackPresets"
 import { LOADING_COPY } from "@/lib/loadingCopy"
 import { logSupabaseError } from "@/lib/logSupabaseError"
+import { dmSendFeedback } from "@/lib/dmSendFeedback"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import ImageCropModal from "@/app/components/ImageCropModal"
 import { useImageCropUpload } from "@/lib/useImageCropUpload"
@@ -1922,7 +1923,7 @@ export default function DMPage() {
         payload: sendPayload,
         userId: user.id,
       })
-      showPopup({ type: "error", message: handleSupabaseError(sendErr) })
+      showPopup(dmSendFeedback(sendErr))
       return
     }
 
@@ -1997,7 +1998,7 @@ export default function DMPage() {
         payload: tradeSendPayload,
         userId: user.id,
       })
-      showPopup({ type: "error", message: handleSupabaseError(tradeSendErr) })
+      showPopup(dmSendFeedback(tradeSendErr, "Share Failed"))
       return
     }
 

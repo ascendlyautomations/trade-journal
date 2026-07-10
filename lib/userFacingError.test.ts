@@ -29,6 +29,14 @@ test("maps P0001 free plan clip limit", () => {
   assert.equal(msg, USER_FACING_ERROR_MESSAGES.FREE_PLAN_DAILY_CLIP_LIMIT)
 })
 
+test("maps P0001 free plan DM limit", () => {
+  const msg = toUserFacingErrorMessage({
+    code: "P0001",
+    message: "FREE_PLAN_DAILY_DM_LIMIT",
+  })
+  assert.equal(msg, USER_FACING_ERROR_MESSAGES.FREE_PLAN_DAILY_DM_LIMIT)
+})
+
 test("maps foreign key violation", () => {
   const msg = toUserFacingErrorMessage({
     code: "23503",
