@@ -123,7 +123,7 @@ import {
   fetchDemoConversationMessages,
   resolveDemoConversationIdFromSegment,
 } from "@/lib/demo/demoMessages"
-import { DM_MESSAGE_SELECT } from "@/lib/dmMessageSelect"
+import { queryDmMessages } from "@/lib/dmMessageSelect"
 
 const DM_SHARE_CARD_CLASS = "w-full max-w-[min(100%,22rem)]"
 
@@ -1281,11 +1281,13 @@ export default function DMPage() {
           void (async () => {
             let row: any = raw
             if (raw.id) {
-              const { data } = await supabase
-                .from("messages")
-                .select(DM_MESSAGE_SELECT)
-                .eq("id", raw.id)
-                .maybeSingle()
+              const { data } = await queryDmMessages((select) =>
+                supabase
+                  .from("messages")
+                  .select(select)
+                  .eq("id", raw.id)
+                  .maybeSingle()
+              )
               if (data) row = data
             }
             setMessagesWithCache((prev) => {
@@ -1469,12 +1471,14 @@ export default function DMPage() {
 
     if (!cached.newestTimestamp) return
 
-    const { data: incoming } = await supabase
-      .from("messages")
-      .select(DM_MESSAGE_SELECT)
-      .eq("conversation_id", conversationId)
-      .gt("created_at", cached.newestTimestamp)
-      .order("created_at", { ascending: true })
+    const { data: incoming } = await queryDmMessages((select) =>
+      supabase
+        .from("messages")
+        .select(select)
+        .eq("conversation_id", conversationId)
+        .gt("created_at", cached.newestTimestamp)
+        .order("created_at", { ascending: true })
+    )
 
     if (!incoming?.length) return
 
@@ -1670,6 +1674,8 @@ export default function DMPage() {
       findConversationSessionByUrlSegment(sessionUser.id, urlSegment)
 
     if (!cached?.messagesLoaded) return false
+    // Prior failed loads wrote messagesLoaded:true with []. Always refetch history.
+    if (!cached.messages?.length) return false
 
     const conversationId = cached.conversationId || provisionalId
     consumeInboxConversationId(urlSegment)
@@ -1814,11 +1820,40 @@ export default function DMPage() {
       return
     }
 
-    const { data: fetched } = await supabase
-      .from("messages")
-      .select(DM_MESSAGE_SELECT)
-      .eq("conversation_id", conversationId)
-      .order("created_at", { ascending: true })
+    console.log("[dm-thread-load]", {
+      urlSegment: urlSegmentRef.current,
+      conversationIdFromUrl: urlSegmentRef.current,
+      conversationIdUsedInQuery: conversationId,
+      query: {
+        table: "messages",
+        select: "DM_MESSAGE_SELECT (+ fallback without sender_anonymized)",
+        filter: `conversation_id=eq.${conversationId}`,
+        order: "created_at ascending",
+      },
+    })
+
+    const { data: fetched, error } = await queryDmMessages((select) =>
+      supabase
+        .from("messages")
+        .select(select)
+        .eq("conversation_id", conversationId)
+        .order("created_at", { ascending: true })
+    )
+
+    console.log("[dm-thread-load] result", {
+      conversationIdUsedInQuery: conversationId,
+      rowCount: fetched?.length ?? 0,
+      firstRow: fetched?.[0] ?? null,
+      supabaseError: error?.message ?? null,
+      supabaseErrorCode: (error as { code?: string } | null)?.code ?? null,
+    })
+
+    if (error) {
+      console.error("[dm-thread-load] query failed", error)
+      setMessages([])
+      setMessagesLoaded(true)
+      return
+    }
 
     const deletedIds = await fetchConversationDeletedMessageIds(
       currentUserId,

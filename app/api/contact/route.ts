@@ -18,6 +18,7 @@ const VALID_CATEGORIES = new Set<PublicContactCategory>([
   "billing",
   "partnership",
   "business",
+  "faq",
 ])
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -127,7 +128,7 @@ export async function POST(req: Request) {
     category: PUBLIC_CONTACT_CATEGORY_LABELS[category],
     description: message,
     subjectOverride: subject,
-    adminUrl: `${SITE_URL}/contact`,
+    adminUrl: `${SITE_URL}${category === "faq" ? "/faq" : "/contact"}`,
     profileUrl,
   })
 

@@ -302,7 +302,7 @@ export default function CopyTradingGroupsSection({
         title="Delete copy trading group?"
         description={
           deleteTarget
-            ? `"${deleteTarget.name}" will be removed. Existing trades keep their journal entries.`
+            ? `Deleting this Copy Trading Group will unlink the accounts from the group. Your trading accounts and historical trades will not be deleted.`
             : ""
         }
         confirmLabel="Delete"

@@ -237,11 +237,42 @@ export async function updateCopyTradingGroup(
   }
 }
 
+/**
+ * Deletes a Copy Trading Group and its account memberships only.
+ * Does NOT delete trading accounts, trades, posts, clips, achievements, or analytics.
+ * Historical trades are unlinked (`copy_trading_group_id` → null) and otherwise unchanged.
+ * Membership rows are removed via FK cascade on `copy_trading_group_accounts`.
+ */
 export async function deleteCopyTradingGroup(
   client: SupabaseClient,
   userId: string,
   groupId: string
 ): Promise<{ error: Error | null }> {
+  const { data: owned, error: ownError } = await client
+    .from("copy_trading_groups")
+    .select("id")
+    .eq("id", groupId)
+    .eq("user_id", userId)
+    .maybeSingle()
+
+  if (ownError) {
+    return { error: new Error(ownError.message) }
+  }
+  if (!owned) {
+    return { error: new Error("Copy trading group not found") }
+  }
+
+  // Explicit unlink so historical trades remain; DB also uses ON DELETE SET NULL.
+  const { error: unlinkError } = await client
+    .from("trades")
+    .update({ copy_trading_group_id: null })
+    .eq("copy_trading_group_id", groupId)
+    .eq("user_id", userId)
+
+  if (unlinkError) {
+    return { error: new Error(unlinkError.message) }
+  }
+
   const { error } = await client
     .from("copy_trading_groups")
     .delete()

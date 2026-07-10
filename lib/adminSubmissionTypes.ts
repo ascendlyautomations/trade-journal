@@ -10,6 +10,7 @@ export type AdminSubmissionType =
   | "contact_billing"
   | "contact_partnership"
   | "contact_business"
+  | "contact_faq"
 
 export const ADMIN_SUBMISSION_EMAIL_SUBJECTS: Record<AdminSubmissionType, string> = {
   bug_report: "[TradeTraxs] New Bug Report",
@@ -23,6 +24,7 @@ export const ADMIN_SUBMISSION_EMAIL_SUBJECTS: Record<AdminSubmissionType, string
   contact_billing: "[Billing] Subscription Question",
   contact_partnership: "[Partnership] Partnership Inquiry",
   contact_business: "[Business] Business Inquiry",
+  contact_faq: "FAQ Question",
 }
 
 export const ADMIN_SUBMISSION_ADMIN_PATHS: Record<AdminSubmissionType, string> = {
@@ -37,6 +39,7 @@ export const ADMIN_SUBMISSION_ADMIN_PATHS: Record<AdminSubmissionType, string> =
   contact_billing: "/contact",
   contact_partnership: "/contact",
   contact_business: "/contact",
+  contact_faq: "/faq",
 }
 
 export const ADMIN_SUBMISSION_LABELS: Record<AdminSubmissionType, string> = {
@@ -51,6 +54,7 @@ export const ADMIN_SUBMISSION_LABELS: Record<AdminSubmissionType, string> = {
   contact_billing: "Public Contact — Billing",
   contact_partnership: "Public Contact — Partnership",
   contact_business: "Public Contact — Business",
+  contact_faq: "Public Contact — FAQ",
 }
 
 export function isPublicContactSubmissionType(
@@ -59,6 +63,7 @@ export function isPublicContactSubmissionType(
   | "contact_general"
   | "contact_billing"
   | "contact_partnership"
-  | "contact_business" {
+  | "contact_business"
+  | "contact_faq" {
   return type.startsWith("contact_")
 }

@@ -89,6 +89,8 @@ export async function fetchUserDmConversations(
   supabase: SupabaseClient,
   userId: string
 ): Promise<{ rows: DmConversationRow[]; error: Error | null }> {
+  console.log("SHARED_LOADER_CALLED", { userId })
+
   const { data: membershipRows, error: membershipError } = await supabase
     .from("conversation_participants")
     .select("conversation_id")

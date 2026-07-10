@@ -1,6 +1,6 @@
 import type { AdminSubmissionType } from "@/lib/adminSubmissionTypes"
 
-export type PublicContactCategory = "general" | "billing" | "partnership" | "business"
+export type PublicContactCategory = "general" | "billing" | "partnership" | "business" | "faq"
 
 export type PublicContactCategoryConfig = {
   category: PublicContactCategory
@@ -42,11 +42,21 @@ export const PUBLIC_CONTACT_CATEGORIES: PublicContactCategoryConfig[] = [
   },
 ]
 
+/** FAQ page “Send a Question” — not listed on the public contact page cards. */
+export const FAQ_CONTACT_CATEGORY: PublicContactCategoryConfig = {
+  category: "faq",
+  title: "FAQ Question",
+  description: "Couldn't find what you need in the FAQ? Send us your question.",
+  subject: "FAQ Question",
+  cta: "Send a Question",
+}
+
 export const PUBLIC_CONTACT_CATEGORY_LABELS: Record<PublicContactCategory, string> = {
   general: "General Questions",
   billing: "Billing",
   partnership: "Partnerships",
   business: "Business Inquiries",
+  faq: "FAQ Question",
 }
 
 export const PUBLIC_CONTACT_SUBJECTS: Record<PublicContactCategory, string> = {
@@ -54,6 +64,7 @@ export const PUBLIC_CONTACT_SUBJECTS: Record<PublicContactCategory, string> = {
   billing: "[Billing] Subscription Question",
   partnership: "[Partnership] Partnership Inquiry",
   business: "[Business] Business Inquiry",
+  faq: "FAQ Question",
 }
 
 export function publicContactAdminType(

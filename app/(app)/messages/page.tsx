@@ -872,6 +872,15 @@ export default function MessagesPage() {
     showEmptySearch,
   ])
 
+  console.log("INBOX_RENDER_COMPONENT", {
+    conversationsLength: conversations.length,
+    filteredLength: filteredConversations.length,
+    loading,
+    showSkeleton,
+    showEmptyNoConversations,
+    showEmptySearch,
+  })
+
   return (
     <>
       <div className="flex h-[calc(100dvh-4rem)] min-h-0 flex-col overflow-hidden bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white px-6 pb-6 pt-0">
@@ -912,6 +921,12 @@ export default function MessagesPage() {
               <SkeletonMessagesConversationList />
             ) : filteredConversations.length === 0 ? (
               conversations.length === 0 ? (
+                (() => {
+                  console.log("INBOX_EMPTY_STATE_RENDER", {
+                    conversationsLength: conversations.length,
+                    filteredLength: filteredConversations.length,
+                  })
+                  return (
                 <EmptyState
                   title="No Conversations Yet"
                   description="Start chatting with traders in the community."
@@ -925,6 +940,8 @@ export default function MessagesPage() {
                   }
                   className="py-10"
                 />
+                  )
+                })()
               ) : (
                 <EmptyState
                   title="No Conversations Found"
