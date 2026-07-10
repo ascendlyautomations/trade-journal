@@ -28,6 +28,9 @@ export type QuickTradeCsvFormPatch = {
   exitTime: string
   entryPrice: string
   exitPrice: string
+  description: string
+  accountId: string | null
+  accountName: string | null
 }
 
 export type ParseQuickCsvImportResult =
@@ -194,6 +197,9 @@ export function quickTradeFormPatchFromCsvTrade(
       trade.exit_price != null && Number.isFinite(trade.exit_price)
         ? String(trade.exit_price)
         : "",
+    description: String(trade.notes || trade.public_description || "").trim(),
+    accountId: trade.account_id != null ? String(trade.account_id) : null,
+    accountName: trade.account_name != null ? String(trade.account_name) : null,
   }
 }
 

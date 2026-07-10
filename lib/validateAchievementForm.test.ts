@@ -86,6 +86,22 @@ describe("validateAchievementForm", () => {
     assert.equal(popup.persist, true)
   })
 
+  it("does not require a trading account for any achievement type", () => {
+    const missing = collectAchievementFormMissingFields({
+      ...BASE,
+      achievement_type: ACHIEVEMENT_TYPE.MILESTONE,
+      accountId: "",
+    })
+    assert.equal(missing.includes("account_name"), false)
+
+    const payoutMissing = collectAchievementFormMissingFields({
+      ...BASE,
+      achievement_type: ACHIEVEMENT_TYPE.PROP_FIRM_PAYOUT,
+      accountId: "",
+    })
+    assert.equal(payoutMissing.includes("account_name"), false)
+  })
+
   it("builds a combined popup for multiple missing fields", () => {
     const result = validateAchievementForm({
       ...BASE,
@@ -102,7 +118,6 @@ describe("validateAchievementForm", () => {
     assert.equal(popup.title, "Complete Required Fields")
     assert.match(popup.message, /Achievement Title/)
     assert.match(popup.message, /Payout Amount/)
-    assert.match(popup.message, /Trading Account/)
     assert.match(popup.message, /before posting your achievement\./)
   })
 })

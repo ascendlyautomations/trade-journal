@@ -79,6 +79,18 @@ export const feedbackPresets = {
   missingRequiredInformation: (detail: string): FeedbackPopupInput =>
     persistentError("Missing Required Information", detail),
 
+  singleTradeCsvDetected: (
+    onContinue?: () => void
+  ): FeedbackPopupInput => ({
+    type: "info",
+    title: "Single Trade Detected",
+    message:
+      "We found one trade in your CSV. We've opened Quick Input so you can quickly review and save it.",
+    persist: true,
+    dismissLabel: "Got it",
+    onDismiss: onContinue,
+  }),
+
   tradeSaveSuccess: (): FeedbackPopupInput =>
     persistentSuccess("Trade Saved", "Your trade was saved successfully."),
 

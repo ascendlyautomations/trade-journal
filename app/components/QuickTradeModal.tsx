@@ -33,7 +33,6 @@ import { handleTradeNumericInput } from "@/lib/formatMoney"
 import TradeFormCurrencyInput from "@/app/components/trade/TradeFormCurrencyInput"
 import { TRADE_OPTIONAL_ATTACHMENT_LABEL_CLASS } from "@/lib/tradeFormUi"
 import { assertCanCreateTradingAccount, FREE_PLAN_ACCOUNT_LIMIT } from "@/lib/tradingAccounts"
-import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import { supabaseMutationFeedback } from "@/lib/supabaseMutationFeedback"
 import { upsertAccountInCache } from "@/lib/appDataCache"
 import { parseOptionalRr } from "@/lib/tradeRr"
@@ -67,6 +66,8 @@ type QuickTradeModalProps = {
   onClose: () => void
   userId: string | null
   onSaved?: () => void
+  /** Prefill from a single-trade CSV import (consumed when the modal opens). */
+  initialCsvPatch?: QuickTradeCsvFormPatch | null
 }
 
 const INPUT_CLASS =
@@ -85,6 +86,26 @@ const QUICK_CSV_BUTTON_CLASS = buttonVariants({
   size: "md",
   className: "h-11 flex-1 font-medium",
 })
+
+function resolveQuickTradeAccountFromCsvPatch(
+  accounts: TradeAccountOption[],
+  patch: Pick<QuickTradeCsvFormPatch, "accountId" | "accountName">
+): TradeAccountOption | null {
+  if (patch.accountId) {
+    const byId = accounts.find((row) => String(row.id) === String(patch.accountId))
+    if (byId) return byId
+  }
+
+  const normalizedName = patch.accountName?.trim().toLowerCase()
+  if (normalizedName) {
+    const byName = accounts.find(
+      (row) => row.name.trim().toLowerCase() === normalizedName
+    )
+    if (byName) return byName
+  }
+
+  return null
+}
 
 function csvPatchHasPrices(patch: QuickTradeCsvFormPatch): boolean {
   return Boolean(patch.entryPrice.trim() || patch.exitPrice.trim())
@@ -179,6 +200,7 @@ export default function QuickTradeModal({
   onClose,
   userId,
   onSaved,
+  initialCsvPatch = null,
 }: QuickTradeModalProps) {
   const csvFileInputRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
@@ -304,10 +326,43 @@ export default function QuickTradeModal({
     setPlanProfile(data ?? null)
   }, [])
 
+  function applyQuickCsvPatch(patch: QuickTradeCsvFormPatch) {
+    setCsvImportError(null)
+    setTicker(patch.ticker)
+    setPnl(patch.pnl)
+    setPoints(patch.points)
+    setContracts(patch.contracts)
+    setRr(patch.rr)
+    setEntryDate(patch.entryDate || getESTDate())
+    setExitDate(patch.exitDate || patch.entryDate || getESTDate())
+    setEntryTime(patch.entryTime)
+    setExitTime(patch.exitTime)
+    setEntryPrice(patch.entryPrice)
+    setExitPrice(patch.exitPrice)
+    if (patch.description) {
+      setDescription(patch.description)
+    }
+    if (csvPatchHasPrices(patch)) {
+      setAdvancedOpen(true)
+    }
+  }
+
   useEffect(() => {
     if (!open) return
     resetForm()
-  }, [open, resetForm])
+    if (initialCsvPatch) {
+      applyQuickCsvPatch(initialCsvPatch)
+    }
+  }, [open, initialCsvPatch, resetForm])
+
+  useEffect(() => {
+    if (!open || !initialCsvPatch || accounts.length === 0) return
+    const matched = resolveQuickTradeAccountFromCsvPatch(accounts, initialCsvPatch)
+    if (matched) {
+      setSelectedAccount(matched)
+      setSelectedCopyGroupId(null)
+    }
+  }, [open, initialCsvPatch, accounts])
 
   useEffect(() => {
     if (!open || !userId) return
@@ -443,24 +498,6 @@ export default function QuickTradeModal({
   function handleClose() {
     if (busy) return
     onClose()
-  }
-
-  function applyQuickCsvPatch(patch: QuickTradeCsvFormPatch) {
-    setCsvImportError(null)
-    setTicker(patch.ticker)
-    setPnl(patch.pnl)
-    setPoints(patch.points)
-    setContracts(patch.contracts)
-    setRr(patch.rr)
-    setEntryDate(patch.entryDate || getESTDate())
-    setExitDate(patch.exitDate || patch.entryDate || getESTDate())
-    setEntryTime(patch.entryTime)
-    setExitTime(patch.exitTime)
-    setEntryPrice(patch.entryPrice)
-    setExitPrice(patch.exitPrice)
-    if (csvPatchHasPrices(patch)) {
-      setAdvancedOpen(true)
-    }
   }
 
   function handleAutoFillFromCsvPaste() {
@@ -753,11 +790,12 @@ export default function QuickTradeModal({
               showPopup(feedbackPresets.accountLocked())
               throw new Error("Account is locked.")
             }
+            const failureTitle =
+              result.code === "post" ? "Post Failed" : "Save Failed"
             showPopup(
-              persistentError(
-                result.code === "post" ? "Post Failed" : "Save Failed",
-                result.message
-              )
+              result.error != null
+                ? supabaseMutationFeedback(result.error, failureTitle)
+                : persistentError(failureTitle, result.message)
             )
             throw new Error(result.message)
           }

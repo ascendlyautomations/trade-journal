@@ -49,6 +49,8 @@ export type SaveManualTradeResult =
         | "save"
         | "post"
       message: string
+      /** Raw Supabase/Postgres error for {@link supabaseMutationFeedback}. */
+      error?: unknown
     }
 
 function inferDirection(
@@ -250,7 +252,8 @@ export async function saveManualTrade(
     return {
       ok: false,
       code: "save",
-      message: handleSupabaseError(error),
+      message: toUserFacingErrorMessage(error),
+      error,
     }
   }
 
@@ -275,7 +278,8 @@ export async function saveManualTrade(
       return {
         ok: false,
         code: "post",
-        message: handleSupabaseError(postError),
+        message: toUserFacingErrorMessage(postError),
+        error: postError,
       }
     }
     return { ok: true, trade: newTradeData, posted: true }

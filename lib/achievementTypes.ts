@@ -318,14 +318,11 @@ export function isPayoutAchievementType(
   )
 }
 
-/** Payout and passed-eval achievements require a linked trading account. */
+/** Trading account is optional for all achievement types (link when selected). */
 export function achievementTypeRequiresTradingAccount(
-  type: string | null | undefined
+  _type: string | null | undefined
 ): boolean {
-  const canonical = canonicalAchievementType(type)
-  return (
-    isPayoutAchievementType(type) || canonical === ACHIEVEMENT_TYPE.PASSED_EVAL
-  )
+  return false
 }
 
 export function categoryFromType(type: string | null): AchievementCategory {

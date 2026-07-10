@@ -36,6 +36,11 @@ import { validateCsvUpload } from "@/lib/uploadValidation"
 import { submitCsvSupportRequest } from "@/lib/submitCsvSupportRequest"
 import { mirrorAccountSettingsHasUsedInitialImport } from "@/lib/profileSplitMirrorWrites"
 import { csvTradesHaveFutureDate } from "@/lib/tradeDateValidation"
+import {
+  buildQuickInputPatchFromCsvTrade,
+  shouldRouteCsvImportToQuickInput,
+} from "@/lib/csvSingleTradeQuickInput"
+import type { QuickTradeCsvFormPatch } from "@/lib/parseQuickCsvPaste"
 import { notifyGettingStartedChecklistMaybeCompleted } from "@/lib/gettingStartedProgressSync"
 import { useUserProfile } from "@/lib/useUserProfile"
 import { useUploadProgress } from "@/lib/uploadProgress/UploadProgressProvider"
@@ -73,6 +78,8 @@ export type CsvImportPanelProps = {
   requireSelectedAccount?: boolean
   /** Label stored in csv_support_requests notes when user submits a failed file */
   importSource?: string
+  /** When a CSV contains exactly one valid trade, route to Quick Input instead of bulk import. */
+  onSingleTradeDetected?: (patch: QuickTradeCsvFormPatch) => void
 }
 
 export default function CsvImportPanel({
@@ -83,6 +90,7 @@ export default function CsvImportPanel({
   selectedAccount = null,
   requireSelectedAccount = false,
   importSource = "csv_import_panel",
+  onSingleTradeDetected,
 }: CsvImportPanelProps) {
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const { user, profile } = useUserProfile()
@@ -284,6 +292,27 @@ export default function CsvImportPanel({
 
         if (isCsvFormatUnrecognized(preview.summary)) {
           openFailureModal("Unsupported CSV format — no rows could be imported.")
+          return
+        }
+
+        if (
+          shouldRouteCsvImportToQuickInput(preview.parsedTrades) &&
+          onSingleTradeDetected
+        ) {
+          if (csvTradesHaveFutureDate(preview.parsedTrades)) {
+            showPopup(feedbackPresets.csvImportFutureTradeDate())
+            clearCsvState()
+            return
+          }
+
+          const patch = buildQuickInputPatchFromCsvTrade(preview.parsedTrades[0])
+          clearCsvState()
+          showPopup(
+            feedbackPresets.singleTradeCsvDetected(() => {
+              onSingleTradeDetected(patch)
+            })
+          )
+          return
         }
       },
     })

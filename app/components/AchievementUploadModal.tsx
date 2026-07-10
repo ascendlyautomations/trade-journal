@@ -16,7 +16,6 @@ import {
   ACHIEVEMENT_TYPE,
   ACHIEVEMENT_TYPE_OPTIONS,
   type Achievement,
-  achievementTypeRequiresTradingAccount,
   badgeKeyFromType,
   canonicalAchievementType,
   categoryFromType,
@@ -664,9 +663,6 @@ export default function AchievementUploadModal({
 
     const achievementType = canonicalAchievementType(form.achievement_type)
     const hasImage = file != null || (!!form.image_url && !removeImage)
-    const requiresTradingAccount =
-      achievementTypeRequiresTradingAccount(achievementType)
-
     const validation = validateAchievementForm({
       achievement_type: achievementType,
       title: form.title,
@@ -674,7 +670,6 @@ export default function AchievementUploadModal({
       achieved_at: form.achieved_at,
       hasImage,
       accountId: selectedAccount?.id ?? form.account_id,
-      requiresTradingAccount,
     })
 
     if (!validation.ok) {
@@ -915,7 +910,7 @@ export default function AchievementUploadModal({
         onCancel={imageCrop.handleCropCancel}
         onSave={imageCrop.handleCropSave}
       />
-      <FeedbackModal {...feedbackModalProps} />
+      <FeedbackModal {...feedbackModalProps} overlayClassName="z-[200]" />
       <CreateAccountModal
         open={showCreateAccountModal}
         onClose={() => {

@@ -25,6 +25,12 @@ import {
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { feedbackPresets, persistentSuccess } from "@/lib/feedbackPresets"
 import { assertCsvImportAllowedForFreePlan } from "@/lib/csvImportGate"
+import { csvTradesHaveFutureDate } from "@/lib/tradeDateValidation"
+import {
+  buildQuickInputPatchFromCsvTrade,
+  shouldRouteCsvImportToQuickInput,
+} from "@/lib/csvSingleTradeQuickInput"
+import type { QuickTradeCsvFormPatch } from "@/lib/parseQuickCsvPaste"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 import { useUserProfile } from "@/lib/useUserProfile"
@@ -48,6 +54,8 @@ export default function Home() {
   const [failureReason, setFailureReason] = useState("")
   const [submittingSupport, setSubmittingSupport] = useState(false)
   const [showQuickTrade, setShowQuickTrade] = useState(false)
+  const [quickTradeInitialPatch, setQuickTradeInitialPatch] =
+    useState<QuickTradeCsvFormPatch | null>(null)
 
   const csvInputRef = useRef<HTMLInputElement>(null)
   const lastCsvFileRef = useRef<File | null>(null)
@@ -167,6 +175,28 @@ export default function Home() {
         const parsed = buildTradesFromParsedCsv(rows, user.id)
         const diag = buildCsvImportDiagnostics(rows, parsed)
         const unrecognized = isCsvFormatUnrecognized(parsed.summary)
+
+        if (
+          shouldRouteCsvImportToQuickInput(parsed.parsedTrades) &&
+          !unrecognized
+        ) {
+          if (csvTradesHaveFutureDate(parsed.parsedTrades)) {
+            showPopup(feedbackPresets.csvImportFutureTradeDate())
+            setLoading(false)
+            return
+          }
+
+          const patch = buildQuickInputPatchFromCsvTrade(parsed.parsedTrades[0])
+          clearCsvUploadState()
+          showPopup(
+            feedbackPresets.singleTradeCsvDetected(() => {
+              setQuickTradeInitialPatch(patch)
+              setShowQuickTrade(true)
+            })
+          )
+          setLoading(false)
+          return
+        }
 
         setParsedTrades(parsed.parsedTrades)
         setCsvUnrecognized(unrecognized)
@@ -334,7 +364,11 @@ export default function Home() {
       <QuickTradeModal
         open={showQuickTrade}
         userId={userId}
-        onClose={() => setShowQuickTrade(false)}
+        initialCsvPatch={quickTradeInitialPatch}
+        onClose={() => {
+          setShowQuickTrade(false)
+          setQuickTradeInitialPatch(null)
+        }}
         onSaved={() => {
           void fetchReviewCount()
         }}
