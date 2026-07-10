@@ -1407,8 +1407,6 @@ const biggestLoss = losses.length > 0
       <GettingStartedChecklist
         progress={gettingStartedProgress}
         userId={user.id}
-        profileId={user.id ?? profile?.id}
-        firstPrivateTradeId={checklistSignals.firstPrivateTradeId}
         onChecklistRefresh={() => void refreshChecklistSignals()}
         defaultExpanded
       />

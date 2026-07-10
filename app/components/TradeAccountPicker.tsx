@@ -307,6 +307,105 @@ export default function TradeAccountPicker({
         onClick: () => handleSelectAccount(acc),
       }))
 
+  const accountsPanel = (
+    <>
+      {isFilterMode ? (
+        <ItemRow onClick={() => handleSelectFilterOption("all")}>
+          {filterPlaceholder}
+        </ItemRow>
+      ) : null}
+
+      {showCopyTrading ? (
+        <ActionRow onClick={() => setMenuView("copy-groups")}>
+          Copy Trading
+        </ActionRow>
+      ) : null}
+
+      {(isFilterMode || showCopyTrading) && accountRows.length > 0 ? (
+        <div className={ACCOUNT_DROPDOWN_DIVIDER_CLASS} aria-hidden="true">
+          <span className="md:hidden">────────</span>
+          <span className="hidden md:inline">────────────────────</span>
+        </div>
+      ) : null}
+
+      <div className="max-h-48 overflow-y-auto overscroll-contain">
+        {accountRows.map((row) => (
+          <ItemRow key={row.key} onClick={row.onClick}>
+            {row.label}
+          </ItemRow>
+        ))}
+      </div>
+
+      {!hideManageAccounts ? (
+        <>
+          <div className={ACCOUNT_DROPDOWN_DIVIDER_CLASS} aria-hidden="true">
+            <span className="md:hidden">────────</span>
+            <span className="hidden md:inline">────────────────────</span>
+          </div>
+          <ManageRow onClick={handleManageAccounts}>
+            ⚙️ Manage Accounts
+          </ManageRow>
+        </>
+      ) : null}
+
+      {!isFilterMode && onOpenCreate ? (
+        !disableCreate ? (
+          <ItemRow
+            onClick={() => {
+              onOpenCreate()
+              closeMenu()
+            }}
+            className="cursor-pointer px-3 py-2 text-sm text-green-400 hover:bg-[#1f2937]"
+          >
+            <RowText>➕ Add Account</RowText>
+          </ItemRow>
+        ) : (
+          <div className="px-3 py-2 text-sm text-amber-300/90">
+            Upgrade to Pro to add more accounts
+          </div>
+        )
+      ) : null}
+    </>
+  )
+
+  const copyGroupsPanel = (
+    <>
+      <ItemRow onClick={() => setMenuView("accounts")}>
+        ← Single Accounts
+      </ItemRow>
+
+      <div className={ACCOUNT_DROPDOWN_DIVIDER_CLASS} aria-hidden="true">
+        <span className="md:hidden">────────</span>
+        <span className="hidden md:inline">────────────────────</span>
+      </div>
+
+      <div className="max-h-48 overflow-y-auto overscroll-contain">
+        {copyGroups.length === 0 ? (
+          <div className="px-3 py-2 text-sm text-gray-500">
+            No copy trading groups yet.
+          </div>
+        ) : (
+          copyGroups.map((group) => (
+            <ItemRow
+              key={group.id}
+              onClick={() => handleSelectCopyGroup(group)}
+            >
+              {group.name}
+            </ItemRow>
+          ))
+        )}
+      </div>
+
+      <div className={ACCOUNT_DROPDOWN_DIVIDER_CLASS} aria-hidden="true">
+        <span className="md:hidden">────────</span>
+        <span className="hidden md:inline">────────────────────</span>
+      </div>
+      <ManageRow onClick={handleManageCopyGroups}>
+        ⚙️ Manage Copy Trading Groups
+      </ManageRow>
+    </>
+  )
+
   return (
     <div
       className={cn(
@@ -337,111 +436,21 @@ export default function TradeAccountPicker({
 
         {open ? (
           <div className={cn(ACCOUNT_DROPDOWN_PANEL_CLASS, "overflow-hidden p-0")}>
-            <div className="relative overflow-hidden">
-              <div
-                className={cn(
-                  "flex w-[200%] transition-transform duration-200 ease-out",
-                  menuView === "copy-groups" ? "-translate-x-1/2" : "translate-x-0"
-                )}
-              >
-                {/* Accounts view */}
-                <div className="w-1/2 shrink-0">
-                  {isFilterMode ? (
-                    <ItemRow onClick={() => handleSelectFilterOption("all")}>
-                      {filterPlaceholder}
-                    </ItemRow>
-                  ) : null}
-
-                  {showCopyTrading ? (
-                    <ActionRow onClick={() => setMenuView("copy-groups")}>
-                      Copy Trading
-                    </ActionRow>
-                  ) : null}
-
-                  {(isFilterMode || showCopyTrading) && accountRows.length > 0 ? (
-                    <div className={ACCOUNT_DROPDOWN_DIVIDER_CLASS} aria-hidden="true">
-                      <span className="md:hidden">────────</span>
-                      <span className="hidden md:inline">────────────────────</span>
-                    </div>
-                  ) : null}
-
-                  <div className="max-h-48 overflow-y-auto overscroll-contain">
-                    {accountRows.map((row) => (
-                      <ItemRow key={row.key} onClick={row.onClick}>
-                        {row.label}
-                      </ItemRow>
-                    ))}
-                  </div>
-
-                  {!hideManageAccounts ? (
-                    <>
-                      <div className={ACCOUNT_DROPDOWN_DIVIDER_CLASS} aria-hidden="true">
-                        <span className="md:hidden">────────</span>
-                        <span className="hidden md:inline">────────────────────</span>
-                      </div>
-                      <ManageRow onClick={handleManageAccounts}>
-                        ⚙️ Manage Accounts
-                      </ManageRow>
-                    </>
-                  ) : null}
-
-                  {!isFilterMode && onOpenCreate ? (
-                    !disableCreate ? (
-                      <ItemRow
-                        onClick={() => {
-                          onOpenCreate()
-                          closeMenu()
-                        }}
-                        className="cursor-pointer px-3 py-2 text-sm text-green-400 hover:bg-[#1f2937]"
-                      >
-                        <RowText>➕ Add Account</RowText>
-                      </ItemRow>
-                    ) : (
-                      <div className="px-3 py-2 text-sm text-amber-300/90">
-                        Upgrade to Pro to add more accounts
-                      </div>
-                    )
-                  ) : null}
-                </div>
-
-                {/* Copy groups view */}
-                <div className="w-1/2 shrink-0">
-                  <ItemRow onClick={() => setMenuView("accounts")}>
-                    ← Single Accounts
-                  </ItemRow>
-
-                  <div className={ACCOUNT_DROPDOWN_DIVIDER_CLASS} aria-hidden="true">
-                    <span className="md:hidden">────────</span>
-                    <span className="hidden md:inline">────────────────────</span>
-                  </div>
-
-                  <div className="max-h-48 overflow-y-auto overscroll-contain">
-                    {copyGroups.length === 0 ? (
-                      <div className="px-3 py-2 text-sm text-gray-500">
-                        No copy trading groups yet.
-                      </div>
-                    ) : (
-                      copyGroups.map((group) => (
-                        <ItemRow
-                          key={group.id}
-                          onClick={() => handleSelectCopyGroup(group)}
-                        >
-                          {group.name}
-                        </ItemRow>
-                      ))
-                    )}
-                  </div>
-
-                  <div className={ACCOUNT_DROPDOWN_DIVIDER_CLASS} aria-hidden="true">
-                    <span className="md:hidden">────────</span>
-                    <span className="hidden md:inline">────────────────────</span>
-                  </div>
-                  <ManageRow onClick={handleManageCopyGroups}>
-                    ⚙️ Manage Copy Trading Groups
-                  </ManageRow>
+            {showCopyTrading ? (
+              <div className="relative overflow-hidden">
+                <div
+                  className={cn(
+                    "flex w-[200%] transition-transform duration-200 ease-out",
+                    menuView === "copy-groups" ? "-translate-x-1/2" : "translate-x-0"
+                  )}
+                >
+                  <div className="w-1/2 shrink-0">{accountsPanel}</div>
+                  <div className="w-1/2 shrink-0">{copyGroupsPanel}</div>
                 </div>
               </div>
-            </div>
+            ) : (
+              accountsPanel
+            )}
           </div>
         ) : null}
       </div>

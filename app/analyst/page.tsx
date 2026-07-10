@@ -26,6 +26,7 @@ import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 import AnalyzeTradeProgressModal from "../components/analyst/AnalyzeTradeProgressModal"
 import { createAnalyzeProgressController } from "@/lib/analyzeTradeProgress"
 import { tradeScreenshotPublicUrl } from "@/lib/storagePublicUrl"
+import { notifyGettingStartedChecklistMaybeCompleted } from "@/lib/gettingStartedProgressSync"
 
 type AnalyzeTradeApiPayload = {
   reply?: string
@@ -621,6 +622,7 @@ function AnalystPageContent() {
       setSelectedTrade((s) =>
         s && String(s.id) === String(trade.id) ? { ...s, ai_feedback: reply } : s
       )
+      notifyGettingStartedChecklistMaybeCompleted()
     } finally {
       controller.markApiComplete()
       await controller.waitForCompletion()
@@ -690,6 +692,7 @@ function AnalystPageContent() {
         ? { ...s, ai_feedback: data.reply }
         : s
     )
+    notifyGettingStartedChecklistMaybeCompleted()
 
     setLoading(false)
   }

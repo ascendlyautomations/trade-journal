@@ -52,12 +52,11 @@ const EMPTY_SIGNALS: GettingStartedChecklistSignals = {
   onboardingCompleted: false,
   hasSeenGettingStartedIntro: false,
   hasSeenOnboardingCompletePopup: false,
+  accountCount: 0,
   tradeCount: 0,
-  profilePostCount: 0,
+  hasRunAiAnalysis: false,
   followCount: 0,
   hasEverJoinedOtherRoom: false,
-  hasPublicTrade: false,
-  firstPrivateTradeId: null,
 }
 
 function computeRawProgress(
@@ -65,11 +64,10 @@ function computeRawProgress(
 ): GettingStartedProgress {
   return computeGettingStartedProgress({
     onboardingCompleted: signals.onboardingCompleted,
+    accountCount: signals.accountCount,
     tradeCount: signals.tradeCount,
-    profilePostCount: signals.profilePostCount,
-    followCount: signals.followCount,
+    hasRunAiAnalysis: signals.hasRunAiAnalysis,
     hasEverJoinedOtherRoom: signals.hasEverJoinedOtherRoom,
-    hasPublicTrade: signals.hasPublicTrade,
   })
 }
 
@@ -78,9 +76,7 @@ function computeProgressFromSignals(
   userId: string
 ) {
   const base = computeRawProgress(signals)
-  return applyStickyGettingStartedProgress(base, userId, {
-    profilePostCount: signals.profilePostCount,
-  })
+  return applyStickyGettingStartedProgress(base, userId)
 }
 
 type RefreshOptions = {
@@ -446,11 +442,10 @@ export function GettingStartedProgressProvider({
     if (!user?.id) {
       return computeGettingStartedProgress({
         onboardingCompleted: false,
+        accountCount: 0,
         tradeCount: 0,
-        profilePostCount: 0,
-        followCount: 0,
+        hasRunAiAnalysis: false,
         hasEverJoinedOtherRoom: false,
-        hasPublicTrade: false,
       })
     }
     return computeProgressFromSignals(signals, user.id)

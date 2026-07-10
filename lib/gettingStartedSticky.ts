@@ -16,19 +16,20 @@ export const GETTING_STARTED_PROGRESS_POPUP_TASK_IDS_KEY =
 
 const ALL_ITEM_IDS: GettingStartedChecklistItemId[] = [
   "profile",
+  "account",
   "trade",
+  "ai_analysis",
+  "room",
   "post",
   "follow",
-  "room",
   "public",
 ]
 
 const ACTION_ITEM_IDS: GettingStartedChecklistItemId[] = [
+  "account",
   "trade",
-  "follow",
+  "ai_analysis",
   "room",
-  "public",
-  "post",
 ]
 
 function serverActionTasksComplete(progress: GettingStartedProgress): number {
@@ -160,17 +161,10 @@ export function markProgressPopupShownForTasks(
 /** Merge server-derived completion with sticky local milestones (never uncheck). */
 export function applyStickyGettingStartedProgress(
   progress: GettingStartedProgress,
-  userId: string,
-  options?: { profilePostCount?: number }
+  userId: string
 ): GettingStartedProgress {
   const sticky = readStickyCompletedItemIds(userId)
   let stickyChanged = false
-
-  // Clear wrongly stickied "post" from when feed trade rows counted as posts.
-  if (options?.profilePostCount === 0 && sticky.has("post")) {
-    sticky.delete("post")
-    stickyChanged = true
-  }
 
   // DB is source of truth when no action tasks are complete — discard stale sticky.
   if (serverActionTasksComplete(progress) === 0) {
