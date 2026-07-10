@@ -80,8 +80,12 @@ describe("validateAchievementForm", () => {
       assert.fail("expected validation failure")
     }
     const popup = buildAchievementValidationPopup(result)
-    assert.equal(popup.title, "Title Required")
-    assert.equal(popup.message, "Please enter an achievement title.")
+    assert.equal(popup.title, "Complete Required Fields")
+    assert.match(popup.message, /Achievement Title/)
+    assert.match(
+      popup.message,
+      /Please complete the following before posting your achievement:/
+    )
     assert.equal(popup.type, "error")
     assert.equal(popup.persist, true)
   })
@@ -118,6 +122,9 @@ describe("validateAchievementForm", () => {
     assert.equal(popup.title, "Complete Required Fields")
     assert.match(popup.message, /Achievement Title/)
     assert.match(popup.message, /Payout Amount/)
-    assert.match(popup.message, /before posting your achievement\./)
+    assert.match(
+      popup.message,
+      /Please complete the following before posting your achievement:/
+    )
   })
 })

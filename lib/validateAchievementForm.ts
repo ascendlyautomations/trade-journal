@@ -52,35 +52,16 @@ const FIELD_LABELS: Record<AchievementFormField, string> = {
   image: "Achievement Image",
 }
 
-const SINGLE_FIELD_POPUP: Record<
-  AchievementFormField,
-  { title: string; message: string }
-> = {
-  achievement_type: {
-    title: "Achievement Type Required",
-    message: "Please select an achievement type.",
-  },
-  title: {
-    title: "Title Required",
-    message: "Please enter an achievement title.",
-  },
-  payout_amount: {
-    title: "Payout Required",
-    message: "Please enter the payout amount.",
-  },
-  account_name: {
-    title: "Trading Account Required",
-    message:
-      "Please select the trading account associated with this achievement.",
-  },
-  achieved_at: {
-    title: "Date Required",
-    message: "Please choose the achievement date.",
-  },
-  image: {
-    title: "Image Required",
-    message: "Please upload an achievement image.",
-  },
+export const ACHIEVEMENT_MISSING_FIELDS_POPUP_TITLE = "Complete Required Fields"
+
+export function buildAchievementMissingFieldsMessage(
+  fields: AchievementFormField[]
+): string {
+  const bullets = sortMissingFields(fields)
+    .map((field) => `• ${FIELD_LABELS[field]}`)
+    .join("\n")
+
+  return `Please complete the following before posting your achievement:\n\n${bullets}`
 }
 
 function sortMissingFields(fields: AchievementFormField[]): AchievementFormField[] {
@@ -153,24 +134,10 @@ export function buildAchievementValidationPopup(
     }
   }
 
-  if (result.fields.length === 1) {
-    const preset = SINGLE_FIELD_POPUP[result.fields[0]]
-    return {
-      type: "error",
-      title: preset.title,
-      message: preset.message,
-      persist: true,
-    }
-  }
-
-  const bullets = result.fields
-    .map((field) => `• ${FIELD_LABELS[field]}`)
-    .join("\n")
-
   return {
     type: "error",
-    title: "Complete Required Fields",
-    message: `Please complete:\n\n${bullets}\n\nbefore posting your achievement.`,
+    title: ACHIEVEMENT_MISSING_FIELDS_POPUP_TITLE,
+    message: buildAchievementMissingFieldsMessage(result.fields),
     persist: true,
   }
 }

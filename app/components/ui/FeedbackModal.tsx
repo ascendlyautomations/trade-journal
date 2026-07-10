@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
+import { createPortal } from "react-dom"
 import { cn } from "./cn"
 import ModalCloseButton from "./ModalCloseButton"
 import { useModalScrollLock } from "./modalLayout"
@@ -20,6 +21,10 @@ const messageStyles: Record<FeedbackPopupType, string> = {
   info: "text-blue-400",
 }
 
+/** Above ScrollableModalShell / DetailModalShell overlays (z-[10050]). */
+export const FEEDBACK_MODAL_OVERLAY_CLASS =
+  "fixed inset-0 z-[10060] flex items-center justify-center"
+
 export type FeedbackModalProps = {
   isOpen: boolean
   message: string
@@ -28,7 +33,7 @@ export type FeedbackModalProps = {
   onClose: () => void
   /** Primary dismiss button label (default "Close"). */
   dismissLabel?: string
-  /** Override stacking (e.g. z-[1200] above onboarding import modal). */
+  /** Extra overlay classes (layout/background). Do not lower z-index. */
   overlayClassName?: string
 }
 
@@ -42,7 +47,12 @@ export default function FeedbackModal({
   dismissLabel = "Close",
   overlayClassName,
 }: FeedbackModalProps) {
+  const [mounted, setMounted] = useState(false)
   useModalScrollLock(isOpen)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   useEffect(() => {
     if (!isOpen) return
@@ -61,15 +71,10 @@ export default function FeedbackModal({
     console.log("[getting-started] FeedbackModal render", { isOpen, title })
   }
 
-  if (!isOpen) return null
+  if (!isOpen || !mounted) return null
 
-  return (
-    <div
-      className={cn(
-        "fixed inset-0 z-[10050] flex items-center justify-center",
-        overlayClassName
-      )}
-    >
+  return createPortal(
+    <div className={cn(FEEDBACK_MODAL_OVERLAY_CLASS, overlayClassName)}>
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
       <div
         className={cn(
@@ -100,6 +105,7 @@ export default function FeedbackModal({
           {dismissLabel}
         </button>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

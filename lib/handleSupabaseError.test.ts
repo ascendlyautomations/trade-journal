@@ -1,11 +1,11 @@
 import assert from "node:assert/strict"
 import { describe, it } from "node:test"
-import { handleSupabaseError } from "./handleSupabaseError"
-import { supabaseMutationFeedback } from "./supabaseMutationFeedback"
+import { handleSupabaseError } from "./handleSupabaseError.ts"
+import { supabaseMutationFeedback } from "./supabaseMutationFeedback.ts"
 import {
   toUserFacingErrorMessage,
   USER_FACING_ERROR_MESSAGES,
-} from "./userFacingError"
+} from "./userFacingError.ts"
 
 describe("toUserFacingErrorMessage", () => {
   it("maps internal ALL_CAPS codes to friendly copy", () => {
@@ -17,15 +17,19 @@ describe("toUserFacingErrorMessage", () => {
       toUserFacingErrorMessage({ message: "FREE_PLAN_DAILY_TRADE_LIMIT" }),
       USER_FACING_ERROR_MESSAGES.FREE_PLAN_DAILY_TRADE_LIMIT
     )
+    assert.equal(
+      toUserFacingErrorMessage({ message: "FREE_PLAN_DAILY_CLIP_LIMIT" }),
+      USER_FACING_ERROR_MESSAGES.FREE_PLAN_DAILY_CLIP_LIMIT
+    )
   })
 
   it("preserves human-readable postgres sentences", () => {
     assert.equal(
       toUserFacingErrorMessage({
         code: "P0001",
-        message: "Free plan allows only 3 trades per 24 hours",
+        message: "You've reached the Free plan limit of 3 trades every 24 hours.",
       }),
-      "Free plan allows only 3 trades per 24 hours"
+      "You've reached the Free plan limit of 3 trades every 24 hours."
     )
   })
 
@@ -34,9 +38,9 @@ describe("toUserFacingErrorMessage", () => {
       toUserFacingErrorMessage({
         code: "P0001",
         message: "P0001",
-        hint: "Free plan allows only 3 trades per 24 hours",
+        hint: "You've reached the Free plan limit of 3 trades every 24 hours.",
       }),
-      "Free plan allows only 3 trades per 24 hours"
+      "You've reached the Free plan limit of 3 trades every 24 hours."
     )
   })
 
@@ -89,13 +93,16 @@ describe("supabaseMutationFeedback", () => {
 
   it("keeps caller title and database sentence for human-readable errors", () => {
     const feedback = supabaseMutationFeedback(
-      { message: "Free plan allows only 3 trades per 24 hours" },
+      {
+        message:
+          "You've reached the Free plan limit of 3 trades every 24 hours.",
+      },
       "Save Failed"
     )
     assert.equal(feedback.title, "Save Failed")
     assert.equal(
       feedback.message,
-      "Free plan allows only 3 trades per 24 hours"
+      "You've reached the Free plan limit of 3 trades every 24 hours."
     )
   })
 })

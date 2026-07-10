@@ -659,7 +659,13 @@ export default function AchievementUploadModal({
       requestDemoSignup("upload")
       return
     }
-    if (!userId || uploadingRef.current || recordingPayout) return
+    if (!userId) {
+      showPopup(
+        persistentError("Sign In Required", "Please log in to save your achievement.")
+      )
+      return
+    }
+    if (uploadingRef.current || recordingPayout) return
 
     const achievementType = canonicalAchievementType(form.achievement_type)
     const hasImage = file != null || (!!form.image_url && !removeImage)
@@ -910,7 +916,7 @@ export default function AchievementUploadModal({
         onCancel={imageCrop.handleCropCancel}
         onSave={imageCrop.handleCropSave}
       />
-      <FeedbackModal {...feedbackModalProps} overlayClassName="z-[200]" />
+      <FeedbackModal {...feedbackModalProps} />
       <CreateAccountModal
         open={showCreateAccountModal}
         onClose={() => {

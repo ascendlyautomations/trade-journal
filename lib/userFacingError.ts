@@ -1,14 +1,19 @@
+import {
+  FREE_PLAN_DAILY_CLIP_LIMIT_MESSAGE,
+  FREE_PLAN_DAILY_POST_LIMIT_MESSAGE,
+  FREE_PLAN_DAILY_TRADE_LIMIT_MESSAGE,
+} from "./freePlanDailyLimits.ts"
+
 /**
  * Central registry: map internal error codes → polished user-facing copy.
  * Add new mappings here only — do not scatter conditionals across the app.
  */
 export const USER_FACING_ERROR_MESSAGES = {
-  FREE_PLAN_DAILY_POST_LIMIT:
-    "Free accounts can create 1 post every 24 hours. Upgrade to Pro for unlimited posting.",
-  FREE_PLAN_DAILY_TRADE_LIMIT:
-    "You've reached the Free plan limit of 3 trades every 24 hours. Upgrade to Pro for unlimited trades.",
-  FREE_PLAN_REELS_LIMIT:
-    "Free accounts can upload 1 clip every 24 hours. Upgrade to Pro for unlimited clips.",
+  FREE_PLAN_DAILY_POST_LIMIT: FREE_PLAN_DAILY_POST_LIMIT_MESSAGE,
+  FREE_PLAN_DAILY_TRADE_LIMIT: FREE_PLAN_DAILY_TRADE_LIMIT_MESSAGE,
+  FREE_PLAN_DAILY_CLIP_LIMIT: FREE_PLAN_DAILY_CLIP_LIMIT_MESSAGE,
+  /** @deprecated Prefer {@link USER_FACING_ERROR_MESSAGES.FREE_PLAN_DAILY_CLIP_LIMIT}. */
+  FREE_PLAN_REELS_LIMIT: FREE_PLAN_DAILY_CLIP_LIMIT_MESSAGE,
   FREE_PLAN_ACCOUNT_LIMIT:
     "Free plan allows up to 3 accounts. Upgrade to Pro for unlimited accounts.",
   RATE_LIMIT_EXCEEDED:
@@ -123,14 +128,39 @@ function mapFreePlanMessage(text: string): string | null {
   const lower = text.toLowerCase()
   if (!lower.includes("free") && !lower.includes("upgrade to pro")) return null
 
-  if (lower.includes("post") && (lower.includes("24 hour") || lower.includes("daily"))) {
+  if (
+    lower.includes("post") &&
+    (lower.includes("24 hour") ||
+      lower.includes("every 24 hours") ||
+      lower.includes("daily"))
+  ) {
     return USER_FACING_ERROR_MESSAGES.FREE_PLAN_DAILY_POST_LIMIT
   }
-  if (lower.includes("trade") && (lower.includes("24 hour") || lower.includes("daily") || lower.includes("3"))) {
+  if (
+    lower.includes("trade") &&
+    (lower.includes("24 hour") ||
+      lower.includes("every 24 hours") ||
+      lower.includes("daily") ||
+      lower.includes("3"))
+  ) {
     return USER_FACING_ERROR_MESSAGES.FREE_PLAN_DAILY_TRADE_LIMIT
   }
-  if (lower.includes("reel")) {
-    return USER_FACING_ERROR_MESSAGES.FREE_PLAN_REELS_LIMIT
+  if (
+    lower.includes("clip") ||
+    lower.includes("reel") ||
+    lower.includes("free_plan_daily_clip_limit") ||
+    lower.includes("free_plan_reels_limit")
+  ) {
+    if (
+      lower.includes("24 hour") ||
+      lower.includes("every 24 hours") ||
+      lower.includes("daily") ||
+      lower.includes("limit") ||
+      lower.includes("free_plan_daily_clip_limit") ||
+      lower.includes("free_plan_reels_limit")
+    ) {
+      return USER_FACING_ERROR_MESSAGES.FREE_PLAN_DAILY_CLIP_LIMIT
+    }
   }
   if (lower.includes("account")) {
     return USER_FACING_ERROR_MESSAGES.FREE_PLAN_ACCOUNT_LIMIT

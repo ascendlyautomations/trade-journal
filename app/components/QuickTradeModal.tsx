@@ -1210,7 +1210,7 @@ export default function QuickTradeModal({
         onSave={handleCreateAccountSave}
         overlayClassName="z-[160]"
       />
-      <FeedbackModal {...feedbackModalProps} overlayClassName="z-[200]" />
+      <FeedbackModal {...feedbackModalProps} />
       <ImageCropModal
         open={imageCrop.cropSourceFile != null}
         file={imageCrop.cropSourceFile}

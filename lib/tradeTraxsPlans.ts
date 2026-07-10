@@ -1,5 +1,11 @@
 /** Canonical TradeTraxs Free & Pro plan copy — single source for all pricing surfaces. */
 
+import {
+  FREE_PLAN_DAILY_CLIP_PRICING_LABEL,
+  FREE_PLAN_DAILY_POST_PRICING_LABEL,
+  FREE_PLAN_DAILY_TRADE_PRICING_LABEL,
+} from "./freePlanDailyLimits.ts"
+
 export type TradeTraxsPlanId = "free" | "pro"
 
 export type TradeTraxsPlanFeatureGroup = {
@@ -50,6 +56,9 @@ export const TRADETRAXS_FREE_PLAN: TradeTraxsPlan = {
   description:
     "Track trades manually, explore the community, and review core performance stats — no credit card required.",
   features: [
+    FREE_PLAN_DAILY_TRADE_PRICING_LABEL,
+    FREE_PLAN_DAILY_POST_PRICING_LABEL,
+    FREE_PLAN_DAILY_CLIP_PRICING_LABEL,
     "Manual Trade Entry",
     TRADETRAXS_FEATURE_LABELS.basicAnalytics,
     "Basic Calendar",

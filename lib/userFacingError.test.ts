@@ -16,9 +16,17 @@ test("maps duplicate key to friendly username message", () => {
 test("maps P0001 free plan trade limit", () => {
   const msg = toUserFacingErrorMessage({
     code: "P0001",
-    message: "Free plan allows only 3 trades",
+    message: "You've reached the Free plan limit of 3 trades every 24 hours.",
   })
   assert.equal(msg, USER_FACING_ERROR_MESSAGES.FREE_PLAN_DAILY_TRADE_LIMIT)
+})
+
+test("maps P0001 free plan clip limit", () => {
+  const msg = toUserFacingErrorMessage({
+    code: "P0001",
+    message: "FREE_PLAN_DAILY_CLIP_LIMIT",
+  })
+  assert.equal(msg, USER_FACING_ERROR_MESSAGES.FREE_PLAN_DAILY_CLIP_LIMIT)
 })
 
 test("maps foreign key violation", () => {
