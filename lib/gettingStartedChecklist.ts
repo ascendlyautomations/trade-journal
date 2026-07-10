@@ -1,11 +1,9 @@
 export type GettingStartedChecklistItemId =
   | "profile"
-  | "account"
   | "trade"
-  | "ai_analysis"
-  | "room"
   | "post"
   | "follow"
+  | "room"
   | "public"
 
 export type GettingStartedChecklistItem = {
@@ -16,11 +14,13 @@ export type GettingStartedChecklistItem = {
 
 export type GettingStartedSignals = {
   onboardingCompleted: boolean
-  accountCount: number
   tradeCount: number
-  hasRunAiAnalysis: boolean
+  /** Profile wall posts (`profile_posts`) — not auto-generated trade feed rows. */
+  profilePostCount: number
+  followCount: number
   /** Ever joined a room the user does not own (includes left memberships). */
   hasEverJoinedOtherRoom: boolean
+  hasPublicTrade: boolean
 }
 
 export type GettingStartedItemHelp = {
@@ -33,27 +33,19 @@ export const GETTING_STARTED_ITEM_HELP: Record<
 > = {
   profile: {
     body:
-      "Add your username, display name, and trader details in Settings so other traders can discover you.",
-  },
-  account: {
-    body:
-      "Create a trading account in Settings so trades are organized by account type, size, and prop firm rules.",
+      "Add a bio and avatar in Settings so other traders can discover you.",
   },
   trade: {
     body:
       "Click Add Trade and enter your entry, exit, and result. Your dashboard analytics unlock after your first trade.",
   },
-  ai_analysis: {
+  follow: {
     body:
-      "Open AI Analyst, pick a trade, and run your first analysis to get structured feedback on your execution.",
+      "Visit Explore and click Follow on a trader. Their trades, posts, and activity will start appearing in your feed.",
   },
   room: {
     body:
       "Trade Rooms are communities where traders share ideas, charts, setups, and market discussions. Click this task to browse popular rooms and join one.",
-  },
-  follow: {
-    body:
-      "Visit Explore and click Follow on a trader. Their trades, posts, and activity will start appearing in your feed.",
   },
   post: {
     body:
@@ -72,7 +64,7 @@ export type GettingStartedProgress = {
   allComplete: boolean
 }
 
-const TOTAL_ITEMS = 5
+const TOTAL_ITEMS = 6
 
 export const GETTING_STARTED_COLLAPSED_STORAGE_KEY =
   "tradetraxs_getting_started_collapsed_v1"
@@ -207,24 +199,29 @@ export function computeGettingStartedProgress(
       complete: signals.onboardingCompleted,
     },
     {
-      id: "account",
-      label: "Add your first trading account",
-      complete: signals.accountCount > 0,
-    },
-    {
       id: "trade",
       label: "Add your first trade",
       complete: signals.tradeCount > 0,
     },
     {
-      id: "ai_analysis",
-      label: "Run your first AI analysis",
-      complete: signals.hasRunAiAnalysis,
+      id: "follow",
+      label: "Follow another trader",
+      complete: signals.followCount > 0,
     },
     {
       id: "room",
       label: "Join a trade room",
       complete: signals.hasEverJoinedOtherRoom,
+    },
+    {
+      id: "public",
+      label: "Make your first trade public",
+      complete: signals.hasPublicTrade,
+    },
+    {
+      id: "post",
+      label: "Create your first post",
+      complete: signals.profilePostCount > 0,
     },
   ]
 

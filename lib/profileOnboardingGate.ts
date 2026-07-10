@@ -24,21 +24,6 @@ export type ProfileOnboardingGateFields = {
  * Existing users with `onboarding_completed === true` are never gated again,
  * even if optional profile fields are empty.
  */
-/** Required onboarding fields satisfied (ignores onboarding_completed flag). */
-export function profileOnboardingRequirementsMet(
-  profile: Pick<
-    ProfileOnboardingGateFields,
-    "username" | "trader_type" | "trading_style" | "started_trading"
-  >
-): boolean {
-  return (
-    !profileNeedsUsername(profile.username) &&
-    !profileFieldMissing(profile.trader_type) &&
-    !profileFieldMissing(profile.trading_style) &&
-    !profileFieldMissing(profile.started_trading)
-  )
-}
-
 export function profileNeedsOnboarding(
   profile: ProfileOnboardingGateFields
 ): boolean {

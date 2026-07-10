@@ -1,5 +1,4 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
-import { notifyGettingStartedChecklistMaybeCompleted } from "@/lib/gettingStartedProgressSync"
 import { isProActive } from "@/lib/subscription"
 import {
   normalizeAccountCategoryForForm,
@@ -231,8 +230,6 @@ export async function insertTradingAccount(
   if (!data) {
     return { account: null, error: new Error("Account was not created") }
   }
-
-  notifyGettingStartedChecklistMaybeCompleted()
 
   return {
     account: mapAccountRow(data as Record<string, unknown>),

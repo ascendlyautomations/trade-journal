@@ -110,6 +110,8 @@ export default function GettingStartedMobileEntry({
               <GettingStartedChecklist
                 progress={progress}
                 userId={user.id}
+                profileId={user.id}
+                firstPrivateTradeId={signals.firstPrivateTradeId}
                 onChecklistRefresh={() => void refreshChecklistSignals()}
                 alwaysExpanded
                 embedded

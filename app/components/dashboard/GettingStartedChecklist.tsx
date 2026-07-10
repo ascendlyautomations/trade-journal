@@ -12,11 +12,14 @@ import {
   writeGettingStartedCollapsedPreference,
   writeGettingStartedSessionDismissed,
 } from "@/lib/gettingStartedChecklist"
+import { profilePath } from "@/lib/profileRoutes"
 import PopularTradeRoomsModal from "./PopularTradeRoomsModal"
 
 export type GettingStartedChecklistProps = {
   progress: GettingStartedProgress
   userId: string
+  profileId?: string
+  firstPrivateTradeId?: string | null
   onChecklistRefresh?: () => void
   /** When true, always show tasks (no collapse toggle). Used in mobile drawer. */
   alwaysExpanded?: boolean
@@ -28,17 +31,26 @@ export type GettingStartedChecklistProps = {
 }
 
 function itemHref(
-  id: GettingStartedProgress["items"][number]["id"]
+  id: GettingStartedProgress["items"][number]["id"],
+  options: { profileId?: string; firstPrivateTradeId?: string | null }
 ): string | undefined {
+  const { profileId, firstPrivateTradeId } = options
   switch (id) {
     case "profile":
-      return "/settings#profile"
-    case "account":
-      return "/settings#trading-accounts"
+      return "/settings"
     case "trade":
       return "/app"
-    case "ai_analysis":
-      return "/analyst"
+    case "post":
+      return profileId
+        ? `${profilePath({ id: profileId })}?tab=posts&createPost=1`
+        : undefined
+    case "follow":
+      return "/explore"
+    case "public":
+      if (firstPrivateTradeId) {
+        return `/trades?edit=${encodeURIComponent(firstPrivateTradeId)}`
+      }
+      return "/trades"
     default:
       return undefined
   }
@@ -46,9 +58,13 @@ function itemHref(
 
 function ChecklistItemRow({
   item,
+  profileId,
+  firstPrivateTradeId,
   onOpenPopularRooms,
 }: {
   item: GettingStartedProgress["items"][number]
+  profileId?: string
+  firstPrivateTradeId?: string | null
   onOpenPopularRooms: () => void
 }) {
   const row = (
@@ -91,7 +107,7 @@ function ChecklistItemRow({
     )
   }
 
-  const href = itemHref(item.id)
+  const href = itemHref(item.id, { profileId, firstPrivateTradeId })
   return (
     <li key={item.id}>
       {href ? (
@@ -111,6 +127,8 @@ function ChecklistItemRow({
 export default function GettingStartedChecklist({
   progress,
   userId,
+  profileId,
+  firstPrivateTradeId,
   onChecklistRefresh,
   alwaysExpanded = false,
   defaultExpanded = true,
@@ -218,6 +236,8 @@ export default function GettingStartedChecklist({
                 <ChecklistItemRow
                   key={item.id}
                   item={item}
+                  profileId={profileId}
+                  firstPrivateTradeId={firstPrivateTradeId}
                   onOpenPopularRooms={() => setPopularRoomsOpen(true)}
                 />
               ))}

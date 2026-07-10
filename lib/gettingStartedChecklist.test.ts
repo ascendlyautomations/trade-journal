@@ -4,10 +4,11 @@ const { computeGettingStartedProgress, detectNewlyCompletedTasks } = require("./
 
 const EMPTY = {
   onboardingCompleted: false,
-  accountCount: 0,
   tradeCount: 0,
-  hasRunAiAnalysis: false,
+  profilePostCount: 0,
+  followCount: 0,
   hasEverJoinedOtherRoom: false,
+  hasPublicTrade: false,
 }
 
 function itemComplete(
@@ -18,11 +19,87 @@ function itemComplete(
 }
 
 describe("computeGettingStartedProgress", () => {
-  it("orders profile first in the checklist", () => {
+  it("scenario A: first trade only completes trade task", () => {
+    const p = computeGettingStartedProgress({ ...EMPTY, tradeCount: 1 })
+    assert.equal(itemComplete(p, "trade"), true)
+    assert.equal(itemComplete(p, "post"), false)
+    assert.equal(itemComplete(p, "public"), false)
+    assert.equal(p.completedCount, 1)
+  })
+
+  it("scenario B: public trade completes trade and public, not post", () => {
+    const p = computeGettingStartedProgress({
+      ...EMPTY,
+      tradeCount: 1,
+      hasPublicTrade: true,
+    })
+    assert.equal(itemComplete(p, "trade"), true)
+    assert.equal(itemComplete(p, "public"), true)
+    assert.equal(itemComplete(p, "post"), false)
+    assert.equal(p.completedCount, 2)
+  })
+
+  it("scenario B: feed trade rows alone must not complete post task", () => {
+    // Previously feedPostCount > 0 incorrectly completed post; profilePostCount only.
+    const p = computeGettingStartedProgress({
+      ...EMPTY,
+      tradeCount: 1,
+      hasPublicTrade: true,
+      profilePostCount: 0,
+    })
+    assert.equal(itemComplete(p, "post"), false)
+  })
+
+  it("scenario C: profile post only completes post task", () => {
+    const p = computeGettingStartedProgress({
+      ...EMPTY,
+      profilePostCount: 1,
+    })
+    assert.equal(itemComplete(p, "post"), true)
+    assert.equal(itemComplete(p, "trade"), false)
+    assert.equal(itemComplete(p, "public"), false)
+    assert.equal(p.completedCount, 1)
+  })
+
+  it("scenario D: follow only completes follow task", () => {
+    const p = computeGettingStartedProgress({ ...EMPTY, followCount: 1 })
+    assert.equal(itemComplete(p, "follow"), true)
+    assert.equal(itemComplete(p, "trade"), false)
+    assert.equal(itemComplete(p, "post"), false)
+    assert.equal(itemComplete(p, "public"), false)
+    assert.equal(itemComplete(p, "room"), false)
+    assert.equal(p.completedCount, 1)
+  })
+
+  it("scenario E: room join only completes room task", () => {
+    const p = computeGettingStartedProgress({
+      ...EMPTY,
+      hasEverJoinedOtherRoom: true,
+    })
+    assert.equal(itemComplete(p, "room"), true)
+    assert.equal(itemComplete(p, "follow"), false)
+    assert.equal(p.completedCount, 1)
+  })
+
+  it("scenario F: all six tasks complete at 6/6", () => {
+    const p = computeGettingStartedProgress({
+      onboardingCompleted: true,
+      tradeCount: 3,
+      profilePostCount: 1,
+      followCount: 2,
+      hasEverJoinedOtherRoom: true,
+      hasPublicTrade: true,
+    })
+    assert.equal(p.completedCount, 6)
+    assert.equal(p.totalCount, 6)
+    assert.equal(p.allComplete, true)
+  })
+
+  it("includes profile as the first checklist task", () => {
     const p = computeGettingStartedProgress(EMPTY)
     assert.equal(p.items[0]?.id, "profile")
     assert.equal(p.items[0]?.label, "Complete your profile")
-    assert.equal(p.totalCount, 5)
+    assert.equal(p.totalCount, 6)
   })
 
   it("profile task completes when onboarding is finished", () => {
@@ -31,51 +108,8 @@ describe("computeGettingStartedProgress", () => {
       onboardingCompleted: true,
     })
     assert.equal(itemComplete(p, "profile"), true)
+    assert.equal(itemComplete(p, "trade"), false)
     assert.equal(p.completedCount, 1)
-  })
-
-  it("account task completes when user has a trading account", () => {
-    const p = computeGettingStartedProgress({ ...EMPTY, accountCount: 1 })
-    assert.equal(itemComplete(p, "account"), true)
-    assert.equal(itemComplete(p, "profile"), false)
-    assert.equal(p.completedCount, 1)
-  })
-
-  it("trade task completes on first trade", () => {
-    const p = computeGettingStartedProgress({ ...EMPTY, tradeCount: 1 })
-    assert.equal(itemComplete(p, "trade"), true)
-    assert.equal(p.completedCount, 1)
-  })
-
-  it("ai analysis task completes when analysis has run", () => {
-    const p = computeGettingStartedProgress({
-      ...EMPTY,
-      hasRunAiAnalysis: true,
-    })
-    assert.equal(itemComplete(p, "ai_analysis"), true)
-    assert.equal(p.completedCount, 1)
-  })
-
-  it("room task completes when user joined another room", () => {
-    const p = computeGettingStartedProgress({
-      ...EMPTY,
-      hasEverJoinedOtherRoom: true,
-    })
-    assert.equal(itemComplete(p, "room"), true)
-    assert.equal(p.completedCount, 1)
-  })
-
-  it("all five tasks complete at 5/5", () => {
-    const p = computeGettingStartedProgress({
-      onboardingCompleted: true,
-      accountCount: 1,
-      tradeCount: 3,
-      hasRunAiAnalysis: true,
-      hasEverJoinedOtherRoom: true,
-    })
-    assert.equal(p.completedCount, 5)
-    assert.equal(p.totalCount, 5)
-    assert.equal(p.allComplete, true)
   })
 
   it("detects newly completed tasks between snapshots", () => {
@@ -185,22 +219,25 @@ describe("applyStickyGettingStartedProgress", () => {
 
   const userId = "test-user-sticky"
 
-  it("does not let stale sticky inflate a fresh account", () => {
+  it("does not let stale sticky inflate a fresh account to 5/6", () => {
     localStorageMock.clear()
     writeStickyCompletedItemIds(
       userId,
-      new Set(["profile", "account", "trade", "ai_analysis", "room"])
+      new Set(["trade", "post", "follow", "room"])
     )
 
     const serverProgress = computeGettingStartedProgress({
       onboardingCompleted: true,
-      accountCount: 0,
       tradeCount: 0,
-      hasRunAiAnalysis: false,
+      profilePostCount: 0,
+      followCount: 0,
       hasEverJoinedOtherRoom: false,
+      hasPublicTrade: false,
     })
 
-    const merged = applyStickyGettingStartedProgress(serverProgress, userId)
+    const merged = applyStickyGettingStartedProgress(serverProgress, userId, {
+      profilePostCount: 0,
+    })
 
     assert.equal(merged.completedCount, 1)
     assert.equal(merged.items.find((i) => i.id === "profile")?.complete, true)

@@ -45,12 +45,7 @@ import {
   validateProfileUsernameNotEmpty,
 } from "@/lib/profileUsername"
 import { TRADER_TYPE_OPTIONS, normalizeTraderType } from "@/lib/traderType"
-import {
-  mirrorAccountSettingsOnboardingCompleted,
-  mirrorAccountSettingsUsernameChangeCount,
-} from "@/lib/profileSplitMirrorWrites"
-import { profileOnboardingRequirementsMet } from "@/lib/profileOnboardingGate"
-import { notifyGettingStartedChecklistMaybeCompleted } from "@/lib/gettingStartedProgressSync"
+import { mirrorAccountSettingsUsernameChangeCount } from "@/lib/profileSplitMirrorWrites"
 
 import AffiliatePayoutSetupCard from "@/app/components/AffiliatePayoutSetupCard"
 import { supabaseBearerHeaders } from "@/lib/supabaseBearerFetch"
@@ -566,31 +561,16 @@ export default function SettingsPage() {
       }
     }
 
-    const trimmedTraderType = traderType.trim() || null
-    const trimmedStartedTrading = startedTrading.trim() || null
-    const shouldCompleteOnboarding =
-      profile?.onboarding_completed !== true &&
-      profileOnboardingRequirementsMet({
-        username: cleanUsername,
-        trader_type: trimmedTraderType,
-        trading_style: tradingStyle,
-        started_trading: trimmedStartedTrading,
-      })
-
     const updatePayload: Record<string, unknown> = {
       name: name.trim() || null,
       is_private: isPrivate,
       bio,
       avatar_url: avatarUrl,
       trading_style: tradingStyle,
-      trader_type: trimmedTraderType,
+      trader_type: traderType.trim() || null,
       primary_market: primaryMarket.trim() || null,
       trading_model: tradingModel || tradingStyle || null,
-      started_trading: trimmedStartedTrading,
-    }
-
-    if (shouldCompleteOnboarding) {
-      updatePayload.onboarding_completed = true
+      started_trading: startedTrading.trim() || null,
     }
 
     if (usernameChanged) {
@@ -627,17 +607,6 @@ export default function SettingsPage() {
       }
     }
 
-    if (shouldCompleteOnboarding) {
-      const { error: mirrorErr } = await mirrorAccountSettingsOnboardingCompleted(
-        supabase,
-        user.id,
-        true
-      )
-      if (mirrorErr) {
-        console.error("mirror account_settings.onboarding_completed:", mirrorErr)
-      }
-    }
-
     const nextProfile: Record<string, unknown> = {
       ...(profile ?? {}),
       name: name.trim() || null,
@@ -647,14 +616,10 @@ export default function SettingsPage() {
       bio,
       avatar_url: avatarUrl,
       trading_style: tradingStyle,
-      trader_type: trimmedTraderType,
+      trader_type: traderType.trim() || null,
       primary_market: primaryMarket.trim() || null,
       trading_model: tradingModel || tradingStyle || null,
-      started_trading: trimmedStartedTrading,
-    }
-
-    if (shouldCompleteOnboarding) {
-      nextProfile.onboarding_completed = true
+      started_trading: startedTrading.trim() || null,
     }
 
     setUsername(cleanUsername)
@@ -662,7 +627,6 @@ export default function SettingsPage() {
     setAvatarFile(null)
     persistSettingsProfileEverywhere(user.id, nextProfile)
     setSharedProfile((prev) => settingsSaveToSharedSlice(nextProfile, prev))
-    notifyGettingStartedChecklistMaybeCompleted()
     showPopup(feedbackPresets.profileSaveSuccess())
     } finally {
       savingProfileRef.current = false
