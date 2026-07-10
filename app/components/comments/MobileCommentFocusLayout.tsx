@@ -67,7 +67,7 @@ export default function MobileCommentFocusLayout({
       ) : null}
 
       {mobileMedia && !collapse ? (
-        <div className="shrink-0 bg-black/30 md:hidden">{mobileMedia}</div>
+        <div className="shrink-0 md:hidden">{mobileMedia}</div>
       ) : null}
 
       {engagementAfterCollapsible ? null : engagementBlock}

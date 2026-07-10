@@ -90,7 +90,7 @@ function CsvSupportForm() {
           onClick={() => router.push("/app")}
           className="mt-8 w-full rounded-xl border border-white/15 bg-white/10 py-3 text-sm font-medium text-white transition hover:bg-white/15"
         >
-          Back to Input Trade
+          Back to Add Trade
         </button>
       </div>
     )

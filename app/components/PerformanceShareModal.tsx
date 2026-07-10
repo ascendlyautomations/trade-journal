@@ -361,7 +361,7 @@ export default function PerformanceShareModal({
           <button
             type="button"
             onClick={() => setPerfShareActionsOpen(true)}
-            className="rounded-xl border border-emerald-400/40 bg-emerald-500/15 px-4 py-2.5 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-500/25"
+            className="rounded-xl border border-blue-400/40 bg-blue-500/15 px-4 py-2.5 text-sm font-semibold text-blue-100 transition hover:bg-blue-500/25"
           >
             Share…
           </button>
@@ -382,7 +382,7 @@ export default function PerformanceShareModal({
                   setPerfShareActionsOpen(false)
                 }}
                 disabled={busy}
-                className="w-full rounded-lg bg-green-500 py-2 font-medium text-black disabled:opacity-50"
+                className="w-full rounded-lg bg-blue-500 py-2 font-medium text-white hover:bg-blue-600 disabled:opacity-50 disabled:hover:bg-blue-500"
               >
                 Download Image
               </button>

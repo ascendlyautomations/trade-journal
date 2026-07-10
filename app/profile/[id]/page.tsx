@@ -144,10 +144,9 @@ import FollowButton from "../../components/FollowButton"
 import { logSupabaseError } from "@/lib/logSupabaseError"
 import { ensureDmConversation } from "@/lib/dmConversation"
 import { dmThreadPath } from "@/lib/messageRoutes"
-import { ConfirmModal, FeedbackModal, useDeleteTradeConfirmation, useDeleteReelConfirmation, useFeedbackPopup } from "@/app/components/ui"
+import { ConfirmModal, FeedbackModal, useDeleteTradeConfirmation, useDeleteReelConfirmation, useFeedbackPopup, Button } from "@/app/components/ui"
 import { useModalScrollLock } from "@/app/components/ui/modalLayout"
 import ProfileCreateMenu from "../../components/profile/ProfileCreateMenu"
-import { PROFILE_PRIMARY_ACTION_BUTTON_CLASS } from "../../components/profile/profileActionButton"
 import QuickTradeModal from "../../components/QuickTradeModal"
 import ReelComposerModal from "../../components/profile/ReelComposerModal"
 import ProfileReelCard from "../../components/profile/ProfileReelCard"
@@ -550,7 +549,7 @@ function TradeCard({
     return (
       <article className={cardShellClass}>
         {imageSrc ? (
-          <div className="hidden md:flex md:min-h-0 md:flex-1 md:items-center md:justify-center md:border-r md:border-white/10 md:bg-black/40 md:p-3">
+          <div className="hidden md:flex md:min-h-0 md:flex-1 md:items-center md:justify-center md:border-r md:border-white/10 md:p-3">
             {tradeImageBlock}
           </div>
         ) : null}
@@ -613,7 +612,7 @@ function TradeCard({
             <>
               {tradeAuthorHeader}
               {imageSrc ? (
-                <div className="shrink-0 bg-black/30 md:hidden">{tradeImageBlock}</div>
+                <div className="shrink-0 md:hidden">{tradeImageBlock}</div>
               ) : null}
               <div className="space-y-3 p-4">{tradeDetails}</div>
             </>
@@ -1107,7 +1106,7 @@ function PostCard({
       <>
         <article className={cardShellClass}>
           {isRoomSharePost(post) ? (
-            <div className="hidden md:flex md:min-h-0 md:flex-1 md:items-center md:justify-center md:border-r md:border-white/10 md:bg-black/40 md:p-3">
+            <div className="hidden md:flex md:min-h-0 md:flex-1 md:items-center md:justify-center md:border-r md:border-white/10 md:p-3">
               <FeedRoomShareCard
                 post={post}
                 viewerUserId={currentUserId ?? null}
@@ -1115,7 +1114,7 @@ function PostCard({
               />
             </div>
           ) : imgSrc ? (
-            <div className="hidden md:flex md:min-h-0 md:flex-1 md:items-center md:justify-center md:border-r md:border-white/10 md:bg-black/40 md:p-3">
+            <div className="hidden md:flex md:min-h-0 md:flex-1 md:items-center md:justify-center md:border-r md:border-white/10 md:p-3">
               {postImageBlock}
             </div>
           ) : null}
@@ -1185,7 +1184,7 @@ function PostCard({
           />
         </div>
       ) : imgSrc ? (
-        <div className="w-full bg-black/30">
+        <div className="w-full">
           <TradeScreenshotImage
             src={imgSrc}
             preset="feed-thumb"
@@ -4400,8 +4399,10 @@ function ProfilePageContent() {
                   {isOwnProfile ? (
                     hasRoom ? (
                       <div className="mt-3 flex flex-wrap items-center justify-center gap-2 sm:justify-start">
-                        <button
+                        <Button
                           type="button"
+                          variant="primary"
+                          size="md"
                           onClick={() =>
                             router.push(
                               `/trade-rooms?room=${encodeURIComponent(
@@ -4409,10 +4410,10 @@ function ProfilePageContent() {
                               )}`
                             )
                           }
-                          className={PROFILE_PRIMARY_ACTION_BUTTON_CLASS}
+                          className="px-6"
                         >
                           View Trade Room
-                        </button>
+                        </Button>
                         <button
                           type="button"
                           onClick={() => router.push("/settings#profile")}
@@ -4442,8 +4443,10 @@ function ProfilePageContent() {
                     )
                   ) : canShowVisitorRoomCta ? (
                     <div className="mt-3">
-                      <button
+                      <Button
                         type="button"
+                        variant="primary"
+                        size="md"
                         onClick={() =>
                           router.push(
                             `/trade-rooms?room=${encodeURIComponent(
@@ -4451,10 +4454,10 @@ function ProfilePageContent() {
                             )}`
                           )
                         }
-                        className={PROFILE_PRIMARY_ACTION_BUTTON_CLASS}
+                        className="px-6"
                       >
                         View Trade Room
-                      </button>
+                      </Button>
                     </div>
                   ) : null}
                 </div>
@@ -5219,7 +5222,7 @@ function ProfilePageContent() {
                   <img
                     src={postImagePreviewUrl}
                     alt="Selected image preview"
-                    className="max-h-48 w-full rounded-xl border border-white/10 bg-black/30 object-contain"
+                    className="max-h-48 w-full rounded-xl border border-white/10 object-contain"
                   />
                   {postImage ? (
                     <p className="mt-1.5 text-xs text-gray-500">

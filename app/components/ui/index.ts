@@ -12,6 +12,13 @@ export { default as Modal } from "./Modal"
 export type { ModalProps } from "./Modal"
 export { default as ModalCloseButton, MODAL_CLOSE_BUTTON_CLASS } from "./ModalCloseButton"
 export type { ModalCloseButtonProps } from "./ModalCloseButton"
+export {
+  default as ImageViewerCloseButton,
+  IMAGE_VIEWER_CLOSE_BUTTON_CLASS,
+  IMAGE_VIEWER_CLOSE_BUTTON_POSITION_CLASS,
+} from "./ImageViewerCloseButton"
+export type { ImageViewerCloseButtonProps } from "./ImageViewerCloseButton"
+export { default as ImageLightbox, IMAGE_LIGHTBOX_Z_INDEX_CLASS } from "./ImageLightbox"
 export { default as EmptyState } from "./EmptyState"
 export type { EmptyStateProps } from "./EmptyState"
 export { default as Skeleton } from "./Skeleton"

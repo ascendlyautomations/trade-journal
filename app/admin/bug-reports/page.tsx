@@ -12,6 +12,7 @@ import {
   type BugReportStatus,
 } from "@/lib/bugReports"
 import { supabase } from "@/lib/supabaseClient"
+import ImageLightbox from "@/app/components/ui/ImageLightbox"
 
 type StatusFilter = "all" | BugReportStatus
 type SeverityFilter = "all" | BugReportSeverity
@@ -322,7 +323,7 @@ export default function AdminBugReportsPage() {
                     type="button"
                     onClick={() => void handleMarkResolved()}
                     disabled={savingDetail}
-                    className="rounded bg-emerald-500 px-3 py-2 text-sm font-semibold hover:bg-emerald-600 disabled:opacity-60"
+                    className="rounded bg-blue-500 px-3 py-2 text-sm font-semibold hover:bg-blue-600 disabled:opacity-60 disabled:hover:bg-blue-500"
                   >
                     {savingDetail ? "Saving..." : "Mark resolved"}
                   </button>
@@ -398,23 +399,10 @@ export default function AdminBugReportsPage() {
         </div>
       ) : null}
 
-      {lightboxUrl ? (
-        <div
-          className="fixed inset-0 z-[140] flex items-center justify-center bg-black/85 p-3"
-          onClick={() => setLightboxUrl(null)}
-        >
-          <div className="relative w-full max-w-5xl" onClick={(e) => e.stopPropagation()}>
-            <button
-              type="button"
-              onClick={() => setLightboxUrl(null)}
-              className="absolute right-0 top-0 z-10 rounded bg-black/60 px-3 py-1 text-sm text-white hover:bg-black/80"
-            >
-              Close
-            </button>
-            <img src={lightboxUrl} alt="" className="max-h-[85vh] w-full rounded object-contain" />
-          </div>
-        </div>
-      ) : null}
+      <ImageLightbox
+        imageUrl={lightboxUrl}
+        onClose={() => setLightboxUrl(null)}
+      />
     </>
   )
 }

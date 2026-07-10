@@ -23,6 +23,7 @@ export type PayoutSetupModalProps = {
   balanceBeforePayout: number
   defaultDrawdownBehavior: PayoutDrawdownBehavior
   defaultRememberDrawdownBehavior?: boolean
+  initialPayoutAmount?: number
 }
 
 const INPUT_CLASS =
@@ -45,6 +46,7 @@ export default function PayoutSetupModal({
   balanceBeforePayout,
   defaultDrawdownBehavior,
   defaultRememberDrawdownBehavior = false,
+  initialPayoutAmount,
 }: PayoutSetupModalProps) {
   const [balanceAfterDraft, setBalanceAfterDraft] = useState("")
   const [payoutAmountDraft, setPayoutAmountDraft] = useState("")
@@ -57,7 +59,11 @@ export default function PayoutSetupModal({
   useEffect(() => {
     if (!open) return
     setBalanceAfterDraft(String(Math.round(balanceBeforePayout)))
-    setPayoutAmountDraft("")
+    setPayoutAmountDraft(
+      initialPayoutAmount != null && initialPayoutAmount > 0
+        ? String(initialPayoutAmount)
+        : ""
+    )
     setDrawdownBehavior(defaultDrawdownBehavior)
     setRememberBehavior(defaultRememberDrawdownBehavior)
   }, [
@@ -65,6 +71,7 @@ export default function PayoutSetupModal({
     balanceBeforePayout,
     defaultDrawdownBehavior,
     defaultRememberDrawdownBehavior,
+    initialPayoutAmount,
   ])
 
   const balanceAfter = parseCurrencyInput(balanceAfterDraft)

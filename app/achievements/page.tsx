@@ -7,7 +7,7 @@ import AchievementUploadModal, {
   type AchievementUploadInitialValues,
 } from "../components/AchievementUploadModal"
 import SystemMilestonesSection from "@/app/components/milestones/SystemMilestonesSection"
-import { ConfirmModal, useDeleteAchievementConfirmation } from "../components/ui"
+import { ConfirmModal, FeedbackModal, useDeleteAchievementConfirmation, useFeedbackPopup } from "../components/ui"
 import { supabase } from "../../lib/supabaseClient"
 import {
   type Achievement,
@@ -24,6 +24,7 @@ import { useUserStreaks } from "@/lib/useUserStreaks"
 import { useUserAchievements } from "@/lib/useUserAchievements"
 import { patchUserAchievementsCache } from "@/lib/userAchievementsCache"
 import { SkeletonAchievementsGrid } from "../components/ui/skeletons"
+import EmptyState from "../components/ui/EmptyState"
 
 export default function AchievementsPage() {
   const { user, profile, loading: profileLoading } = useUserProfile()
@@ -38,6 +39,7 @@ export default function AchievementsPage() {
     error,
     refresh: refreshAchievements,
   } = useUserAchievements(userId)
+  const { showPopup, feedbackModalProps } = useFeedbackPopup({ autoDismissMs: 2500 })
   const [filter, setFilter] = useState<AchievementPageFilter>("all")
   const [showForm, setShowForm] = useState(false)
   const [editingAchievement, setEditingAchievement] = useState<Achievement | null>(
@@ -93,6 +95,7 @@ export default function AchievementsPage() {
 
   async function handleSaved() {
     if (userId) await refreshAchievements()
+    showPopup({ type: "success", message: "Achievement saved" })
   }
 
   const handleDeleteAchievement = useCallback(
@@ -226,18 +229,35 @@ export default function AchievementsPage() {
           {showMilestonesTab ? null : pageLoading ? (
             <SkeletonAchievementsGrid count={6} />
           ) : visible.length === 0 ? (
-            <div className="rounded-xl border border-white/10 bg-white/5 p-8 text-center">
-              <p className="text-base text-white">
-                {achievements.length === 0
-                  ? "No achievements yet."
-                  : "No achievements match these filters."}
-              </p>
-              <p className="mt-2 text-sm text-gray-400">
-                {achievements.length === 0
-                  ? "Add payouts, passed evals, and milestone moments you want to remember."
-                  : "Try another filter or add a new achievement."}
-              </p>
-            </div>
+            <EmptyState
+              icon="🏆"
+              title={
+                achievements.length === 0
+                  ? "No achievements yet"
+                  : "No achievements match these filters"
+              }
+              description={
+                achievements.length === 0
+                  ? "Track payouts, passed evals, and milestone moments you want to remember."
+                  : "Try another filter or add a new achievement."
+              }
+              action={
+                achievements.length === 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingAchievement(null)
+                      setCreateInitialValues(undefined)
+                      setShowForm(true)
+                    }}
+                    className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600"
+                  >
+                    + Add Achievement
+                  </button>
+                ) : undefined
+              }
+              className="py-10"
+            />
           ) : (
             <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {visible.map((a) => (
@@ -283,6 +303,8 @@ export default function AchievementsPage() {
           }}
         />
       ) : null}
+
+      <FeedbackModal {...feedbackModalProps} />
     </>
   )
 }

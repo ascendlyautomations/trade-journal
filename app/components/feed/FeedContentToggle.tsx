@@ -32,15 +32,13 @@ function FeedContentToggle({
             title={id === "achievements" ? "Achievements" : undefined}
             className={`inline-flex shrink-0 items-center justify-center rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors sm:px-4 sm:text-sm ${
               contentType === id
-                ? "bg-green-500 text-white shadow-sm"
+                ? "bg-blue-500 text-white shadow-sm"
                 : "text-gray-400 hover:text-gray-200"
             }`}
           >
             {id === "achievements" ? (
               <>
-                <span className="text-base leading-none sm:hidden" aria-hidden>
-                  🏆
-                </span>
+                <span className="sm:hidden">🏆</span>
                 <span className="hidden sm:inline">Achievements</span>
               </>
             ) : (

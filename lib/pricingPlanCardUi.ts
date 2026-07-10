@@ -49,7 +49,7 @@ export const PRICING_PAGE_CTA_FINE_PRINT =
 /** "Why TradeTraxs Pro?" value bullets — pricing page. */
 export const PRICING_PAGE_WHY_PRO_BULLETS = [
   "Unlimited trades and trading accounts",
-  "AI Trade Analyst and weekly & monthly trading reports",
+  "AI Analyst and weekly & monthly trading reports",
   "Premium analytics and performance insights",
   "Backtest Lab and Prop Firm Mode",
   "Performance image exports for sharing your results",

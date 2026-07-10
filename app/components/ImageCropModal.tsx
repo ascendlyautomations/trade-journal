@@ -322,7 +322,7 @@ export default function ImageCropModal({
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6">
           <div
             ref={frameRef}
-            className={`relative w-full touch-none overflow-hidden border border-white/10 bg-[#111827] ${frameMaskClass}`}
+            className={`relative w-full touch-none overflow-hidden border border-white/10 bg-[#0f172a] ${frameMaskClass}`}
             style={{ aspectRatio: String(preset.fillAspect) }}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}

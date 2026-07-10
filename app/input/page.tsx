@@ -88,7 +88,7 @@ export default function InputPage() {
           className="bg-white/5 backdrop-blur-md border border-white/10 rounded-xl p-8 w-full max-w-md space-y-4"
         >
           <h1 className="text-2xl font-bold text-center text-blue-300">
-            Input Trade
+            Add Trade
           </h1>
 
           <input

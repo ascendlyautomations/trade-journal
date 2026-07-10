@@ -500,7 +500,7 @@ export default function Leaderboard() {
 
           <div className="rounded-xl border border-white/10 bg-white/5 p-4 backdrop-blur-md md:p-6">
             <h2 className="text-lg font-semibold text-blue-300">
-              Community Performance
+              Community Leaderboard
             </h2>
             <p className="mb-3 text-sm text-gray-400">
               Performance comparison of traders with public profiles.

@@ -314,7 +314,7 @@ export default function AdminPayoutRequestsPage() {
                 onClick={() => setTab(id)}
                 className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
                   tab === id
-                    ? "bg-white/15 text-white ring-1 ring-emerald-400/40"
+                    ? "bg-white/15 text-white ring-1 ring-blue-400/40"
                     : "bg-white/5 text-gray-300 hover:bg-white/10"
                 }`}
               >

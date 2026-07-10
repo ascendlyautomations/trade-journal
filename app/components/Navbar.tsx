@@ -561,7 +561,7 @@ export default function Navbar() {
                     : "text-gray-300 hover:text-white"
                 }`}
               >
-                Input Trade
+                Add Trade
               </IntentPrefetchLink>
               <IntentPrefetchLink
                 href="/dashboard"
@@ -907,7 +907,7 @@ export default function Navbar() {
             }`}
             onClick={closeMobile}
           >
-            Input Trade
+            Add Trade
           </IntentPrefetchLink>
 
           <IntentPrefetchLink

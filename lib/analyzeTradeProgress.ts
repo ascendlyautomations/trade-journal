@@ -7,17 +7,17 @@ export function getAnalyzeProgressStages(
   hasScreenshot: boolean
 ): AnalyzeProgressStage[] {
   const stages: AnalyzeProgressStage[] = [
-    { percent: 0, label: "Preparing analysis..." },
-    { percent: 20, label: "Reading trade details..." },
-    { percent: 40, label: "Reviewing execution..." },
-    { percent: 60, label: "Analyzing statistics..." },
+    { percent: 0, label: "Reviewing your trade…" },
+    { percent: 20, label: "Evaluating risk…" },
+    { percent: 40, label: "Finding strengths…" },
+    { percent: 60, label: "Analyzing psychology…" },
     {
       percent: 80,
       label: hasScreenshot
-        ? "Reviewing uploaded charts..."
-        : "Evaluating trade context...",
+        ? "Reviewing uploaded charts…"
+        : "Analyzing trade context…",
     },
-    { percent: 95, label: "Generating personalized coaching..." },
+    { percent: 95, label: "Generating personalized insights…" },
     { percent: 100, label: "Done" },
   ]
   return stages

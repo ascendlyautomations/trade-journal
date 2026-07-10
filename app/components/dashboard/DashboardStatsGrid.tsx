@@ -312,7 +312,7 @@ export default function DashboardStatsGrid({
           </>
         ) : (
           <p className="text-[11px] text-gray-400 md:text-sm">
-            Not enough trading history yet.
+            Upload your first trade to see streak insights.
           </p>
         )}
       </div>
@@ -326,7 +326,7 @@ export default function DashboardStatsGrid({
 
         {hourData === null ? (
           <p className="text-[11px] text-gray-400 md:text-sm">
-            Track additional trades to view insights.
+            Complete more trades to view trading hour insights.
           </p>
         ) : !hourData.hasValidTradingHoursData ? (
           <p className="text-xs text-white/60 md:text-sm">

@@ -161,8 +161,13 @@ export async function renderZoomPanCrop(
   const scaleX = preset.outputWidth / frame.width
   const scaleY = preset.outputHeight / frame.height
 
-  ctx.fillStyle = preset.letterboxColor ?? TRADE_IMAGE_LETTERBOX_COLOR
-  ctx.fillRect(0, 0, canvas.width, canvas.height)
+  const letterbox = preset.letterboxColor ?? TRADE_IMAGE_LETTERBOX_COLOR
+  if (letterbox && letterbox !== "transparent") {
+    ctx.fillStyle = letterbox
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+  } else {
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+  }
 
   if (preset.mask === "circle") {
     const radius = Math.min(canvas.width, canvas.height) / 2

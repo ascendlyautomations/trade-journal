@@ -1,6 +1,6 @@
 "use client"
 
-import EmptyState from "@/app/components/ui/EmptyState"
+import DashboardWidgetEmptyState from "@/app/components/dashboard/DashboardWidgetEmptyState"
 import { formatCurrency } from "@/lib/formatCurrency"
 
 export type DashboardMaxDrawdownProps = {
@@ -23,7 +23,7 @@ export default function DashboardMaxDrawdown({
         <h3 className="mb-1.5 text-[11px] text-gray-300 md:mb-2 md:text-sm">Max Drawdown</h3>
         {showEmpty ? (
           <p className="text-[11px] text-gray-400 md:text-sm">
-            Add more trades to unlock this metric.
+            Upload your first trade to unlock this metric.
           </p>
         ) : (
           <>
@@ -45,11 +45,7 @@ export default function DashboardMaxDrawdown({
         Max Drawdown
       </h2>
       {showEmpty ? (
-        <EmptyState
-          title="Not Enough Data Yet"
-          description="Add more trades to unlock detailed analytics."
-          className="py-6"
-        />
+        <DashboardWidgetEmptyState variant="no-trades" className="py-6" />
       ) : (
         <>
           <p className="text-2xl md:text-3xl font-semibold tabular-nums text-red-400">

@@ -37,7 +37,7 @@ export const TERMS_OF_SERVICE_SECTIONS: LegalSection[] = [
           TradeTraxs is a <strong>trading journal and social community platform</strong> for
           educational, record-keeping, and community purposes. The Service allows you to log and
           import trades, analyze performance, share content with other users, participate in Trade
-          Rooms, message other users, and access optional premium features such as AI Trade Analyst.
+          Rooms, message other users, and access optional premium features such as AI Analyst.
         </p>
         <p>
           <strong>TradeTraxs is not a broker, dealer, exchange, or investment adviser.</strong> We
@@ -111,7 +111,7 @@ export const TERMS_OF_SERVICE_SECTIONS: LegalSection[] = [
       <>
         <p>
           &quot;User Content&quot; means content you submit to the Service, including trades,
-          notes, images, videos, chart screenshots, reels, posts, comments, messages, room
+          notes, images, videos, chart screenshots, clips, posts, comments, messages, room
           messages, profile information, and feedback.
         </p>
         <p>
@@ -128,7 +128,7 @@ export const TERMS_OF_SERVICE_SECTIONS: LegalSection[] = [
         </p>
         <ul>
           <li>Images and chart screenshots;</li>
-          <li>Videos and reels;</li>
+          <li>Videos and clips;</li>
           <li>Posts, comments, and messages; and</li>
           <li>Any other media or text you submit.</li>
         </ul>
@@ -282,16 +282,16 @@ export const TERMS_OF_SERVICE_SECTIONS: LegalSection[] = [
   },
   {
     id: "ai-analyst",
-    title: "AI Trade Analyst Disclaimer",
+    title: "AI Analyst Disclaimer",
     content: (
       <>
         <p>
-          The AI Trade Analyst and related features use automated systems, including third-party AI
+          The AI Analyst and related features use automated systems, including third-party AI
           models, to generate commentary based on trade data and prompts you provide.
         </p>
         <p>
           <strong>AI output is for informational and educational purposes only — not financial
-          advice.</strong> AI Trade Analyst output may be inaccurate, incomplete, delayed, or
+          advice.</strong> AI Analyst output may be inaccurate, incomplete, delayed, or
           incorrect. Responses may take time to generate or fail to generate. You must independently
           verify any information before relying on it.
         </p>

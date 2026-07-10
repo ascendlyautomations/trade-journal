@@ -45,6 +45,7 @@ type TradesPageMainContentProps = {
   tradeStats: TradeStats
   displayedTrades: any[]
   visibleTradesLength: number
+  hasAnyTrades: boolean
   visibleCount: number
   accountById: Record<string, any>
   gateProfile: any | null
@@ -98,6 +99,7 @@ function TradesPageMainContent({
   tradeStats,
   displayedTrades,
   visibleTradesLength,
+  hasAnyTrades,
   visibleCount,
   accountById,
   gateProfile,
@@ -139,7 +141,7 @@ function TradesPageMainContent({
                 onClick={() => onResultFilterChange("all")}
                 className={`whitespace-nowrap rounded-md px-3 py-1 text-sm text-white ${
                   resultFilter === "all"
-                    ? "bg-emerald-500 hover:bg-emerald-600"
+                    ? "bg-blue-500 hover:bg-blue-600"
                     : "bg-white/10 hover:bg-white/20"
                 }`}
               >
@@ -276,13 +278,22 @@ function TradesPageMainContent({
             {displayedTrades.length === 0 ? (
               <div className="md:col-span-2">
                 <EmptyState
-                  title="No Trades Yet"
-                  description="Start tracking your performance by logging your first trade."
+                  title={
+                    hasAnyTrades
+                      ? "No Trades Match Your Filters"
+                      : "No Trades Yet"
+                  }
+                  description={
+                    hasAnyTrades
+                      ? "Try adjusting your account, date range, or result filters to see more trades."
+                      : "Start tracking your performance by logging your first trade."
+                  }
                   action={
+                    hasAnyTrades ? undefined : (
                     <div className="flex flex-wrap items-center justify-center gap-3">
                       <Link
                         href="/app"
-                        className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600"
+                        className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:hover:bg-blue-500"
                       >
                         Add Trade
                       </Link>
@@ -294,6 +305,7 @@ function TradesPageMainContent({
                         Import CSV
                       </button>
                     </div>
+                    )
                   }
                   className="py-10"
                 />

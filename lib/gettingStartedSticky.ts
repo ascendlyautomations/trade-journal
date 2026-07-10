@@ -25,10 +25,10 @@ const ALL_ITEM_IDS: GettingStartedChecklistItemId[] = [
 
 const ACTION_ITEM_IDS: GettingStartedChecklistItemId[] = [
   "trade",
-  "post",
   "follow",
   "room",
   "public",
+  "post",
 ]
 
 function serverActionTasksComplete(progress: GettingStartedProgress): number {

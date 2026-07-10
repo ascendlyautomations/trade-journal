@@ -376,6 +376,7 @@ export default function TradesPage() {
             tradeStats={tradeStats}
             displayedTrades={displayedTrades}
             visibleTradesLength={visibleTrades.length}
+            hasAnyTrades={trades.length > 0}
             visibleCount={visibleCount}
             accountById={accountById}
             gateProfile={gateProfile}

@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useState } from "react"
 import ProGate from "@/app/components/ProGate"
 import CopyTradingGroupEditorModal from "@/app/components/CopyTradingGroupEditorModal"
-import { ConfirmModal } from "@/app/components/ui"
+import { ConfirmModal, FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
+import EmptyState from "@/app/components/ui/EmptyState"
+import { LOADING_COPY } from "@/lib/loadingCopy"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import { supabase } from "@/lib/supabaseClient"
 import {
@@ -53,6 +55,7 @@ export default function CopyTradingGroupsSection({
   const [deleteTarget, setDeleteTarget] = useState<CopyTradingGroup | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const { showPopup, feedbackModalProps } = useFeedbackPopup({ autoDismissMs: 2500 })
 
   const description =
     variant === "settings"
@@ -123,6 +126,7 @@ export default function CopyTradingGroupsSection({
 
   async function handleSave(payload: { name: string; accountIds: string[] }) {
     if (!userId || saving) return
+    const wasEditing = Boolean(editingGroup)
     setSaving(true)
     setError(null)
 
@@ -151,6 +155,12 @@ export default function CopyTradingGroupsSection({
     setEditorOpen(false)
     setEditingGroup(null)
     await refresh()
+    showPopup({
+      type: "success",
+      message: wasEditing
+        ? "Copy trading group updated"
+        : "Copy trading group saved",
+    })
   }
 
   async function confirmDelete() {
@@ -201,14 +211,25 @@ export default function CopyTradingGroupsSection({
             <ProGate isPro={false} />
           </div>
         ) : loading ? (
-          <p className="mt-4 text-sm text-gray-500">Loading groups…</p>
+          <p className="mt-4 text-sm text-gray-500">{LOADING_COPY.copyTradingGroups}</p>
         ) : error ? (
           <p className="mt-4 text-sm text-red-300">{error}</p>
         ) : groups.length === 0 ? (
-          <p className="mt-4 text-sm text-gray-500">
-            No copy trading groups yet. Create one to journal the same trade across
-            multiple accounts at once.
-          </p>
+          <EmptyState
+            icon="📑"
+            title="No copy trading groups yet"
+            description="Create a group to journal the same trade across multiple accounts at once."
+            action={
+              <button
+                type="button"
+                onClick={openCreate}
+                className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600"
+              >
+                + Create Copy Trading Group
+              </button>
+            }
+            className="mt-4"
+          />
         ) : (
           <div className="mt-4 space-y-3">
             {groups.map((group) => {
@@ -294,6 +315,8 @@ export default function CopyTradingGroupsSection({
         }}
         onConfirm={() => void confirmDelete()}
       />
+
+      <FeedbackModal {...feedbackModalProps} />
     </>
   )
 }

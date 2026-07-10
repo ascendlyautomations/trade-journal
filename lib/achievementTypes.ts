@@ -160,6 +160,7 @@ export type Achievement = {
   account_type: string | null
   account_name: string | null
   account_size: string | null
+  account_id: string | null
   mode: string | null
   firm: string | null
   image_url: string | null
@@ -197,6 +198,7 @@ export const ACHIEVEMENT_SELECT = `
   account_type,
   account_name,
   account_size,
+  account_id,
   mode,
   firm,
   image_url,
@@ -313,6 +315,16 @@ export function isPayoutAchievementType(
     String(type ?? "")
       .trim()
       .toLowerCase() === ACHIEVEMENT_TYPE.LEGACY_PAYOUT
+  )
+}
+
+/** Payout and passed-eval achievements require a linked trading account. */
+export function achievementTypeRequiresTradingAccount(
+  type: string | null | undefined
+): boolean {
+  const canonical = canonicalAchievementType(type)
+  return (
+    isPayoutAchievementType(type) || canonical === ACHIEVEMENT_TYPE.PASSED_EVAL
   )
 }
 

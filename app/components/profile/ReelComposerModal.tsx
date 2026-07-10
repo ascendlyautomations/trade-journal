@@ -173,7 +173,7 @@ export default function ReelComposerModal({
     <Modal
       open={open}
       onClose={handleClose}
-      title={isTradeReplayEdit ? "Trade Replay" : isEditMode ? "Edit Clip" : "Create Clip"}
+      title={isTradeReplayEdit ? "Trade Clip" : isEditMode ? "Edit Clip" : "Create Clip"}
       size="md"
       panelClassName="max-w-lg p-4 sm:p-6"
       footer={
@@ -191,7 +191,7 @@ export default function ReelComposerModal({
               type="button"
               disabled={publishing}
               onClick={() => void handleSaveEdit()}
-              className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-500 disabled:opacity-50"
+              className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-600 disabled:opacity-50 disabled:hover:bg-blue-500"
             >
               {publishing ? "Saving…" : "Save"}
             </button>
@@ -200,7 +200,7 @@ export default function ReelComposerModal({
               type="button"
               disabled={publishing}
               onClick={handleClose}
-              className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-500 disabled:opacity-50"
+              className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-600 disabled:opacity-50 disabled:hover:bg-blue-500"
             >
               Done
             </button>
@@ -209,7 +209,7 @@ export default function ReelComposerModal({
               type="button"
               disabled={!videoFile || publishing || validating || uploadingRef.current}
               onClick={() => void handlePublish()}
-              className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-500 disabled:opacity-50"
+              className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-600 disabled:opacity-50 disabled:hover:bg-blue-500"
             >
               Publish
             </button>

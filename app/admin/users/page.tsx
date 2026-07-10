@@ -597,7 +597,7 @@ export default function AdminUsersPage() {
                         disabled={listLoading || p === currentPage}
                         onClick={() => goToPage(p)}
                         className={`min-w-[2rem] rounded px-2 py-1 text-xs tabular-nums ${
-                          p === currentPage ? "bg-emerald-600 text-white" : "bg-white/10 text-gray-200 hover:bg-white/20"
+                          p === currentPage ? "bg-blue-500 text-white" : "bg-white/10 text-gray-200 hover:bg-white/20"
                         } disabled:opacity-50`}
                       >
                         {p}
@@ -879,7 +879,7 @@ export default function AdminUsersPage() {
                     type="button"
                     disabled={moderationBusy || deleteView}
                     onClick={() => void handleUnban()}
-                    className="rounded bg-emerald-600 px-4 py-2 text-sm font-semibold hover:bg-emerald-500 disabled:opacity-50"
+                    className="rounded bg-blue-500 px-4 py-2 text-sm font-semibold hover:bg-blue-600 disabled:opacity-50 disabled:hover:bg-blue-500"
                   >
                     Unban user
                   </button>

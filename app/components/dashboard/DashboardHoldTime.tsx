@@ -1,6 +1,6 @@
 "use client"
 
-import EmptyState from "@/app/components/ui/EmptyState"
+import DashboardWidgetEmptyState from "@/app/components/dashboard/DashboardWidgetEmptyState"
 import { formatCurrency } from "@/lib/formatCurrency"
 import type { DurationExtreme, HoldTimeStats } from "@/lib/dashboardHoldTimeStats"
 import { formatHoldDurationSeconds } from "@/lib/tradeTimingDisplay"
@@ -58,17 +58,13 @@ export default function DashboardHoldTime({
       </h2>
 
       {showEmpty ? (
-        <EmptyState
-          title="Not Enough Data Yet"
-          description="Add more trades to unlock detailed analytics."
+        <DashboardWidgetEmptyState
+          variant="no-trades"
+          showImportCsv
           className="py-5 md:py-8"
         />
       ) : !stats.hasDurationData ? (
-        <EmptyState
-          title="No duration data"
-          description="Add duration_seconds or entry/exit times to unlock hold time analytics."
-          className="py-8"
-        />
+        <DashboardWidgetEmptyState variant="needs-duration" className="py-8" />
       ) : (
         <div className="space-y-3 md:space-y-4">
           <div className="flex min-h-[76px] flex-col items-center justify-center rounded-xl border border-white/10 bg-white/5 p-2.5 text-center md:min-h-[90px] md:p-3">

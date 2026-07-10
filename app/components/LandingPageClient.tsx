@@ -263,7 +263,7 @@ export default function LandingPageClient({
                 type="button"
                 disabled={checkoutLoading || loading}
                 onClick={() => void handleSubscribe()}
-                className="min-w-[200px] rounded-xl bg-emerald-500 px-6 py-3 font-semibold text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60 md:min-w-[220px] md:px-8 md:py-3.5"
+                className="min-w-[200px] rounded-xl bg-blue-500 px-6 py-3 font-semibold text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-blue-500 md:min-w-[220px] md:px-8 md:py-3.5"
               >
                 {checkoutLoading ? "Starting trial…" : trialCtaLabel}
               </button>

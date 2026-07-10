@@ -41,7 +41,7 @@ export const ABOUT_DIFFERENTIATORS: readonly AboutDifferentiator[] = [
   },
   {
     icon: "🤖",
-    title: "AI Trade Analyst",
+    title: "AI Analyst",
     description:
       "Receive AI-powered feedback designed to help improve your decision making.",
   },
@@ -58,12 +58,12 @@ export const ABOUT_DIFFERENTIATORS: readonly AboutDifferentiator[] = [
   },
   {
     icon: "🎥",
-    title: "Trade Replays",
+    title: "Trade Clips",
     description: "Review your execution with screenshots and replay videos.",
   },
   {
     icon: "🌍",
-    title: "Trading Community",
+    title: "Trade Rooms",
     description:
       "Share trades, clips, ideas, and learn from traders around the world.",
   },

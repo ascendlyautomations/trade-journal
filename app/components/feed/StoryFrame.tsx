@@ -40,7 +40,7 @@ export default function StoryFrame({
 
   return (
     <div
-      className={`relative flex flex-col overflow-hidden bg-black ${className}`}
+      className={`relative flex flex-col overflow-hidden bg-[#0f172a] ${className}`}
     >
       <div className="absolute left-3 right-14 top-3 z-[2] flex items-center gap-2.5">
         <ProfileAvatarImg
@@ -60,7 +60,7 @@ export default function StoryFrame({
       ) : null}
 
       <div
-        className={`absolute inset-0 z-0 flex items-center justify-center bg-black pt-11 ${
+        className={`absolute inset-0 z-0 flex items-center justify-center pt-11 ${
           hasFooter ? "pb-[4.75rem]" : ""
         }`}
       >

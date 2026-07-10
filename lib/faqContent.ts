@@ -22,7 +22,7 @@ export const TRADETRAXS_FAQ_ITEMS: FaqItem[] = [
   },
   {
     question: "Can I track multiple trading accounts?",
-    answer: `${TRADETRAXS_PRO_PLAN.name} includes unlimited trading accounts. ${TRADETRAXS_FREE_PLAN.name} is designed for getting started with manual trade journaling and community features.`,
+    answer: `${TRADETRAXS_PRO_PLAN.name} includes unlimited trading accounts. ${TRADETRAXS_FREE_PLAN.name} is designed for getting started with manual trade journaling, Trade Rooms, and social features.`,
   },
   {
     question: "What does the Free plan include?",
@@ -34,7 +34,7 @@ export const TRADETRAXS_FAQ_ITEMS: FaqItem[] = [
   },
   {
     question: "What stats does TradeTraxs show?",
-    answer: `${TRADETRAXS_FREE_PLAN.name} includes basic trading statistics. ${TRAXPRO_PLAN_NAME} unlocks advanced performance analytics, AI Trade Analyst, Backtest Lab, Prop Firm Mode, and advanced trade insights.`,
+    answer: `${TRADETRAXS_FREE_PLAN.name} includes basic trading statistics. ${TRAXPRO_PLAN_NAME} unlocks advanced performance analytics, AI Analyst, Backtest Lab, Prop Firm Mode, and advanced trade insights.`,
   },
   {
     question: "Can I share my trades publicly?",
@@ -54,7 +54,7 @@ export const TRADETRAXS_FAQ_ITEMS: FaqItem[] = [
   },
   {
     question: "Can I message other traders?",
-    answer: `${TRADETRAXS_FREE_PLAN.name} includes Trade Rooms and community features. ${TRAXPRO_PLAN_NAME} adds unlimited journaling, AI Trade Analyst, Backtest Lab, Prop Firm Mode, and advanced performance analytics.`,
+    answer: `${TRADETRAXS_FREE_PLAN.name} includes Trade Rooms and social features. ${TRAXPRO_PLAN_NAME} adds unlimited journaling, AI Analyst, Backtest Lab, Prop Firm Mode, and advanced performance analytics.`,
   },
   {
     question: "Is there a leaderboard?",

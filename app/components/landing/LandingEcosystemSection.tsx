@@ -58,7 +58,7 @@ const ECOSYSTEM = [
     tag: "Analytics",
   },
   {
-    title: "AI Trade Analyst",
+    title: "AI Analyst",
     description: "Get a second opinion on patterns, entries, and habits.",
     tag: "TraxPro",
   },

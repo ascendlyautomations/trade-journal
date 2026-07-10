@@ -9,6 +9,9 @@ import {
   resolveRecordedAffiliateEarnings,
 } from "@/lib/affiliateEarnings"
 import { useToast } from "@/app/components/ui"
+import EmptyState from "@/app/components/ui/EmptyState"
+import { SkeletonReferralsPage } from "@/app/components/ui/skeletons"
+import { LOADING_COPY } from "@/lib/loadingCopy"
 import { useUserProfile } from "@/lib/useUserProfile"
 import { fetchSettingsProfileRow } from "@/lib/settingsProfileSync"
 import { readSettingsProfileCache } from "@/lib/settingsProfileCache"
@@ -160,11 +163,17 @@ export default function ReferralsPage() {
 
   if (loading) {
     return (
-      <>
-        <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white">
-          Loading…
+      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 py-8 text-white sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-5xl">
+          <div className="mb-8">
+            <h1 className="text-2xl font-bold text-blue-300 sm:text-3xl">
+              Referral stats
+            </h1>
+            <p className="mt-2 text-sm text-gray-400">{LOADING_COPY.referrals}</p>
+          </div>
+          <SkeletonReferralsPage />
         </div>
-      </>
+      </div>
     )
   }
 
@@ -238,7 +247,7 @@ export default function ReferralsPage() {
                 <button
                   type="button"
                   onClick={() => void copyLink()}
-                  className="shrink-0 rounded-xl bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-emerald-600"
+                  className="shrink-0 rounded-xl bg-blue-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-600 disabled:hover:bg-blue-500"
                 >
                   {copyDone ? "Copied!" : "Copy link"}
                 </button>
@@ -255,9 +264,23 @@ export default function ReferralsPage() {
             </p>
 
             {referrals.length === 0 ? (
-              <p className="mt-6 text-center text-sm text-gray-500">
-                No referrals yet. Share your link to get started.
-              </p>
+              <EmptyState
+                icon="🔗"
+                title="No referrals yet"
+                description="Share your link to start earning when traders join TradeTraxs."
+                action={
+                  referralCode ? (
+                    <button
+                      type="button"
+                      onClick={() => void copyLink()}
+                      className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:hover:bg-blue-500"
+                    >
+                      {copyDone ? "Copied!" : "Copy referral link"}
+                    </button>
+                  ) : undefined
+                }
+                className="mt-6 border-0 bg-transparent py-6"
+              />
             ) : (
               <ul className="mt-4 divide-y divide-white/10">
                 {referrals.map((r) => (

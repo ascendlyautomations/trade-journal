@@ -291,7 +291,7 @@ export default function AboutPage() {
                     type="button"
                     disabled={checkoutLoading || loading}
                     onClick={() => void handleStartTrial()}
-                    className="min-w-[220px] rounded-xl bg-emerald-500 px-8 py-3.5 font-semibold text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="min-w-[220px] rounded-xl bg-blue-500 px-8 py-3.5 font-semibold text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-blue-500"
                   >
                     {checkoutLoading ? "Starting trial…" : ABOUT_CTA.trialLabel}
                   </button>

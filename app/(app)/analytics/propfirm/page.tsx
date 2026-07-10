@@ -54,6 +54,8 @@ import Modal from "@/app/components/ui/Modal"
 import AchievementUploadModal, {
   type AchievementUploadInitialValues,
 } from "@/app/components/AchievementUploadModal"
+import { fetchAchievementsForAccounts } from "@/lib/fetchAccountAchievements"
+import type { Achievement } from "@/lib/achievements"
 import CreateAccountModal from "@/app/components/CreateAccountModal"
 import PropFirmEvalContinuanceModal from "@/app/components/propfirm/PropFirmEvalContinuanceModal"
 import PropFirmFundedRulesChoiceModal from "@/app/components/propfirm/PropFirmFundedRulesChoiceModal"
@@ -324,6 +326,9 @@ export default function PropFirmPage() {
     Record<string, AccountPayoutCycle[]>
   >({})
   const [loadingPayoutHistory, setLoadingPayoutHistory] = useState(false)
+  const [accountAchievements, setAccountAchievements] = useState<Achievement[]>([])
+  const [loadingAccountAchievements, setLoadingAccountAchievements] =
+    useState(false)
   const [payoutModalOpen, setPayoutModalOpen] = useState(false)
   const [payoutSetupOpen, setPayoutSetupOpen] = useState(false)
   const [payoutSetupKey, setPayoutSetupKey] = useState(0)
@@ -414,8 +419,17 @@ export default function PropFirmPage() {
   ])
 
   const payoutHistorySubtitle = isAllAccountsView
-    ? "Every payout recorded across your funded prop firm accounts, newest first."
-    : "View every payout recorded for this trading account."
+    ? "Payouts and achievements across your prop firm accounts, newest first."
+    : "View payouts and achievements recorded for this trading account."
+
+  const visibleAccountAchievements = useMemo(() => {
+    if (isAllAccountsView) return accountAchievements
+    if (!selectedAccount) return []
+    return accountAchievements.filter(
+      (achievement) =>
+        String(achievement.account_id) === String(selectedAccount.id)
+    )
+  }, [accountAchievements, isAllAccountsView, selectedAccount])
 
   const payoutCycleContext = useMemo(() => {
     const startingBalance = selectedAccount
@@ -563,6 +577,49 @@ export default function PropFirmPage() {
       cancelled = true
     }
   }, [planChecked, hasProAccess, accountsLoaded, fundedAccounts, user?.id])
+
+  useEffect(() => {
+    if (!planChecked || !hasProAccess || !user?.id) return
+
+    const accountIds = isAllAccountsView
+      ? accounts.map((account) => account.id)
+      : selectedAccount
+        ? [selectedAccount.id]
+        : []
+
+    if (accountIds.length === 0) {
+      setAccountAchievements([])
+      return
+    }
+
+    let cancelled = false
+
+    async function loadAccountAchievements() {
+      setLoadingAccountAchievements(true)
+      try {
+        const rows = await fetchAchievementsForAccounts(
+          supabase,
+          user.id,
+          accountIds
+        )
+        if (!cancelled) setAccountAchievements(rows)
+      } finally {
+        if (!cancelled) setLoadingAccountAchievements(false)
+      }
+    }
+
+    void loadAccountAchievements()
+    return () => {
+      cancelled = true
+    }
+  }, [
+    accounts,
+    hasProAccess,
+    isAllAccountsView,
+    planChecked,
+    selectedAccount,
+    user?.id,
+  ])
 
   useEffect(() => {
     if (!planChecked || !hasProAccess) return
@@ -731,15 +788,8 @@ export default function PropFirmPage() {
   }
 
   async function handleAchievementSaved() {
-    const shouldOpenContinuance =
-      activeMilestoneKind === "passed_eval" && evalContinuanceAccount != null
-
     setActiveMilestoneKind(null)
     setAchievementUploadInitial(undefined)
-
-    if (shouldOpenContinuance) {
-      setEvalContinuanceOpen(true)
-    }
   }
 
   function closeEvalMilestoneFlow() {
@@ -1040,8 +1090,9 @@ export default function PropFirmPage() {
           onClose={() => setPayoutHistoryOpen(false)}
           subtitle={payoutHistorySubtitle}
           payouts={completedPayoutHistory}
+          achievements={visibleAccountAchievements}
           showAccountNames={isAllAccountsView}
-          loading={loadingPayoutHistory}
+          loading={loadingPayoutHistory || loadingAccountAchievements}
         />
 
         <Modal
@@ -1100,6 +1151,7 @@ export default function PropFirmPage() {
           userId={user?.id ?? null}
           initialValues={achievementUploadInitial}
           onSaved={handleAchievementSaved}
+          propFirmPayoutAlreadyRecorded={activeMilestoneKind === "payout"}
           lockAchievementType={milestoneUploadConfig.lockAchievementType}
           dialogTitle={milestoneUploadConfig.dialogTitle}
           dialogSubtitle={milestoneUploadConfig.dialogSubtitle}
@@ -1536,7 +1588,7 @@ export default function PropFirmPage() {
             action={
               <Link
                 href="/settings#trading-accounts"
-                className="inline-flex items-center justify-center rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600"
+                className="inline-flex items-center justify-center rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:hover:bg-blue-500"
               >
                 Create Prop Firm Account
               </Link>

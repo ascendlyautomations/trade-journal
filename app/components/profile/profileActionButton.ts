@@ -1,3 +1,8 @@
-/** Primary profile header action (View Trade Room, + Create, etc.). */
-export const PROFILE_PRIMARY_ACTION_BUTTON_CLASS =
-  "px-6 py-2 rounded-lg bg-green-500 font-semibold text-sm text-white hover:bg-green-600"
+import { buttonVariants } from "@/app/components/ui/Button"
+
+/** Primary profile header action (+ Create, View Trade Room) — shared primary Button with profile px-6. */
+export const PROFILE_PRIMARY_ACTION_BUTTON_CLASS = buttonVariants({
+  variant: "primary",
+  size: "md",
+  className: "px-6",
+})

@@ -32,7 +32,7 @@ export default function DemoBanner() {
           <Link
             href="/login?tab=signup"
             onClick={() => enterSignupFlow()}
-            className="hidden shrink-0 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600 sm:inline-flex"
+            className="hidden shrink-0 rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:hover:bg-blue-500 sm:inline-flex"
           >
             Start {TRAXPRO_TRIAL_HEADLINE}
           </Link>

@@ -81,13 +81,13 @@ export default function DetailModalShell({
     layout === "split" && splitPanel != null ? (
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
         {splitMedia ? (
-          <div className="hidden md:flex md:min-h-0 md:flex-1 md:items-center md:justify-center md:border-r md:border-white/10 md:bg-black/40 md:p-3">
+          <div className="hidden md:flex md:min-h-0 md:flex-1 md:items-center md:justify-center md:border-r md:border-white/10 md:p-3">
             {splitMedia}
           </div>
         ) : null}
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:w-[400px] md:shrink-0 lg:w-[420px]">
           {splitMedia && !suppressMobileSplitMedia ? (
-            <div className="shrink-0 bg-black/30 md:hidden">{splitMedia}</div>
+            <div className="shrink-0 md:hidden">{splitMedia}</div>
           ) : null}
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             {splitPanel}

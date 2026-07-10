@@ -81,7 +81,7 @@ describe("computeGettingStartedProgress", () => {
     assert.equal(p.completedCount, 1)
   })
 
-  it("scenario F: all six tasks complete at 6/6", () => {
+  it("scenario F: all five tasks complete at 5/5", () => {
     const p = computeGettingStartedProgress({
       onboardingCompleted: true,
       tradeCount: 3,
@@ -90,24 +90,18 @@ describe("computeGettingStartedProgress", () => {
       hasEverJoinedOtherRoom: true,
       hasPublicTrade: true,
     })
-    assert.equal(p.completedCount, 6)
-    assert.equal(p.totalCount, 6)
+    assert.equal(p.completedCount, 5)
+    assert.equal(p.totalCount, 5)
     assert.equal(p.allComplete, true)
   })
 
-  it("profile task uses onboarding_completed only", () => {
-    const incomplete = computeGettingStartedProgress({
-      ...EMPTY,
-      tradeCount: 5,
-      onboardingCompleted: false,
-    })
-    assert.equal(itemComplete(incomplete, "profile"), false)
-
-    const complete = computeGettingStartedProgress({
+  it("does not include a redundant profile task after onboarding", () => {
+    const p = computeGettingStartedProgress({
       ...EMPTY,
       onboardingCompleted: true,
     })
-    assert.equal(itemComplete(complete, "profile"), true)
+    assert.equal(p.items.find((i) => i.id === "profile"), undefined)
+    assert.equal(p.totalCount, 5)
   })
 
   it("detects newly completed tasks between snapshots", () => {
@@ -116,7 +110,7 @@ describe("computeGettingStartedProgress", () => {
     const newly = detectNewlyCompletedTasks(before, after)
     assert.equal(newly.length, 1)
     assert.equal(newly[0].id, "trade")
-    assert.equal(newly[0].label, "Log your first trade")
+    assert.equal(newly[0].label, "Add your first trade")
   })
 })
 
@@ -237,7 +231,7 @@ describe("applyStickyGettingStartedProgress", () => {
       profilePostCount: 0,
     })
 
-    assert.equal(merged.completedCount, 1)
+    assert.equal(merged.completedCount, 0)
     assert.equal(merged.items.find((i) => i.id === "trade")?.complete, false)
   })
 })

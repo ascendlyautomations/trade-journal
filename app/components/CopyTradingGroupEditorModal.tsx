@@ -104,7 +104,7 @@ export default function CopyTradingGroupEditorModal({
             type="button"
             onClick={handleSubmit}
             disabled={saving || !name.trim() || selectedIds.length === 0}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-blue-500"
           >
             {saving ? (
               <>
@@ -158,7 +158,7 @@ export default function CopyTradingGroupEditorModal({
                     className={cn(
                       "flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition",
                       checked
-                        ? "border-emerald-400/40 bg-emerald-500/10"
+                        ? "border-blue-400/40 bg-blue-500/10"
                         : "border-white/10 bg-white/[0.03] hover:bg-white/[0.06]"
                     )}
                   >
@@ -167,7 +167,7 @@ export default function CopyTradingGroupEditorModal({
                       checked={checked}
                       disabled={saving}
                       onChange={() => toggleAccount(account.id)}
-                      className="mt-1 accent-emerald-500"
+                      className="mt-1 accent-blue-500"
                       aria-label={`Include ${tradingAccountDisplayTitle(account)}`}
                     />
                     <span className="min-w-0 flex-1">

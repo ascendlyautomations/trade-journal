@@ -1,10 +1,11 @@
 "use client"
 
-import Link from "next/link"
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/app/components/ui"
 import { useUserProfile } from "@/lib/useUserProfile"
+import { supabase } from "@/lib/supabaseClient"
+import { markProfileUseFreeTier } from "@/lib/markFreeTierSignup"
 import { startTraxProCheckout } from "@/lib/startTraxProCheckout"
 import {
   isSubscriptionGateSuspended,
@@ -19,11 +20,14 @@ import {
   type TraxProBillingIntervalId,
 } from "@/lib/traxProBillingPlans"
 import { setCheckoutBillingInterval } from "@/lib/signupFlow"
+import { LOADING_COPY } from "@/lib/loadingCopy"
 
 export default function FinishTrialPage() {
   const router = useRouter()
-  const { user, profile, loading, membershipReconciling } = useUserProfile()
+  const { user, profile, loading, membershipReconciling, refreshProfile } =
+    useUserProfile()
   const [checkoutLoading, setCheckoutLoading] = useState(false)
+  const [continueLoading, setContinueLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [billingInterval, setBillingInterval] = useState<TraxProBillingIntervalId>(
     TRAXPRO_DEFAULT_BILLING_INTERVAL
@@ -64,10 +68,29 @@ export default function FinishTrialPage() {
     }
   }
 
+  async function handleContinueFree() {
+    if (!user?.id || continueLoading || checkoutLoading) return
+    setContinueLoading(true)
+    setError(null)
+    try {
+      const result = await markProfileUseFreeTier(supabase, user.id)
+      if (!result.ok) {
+        setError(result.error ?? "Could not continue on Free. Please try again.")
+        setContinueLoading(false)
+        return
+      }
+      await refreshProfile()
+      router.replace("/dashboard")
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.")
+      setContinueLoading(false)
+    }
+  }
+
   if (loading || !user || !profile || !needsSubscriptionCheckout(profile)) {
     return (
       <div className="flex min-h-screen items-center justify-center px-4 text-gray-300">
-        Loading…
+        {LOADING_COPY.finishTrial}
       </div>
     )
   }
@@ -83,12 +106,13 @@ export default function FinishTrialPage() {
       <div className="absolute inset-0 bg-black/70" aria-hidden />
 
       <div className="relative z-10 w-full max-w-lg rounded-2xl border border-white/10 bg-[#0f172a]/95 p-8 shadow-2xl backdrop-blur-md">
-        <p className="text-sm font-semibold uppercase tracking-wide text-blue-300">
-          Finish Your Free Trial
+        <p className="text-sm font-semibold uppercase tracking-wide text-emerald-300">
+          You&apos;re all set
         </p>
-        <h1 className="mt-2 text-3xl font-bold text-blue-300">You&apos;re almost done!</h1>
+        <h1 className="mt-2 text-3xl font-bold text-blue-300">Your profile is ready</h1>
         <p className="mt-4 text-sm leading-relaxed text-gray-300">
-          Start your {TRAXPRO_TRIAL_HEADLINE.toLowerCase()} to access {TRADETRAXS_PRO_PLAN.name}.{" "}
+          Continue on the Free plan anytime, or start your{" "}
+          {TRAXPRO_TRIAL_HEADLINE.toLowerCase()} to unlock {TRADETRAXS_PRO_PLAN.name} —{" "}
           {TRADETRAXS_PRO_PLAN.description}
         </p>
 
@@ -99,7 +123,7 @@ export default function FinishTrialPage() {
               setBillingInterval(interval)
               setCheckoutBillingInterval(interval)
             }}
-            disabled={checkoutLoading}
+            disabled={checkoutLoading || continueLoading}
             name="finish-trial-billing"
           />
         </div>
@@ -111,21 +135,27 @@ export default function FinishTrialPage() {
         ) : null}
 
         <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-          <Link
-            href="/"
-            className="inline-flex items-center justify-center rounded-lg border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-medium text-gray-200 transition hover:bg-white/10"
-          >
-            Back to Homepage
-          </Link>
           <Button
             type="button"
-            disabled={checkoutLoading}
-            onClick={() => void handleStartTrial()}
-            className="rounded-lg bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-60"
+            variant="secondary"
+            disabled={checkoutLoading || continueLoading}
+            onClick={() => void handleContinueFree()}
           >
-            {checkoutLoading ? "Starting trial…" : "Start Trial"}
+            {continueLoading ? "Continuing…" : "Continue to Dashboard"}
+          </Button>
+          <Button
+            type="button"
+            variant="accent"
+            disabled={checkoutLoading || continueLoading}
+            onClick={() => void handleStartTrial()}
+          >
+            {checkoutLoading ? "Starting trial…" : "Upgrade to Pro"}
           </Button>
         </div>
+
+        <p className="mt-4 text-center text-xs text-gray-500">
+          No pressure — upgrade whenever you&apos;re ready.
+        </p>
       </div>
     </div>
   )

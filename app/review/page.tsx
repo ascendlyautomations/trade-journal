@@ -79,9 +79,9 @@ export default function ReviewPage() {
             <button
               type="button"
               onClick={() => router.push("/app")}
-              className="mt-4 rounded bg-emerald-500 px-4 py-2 font-semibold hover:bg-emerald-600"
+              className="mt-4 rounded bg-blue-500 px-4 py-2 font-semibold hover:bg-blue-600 disabled:hover:bg-blue-500"
             >
-              Back to Input Trade
+              Back to Add Trade
             </button>
           </div>
         </div>
@@ -103,7 +103,7 @@ export default function ReviewPage() {
                 type="button"
                 onClick={() => setShowApproveAllConfirm(true)}
                 disabled={!trades.length}
-                className="rounded bg-emerald-600 px-3 py-2 text-sm font-semibold hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="rounded bg-blue-500 px-3 py-2 text-sm font-semibold hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-blue-500"
               >
                 Approve All
               </button>
@@ -191,7 +191,7 @@ export default function ReviewPage() {
                 type="button"
                 onClick={() => void handleApproveAll()}
                 disabled={bulkApproving}
-                className="rounded bg-emerald-600 px-3 py-2 text-sm font-semibold hover:bg-emerald-500 disabled:opacity-60"
+                className="rounded bg-blue-500 px-3 py-2 text-sm font-semibold hover:bg-blue-600 disabled:opacity-60 disabled:hover:bg-blue-500"
               >
                 {bulkApproving ? "Approving..." : "Approve All"}
               </button>

@@ -10,7 +10,7 @@ import {
   CartesianGrid,
   ResponsiveContainer,
 } from "recharts"
-import EmptyState from "@/app/components/ui/EmptyState"
+import DashboardWidgetEmptyState from "@/app/components/dashboard/DashboardWidgetEmptyState"
 import { formatEST } from "@/lib/formatEST"
 import { formatCurrency } from "@/lib/formatCurrency"
 import { formatDecimal } from "@/lib/formatDisplay"
@@ -33,9 +33,9 @@ export type DashboardEquityCurveProps = {
 
 function ChartEmptyState() {
   return (
-    <EmptyState
-      title="Not Enough Data Yet"
-      description="Add more trades to unlock detailed analytics."
+    <DashboardWidgetEmptyState
+      variant="no-trades"
+      showImportCsv
       className="py-8"
     />
   )

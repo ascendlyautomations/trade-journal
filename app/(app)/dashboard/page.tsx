@@ -48,6 +48,7 @@ import {
 } from "@/lib/tradeAccountDisplay"
 import DashboardPremiumPreviewSection from "../../components/dashboard/DashboardPremiumPreviewSection"
 import ProUpgradeModal from "../../components/ProUpgradeModal"
+import DashboardWidgetEmptyState from "../../components/dashboard/DashboardWidgetEmptyState"
 import EmptyState from "../../components/ui/EmptyState"
 import { SkeletonDashboardShell } from "../../components/ui/skeletons"
 import Link from "next/link"
@@ -1419,9 +1420,8 @@ const biggestLoss = losses.length > 0
     return checklist ? <div className="hidden md:block">{checklist}</div> : null
   })()
 
-  /** Mobile only: inline checklist for brand-new users with no trades yet. */
+  /** Mobile: show checklist while getting-started tasks remain (not only before first trade). */
   const gettingStartedSectionMobile = (() => {
-    if (!hasNoTrades || statsStillLoading) return null
     const checklist = renderGettingStartedChecklist()
     return checklist ? <div className="md:hidden">{checklist}</div> : null
   })()
@@ -1571,16 +1571,25 @@ const biggestLoss = losses.length > 0
       <div className="max-h-[28rem] space-y-2 overflow-y-auto pr-1 md:space-y-3">
         {recentTradesList.length === 0 ? (
           <EmptyState
+            icon="📋"
             title="No recent trades"
             description="Your latest trades will appear here once you log activity."
             action={
               tradesExcludingBacktest.length === 0 ? (
-                <Link
-                  href="/app"
-                  className="text-sm font-medium text-blue-300 hover:text-blue-200"
-                >
-                  Add Trade →
-                </Link>
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  <Link
+                    href="/app"
+                    className="rounded-lg bg-blue-500 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:hover:bg-blue-500"
+                  >
+                    + Add Trade
+                  </Link>
+                  <Link
+                    href="/import"
+                    className="rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-white/15"
+                  >
+                    Import CSV
+                  </Link>
+                </div>
               ) : undefined
             }
             className="border-0 bg-transparent py-6"
@@ -1771,7 +1780,7 @@ const biggestLoss = losses.length > 0
         <div className="mt-4 flex flex-wrap items-center gap-2 md:mt-6 md:gap-3">
           <Link
             href="/app"
-            className="inline-flex min-h-[44px] items-center rounded-lg bg-emerald-500 px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-emerald-600 md:px-4 md:text-sm"
+            className="inline-flex min-h-[44px] items-center rounded-lg bg-blue-500 px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-blue-600 md:px-4 md:text-sm disabled:hover:bg-blue-500"
           >
             Add Trade
           </Link>
@@ -1900,9 +1909,11 @@ const biggestLoss = losses.length > 0
       <h3 className={dashboardInsightTitleClass}>Symbol Performance</h3>
 
       {symbolPerformanceRows.length === 0 ? (
-        <EmptyState
-          title="Not Enough Data Yet"
-          description="Add more trades to unlock detailed analytics."
+        <DashboardWidgetEmptyState
+          variant={
+            tradesExcludingBacktest.length === 0 ? "no-trades" : "needs-more-trades"
+          }
+          showImportCsv={tradesExcludingBacktest.length === 0}
           className="py-8"
         />
       ) : (

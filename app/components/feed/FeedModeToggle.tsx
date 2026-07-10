@@ -18,7 +18,7 @@ function FeedModeToggle({ mode, onModeChange }: FeedModeToggleProps) {
           onClick={() => onModeChange("following")}
           className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
             mode === "following"
-              ? "bg-green-500 text-white shadow-sm"
+              ? "bg-blue-500 text-white shadow-sm"
               : "text-gray-400 hover:text-gray-200"
           }`}
         >
@@ -30,7 +30,7 @@ function FeedModeToggle({ mode, onModeChange }: FeedModeToggleProps) {
           onClick={() => onModeChange("global")}
           className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
             mode === "global"
-              ? "bg-green-500 text-white shadow-sm"
+              ? "bg-blue-500 text-white shadow-sm"
               : "text-gray-400 hover:text-gray-200"
           }`}
         >

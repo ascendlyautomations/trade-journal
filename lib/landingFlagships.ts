@@ -62,7 +62,7 @@ export const LANDING_FLAGSHIPS: LandingFlagship[] = [
   },
   {
     id: "flagship-ai",
-    title: "AI Trade Analyst",
+    title: "AI Analyst",
     tagline:
       "Discover patterns, uncover mistakes, and receive AI-powered insights that help you become a more consistent trader.",
     bonuses: "Advanced Analytics · Performance Insights",

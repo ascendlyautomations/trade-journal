@@ -34,7 +34,7 @@ export const LANDING_COMPARISON_MOBILE_PREVIEW_COUNT = 3
 export const LANDING_COMPARISON_FEATURE_LABELS = {
   aiTradeAnalyst: TRADETRAXS_PRO_FEATURE_LABELS.aiTradeAnalyst,
   propFirmMode: TRADETRAXS_PRO_FEATURE_LABELS.propFirmMode,
-  communityTradeRooms: "Community & Trade Rooms",
+  communityTradeRooms: "Trade Rooms",
   performanceAnalytics: TRADETRAXS_FEATURE_LABELS.premiumAnalytics,
   brandedShareCards: TRADETRAXS_FEATURE_LABELS.performanceImageExports,
   backtestLab: TRADETRAXS_PRO_FEATURE_LABELS.backtestLab,

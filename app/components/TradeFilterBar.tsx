@@ -388,7 +388,7 @@ export default function TradeFilterBar({
                   setSelectedTimeframe("Specific Date")
                   setTimeframeOpen(false)
                 }}
-                className="w-full mt-2 py-2 rounded-lg bg-green-500 text-black font-medium"
+                className="w-full mt-2 py-2 rounded-lg bg-blue-500 text-white font-medium hover:bg-blue-600 disabled:hover:bg-blue-500"
               >
                 Apply Specific Date
               </button>
@@ -423,7 +423,7 @@ export default function TradeFilterBar({
                   setSelectedTimeframe("Custom")
                   setTimeframeOpen(false)
                 }}
-                className="w-full mt-2 py-2 rounded-lg bg-green-500 text-black font-medium"
+                className="w-full mt-2 py-2 rounded-lg bg-blue-500 text-white font-medium hover:bg-blue-600 disabled:hover:bg-blue-500"
               >
                 Apply Range
               </button>

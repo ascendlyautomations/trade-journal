@@ -489,7 +489,7 @@ export default function TradingAccountsSettingsSection({
               type="button"
               onClick={() => setShowCreateModal(true)}
               disabled={creating || !userId}
-              className="rounded-xl border border-emerald-500/40 bg-emerald-500/15 px-4 py-2.5 text-sm font-medium text-emerald-200 transition hover:bg-emerald-500/25 disabled:opacity-50"
+              className="rounded-xl border border-blue-500/40 bg-blue-500/15 px-4 py-2.5 text-sm font-medium text-blue-200 transition hover:bg-blue-500/25 disabled:opacity-50"
             >
               + Add Account
             </button>

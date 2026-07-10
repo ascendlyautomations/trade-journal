@@ -370,7 +370,7 @@ export default function CsvImportPanel({
         execute: async (report) => {
           importingRef.current = true
           setLoading(true)
-          report({ percent: 5, stage: "Preparing…" })
+          report({ percent: 5, stage: "Reading CSV…" })
 
           if (!user?.id) {
             throw new Error("Please log in first.")
@@ -385,7 +385,7 @@ export default function CsvImportPanel({
             throw new Error(rateLimit.message)
           }
 
-          report({ percent: 12, stage: "Processing…" })
+          report({ percent: 12, stage: "Matching columns…" })
 
           const { data: profile, error: profileErr } = await supabase
             .from("profiles")
@@ -431,7 +431,7 @@ export default function CsvImportPanel({
 
           const isInitialImportOnRows = !hasUsedInitialImport
 
-          report({ percent: 40, stage: "Importing…" })
+          report({ percent: 40, stage: "Importing trades…" })
 
           let error: { message?: string; details?: string; hint?: string } | null =
             null
@@ -683,9 +683,9 @@ export default function CsvImportPanel({
             csvImportBlocked ||
             (requireSelectedAccount && !selectedAccount)
           }
-          className="w-full rounded-xl bg-emerald-500 px-4 py-2.5 font-semibold text-white transition hover:bg-emerald-600 disabled:opacity-60"
+          className="w-full rounded-xl bg-blue-500 px-4 py-2.5 font-semibold text-white transition hover:bg-blue-600 disabled:opacity-60 disabled:hover:bg-blue-500"
         >
-          {loading ? "Importing..." : "Import trades"}
+          {loading ? "Importing trades…" : "Import trades"}
         </button>
       ) : null}
     </div>

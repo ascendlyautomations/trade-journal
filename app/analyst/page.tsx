@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import LockedFeature from "../components/LockedFeature"
 import { useCallback, useEffect, useRef, useState, Suspense, type Dispatch, type ReactNode, type SetStateAction } from "react"
 import { createPortal } from "react-dom"
@@ -16,6 +17,7 @@ import { useUserProfile } from "@/lib/UserProfileProvider"
 import { useCachedTrades } from "@/lib/useAppDataCache"
 import { getCachedTrades, upsertTradeInCache } from "@/lib/appDataCache"
 import { SkeletonAnalystPanel } from "../components/ui/skeletons"
+import EmptyState from "../components/ui/EmptyState"
 import { NAVBAR_HEIGHT_CLASS } from "@/app/components/ui/DetailModalShell"
 import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
 import { useModalScrollLock } from "@/app/components/ui/modalLayout"
@@ -305,7 +307,7 @@ function AnalystTradeDetailPanel({
             type="button"
             onClick={onRunAnalysis}
             disabled={loading || analysisInProgress}
-            className="rounded-lg bg-emerald-500 px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-lg bg-blue-500 px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-blue-500"
           >
             {analysisInProgress ? "Analyzing…" : "Analyze Trade"}
           </button>
@@ -351,7 +353,7 @@ function AnalystTradeDetailPanel({
             type="button"
             onClick={onSendMessage}
             disabled={loading}
-            className="rounded bg-emerald-500 px-4 disabled:opacity-60"
+            className="rounded bg-blue-500 px-4 hover:bg-blue-600 disabled:opacity-60 disabled:hover:bg-blue-500"
           >
             Send
           </button>
@@ -450,7 +452,7 @@ export default function AnalystPage() {
       fallback={
         <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] p-10">
           <h1 className="mb-8 text-center text-3xl text-blue-300">
-            AI Trade Analyst
+            AI Analyst
           </h1>
           <SkeletonAnalystPanel count={4} />
         </div>
@@ -720,7 +722,7 @@ function AnalystPageContent() {
 
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100 p-10">
         <h1 className="mb-8 text-center text-3xl text-blue-300">
-          AI Trade Analyst
+          AI Analyst
         </h1>
 
         {!pageReady ? (
@@ -732,7 +734,23 @@ function AnalystPageContent() {
         ) : (
           <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
             <div className="max-h-[80vh] overflow-y-auto rounded-xl border border-white/10 bg-white/5 p-4">
-              {trades.map((trade) => (
+              {trades.length === 0 ? (
+                <EmptyState
+                  icon="🤖"
+                  title="No Trades to Analyze"
+                  description="Add your first trade to unlock AI-powered trade review and coaching."
+                  action={
+                    <Link
+                      href="/app"
+                      className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600"
+                    >
+                      Add Trade
+                    </Link>
+                  }
+                  className="py-10"
+                />
+              ) : (
+              trades.map((trade) => (
                 <div
                   key={trade.id}
                   onClick={() => selectTradeForReview(trade)}
@@ -781,7 +799,8 @@ function AnalystPageContent() {
                     </div>
                   </div>
                 </div>
-              ))}
+              ))
+              )}
             </div>
 
             <div className="hidden h-[80vh] flex-col rounded-xl border border-white/10 bg-white/5 p-4 lg:flex">

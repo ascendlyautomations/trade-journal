@@ -231,7 +231,7 @@ const PREVIEW_CARDS = [
     content: <BestSetupPlaceholder />,
   },
   {
-    title: "AI Trade Analyst",
+    title: "AI Analyst",
     variant: "insight" as const,
     content: <AiAnalystPlaceholder />,
   },

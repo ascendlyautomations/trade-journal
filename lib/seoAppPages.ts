@@ -37,7 +37,7 @@ export const COMMUNITY_PAGE_METADATA = buildAppPageMetadata(
 )
 
 export const ANALYST_PAGE_METADATA = buildAppPageMetadata(
-  "AI Trade Analyst",
+  "AI Analyst",
   "AI-powered trade analysis and coaching on TradeTraxs Pro.",
   "/analyst"
 )

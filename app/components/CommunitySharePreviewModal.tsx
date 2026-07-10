@@ -91,7 +91,7 @@ export default function CommunitySharePreviewModal({
             type="button"
             disabled={submitting || postTradeDisabled}
             onClick={onPostTrade}
-            className="w-full rounded-lg bg-green-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+            className="w-full rounded-lg bg-blue-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto disabled:hover:bg-blue-500"
           >
             {submitting ? submittingLabel : postTradeLabel}
           </button>

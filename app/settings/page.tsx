@@ -1119,7 +1119,7 @@ export default function SettingsPage() {
                     aria-pressed={isPrivate}
                     className={`shrink-0 rounded-lg px-4 py-2 text-sm font-medium transition ${
                       isPrivate
-                        ? "bg-emerald-500 text-white"
+                        ? "bg-blue-500 text-white"
                         : "bg-white/10 text-white"
                     }`}
                   >
@@ -1346,7 +1346,7 @@ export default function SettingsPage() {
                         <button
                           type="button"
                           onClick={() => void copyReferralLink()}
-                          className="shrink-0 rounded-xl bg-emerald-500 px-5 py-3 text-sm font-semibold hover:bg-emerald-600"
+                          className="shrink-0 rounded-xl bg-blue-500 px-5 py-3 text-sm font-semibold hover:bg-blue-600 disabled:hover:bg-blue-500"
                         >
                           Copy link
                         </button>

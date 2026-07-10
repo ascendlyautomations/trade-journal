@@ -192,7 +192,7 @@ export default function ChatPage() {
                 type="button"
                 onClick={() => setChannel(room.id)}
                 className={`w-full rounded px-4 py-2 text-left ${
-                  channel === room.id ? "bg-emerald-500" : "bg-white/10"
+                  channel === room.id ? "bg-blue-500" : "bg-white/10"
                 }`}
               >
                 {room.name}

@@ -12,7 +12,7 @@ function FeedLoadMoreFooter({ loading, hasMore, onLoadMore }: FeedLoadMoreFooter
   return (
     <>
       {loading ? (
-        <p className="mt-4 text-center text-gray-400">Loading...</p>
+        <p className="mt-4 text-center text-gray-400">Loading more posts…</p>
       ) : null}
 
       {hasMore && !loading ? (
@@ -20,7 +20,7 @@ function FeedLoadMoreFooter({ loading, hasMore, onLoadMore }: FeedLoadMoreFooter
           <button
             type="button"
             onClick={() => void onLoadMore()}
-            className="rounded bg-green-500 px-4 py-2 text-white"
+            className="rounded bg-blue-500 px-4 py-2 text-white hover:bg-blue-600"
           >
             View More
           </button>

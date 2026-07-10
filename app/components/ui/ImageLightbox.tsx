@@ -1,9 +1,21 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { createPortal } from "react-dom"
 import { NAVBAR_HEIGHT_CLASS } from "./DetailModalShell"
-import { useModalScrollLock } from "./modalLayout"
+import ImageViewerCloseButton from "./ImageViewerCloseButton"
+import {
+  MODAL_PANEL_MAX_HEIGHT_BELOW_NAV_CLASS,
+  MODAL_PANEL_MAX_HEIGHT_CLASS,
+  MODAL_PANEL_SHELL_CLASS,
+  useModalScrollLock,
+} from "./modalLayout"
+
+/** Above fixed navbar (z-[9999]) and demo banner; below standard modals (z-[10050]). */
+export const IMAGE_LIGHTBOX_Z_INDEX_CLASS = "z-[10001]"
+
+const IMAGE_LIGHTBOX_SAFE_PADDING =
+  "p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4 sm:pt-[max(1rem,env(safe-area-inset-top))] sm:pb-[max(1rem,env(safe-area-inset-bottom))]"
 
 type ImageLightboxProps = {
   imageUrl: string | null
@@ -20,19 +32,20 @@ export default function ImageLightbox({
   onClose,
   alt = "",
   open,
-  zIndexClass = "z-[9998]",
+  zIndexClass = IMAGE_LIGHTBOX_Z_INDEX_CLASS,
   belowNavbar = false,
 }: ImageLightboxProps) {
   const isOpen = open ?? Boolean(imageUrl)
   const [visible, setVisible] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const showViewer = isOpen && Boolean(imageUrl) && mounted
 
   useEffect(() => {
     setMounted(true)
   }, [])
 
   useEffect(() => {
-    if (!isOpen) return
+    if (!showViewer) return
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
         e.preventDefault()
@@ -42,58 +55,74 @@ export default function ImageLightbox({
     }
     window.addEventListener("keydown", onKey, true)
     return () => window.removeEventListener("keydown", onKey, true)
-  }, [isOpen, onClose])
+  }, [showViewer, onClose])
 
-  useModalScrollLock(isOpen)
+  useModalScrollLock(showViewer)
 
   useEffect(() => {
-    if (!isOpen) {
+    if (!showViewer) {
       setVisible(false)
       return
     }
     const frame = requestAnimationFrame(() => setVisible(true))
     return () => cancelAnimationFrame(frame)
-  }, [isOpen])
+  }, [showViewer])
 
-  if (!isOpen || !imageUrl || !mounted) return null
+  const stopPropagation = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+  }, [])
+
+  if (!showViewer) return null
 
   const overlayClass = belowNavbar
     ? `fixed inset-x-0 bottom-0 ${NAVBAR_HEIGHT_CLASS}`
     : "fixed inset-0"
 
+  const panelMaxHeightClass = belowNavbar
+    ? MODAL_PANEL_MAX_HEIGHT_BELOW_NAV_CLASS
+    : MODAL_PANEL_MAX_HEIGHT_CLASS
+
   const imageMaxHeight = belowNavbar
-    ? "max-h-[calc(100dvh-var(--navbar-height,4rem)-2rem)]"
-    : "max-h-[95vh]"
+    ? "max-h-[min(75dvh,calc(100dvh-var(--navbar-height,4rem)-env(safe-area-inset-top)-env(safe-area-inset-bottom)-7rem))]"
+    : "max-h-[min(75dvh,calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-7rem))]"
 
   return createPortal(
     <div
-      className={`${overlayClass} ${zIndexClass} flex items-start justify-center overflow-y-auto bg-black/75 p-4 pt-3 backdrop-blur-md transition-opacity duration-300 ease-out sm:p-6 sm:pt-4 ${
+      className={`${overlayClass} ${zIndexClass} flex items-center justify-center overflow-y-auto overflow-x-hidden bg-black/75 backdrop-blur-md transition-opacity duration-300 ease-out motion-reduce:transition-none ${IMAGE_LIGHTBOX_SAFE_PADDING} ${
         visible ? "opacity-100" : "opacity-0"
       }`}
-      role="dialog"
-      aria-modal="true"
-      aria-label="Image viewer"
+      role="presentation"
       onClick={onClose}
     >
-      <button
-        type="button"
-        onClick={onClose}
-        className="absolute right-3 top-3 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-2xl leading-none text-white transition hover:bg-black/80 md:right-4 md:top-4"
-        aria-label="Close image viewer"
-      >
-        ×
-      </button>
-
-      <img
-        src={imageUrl}
-        alt={alt}
-        decoding="async"
-        className={`${imageMaxHeight} w-auto max-w-[min(95vw,100%)] object-contain transition-transform duration-300 ease-out ${
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Image viewer"
+        className={`relative mx-auto flex w-full max-w-5xl flex-col overflow-hidden ${MODAL_PANEL_SHELL_CLASS} ${panelMaxHeightClass} transition-transform duration-300 ease-out motion-reduce:transition-none ${
           visible ? "scale-100" : "scale-[0.98]"
         }`}
-        style={{ touchAction: "pinch-zoom", imageRendering: "auto" }}
-        onClick={(e) => e.stopPropagation()}
-      />
+        onClick={stopPropagation}
+      >
+        <ImageViewerCloseButton
+          positionClassName="absolute right-3 top-3 md:right-4 md:top-4"
+          className="h-11 w-11 text-2xl md:h-10 md:w-10 md:text-xl"
+          onClick={(event) => {
+            event.stopPropagation()
+            onClose()
+          }}
+        />
+
+        <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden px-3 pb-3 pt-14 sm:px-4 sm:pb-4 sm:pt-16 md:px-6 md:pb-6 md:pt-[4.25rem]">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={imageUrl!}
+            alt={alt}
+            decoding="async"
+            className={`${imageMaxHeight} w-auto max-w-full object-contain`}
+            style={{ touchAction: "pinch-zoom", imageRendering: "auto" }}
+          />
+        </div>
+      </div>
     </div>,
     document.body
   )

@@ -289,7 +289,7 @@ export default function CsvImportDiagnosticsPanel({
                       type="button"
                       onClick={() => void handleSubmitFormatOnly()}
                       disabled={submittingFormat || !csvFile}
-                      className="w-full rounded-lg border border-emerald-400/30 bg-emerald-500/15 px-3 py-2 text-xs font-semibold text-emerald-100 transition hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:px-4 sm:text-sm"
+                      className="w-full rounded-lg border border-blue-400/30 bg-blue-500/15 px-3 py-2 text-xs font-semibold text-blue-100 transition hover:bg-blue-500/25 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:px-4 sm:text-sm"
                     >
                       {submittingFormat
                         ? "Submitting…"
@@ -356,7 +356,7 @@ export default function CsvImportDiagnosticsPanel({
                   : handleImportOnly())
               }
               disabled={importBusy || !canImport}
-              className="w-full rounded-lg bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+              className="w-full rounded-lg bg-blue-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto disabled:hover:bg-blue-500"
             >
               {showCombinedPrimary
                 ? importBusy

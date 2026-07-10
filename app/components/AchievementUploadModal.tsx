@@ -16,6 +16,7 @@ import {
   ACHIEVEMENT_TYPE,
   ACHIEVEMENT_TYPE_OPTIONS,
   type Achievement,
+  achievementTypeRequiresTradingAccount,
   badgeKeyFromType,
   canonicalAchievementType,
   categoryFromType,
@@ -23,6 +24,29 @@ import {
   normalizeAchievementMetadata,
 } from "@/lib/achievements"
 import ScrollableModalShell from "@/app/components/ui/ScrollableModalShell"
+import Modal from "@/app/components/ui/Modal"
+import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
+import { persistentError } from "@/lib/feedbackPresets"
+import {
+  buildAchievementValidationPopup,
+  validateAchievementForm,
+} from "@/lib/validateAchievementForm"
+import {
+  buildAchievementAccountSnapshot,
+  findTradeAccountById,
+  shouldOpenPassedEvalContinuance,
+  shouldRunPropFirmPayoutWorkflow,
+  tradeAccountToPropFirmMilestoneAccount,
+} from "@/lib/achievementAccountLink"
+import { fetchPropFirmPayoutSetupContext } from "@/lib/fetchPropFirmPayoutSetupContext"
+import { useAchievementPropFirmEvalContinuance } from "@/app/components/achievement/AchievementPropFirmEvalContinuanceHost"
+import TradeAccountPicker, {
+  type TradeAccountOption,
+} from "@/app/components/TradeAccountPicker"
+import CreateAccountModal from "@/app/components/CreateAccountModal"
+import PayoutSetupModal, {
+  type PayoutSetupValues,
+} from "@/app/components/PayoutSetupModal"
 import { uploadToSupabaseStorageWithProgress } from "@/lib/supabaseStorageUploadWithProgress"
 import {
   createMonotonicReporter,
@@ -31,6 +55,12 @@ import {
 import { useUploadProgress } from "@/lib/uploadProgress/UploadProgressProvider"
 import ImageCropModal from "@/app/components/ImageCropModal"
 import { useImageCropUpload } from "@/lib/useImageCropUpload"
+import { isProActive } from "@/lib/subscription"
+import { assertCanCreateTradingAccount } from "@/lib/tradingAccounts"
+import { upsertAccountInCache } from "@/lib/appDataCache"
+import { supabaseMutationFeedback } from "@/lib/supabaseMutationFeedback"
+import { computePayoutDrawdownFloor } from "@/lib/propfirmMetrics"
+import { recordAccountPayout } from "@/lib/propfirmPayoutCycles"
 
 export type AchievementFormState = {
   achievement_type: string
@@ -44,6 +74,7 @@ export type AchievementFormState = {
   firm?: string
   account_name?: string
   account_size?: string
+  account_id?: string
   metadata?: Record<string, unknown> | null
 }
 
@@ -71,6 +102,8 @@ export type AchievementUploadModalProps = {
   dialogTitle?: string
   dialogSubtitle?: string
   saveLabel?: string
+  /** When true, prop firm payout was already recorded (e.g. from Prop Firm Mode). */
+  propFirmPayoutAlreadyRecorded?: boolean
 }
 
 AchievementUploadModal.displayName = "AchievementUploadModal"
@@ -97,6 +130,7 @@ export default function AchievementUploadModal({
   dialogTitle,
   dialogSubtitle,
   saveLabel,
+  propFirmPayoutAlreadyRecorded = false,
 }: AchievementUploadModalProps) {
   const editingId = editingAchievement?.id ?? null
   const [busy, setBusy] = useState(false)
@@ -111,13 +145,108 @@ export default function AchievementUploadModal({
       setRemoveImage(false)
       setFile(cropped)
     },
-    onValidationError: setError,
+    onValidationError: (message) => {
+      showPopup(persistentError("Invalid Image", message))
+    },
   })
   const fileInputRef = imageCrop.fileInputRef
   const uploadingRef = useRef(false)
   const { runUpload } = useUploadProgress()
+  const { showPopup, feedbackModalProps } = useFeedbackPopup()
+  const [accounts, setAccounts] = useState<TradeAccountOption[]>([])
+  const [selectedAccount, setSelectedAccount] =
+    useState<TradeAccountOption | null>(null)
+  const [showCreateAccountModal, setShowCreateAccountModal] = useState(false)
+  const [creatingAccount, setCreatingAccount] = useState(false)
+  const creatingAccountRef = useRef(false)
+  const [planProfile, setPlanProfile] = useState<{
+    is_pro?: boolean | null
+    subscription_status?: string | null
+  } | null>(null)
+  const [payoutConfirmOpen, setPayoutConfirmOpen] = useState(false)
+  const [payoutSetupOpen, setPayoutSetupOpen] = useState(false)
+  const [payoutSetupKey, setPayoutSetupKey] = useState(0)
+  const [recordingPayout, setRecordingPayout] = useState(false)
+  const [payoutSetupContext, setPayoutSetupContext] = useState<Awaited<
+    ReturnType<typeof fetchPropFirmPayoutSetupContext>
+  >["context"]>(null)
+  const pendingAchievementSaveRef = useRef(false)
+
+  const {
+    openPassedEvalContinuance,
+    evalContinuanceModals,
+    evalContinuanceBusy,
+  } = useAchievementPropFirmEvalContinuance({
+    supabase,
+    userId,
+  })
+
+  const isPro = isProActive(planProfile)
+
+  const loadAccounts = useCallback(async (uid: string) => {
+    const { data, error: fetchErr } = await supabase
+      .from("accounts")
+      .select("*")
+      .eq("user_id", uid)
+
+    if (fetchErr) {
+      console.error("[AchievementUploadModal] accounts fetch:", fetchErr)
+      setAccounts([])
+      return
+    }
+
+    const rows = (data ?? [])
+      .filter((acc) => acc.is_active !== false)
+      .map((acc) => ({
+        name: String(acc.name ?? ""),
+        size: String(acc.account_size ?? ""),
+        id: String(acc.id),
+        account_number: acc.account_number ?? null,
+        mode: acc.mode ?? "live",
+        category: acc.category ?? null,
+      }))
+
+    setAccounts(rows)
+  }, [])
+
+  const loadPlanProfile = useCallback(async (uid: string) => {
+    const { data } = await supabase
+      .from("profiles")
+      .select("is_pro, subscription_status")
+      .eq("id", uid)
+      .maybeSingle()
+    setPlanProfile(data ?? null)
+  }, [])
+
+  const syncSelectedAccountToForm = useCallback(
+    (account: TradeAccountOption | null) => {
+      setSelectedAccount(account)
+      if (!account) {
+        setForm((prev) => ({
+          ...prev,
+          account_id: undefined,
+          account_name: undefined,
+          account_size: undefined,
+          firm: undefined,
+        }))
+        return
+      }
+
+      const snapshot = buildAchievementAccountSnapshot(account)
+      setForm((prev) => ({
+        ...prev,
+        account_id: snapshot.account_id,
+        account_name: snapshot.account_name,
+        account_size: snapshot.account_size,
+        firm: snapshot.firm ?? undefined,
+      }))
+    },
+    []
+  )
 
   const resetForm = useCallback(() => {
+    let nextSelectedAccount: TradeAccountOption | null = null
+
     if (editingAchievement) {
       const savedDate = normalizeAchievementDateInputValue(
         editingAchievement.achieved_at
@@ -140,27 +269,59 @@ export default function AchievementUploadModal({
         firm: editingAchievement.firm ?? undefined,
         account_name: editingAchievement.account_name ?? undefined,
         account_size: editingAchievement.account_size ?? undefined,
+        account_id: editingAchievement.account_id ?? undefined,
         metadata: editingAchievement.metadata ?? null,
       })
+      nextSelectedAccount = findTradeAccountById(
+        accounts,
+        editingAchievement.account_id
+      )
     } else {
       const defaultDate = resolveNewAchievementDateInputValue(initialValues)
-      setForm(
-        mergeInitialForm({
-          ...initialValues,
-          achieved_at: defaultDate,
-        })
+      const merged = mergeInitialForm({
+        ...initialValues,
+        achieved_at: defaultDate,
+      })
+      setForm(merged)
+      nextSelectedAccount = findTradeAccountById(
+        accounts,
+        initialValues?.account_id
       )
     }
+
+    setSelectedAccount(nextSelectedAccount)
     setFile(null)
     setPreviewUrl(null)
     setRemoveImage(false)
     setError(null)
-  }, [editingAchievement, initialValues])
+    setPayoutConfirmOpen(false)
+    setPayoutSetupOpen(false)
+    pendingAchievementSaveRef.current = false
+  }, [accounts, editingAchievement, initialValues])
 
   useLayoutEffect(() => {
     if (!open) return
     resetForm()
   }, [open, resetForm])
+
+  useEffect(() => {
+    if (!open || !userId) return
+    void loadAccounts(userId)
+    void loadPlanProfile(userId)
+  }, [open, userId, loadAccounts, loadPlanProfile])
+
+  useEffect(() => {
+    if (!open) return
+    if (editingAchievement?.account_id) {
+      setSelectedAccount(
+        findTradeAccountById(accounts, editingAchievement.account_id)
+      )
+      return
+    }
+    if (initialValues?.account_id) {
+      setSelectedAccount(findTradeAccountById(accounts, initialValues.account_id))
+    }
+  }, [accounts, editingAchievement?.account_id, initialValues?.account_id, open])
 
   useEffect(() => {
     if (!file) {
@@ -173,47 +334,115 @@ export default function AchievementUploadModal({
   }, [file])
 
   function handleClose() {
-    if (busy || uploadingRef.current || imageCrop.cropSourceFile) return
+    if (
+      busy ||
+      uploadingRef.current ||
+      imageCrop.cropSourceFile ||
+      recordingPayout ||
+      evalContinuanceBusy
+    ) {
+      return
+    }
     onClose()
   }
 
   const cropModalOpen = imageCrop.cropSourceFile != null
 
-  async function saveAchievement() {
+  async function handleCreateAccountSave(newAccount: {
+    name: string
+    size: string
+    id: string
+    category: string
+    mode: string | null
+    rules: unknown
+  }) {
     if (isDemoModeActive()) {
-      requestDemoSignup("upload")
+      requestDemoSignup("save")
       return
     }
-    if (!userId || !form.title.trim() || !form.achievement_type.trim()) return
-    if (uploadingRef.current) return
+    if (creatingAccountRef.current || creatingAccount || !userId) return
 
-    const achievementType = canonicalAchievementType(form.achievement_type)
-    const payoutAmount = isPayoutAchievementType(achievementType)
-      ? Number(form.payout_amount)
-      : null
-    if (
-      isPayoutAchievementType(achievementType) &&
-      (!Number.isFinite(payoutAmount) || (payoutAmount as number) <= 0)
-    ) {
-      setError("Please enter a valid payout amount.")
-      return
+    creatingAccountRef.current = true
+    setCreatingAccount(true)
+
+    try {
+      const gate = await assertCanCreateTradingAccount(supabase, userId, planProfile)
+      if (!gate.ok) {
+        showPopup(persistentError("Account Limit Reached", gate.message))
+        return
+      }
+
+      const { data, error: insertErr } = await supabase
+        .from("accounts")
+        .insert([
+          {
+            user_id: userId,
+            name: newAccount.name,
+            account_size: newAccount.size,
+            account_number: newAccount.id,
+            category: newAccount.category,
+            mode: newAccount.mode,
+            is_active: true,
+          },
+        ])
+        .select()
+        .single()
+
+      if (insertErr) {
+        console.error(insertErr)
+        showPopup(supabaseMutationFeedback(insertErr, "Save Failed"))
+        return
+      }
+
+      if (!data) return
+
+      upsertAccountInCache(userId, data)
+
+      const createdAccount: TradeAccountOption = {
+        name: data.name,
+        size: data.account_size,
+        id: String(data.id),
+        account_number: data.account_number ?? null,
+        mode: data.mode,
+        category: data.category,
+      }
+
+      setAccounts((prev) => [...prev, createdAccount])
+      syncSelectedAccountToForm(createdAccount)
+      setShowCreateAccountModal(false)
+    } finally {
+      creatingAccountRef.current = false
+      setCreatingAccount(false)
     }
+  }
+
+  async function executeAchievementSave() {
+    if (!userId) return
 
     setError(null)
     uploadingRef.current = true
+
+    const achievementType = canonicalAchievementType(form.achievement_type)
+    const payoutAmount = isPayoutAchievementType(achievementType)
+      ? Number(String(form.payout_amount).replace(/,/g, ""))
+      : null
+    const accountSnapshot = selectedAccount
+      ? buildAchievementAccountSnapshot(selectedAccount)
+      : null
 
     const snapshotForm = { ...form }
     const snapshotFile = file
     const snapshotRemoveImage = removeImage
     const snapshotEditingId = editingId
+    const snapshotSelectedAccount = selectedAccount
 
     try {
       await runUpload({
         title: snapshotFile
-          ? editingId
+          ? snapshotEditingId
             ? "Updating Achievement"
             : "Uploading Achievement"
-          : editingId
+          : snapshotEditingId
             ? "Updating Achievement"
             : "Saving Achievement",
         onDismissCompose: onClose,
@@ -229,7 +458,7 @@ export default function AchievementUploadModal({
               throw new Error(validationError)
             }
 
-            report({ percent: 10, stage: "Processing image…" })
+            report({ percent: 10, stage: "Optimizing image…" })
 
             const ext = snapshotFile.name.includes(".")
               ? snapshotFile.name.split(".").pop()?.toLowerCase() || "jpg"
@@ -249,7 +478,7 @@ export default function AchievementUploadModal({
               : `${safeBase || "image"}.${ext}`
             const filePath = `achievements/${userId}/${Date.now()}-${uploadName}`
 
-            report({ percent: 18, stage: "Uploading media…" })
+            report({ percent: 18, stage: "Preparing upload…" })
             const stageReport = createMonotonicReporter(report, {
               min: 18,
               max: 72,
@@ -267,7 +496,7 @@ export default function AchievementUploadModal({
                       start: 20,
                       end: 72,
                     }),
-                    stage: "Uploading media…",
+                    stage: "Preparing upload…",
                   })
                 },
               }
@@ -281,7 +510,7 @@ export default function AchievementUploadModal({
               .getPublicUrl(filePath)
             imageUrl = publicData.publicUrl
           } else {
-            report({ percent: 40, stage: "Saving achievement…" })
+            report({ percent: 40, stage: "Preparing achievement…" })
           }
 
           const payload = {
@@ -303,11 +532,12 @@ export default function AchievementUploadModal({
                   })}`
                 : null,
             currency: isPayoutAchievementType(achievementType) ? "USD" : null,
-            account_type: null,
-            account_name: snapshotForm.account_name?.trim() || null,
-            account_size: snapshotForm.account_size?.trim() || null,
-            mode: null,
-            firm: snapshotForm.firm?.trim() || null,
+            account_id: accountSnapshot?.account_id ?? snapshotForm.account_id ?? null,
+            account_type: accountSnapshot?.account_type ?? null,
+            account_name: accountSnapshot?.account_name ?? (snapshotForm.account_name?.trim() || null),
+            account_size: accountSnapshot?.account_size ?? (snapshotForm.account_size?.trim() || null),
+            mode: accountSnapshot?.mode ?? null,
+            firm: accountSnapshot?.firm ?? (snapshotForm.firm?.trim() || null),
             achieved_at: snapshotForm.achieved_at || null,
             image_url: imageUrl,
             is_public: snapshotForm.is_public,
@@ -333,13 +563,136 @@ export default function AchievementUploadModal({
 
           report({ percent: 95, stage: "Finishing…" })
           await onSaved?.()
+
+          if (
+            !snapshotEditingId &&
+            shouldOpenPassedEvalContinuance(achievementType, snapshotSelectedAccount)
+          ) {
+            openPassedEvalContinuance(
+              tradeAccountToPropFirmMilestoneAccount(snapshotSelectedAccount!)
+            )
+          }
         },
       })
     } catch {
       // Overlay handles retry/cancel.
     } finally {
       uploadingRef.current = false
+      pendingAchievementSaveRef.current = false
     }
+  }
+
+  async function handlePayoutSetupSubmit(values: PayoutSetupValues) {
+    if (!userId || !selectedAccount || !payoutSetupContext) return
+
+    setRecordingPayout(true)
+    try {
+      const balanceBeforePayout = payoutSetupContext.balanceBeforePayout
+      const drawdownFloorAfterPayout = computePayoutDrawdownFloor(
+        values.drawdownBehavior,
+        payoutSetupContext.startingBalance,
+        payoutSetupContext.cycleTrailingMetrics,
+        Number(payoutSetupContext.account.max_drawdown) || 0
+      )
+      const nextCycleNumber =
+        payoutSetupContext.activePayoutCycle?.cycle_number != null
+          ? payoutSetupContext.activePayoutCycle.cycle_number + 1
+          : 1
+
+      const { cycle, error } = await recordAccountPayout(
+        supabase,
+        selectedAccount.id,
+        {
+          balanceAfterPayout: values.balanceAfterPayout,
+          payoutAmount: values.payoutAmount,
+          drawdownBehavior: values.drawdownBehavior,
+          drawdownFloorAfterPayout,
+          balanceBeforePayout,
+          rememberDrawdownBehavior: values.rememberDrawdownBehavior,
+        },
+        nextCycleNumber
+      )
+
+      if (error || !cycle) {
+        console.error(error ?? "Failed to record payout")
+        showPopup(
+          persistentError(
+            "Payout Failed",
+            "We couldn't record this payout. Please try again."
+          )
+        )
+        return
+      }
+
+      setPayoutSetupOpen(false)
+      setPayoutSetupContext(null)
+      await executeAchievementSave()
+    } finally {
+      setRecordingPayout(false)
+    }
+  }
+
+  async function beginPropFirmPayoutWorkflow() {
+    if (!userId || !selectedAccount) return
+
+    const { context, error } = await fetchPropFirmPayoutSetupContext(
+      supabase,
+      userId,
+      selectedAccount.id
+    )
+
+    if (error || !context) {
+      showPopup(
+        persistentError(
+          "Payout Setup Unavailable",
+          error?.message ?? "Could not load account payout details."
+        )
+      )
+      return
+    }
+
+    setPayoutSetupContext(context)
+    setPayoutConfirmOpen(true)
+  }
+
+  async function saveAchievement() {
+    if (isDemoModeActive()) {
+      requestDemoSignup("upload")
+      return
+    }
+    if (!userId || uploadingRef.current || recordingPayout) return
+
+    const achievementType = canonicalAchievementType(form.achievement_type)
+    const hasImage = file != null || (!!form.image_url && !removeImage)
+    const requiresTradingAccount =
+      achievementTypeRequiresTradingAccount(achievementType)
+
+    const validation = validateAchievementForm({
+      achievement_type: achievementType,
+      title: form.title,
+      payout_amount: form.payout_amount,
+      achieved_at: form.achieved_at,
+      hasImage,
+      accountId: selectedAccount?.id ?? form.account_id,
+      requiresTradingAccount,
+    })
+
+    if (!validation.ok) {
+      showPopup(buildAchievementValidationPopup(validation))
+      return
+    }
+
+    if (
+      shouldRunPropFirmPayoutWorkflow(achievementType, selectedAccount, {
+        payoutAlreadyRecorded: propFirmPayoutAlreadyRecorded,
+      })
+    ) {
+      pendingAchievementSaveRef.current = true
+      await beginPropFirmPayoutWorkflow()
+      return
+    }
+
+    await executeAchievementSave()
   }
 
   if (!open) return null
@@ -426,6 +779,19 @@ export default function AchievementUploadModal({
               className="mt-1.5 h-11 w-full rounded-lg border border-white/15 bg-[#0a1329] px-3 text-sm text-white placeholder:text-slate-500 outline-none transition focus:border-blue-400/60 focus:ring-2 focus:ring-blue-500/20"
             />
           </label>
+          <label className="text-xs text-gray-300 sm:col-span-2">
+            Trading Account
+            <TradeAccountPicker
+              className="mt-1.5"
+              triggerId="achievement-account-trigger"
+              accounts={accounts}
+              isPro={isPro}
+              selectedAccount={selectedAccount}
+              onSelect={syncSelectedAccountToForm}
+              onOpenCreate={() => setShowCreateAccountModal(true)}
+              showExternalCreateButton={false}
+            />
+          </label>
           {isPayoutAchievementType(form.achievement_type) ? (
             <label className="text-xs text-gray-300">
               Payout Amount (USD)
@@ -502,7 +868,7 @@ export default function AchievementUploadModal({
                     onClick={() => setRemoveImage(true)}
                     className="rounded border border-red-400/40 px-2 py-0.5 text-[11px] text-red-300 hover:bg-red-500/10"
                   >
-                    Remove image
+                    Delete image
                   </button>
                 </div>
               ) : removeImage ? (
@@ -549,6 +915,80 @@ export default function AchievementUploadModal({
         onCancel={imageCrop.handleCropCancel}
         onSave={imageCrop.handleCropSave}
       />
+      <FeedbackModal {...feedbackModalProps} />
+      <CreateAccountModal
+        open={showCreateAccountModal}
+        onClose={() => {
+          if (!creatingAccount) setShowCreateAccountModal(false)
+        }}
+        onSave={handleCreateAccountSave}
+      />
+      <Modal
+        open={payoutConfirmOpen}
+        onClose={() => {
+          if (!recordingPayout) {
+            setPayoutConfirmOpen(false)
+            pendingAchievementSaveRef.current = false
+          }
+        }}
+        title="Record Payout"
+        size="sm"
+        footer={
+          <div className="flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                setPayoutConfirmOpen(false)
+                pendingAchievementSaveRef.current = false
+              }}
+              className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-gray-200 transition hover:bg-white/10"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setPayoutConfirmOpen(false)
+                setPayoutSetupKey((key) => key + 1)
+                setPayoutSetupOpen(true)
+              }}
+              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-500"
+            >
+              Continue
+            </button>
+          </div>
+        }
+      >
+        <p className="text-sm leading-relaxed text-gray-300">
+          Recording a payout will begin a new payout cycle. Historical trades and
+          lifetime statistics will remain unchanged. Current payout cycle progress
+          will reset.
+        </p>
+      </Modal>
+      {payoutSetupContext ? (
+        <PayoutSetupModal
+          key={payoutSetupKey}
+          open={payoutSetupOpen}
+          onClose={() => {
+            if (!recordingPayout) {
+              setPayoutSetupOpen(false)
+              pendingAchievementSaveRef.current = false
+            }
+          }}
+          onSubmit={handlePayoutSetupSubmit}
+          busy={recordingPayout}
+          accountBaseBalance={payoutSetupContext.startingBalance}
+          balanceBeforePayout={payoutSetupContext.balanceBeforePayout}
+          defaultDrawdownBehavior={payoutSetupContext.defaultDrawdownBehavior}
+          defaultRememberDrawdownBehavior={
+            payoutSetupContext.defaultRememberDrawdownBehavior
+          }
+          initialPayoutAmount={
+            Number(String(form.payout_amount).replace(/,/g, "")) || undefined
+          }
+        />
+      ) : null}
+      {evalContinuanceModals}
     </>
   )
 }

@@ -129,15 +129,15 @@ export function formatReelMutationError(error: unknown): string {
       lower.includes("schema cache") ||
       lower.includes("could not find"))
   ) {
-    return "Replay could not be saved. Apply the latest database migration (reels.trade_id) and reload the API schema."
+    return "Clip could not be saved. Apply the latest database migration (reels.trade_id) and reload the API schema."
   }
 
   if (e.code === "23503") {
-    return "Trade not found. Save the trade first, then attach the replay."
+    return "Trade not found. Save the trade first, then attach the clip."
   }
 
   if (e.code === "23514") {
-    return "Invalid replay data for this trade."
+    return "Invalid clip data for this trade."
   }
 
   return toUserFacingErrorMessage(error)
@@ -689,11 +689,11 @@ export async function replaceTradeReelVideo(
   }
 
   if (!existing) {
-    return { error: "Replay not found." }
+    return { error: "Clip not found." }
   }
 
   if (!isTradeAttachedReel(existing as ReelRow)) {
-    return { error: "Only trade replays can be replaced this way." }
+    return { error: "Only trade clips can be replaced this way." }
   }
 
   let durationSeconds: number

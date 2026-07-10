@@ -23,7 +23,7 @@ export default function ProGate({ isPro, children }: ProGateProps) {
       </p>
       <Link
         href="/settings"
-        className="inline-block bg-emerald-500 hover:bg-emerald-600 px-4 py-2 rounded font-semibold text-white"
+        className="inline-block bg-blue-500 hover:bg-blue-600 px-4 py-2 rounded font-semibold text-white disabled:hover:bg-blue-500"
       >
         Open settings
       </Link>

@@ -868,7 +868,7 @@ export default function InputTradeForm({
         if (replayError) {
           showPopup(
             persistentError(
-              "Replay Upload Failed",
+              "Clip Upload Failed",
               `Trades saved, but replay could not be uploaded for every account: ${replayError}`
             )
           )
@@ -1058,7 +1058,7 @@ export default function InputTradeForm({
       if (replayError) {
         showPopup(
           persistentError(
-            "Replay Upload Failed",
+            "Clip Upload Failed",
             `Trade saved, but replay could not be updated: ${replayError}`
           )
         )
@@ -1191,7 +1191,7 @@ export default function InputTradeForm({
       if (replayError) {
         showPopup(
           persistentError(
-            "Replay Upload Failed",
+            "Clip Upload Failed",
             `Trade posted, but replay could not be uploaded: ${replayError}`
           )
         )
@@ -1217,7 +1217,7 @@ export default function InputTradeForm({
       if (replayErrorPrivate) {
         showPopup(
           persistentError(
-            "Replay Upload Failed",
+            "Clip Upload Failed",
             `Trade saved, but replay could not be uploaded: ${replayErrorPrivate}`
           )
         )
@@ -1651,7 +1651,7 @@ export default function InputTradeForm({
               type="button"
               onClick={onReviewCsvClick}
               disabled={!onReviewCsvClick}
-              className="shrink-0 relative flex-1 px-3 py-2 text-sm rounded-lg bg-emerald-500 disabled:opacity-60"
+              className="shrink-0 relative flex-1 px-3 py-2 text-sm rounded-lg bg-blue-500 hover:bg-blue-600 disabled:opacity-60 disabled:hover:bg-blue-500"
             >
               Review CSV
               {reviewCount > 0 ? (
@@ -1737,7 +1737,7 @@ export default function InputTradeForm({
               type="button"
               onClick={onReviewCsvClick}
               disabled={!onReviewCsvClick}
-              className="shrink-0 relative px-4 py-2 text-sm rounded-lg bg-emerald-500 disabled:opacity-60"
+              className="shrink-0 relative px-4 py-2 text-sm rounded-lg bg-blue-500 hover:bg-blue-600 disabled:opacity-60 disabled:hover:bg-blue-500"
             >
               Review CSV
               {reviewCount > 0 ? (
@@ -2240,7 +2240,7 @@ export default function InputTradeForm({
               }
               setCommunityPreviewOpen(true)
             }}
-            className="w-full py-3 text-lg font-semibold rounded bg-green-500 hover:bg-green-600 text-white disabled:cursor-not-allowed disabled:opacity-60"
+            className="w-full py-3 text-lg font-semibold rounded bg-blue-500 hover:bg-blue-600 text-white disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-blue-500"
           >
             {isEditMode
               ? "Save changes"
@@ -2511,7 +2511,7 @@ export default function InputTradeForm({
               <button
                 type="button"
                 onClick={() => setShowAccountWarning(false)}
-                className="px-4 py-2 rounded bg-green-500 text-white w-full"
+                className="px-4 py-2 rounded bg-blue-500 hover:bg-blue-600 text-white w-full"
               >
                 Got it
               </button>
@@ -2555,7 +2555,7 @@ export default function InputTradeForm({
             <button
               type="button"
               onClick={() => setShowAccountWarning(false)}
-              className="px-4 py-2 rounded bg-green-500 text-white w-full"
+              className="px-4 py-2 rounded bg-blue-500 hover:bg-blue-600 text-white w-full"
             >
               Got it
             </button>

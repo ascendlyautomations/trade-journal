@@ -5,10 +5,10 @@ import { isTradeAttachedReel } from "@/lib/reels"
 import type { ConfirmModalProps } from "./ConfirmModal"
 
 export const DELETE_REPLAY_CONFIRM_COPY = {
-  title: "Delete Replay?",
+  title: "Delete Clip?",
   description:
-    "Are you sure you want to delete this replay? This action cannot be undone.",
-  confirmLabel: "Delete Replay",
+    "Are you sure you want to delete this clip? This action cannot be undone.",
+  confirmLabel: "Delete Clip",
   cancelLabel: "Cancel",
 } as const
 

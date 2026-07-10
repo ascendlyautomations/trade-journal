@@ -23,6 +23,7 @@ import { supabase } from "../../../lib/supabaseClient"
 import { devLog } from "@/lib/devLog"
 import { compressImage, compressScreenshot } from "@/lib/compressImage"
 import { feedbackPresets } from "@/lib/feedbackPresets"
+import { LOADING_COPY } from "@/lib/loadingCopy"
 import { logSupabaseError } from "@/lib/logSupabaseError"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import ImageCropModal from "@/app/components/ImageCropModal"
@@ -2252,7 +2253,7 @@ export default function DMPage() {
             ← Back to messages
           </button>
           {pageAccess === "loading" ? (
-            <p className="text-gray-300">Loading conversation...</p>
+            <p className="text-gray-300">{LOADING_COPY.conversation}</p>
           ) : (
             <>
               <p className="text-lg font-semibold">

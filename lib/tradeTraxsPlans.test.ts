@@ -47,7 +47,7 @@ describe("tradeTraxsPlans", () => {
     )
     assert.ok(
       !TRADETRAXS_FREE_PLAN.features.some((feature) =>
-        /AI Trade Analyst|Backtest Lab|CSV Import/i.test(feature)
+        /AI Analyst|Backtest Lab|CSV Import/i.test(feature)
       )
     )
   })

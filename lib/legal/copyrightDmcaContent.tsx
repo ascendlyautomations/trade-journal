@@ -20,7 +20,7 @@ export const COPYRIGHT_DMCA_SECTIONS: LegalSection[] = [
         </p>
         <p>
           TradeTraxs hosts user-generated content, including trade screenshots, chart images,
-          videos, reels, posts, comments, and messages. We respond to valid copyright complaints and
+          videos, clips, posts, comments, and messages. We respond to valid copyright complaints and
           may remove or restrict access to material that infringes the rights of others.
         </p>
         <p>

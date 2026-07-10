@@ -8,7 +8,7 @@ export const USER_FACING_ERROR_MESSAGES = {
   FREE_PLAN_DAILY_TRADE_LIMIT:
     "You've reached the Free plan limit of 3 trades every 24 hours. Upgrade to Pro for unlimited trades.",
   FREE_PLAN_REELS_LIMIT:
-    "Free accounts can upload 1 reel every 24 hours. Upgrade to Pro for unlimited reels.",
+    "Free accounts can upload 1 clip every 24 hours. Upgrade to Pro for unlimited clips.",
   FREE_PLAN_ACCOUNT_LIMIT:
     "Free plan allows up to 3 accounts. Upgrade to Pro for unlimited accounts.",
   RATE_LIMIT_EXCEEDED:

@@ -3451,7 +3451,7 @@ function CommunityContent() {
                       <button
                         type="button"
                         onClick={() => void handleRenameRoom()}
-                        className="mt-3 rounded-xl border border-emerald-500/30 bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-500/25"
+                        className="mt-3 rounded-xl border border-blue-500/30 bg-blue-500/15 px-4 py-2 text-sm font-semibold text-blue-100 transition hover:bg-blue-500/25"
                       >
                         Save Name
                       </button>
@@ -3529,7 +3529,7 @@ function CommunityContent() {
                   type="button"
                   onClick={() => void joinRoom(inviteTargetRoom.id)}
                   disabled={joiningRoomId === inviteTargetRoom.id}
-                  className="rounded-lg bg-green-500/30 px-6 py-3 text-sm font-medium text-green-100 hover:bg-green-500/40 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-lg bg-blue-500 px-6 py-3 text-sm font-medium text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-blue-500"
                 >
                   {joiningRoomId === inviteTargetRoom.id
                     ? "Joining…"
@@ -3547,7 +3547,7 @@ function CommunityContent() {
                         key={section.id}
                         className={`flex min-w-0 items-stretch rounded-md ${
                           selectedSectionId === section.id
-                            ? "bg-green-500/20 text-green-300"
+                            ? "bg-blue-500/20 text-blue-300"
                             : "text-gray-400"
                         }`}
                       >
@@ -3650,7 +3650,7 @@ function CommunityContent() {
                               }}
                               className={`mb-1 flex min-h-[40px] w-full items-center rounded-lg px-3 py-2 text-left text-sm transition ${
                                 selectedSectionId === section.id
-                                  ? "bg-green-500/20 font-medium text-green-300"
+                                  ? "bg-blue-500/20 font-medium text-blue-300"
                                   : "text-gray-300 hover:bg-white/10"
                               }`}
                             >
@@ -3690,7 +3690,14 @@ function CommunityContent() {
               ) : (
                 <>
                   {messages.length === 0 && pinnedMessages.length === 0 ? (
-                    <p className="text-sm text-gray-400">No messages yet.</p>
+                    <div className="rounded-xl border border-dashed border-white/10 bg-white/[0.03] px-4 py-8 text-center">
+                      <p className="text-sm font-medium text-gray-300">
+                        No messages yet
+                      </p>
+                      <p className="mt-1 text-sm text-gray-500">
+                        Say hello or share a setup to start the conversation.
+                      </p>
+                    </div>
                   ) : null}
                   {messages.length > 0 ? (
                 <div className="space-y-3">
@@ -3815,7 +3822,7 @@ function CommunityContent() {
                                   void handleSaveEditMessage(msg.id)
                                 }
                                 disabled={!editingMessageContent.trim()}
-                                className="rounded-md bg-green-600 px-3 py-1 text-xs text-white hover:bg-green-500 disabled:opacity-50"
+                                className="rounded-md bg-blue-500 px-3 py-1 text-xs text-white hover:bg-blue-600 disabled:opacity-50 disabled:hover:bg-blue-500"
                               >
                                 Save
                               </button>
@@ -3974,7 +3981,7 @@ function CommunityContent() {
                                         void handleSaveEditMessage(msg.id)
                                       }
                                       disabled={!editingMessageContent.trim()}
-                                      className="rounded-md bg-green-600 px-3 py-1 text-xs text-white hover:bg-green-500 disabled:opacity-50"
+                                      className="rounded-md bg-blue-500 px-3 py-1 text-xs text-white hover:bg-blue-600 disabled:opacity-50 disabled:hover:bg-blue-500"
                                     >
                                       Save
                                     </button>
@@ -4038,7 +4045,7 @@ function CommunityContent() {
                           type="button"
                           onClick={clearComposerImage}
                           className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs text-white"
-                          aria-label="Remove image"
+                          aria-label="Delete image"
                         >
                           ✕
                         </button>
@@ -4147,7 +4154,7 @@ function CommunityContent() {
               <button
                 type="button"
                 onClick={() => void handleCreateSection()}
-                className="rounded bg-green-500/20 px-4 py-2 text-sm text-white hover:bg-green-500/30"
+                className="rounded bg-blue-500 px-4 py-2 text-sm text-white hover:bg-blue-600 disabled:hover:bg-blue-500"
               >
                 Create
               </button>
@@ -4198,7 +4205,7 @@ function CommunityContent() {
               <button
                 type="button"
                 onClick={() => void handleSaveSectionEdit()}
-                className="w-full rounded bg-green-500/20 px-4 py-2 text-sm text-green-100 hover:bg-green-500/30"
+                className="w-full rounded bg-blue-500 px-4 py-2 text-sm text-white hover:bg-blue-600 disabled:hover:bg-blue-500"
               >
                 Save Changes
               </button>
@@ -4243,7 +4250,7 @@ function CommunityContent() {
                   if (!inviteLink) return
                   void navigator.clipboard.writeText(inviteLink)
                 }}
-                className="rounded bg-green-500/20 px-3 py-1 text-xs text-green-400 hover:bg-green-500/30"
+                className="rounded bg-blue-500 px-3 py-1 text-xs text-blue-100 hover:bg-blue-600 disabled:hover:bg-blue-500"
               >
                 Copy
               </button>
@@ -4442,7 +4449,7 @@ function CommunityContent() {
                                     banId: ban.id,
                                   })
                                 }
-                                className="inline-flex shrink-0 items-center gap-1 rounded bg-green-500/10 px-2 py-1 text-xs text-green-400 hover:bg-green-500/20 disabled:opacity-50"
+                                className="inline-flex shrink-0 items-center gap-1 rounded bg-blue-500/10 px-2 py-1 text-xs text-blue-400 hover:bg-blue-500/20 disabled:opacity-50"
                               >
                                 {isUnbanning ? (
                                   <>
@@ -4498,7 +4505,7 @@ function CommunityContent() {
                       onClick={() => void handleMemberActionConfirm()}
                       className={
                         memberActionConfirm.kind === "unban"
-                          ? "inline-flex items-center gap-1.5 rounded bg-green-500/20 px-3 py-1.5 text-sm text-green-100 hover:bg-green-500/30 disabled:opacity-50"
+                          ? "inline-flex items-center gap-1.5 rounded bg-blue-500/20 px-3 py-1.5 text-sm text-blue-100 hover:bg-blue-500/30 disabled:opacity-50"
                           : memberActionConfirm.kind === "ban"
                             ? "inline-flex items-center gap-1.5 rounded bg-orange-500/20 px-3 py-1.5 text-sm text-orange-100 hover:bg-orange-500/30 disabled:opacity-50"
                             : "inline-flex items-center gap-1.5 rounded bg-red-500/20 px-3 py-1.5 text-sm text-red-100 hover:bg-red-500/30 disabled:opacity-50"
@@ -4642,7 +4649,7 @@ function CommunityContent() {
               <button
                 type="button"
                 onClick={() => void handleRenameRoom({ closeSettings: true })}
-                className="rounded bg-green-500/20 px-4 py-2 text-sm text-green-100 hover:bg-green-500/30"
+                className="rounded bg-blue-500 px-4 py-2 text-sm text-white hover:bg-blue-600 disabled:hover:bg-blue-500"
               >
                 Save Changes
               </button>

@@ -7,7 +7,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts"
-import EmptyState from "@/app/components/ui/EmptyState"
+import DashboardWidgetEmptyState from "@/app/components/dashboard/DashboardWidgetEmptyState"
 import { formatCurrency } from "@/lib/formatCurrency"
 import {
   DASHBOARD_SESSION_COLORS,
@@ -52,9 +52,9 @@ export default function DashboardSessionChart({
         Session Performance
       </h2>
       {showEmpty ? (
-        <EmptyState
-          title="Not Enough Data Yet"
-          description="Add more trades to unlock detailed analytics."
+        <DashboardWidgetEmptyState
+          variant="no-trades"
+          showImportCsv
           className="py-5 md:py-8"
         />
       ) : (

@@ -110,7 +110,7 @@ function StoryReplyInput({
           aria-label="Send story reply"
           onClick={() => void submit()}
           disabled={sending || !text.trim()}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white transition hover:bg-emerald-400 disabled:pointer-events-none disabled:opacity-40"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-500 text-white transition hover:bg-blue-600 disabled:pointer-events-none disabled:opacity-40 disabled:hover:bg-blue-500"
         >
           <SendIcon className="h-4 w-4" />
         </button>

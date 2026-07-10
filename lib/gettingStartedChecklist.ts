@@ -33,7 +33,7 @@ export const GETTING_STARTED_ITEM_HELP: Record<
 > = {
   profile: {
     body:
-      "You already completed this during onboarding. Your profile helps other traders discover you and see your trading journey.",
+      "Add a bio and avatar in Settings so other traders can discover you.",
   },
   trade: {
     body:
@@ -45,11 +45,11 @@ export const GETTING_STARTED_ITEM_HELP: Record<
   },
   room: {
     body:
-      "Trade Rooms are communities where traders share ideas, charts, setups, and market discussions. Many traders also showcase their rooms directly on their profiles. Click this task to browse popular rooms and join one.",
+      "Trade Rooms are communities where traders share ideas, charts, setups, and market discussions. Click this task to browse popular rooms and join one.",
   },
   post: {
     body:
-      "Click this task to go to your profile and open the post creator.\n\nShare a trade, chart, lesson learned, or market idea with the community. Posts appear on your profile and in the feed.",
+      "Click this task to go to your profile and open the post creator.\n\nShare a chart, lesson learned, or market idea with the community. Posts appear on your profile and in the feed.",
   },
   public: {
     body:
@@ -64,7 +64,7 @@ export type GettingStartedProgress = {
   allComplete: boolean
 }
 
-const TOTAL_ITEMS = 6
+const TOTAL_ITEMS = 5
 
 export const GETTING_STARTED_COLLAPSED_STORAGE_KEY =
   "tradetraxs_getting_started_collapsed_v1"
@@ -194,19 +194,9 @@ export function computeGettingStartedProgress(
 ): GettingStartedProgress {
   const items: GettingStartedChecklistItem[] = [
     {
-      id: "profile",
-      label: "Complete your profile",
-      complete: signals.onboardingCompleted,
-    },
-    {
       id: "trade",
-      label: "Log your first trade",
+      label: "Add your first trade",
       complete: signals.tradeCount > 0,
-    },
-    {
-      id: "post",
-      label: "Create your first post",
-      complete: signals.profilePostCount > 0,
     },
     {
       id: "follow",
@@ -220,8 +210,13 @@ export function computeGettingStartedProgress(
     },
     {
       id: "public",
-      label: "Make Your First Trade Public",
+      label: "Make your first trade public",
       complete: signals.hasPublicTrade,
+    },
+    {
+      id: "post",
+      label: "Create your first post",
+      complete: signals.profilePostCount > 0,
     },
   ]
 

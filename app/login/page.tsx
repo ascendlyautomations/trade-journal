@@ -14,7 +14,7 @@ import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import AuthPasswordInput from "@/app/components/ui/AuthPasswordInput"
 import { isBetaReferralRef } from "@/lib/betaReferralCode"
 import { persistReferralCodeFromUrl } from "@/lib/referralPersistence"
-import { enterSignupFlow, setCheckoutBillingInterval, setSignupIntent, clearSignupIntent, type SignupIntent } from "@/lib/signupFlow"
+import { enterSignupFlow, setCheckoutBillingInterval, setSignupIntent, getSignupIntent, type SignupIntent } from "@/lib/signupFlow"
 import SignupPlanPicker from "@/app/components/SignupPlanPicker"
 import { markProfileUseFreeTier } from "@/lib/markFreeTierSignup"
 import {
@@ -56,9 +56,21 @@ export default function LoginPage() {
   const [billingInterval, setBillingInterval] = useState<TraxProBillingIntervalId>(
     TRAXPRO_DEFAULT_BILLING_INTERVAL
   )
+  const [signupPlanIntent, setSignupPlanIntent] = useState<SignupIntent | null>(
+    () => getSignupIntent()
+  )
   const { showPopup, feedbackModalProps } = useFeedbackPopup({ autoDismissMs: 3000 })
 
   const router = useRouter()
+
+  function applySignupPlanIntent(intent: SignupIntent) {
+    setSignupPlanIntent(intent)
+    setSignupIntent(intent)
+    enterSignupFlow()
+    if (intent === "trial") {
+      setCheckoutBillingInterval(billingInterval)
+    }
+  }
 
   function maybePrefetchDashboardBeforeNav(path: string) {
     if (path === "/dashboard" || path.startsWith("/dashboard/")) {
@@ -192,6 +204,7 @@ export default function LoginPage() {
     }
 
     setSignupIntent(intent)
+    setSignupPlanIntent(intent)
     if (intent === "trial") {
       enterSignupFlow()
       setCheckoutBillingInterval(billingInterval)
@@ -355,14 +368,26 @@ export default function LoginPage() {
       return
     }
 
+    if (!isLogin) {
+      const intent = signupPlanIntent ?? getSignupIntent()
+      if (!intent) {
+        showPopup({
+          type: "error",
+          message:
+            "Choose Start Free Trial or Continue Free below before signing up with Google.",
+        })
+        return
+      }
+      applySignupPlanIntent(intent)
+    }
+
     setGoogleLoading(true)
 
     try {
     if (!isLogin) {
-      clearSignupIntent()
       enterSignupFlow()
     }
-    let redirectPath = isLogin ? "/dashboard" : "/choose-plan"
+    let redirectPath = isLogin ? "/dashboard" : "/onboarding"
     if (shouldStartCheckout()) {
       redirectPath = "/login?next=checkout"
     } else {
@@ -683,6 +708,8 @@ export default function LoginPage() {
                   setBillingInterval(interval)
                   setCheckoutBillingInterval(interval)
                 }}
+                selectedIntent={signupPlanIntent}
+                onSelectIntent={applySignupPlanIntent}
                 onSelectTrial={() => void handleSignUp("trial")}
                 onSelectFree={() => void handleSignUp("free")}
                 disabled={!agreedToTerms}

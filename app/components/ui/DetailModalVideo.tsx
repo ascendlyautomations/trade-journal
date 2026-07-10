@@ -22,7 +22,7 @@ const DetailModalVideo = forwardRef(function DetailModalVideo(
       thumbnailUrl={poster}
       nativeControls
       className="relative w-full"
-      videoClassName="block w-full max-h-[60dvh] rounded-lg bg-black/30 object-contain md:max-h-full md:max-w-full md:bg-transparent"
+      videoClassName="block w-full max-h-[60dvh] rounded-lg object-contain md:max-h-full md:max-w-full"
     />
   )
 })

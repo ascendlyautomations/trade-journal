@@ -22,6 +22,7 @@ import { DEMO_PROFILE } from "@/lib/demo/fixtures"
 import { TRADES_APP_SELECT } from "@/lib/publicAccountPrivacy"
 import { useUserProfile } from "@/lib/UserProfileProvider"
 import { SkeletonBacktestPageContent } from "../components/ui/skeletons"
+import ImageLightbox from "../components/ui/ImageLightbox"
 
 const InputTradeForm = dynamic(() => import("../components/InputTradeForm"), {
   ssr: false,
@@ -361,18 +362,10 @@ export default function BacktestPage() {
         </div>
       </div>
 
-      {selectedImage ? (
-        <div
-          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80"
-          onClick={() => setSelectedImage(null)}
-        >
-          <img
-            src={selectedImage}
-            alt=""
-            className="max-h-[90%] max-w-[90%] rounded-lg"
-          />
-        </div>
-      ) : null}
+      <ImageLightbox
+        imageUrl={selectedImage}
+        onClose={() => setSelectedImage(null)}
+      />
 
       {editingTrade ? (
         <InputTradeForm

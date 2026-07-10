@@ -25,7 +25,7 @@ export const TRADETRAXS_FEATURE_LABELS = {
   unlimitedTrades: "Unlimited Trades",
   unlimitedTradingAccounts: "Unlimited Trading Accounts",
   csvImport: "CSV Import",
-  aiTradeAnalyst: "AI Trade Analyst",
+  aiTradeAnalyst: "AI Analyst",
   weeklyMonthlyReports: "Weekly & Monthly Trading Reports",
   backtestLab: "Backtest Lab",
   propFirmMode: "Prop Firm Mode",

@@ -55,7 +55,7 @@ const PREFERENCE_SECTIONS: ToggleSection[] = [
     ],
   },
   {
-    title: "Community",
+    title: "Followers",
     items: [
       {
         key: "followers_enabled",
@@ -188,7 +188,7 @@ function SettingsToggle({
         disabled={disabled}
         onClick={() => onChange(!checked)}
         className={`relative mt-0.5 h-6 w-11 shrink-0 rounded-full transition-colors disabled:cursor-not-allowed ${
-          checked ? "bg-emerald-500" : "bg-white/20"
+          checked ? "bg-blue-500" : "bg-white/20"
         }`}
       >
         <span

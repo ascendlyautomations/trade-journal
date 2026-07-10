@@ -233,7 +233,7 @@ export const PRIVACY_POLICY_SECTIONS: LegalSection[] = [
             business email and operations.
           </li>
           <li>
-            <strong>AI service providers</strong> — when you use AI Trade Analyst, trade context
+            <strong>AI service providers</strong> — when you use AI Analyst, trade context
             you submit may be processed by third-party AI providers, including OpenAI where
             applicable, to generate responses. AI output may be inaccurate, incomplete, delayed, or
             incorrect and is for educational purposes only, not financial advice. Do not submit

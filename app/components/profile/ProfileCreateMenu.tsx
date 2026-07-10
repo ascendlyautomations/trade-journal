@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { createPortal } from "react-dom"
-import { PROFILE_PRIMARY_ACTION_BUTTON_CLASS } from "@/app/components/profile/profileActionButton"
+import Button from "@/app/components/ui/Button"
 import { useModalScrollLock } from "@/app/components/ui/modalLayout"
 
 type CreateMenuEntry = {
@@ -187,15 +187,17 @@ export default function ProfileCreateMenu({
 
   const trigger =
     variant === "button" ? (
-      <button
+      <Button
         type="button"
+        variant="primary"
+        size="md"
         onClick={() => setOpen((prev) => !prev)}
         aria-expanded={open}
         aria-haspopup="menu"
-        className={className ?? PROFILE_PRIMARY_ACTION_BUTTON_CLASS}
+        className={className ?? "px-6"}
       >
         + Create
-      </button>
+      </Button>
     ) : (
       <button
         type="button"

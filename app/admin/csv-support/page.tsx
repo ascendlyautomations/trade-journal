@@ -378,7 +378,7 @@ export default function AdminCsvSupportPage() {
                   type="button"
                   onClick={() => void handleSaveDetail()}
                   disabled={savingDetail}
-                  className="rounded bg-emerald-500 px-3 py-2 text-sm font-semibold hover:bg-emerald-600 disabled:opacity-60"
+                  className="rounded bg-blue-500 px-3 py-2 text-sm font-semibold hover:bg-blue-600 disabled:opacity-60 disabled:hover:bg-blue-500"
                 >
                   {savingDetail ? "Saving..." : "Save"}
                 </button>

@@ -17,7 +17,7 @@ export const LANDING_FAQ_ITEMS: LandingFaqItem[] = [
   },
   {
     q: "Can I track multiple trading accounts?",
-    a: `${TRADETRAXS_PRO_PLAN.name} includes unlimited trading accounts. ${TRADETRAXS_FREE_PLAN.name} is designed for getting started with manual trade journaling and community features.`,
+    a: `${TRADETRAXS_PRO_PLAN.name} includes unlimited trading accounts. ${TRADETRAXS_FREE_PLAN.name} is designed for getting started with manual trade journaling, Trade Rooms, and social features.`,
   },
   {
     q: "What does the Free plan include?",
@@ -29,7 +29,7 @@ export const LANDING_FAQ_ITEMS: LandingFaqItem[] = [
   },
   {
     q: "What stats does TradeTraxs show?",
-    a: `${TRADETRAXS_FREE_PLAN.name} includes basic trading statistics. ${TRAXPRO_PLAN_NAME} unlocks advanced performance analytics, AI Trade Analyst, Backtest Lab, Prop Firm Mode, and advanced trade insights.`,
+    a: `${TRADETRAXS_FREE_PLAN.name} includes basic trading statistics. ${TRAXPRO_PLAN_NAME} unlocks advanced performance analytics, AI Analyst, Backtest Lab, Prop Firm Mode, and advanced trade insights.`,
   },
   {
     q: "Can I import trades from a CSV?",

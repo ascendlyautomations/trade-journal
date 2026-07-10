@@ -1,6 +1,6 @@
 "use client"
 
-import EmptyState from "@/app/components/ui/EmptyState"
+import DashboardWidgetEmptyState from "@/app/components/dashboard/DashboardWidgetEmptyState"
 import { formatCurrency } from "@/lib/formatCurrency"
 import { formatDecimal, formatRR } from "@/lib/formatDisplay"
 import type { DirectionEdge, LongShortPerformance } from "@/lib/dashboardLongShortStats"
@@ -167,15 +167,14 @@ export default function DashboardLongShort({
         Long vs Short
       </h2>
       {showEmpty ? (
-        <EmptyState
-          title="Not Enough Data Yet"
-          description="Add more trades to unlock detailed analytics."
+        <DashboardWidgetEmptyState
+          variant="no-trades"
+          showImportCsv
           className="py-5 md:py-8"
         />
       ) : !performance.hasDirectionData ? (
-        <EmptyState
-          title="No direction data"
-          description="Add trade direction to compare long vs short performance."
+        <DashboardWidgetEmptyState
+          variant="needs-direction"
           className="py-8"
         />
       ) : (

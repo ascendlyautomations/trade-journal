@@ -48,7 +48,7 @@ export default function AnalyzeTradeProgressModal({
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-emerald-400/20 bg-emerald-500/10 text-2xl">
             🧠
           </div>
-          <h2 className="text-lg font-semibold text-white">AI Trade Analyst</h2>
+          <h2 className="text-lg font-semibold text-white">AI Analyst</h2>
           <p className="mt-1 text-sm text-gray-400">Analyzing your trade...</p>
         </div>
 

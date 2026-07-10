@@ -142,7 +142,7 @@ export default function TradeReelAttachment({
                 </span>
               ) : null}
             </div>
-            <p className="text-sm text-gray-300">Replay attached</p>
+            <p className="text-sm text-gray-300">Clip attached</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <button
@@ -160,7 +160,7 @@ export default function TradeReelAttachment({
                 onClick={() => void onDeleteAttached()}
                 className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-300 transition hover:bg-red-500/20 disabled:opacity-50"
               >
-                {deleteBusy ? "Removing…" : "Remove"}
+                {deleteBusy ? "Deleting…" : "Delete"}
               </button>
             ) : null}
           </div>
@@ -198,7 +198,7 @@ export default function TradeReelAttachment({
               }}
               className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-300 transition hover:bg-red-500/20 disabled:opacity-50"
             >
-              Remove
+              Delete
             </button>
           </div>
         </div>

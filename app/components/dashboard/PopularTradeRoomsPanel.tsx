@@ -87,7 +87,7 @@ function RoomListItem({
         type="button"
         onClick={() => onJoin(room)}
         disabled={joiningId === room.id}
-        className="shrink-0 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:opacity-60"
+        className="shrink-0 rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:opacity-60 disabled:hover:bg-blue-500"
       >
         {joiningId === room.id ? "Joining…" : "Join"}
       </button>

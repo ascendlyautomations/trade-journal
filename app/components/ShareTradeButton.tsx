@@ -200,7 +200,7 @@ export default function ShareTradeButton({
                     void handleDownload()
                     setIsOpen(false)
                   }}
-                  className="w-full rounded-lg bg-green-500 py-2 font-medium text-black"
+                  className="w-full rounded-lg bg-blue-500 py-2 font-medium text-white hover:bg-blue-600 disabled:hover:bg-blue-500"
                 >
                   Download Image
                 </button>

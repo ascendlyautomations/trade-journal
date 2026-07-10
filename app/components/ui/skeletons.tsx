@@ -795,4 +795,30 @@ export function SkeletonPayoutsPage() {
   )
 }
 
+export function SkeletonReferralsPage() {
+  return (
+    <div aria-busy="true" aria-label="Loading referral stats" className="space-y-8">
+      <div className="grid gap-4 sm:grid-cols-3">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <SkeletonCard key={i} className="p-5">
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="mt-3 h-8 w-20" />
+          </SkeletonCard>
+        ))}
+      </div>
+      <SkeletonCard className="space-y-3 p-6">
+        <Skeleton className="h-4 w-32" />
+        <Skeleton className="h-4 w-full max-w-md" />
+        <Skeleton className="h-10 w-full rounded-xl" />
+      </SkeletonCard>
+      <SkeletonCard className="space-y-3 p-6">
+        <Skeleton className="h-4 w-28" />
+        {Array.from({ length: 3 }).map((_, i) => (
+          <Skeleton key={i} className="h-12 w-full rounded-lg" />
+        ))}
+      </SkeletonCard>
+    </div>
+  )
+}
+
 export { SkeletonCard }

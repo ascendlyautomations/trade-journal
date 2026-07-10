@@ -65,7 +65,7 @@ const SIGNUP_MESSAGES: Record<DemoSignupReason, { title: string; message: string
     message: "Start your free trial to journal trades and track your edge.",
   },
   ai: {
-    title: "Unlock AI Trade Analyst",
+    title: "Unlock AI Analyst",
     message: "Create your account to analyze your trades with AI-powered insights.",
   },
   upload: {
@@ -161,7 +161,7 @@ export function DemoModeProvider({ children }: { children: ReactNode }) {
               <a
                 href="/login?tab=signup"
                 onClick={() => enterSignupFlow()}
-                className="rounded-lg bg-emerald-500 px-4 py-2.5 text-center text-sm font-semibold text-white hover:bg-emerald-600"
+                className="rounded-lg bg-blue-500 px-4 py-2.5 text-center text-sm font-semibold text-white hover:bg-blue-600 disabled:hover:bg-blue-500"
               >
                 Start {TRAXPRO_TRIAL_HEADLINE}
               </a>

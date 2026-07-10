@@ -77,7 +77,7 @@ export default function DashboardGearSettings({
                   <span>Performance charts</span>
                   <input
                     type="checkbox"
-                    className="accent-emerald-500"
+                    className="accent-blue-500"
                     checked={gearDraft.showEquity && gearDraft.showDrawdown}
                     onChange={(e) => {
                       const on = e.target.checked
@@ -91,7 +91,7 @@ export default function DashboardGearSettings({
                   <span>Insights overview</span>
                   <input
                     type="checkbox"
-                    className="accent-emerald-500"
+                    className="accent-blue-500"
                     checked={gearDraft.showInsights}
                     onChange={() =>
                       setGearDraft((d) =>
@@ -104,7 +104,7 @@ export default function DashboardGearSettings({
                   <span>Session chart</span>
                   <input
                     type="checkbox"
-                    className="accent-emerald-500"
+                    className="accent-blue-500"
                     checked={gearDraft.showSessions}
                     onChange={() =>
                       setGearDraft((d) =>
@@ -117,7 +117,7 @@ export default function DashboardGearSettings({
                   <span>Setups & behavior tips</span>
                   <input
                     type="checkbox"
-                    className="accent-emerald-500"
+                    className="accent-blue-500"
                     checked={
                       gearDraft.showBestSetup &&
                       gearDraft.showWorstSetup &&

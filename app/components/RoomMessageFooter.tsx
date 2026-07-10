@@ -66,7 +66,7 @@ export default function RoomMessageFooter({
               className={
                 "inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs leading-none transition " +
                 (reactedByViewer
-                  ? "bg-green-500/20 text-green-100 ring-1 ring-green-400/30"
+                  ? "bg-blue-500/20 text-blue-100 ring-1 ring-blue-400/30"
                   : "bg-white/10 text-gray-300 hover:bg-white/15")
               }
               aria-label={`${emoji} ${count}${reactedByViewer ? ", you reacted" : ""}`}

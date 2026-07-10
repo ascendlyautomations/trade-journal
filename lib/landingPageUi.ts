@@ -47,7 +47,7 @@ export const LANDING_BODY = "text-sm leading-relaxed text-gray-400 md:text-base"
 
 /** Primary marketing CTA — compact on mobile, unchanged from md up. */
 export const LANDING_CTA_BUTTON =
-  "rounded-xl bg-emerald-500 px-6 py-3 font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60 md:px-8 md:py-3.5"
+  "rounded-xl bg-blue-500 px-6 py-3 font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-blue-500 md:px-8 md:py-3.5"
 
 export const LANDING_CTA_BUTTON_SECONDARY =
   "rounded-lg border border-white/20 px-6 py-3 font-semibold transition hover:bg-white/10 md:px-8 md:py-3.5"
