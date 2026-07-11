@@ -9,7 +9,6 @@ import LandingProblemSection from "./landing/LandingProblemSection"
 import LandingAnalyticsShowcaseSection from "./landing/LandingAnalyticsShowcaseSection"
 import LandingPricingSection from "./landing/LandingPricingSection"
 import LandingFaqSection from "./landing/LandingFaqSection"
-import { supabase } from "../../lib/supabaseClient"
 import { ConfirmModal, FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import MarketingFooter from "./marketing/MarketingFooter"
 import { TRAXPRO_TRIAL_HEADLINE } from "@/lib/traxProPricing"
@@ -24,6 +23,7 @@ import {
 } from "@/lib/subscriptionAccess"
 import { clearSignupFlow, enterSignupFlow, getCheckoutBillingInterval, resolveSignupProfileSetupPath, setCheckoutBillingInterval } from "@/lib/signupFlow"
 import type { TraxProBillingIntervalId } from "@/lib/traxProBillingPlans"
+import { startTraxProCheckout } from "@/lib/startTraxProCheckout"
 
 type LandingPageClientProps = {
   featuredTradesSection: ReactNode
@@ -81,35 +81,21 @@ export default function LandingPageClient({
 
       if (!user?.id) return
 
-      fetch("/api/create-checkout-session", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          userId: user.id,
-          referralCode: localStorage.getItem("referral_code"),
-        }),
-      })
-        .then(async (res) => {
-          const data = await res.json()
-          if (!res.ok) {
-            throw new Error(data?.error || "Referral checkout failed")
-          }
-          return data
-        })
-        .then((data) => {
-          if (data.url) {
-            window.location.href = data.url
-          }
+      void startTraxProCheckout()
+        .then((url) => {
+          window.location.href = url
         })
         .catch((err) => {
           console.error("Referral checkout error:", err)
+          showPopup({
+            type: "error",
+            message: "Checkout failed. Please try again.",
+          })
         })
     }
 
     void runReferralCheckout()
-  }, [user?.id])
+  }, [user?.id, showPopup])
 
   const handleStartTrial = () => {
     if (isAuthenticatedUser) {
@@ -162,33 +148,8 @@ export default function LandingPageClient({
         return
       }
 
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-      const accessToken = session?.access_token
-
-      const res = await fetch("/api/create-checkout-session", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-        },
-        body: JSON.stringify({
-          userId: user.id,
-          billingInterval: interval,
-          referralCode: localStorage.getItem("referral_code"),
-        }),
-      })
-
-      const data = await res.json()
-
-      if (!res.ok) {
-        throw new Error(data?.error || "Checkout failed")
-      }
-
-      if (data.url) {
-        window.location.href = data.url
-      }
+      const url = await startTraxProCheckout({ billingInterval: interval })
+      window.location.href = url
     } catch (err) {
       console.error("Checkout error:", err)
       showPopup({

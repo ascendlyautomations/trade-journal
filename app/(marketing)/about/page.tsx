@@ -19,6 +19,7 @@ import { profileNeedsOnboarding } from "@/lib/profileOnboardingGate"
 import { hasActiveMembership } from "@/lib/subscriptionAccess"
 import { enterSignupFlow, resolveSignupProfileSetupPath, setCheckoutBillingInterval } from "@/lib/signupFlow"
 import { TRAXPRO_DEFAULT_BILLING_INTERVAL } from "@/lib/traxProBillingPlans"
+import { startTraxProCheckout } from "@/lib/startTraxProCheckout"
 import { useUserProfile } from "@/lib/useUserProfile"
 import {
   LANDING_BODY,
@@ -86,29 +87,10 @@ export default function AboutPage() {
         return
       }
 
-      const res = await fetch("/api/create-checkout-session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: user.id,
-          billingInterval: TRAXPRO_DEFAULT_BILLING_INTERVAL,
-          referralCode:
-            typeof window !== "undefined"
-              ? localStorage.getItem("referral_code")
-              : null,
-        }),
+      const url = await startTraxProCheckout({
+        billingInterval: TRAXPRO_DEFAULT_BILLING_INTERVAL,
       })
-
-      const data = await res.json()
-      if (data.url) {
-        window.location.href = data.url
-      } else {
-        showPopup(
-          feedbackPresets.subscriptionCheckoutFailed(
-            data.error || "Checkout failed"
-          )
-        )
-      }
+      window.location.href = url
     } catch (error) {
       console.error("Checkout error:", error)
       showPopup(feedbackPresets.subscriptionCheckoutFailed("Checkout failed"))

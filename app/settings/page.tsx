@@ -34,6 +34,7 @@ import {
   type TraxProBillingIntervalId,
 } from "@/lib/traxProBillingPlans"
 import { setCheckoutBillingInterval } from "@/lib/signupFlow"
+import { startTraxProCheckout as startTraxProCheckoutSession } from "@/lib/startTraxProCheckout"
 import {
   canChangeProfileUsername,
   isProfilesUsernameConflict,
@@ -788,48 +789,17 @@ export default function SettingsPage() {
     setCheckoutLoading(true)
     setCheckoutBillingInterval(upgradeBillingInterval)
     try {
-      const token = await getAccessToken()
-      if (!token) {
+      const url = await startTraxProCheckoutSession({
+        billingInterval: upgradeBillingInterval,
+      })
+      window.location.href = url
+    } catch (e) {
+      console.error(e)
+      const message = e instanceof Error ? e.message : ""
+      if (message === "Not authenticated") {
         router.push("/login?next=checkout")
         return
       }
-
-      const res = await fetch("/api/create-checkout-session", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          userId: user.id,
-          billingInterval: upgradeBillingInterval,
-          referralCode:
-            typeof window !== "undefined"
-              ? localStorage.getItem("referral_code")
-              : null,
-        }),
-      })
-
-      const data = await res.json().catch(() => ({}))
-
-      if (!res.ok) {
-        console.error("Settings checkout failed:", { status: res.status, data })
-        if (res.status === 401) {
-          showPopup({ type: "error", message: "Something went wrong" })
-          router.push("/login?next=checkout")
-          return
-        }
-        showPopup({ type: "error", message: "Something went wrong" })
-        return
-      }
-
-      if (data.url) {
-        window.location.href = data.url as string
-      } else {
-        showPopup({ type: "error", message: "Something went wrong" })
-      }
-    } catch (e) {
-      console.error(e)
       showPopup({ type: "error", message: "Something went wrong" })
     } finally {
       setCheckoutLoading(false)

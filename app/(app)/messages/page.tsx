@@ -119,6 +119,7 @@ export default function MessagesPage() {
   const { user: authUser, loading: profileLoading } = useUserProfile()
   const [conversations, setConversations] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [inboxLoadError, setInboxLoadError] = useState<string | null>(null)
   const [search, setSearch] = useState("")
   const [showGroupModal, setShowGroupModal] = useState(false)
   const [showDMModal, setShowDMModal] = useState(false)
@@ -354,6 +355,7 @@ export default function MessagesPage() {
         reason: "supabase_error",
         message: error.message,
       })
+      setInboxLoadError("Couldn't load conversations. Please try again.")
       return null
     }
 
@@ -362,6 +364,7 @@ export default function MessagesPage() {
         source,
         reason: "zero_rows",
       })
+      setInboxLoadError(null)
       setConversations([])
       writeMessagesInboxSession(userId, [])
       return []
@@ -411,6 +414,7 @@ export default function MessagesPage() {
     })
 
     setConversations(sorted)
+    setInboxLoadError(null)
     writeMessagesInboxSession(userId, sorted)
     return sorted
   }, [])
@@ -841,8 +845,11 @@ export default function MessagesPage() {
     !authUser?.id || (loading && conversations.length === 0)
   const showEmptyNoConversations =
     !showSkeleton &&
+    !inboxLoadError &&
     filteredConversations.length === 0 &&
     conversations.length === 0
+  const showInboxLoadError =
+    !showSkeleton && !!inboxLoadError && conversations.length === 0
   const showEmptySearch =
     !showSkeleton &&
     filteredConversations.length === 0 &&
@@ -919,36 +926,49 @@ export default function MessagesPage() {
           <div className="min-h-0 flex-1 overflow-y-auto">
             {showSkeleton ? (
               <SkeletonMessagesConversationList />
-            ) : filteredConversations.length === 0 ? (
-              conversations.length === 0 ? (
-                (() => {
-                  console.log("INBOX_EMPTY_STATE_RENDER", {
-                    conversationsLength: conversations.length,
-                    filteredLength: filteredConversations.length,
-                  })
-                  return (
-                <EmptyState
-                  title="No Conversations Yet"
-                  description="Start chatting with traders in the community."
-                  action={
-                    <Link
-                      href="/explore"
-                      className="text-sm font-medium text-blue-300 hover:text-blue-200"
+            ) : showInboxLoadError ? (
+              <EmptyState
+                title="Couldn't Load Conversations"
+                description={inboxLoadError}
+                className="py-10"
+                action={
+                  authUser?.id ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLoading(true)
+                        setInboxLoadError(null)
+                        void fetchConversations(authUser.id, "retry").finally(
+                          () => setLoading(false)
+                        )
+                      }}
+                      className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600"
                     >
-                      Explore Traders →
-                    </Link>
-                  }
-                  className="py-10"
-                />
-                  )
-                })()
-              ) : (
-                <EmptyState
-                  title="No Conversations Found"
-                  description="Try adjusting your search."
-                  className="py-10"
-                />
-              )
+                      Retry
+                    </button>
+                  ) : undefined
+                }
+              />
+            ) : showEmptyNoConversations ? (
+              <EmptyState
+                title="No Conversations Yet"
+                description="Start chatting with traders in the community."
+                action={
+                  <Link
+                    href="/explore"
+                    className="text-sm font-medium text-blue-300 hover:text-blue-200"
+                  >
+                    Explore Traders →
+                  </Link>
+                }
+                className="py-10"
+              />
+            ) : showEmptySearch ? (
+              <EmptyState
+                title="No Conversations Found"
+                description="Try adjusting your search."
+                className="py-10"
+              />
             ) : (
               <MessagesConversationList
                 conversations={filteredConversations}

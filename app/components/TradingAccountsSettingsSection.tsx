@@ -177,6 +177,10 @@ export default function TradingAccountsSettingsSection({
     )
     invalidateAccountCaches()
     void refreshAccounts({ force: true })
+    showPopup({
+      type: "success",
+      message: nextActive ? "Account activated" : "Account deactivated",
+    })
   }
 
   async function handleCreateAccountSave(newAccount: CreateAccountSavePayload) {

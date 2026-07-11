@@ -88,7 +88,10 @@ export async function POST(req: Request) {
     return Response.json({ error: "Missing comment target" }, { status: 400 })
   }
 
-  const recipientUserId = await resolveCommentNotificationRecipient({
+  // Prefer the explicit recipient from the client (reply parent author, mention
+  // target, or content owner). Fall back to server-resolved content owner when
+  // the client omits recipientUserId.
+  const ownerUserId = await resolveCommentNotificationRecipient({
     postId: body.postId,
     tradeId: body.tradeId,
     profilePostId: body.profilePostId,
@@ -96,18 +99,10 @@ export async function POST(req: Request) {
     reelId: body.reelId,
   })
 
+  const recipientUserId = recipientUserIdFromClient || ownerUserId || null
+
   if (!recipientUserId || recipientUserId === user.id) {
     return Response.json({ error: "Invalid notification recipient" }, { status: 400 })
-  }
-
-  if (
-    recipientUserIdFromClient &&
-    recipientUserIdFromClient !== recipientUserId
-  ) {
-    console.warn("[api/notifications/comment] client recipient mismatch", {
-      client: recipientUserIdFromClient,
-      resolved: recipientUserId,
-    })
   }
 
   const isAchievement = Boolean(body.achievementPostId)

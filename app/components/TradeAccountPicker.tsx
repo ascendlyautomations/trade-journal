@@ -39,6 +39,13 @@ export type TradeAccountOption = {
   account_number?: string | null
   mode: string | null
   category?: string | null
+  /** Prop Firm rule fields — optional; used by Passed Eval continuance. */
+  consistency?: number | string | null
+  max_drawdown?: number | string | null
+  daily_drawdown?: number | string | null
+  profit_target?: number | string | null
+  winning_days?: number | string | null
+  winning_day_threshold?: number | string | null
 }
 
 type FilterOption = {

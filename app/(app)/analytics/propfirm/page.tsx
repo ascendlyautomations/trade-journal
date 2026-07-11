@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useEffect, useMemo, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
 import {
   CartesianGrid,
   Line,
@@ -34,6 +34,7 @@ import {
 import LockedFeature from "@/app/components/LockedFeature"
 import CustomSelect from "@/app/components/CustomSelect"
 import EmptyState from "@/app/components/ui/EmptyState"
+import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { SkeletonAnalyticsPage } from "@/app/components/ui/skeletons"
 import {
   dashboardInsightBodyClass,
@@ -315,10 +316,12 @@ function tradingListItemToPropfirmAccount(
 export default function PropFirmPage() {
   const router = useRouter()
   const { user, profile } = useUserProfile()
+  const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const [planChecked, setPlanChecked] = useState(false)
   const [hasProAccess, setHasProAccess] = useState(false)
   const [accounts, setAccounts] = useState<PropfirmAccount[]>([])
   const [accountsLoaded, setAccountsLoaded] = useState(false)
+  const [accountsLoadError, setAccountsLoadError] = useState<string | null>(null)
   const [accountFilter, setAccountFilter] = useState(PROPFIRM_ALL_ACCOUNTS_VALUE)
   const [trades, setTrades] = useState<PropfirmTrade[]>([])
   const [loadingTrades, setLoadingTrades] = useState(false)
@@ -508,38 +511,44 @@ export default function PropFirmPage() {
     void checkPlan()
   }, [profile, user?.id])
 
-  useEffect(() => {
-    if (!planChecked || !hasProAccess) return
-    async function loadAccounts() {
-      if (isDemoUserId(user?.id)) {
-        setAccounts(getDemoPropfirmAccounts() as PropfirmAccount[])
-        setAccountsLoaded(true)
-        return
-      }
-
-      if (!user?.id) {
-        setAccountsLoaded(true)
-        return
-      }
-
-      const { data, error } = await supabase
-        .from("accounts")
-        .select(PROPFIRM_ACCOUNT_FIELDS)
-        .eq("user_id", user.id)
-        .eq("category", "Prop Firm")
-
-      if (error) {
-        console.error(error)
-        setAccountsLoaded(true)
-        return
-      }
-
-      setAccounts(data || [])
+  const loadAccounts = useCallback(async () => {
+    if (isDemoUserId(user?.id)) {
+      setAccounts(getDemoPropfirmAccounts() as PropfirmAccount[])
+      setAccountsLoadError(null)
       setAccountsLoaded(true)
+      return
     }
 
-    loadAccounts()
-  }, [planChecked, hasProAccess, user?.id])
+    if (!user?.id) {
+      setAccountsLoaded(true)
+      return
+    }
+
+    setAccountsLoaded(false)
+    setAccountsLoadError(null)
+
+    const { data, error } = await supabase
+      .from("accounts")
+      .select(PROPFIRM_ACCOUNT_FIELDS)
+      .eq("user_id", user.id)
+      .eq("category", "Prop Firm")
+
+    if (error) {
+      console.error(error)
+      setAccountsLoadError("We couldn't load your prop firm accounts. Please try again.")
+      setAccountsLoaded(true)
+      return
+    }
+
+    setAccounts(data || [])
+    setAccountsLoadError(null)
+    setAccountsLoaded(true)
+  }, [user?.id])
+
+  useEffect(() => {
+    if (!planChecked || !hasProAccess) return
+    void loadAccounts()
+  }, [planChecked, hasProAccess, loadAccounts])
 
   useEffect(() => {
     if (!planChecked || !hasProAccess) return
@@ -710,6 +719,10 @@ export default function PropFirmPage() {
 
       if (error || !cycle) {
         console.error(error ?? "Failed to record payout")
+        showPopup({
+          type: "error",
+          message: "Couldn't record payout. Please try again.",
+        })
         return
       }
 
@@ -752,6 +765,8 @@ export default function PropFirmPage() {
 
       setPayoutSetupOpen(false)
 
+      showPopup({ type: "success", message: "Payout recorded" })
+
       setActiveMilestoneKind("payout")
       setAchievementUploadInitial(
         buildPropFirmMilestoneAchievementInitials("payout", selectedAccount, {
@@ -788,8 +803,15 @@ export default function PropFirmPage() {
   }
 
   async function handleAchievementSaved() {
+    const shouldOpenContinuance =
+      activeMilestoneKind === "passed_eval" && evalContinuanceAccount != null
+
     setActiveMilestoneKind(null)
     setAchievementUploadInitial(undefined)
+
+    if (shouldOpenContinuance) {
+      setEvalContinuanceOpen(true)
+    }
   }
 
   function closeEvalMilestoneFlow() {
@@ -837,6 +859,10 @@ export default function PropFirmPage() {
       )
       if (error || !updated) {
         console.error(error ?? "Failed to convert account")
+        showPopup({
+          type: "error",
+          message: "Couldn't convert account. Please try again.",
+        })
         return
       }
 
@@ -851,6 +877,7 @@ export default function PropFirmPage() {
       setAccountFilter(accountId)
       invalidateAccountsCache(user.id)
       closeEvalMilestoneFlow()
+      showPopup({ type: "success", message: "Account converted to funded" })
     } finally {
       setEvalContinuanceBusy(false)
     }
@@ -884,6 +911,10 @@ export default function PropFirmPage() {
       )
       if (error || !created) {
         console.error(error ?? "Failed to create funded account")
+        showPopup({
+          type: "error",
+          message: "Couldn't create funded account. Please try again.",
+        })
         return
       }
 
@@ -891,6 +922,7 @@ export default function PropFirmPage() {
       setAccountFilter(String(created.id))
       invalidateAccountsCache(user.id)
       closeEvalMilestoneFlow()
+      showPopup({ type: "success", message: "Funded account created" })
     } finally {
       setEvalContinuanceBusy(false)
     }
@@ -936,7 +968,10 @@ export default function PropFirmPage() {
     )
   }
 
-  const isEmptyAccounts = accountsLoaded && accounts.length === 0
+  const isEmptyAccounts =
+    accountsLoaded && accounts.length === 0 && !accountsLoadError
+  const showAccountsLoadError =
+    accountsLoaded && accounts.length === 0 && !!accountsLoadError
 
   const drawdownUsed = cycleTrailingMetrics.maxDrawdownUsed
   const { progressPercent, ddPercent } = cycleProgress
@@ -971,6 +1006,7 @@ export default function PropFirmPage() {
 
   return (
     <PropfirmPageShell>
+      <FeedbackModal {...feedbackModalProps} />
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-blue-300">
             Analytics
@@ -1152,6 +1188,7 @@ export default function PropFirmPage() {
           initialValues={achievementUploadInitial}
           onSaved={handleAchievementSaved}
           propFirmPayoutAlreadyRecorded={activeMilestoneKind === "payout"}
+          deferPassedEvalContinuance={activeMilestoneKind === "passed_eval"}
           lockAchievementType={milestoneUploadConfig.lockAchievementType}
           dialogTitle={milestoneUploadConfig.dialogTitle}
           dialogSubtitle={milestoneUploadConfig.dialogSubtitle}
@@ -1281,61 +1318,105 @@ export default function PropFirmPage() {
             </div>
 
             <div className="grid gap-2 sm:grid-cols-2">
-              <div
-                className={`${RULE_CHIP_CLASS} ${
-                  maxDdLimit > 0 && cycleTrailingMetrics.breachedTrailingDD
-                    ? "text-red-400"
-                    : "text-green-400"
-                }`}
-              >
-                <span aria-hidden>
-                  {maxDdLimit > 0 && cycleTrailingMetrics.breachedTrailingDD ? "❌" : "✔"}
-                </span>
-                <span className="font-medium">Max Drawdown</span>
-              </div>
+              {Number(selectedAccount?.profit_target) > 0 ? (
+                <div
+                  className={`${RULE_CHIP_CLASS} ${
+                    cycleProgress.isPassed ? "text-green-400" : "text-amber-300"
+                  }`}
+                >
+                  <span aria-hidden>{cycleProgress.isPassed ? "✓" : "○"}</span>
+                  <span className="font-medium">
+                    {cycleProgress.isPassed
+                      ? "Profit Target Met"
+                      : "Profit Target Not Met Yet"}
+                  </span>
+                </div>
+              ) : null}
 
-              <div
-                className={`${RULE_CHIP_CLASS} ${
-                  dailyDrawdownBreached
-                    ? "text-red-400"
-                    : "text-green-400"
-                }`}
-              >
-                <span aria-hidden>{dailyDrawdownBreached ? "❌" : "✔"}</span>
-                <span className="font-medium">Daily Drawdown</span>
-              </div>
-
-              <div
-                className={`${RULE_CHIP_CLASS} ${
-                  !winningDaysRequired
-                    ? "text-gray-400"
-                    : winningDaysTargetMet
-                      ? "text-green-400"
-                      : "text-amber-300"
-                }`}
-              >
-                <span aria-hidden>
-                  {!winningDaysRequired
-                    ? "—"
-                    : winningDaysTargetMet
-                      ? "✔"
-                      : "⚠"}
-                </span>
-                <span className="font-medium">Winning Days</span>
-              </div>
+              {winningDaysRequired ? (
+                <div
+                  className={`${RULE_CHIP_CLASS} ${
+                    winningDaysTargetMet ? "text-green-400" : "text-amber-300"
+                  }`}
+                >
+                  <span aria-hidden>{winningDaysTargetMet ? "✓" : "○"}</span>
+                  <span className="font-medium">
+                    {winningDaysTargetMet
+                      ? "Minimum Trading Days Met"
+                      : "Minimum Trading Days Not Met Yet"}
+                  </span>
+                </div>
+              ) : null}
 
               {consistencyRequired ? (
                 <div
                   className={`${RULE_CHIP_CLASS} ${
                     cycleConsistencyMetrics.isConsistent
                       ? "text-green-400"
-                      : "text-red-400"
+                      : "text-amber-300"
                   }`}
                 >
                   <span aria-hidden>
-                    {cycleConsistencyMetrics.isConsistent ? "✔" : "✖"}
+                    {cycleConsistencyMetrics.isConsistent ? "✓" : "○"}
                   </span>
-                  <span className="font-medium">Consistency</span>
+                  <span className="font-medium">
+                    {cycleConsistencyMetrics.isConsistent
+                      ? "Consistency Rule Met"
+                      : "Consistency Rule Not Met Yet"}
+                  </span>
+                </div>
+              ) : null}
+
+              {maxDdLimit > 0 ? (
+                <div
+                  className={`${RULE_CHIP_CLASS} ${
+                    drawdownUsed > maxDdLimit ? "text-red-400" : "text-green-400"
+                  }`}
+                >
+                  <span aria-hidden>
+                    {drawdownUsed > maxDdLimit ? "✕" : "✓"}
+                  </span>
+                  <span className="font-medium">
+                    {drawdownUsed > maxDdLimit
+                      ? "Max Drawdown Violated"
+                      : "Max Drawdown Within Limits"}
+                  </span>
+                </div>
+              ) : null}
+
+              {Number(selectedAccount?.daily_drawdown) > 0 ? (
+                <div
+                  className={`${RULE_CHIP_CLASS} ${
+                    dailyDrawdownBreached ? "text-red-400" : "text-green-400"
+                  }`}
+                >
+                  <span aria-hidden>
+                    {dailyDrawdownBreached ? "✕" : "✓"}
+                  </span>
+                  <span className="font-medium">
+                    {dailyDrawdownBreached
+                      ? "Daily Loss Limit Violated"
+                      : "Daily Loss Within Limits"}
+                  </span>
+                </div>
+              ) : null}
+
+              {maxDdLimit > 0 ? (
+                <div
+                  className={`${RULE_CHIP_CLASS} ${
+                    cycleTrailingMetrics.breachedTrailingDD
+                      ? "text-red-400"
+                      : "text-green-400"
+                  }`}
+                >
+                  <span aria-hidden>
+                    {cycleTrailingMetrics.breachedTrailingDD ? "✕" : "✓"}
+                  </span>
+                  <span className="font-medium">
+                    {cycleTrailingMetrics.breachedTrailingDD
+                      ? "Trailing Drawdown Violated"
+                      : "Trailing Drawdown Within Limits"}
+                  </span>
                 </div>
               ) : null}
             </div>
@@ -1581,7 +1662,21 @@ export default function PropFirmPage() {
           </div>
         </div>
 
-        {isEmptyAccounts ? (
+        {showAccountsLoadError ? (
+          <EmptyState
+            title="Unable to Load Accounts"
+            description={accountsLoadError ?? undefined}
+            action={
+              <button
+                type="button"
+                onClick={() => void loadAccounts()}
+                className="inline-flex items-center justify-center rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600"
+              >
+                Retry
+              </button>
+            }
+          />
+        ) : isEmptyAccounts ? (
           <EmptyState
             title="No Prop Firm Accounts"
             description="You don't have any Prop Firm accounts yet. Create one in Settings to start tracking rule progress."

@@ -21,6 +21,7 @@ import {
   TRAXPRO_DEFAULT_BILLING_INTERVAL,
   type TraxProBillingIntervalId,
 } from "@/lib/traxProBillingPlans"
+import { startTraxProCheckout } from "@/lib/startTraxProCheckout"
 import TraxProBillingIntervalPicker from "@/app/components/TraxProBillingIntervalPicker"
 import TraxProSelectedPlanPrice from "@/app/components/TraxProSelectedPlanPrice"
 import TradeTraxsProFeatureGroupsList from "../../components/pricing/TradeTraxsProFeatureGroupsList"
@@ -79,32 +80,8 @@ export default function PricingPage() {
         return
       }
 
-      const res = await fetch("/api/create-checkout-session", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          userId: user.id,
-          billingInterval,
-          referralCode:
-            typeof window !== "undefined"
-              ? localStorage.getItem("referral_code")
-              : null,
-        }),
-      })
-
-      const data = await res.json()
-
-      if (data.url) {
-        window.location.href = data.url
-      } else {
-        showPopup(
-          feedbackPresets.subscriptionCheckoutFailed(
-            data.error || "Checkout failed"
-          )
-        )
-      }
+      const url = await startTraxProCheckout({ billingInterval })
+      window.location.href = url
     } catch (e) {
       console.error("Checkout error:", e)
       showPopup(feedbackPresets.subscriptionCheckoutFailed("Checkout failed"))

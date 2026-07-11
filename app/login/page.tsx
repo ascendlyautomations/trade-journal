@@ -23,6 +23,7 @@ import {
 } from "@/lib/traxProBillingPlans"
 import { useUserProfile } from "@/lib/useUserProfile"
 import { prefetchCriticalAppRoutes } from "@/lib/routePrefetch"
+import { startTraxProCheckout } from "@/lib/startTraxProCheckout"
 
 function getSafeNextPath(): string | null {
   if (typeof window === "undefined") return null
@@ -88,48 +89,15 @@ export default function LoginPage() {
   }
 
   async function startCheckoutAfterAuth(
-    userId: string,
+    _userId: string,
     interval: TraxProBillingIntervalId = billingInterval
   ) {
     if (checkoutInFlightRef.current) return
     checkoutInFlightRef.current = true
 
     try {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession()
-    const accessToken = session?.access_token
-
-    const referralCode =
-      typeof window !== "undefined"
-        ? localStorage.getItem("referral_code")
-        : null
-
-    const res = await fetch("/api/create-checkout-session", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-      },
-      body: JSON.stringify({
-        userId,
-        billingInterval: interval,
-        referralCode,
-      }),
-    })
-
-    const data = await res.json()
-    devLog("Checkout API response from login:", { status: res.status, data })
-
-    if (!res.ok) {
-      throw new Error(data?.error || "Checkout failed")
-    }
-
-    if (!data.url) {
-      throw new Error("Missing checkout URL")
-    }
-
-    window.location.href = data.url
+      const url = await startTraxProCheckout({ billingInterval: interval })
+      window.location.href = url
     } finally {
       checkoutInFlightRef.current = false
     }
@@ -161,6 +129,11 @@ export default function LoginPage() {
       } catch (e) {
         if (!cancelled) {
           console.error("Checkout continuation failed:", e)
+          showPopup({
+            type: "error",
+            message:
+              "Logged in, but checkout failed. Please try again from Pricing.",
+          })
         }
       } finally {
         if (!cancelled) setLoading(false)
@@ -170,7 +143,7 @@ export default function LoginPage() {
     return () => {
       cancelled = true
     }
-  }, [user?.id, authLoading])
+  }, [user?.id, authLoading, showPopup])
 
   useEffect(() => {
     if (shouldStartCheckout() || authLoading) return

@@ -191,6 +191,9 @@ export default function Leaderboard() {
   const { user } = useUserProfile()
   const [trades, setTrades] = useState<TradeForLeaderboard[]>([])
   const [tradesLoading, setTradesLoading] = useState(true)
+  const [leaderboardLoadError, setLeaderboardLoadError] = useState<string | null>(
+    null
+  )
   const [userId, setUserId] = useState<string | null>(null)
   const [view, setView] = useState<LeaderboardView>("7D")
   const [accountTypeFilter, setAccountTypeFilter] =
@@ -210,6 +213,7 @@ export default function Leaderboard() {
 
   async function fetchData() {
     setTradesLoading(true)
+    setLeaderboardLoadError(null)
     try {
       if (isDemoModeActive()) {
         setUserId(user?.id ?? null)
@@ -222,6 +226,14 @@ export default function Leaderboard() {
       const allTrades = await fetchLeaderboardTrades()
 
       setTrades(allTrades)
+    } catch (error) {
+      console.error("[leaderboard] fetchData error:", error)
+      setTrades([])
+      setLeaderboardLoadError(
+        error instanceof Error
+          ? error.message
+          : "Couldn't load leaderboard data. Please try again."
+      )
     } finally {
       setTradesLoading(false)
     }
@@ -409,6 +421,21 @@ export default function Leaderboard() {
                 description="Start date must be on or before end date. Adjust the range to view leaderboard data."
                 className="border-0 bg-transparent py-6"
               />
+            ) : leaderboardLoadError ? (
+              <EmptyState
+                title="Couldn't Load Leaderboard"
+                description={leaderboardLoadError}
+                className="border-0 bg-transparent py-6"
+                action={
+                  <button
+                    type="button"
+                    onClick={() => void fetchData()}
+                    className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600"
+                  >
+                    Retry
+                  </button>
+                }
+              />
             ) : !showLeaderboardContent ? (
               <EmptyState
                 title="No Leaderboard Data"
@@ -568,13 +595,32 @@ export default function Leaderboard() {
 
             {!showLeaderboardContent ? (
               <EmptyState
-                title={customRangeInvalid ? "Invalid Date Range" : "No Traders Ranked"}
+                title={
+                  leaderboardLoadError
+                    ? "Couldn't Load Leaderboard"
+                    : customRangeInvalid
+                      ? "Invalid Date Range"
+                      : "No Traders Ranked"
+                }
                 description={
-                  customRangeInvalid
-                    ? "Start date must be on or before end date. Adjust the range to view leaderboard data."
-                    : leaderboardEmptyDescription()
+                  leaderboardLoadError
+                    ? leaderboardLoadError
+                    : customRangeInvalid
+                      ? "Start date must be on or before end date. Adjust the range to view leaderboard data."
+                      : leaderboardEmptyDescription()
                 }
                 className="border-0 bg-transparent py-6"
+                action={
+                  leaderboardLoadError ? (
+                    <button
+                      type="button"
+                      onClick={() => void fetchData()}
+                      className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600"
+                    >
+                      Retry
+                    </button>
+                  ) : undefined
+                }
               />
             ) : (
               <div className="overflow-x-auto">

@@ -7,7 +7,7 @@ import ExploreDiscoverBar from "../components/explore/ExploreDiscoverBar"
 import ExploreTraderCard from "../components/explore/ExploreTraderCard"
 import EmptyState from "../components/ui/EmptyState"
 import { SkeletonExplorePage, SkeletonTraderCard } from "../components/ui/skeletons"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import {
   buildPostSummaries,
@@ -87,6 +87,10 @@ export default function ExplorePage() {
   const [visibleCount, setVisibleCount] = useState(EXPLORE_PAGE_SIZE)
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasMoreProfiles, setHasMoreProfiles] = useState(true)
+  const [exploreLoadError, setExploreLoadError] = useState<string | null>(null)
+  const [exploreSearchError, setExploreSearchError] = useState<string | null>(
+    null
+  )
 
   useEffect(() => {
     setVisibleCount(EXPLORE_PAGE_SIZE)
@@ -131,9 +135,9 @@ export default function ExplorePage() {
   async function fetchProfileBatch(
     offset: number,
     limit = EXPLORE_PAGE_SIZE
-  ): Promise<{ added: ExploreProfile[]; hasMore: boolean }> {
+  ): Promise<{ added: ExploreProfile[]; hasMore: boolean; error: boolean }> {
     if (isDemoModeActive()) {
-      return { added: [], hasMore: false }
+      return { added: [], hasMore: false, error: false }
     }
 
     const { data, error } = await supabase
@@ -146,12 +150,12 @@ export default function ExplorePage() {
 
     if (error) {
       console.error("[explore] profile batch fetch error:", error)
-      return { added: [], hasMore: false }
+      return { added: [], hasMore: false, error: true as const }
     }
 
     const batch = (data as ExploreProfile[]) || []
     if (batch.length === 0) {
-      return { added: [], hasMore: false }
+      return { added: [], hasMore: false, error: false as const }
     }
 
     const profileIds = batch.map((p) => p.id)
@@ -171,7 +175,7 @@ export default function ExplorePage() {
       ...buildPostSummaries(postsRes.data || []),
     }))
 
-    return { added: enriched, hasMore: batch.length >= limit }
+    return { added: enriched, hasMore: batch.length >= limit, error: false }
   }
 
   function restoreExploreSession(
@@ -204,44 +208,61 @@ export default function ExplorePage() {
     void init()
   }, [user?.id])
 
+  const runExploreSearch = useCallback(async (term: string) => {
+    setLoadingSearch(true)
+    setSearchFinished(false)
+
+    if (isDemoModeActive()) {
+      setResults(searchDemoExploreProfiles(term))
+      setLoadingSearch(false)
+      setSearchFinished(true)
+      setExploreSearchError(null)
+      return
+    }
+
+    const { data, error } = await supabase
+      .from("profiles")
+      .select(SEARCH_PROFILE_FIELDS)
+      .or(`username.ilike.%${term}%,name.ilike.%${term}%`)
+      .not("username", "is", null)
+      .neq("is_private", true)
+      .limit(8)
+
+    if (error) {
+      console.error("[explore] search error:", error)
+      setResults([])
+      setExploreSearchError("Couldn't search traders. Please try again.")
+      setLoadingSearch(false)
+      setSearchFinished(true)
+      return
+    }
+
+    setResults(data || [])
+    setExploreSearchError(null)
+    setLoadingSearch(false)
+    setSearchFinished(true)
+  }, [])
+
   useEffect(() => {
     const term = search.trim()
     if (term.length < SEARCH_MIN_CHARS) {
       setResults([])
       setLoadingSearch(false)
       setSearchFinished(false)
+      setExploreSearchError(null)
       return
     }
 
-    const delayDebounce = setTimeout(async () => {
-      setLoadingSearch(true)
-      setSearchFinished(false)
-
-      if (isDemoModeActive()) {
-        setResults(searchDemoExploreProfiles(term))
-        setLoadingSearch(false)
-        setSearchFinished(true)
-        return
-      }
-
-      const { data } = await supabase
-        .from("profiles")
-        .select(SEARCH_PROFILE_FIELDS)
-        .or(`username.ilike.%${term}%,name.ilike.%${term}%`)
-        .not("username", "is", null)
-        .neq("is_private", true)
-        .limit(8)
-
-      setResults(data || [])
-      setLoadingSearch(false)
-      setSearchFinished(true)
+    const delayDebounce = setTimeout(() => {
+      void runExploreSearch(term)
     }, 300)
 
     return () => clearTimeout(delayDebounce)
-  }, [search])
+  }, [search, runExploreSearch])
 
   async function init() {
     setLoading(true)
+    setExploreLoadError(null)
 
     if (isDemoModeActive()) {
       const uid = user?.id ?? null
@@ -298,9 +319,21 @@ export default function ExplorePage() {
         : Promise.resolve({ data: null }),
     ])
 
-    const { added, hasMore } = await fetchProfileBatch(0, EXPLORE_PAGE_SIZE)
+    const { added, hasMore, error: profilesError } = await fetchProfileBatch(
+      0,
+      EXPLORE_PAGE_SIZE
+    )
+    if (profilesError) {
+      setProfiles([])
+      setHasMoreProfiles(false)
+      setExploreLoadError("Couldn't load traders. Please try again.")
+      initialLoadDone.current = true
+      setLoading(false)
+      return
+    }
     setProfiles(added)
     setHasMoreProfiles(hasMore)
+    setExploreLoadError(null)
 
     await loadTradeMetaRows()
 
@@ -492,9 +525,27 @@ export default function ExplorePage() {
           results.length === 0 ? (
             <div className="mt-3">
               <EmptyState
-                title="No traders found"
-                description={`No profiles match "${search.trim()}".`}
+                title={
+                  exploreSearchError
+                    ? "Couldn't Search Traders"
+                    : "No traders found"
+                }
+                description={
+                  exploreSearchError ??
+                  `No profiles match "${search.trim()}".`
+                }
                 className="py-6"
+                action={
+                  exploreSearchError ? (
+                    <button
+                      type="button"
+                      onClick={() => void runExploreSearch(search.trim())}
+                      className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600"
+                    >
+                      Retry
+                    </button>
+                  ) : undefined
+                }
               />
             </div>
           ) : null}
@@ -558,6 +609,21 @@ export default function ExplorePage() {
 
         {loading ? (
           <SkeletonExplorePage />
+        ) : exploreLoadError ? (
+          <EmptyState
+            title="Couldn't Load Traders"
+            description={exploreLoadError}
+            className="py-12"
+            action={
+              <button
+                type="button"
+                onClick={() => void init()}
+                className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600"
+              >
+                Retry
+              </button>
+            }
+          />
         ) : displayedTraders.length === 0 ? (
           <EmptyState
             title="No traders match these filters"

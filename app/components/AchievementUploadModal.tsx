@@ -103,6 +103,11 @@ export type AchievementUploadModalProps = {
   saveLabel?: string
   /** When true, prop firm payout was already recorded (e.g. from Prop Firm Mode). */
   propFirmPayoutAlreadyRecorded?: boolean
+  /**
+   * When true, skip in-modal Passed Eval continuance so the parent
+   * (e.g. Prop Firm Mode) can open its own flow with the full account.
+   */
+  deferPassedEvalContinuance?: boolean
 }
 
 AchievementUploadModal.displayName = "AchievementUploadModal"
@@ -130,6 +135,7 @@ export default function AchievementUploadModal({
   dialogSubtitle,
   saveLabel,
   propFirmPayoutAlreadyRecorded = false,
+  deferPassedEvalContinuance = false,
 }: AchievementUploadModalProps) {
   const editingId = editingAchievement?.id ?? null
   const [busy, setBusy] = useState(false)
@@ -203,6 +209,12 @@ export default function AchievementUploadModal({
         account_number: acc.account_number ?? null,
         mode: acc.mode ?? "live",
         category: acc.category ?? null,
+        consistency: acc.consistency ?? null,
+        max_drawdown: acc.max_drawdown ?? null,
+        daily_drawdown: acc.daily_drawdown ?? null,
+        profit_target: acc.profit_target ?? null,
+        winning_days: acc.winning_days ?? null,
+        winning_day_threshold: acc.winning_day_threshold ?? null,
       }))
 
     setAccounts(rows)
@@ -565,6 +577,7 @@ export default function AchievementUploadModal({
 
           if (
             !snapshotEditingId &&
+            !deferPassedEvalContinuance &&
             shouldOpenPassedEvalContinuance(achievementType, snapshotSelectedAccount)
           ) {
             openPassedEvalContinuance(

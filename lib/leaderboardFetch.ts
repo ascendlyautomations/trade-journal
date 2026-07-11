@@ -9,7 +9,7 @@ export async function fetchLeaderboardTrades(): Promise<TradeForLeaderboard[]> {
 
   if (!res.ok) {
     console.error("[leaderboard] trade fetch error:", res.status, res.statusText)
-    return []
+    throw new Error("Couldn't load leaderboard data. Please try again.")
   }
 
   return (await res.json()) as TradeForLeaderboard[]

@@ -216,6 +216,7 @@ function FeedPageContent() {
   const [feedEmptyState, setFeedEmptyState] = useState<FeedEmptyState | null>(
     null
   )
+  const [feedLoadError, setFeedLoadError] = useState<string | null>(null)
   const feedEmptyStateRef = useRef<FeedEmptyState | null>(null)
   feedEmptyStateRef.current = feedEmptyState
   const scrollYRef = useRef(0)
@@ -843,6 +844,7 @@ function FeedPageContent() {
 
       if (currentPage === 0 && isActive()) {
         setFeedEmptyState(null)
+        setFeedLoadError(null)
       }
 
       try {
@@ -1079,6 +1081,11 @@ function FeedPageContent() {
         } else {
           console.error("[feed] loadPosts FULL ERROR", error)
         }
+        if (isActive() && currentPage === 0) {
+          setFeedLoadError("Couldn't load the feed. Please try again.")
+          hasLoadedFeedRef.current = true
+          setFeedReady(true)
+        }
       } finally {
         if (isActive()) {
           loadingRef.current = false
@@ -1096,6 +1103,7 @@ function FeedPageContent() {
     setLikesByPost({})
     setCommentsByPost({})
     setFeedEmptyState(null)
+    setFeedLoadError(null)
     setPage(0)
     setHasMore(true)
     pageRef.current = 0
@@ -1118,6 +1126,7 @@ function FeedPageContent() {
     setLikesByPost(cached.likesByPost)
     setCommentsByPost(cached.commentsByPost)
     setFeedEmptyState(cached.feedEmptyState)
+    setFeedLoadError(null)
     setPage(cached.page)
     setHasMore(cached.hasMore)
     pageRef.current = cached.page
@@ -1810,7 +1819,7 @@ function FeedPageContent() {
       const meta = likesByPostRef.current[pid] ?? EMPTY_LIKE_META
 
       if (isReel) {
-        await toggleReelLike(supabase, {
+        const ok = await toggleReelLike(supabase, {
           reelId: pid,
           userId: user.id,
           ownerUserId: reelOwnerUserId(post),
@@ -1827,6 +1836,12 @@ function FeedPageContent() {
             })
           },
         })
+        if (!ok) {
+          showPopup({
+            type: "error",
+            message: "Couldn't update like. Please try again.",
+          })
+        }
         return
       }
 
@@ -1857,6 +1872,10 @@ function FeedPageContent() {
 
         if (error) {
           console.error("Unlike error:", error)
+          showPopup({
+            type: "error",
+            message: "Couldn't update like. Please try again.",
+          })
           return
         }
 
@@ -1896,6 +1915,10 @@ function FeedPageContent() {
               hint: error.hint,
             },
           })
+          showPopup({
+            type: "error",
+            message: "Couldn't update like. Please try again.",
+          })
           return
         }
 
@@ -1933,6 +1956,10 @@ function FeedPageContent() {
               hint: error.hint,
             },
           })
+          showPopup({
+            type: "error",
+            message: "Couldn't update like. Please try again.",
+          })
           return
         }
 
@@ -1969,6 +1996,10 @@ function FeedPageContent() {
               hint: error.hint,
             },
           })
+          showPopup({
+            type: "error",
+            message: "Couldn't update like. Please try again.",
+          })
           return
         }
 
@@ -1993,7 +2024,7 @@ function FeedPageContent() {
         setLikeBusyByPost((prev) => ({ ...prev, [pid]: false }))
       }
     },
-    [user, persistFeedSnapshot]
+    [user, persistFeedSnapshot, showPopup]
   )
 
   const submitComment = useCallback(
@@ -2515,6 +2546,27 @@ function FeedPageContent() {
 
           {!authChecked || (!feedReady && uniquePosts.length === 0) ? (
             <SkeletonFeedPage count={3} />
+          ) : feedLoadError && uniquePosts.length === 0 ? (
+            <EmptyState
+              title="Couldn't Load Feed"
+              description={feedLoadError}
+              className="py-10"
+              action={
+                <button
+                  type="button"
+                  onClick={() => {
+                    bumpFeedRequestGeneration()
+                    resetFeedState()
+                    setFeedLoadError(null)
+                    setLoading(true)
+                    void loadPosts(0)
+                  }}
+                  className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600"
+                >
+                  Retry
+                </button>
+              }
+            />
           ) : feedReady && !loading && uniquePosts.length === 0 && feedEmptyState ? (
             <EmptyState
               title={

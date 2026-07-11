@@ -11,6 +11,7 @@ export default function SearchPage() {
   const [search, setSearch] = useState("")
   const [users, setUsers] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
+  const [searchError, setSearchError] = useState<string | null>(null)
 
   const router = useRouter()
 
@@ -19,10 +20,12 @@ export default function SearchPage() {
 
     if (!value.trim()) {
       setUsers([])
+      setSearchError(null)
       return
     }
 
     setLoading(true)
+    setSearchError(null)
 
     const { data, error } = await supabase
       .from("profiles")
@@ -33,6 +36,10 @@ export default function SearchPage() {
 
     if (error) {
       console.error("Supabase error (search profiles):", error)
+      setUsers([])
+      setSearchError("Couldn't search users. Please try again.")
+      setLoading(false)
+      return
     }
 
     if (!data) {
@@ -65,8 +72,19 @@ export default function SearchPage() {
 
           {!loading && search.trim() && users.length === 0 ? (
             <EmptyState
-              title="No users found"
-              description="Try a different username."
+              title={searchError ? "Couldn't Search Users" : "No users found"}
+              description={searchError ?? "Try a different username."}
+              action={
+                searchError ? (
+                  <button
+                    type="button"
+                    onClick={() => void handleSearch(search)}
+                    className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600"
+                  >
+                    Retry
+                  </button>
+                ) : undefined
+              }
             />
           ) : null}
 

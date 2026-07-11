@@ -862,6 +862,7 @@ export default function DMPage() {
 
   const [messages, setMessages] = useState<any[]>([])
   const [messagesLoaded, setMessagesLoaded] = useState(false)
+  const [messagesLoadError, setMessagesLoadError] = useState<string | null>(null)
   const [input, setInput] = useState("")
   const [replyTarget, setReplyTarget] = useState<ReplyTarget | null>(null)
   const replyTargetRef = useRef<ReplyTarget | null>(null)
@@ -1033,6 +1034,7 @@ export default function DMPage() {
     setPageAccess("allowed")
     setMessages(cached.messages)
     setMessagesLoaded(true)
+    setMessagesLoadError(null)
     setConversation(cached.conversation)
     setParticipants(cached.participants)
     setOtherUser(cached.otherUser)
@@ -1630,6 +1632,7 @@ export default function DMPage() {
 
     setMessages([])
     setMessagesLoaded(false)
+    setMessagesLoadError(null)
     setConversation(null)
     setParticipants([])
     setOtherUser(null)
@@ -1851,6 +1854,7 @@ export default function DMPage() {
     if (error) {
       console.error("[dm-thread-load] query failed", error)
       setMessages([])
+      setMessagesLoadError("Couldn't load messages. Please try again.")
       setMessagesLoaded(true)
       return
     }
@@ -1864,6 +1868,7 @@ export default function DMPage() {
     const sorted = sortMessagesByCreatedAt(filteredMessages)
 
     setMessages(sorted)
+    setMessagesLoadError(null)
     prevLastMessageIdRef.current = null
     scrollAnchorRef.current = {
       conversationId,
@@ -2381,11 +2386,34 @@ export default function DMPage() {
             className="min-h-0 flex-1 overflow-y-auto overflow-x-visible px-2 py-3 md:p-4"
           >
             {messagesLoaded && messages.length === 0 ? (
-              <EmptyState
-                title="No Messages Yet"
-                description="Start the conversation."
-                className="py-10"
-              />
+              messagesLoadError ? (
+                <EmptyState
+                  title="Unable to Load Messages"
+                  description="We couldn't load this conversation. Please try again."
+                  className="py-10"
+                  action={
+                    user?.id && activeConversationId ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMessagesLoadError(null)
+                          setMessagesLoaded(false)
+                          void loadMessages(user.id, activeConversationId)
+                        }}
+                        className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600"
+                      >
+                        Retry
+                      </button>
+                    ) : undefined
+                  }
+                />
+              ) : (
+                <EmptyState
+                  title="No Messages Yet"
+                  description="Start the conversation."
+                  className="py-10"
+                />
+              )
             ) : null}
             {messages.map((message, i) => {
               if (message.is_system) {

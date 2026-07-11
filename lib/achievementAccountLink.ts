@@ -77,6 +77,12 @@ export function tradeAccountToPropFirmMilestoneAccount(
     account_size: account.size,
     account_number: account.account_number,
     mode: account.mode,
+    consistency: account.consistency ?? null,
+    max_drawdown: account.max_drawdown ?? null,
+    daily_drawdown: account.daily_drawdown ?? null,
+    profit_target: account.profit_target ?? null,
+    winning_days: account.winning_days ?? null,
+    winning_day_threshold: account.winning_day_threshold ?? null,
   }
 }
 
