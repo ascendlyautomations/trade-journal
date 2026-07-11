@@ -12,7 +12,8 @@ import { formatEST } from "@/lib/formatEST"
 import { formatMoneyUnknown, formatNumberUnknown, formatTradePoints } from "@/lib/formatDisplay"
 import { safeAccountNumberLabel, formatTradeAccountNameSizeLine } from "@/lib/tradeAccountDisplay"
 import { tradeScreenshotPublicUrl } from "@/lib/storagePublicUrl"
-import TradeScreenshotImage from "@/app/components/trade/TradeScreenshotImage"
+import SavedImage from "@/app/components/ui/SavedImage"
+import { TRADE_PAGE_SCREENSHOT_MAX_HEIGHT_CLASS } from "@/lib/tradeScreenshotDisplay"
 import CopyTradedBadge from "@/app/components/trade/CopyTradedBadge"
 import ExpandableText from "@/app/components/ui/ExpandableText"
 import { isCopyTradedTrade } from "@/lib/tradeCopyTrading"
@@ -418,12 +419,12 @@ function TradesPageTradeCard({
       </div>
 
       {screenshotUrl ? (
-        <TradeScreenshotImage
+        <SavedImage
           src={screenshotUrl}
-          preset="trade-thumb"
-          className="mt-4 rounded-lg border border-white/10"
+          alt=""
+          maxHeightClassName={TRADE_PAGE_SCREENSHOT_MAX_HEIGHT_CLASS}
+          className="mt-4 rounded-lg"
           onClick={() => onImageClick(screenshotUrl)}
-          logContext="trades-page-card"
         />
       ) : null}
 

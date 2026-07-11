@@ -115,7 +115,7 @@ function logTradeReelError(step: string, error: unknown) {
   console.error(TRADE_REEL_LOG, step, error)
 }
 
-/** Surface actionable reel DB errors instead of masking them. */
+/** Surface friendly reel errors — never DB/schema details. */
 export function formatReelMutationError(error: unknown): string {
   const e = error as SupabaseErr | null | undefined
   if (!e?.message) return toUserFacingErrorMessage(error)
@@ -129,7 +129,8 @@ export function formatReelMutationError(error: unknown): string {
       lower.includes("schema cache") ||
       lower.includes("could not find"))
   ) {
-    return "Clip could not be saved. Apply the latest database migration (reels.trade_id) and reload the API schema."
+    console.error("[reels] trade_id schema/column error:", error)
+    return "Clip could not be saved. Please try again."
   }
 
   if (e.code === "23503") {
@@ -325,8 +326,10 @@ export async function publishReel(
     const metadata = await readReelVideoMetadata(input.file)
     durationSeconds = metadata.durationSeconds
   } catch (err) {
-    const message =
-      err instanceof Error ? err.message : "Could not process this video."
+    const message = toUserFacingErrorMessage(
+      err,
+      "Could not process this video."
+    )
     return { error: message }
   }
 
@@ -458,9 +461,9 @@ export async function publishTradeReel(
     logTradeReel("metadata read", { durationSeconds })
   } catch (err) {
     logTradeReelError("metadata read failed", err)
-    const message =
-      err instanceof Error ? err.message : "Could not process this video."
-    return { error: message }
+    return {
+      error: toUserFacingErrorMessage(err, "Could not process this video."),
+    }
   }
 
   logTradeReel("video upload started")
@@ -703,8 +706,10 @@ export async function replaceTradeReelVideo(
     const metadata = await readReelVideoMetadata(input.file)
     durationSeconds = metadata.durationSeconds
   } catch (err) {
-    const message =
-      err instanceof Error ? err.message : "Could not process this video."
+    const message = toUserFacingErrorMessage(
+      err,
+      "Could not process this video."
+    )
     return { error: message }
   }
 

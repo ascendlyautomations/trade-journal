@@ -6,6 +6,7 @@ import {
 } from "@/lib/affiliateStripeConnect"
 import { getStripeServer } from "@/lib/stripeServer"
 import { devLog } from "@/lib/devLog"
+import { jsonUserFacingError, USER_FACING_ERROR_MESSAGES } from "@/lib/userFacingError"
 
 export const runtime = "nodejs"
 
@@ -38,14 +39,23 @@ export async function POST(req: Request) {
             : "no_session_cookie_and_no_bearer",
         })
       }
-      return Response.json({ error: "Unauthorized" }, { status: 401 })
+      return Response.json(
+        { error: USER_FACING_ERROR_MESSAGES.SESSION_EXPIRED },
+        { status: 401 }
+      )
     }
 
     let stripe: ReturnType<typeof getStripeServer>
     try {
       stripe = getStripeServer()
     } catch {
-      return Response.json({ error: "Stripe is not configured", skipped: true }, { status: 503 })
+      return Response.json(
+        {
+          error: USER_FACING_ERROR_MESSAGES.BILLING_UNAVAILABLE,
+          skipped: true,
+        },
+        { status: 503 }
+      )
     }
 
     const { data: affiliate, error: affErr } = await supabaseServiceRole
@@ -118,8 +128,6 @@ export async function POST(req: Request) {
       affiliate: parseAffiliateConnectRow(row as Record<string, unknown>),
     })
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : "Stripe error"
-    console.error("[connect/sync]", e)
-    return Response.json({ error: msg }, { status: 500 })
+    return jsonUserFacingError(e, 500, "connect/sync")
   }
 }

@@ -264,7 +264,9 @@ export default function CsvImportPanel({
       error: (err) => {
         clearCsvState()
         lastCsvFileRef.current = file
-        openFailureModal(err.message || "Could not parse CSV file.")
+        openFailureModal(
+          handleSupabaseError(err, "Could not parse CSV file.")
+        )
       },
       complete: (results) => {
         const fields = (results.meta.fields ?? []).map((f) => stripBom(String(f).trim()))

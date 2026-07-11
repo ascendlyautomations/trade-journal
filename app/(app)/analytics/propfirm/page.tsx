@@ -50,7 +50,10 @@ import {
   MANAGE_ACCOUNTS_VALUE,
   navigateToManageAccounts,
 } from "@/app/components/TradeFilterBar"
-import { formatAccountNameWithSizeDisplay } from "@/lib/tradeAccountDisplay"
+import {
+  formatAccountNameWithSizeDisplay,
+  formatTradingAccountSelectorLabel,
+} from "@/lib/tradeAccountDisplay"
 import Modal from "@/app/components/ui/Modal"
 import AchievementUploadModal, {
   type AchievementUploadInitialValues,
@@ -467,7 +470,12 @@ export default function PropFirmPage() {
       { value: "__divider__", label: "----------------", disabled: true },
       ...accounts.map((acc) => ({
         value: String(acc.id),
-        label: `${formatAccountNameWithSizeDisplay(acc.name ?? "", acc.account_size as string | null | undefined)} • ${acc.mode}`,
+        label: formatTradingAccountSelectorLabel({
+          name: acc.name,
+          account_size: acc.account_size as string | null | undefined,
+          account_number: acc.account_number,
+          mode: acc.mode,
+        }),
       })),
       { value: MANAGE_ACCOUNTS_VALUE, label: "⚙️ Manage Accounts" },
     ],

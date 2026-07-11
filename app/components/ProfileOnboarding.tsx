@@ -26,6 +26,7 @@ import {
 } from "@/lib/tradeDateValidation"
 import { mirrorAccountSettingsOnboardingCompleted } from "@/lib/profileSplitMirrorWrites"
 import { notifyBetaSignupAfterOnboardingComplete } from "@/lib/betaSignupNotify"
+import { handleSupabaseError } from "@/lib/handleSupabaseError"
 
 export {
   profileNeedsOnboarding,
@@ -236,7 +237,8 @@ export default function ProfileOnboarding({
         if (isProfilesUsernameConflict(upErr)) {
           setError("Username already in use")
         } else {
-          setError(upErr.message)
+          console.error("[ProfileOnboarding] profile update failed", upErr)
+          setError(handleSupabaseError(upErr))
         }
         return
       }
@@ -278,7 +280,7 @@ export default function ProfileOnboarding({
       >
         <form
           onSubmit={handleSubmit}
-          className="flex max-h-[min(90vh,720px)] w-full min-w-0 max-w-xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/10 p-6 shadow-2xl backdrop-blur-xl sm:p-8"
+          className="flex max-h-[min(90vh,720px)] w-full min-w-0 max-w-xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0f172a]/95 p-6 shadow-2xl backdrop-blur-xl sm:p-8"
         >
           <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain">
             <h2

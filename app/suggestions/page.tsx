@@ -7,6 +7,8 @@ import { supabase } from "../../lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
 import { useToast } from "@/app/components/ui"
 import { useUserProfile } from "@/lib/useUserProfile"
+import { handleSupabaseError } from "@/lib/handleSupabaseError"
+import { USER_FACING_ERROR_MESSAGES } from "@/lib/userFacingError"
 
 export default function SuggestionsPage() {
   const toast = useToast()
@@ -43,7 +45,13 @@ export default function SuggestionsPage() {
       .upload(fileName, uploadFile)
 
     if (uploadError) {
-      toast.error(uploadError.message)
+      console.error("[suggestions] upload failed", uploadError)
+      toast.error(
+        handleSupabaseError(
+          uploadError,
+          USER_FACING_ERROR_MESSAGES.FILE_UPLOAD_FAILED
+        )
+      )
       setLoading(false)
       return
     }
@@ -59,7 +67,8 @@ export default function SuggestionsPage() {
     })
 
     if (insertError) {
-      toast.error(insertError.message)
+      console.error("[suggestions] insert failed", insertError)
+      toast.error(handleSupabaseError(insertError))
       setLoading(false)
       return
     }

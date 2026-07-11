@@ -55,6 +55,15 @@ import TradePublicShareToggle from "@/app/components/TradePublicShareToggle"
 import TradeReelAttachment from "@/app/components/TradeReelAttachment"
 import ImageCropModal from "@/app/components/ImageCropModal"
 import { useTradeImageCropUpload } from "@/lib/useTradeImageCropUpload"
+import {
+  fetchImageUrlAsFile,
+  type TradeScreenshotDisplayMode,
+} from "@/lib/tradeScreenshotDisplayMode"
+import {
+  DEFAULT_TRADE_SCREENSHOT_DISPLAY_MODE,
+  resolveTradeScreenshotDisplayMode,
+  tradeScreenshotObjectFitClass,
+} from "@/lib/tradeScreenshotDisplay"
 import TradeFormCurrencyInput from "@/app/components/trade/TradeFormCurrencyInput"
 import {
   getTradeFormCurrencyInputDisplayValue,
@@ -86,6 +95,23 @@ import {
 } from "@/lib/appDataCache"
 
 type CreateAccountSavePayload = Parameters<CreateAccountModalProps["onSave"]>[0]
+
+const TRADE_TIMEFRAME_PRESETS = [
+  "15s",
+  "30s",
+  "1m",
+  "5m",
+  "15m",
+  "30m",
+  "1hr",
+  "4hr",
+] as const
+
+const TRADE_TIMEFRAME_OPTIONS = [...TRADE_TIMEFRAME_PRESETS, "Custom"] as const
+
+function isTradeTimeframePreset(value: string): boolean {
+  return (TRADE_TIMEFRAME_PRESETS as readonly string[]).includes(value)
+}
 
 function modeLabelFromDb(raw: string | null | undefined): string {
   const s = String(raw ?? "").toLowerCase().trim()
@@ -186,6 +212,7 @@ export default function InputTradeForm({
   const [market, setMarket] = useState("")
   const [newsEvent, setNewsEvent] = useState(false)
   const [timeframe, setTimeframe] = useState("")
+  const [customTimeframe, setCustomTimeframe] = useState("")
 
   function handleNumberInput(value: string) {
     if (/^-?\d*\.?\d*$/.test(value)) return value
@@ -216,8 +243,16 @@ export default function InputTradeForm({
   const [postToFeed, setPostToFeed] = useState(false)
   const [isPublic, setIsPublic] = useState(false)
   const [image, setImage] = useState<File | null>(null)
+  const [removeScreenshot, setRemoveScreenshot] = useState(false)
+  const [screenshotDisplayMode, setScreenshotDisplayMode] =
+    useState<TradeScreenshotDisplayMode>(DEFAULT_TRADE_SCREENSHOT_DISPLAY_MODE)
+  const [screenshotModeBusy, setScreenshotModeBusy] = useState(false)
+  const screenshotSourceRef = useRef<File | null>(null)
   const imageCrop = useTradeImageCropUpload({
-    onCropped: setImage,
+    onCropped: (cropped) => {
+      setRemoveScreenshot(false)
+      setImage(cropped)
+    },
     onValidationError: (message) =>
       showPopup(persistentError("Invalid Image", message)),
   })
@@ -494,6 +529,11 @@ export default function InputTradeForm({
     setPostToFeed(false)
     setIsPublic(Boolean(t.is_public))
     setImage(null)
+    setRemoveScreenshot(false)
+    setScreenshotDisplayMode(
+      resolveTradeScreenshotDisplayMode(t.image_display_mode)
+    )
+    screenshotSourceRef.current = null
     setStrategy(t.strategy ?? "")
     const acctCat = (t as { account_category?: string | null }).account_category
     const tradeAcctNum = (t as { account_number?: string | null }).account_number
@@ -523,7 +563,17 @@ export default function InputTradeForm({
     setMistakeType(t.mistake_type ?? "")
     setMarket(t.market_condition ?? "")
     setNewsEvent(Boolean(t.news_event))
-    setTimeframe(t.timeframe ?? "")
+    const savedTimeframe = String(t.timeframe ?? "").trim()
+    if (!savedTimeframe) {
+      setTimeframe("")
+      setCustomTimeframe("")
+    } else if (isTradeTimeframePreset(savedTimeframe)) {
+      setTimeframe(savedTimeframe)
+      setCustomTimeframe("")
+    } else {
+      setTimeframe("Custom")
+      setCustomTimeframe(savedTimeframe === "Custom" ? "" : savedTimeframe)
+    }
     setPsychologyNotes(t.psychology_notes ?? "")
     setEntryPrice(
       t.entry_price != null && t.entry_price !== ""
@@ -572,6 +622,9 @@ export default function InputTradeForm({
     setConfluences("")
     setPublicDescription("")
     setImage(null)
+    setRemoveScreenshot(false)
+    setScreenshotDisplayMode(DEFAULT_TRADE_SCREENSHOT_DISPLAY_MODE)
+    screenshotSourceRef.current = null
     setPendingReelFile(null)
     setAttachedReel(null)
     setEntryPrice("")
@@ -588,6 +641,7 @@ export default function InputTradeForm({
     setMarket("")
     setNewsEvent(false)
     setTimeframe("")
+    setCustomTimeframe("")
     setPsychologyNotes("")
     setTradeType("")
     const today = getESTDate()
@@ -609,7 +663,9 @@ export default function InputTradeForm({
       setReelDeleteBusy(false)
 
       if ("error" in result) {
-        showPopup(persistentError("Delete Failed", result.error))
+        showPopup(
+          persistentError("Delete Failed", handleSupabaseError(result.error))
+        )
         return
       }
 
@@ -752,15 +808,19 @@ export default function InputTradeForm({
         uploadProgressRange: { start: 20, end: 62 },
       })
       if (uploaded.error) {
+        const safeMessage = handleSupabaseError(
+          uploaded.error,
+          "We couldn't upload your trade image."
+        )
         showPopup(
           persistentError(
-            uploaded.error.includes("image") || uploaded.error.includes("Image")
+            safeMessage.toLowerCase().includes("image")
               ? "Invalid Image"
               : "Upload Failed",
-            uploaded.error
+            safeMessage
           )
         )
-        throw new Error(uploaded.error)
+        throw new Error(safeMessage)
       }
       screenshotUrl = uploaded.path
     } else {
@@ -791,6 +851,11 @@ export default function InputTradeForm({
         ? String(psychologyNotes).trim()
         : null
 
+    const timeframeToSave =
+      timeframe === "Custom"
+        ? customTimeframe.trim() || null
+        : timeframe.trim() || null
+
     const selectedCopyGroup = selectedCopyGroupId
       ? (copyGroups.find((group) => group.id === selectedCopyGroupId) ?? null)
       : null
@@ -819,6 +884,7 @@ export default function InputTradeForm({
         notes: confluences || null,
         public_description: publicDescription,
         image_url: screenshotUrl,
+        image_display_mode: screenshotDisplayMode,
         strategy: strategy || null,
         user_id: userId,
         created_at: now.toISOString(),
@@ -836,7 +902,7 @@ export default function InputTradeForm({
         mistake_type: mistakeType || null,
         market_condition: market || null,
         news_event: newsEvent,
-        timeframe: timeframe || null,
+        timeframe: timeframeToSave,
         is_public: isPublic,
       }
 
@@ -853,7 +919,10 @@ export default function InputTradeForm({
 
       if (!copyResult.ok) {
         showPopup(
-          persistentError("Save Failed", copyResult.message)
+          persistentError(
+            "Save Failed",
+            handleSupabaseError(copyResult.message)
+          )
         )
         throw new Error(copyResult.message)
       }
@@ -947,7 +1016,9 @@ export default function InputTradeForm({
       }
 
       const prevImg = existingTrade.image_url ?? null
-      const imageUrlOut = screenshotUrl ?? prevImg
+      const imageUrlOut = removeScreenshot
+        ? null
+        : (screenshotUrl ?? prevImg)
 
       const entryVal = entryPrice.trim() === "" ? null : Number(entryPrice)
       const exitVal = exitPrice.trim() === "" ? null : Number(exitPrice)
@@ -963,6 +1034,7 @@ export default function InputTradeForm({
         top_confluences: confluences || null,
         public_description: publicDescription ?? "",
         image_url: imageUrlOut,
+        image_display_mode: screenshotDisplayMode,
         account_name: rowAcct.name,
         account_type: rowAcct.type,
         mode: rowAcct.mode,
@@ -993,7 +1065,7 @@ export default function InputTradeForm({
         mistake_type: mistakeType || null,
         market_condition: market || null,
         news_event: newsEvent,
-        timeframe: timeframe || null,
+        timeframe: timeframeToSave,
         is_public: isPublic,
       }
       const csvReviewPending =
@@ -1114,6 +1186,7 @@ export default function InputTradeForm({
       notes: confluences || null,
       public_description: publicDescription,
       image_url: screenshotUrl,
+      image_display_mode: screenshotDisplayMode,
       account_name: rowAcct.name,
       account_size: rowAcct.size,
       account_id: rowAcct.id,
@@ -1137,7 +1210,7 @@ export default function InputTradeForm({
       mistake_type: mistakeType || null,
       market_condition: market || null,
       news_event: newsEvent,
-      timeframe: timeframe || null,
+      timeframe: timeframeToSave,
       is_public: isPublic,
     }
 
@@ -1254,6 +1327,11 @@ export default function InputTradeForm({
   }
 
   function handleCropSave(cropped: File) {
+    if (imageCrop.cropSourceFile) {
+      screenshotSourceRef.current = imageCrop.cropSourceFile
+    }
+    setRemoveScreenshot(false)
+    setScreenshotDisplayMode(DEFAULT_TRADE_SCREENSHOT_DISPLAY_MODE)
     imageCrop.handleCropSave(cropped)
   }
 
@@ -1264,6 +1342,63 @@ export default function InputTradeForm({
 
   function handleClickUpload() {
     fileInputRef.current?.click()
+  }
+
+  async function ensureScreenshotSourceFile(): Promise<File | null> {
+    if (screenshotSourceRef.current) return screenshotSourceRef.current
+    if (image) {
+      screenshotSourceRef.current = image
+      return image
+    }
+    const existingUrl =
+      existingTrade?.image_url != null
+        ? postImageSrc(existingTrade.image_url)
+        : null
+    if (!existingUrl) return null
+    const file = await fetchImageUrlAsFile(existingUrl, "trade-screenshot.jpg")
+    screenshotSourceRef.current = file
+    return file
+  }
+
+  function applyScreenshotDisplayMode(mode: TradeScreenshotDisplayMode) {
+    if (screenshotModeBusy || submitting) return
+    setScreenshotDisplayMode(mode)
+    setRemoveScreenshot(false)
+  }
+
+  async function handleAdjustExistingScreenshot() {
+    if (screenshotModeBusy || submitting) return
+    setScreenshotModeBusy(true)
+    try {
+      const source = await ensureScreenshotSourceFile()
+      if (!source) {
+        showPopup(
+          persistentError(
+            "Screenshot Unavailable",
+            "Could not load the current screenshot."
+          )
+        )
+        return
+      }
+      imageCrop.handleFileSelected(source)
+    } catch {
+      showPopup(
+        persistentError(
+          "Adjust Failed",
+          "Could not open the screenshot editor."
+        )
+      )
+    } finally {
+      setScreenshotModeBusy(false)
+    }
+  }
+
+  function handleRemoveScreenshot() {
+    setImage(null)
+    setRemoveScreenshot(true)
+    setScreenshotDisplayMode(DEFAULT_TRADE_SCREENSHOT_DISPLAY_MODE)
+    screenshotSourceRef.current = null
+    imageCrop.resetFileInput()
   }
 
   function handleUploadCsvGuardClick() {
@@ -1517,12 +1652,32 @@ export default function InputTradeForm({
   const fieldLabelClass = TRADE_FIELD_LABEL_CLASS
 
   const communityPreviewImageUrl = useMemo(() => {
+    if (removeScreenshot) return null
     if (screenshotPreviewUrl) return screenshotPreviewUrl
     if (existingTrade?.image_url) {
       return postImageSrc(existingTrade.image_url)
     }
     return null
-  }, [screenshotPreviewUrl, existingTrade?.image_url])
+  }, [removeScreenshot, screenshotPreviewUrl, existingTrade?.image_url])
+
+  const editScreenshotPreviewSrc = useMemo(() => {
+    if (!isEditMode || removeScreenshot) return null
+    if (screenshotPreviewUrl) return screenshotPreviewUrl
+    if (existingTrade?.image_url) {
+      return postImageSrc(existingTrade.image_url)
+    }
+    return null
+  }, [
+    isEditMode,
+    removeScreenshot,
+    screenshotPreviewUrl,
+    existingTrade?.image_url,
+  ])
+
+  const editScreenshotHasImage = Boolean(editScreenshotPreviewSrc)
+  const editScreenshotPreviewObjectClass = tradeScreenshotObjectFitClass(
+    screenshotDisplayMode
+  )
 
   const communityPreviewPost = useMemo(() => {
     if (!userId) return null
@@ -1585,17 +1740,7 @@ export default function InputTradeForm({
     [userId]
   )
 
-  const tradeTimeframeOptions = [
-    "15s",
-    "30s",
-    "1m",
-    "5m",
-    "15m",
-    "30m",
-    "1hr",
-    "4hr",
-    "Custom",
-  ] as const
+  const tradeTimeframeOptions = TRADE_TIMEFRAME_OPTIONS
 
   const quickInputButtonClass =
     "shrink-0 rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-sm font-medium text-blue-100 transition hover:bg-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60 md:px-4"
@@ -2076,14 +2221,14 @@ export default function InputTradeForm({
           <div className="space-y-2">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2">
           <div>
-            <label className={fieldLabelClass}>Confidence</label>
+            <label className={fieldLabelClass}>Trade Conviction</label>
             <select
               tabIndex={18}
               value={confidence}
               onChange={(e) => setConfidence(e.target.value)}
               className="w-full p-2 lg:p-2.5 bg-[#0f172a] border border-white/10 rounded"
             >
-              <option value="">Confidence Level</option>
+              <option value="">Conviction Level</option>
               <option value="1">1 - Bad</option>
               <option value="2">2</option>
               <option value="3">3</option>
@@ -2105,11 +2250,20 @@ export default function InputTradeForm({
                   {option}
                 </option>
               ))}
-              {timeframe &&
-                !(tradeTimeframeOptions as readonly string[]).includes(timeframe) && (
-                  <option value={timeframe}>{timeframe}</option>
-                )}
             </select>
+            {timeframe === "Custom" ? (
+              <div className="mt-2">
+                <label className={fieldLabelClass}>Custom Timeframe</label>
+                <input
+                  type="text"
+                  tabIndex={22}
+                  value={customTimeframe}
+                  onChange={(e) => setCustomTimeframe(e.target.value)}
+                  placeholder="e.g. 45 Second, 2 Minute, 12 Minute, 3 Hour"
+                  className="w-full p-2 lg:p-2.5 bg-[#0f172a] border border-white/10 rounded text-white"
+                />
+              </div>
+            ) : null}
           </div>
           </div>
           <div>
@@ -2139,7 +2293,7 @@ export default function InputTradeForm({
                 checked={followedPlan}
                 onChange={(e) => setFollowedPlan(e.target.checked)}
               />
-              Followed Plan?
+              Followed Bias?
             </label>
             <label className="flex items-center gap-2 text-sm">
               <input
@@ -2174,7 +2328,7 @@ export default function InputTradeForm({
           <div>
             <label className={fieldLabelClass}>Psychology Notes</label>
             <textarea
-              placeholder="What were you thinking in the moment?"
+              placeholder="Describe your thought process before, during, and after the trade."
               tabIndex={24}
               value={psychologyNotes}
               onChange={(e) => setPsychologyNotes(e.target.value)}
@@ -2184,30 +2338,133 @@ export default function InputTradeForm({
 
           <div>
             <label className={fieldLabelClass}>Screenshot</label>
-            <div
-              tabIndex={25}
-              onClick={handleClickUpload}
-              onDrop={handleDrop}
-              onDragOver={(e) => e.preventDefault()}
-              className={TRADE_FULL_INPUT_MEDIA_UPLOAD_CLASS}
-            >
-            {image ? (
-              <p>{image.name}</p>
-            ) : isEditMode && existingTrade?.image_url ? (
-              <p className="text-gray-400 text-sm">Keep existing image / drop new</p>
+            {isEditMode ? (
+              <div className="mt-2 space-y-2">
+                {editScreenshotHasImage ? (
+                  <div
+                    className="relative aspect-[4/3] w-full overflow-hidden rounded-lg border border-white/10 bg-[#0f172a]"
+                    onDrop={handleDrop}
+                    onDragOver={(e) => e.preventDefault()}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={editScreenshotPreviewSrc ?? undefined}
+                      alt="Trade screenshot preview"
+                      className={`h-full w-full ${editScreenshotPreviewObjectClass}`}
+                    />
+                    {screenshotModeBusy ? (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/40 text-sm text-white">
+                        Updating…
+                      </div>
+                    ) : null}
+                  </div>
+                ) : (
+                  <div
+                    tabIndex={25}
+                    onClick={handleClickUpload}
+                    onDrop={handleDrop}
+                    onDragOver={(e) => e.preventDefault()}
+                    className={TRADE_FULL_INPUT_MEDIA_UPLOAD_CLASS}
+                  >
+                    <p>Upload Screenshot</p>
+                  </div>
+                )}
+
+                {editScreenshotHasImage ? (
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={screenshotModeBusy || submitting}
+                      onClick={() => applyScreenshotDisplayMode("fit")}
+                      className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition disabled:opacity-40 ${
+                        screenshotDisplayMode === "fit"
+                          ? "border-blue-500 bg-blue-500/20 text-white"
+                          : "border-white/15 bg-white/5 text-gray-200 hover:bg-white/10"
+                      }`}
+                    >
+                      Fit
+                    </button>
+                    <button
+                      type="button"
+                      disabled={screenshotModeBusy || submitting}
+                      onClick={() => applyScreenshotDisplayMode("fill")}
+                      className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition disabled:opacity-40 ${
+                        screenshotDisplayMode === "fill"
+                          ? "border-blue-500 bg-blue-500/20 text-white"
+                          : "border-white/15 bg-white/5 text-gray-200 hover:bg-white/10"
+                      }`}
+                    >
+                      Fill
+                    </button>
+                    <button
+                      type="button"
+                      disabled={screenshotModeBusy || submitting}
+                      onClick={() => void handleAdjustExistingScreenshot()}
+                      className="rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-medium text-gray-200 transition hover:bg-white/10 disabled:opacity-40"
+                    >
+                      Adjust
+                    </button>
+                  </div>
+                ) : null}
+
+                <div className="flex flex-wrap gap-2">
+                  {editScreenshotHasImage ? (
+                    <>
+                      <button
+                        type="button"
+                        tabIndex={25}
+                        disabled={screenshotModeBusy || submitting}
+                        onClick={handleClickUpload}
+                        className="rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-medium text-gray-200 transition hover:bg-white/10 disabled:opacity-40"
+                      >
+                        Replace image
+                      </button>
+                      <button
+                        type="button"
+                        disabled={screenshotModeBusy || submitting}
+                        onClick={handleRemoveScreenshot}
+                        className="rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-medium text-red-300 transition hover:bg-white/10 disabled:opacity-40"
+                      >
+                        Remove
+                      </button>
+                    </>
+                  ) : null}
+                </div>
+
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  className="hidden"
+                  accept="image/*"
+                  onChange={(e) => {
+                    selectTradeImage(e.target.files?.[0])
+                  }}
+                />
+              </div>
             ) : (
-              <p>Upload Screenshot</p>
+              <div
+                tabIndex={25}
+                onClick={handleClickUpload}
+                onDrop={handleDrop}
+                onDragOver={(e) => e.preventDefault()}
+                className={TRADE_FULL_INPUT_MEDIA_UPLOAD_CLASS}
+              >
+                {image ? (
+                  <p>{image.name}</p>
+                ) : (
+                  <p>Upload Screenshot</p>
+                )}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  className="hidden"
+                  accept="image/*"
+                  onChange={(e) => {
+                    selectTradeImage(e.target.files?.[0])
+                  }}
+                />
+              </div>
             )}
-            <input
-              ref={fileInputRef}
-              type="file"
-              className="hidden"
-              accept="image/*"
-              onChange={(e) => {
-                selectTradeImage(e.target.files?.[0])
-              }}
-            />
-          </div>
 
           <TradeReelAttachment
             variant="full"

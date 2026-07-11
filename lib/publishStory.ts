@@ -72,7 +72,11 @@ export async function publishStory(
 
   const base = process.env.NEXT_PUBLIC_SUPABASE_URL
   if (!base) {
-    return { ok: false, message: "Missing NEXT_PUBLIC_SUPABASE_URL" }
+    console.error("[publishStory] NEXT_PUBLIC_SUPABASE_URL is not set")
+    return {
+      ok: false,
+      message: "Story couldn't be published. Please try again.",
+    }
   }
 
   const publicUrl = `${base}/storage/v1/object/public/stories/${fileName}`

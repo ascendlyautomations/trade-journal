@@ -28,6 +28,26 @@ export function computeFitScale(
   return Math.min(frameWidth / imageWidth, frameHeight / imageHeight)
 }
 
+/**
+ * Zoom multiplier (relative to Fit) so the image covers the frame with no letterbox.
+ * Returns 1 when the image already covers at Fit scale (exact aspect match).
+ */
+export function computeCoverZoom(
+  imageWidth: number,
+  imageHeight: number,
+  frameWidth: number,
+  frameHeight: number,
+  maxZoom = ZOOM_PAN_MAX
+): number {
+  if (imageWidth <= 0 || imageHeight <= 0 || frameWidth <= 0 || frameHeight <= 0) {
+    return ZOOM_PAN_MIN
+  }
+  const fit = computeFitScale(imageWidth, imageHeight, frameWidth, frameHeight)
+  if (fit <= 0) return ZOOM_PAN_MIN
+  const cover = Math.max(frameWidth / imageWidth, frameHeight / imageHeight)
+  return clampZoom(cover / fit, maxZoom)
+}
+
 export function clampZoom(zoom: number, maxZoom = ZOOM_PAN_MAX): number {
   return Math.min(maxZoom, Math.max(ZOOM_PAN_MIN, zoom))
 }

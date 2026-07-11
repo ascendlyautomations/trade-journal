@@ -16,6 +16,10 @@ import type {
   UploadJob,
   UploadProgressReporter,
 } from "@/lib/uploadProgress/types"
+import {
+  toUserFacingErrorMessage,
+  USER_FACING_ERROR_MESSAGES,
+} from "@/lib/userFacingError"
 
 const MAX_CONCURRENT_UPLOADS = 2
 const SUCCESS_DISMISS_MS = 1400
@@ -151,8 +155,10 @@ export function UploadProgressProvider({ children }: { children: ReactNode }) {
               scheduleSuccessDismiss(id, task)
               resolveAttempt()
             } catch (err) {
-              const message =
-                err instanceof Error ? err.message : "Upload failed."
+              const message = toUserFacingErrorMessage(
+                err,
+                USER_FACING_ERROR_MESSAGES.FILE_UPLOAD_FAILED
+              )
               const lastPercent = percentByIdRef.current.get(id) ?? 0
               patchJob(id, {
                 percent: lastPercent,

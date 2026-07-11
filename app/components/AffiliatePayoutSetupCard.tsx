@@ -9,6 +9,7 @@ import {
   isAffiliatePayoutSetupComplete,
 } from "@/lib/affiliateStripeConnect"
 import { STRIPE_CONNECT_PRIMARY_BUTTON_CLASS } from "@/lib/affiliateUi"
+import { toUserFacingErrorMessage } from "@/lib/userFacingError"
 
 type Props = {
   /** Affiliate row incl. Stripe Connect fields (null if no row yet). */
@@ -41,14 +42,19 @@ export default function AffiliatePayoutSetupCard({ affiliateConnect, show }: Pro
       })
       const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string }
       if (!res.ok) {
-        setError(typeof data.error === "string" ? data.error : "Could not start onboarding.")
+        setError(
+          toUserFacingErrorMessage(
+            data.error,
+            "Could not start onboarding. Please try again."
+          )
+        )
         return
       }
       if (data.url) {
         window.location.href = data.url
         return
       }
-      setError("No redirect URL returned.")
+      setError("Could not start onboarding. Please try again.")
     } finally {
       setBusy(false)
     }

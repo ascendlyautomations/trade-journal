@@ -50,7 +50,13 @@ export async function sendStoryReply(
   )
 
   if (!ensured.ok) {
-    return { ok: false, error: ensured.error.message || "Could not open conversation" }
+    return {
+      ok: false,
+      error: handleSupabaseError(
+        ensured.error,
+        "Could not open conversation. Please try again."
+      ),
+    }
   }
 
   const payload: StoryReplyPayload = {

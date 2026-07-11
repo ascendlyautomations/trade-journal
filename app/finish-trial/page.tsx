@@ -21,6 +21,7 @@ import {
 } from "@/lib/traxProBillingPlans"
 import { setCheckoutBillingInterval } from "@/lib/signupFlow"
 import { LOADING_COPY } from "@/lib/loadingCopy"
+import { toUserFacingErrorMessage } from "@/lib/userFacingError"
 
 export default function FinishTrialPage() {
   const router = useRouter()
@@ -63,7 +64,10 @@ export default function FinishTrialPage() {
       const url = await startTraxProCheckout({ billingInterval })
       window.location.href = url
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Checkout failed. Please try again.")
+      console.error("[finish-trial] checkout failed", err)
+      setError(
+        toUserFacingErrorMessage(err, "Checkout failed. Please try again.")
+      )
       setCheckoutLoading(false)
     }
   }
@@ -75,14 +79,17 @@ export default function FinishTrialPage() {
     try {
       const result = await markProfileUseFreeTier(supabase, user.id)
       if (!result.ok) {
-        setError(result.error ?? "Could not continue on Free. Please try again.")
+        setError(
+          result.error ?? "Could not continue on Free. Please try again."
+        )
         setContinueLoading(false)
         return
       }
       await refreshProfile()
       router.replace("/dashboard")
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.")
+      console.error("[finish-trial] continue free failed", err)
+      setError(toUserFacingErrorMessage(err))
       setContinueLoading(false)
     }
   }

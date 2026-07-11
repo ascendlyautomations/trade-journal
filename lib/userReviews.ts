@@ -3,6 +3,7 @@ import { notifyAdminSubmission } from "@/lib/notifyAdminSubmission"
 import { isRateLimitExceededError, formatRateLimitExceededMessage } from "@/lib/rateLimitErrors"
 import type { PostgrestError } from "@supabase/supabase-js"
 import type { PublicUserReview } from "@/lib/userReviewDisplay"
+import { toUserFacingErrorMessage } from "@/lib/userFacingError"
 
 export type { PublicUserReview } from "@/lib/userReviewDisplay"
 export {
@@ -157,7 +158,8 @@ export async function saveUserReview(
       .single()
 
     if (error) {
-      return { ok: false, message: error.message }
+      logUserReviewError("update", error)
+      return { ok: false, message: toUserFacingErrorMessage(error) }
     }
 
     notifyAdminSubmission("user_review", (data as UserReviewRow).id)
@@ -188,7 +190,8 @@ export async function saveUserReview(
         ),
       }
     }
-    return { ok: false, message: error.message }
+    logUserReviewError("insert", error)
+    return { ok: false, message: toUserFacingErrorMessage(error) }
   }
 
   notifyAdminSubmission("user_review", (data as UserReviewRow).id)

@@ -1,4 +1,5 @@
 import type { PostgrestError } from "@supabase/supabase-js"
+import { toUserFacingErrorMessage } from "@/lib/userFacingError"
 
 /**
  * PGRST116 — JSON object requested, multiple (or fewer) rows returned.
@@ -8,10 +9,9 @@ export function isPostgrestRowCardinalityError(e: PostgrestError): boolean {
   return e.code === "PGRST116"
 }
 
-/** Full PostgREST details in development builds for faster debugging. */
+/** Safe user-facing PostgREST copy (never raw SQL/constraint details). */
 export function formatPostgrestErrorMessage(e: PostgrestError): string {
-  if (process.env.NODE_ENV !== "development") return e.message
-  return [e.message, e.details, e.hint, e.code && `(${e.code})`].filter(Boolean).join(" | ")
+  return toUserFacingErrorMessage(e)
 }
 
 /** Logs the full Supabase/PostgREST error shape (dev only). */

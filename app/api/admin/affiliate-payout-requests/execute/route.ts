@@ -1,6 +1,11 @@
 import { supabaseServiceRole, getRouteUser } from "@/app/api/_lib/getRouteUser"
 import { getStripeServer } from "@/lib/stripeServer"
 import Stripe from "stripe"
+import {
+  jsonUserFacingError,
+  toUserFacingErrorMessage,
+  USER_FACING_ERROR_MESSAGES,
+} from "@/lib/userFacingError"
 
 export const runtime = "nodejs"
 
@@ -28,7 +33,10 @@ function stripeUserMessage(err: Stripe.errors.StripeError): string {
       return "Connected account is not valid for transfers. Verify the affiliate completed Stripe onboarding."
     }
   }
-  return err.message || "Stripe could not complete the transfer."
+  return toUserFacingErrorMessage(
+    err,
+    "The transfer could not be completed. Please try again."
+  )
 }
 
 export async function POST(req: Request) {
@@ -37,7 +45,10 @@ export async function POST(req: Request) {
   try {
     const adminUser = await getRouteUser(req)
     if (!adminUser?.id) {
-      return Response.json({ error: "Unauthorized" }, { status: 401 })
+      return Response.json(
+        { error: USER_FACING_ERROR_MESSAGES.SESSION_EXPIRED },
+        { status: 401 }
+      )
     }
 
     const { data: adminRow } = await supabaseServiceRole
@@ -47,7 +58,10 @@ export async function POST(req: Request) {
       .maybeSingle()
 
     if (!adminRow?.user_id) {
-      return Response.json({ error: "Forbidden" }, { status: 403 })
+      return Response.json(
+        { error: USER_FACING_ERROR_MESSAGES.UNAUTHORIZED },
+        { status: 403 }
+      )
     }
 
     let body: { payoutRequestId?: string; adminNotes?: string | null }
@@ -239,9 +253,7 @@ export async function POST(req: Request) {
       return Response.json(
         {
           error:
-            "Transfer succeeded in Stripe but saving this request failed. Reconcile in Dashboard → Transfers for " +
-            transfer.id +
-            ".",
+            "Transfer succeeded but saving this request failed. Check Stripe Dashboard transfers and try again.",
         },
         { status: 500 }
       )
@@ -254,8 +266,10 @@ export async function POST(req: Request) {
       currency: CURRENCY,
     })
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : "Unexpected error"
-    console.error("[admin-payout-execute]", e)
-    return Response.json({ error: msg }, { status: 500 })
+    if (e instanceof Stripe.errors.StripeError) {
+      console.error("[admin-payout-execute]", e)
+      return Response.json({ error: stripeUserMessage(e) }, { status: 500 })
+    }
+    return jsonUserFacingError(e, 500, "admin-payout-execute")
   }
 }

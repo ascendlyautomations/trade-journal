@@ -6,8 +6,7 @@ import {
   navigateToManageAccounts,
 } from "./TradeFilterBar"
 import {
-  formatAccountNameWithSizeDisplay,
-  safeAccountNumberLabel,
+  formatTradingAccountSelectorParts,
 } from "@/lib/tradeAccountDisplay"
 import type { CopyTradingGroup } from "@/lib/copyTradingGroups"
 import {
@@ -51,30 +50,27 @@ export type TradeAccountOption = {
 type FilterOption = {
   value: string
   label: string
+  labelName?: string
+  labelSuffix?: string
 }
 
 type MenuView = "accounts" | "copy-groups"
 
-function accountNumberSuffix(acc: {
-  account_number?: string | null
-}): string {
-  const num = safeAccountNumberLabel(acc.account_number)
-  return num ? ` • #${num}` : ""
-}
-
-function formatMode(mode: unknown) {
-  if (!mode) return "Live"
-  const m = String(mode).toLowerCase()
-  if (m === "eval") return "Eval"
-  if (m === "funded") return "Funded"
-  if (m === "live") return "Live"
-  if (m === "sim") return "Sim"
-  if (m === "backtest") return "Backtest"
-  return String(mode)
-}
-
-function formatAccountLine(acc: TradeAccountOption): string {
-  return `${formatAccountNameWithSizeDisplay(acc.name, acc.size)} • ${acc.category || "Personal"} • ${formatMode(acc.mode)}${accountNumberSuffix(acc)}`
+function AccountSelectorLabelText({
+  name,
+  suffix,
+  className,
+}: {
+  name: string
+  suffix: string
+  className?: string
+}) {
+  return (
+    <span className={cn("flex min-w-0 flex-1 items-center", className)}>
+      <span className="min-w-0 truncate">{name}</span>
+      {suffix ? <span className="shrink-0">{suffix}</span> : null}
+    </span>
+  )
 }
 
 type TradeAccountPickerProps = {
@@ -164,6 +160,12 @@ function ItemRow({
   onClick: () => void
   className?: string
 }) {
+  const content =
+    typeof children === "string" || typeof children === "number" ? (
+      <RowText>{children}</RowText>
+    ) : (
+      children
+    )
   return (
     <div
       role="button"
@@ -177,7 +179,7 @@ function ItemRow({
       }}
       className={className ?? ACCOUNT_DROPDOWN_ITEM_CLASS}
     >
-      <RowText>{children}</RowText>
+      {content}
     </div>
   )
 }
@@ -222,23 +224,55 @@ export default function TradeAccountPicker({
     [copyGroups, filterValue, isFilterMode, selectedCopyGroupId]
   )
 
+  const selectedAccountParts = useMemo(() => {
+    if (!selectedAccount) return null
+    return formatTradingAccountSelectorParts({
+      name: selectedAccount.name,
+      size: selectedAccount.size,
+      account_number: selectedAccount.account_number,
+      mode: selectedAccount.mode,
+    })
+  }, [selectedAccount])
+
   const triggerLabel = useMemo(() => {
     if (isFilterMode) {
-      if (!filterValue || filterValue === "all") return filterPlaceholder
-      if (selectedCopyGroup) return selectedCopyGroup.name
+      if (!filterValue || filterValue === "all") {
+        return { kind: "text" as const, text: filterPlaceholder }
+      }
+      if (selectedCopyGroup) {
+        return { kind: "text" as const, text: selectedCopyGroup.name }
+      }
       const option = filterOptions.find((opt) => opt.value === filterValue)
-      return option?.label ?? filterPlaceholder
+      if (option?.labelName != null) {
+        return {
+          kind: "parts" as const,
+          name: option.labelName,
+          suffix: option.labelSuffix ?? "",
+        }
+      }
+      return {
+        kind: "text" as const,
+        text: option?.label ?? filterPlaceholder,
+      }
     }
 
-    if (selectedCopyGroup) return selectedCopyGroup.name
-    if (selectedAccount) return formatAccountLine(selectedAccount)
-    return "Select Account"
+    if (selectedCopyGroup) {
+      return { kind: "text" as const, text: selectedCopyGroup.name }
+    }
+    if (selectedAccountParts) {
+      return {
+        kind: "parts" as const,
+        name: selectedAccountParts.name,
+        suffix: selectedAccountParts.suffix,
+      }
+    }
+    return { kind: "text" as const, text: "Select Account" }
   }, [
     filterOptions,
     filterPlaceholder,
     filterValue,
     isFilterMode,
-    selectedAccount,
+    selectedAccountParts,
     selectedCopyGroup,
   ])
 
@@ -305,14 +339,24 @@ export default function TradeAccountPicker({
   const accountRows = isFilterMode
     ? filterOptions.map((opt) => ({
         key: opt.value,
-        label: opt.label,
+        labelName: opt.labelName ?? opt.label,
+        labelSuffix: opt.labelSuffix ?? "",
         onClick: () => handleSelectFilterOption(opt.value),
       }))
-    : accounts.map((acc) => ({
-        key: String(acc.id),
-        label: formatAccountLine(acc),
-        onClick: () => handleSelectAccount(acc),
-      }))
+    : accounts.map((acc) => {
+        const parts = formatTradingAccountSelectorParts({
+          name: acc.name,
+          size: acc.size,
+          account_number: acc.account_number,
+          mode: acc.mode,
+        })
+        return {
+          key: String(acc.id),
+          labelName: parts.name,
+          labelSuffix: parts.suffix,
+          onClick: () => handleSelectAccount(acc),
+        }
+      })
 
   const accountsPanel = (
     <>
@@ -338,7 +382,10 @@ export default function TradeAccountPicker({
       <div className="max-h-48 overflow-y-auto overscroll-contain">
         {accountRows.map((row) => (
           <ItemRow key={row.key} onClick={row.onClick}>
-            {row.label}
+            <AccountSelectorLabelText
+              name={row.labelName}
+              suffix={row.labelSuffix}
+            />
           </ItemRow>
         ))}
       </div>
@@ -435,8 +482,17 @@ export default function TradeAccountPicker({
           onClick={() => setOpen((prev) => !prev)}
           className={resolvedTriggerClassName}
         >
-          <span className={cn(ACCOUNT_DROPDOWN_ROW_TEXT_CLASS, "text-left")}>
-            {triggerLabel}
+          <span className="flex min-w-0 flex-1 items-center text-left">
+            {triggerLabel.kind === "parts" ? (
+              <AccountSelectorLabelText
+                name={triggerLabel.name}
+                suffix={triggerLabel.suffix}
+              />
+            ) : (
+              <span className={cn(ACCOUNT_DROPDOWN_ROW_TEXT_CLASS, "text-left")}>
+                {triggerLabel.text}
+              </span>
+            )}
           </span>
           <span className="shrink-0 text-gray-400">▾</span>
         </button>

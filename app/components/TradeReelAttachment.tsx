@@ -13,6 +13,7 @@ import {
   REEL_MAX_DURATION_LABEL,
   validateReelVideoFile,
 } from "@/lib/reelVideo"
+import { toUserFacingErrorMessage } from "@/lib/userFacingError"
 
 export type TradeReelAttachmentProps = {
   variant?: "quick" | "full"
@@ -86,7 +87,7 @@ export default function TradeReelAttachment({
       onPendingFileChange(file)
     } catch (err) {
       setErrorMessage(
-        err instanceof Error ? err.message : "Could not read this video."
+        toUserFacingErrorMessage(err, "Could not read this video.")
       )
       onPendingFileChange(null)
     } finally {

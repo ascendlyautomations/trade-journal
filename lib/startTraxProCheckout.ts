@@ -2,6 +2,7 @@ import { supabase } from "./supabaseClient"
 import { markStripeReconciliationPending } from "./stripeReconciliation"
 import type { TraxProBillingIntervalId } from "./traxProBillingPlans"
 import { TRAXPRO_DEFAULT_BILLING_INTERVAL } from "./traxProBillingPlans"
+import { toUserFacingErrorMessage, USER_FACING_ERROR_MESSAGES } from "./userFacingError"
 
 export type StartTraxProCheckoutOptions = {
   billingInterval?: TraxProBillingIntervalId
@@ -17,7 +18,7 @@ export async function startTraxProCheckout(
   const accessToken = session?.access_token
 
   if (!accessToken) {
-    throw new Error("Not authenticated")
+    throw new Error(USER_FACING_ERROR_MESSAGES.SESSION_EXPIRED)
   }
 
   const billingInterval =
@@ -42,11 +43,13 @@ export async function startTraxProCheckout(
   const data = (await res.json()) as { url?: string; error?: string }
 
   if (!res.ok) {
-    throw new Error(data?.error || "Checkout failed")
+    throw new Error(
+      toUserFacingErrorMessage(data?.error, "Checkout failed. Please try again.")
+    )
   }
 
   if (!data.url) {
-    throw new Error("Missing checkout URL")
+    throw new Error("Checkout is temporarily unavailable. Please try again.")
   }
 
   const userId = session?.user?.id

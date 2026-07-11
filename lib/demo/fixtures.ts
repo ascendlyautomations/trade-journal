@@ -6,7 +6,7 @@ import { getTradingSession } from "@/lib/formatDate"
 export const DEMO_PROFILE = {
   id: DEMO_USER_ID,
   username: "john_trades",
-  name: "Maya Chen",
+  name: "John Jones",
   bio: "Futures trader focused on NQ & ES. Sharing the journey — wins, losses, and lessons.",
   avatar_url: demoAvatarUrl(DEMO_USER_ID),
   is_pro: true,

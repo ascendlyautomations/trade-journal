@@ -1,4 +1,5 @@
 import type { AdminSubmissionType } from "@/lib/adminSubmissionTypes"
+import { toUserFacingErrorMessage } from "@/lib/userFacingError"
 
 export type PublicContactCategory = "general" | "billing" | "partnership" | "business" | "faq"
 
@@ -98,7 +99,13 @@ export async function submitPublicContact(
   }
 
   if (!res.ok) {
-    return { ok: false, message: data.error || "Failed to send message. Please try again." }
+    return {
+      ok: false,
+      message: toUserFacingErrorMessage(
+        data.error,
+        "Failed to send message. Please try again."
+      ),
+    }
   }
 
   return { ok: true }

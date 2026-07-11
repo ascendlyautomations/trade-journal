@@ -8,10 +8,10 @@ import { useModalScrollLock } from "./modalLayout"
 import type { FeedbackPopupType } from "./feedback-popup-types"
 
 const panelStyles: Record<FeedbackPopupType, string> = {
-  success: "border-green-500 bg-green-900/20",
-  error: "border-red-500 bg-red-900/20",
-  warning: "border-amber-500 bg-amber-900/20",
-  info: "border-blue-500 bg-blue-900/20",
+  success: "border-green-500/70 bg-[#0f172a]/95 backdrop-blur-xl",
+  error: "border-red-500/70 bg-[#0f172a]/95 backdrop-blur-xl",
+  warning: "border-amber-500/70 bg-[#0f172a]/95 backdrop-blur-xl",
+  info: "border-blue-500/70 bg-[#0f172a]/95 backdrop-blur-xl",
 }
 
 const messageStyles: Record<FeedbackPopupType, string> = {

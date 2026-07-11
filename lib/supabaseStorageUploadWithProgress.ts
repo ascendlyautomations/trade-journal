@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { toUserFacingErrorMessage, USER_FACING_ERROR_MESSAGES } from "@/lib/userFacingError"
 
 export type SupabaseStorageUploadOptions = {
   bucket: string
@@ -29,8 +30,10 @@ export async function uploadToSupabaseStorageWithProgress(
   const apiKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   const base = process.env.NEXT_PUBLIC_SUPABASE_URL
 
-  if (!token) return { error: "Not authenticated." }
-  if (!apiKey || !base) return { error: "Missing storage configuration." }
+  if (!token) return { error: USER_FACING_ERROR_MESSAGES.SESSION_EXPIRED }
+  if (!apiKey || !base) {
+    return { error: USER_FACING_ERROR_MESSAGES.FILE_UPLOAD_FAILED }
+  }
 
   const encodedPath = encodeStoragePath(options.path.replace(/^\/+/, ""))
   const url = `${base}/storage/v1/object/${options.bucket}/${encodedPath}`
@@ -70,17 +73,18 @@ export async function uploadToSupabaseStorageWithProgress(
           error?: string
         }
         resolve({
-          error:
-            body.message ||
-            body.error ||
-            `Upload failed (${xhr.status}).`,
+          error: toUserFacingErrorMessage(
+            body.message || body.error || `Upload failed (${xhr.status}).`,
+            USER_FACING_ERROR_MESSAGES.FILE_UPLOAD_FAILED
+          ),
         })
       } catch {
-        resolve({ error: `Upload failed (${xhr.status}).` })
+        resolve({ error: USER_FACING_ERROR_MESSAGES.FILE_UPLOAD_FAILED })
       }
     }
 
-    xhr.onerror = () => resolve({ error: "Network error during upload." })
+    xhr.onerror = () =>
+      resolve({ error: USER_FACING_ERROR_MESSAGES.NETWORK_ERROR })
     xhr.onabort = () => resolve({ error: "Upload cancelled." })
     xhr.send(options.file)
   })

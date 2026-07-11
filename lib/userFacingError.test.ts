@@ -42,7 +42,21 @@ test("maps foreign key violation", () => {
     code: "23503",
     message: "insert or update on table violates foreign key constraint",
   })
-  assert.equal(msg, USER_FACING_ERROR_MESSAGES.ITEM_NOT_FOUND)
+  assert.equal(msg, USER_FACING_ERROR_MESSAGES.ACTION_FAILED)
+})
+
+test("maps failed to fetch", () => {
+  assert.equal(
+    toUserFacingErrorMessage("Failed to fetch"),
+    USER_FACING_ERROR_MESSAGES.NETWORK_ERROR
+  )
+})
+
+test("maps upload status noise", () => {
+  assert.equal(
+    toUserFacingErrorMessage("Upload failed (500)."),
+    USER_FACING_ERROR_MESSAGES.FILE_UPLOAD_FAILED
+  )
 })
 
 test("maps missing stripe config", () => {

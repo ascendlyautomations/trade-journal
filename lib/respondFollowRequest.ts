@@ -1,4 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import {
+  toUserFacingErrorMessage,
+  USER_FACING_ERROR_MESSAGES,
+} from "@/lib/userFacingError"
 
 async function authPost(
   supabase: SupabaseClient,
@@ -10,7 +14,7 @@ async function authPost(
   } = await supabase.auth.getSession()
   const accessToken = session?.access_token
   if (!accessToken) {
-    return { ok: false, message: "Not signed in" }
+    return { ok: false, message: USER_FACING_ERROR_MESSAGES.SESSION_EXPIRED }
   }
 
   const res = await fetch(url, {
@@ -25,7 +29,18 @@ async function authPost(
   if (!res.ok) {
     const text = await res.text()
     console.error("[follow-requests] API failed", { url, status: res.status, text })
-    return { ok: false, message: text || res.statusText }
+    let payload: { error?: string; message?: string } | null = null
+    try {
+      payload = JSON.parse(text) as { error?: string; message?: string }
+    } catch {
+      // ignore non-JSON bodies
+    }
+    return {
+      ok: false,
+      message: toUserFacingErrorMessage(
+        payload?.error || payload?.message || text || res.statusText
+      ),
+    }
   }
 
   window.dispatchEvent(new CustomEvent("tj-unread-notifications-refresh"))

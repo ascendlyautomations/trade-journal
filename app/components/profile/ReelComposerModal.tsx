@@ -13,6 +13,7 @@ import {
   REEL_MAX_DURATION_SECONDS,
   validateReelVideoFile,
 } from "@/lib/reelVideo"
+import { toUserFacingErrorMessage } from "@/lib/userFacingError"
 
 type ReelComposerModalProps = {
   open: boolean
@@ -84,7 +85,7 @@ export default function ReelComposerModal({
       await readReelVideoMetadata(file)
     } catch (err) {
       setErrorMessage(
-        err instanceof Error ? err.message : "Could not read this video."
+        toUserFacingErrorMessage(err, "Could not read this video.")
       )
       setValidating(false)
       return

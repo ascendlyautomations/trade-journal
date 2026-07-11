@@ -119,9 +119,7 @@ export function sanitizeDashboardAccountFilter(
 export function buildDashboardAccountOptionsFromAccounts(
   accountRows: readonly AccountRowForDisplay[]
 ): DashboardAccountOption[] {
-  return buildAccountFilterOptionsFromRows(accountRows, {
-    includeAccountNumberInLabel: false,
-  })
+  return buildAccountFilterOptionsFromRows(accountRows)
 }
 
 /** @deprecated Prefer `buildDashboardAccountOptionsFromAccounts`. */

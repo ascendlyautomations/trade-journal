@@ -8,6 +8,7 @@ import {
 } from "./uploadProgress/reportProgress"
 import type { UploadProgressReporter } from "./uploadProgress/types"
 import { validateImageUpload } from "./uploadValidation"
+import { toUserFacingErrorMessage, USER_FACING_ERROR_MESSAGES } from "./userFacingError"
 
 /** Shared crop preset for trades, posts, achievements, and other content images. */
 export const CONTENT_IMAGE_CROP_PRESET: ImageCropPresetId = "content"
@@ -76,7 +77,13 @@ export async function uploadContentImageToStorage(
     })
     if (upErr) {
       console.error("[uploadContentImage] upload error:", upErr)
-      return { path: null, error: upErr || "Could not upload image." }
+      return {
+        path: null,
+        error: toUserFacingErrorMessage(
+          upErr,
+          USER_FACING_ERROR_MESSAGES.TRADE_IMAGE_UPLOAD_FAILED
+        ),
+      }
     }
   } else {
     const { error: upErr } = await client.storage
@@ -84,7 +91,13 @@ export async function uploadContentImageToStorage(
       .upload(fileName, uploadFile)
     if (upErr) {
       console.error("[uploadContentImage] upload error:", upErr)
-      return { path: null, error: upErr.message || "Could not upload image." }
+      return {
+        path: null,
+        error: toUserFacingErrorMessage(
+          upErr,
+          USER_FACING_ERROR_MESSAGES.TRADE_IMAGE_UPLOAD_FAILED
+        ),
+      }
     }
   }
 

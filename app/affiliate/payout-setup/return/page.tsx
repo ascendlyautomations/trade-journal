@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import { supabaseBearerHeaders } from "@/lib/supabaseBearerFetch"
+import { toUserFacingErrorMessage } from "@/lib/userFacingError"
 
 export default function AffiliatePayoutSetupReturnPage() {
   const router = useRouter()
@@ -19,17 +20,27 @@ export default function AffiliatePayoutSetupReturnPage() {
             ...(await supabaseBearerHeaders()),
           },
         })
-        const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string }
+        const data = (await res.json().catch(() => ({}))) as {
+          ok?: boolean
+          error?: string
+        }
         if (!cancelled) {
           if (res.ok && data.ok !== false) {
             setMessage("Payout setup updated. Redirecting…")
             router.replace("/payouts?setup=return")
             return
           }
-          setMessage(typeof data.error === "string" ? data.error : "Could not refresh status.")
+          setMessage(
+            toUserFacingErrorMessage(
+              data.error,
+              "Could not refresh status. Please try again."
+            )
+          )
         }
       } catch {
-        if (!cancelled) setMessage("Could not refresh status.")
+        if (!cancelled) {
+          setMessage("Could not refresh status. Please try again.")
+        }
       }
       if (!cancelled) {
         window.setTimeout(() => router.replace("/payouts?setup=return"), 2200)

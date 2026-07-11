@@ -26,6 +26,7 @@ import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 import AnalyzeTradeProgressModal from "../components/analyst/AnalyzeTradeProgressModal"
 import { createAnalyzeProgressController } from "@/lib/analyzeTradeProgress"
 import { tradeScreenshotPublicUrl } from "@/lib/storagePublicUrl"
+import { toUserFacingErrorMessage } from "@/lib/userFacingError"
 
 type AnalyzeTradeApiPayload = {
   reply?: string
@@ -65,7 +66,8 @@ function analyzeTradeErrorMessage(
   data: AnalyzeTradeApiPayload | null,
   fallback: string
 ) {
-  return data?.reply?.trim() || data?.error?.trim() || fallback
+  const candidate = data?.reply?.trim() || data?.error?.trim() || fallback
+  return toUserFacingErrorMessage(candidate, fallback)
 }
 
 const MOBILE_ANALYST_MQ = "(max-width: 1023px)"

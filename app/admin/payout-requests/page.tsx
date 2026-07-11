@@ -229,13 +229,20 @@ export default function AdminPayoutRequestsPage() {
       })
       const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string }
       if (!res.ok) {
-        setActionError(typeof data.error === "string" ? data.error : "Could not complete Stripe transfer.")
+        setActionError(
+          toUserFacingErrorMessage(
+            data.error,
+            "Could not complete Stripe transfer."
+          )
+        )
         return
       }
       const nextRows = await loadRows()
       applyReselectOrClose(requestId, nextRows)
     } catch (e) {
-      setActionError(e instanceof Error ? e.message : "Could not complete Stripe transfer.")
+      setActionError(
+        toUserFacingErrorMessage(e, "Could not complete Stripe transfer.")
+      )
     } finally {
       setActionBusy(false)
     }

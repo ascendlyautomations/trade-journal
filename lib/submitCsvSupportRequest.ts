@@ -2,6 +2,10 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import { notifyAdminSubmission } from "@/lib/notifyAdminSubmission"
 import { validateCsvUpload } from "@/lib/uploadValidation"
 import { isRateLimitExceededError, formatRateLimitExceededMessage } from "@/lib/rateLimitErrors"
+import {
+  toUserFacingErrorMessage,
+  USER_FACING_ERROR_MESSAGES,
+} from "@/lib/userFacingError"
 
 export type SubmitCsvSupportInput = {
   csvFile: File
@@ -95,7 +99,14 @@ export async function submitCsvSupportRequest(
     })
 
   if (uploadError) {
-    return { ok: false, message: uploadError.message }
+    console.error("[csv-support] upload failed", uploadError)
+    return {
+      ok: false,
+      message: toUserFacingErrorMessage(
+        uploadError,
+        USER_FACING_ERROR_MESSAGES.FILE_UPLOAD_FAILED
+      ),
+    }
   }
 
   const { data, error: insertError } = await supabase
@@ -113,7 +124,10 @@ export async function submitCsvSupportRequest(
         ),
       }
     }
-    return { ok: false, message: insertError.message }
+    return {
+      ok: false,
+      message: toUserFacingErrorMessage(insertError),
+    }
   }
 
   if (data?.id) {

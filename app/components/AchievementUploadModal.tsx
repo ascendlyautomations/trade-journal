@@ -26,6 +26,7 @@ import ScrollableModalShell from "@/app/components/ui/ScrollableModalShell"
 import Modal from "@/app/components/ui/Modal"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { persistentError } from "@/lib/feedbackPresets"
+import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import {
   buildAchievementValidationPopup,
   validateAchievementForm,
@@ -569,7 +570,9 @@ export default function AchievementUploadModal({
           const { error: saveErr } = await query
           if (saveErr) {
             console.error("[achievements] save failed", saveErr)
-            throw new Error(saveErr.message || "Could not save achievement.")
+            throw new Error(
+              handleSupabaseError(saveErr, "Could not save achievement.")
+            )
           }
 
           report({ percent: 95, stage: "Finishing…" })
@@ -657,7 +660,9 @@ export default function AchievementUploadModal({
       showPopup(
         persistentError(
           "Payout Setup Unavailable",
-          error?.message ?? "Could not load account payout details."
+          error
+            ? handleSupabaseError(error)
+            : "Could not load account payout details."
         )
       )
       return

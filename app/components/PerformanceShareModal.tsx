@@ -214,7 +214,7 @@ export default function PerformanceShareModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="performance-share-title"
-        className={`relative z-10 w-full max-w-lg ${MODAL_PANEL_SHELL_CLASS} ${MODAL_PANEL_MAX_HEIGHT_CLASS} border-white/15 bg-[#0f172a]/98 backdrop-blur-xl`}
+        className={`relative z-10 w-full max-w-lg ${MODAL_PANEL_SHELL_CLASS} ${MODAL_PANEL_MAX_HEIGHT_CLASS} border-white/15`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="shrink-0 border-b border-white/10 px-5 py-4 md:px-6">

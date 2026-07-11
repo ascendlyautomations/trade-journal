@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { toUserFacingErrorMessage } from "@/lib/userFacingError"
 
 /** DB status values (csv_support_requests_status_ck). */
 export const CSV_SUPPORT_STATUS_OPTIONS = [
@@ -52,7 +53,13 @@ export async function createCsvSupportSignedDownloadUrl(
     .createSignedUrl(trimmed, 3600)
 
   if (error || !data?.signedUrl) {
-    return { error: error?.message || "Could not create download link" }
+    console.error("[adminCsvSupport] signed URL failed", error)
+    return {
+      error: toUserFacingErrorMessage(
+        error,
+        "Could not create download link. Please try again."
+      ),
+    }
   }
 
   return { url: data.signedUrl }

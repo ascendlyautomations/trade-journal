@@ -379,7 +379,10 @@ export default function AdminUsersPage() {
       setDeletePreview(data.preview ?? null)
     } catch (err) {
       setDeleteError({
-        message: err instanceof Error ? err.message : "Failed to load deletion preview",
+        message: toUserFacingErrorMessage(
+          err,
+          "Failed to load deletion preview"
+        ),
       })
       setDeletePreview(null)
     } finally {
@@ -398,9 +401,8 @@ export default function AdminUsersPage() {
     try {
       const result = await postAdminUserDelete(selected.id)
       if (!result.ok) {
+        console.error("[admin-users] delete failed", result.error)
         setDeleteError({
-          step: result.error.step ?? null,
-          table: result.error.table ?? null,
           message: toUserFacingErrorMessage(result.error),
         })
         return
@@ -412,7 +414,7 @@ export default function AdminUsersPage() {
       await loadDirectory()
     } catch (err) {
       setDeleteError({
-        message: err instanceof Error ? err.message : "Delete failed",
+        message: toUserFacingErrorMessage(err, "Delete failed"),
       })
     } finally {
       setDeleteBusy(false)
@@ -1002,22 +1004,7 @@ export default function AdminUsersPage() {
 
                   {deleteError ? (
                     <div className="rounded-lg border border-red-500/30 bg-red-950/30 p-3 text-sm text-red-200">
-                      {deleteError.step ? (
-                        <p>
-                          <span className="font-medium text-red-100">Failed during:</span>{" "}
-                          {deleteError.step}
-                        </p>
-                      ) : null}
-                      {deleteError.table ? (
-                        <p className={deleteError.step ? "mt-1" : ""}>
-                          <span className="font-medium text-red-100">Table:</span>{" "}
-                          {deleteError.table}
-                        </p>
-                      ) : null}
-                      <p className={deleteError.step || deleteError.table ? "mt-1" : ""}>
-                        <span className="font-medium text-red-100">Reason:</span>{" "}
-                        {deleteError.message}
-                      </p>
+                      {deleteError.message}
                     </div>
                   ) : null}
 
@@ -1107,9 +1094,6 @@ export default function AdminUsersPage() {
                       {bulkDeleteOutcome.failed.map((u) => (
                         <li key={u.id} className="rounded border border-red-500/20 bg-red-950/20 p-2">
                           <p className="font-medium text-red-100">{u.username}</p>
-                          {u.step ? (
-                            <p className="text-xs text-gray-400">Step: {u.step}</p>
-                          ) : null}
                           <p className="text-xs text-red-200/90">{u.message}</p>
                         </li>
                       ))}

@@ -10,6 +10,7 @@ import {
   selectActivePayoutCycle,
   type AccountPayoutCycle,
 } from "./propfirmPayoutCycles"
+import { toUserFacingErrorMessage } from "./userFacingError"
 
 const PROPFIRM_ACCOUNT_FIELDS =
   "id,name,account_size,account_number,mode,consistency,max_drawdown,daily_drawdown,profit_target,winning_days,winning_day_threshold,payout_drawdown_behavior,remember_payout_drawdown_behavior"
@@ -44,7 +45,10 @@ export async function fetchPropFirmPayoutSetupContext(
     .maybeSingle()
 
   if (accountError) {
-    return { context: null, error: new Error(accountError.message) }
+    return {
+      context: null,
+      error: new Error(toUserFacingErrorMessage(accountError)),
+    }
   }
   if (!account) {
     return { context: null, error: new Error("Trading account not found.") }
@@ -58,7 +62,10 @@ export async function fetchPropFirmPayoutSetupContext(
     .order("entry_time", { ascending: true })
 
   if (tradesError) {
-    return { context: null, error: new Error(tradesError.message) }
+    return {
+      context: null,
+      error: new Error(toUserFacingErrorMessage(tradesError)),
+    }
   }
 
   const payoutCycles = await fetchPayoutCycleHistory(supabase, accountId)

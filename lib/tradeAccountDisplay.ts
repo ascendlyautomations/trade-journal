@@ -104,6 +104,10 @@ export type AccountRowForDisplay = {
 export type AccountFilterOption = {
   value: string
   label: string
+  /** Name/size segment — truncate this when space is tight. */
+  labelName?: string
+  /** Fixed suffix (` • #ID • Mode`) — do not truncate. */
+  labelSuffix?: string
   accountType?: string | null
 }
 
@@ -153,26 +157,60 @@ export function buildAccountFilterKeyFromRow(
   return `${name}|${size}|${id}`
 }
 
-function formatAccountFilterOptionLabel(
-  accountRow: AccountRowForDisplay,
+/**
+ * Mode badge for account selectors (Eval / Funded / Live / …).
+ */
+export function formatTradingAccountModeLabel(mode: unknown): string {
+  if (mode == null || String(mode).trim() === "") return "Live"
+  const m = String(mode).toLowerCase().trim()
+  if (m === "eval") return "Eval"
+  if (m === "funded") return "Funded"
+  if (m === "live") return "Live"
+  if (m === "sim") return "Sim"
+  if (m === "backtest") return "Backtest"
+  return String(mode).trim()
+}
+
+export type TradingAccountSelectorLabelInput = {
+  name?: string | null
+  size?: string | null
+  account_size?: string | null
+  account_number?: string | null
+  mode?: string | null
+}
+
+/**
+ * Selector label parts: truncate `name` only; keep `suffix` (` • #ID • Mode`) fully visible.
+ */
+export function formatTradingAccountSelectorParts(
+  account: TradingAccountSelectorLabelInput,
+  options?: { includeAccountNumber?: boolean }
+): { name: string; suffix: string } {
+  const name = formatAccountNameWithSizeDisplay(
+    account.name ?? "",
+    account.size ?? account.account_size ?? null
+  )
+  const tail: string[] = []
+  if (options?.includeAccountNumber !== false) {
+    const num = safeAccountNumberLabel(account.account_number)
+    if (num) tail.push(`#${num}`)
+  }
+  const modeLabel = formatTradingAccountModeLabel(account.mode)
+  if (modeLabel) tail.push(modeLabel)
+  const suffix = tail.length > 0 ? ` • ${tail.join(" • ")}` : ""
+  return { name, suffix }
+}
+
+/**
+ * Account dropdown label: Account Name • Account ID • Eval/Funded.
+ * Account ID always appears before mode when present.
+ */
+export function formatTradingAccountSelectorLabel(
+  account: TradingAccountSelectorLabelInput,
   options?: { includeAccountNumber?: boolean }
 ): string {
-  const name = String(accountRow.name ?? "").trim()
-  const size =
-    accountRow.account_size != null
-      ? String(accountRow.account_size).trim()
-      : ""
-  const nameSizeLabel = formatAccountNameWithSizeDisplay(name, size || null)
-  if (options?.includeAccountNumber === false) return nameSizeLabel
-
-  const num = safeAccountNumberLabel(accountRow.account_number)
-  if (!num) return nameSizeLabel
-
-  return [nameSizeLabel, `• #${num}`]
-    .filter((x) => x !== "")
-    .join(" ")
-    .replace(/\s+/g, " ")
-    .trim()
+  const { name, suffix } = formatTradingAccountSelectorParts(account, options)
+  return `${name}${suffix}`.replace(/\s+/g, " ").trim()
 }
 
 /**
@@ -195,11 +233,21 @@ export function buildAccountFilterOptionsFromRows(
     const value = buildAccountFilterKeyFromRow(row)
     if (accountMap.has(value)) continue
 
+    const parts = formatTradingAccountSelectorParts(
+      {
+        name: row.name,
+        account_size: row.account_size,
+        account_number: row.account_number,
+        mode: row.mode,
+      },
+      { includeAccountNumber }
+    )
+
     accountMap.set(value, {
       value,
-      label: formatAccountFilterOptionLabel(row, {
-        includeAccountNumber,
-      }),
+      label: `${parts.name}${parts.suffix}`.replace(/\s+/g, " ").trim(),
+      labelName: parts.name,
+      labelSuffix: parts.suffix,
       accountType: row.mode ?? null,
     })
   }

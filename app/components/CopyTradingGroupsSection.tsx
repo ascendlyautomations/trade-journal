@@ -90,7 +90,7 @@ export default function CopyTradingGroupsSection({
         userId
       )
       if (groupsError) {
-        setError(groupsError.message)
+        setError(handleSupabaseError(groupsError))
         setGroups([])
       } else {
         setGroups(nextGroups)
@@ -148,7 +148,7 @@ export default function CopyTradingGroupsSection({
     setSaving(false)
 
     if (result.error) {
-      setError(result.error.message)
+      setError(handleSupabaseError(result.error))
       return
     }
 
@@ -174,7 +174,7 @@ export default function CopyTradingGroupsSection({
     setDeleting(false)
 
     if (deleteError) {
-      setError(deleteError.message)
+      setError(handleSupabaseError(deleteError))
       return
     }
 

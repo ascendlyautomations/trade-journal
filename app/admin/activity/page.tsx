@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation"
 import { type AdminAuditFeedItem, fetchAdminRecentAudit } from "@/lib/adminAnalytics"
 import { getCurrentAdminCheckResult } from "@/lib/adminUsers"
 import { supabase } from "@/lib/supabaseClient"
+import { toUserFacingErrorMessage } from "@/lib/userFacingError"
 
 export default function AdminActivityPage() {
   const router = useRouter()
@@ -42,7 +43,7 @@ export default function AdminActivityPage() {
     void (async () => {
       const { data, error: e } = await fetchAdminRecentAudit(supabase, 80)
       if (cancelled) return
-      if (e) setError(e.message)
+      if (e) setError(toUserFacingErrorMessage(e))
       setRows(data)
     })()
     return () => {

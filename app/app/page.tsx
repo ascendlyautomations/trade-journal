@@ -24,6 +24,7 @@ import {
 } from "@/lib/inputTradePageTitle"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { feedbackPresets, persistentSuccess } from "@/lib/feedbackPresets"
+import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import { assertCsvImportAllowedForFreePlan } from "@/lib/csvImportGate"
 import { csvTradesHaveFutureDate } from "@/lib/tradeDateValidation"
 import {
@@ -141,7 +142,9 @@ export default function Home() {
       error: (err) => {
         clearCsvUploadState()
         lastCsvFileRef.current = file
-        openFailureModal(err.message || "Could not parse CSV file.")
+        openFailureModal(
+          handleSupabaseError(err, "Could not parse CSV file.")
+        )
         setLoading(false)
       },
       complete: (results) => {

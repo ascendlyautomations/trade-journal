@@ -7,6 +7,8 @@ import { useRouter } from "next/navigation"
 import { supabase } from "../../lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
 import { notifyAdminSubmission } from "@/lib/notifyAdminSubmission"
+import { handleSupabaseError } from "@/lib/handleSupabaseError"
+import { USER_FACING_ERROR_MESSAGES } from "@/lib/userFacingError"
 import {
   submissionFileBrowse,
   submissionFilePicker,
@@ -115,7 +117,13 @@ export default function FeedbackPage() {
           .upload(filePath, uploadFile, { upsert: false })
 
         if (uploadError) {
-          setError(uploadError.message)
+          console.error("[feedback] upload failed", uploadError)
+          setError(
+            handleSupabaseError(
+              uploadError,
+              USER_FACING_ERROR_MESSAGES.FILE_UPLOAD_FAILED
+            )
+          )
           return
         }
 
@@ -139,7 +147,8 @@ export default function FeedbackPage() {
         .single()
 
       if (insertError) {
-        setError(insertError.message)
+        console.error("[feedback] insert failed", insertError)
+        setError(handleSupabaseError(insertError))
         return
       }
 

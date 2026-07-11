@@ -14,8 +14,8 @@ type TradeScreenshotImageProps = {
 }
 
 /**
- * Displays a user-cropped content image exactly as exported from the crop editor.
- * No automatic object-cover / aspect guessing — WYSIWYG.
+ * Feed/detail screenshot helper (storage transforms for performance).
+ * Trades page + full-screen viewer use {@link SavedImage} for identical composition.
  */
 export default function TradeScreenshotImage({
   src,
@@ -38,7 +38,7 @@ export default function TradeScreenshotImage({
       originalSrc={src}
       preset={preset}
       alt={alt}
-      className={`block h-auto w-full max-w-full ${onClick ? "cursor-pointer" : ""} ${className}`}
+      className={`block h-auto w-full max-w-full object-contain ${onClick ? "cursor-pointer" : ""} ${className}`}
       style={
         maxHeightPx != null
           ? { maxHeight: `min(70dvh, ${maxHeightPx}px)` }

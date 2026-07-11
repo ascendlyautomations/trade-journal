@@ -63,6 +63,10 @@ import NativeDateInput from "@/app/components/ui/NativeDateInput"
 import { feedbackPresets, persistentError } from "@/lib/feedbackPresets"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import {
+  toUserFacingErrorMessage,
+  USER_FACING_ERROR_MESSAGES,
+} from "@/lib/userFacingError"
+import {
   getLocalTodayDateInputValue,
   isStartedTradingDateInFuture,
 } from "@/lib/tradeDateValidation"
@@ -795,8 +799,11 @@ export default function SettingsPage() {
       window.location.href = url
     } catch (e) {
       console.error(e)
-      const message = e instanceof Error ? e.message : ""
-      if (message === "Not authenticated") {
+      const message = toUserFacingErrorMessage(e)
+      if (
+        message === USER_FACING_ERROR_MESSAGES.SESSION_EXPIRED ||
+        (e instanceof Error && e.message === "Not authenticated")
+      ) {
         router.push("/login?next=checkout")
         return
       }

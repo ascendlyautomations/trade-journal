@@ -2,6 +2,11 @@ import { supabaseServiceRole, getRouteUser } from "@/app/api/_lib/getRouteUser"
 import { ensureStripeConnectAccountForUser } from "@/lib/stripeConnectAffiliateServer"
 import { getStripeServer, resolveAppUrl } from "@/lib/stripeServer"
 import { devLog } from "@/lib/devLog"
+import {
+  jsonUserFacingError,
+  toUserFacingErrorMessage,
+  USER_FACING_ERROR_MESSAGES,
+} from "@/lib/userFacingError"
 
 export const runtime = "nodejs"
 
@@ -30,7 +35,10 @@ export async function POST(req: Request) {
             : "no_session_cookie_and_no_bearer",
         })
       }
-      return Response.json({ error: "Unauthorized" }, { status: 401 })
+      return Response.json(
+        { error: USER_FACING_ERROR_MESSAGES.SESSION_EXPIRED },
+        { status: 401 }
+      )
     }
 
     const { data: affiliateRow, error: affiliateSelectErr } = await supabaseServiceRole
@@ -60,12 +68,23 @@ export async function POST(req: Request) {
     try {
       stripe = getStripeServer()
     } catch {
-      return Response.json({ error: "Stripe is not configured" }, { status: 503 })
+      return Response.json(
+        { error: USER_FACING_ERROR_MESSAGES.BILLING_UNAVAILABLE },
+        { status: 503 }
+      )
     }
 
     const ensured = await ensureStripeConnectAccountForUser(supabaseServiceRole, user.id)
     if (!ensured.ok) {
-      return Response.json({ error: ensured.error }, { status: ensured.status })
+      return Response.json(
+        {
+          error: toUserFacingErrorMessage(
+            ensured.error,
+            USER_FACING_ERROR_MESSAGES.BILLING_UNAVAILABLE
+          ),
+        },
+        { status: ensured.status }
+      )
     }
 
     const base = resolveAppUrl(req)
@@ -88,8 +107,10 @@ export async function POST(req: Request) {
 
     return Response.json({ ok: true, url: link.url })
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : "Stripe error"
-    console.error("[account-link]", e)
-    return Response.json({ error: msg }, { status: 500 })
+    return jsonUserFacingError(
+      e,
+      500,
+      "account-link",
+    )
   }
 }

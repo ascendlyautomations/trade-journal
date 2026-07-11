@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react"
 import { createPortal } from "react-dom"
 import { NAVBAR_HEIGHT_CLASS } from "./DetailModalShell"
 import ImageViewerCloseButton from "./ImageViewerCloseButton"
+import SavedImage from "./SavedImage"
 import {
   MODAL_PANEL_MAX_HEIGHT_BELOW_NAV_CLASS,
   MODAL_PANEL_MAX_HEIGHT_CLASS,
@@ -113,13 +114,11 @@ export default function ImageLightbox({
         />
 
         <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden px-3 pb-3 pt-14 sm:px-4 sm:pb-4 sm:pt-16 md:px-6 md:pb-6 md:pt-[4.25rem]">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
+          <SavedImage
             src={imageUrl!}
             alt={alt}
-            decoding="async"
-            className={`${imageMaxHeight} w-auto max-w-full object-contain`}
-            style={{ touchAction: "pinch-zoom", imageRendering: "auto" }}
+            maxHeightClassName={imageMaxHeight}
+            style={{ touchAction: "pinch-zoom" }}
           />
         </div>
       </div>

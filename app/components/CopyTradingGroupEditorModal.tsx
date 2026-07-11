@@ -5,10 +5,9 @@ import ScrollableModalShell from "@/app/components/ui/ScrollableModalShell"
 import { cn } from "@/app/components/ui/cn"
 import type { CopyTradingGroup } from "@/lib/copyTradingGroups"
 import {
-  formatTradingAccountMode,
-  tradingAccountDisplayTitle,
   type TradingAccountListItem,
 } from "@/lib/tradingAccounts"
+import { formatTradingAccountSelectorLabel } from "@/lib/tradeAccountDisplay"
 
 type CopyTradingGroupEditorModalProps = {
   open: boolean
@@ -148,9 +147,13 @@ export default function CopyTradingGroupEditorModal({
           >
             {selectableAccounts.map((account) => {
               const checked = selectedIds.includes(account.id)
-              const modeLabel = formatTradingAccountMode(account.mode)
-              const categoryLabel = account.category?.trim() || "Personal"
               const isActive = account.is_active !== false
+              const selectorLabel = formatTradingAccountSelectorLabel({
+                name: account.name,
+                size: account.size,
+                account_number: account.account_number,
+                mode: account.mode,
+              })
 
               return (
                 <li key={account.id}>
@@ -168,15 +171,11 @@ export default function CopyTradingGroupEditorModal({
                       disabled={saving}
                       onChange={() => toggleAccount(account.id)}
                       className="mt-1 accent-blue-500"
-                      aria-label={`Include ${tradingAccountDisplayTitle(account)}`}
+                      aria-label={`Include ${selectorLabel}`}
                     />
                     <span className="min-w-0 flex-1">
                       <span className="block text-sm font-medium text-white">
-                        {account.name.trim() || "Unnamed account"}
-                      </span>
-                      <span className="mt-1 block text-xs text-gray-400">
-                        {categoryLabel}
-                        {modeLabel ? ` · ${modeLabel}` : ""}
+                        {selectorLabel}
                       </span>
                       <span
                         className={cn(

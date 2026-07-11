@@ -29,12 +29,13 @@ export const USER_FACING_ERROR_MESSAGES = {
   DUPLICATE_ENTRY: "This already exists. Please try a different value.",
   ITEM_NOT_FOUND: "This item could not be found.",
   FILE_TOO_LARGE: "This file is too large.",
-  NETWORK_ERROR:
-    "We couldn't reach our servers. Please try again in a moment.",
+  NETWORK_ERROR: "Couldn't connect. Please try again.",
   CONNECTION_ERROR:
     "Couldn't connect to TradeTraxs. Check your internet connection and try again.",
   TRADE_SAVE_FAILED: "Your trade couldn't be saved. Please try again.",
   TRADE_IMAGE_UPLOAD_FAILED: "We couldn't upload your trade image.",
+  FILE_UPLOAD_FAILED: "We couldn't upload your file. Please try again.",
+  ACTION_FAILED: "This action couldn't be completed.",
   UNKNOWN_ERROR: "Something went wrong. Please try again.",
 } as const
 
@@ -74,6 +75,49 @@ function looksLikeStackTrace(text: string): boolean {
   return /\n\s+at\s+/m.test(text) || /\.tsx?:\d+/.test(text)
 }
 
+function looksLikeHttpStatusNoise(text: string): boolean {
+  const trimmed = text.trim()
+  const lower = trimmed.toLowerCase()
+  if (/^\d{3}$/.test(trimmed)) return true
+  if (
+    lower === "internal server error" ||
+    lower === "bad request" ||
+    lower === "not found" ||
+    lower === "forbidden" ||
+    lower === "unauthorized" ||
+    lower === "method not allowed" ||
+    lower === "too many requests"
+  ) {
+    return true
+  }
+  if (lower.includes("http error")) return true
+  if (!/\b(4\d{2}|5\d{2})\b/.test(trimmed)) return false
+  return (
+    lower.includes("status") ||
+    lower.includes("request failed") ||
+    lower.includes("upload failed") ||
+    lower.includes("internal server") ||
+    lower.includes("bad gateway") ||
+    lower.includes("service unavailable") ||
+    lower.includes("gateway timeout")
+  )
+}
+
+function looksLikeJsExceptionNoise(text: string): boolean {
+  const lower = text.toLowerCase()
+  return (
+    lower.startsWith("typeerror") ||
+    lower.startsWith("referenceerror") ||
+    lower.startsWith("syntaxerror") ||
+    lower.startsWith("rangeerror") ||
+    lower.includes("unexpected token") ||
+    lower.includes("null is not an object") ||
+    lower.includes("cannot read propert") ||
+    lower.includes("is not a function") ||
+    lower.includes("is not defined")
+  )
+}
+
 function looksLikeTechnicalDbMessage(text: string): boolean {
   const lower = text.toLowerCase()
   return (
@@ -85,8 +129,19 @@ function looksLikeTechnicalDbMessage(text: string): boolean {
     lower.includes("permission denied for") ||
     lower.includes("schema cache") ||
     lower.includes("postgrest") ||
+    lower.includes("pgrst") ||
     lower.includes("jwt") ||
     lower.includes("constraint") ||
+    (lower.includes("relation ") && lower.includes("does not exist")) ||
+    (lower.includes("column ") &&
+      (lower.includes("does not exist") || lower.includes("of relation"))) ||
+    lower.includes("null value in column") ||
+    lower.includes("econnreset") ||
+    lower.includes("econnrefused") ||
+    lower.includes("etimedout") ||
+    lower.includes("socket hang up") ||
+    looksLikeHttpStatusNoise(text) ||
+    looksLikeJsExceptionNoise(text) ||
     isBarePostgresCode(text) ||
     isPostgrestCode(text) ||
     isNumericPgCode(text)
@@ -239,11 +294,16 @@ function lookupMappedMessage(text: string): string | null {
     return USER_FACING_ERROR_MESSAGES.DUPLICATE_ENTRY
   }
 
+  if (lower.includes("foreign key") || lower.includes("23503")) {
+    return USER_FACING_ERROR_MESSAGES.ACTION_FAILED
+  }
+
   if (
-    lower.includes("foreign key") ||
-    lower.includes("23503") ||
-    lower.includes("not found") ||
-    lower.includes("no rows")
+    lower === "not found" ||
+    lower.includes("no rows") ||
+    lower.includes("pgrst116") ||
+    lower.includes("json object requested") ||
+    lower.includes("0 rows")
   ) {
     return USER_FACING_ERROR_MESSAGES.ITEM_NOT_FOUND
   }
@@ -258,6 +318,16 @@ function lookupMappedMessage(text: string): string | null {
   }
 
   if (
+    lower.includes("upload failed") ||
+    (lower.includes("bucket") && lower.includes("not found")) ||
+    lower.includes("storageapierror") ||
+    lower.includes("the object exceeded") ||
+    lower.includes("mime type") && lower.includes("not supported")
+  ) {
+    return USER_FACING_ERROR_MESSAGES.FILE_UPLOAD_FAILED
+  }
+
+  if (
     lower.includes("row-level security") ||
     lower.includes("permission denied") ||
     lower.includes("not authorized") ||
@@ -265,6 +335,18 @@ function lookupMappedMessage(text: string): string | null {
     lower.includes("42501")
   ) {
     return USER_FACING_ERROR_MESSAGES.UNAUTHORIZED
+  }
+
+  if (
+    lower === "not authenticated" ||
+    lower.includes("not authenticated") ||
+    lower.includes("auth session missing")
+  ) {
+    return USER_FACING_ERROR_MESSAGES.SESSION_EXPIRED
+  }
+
+  if (looksLikeHttpStatusNoise(trimmed) || looksLikeJsExceptionNoise(trimmed)) {
+    return USER_FACING_ERROR_MESSAGES.UNKNOWN_ERROR
   }
 
   if (looksLikeConfigError(trimmed)) {

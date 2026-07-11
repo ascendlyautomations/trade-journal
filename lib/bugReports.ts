@@ -1,6 +1,10 @@
 import { supabase } from "@/lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
 import { notifyAdminSubmission } from "@/lib/notifyAdminSubmission"
+import {
+  toUserFacingErrorMessage,
+  USER_FACING_ERROR_MESSAGES,
+} from "@/lib/userFacingError"
 
 export type BugReportSeverity = "low" | "medium" | "high" | "critical"
 export type BugReportStatus = "open" | "in_progress" | "resolved"
@@ -86,7 +90,14 @@ export async function submitBugReport(
       .upload(filePath, uploadFile, { upsert: false })
 
     if (uploadError) {
-      return { ok: false, message: uploadError.message }
+      console.error("[bugReports] upload failed", uploadError)
+      return {
+        ok: false,
+        message: toUserFacingErrorMessage(
+          uploadError,
+          USER_FACING_ERROR_MESSAGES.FILE_UPLOAD_FAILED
+        ),
+      }
     }
 
     const { data: publicData } = supabase.storage
@@ -110,7 +121,11 @@ export async function submitBugReport(
     .single()
 
   if (insertError) {
-    return { ok: false, message: insertError.message }
+    console.error("[bugReports] insert failed", insertError)
+    return {
+      ok: false,
+      message: toUserFacingErrorMessage(insertError),
+    }
   }
 
   if (data?.id) {

@@ -8,7 +8,7 @@ export const submissionPageShell =
 export const submissionPageContainer = "mx-auto w-full max-w-2xl space-y-8"
 
 export const submissionFormCard =
-  "rounded-2xl border border-white/10 bg-white/10 p-5 md:p-8 shadow-2xl backdrop-blur-xl"
+  "rounded-2xl border border-white/10 bg-[#0f172a]/95 p-5 md:p-8 shadow-2xl backdrop-blur-xl"
 
 export const submissionHistoryCard =
   "rounded-2xl border border-white/10 bg-white/5 p-5 md:p-6 backdrop-blur-sm"

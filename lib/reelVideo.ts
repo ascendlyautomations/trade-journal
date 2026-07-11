@@ -12,6 +12,10 @@ import {
   cacheReelPosterObjectUrl,
   getCachedReelPosterObjectUrl,
 } from "@/lib/reelPosterCache"
+import {
+  toUserFacingErrorMessage,
+  USER_FACING_ERROR_MESSAGES,
+} from "@/lib/userFacingError"
 
 export const REEL_MAX_DURATION_SECONDS = 90
 export const REEL_MAX_FILE_BYTES = 100 * 1024 * 1024
@@ -440,7 +444,12 @@ export async function uploadReelVideoFile(
       })
 
     if (error) {
-      return { error: error.message }
+      return {
+        error: toUserFacingErrorMessage(
+          error,
+          USER_FACING_ERROR_MESSAGES.FILE_UPLOAD_FAILED
+        ),
+      }
     }
   }
 
@@ -488,7 +497,12 @@ export async function uploadReelThumbnailBlob(
       })
 
     if (error) {
-      return { error: error.message }
+      return {
+        error: toUserFacingErrorMessage(
+          error,
+          USER_FACING_ERROR_MESSAGES.FILE_UPLOAD_FAILED
+        ),
+      }
     }
   }
 

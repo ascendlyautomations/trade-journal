@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { toUserFacingErrorMessage } from "@/lib/userFacingError"
 
 export type RoomSectionLike = { id: string; name?: string | null }
 
@@ -66,7 +67,7 @@ export async function upsertRoomChannelNotificationPref(
 
   if (error) {
     console.error("upsertRoomChannelNotificationPref:", error)
-    return { ok: false, error: error.message }
+    return { ok: false, error: toUserFacingErrorMessage(error) }
   }
 
   return { ok: true }

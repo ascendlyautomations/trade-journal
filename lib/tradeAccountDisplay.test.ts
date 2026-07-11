@@ -9,6 +9,7 @@ const {
   formatAccountNameWithSizeDisplay,
   formatTradeAccountDisplay,
   formatTradeAccountNameSizeLine,
+  formatTradingAccountSelectorLabel,
   resolveTradeAccountName,
   tradeMatchesAccountFilter,
 } = require("./tradeAccountDisplay.ts")
@@ -106,22 +107,24 @@ describe("buildAccountFilterOptionsFromRows", () => {
     ])
     assert.equal(options.length, 1)
     assert.equal(options[0].value, "Empty Sim|25000|a1")
-    assert.equal(options[0].label, "Empty Sim 25k")
+    assert.equal(options[0].label, "Empty Sim 25k • Sim")
     assert.equal(options[0].accountType, "sim")
   })
 
-  it("includes account number in label when present", () => {
+  it("includes account number before mode in label when present", () => {
     const options = buildAccountFilterOptionsFromRows([
       {
         id: "a1",
-        name: "Funded",
-        account_size: "100000",
-        account_number: "12345",
-        mode: "funded",
+        name: "Apex",
+        account_size: "50000",
+        account_number: "104582",
+        mode: "eval",
         is_active: true,
       },
     ])
-    assert.equal(options[0].label, "Funded 100k • #12345")
+    assert.equal(options[0].label, "Apex 50k • #104582 • Eval")
+    assert.equal(options[0].labelName, "Apex 50k")
+    assert.equal(options[0].labelSuffix, " • #104582 • Eval")
   })
 
   it("matches trade filter keys for linked trades", () => {
@@ -175,6 +178,28 @@ describe("tradeMatchesAccountFilter", () => {
     assert.equal(
       tradeMatchesAccountFilter(trade, "Old|50000|uuid-1", accountRow),
       false
+    )
+  })
+})
+
+describe("formatTradingAccountSelectorLabel", () => {
+  it("orders name, account id, then mode", () => {
+    assert.equal(
+      formatTradingAccountSelectorLabel({
+        name: "Apex",
+        account_size: "50000",
+        account_number: "104582",
+        mode: "eval",
+      }),
+      "Apex 50k • #104582 • Eval"
+    )
+    assert.equal(
+      formatTradingAccountSelectorLabel({
+        name: "Personal Account",
+        account_number: "99123",
+        mode: "live",
+      }),
+      "Personal Account • #99123 • Live"
     )
   })
 })

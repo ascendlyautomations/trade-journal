@@ -119,13 +119,13 @@ export default function DetailModalShell({
         role="dialog"
         aria-modal="true"
         aria-label={ariaLabel}
-        className={`mx-auto flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-xl bg-[#0f172a] text-gray-100 shadow-xl ${dialogWidthClass}`}
+        className={`mx-auto flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-xl border border-white/10 bg-[#0f172a]/95 text-gray-100 shadow-xl backdrop-blur-xl ${dialogWidthClass}`}
         style={{
           maxHeight: "calc(100dvh - var(--navbar-height, 4rem) - 1.5rem)",
         }}
         onClick={stopPropagation}
       >
-        <header className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-[#0f172a] px-3 py-2.5">
+        <header className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-[#0f172a]/95 px-3 py-2.5 backdrop-blur-xl">
           <p className="min-w-0 truncate text-sm font-semibold text-white">
             {title || "\u00a0"}
           </p>

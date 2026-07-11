@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   clampZoom,
   clampZoomPanOffset,
+  computeCoverZoom,
   computeFitScale,
   computeZoomPanDrawRect,
   DEFAULT_ZOOM_PAN_TRANSFORM,
@@ -25,6 +26,13 @@ describe("zoomPanCrop", () => {
     expect(rect.height).toBeCloseTo(675)
     expect(rect.x).toBeCloseTo(0)
     expect(rect.y).toBeGreaterThan(0)
+  })
+
+  it("computes cover zoom so a landscape image fills the frame", () => {
+    const zoom = computeCoverZoom(1600, 900, FRAME_W, FRAME_H)
+    const rect = computeZoomPanDrawRect(1600, 900, FRAME_W, FRAME_H, zoom)
+    expect(rect.width).toBeGreaterThanOrEqual(FRAME_W - 0.5)
+    expect(rect.height).toBeGreaterThanOrEqual(FRAME_H - 0.5)
   })
 
   it("fits a portrait photo entirely inside the frame", () => {

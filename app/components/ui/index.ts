@@ -19,6 +19,7 @@ export {
 } from "./ImageViewerCloseButton"
 export type { ImageViewerCloseButtonProps } from "./ImageViewerCloseButton"
 export { default as ImageLightbox, IMAGE_LIGHTBOX_Z_INDEX_CLASS } from "./ImageLightbox"
+export { default as SavedImage, SAVED_IMAGE_FIT_CLASS } from "./SavedImage"
 export { default as EmptyState } from "./EmptyState"
 export type { EmptyStateProps } from "./EmptyState"
 export { default as Skeleton } from "./Skeleton"
@@ -85,6 +86,7 @@ export {
   MODAL_PANEL_MAX_HEIGHT_BELOW_NAV_CLASS,
   MODAL_PANEL_MAX_HEIGHT_CLASS,
   MODAL_PANEL_SHELL_CLASS,
+  MODAL_PANEL_SURFACE_CLASS,
   useModalScrollLock,
 } from "./modalLayout"
 export {

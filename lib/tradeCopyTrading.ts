@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import { ensureManualUserAccountRegistered } from "./ensureManualUserAccount"
 import { prependTradeInCache } from "./appDataCache"
 import type { TradingAccountListItem } from "./tradingAccounts"
+import { toUserFacingErrorMessage, USER_FACING_ERROR_MESSAGES } from "./userFacingError"
 
 export function isCopyTradedTrade(
   trade: { copy_trading_group_id?: string | null } | null | undefined
@@ -105,7 +106,13 @@ export async function insertCopyTradedTrades({
 
   if (error) {
     console.error("[insertCopyTradedTrades] insert error:", error)
-    return { ok: false, message: error.message || "Could not save trades." }
+    return {
+      ok: false,
+      message: toUserFacingErrorMessage(
+        error,
+        USER_FACING_ERROR_MESSAGES.TRADE_SAVE_FAILED
+      ),
+    }
   }
 
   const trades = (insertedTrades ?? []) as Record<string, unknown>[]
@@ -125,7 +132,13 @@ export async function insertCopyTradedTrades({
     const { error: postError } = await client.from("posts").insert(postRows)
     if (postError) {
       console.error("[insertCopyTradedTrades] post insert error:", postError)
-      return { ok: false, message: postError.message || "Could not publish trades." }
+      return {
+        ok: false,
+        message: toUserFacingErrorMessage(
+          postError,
+          "Could not publish trades. Please try again."
+        ),
+      }
     }
   }
 

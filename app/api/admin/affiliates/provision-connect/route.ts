@@ -1,5 +1,6 @@
 import { supabaseServiceRole, getRouteUser } from "@/app/api/_lib/getRouteUser"
 import { ensureStripeConnectAccountForUser } from "@/lib/stripeConnectAffiliateServer"
+import { jsonUserFacingError, toUserFacingErrorMessage, USER_FACING_ERROR_MESSAGES } from "@/lib/userFacingError"
 
 export const runtime = "nodejs"
 
@@ -7,7 +8,10 @@ export async function POST(req: Request) {
   try {
     const user = await getRouteUser(req)
     if (!user?.id) {
-      return Response.json({ error: "Unauthorized" }, { status: 401 })
+      return Response.json(
+        { error: USER_FACING_ERROR_MESSAGES.SESSION_EXPIRED },
+        { status: 401 }
+      )
     }
 
     const { data: adminRow } = await supabaseServiceRole
@@ -17,7 +21,10 @@ export async function POST(req: Request) {
       .maybeSingle()
 
     if (!adminRow?.user_id) {
-      return Response.json({ error: "Forbidden" }, { status: 403 })
+      return Response.json(
+        { error: USER_FACING_ERROR_MESSAGES.UNAUTHORIZED },
+        { status: 403 }
+      )
     }
 
     let body: { affiliateUserId?: string }
@@ -33,13 +40,24 @@ export async function POST(req: Request) {
     }
 
     if (!process.env.STRIPE_SECRET_KEY) {
-      return Response.json({ error: "Stripe is not configured (STRIPE_SECRET_KEY)" }, { status: 503 })
+      return Response.json(
+        { error: USER_FACING_ERROR_MESSAGES.BILLING_UNAVAILABLE },
+        { status: 503 }
+      )
     }
 
     const result = await ensureStripeConnectAccountForUser(supabaseServiceRole, affiliateUserId)
 
     if (!result.ok) {
-      return Response.json({ error: result.error }, { status: result.status })
+      return Response.json(
+        {
+          error: toUserFacingErrorMessage(
+            result.error,
+            USER_FACING_ERROR_MESSAGES.BILLING_UNAVAILABLE
+          ),
+        },
+        { status: result.status }
+      )
     }
 
     return Response.json({
@@ -48,8 +66,6 @@ export async function POST(req: Request) {
       stripe_connected_account_id: result.accountId,
     })
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : "Stripe error"
-    console.error("[provision-connect]", e)
-    return Response.json({ error: msg }, { status: 500 })
+    return jsonUserFacingError(e, 500, "provision-connect")
   }
 }

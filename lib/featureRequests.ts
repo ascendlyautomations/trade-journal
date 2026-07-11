@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabaseClient"
 import { notifyAdminSubmission } from "@/lib/notifyAdminSubmission"
+import { toUserFacingErrorMessage } from "@/lib/userFacingError"
 
 export type FeatureRequestStatus = "open" | "planned" | "completed"
 
@@ -53,7 +54,8 @@ export async function submitFeatureRequest(
         message: "You already submitted a feature request with this title.",
       }
     }
-    return { ok: false, message: insertError.message }
+    console.error("[featureRequests] insert failed", insertError)
+    return { ok: false, message: toUserFacingErrorMessage(insertError) }
   }
 
   if (data?.id) {
