@@ -57,6 +57,7 @@ import ImageCropModal from "@/app/components/ImageCropModal"
 import { useImageCropUpload } from "@/lib/useImageCropUpload"
 import { isProActive } from "@/lib/subscription"
 import { assertCanCreateTradingAccount } from "@/lib/tradingAccounts"
+import { assertRequiredAccountValue } from "@/lib/createAccountForm"
 import { upsertAccountInCache } from "@/lib/appDataCache"
 import { supabaseMutationFeedback } from "@/lib/supabaseMutationFeedback"
 import { computePayoutDrawdownFloor } from "@/lib/propfirmMetrics"
@@ -417,13 +418,19 @@ export default function AchievementUploadModal({
         return
       }
 
+      const sizeGate = assertRequiredAccountValue(newAccount.size)
+      if (!sizeGate.ok) {
+        showPopup(persistentError("Account Value Required", sizeGate.message))
+        return
+      }
+
       const { data, error: insertErr } = await supabase
         .from("accounts")
         .insert([
           {
             user_id: userId,
             name: newAccount.name,
-            account_size: newAccount.size,
+            account_size: sizeGate.value,
             account_number: newAccount.id,
             category: newAccount.category,
             mode: newAccount.mode,

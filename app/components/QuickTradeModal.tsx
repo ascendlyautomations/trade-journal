@@ -33,6 +33,7 @@ import { handleTradeNumericInput } from "@/lib/formatMoney"
 import TradeFormCurrencyInput from "@/app/components/trade/TradeFormCurrencyInput"
 import { TRADE_OPTIONAL_ATTACHMENT_LABEL_CLASS } from "@/lib/tradeFormUi"
 import { assertCanCreateTradingAccount, FREE_PLAN_ACCOUNT_LIMIT } from "@/lib/tradingAccounts"
+import { assertRequiredAccountValue } from "@/lib/createAccountForm"
 import { filterAccountsForTradeEntry } from "@/lib/freePlanAccountSlots"
 import { supabaseMutationFeedback } from "@/lib/supabaseMutationFeedback"
 import { upsertAccountInCache } from "@/lib/appDataCache"
@@ -608,13 +609,19 @@ export default function QuickTradeModal({
         return
       }
 
+      const sizeGate = assertRequiredAccountValue(newAccount.size)
+      if (!sizeGate.ok) {
+        showPopup(persistentError("Account Value Required", sizeGate.message))
+        return
+      }
+
       const { data, error: insertErr } = await supabase
         .from("accounts")
         .insert([
           {
             user_id: userId,
             name: newAccount.name,
-            account_size: newAccount.size,
+            account_size: sizeGate.value,
             account_number: newAccount.id,
             category: newAccount.category,
             mode: newAccount.mode,

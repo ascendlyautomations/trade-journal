@@ -25,6 +25,7 @@ import { useUserProfile } from "@/lib/UserProfileProvider"
 import { isProActive } from "@/lib/subscription"
 import { insertCsvTradesWithAccount } from "@/lib/insertCsvTradesWithAccount"
 import { feedbackPresets, persistentError } from "@/lib/feedbackPresets"
+import { assertRequiredAccountValue } from "@/lib/createAccountForm"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import { supabaseMutationFeedback } from "@/lib/supabaseMutationFeedback"
 import { getSessionFromDate } from "@/lib/getSession"
@@ -1554,13 +1555,19 @@ export default function InputTradeForm({
       return
     }
 
+    const sizeGate = assertRequiredAccountValue(newAccount.size)
+    if (!sizeGate.ok) {
+      showPopup(persistentError("Account Value Required", sizeGate.message))
+      return
+    }
+
     const { data, error } = await supabase
       .from("accounts")
       .insert([
         {
           user_id: userId,
           name: newAccount.name,
-          account_size: newAccount.size,
+          account_size: sizeGate.value,
           account_number: newAccount.id,
           category: newAccount.category,
           mode: newAccount.mode,

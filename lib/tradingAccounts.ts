@@ -5,6 +5,7 @@ import {
   countTradeEntryEnabledAccounts,
 } from "@/lib/freePlanAccountSlots"
 import {
+  assertRequiredAccountValue,
   normalizeAccountCategoryForForm,
   normalizeAccountModeForForm,
   type AccountType,
@@ -204,13 +205,18 @@ export async function insertTradingAccount(
   userId: string,
   newAccount: CreateTradingAccountPayload
 ): Promise<{ account: TradingAccountListItem | null; error: Error | null }> {
+  const sizeGate = assertRequiredAccountValue(newAccount.size)
+  if (!sizeGate.ok) {
+    return { account: null, error: new Error(sizeGate.message) }
+  }
+
   const { data, error } = await client
     .from("accounts")
     .insert([
       {
         user_id: userId,
         name: newAccount.name,
-        account_size: newAccount.size,
+        account_size: sizeGate.value,
         account_number: newAccount.id,
         category: newAccount.category,
         mode: newAccount.mode,

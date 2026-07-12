@@ -8,6 +8,7 @@ import {
   accountModeOptions,
   accountNameHelperText,
   accountNamePlaceholder,
+  assertRequiredAccountValue,
   defaultModeForAccountType,
   formatAccountSizeInput,
   parseAccountSizeInput,
@@ -117,6 +118,7 @@ export default function CreateAccountModal({
   const [winningDays, setWinningDays] = useState("")
   const [winningDaysMode, setWinningDaysMode] = useState<"na" | "required">("na")
   const [winningDayThreshold, setWinningDayThreshold] = useState("")
+  const [sizeError, setSizeError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const savingRef = useRef(false)
   const isEdit = Boolean(initialAccount)
@@ -132,6 +134,7 @@ export default function CreateAccountModal({
     if (!open) {
       setName(emptyForm.name)
       setSize(emptyForm.size)
+      setSizeError(null)
       setId(emptyForm.id)
       setMode(emptyForm.mode)
       setCategory(emptyForm.category)
@@ -149,6 +152,7 @@ export default function CreateAccountModal({
     if (initialAccount) {
       setName(initialAccount.name)
       setSize(initialAccount.size)
+      setSizeError(null)
       setId(initialAccount.accountNumber)
       setCategory(initialAccount.category)
       setMode(initialAccount.mode)
@@ -191,6 +195,7 @@ export default function CreateAccountModal({
     } else {
       setName(emptyForm.name)
       setSize(emptyForm.size)
+      setSizeError(null)
       setId(emptyForm.id)
       setMode(emptyForm.mode)
       setCategory(emptyForm.category)
@@ -210,6 +215,7 @@ export default function CreateAccountModal({
   function resetFields() {
     setName(emptyForm.name)
     setSize(emptyForm.size)
+    setSizeError(null)
     setId(emptyForm.id)
     setMode(emptyForm.mode)
     setCategory(emptyForm.category)
@@ -232,6 +238,19 @@ export default function CreateAccountModal({
     if (savingRef.current || isSaving) return
     if (!name.trim()) return
 
+    let sizeForSave = parseAccountSizeInput(size)
+
+    // Create only — existing accounts keep optional size on edit.
+    if (!isEdit) {
+      const sizeGate = assertRequiredAccountValue(size)
+      if (!sizeGate.ok) {
+        setSizeError(sizeGate.message)
+        return
+      }
+      setSizeError(null)
+      sizeForSave = sizeGate.value
+    }
+
     savingRef.current = true
     setIsSaving(true)
 
@@ -253,7 +272,7 @@ export default function CreateAccountModal({
 
       await onSave({
         name: name.trim(),
-        size: parseAccountSizeInput(size),
+        size: sizeForSave,
         id: id.trim(),
         category,
         mode: resolveAccountModeForSave(category, mode),
@@ -366,7 +385,7 @@ export default function CreateAccountModal({
           </label>
 
           <label className="block">
-            <span className="text-xs text-gray-400">Account size</span>
+            <span className="text-xs text-gray-400">Account Value</span>
             <div className="relative mt-1">
               <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">
                 $
@@ -375,13 +394,26 @@ export default function CreateAccountModal({
                 type="text"
                 inputMode="numeric"
                 value={formatAccountSizeInput(size)}
-                onChange={(e) => handleNumberChange(e.target.value, setSize)}
-                className={`${inputClass} mt-0 pl-7`}
+                onChange={(e) => {
+                  handleNumberChange(e.target.value, setSize)
+                  if (sizeError) setSizeError(null)
+                }}
+                aria-invalid={sizeError ? true : undefined}
+                className={cn(
+                  `${inputClass} mt-0 pl-7`,
+                  sizeError && "border-red-500/70 focus:border-red-500/70"
+                )}
                 placeholder={ACCOUNT_SIZE_PLACEHOLDER}
                 autoComplete="off"
               />
             </div>
-            <p className="mt-1 text-xs text-gray-500">{ACCOUNT_SIZE_HELPER}</p>
+            {sizeError ? (
+              <p className="mt-1 text-xs text-red-400" role="alert">
+                {sizeError}
+              </p>
+            ) : (
+              <p className="mt-1 text-xs text-gray-500">{ACCOUNT_SIZE_HELPER}</p>
+            )}
           </label>
 
           <label className="block">

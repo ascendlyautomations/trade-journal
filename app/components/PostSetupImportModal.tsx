@@ -11,6 +11,7 @@ import CreateAccountModal, {
 import { supabase } from "@/lib/supabaseClient"
 import { isProActive } from "@/lib/subscription"
 import { FREE_PLAN_ACCOUNT_LIMIT } from "@/lib/tradingAccounts"
+import { assertRequiredAccountValue } from "@/lib/createAccountForm"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { MODAL_PANEL_MAX_HEIGHT_CLASS, useModalScrollLock } from "@/app/components/ui/modalLayout"
 import { feedbackPresets, persistentError } from "@/lib/feedbackPresets"
@@ -137,13 +138,19 @@ export default function PostSetupImportModal({ open, onComplete }: Props) {
       }
     }
 
+    const sizeGate = assertRequiredAccountValue(newAccount.size)
+    if (!sizeGate.ok) {
+      showPopup(persistentError("Account Value Required", sizeGate.message))
+      return
+    }
+
     const { data, error } = await supabase
       .from("accounts")
       .insert([
         {
           user_id: user.id,
           name: newAccount.name,
-          account_size: newAccount.size,
+          account_size: sizeGate.value,
           account_number: newAccount.id,
           category: newAccount.category,
           mode: newAccount.mode,

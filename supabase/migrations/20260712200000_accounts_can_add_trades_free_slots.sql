@@ -118,7 +118,8 @@ begin
   select a.user_id, a.can_add_trades
   into acct_user, acct_can_add
   from public.accounts a
-  where a.id = new.account_id;
+  -- trades.account_id is text; accounts.id is uuid — compare as text.
+  where a.id::text = nullif(trim(new.account_id::text), '');
 
   -- No matching accounts row (legacy / orphaned name) — do not block.
   if acct_user is null then

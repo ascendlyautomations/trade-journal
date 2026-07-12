@@ -44,6 +44,23 @@ export function parseAccountSizeInput(value: string): string {
   return value.replace(/\D/g, "")
 }
 
+/** Shown when creating an account without an Account Value. */
+export const ACCOUNT_VALUE_REQUIRED_MESSAGE = "Account Value is required."
+
+/**
+ * Account Value for create: digits only after parse; rejects empty / whitespace-only.
+ * Existing accounts are not rewritten by this helper.
+ */
+export function assertRequiredAccountValue(
+  size: string | null | undefined
+): { ok: true; value: string } | { ok: false; message: string } {
+  const value = parseAccountSizeInput(String(size ?? "")).trim()
+  if (!value) {
+    return { ok: false, message: ACCOUNT_VALUE_REQUIRED_MESSAGE }
+  }
+  return { ok: true, value }
+}
+
 export function defaultModeForAccountType(type: AccountType): string {
   if (type === "Prop Firm") return "Eval"
   if (type === "Backtest") return "backtest"
