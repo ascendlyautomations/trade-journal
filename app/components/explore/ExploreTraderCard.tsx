@@ -83,12 +83,12 @@ export default function ExploreTraderCard({
           ) : null}
         </Link>
         {detailParts.length > 0 ? (
-          <p className="mt-1 truncate text-xs text-gray-400">
+          <p className="mt-1 truncate text-xs text-gray-300">
             {detailParts.join(" · ")}
           </p>
         ) : null}
         {followers ? (
-          <p className="mt-0.5 truncate text-xs text-gray-500">{followers}</p>
+          <p className="mt-0.5 truncate text-xs text-gray-300">{followers}</p>
         ) : null}
       </div>
 
