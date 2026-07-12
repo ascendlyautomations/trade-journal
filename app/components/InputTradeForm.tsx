@@ -11,6 +11,10 @@ import {
   FREE_PLAN_ACCOUNT_LIMIT,
 } from "@/lib/tradingAccounts"
 import {
+  ACCOUNT_READ_ONLY_BADGE,
+  filterAccountsForTradeEntry,
+} from "@/lib/freePlanAccountSlots"
+import {
   assertCsvImportAllowedForFreePlan,
   FREE_PLAN_CSV_IMPORT_COOLDOWN_DAYS,
   markProfileCsvImportUsed,
@@ -373,6 +377,7 @@ export default function InputTradeForm({
       mode: acc.mode,
       category: acc.category,
       is_active: acc.is_active !== false,
+      can_add_trades: acc.can_add_trades !== false,
       note: acc.note ?? "",
     }))
 
@@ -449,7 +454,7 @@ export default function InputTradeForm({
   }, [openMenuId])
 
   const activeAccounts = useMemo(
-    () => accounts.filter((a) => a.is_active !== false),
+    () => filterAccountsForTradeEntry(accounts),
     [accounts]
   )
 
@@ -466,10 +471,13 @@ export default function InputTradeForm({
 
   useEffect(() => {
     if (!selectedAccount?.id) return
-    if (selectedAccount.is_active === false) {
+    const stillSelectable = activeAccounts.some(
+      (a) => String(a.id) === String(selectedAccount.id)
+    )
+    if (!stillSelectable) {
       setSelectedAccount(null)
     }
-  }, [selectedAccount])
+  }, [selectedAccount, activeAccounts])
 
   const effectiveModeLower = String(
     selectedAccount?.mode ??
@@ -1557,6 +1565,7 @@ export default function InputTradeForm({
           category: newAccount.category,
           mode: newAccount.mode,
           is_active: true,
+          can_add_trades: true,
 
           consistency: newAccount.rules?.consistency ?? null,
           max_drawdown: newAccount.rules?.maxDrawdown ?? null,
@@ -1591,6 +1600,7 @@ export default function InputTradeForm({
         mode: data.mode,
         category: data.category,
         is_active: data.is_active !== false,
+        can_add_trades: data.can_add_trades !== false,
         note: data.note ?? "",
       },
     ])
@@ -1603,6 +1613,7 @@ export default function InputTradeForm({
       mode: data.mode,
       category: data.category,
       is_active: data.is_active !== false,
+      can_add_trades: data.can_add_trades !== false,
       note: data.note ?? "",
     })
 
@@ -2562,7 +2573,9 @@ export default function InputTradeForm({
       <div className="rounded-lg border border-white/10 bg-white/5 p-3 space-y-2">
           <p className="text-sm font-medium text-white">Accounts</p>
           <p className="text-xs text-gray-500">
-            Inactive accounts stay linked to trades but are hidden from the account picker.
+            Inactive accounts stay linked to trades but are hidden from the
+            account picker. Read-only accounts keep full history and cannot
+            receive new trades on Free.
           </p>
           {accounts.length === 0 ? (
             <p className="text-sm text-gray-500">No accounts yet.</p>
@@ -2583,6 +2596,11 @@ export default function InputTradeForm({
                         <span className="block truncate text-sm text-white">
                           {title || "—"}
                         </span>
+                        {account.can_add_trades === false ? (
+                          <span className="mt-1 inline-flex rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-200">
+                            {ACCOUNT_READ_ONLY_BADGE}
+                          </span>
+                        ) : null}
                         {account.note?.trim() ? (
                           <p className="mt-1 truncate text-xs text-gray-400">
                             {account.note.trim()}

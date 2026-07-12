@@ -10,7 +10,10 @@
     "test:propfirm": "node --experimental-strip-types --test lib/propfirmMetrics.test.ts",
     "test:achievements": "node --experimental-strip-types --test lib/achievements.test.ts",
     "test:user-facing-error": "node --experimental-strip-types --test lib/userFacingError.test.ts",
-    "generate:og-image": "node scripts/generate-og-image.mjs"
+    "test:affiliate": "node --experimental-strip-types --test lib/affiliateEarnings.test.ts lib/affiliateStripeDiscount.test.ts",
+    "migrate:affiliate-promos": "node scripts/migrate-affiliate-promos-to-once.mjs",
+    "generate:og-image": "node scripts/generate-og-image.mjs",
+    "export:marketing-ads": "node scripts/export-marketing-ads.mjs"
   },
   "dependencies": {
     "@sentry/nextjs": "^10.57.0",
@@ -37,6 +40,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.1",
+    "playwright": "^1.61.1",
     "sharp": "^0.34.3",
     "tailwindcss": "^4",
     "typescript": "^5"

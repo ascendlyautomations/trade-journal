@@ -10,6 +10,7 @@ const sampleAccount = {
   mode: "eval",
   category: "Prop Firm",
   is_active: true,
+  can_add_trades: true,
   note: "",
   rules: null,
 }

@@ -4,7 +4,9 @@ import { getSessionFromDate } from "@/lib/getSession"
 import { buildDateTime } from "@/lib/inputTradeDateTime"
 import { prependTradeInCache } from "@/lib/appDataCache"
 import { isProActive } from "@/lib/subscription"
+import { inferTradeDirectionFromPrices } from "@/lib/inferTradeDirection"
 import { parseOptionalRr } from "@/lib/tradeRr"
+import { assertAccountAllowsNewTrades } from "@/lib/freePlanAccountSlots"
 import { uploadContentImageToStorage } from "@/lib/contentImagePipeline"
 import { createMonotonicReporter } from "@/lib/uploadProgress/reportProgress"
 import type { UploadProgressOptions } from "@/lib/uploadProgress/types"
@@ -45,6 +47,8 @@ export type SaveManualTradeResult =
         | "auth"
         | "account_locked"
         | "account_limit"
+        | "account_read_only"
+        | "account_slot_selection"
         | "upload"
         | "save"
         | "post"
@@ -52,21 +56,6 @@ export type SaveManualTradeResult =
       /** Raw Supabase/Postgres error for {@link supabaseMutationFeedback}. */
       error?: unknown
     }
-
-function inferDirection(
-  entryPrice: number | null | undefined,
-  exitPrice: number | null | undefined
-): string {
-  if (
-    entryPrice != null &&
-    exitPrice != null &&
-    Number.isFinite(entryPrice) &&
-    Number.isFinite(exitPrice)
-  ) {
-    return exitPrice >= entryPrice ? "Long" : "Short"
-  }
-  return "Long"
-}
 
 async function uploadTradeScreenshot(
   client: SupabaseClient,
@@ -130,7 +119,7 @@ export async function saveManualTrade(
   const { data: profileRow } = await client
     .from("profiles")
     .select(
-      "is_pro, subscription_status, locked_account_type, locked_account_size, locked_account_name, locked_account_number"
+      "is_pro, subscription_status, trial_end, locked_account_type, locked_account_size, locked_account_name, locked_account_number"
     )
     .eq("id", userId)
     .maybeSingle()
@@ -168,6 +157,25 @@ export async function saveManualTrade(
     }
   }
 
+  const entryGate = await assertAccountAllowsNewTrades(
+    client,
+    userId,
+    rowAcct.id,
+    profileRow
+  )
+  if (!entryGate.ok) {
+    return {
+      ok: false,
+      code:
+        entryGate.code === "selection_required"
+          ? "account_slot_selection"
+          : entryGate.code === "read_only"
+            ? "account_read_only"
+            : "save",
+      message: entryGate.message,
+    }
+  }
+
   let screenshotUrl: string | null = null
   if (input.imageFile) {
     const uploaded = await uploadTradeScreenshot(
@@ -188,7 +196,8 @@ export async function saveManualTrade(
 
   const direction =
     input.direction?.trim() ||
-    inferDirection(input.entryPrice, input.exitPrice)
+    inferTradeDirectionFromPrices(input.entryPrice, input.exitPrice) ||
+    "Long"
   const entryTimeIso = buildDateTime(input.entryDate, input.entryTime ?? "")
   const exitTimeIso = buildDateTime(input.exitDate, input.exitTime ?? "")
   const sessionToSave = entryTimeIso

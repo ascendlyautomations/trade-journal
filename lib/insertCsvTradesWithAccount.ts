@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { tradesInsertRowsPrivate } from "@/lib/csvTradeParsers"
+import { assertAccountAllowsNewTrades } from "@/lib/freePlanAccountSlots"
 
 /** Same shape as `InputTradeForm`’s `selectedAccount` (name/size from `accounts` table). */
 export type CsvSelectedAccount = {
@@ -23,6 +24,43 @@ export async function insertCsvTradesWithAccount(
   selectedAccount: CsvSelectedAccount,
   insertOptions?: InsertCsvTradesWithAccountOptions
 ) {
+  const {
+    data: { user },
+  } = await client.auth.getUser()
+  if (!user) {
+    return {
+      data: null,
+      error: { message: "Unauthorized", code: "UNAUTHORIZED" },
+    }
+  }
+
+  const { data: profile } = await client
+    .from("profiles")
+    .select("is_pro, subscription_status, trial_end")
+    .eq("id", user.id)
+    .maybeSingle()
+
+  const entryGate = await assertAccountAllowsNewTrades(
+    client,
+    user.id,
+    selectedAccount.id,
+    profile
+  )
+  if (!entryGate.ok) {
+    return {
+      data: null,
+      error: {
+        message: entryGate.message,
+        code:
+          entryGate.code === "selection_required"
+            ? "ACCOUNT_SLOT_SELECTION_REQUIRED"
+            : entryGate.code === "read_only"
+              ? "ACCOUNT_READ_ONLY"
+              : "ACCOUNT_MISSING",
+      },
+    }
+  }
+
   const modeDisplay = String(selectedAccount.mode ?? "live").trim() || "live"
   const accountType = modeDisplay.toLowerCase()
 
@@ -33,7 +71,8 @@ export async function insertCsvTradesWithAccount(
     account_id: selectedAccount.id,
     mode: modeDisplay,
     account_type: accountType,
-    ...(selectedAccount.category != null && String(selectedAccount.category).trim() !== ""
+    ...(selectedAccount.category != null &&
+    String(selectedAccount.category).trim() !== ""
       ? { account_category: selectedAccount.category }
       : {}),
   }))

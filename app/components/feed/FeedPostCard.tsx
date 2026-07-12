@@ -37,6 +37,8 @@ export type FeedPostCardProps = {
   onSubmitComment: (post: any, text: string) => Promise<boolean>
   onSharePost: (post: any) => void
   onOpenAttachedReel?: (post: any, reel: ReelRow) => void
+  /** Shared aspect-ratio media frame for homepage featured trade cards (contain, no re-crop). */
+  screenshotFixedFrameClassName?: string
 }
 
 function FeedPostCard({
@@ -54,6 +56,7 @@ function FeedPostCard({
   onSubmitComment: _onSubmitComment,
   onSharePost,
   onOpenAttachedReel,
+  screenshotFixedFrameClassName,
 }: FeedPostCardProps) {
   const handleOpenComments = useCallback(() => {
     onOpenComments(post)
@@ -119,7 +122,10 @@ function FeedPostCard({
         preview={preview}
       />
 
-      <FeedPostScreenshot imageSrc={imageSrc} />
+      <FeedPostScreenshot
+        imageSrc={imageSrc}
+        fixedFrameClassName={screenshotFixedFrameClassName}
+      />
 
       <FeedPostActions
         post={post}

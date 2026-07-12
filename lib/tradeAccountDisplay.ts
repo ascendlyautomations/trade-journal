@@ -99,6 +99,7 @@ export type AccountRowForDisplay = {
   account_number?: string | null
   mode?: string | null
   is_active?: boolean | null
+  can_add_trades?: boolean | null
 }
 
 export type AccountFilterOption = {
@@ -109,6 +110,8 @@ export type AccountFilterOption = {
   /** Fixed suffix (` • #ID • Mode`) — do not truncate. */
   labelSuffix?: string
   accountType?: string | null
+  /** Free-plan historical account — shown in filters, not trade-entry pickers. */
+  readOnly?: boolean
 }
 
 /** Prefer linked `accounts.name` over denormalized trade.account_name. */
@@ -214,8 +217,9 @@ export function formatTradingAccountSelectorLabel(
 }
 
 /**
- * Build account selector options from active `accounts` rows (not trade history).
- * Deactivated accounts (`is_active === false`) are excluded.
+ * Build account selector options from `accounts` rows for historical filters.
+ * Includes read-only (can_add_trades = false) accounts with a badge flag.
+ * Soft-hidden (`is_active === false`) rows remain available for history.
  */
 export function buildAccountFilterOptionsFromRows(
   accountRows: readonly AccountRowForDisplay[],
@@ -225,7 +229,6 @@ export function buildAccountFilterOptionsFromRows(
   const accountMap = new Map<string, AccountFilterOption>()
 
   for (const row of accountRows) {
-    if (row.is_active === false) continue
     const id = String(row.id ?? "").trim()
     const name = String(row.name ?? "").trim()
     if (!id || !name) continue
@@ -243,12 +246,18 @@ export function buildAccountFilterOptionsFromRows(
       { includeAccountNumber }
     )
 
+    const readOnly = row.can_add_trades === false
+    const baseLabel = `${parts.name}${parts.suffix}`.replace(/\s+/g, " ").trim()
+
     accountMap.set(value, {
       value,
-      label: `${parts.name}${parts.suffix}`.replace(/\s+/g, " ").trim(),
+      label: readOnly ? `${baseLabel} (Read Only)` : baseLabel,
       labelName: parts.name,
-      labelSuffix: parts.suffix,
+      labelSuffix: readOnly
+        ? `${parts.suffix} • Read Only`
+        : parts.suffix,
       accountType: row.mode ?? null,
+      readOnly,
     })
   }
 

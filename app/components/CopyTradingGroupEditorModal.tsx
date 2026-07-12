@@ -7,6 +7,7 @@ import type { CopyTradingGroup } from "@/lib/copyTradingGroups"
 import {
   type TradingAccountListItem,
 } from "@/lib/tradingAccounts"
+import { filterAccountsForTradeEntry } from "@/lib/freePlanAccountSlots"
 import { formatTradingAccountSelectorLabel } from "@/lib/tradeAccountDisplay"
 
 type CopyTradingGroupEditorModalProps = {
@@ -42,7 +43,7 @@ export default function CopyTradingGroupEditorModal({
 
   const selectableAccounts = useMemo(
     () =>
-      [...accounts].sort((a, b) =>
+      [...filterAccountsForTradeEntry(accounts)].sort((a, b) =>
         a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
       ),
     [accounts]

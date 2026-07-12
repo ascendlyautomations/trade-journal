@@ -5,28 +5,25 @@ import { cookies } from "next/headers"
 import { mirrorBillingAccountsStripeCustomerId } from "@/lib/profileSplitMirrorWrites"
 import { ensureProfileForUser } from "@/lib/ensureProfileForUser"
 import { createAffiliateReferralNotification, resolveAffiliateUserIdFromCode } from "@/lib/server/affiliateReferralNotifications"
+import {
+  ensureBuyerReferredBy,
+  resolveAffiliateForCheckout,
+} from "@/lib/affiliateCheckoutAttribution"
+import {
+  buildAffiliateAttributionMetadata,
+} from "@/lib/affiliateStripeDiscount"
 import { isProActive } from "@/lib/subscription"
 import {
   parseCheckoutBillingInterval,
-  resolveTraxProBillingIntervalFromStripePriceId,
   resolveTraxProStripePriceId,
 } from "@/lib/traxProBillingPlans.server"
 import { devLog } from "@/lib/devLog"
+import { resolveCheckoutTrialPeriodDays } from "@/lib/checkoutTrial"
 import { toUserFacingErrorMessage, USER_FACING_ERROR_MESSAGES } from "@/lib/userFacingError"
 
 export const runtime = "nodejs"
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string)
-let TRIAL_DAYS = Number(process.env.STRIPE_TRIAL_DAYS ?? 14)
-if (Number.isNaN(TRIAL_DAYS) || TRIAL_DAYS < 0) {
-  TRIAL_DAYS = 14
-}
-/**
- * TEMPORARY — live payment testing: Checkout charges immediately (no trial).
- * Restore the 14-day free trial by setting this to `true`.
- */
-const ENABLE_CHECKOUT_TRIAL = false
-devLog("[Stripe] Trial days:", ENABLE_CHECKOUT_TRIAL ? TRIAL_DAYS : 0)
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -118,7 +115,7 @@ export async function POST(req: Request) {
 
     const { data: initialProfile, error: profileError } = await supabase
       .from("profiles")
-      .select("id, stripe_customer_id, is_pro, subscription_status")
+      .select("id, stripe_customer_id, is_pro, subscription_status, referred_by, trial_end")
       .eq("id", user.id)
       .maybeSingle()
 
@@ -176,7 +173,7 @@ export async function POST(req: Request) {
 
       const refetch = await supabase
         .from("profiles")
-        .select("id, stripe_customer_id")
+        .select("id, stripe_customer_id, referred_by, trial_end")
         .eq("id", user.id)
         .maybeSingle()
 
@@ -257,19 +254,124 @@ export async function POST(req: Request) {
     const baseUrl =
       process.env.NEXT_PUBLIC_BASE_URL?.trim() || new URL(req.url).origin
 
+    const existingReferredBy =
+      profile && "referred_by" in profile
+        ? (profile.referred_by as string | null | undefined)
+        : null
+
+    const affiliateForCheckout = await resolveAffiliateForCheckout(supabase, {
+      buyerUserId: user.id,
+      existingReferredBy,
+      referralCodeFromBody,
+    })
+
+
+    if (affiliateForCheckout) {
+      try {
+        const attribution = await ensureBuyerReferredBy(supabase, {
+          buyerUserId: user.id,
+          affiliateCode: affiliateForCheckout.code,
+          existingReferredBy,
+        })
+        if (attribution.newlySet) {
+          try {
+            await createAffiliateReferralNotification(supabase, {
+              affiliateUserId: affiliateForCheckout.user_id,
+              referredUserId: user.id,
+            })
+          } catch (notifErr) {
+            console.error(
+              "[create-checkout-session] affiliate referral notification failed:",
+              notifErr
+            )
+          }
+        }
+      } catch (attrErr) {
+        console.error(
+          "[create-checkout-session] failed to persist referred_by:",
+          attrErr
+        )
+      }
+    }
+
+    const attributionMeta = affiliateForCheckout
+      ? buildAffiliateAttributionMetadata({
+          affiliateUserId: affiliateForCheckout.user_id,
+          affiliateCode: affiliateForCheckout.code,
+          referredUserId: user.id,
+        })
+      : null
+
+    if (affiliateForCheckout && attributionMeta && customerId) {
+      try {
+        await stripe.customers.update(customerId, {
+          metadata: {
+            user_id: user.id,
+            ...attributionMeta,
+          },
+        })
+      } catch (custMetaErr) {
+        console.error(
+          "[create-checkout-session] customer metadata update failed:",
+          custMetaErr
+        )
+      }
+    }
+
+    const promoId = affiliateForCheckout?.stripe_promo_code_id?.trim() || null
+    const applyAffiliateDiscount = Boolean(promoId)
+
+    const trialPeriodDays = resolveCheckoutTrialPeriodDays({
+      trial_end:
+        profile && "trial_end" in profile
+          ? (profile.trial_end as string | null | undefined)
+          : null,
+    })
+
+    // Stripe-side guard: prior subscriptions that already used a trial.
+    let effectiveTrialDays = trialPeriodDays
+    if (effectiveTrialDays != null && customerId) {
+      try {
+        const priorSubs = await stripe.subscriptions.list({
+          customer: customerId,
+          status: "all",
+          limit: 20,
+        })
+        const alreadyTrialed = priorSubs.data.some(
+          (sub) => sub.trial_end != null
+        )
+        if (alreadyTrialed) {
+          effectiveTrialDays = null
+        }
+      } catch (trialLookupErr) {
+        console.error(
+          "[create-checkout-session] prior trial lookup failed:",
+          trialLookupErr
+        )
+      }
+    }
+
     devLog("💳 Checkout config:", {
       priceId: stripePriceId,
       billingInterval,
       baseUrl,
-      trialDays: ENABLE_CHECKOUT_TRIAL ? TRIAL_DAYS : 0,
+      trialDays: effectiveTrialDays ?? 0,
       userId: user.id,
+      affiliateCode: affiliateForCheckout?.code ?? null,
+      applyAffiliateDiscount,
     })
 
     const sessionConfig: Stripe.Checkout.SessionCreateParams = {
       mode: "subscription",
       customer: customerId,
       payment_method_types: ["card"],
-      allow_promotion_codes: true,
+      ...(applyAffiliateDiscount
+        ? {
+            discounts: [{ promotion_code: promoId! }],
+          }
+        : {
+            allow_promotion_codes: true,
+          }),
       line_items: [
         {
           price: stripePriceId,
@@ -282,13 +384,17 @@ export async function POST(req: Request) {
         user_id: user.id,
         userId: user.id,
         billing_interval: billingInterval,
+        ...(attributionMeta ?? {}),
       },
       subscription_data: {
-        ...(ENABLE_CHECKOUT_TRIAL ? { trial_period_days: TRIAL_DAYS } : {}),
+        ...(effectiveTrialDays != null
+          ? { trial_period_days: effectiveTrialDays }
+          : {}),
         metadata: {
           user_id: user.id,
           userId: user.id,
           billing_interval: billingInterval,
+          ...(attributionMeta ?? {}),
         },
       },
     }

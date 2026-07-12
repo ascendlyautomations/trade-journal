@@ -33,9 +33,16 @@ import { handleTradeNumericInput } from "@/lib/formatMoney"
 import TradeFormCurrencyInput from "@/app/components/trade/TradeFormCurrencyInput"
 import { TRADE_OPTIONAL_ATTACHMENT_LABEL_CLASS } from "@/lib/tradeFormUi"
 import { assertCanCreateTradingAccount, FREE_PLAN_ACCOUNT_LIMIT } from "@/lib/tradingAccounts"
+import { filterAccountsForTradeEntry } from "@/lib/freePlanAccountSlots"
 import { supabaseMutationFeedback } from "@/lib/supabaseMutationFeedback"
 import { upsertAccountInCache } from "@/lib/appDataCache"
 import { parseOptionalRr } from "@/lib/tradeRr"
+import {
+  inferTradeDirectionFromPrices,
+  nextDirectionAfterPriceChange,
+  parseTradePriceInput,
+  type TradeDirection,
+} from "@/lib/inferTradeDirection"
 import CommunitySharePreviewPanel from "@/app/components/CommunitySharePreviewPanel"
 import TradePublicShareToggle from "@/app/components/TradePublicShareToggle"
 import TradeReelAttachment from "@/app/components/TradeReelAttachment"
@@ -77,7 +84,8 @@ const LABEL_CLASS = "block text-xs font-medium text-gray-300"
 
 const FIELD_PAIR_ROW_CLASS = "grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5"
 
-const FIELD_TRIPLE_ROW_CLASS = "grid grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-5"
+/** Points · Contracts · RR · Direction — compact two-up on narrow, four-up from `sm`. */
+const FIELD_METRICS_ROW_CLASS = "grid grid-cols-2 gap-4 sm:grid-cols-4 sm:gap-5"
 
 const QUICK_CURRENCY_INPUT_CLASS = `${INPUT_CLASS} mt-2 pl-8 tabular-nums`
 
@@ -120,18 +128,6 @@ function toManualTradeAccount(account: TradeAccountOption): ManualTradeAccount {
     mode: String(account.mode ?? "live"),
     category: account.category ?? null,
   }
-}
-
-function inferPreviewDirection(
-  entryPrice: string,
-  exitPrice: string
-): string {
-  const entry = Number(entryPrice.replace(/,/g, "").replace(/\$/g, ""))
-  const exit = Number(exitPrice.replace(/,/g, "").replace(/\$/g, ""))
-  if (Number.isFinite(entry) && Number.isFinite(exit)) {
-    return exit >= entry ? "Long" : "Short"
-  }
-  return "Long"
 }
 
 function FieldLabel({
@@ -224,6 +220,8 @@ export default function QuickTradeModal({
   const [points, setPoints] = useState("")
   const [contracts, setContracts] = useState("")
   const [rr, setRr] = useState("")
+  const [direction, setDirection] = useState<TradeDirection>("Long")
+  const [directionManuallySet, setDirectionManuallySet] = useState(false)
   const [entryDate, setEntryDate] = useState(getESTDate())
   const [exitDate, setExitDate] = useState(getESTDate())
   const [entryTime, setEntryTime] = useState("")
@@ -261,6 +259,8 @@ export default function QuickTradeModal({
     setPoints("")
     setContracts("")
     setRr("")
+    setDirection("Long")
+    setDirectionManuallySet(false)
     setEntryDate(today)
     setExitDate(today)
     setEntryTime("")
@@ -300,16 +300,15 @@ export default function QuickTradeModal({
       return
     }
 
-    const rows = (data ?? [])
-      .filter((acc) => acc.is_active !== false)
-      .map((acc) => ({
-        name: String(acc.name ?? ""),
-        size: String(acc.account_size ?? ""),
-        id: String(acc.id),
-        account_number: acc.account_number ?? null,
-        mode: acc.mode ?? "live",
-        category: acc.category ?? null,
-      }))
+    const rows = filterAccountsForTradeEntry(data ?? []).map((acc) => ({
+      name: String(acc.name ?? ""),
+      size: String(acc.account_size ?? ""),
+      id: String(acc.id),
+      account_number: acc.account_number ?? null,
+      mode: acc.mode ?? "live",
+      category: acc.category ?? null,
+      can_add_trades: acc.can_add_trades !== false,
+    }))
 
     setAccounts(rows)
     setAccountLoading(false)
@@ -339,12 +338,56 @@ export default function QuickTradeModal({
     setExitTime(patch.exitTime)
     setEntryPrice(patch.entryPrice)
     setExitPrice(patch.exitPrice)
+    const inferred = inferTradeDirectionFromPrices(
+      parseTradePriceInput(patch.entryPrice),
+      parseTradePriceInput(patch.exitPrice)
+    )
+    if (inferred) {
+      setDirection(inferred)
+      setDirectionManuallySet(false)
+    } else if (patch.direction === "Long" || patch.direction === "Short") {
+      setDirection(patch.direction)
+      setDirectionManuallySet(true)
+    } else {
+      setDirection("Long")
+      setDirectionManuallySet(false)
+    }
     if (patch.description) {
       setDescription(patch.description)
     }
     if (csvPatchHasPrices(patch)) {
       setAdvancedOpen(true)
     }
+  }
+
+  function handleEntryPriceChange(value: string) {
+    setEntryPrice(value)
+    setDirection((prev) =>
+      nextDirectionAfterPriceChange({
+        current: prev,
+        manualOverride: directionManuallySet,
+        entryPrice: parseTradePriceInput(value),
+        exitPrice: parseTradePriceInput(exitPrice),
+      })
+    )
+  }
+
+  function handleExitPriceChange(value: string) {
+    setExitPrice(value)
+    setDirection((prev) =>
+      nextDirectionAfterPriceChange({
+        current: prev,
+        manualOverride: directionManuallySet,
+        entryPrice: parseTradePriceInput(entryPrice),
+        exitPrice: parseTradePriceInput(value),
+      })
+    )
+  }
+
+  function handleDirectionChange(value: string) {
+    if (value !== "Long" && value !== "Short") return
+    setDirection(value)
+    setDirectionManuallySet(true)
   }
 
   useEffect(() => {
@@ -410,11 +453,6 @@ export default function QuickTradeModal({
     return () => URL.revokeObjectURL(url)
   }, [image])
 
-  const previewDirection = useMemo(
-    () => inferPreviewDirection(entryPrice, exitPrice),
-    [entryPrice, exitPrice]
-  )
-
   const communityPreviewPost = useMemo(() => {
     if (!userId) return null
     const previewEntryTime = entryTime
@@ -429,7 +467,7 @@ export default function QuickTradeModal({
       rr,
       points,
       ticker,
-      direction: previewDirection,
+      direction,
       accountMode: selectedAccount?.mode,
       accountType: selectedAccount?.category ?? null,
       lockedAccountType: planProfile?.locked_account_type,
@@ -452,7 +490,7 @@ export default function QuickTradeModal({
     rr,
     points,
     ticker,
-    previewDirection,
+    direction,
     selectedAccount,
     description,
     previewUrl,
@@ -581,6 +619,7 @@ export default function QuickTradeModal({
             category: newAccount.category,
             mode: newAccount.mode,
             is_active: true,
+            can_add_trades: true,
             consistency: newAccount.rules?.consistency ?? null,
             max_drawdown: newAccount.rules?.maxDrawdown ?? null,
             daily_drawdown: newAccount.rules?.dailyDrawdown ?? null,
@@ -658,14 +697,8 @@ export default function QuickTradeModal({
       String(contracts).replace(/,/g, ""),
       10
     )
-    const entryVal =
-      entryPrice.trim() === ""
-        ? null
-        : Number(entryPrice.replace(/,/g, "").replace(/\$/g, ""))
-    const exitVal =
-      exitPrice.trim() === ""
-        ? null
-        : Number(exitPrice.replace(/,/g, "").replace(/\$/g, ""))
+    const entryVal = parseTradePriceInput(entryPrice)
+    const exitVal = parseTradePriceInput(exitPrice)
 
     const uploadTitle = isPublic
       ? reelFile || image
@@ -698,7 +731,7 @@ export default function QuickTradeModal({
             const now = new Date()
             const tradeTemplate = {
               ticker: ticker.trim().toUpperCase(),
-              direction: inferPreviewDirection(entryPrice, exitPrice),
+              direction,
               pnl: parsedPnl,
               rr: parseOptionalRr(rr),
               points: parsedPoints,
@@ -762,6 +795,7 @@ export default function QuickTradeModal({
             toManualTradeAccount(selectedAccount),
             {
               ticker: ticker.trim().toUpperCase(),
+              direction,
               pnl: parsedPnl,
               points: parsedPoints,
               contracts: parsedContracts,
@@ -1010,8 +1044,8 @@ export default function QuickTradeModal({
               </div>
             </div>
 
-            {/* Row 2: Points · Contracts · RR */}
-            <div className={FIELD_TRIPLE_ROW_CLASS}>
+            {/* Row 2: Points · Contracts · RR · Direction */}
+            <div className={FIELD_METRICS_ROW_CLASS}>
               <div>
                 <FieldLabel htmlFor="quick-trade-points">Points</FieldLabel>
                 <input
@@ -1057,6 +1091,18 @@ export default function QuickTradeModal({
                   placeholder="2.5"
                   className={`${INPUT_CLASS} mt-2 tabular-nums`}
                 />
+              </div>
+              <div>
+                <FieldLabel htmlFor="quick-trade-direction">Direction</FieldLabel>
+                <select
+                  id="quick-trade-direction"
+                  value={direction}
+                  onChange={(e) => handleDirectionChange(e.target.value)}
+                  className={`${INPUT_CLASS} mt-2`}
+                >
+                  <option value="Long">Long</option>
+                  <option value="Short">Short</option>
+                </select>
               </div>
             </div>
 
@@ -1120,7 +1166,7 @@ export default function QuickTradeModal({
                     <TradeFormCurrencyInput
                       id="quick-entry-price"
                       value={entryPrice}
-                      onChange={setEntryPrice}
+                      onChange={handleEntryPriceChange}
                       onDecimalError={setDecimalError}
                       inputClassName={QUICK_CURRENCY_INPUT_CLASS}
                     />
@@ -1130,7 +1176,7 @@ export default function QuickTradeModal({
                     <TradeFormCurrencyInput
                       id="quick-exit-price"
                       value={exitPrice}
-                      onChange={setExitPrice}
+                      onChange={handleExitPriceChange}
                       onDecimalError={setDecimalError}
                       inputClassName={QUICK_CURRENCY_INPUT_CLASS}
                     />

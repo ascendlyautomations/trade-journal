@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react"
 import StorageImage from "@/app/components/ui/StorageImage"
 import {
   captureReelPosterFromUrl,
+  firstVisibleReelSeekTime,
   getReelPosterImageUrl,
   getReelVideoFrameSource,
 } from "@/lib/reelVideo"
@@ -26,7 +27,7 @@ function PrimedVideoPoster({
 }) {
   const primeFrame = useCallback((video: HTMLVideoElement) => {
     if (!Number.isFinite(video.duration) || video.duration <= 0) return
-    const target = Math.min(0.25, Math.max(video.duration - 0.05, 0))
+    const target = firstVisibleReelSeekTime(video.duration)
     if (Math.abs(video.currentTime - target) > 0.01) {
       video.currentTime = target
     }

@@ -77,8 +77,8 @@ export const TRAXPRO_BILLING_PLANS: readonly TraxProBillingPlan[] = [
 ] as const
 
 /**
- * TEMPORARY — live Stripe $1/mo test subscription.
- * Remove with `STRIPE_PRICE_ID_TEST` + `isTraxProTestPlanEnabled` / `getVisibleTraxProBillingPlans` call sites.
+ * Legacy $1 test plan metadata — kept only so existing Stripe Price IDs can still
+ * resolve to a display label. Not offered in checkout or billing pickers.
  */
 export const TRAXPRO_TEST_BILLING_PLAN: TraxProBillingPlan = {
   id: "test",
@@ -103,18 +103,16 @@ const planById = new Map(
 )
 
 /**
- * TEMPORARY — true when `STRIPE_PRICE_ID_TEST` is set.
- * Client builds see `NEXT_PUBLIC_STRIPE_TEST_PLAN_ENABLED` (bridged in next.config from the same env).
+ * @deprecated Test Plan is no longer offered. Always false.
+ * Retained so call sites compile until fully removed.
  */
 export function isTraxProTestPlanEnabled(): boolean {
-  if (process.env.STRIPE_PRICE_ID_TEST?.trim()) return true
-  return process.env.NEXT_PUBLIC_STRIPE_TEST_PLAN_ENABLED === "1"
+  return false
 }
 
-/** Production plans, plus Test Plan only when `STRIPE_PRICE_ID_TEST` is configured. */
+/** Production checkout / billing pickers — monthly, 6-month, yearly only. */
 export function getVisibleTraxProBillingPlans(): readonly TraxProBillingPlan[] {
-  if (!isTraxProTestPlanEnabled()) return TRAXPRO_BILLING_PLANS
-  return [...TRAXPRO_BILLING_PLANS, TRAXPRO_TEST_BILLING_PLAN]
+  return TRAXPRO_BILLING_PLANS
 }
 
 export function isTraxProBillingIntervalId(

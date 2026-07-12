@@ -8,6 +8,8 @@ export const STANDALONE_LAYOUT_SEGMENTS = new Set([
   "onboarding",
   "choose-plan",
   "finish-trial",
+  /** Instagram / export ad frames — no marketing or app chrome. */
+  "marketing",
 ])
 
 export function isStandaloneLayoutSegment(segments: readonly string[]): boolean {

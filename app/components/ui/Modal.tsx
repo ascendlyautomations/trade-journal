@@ -27,6 +27,8 @@ export type ModalProps = {
   belowNavbar?: boolean
   /** Disable the top-right close control (e.g. while saving). */
   closeDisabled?: boolean
+  /** Hide the top-right close control (e.g. required blocking flows). */
+  showCloseButton?: boolean
   className?: string
   panelClassName?: string
   backdropClassName?: string
@@ -48,6 +50,7 @@ export default function Modal({
   size = "md",
   belowNavbar = false,
   closeDisabled = false,
+  showCloseButton = true,
   className,
   panelClassName,
   backdropClassName,
@@ -61,13 +64,13 @@ export default function Modal({
   }, [])
 
   useEffect(() => {
-    if (!open || closeDisabled) return
+    if (!open || closeDisabled || !showCloseButton) return
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") onClose()
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [open, onClose, closeDisabled])
+  }, [open, onClose, closeDisabled, showCloseButton])
 
   if (!open || !mounted) return null
 
@@ -80,7 +83,7 @@ export default function Modal({
         className
       )}
       role="presentation"
-      onClick={closeDisabled ? undefined : onClose}
+      onClick={closeDisabled || !showCloseButton ? undefined : onClose}
     >
       <div
         className={cn(
@@ -104,13 +107,20 @@ export default function Modal({
         )}
         onClick={(e) => e.stopPropagation()}
       >
-        <ModalCloseButton
-          onClick={onClose}
-          disabled={closeDisabled}
-          className="absolute right-4 top-4 z-10"
-        />
+        {showCloseButton ? (
+          <ModalCloseButton
+            onClick={onClose}
+            disabled={closeDisabled}
+            className="absolute right-4 top-4 z-10"
+          />
+        ) : null}
         {title ? (
-          <div className={cn(MODAL_HEADER_CLASS, "px-6 py-4 pr-12")}>
+          <div
+            className={cn(
+              MODAL_HEADER_CLASS,
+              showCloseButton ? "px-6 py-4 pr-12" : "px-6 py-4"
+            )}
+          >
             <h2 className="text-lg font-semibold text-white">{title}</h2>
           </div>
         ) : null}

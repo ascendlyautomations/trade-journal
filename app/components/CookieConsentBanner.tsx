@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { useEffect, useState } from "react"
+import { usePathname } from "next/navigation"
 import {
   hasCookieConsentChoice,
   saveCookieConsent,
@@ -9,18 +10,25 @@ import {
 } from "@/lib/cookieConsent"
 
 export default function CookieConsentBanner() {
+  const pathname = usePathname()
   const [visible, setVisible] = useState(false)
+  const isMarketingAdFrame =
+    pathname === "/marketing" || Boolean(pathname?.startsWith("/marketing/"))
 
   useEffect(() => {
+    if (isMarketingAdFrame) {
+      setVisible(false)
+      return
+    }
     setVisible(!hasCookieConsentChoice())
-  }, [])
+  }, [isMarketingAdFrame])
 
   function handleChoice(choice: CookieConsentChoice) {
     saveCookieConsent(choice)
     setVisible(false)
   }
 
-  if (!visible) return null
+  if (!visible || isMarketingAdFrame) return null
 
   return (
     <div

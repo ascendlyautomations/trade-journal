@@ -11,7 +11,7 @@ import {
   type Ref,
 } from "react"
 import ReelClipPlayOverlay from "@/app/components/ReelClipPlayOverlay"
-import { getReelPosterImageUrl } from "@/lib/reelVideo"
+import { getReelPosterImageUrl, firstVisibleReelSeekTime } from "@/lib/reelVideo"
 
 export type ReelClipPlaybackHandle = {
   play: () => Promise<void>
@@ -94,7 +94,7 @@ const ReelClipPlayback = forwardRef(function ReelClipPlayback(
 
     const primePreviewFrame = () => {
       if (!Number.isFinite(video.duration) || video.duration <= 0) return
-      const target = Math.min(0.25, Math.max(video.duration - 0.05, 0))
+      const target = firstVisibleReelSeekTime(video.duration)
       if (Math.abs(video.currentTime - target) > 0.01) {
         video.currentTime = target
       }

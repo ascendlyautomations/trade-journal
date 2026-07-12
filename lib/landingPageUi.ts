@@ -11,6 +11,15 @@ export const LANDING_GLASS_SURFACE =
  */
 export const LANDING_CARD_FULL = `${LANDING_GLASS_SURFACE} transition-[opacity,transform] duration-[400ms] ease-out hover:z-[1] hover:scale-[1.02] hover:border-emerald-400/25 hover:shadow-[0_0_28px_rgba(52,211,153,0.14)] motion-reduce:transition-none`
 
+/**
+ * Shared media frame for Best Trade / Highest RR homepage cards.
+ * Re-exports the upload cropper frame (`TRADE_IMAGE_ASPECT` = 4/3).
+ */
+export {
+  TRADE_IMAGE_MEDIA_FRAME_CLASS as LANDING_FEATURED_TRADE_MEDIA_FRAME_CLASS,
+  TRADE_IMAGE_MEDIA_FRAME_IMG_CLASS as LANDING_FEATURED_TRADE_MEDIA_IMAGE_CLASS,
+} from "@/lib/tradeImageAspect"
+
 export const LANDING_CARD_PADDING = "p-4 md:p-7"
 
 export const LANDING_TITLE_GRADIENT =

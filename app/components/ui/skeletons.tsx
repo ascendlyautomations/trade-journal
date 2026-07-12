@@ -379,8 +379,15 @@ export function SkeletonFeaturedTradesSection() {
           <Skeleton className="mx-auto h-4 w-96 max-w-full" />
         </div>
         <div className="grid gap-4 md:grid-cols-2">
-          <Skeleton className="min-h-[280px] w-full rounded-xl md:min-h-[320px]" />
-          <Skeleton className="min-h-[280px] w-full rounded-xl md:min-h-[320px]" />
+          {Array.from({ length: 2 }).map((_, i) => (
+            <div key={i} className="overflow-hidden rounded-xl border border-white/10">
+              <Skeleton className="aspect-[4/3] w-full rounded-none" />
+              <div className="space-y-3 p-4">
+                <Skeleton className="h-4 w-1/3" />
+                <Skeleton className="h-3 w-2/3" />
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </section>

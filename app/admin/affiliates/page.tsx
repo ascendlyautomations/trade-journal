@@ -4,7 +4,6 @@ import Link from "next/link"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import {
-  adminApproveAffiliateApplication,
   adminRejectAffiliateApplication,
 } from "@/lib/affiliateAdmin"
 import { getCurrentAdminCheckResult } from "@/lib/adminUsers"
@@ -205,54 +204,80 @@ export default function AdminAffiliateApplicationsPage() {
 
   async function handleApprove() {
     if (!selected?.id) return
-    const promo = stripePromoId.trim()
-    if (!promo) {
-      setActionError("Stripe promo code ID is required to approve.")
-      return
-    }
     setPendingAction("approve")
     setActionError(null)
     const override = finalCodeOverride.trim()
-    const { error } = await adminApproveAffiliateApplication(supabase, {
-      applicationId: selected.id,
-      adminCode: override ? override : null,
-      stripePromo: promo,
-    })
-    setPendingAction(null)
-    if (error) {
-      setActionError(toUserFacingErrorMessage(error))
-      return
-    }
-
+    const promo = stripePromoId.trim()
     const approvedUserId = selected.user_id
-    void (async () => {
-      try {
-        const res = await fetch("/api/admin/affiliates/provision-connect", {
-          method: "POST",
-          credentials: "include",
-          headers: {
-            "Content-Type": "application/json",
-            ...(await supabaseBearerHeaders()),
-          },
-          body: JSON.stringify({ affiliateUserId: approvedUserId }),
-        })
-        if (!res.ok && process.env.NODE_ENV === "development") {
-          const j = await res.json().catch(() => ({}))
-          console.warn("[admin] provision-connect failed", res.status, j)
-        }
-      } catch (e) {
-        if (process.env.NODE_ENV === "development") console.warn("[admin] provision-connect", e)
+    try {
+      const res = await fetch("/api/admin/affiliates/approve", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          ...(await supabaseBearerHeaders()),
+        },
+        body: JSON.stringify({
+          applicationId: selected.id,
+          adminCode: override ? override : null,
+          stripePromo: promo ? promo : null,
+        }),
+      })
+      const json = (await res.json()) as {
+        error?: string
+        code?: string
+        stripe_promo_code_id?: string
       }
-    })()
+      if (!res.ok) {
+        setActionError(
+          toUserFacingErrorMessage(
+            json.error,
+            "Could not approve this application."
+          )
+        )
+        return
+      }
 
-    setSelected(null)
-    setActionError(null)
-    setFinalCodeOverride("")
-    setStripePromoId("")
-    setRejectNotes("")
-    setTab("approved")
-    setSuccessBanner({ message: "Affiliate approved successfully", variant: "success" })
-    void fetchApplications()
+      void (async () => {
+        try {
+          const connectRes = await fetch("/api/admin/affiliates/provision-connect", {
+            method: "POST",
+            credentials: "include",
+            headers: {
+              "Content-Type": "application/json",
+              ...(await supabaseBearerHeaders()),
+            },
+            body: JSON.stringify({ affiliateUserId: approvedUserId }),
+          })
+          if (!connectRes.ok && process.env.NODE_ENV === "development") {
+            const j = await connectRes.json().catch(() => ({}))
+            console.warn("[admin] provision-connect failed", connectRes.status, j)
+          }
+        } catch (e) {
+          if (process.env.NODE_ENV === "development") {
+            console.warn("[admin] provision-connect", e)
+          }
+        }
+      })()
+
+      setSelected(null)
+      setActionError(null)
+      setFinalCodeOverride("")
+      setStripePromoId("")
+      setRejectNotes("")
+      setTab("approved")
+      setSuccessBanner({
+        message: `Affiliate approved successfully${
+          json.code ? ` — code ${json.code}` : ""
+        }. New codes use a 10% first-invoice discount (duration once).`,
+        variant: "success",
+      })
+      void fetchApplications()
+    } catch (e) {
+      setActionError(toUserFacingErrorMessage(e, "Could not approve this application."))
+    } finally {
+      setPendingAction(null)
+    }
   }
 
   async function handleReject() {
@@ -302,7 +327,8 @@ export default function AdminAffiliateApplicationsPage() {
                 Affiliate applications
               </h1>
               <p className="mt-1 text-sm text-gray-400">
-                Approve or reject applications. Approval requires a Stripe promo code ID; you can optionally
+                Approve or reject applications. Approval auto-creates a Stripe promotion code
+                (10% off, duration once) unless you paste an existing promo ID. You can optionally
                 override the final affiliate code.
               </p>
             </div>
@@ -509,7 +535,9 @@ export default function AdminAffiliateApplicationsPage() {
                     />
                   </label>
                   <label className="block">
-                    <span className="text-xs text-gray-400">Stripe promo code ID (required for approval)</span>
+                    <span className="text-xs text-gray-400">
+                      Stripe promo code ID (optional — leave blank to auto-create a 10% once promo)
+                    </span>
                     <input
                       type="text"
                       value={stripePromoId}

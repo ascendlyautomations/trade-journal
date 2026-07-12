@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { ensureManualUserAccountRegistered } from "./ensureManualUserAccount"
 import { prependTradeInCache } from "./appDataCache"
+import { assertAccountAllowsNewTrades } from "./freePlanAccountSlots"
 import type { TradingAccountListItem } from "./tradingAccounts"
 import { toUserFacingErrorMessage, USER_FACING_ERROR_MESSAGES } from "./userFacingError"
 
@@ -63,7 +64,23 @@ export async function insertCopyTradedTrades({
     return { ok: false, message: "Copy trading group has no linked accounts." }
   }
 
+  const { data: profile } = await client
+    .from("profiles")
+    .select("is_pro, subscription_status, trial_end")
+    .eq("id", userId)
+    .maybeSingle()
+
   for (const account of accounts) {
+    const entryGate = await assertAccountAllowsNewTrades(
+      client,
+      userId,
+      account.id,
+      profile
+    )
+    if (!entryGate.ok) {
+      return { ok: false, message: entryGate.message }
+    }
+
     const snapshot = accountToTradeSnapshot(account)
     const skipRegistry =
       snapshot.type === "backtest" || snapshot.type === "imported"

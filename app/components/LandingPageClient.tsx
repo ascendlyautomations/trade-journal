@@ -9,6 +9,7 @@ import LandingProblemSection from "./landing/LandingProblemSection"
 import LandingAnalyticsShowcaseSection from "./landing/LandingAnalyticsShowcaseSection"
 import LandingPricingSection from "./landing/LandingPricingSection"
 import LandingFaqSection from "./landing/LandingFaqSection"
+import LandingComingSoonSection from "./landing/LandingComingSoonSection"
 import { ConfirmModal, FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import MarketingFooter from "./marketing/MarketingFooter"
 import { TRAXPRO_TRIAL_HEADLINE } from "@/lib/traxProPricing"
@@ -254,6 +255,7 @@ export default function LandingPageClient({
           />
           {testimonialsSection}
           <LandingFaqSection />
+          <LandingComingSoonSection />
           <LandingFinalCtaSection
             checkoutLoading={checkoutLoading}
             onStartTrial={() => void handleSubscribe()}

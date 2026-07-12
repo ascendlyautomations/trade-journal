@@ -14,7 +14,9 @@ export function shouldOptOutOfGlobalAppNavbar(
     isMarketingRoute(pathname) ||
     isPublicLegalRoute(pathname) ||
     pathname === "/demo" ||
-    pathname.startsWith("/demo/")
+    pathname.startsWith("/demo/") ||
+    pathname === "/marketing" ||
+    pathname.startsWith("/marketing/")
   )
 }
 

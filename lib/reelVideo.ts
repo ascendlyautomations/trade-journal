@@ -16,6 +16,13 @@ import {
   toUserFacingErrorMessage,
   USER_FACING_ERROR_MESSAGES,
 } from "@/lib/userFacingError"
+import {
+  buildReelThumbnailSeekCandidates,
+  clampReelSeekTime,
+  firstVisibleReelSeekTime,
+} from "@/lib/reelVideoSeek"
+
+export { firstVisibleReelSeekTime } from "@/lib/reelVideoSeek"
 
 export const REEL_MAX_DURATION_SECONDS = 90
 export const REEL_MAX_FILE_BYTES = 100 * 1024 * 1024
@@ -32,9 +39,6 @@ const ACCEPTED_VIDEO_MIME_TYPES = new Set([
 ])
 
 const ACCEPTED_VIDEO_EXTENSIONS = new Set([".mp4", ".mov", ".m4v"])
-
-/** Seek offsets tried in order — avoids all-black first frames from encoders. */
-const THUMBNAIL_SEEK_CANDIDATES = [0.25, 0.1, 0.5, 1, 0.05, 2]
 
 export type ReelVideoValidationError = {
   title: string
@@ -86,25 +90,64 @@ export function validateReelVideoFile(file: File): ReelVideoValidationError | nu
 
 function loadVideoElement(
   video: HTMLVideoElement,
-  objectUrl: string
+  objectUrl: string,
+  options?: { requireDecodedFrame?: boolean }
 ): Promise<void> {
+  const requireDecodedFrame = options?.requireDecodedFrame === true
+
   return new Promise((resolve, reject) => {
-    const onLoadedData = () => {
+    let settled = false
+
+    const isReady = () => {
+      if (!Number.isFinite(video.duration) || video.duration <= 0) return false
+      if (requireDecodedFrame) {
+        return (
+          video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+          video.videoWidth > 0 &&
+          video.videoHeight > 0
+        )
+      }
+      return video.readyState >= HTMLMediaElement.HAVE_METADATA
+    }
+
+    const finish = () => {
+      if (settled) return
+      if (!isReady()) return
+      settled = true
       cleanup()
       resolve()
     }
+
     const onError = () => {
+      if (settled) return
+      settled = true
       cleanup()
       reject(new Error("Could not read this video file."))
     }
-    const cleanup = () => {
-      video.removeEventListener("loadeddata", onLoadedData)
-      video.removeEventListener("error", onError)
+
+    const onTimeout = () => {
+      if (settled) return
+      settled = true
+      cleanup()
+      reject(new Error("Could not read this video file."))
     }
 
-    video.addEventListener("loadeddata", onLoadedData, { once: true })
+    const cleanup = () => {
+      video.removeEventListener("loadedmetadata", finish)
+      video.removeEventListener("loadeddata", finish)
+      video.removeEventListener("canplay", finish)
+      video.removeEventListener("error", onError)
+      window.clearTimeout(timeoutId)
+    }
+
+    const timeoutId = window.setTimeout(onTimeout, 15_000)
+
+    video.addEventListener("loadedmetadata", finish)
+    video.addEventListener("loadeddata", finish)
+    video.addEventListener("canplay", finish)
     video.addEventListener("error", onError, { once: true })
     video.src = objectUrl
+    video.load()
   })
 }
 
@@ -144,29 +187,11 @@ export function readReelVideoMetadata(
 }
 
 function clampSeekTime(duration: number, seekSeconds: number): number {
-  if (!Number.isFinite(duration) || duration <= 0) return 0
-  const maxSeek = Math.max(duration - 0.05, 0)
-  return Math.min(Math.max(seekSeconds, 0), maxSeek)
+  return clampReelSeekTime(duration, seekSeconds)
 }
 
 function buildSeekCandidates(duration: number, preferred?: number): number[] {
-  const seeds =
-    preferred != null
-      ? [preferred, ...THUMBNAIL_SEEK_CANDIDATES]
-      : THUMBNAIL_SEEK_CANDIDATES
-
-  const seen = new Set<string>()
-  const out: number[] = []
-
-  for (const candidate of seeds) {
-    const clamped = clampSeekTime(duration, candidate)
-    const key = clamped.toFixed(3)
-    if (seen.has(key)) continue
-    seen.add(key)
-    out.push(clamped)
-  }
-
-  return out
+  return buildReelThumbnailSeekCandidates(duration, preferred)
 }
 
 async function seekVideoTo(
@@ -174,6 +199,11 @@ async function seekVideoTo(
   time: number
 ): Promise<void> {
   const target = clampSeekTime(video.duration, time)
+
+  // Already on the target frame — still wait for a paintable frame below.
+  if (Math.abs(video.currentTime - target) < 0.001) {
+    return
+  }
 
   await new Promise<void>((resolve, reject) => {
     const onSeeked = () => {
@@ -200,7 +230,21 @@ async function waitForPaintedVideoFrame(
 ): Promise<void> {
   if (typeof video.requestVideoFrameCallback === "function") {
     await new Promise<void>((resolve) => {
-      video.requestVideoFrameCallback(() => resolve())
+      let settled = false
+      const done = () => {
+        if (settled) return
+        settled = true
+        resolve()
+      }
+      const handle = video.requestVideoFrameCallback(() => done())
+      window.setTimeout(() => {
+        try {
+          video.cancelVideoFrameCallback?.(handle)
+        } catch {
+          /* ignore */
+        }
+        done()
+      }, 750)
     })
     return
   }
@@ -214,19 +258,20 @@ function isMostlyBlackImageData(data: ImageData): boolean {
   const { data: pixels } = data
   if (pixels.length === 0) return true
 
-  let darkSamples = 0
+  let darkOrEmptySamples = 0
   let samples = 0
 
   for (let i = 0; i < pixels.length; i += 16) {
     const r = pixels[i]!
     const g = pixels[i + 1]!
     const b = pixels[i + 2]!
+    const a = pixels[i + 3] ?? 255
     const luminance = (r + g + b) / 3
-    if (luminance < 20) darkSamples += 1
+    if (a < 16 || luminance < 20) darkOrEmptySamples += 1
     samples += 1
   }
 
-  return samples > 0 && darkSamples / samples > 0.92
+  return samples > 0 && darkOrEmptySamples / samples > 0.92
 }
 
 function captureVideoFrame(
@@ -267,19 +312,24 @@ function captureVideoFrame(
 
 export async function captureReelVideoThumbnail(
   file: File,
-  seekSeconds = 0.25
+  seekSeconds?: number
 ): Promise<{ blob: Blob; metadata: ReelVideoMetadata }> {
   const video = document.createElement("video")
   video.preload = "auto"
   video.muted = true
   video.playsInline = true
+  video.setAttribute("playsinline", "true")
 
   const objectUrl = URL.createObjectURL(file)
 
   try {
-    await loadVideoElement(video, objectUrl)
-    const blob = await capturePosterBlobFromLoadedVideo(video, seekSeconds)
+    await loadVideoElement(video, objectUrl, { requireDecodedFrame: true })
     const metadata = buildVideoMetadata(video)
+    const preferred =
+      seekSeconds != null && seekSeconds > 0
+        ? seekSeconds
+        : firstVisibleReelSeekTime(video.duration)
+    const blob = await capturePosterBlobFromLoadedVideo(video, preferred)
     return { blob, metadata }
   } finally {
     URL.revokeObjectURL(objectUrl)
@@ -288,7 +338,7 @@ export async function captureReelVideoThumbnail(
   }
 }
 
-/** Local upload preview URL from a captured video frame (caller must revoke). */
+/** Local upload preview URL from the first visible video frame (caller must revoke). */
 export async function createReelVideoPreviewObjectUrl(
   file: File
 ): Promise<{ previewUrl: string; durationSeconds: number }> {
@@ -376,7 +426,7 @@ export async function captureReelPosterFromUrl(
   video.preload = "auto"
 
   try {
-    await loadVideoElement(video, trimmed)
+    await loadVideoElement(video, trimmed, { requireDecodedFrame: true })
     const blob = await capturePosterBlobFromLoadedVideo(video)
     const objectUrl = URL.createObjectURL(blob)
     cacheReelPosterObjectUrl(trimmed, objectUrl)

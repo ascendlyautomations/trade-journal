@@ -1,6 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { isProActive } from "@/lib/subscription"
 import {
+  accountCanAddTrades,
+  countTradeEntryEnabledAccounts,
+} from "@/lib/freePlanAccountSlots"
+import {
   normalizeAccountCategoryForForm,
   normalizeAccountModeForForm,
   type AccountType,
@@ -30,6 +34,8 @@ export type TradingAccountListItem = {
   mode: string | null
   category: string | null
   is_active: boolean
+  /** Free-plan trade-entry slot; false = historical read-only. */
+  can_add_trades: boolean
   note: string
   rules: TradingAccountPropFirmRules | null
 }
@@ -113,6 +119,7 @@ function mapAccountRow(acc: Record<string, unknown>): TradingAccountListItem {
     mode: acc.mode != null ? String(acc.mode) : null,
     category,
     is_active: acc.is_active !== false,
+    can_add_trades: accountCanAddTrades(acc),
     note: acc.note != null ? String(acc.note) : "",
     rules: category === "Prop Firm" ? mapPropFirmRules(acc) : null,
   }
@@ -162,11 +169,11 @@ export async function loadTradingAccounts(
   }
 }
 
-/** Mirrors InputTradeForm free-plan check before insert. */
+/** Free plan: at most FREE_PLAN_ACCOUNT_LIMIT accounts with can_add_trades. */
 export async function assertCanCreateTradingAccount(
   client: SupabaseClient,
   userId: string,
-  profile: { is_pro?: boolean | null; subscription_status?: string | null } | null
+  profile: { is_pro?: boolean | null; subscription_status?: string | null; trial_end?: string | null } | null
 ): Promise<{ ok: true } | { ok: false; message: string }> {
   if (isProActive(profile)) {
     return { ok: true }
@@ -174,7 +181,7 @@ export async function assertCanCreateTradingAccount(
 
   const { data: existingAccounts, error: countErr } = await client
     .from("accounts")
-    .select("id")
+    .select("id, can_add_trades")
     .eq("user_id", userId)
 
   if (countErr) {
@@ -182,7 +189,9 @@ export async function assertCanCreateTradingAccount(
     return { ok: false, message: "Something went wrong" }
   }
 
-  if ((existingAccounts ?? []).length >= FREE_PLAN_ACCOUNT_LIMIT) {
+  if (
+    countTradeEntryEnabledAccounts(existingAccounts ?? []) >= FREE_PLAN_ACCOUNT_LIMIT
+  ) {
     return { ok: false, message: FREE_PLAN_ACCOUNT_LIMIT_MESSAGE }
   }
 
@@ -206,6 +215,7 @@ export async function insertTradingAccount(
         category: newAccount.category,
         mode: newAccount.mode,
         is_active: true,
+        can_add_trades: true,
         consistency: newAccount.rules?.consistency ?? null,
         max_drawdown: newAccount.rules?.maxDrawdown ?? null,
         daily_drawdown: newAccount.rules?.dailyDrawdown ?? null,

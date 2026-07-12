@@ -2,7 +2,7 @@
 
 import IntentPrefetchLink from "@/lib/IntentPrefetchLink"
 import { usePathname, useRouter } from "next/navigation"
-import { useEffect, useState } from "react"
+import { useEffect, useState, type MouseEvent } from "react"
 import { useUserProfile } from "@/lib/useUserProfile"
 import { isAuthRoute } from "@/lib/authRoutes"
 import {
@@ -10,6 +10,7 @@ import {
   shouldShowMarketingNavbar,
 } from "@/lib/marketingAccess"
 import { NAVBAR_BRAND_LINK_CLASS_NOWRAP } from "@/lib/navbarBrand"
+import { navigateToComingSoonSection } from "@/app/components/landing/LandingComingSoonSection"
 
 const DESKTOP_NAV_LINKS = [
   { href: "/faq", label: "FAQ" },
@@ -28,6 +29,8 @@ const MOBILE_NAV_LINKS = [
   { href: "/legal", label: "Legal" },
   { href: "/about", label: "About" },
 ] as const
+
+const COMING_SOON_NAV_HREF = "/#coming-soon"
 
 function isNavLinkActive(pathname: string, href: string): boolean {
   if (href === "/affiliate") {
@@ -52,17 +55,44 @@ function mobileNavLinkClass(pathname: string, href: string): string {
   }`
 }
 
+function comingSoonNavClass(active: boolean, mobile: boolean): string {
+  if (mobile) {
+    return `rounded-lg px-3 py-2 transition ${
+      active
+        ? "bg-blue-500/20 text-blue-300"
+        : "text-gray-300 hover:text-white"
+    }`
+  }
+  return `shrink-0 rounded px-2 py-1 text-sm transition ${
+    active
+      ? "bg-blue-500/20 text-blue-300"
+      : "text-gray-300 hover:text-white"
+  }`
+}
+
 /** Marketing navbar — logged-out visitors and completed members on public pages. */
 export default function PublicNavbar() {
   const { user, profile, loading } = useUserProfile()
   const pathname = usePathname()
   const router = useRouter()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [comingSoonActive, setComingSoonActive] = useState(false)
 
   const showReturnToApp = shouldShowCustomerHomeChrome(user, profile, loading)
 
   useEffect(() => {
     setMenuOpen(false)
+  }, [pathname])
+
+  useEffect(() => {
+    function syncComingSoonActive() {
+      setComingSoonActive(
+        pathname === "/" && window.location.hash === "#coming-soon"
+      )
+    }
+    syncComingSoonActive()
+    window.addEventListener("hashchange", syncComingSoonActive)
+    return () => window.removeEventListener("hashchange", syncComingSoonActive)
   }, [pathname])
 
   if (isAuthRoute(pathname)) {
@@ -76,6 +106,45 @@ export default function PublicNavbar() {
   function handleReturnToApp() {
     setMenuOpen(false)
     router.push("/dashboard")
+  }
+
+  function handleComingSoonClick(event: MouseEvent<HTMLAnchorElement>) {
+    event.preventDefault()
+    setMenuOpen(false)
+    setComingSoonActive(true)
+    navigateToComingSoonSection()
+  }
+
+  function renderNavLinks(mobile: boolean) {
+    const links = mobile ? MOBILE_NAV_LINKS : DESKTOP_NAV_LINKS
+    const classFor = mobile ? mobileNavLinkClass : navLinkClass
+
+    return links.flatMap((link) => {
+      const item = (
+        <IntentPrefetchLink
+          key={link.href}
+          href={link.href}
+          className={classFor(pathname, link.href)}
+          onClick={mobile ? () => setMenuOpen(false) : undefined}
+        >
+          {link.label}
+        </IntentPrefetchLink>
+      )
+
+      if (link.href !== "/about") return [item]
+
+      return [
+        item,
+        <a
+          key={COMING_SOON_NAV_HREF}
+          href={COMING_SOON_NAV_HREF}
+          className={comingSoonNavClass(comingSoonActive, mobile)}
+          onClick={handleComingSoonClick}
+        >
+          Coming Soon
+        </a>,
+      ]
+    })
   }
 
   return (
@@ -93,15 +162,7 @@ export default function PublicNavbar() {
               className="hidden min-w-0 items-center gap-2 sm:gap-3 md:flex"
               aria-label="Marketing"
             >
-              {DESKTOP_NAV_LINKS.map((link) => (
-                <IntentPrefetchLink
-                  key={link.href}
-                  href={link.href}
-                  className={navLinkClass(pathname, link.href)}
-                >
-                  {link.label}
-                </IntentPrefetchLink>
-              ))}
+              {renderNavLinks(false)}
             </nav>
           </div>
 
@@ -190,16 +251,7 @@ export default function PublicNavbar() {
                 <div className="my-1 border-t border-white/10" aria-hidden />
               </>
             )}
-            {MOBILE_NAV_LINKS.map((link) => (
-              <IntentPrefetchLink
-                key={link.href}
-                href={link.href}
-                className={mobileNavLinkClass(pathname, link.href)}
-                onClick={() => setMenuOpen(false)}
-              >
-                {link.label}
-              </IntentPrefetchLink>
-            ))}
+            {renderNavLinks(true)}
           </nav>
         </div>
       ) : null}

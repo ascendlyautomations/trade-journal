@@ -10,10 +10,18 @@ import {
   resolveAffiliateCommissionBaseCents,
 } from "@/lib/affiliateEarnings"
 import {
+  normalizeAffiliateCode,
+  readAffiliateCodeFromStripeMetadata,
+  resolveAffiliateCodeForCommission,
+  shouldRecordAffiliateCommission,
+} from "@/lib/affiliateStripeDiscount"
+import {
   createAffiliateCommissionNotification,
   createAffiliateReferralNotification,
 } from "@/lib/server/affiliateReferralNotifications"
 import { resolveTraxProBillingIntervalFromStripePriceId } from "@/lib/traxProBillingPlans.server"
+import { mirrorBillingAccountsStripeCustomerId } from "@/lib/profileSplitMirrorWrites"
+import { enableAllAccountsForTradeEntry } from "@/lib/enableAllAccountsForTradeEntry"
 import { devLog } from "@/lib/devLog"
 
 export const runtime = "nodejs"
@@ -167,12 +175,133 @@ async function syncSubscriptionToProfile(params: {
     profileId: profile.id,
     rowsUpdated: updatedRows.length,
   })
+
+  if (updatePayload.is_pro === true) {
+    await enableAllAccountsForTradeEntry(supabase, profile.id)
+  }
+
   return true
 }
 
 /**
+ * Persist durable affiliate attribution from Checkout Session metadata and/or
+ * promotion codes. Metadata is the durable source; promo codes remain a backup
+ * path for manually entered codes.
+ */
+async function trackAffiliateAttributionFromCheckout(params: {
+  stripe: Stripe
+  supabase: SupabaseClient
+  session: Stripe.Checkout.Session
+  buyerProfileId: string
+}): Promise<void> {
+  const { stripe, supabase, session, buyerProfileId } = params
+
+  const metaCode = readAffiliateCodeFromStripeMetadata(session.metadata)
+  if (metaCode) {
+    await applyAffiliateAttributionToBuyer({
+      supabase,
+      buyerProfileId,
+      affiliateCode: metaCode,
+      source: "session_metadata",
+    })
+    return
+  }
+
+  await trackAffiliateFromManualCheckoutDiscount({
+    stripe,
+    supabase,
+    sessionId: session.id,
+    buyerProfileId,
+  })
+}
+
+async function applyAffiliateAttributionToBuyer(params: {
+  supabase: SupabaseClient
+  buyerProfileId: string
+  affiliateCode: string
+  source: string
+}): Promise<void> {
+  const { supabase, buyerProfileId, source } = params
+  const affiliateCode = normalizeAffiliateCode(params.affiliateCode)
+  if (!affiliateCode) return
+
+  const { data: affiliate } = await supabase
+    .from("affiliates")
+    .select("id, user_id, code")
+    .ilike("code", affiliateCode)
+    .maybeSingle()
+
+  if (!affiliate?.user_id || !affiliate.code) {
+    devLog("⚠️ No affiliate row for attribution code:", affiliateCode, source)
+    return
+  }
+
+  if (affiliate.user_id === buyerProfileId) {
+    devLog("⚠️ Skip self-referral (buyer is affiliate owner)")
+    return
+  }
+
+  const { data: buyer } = await supabase
+    .from("profiles")
+    .select("id, referred_by")
+    .eq("id", buyerProfileId)
+    .maybeSingle()
+
+  const existing = normalizeAffiliateCode(buyer?.referred_by)
+  if (existing) {
+    devLog("ℹ️ Buyer already attributed:", existing, `(${source})`)
+    return
+  }
+
+  const code = normalizeAffiliateCode(affiliate.code)
+  const { error: buyerRefErr } = await supabase
+    .from("profiles")
+    .update({ referred_by: code })
+    .eq("id", buyerProfileId)
+
+  if (buyerRefErr) {
+    console.error("ERROR:", JSON.stringify(buyerRefErr, null, 2))
+    return
+  }
+
+  devLog("✅ Buyer referred_by set from", source, ":", code)
+  try {
+    await createAffiliateReferralNotification(supabase, {
+      affiliateUserId: affiliate.user_id,
+      referredUserId: buyerProfileId,
+    })
+  } catch (notifErr) {
+    console.error("[checkout] affiliate referral notification failed:", notifErr)
+  }
+
+  const { data: referrerProfile, error: refFetchErr } = await supabase
+    .from("profiles")
+    .select("id, referral_count")
+    .eq("id", affiliate.user_id)
+    .maybeSingle()
+
+  if (refFetchErr || !referrerProfile?.id) {
+    devLog("❌ Referrer profile missing for affiliate.user_id:", affiliate.user_id)
+    return
+  }
+
+  const { error: refUpErr } = await supabase
+    .from("profiles")
+    .update({
+      referral_count: Number(referrerProfile.referral_count || 0) + 1,
+    })
+    .eq("id", referrerProfile.id)
+
+  if (refUpErr) {
+    console.error("ERROR:", JSON.stringify(refUpErr, null, 2))
+  } else {
+    devLog("✅ referral_count incremented for:", code)
+  }
+}
+
+/**
  * When the customer enters a promotion code in Checkout, attribute affiliate
- * (referred_by + referral_count) — no auto-applied codes at session create.
+ * (referred_by + referral_count) — backup path when session metadata is absent.
  */
 async function trackAffiliateFromManualCheckoutDiscount(params: {
   stripe: Stripe
@@ -232,6 +361,21 @@ async function trackAffiliateFromManualCheckoutDiscount(params: {
     }
   }
 
+  // Auto-applied discounts may also appear on session.total_details only; also
+  // read durable metadata written at session create.
+  const metaCode = readAffiliateCodeFromStripeMetadata(
+    sessionWithDiscounts.metadata
+  )
+  if (metaCode) {
+    await applyAffiliateAttributionToBuyer({
+      supabase,
+      buyerProfileId,
+      affiliateCode: metaCode,
+      source: "session_metadata_retrieve",
+    })
+    return
+  }
+
   if (promoIds.size === 0) {
     devLog(
       "ℹ️ No promotion code discount on checkout — skip affiliate attribution"
@@ -281,58 +425,12 @@ async function trackAffiliateFromManualCheckoutDiscount(params: {
       continue
     }
 
-    if (affiliate.user_id === buyerProfileId) {
-      devLog("⚠️ Skip self-referral (buyer is affiliate owner)")
-      continue
-    }
-
-    const { error: buyerRefErr } = await supabase
-      .from("profiles")
-      .update({ referred_by: affiliate.code })
-      .eq("id", buyerProfileId)
-
-    if (buyerRefErr) {
-      console.error("ERROR:", JSON.stringify(buyerRefErr, null, 2))
-    } else {
-      devLog("✅ Buyer referred_by set from manual promo:", affiliate.code)
-      try {
-        await createAffiliateReferralNotification(supabase, {
-          affiliateUserId: affiliate.user_id,
-          referredUserId: buyerProfileId,
-        })
-      } catch (notifErr) {
-        console.error("[checkout] affiliate referral notification failed:", notifErr)
-      }
-    }
-
-    const { data: referrerProfile, error: refFetchErr } = await supabase
-      .from("profiles")
-      .select("id, referral_count")
-      .eq("id", affiliate.user_id)
-      .maybeSingle()
-
-    if (refFetchErr) {
-      devLog("❌ Referrer profile fetch error:", refFetchErr)
-    } else if (!referrerProfile?.id) {
-      devLog(
-        "❌ Referrer profile missing for affiliate.user_id:",
-        affiliate.user_id
-      )
-    } else {
-      const { error: refUpErr } = await supabase
-        .from("profiles")
-        .update({
-          referral_count: Number(referrerProfile.referral_count || 0) + 1,
-        })
-        .eq("id", referrerProfile.id)
-
-      if (refUpErr) {
-        console.error("ERROR:", JSON.stringify(refUpErr, null, 2))
-      } else {
-        devLog("✅ referral_count incremented for:", affiliate.code)
-      }
-    }
-
+    await applyAffiliateAttributionToBuyer({
+      supabase,
+      buyerProfileId,
+      affiliateCode: affiliate.code,
+      source: "manual_promo",
+    })
     break
   }
 }
@@ -468,6 +566,9 @@ export async function POST(req: Request) {
               console.error("ERROR:", JSON.stringify(upErr, null, 2))
             } else {
               devLog("✅ checkout.session.completed: profile updated to active")
+              if (subscriptionPayload.is_pro === true) {
+                await enableAllAccountsForTradeEntry(supabase, userId)
+              }
               if (customerId) {
                 const { error: mirrorErr } =
                   await mirrorBillingAccountsStripeCustomerId(
@@ -490,10 +591,10 @@ export async function POST(req: Request) {
 
         if (userId && session.id) {
           try {
-            await trackAffiliateFromManualCheckoutDiscount({
+            await trackAffiliateAttributionFromCheckout({
               stripe,
               supabase,
-              sessionId: session.id,
+              session,
               buyerProfileId: userId,
             })
           } catch (affErr) {
@@ -671,12 +772,42 @@ export async function POST(req: Request) {
         }
 
         //----------------------------------------
-        // STEP 2: Referral on payer
+        // STEP 2: Referral on payer (DB first, then Stripe metadata fallback)
         //----------------------------------------
 
-        const referredRaw = payingUser.referred_by as string | null | undefined
-        const referredBy =
-          referredRaw != null ? String(referredRaw).trim() : ""
+        let referredRaw = payingUser.referred_by as string | null | undefined
+        let referredBy = normalizeAffiliateCode(referredRaw)
+
+        let subscriptionMetadata: Stripe.Metadata | null = null
+        let customerMetadata: Stripe.Metadata | null = null
+
+        if (!referredBy && subscriptionId) {
+          try {
+            const subscription = await stripe.subscriptions.retrieve(subscriptionId)
+            subscriptionMetadata = subscription.metadata ?? null
+          } catch (subMetaErr) {
+            console.error("[invoice.paid] subscription metadata retrieve failed:", subMetaErr)
+          }
+        }
+
+        if (!referredBy) {
+          try {
+            const customer = await stripe.customers.retrieve(customerId)
+            if (customer && !("deleted" in customer && customer.deleted)) {
+              customerMetadata = customer.metadata ?? null
+            }
+          } catch (custMetaErr) {
+            console.error("[invoice.paid] customer metadata retrieve failed:", custMetaErr)
+          }
+        }
+
+        if (!referredBy) {
+          referredBy = resolveAffiliateCodeForCommission({
+            profileReferredBy: referredRaw,
+            subscriptionMetadata,
+            customerMetadata,
+          })
+        }
 
         console.log(
           "[invoice.paid][AFFILIATE TEMP] BEFORE referred_by gate",
@@ -685,6 +816,10 @@ export async function POST(req: Request) {
             referred_by_raw: referredRaw ?? null,
             referred_by_trimmed: referredBy,
             referred_by_empty: !referredBy,
+            metadata_affiliate_code:
+              readAffiliateCodeFromStripeMetadata(subscriptionMetadata) ||
+              readAffiliateCodeFromStripeMetadata(customerMetadata) ||
+              null,
           }
         )
 
@@ -694,6 +829,20 @@ export async function POST(req: Request) {
             { payingUserId: payingUser.id, referred_by_raw: referredRaw ?? null }
           )
           return new Response("OK", { status: 200 })
+        }
+
+        // Backfill durable DB attribution when recovered from Stripe metadata.
+        if (!normalizeAffiliateCode(referredRaw) && referredBy) {
+          try {
+            await applyAffiliateAttributionToBuyer({
+              supabase,
+              buyerProfileId: payingUser.id as string,
+              affiliateCode: referredBy,
+              source: "invoice.paid_metadata_backfill",
+            })
+          } catch (backfillErr) {
+            console.error("[invoice.paid] referred_by backfill failed:", backfillErr)
+          }
         }
 
         console.log(
@@ -851,10 +1000,16 @@ export async function POST(req: Request) {
           }
         )
 
-        if (commissionBaseMajor <= 0) {
+        if (
+          !shouldRecordAffiliateCommission({
+            invoiceStatus: status,
+            commissionBaseMajor,
+          })
+        ) {
           console.log(
-            "[invoice.paid][AFFILIATE TEMP] BRANCH EXIT: commission base <= 0",
+            "[invoice.paid][AFFILIATE TEMP] BRANCH EXIT: commission not recordable",
             {
+              status,
               commissionBaseMajor,
               basisCents: commissionBase.basisCents,
               source: commissionBase.source,

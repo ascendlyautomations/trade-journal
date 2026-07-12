@@ -40,6 +40,7 @@ export const DEMO_ACCOUNTS = [
     mode: "eval",
     category: "Prop Firm",
     is_active: true,
+    can_add_trades: true,
     consistency: 40,
     max_drawdown: 4500,
     daily_drawdown: 2500,
@@ -58,6 +59,7 @@ export const DEMO_ACCOUNTS = [
     mode: "funded",
     category: "Prop Firm",
     is_active: true,
+    can_add_trades: true,
     consistency: 40,
     max_drawdown: 4500,
     daily_drawdown: 2500,
@@ -76,6 +78,7 @@ export const DEMO_ACCOUNTS = [
     mode: "live",
     category: "personal",
     is_active: true,
+    can_add_trades: true,
   },
 ] as const
 

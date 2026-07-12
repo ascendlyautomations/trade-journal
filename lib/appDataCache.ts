@@ -6,7 +6,7 @@ import { TRADES_APP_SELECT } from "./publicAccountPrivacy"
 /** Shared client-side cache for trades and accounts (module-level, survives route remounts). */
 
 export const ACCOUNTS_SELECT =
-  "id, account_number, name, account_size, mode, category, is_active, note, consistency, max_drawdown, daily_drawdown, profit_target, winning_days, winning_day_threshold" as const
+  "id, account_number, name, account_size, mode, category, is_active, can_add_trades, note, consistency, max_drawdown, daily_drawdown, profit_target, winning_days, winning_day_threshold" as const
 
 const DEFAULT_STALE_MS = 5 * 60 * 1000
 

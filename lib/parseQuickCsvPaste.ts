@@ -22,6 +22,7 @@ export type QuickTradeCsvFormPatch = {
   points: string
   contracts: string
   rr: string
+  direction: "Long" | "Short" | null
   entryDate: string
   exitDate: string
   entryTime: string
@@ -172,6 +173,11 @@ export function quickTradeFormPatchFromCsvTrade(
   const exitDate =
     toDateInputValue(trade.exit_time) || toDateInputValue(trade.date) || entryDate
 
+  const direction =
+    trade.direction === "Long" || trade.direction === "Short"
+      ? trade.direction
+      : null
+
   return {
     ticker: trade.ticker ?? "",
     pnl: Number.isFinite(trade.pnl) ? String(trade.pnl) : "",
@@ -185,6 +191,7 @@ export function quickTradeFormPatchFromCsvTrade(
         : "",
     rr:
       trade.rr != null && Number.isFinite(trade.rr) ? String(trade.rr) : "",
+    direction,
     entryDate,
     exitDate,
     entryTime: toTimeInputValue(trade.entry_time),

@@ -1,10 +1,4 @@
 import type { PublicUserReview } from "@/lib/userReviewDisplay"
-import { demoAvatarUrl } from "@/lib/demo/demoAvatars"
-import {
-  DEMO_USER_ALEX,
-  DEMO_USER_JORDAN,
-  DEMO_USER_SARAH,
-} from "@/lib/demo/demoFeed"
 
 export const SAMPLE_USER_REVIEWS: PublicUserReview[] = [
   {
@@ -18,7 +12,7 @@ export const SAMPLE_USER_REVIEWS: PublicUserReview[] = [
     created_at: "2026-06-01T12:00:00.000Z",
     display_name: "Alex M.",
     username_snapshot: "alex_futures",
-    avatar_snapshot: demoAvatarUrl(DEMO_USER_ALEX),
+    avatar_snapshot: "/homepage/testimonials/beta-user-01.webp",
   },
   {
     id: "sample-2",
@@ -29,9 +23,9 @@ export const SAMPLE_USER_REVIEWS: PublicUserReview[] = [
     would_recommend: true,
     featured: true,
     created_at: "2026-06-08T12:00:00.000Z",
-    display_name: "Jordan K.",
-    username_snapshot: "jordan_scalps",
-    avatar_snapshot: demoAvatarUrl(DEMO_USER_JORDAN),
+    display_name: "George K.",
+    username_snapshot: "george_scalps",
+    avatar_snapshot: "/homepage/testimonials/beta-user-02.webp",
   },
   {
     id: "sample-3",
@@ -42,8 +36,8 @@ export const SAMPLE_USER_REVIEWS: PublicUserReview[] = [
     would_recommend: true,
     featured: true,
     created_at: "2026-06-15T12:00:00.000Z",
-    display_name: "Sarah R.",
-    username_snapshot: "sarah_indices",
-    avatar_snapshot: demoAvatarUrl(DEMO_USER_SARAH),
+    display_name: "Timmy R.",
+    username_snapshot: "timmy_trades",
+    avatar_snapshot: "/homepage/testimonials/beta-user-03.webp",
   },
 ]

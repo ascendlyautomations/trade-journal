@@ -258,7 +258,57 @@ export async function deleteReelStorageFiles(
   }
 }
 
-/** Generate and persist a JPEG thumbnail after publish — never blocks upload. */
+/**
+ * Capture the first painted frame and upload a JPEG thumbnail.
+ * Returns null when capture/upload fails so callers can fall back safely.
+ */
+async function captureAndUploadReelThumbnail(
+  supabase: SupabaseClient,
+  userId: string,
+  file: File,
+  options?: {
+    onProgress?: UploadProgressReporter
+    /** Pre-captured frame — skips a second decode when available. */
+    thumbnailBlob?: Blob
+    durationSeconds?: number
+  }
+): Promise<{ publicUrl: string; durationSeconds: number } | null> {
+  try {
+    let blob = options?.thumbnailBlob
+    let durationSeconds = options?.durationSeconds
+
+    if (!blob || durationSeconds == null) {
+      const captured = await captureReelVideoThumbnail(file)
+      blob = captured.blob
+      durationSeconds = captured.metadata.durationSeconds
+    }
+
+    const thumbUpload = await uploadReelThumbnailBlob(
+      supabase,
+      userId,
+      blob,
+      options?.onProgress
+        ? { onProgress: options.onProgress }
+        : undefined
+    )
+    if ("error" in thumbUpload) {
+      console.error(
+        "[captureAndUploadReelThumbnail] upload:",
+        thumbUpload.error
+      )
+      return null
+    }
+    return {
+      publicUrl: thumbUpload.publicUrl,
+      durationSeconds,
+    }
+  } catch (err) {
+    console.error("[captureAndUploadReelThumbnail]", err)
+    return null
+  }
+}
+
+/** Async retry when inline thumbnail generation fails — never blocks publish. */
 function scheduleReelThumbnailGeneration(
   supabase: SupabaseClient,
   input: {
@@ -270,23 +320,16 @@ function scheduleReelThumbnailGeneration(
 ): void {
   void (async () => {
     try {
-      const captured = await captureReelVideoThumbnail(input.file)
-      const thumbUpload = await uploadReelThumbnailBlob(
+      const uploaded = await captureAndUploadReelThumbnail(
         supabase,
         input.userId,
-        captured.blob
+        input.file
       )
-      if ("error" in thumbUpload) {
-        console.error(
-          "[scheduleReelThumbnailGeneration] upload:",
-          thumbUpload.error
-        )
-        return
-      }
+      if (!uploaded) return
 
       const { error } = await supabase
         .from("reels")
-        .update({ thumbnail_url: thumbUpload.publicUrl })
+        .update({ thumbnail_url: uploaded.publicUrl })
         .eq("id", input.reelId)
         .eq("user_id", input.userId)
 
@@ -320,17 +363,25 @@ export async function publishReel(
   }
 
   let durationSeconds: number
+  let thumbnailBlob: Blob | null = null
 
   try {
-    report({ percent: 8, stage: "Reading video…" })
-    const metadata = await readReelVideoMetadata(input.file)
-    durationSeconds = metadata.durationSeconds
+    report({ percent: 8, stage: "Generating thumbnail…" })
+    const captured = await captureReelVideoThumbnail(input.file)
+    thumbnailBlob = captured.blob
+    durationSeconds = captured.metadata.durationSeconds
   } catch (err) {
-    const message = toUserFacingErrorMessage(
-      err,
-      "Could not process this video."
-    )
-    return { error: message }
+    try {
+      report({ percent: 10, stage: "Reading video…" })
+      const metadata = await readReelVideoMetadata(input.file)
+      durationSeconds = metadata.durationSeconds
+    } catch (metaErr) {
+      const message = toUserFacingErrorMessage(
+        metaErr,
+        "Could not process this video."
+      )
+      return { error: message }
+    }
   }
 
   report({ percent: 15, stage: "Uploading media…" })
@@ -342,7 +393,7 @@ export async function publishReel(
       onProgress: input.onProgress
         ? (update) => {
             report({
-              percent: 15 + (update.percent / 100) * 73,
+              percent: 15 + (update.percent / 100) * 70,
               stage: update.stage || "Uploading media…",
             })
           }
@@ -353,9 +404,35 @@ export async function publishReel(
     return { error: videoUpload.error }
   }
 
-  report({ percent: 90, stage: "Creating clip…" })
+  let thumbnailPublicUrl: string | null = null
+  if (thumbnailBlob) {
+    report({ percent: 86, stage: "Saving thumbnail…" })
+    const uploadedThumb = await captureAndUploadReelThumbnail(
+      supabase,
+      input.userId,
+      input.file,
+      {
+        thumbnailBlob,
+        durationSeconds,
+        onProgress: input.onProgress
+          ? (update) => {
+              report({
+                percent: 86 + (update.percent / 100) * 4,
+                stage: update.stage || "Saving thumbnail…",
+              })
+            }
+          : undefined,
+      }
+    )
+    if (uploadedThumb) {
+      thumbnailPublicUrl = uploadedThumb.publicUrl
+    }
+  }
+
+  report({ percent: 92, stage: "Creating clip…" })
 
   const caption = input.caption?.trim() ?? ""
+  const resolvedThumbnailUrl = thumbnailPublicUrl ?? videoUpload.publicUrl
 
   const { data, error } = await supabase
     .from("reels")
@@ -363,7 +440,7 @@ export async function publishReel(
       user_id: input.userId,
       caption: caption || null,
       video_url: videoUpload.publicUrl,
-      thumbnail_url: videoUpload.publicUrl,
+      thumbnail_url: resolvedThumbnailUrl,
       duration_seconds: durationSeconds,
       visibility: input.visibility ?? "public",
       trade_id: null,
@@ -377,12 +454,14 @@ export async function publishReel(
     return { error: formatReelMutationError(error) }
   }
 
-  scheduleReelThumbnailGeneration(supabase, {
-    reelId: String(data.id),
-    userId: input.userId,
-    file: input.file,
-    previousThumbnailUrl: videoUpload.publicUrl,
-  })
+  if (!thumbnailPublicUrl) {
+    scheduleReelThumbnailGeneration(supabase, {
+      reelId: String(data.id),
+      userId: input.userId,
+      file: input.file,
+      previousThumbnailUrl: videoUpload.publicUrl,
+    })
+  }
 
   report({ percent: 95, stage: "Publishing…" })
   invalidateUserStreaksCache(input.userId)
@@ -452,17 +531,27 @@ export async function publishTradeReel(
   }
 
   let durationSeconds: number
+  let thumbnailBlob: Blob | null = null
 
   try {
-    logTradeReel("reading video metadata")
-    report({ percent: 8, stage: "Reading video…" })
-    const metadata = await readReelVideoMetadata(input.file)
-    durationSeconds = metadata.durationSeconds
-    logTradeReel("metadata read", { durationSeconds })
+    logTradeReel("generating thumbnail")
+    report({ percent: 8, stage: "Generating thumbnail…" })
+    const captured = await captureReelVideoThumbnail(input.file)
+    thumbnailBlob = captured.blob
+    durationSeconds = captured.metadata.durationSeconds
+    logTradeReel("thumbnail captured", { durationSeconds })
   } catch (err) {
-    logTradeReelError("metadata read failed", err)
-    return {
-      error: toUserFacingErrorMessage(err, "Could not process this video."),
+    try {
+      logTradeReel("reading video metadata")
+      report({ percent: 10, stage: "Reading video…" })
+      const metadata = await readReelVideoMetadata(input.file)
+      durationSeconds = metadata.durationSeconds
+      logTradeReel("metadata read", { durationSeconds })
+    } catch (metaErr) {
+      logTradeReelError("metadata read failed", metaErr)
+      return {
+        error: toUserFacingErrorMessage(metaErr, "Could not process this video."),
+      }
     }
   }
 
@@ -476,7 +565,7 @@ export async function publishTradeReel(
       onProgress: input.onProgress
         ? (update) => {
             report({
-              percent: 15 + (update.percent / 100) * 73,
+              percent: 15 + (update.percent / 100) * 70,
               stage: update.stage || "Uploading media…",
             })
           }
@@ -492,11 +581,38 @@ export async function publishTradeReel(
     storagePath: videoUpload.storagePath,
   })
 
+  let thumbnailPublicUrl: string | null = null
+  if (thumbnailBlob) {
+    report({ percent: 86, stage: "Saving thumbnail…" })
+    const uploadedThumb = await captureAndUploadReelThumbnail(
+      supabase,
+      input.userId,
+      input.file,
+      {
+        thumbnailBlob,
+        durationSeconds,
+        onProgress: input.onProgress
+          ? (update) => {
+              report({
+                percent: 86 + (update.percent / 100) * 4,
+                stage: update.stage || "Saving thumbnail…",
+              })
+            }
+          : undefined,
+      }
+    )
+    if (uploadedThumb) {
+      thumbnailPublicUrl = uploadedThumb.publicUrl
+    }
+  }
+
   logTradeReel("insert started", {
     tradeId: input.tradeId,
     userId: input.userId,
   })
-  report({ percent: 90, stage: "Creating clip…" })
+  report({ percent: 92, stage: "Creating clip…" })
+
+  const resolvedThumbnailUrl = thumbnailPublicUrl ?? videoUpload.publicUrl
 
   const { data, error } = await supabase
     .from("reels")
@@ -506,7 +622,7 @@ export async function publishTradeReel(
       kind: input.kind?.trim() || null,
       caption: null,
       video_url: videoUpload.publicUrl,
-      thumbnail_url: videoUpload.publicUrl,
+      thumbnail_url: resolvedThumbnailUrl,
       duration_seconds: durationSeconds,
       visibility: "public",
     })
@@ -524,12 +640,14 @@ export async function publishTradeReel(
     userId: data?.user_id,
   })
 
-  scheduleReelThumbnailGeneration(supabase, {
-    reelId: String(data.id),
-    userId: input.userId,
-    file: input.file,
-    previousThumbnailUrl: videoUpload.publicUrl,
-  })
+  if (!thumbnailPublicUrl) {
+    scheduleReelThumbnailGeneration(supabase, {
+      reelId: String(data.id),
+      userId: input.userId,
+      file: input.file,
+      previousThumbnailUrl: videoUpload.publicUrl,
+    })
+  }
 
   const hydrated = await fetchTradeReel(supabase, input.tradeId)
   const reel = hydrated ?? (data as ReelRow)
@@ -700,17 +818,25 @@ export async function replaceTradeReelVideo(
   }
 
   let durationSeconds: number
+  let thumbnailBlob: Blob | null = null
 
   try {
-    report({ percent: 8, stage: "Reading video…" })
-    const metadata = await readReelVideoMetadata(input.file)
-    durationSeconds = metadata.durationSeconds
+    report({ percent: 8, stage: "Generating thumbnail…" })
+    const captured = await captureReelVideoThumbnail(input.file)
+    thumbnailBlob = captured.blob
+    durationSeconds = captured.metadata.durationSeconds
   } catch (err) {
-    const message = toUserFacingErrorMessage(
-      err,
-      "Could not process this video."
-    )
-    return { error: message }
+    try {
+      report({ percent: 10, stage: "Reading video…" })
+      const metadata = await readReelVideoMetadata(input.file)
+      durationSeconds = metadata.durationSeconds
+    } catch (metaErr) {
+      const message = toUserFacingErrorMessage(
+        metaErr,
+        "Could not process this video."
+      )
+      return { error: message }
+    }
   }
 
   report({ percent: 15, stage: "Uploading media…" })
@@ -722,7 +848,7 @@ export async function replaceTradeReelVideo(
       onProgress: input.onProgress
         ? (update) => {
             report({
-              percent: 15 + (update.percent / 100) * 73,
+              percent: 15 + (update.percent / 100) * 70,
               stage: update.stage || "Uploading media…",
             })
           }
@@ -733,15 +859,41 @@ export async function replaceTradeReelVideo(
     return { error: videoUpload.error }
   }
 
-  const previousThumbnailUrl = (existing as ReelRow).thumbnail_url
-  await deleteReelStorageFiles(supabase, existing as ReelRow)
+  let thumbnailPublicUrl: string | null = null
+  if (thumbnailBlob) {
+    report({ percent: 86, stage: "Saving thumbnail…" })
+    const uploadedThumb = await captureAndUploadReelThumbnail(
+      supabase,
+      input.userId,
+      input.file,
+      {
+        thumbnailBlob,
+        durationSeconds,
+        onProgress: input.onProgress
+          ? (update) => {
+              report({
+                percent: 86 + (update.percent / 100) * 4,
+                stage: update.stage || "Saving thumbnail…",
+              })
+            }
+          : undefined,
+      }
+    )
+    if (uploadedThumb) {
+      thumbnailPublicUrl = uploadedThumb.publicUrl
+    }
+  }
 
-  report({ percent: 90, stage: "Updating clip…" })
+  const previousVideoUrl = (existing as ReelRow).video_url
+  const previousThumbnailUrl = (existing as ReelRow).thumbnail_url
+  const resolvedThumbnailUrl = thumbnailPublicUrl ?? videoUpload.publicUrl
+
+  report({ percent: 92, stage: "Updating clip…" })
   const { data, error } = await supabase
     .from("reels")
     .update({
       video_url: videoUpload.publicUrl,
-      thumbnail_url: videoUpload.publicUrl,
+      thumbnail_url: resolvedThumbnailUrl,
       duration_seconds: durationSeconds,
     })
     .eq("id", input.reelId)
@@ -754,12 +906,19 @@ export async function replaceTradeReelVideo(
     return { error: formatReelMutationError(error) }
   }
 
-  scheduleReelThumbnailGeneration(supabase, {
-    reelId: input.reelId,
-    userId: input.userId,
-    file: input.file,
-    previousThumbnailUrl,
+  await deleteReelStorageFiles(supabase, {
+    video_url: previousVideoUrl,
+    thumbnail_url: previousThumbnailUrl,
   })
+
+  if (!thumbnailPublicUrl) {
+    scheduleReelThumbnailGeneration(supabase, {
+      reelId: input.reelId,
+      userId: input.userId,
+      file: input.file,
+      previousThumbnailUrl: videoUpload.publicUrl,
+    })
+  }
 
   const tradeId = (existing as ReelRow).trade_id
   if (tradeId) {

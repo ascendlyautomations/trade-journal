@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import Modal from "@/app/components/ui/Modal"
 import ReelVideoFilePreview from "@/app/components/ReelVideoFilePreview"
-import StorageImage from "@/app/components/ui/StorageImage"
+import ReelVideoPosterFrame from "@/app/components/ReelVideoPosterFrame"
 import { supabase } from "@/lib/supabaseClient"
 import { publishReel, updateReelCaption, type ReelRow, isTradeAttachedReel } from "@/lib/reels"
 import { useUploadProgress } from "@/lib/uploadProgress/UploadProgressProvider"
@@ -166,9 +166,6 @@ export default function ReelComposerModal({
   }
 
   const readOnlyVideoUrl = isEditMode ? String(editReel?.video_url ?? "") : null
-  const readOnlyPoster = isEditMode
-    ? String(editReel?.thumbnail_url ?? "")
-    : undefined
 
   return (
     <Modal
@@ -221,23 +218,21 @@ export default function ReelComposerModal({
       {isEditMode ? (
         <div className="space-y-4">
           <div className="mx-auto w-full max-w-[220px] overflow-hidden rounded-xl border border-white/10 bg-black/40 shadow-lg shadow-black/40">
-            {readOnlyPoster ? (
-              <StorageImage
-                src={readOnlyPoster}
-                originalSrc={readOnlyPoster}
-                preset="reel-thumb"
-                alt=""
+            {editReel ? (
+              <ReelVideoPosterFrame
+                thumbnailUrl={editReel.thumbnail_url}
+                videoUrl={editReel.video_url}
                 className="aspect-[9/16] w-full object-cover"
               />
-            ) : (
+            ) : readOnlyVideoUrl ? (
               <video
-                src={readOnlyVideoUrl ?? undefined}
+                src={readOnlyVideoUrl}
                 className="aspect-[9/16] w-full object-cover"
                 controls
                 playsInline
                 preload="metadata"
               />
-            )}
+            ) : null}
           </div>
           {isTradeReplayEdit ? (
             <p className="text-center text-sm text-gray-400">

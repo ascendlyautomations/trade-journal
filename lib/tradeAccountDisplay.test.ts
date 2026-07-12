@@ -105,10 +105,27 @@ describe("buildAccountFilterOptionsFromRows", () => {
         is_active: false,
       },
     ])
-    assert.equal(options.length, 1)
+    assert.equal(options.length, 2)
     assert.equal(options[0].value, "Empty Sim|25000|a1")
     assert.equal(options[0].label, "Empty Sim 25k • Sim")
     assert.equal(options[0].accountType, "sim")
+    assert.equal(options[1].value, "Archived|50000|a2")
+    assert.equal(options[1].label, "Archived 50k • Live")
+  })
+
+  it("marks read-only accounts in historical filter labels", () => {
+    const options = buildAccountFilterOptionsFromRows([
+      {
+        id: "a1",
+        name: "Legacy",
+        account_size: "50000",
+        mode: "live",
+        is_active: true,
+        can_add_trades: false,
+      },
+    ])
+    assert.equal(options[0].label, "Legacy 50k • Live (Read Only)")
+    assert.equal(options[0].readOnly, true)
   })
 
   it("includes account number before mode in label when present", () => {

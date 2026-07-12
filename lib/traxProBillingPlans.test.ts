@@ -57,7 +57,7 @@ describe("traxProBillingPlans", () => {
     )
   })
 
-  it("test plan display uses $1 and is labeled Test Plan", () => {
+  it("test plan display metadata remains for legacy subscriptions", () => {
     const plan = getTraxProBillingPlan("test")
     assert.equal(plan.label, "Test Plan")
     assert.equal(plan.checkoutOptionLabel, "Test Plan")
@@ -70,34 +70,14 @@ describe("traxProBillingPlans", () => {
     })
   })
 
-  it("visible plans exclude test when STRIPE_PRICE_ID_TEST is unset", () => {
-    const previous = process.env.STRIPE_PRICE_ID_TEST
-    const previousPublic = process.env.NEXT_PUBLIC_STRIPE_TEST_PLAN_ENABLED
-    delete process.env.STRIPE_PRICE_ID_TEST
-    delete process.env.NEXT_PUBLIC_STRIPE_TEST_PLAN_ENABLED
-    try {
-      assert.equal(getVisibleTraxProBillingPlans().length, 3)
-      assert.ok(!getVisibleTraxProBillingPlans().some((plan) => plan.id === "test"))
-    } finally {
-      if (previous === undefined) delete process.env.STRIPE_PRICE_ID_TEST
-      else process.env.STRIPE_PRICE_ID_TEST = previous
-      if (previousPublic === undefined) {
-        delete process.env.NEXT_PUBLIC_STRIPE_TEST_PLAN_ENABLED
-      } else {
-        process.env.NEXT_PUBLIC_STRIPE_TEST_PLAN_ENABLED = previousPublic
-      }
-    }
-  })
-
-  it("visible plans include test when STRIPE_PRICE_ID_TEST is set", () => {
+  it("visible plans never include the Test Plan", () => {
     const previous = process.env.STRIPE_PRICE_ID_TEST
     const previousPublic = process.env.NEXT_PUBLIC_STRIPE_TEST_PLAN_ENABLED
     process.env.STRIPE_PRICE_ID_TEST = "price_test_live_1"
-    delete process.env.NEXT_PUBLIC_STRIPE_TEST_PLAN_ENABLED
+    process.env.NEXT_PUBLIC_STRIPE_TEST_PLAN_ENABLED = "1"
     try {
-      const visible = getVisibleTraxProBillingPlans()
-      assert.equal(visible.length, 4)
-      assert.equal(visible[3].id, "test")
+      assert.equal(getVisibleTraxProBillingPlans().length, 3)
+      assert.ok(!getVisibleTraxProBillingPlans().some((plan) => plan.id === "test"))
     } finally {
       if (previous === undefined) delete process.env.STRIPE_PRICE_ID_TEST
       else process.env.STRIPE_PRICE_ID_TEST = previous

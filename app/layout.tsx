@@ -15,6 +15,7 @@ import MarketingNavbarRoot from "./components/MarketingNavbarRoot"
 import CookieConsentBanner from "./components/CookieConsentBanner"
 import ScrollLockRouteReset from "./components/ScrollLockRouteReset"
 import SubscriptionGateShell from "./components/SubscriptionGateShell"
+import FreePlanAccountSlotShell from "./components/FreePlanAccountSlotShell"
 import { UserProfileProvider } from "@/lib/UserProfileProvider"
 import { GettingStartedProgressProvider } from "@/lib/GettingStartedProgressProvider"
 import {
@@ -125,9 +126,11 @@ export default function RootLayout({
               <OnboardingGateShell>
                 <DemoAppShell>
                   <SubscriptionGateShell>
+                    <FreePlanAccountSlotShell>
                     <MarketingNavbarRoot />
                     <AppChrome>{children}</AppChrome>
                     <CookieConsentBanner />
+                    </FreePlanAccountSlotShell>
                   </SubscriptionGateShell>
                 </DemoAppShell>
               </OnboardingGateShell>

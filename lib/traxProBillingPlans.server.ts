@@ -1,7 +1,6 @@
 import {
   getTraxProBillingPlan,
   isTraxProBillingIntervalId,
-  isTraxProTestPlanEnabled,
   TRAXPRO_BILLING_PLANS,
   TRAXPRO_DEFAULT_BILLING_INTERVAL,
   TRAXPRO_TEST_BILLING_PLAN,
@@ -19,8 +18,10 @@ function readEnvPriceId(key: string): string | null {
 export function resolveTraxProStripePriceId(
   interval: TraxProBillingIntervalId = TRAXPRO_DEFAULT_BILLING_INTERVAL
 ): string {
-  if (interval === "test" && !isTraxProTestPlanEnabled()) {
-    throw new Error("Test Plan is not configured (set STRIPE_PRICE_ID_TEST)")
+  if (interval === "test") {
+    throw new Error(
+      "Test Plan checkout is disabled. Choose monthly, 6-month, or yearly."
+    )
   }
 
   const plan = getTraxProBillingPlan(interval)
@@ -49,7 +50,7 @@ export function resolveTraxProBillingIntervalFromStripePriceId(
     if (envPrice && envPrice === normalized) return plan.id
   }
 
-  // TEMPORARY — live Stripe test plan
+  // Legacy display mapping for any remaining Test Plan subscriptions.
   const testPrice = readEnvPriceId(TRAXPRO_TEST_BILLING_PLAN.stripePriceEnvKey)
   if (testPrice && testPrice === normalized) return "test"
 
@@ -69,10 +70,8 @@ export function parseCheckoutBillingInterval(
     record.billingInterval ?? record.billing_interval ?? record.interval
 
   if (isTraxProBillingIntervalId(raw)) {
-    // TEMPORARY — reject Test Plan checkout when env is not configured
-    if (raw === "test" && !isTraxProTestPlanEnabled()) {
-      return TRAXPRO_DEFAULT_BILLING_INTERVAL
-    }
+    // Never allow Test Plan through checkout — fall back to monthly.
+    if (raw === "test") return TRAXPRO_DEFAULT_BILLING_INTERVAL
     return raw
   }
   return TRAXPRO_DEFAULT_BILLING_INTERVAL

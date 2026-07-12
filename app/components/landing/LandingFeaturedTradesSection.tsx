@@ -20,6 +20,7 @@ import {
   LANDING_SECTION_SHELL,
   LANDING_SECTION_SPACING,
 } from "@/lib/landingPageUi"
+import { TRADE_IMAGE_MEDIA_FRAME_CLASS } from "@/lib/tradeImageAspect"
 import { supabase } from "@/lib/supabaseClient"
 import { useUserProfile } from "@/lib/useUserProfile"
 
@@ -263,14 +264,23 @@ export default function LandingFeaturedTradesSection({
                       onToggleLike={() => {}}
                       onSubmitComment={async () => false}
                       onSharePost={() => {}}
+                      screenshotFixedFrameClassName={
+                        TRADE_IMAGE_MEDIA_FRAME_CLASS
+                      }
                     />
                   ) : loaded ? (
                     <FeaturedTradePlaceholder />
                   ) : (
                     <div
-                      className={`${LANDING_CARD_FULL} min-h-[280px] animate-pulse md:min-h-[320px]`}
+                      className={`${LANDING_CARD_FULL} overflow-hidden`}
                       aria-hidden
-                    />
+                    >
+                      <div className={TRADE_IMAGE_MEDIA_FRAME_CLASS} />
+                      <div className="space-y-3 p-4">
+                        <div className="h-4 w-1/3 rounded bg-white/10" />
+                        <div className="h-3 w-2/3 rounded bg-white/5" />
+                      </div>
+                    </div>
                   )}
                 </FeaturedTradeCardShell>
               ))

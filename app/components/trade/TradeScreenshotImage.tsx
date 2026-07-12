@@ -9,6 +9,10 @@ type TradeScreenshotImageProps = {
   alt?: string
   className?: string
   maxHeightPx?: number
+  /** `cover` crops to fill; `contain` (default) shows the full saved image. */
+  objectFit?: "contain" | "cover"
+  /** With `contain`, size to the parent frame (letterbox; no second crop). */
+  fillFrame?: boolean
   onClick?: (url: string) => void
   logContext?: string
 }
@@ -23,6 +27,8 @@ export default function TradeScreenshotImage({
   alt = "",
   className = "",
   maxHeightPx,
+  objectFit = "contain",
+  fillFrame = false,
   onClick,
 }: TradeScreenshotImageProps) {
   const clickHandler = onClick
@@ -32,15 +38,22 @@ export default function TradeScreenshotImage({
       }
     : undefined
 
+  const sizingClass =
+    objectFit === "cover"
+      ? "block h-full w-full object-cover object-center"
+      : fillFrame
+        ? "block object-contain object-center"
+        : "block h-auto w-full max-w-full object-contain"
+
   return (
     <StorageImage
       src={src}
       originalSrc={src}
       preset={preset}
       alt={alt}
-      className={`block h-auto w-full max-w-full object-contain ${onClick ? "cursor-pointer" : ""} ${className}`}
+      className={`${sizingClass} ${onClick ? "cursor-pointer" : ""} ${className}`}
       style={
-        maxHeightPx != null
+        objectFit === "contain" && !fillFrame && maxHeightPx != null
           ? { maxHeight: `min(70dvh, ${maxHeightPx}px)` }
           : undefined
       }
