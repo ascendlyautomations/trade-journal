@@ -148,7 +148,7 @@ export default function FinishTrialPage() {
             disabled={checkoutLoading || continueLoading}
             onClick={() => void handleContinueFree()}
           >
-            {continueLoading ? "Continuing…" : "Continue to Dashboard"}
+            {continueLoading ? "Continuing…" : "Continue for free"}
           </Button>
           <Button
             type="button"

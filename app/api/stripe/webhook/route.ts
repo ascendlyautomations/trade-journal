@@ -2,7 +2,13 @@
 
 import Stripe from "stripe"
 import { createClient, type SupabaseClient } from "@supabase/supabase-js"
-import { COMMISSION_RATE } from "@/lib/affiliateEarnings"
+import {
+  COMMISSION_RATE,
+  calculateAffiliateCommission,
+  centsToMajorUnits,
+  extractStripePriceIdFromInvoice,
+  resolveAffiliateCommissionBaseCents,
+} from "@/lib/affiliateEarnings"
 import {
   createAffiliateCommissionNotification,
   createAffiliateReferralNotification,
@@ -520,9 +526,10 @@ export async function POST(req: Request) {
               ? (subscriptionRaw as Stripe.Subscription).id
               : null
 
-        const amountPaidCents = Number(invoice.amount_paid ?? 0)
         const totalCents = Number(invoice.total ?? 0)
         const status = invoice.status ?? "unknown"
+        const commissionBase = resolveAffiliateCommissionBaseCents(invoice)
+        const stripePriceId = extractStripePriceIdFromInvoice(invoice)
 
         devLog("[invoice.paid] event received", {
           invoiceId: invoice.id,
@@ -531,8 +538,12 @@ export async function POST(req: Request) {
           status,
           currency: invoice.currency,
           billing_reason: invoice.billing_reason,
-          amount_paid_cents: amountPaidCents,
+          amount_paid_cents: Number(invoice.amount_paid ?? 0),
           total_cents: totalCents,
+          total_excluding_tax_cents: invoice.total_excluding_tax,
+          commission_base_cents: commissionBase.basisCents,
+          commission_base_source: commissionBase.source,
+          stripe_price_id: stripePriceId,
           subtotal: invoice.subtotal,
           amount_due: invoice.amount_due,
         })
@@ -677,36 +688,28 @@ export async function POST(req: Request) {
         const isFirstCommissionForPair = (priorCommissionCount ?? 0) === 0
 
         //----------------------------------------
-        // STEP 4: Commission basis (prefer amount_paid; fallback for edge cases)
+        // STEP 4: Commission base = after discounts, before tax (never amount_paid)
         //----------------------------------------
 
-        let basisCents = amountPaidCents
-        if (basisCents <= 0 && status === "paid" && totalCents > 0) {
-          devLog(
-            "amount_paid was 0 but invoice is paid with total > 0 — using total as commission basis (cents):",
-            totalCents
-          )
-          basisCents = totalCents
-        }
-
-        const amountPaid = Math.round((basisCents / 100) * 100) / 100
+        const commissionBaseMajor = centsToMajorUnits(commissionBase.basisCents)
         const commissionRatePercent = Math.round(COMMISSION_RATE * 10000) / 100
         const currency = String(invoice.currency ?? "usd").toLowerCase()
 
         devLog(
-          "[invoice.paid] commission basis (major units, after cents/100):",
-          amountPaid,
-          currency
+          "[invoice.paid] commission base (major units, after discounts, before tax):",
+          commissionBaseMajor,
+          currency,
+          commissionBase.source
         )
 
-        if (amountPaid <= 0) {
+        if (commissionBaseMajor <= 0) {
           devLog(
-            "[invoice.paid] commission basis is 0 — skip row (trial, $0, or unpaid shape)"
+            "[invoice.paid] commission base is 0 — skip row (trial, $0, or unpaid shape)"
           )
           return new Response("OK", { status: 200 })
         }
 
-        const commission = Math.round(amountPaid * COMMISSION_RATE * 100) / 100
+        const commission = calculateAffiliateCommission(commissionBaseMajor)
 
         devLog("[invoice.paid] commission 18%:", commission)
 
@@ -718,12 +721,13 @@ export async function POST(req: Request) {
           referrer_user_id: referrer.id,
           referred_user_id: payingUser.id as string,
           amount_earned: commission,
-          transaction_amount: amountPaid,
+          transaction_amount: commissionBaseMajor,
           commission_rate: commissionRatePercent,
           currency,
           stripe_customer_id: customerId,
           stripe_subscription_id: subscriptionId,
           stripe_invoice_id: invoice.id,
+          stripe_price_id: stripePriceId,
         })
 
         if (insertError) {
@@ -732,13 +736,15 @@ export async function POST(req: Request) {
         }
 
         devLog("[invoice.paid] referral row inserted", {
-          transaction_amount: amountPaid,
+          transaction_amount: commissionBaseMajor,
           commission_rate: commissionRatePercent,
           amount_earned: commission,
           currency,
           stripe_invoice_id: invoice.id,
           stripe_subscription_id: subscriptionId,
           stripe_customer_id: customerId,
+          stripe_price_id: stripePriceId,
+          commission_base_source: commissionBase.source,
         })
 
         //----------------------------------------
