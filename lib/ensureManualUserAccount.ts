@@ -10,7 +10,8 @@ function isImportedType(t: string | null | undefined) {
 
 /**
  * Ensures this account_name is registered for the user before a non-imported trade is saved.
- * Free users may have up to FREE_PLAN_ACCOUNT_LIMIT accounts with can_add_trades = true.
+ * Free users may register a new name only when they have fewer than FREE_PLAN_ACCOUNT_LIMIT
+ * entry-enabled accounts — unless that name already exists on public.accounts (not a new slot).
  */
 export async function ensureManualUserAccountRegistered(
   supabase: SupabaseClient,
@@ -43,20 +44,40 @@ export async function ensureManualUserAccountRegistered(
   if (existing) return { ok: true }
 
   if (!isPro) {
-    const { data: tradingAccounts, error: countErr } = await supabase
-      .from("accounts")
-      .select("id, can_add_trades")
-      .eq("user_id", userId)
+    // Name already exists as a real trading account — registering it in
+    // user_accounts is not creating a new Free slot. Slot limits are enforced
+    // on accounts insert / can_add_trades, not here.
+    const { data: existingTradingAccount, error: existingAcctErr } =
+      await supabase
+        .from("accounts")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("name", account_name)
+        .limit(1)
+        .maybeSingle()
 
-    if (countErr) {
-      console.error("accounts count for free limit:", countErr)
+    if (existingAcctErr) {
+      console.error("accounts lookup for free limit:", existingAcctErr)
       return { ok: false, reason: "error" }
     }
 
-    if (
-      countTradeEntryEnabledAccounts(tradingAccounts ?? []) >= FREE_PLAN_ACCOUNT_LIMIT
-    ) {
-      return { ok: false, reason: "limit" }
+    if (!existingTradingAccount) {
+      const { data: tradingAccounts, error: countErr } = await supabase
+        .from("accounts")
+        .select("id, can_add_trades")
+        .eq("user_id", userId)
+
+      if (countErr) {
+        console.error("accounts count for free limit:", countErr)
+        return { ok: false, reason: "error" }
+      }
+
+      if (
+        countTradeEntryEnabledAccounts(tradingAccounts ?? []) >=
+        FREE_PLAN_ACCOUNT_LIMIT
+      ) {
+        return { ok: false, reason: "limit" }
+      }
     }
   }
 
