@@ -22,8 +22,8 @@ export function countTradeEntryEnabledAccounts(
 }
 
 /**
- * Free user must pick exactly 3 entry-enabled accounts when they currently
- * have more than FREE_PLAN_ACCOUNT_LIMIT with can_add_trades = true.
+ * Free user must pick up to FREE_PLAN_ACCOUNT_LIMIT entry-enabled accounts
+ * when they currently have more than that limit with can_add_trades = true.
  */
 export function needsFreePlanAccountSlotSelection(
   profile: Parameters<typeof isProActive>[0],
@@ -45,7 +45,7 @@ export function filterAccountsForTradeEntry<
 export const ACCOUNT_READ_ONLY_BADGE = "Read Only"
 
 export const ACCOUNT_SLOT_SELECTION_REQUIRED_MESSAGE =
-  "Choose which 3 accounts to keep active for new trades. Your other accounts stay available in read-only mode."
+  "Choose up to 3 accounts to keep active for new trades. Your other accounts stay available in read-only mode."
 
 export const ACCOUNT_READ_ONLY_TRADE_MESSAGE =
   "This account is read-only on the Free plan. Choose it as one of your 3 active accounts or upgrade to Pro to add trades."

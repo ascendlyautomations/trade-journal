@@ -14,8 +14,8 @@ const supabaseAdmin = createClient(
 )
 
 /**
- * Free-plan downgrade: keep exactly 3 accounts entry-enabled; rest read-only.
- * Body: { accountIds: string[] } — must be length 3, owned by the caller.
+ * Free-plan downgrade: keep 0–3 accounts entry-enabled; rest read-only.
+ * Body: { accountIds: string[] } — length 0..3, owned by the caller.
  */
 export async function POST(req: Request) {
   try {
@@ -49,16 +49,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid request body" }, { status: 400 })
     }
 
-    if (accountIds.length !== FREE_PLAN_ACCOUNT_LIMIT) {
+    if (accountIds.length > FREE_PLAN_ACCOUNT_LIMIT) {
       return NextResponse.json(
-        { error: `Select exactly ${FREE_PLAN_ACCOUNT_LIMIT} accounts.` },
+        {
+          error: `Select at most ${FREE_PLAN_ACCOUNT_LIMIT} accounts.`,
+        },
         { status: 400 }
       )
     }
 
-    if (new Set(accountIds).size !== FREE_PLAN_ACCOUNT_LIMIT) {
+    if (new Set(accountIds).size !== accountIds.length) {
       return NextResponse.json(
-        { error: `Select exactly ${FREE_PLAN_ACCOUNT_LIMIT} distinct accounts.` },
+        { error: "Selected accounts must be distinct." },
         { status: 400 }
       )
     }
@@ -77,22 +79,27 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, pro: true })
     }
 
-    const { data: owned, error: ownedErr } = await supabaseAdmin
-      .from("accounts")
-      .select("id")
-      .eq("user_id", user.id)
-      .in("id", accountIds)
+    if (accountIds.length > 0) {
+      const { data: owned, error: ownedErr } = await supabaseAdmin
+        .from("accounts")
+        .select("id")
+        .eq("user_id", user.id)
+        .in("id", accountIds)
 
-    if (ownedErr) {
-      console.error("[select-free-slots] ownership lookup", ownedErr)
-      return NextResponse.json({ error: "Could not verify accounts." }, { status: 500 })
-    }
+      if (ownedErr) {
+        console.error("[select-free-slots] ownership lookup", ownedErr)
+        return NextResponse.json(
+          { error: "Could not verify accounts." },
+          { status: 500 }
+        )
+      }
 
-    if ((owned ?? []).length !== FREE_PLAN_ACCOUNT_LIMIT) {
-      return NextResponse.json(
-        { error: "All selected accounts must belong to you." },
-        { status: 400 }
-      )
+      if ((owned ?? []).length !== accountIds.length) {
+        return NextResponse.json(
+          { error: "All selected accounts must belong to you." },
+          { status: 400 }
+        )
+      }
     }
 
     const { error: disableErr } = await supabaseAdmin
@@ -105,15 +112,20 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Could not update accounts." }, { status: 500 })
     }
 
-    const { error: enableErr } = await supabaseAdmin
-      .from("accounts")
-      .update({ can_add_trades: true })
-      .eq("user_id", user.id)
-      .in("id", accountIds)
+    if (accountIds.length > 0) {
+      const { error: enableErr } = await supabaseAdmin
+        .from("accounts")
+        .update({ can_add_trades: true })
+        .eq("user_id", user.id)
+        .in("id", accountIds)
 
-    if (enableErr) {
-      console.error("[select-free-slots] enable", enableErr)
-      return NextResponse.json({ error: "Could not update accounts." }, { status: 500 })
+      if (enableErr) {
+        console.error("[select-free-slots] enable", enableErr)
+        return NextResponse.json(
+          { error: "Could not update accounts." },
+          { status: 500 }
+        )
+      }
     }
 
     return NextResponse.json({ ok: true })

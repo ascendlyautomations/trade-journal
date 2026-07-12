@@ -21,7 +21,7 @@ export const USER_FACING_ERROR_MESSAGES = {
   ACCOUNT_READ_ONLY:
     "This account is read-only on the Free plan. Choose it as one of your 3 active accounts or upgrade to Pro to add trades.",
   ACCOUNT_SLOT_SELECTION_REQUIRED:
-    "Choose which 3 accounts to keep active for new trades. Your other accounts stay available in read-only mode.",
+    "Choose up to 3 accounts to keep active for new trades. Your other accounts stay available in read-only mode.",
   ACCOUNT_OWNERSHIP_MISMATCH: "That trading account does not belong to you.",
   RATE_LIMIT_EXCEEDED:
     "You're doing that too often. Please wait a moment and try again.",

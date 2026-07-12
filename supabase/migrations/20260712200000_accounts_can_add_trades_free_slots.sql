@@ -21,7 +21,7 @@ alter table public.accounts
 comment on column public.accounts.can_add_trades is
   'When true, new trades may target this account. Free plan allows at most 3 true. False = historical/read-only; never deleted.';
 
--- Atomic Free-plan selection: exactly 3 accounts keep can_add_trades = true.
+-- Atomic Free-plan selection: 0–3 accounts keep can_add_trades = true.
 create or replace function public.select_free_plan_trade_accounts(p_account_ids uuid[])
 returns void
 language plpgsql
@@ -30,6 +30,7 @@ set search_path = public
 as $$
 declare
   uid uuid := auth.uid();
+  selected_count int;
   owned_count int;
 begin
   if uid is null then
@@ -44,33 +45,39 @@ begin
     return;
   end if;
 
-  if p_account_ids is null or coalesce(array_length(p_account_ids, 1), 0) <> 3 then
-    raise exception 'MUST_SELECT_EXACTLY_3';
+  selected_count := coalesce(cardinality(p_account_ids), 0);
+
+  if selected_count > 3 then
+    raise exception 'MUST_SELECT_AT_MOST_3';
   end if;
 
   if (
-    select count(distinct x) from unnest(p_account_ids) as t(x)
-  ) <> 3 then
-    raise exception 'MUST_SELECT_EXACTLY_3';
+    select count(distinct x) from unnest(coalesce(p_account_ids, array[]::uuid[])) as t(x)
+  ) <> selected_count then
+    raise exception 'INVALID_ACCOUNT_SELECTION';
   end if;
 
-  select count(*)::int into owned_count
-  from public.accounts
-  where user_id = uid
-    and id = any (p_account_ids);
+  if selected_count > 0 then
+    select count(*)::int into owned_count
+    from public.accounts
+    where user_id = uid
+      and id = any (p_account_ids);
 
-  if owned_count <> 3 then
-    raise exception 'INVALID_ACCOUNT_SELECTION';
+    if owned_count <> selected_count then
+      raise exception 'INVALID_ACCOUNT_SELECTION';
+    end if;
   end if;
 
   update public.accounts
   set can_add_trades = false
   where user_id = uid;
 
-  update public.accounts
-  set can_add_trades = true
-  where user_id = uid
-    and id = any (p_account_ids);
+  if selected_count > 0 then
+    update public.accounts
+    set can_add_trades = true
+    where user_id = uid
+      and id = any (p_account_ids);
+  end if;
 end;
 $$;
 
