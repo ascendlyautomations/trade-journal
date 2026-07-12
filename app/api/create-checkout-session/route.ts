@@ -21,7 +21,12 @@ let TRIAL_DAYS = Number(process.env.STRIPE_TRIAL_DAYS ?? 14)
 if (Number.isNaN(TRIAL_DAYS) || TRIAL_DAYS < 0) {
   TRIAL_DAYS = 14
 }
-devLog("[Stripe] Trial days:", TRIAL_DAYS)
+/**
+ * TEMPORARY — live payment testing: Checkout charges immediately (no trial).
+ * Restore the 14-day free trial by setting this to `true`.
+ */
+const ENABLE_CHECKOUT_TRIAL = false
+devLog("[Stripe] Trial days:", ENABLE_CHECKOUT_TRIAL ? TRIAL_DAYS : 0)
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -256,7 +261,7 @@ export async function POST(req: Request) {
       priceId: stripePriceId,
       billingInterval,
       baseUrl,
-      trialDays: TRIAL_DAYS,
+      trialDays: ENABLE_CHECKOUT_TRIAL ? TRIAL_DAYS : 0,
       userId: user.id,
     })
 
@@ -279,7 +284,7 @@ export async function POST(req: Request) {
         billing_interval: billingInterval,
       },
       subscription_data: {
-        trial_period_days: TRIAL_DAYS,
+        ...(ENABLE_CHECKOUT_TRIAL ? { trial_period_days: TRIAL_DAYS } : {}),
         metadata: {
           user_id: user.id,
           userId: user.id,
