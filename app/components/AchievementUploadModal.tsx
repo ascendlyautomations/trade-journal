@@ -435,6 +435,7 @@ export default function AchievementUploadModal({
             category: newAccount.category,
             mode: newAccount.mode,
             is_active: true,
+            can_add_trades: true,
           },
         ])
         .select()

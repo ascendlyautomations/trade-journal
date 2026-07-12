@@ -12,6 +12,7 @@ import {
 } from "@/lib/tradingAccounts"
 import {
   ACCOUNT_READ_ONLY_BADGE,
+  countTradeEntryEnabledAccounts,
   filterAccountsForTradeEntry,
 } from "@/lib/freePlanAccountSlots"
 import {
@@ -337,16 +338,19 @@ export default function InputTradeForm({
       return
     }
 
-    const { count, error: countErr } = await supabase
+    const { data: existingAccounts, error: countErr } = await supabase
       .from("accounts")
-      .select("id", { count: "exact", head: true })
+      .select("id, can_add_trades")
       .eq("user_id", uid)
 
     if (countErr) {
       console.error(countErr)
       setAccountFieldsLocked(false)
     } else {
-      setAccountFieldsLocked((count ?? 0) >= FREE_PLAN_ACCOUNT_LIMIT)
+      setAccountFieldsLocked(
+        countTradeEntryEnabledAccounts(existingAccounts ?? []) >=
+          FREE_PLAN_ACCOUNT_LIMIT
+      )
     }
 
     const csvGate = await assertCsvImportAllowedForFreePlan(supabase, uid)

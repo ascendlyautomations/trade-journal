@@ -34,7 +34,10 @@ import TradeFormCurrencyInput from "@/app/components/trade/TradeFormCurrencyInpu
 import { TRADE_OPTIONAL_ATTACHMENT_LABEL_CLASS } from "@/lib/tradeFormUi"
 import { assertCanCreateTradingAccount, FREE_PLAN_ACCOUNT_LIMIT } from "@/lib/tradingAccounts"
 import { assertRequiredAccountValue } from "@/lib/createAccountForm"
-import { filterAccountsForTradeEntry } from "@/lib/freePlanAccountSlots"
+import {
+  countTradeEntryEnabledAccounts,
+  filterAccountsForTradeEntry,
+} from "@/lib/freePlanAccountSlots"
 import { supabaseMutationFeedback } from "@/lib/supabaseMutationFeedback"
 import { upsertAccountInCache } from "@/lib/appDataCache"
 import { parseOptionalRr } from "@/lib/tradeRr"
@@ -205,6 +208,7 @@ export default function QuickTradeModal({
   const { runUpload } = useUploadProgress()
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [accounts, setAccounts] = useState<TradeAccountOption[]>([])
+  const [entryEnabledAccountCount, setEntryEnabledAccountCount] = useState(0)
   const [selectedAccount, setSelectedAccount] =
     useState<TradeAccountOption | null>(null)
   const [selectedCopyGroupId, setSelectedCopyGroupId] = useState<string | null>(
@@ -297,11 +301,15 @@ export default function QuickTradeModal({
     if (fetchErr) {
       console.error("[QuickTradeModal] accounts fetch:", fetchErr)
       setAccounts([])
+      setEntryEnabledAccountCount(0)
       setAccountLoading(false)
       return
     }
 
-    const rows = filterAccountsForTradeEntry(data ?? []).map((acc) => ({
+    const allRows = data ?? []
+    setEntryEnabledAccountCount(countTradeEntryEnabledAccounts(allRows))
+
+    const rows = filterAccountsForTradeEntry(allRows).map((acc) => ({
       name: String(acc.name ?? ""),
       size: String(acc.account_size ?? ""),
       id: String(acc.id),
@@ -660,6 +668,7 @@ export default function QuickTradeModal({
       }
 
       setAccounts((prev) => [...prev, createdAccount])
+      setEntryEnabledAccountCount((n) => n + 1)
       setSelectedAccount(createdAccount)
       setShowCreateAccountModal(false)
     } finally {
@@ -880,7 +889,7 @@ export default function QuickTradeModal({
   if (!open) return null
 
   const canCreateMoreAccounts =
-    isPro || accounts.length < FREE_PLAN_ACCOUNT_LIMIT
+    isPro || entryEnabledAccountCount < FREE_PLAN_ACCOUNT_LIMIT
 
   function selectTradeImage(file: File | undefined) {
     imageCrop.handleFileSelected(file)

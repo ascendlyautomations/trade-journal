@@ -29,6 +29,7 @@ import {
   matchesTradingAccountSearch,
   type TradingAccountListItem,
 } from "@/lib/tradingAccounts"
+import { countTradeEntryEnabledAccounts } from "@/lib/freePlanAccountSlots"
 
 const ACCOUNTS_PAGE_SIZE = 5
 
@@ -73,7 +74,9 @@ export default function TradingAccountsSettingsSection({
     useState<TradingAccountListItem | null>(null)
   const [savingNoteId, setSavingNoteId] = useState<string | null>(null)
 
-  const canCreateMore = isPro || accounts.length < FREE_PLAN_ACCOUNT_LIMIT
+  const canCreateMore = isPro
+    ? true
+    : countTradeEntryEnabledAccounts(accounts) < FREE_PLAN_ACCOUNT_LIMIT
 
   const editFormValues = useMemo(
     () =>

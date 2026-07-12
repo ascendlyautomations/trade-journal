@@ -62,7 +62,7 @@ export type CreateTradingAccountPayload = {
 export const FREE_PLAN_ACCOUNT_LIMIT = 3
 
 export const FREE_PLAN_ACCOUNT_LIMIT_MESSAGE =
-  "Free plan allows up to 3 accounts. Upgrade to Pro for unlimited accounts."
+  "Free plan allows up to 3 active accounts. Upgrade to Pro for unlimited accounts."
 
 export function formatTradingAccountSize(size: unknown): string {
   return formatAccountBalanceForDisplay(size)
@@ -203,11 +203,35 @@ export async function assertCanCreateTradingAccount(
 export async function insertTradingAccount(
   client: SupabaseClient,
   userId: string,
-  newAccount: CreateTradingAccountPayload
+  newAccount: CreateTradingAccountPayload,
+  profile?: {
+    is_pro?: boolean | null
+    subscription_status?: string | null
+    trial_end?: string | null
+  } | null
 ): Promise<{ account: TradingAccountListItem | null; error: Error | null }> {
   const sizeGate = assertRequiredAccountValue(newAccount.size)
   if (!sizeGate.ok) {
     return { account: null, error: new Error(sizeGate.message) }
+  }
+
+  let resolvedProfile = profile
+  if (resolvedProfile === undefined) {
+    const { data } = await client
+      .from("profiles")
+      .select("is_pro, subscription_status, trial_end")
+      .eq("id", userId)
+      .maybeSingle()
+    resolvedProfile = data
+  }
+
+  const gate = await assertCanCreateTradingAccount(
+    client,
+    userId,
+    resolvedProfile ?? null
+  )
+  if (!gate.ok) {
+    return { account: null, error: new Error(gate.message) }
   }
 
   const { data, error } = await client

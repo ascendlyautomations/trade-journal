@@ -10,8 +10,9 @@ import CreateAccountModal, {
 } from "@/components/CreateAccountModal"
 import { supabase } from "@/lib/supabaseClient"
 import { isProActive } from "@/lib/subscription"
-import { FREE_PLAN_ACCOUNT_LIMIT } from "@/lib/tradingAccounts"
+import { FREE_PLAN_ACCOUNT_LIMIT, assertCanCreateTradingAccount } from "@/lib/tradingAccounts"
 import { assertRequiredAccountValue } from "@/lib/createAccountForm"
+import { countTradeEntryEnabledAccounts } from "@/lib/freePlanAccountSlots"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { MODAL_PANEL_MAX_HEIGHT_CLASS, useModalScrollLock } from "@/app/components/ui/modalLayout"
 import { feedbackPresets, persistentError } from "@/lib/feedbackPresets"
@@ -74,11 +75,15 @@ export default function PostSetupImportModal({ open, onComplete }: Props) {
         account_number: acc.account_number ?? null,
         mode: acc.mode,
         category: acc.category,
+        can_add_trades: acc.can_add_trades !== false,
       }))
 
       setAccounts(formatted)
       const userIsPro = isProActive(profile)
-      setCanCreateMoreAccounts(userIsPro || formatted.length < FREE_PLAN_ACCOUNT_LIMIT)
+      setCanCreateMoreAccounts(
+        userIsPro ||
+          countTradeEntryEnabledAccounts(formatted) < FREE_PLAN_ACCOUNT_LIMIT
+      )
     }
 
     void loadAccounts()
@@ -117,21 +122,8 @@ export default function PostSetupImportModal({ open, onComplete }: Props) {
 
     const userIsPro = isProActive(profile)
     if (!userIsPro) {
-      const { data: existingAccounts, error: countErr } = await supabase
-        .from("accounts")
-        .select("id")
-        .eq("user_id", user.id)
-      if (countErr) {
-        console.error(countErr)
-        showPopup(
-          persistentError(
-            "Could Not Verify Limit",
-            "Failed to verify account limit."
-          )
-        )
-        return
-      }
-      if ((existingAccounts || []).length >= 1) {
+      const gate = await assertCanCreateTradingAccount(supabase, user.id, profile)
+      if (!gate.ok) {
         setCanCreateMoreAccounts(false)
         showPopup(feedbackPresets.accountLimit())
         return
@@ -154,6 +146,8 @@ export default function PostSetupImportModal({ open, onComplete }: Props) {
           account_number: newAccount.id,
           category: newAccount.category,
           mode: newAccount.mode,
+          is_active: true,
+          can_add_trades: true,
           consistency: newAccount.rules?.consistency ?? null,
           max_drawdown: newAccount.rules?.maxDrawdown ?? null,
           daily_drawdown: newAccount.rules?.dailyDrawdown ?? null,
@@ -182,11 +176,18 @@ export default function PostSetupImportModal({ open, onComplete }: Props) {
       account_number: data.account_number ?? null,
       mode: data.mode,
       category: data.category,
+      can_add_trades: data.can_add_trades !== false,
     }
 
-    setAccounts((prev) => [...prev, row])
+    setAccounts((prev) => {
+      const next = [...prev, row]
+      setCanCreateMoreAccounts(
+        isProActive(profile) ||
+          countTradeEntryEnabledAccounts(next) < FREE_PLAN_ACCOUNT_LIMIT
+      )
+      return next
+    })
     setSelectedAccount(row)
-    setCanCreateMoreAccounts(isProActive(profile))
     setShowCreateModal(false)
     } finally {
       creatingAccountRef.current = false

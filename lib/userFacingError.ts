@@ -17,7 +17,7 @@ export const USER_FACING_ERROR_MESSAGES = {
   /** @deprecated Prefer {@link USER_FACING_ERROR_MESSAGES.FREE_PLAN_DAILY_CLIP_LIMIT}. */
   FREE_PLAN_REELS_LIMIT: FREE_PLAN_DAILY_CLIP_LIMIT_MESSAGE,
   FREE_PLAN_ACCOUNT_LIMIT:
-    "Free plan allows up to 3 accounts. Upgrade to Pro for unlimited accounts.",
+    "Free plan allows up to 3 active accounts. Upgrade to Pro for unlimited accounts.",
   ACCOUNT_READ_ONLY:
     "This account is read-only on the Free plan. Choose it as one of your 3 active accounts or upgrade to Pro to add trades.",
   ACCOUNT_SLOT_SELECTION_REQUIRED:
