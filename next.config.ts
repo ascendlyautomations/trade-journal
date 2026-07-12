@@ -17,6 +17,13 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  // TEMPORARY — bridge STRIPE_PRICE_ID_TEST to the client so Test Plan can appear in billing pickers.
+  // Remove with the Test Plan (see lib/traxProBillingPlans.ts).
+  env: {
+    NEXT_PUBLIC_STRIPE_TEST_PLAN_ENABLED: process.env.STRIPE_PRICE_ID_TEST?.trim()
+      ? "1"
+      : "",
+  },
   images: {
     qualities: [75, 100],
     remotePatterns: [

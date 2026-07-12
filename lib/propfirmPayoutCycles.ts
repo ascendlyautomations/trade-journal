@@ -38,6 +38,13 @@ export type RecordAccountPayoutResult = {
   error: string | null
 }
 
+/** Payout details collected before achievement save — applied only after achievement succeeds. */
+export type PendingPropFirmPayoutRecord = {
+  accountId: string
+  input: RecordAccountPayoutInput
+  nextCycleNumber: number
+}
+
 const PAYOUT_CYCLE_FIELDS =
   "id,account_id,started_at,ended_at,cycle_start_balance,payout_amount,note,balance_before_payout,balance_after_payout,drawdown_behavior,drawdown_floor_after_payout,cycle_number"
 

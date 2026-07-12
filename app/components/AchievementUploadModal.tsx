@@ -60,7 +60,12 @@ import { assertCanCreateTradingAccount } from "@/lib/tradingAccounts"
 import { upsertAccountInCache } from "@/lib/appDataCache"
 import { supabaseMutationFeedback } from "@/lib/supabaseMutationFeedback"
 import { computePayoutDrawdownFloor } from "@/lib/propfirmMetrics"
-import { recordAccountPayout } from "@/lib/propfirmPayoutCycles"
+import {
+  recordAccountPayout,
+  type AccountPayoutCycle,
+  type PendingPropFirmPayoutRecord,
+  type RecordAccountPayoutResult,
+} from "@/lib/propfirmPayoutCycles"
 
 export type AchievementFormState = {
   achievement_type: string
@@ -102,8 +107,28 @@ export type AchievementUploadModalProps = {
   dialogTitle?: string
   dialogSubtitle?: string
   saveLabel?: string
-  /** When true, prop firm payout was already recorded (e.g. from Prop Firm Mode). */
+  /**
+   * When true, skip in-modal prop firm payout setup/recording (legacy).
+   * Prefer `pendingPropFirmPayout` when the parent collected payout details
+   * but has not written them yet.
+   */
   propFirmPayoutAlreadyRecorded?: boolean
+  /**
+   * Payout details collected by the parent (e.g. Prop Firm Mode) that must
+   * only be recorded after the achievement is created successfully.
+   */
+  pendingPropFirmPayout?: PendingPropFirmPayoutRecord | null
+  /** Called after a pending/in-modal payout is recorded successfully. */
+  onPropFirmPayoutRecorded?: (payload: {
+    cycle: AccountPayoutCycle
+    accountPreferences: RecordAccountPayoutResult["accountPreferences"]
+    pending: PendingPropFirmPayoutRecord
+  }) => void | Promise<void>
+  /**
+   * Soft-close when the upload overlay takes over. Must hide the compose UI
+   * without abandoning in-flight payout/achievement work.
+   */
+  onComposeDismissed?: () => void
   /**
    * When true, skip in-modal Passed Eval continuance so the parent
    * (e.g. Prop Firm Mode) can open its own flow with the full account.
@@ -136,6 +161,9 @@ export default function AchievementUploadModal({
   dialogSubtitle,
   saveLabel,
   propFirmPayoutAlreadyRecorded = false,
+  pendingPropFirmPayout = null,
+  onPropFirmPayoutRecorded,
+  onComposeDismissed,
   deferPassedEvalContinuance = false,
 }: AchievementUploadModalProps) {
   const editingId = editingAchievement?.id ?? null
@@ -177,6 +205,10 @@ export default function AchievementUploadModal({
     ReturnType<typeof fetchPropFirmPayoutSetupContext>
   >["context"]>(null)
   const pendingAchievementSaveRef = useRef(false)
+  /** In-modal payout setup values — recorded only after achievement insert succeeds. */
+  const pendingPayoutFromSetupRef = useRef<PendingPropFirmPayoutRecord | null>(
+    null
+  )
 
   const {
     openPassedEvalContinuance,
@@ -309,6 +341,7 @@ export default function AchievementUploadModal({
     setPayoutConfirmOpen(false)
     setPayoutSetupOpen(false)
     pendingAchievementSaveRef.current = false
+    pendingPayoutFromSetupRef.current = null
   }, [accounts, editingAchievement, initialValues])
 
   useLayoutEffect(() => {
@@ -428,7 +461,9 @@ export default function AchievementUploadModal({
     }
   }
 
-  async function executeAchievementSave() {
+  async function executeAchievementSave(options?: {
+    payoutToRecord?: PendingPropFirmPayoutRecord | null
+  }) {
     if (!userId) return
 
     setError(null)
@@ -447,6 +482,10 @@ export default function AchievementUploadModal({
     const snapshotRemoveImage = removeImage
     const snapshotEditingId = editingId
     const snapshotSelectedAccount = selectedAccount
+    const payoutToRecord =
+      options?.payoutToRecord ??
+      pendingPropFirmPayout ??
+      pendingPayoutFromSetupRef.current
 
     try {
       await runUpload({
@@ -457,7 +496,7 @@ export default function AchievementUploadModal({
           : snapshotEditingId
             ? "Updating Achievement"
             : "Saving Achievement",
-        onDismissCompose: onClose,
+        onDismissCompose: onComposeDismissed ?? onClose,
         execute: async (report) => {
           let imageUrl = snapshotForm.image_url
           if (snapshotRemoveImage) {
@@ -567,12 +606,56 @@ export default function AchievementUploadModal({
                 .eq("user_id", userId)
             : supabase.from("achievements").insert(payload)
 
-          const { error: saveErr } = await query
+          const { data: savedRow, error: saveErr } = await query
+            .select("id")
+            .single()
           if (saveErr) {
             console.error("[achievements] save failed", saveErr)
             throw new Error(
               handleSupabaseError(saveErr, "Could not save achievement.")
             )
+          }
+
+          const savedAchievementId =
+            savedRow?.id != null ? String(savedRow.id) : null
+
+          if (payoutToRecord && !snapshotEditingId) {
+            report({ percent: 90, stage: "Recording payout…" })
+            const { cycle, accountPreferences, error: payoutError } =
+              await recordAccountPayout(
+                supabase,
+                payoutToRecord.accountId,
+                payoutToRecord.input,
+                payoutToRecord.nextCycleNumber
+              )
+
+            if (payoutError || !cycle) {
+              console.error(payoutError ?? "Failed to record payout")
+              if (savedAchievementId) {
+                const { error: rollbackErr } = await supabase
+                  .from("achievements")
+                  .delete()
+                  .eq("id", savedAchievementId)
+                  .eq("user_id", userId)
+                if (rollbackErr) {
+                  console.error(
+                    "[achievements] payout rollback delete failed",
+                    rollbackErr
+                  )
+                }
+              }
+              throw new Error(
+                payoutError ||
+                  "Could not record payout. Please try again."
+              )
+            }
+
+            pendingPayoutFromSetupRef.current = null
+            await onPropFirmPayoutRecorded?.({
+              cycle,
+              accountPreferences,
+              pending: payoutToRecord,
+            })
           }
 
           report({ percent: 95, stage: "Finishing…" })
@@ -614,10 +697,9 @@ export default function AchievementUploadModal({
           ? payoutSetupContext.activePayoutCycle.cycle_number + 1
           : 1
 
-      const { cycle, error } = await recordAccountPayout(
-        supabase,
-        selectedAccount.id,
-        {
+      const pending: PendingPropFirmPayoutRecord = {
+        accountId: selectedAccount.id,
+        input: {
           balanceAfterPayout: values.balanceAfterPayout,
           payoutAmount: values.payoutAmount,
           drawdownBehavior: values.drawdownBehavior,
@@ -625,23 +707,13 @@ export default function AchievementUploadModal({
           balanceBeforePayout,
           rememberDrawdownBehavior: values.rememberDrawdownBehavior,
         },
-        nextCycleNumber
-      )
-
-      if (error || !cycle) {
-        console.error(error ?? "Failed to record payout")
-        showPopup(
-          persistentError(
-            "Payout Failed",
-            "We couldn't record this payout. Please try again."
-          )
-        )
-        return
+        nextCycleNumber,
       }
 
+      pendingPayoutFromSetupRef.current = pending
       setPayoutSetupOpen(false)
       setPayoutSetupContext(null)
-      await executeAchievementSave()
+      await executeAchievementSave({ payoutToRecord: pending })
     } finally {
       setRecordingPayout(false)
     }
@@ -704,6 +776,7 @@ export default function AchievementUploadModal({
     if (
       shouldRunPropFirmPayoutWorkflow(achievementType, selectedAccount, {
         payoutAlreadyRecorded: propFirmPayoutAlreadyRecorded,
+        hasPendingPayout: pendingPropFirmPayout != null,
       })
     ) {
       pendingAchievementSaveRef.current = true

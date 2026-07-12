@@ -2,7 +2,7 @@ import { TRADETRAXS_PRO_PLAN } from "./tradeTraxsPlans.ts"
 
 /** TraxPro billing interval registry — extend {@link TRAXPRO_BILLING_PLANS} for new cadences. */
 
-export type TraxProBillingIntervalId = "monthly" | "six_month" | "yearly"
+export type TraxProBillingIntervalId = "monthly" | "six_month" | "yearly" | "test"
 
 export type TraxProBillingPlan = {
   id: TraxProBillingIntervalId
@@ -26,6 +26,12 @@ export type TraxProBillingPlan = {
     | "STRIPE_PRICE_ID_MONTHLY"
     | "STRIPE_PRICE_ID_SIX_MONTH"
     | "STRIPE_PRICE_ID_YEARLY"
+    | "STRIPE_PRICE_ID_TEST"
+  /**
+   * Optional UI monthly amount when list-price math should not apply.
+   * Checkout always charges the Stripe Price ID (source of truth).
+   */
+  displayMonthlyAmount?: number
 }
 
 /** Canonical monthly list price — all intervals derive from this. */
@@ -70,11 +76,46 @@ export const TRAXPRO_BILLING_PLANS: readonly TraxProBillingPlan[] = [
   },
 ] as const
 
+/**
+ * TEMPORARY — live Stripe $1/mo test subscription.
+ * Remove with `STRIPE_PRICE_ID_TEST` + `isTraxProTestPlanEnabled` / `getVisibleTraxProBillingPlans` call sites.
+ */
+export const TRAXPRO_TEST_BILLING_PLAN: TraxProBillingPlan = {
+  id: "test",
+  label: "Test Plan",
+  settingsPlanLabel: "Test Plan",
+  settingsBilledLabel: "Monthly (Test)",
+  checkoutOptionLabel: "Test Plan",
+  intervalMonths: 1,
+  savePercent: null,
+  billingCadenceLabel: "Billed monthly (test)",
+  stripePriceEnvKey: "STRIPE_PRICE_ID_TEST",
+  // Display only — Stripe Price ID determines the real charge.
+  displayMonthlyAmount: 1,
+}
+
 export const TRAXPRO_DEFAULT_BILLING_INTERVAL: TraxProBillingIntervalId = "monthly"
 
 const planById = new Map(
-  TRAXPRO_BILLING_PLANS.map((plan) => [plan.id, plan] as const)
+  [...TRAXPRO_BILLING_PLANS, TRAXPRO_TEST_BILLING_PLAN].map(
+    (plan) => [plan.id, plan] as const
+  )
 )
+
+/**
+ * TEMPORARY — true when `STRIPE_PRICE_ID_TEST` is set.
+ * Client builds see `NEXT_PUBLIC_STRIPE_TEST_PLAN_ENABLED` (bridged in next.config from the same env).
+ */
+export function isTraxProTestPlanEnabled(): boolean {
+  if (process.env.STRIPE_PRICE_ID_TEST?.trim()) return true
+  return process.env.NEXT_PUBLIC_STRIPE_TEST_PLAN_ENABLED === "1"
+}
+
+/** Production plans, plus Test Plan only when `STRIPE_PRICE_ID_TEST` is configured. */
+export function getVisibleTraxProBillingPlans(): readonly TraxProBillingPlan[] {
+  if (!isTraxProTestPlanEnabled()) return TRAXPRO_BILLING_PLANS
+  return [...TRAXPRO_BILLING_PLANS, TRAXPRO_TEST_BILLING_PLAN]
+}
 
 export function isTraxProBillingIntervalId(
   value: unknown
@@ -97,6 +138,7 @@ export function roundCurrency(amount: number): number {
 }
 
 export function getTraxProPlanEffectiveMonthlyAmount(plan: TraxProBillingPlan): number {
+  if (plan.displayMonthlyAmount != null) return plan.displayMonthlyAmount
   if (plan.savePercent == null) return TRAXPRO_MONTHLY_LIST_PRICE
   return roundCurrency(
     TRAXPRO_MONTHLY_LIST_PRICE * (1 - plan.savePercent / 100)
@@ -105,6 +147,9 @@ export function getTraxProPlanEffectiveMonthlyAmount(plan: TraxProBillingPlan): 
 
 /** Total charged each Stripe billing cycle (before trial). */
 export function getTraxProPlanBilledAmount(plan: TraxProBillingPlan): number {
+  if (plan.displayMonthlyAmount != null) {
+    return roundCurrency(plan.displayMonthlyAmount * plan.intervalMonths)
+  }
   const multiplier = 1 - (plan.savePercent ?? 0) / 100
   return roundCurrency(TRAXPRO_MONTHLY_LIST_PRICE * plan.intervalMonths * multiplier)
 }

@@ -20,9 +20,10 @@ export {
 export function shouldRunPropFirmPayoutWorkflow(
   type: string | null | undefined,
   account: Pick<TradeAccountOption, "category" | "mode"> | null,
-  options?: { payoutAlreadyRecorded?: boolean }
+  options?: { payoutAlreadyRecorded?: boolean; hasPendingPayout?: boolean }
 ): boolean {
-  if (options?.payoutAlreadyRecorded) return false
+  // Parent already collected payout details (or already wrote the cycle) — skip in-modal setup.
+  if (options?.payoutAlreadyRecorded || options?.hasPendingPayout) return false
   return (
     canonicalAchievementType(type) === ACHIEVEMENT_TYPE.PROP_FIRM_PAYOUT &&
     account?.category === "Prop Firm" &&

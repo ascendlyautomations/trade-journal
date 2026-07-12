@@ -1,8 +1,10 @@
 import {
   getTraxProBillingPlan,
   isTraxProBillingIntervalId,
+  isTraxProTestPlanEnabled,
   TRAXPRO_BILLING_PLANS,
   TRAXPRO_DEFAULT_BILLING_INTERVAL,
+  TRAXPRO_TEST_BILLING_PLAN,
   type TraxProBillingIntervalId,
 } from "@/lib/traxProBillingPlans"
 
@@ -17,6 +19,10 @@ function readEnvPriceId(key: string): string | null {
 export function resolveTraxProStripePriceId(
   interval: TraxProBillingIntervalId = TRAXPRO_DEFAULT_BILLING_INTERVAL
 ): string {
+  if (interval === "test" && !isTraxProTestPlanEnabled()) {
+    throw new Error("Test Plan is not configured (set STRIPE_PRICE_ID_TEST)")
+  }
+
   const plan = getTraxProBillingPlan(interval)
   const priceId = readEnvPriceId(plan.stripePriceEnvKey)
   if (priceId) return priceId
@@ -43,6 +49,10 @@ export function resolveTraxProBillingIntervalFromStripePriceId(
     if (envPrice && envPrice === normalized) return plan.id
   }
 
+  // TEMPORARY — live Stripe test plan
+  const testPrice = readEnvPriceId(TRAXPRO_TEST_BILLING_PLAN.stripePriceEnvKey)
+  if (testPrice && testPrice === normalized) return "test"
+
   const legacy = readEnvPriceId(LEGACY_STRIPE_PRICE_ENV)
   if (legacy && legacy === normalized) return TRAXPRO_DEFAULT_BILLING_INTERVAL
 
@@ -58,6 +68,12 @@ export function parseCheckoutBillingInterval(
   const raw =
     record.billingInterval ?? record.billing_interval ?? record.interval
 
-  if (isTraxProBillingIntervalId(raw)) return raw
+  if (isTraxProBillingIntervalId(raw)) {
+    // TEMPORARY — reject Test Plan checkout when env is not configured
+    if (raw === "test" && !isTraxProTestPlanEnabled()) {
+      return TRAXPRO_DEFAULT_BILLING_INTERVAL
+    }
+    return raw
+  }
   return TRAXPRO_DEFAULT_BILLING_INTERVAL
 }

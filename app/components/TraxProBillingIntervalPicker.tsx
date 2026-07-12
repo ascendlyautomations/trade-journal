@@ -2,7 +2,7 @@
 
 import {
   getTraxProBillingPlan,
-  TRAXPRO_BILLING_PLANS,
+  getVisibleTraxProBillingPlans,
   TRAXPRO_DEFAULT_BILLING_INTERVAL,
   type TraxProBillingIntervalId,
 } from "@/lib/traxProBillingPlans"
@@ -22,13 +22,15 @@ export default function TraxProBillingIntervalPicker({
   name = "traxpro-billing-interval",
   className = "",
 }: Props) {
+  const plans = getVisibleTraxProBillingPlans()
+
   return (
     <fieldset
       className={`space-y-2 ${className}`}
       disabled={disabled}
       aria-label="Choose billing interval"
     >
-      {TRAXPRO_BILLING_PLANS.map((plan) => {
+      {plans.map((plan) => {
         const checked = value === plan.id
         const inputId = `${name}-${plan.id}`
         return (

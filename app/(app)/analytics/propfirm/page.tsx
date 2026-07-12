@@ -75,7 +75,6 @@ import {
   isFundedPropfirmAccount,
   mergeFundedPayoutHistory,
   PROPFIRM_ALL_ACCOUNTS_VALUE,
-  recordAccountPayout,
   resolveDefaultPayoutDrawdownBehavior,
   selectActivePayoutCycle,
   summarizeAccountPayouts,
@@ -84,6 +83,8 @@ import {
   selectRecordedPayoutEquityEvents,
   type AccountPayoutCycle,
   type PayoutHistoryEntry,
+  type PendingPropFirmPayoutRecord,
+  type RecordAccountPayoutResult,
 } from "@/lib/propfirmPayoutCycles"
 import { ACCOUNT_DROPDOWN_TRIGGER_COMPACT_CLASS } from "@/lib/accountDropdownStyles"
 import {
@@ -339,7 +340,8 @@ export default function PropFirmPage() {
   const [payoutSetupOpen, setPayoutSetupOpen] = useState(false)
   const [payoutSetupKey, setPayoutSetupKey] = useState(0)
   const [payoutHistoryOpen, setPayoutHistoryOpen] = useState(false)
-  const [recordingPayout, setRecordingPayout] = useState(false)
+  const [pendingPropFirmPayout, setPendingPropFirmPayout] =
+    useState<PendingPropFirmPayoutRecord | null>(null)
   const [achievementUploadOpen, setAchievementUploadOpen] = useState(false)
   const [achievementUploadInitial, setAchievementUploadInitial] = useState<
     AchievementUploadInitialValues | undefined
@@ -697,94 +699,40 @@ export default function PropFirmPage() {
     }
     if (!selectedAccount) return
 
-    setRecordingPayout(true)
-    try {
-      const balanceBeforePayout = lifetimeTrailingMetrics.currentBalance
-      const drawdownFloorAfterPayout = computePayoutDrawdownFloor(
-        values.drawdownBehavior,
-        startingBalance,
-        cycleTrailingMetrics,
-        Number(selectedAccount.max_drawdown) || 0
-      )
-      const nextCycleNumber =
-        activePayoutCycle?.cycle_number != null
-          ? activePayoutCycle.cycle_number + 1
-          : 1
+    const balanceBeforePayout = lifetimeTrailingMetrics.currentBalance
+    const drawdownFloorAfterPayout = computePayoutDrawdownFloor(
+      values.drawdownBehavior,
+      startingBalance,
+      cycleTrailingMetrics,
+      Number(selectedAccount.max_drawdown) || 0
+    )
+    const nextCycleNumber =
+      activePayoutCycle?.cycle_number != null
+        ? activePayoutCycle.cycle_number + 1
+        : 1
 
-      const { cycle, accountPreferences, error } = await recordAccountPayout(
-        supabase,
-        selectedAccount.id,
-        {
-          balanceAfterPayout: values.balanceAfterPayout,
-          payoutAmount: values.payoutAmount,
-          drawdownBehavior: values.drawdownBehavior,
-          drawdownFloorAfterPayout,
-          balanceBeforePayout,
-          rememberDrawdownBehavior: values.rememberDrawdownBehavior,
-        },
-        nextCycleNumber
-      )
+    // Stash only — do not write the payout until the achievement is created.
+    setPendingPropFirmPayout({
+      accountId: String(selectedAccount.id),
+      input: {
+        balanceAfterPayout: values.balanceAfterPayout,
+        payoutAmount: values.payoutAmount,
+        drawdownBehavior: values.drawdownBehavior,
+        drawdownFloorAfterPayout,
+        balanceBeforePayout,
+        rememberDrawdownBehavior: values.rememberDrawdownBehavior,
+      },
+      nextCycleNumber,
+    })
 
-      if (error || !cycle) {
-        console.error(error ?? "Failed to record payout")
-        showPopup({
-          type: "error",
-          message: "Couldn't record payout. Please try again.",
-        })
-        return
-      }
-
-      setPayoutCyclesByAccountId((previous) => {
-        const accountId = String(selectedAccount.id)
-        const previousCycles = previous[accountId] ?? []
-        return {
-          ...previous,
-          [accountId]: applyRecordedPayoutToHistory(
-            previousCycles,
-            activePayoutCycle,
-            cycle,
-            {
-              amount: values.payoutAmount,
-              balanceBefore: balanceBeforePayout,
-              balanceAfter: values.balanceAfterPayout,
-              drawdownBehavior: values.drawdownBehavior,
-              drawdownFloor: drawdownFloorAfterPayout,
-              recordedAt: cycle.started_at,
-              cycleNumber: nextCycleNumber,
-            }
-          ),
-        }
+    setPayoutSetupOpen(false)
+    setActiveMilestoneKind("payout")
+    setAchievementUploadInitial(
+      buildPropFirmMilestoneAchievementInitials("payout", selectedAccount, {
+        payoutAmount: values.payoutAmount,
       })
-      if (accountPreferences) {
-        setAccounts((prev) =>
-          prev.map((acc) =>
-            String(acc.id) === String(selectedAccount.id)
-              ? {
-                  ...acc,
-                  payout_drawdown_behavior:
-                    accountPreferences.payout_drawdown_behavior,
-                  remember_payout_drawdown_behavior:
-                    accountPreferences.remember_payout_drawdown_behavior,
-                }
-              : acc
-          )
-        )
-      }
-
-      setPayoutSetupOpen(false)
-
-      showPopup({ type: "success", message: "Payout recorded" })
-
-      setActiveMilestoneKind("payout")
-      setAchievementUploadInitial(
-        buildPropFirmMilestoneAchievementInitials("payout", selectedAccount, {
-          payoutAmount: values.payoutAmount,
-        })
-      )
-      setAchievementUploadOpen(true)
-    } finally {
-      setRecordingPayout(false)
-    }
+    )
+    setAchievementUploadOpen(true)
   }
 
   function openPassEvalWorkflow() {
@@ -793,6 +741,7 @@ export default function PropFirmPage() {
       return
     }
     if (!selectedAccount) return
+    setPendingPropFirmPayout(null)
     setEvalContinuanceAccount(selectedAccount)
     setActiveMilestoneKind("passed_eval")
     setAchievementUploadInitial(
@@ -806,8 +755,75 @@ export default function PropFirmPage() {
     if (activeMilestoneKind === "passed_eval") {
       setEvalContinuanceAccount(null)
     }
+    // Abandon any uncommitted payout when the user cancels/closes.
+    setPendingPropFirmPayout(null)
     setActiveMilestoneKind(null)
     setAchievementUploadInitial(undefined)
+  }
+
+  async function handlePropFirmPayoutRecorded(payload: {
+    cycle: AccountPayoutCycle
+    accountPreferences: RecordAccountPayoutResult["accountPreferences"]
+    pending: PendingPropFirmPayoutRecord
+  }) {
+    const { cycle, accountPreferences, pending } = payload
+    const accountId = pending.accountId
+
+    setPayoutCyclesByAccountId((previous) => {
+      const previousCycles = previous[accountId] ?? []
+      const previousActive = selectActivePayoutCycle(previousCycles)
+      return {
+        ...previous,
+        [accountId]: applyRecordedPayoutToHistory(
+          previousCycles,
+          previousActive,
+          cycle,
+          {
+            amount: pending.input.payoutAmount,
+            balanceBefore: pending.input.balanceBeforePayout,
+            balanceAfter: pending.input.balanceAfterPayout,
+            drawdownBehavior: pending.input.drawdownBehavior,
+            drawdownFloor: pending.input.drawdownFloorAfterPayout,
+            recordedAt: cycle.started_at,
+            cycleNumber: pending.nextCycleNumber,
+          }
+        ),
+      }
+    })
+
+    if (accountPreferences) {
+      setAccounts((prev) =>
+        prev.map((acc) =>
+          String(acc.id) === accountId
+            ? {
+                ...acc,
+                payout_drawdown_behavior:
+                  accountPreferences.payout_drawdown_behavior,
+                remember_payout_drawdown_behavior:
+                  accountPreferences.remember_payout_drawdown_behavior,
+              }
+            : acc
+        )
+      )
+    }
+
+    setPendingPropFirmPayout(null)
+
+    if (user?.id) {
+      const accountIds = isAllAccountsView
+        ? accounts.map((account) => account.id)
+        : selectedAccount
+          ? [selectedAccount.id]
+          : [accountId]
+      const rows = await fetchAchievementsForAccounts(
+        supabase,
+        user.id,
+        accountIds
+      )
+      setAccountAchievements(rows)
+    }
+
+    showPopup({ type: "success", message: "Payout recorded" })
   }
 
   async function handleAchievementSaved() {
@@ -816,6 +832,7 @@ export default function PropFirmPage() {
 
     setActiveMilestoneKind(null)
     setAchievementUploadInitial(undefined)
+    setPendingPropFirmPayout(null)
 
     if (shouldOpenContinuance) {
       setEvalContinuanceOpen(true)
@@ -1174,10 +1191,10 @@ export default function PropFirmPage() {
           key={payoutSetupKey}
           open={payoutSetupOpen}
           onClose={() => {
-            if (!recordingPayout) setPayoutSetupOpen(false)
+            setPayoutSetupOpen(false)
           }}
           onSubmit={handlePayoutSetupSubmit}
-          busy={recordingPayout}
+          busy={false}
           accountBaseBalance={startingBalance}
           balanceBeforePayout={lifetimeTrailingMetrics.currentBalance}
           defaultDrawdownBehavior={resolveDefaultPayoutDrawdownBehavior(
@@ -1192,10 +1209,12 @@ export default function PropFirmPage() {
         <AchievementUploadModal
           open={achievementUploadOpen}
           onClose={handleAchievementUploadClose}
+          onComposeDismissed={() => setAchievementUploadOpen(false)}
           userId={user?.id ?? null}
           initialValues={achievementUploadInitial}
           onSaved={handleAchievementSaved}
-          propFirmPayoutAlreadyRecorded={activeMilestoneKind === "payout"}
+          pendingPropFirmPayout={pendingPropFirmPayout}
+          onPropFirmPayoutRecorded={handlePropFirmPayoutRecorded}
           deferPassedEvalContinuance={activeMilestoneKind === "passed_eval"}
           lockAchievementType={milestoneUploadConfig.lockAchievementType}
           dialogTitle={milestoneUploadConfig.dialogTitle}

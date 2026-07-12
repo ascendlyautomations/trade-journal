@@ -6,6 +6,8 @@ const {
   getTraxProPlanEffectiveMonthlyAmount,
   formatTraxProEffectiveMonthly,
   getTraxProSubscriptionDisplay,
+  getVisibleTraxProBillingPlans,
+  TRAXPRO_BILLING_PLANS,
 } = require("./traxProBillingPlans.ts")
 
 describe("traxProBillingPlans", () => {
@@ -45,5 +47,65 @@ describe("traxProBillingPlans", () => {
       planLabel: "Yearly Plan",
       billedLabel: "Annually",
     })
+  })
+
+  it("production plan list stays three intervals", () => {
+    assert.equal(TRAXPRO_BILLING_PLANS.length, 3)
+    assert.deepEqual(
+      TRAXPRO_BILLING_PLANS.map((plan) => plan.id),
+      ["monthly", "six_month", "yearly"]
+    )
+  })
+
+  it("test plan display uses $1 and is labeled Test Plan", () => {
+    const plan = getTraxProBillingPlan("test")
+    assert.equal(plan.label, "Test Plan")
+    assert.equal(plan.checkoutOptionLabel, "Test Plan")
+    assert.equal(getTraxProPlanEffectiveMonthlyAmount(plan), 1)
+    assert.equal(getTraxProPlanBilledAmount(plan), 1)
+    assert.deepEqual(getTraxProSubscriptionDisplay("test"), {
+      productName: "TradeTraxs Pro",
+      planLabel: "Test Plan",
+      billedLabel: "Monthly (Test)",
+    })
+  })
+
+  it("visible plans exclude test when STRIPE_PRICE_ID_TEST is unset", () => {
+    const previous = process.env.STRIPE_PRICE_ID_TEST
+    const previousPublic = process.env.NEXT_PUBLIC_STRIPE_TEST_PLAN_ENABLED
+    delete process.env.STRIPE_PRICE_ID_TEST
+    delete process.env.NEXT_PUBLIC_STRIPE_TEST_PLAN_ENABLED
+    try {
+      assert.equal(getVisibleTraxProBillingPlans().length, 3)
+      assert.ok(!getVisibleTraxProBillingPlans().some((plan) => plan.id === "test"))
+    } finally {
+      if (previous === undefined) delete process.env.STRIPE_PRICE_ID_TEST
+      else process.env.STRIPE_PRICE_ID_TEST = previous
+      if (previousPublic === undefined) {
+        delete process.env.NEXT_PUBLIC_STRIPE_TEST_PLAN_ENABLED
+      } else {
+        process.env.NEXT_PUBLIC_STRIPE_TEST_PLAN_ENABLED = previousPublic
+      }
+    }
+  })
+
+  it("visible plans include test when STRIPE_PRICE_ID_TEST is set", () => {
+    const previous = process.env.STRIPE_PRICE_ID_TEST
+    const previousPublic = process.env.NEXT_PUBLIC_STRIPE_TEST_PLAN_ENABLED
+    process.env.STRIPE_PRICE_ID_TEST = "price_test_live_1"
+    delete process.env.NEXT_PUBLIC_STRIPE_TEST_PLAN_ENABLED
+    try {
+      const visible = getVisibleTraxProBillingPlans()
+      assert.equal(visible.length, 4)
+      assert.equal(visible[3].id, "test")
+    } finally {
+      if (previous === undefined) delete process.env.STRIPE_PRICE_ID_TEST
+      else process.env.STRIPE_PRICE_ID_TEST = previous
+      if (previousPublic === undefined) {
+        delete process.env.NEXT_PUBLIC_STRIPE_TEST_PLAN_ENABLED
+      } else {
+        process.env.NEXT_PUBLIC_STRIPE_TEST_PLAN_ENABLED = previousPublic
+      }
+    }
   })
 })
