@@ -152,9 +152,21 @@ export default function FreePlanAccountSlotShell({
     setSaving(true)
     setError(null)
     try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+      const accessToken = session?.access_token
+      if (!accessToken) {
+        setError("Unauthorized")
+        return
+      }
+
       const res = await fetch("/api/accounts/select-free-slots", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
         body: JSON.stringify({ accountIds }),
       })
       const body = (await res.json().catch(() => ({}))) as {

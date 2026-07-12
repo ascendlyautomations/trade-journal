@@ -1,17 +1,10 @@
 import { NextResponse } from "next/server"
-import { createClient } from "@supabase/supabase-js"
-import { createServerClient } from "@supabase/ssr"
-import { cookies } from "next/headers"
+import { getRouteUser, supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
 import { FREE_PLAN_ACCOUNT_LIMIT } from "@/lib/tradingAccounts"
 import { isProActive } from "@/lib/subscription"
 import { toUserFacingErrorMessage } from "@/lib/userFacingError"
 
 export const runtime = "nodejs"
-
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
 
 /**
  * Free-plan downgrade: keep 0–3 accounts entry-enabled; rest read-only.
@@ -19,20 +12,7 @@ const supabaseAdmin = createClient(
  */
 export async function POST(req: Request) {
   try {
-    const cookieStore = await cookies()
-    const supabaseAuth = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get: (name) => cookieStore.get(name)?.value,
-        },
-      }
-    )
-
-    const {
-      data: { user },
-    } = await supabaseAuth.auth.getUser()
+    const user = await getRouteUser(req)
 
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -65,14 +45,14 @@ export async function POST(req: Request) {
       )
     }
 
-    const { data: profile } = await supabaseAdmin
+    const { data: profile } = await supabaseServiceRole
       .from("profiles")
       .select("is_pro, subscription_status, trial_end")
       .eq("id", user.id)
       .maybeSingle()
 
     if (isProActive(profile)) {
-      await supabaseAdmin
+      await supabaseServiceRole
         .from("accounts")
         .update({ can_add_trades: true })
         .eq("user_id", user.id)
@@ -80,7 +60,7 @@ export async function POST(req: Request) {
     }
 
     if (accountIds.length > 0) {
-      const { data: owned, error: ownedErr } = await supabaseAdmin
+      const { data: owned, error: ownedErr } = await supabaseServiceRole
         .from("accounts")
         .select("id")
         .eq("user_id", user.id)
@@ -102,7 +82,7 @@ export async function POST(req: Request) {
       }
     }
 
-    const { error: disableErr } = await supabaseAdmin
+    const { error: disableErr } = await supabaseServiceRole
       .from("accounts")
       .update({ can_add_trades: false })
       .eq("user_id", user.id)
@@ -113,7 +93,7 @@ export async function POST(req: Request) {
     }
 
     if (accountIds.length > 0) {
-      const { error: enableErr } = await supabaseAdmin
+      const { error: enableErr } = await supabaseServiceRole
         .from("accounts")
         .update({ can_add_trades: true })
         .eq("user_id", user.id)
