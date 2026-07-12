@@ -184,6 +184,18 @@ function ItemRow({
   )
 }
 
+/** Collapsed account list shows this many rows before "View More Accounts". */
+const ACCOUNT_LIST_COLLAPSED_LIMIT = 5
+
+function DropdownDivider() {
+  return (
+    <div className={ACCOUNT_DROPDOWN_DIVIDER_CLASS} aria-hidden="true">
+      <span className="md:hidden">────────</span>
+      <span className="hidden md:inline">────────────────────</span>
+    </div>
+  )
+}
+
 export default function TradeAccountPicker({
   accounts,
   className = "",
@@ -215,6 +227,7 @@ export default function TradeAccountPicker({
 
   const [open, setOpen] = useState(false)
   const [menuView, setMenuView] = useState<MenuView>("accounts")
+  const [accountsExpanded, setAccountsExpanded] = useState(false)
 
   const selectedCopyGroup = useMemo(
     () =>
@@ -290,12 +303,14 @@ export default function TradeAccountPicker({
   useEffect(() => {
     if (!open) {
       setMenuView("accounts")
+      setAccountsExpanded(false)
     }
   }, [open])
 
   function closeMenu() {
     setOpen(false)
     setMenuView("accounts")
+    setAccountsExpanded(false)
   }
 
   function handleManageAccounts() {
@@ -358,6 +373,15 @@ export default function TradeAccountPicker({
         }
       })
 
+  const showViewMoreAccounts =
+    !accountsExpanded && accountRows.length > ACCOUNT_LIST_COLLAPSED_LIMIT
+  const visibleAccountRows =
+    showViewMoreAccounts
+      ? accountRows.slice(0, ACCOUNT_LIST_COLLAPSED_LIMIT)
+      : accountRows
+  const accountListNeedsScroll =
+    accountsExpanded && accountRows.length > ACCOUNT_LIST_COLLAPSED_LIMIT
+
   const accountsPanel = (
     <>
       {isFilterMode ? (
@@ -373,14 +397,16 @@ export default function TradeAccountPicker({
       ) : null}
 
       {(isFilterMode || showCopyTrading) && accountRows.length > 0 ? (
-        <div className={ACCOUNT_DROPDOWN_DIVIDER_CLASS} aria-hidden="true">
-          <span className="md:hidden">────────</span>
-          <span className="hidden md:inline">────────────────────</span>
-        </div>
+        <DropdownDivider />
       ) : null}
 
-      <div className="max-h-48 overflow-y-auto overscroll-contain">
-        {accountRows.map((row) => (
+      <div
+        className={cn(
+          accountListNeedsScroll &&
+            "max-h-60 overflow-y-auto overscroll-contain"
+        )}
+      >
+        {visibleAccountRows.map((row) => (
           <ItemRow key={row.key} onClick={row.onClick}>
             <AccountSelectorLabelText
               name={row.labelName}
@@ -388,18 +414,21 @@ export default function TradeAccountPicker({
             />
           </ItemRow>
         ))}
+        {showViewMoreAccounts ? (
+          <ActionRow onClick={() => setAccountsExpanded(true)}>
+            View More Accounts
+          </ActionRow>
+        ) : null}
       </div>
 
+      {!hideManageAccounts || (!isFilterMode && onOpenCreate) ? (
+        <DropdownDivider />
+      ) : null}
+
       {!hideManageAccounts ? (
-        <>
-          <div className={ACCOUNT_DROPDOWN_DIVIDER_CLASS} aria-hidden="true">
-            <span className="md:hidden">────────</span>
-            <span className="hidden md:inline">────────────────────</span>
-          </div>
-          <ManageRow onClick={handleManageAccounts}>
-            ⚙️ Manage Accounts
-          </ManageRow>
-        </>
+        <ManageRow onClick={handleManageAccounts}>
+          ⚙️ Manage Accounts
+        </ManageRow>
       ) : null}
 
       {!isFilterMode && onOpenCreate ? (
@@ -428,12 +457,9 @@ export default function TradeAccountPicker({
         ← Single Accounts
       </ItemRow>
 
-      <div className={ACCOUNT_DROPDOWN_DIVIDER_CLASS} aria-hidden="true">
-        <span className="md:hidden">────────</span>
-        <span className="hidden md:inline">────────────────────</span>
-      </div>
+      <DropdownDivider />
 
-      <div className="max-h-48 overflow-y-auto overscroll-contain">
+      <div className="max-h-60 overflow-y-auto overscroll-contain">
         {copyGroups.length === 0 ? (
           <div className="px-3 py-2 text-sm text-gray-500">
             No copy trading groups yet.
@@ -450,10 +476,7 @@ export default function TradeAccountPicker({
         )}
       </div>
 
-      <div className={ACCOUNT_DROPDOWN_DIVIDER_CLASS} aria-hidden="true">
-        <span className="md:hidden">────────</span>
-        <span className="hidden md:inline">────────────────────</span>
-      </div>
+      <DropdownDivider />
       <ManageRow onClick={handleManageCopyGroups}>
         ⚙️ Manage Copy Trading Groups
       </ManageRow>
@@ -498,7 +521,13 @@ export default function TradeAccountPicker({
         </button>
 
         {open ? (
-          <div className={cn(ACCOUNT_DROPDOWN_PANEL_CLASS, "overflow-hidden p-0")}>
+          <div
+            className={cn(
+              ACCOUNT_DROPDOWN_PANEL_CLASS,
+              // Pin footer actions (Add Account) — do not clip the whole panel.
+              "max-h-none overflow-hidden p-0"
+            )}
+          >
             {showCopyTrading ? (
               <div className="relative overflow-hidden">
                 <div
