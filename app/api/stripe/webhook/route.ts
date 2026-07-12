@@ -507,7 +507,8 @@ export async function POST(req: Request) {
 
     // ======================================================
     // INVOICE PAID → Pro refresh + referral ledger + referrer earnings
-    // Idempotent per stripe_invoice_id. Detailed logs for commission debugging.
+    // Idempotent per stripe_invoice_id.
+    // TEMP: affiliate-path decision logging (console.log — visible in production).
     // ======================================================
     if (event.type === "invoice.paid") {
       try {
@@ -526,40 +527,52 @@ export async function POST(req: Request) {
               ? (subscriptionRaw as Stripe.Subscription).id
               : null
 
-        const totalCents = Number(invoice.total ?? 0)
         const status = invoice.status ?? "unknown"
         const commissionBase = resolveAffiliateCommissionBaseCents(invoice)
         const stripePriceId = extractStripePriceIdFromInvoice(invoice)
 
-        devLog("[invoice.paid] event received", {
-          invoiceId: invoice.id,
+        console.log("[invoice.paid][AFFILIATE TEMP] START", {
+          invoiceId: invoice.id ?? null,
           customerId,
           subscriptionId,
           status,
-          currency: invoice.currency,
-          billing_reason: invoice.billing_reason,
-          amount_paid_cents: Number(invoice.amount_paid ?? 0),
-          total_cents: totalCents,
-          total_excluding_tax_cents: invoice.total_excluding_tax,
-          commission_base_cents: commissionBase.basisCents,
-          commission_base_source: commissionBase.source,
+          currency: invoice.currency ?? null,
+          billing_reason: invoice.billing_reason ?? null,
+          amount_paid: invoice.amount_paid ?? null,
+          total: invoice.total ?? null,
+          total_excluding_tax: invoice.total_excluding_tax ?? null,
+          commission_base_cents_precomputed: commissionBase.basisCents,
+          commission_base_source_precomputed: commissionBase.source,
           stripe_price_id: stripePriceId,
-          subtotal: invoice.subtotal,
-          amount_due: invoice.amount_due,
         })
 
+        console.log("[invoice.paid][AFFILIATE TEMP] BEFORE customerId check", {
+          customerId,
+        })
         if (!customerId) {
+          console.log(
+            "[invoice.paid][AFFILIATE TEMP] BRANCH EXIT: no customerId on invoice"
+          )
           console.error(
             "[invoice.paid] no Stripe customer id on invoice object"
           )
           return new Response("OK", { status: 200 })
         }
+        console.log("[invoice.paid][AFFILIATE TEMP] AFTER customerId check: OK", {
+          customerId,
+        })
 
         //----------------------------------------
         // STEP 1: Get paying user (retry — profile may lag checkout)
         //----------------------------------------
 
         let payingUser: Record<string, unknown> | null = null
+        let lastLookupError: unknown = null
+
+        console.log(
+          "[invoice.paid][AFFILIATE TEMP] BEFORE paying-user lookup by stripe_customer_id",
+          { customerId, maxAttempts: 5 }
+        )
 
         for (let attempt = 0; attempt < 5; attempt++) {
           const { data, error: userError } = await supabase
@@ -568,7 +581,27 @@ export async function POST(req: Request) {
             .eq("stripe_customer_id", customerId)
             .maybeSingle()
 
+          console.log(
+            "[invoice.paid][AFFILIATE TEMP] customer lookup attempt result",
+            {
+              attempt: attempt + 1,
+              customerId,
+              found: Boolean(data?.id),
+              profileId: data?.id ?? null,
+              referred_by_raw: data?.referred_by ?? null,
+              error: userError
+                ? {
+                    message: userError.message,
+                    code: userError.code,
+                    details: userError.details,
+                    hint: userError.hint,
+                  }
+                : null,
+            }
+          )
+
           if (userError) {
+            lastLookupError = userError
             console.error("[invoice.paid] profile lookup error", userError)
           }
 
@@ -577,13 +610,31 @@ export async function POST(req: Request) {
             break
           }
 
-          devLog(
-            `Waiting for profile stripe_customer_id=${customerId} attempt ${attempt + 1}/5`
-          )
           await new Promise((res) => setTimeout(res, 1000))
         }
 
+        console.log(
+          "[invoice.paid][AFFILIATE TEMP] AFTER paying-user lookup",
+          {
+            customerId,
+            payingUserFound: Boolean(payingUser?.id),
+            payingUserId: payingUser?.id ?? null,
+            referred_by: payingUser?.referred_by ?? null,
+            lastLookupError:
+              lastLookupError && typeof lastLookupError === "object"
+                ? {
+                    message: (lastLookupError as { message?: string }).message,
+                    code: (lastLookupError as { code?: string }).code,
+                  }
+                : lastLookupError,
+          }
+        )
+
         if (!payingUser?.id) {
+          console.log(
+            "[invoice.paid][AFFILIATE TEMP] BRANCH EXIT: paying user profile NOT found",
+            { customerId }
+          )
           console.error(
             "[invoice.paid] no paying user for stripe_customer_id:",
             customerId
@@ -591,7 +642,11 @@ export async function POST(req: Request) {
           return new Response("OK", { status: 200 })
         }
 
-        devLog("[invoice.paid] paying user:", payingUser.id)
+        console.log(
+          "[invoice.paid][AFFILIATE TEMP] Paying user profile found?",
+          true,
+          { payingUserId: payingUser.id }
+        )
 
         try {
           if (subscriptionId) {
@@ -609,8 +664,6 @@ export async function POST(req: Request) {
 
             if (proErr) {
               console.error("Pro refresh failed (invoice.paid)", proErr)
-            } else {
-              devLog("[invoice.paid] Pro subscription_status refreshed")
             }
           }
         } catch (e) {
@@ -625,18 +678,37 @@ export async function POST(req: Request) {
         const referredBy =
           referredRaw != null ? String(referredRaw).trim() : ""
 
+        console.log(
+          "[invoice.paid][AFFILIATE TEMP] BEFORE referred_by gate",
+          {
+            payingUserId: payingUser.id,
+            referred_by_raw: referredRaw ?? null,
+            referred_by_trimmed: referredBy,
+            referred_by_empty: !referredBy,
+          }
+        )
+
         if (!referredBy) {
-          devLog(
-            "[invoice.paid] no referral on payer (referred_by empty), skip commission"
+          console.log(
+            "[invoice.paid][AFFILIATE TEMP] BRANCH EXIT: referred_by empty — skip commission",
+            { payingUserId: payingUser.id, referred_by_raw: referredRaw ?? null }
           )
           return new Response("OK", { status: 200 })
         }
 
-        devLog("🔗 Referral code used:", referredBy)
+        console.log(
+          "[invoice.paid][AFFILIATE TEMP] AFTER referred_by gate: OK",
+          { referredBy }
+        )
 
         //----------------------------------------
         // STEP 3: Referrer profile
         //----------------------------------------
+
+        console.log(
+          "[invoice.paid][AFFILIATE TEMP] BEFORE referrer lookup",
+          { referral_code_eq: referredBy }
+        )
 
         const { data: referrer, error: refError } = await supabase
           .from("profiles")
@@ -644,37 +716,107 @@ export async function POST(req: Request) {
           .eq("referral_code", referredBy)
           .maybeSingle()
 
+        console.log(
+          "[invoice.paid][AFFILIATE TEMP] AFTER referrer lookup",
+          {
+            referral_code_eq: referredBy,
+            referrerFound: Boolean(referrer?.id),
+            referrerId: referrer?.id ?? null,
+            referrer_referral_earnings: referrer?.referral_earnings ?? null,
+            error: refError
+              ? {
+                  message: refError.message,
+                  code: refError.code,
+                  details: refError.details,
+                  hint: refError.hint,
+                }
+              : null,
+          }
+        )
+
         if (refError || !referrer?.id) {
+          console.log(
+            "[invoice.paid][AFFILIATE TEMP] BRANCH EXIT: referrer NOT found",
+            { referredBy, refError: refError?.message ?? null }
+          )
           console.error("[invoice.paid] referrer not found", refError, {
             referredBy,
           })
           return new Response("OK", { status: 200 })
         }
 
+        console.log(
+          "[invoice.paid][AFFILIATE TEMP] Referrer found?",
+          true,
+          { referrerId: referrer.id }
+        )
+
+        console.log(
+          "[invoice.paid][AFFILIATE TEMP] BEFORE self-referral check",
+          {
+            referrerId: referrer.id,
+            payingUserId: payingUser.id,
+            isSelfReferral: referrer.id === payingUser.id,
+          }
+        )
+
         if (referrer.id === payingUser.id) {
-          devLog("[invoice.paid] skip self-referral")
+          console.log(
+            "[invoice.paid][AFFILIATE TEMP] BRANCH EXIT: self-referral",
+            { userId: referrer.id }
+          )
           return new Response("OK", { status: 200 })
         }
 
-        devLog("[invoice.paid] referrer:", referrer.id)
+        console.log(
+          "[invoice.paid][AFFILIATE TEMP] AFTER self-referral check: OK (not self)"
+        )
+
+        console.log(
+          "[invoice.paid][AFFILIATE TEMP] BEFORE invoice.id check",
+          { invoiceId: invoice.id ?? null }
+        )
 
         if (!invoice.id) {
+          console.log(
+            "[invoice.paid][AFFILIATE TEMP] BRANCH EXIT: invoice.id missing"
+          )
           console.error(
             "[invoice.paid] invoice.id missing — cannot record referral row"
           )
           return new Response("OK", { status: 200 })
         }
 
-        const { data: existing } = await supabase
+        console.log(
+          "[invoice.paid][AFFILIATE TEMP] BEFORE duplicate invoice check",
+          { stripe_invoice_id: invoice.id }
+        )
+
+        const { data: existing, error: existingError } = await supabase
           .from("referrals")
           .select("id")
           .eq("stripe_invoice_id", invoice.id)
           .maybeSingle()
 
+        console.log(
+          "[invoice.paid][AFFILIATE TEMP] AFTER duplicate invoice check",
+          {
+            stripe_invoice_id: invoice.id,
+            duplicateFound: Boolean(existing?.id),
+            existingReferralId: existing?.id ?? null,
+            error: existingError
+              ? {
+                  message: existingError.message,
+                  code: existingError.code,
+                }
+              : null,
+          }
+        )
+
         if (existing) {
-          devLog(
-            "[invoice.paid] referral already recorded for invoice, skipping:",
-            invoice.id
+          console.log(
+            "[invoice.paid][AFFILIATE TEMP] BRANCH EXIT: duplicate stripe_invoice_id",
+            { invoiceId: invoice.id, existingReferralId: existing.id }
           )
           return new Response("OK", { status: 200 })
         }
@@ -695,29 +837,49 @@ export async function POST(req: Request) {
         const commissionRatePercent = Math.round(COMMISSION_RATE * 10000) / 100
         const currency = String(invoice.currency ?? "usd").toLowerCase()
 
-        devLog(
-          "[invoice.paid] commission base (major units, after discounts, before tax):",
-          commissionBaseMajor,
-          currency,
-          commissionBase.source
+        console.log(
+          "[invoice.paid][AFFILIATE TEMP] BEFORE commission base gate",
+          {
+            basisCents: commissionBase.basisCents,
+            source: commissionBase.source,
+            commissionBaseMajor,
+            currency,
+            amount_paid: invoice.amount_paid ?? null,
+            total: invoice.total ?? null,
+            total_excluding_tax: invoice.total_excluding_tax ?? null,
+            commissionBaseMajor_lte_0: commissionBaseMajor <= 0,
+          }
         )
 
         if (commissionBaseMajor <= 0) {
-          devLog(
-            "[invoice.paid] commission base is 0 — skip row (trial, $0, or unpaid shape)"
+          console.log(
+            "[invoice.paid][AFFILIATE TEMP] BRANCH EXIT: commission base <= 0",
+            {
+              commissionBaseMajor,
+              basisCents: commissionBase.basisCents,
+              source: commissionBase.source,
+            }
           )
           return new Response("OK", { status: 200 })
         }
 
         const commission = calculateAffiliateCommission(commissionBaseMajor)
 
-        devLog("[invoice.paid] commission 18%:", commission)
+        console.log(
+          "[invoice.paid][AFFILIATE TEMP] AFTER commission calculation",
+          {
+            commissionBaseMajor,
+            commissionRate: COMMISSION_RATE,
+            commissionRatePercent,
+            commission,
+          }
+        )
 
         //----------------------------------------
         // STEP 5: Insert referral
         //----------------------------------------
 
-        const { error: insertError } = await supabase.from("referrals").insert({
+        const insertPayload = {
           referrer_user_id: referrer.id,
           referred_user_id: payingUser.id as string,
           amount_earned: commission,
@@ -728,37 +890,95 @@ export async function POST(req: Request) {
           stripe_subscription_id: subscriptionId,
           stripe_invoice_id: invoice.id,
           stripe_price_id: stripePriceId,
-        })
+        }
+
+        console.log(
+          "[invoice.paid][AFFILIATE TEMP] BEFORE referrals INSERT",
+          insertPayload
+        )
+
+        const { data: insertedRows, error: insertError } = await supabase
+          .from("referrals")
+          .insert(insertPayload)
+          .select("id, amount_earned, transaction_amount, stripe_invoice_id")
+
+        console.log(
+          "[invoice.paid][AFFILIATE TEMP] AFTER referrals INSERT",
+          {
+            ok: !insertError,
+            insertedRows: insertedRows ?? null,
+            error: insertError
+              ? {
+                  message: insertError.message,
+                  code: insertError.code,
+                  details: insertError.details,
+                  hint: insertError.hint,
+                }
+              : null,
+          }
+        )
 
         if (insertError) {
+          console.log(
+            "[invoice.paid][AFFILIATE TEMP] BRANCH EXIT: referrals INSERT failed",
+            {
+              message: insertError.message,
+              code: insertError.code,
+              details: insertError.details,
+              hint: insertError.hint,
+            }
+          )
           console.error("[invoice.paid] referrals insert failed", insertError)
           return new Response("OK", { status: 200 })
         }
-
-        devLog("[invoice.paid] referral row inserted", {
-          transaction_amount: commissionBaseMajor,
-          commission_rate: commissionRatePercent,
-          amount_earned: commission,
-          currency,
-          stripe_invoice_id: invoice.id,
-          stripe_subscription_id: subscriptionId,
-          stripe_customer_id: customerId,
-          stripe_price_id: stripePriceId,
-          commission_base_source: commissionBase.source,
-        })
 
         //----------------------------------------
         // STEP 6: Referrer total
         //----------------------------------------
 
-        const newTotal = Number(referrer.referral_earnings || 0) + commission
+        const previousEarnings = Number(referrer.referral_earnings || 0)
+        const newTotal = previousEarnings + commission
 
-        const { error: updateError } = await supabase
+        console.log(
+          "[invoice.paid][AFFILIATE TEMP] BEFORE profiles.referral_earnings update",
+          {
+            referrerId: referrer.id,
+            previousEarnings,
+            commission,
+            newTotal,
+          }
+        )
+
+        const { data: earningsUpdateRows, error: updateError } = await supabase
           .from("profiles")
           .update({ referral_earnings: newTotal })
           .eq("id", referrer.id as string)
+          .select("id, referral_earnings")
+
+        console.log(
+          "[invoice.paid][AFFILIATE TEMP] AFTER profiles.referral_earnings update",
+          {
+            ok: !updateError,
+            rows: earningsUpdateRows ?? null,
+            error: updateError
+              ? {
+                  message: updateError.message,
+                  code: updateError.code,
+                  details: updateError.details,
+                  hint: updateError.hint,
+                }
+              : null,
+          }
+        )
 
         if (updateError) {
+          console.log(
+            "[invoice.paid][AFFILIATE TEMP] BRANCH EXIT: referral_earnings update failed",
+            {
+              message: updateError.message,
+              code: updateError.code,
+            }
+          )
           console.error(
             "[invoice.paid] referrer referral_earnings update failed",
             updateError
@@ -766,7 +986,17 @@ export async function POST(req: Request) {
           return new Response("OK", { status: 200 })
         }
 
-        devLog("[invoice.paid] referrer referral_earnings →", newTotal)
+        console.log(
+          "[invoice.paid][AFFILIATE TEMP] SUCCESS — commission recorded",
+          {
+            invoiceId: invoice.id,
+            referrerId: referrer.id,
+            payingUserId: payingUser.id,
+            transaction_amount: commissionBaseMajor,
+            amount_earned: commission,
+            referral_earnings: newTotal,
+          }
+        )
 
         if (isFirstCommissionForPair) {
           try {
@@ -780,6 +1010,10 @@ export async function POST(req: Request) {
           }
         }
       } catch (err) {
+        console.log("[invoice.paid][AFFILIATE TEMP] CATCH handler error", {
+          err: err instanceof Error ? err.message : String(err),
+          stack: err instanceof Error ? err.stack : null,
+        })
         console.error("[invoice.paid] handler error:", err)
       }
     }
