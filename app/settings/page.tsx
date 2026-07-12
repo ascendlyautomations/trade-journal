@@ -699,9 +699,19 @@ export default function SettingsPage() {
       })
 
       if (!res.ok) {
-        throw new Error("Failed")
+        let message = "Failed to delete account."
+        try {
+          const body = (await res.json()) as { error?: string }
+          if (body.error?.trim()) message = body.error.trim()
+        } catch {
+          /* keep default */
+        }
+        showPopup(persistentError("Delete Failed", message))
+        return
       }
 
+      setShowDeleteConfirm(false)
+      setConfirmText("")
       await supabase.auth.signOut()
       window.location.href = "/"
     } catch (err) {
@@ -1528,6 +1538,16 @@ export default function SettingsPage() {
                         className="text-blue-300 underline hover:text-blue-200"
                       >
                         Terms of Service
+                      </a>
+                    </li>
+                    <li>
+                      <a
+                        href="/refund-policy"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-300 underline hover:text-blue-200"
+                      >
+                        Refund Policy
                       </a>
                     </li>
                   </ul>

@@ -68,6 +68,7 @@ describe("isAllowedPathDuringOnboarding", () => {
     assert.equal(isAllowedPathDuringOnboarding("/reset-password"), true)
     assert.equal(isAllowedPathDuringOnboarding("/privacy"), true)
     assert.equal(isAllowedPathDuringOnboarding("/terms"), true)
+    assert.equal(isAllowedPathDuringOnboarding("/refund-policy"), true)
     assert.equal(isAllowedPathDuringOnboarding("/"), false)
     assert.equal(isAllowedPathDuringOnboarding("/faq"), false)
     assert.equal(isAllowedPathDuringOnboarding("/pricing"), false)

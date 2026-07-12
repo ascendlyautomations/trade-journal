@@ -36,7 +36,18 @@ export async function POST(req: Request, context: RouteContext) {
   }
 
   try {
-    const stripe = process.env.STRIPE_SECRET_KEY ? getStripeServer() : null
+    let stripe: ReturnType<typeof getStripeServer> | null = null
+    try {
+      if (process.env.STRIPE_SECRET_KEY) {
+        stripe = getStripeServer()
+      }
+    } catch (stripeInitErr) {
+      console.warn(
+        "[admin/users/delete] Stripe client unavailable; continuing delete without Stripe cleanup:",
+        stripeInitErr instanceof Error ? stripeInitErr.message : stripeInitErr
+      )
+    }
+
     const result = await deleteUserAdmin(supabaseServiceRole, {
       adminUserId: auth.adminUser.id,
       targetUserId,
@@ -46,6 +57,12 @@ export async function POST(req: Request, context: RouteContext) {
     return Response.json({ success: true, ...result })
   } catch (err) {
     if (err instanceof AdminUserDeletionStepError) {
+      console.error("[admin/users/delete] AdminUserDeletionStepError", {
+        step: err.step,
+        table: err.table,
+        message: err.message,
+        stack: err.stack,
+      })
       return Response.json(
         {
           error: err.message,

@@ -70,6 +70,7 @@ export const SUBSCRIPTION_GATE_PATH_PREFIXES = [
   "/reset-password",
   "/privacy",
   "/terms",
+  "/refund-policy",
   "/demo",
 ] as const
 

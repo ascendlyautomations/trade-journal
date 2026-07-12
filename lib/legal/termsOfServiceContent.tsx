@@ -225,9 +225,9 @@ export const TERMS_OF_SERVICE_SECTIONS: LegalSection[] = [
         </p>
         <p>
           Except where required by law, subscription fees are non-refundable once a billing period
-          has begun. Contact{" "}
-          <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> for billing
-          questions.
+          has begun. See our{" "}
+          <Link href="/refund-policy">Refund Policy</Link> for full details. Contact{" "}
+          <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> for billing questions.
         </p>
       </>
     ),

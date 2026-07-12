@@ -1,16 +1,31 @@
 import Stripe from "stripe"
 import { NextResponse } from "next/server"
 import { getRouteUser, supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
-import { deleteUserAccount } from "@/lib/deleteUserAccount"
 import {
   AdminUserDeletionError,
   AdminUserDeletionStepError,
+  deleteUserAdmin,
 } from "@/lib/deleteUserAdmin"
+import { getStripeServer } from "@/lib/stripeServer"
 import { toUserFacingErrorMessage } from "@/lib/userFacingError"
 
-const stripe = process.env.STRIPE_SECRET_KEY
-  ? new Stripe(process.env.STRIPE_SECRET_KEY)
-  : null
+/**
+ * Settings → Delete Account.
+ * Uses the same deleteUserAdmin() pipeline as Admin Delete User.
+ * Only difference: selfService=true (authorization + skip admin audit log).
+ */
+function resolveStripeForAccountDelete(): Stripe | null {
+  if (!process.env.STRIPE_SECRET_KEY) return null
+  try {
+    return getStripeServer()
+  } catch (err) {
+    console.warn(
+      "[api/delete-account] Stripe client unavailable; continuing without Stripe cleanup:",
+      err instanceof Error ? err.message : err
+    )
+    return null
+  }
+}
 
 export async function POST(req: Request) {
   const user = await getRouteUser(req)
@@ -20,9 +35,11 @@ export async function POST(req: Request) {
   }
 
   try {
-    await deleteUserAccount(supabaseServiceRole, {
-      userId: user.id,
-      stripe,
+    await deleteUserAdmin(supabaseServiceRole, {
+      adminUserId: user.id,
+      targetUserId: user.id,
+      stripe: resolveStripeForAccountDelete(),
+      selfService: true,
     })
   } catch (err) {
     if (err instanceof AdminUserDeletionError) {

@@ -62,6 +62,12 @@ export const TERMS_PAGE_METADATA = publicPage(
   "TradeTraxs Terms of Service — account rules, subscriptions, user content, and platform disclaimers."
 )
 
+export const REFUND_POLICY_PAGE_METADATA = publicPage(
+  "/refund-policy",
+  "Refund Policy",
+  "TradeTraxs Refund Policy — subscription billing, cancellation, and non-refundable purchase terms."
+)
+
 export const COOKIE_POLICY_PAGE_METADATA = publicPage(
   "/cookie-policy",
   "Cookie Policy",
@@ -83,7 +89,7 @@ export const COPYRIGHT_PAGE_METADATA = publicPage(
 export const LEGAL_HUB_PAGE_METADATA = publicPage(
   "/legal",
   "Legal",
-  "TradeTraxs legal documents — privacy policy, terms of service, and platform policies."
+  "TradeTraxs legal documents — privacy policy, terms of service, refund policy, and platform policies."
 )
 
 export const COMMUNITY_GUIDELINES_PAGE_METADATA = publicPage(

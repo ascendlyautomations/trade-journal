@@ -1,13 +1,28 @@
 import Stripe from "stripe"
 
 let stripeSingleton: Stripe | null = null
+let stripeSingletonKey: string | null = null
+
+/** True when the configured secret key is a Stripe Test Mode key. */
+export function isStripeSecretKeyTestMode(
+  key: string | null | undefined = process.env.STRIPE_SECRET_KEY
+): boolean {
+  return Boolean(key?.trim().startsWith("sk_test_"))
+}
 
 export function getStripeServer(): Stripe {
-  if (!process.env.STRIPE_SECRET_KEY) {
+  const key = process.env.STRIPE_SECRET_KEY?.trim()
+  if (!key) {
     throw new Error("Missing STRIPE_SECRET_KEY")
   }
-  if (!stripeSingleton) {
-    stripeSingleton = new Stripe(process.env.STRIPE_SECRET_KEY)
+  if (!stripeSingleton || stripeSingletonKey !== key) {
+    if (key.startsWith("sk_test_")) {
+      console.warn(
+        "[stripeServer] STRIPE_SECRET_KEY is a Test Mode key (sk_test_). Live Stripe customers/subscriptions will not be found."
+      )
+    }
+    stripeSingleton = new Stripe(key)
+    stripeSingletonKey = key
   }
   return stripeSingleton
 }

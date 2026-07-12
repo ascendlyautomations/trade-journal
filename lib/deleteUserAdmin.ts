@@ -160,6 +160,19 @@ async function deleteWhereIn(
   }
 }
 
+function isStripeMissingCustomerError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false
+  const e = err as {
+    code?: string
+    message?: string
+    raw?: { code?: string; message?: string }
+  }
+  const code = e.code ?? e.raw?.code
+  if (code === "resource_missing") return true
+  const message = String(e.message ?? e.raw?.message ?? "")
+  return /no such customer/i.test(message)
+}
+
 async function cancelStripeSubscriptions(
   targetUserId: string,
   stripe: Stripe | null | undefined,
@@ -184,11 +197,25 @@ async function cancelStripeSubscriptions(
       try {
         await stripe.subscriptions.cancel(sub.id)
       } catch (err) {
-        console.error("[deleteUserAdmin] Stripe cancel:", err)
+        console.warn(
+          `[deleteUserAdmin] Stripe cancel failed (continuing delete) sub=${sub.id}:`,
+          err instanceof Error ? err.message : err
+        )
       }
     }
   } catch (err) {
-    console.error("[deleteUserAdmin] Stripe list subscriptions:", err)
+    // Missing/mismatched customers (e.g. live cus_* with test sk_test_ key) must not abort deletion.
+    if (isStripeMissingCustomerError(err)) {
+      console.warn(
+        `[deleteUserAdmin] Stripe customer not found (continuing delete): ${stripeCustomerId}`,
+        err instanceof Error ? err.message : err
+      )
+      return
+    }
+    console.warn(
+      "[deleteUserAdmin] Stripe subscription cleanup failed (continuing delete):",
+      err instanceof Error ? err.message : err
+    )
   }
 }
 
@@ -463,19 +490,66 @@ async function anonymizeUserDirectMessages(
     step: "DM sender anonymization",
     table: "messages",
   })
+  console.log(
+    `[deleteUserAdmin] TEMP before DM anonymization update userId=${targetUserId}`
+  )
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("messages")
     .update({ sender_anonymized: true, sender_id: null, user_id: null })
     .eq("sender_id", targetUserId)
     .not("conversation_id", "is", null)
+    .select("id")
 
   if (error) {
+    console.error("[deleteUserAdmin] FATAL DM sender anonymization failed", {
+      targetUserId,
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      // Equivalent PostgREST call:
+      // PATCH /rest/v1/messages?sender_id=eq.<userId>&conversation_id=not.is.null
+      // body: { sender_anonymized: true, sender_id: null, user_id: null }
+    })
     throw new AdminUserDeletionStepError(
       "DM sender anonymization",
       "messages",
       error.message
     )
+  }
+
+  console.log(
+    `[deleteUserAdmin] TEMP after DM anonymization update userId=${targetUserId} rows=${data?.length ?? 0}`
+  )
+}
+
+/** TEMPORARY audit logging — remove after delete-500 root cause is confirmed. */
+function tempLog(targetUserId: string, phase: "before" | "after", label: string) {
+  console.log(
+    `[deleteUserAdmin] TEMP ${phase} "${label}" userId=${targetUserId}`
+  )
+}
+
+async function runLoggedStep(
+  targetUserId: string,
+  label: string,
+  fn: () => Promise<void>
+) {
+  tempLog(targetUserId, "before", label)
+  try {
+    await fn()
+    tempLog(targetUserId, "after", label)
+  } catch (err) {
+    console.error(`[deleteUserAdmin] TEMP FAILED at "${label}"`, {
+      targetUserId,
+      name: err instanceof Error ? err.name : typeof err,
+      message: err instanceof Error ? err.message : String(err),
+      step: err instanceof AdminUserDeletionStepError ? err.step : undefined,
+      table: err instanceof AdminUserDeletionStepError ? err.table : undefined,
+      stack: err instanceof Error ? err.stack : undefined,
+    })
+    throw err
   }
 }
 
@@ -488,8 +562,9 @@ function step(
 }
 
 /**
- * Permanently deletes a user and related application data.
- * Server-side only — caller must verify admin access first.
+ * Shared permanent account deletion pipeline.
+ * Used by Admin Delete User and Settings → Delete Account (selfService=true).
+ * Callers must authorize first (admin gate or signed-in self).
  */
 export async function deleteUserAdmin(
   supabase: SupabaseClient,
@@ -672,347 +747,449 @@ export async function deleteUserAdmin(
     `sender_id.eq.${targetUserId},recipient_id.eq.${targetUserId}`
   )
   await anonymizeUserDirectMessages(supabase, targetUserId)
-  logStep({
-    targetUserId,
-    step: "Lobby message cleanup",
-    table: "messages",
-  })
-  const { error: lobbyError } = await supabase
-    .from("messages")
-    .delete()
-    .eq("user_id", targetUserId)
-    .is("conversation_id", null)
-  if (lobbyError) {
-    throw new AdminUserDeletionStepError(
-      "Lobby message cleanup",
-      "messages",
-      lobbyError.message
-    )
-  }
-  await deleteWhere(
-    step(targetUserId, "Conversation participant cleanup", "conversation_participants"),
-    supabase,
-    "user_id",
-    targetUserId
-  )
 
-  await deleteWhere(
-    step(targetUserId, "Trade likes cleanup", "trade_likes"),
-    supabase,
-    "user_id",
-    targetUserId
-  )
-  await deleteWhere(
-    step(targetUserId, "Trade comments cleanup", "trade_comments"),
-    supabase,
-    "user_id",
-    targetUserId
-  )
-  await deleteWhere(
-    step(targetUserId, "Post comments cleanup", "comments"),
-    supabase,
-    "user_id",
-    targetUserId
-  )
-
-  await deleteWhere(
-    step(targetUserId, "Posts cleanup", "posts"),
-    supabase,
-    "user_id",
-    targetUserId
-  )
-  await deleteWhere(
-    step(targetUserId, "Trades cleanup", "trades"),
-    supabase,
-    "user_id",
-    targetUserId
-  )
-
-  await deleteWhere(
-    step(targetUserId, "Profile posts cleanup", "profile_posts"),
-    supabase,
-    "user_id",
-    targetUserId
-  )
-  await deleteWhere(
-    step(targetUserId, "Stories cleanup", "stories"),
-    supabase,
-    "user_id",
-    targetUserId
-  )
-  await deleteWhere(
-    step(targetUserId, "Saved posts cleanup", "saved_posts"),
-    supabase,
-    "user_id",
-    targetUserId
-  )
-  await deleteWhere(
-    step(targetUserId, "Saved trades cleanup", "saved_trades"),
-    supabase,
-    "user_id",
-    targetUserId
-  )
-
-  await tryDeleteWhere(
-    step(targetUserId, "Clip likes cleanup", "reel_likes"),
-    supabase,
-    "user_id",
-    targetUserId
-  )
-  await tryDeleteWhere(
-    step(targetUserId, "Clip comments cleanup", "reel_comments"),
-    supabase,
-    "user_id",
-    targetUserId
-  )
-  await tryDeleteWhere(
-    step(targetUserId, "Clips cleanup", "reels"),
-    supabase,
-    "user_id",
-    targetUserId
-  )
-  await tryDeleteWhere(
-    step(targetUserId, "User reviews cleanup", "user_reviews"),
-    supabase,
-    "user_id",
-    targetUserId
-  )
-  await tryDeleteWhere(
-    step(targetUserId, "Achievement posts cleanup", "achievement_posts"),
-    supabase,
-    "user_id",
-    targetUserId
-  )
-  await tryDeleteWhere(
-    step(targetUserId, "Profile post likes cleanup", "profile_post_likes"),
-    supabase,
-    "user_id",
-    targetUserId
-  )
-  await tryDeleteWhere(
-    step(targetUserId, "Profile post comments cleanup", "profile_post_comments"),
-    supabase,
-    "user_id",
-    targetUserId
-  )
-  await tryDeleteWhere(
-    step(targetUserId, "Comment likes cleanup", "comment_likes"),
-    supabase,
-    "user_id",
-    targetUserId
-  )
-  await tryDeleteWhere(
-    step(targetUserId, "Room message reactions cleanup", "room_message_reactions"),
-    supabase,
-    "user_id",
-    targetUserId
-  )
-  await tryDeleteWhere(
-    step(targetUserId, "Room channel preferences cleanup", "room_member_channel_preferences"),
-    supabase,
-    "user_id",
-    targetUserId
-  )
-  await tryDeleteWhere(
-    step(targetUserId, "Beta testimonials cleanup", "beta_testimonials"),
-    supabase,
-    "user_id",
-    targetUserId
-  )
-  await tryDeleteWhere(
-    step(targetUserId, "Account payout cycles cleanup", "account_payout_cycles"),
-    supabase,
-    "user_id",
-    targetUserId
-  )
-
-  await deleteWhere(
-    step(targetUserId, "Affiliate payout cleanup", "affiliate_payout_requests"),
-    supabase,
-    "user_id",
-    targetUserId
-  )
-  await deleteWhere(
-    step(targetUserId, "Affiliate application cleanup", "affiliate_applications"),
-    supabase,
-    "user_id",
-    targetUserId
-  )
-  await deleteWhere(
-    step(targetUserId, "Affiliate record cleanup", "affiliates"),
-    supabase,
-    "user_id",
-    targetUserId
-  )
-
-  await deleteWhere(
-    step(targetUserId, "Achievements cleanup", "achievements"),
-    supabase,
-    "user_id",
-    targetUserId
-  )
-  await deleteWhere(
-    step(targetUserId, "Feedback cleanup", "feedback_submissions"),
-    supabase,
-    "user_id",
-    targetUserId
-  )
-  await deleteWhere(
-    step(targetUserId, "Support ticket cleanup", "support_tickets"),
-    supabase,
-    "user_id",
-    targetUserId
-  )
-  await deleteWhere(
-    step(targetUserId, "Bug report cleanup", "bug_reports"),
-    supabase,
-    "user_id",
-    targetUserId
-  )
-  await deleteWhere(
-    step(targetUserId, "Feature request cleanup", "feature_requests"),
-    supabase,
-    "user_id",
-    targetUserId
-  )
-  await deleteWhere(
-    step(targetUserId, "Presets cleanup", "presets"),
-    supabase,
-    "user_id",
-    targetUserId
-  )
-  await deleteWhere(
-    step(targetUserId, "Accounts cleanup", "accounts"),
-    supabase,
-    "user_id",
-    targetUserId
-  )
-  await tryDeleteWhere(
-    step(targetUserId, "User accounts cleanup", "user_accounts"),
-    supabase,
-    "user_id",
-    targetUserId
-  )
-  await deleteWhere(
-    step(targetUserId, "CSV support cleanup", "csv_support_requests"),
-    supabase,
-    "user_id",
-    targetUserId
-  )
-  await tryDeleteWhere(
-    step(targetUserId, "Account settings cleanup", "account_settings"),
-    supabase,
-    "id",
-    targetUserId
-  )
-  await tryDeleteWhere(
-    step(targetUserId, "Billing account cleanup", "billing_accounts"),
-    supabase,
-    "id",
-    targetUserId
-  )
-
-  const referralFilter = `referrer_user_id.eq.${targetUserId},referred_user_id.eq.${targetUserId}`
-  await tryDeleteOr(
-    step(targetUserId, "Referral cleanup", "referrals"),
-    supabase,
-    referralFilter
-  )
-  await tryDeleteOr(
-    step(targetUserId, "Referral cleanup", "referrals_ledger"),
-    supabase,
-    referralFilter
-  )
-
-  logStep({
-    targetUserId,
-    step: "Profile ban reference cleanup",
-    table: "profiles",
-  })
-  await supabase
-    .from("profiles")
-    .update({ banned_by: null })
-    .eq("banned_by", targetUserId)
-
-  logStep({
-    targetUserId,
-    step: "Account settings ban reference cleanup",
-    table: "account_settings",
-  })
-  await supabase
-    .from("account_settings")
-    .update({ banned_by: null })
-    .eq("banned_by", targetUserId)
-
-  await clearReviewerReferences(supabase, targetUserId)
-
-  if (!selfService) {
+  await runLoggedStep(targetUserId, "Lobby message cleanup", async () => {
     logStep({
       targetUserId,
-      step: "Audit log",
-      table: "admin_audit_log",
+      step: "Lobby message cleanup",
+      table: "messages",
     })
-    const { error: auditError } = await supabase.from("admin_audit_log").insert({
-      admin_user_id: adminUserId,
-      target_user_id: targetUserId,
-      action: "delete_user",
-      target_type: "user",
-      target_id: targetUserId,
-      details: {
-        username,
-        email,
-        deleted_at: new Date().toISOString(),
-      },
-    })
-
-    if (auditError) {
-      console.error("[deleteUserAdmin] audit log:", auditError.message)
+    const { error: lobbyError } = await supabase
+      .from("messages")
+      .delete()
+      .eq("user_id", targetUserId)
+      .is("conversation_id", null)
+    if (lobbyError) {
       throw new AdminUserDeletionStepError(
-        "Audit log",
-        "admin_audit_log",
-        auditError.message
+        "Lobby message cleanup",
+        "messages",
+        lobbyError.message
       )
     }
-  }
+  })
 
-  if (profile?.id) {
-    await deleteWhere(
-      step(targetUserId, "Profile delete", "profiles"),
+  await runLoggedStep(targetUserId, "Conversation participant cleanup", () =>
+    deleteWhere(
+      step(targetUserId, "Conversation participant cleanup", "conversation_participants"),
+      supabase,
+      "user_id",
+      targetUserId
+    )
+  )
+
+  await runLoggedStep(targetUserId, "Trade likes cleanup", () =>
+    deleteWhere(
+      step(targetUserId, "Trade likes cleanup", "trade_likes"),
+      supabase,
+      "user_id",
+      targetUserId
+    )
+  )
+  await runLoggedStep(targetUserId, "Trade comments cleanup", () =>
+    deleteWhere(
+      step(targetUserId, "Trade comments cleanup", "trade_comments"),
+      supabase,
+      "user_id",
+      targetUserId
+    )
+  )
+  await runLoggedStep(targetUserId, "Post comments cleanup", () =>
+    deleteWhere(
+      step(targetUserId, "Post comments cleanup", "comments"),
+      supabase,
+      "user_id",
+      targetUserId
+    )
+  )
+
+  await runLoggedStep(targetUserId, "Posts cleanup", () =>
+    deleteWhere(
+      step(targetUserId, "Posts cleanup", "posts"),
+      supabase,
+      "user_id",
+      targetUserId
+    )
+  )
+  await runLoggedStep(targetUserId, "Trades cleanup", () =>
+    deleteWhere(
+      step(targetUserId, "Trades cleanup", "trades"),
+      supabase,
+      "user_id",
+      targetUserId
+    )
+  )
+
+  await runLoggedStep(targetUserId, "Profile posts cleanup", () =>
+    deleteWhere(
+      step(targetUserId, "Profile posts cleanup", "profile_posts"),
+      supabase,
+      "user_id",
+      targetUserId
+    )
+  )
+  await runLoggedStep(targetUserId, "Stories cleanup", () =>
+    deleteWhere(
+      step(targetUserId, "Stories cleanup", "stories"),
+      supabase,
+      "user_id",
+      targetUserId
+    )
+  )
+  await runLoggedStep(targetUserId, "Saved posts cleanup", () =>
+    deleteWhere(
+      step(targetUserId, "Saved posts cleanup", "saved_posts"),
+      supabase,
+      "user_id",
+      targetUserId
+    )
+  )
+  await runLoggedStep(targetUserId, "Saved trades cleanup", () =>
+    deleteWhere(
+      step(targetUserId, "Saved trades cleanup", "saved_trades"),
+      supabase,
+      "user_id",
+      targetUserId
+    )
+  )
+
+  await runLoggedStep(targetUserId, "Clip likes cleanup", () =>
+    tryDeleteWhere(
+      step(targetUserId, "Clip likes cleanup", "reel_likes"),
+      supabase,
+      "user_id",
+      targetUserId
+    )
+  )
+  await runLoggedStep(targetUserId, "Clip comments cleanup", () =>
+    tryDeleteWhere(
+      step(targetUserId, "Clip comments cleanup", "reel_comments"),
+      supabase,
+      "user_id",
+      targetUserId
+    )
+  )
+  await runLoggedStep(targetUserId, "Clips cleanup", () =>
+    tryDeleteWhere(
+      step(targetUserId, "Clips cleanup", "reels"),
+      supabase,
+      "user_id",
+      targetUserId
+    )
+  )
+  await runLoggedStep(targetUserId, "User reviews cleanup", () =>
+    tryDeleteWhere(
+      step(targetUserId, "User reviews cleanup", "user_reviews"),
+      supabase,
+      "user_id",
+      targetUserId
+    )
+  )
+  await runLoggedStep(targetUserId, "Achievement posts cleanup", () =>
+    tryDeleteWhere(
+      step(targetUserId, "Achievement posts cleanup", "achievement_posts"),
+      supabase,
+      "user_id",
+      targetUserId
+    )
+  )
+  await runLoggedStep(targetUserId, "Profile post likes cleanup", () =>
+    tryDeleteWhere(
+      step(targetUserId, "Profile post likes cleanup", "profile_post_likes"),
+      supabase,
+      "user_id",
+      targetUserId
+    )
+  )
+  await runLoggedStep(targetUserId, "Profile post comments cleanup", () =>
+    tryDeleteWhere(
+      step(targetUserId, "Profile post comments cleanup", "profile_post_comments"),
+      supabase,
+      "user_id",
+      targetUserId
+    )
+  )
+  await runLoggedStep(targetUserId, "Comment likes cleanup", () =>
+    tryDeleteWhere(
+      step(targetUserId, "Comment likes cleanup", "comment_likes"),
+      supabase,
+      "user_id",
+      targetUserId
+    )
+  )
+  await runLoggedStep(targetUserId, "Room message reactions cleanup", () =>
+    tryDeleteWhere(
+      step(targetUserId, "Room message reactions cleanup", "room_message_reactions"),
+      supabase,
+      "user_id",
+      targetUserId
+    )
+  )
+  await runLoggedStep(targetUserId, "Room channel preferences cleanup", () =>
+    tryDeleteWhere(
+      step(
+        targetUserId,
+        "Room channel preferences cleanup",
+        "room_member_channel_preferences"
+      ),
+      supabase,
+      "user_id",
+      targetUserId
+    )
+  )
+  await runLoggedStep(targetUserId, "Beta testimonials cleanup", () =>
+    tryDeleteWhere(
+      step(targetUserId, "Beta testimonials cleanup", "beta_testimonials"),
+      supabase,
+      "user_id",
+      targetUserId
+    )
+  )
+  await runLoggedStep(targetUserId, "Account payout cycles cleanup", () =>
+    tryDeleteWhere(
+      step(targetUserId, "Account payout cycles cleanup", "account_payout_cycles"),
+      supabase,
+      "user_id",
+      targetUserId
+    )
+  )
+
+  await runLoggedStep(targetUserId, "Affiliate payout cleanup", () =>
+    deleteWhere(
+      step(targetUserId, "Affiliate payout cleanup", "affiliate_payout_requests"),
+      supabase,
+      "user_id",
+      targetUserId
+    )
+  )
+  await runLoggedStep(targetUserId, "Affiliate application cleanup", () =>
+    deleteWhere(
+      step(targetUserId, "Affiliate application cleanup", "affiliate_applications"),
+      supabase,
+      "user_id",
+      targetUserId
+    )
+  )
+  await runLoggedStep(targetUserId, "Affiliate record cleanup", () =>
+    deleteWhere(
+      step(targetUserId, "Affiliate record cleanup", "affiliates"),
+      supabase,
+      "user_id",
+      targetUserId
+    )
+  )
+
+  await runLoggedStep(targetUserId, "Achievements cleanup", () =>
+    deleteWhere(
+      step(targetUserId, "Achievements cleanup", "achievements"),
+      supabase,
+      "user_id",
+      targetUserId
+    )
+  )
+  await runLoggedStep(targetUserId, "Feedback cleanup", () =>
+    deleteWhere(
+      step(targetUserId, "Feedback cleanup", "feedback_submissions"),
+      supabase,
+      "user_id",
+      targetUserId
+    )
+  )
+  await runLoggedStep(targetUserId, "Support ticket cleanup", () =>
+    deleteWhere(
+      step(targetUserId, "Support ticket cleanup", "support_tickets"),
+      supabase,
+      "user_id",
+      targetUserId
+    )
+  )
+  await runLoggedStep(targetUserId, "Bug report cleanup", () =>
+    deleteWhere(
+      step(targetUserId, "Bug report cleanup", "bug_reports"),
+      supabase,
+      "user_id",
+      targetUserId
+    )
+  )
+  await runLoggedStep(targetUserId, "Feature request cleanup", () =>
+    deleteWhere(
+      step(targetUserId, "Feature request cleanup", "feature_requests"),
+      supabase,
+      "user_id",
+      targetUserId
+    )
+  )
+  await runLoggedStep(targetUserId, "Presets cleanup", () =>
+    deleteWhere(
+      step(targetUserId, "Presets cleanup", "presets"),
+      supabase,
+      "user_id",
+      targetUserId
+    )
+  )
+  await runLoggedStep(targetUserId, "Accounts cleanup", () =>
+    deleteWhere(
+      step(targetUserId, "Accounts cleanup", "accounts"),
+      supabase,
+      "user_id",
+      targetUserId
+    )
+  )
+  await runLoggedStep(targetUserId, "User accounts cleanup", () =>
+    tryDeleteWhere(
+      step(targetUserId, "User accounts cleanup", "user_accounts"),
+      supabase,
+      "user_id",
+      targetUserId
+    )
+  )
+  await runLoggedStep(targetUserId, "CSV support cleanup", () =>
+    deleteWhere(
+      step(targetUserId, "CSV support cleanup", "csv_support_requests"),
+      supabase,
+      "user_id",
+      targetUserId
+    )
+  )
+  await runLoggedStep(targetUserId, "Account settings cleanup", () =>
+    tryDeleteWhere(
+      step(targetUserId, "Account settings cleanup", "account_settings"),
       supabase,
       "id",
       targetUserId
     )
+  )
+  await runLoggedStep(targetUserId, "Billing account cleanup", () =>
+    tryDeleteWhere(
+      step(targetUserId, "Billing account cleanup", "billing_accounts"),
+      supabase,
+      "id",
+      targetUserId
+    )
+  )
+
+  const referralFilter = `referrer_user_id.eq.${targetUserId},referred_user_id.eq.${targetUserId}`
+  await runLoggedStep(targetUserId, "Referral cleanup (referrals)", () =>
+    tryDeleteOr(
+      step(targetUserId, "Referral cleanup", "referrals"),
+      supabase,
+      referralFilter
+    )
+  )
+  await runLoggedStep(targetUserId, "Referral cleanup (referrals_ledger)", () =>
+    tryDeleteOr(
+      step(targetUserId, "Referral cleanup", "referrals_ledger"),
+      supabase,
+      referralFilter
+    )
+  )
+
+  await runLoggedStep(targetUserId, "Profile ban reference cleanup", async () => {
+    logStep({
+      targetUserId,
+      step: "Profile ban reference cleanup",
+      table: "profiles",
+    })
+    await supabase
+      .from("profiles")
+      .update({ banned_by: null })
+      .eq("banned_by", targetUserId)
+  })
+
+  await runLoggedStep(
+    targetUserId,
+    "Account settings ban reference cleanup",
+    async () => {
+      logStep({
+        targetUserId,
+        step: "Account settings ban reference cleanup",
+        table: "account_settings",
+      })
+      await supabase
+        .from("account_settings")
+        .update({ banned_by: null })
+        .eq("banned_by", targetUserId)
+    }
+  )
+
+  await runLoggedStep(targetUserId, "Clear reviewer references", () =>
+    clearReviewerReferences(supabase, targetUserId)
+  )
+
+  if (!selfService) {
+    await runLoggedStep(targetUserId, "Audit log", async () => {
+      logStep({
+        targetUserId,
+        step: "Audit log",
+        table: "admin_audit_log",
+      })
+      const { error: auditError } = await supabase.from("admin_audit_log").insert({
+        admin_user_id: adminUserId,
+        target_user_id: targetUserId,
+        action: "delete_user",
+        target_type: "user",
+        target_id: targetUserId,
+        details: {
+          username,
+          email,
+          deleted_at: new Date().toISOString(),
+        },
+      })
+
+      if (auditError) {
+        console.error("[deleteUserAdmin] audit log:", auditError.message)
+        throw new AdminUserDeletionStepError(
+          "Audit log",
+          "admin_audit_log",
+          auditError.message
+        )
+      }
+    })
+  }
+
+  if (profile?.id) {
+    await runLoggedStep(targetUserId, "Profile delete", () =>
+      deleteWhere(
+        step(targetUserId, "Profile delete", "profiles"),
+        supabase,
+        "id",
+        targetUserId
+      )
+    )
   }
 
   if (authUser?.id) {
-    logStep({
-      targetUserId,
-      step: "Auth session revoke",
-      table: "auth.sessions",
-    })
-    const { error: signOutError } = await supabase.auth.admin.signOut(
-      targetUserId,
-      "global"
-    )
-    if (signOutError) {
-      console.warn("[deleteUserAdmin] global signOut:", signOutError.message)
-    }
-
-    logStep({
-      targetUserId,
-      step: "Auth user delete",
-      table: "auth.users",
-    })
-    const { error: authDeleteError } = await supabase.auth.admin.deleteUser(
-      targetUserId
-    )
-    if (authDeleteError) {
-      throw new AdminUserDeletionStepError(
-        "Auth user delete",
-        "auth.users",
-        authDeleteError.message
+    await runLoggedStep(targetUserId, "Auth session revoke", async () => {
+      logStep({
+        targetUserId,
+        step: "Auth session revoke",
+        table: "auth.sessions",
+      })
+      const { error: signOutError } = await supabase.auth.admin.signOut(
+        targetUserId,
+        "global"
       )
-    }
+      if (signOutError) {
+        console.warn("[deleteUserAdmin] global signOut:", signOutError.message)
+      }
+    })
+
+    await runLoggedStep(targetUserId, "Auth user delete", async () => {
+      logStep({
+        targetUserId,
+        step: "Auth user delete",
+        table: "auth.users",
+      })
+      const { error: authDeleteError } = await supabase.auth.admin.deleteUser(
+        targetUserId
+      )
+      if (authDeleteError) {
+        throw new AdminUserDeletionStepError(
+          "Auth user delete",
+          "auth.users",
+          authDeleteError.message
+        )
+      }
+    })
   } else if (authError && authError.message !== "User not found") {
     throw new AdminUserDeletionStepError(
       "Auth user lookup",

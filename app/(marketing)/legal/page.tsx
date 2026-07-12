@@ -14,6 +14,12 @@ const LEGAL_DOCUMENTS = [
     href: "/terms",
   },
   {
+    title: "Refund Policy",
+    description:
+      "How TradeTraxs handles subscription billing, cancellation, and refunds for paid plans.",
+    href: "/refund-policy",
+  },
+  {
     title: "Cookie Policy",
     description:
       "How TradeTraxs uses cookies and similar technologies to operate and improve the service.",

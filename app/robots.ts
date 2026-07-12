@@ -16,6 +16,7 @@ const ALLOW_PATHS = [
   "/legal",
   "/privacy",
   "/terms",
+  "/refund-policy",
   "/cookie-policy",
   "/acceptable-use",
   "/copyright",

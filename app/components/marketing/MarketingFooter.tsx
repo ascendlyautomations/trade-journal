@@ -200,6 +200,9 @@ export default function MarketingFooter() {
                   <FooterLink href="/terms">Terms of Service</FooterLink>
                 </li>
                 <li>
+                  <FooterLink href="/refund-policy">Refund Policy</FooterLink>
+                </li>
+                <li>
                   <FooterLink href="/cookie-policy">Cookie Policy</FooterLink>
                 </li>
                 <li>
@@ -270,6 +273,9 @@ export default function MarketingFooter() {
             </li>
             <li>
               <FooterLink href="/terms">Terms of Service</FooterLink>
+            </li>
+            <li>
+              <FooterLink href="/refund-policy">Refund Policy</FooterLink>
             </li>
             <li>
               <FooterLink href="/cookie-policy">Cookie Policy</FooterLink>

@@ -10,7 +10,10 @@ export type DeleteUserAccountInput = {
   stripe?: Stripe | null
 }
 
-/** Self-service permanent account deletion (settings → delete account). */
+/**
+ * Self-service permanent account deletion (settings → delete account).
+ * Thin wrapper — all cleanup lives in deleteUserAdmin (same as Admin Delete User).
+ */
 export async function deleteUserAccount(
   supabase: SupabaseClient,
   input: DeleteUserAccountInput

@@ -24,6 +24,7 @@ export const MARKETING_EXACT_PATHS = [
 export const PUBLIC_LEGAL_EXACT_PATHS = [
   "/privacy",
   "/terms",
+  "/refund-policy",
   "/cookie-policy",
   "/acceptable-use",
 ] as const

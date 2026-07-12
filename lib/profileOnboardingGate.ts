@@ -49,6 +49,7 @@ export const ONBOARDING_ALLOWED_PATH_PREFIXES = [
   "/reset-password",
   "/privacy",
   "/terms",
+  "/refund-policy",
 ] as const
 
 export function isAllowedPathDuringOnboarding(pathname: string): boolean {

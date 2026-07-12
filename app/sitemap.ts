@@ -23,6 +23,7 @@ const STATIC_PATHS: Array<{
   { path: "/legal", changeFrequency: "yearly", priority: 0.5 },
   { path: "/privacy", changeFrequency: "yearly", priority: 0.5 },
   { path: "/terms", changeFrequency: "yearly", priority: 0.5 },
+  { path: "/refund-policy", changeFrequency: "yearly", priority: 0.5 },
   { path: "/cookie-policy", changeFrequency: "yearly", priority: 0.45 },
   { path: "/acceptable-use", changeFrequency: "yearly", priority: 0.45 },
   { path: "/copyright", changeFrequency: "yearly", priority: 0.45 },
