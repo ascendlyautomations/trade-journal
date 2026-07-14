@@ -93,7 +93,7 @@ export const ACCEPTABLE_USE_POLICY_SECTIONS: LegalSection[] = [
         <p>You may not upload, post, or share content that:</p>
         <ul>
           <li>
-            Infringes copyrights — including chart screenshots, images, videos, or other media you
+            Infringes copyrights, including chart screenshots, images, videos, or other media you
             do not have permission to use;
           </li>
           <li>

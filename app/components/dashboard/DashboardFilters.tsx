@@ -103,7 +103,7 @@ export default function DashboardFilters({
   return (
     <div>
       <TradeFilterBar
-        className="mt-2 mb-2.5 md:mt-2.5 md:mb-4"
+        className="mt-2 mb-2 md:mt-2.5 md:mb-3"
         mobileThreeRowLayout
         leading={<DashboardPlanIndicator isPro={isPro} />}
         leadingOverlay
@@ -175,7 +175,7 @@ export default function DashboardFilters({
         }
       />
       {showPropFirmLink ? (
-        <div className="-mt-1 mb-3 flex justify-end md:justify-start md:mb-4">
+        <div className="-mt-1 mb-2 flex justify-end md:justify-start md:mb-3">
           <Link
             href="/analytics/propfirm"
             className="text-xs text-blue-300/70 transition hover:text-blue-200"

@@ -7,7 +7,7 @@ export const DEMO_PROFILE = {
   id: DEMO_USER_ID,
   username: "john_trades",
   name: "John Jones",
-  bio: "Futures trader focused on NQ & ES. Sharing the journey — wins, losses, and lessons.",
+  bio: "Futures trader focused on NQ & ES. Sharing the journey, wins, losses, and lessons.",
   avatar_url: demoAvatarUrl(DEMO_USER_ID),
   is_pro: true,
   subscription_status: "active",
@@ -91,7 +91,7 @@ This was a high-quality opening-drive long with disciplined risk and a strong re
 - Position sizing stayed within normal eval risk parameters for a trade of this size.
 
 ## Areas for Improvement
-- Entry was slightly late after the BOS confirmation candle — a few ticks of slippage reduced optimal RR.
+- Entry was slightly late after the BOS confirmation candle. A few ticks of slippage reduced optimal RR.
 - Partial profit could have been more aggressive when momentum stalled at the first extension target.
 
 ## Behavior Observed
@@ -103,7 +103,7 @@ You waited for confirmation instead of anticipating the move, which matches your
 3. Repeat this workflow on comparable liquidity-sweep contexts during the NY open.
 
 ## Questions That Could Improve Future Analysis
-What was your planned invalidation level before entry — did price ever threaten that level after you were in?`
+What was your planned invalidation level before entry, did price ever threaten that level after you were in?`
 
 type TradeSeed = {
   id: string
@@ -200,11 +200,11 @@ export const DEMO_TRADES = TRADE_SEEDS.map((seed) => {
       ...base,
       is_public: true,
       public_description:
-        "Clean opening drive long — waited for liquidity sweep, entered on 1m BOS.",
+        "Clean opening drive long. Waited for liquidity sweep, entered on 1m BOS.",
       notes:
         "Opening drive long after liquidity sweep at overnight low. Entered on 1m BOS with stop below sweep.",
       confluences: ["HTF bullish structure", "VWAP reclaim", "Opening range high break"],
-      psychology: "Calm and patient — waited for full confirmation before entry.",
+      psychology: "Calm and patient. Waited for full confirmation before entry.",
       ai_feedback: DEMO_AI_FEEDBACK,
     }
   }
@@ -229,7 +229,7 @@ export const DEMO_FEED_POSTS = [
       rr: 2.7,
       account_type: "prop",
       public_description:
-        "Clean opening drive long — waited for liquidity sweep, entered on 1m BOS. Took partials at VWAP extension.",
+        "Clean opening drive long. Waited for liquidity sweep, entered on 1m BOS. Took partials at VWAP extension.",
     },
   },
   {
@@ -259,7 +259,7 @@ export const DEMO_FEED_POSTS = [
       direction: "Long",
       rr: 0.6,
       account_type: "personal",
-      public_description: "Took a loss today — rushed entry before confirmation. Journal notes saved for review.",
+      public_description: "Took a loss today. Rushed entry before confirmation. Journal notes saved for review.",
     },
   },
 ] as const
@@ -284,7 +284,7 @@ export const DEMO_AI_ANALYSIS = {
   ],
   improvements: [
     "Consider scaling out earlier when RSI reached overbought on 5m",
-    "Entry was 2 ticks late — set alert at trigger level",
+    "Entry was 2 ticks late. Set alert at trigger level",
   ],
   patterns: ["Morning trend continuation", "VWAP reclaim long", "Opening range breakout"],
   markdown: DEMO_AI_FEEDBACK,
@@ -354,7 +354,7 @@ export const DEMO_REELS = [
     views: 2400,
     duration: "0:42",
     thumbnail_url: demoReelThumbnailUrl("reel-1"),
-    caption: "NQ Opening Drive Breakdown — liquidity sweep + BOS entry",
+    caption: "NQ Opening Drive Breakdown, liquidity sweep + BOS entry",
   },
   {
     id: "reel-2",
@@ -362,7 +362,7 @@ export const DEMO_REELS = [
     views: 5100,
     duration: "1:15",
     thumbnail_url: demoReelThumbnailUrl("reel-2"),
-    caption: "How I Passed My Eval — rule tracking workflow",
+    caption: "How I Passed My Eval, rule tracking workflow",
   },
   {
     id: "reel-3",
@@ -370,6 +370,6 @@ export const DEMO_REELS = [
     views: 1800,
     duration: "0:58",
     thumbnail_url: demoReelThumbnailUrl("reel-3"),
-    caption: "3 Mistakes From Last Week — journal review",
+    caption: "3 Mistakes From Last Week, journal review",
   },
 ] as const

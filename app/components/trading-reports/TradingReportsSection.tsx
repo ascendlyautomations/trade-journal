@@ -103,7 +103,7 @@ const TradingReportsSection = forwardRef<
 
   return (
     <>
-      <div className="hidden md:-mb-3 md:block">
+      <div className="hidden md:block">
         <TradingReportsDashboardCard
           onOpen={openDefaultReport}
           loading={loading && !snapshot}

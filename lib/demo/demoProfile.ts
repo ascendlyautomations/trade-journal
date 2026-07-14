@@ -105,7 +105,7 @@ const DEMO_USER_REGISTRY: DemoPublicProfile[] = [
     id: DEMO_USER_ELI,
     username: "eli_prop",
     name: "Eli Nguyen",
-    bio: "Documenting the prop firm journey — evals, payouts, and rule tracking.",
+    bio: "Documenting the prop firm journey, evals, payouts, and rule tracking.",
     avatar_url: demoAvatarUrl(DEMO_USER_ELI),
     trading_style: "Day Trading",
     trader_type: "Futures",
@@ -179,7 +179,7 @@ const DEMO_REELS: ReelRow[] = [
     updated_at: isoDemoDaysAgo(1, 15),
     trades: {
       id: "dt-03",
-      public_description: "Clean NQ continuation after liquidity sweep — held to target.",
+      public_description: "Clean NQ continuation after liquidity sweep. Held to target.",
       is_public: true,
       ticker: "NQ",
       direction: "Long",
@@ -190,7 +190,7 @@ const DEMO_REELS: ReelRow[] = [
   {
     id: "demo-reel-maya-2",
     user_id: DEMO_USER_ID,
-    caption: "How I Passed My Eval — rule tracking workflow",
+    caption: "How I Passed My Eval, rule tracking workflow",
     video_url:
       "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
     thumbnail_url: demoReelThumbnailUrl("demo-reel-maya-2"),
@@ -204,7 +204,7 @@ const DEMO_REELS: ReelRow[] = [
   {
     id: "demo-reel-maya-3",
     user_id: DEMO_USER_ID,
-    caption: "3 Mistakes From Last Week — journal review",
+    caption: "3 Mistakes From Last Week, journal review",
     video_url:
       "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4",
     thumbnail_url: demoReelThumbnailUrl("demo-reel-maya-3"),
@@ -218,7 +218,7 @@ const DEMO_REELS: ReelRow[] = [
   {
     id: "demo-reel-2",
     user_id: DEMO_USER_ALEX,
-    caption: "ES Reversal Play — overnight high rejection",
+    caption: "ES Reversal Play, overnight high rejection",
     video_url:
       "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
     thumbnail_url: demoReelThumbnailUrl("demo-reel-2"),
@@ -251,7 +251,7 @@ const DEMO_WALL_POSTS: Record<string, Record<string, unknown>[]> = {
       id: "demo-wall-maya-1",
       user_id: DEMO_USER_ID,
       content:
-        "Green week on the eval — consistency rule was the hardest part. Prop Firm Mode made tracking winning days painless.",
+        "Green week on the eval. Consistency rule was the hardest part. Prop Firm Mode made tracking winning days painless.",
       image_url: demoPostImageUrl("demo-wall-maya-1"),
       room_id: null,
       created_at: isoDemoDaysAgo(2, 16),
@@ -268,7 +268,7 @@ const DEMO_WALL_POSTS: Record<string, Record<string, unknown>[]> = {
       id: "demo-wall-maya-3",
       user_id: DEMO_USER_ID,
       content:
-        "Posted today's NQ long breakdown on the feed — liquidity sweep + 1m BOS. Link in Clips tab too.",
+        "Posted today's NQ long breakdown on the feed, liquidity sweep + 1m BOS. Link in Clips tab too.",
       image_url: demoTradeScreenshotUrl("dt-24", { direction: "Long", pnl: 1050 }),
       room_id: null,
       created_at: isoDemoDaysAgo(0, 11),
@@ -287,7 +287,7 @@ const DEMO_WALL_POSTS: Record<string, Record<string, unknown>[]> = {
     {
       id: "demo-wall-alex-2",
       user_id: DEMO_USER_ALEX,
-      content: "ES reversal from overnight high — full chart markup in today's clip.",
+      content: "ES reversal from overnight high. Full chart markup in today's clip.",
       image_url: demoTradeScreenshotUrl("demo-trade-alex-1", { direction: "Short", pnl: 720 }),
       room_id: null,
       created_at: isoDemoDaysAgo(1, 14),
@@ -298,7 +298,7 @@ const DEMO_WALL_POSTS: Record<string, Record<string, unknown>[]> = {
       id: "demo-wall-sarah-1",
       user_id: DEMO_USER_SARAH,
       content:
-        "Five winning days on eval — Prop Firm Mode tracking made the consistency rule manageable.",
+        "Five winning days on eval. Prop Firm Mode tracking made the consistency rule manageable.",
       image_url: demoPostImageUrl("demo-wall-sarah-1"),
       room_id: null,
       created_at: isoDemoDaysAgo(1, 16),

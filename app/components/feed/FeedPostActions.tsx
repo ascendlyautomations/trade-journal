@@ -26,7 +26,7 @@ function FeedPostActions({
   onSharePost,
 }: FeedPostActionsProps) {
   return (
-    <div className="border-t border-white/10 px-4 py-2">
+    <div className="border-t border-white/10 px-4 py-1.5">
       <div className="min-w-0">
         <PostInteractionsEngagement
           post={post}

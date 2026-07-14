@@ -452,11 +452,13 @@ export default function AnalystPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] p-10">
-          <h1 className="mb-8 text-center text-3xl text-blue-300">
-            AI Analyst
-          </h1>
-          <SkeletonAnalystPanel count={4} />
+        <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 pb-6 pt-0 text-gray-100 md:px-6 md:pb-10">
+          <div className="relative z-0 mx-auto mt-2.5 flex w-full max-w-[1600px] flex-col gap-3 md:gap-3">
+            <h1 className="shrink-0 text-lg font-semibold uppercase tracking-wide text-blue-300 md:text-xl">
+              AI Analyst
+            </h1>
+            <SkeletonAnalystPanel count={4} />
+          </div>
         </div>
       }
     >
@@ -722,99 +724,100 @@ function AnalystPageContent() {
         status={progressLabel}
       />
 
-      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100 p-10">
-        <h1 className="mb-8 text-center text-3xl text-blue-300">
-          AI Analyst
-        </h1>
+      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 pb-6 pt-0 text-gray-100 md:px-6 md:pb-10">
+        <div className="relative z-0 mx-auto mt-2.5 flex w-full max-w-[1600px] flex-col gap-3 md:gap-3">
+          <h1 className="shrink-0 text-lg font-semibold uppercase tracking-wide text-blue-300 md:text-xl">
+            AI Analyst
+          </h1>
 
-        {!pageReady ? (
-          <SkeletonAnalystPanel count={4} />
-        ) : !pro ? (
-          <div className="mx-auto max-w-lg">
-            <LockedFeature title="AI Analyst" />
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
-            <div className="max-h-[80vh] overflow-y-auto rounded-xl border border-white/10 bg-white/5 p-4">
-              {trades.length === 0 ? (
-                <EmptyState
-                  icon="🤖"
-                  title="No Trades to Analyze"
-                  description="Add your first trade to unlock AI-powered trade review and coaching."
-                  action={
-                    <Link
-                      href="/app"
-                      className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600"
-                    >
-                      Add Trade
-                    </Link>
-                  }
-                  className="py-10"
-                />
-              ) : (
-              trades.map((trade) => (
-                <div
-                  key={trade.id}
-                  onClick={() => selectTradeForReview(trade)}
-                  className={`mb-3 cursor-pointer rounded border p-4 ${
-                    selectedTrade?.id === trade.id
-                      ? "border-emerald-400 bg-white/10"
-                      : "border-white/10 hover:bg-white/10"
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-semibold">
-                        {trade.ticker} • {trade.direction}
-                      </p>
-
-                      <p className="text-xs text-gray-400">
-                        {formatEST(trade.created_at)} • {trade.session}
-                      </p>
-
-                      <p className="text-xs text-gray-500">
-                        {formatTradeAccountDisplay(trade) || "—"}
-                      </p>
-                    </div>
-
-                    <div className="text-right">
-                      <p
-                        className={
-                          trade.pnl >= 0 ? "text-green-400" : "text-red-400"
-                        }
+          {!pageReady ? (
+            <SkeletonAnalystPanel count={4} />
+          ) : !pro ? (
+            <div className="mx-auto w-full max-w-lg">
+              <LockedFeature title="AI Analyst" />
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-6">
+              <div className="max-h-[80vh] overflow-y-auto rounded-xl border border-white/10 bg-white/5 p-4">
+                {trades.length === 0 ? (
+                  <EmptyState
+                    title="No Trades to Analyze"
+                    description="Add your first trade to unlock AI-powered trade review and coaching."
+                    action={
+                      <Link
+                        href="/app"
+                        className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600"
                       >
-                        {formatCurrency(trade.pnl)}
-                      </p>
+                        Add Trade
+                      </Link>
+                    }
+                    className="py-10"
+                  />
+                ) : (
+                trades.map((trade) => (
+                  <div
+                    key={trade.id}
+                    onClick={() => selectTradeForReview(trade)}
+                    className={`mb-3 cursor-pointer rounded border p-4 ${
+                      selectedTrade?.id === trade.id
+                        ? "border-emerald-400 bg-white/10"
+                        : "border-white/10 hover:bg-white/10"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-semibold">
+                          {trade.ticker} • {trade.direction}
+                        </p>
 
-                      <p className="text-xs text-gray-400">
-                        RR: {formatRR(trade.rr, "-")}
-                        {trade.contracts != null
-                          ? ` • Contracts: ${trade.contracts}`
-                          : ""}
-                      </p>
+                        <p className="text-xs text-gray-400">
+                          {formatEST(trade.created_at)} • {trade.session}
+                        </p>
 
-                      {trade.ai_feedback && (
-                        <span className="mt-1 inline-block text-xs text-green-400">
-                          Analyzed
-                        </span>
-                      )}
+                        <p className="text-xs text-gray-500">
+                          {formatTradeAccountDisplay(trade) || "—"}
+                        </p>
+                      </div>
+
+                      <div className="text-right">
+                        <p
+                          className={
+                            trade.pnl >= 0 ? "text-green-400" : "text-red-400"
+                          }
+                        >
+                          {formatCurrency(trade.pnl)}
+                        </p>
+
+                        <p className="text-xs text-gray-400">
+                          RR: {formatRR(trade.rr, "-")}
+                          {trade.contracts != null
+                            ? ` • Contracts: ${trade.contracts}`
+                            : ""}
+                        </p>
+
+                        {trade.ai_feedback && (
+                          <span className="mt-1 inline-block text-xs text-green-400">
+                            Analyzed
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))
-              )}
-            </div>
+                ))
+                )}
+              </div>
 
-            <div className="hidden h-[80vh] flex-col rounded-xl border border-white/10 bg-white/5 p-4 lg:flex">
-              <AnalystTradeDetailPanel
-                {...panelProps}
-                emptyState={
-                  <p className="mt-10 text-center text-gray-400">Select a trade</p>
-                }
-              />
+              <div className="hidden h-[80vh] flex-col rounded-xl border border-white/10 bg-white/5 p-4 lg:flex">
+                <AnalystTradeDetailPanel
+                  {...panelProps}
+                  emptyState={
+                    <p className="mt-10 text-center text-gray-400">Select a trade</p>
+                  }
+                />
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
         <AnalystMobileAnalysisSheet
           open={mobileAnalysisOpen && pro && pageReady}

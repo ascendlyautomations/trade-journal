@@ -79,7 +79,7 @@ export const feedbackPresets = {
     ),
 
   importSuccess: (importedCount: number, skipped = 0): FeedbackPopupInput => {
-    let message = `${importedCount} trade${importedCount === 1 ? "" : "s"} imported successfully. They are private by default — edit a trade to make it public.`
+    let message = `${importedCount} trade${importedCount === 1 ? "" : "s"} imported successfully. They are private by default. Edit a trade to make it public.`
     if (skipped > 0) {
       message += ` ${skipped} row(s) were skipped.`
     }
@@ -132,7 +132,7 @@ export const feedbackPresets = {
     type: "info",
     title: GETTING_STARTED_INTRO_POPUP_TITLE,
     message:
-      "Your dashboard includes a Getting Started checklist to help you set up TradeTraxs.\n\nComplete tasks like logging trades, following traders, and joining rooms — progress is saved to your account.",
+      "Your dashboard includes a Getting Started checklist to help you set up TradeTraxs.\n\nComplete tasks like logging trades, following traders, and joining rooms. Progress is saved to your account.",
     persist: true,
     dismissLabel: "Got it",
   }),

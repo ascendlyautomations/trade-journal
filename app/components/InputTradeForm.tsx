@@ -84,6 +84,7 @@ import {
   fetchTradeReel,
   publishTradeReel,
   replaceTradeReelVideo,
+  syncTradeLinkedReelVisibility,
   type ReelRow,
 } from "@/lib/reels"
 import type { UploadProgressReporter } from "@/lib/uploadProgress/types"
@@ -476,13 +477,42 @@ export default function InputTradeForm({
 
   useEffect(() => {
     if (!selectedAccount?.id) return
+    // Accounts still loading — don't clear the hydrated edit selection.
+    if (accounts.length === 0) return
+
+    const selectedId = String(selectedAccount.id)
     const stillSelectable = activeAccounts.some(
-      (a) => String(a.id) === String(selectedAccount.id)
+      (a) => String(a.id) === selectedId
     )
-    if (!stillSelectable) {
+    if (stillSelectable) return
+
+    // Keep the trade's own account selectable while editing (incl. read-only / inactive).
+    const inAllAccounts = accounts.some((a) => String(a.id) === selectedId)
+    const isCurrentEditAccount =
+      isEditMode &&
+      existingTrade?.account_id != null &&
+      String(existingTrade.account_id) === selectedId
+
+    if (!inAllAccounts && !isCurrentEditAccount) {
       setSelectedAccount(null)
     }
-  }, [selectedAccount, activeAccounts])
+  }, [
+    selectedAccount,
+    activeAccounts,
+    accounts,
+    isEditMode,
+    existingTrade?.account_id,
+  ])
+
+  const pickerAccounts = useMemo(() => {
+    const list = [...activeAccounts]
+    if (!selectedAccount?.id) return list
+    const selectedId = String(selectedAccount.id)
+    if (list.some((a) => String(a.id) === selectedId)) return list
+    const fromAll = accounts.find((a) => String(a.id) === selectedId)
+    list.push(fromAll ?? selectedAccount)
+    return list
+  }, [activeAccounts, accounts, selectedAccount])
 
   const effectiveModeLower = String(
     selectedAccount?.mode ??
@@ -536,7 +566,8 @@ export default function InputTradeForm({
     setRR(t.rr != null && t.rr !== "" ? String(t.rr) : "")
     setPoints(t.points != null && t.points !== "" ? String(t.points) : "")
     setSession(t.session || "NY")
-    setSessionManuallySet(false)
+    // Preserve the saved session; do not let auto-detect overwrite while editing.
+    setSessionManuallySet(true)
     setConfluences(t.top_confluences ?? t.notes ?? "")
     setPublicDescription(t.public_description ?? "")
     setPostToFeed(false)
@@ -602,7 +633,9 @@ export default function InputTradeForm({
     setEntryTime(dtFields.entryTime)
     setExitTime(dtFields.exitTime)
     setPendingReelFile(null)
-  }, [existingTrade])
+    // Re-hydrate only when switching to a different trade. Parent list refreshes
+    // often create a new `existingTrade` object for the same id and must not wipe edits.
+  }, [existingTrade?.id])
 
   useEffect(() => {
     if (!existingTrade?.id) {
@@ -1053,9 +1086,7 @@ export default function InputTradeForm({
         mode: rowAcct.mode,
         account_category: rowAcct.category,
         strategy:
-          rowAcct.type === "backtest" && String(strategy).trim() !== ""
-            ? String(strategy).trim()
-            : null,
+          String(strategy).trim() !== "" ? String(strategy).trim() : null,
         account_size: rowAcct.size,
         account_id: rowAcct.id,
         created_at: existingTrade.created_at,
@@ -1080,6 +1111,7 @@ export default function InputTradeForm({
         news_event: newsEvent,
         timeframe: timeframeToSave,
         is_public: isPublic,
+        notes: confluences || null,
       }
       const csvReviewPending =
         existingTrade.is_initial_import === true &&
@@ -1132,6 +1164,14 @@ export default function InputTradeForm({
           .delete()
           .eq("trade_id", existingTrade.id)
         if (delErr) console.error("posts delete:", delErr)
+      }
+
+      if (existingTrade.is_public !== isPublic) {
+        await syncTradeLinkedReelVisibility(
+          supabase,
+          String(existingTrade.id),
+          isPublic
+        )
       }
 
       const replayError = await syncTradeReplayAfterSave(
@@ -1769,25 +1809,23 @@ export default function InputTradeForm({
 
   const formBody = (
     <>
-      <div className="mb-4">
+      <div className={isEditMode ? "mb-2" : "mb-4"}>
         <div className="flex flex-col gap-3 md:hidden">
           <div className="flex items-center gap-2">
-            {onUploadCsvClick ? (
-              <TradeAccountPicker
-                className="min-w-0 flex-1 md:flex-none"
-                accounts={activeAccounts}
-                isPro={isPro}
-                copyGroups={copyGroups}
-                selectedAccount={selectedAccount}
-                selectedCopyGroupId={selectedCopyGroupId}
-                onSelect={setSelectedAccount}
-                onSelectCopyGroup={setSelectedCopyGroupId}
-                onOpenCreate={() => setShowCreateModal(true)}
-                disableCreate={accountFieldsLocked}
-                showExternalCreateButton={false}
-              />
-            ) : null}
-            {onQuickInputClick ? (
+            <TradeAccountPicker
+              className="min-w-0 flex-1 md:flex-none"
+              accounts={pickerAccounts}
+              isPro={isPro}
+              copyGroups={copyGroups}
+              selectedAccount={selectedAccount}
+              selectedCopyGroupId={selectedCopyGroupId}
+              onSelect={setSelectedAccount}
+              onSelectCopyGroup={setSelectedCopyGroupId}
+              onOpenCreate={() => setShowCreateModal(true)}
+              disableCreate={accountFieldsLocked}
+              showExternalCreateButton={false}
+            />
+            {!isEditMode && onQuickInputClick ? (
               <button
                 type="button"
                 onClick={onQuickInputClick}
@@ -1805,30 +1843,32 @@ export default function InputTradeForm({
               ⚙️
             </button>
           </div>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={handleUploadCsvGuardClick}
-              disabled={!onUploadCsvClick || csvLoading || csvImportBlocked}
-              className="shrink-0 flex-1 px-3 py-2 text-sm rounded-lg bg-blue-500 disabled:opacity-60"
-            >
-              Upload CSV
-            </button>
-            <button
-              type="button"
-              onClick={onReviewCsvClick}
-              disabled={!onReviewCsvClick}
-              className="shrink-0 relative flex-1 px-3 py-2 text-sm rounded-lg bg-blue-500 hover:bg-blue-600 disabled:opacity-60 disabled:hover:bg-blue-500"
-            >
-              Review CSV
-              {reviewCount > 0 ? (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full text-[10px] px-1.5 py-0.5">
-                  {reviewCount > 99 ? "99+" : reviewCount}
-                </span>
-              ) : null}
-            </button>
-          </div>
-          {parsedTrades.length > 0 && !csvDiagnostics ? (
+          {!isEditMode ? (
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={handleUploadCsvGuardClick}
+                disabled={!onUploadCsvClick || csvLoading || csvImportBlocked}
+                className="shrink-0 flex-1 px-3 py-2 text-sm rounded-lg bg-blue-500 disabled:opacity-60"
+              >
+                Upload CSV
+              </button>
+              <button
+                type="button"
+                onClick={onReviewCsvClick}
+                disabled={!onReviewCsvClick}
+                className="shrink-0 relative flex-1 px-3 py-2 text-sm rounded-lg bg-blue-500 hover:bg-blue-600 disabled:opacity-60 disabled:hover:bg-blue-500"
+              >
+                Review CSV
+                {reviewCount > 0 ? (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full text-[10px] px-1.5 py-0.5">
+                    {reviewCount > 99 ? "99+" : reviewCount}
+                  </span>
+                ) : null}
+              </button>
+            </div>
+          ) : null}
+          {!isEditMode && parsedTrades.length > 0 && !csvDiagnostics ? (
             <button
               type="button"
               onClick={() => void handleCsvManualImport()}
@@ -1848,23 +1888,21 @@ export default function InputTradeForm({
 
         <div className="hidden md:flex items-center w-full gap-3 min-w-0">
           <div className="flex min-w-0 flex-1 items-center gap-3 flex-wrap">
-            {onUploadCsvClick ? (
-              <TradeAccountPicker
-                className="shrink-0"
-                accounts={activeAccounts}
-                isPro={isPro}
-                copyGroups={copyGroups}
-                selectedAccount={selectedAccount}
-                selectedCopyGroupId={selectedCopyGroupId}
-                onSelect={setSelectedAccount}
-                onSelectCopyGroup={setSelectedCopyGroupId}
-                onOpenCreate={() => setShowCreateModal(true)}
-                disableCreate={accountFieldsLocked}
-                showExternalCreateButton={false}
-              />
-            ) : null}
+            <TradeAccountPicker
+              className="shrink-0"
+              accounts={pickerAccounts}
+              isPro={isPro}
+              copyGroups={copyGroups}
+              selectedAccount={selectedAccount}
+              selectedCopyGroupId={selectedCopyGroupId}
+              onSelect={setSelectedAccount}
+              onSelectCopyGroup={setSelectedCopyGroupId}
+              onOpenCreate={() => setShowCreateModal(true)}
+              disableCreate={accountFieldsLocked}
+              showExternalCreateButton={false}
+            />
 
-            {onQuickInputClick ? (
+            {!isEditMode && onQuickInputClick ? (
               <button
                 type="button"
                 onClick={onQuickInputClick}
@@ -1874,45 +1912,49 @@ export default function InputTradeForm({
               </button>
             ) : null}
 
-            <button
-              type="button"
-              onClick={handleUploadCsvGuardClick}
-              disabled={!onUploadCsvClick || csvLoading || csvImportBlocked}
-              className="shrink-0 px-4 py-2 text-sm rounded-lg bg-blue-500 disabled:opacity-60"
-            >
-              Upload CSV
-            </button>
+            {!isEditMode ? (
+              <>
+                <button
+                  type="button"
+                  onClick={handleUploadCsvGuardClick}
+                  disabled={!onUploadCsvClick || csvLoading || csvImportBlocked}
+                  className="shrink-0 px-4 py-2 text-sm rounded-lg bg-blue-500 disabled:opacity-60"
+                >
+                  Upload CSV
+                </button>
 
-            {parsedTrades.length > 0 && !csvDiagnostics ? (
-              <button
-                type="button"
-                onClick={() => void handleCsvManualImport()}
-                disabled={!selectedAccount || csvImporting}
-                className={`ml-2 px-4 py-2 rounded disabled:cursor-not-allowed disabled:opacity-50 ${
-                  selectedAccount
-                    ? "bg-green-500/20 text-green-400"
-                    : "bg-gray-700 text-gray-400 cursor-not-allowed"
-                }`}
-              >
-                {csvImporting
-                  ? "Importing…"
-                  : `Import ${parsedTrades.length}`}
-              </button>
+                {parsedTrades.length > 0 && !csvDiagnostics ? (
+                  <button
+                    type="button"
+                    onClick={() => void handleCsvManualImport()}
+                    disabled={!selectedAccount || csvImporting}
+                    className={`ml-2 px-4 py-2 rounded disabled:cursor-not-allowed disabled:opacity-50 ${
+                      selectedAccount
+                        ? "bg-green-500/20 text-green-400"
+                        : "bg-gray-700 text-gray-400 cursor-not-allowed"
+                    }`}
+                  >
+                    {csvImporting
+                      ? "Importing…"
+                      : `Import ${parsedTrades.length}`}
+                  </button>
+                ) : null}
+
+                <button
+                  type="button"
+                  onClick={onReviewCsvClick}
+                  disabled={!onReviewCsvClick}
+                  className="shrink-0 relative px-4 py-2 text-sm rounded-lg bg-blue-500 hover:bg-blue-600 disabled:opacity-60 disabled:hover:bg-blue-500"
+                >
+                  Review CSV
+                  {reviewCount > 0 ? (
+                    <span className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full text-[10px] px-1.5 py-0.5">
+                      {reviewCount > 99 ? "99+" : reviewCount}
+                    </span>
+                  ) : null}
+                </button>
+              </>
             ) : null}
-
-            <button
-              type="button"
-              onClick={onReviewCsvClick}
-              disabled={!onReviewCsvClick}
-              className="shrink-0 relative px-4 py-2 text-sm rounded-lg bg-blue-500 hover:bg-blue-600 disabled:opacity-60 disabled:hover:bg-blue-500"
-            >
-              Review CSV
-              {reviewCount > 0 ? (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full text-[10px] px-1.5 py-0.5">
-                  {reviewCount > 99 ? "99+" : reviewCount}
-                </span>
-              ) : null}
-            </button>
           </div>
 
           <div className="ml-auto">
@@ -2749,11 +2791,11 @@ export default function InputTradeForm({
           onClose={() => onClose?.()}
           ariaLabel="Edit Trade"
           showCloseButton={false}
-          overlayClassName="z-[10050] bg-black/70 py-4 backdrop-blur-sm md:py-6"
+          overlayClassName="z-[10050] bg-black/70 py-3 backdrop-blur-sm md:py-4"
           backdropClassName="bg-transparent"
-          panelClassName="max-w-md rounded-xl bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] md:max-w-4xl xl:max-w-7xl"
+          panelClassName="!h-[min(92dvh,calc(100dvh-1.5rem))] !max-h-[min(92dvh,calc(100dvh-1.5rem))] !w-[min(95vw,90rem)] !max-w-[95vw] rounded-xl bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46]"
           headerClassName="border-white/10 px-4 py-3 md:px-6 lg:px-7"
-          bodyClassName="px-4 md:px-6 lg:px-7"
+          bodyClassName="px-4 pt-3 pb-4 md:px-6 md:pt-4 md:pb-5 lg:px-7"
           header={
             <div className="flex items-center justify-between gap-4">
               <h2

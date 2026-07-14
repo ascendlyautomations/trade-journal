@@ -15,8 +15,8 @@ function chipClass(active: boolean) {
   return (
     CHIP_BASE +
     (active
-      ? " border-blue-400/40 bg-blue-500/20 text-blue-100"
-      : " border-white/10 bg-black/20 text-gray-300 hover:border-white/20 hover:bg-white/5")
+      ? " border-blue-400/50 bg-blue-500/25 text-white"
+      : " border-white/10 bg-white/5 text-gray-200 hover:border-white/20 hover:bg-white/10")
   )
 }
 
@@ -72,7 +72,7 @@ export default function ExploreDiscoverBar({
     availability.tradingStyle
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3.5">
       <div className="flex flex-wrap gap-2">
         {EXPLORE_CATEGORY_TABS.map((tab) => (
           <button
@@ -87,7 +87,7 @@ export default function ExploreDiscoverBar({
       </div>
 
       {showSubFilters ? (
-        <div className="space-y-2 border-t border-white/10 pt-3">
+        <div className="space-y-2.5 border-t border-white/10 pt-3.5">
           {availability.session ? (
             <FilterRow label="Session">
               {SESSION_OPTIONS.map((option) => (
@@ -146,8 +146,8 @@ function FilterRow({
   children: React.ReactNode
 }) {
   return (
-    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-      <span className="w-20 shrink-0 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+      <span className="w-20 shrink-0 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
         {label}
       </span>
       <div className="flex min-w-0 flex-1 flex-wrap gap-2">

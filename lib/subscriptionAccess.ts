@@ -11,6 +11,7 @@ import { isProActive } from "./subscription"
 export type SubscriptionAccessProfile = ProfileOnboardingGateFields & {
   id?: string | null
   is_pro?: boolean | null
+  creator_access?: boolean | null
   subscription_status?: string | null
   trial_end?: string | null
   is_beta_tester?: boolean | null
@@ -68,6 +69,7 @@ export const SUBSCRIPTION_GATE_PATH_PREFIXES = [
   "/onboarding",
   "/choose-plan",
   "/reset-password",
+  "/creator",
   "/privacy",
   "/terms",
   "/refund-policy",

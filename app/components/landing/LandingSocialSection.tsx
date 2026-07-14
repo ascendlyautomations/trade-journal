@@ -57,7 +57,7 @@ export default function LandingSocialSection() {
               This isn&apos;t another trading journal.
             </h2>
             <p className={`${LANDING_LEAD} mt-5`}>
-              Where traders connect, share, and grow — with tracking and analytics built in.
+              Where traders connect, share, and grow, with tracking and analytics built in.
             </p>
           </div>
 

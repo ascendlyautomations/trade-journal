@@ -421,7 +421,7 @@ export function SkeletonAnalystPanel({ count = 4 }: { count?: number }) {
     <div
       aria-busy="true"
       aria-label="Loading AI analyst"
-      className="grid grid-cols-1 gap-8 lg:grid-cols-2"
+      className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-6"
     >
       <div className="max-h-[80vh] space-y-3 overflow-hidden rounded-xl border border-white/10 bg-white/5 p-4">
         {Array.from({ length: count }).map((_, i) => (
@@ -486,7 +486,7 @@ export function SkeletonFeedPage({ count = 3 }: { count?: number }) {
 
 export function SkeletonExplorePage() {
   return (
-    <div className="rounded-xl border border-white/10 bg-white/10 p-2.5 backdrop-blur-md md:p-3">
+    <div className="rounded-xl border border-white/10 bg-white/5 p-2.5 backdrop-blur-md md:p-3">
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {Array.from({ length: 6 }).map((_, i) => (
           <SkeletonTraderCard key={i} />

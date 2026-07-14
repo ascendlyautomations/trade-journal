@@ -129,10 +129,9 @@ describe("getting started visibility", () => {
     shouldShowGettingStartedIntroPopup,
   } = require("./gettingStartedChecklist.ts")
 
-  it("offers manual checklist while tasks remain", () => {
+  it("offers navbar checklist while any task remains", () => {
     assert.equal(
       shouldOfferGettingStartedChecklist("user-1", {
-        hasSeenOnboardingCompletePopup: false,
         allComplete: false,
       }),
       true
@@ -142,11 +141,17 @@ describe("getting started visibility", () => {
         hasSeenOnboardingCompletePopup: true,
         allComplete: false,
       }),
+      true
+    )
+    assert.equal(
+      shouldOfferGettingStartedChecklist("user-1", {
+        allComplete: true,
+      }),
       false
     )
   })
 
-  it("auto-shows after profile onboarding while tasks remain", () => {
+  it("auto-shows on dashboard only until first trade", () => {
     assert.equal(
       shouldAutoShowGettingStartedChecklist("user-1", {
         onboardingCompleted: false,
@@ -157,23 +162,35 @@ describe("getting started visibility", () => {
       shouldAutoShowGettingStartedChecklist("user-1", {
         onboardingCompleted: true,
         allComplete: false,
-        hasSeenOnboardingCompletePopup: false,
+        tradeCount: 0,
       }),
       true
     )
     assert.equal(
       shouldAutoShowGettingStartedChecklist("user-1", {
         onboardingCompleted: true,
-        allComplete: true,
+        allComplete: false,
+        tradeCount: 1,
       }),
       false
     )
     assert.equal(
       shouldAutoShowGettingStartedChecklist("user-1", {
         onboardingCompleted: true,
-        hasSeenOnboardingCompletePopup: true,
+        allComplete: true,
+        tradeCount: 0,
       }),
       false
+    )
+    // Stale completion-popup flag must not hide the dashboard card while tasks remain.
+    assert.equal(
+      shouldAutoShowGettingStartedChecklist("user-1", {
+        onboardingCompleted: true,
+        hasSeenOnboardingCompletePopup: true,
+        allComplete: false,
+        tradeCount: 0,
+      }),
+      true
     )
   })
 

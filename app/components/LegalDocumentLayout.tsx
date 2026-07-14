@@ -1,4 +1,4 @@
-import { PAGE_HEADING_LARGE_CLASS } from "@/lib/pageHeadingStyles"
+import { PAGE_HEADING_MARKETING_CLASS } from "@/lib/pageHeadingStyles"
 import Link from "next/link"
 import type { ReactNode } from "react"
 import LegalPageBackButton from "./LegalPageBackButton"
@@ -25,11 +25,11 @@ export default function LegalDocumentLayout({
 }: LegalDocumentLayoutProps) {
   return (
     <>
-      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 pb-16 pt-12 text-gray-100 md:px-6 md:pt-24">
+      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 pb-16 pt-12 text-gray-100 md:px-6 md:pt-[calc(var(--navbar-height)+7px)]">
         <article className="mx-auto max-w-3xl">
           <LegalPageBackButton />
-          <header className="mb-10 text-center">
-            <h1 className={PAGE_HEADING_LARGE_CLASS}>{title}</h1>
+          <header className="mb-10 text-center md:mb-6">
+            <h1 className={PAGE_HEADING_MARKETING_CLASS}>{title}</h1>
             <p className="mt-3 text-sm text-gray-300">{subtitle}</p>
             <p className="mt-2 text-xs text-gray-500">Last updated: {LEGAL_LAST_UPDATED}</p>
           </header>

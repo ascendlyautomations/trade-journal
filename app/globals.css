@@ -139,6 +139,8 @@ input[type="time"]:hover::-webkit-calendar-picker-indicator {
   align-items: center;
   overflow: hidden;
   box-sizing: border-box;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .tt-date-field-input {
@@ -151,6 +153,9 @@ input[type="time"]:hover::-webkit-calendar-picker-indicator {
   padding-right: 2.5rem;
   line-height: 1.5rem;
   box-sizing: border-box;
+  touch-action: manipulation;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 .tt-date-field-input::-webkit-datetime-edit,

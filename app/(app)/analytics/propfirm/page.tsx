@@ -38,11 +38,8 @@ import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { SkeletonAnalyticsPage } from "@/app/components/ui/skeletons"
 import {
   dashboardInsightBodyClass,
-  dashboardInsightCardClass,
-  dashboardInsightLabelClass,
   dashboardInsightMetricNegativeClass,
   dashboardInsightMetricPositiveClass,
-  dashboardInsightTitleClass,
 } from "@/app/components/dashboard/dashboardInsightStyles"
 import { isProActive } from "@/lib/subscription"
 import { formatPnlCurrency } from "@/lib/formatMoney"
@@ -111,13 +108,28 @@ import {
   getDemoPropfirmTrades,
 } from "@/lib/demo/demoPropfirm"
 
-const SECTION_PANEL = dashboardInsightCardClass
+const SECTION_PANEL =
+  "rounded-xl border border-white/10 bg-white/5 p-2.5 backdrop-blur-md md:p-4"
+
+/** Explore / dashboard hierarchy: labels quieter, copy readable, values bright. */
+const PROPFIRM_LABEL_CLASS = "text-gray-400"
+const PROPFIRM_SECONDARY_CLASS = "text-gray-300"
+const PROPFIRM_SECONDARY_MUTED_CLASS = "text-gray-400"
+const PROPFIRM_VALUE_CLASS = "font-semibold text-white"
+const PROPFIRM_SECTION_TITLE_CLASS =
+  "mb-1.5 text-[11px] font-semibold text-blue-300 md:mb-2 md:text-sm"
 
 const INNER_ROW_CLASS =
-  "flex items-center justify-between rounded-lg border border-white/10 bg-white/5 px-2.5 py-2 transition-colors hover:bg-white/[0.07] md:px-3 md:py-2.5"
+  "flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.06] px-2.5 py-2 transition-colors hover:border-white/20 hover:bg-white/[0.09] md:px-3 md:py-2.5"
 
 const RULE_CHIP_CLASS =
-  "flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-2.5 py-2 text-xs transition-colors hover:bg-white/[0.07] md:gap-2.5 md:px-3 md:py-2.5 md:text-sm"
+  "flex items-center gap-2 rounded-lg border px-2.5 py-2 text-xs transition-colors md:gap-2.5 md:px-3 md:py-2.5 md:text-sm"
+const RULE_CHIP_PASSED_CLASS =
+  "border-emerald-500/35 bg-emerald-500/10 text-emerald-300"
+const RULE_CHIP_PENDING_CLASS =
+  "border-amber-500/35 bg-amber-500/10 text-amber-200"
+const RULE_CHIP_FAILED_CLASS =
+  "border-red-500/35 bg-red-500/10 text-red-400"
 
 function PropfirmStat({
   title,
@@ -133,18 +145,20 @@ function PropfirmStat({
   onClick?: () => void
 }) {
   let color = valueClassName ?? "text-white"
-  if (positive === true) color = "text-green-400"
+  if (positive === true) color = "text-emerald-400"
   if (positive === false) color = "text-red-400"
 
-  const className = `flex min-h-[76px] w-full flex-col items-center justify-center rounded-xl border border-white/10 bg-white/10 p-2.5 text-center backdrop-blur-md md:min-h-[90px] md:p-4${
+  const className = `flex min-h-[76px] w-full flex-col items-center justify-center rounded-xl border border-white/10 bg-white/5 p-2.5 text-center backdrop-blur-md md:min-h-[90px] md:p-4${
     onClick
-      ? " cursor-pointer transition hover:border-white/20 hover:bg-white/[0.14] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
+      ? " cursor-pointer transition hover:border-white/20 hover:bg-white/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
       : ""
   }`
 
   const content = (
     <>
-      <p className="mb-1 text-[11px] text-gray-400 md:text-sm">{title}</p>
+      <p className={`mb-1 text-[11px] md:text-sm ${PROPFIRM_LABEL_CLASS}`}>
+        {title}
+      </p>
       <span
         className={`block whitespace-nowrap text-sm font-semibold leading-tight tabular-nums md:text-lg lg:text-xl ${color}`}
       >
@@ -188,7 +202,7 @@ const PROPFIRM_EQUITY_CURVE_SCOPE: PropfirmEquityCurveScope = "lifetime"
 function PropfirmPageShell({ children }: { children: ReactNode }) {
   return (
     <div className="w-full px-3 pb-3 pt-0 text-white md:px-4 md:pb-10">
-      <div className="relative z-0 mx-auto mt-2.5 flex w-full max-w-[1600px] flex-col gap-6 px-1 md:gap-8 md:px-6">
+      <div className="relative z-0 mx-auto mt-4 flex w-full max-w-[1600px] flex-col gap-4 px-1 md:px-6">
         {children}
       </div>
     </div>
@@ -204,10 +218,10 @@ function PropfirmEquityCurve({ data }: { data: PropfirmEquityCurvePoint[] }) {
     <div className={SECTION_PANEL}>
       <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 className="text-xs font-semibold text-blue-300 md:text-base">
+          <h2 className={PROPFIRM_SECTION_TITLE_CLASS}>
             Equity Curve
           </h2>
-          <p className="mt-0.5 text-[11px] text-gray-400 md:text-sm">
+          <p className={`mt-0.5 text-[11px] md:text-sm ${PROPFIRM_SECONDARY_CLASS}`}>
             Lifetime account balance progression by trading day
           </p>
         </div>
@@ -1032,27 +1046,14 @@ export default function PropFirmPage() {
   return (
     <PropfirmPageShell>
       <FeedbackModal {...feedbackModalProps} />
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-blue-300">
-            Analytics
-          </p>
-          <h1 className="mt-0.5 text-xl font-semibold text-blue-300 md:text-3xl">
-            Prop Firm Mode
-          </h1>
-          <p className="mt-1 max-w-2xl text-xs text-gray-400 md:text-base">
-            Track rule progress, drawdown room, and account balance from one
-            stabilized view.
-          </p>
-        </div>
-
         <div className={SECTION_PANEL}>
-          <div
-            className={
-              isEvalAccountSelected
-                ? "grid min-w-0 grid-cols-[minmax(0,1fr)_auto] grid-rows-[auto_auto] gap-x-2 gap-y-2.5 sm:flex sm:flex-row sm:items-center sm:gap-3"
-                : "flex min-w-0 flex-col gap-2.5 sm:flex-row sm:items-center sm:gap-3"
-            }
-          >
+            <div
+              className={
+                isEvalAccountSelected
+                  ? "grid min-w-0 grid-cols-[minmax(0,1fr)_auto] grid-rows-[auto_auto] gap-x-2 gap-y-2.5 sm:flex sm:flex-row sm:items-center sm:gap-3"
+                  : "flex min-w-0 flex-col gap-2.5 sm:flex-row sm:items-center sm:gap-3"
+              }
+            >
               <div
                 className={
                   isEvalAccountSelected
@@ -1084,10 +1085,10 @@ export default function PropFirmPage() {
                 <div
                   className={`col-start-2 row-start-1 inline-flex w-[108px] shrink-0 items-center justify-center self-center rounded-full border px-2.5 py-1.5 text-xs font-semibold md:px-3 md:text-sm ${
                     evalDisplayStatus === "PASSED"
-                      ? "border-green-500/30 bg-green-500/10 text-green-400"
+                      ? "border-emerald-500/35 bg-emerald-500/10 text-emerald-300"
                       : evalDisplayStatus === "FAILED"
-                        ? "border-red-500/30 bg-red-500/10 text-red-400"
-                        : "border-amber-500/30 bg-amber-500/10 text-amber-300"
+                        ? "border-red-500/35 bg-red-500/10 text-red-400"
+                        : "border-amber-500/35 bg-amber-500/10 text-amber-200"
                   }`}
                 >
                   {evalDisplayStatus}
@@ -1143,8 +1144,8 @@ export default function PropFirmPage() {
                 </button>
               ) : null}
               </div>
+            </div>
           </div>
-        </div>
 
         <PropFirmPayoutHistoryModal
           open={payoutHistoryOpen}
@@ -1180,7 +1181,7 @@ export default function PropFirmPage() {
             </div>
           }
         >
-          <p className="text-sm leading-relaxed text-gray-300">
+          <p className={`text-sm leading-relaxed ${PROPFIRM_SECONDARY_CLASS}`}>
             Recording a payout will begin a new payout cycle. Historical trades
             and lifetime statistics will remain unchanged. Current payout cycle
             progress will reset.
@@ -1287,7 +1288,7 @@ export default function PropFirmPage() {
         {loadingTrades ? (
           <SkeletonAnalyticsPage />
         ) : (
-          <>
+          <div className="flex flex-col gap-4">
         {showAccountDashboard && (
           <div
             className={`grid gap-3 ${
@@ -1316,7 +1317,7 @@ export default function PropFirmPage() {
                 !winningDaysRequired
                   ? undefined
                   : winningDaysTargetMet
-                    ? "text-green-400"
+                    ? "text-emerald-400"
                     : "text-amber-300"
               }
             />
@@ -1338,8 +1339,8 @@ export default function PropFirmPage() {
         {showAccountDashboard && (
           <div className={SECTION_PANEL}>
             <div className="mb-3 flex items-center justify-between gap-2">
-              <h2 className={dashboardInsightTitleClass}>Rule Status</h2>
-              <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 text-xs font-medium uppercase tracking-wide text-gray-400">
+              <h2 className={PROPFIRM_SECTION_TITLE_CLASS}>Rule Status</h2>
+              <span className="rounded-full border border-blue-400/30 bg-blue-500/15 px-2.5 py-0.5 text-xs font-medium uppercase tracking-wide text-blue-200">
                 Current Cycle
               </span>
             </div>
@@ -1348,7 +1349,7 @@ export default function PropFirmPage() {
               {Number(selectedAccount?.profit_target) > 0 ? (
                 <div
                   className={`${RULE_CHIP_CLASS} ${
-                    cycleProgress.isPassed ? "text-green-400" : "text-amber-300"
+                    cycleProgress.isPassed ? RULE_CHIP_PASSED_CLASS : RULE_CHIP_PENDING_CLASS
                   }`}
                 >
                   <span aria-hidden>{cycleProgress.isPassed ? "✓" : "○"}</span>
@@ -1363,7 +1364,7 @@ export default function PropFirmPage() {
               {winningDaysRequired ? (
                 <div
                   className={`${RULE_CHIP_CLASS} ${
-                    winningDaysTargetMet ? "text-green-400" : "text-amber-300"
+                    winningDaysTargetMet ? RULE_CHIP_PASSED_CLASS : RULE_CHIP_PENDING_CLASS
                   }`}
                 >
                   <span aria-hidden>{winningDaysTargetMet ? "✓" : "○"}</span>
@@ -1379,8 +1380,8 @@ export default function PropFirmPage() {
                 <div
                   className={`${RULE_CHIP_CLASS} ${
                     cycleConsistencyMetrics.isConsistent
-                      ? "text-green-400"
-                      : "text-amber-300"
+                      ? RULE_CHIP_PASSED_CLASS
+                      : RULE_CHIP_PENDING_CLASS
                   }`}
                 >
                   <span aria-hidden>
@@ -1397,7 +1398,7 @@ export default function PropFirmPage() {
               {maxDdLimit > 0 ? (
                 <div
                   className={`${RULE_CHIP_CLASS} ${
-                    drawdownUsed > maxDdLimit ? "text-red-400" : "text-green-400"
+                    drawdownUsed > maxDdLimit ? RULE_CHIP_FAILED_CLASS : RULE_CHIP_PASSED_CLASS
                   }`}
                 >
                   <span aria-hidden>
@@ -1414,7 +1415,7 @@ export default function PropFirmPage() {
               {Number(selectedAccount?.daily_drawdown) > 0 ? (
                 <div
                   className={`${RULE_CHIP_CLASS} ${
-                    dailyDrawdownBreached ? "text-red-400" : "text-green-400"
+                    dailyDrawdownBreached ? RULE_CHIP_FAILED_CLASS : RULE_CHIP_PASSED_CLASS
                   }`}
                 >
                   <span aria-hidden>
@@ -1432,8 +1433,8 @@ export default function PropFirmPage() {
                 <div
                   className={`${RULE_CHIP_CLASS} ${
                     cycleTrailingMetrics.breachedTrailingDD
-                      ? "text-red-400"
-                      : "text-green-400"
+                      ? RULE_CHIP_FAILED_CLASS
+                      : RULE_CHIP_PASSED_CLASS
                   }`}
                 >
                   <span aria-hidden>
@@ -1452,21 +1453,21 @@ export default function PropFirmPage() {
 
         {showAccountDashboard && (
           <div className={SECTION_PANEL}>
-            <h2 className={`${dashboardInsightTitleClass} mb-3`}>
+            <h2 className={`${PROPFIRM_SECTION_TITLE_CLASS} mb-3`}>
               Account Rules
             </h2>
 
             <div className={`grid gap-x-6 gap-y-2.5 sm:grid-cols-2 ${dashboardInsightBodyClass}`}>
               <div className="flex justify-between gap-3">
-                <span className={dashboardInsightLabelClass}>Account size</span>
-                <span className="font-medium text-gray-100">
+                <span className={PROPFIRM_LABEL_CLASS}>Account size</span>
+                <span className={PROPFIRM_VALUE_CLASS}>
                   {startingBalance > 0 ? formatPropfirmUsd(startingBalance) : "—"}
                 </span>
               </div>
 
               <div className="flex justify-between gap-3">
-                <span className={dashboardInsightLabelClass}>Consistency</span>
-                <span className="font-medium text-gray-100">
+                <span className={PROPFIRM_LABEL_CLASS}>Consistency</span>
+                <span className={PROPFIRM_VALUE_CLASS}>
                   {consistencyRequired
                     ? `${selectedAccount!.consistency}%`
                     : "Does Not Apply"}
@@ -1474,29 +1475,29 @@ export default function PropFirmPage() {
               </div>
 
               <div className="flex justify-between gap-3">
-                <span className={dashboardInsightLabelClass}>Max Drawdown</span>
-                <span className="font-medium text-gray-100">
+                <span className={PROPFIRM_LABEL_CLASS}>Max Drawdown</span>
+                <span className={PROPFIRM_VALUE_CLASS}>
                   ${selectedAccount!.max_drawdown}
                 </span>
               </div>
 
               <div className="flex justify-between gap-3">
-                <span className={dashboardInsightLabelClass}>Daily Drawdown</span>
-                <span className="font-medium text-gray-100">
+                <span className={PROPFIRM_LABEL_CLASS}>Daily Drawdown</span>
+                <span className={PROPFIRM_VALUE_CLASS}>
                   ${selectedAccount!.daily_drawdown}
                 </span>
               </div>
 
               <div className="flex justify-between gap-3">
-                <span className={dashboardInsightLabelClass}>Profit Target</span>
-                <span className="font-medium text-gray-100">
+                <span className={PROPFIRM_LABEL_CLASS}>Profit Target</span>
+                <span className="font-semibold text-emerald-300">
                   ${selectedAccount!.profit_target}
                 </span>
               </div>
 
               <div className="flex justify-between gap-3">
-                <span className={dashboardInsightLabelClass}>Winning Days</span>
-                <span className="font-medium text-gray-100">
+                <span className={PROPFIRM_LABEL_CLASS}>Winning Days</span>
+                <span className={PROPFIRM_VALUE_CLASS}>
                   {selectedAccount!.winning_days != null &&
                   selectedAccount!.winning_days !== ""
                     ? selectedAccount!.winning_days
@@ -1507,10 +1508,10 @@ export default function PropFirmPage() {
               {selectedAccount!.winning_days != null &&
               selectedAccount!.winning_days !== "" ? (
                 <div className="flex justify-between gap-3">
-                  <span className={dashboardInsightLabelClass}>
+                  <span className={PROPFIRM_LABEL_CLASS}>
                     Winning Day Threshold
                   </span>
-                  <span className="font-medium text-gray-100">
+                  <span className={PROPFIRM_VALUE_CLASS}>
                     {selectedAccount!.winning_day_threshold
                       ? `$${selectedAccount!.winning_day_threshold}`
                       : "Any positive day"}
@@ -1523,30 +1524,30 @@ export default function PropFirmPage() {
 
         {showAccountDashboard && (
           <div className={SECTION_PANEL}>
-            <h2 className={`${dashboardInsightTitleClass} mb-3`}>
-              Progress <span className="text-[10px] font-normal text-gray-500 md:text-xs">(current cycle)</span>
+            <h2 className={`${PROPFIRM_SECTION_TITLE_CLASS} mb-3`}>
+              Progress <span className={`text-[10px] font-normal md:text-xs ${PROPFIRM_SECONDARY_MUTED_CLASS}`}>(current cycle)</span>
             </h2>
 
             <div className={`grid gap-x-6 gap-y-2.5 sm:grid-cols-2 ${dashboardInsightBodyClass}`}>
               <div className="flex justify-between gap-3">
-                <span className={dashboardInsightLabelClass}>Cycle P&L</span>
+                <span className={PROPFIRM_LABEL_CLASS}>Cycle P&L</span>
                 <span className={cyclePnL >= 0 ? dashboardInsightMetricPositiveClass : dashboardInsightMetricNegativeClass}>
                   {formatPropfirmUsd(cyclePnL)}
                 </span>
               </div>
 
               <div className="flex justify-between gap-3">
-                <span className={dashboardInsightLabelClass}>Profit Target</span>
-                <span className="font-medium text-gray-200">${selectedAccount!.profit_target}</span>
+                <span className={PROPFIRM_LABEL_CLASS}>Profit Target</span>
+                <span className="font-semibold text-emerald-300">${selectedAccount!.profit_target}</span>
               </div>
 
               <div className="flex justify-between gap-3">
-                <span className={dashboardInsightLabelClass}>Max Drawdown Used</span>
+                <span className={PROPFIRM_LABEL_CLASS}>Max Drawdown Used</span>
                 <span
                   className={
                     maxDdLimit > 0 && drawdownUsed > maxDdLimit
                       ? dashboardInsightMetricNegativeClass
-                      : "font-medium text-gray-200"
+                      : PROPFIRM_VALUE_CLASS
                   }
                 >
                   {formatPropfirmUsd(drawdownUsed)}
@@ -1554,14 +1555,14 @@ export default function PropFirmPage() {
               </div>
 
               <div className="flex justify-between gap-3">
-                <span className={dashboardInsightLabelClass}>Drawdown Floor</span>
-                <span className="font-medium text-gray-200">
+                <span className={PROPFIRM_LABEL_CLASS}>Drawdown Floor</span>
+                <span className={PROPFIRM_VALUE_CLASS}>
                   {formatPropfirmUsd(cycleTrailingMetrics.drawdownFloor)}
                 </span>
               </div>
 
               <div className="flex justify-between gap-3">
-                <span className={dashboardInsightLabelClass}>Today P&L</span>
+                <span className={PROPFIRM_LABEL_CLASS}>Today P&L</span>
                 <span className={lifetimeDailyMetrics.todayPnL >= 0 ? dashboardInsightMetricPositiveClass : dashboardInsightMetricNegativeClass}>
                   {formatPropfirmUsd(lifetimeDailyMetrics.todayPnL)}
                 </span>
@@ -1570,21 +1571,21 @@ export default function PropFirmPage() {
               {consistencyRequired ? (
                 <>
                   <div className="flex justify-between gap-3">
-                    <span className={dashboardInsightLabelClass}>Biggest Trade</span>
-                    <span className="font-medium text-gray-200">
+                    <span className={PROPFIRM_LABEL_CLASS}>Biggest Trade</span>
+                    <span className={PROPFIRM_VALUE_CLASS}>
                       {formatPropfirmUsd(cycleConsistencyMetrics.biggestWin)}
                     </span>
                   </div>
 
                   <div className="flex justify-between gap-3">
-                    <span className={dashboardInsightLabelClass}>Allowed Max</span>
-                    <span className="font-medium text-gray-200">
+                    <span className={PROPFIRM_LABEL_CLASS}>Allowed Max</span>
+                    <span className={PROPFIRM_VALUE_CLASS}>
                       {formatPropfirmUsd(cycleConsistencyMetrics.allowedMax)}
                     </span>
                   </div>
 
                   <div className="flex justify-between gap-3">
-                    <span className={dashboardInsightLabelClass}>Consistency</span>
+                    <span className={PROPFIRM_LABEL_CLASS}>Consistency</span>
                     <span
                       className={
                         cycleConsistencyMetrics.isConsistent
@@ -1603,9 +1604,15 @@ export default function PropFirmPage() {
 
             <div className="mt-4 space-y-3">
               <div>
-                <div className="mb-1.5 flex justify-between text-[11px] text-gray-400 md:text-sm">
+                <div className={`mb-1.5 flex justify-between text-[11px] md:text-sm ${PROPFIRM_SECONDARY_CLASS}`}>
                   <span>Profit target (cycle)</span>
-                  <span className="tabular-nums">{progressPercent.toFixed(0)}%</span>
+                  <span
+                    className={`font-semibold tabular-nums ${
+                      progressPercent >= 100 ? "text-emerald-300" : "text-blue-300"
+                    }`}
+                  >
+                    {progressPercent.toFixed(0)}%
+                  </span>
                 </div>
                 <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
                   <div
@@ -1616,9 +1623,15 @@ export default function PropFirmPage() {
               </div>
 
               <div>
-                <div className="mb-1.5 flex justify-between text-[11px] text-gray-400 md:text-sm">
+                <div className={`mb-1.5 flex justify-between text-[11px] md:text-sm ${PROPFIRM_SECONDARY_CLASS}`}>
                   <span>Drawdown used (cycle)</span>
-                  <span className="tabular-nums">{ddPercent.toFixed(0)}%</span>
+                  <span
+                    className={`font-semibold tabular-nums ${
+                      ddPercent >= 100 ? "text-red-400" : "text-amber-300"
+                    }`}
+                  >
+                    {ddPercent.toFixed(0)}%
+                  </span>
                 </div>
                 <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
                   <div
@@ -1649,12 +1662,12 @@ export default function PropFirmPage() {
         <div className={SECTION_PANEL}>
           <div className="mb-3 flex items-center justify-between gap-2">
             <div>
-              <h2 className={dashboardInsightTitleClass}>Daily Performance</h2>
-              <p className="mt-0.5 text-xs text-gray-400 md:text-sm">
-                Lifetime — aggregated by trading day
+              <h2 className={PROPFIRM_SECTION_TITLE_CLASS}>Daily Performance</h2>
+              <p className={`mt-0.5 text-xs md:text-sm ${PROPFIRM_SECONDARY_CLASS}`}>
+                Lifetime, aggregated by trading day
               </p>
             </div>
-            <span className="shrink-0 rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 text-xs font-medium tabular-nums text-gray-300">
+            <span className="shrink-0 rounded-full border border-white/15 bg-white/[0.07] px-2.5 py-0.5 text-xs font-medium tabular-nums text-gray-200">
               {lifetimeDailyRows.length} days
             </span>
           </div>
@@ -1666,7 +1679,7 @@ export default function PropFirmPage() {
                   key={date}
                   className={INNER_ROW_CLASS}
                 >
-                  <span className="font-medium text-gray-300">{date}</span>
+                  <span className={`font-medium ${PROPFIRM_SECONDARY_CLASS}`}>{date}</span>
                   <span
                     className={
                       pnl >= 0
@@ -1682,7 +1695,7 @@ export default function PropFirmPage() {
                 </div>
               ))
             ) : (
-              <div className="rounded-lg border border-dashed border-white/10 bg-white/5 px-3 py-5 text-center text-xs text-gray-400 md:py-6 md:text-sm">
+              <div className={`rounded-lg border border-dashed border-white/10 bg-white/5 px-3 py-5 text-center text-xs md:py-6 md:text-sm ${PROPFIRM_SECONDARY_CLASS}`}>
                 No daily performance yet.
               </div>
             )}
@@ -1723,7 +1736,7 @@ export default function PropFirmPage() {
             className="py-8"
           />
         ) : null}
-          </>
+          </div>
         )}
     </PropfirmPageShell>
   )

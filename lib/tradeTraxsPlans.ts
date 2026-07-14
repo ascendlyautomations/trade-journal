@@ -59,7 +59,7 @@ export const TRADETRAXS_FREE_PLAN: TradeTraxsPlan = {
   id: "free",
   name: "TradeTraxs Free",
   description:
-    "Track trades manually, explore the community, and review core performance stats — no credit card required.",
+    "Track trades manually, explore the community, and review core performance stats. No credit card required.",
   features: [
     FREE_PLAN_DAILY_TRADE_PRICING_LABEL,
     FREE_PLAN_DAILY_POST_PRICING_LABEL,

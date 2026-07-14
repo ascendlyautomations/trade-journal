@@ -122,7 +122,7 @@ export const TRADETRAXS_FAQ_ITEMS: FaqItem[] = [
   {
     question: "How does AI Analyst work?",
     answer:
-      "AI Analyst looks at the trades and context in your TradeTraxs journal to surface insights about your trading performance. It is designed to support review and reflection—not to place trades or replace your own decision-making.",
+      "AI Analyst looks at the trades and context in your TradeTraxs journal to surface insights about your trading performance. It is designed to support review and reflection, not to place trades or replace your own decision-making.",
   },
   {
     question: "What trading statistics does TradeTraxs calculate?",

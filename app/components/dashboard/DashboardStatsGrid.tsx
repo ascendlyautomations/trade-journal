@@ -157,7 +157,7 @@ function FreeDashboardKpis({
   | "mobileEquitySlot"
 >) {
   return (
-    <div className="flex flex-col gap-3 md:block md:space-y-4">
+    <div className="flex flex-col gap-2 md:block md:space-y-3">
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:gap-3 lg:grid-cols-1 xl:grid-cols-2">
         <Stat
           title="Net P/L"
@@ -223,7 +223,7 @@ export default function DashboardStatsGrid({
   }
 
   return (
-    <div className="flex flex-col gap-3 md:block md:space-y-4">
+    <div className="flex flex-col gap-2 md:block md:space-y-3">
       <div className="grid grid-cols-2 gap-2 md:gap-3">
         <Stat title="Trades" value={formatNumber(totalTrades)} />
         <Stat title="Win %" value={`${winRate.toFixed(1)}%`} />

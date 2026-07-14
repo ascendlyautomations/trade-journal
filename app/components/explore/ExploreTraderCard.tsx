@@ -64,7 +64,7 @@ export default function ExploreTraderCard({
       : null
 
   return (
-    <article className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/10 p-3 backdrop-blur-md transition hover:border-white/20 hover:bg-white/[0.12]">
+    <article className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 p-3 backdrop-blur-md transition hover:border-white/20 hover:bg-white/[0.08]">
       <Link href={href} className="shrink-0">
         <ProfileAvatarImg
           src={profile.avatar_url}
@@ -75,11 +75,11 @@ export default function ExploreTraderCard({
 
       <div className="min-w-0 flex-1">
         <Link href={href} className="block min-w-0">
-          <p className="truncate text-sm font-medium text-gray-100">
+          <p className="truncate text-sm font-semibold text-white">
             {displayName}
           </p>
           {username ? (
-            <p className="truncate text-xs text-gray-400">@{username}</p>
+            <p className="truncate text-xs text-gray-300">@{username}</p>
           ) : null}
         </Link>
         {detailParts.length > 0 ? (
@@ -88,7 +88,7 @@ export default function ExploreTraderCard({
           </p>
         ) : null}
         {followers ? (
-          <p className="mt-0.5 truncate text-xs text-gray-300">{followers}</p>
+          <p className="mt-0.5 truncate text-xs text-gray-400">{followers}</p>
         ) : null}
       </div>
 

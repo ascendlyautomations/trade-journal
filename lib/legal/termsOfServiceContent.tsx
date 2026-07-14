@@ -135,7 +135,7 @@ export const TERMS_OF_SERVICE_SECTIONS: LegalSection[] = [
         <p>
           By submitting User Content, you grant {LEGAL_ENTITY_NAME} a worldwide, non-exclusive,
           royalty-free license to host, store, reproduce, display, distribute, and adapt it solely
-          to operate, improve, and promote the Service — including showing public content to other
+          to operate, improve, and promote the Service, including showing public content to other
           users as you direct through product features.
         </p>
         <p>You further represent that your User Content:</p>
@@ -290,7 +290,7 @@ export const TERMS_OF_SERVICE_SECTIONS: LegalSection[] = [
           models, to generate commentary based on trade data and prompts you provide.
         </p>
         <p>
-          <strong>AI output is for informational and educational purposes only — not financial
+          <strong>AI output is for informational and educational purposes only, not financial
           advice.</strong> AI Analyst output may be inaccurate, incomplete, delayed, or
           incorrect. Responses may take time to generate or fail to generate. You must independently
           verify any information before relying on it.
@@ -319,8 +319,8 @@ export const TERMS_OF_SERVICE_SECTIONS: LegalSection[] = [
             TradeTraxs does not provide investment advice, trading recommendations, or suitability
             analysis.
           </strong>{" "}
-          Content on the Service — including user posts, leaderboard rankings, shared trades, room
-          discussions, and AI-generated text — reflects opinions or records of users or automated
+          Content on the Service, including user posts, leaderboard rankings, shared trades, room
+          discussions, and AI-generated text, reflects opinions or records of users or automated
           systems, not recommendations from {LEGAL_ENTITY_NAME}.
         </p>
         <p>

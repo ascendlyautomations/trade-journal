@@ -54,7 +54,7 @@ export default function TradeScreenshotImage({
       className={`${sizingClass} ${onClick ? "cursor-pointer" : ""} ${className}`}
       style={
         objectFit === "contain" && !fillFrame && maxHeightPx != null
-          ? { maxHeight: `min(70dvh, ${maxHeightPx}px)` }
+          ? { maxHeight: `min(58dvh, ${maxHeightPx}px)` }
           : undefined
       }
       onClick={clickHandler}

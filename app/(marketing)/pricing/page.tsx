@@ -39,6 +39,8 @@ import {
   PRICING_PAGE_WHY_PRO_ITEM,
   PRICING_PAGE_WHY_PRO_LIST,
 } from "@/lib/pricingPlanCardUi"
+import { COMPANY_PAGE_TOP } from "@/lib/companyPageUi"
+import { PAGE_HEADING_MARKETING_CLASS } from "@/lib/pageHeadingStyles"
 
 function CheckIcon({ bright = false }: { bright?: boolean }) {
   return (
@@ -93,20 +95,22 @@ export default function PricingPage() {
   return (
     <>
       <FeedbackModal {...feedbackModalProps} />
-      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 py-14 text-white sm:px-6 sm:py-20">
+      <div
+        className={`min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 pb-14 text-white sm:px-6 sm:pb-20 ${COMPANY_PAGE_TOP}`}
+      >
         <div className="mx-auto flex max-w-5xl flex-col items-center">
-          <h1 className="max-w-3xl text-center text-3xl font-bold leading-tight tracking-tight text-blue-300 sm:text-4xl md:text-5xl">
+          <h1 className={`max-w-3xl text-center leading-tight tracking-tight ${PAGE_HEADING_MARKETING_CLASS}`}>
             Take Your Trading to the Next Level
           </h1>
-          <p className="mt-4 max-w-2xl text-center text-base text-gray-200 sm:text-lg md:text-xl">
+          <p className="mt-2 max-w-2xl text-center text-base text-gray-200 md:mt-3 sm:text-lg md:text-xl">
             Stop guessing. Start tracking, analyzing, and improving with real
             data.
           </p>
-          <p className="mt-6 text-center text-sm font-medium text-teal-300/90 sm:text-base">
+          <p className="mt-3 text-center text-sm font-medium text-teal-300/90 md:mt-4 sm:text-base">
             Trusted by growing traders every day
           </p>
 
-          <div className="mt-14 grid w-full max-w-4xl gap-8 md:grid-cols-2 md:items-start md:gap-10">
+          <div className="mt-8 grid w-full max-w-4xl gap-8 md:mt-10 md:grid-cols-2 md:items-start md:gap-10">
             <div className="order-2 flex w-full flex-col self-start rounded-2xl border border-white/10 bg-white/[0.06] px-8 pt-8 pb-6 opacity-90 shadow-lg backdrop-blur-md md:order-1">
               <h2 className="text-lg font-semibold text-gray-200">{TRADETRAXS_FREE_PLAN.name}</h2>
               <p className="mt-2 text-3xl font-bold tracking-tight text-gray-100">

@@ -868,12 +868,10 @@ export default function NotificationsPage() {
       <div className="w-full text-white px-2 pb-3 pt-0 md:px-4 md:pb-10">
         <div className="relative z-0 mx-auto mt-2.5 flex w-full max-w-xl flex-col gap-3 px-1 md:gap-4 md:px-2">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-blue-300">
+            <p className="text-md font-semibold uppercase tracking-wide text-blue-300">
               Activity
             </p>
-            <h1 className="mt-0.5 text-2xl font-semibold text-blue-300 md:text-3xl">
-              Notifications
-            </h1>
+            
             <p className="mt-1 text-sm text-gray-400">
               Grouped likes, comments, follows, and trade room activity.
             </p>

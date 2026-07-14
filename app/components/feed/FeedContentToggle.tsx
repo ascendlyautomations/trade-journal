@@ -38,7 +38,7 @@ function FeedContentToggle({
           >
             {id === "achievements" ? (
               <>
-                <span className="sm:hidden">🏆</span>
+                <span className="sm:hidden">Achievements</span>
                 <span className="hidden sm:inline">Achievements</span>
               </>
             ) : (

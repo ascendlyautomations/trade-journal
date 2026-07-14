@@ -13,10 +13,10 @@ export const BUG_REPORT_SEVERITY_OPTIONS: {
   value: BugReportSeverity
   label: string
 }[] = [
-  { value: "low", label: "Low — cosmetic or minor" },
-  { value: "medium", label: "Medium — affects workflow" },
-  { value: "high", label: "High — major feature broken" },
-  { value: "critical", label: "Critical — blocker" },
+  { value: "low", label: "Low, cosmetic or minor" },
+  { value: "medium", label: "Medium, affects workflow" },
+  { value: "high", label: "High, major feature broken" },
+  { value: "critical", label: "Critical, blocker" },
 ]
 
 export const BUG_REPORT_STATUS_OPTIONS: {

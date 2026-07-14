@@ -1,5 +1,5 @@
-/** Auth pages — login, password reset. */
-export const AUTH_ROUTE_PREFIXES = ["/login", "/reset-password"] as const
+/** Auth pages — login, password reset, creator invite auth. */
+export const AUTH_ROUTE_PREFIXES = ["/login", "/reset-password", "/creator"] as const
 
 /** Profile setup before app access. */
 export const ONBOARDING_ROUTE_PREFIXES = ["/onboarding", "/choose-plan"] as const

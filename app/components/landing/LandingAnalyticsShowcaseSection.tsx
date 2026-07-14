@@ -37,7 +37,7 @@ export default function LandingAnalyticsShowcaseSection() {
           <div className="w-[94%] max-w-full sm:w-[92%] md:w-[90%] lg:w-[87%]">
             <LandingShowcaseImage
               src="/images/Know_Your_Edge.webp"
-              alt="TradeTraxs analytics — know your edge with performance insights"
+              alt="TradeTraxs analytics, know your edge with performance insights"
               objectPositionClass="object-top"
               size="large"
             />

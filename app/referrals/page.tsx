@@ -227,7 +227,7 @@ export default function ReferralsPage() {
               Your referral link
             </h2>
             <p className="mt-1 text-sm text-gray-400">
-              Share this link — signups will attribute to your account when they register.
+              Share this link. Signups will attribute to your account when they register.
             </p>
             {!referralCode ? (
               <p className="mt-4 text-sm text-amber-200/90">

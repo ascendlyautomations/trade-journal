@@ -390,11 +390,11 @@ function TradeCard({
 
   const tradeDetails = (
     <>
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm text-gray-100">
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 overflow-hidden text-xs text-gray-100 md:text-sm">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span
             className={
-              `shrink-0 text-base font-bold tabular-nums ${
+              `shrink-0 text-sm font-bold tabular-nums md:text-base ${
                 Number.isFinite(pnl)
                   ? pnl >= 0
                     ? "text-emerald-400"
@@ -423,7 +423,7 @@ function TradeCard({
           {accountTypeNorm ? (
             <span
               className={`
-          px-2 py-0.5 text-xs rounded-full font-medium
+          shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium md:text-xs
           ${
             accountTypeNorm === "funded"
               ? "bg-green-500/20 text-green-400 border border-green-400/30"
@@ -439,15 +439,15 @@ function TradeCard({
             </span>
           ) : null}
         </div>
-        <div className="flex shrink-0 items-center gap-3 text-gray-300 tabular-nums">
+        <div className="flex shrink-0 items-center gap-3 text-xs tabular-nums text-gray-300 md:text-sm">
           <span>RR {rr}</span>
           {pointsLabel ? <span>Pts {pointsLabel}</span> : null}
         </div>
       </div>
       {desc ? (
         <ExpandableText
-          className="px-1 text-sm leading-relaxed text-white"
-          textClassName="text-white"
+          className="min-w-0 px-1 text-xs leading-relaxed text-white md:text-sm"
+          textClassName="break-words text-white"
           stopPropagation
         >
           {desc}
@@ -4253,7 +4253,7 @@ function ProfilePageContent() {
       ) : null}
 
       <div className="w-full text-gray-100">
-        <div className="mx-auto max-w-5xl space-y-4 px-4 py-6 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-5xl space-y-4 px-4 pt-4 pb-6 sm:px-6 lg:px-8">
           <div className="relative bg-white/5 border border-white/10 rounded-xl p-6 backdrop-blur-md">
             {currentUserId === profile.id ? (
               <input
@@ -4314,7 +4314,7 @@ function ProfilePageContent() {
                             <button
                               type="button"
                               onClick={() => router.push("/settings#profile")}
-                              className="rounded-md bg-gray-600 px-2 py-1 text-xs text-gray-100 hover:bg-gray-500 md:bg-white/10 md:px-3 md:text-sm md:hover:bg-white/20"
+                              className="rounded-md bg-gray-600 px-2 py-1 text-xs text-gray-100 hover:bg-gray-500 md:bg-white/10 md:px-2 md:py-0.5 md:text-xs md:hover:bg-white/20"
                             >
                               Edit Profile
                             </button>
@@ -4410,17 +4410,10 @@ function ProfilePageContent() {
                               )}`
                             )
                           }
-                          className="px-6"
+                          className="px-4 py-1.5 sm:px-4 sm:py-1.5"
                         >
                           View Trade Room
                         </Button>
-                        <button
-                          type="button"
-                          onClick={() => router.push("/settings#profile")}
-                          className="rounded-md bg-gray-600 px-2 py-1 text-xs text-gray-100 hover:bg-gray-500 sm:hidden"
-                        >
-                          Edit Profile
-                        </button>
                       </div>
                     ) : (
                       <div className="mt-3 flex flex-wrap items-center justify-center gap-2 sm:justify-start">
@@ -4428,16 +4421,9 @@ function ProfilePageContent() {
                           type="button"
                           onClick={() => router.push("/trade-rooms?create=true")}
                           disabled={creatingRoom}
-                          className="rounded-xl bg-blue-500 px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-blue-500"
+                          className="rounded-xl bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-blue-500 sm:px-4 sm:py-1.5"
                         >
                           {creatingRoom ? "Creating…" : "Create Trade Room"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => router.push("/settings#profile")}
-                          className="rounded-md bg-gray-600 px-2 py-1 text-xs text-gray-100 hover:bg-gray-500 sm:hidden"
-                        >
-                          Edit Profile
                         </button>
                       </div>
                     )
@@ -4454,7 +4440,7 @@ function ProfilePageContent() {
                             )}`
                           )
                         }
-                        className="px-6"
+                        className="px-4 py-1.5 sm:px-4 sm:py-1.5"
                       >
                         View Trade Room
                       </Button>
@@ -4464,13 +4450,35 @@ function ProfilePageContent() {
               </div>
 
               {currentUserId === profile.id ? (
-                <div className="absolute right-1 top-3 z-10 sm:relative sm:right-auto sm:top-auto sm:mt-0 sm:flex sm:shrink-0 sm:justify-end sm:pt-1">
+                <div className="absolute right-4 top-4 z-10 flex items-center gap-2 sm:relative sm:right-auto sm:top-auto sm:mt-0 sm:flex sm:shrink-0 sm:justify-end sm:pt-2">
                   <ProfileCreateMenu
                     onCreateStory={openCreateStory}
                     onCreatePost={openCreatePostModal}
                     onCreateReel={openCreateReelModal}
                     onCreateQuickTrade={openQuickTradeModal}
                   />
+                  <button
+                    type="button"
+                    onClick={() => router.push("/settings#profile")}
+                    className="inline-flex items-center justify-center rounded-lg border border-white/10 bg-white/5 p-2 text-gray-100 transition hover:bg-white/10 sm:hidden"
+                    aria-label="Edit Profile"
+                    title="Edit Profile"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.75"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="h-5 w-5"
+                      aria-hidden
+                    >
+                      <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                  </button>
                 </div>
               ) : null}
             </div>
@@ -5475,6 +5483,7 @@ function ProfilePageContent() {
 
       {editingTrade ? (
         <InputTradeForm
+          key={String(editingTrade.id)}
           existingTrade={editingTrade}
           onClose={() => setEditingTrade(null)}
           onSave={() => {

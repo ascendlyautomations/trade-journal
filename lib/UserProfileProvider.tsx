@@ -67,13 +67,14 @@ import { DEMO_USER_ID, isDemoUserId } from "./demo/constants"
  * Avoids duplicate `profiles` reads across Navbar, checklist, and key pages.
  */
 export const USER_PROFILE_SELECT =
-  "id, name, username, bio, is_private, avatar_url, trading_style, trading_model, trader_type, primary_market, started_trading, username_change_count, referral_code, referral_count, is_pro, subscription_status, cancel_at_period_end, cancel_at, trial_end, current_period_end, stripe_customer_id, is_banned, banned_reason, is_beta_tester, use_free_tier, onboarding_completed, has_seen_getting_started_intro, has_seen_onboarding_complete_popup, max_drawdown_limit, has_email_password" as const
+  "id, name, username, bio, is_private, avatar_url, trading_style, trading_model, trader_type, primary_market, started_trading, username_change_count, referral_code, referral_count, is_pro, creator_access, creator_code, creator_granted_at, subscription_status, cancel_at_period_end, cancel_at, trial_end, current_period_end, stripe_customer_id, is_banned, banned_reason, is_beta_tester, use_free_tier, onboarding_completed, has_seen_getting_started_intro, has_seen_onboarding_complete_popup, max_drawdown_limit, has_email_password" as const
 
 export type UserProfileSlice = {
   id: string
   username: string | null
   avatar_url: string | null
   is_pro: boolean | null
+  creator_access: boolean | null
   subscription_status: string | null
   trial_end: string | null
   is_banned: boolean | null
@@ -105,6 +106,7 @@ function pickUserProfileFields(row: unknown): UserProfileSlice | null {
     username: o.username != null ? String(o.username) : null,
     avatar_url: o.avatar_url != null ? String(o.avatar_url) : null,
     is_pro: typeof o.is_pro === "boolean" ? o.is_pro : null,
+    creator_access: typeof o.creator_access === "boolean" ? o.creator_access : null,
     subscription_status:
       o.subscription_status != null ? String(o.subscription_status) : null,
     trial_end: o.trial_end != null ? String(o.trial_end) : null,

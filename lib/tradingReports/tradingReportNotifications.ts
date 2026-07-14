@@ -1,5 +1,6 @@
 import type { TradingReportKind, TradingReportPeriodKey } from "./tradingReportTypes"
 import { tradingReportPeriodId } from "./tradingReportPeriods"
+import { supabaseBearerHeaders } from "@/lib/supabaseBearerFetch"
 
 export async function requestTradingReportNotification(input: {
   periodKey: TradingReportPeriodKey
@@ -9,10 +10,14 @@ export async function requestTradingReportNotification(input: {
   try {
     const periodId = tradingReportPeriodId(input.periodKey)
     const href = `/dashboard?report=${encodeURIComponent(input.periodKey)}`
+    const authHeaders = await supabaseBearerHeaders()
 
     await fetch("/api/trading-reports/notify", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeaders,
+      },
       body: JSON.stringify({
         periodKey: input.periodKey,
         periodId,

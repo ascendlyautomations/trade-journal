@@ -11,7 +11,7 @@ export default function AffiliateProgramHeroApplyButton() {
   if (!user?.id) return null
 
   return (
-    <div className="mt-6 flex justify-center">
+    <div className="mt-4 flex justify-center md:mt-4">
       <button
         type="button"
         onClick={scrollToApplication}

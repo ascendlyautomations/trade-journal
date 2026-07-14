@@ -57,7 +57,7 @@ export default function LandingCommunitySection() {
             <span className={LANDING_TITLE_GRADIENT}>Improve.</span>
           </h2>
           <p className="mt-5 text-lg text-gray-400 md:text-xl">
-            Share trades, study setups, and learn from real breakdowns — right inside the app.
+            Share trades, study setups, and learn from real breakdowns, right inside the app.
           </p>
         </div>
 

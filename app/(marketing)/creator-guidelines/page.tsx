@@ -8,7 +8,7 @@ const SECTIONS = [
       <>
         <p>
           TradeTraxs creators share trades, posts, and clips to educate, document progress, and
-          build authentic trading journeys. Your content helps others learn — and reflects on the
+          build authentic trading journeys. Your content helps others learn, and reflects on the
           community as a whole.
         </p>
         <p>
@@ -96,7 +96,7 @@ const SECTIONS = [
     title: "Encourage Authentic Journeys",
     body: (
       <p>
-        The best creator content documents real growth — wins, losses, and the work in between.
+        The best creator content documents real growth. Wins, losses, and the work in between.
         TradeTraxs is built for traders who value honesty over hype.
       </p>
     ),

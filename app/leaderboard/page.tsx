@@ -352,7 +352,7 @@ export default function Leaderboard() {
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100 px-4 py-6 md:px-8 md:py-8">
         <div className="mx-auto max-w-7xl space-y-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <h1 className="text-2xl font-semibold text-blue-300 md:text-3xl">
+            <h1 className="hidden text-2xl font-semibold text-blue-300 md:block md:text-3xl">
               Leaderboard
             </h1>
             <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">

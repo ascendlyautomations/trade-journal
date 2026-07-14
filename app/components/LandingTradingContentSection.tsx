@@ -12,12 +12,12 @@ import {
 const BLOCKS = [
   {
     title: "Post Your Trades Like Content",
-    body: "Setups, executions, results—the full story, not a screenshot of a PnL cell.",
+    body: "Setups, executions, results. The full story, not a screenshot of a PnL cell.",
     Icon: IconLayers,
   },
   {
     title: "Learn From Real Traders",
-    body: "Watch how others enter, manage, and exit—no cherry-picked highlight clips.",
+    body: "Watch how others enter, manage, and exit. No cherry-picked highlight clips.",
     Icon: IconUsers,
   },
   {
@@ -32,12 +32,12 @@ const BLOCKS = [
   },
   {
     title: "Stay Accountable",
-    body: "Visibility changes the game—discipline stops being optional.",
+    body: "Visibility changes the game. Discipline stops being optional.",
     Icon: IconEye,
   },
   {
     title: "See What Actually Works",
-    body: "Spot patterns across real trades — what wins, what fails, and what to repeat.",
+    body: "Spot patterns across real trades. What wins, what fails, and what to repeat.",
     Icon: IconChartTrend,
   },
 ] as const
@@ -177,7 +177,7 @@ export default function LandingTradingContentSection() {
       </div>
 
       <p className="mx-auto mt-12 max-w-2xl text-center text-sm leading-relaxed text-gray-500">
-        Where trading meets content—and content meets real markets.
+        Where trading meets content, and content meets real markets.
       </p>
     </section>
   )

@@ -894,12 +894,7 @@ export default function MessagesPage() {
 
         <div className="mx-auto flex h-full min-h-0 w-full max-w-3xl flex-col">
 
-          <h1 className="mb-4 shrink-0 text-2xl font-semibold text-blue-300">
-            Messages
-          </h1>
-
-          <div className="mt-2 mb-4 flex shrink-0 justify-start gap-2 md:mt-3">
-            
+          <div className="mb-4 flex shrink-0 justify-start gap-2 pt-4">
             <button
               type="button"
               onClick={openDMModal}

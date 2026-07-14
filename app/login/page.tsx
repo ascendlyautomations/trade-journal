@@ -24,6 +24,12 @@ import {
 import { useUserProfile } from "@/lib/useUserProfile"
 import { prefetchCriticalAppRoutes } from "@/lib/routePrefetch"
 import { startTraxProCheckout } from "@/lib/startTraxProCheckout"
+import {
+  buildCreatorSignupPath,
+  enterCreatorFlow,
+  getPendingCreatorCode,
+  normalizeCreatorAccessCode,
+} from "@/lib/creatorAccess"
 
 function getSafeNextPath(): string | null {
   if (typeof window === "undefined") return null
@@ -116,6 +122,30 @@ export default function LoginPage() {
       setIsBetaSignup(true)
     }
   }, [])
+
+  // Creator invites must never stay on the trial/billing login page.
+  useEffect(() => {
+    if (authLoading || user?.id) return
+
+    const pending = getPendingCreatorCode()
+    if (pending) {
+      router.replace(buildCreatorSignupPath(pending))
+      return
+    }
+
+    const next = getSafeNextPath()
+    if (!next?.startsWith("/creator")) return
+
+    try {
+      const url = new URL(next, window.location.origin)
+      const code = normalizeCreatorAccessCode(url.searchParams.get("code"))
+      if (!code) return
+      enterCreatorFlow(code)
+      router.replace(buildCreatorSignupPath(code))
+    } catch {
+      /* ignore malformed next */
+    }
+  }, [authLoading, user?.id, router])
 
   useEffect(() => {
     if (!shouldStartCheckout() || authLoading) return
@@ -462,7 +492,7 @@ export default function LoginPage() {
                 Thank you again for taking the time to test the platform. I&apos;m excited to hear
                 your feedback and continue building something awesome together.
               </p>
-              <p className="pt-1 font-medium text-amber-100/90"> — Nick</p>
+              <p className="pt-1 font-medium text-amber-100/90">Nick</p>
             </div>
 
             {/* Mobile — teaser + expandable remainder */}
@@ -495,7 +525,7 @@ export default function LoginPage() {
                       Thank you again for taking the time to test the platform. I&apos;m excited to hear
                       your feedback and continue building something awesome together.
                     </p>
-                    <p className="font-medium text-amber-100/90"> — Nick</p>
+                    <p className="font-medium text-amber-100/90">Nick</p>
                   </div>
                 </div>
               </div>

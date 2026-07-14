@@ -18,10 +18,6 @@ import {
 } from "@/lib/csvImportDiagnostics"
 import { buildCsvSupportNotes } from "@/lib/csvImportSupportNotes"
 import { submitCsvSupportRequest } from "@/lib/submitCsvSupportRequest"
-import {
-  INPUT_TRADE_PAGE_TITLE_CLASSNAME,
-  INPUT_TRADE_PAGE_TITLE_ROW_CLASSNAME,
-} from "@/lib/inputTradePageTitle"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { feedbackPresets, persistentSuccess } from "@/lib/feedbackPresets"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
@@ -208,7 +204,7 @@ export default function Home() {
         setCsvDataRowCount(rows.length)
 
         if (unrecognized || parsed.parsedTrades.length === 0) {
-          openFailureModal("Unsupported CSV format — no rows could be imported.")
+          openFailureModal("Unsupported CSV format. No rows could be imported.")
         }
 
         setLoading(false)
@@ -313,10 +309,6 @@ export default function Home() {
 
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100">
         <div className="pt-2 px-4 pb-4 md:px-6 md:pb-5 max-w-8xl mx-auto">
-          <div className={INPUT_TRADE_PAGE_TITLE_ROW_CLASSNAME}>
-            <h1 className={INPUT_TRADE_PAGE_TITLE_CLASSNAME}>Add Trade</h1>
-          </div>
-
           <input
             id={INPUT_TRADE_CSV_INPUT_ID}
             ref={csvInputRef}

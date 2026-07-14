@@ -54,38 +54,38 @@ export const PRIVACY_POLICY_SECTIONS: LegalSection[] = [
         <p>We collect information in the following categories:</p>
         <ul>
           <li>
-            <strong>Account information</strong> — email address, password (stored in hashed form
+            <strong>Account information</strong>, email address, password (stored in hashed form
             by our authentication provider), username, display name, profile details, avatar,
             privacy settings, subscription status, and referral or affiliate identifiers you
             provide or that are assigned to you.
           </li>
           <li>
-            <strong>Trading data</strong> — trades you log or import (including tickers, dates,
+            <strong>Trading data</strong>, trades you log or import (including tickers, dates,
             profit and loss, direction, session, strategy notes, account labels, screenshots, and
             CSV import files), dashboard preferences, and analytics derived from your trading
             activity within the Service.
           </li>
           <li>
-            <strong>User-generated content</strong> — posts, comments, likes, messages, Trade Room
+            <strong>User-generated content</strong>, posts, comments, likes, messages, Trade Room
             messages, stories, achievements, support tickets, feedback, bug reports, and any
             content you choose to make public or share with other users.
           </li>
           <li>
-            <strong>Social and community data</strong> — followers, follow requests, room
+            <strong>Social and community data</strong>, followers, follow requests, room
             memberships, invites, notifications, and interaction history with other users.
           </li>
           <li>
-            <strong>Payment information</strong> — subscription and billing metadata processed by
+            <strong>Payment information</strong>, subscription and billing metadata processed by
             Stripe (such as customer ID, plan, payment status, and transaction records). We do not
             store full payment card numbers on our servers.
           </li>
           <li>
-            <strong>Technical and usage data</strong> — IP address, browser type, device
+            <strong>Technical and usage data</strong>, IP address, browser type, device
             information, log data, pages viewed, feature usage, performance metrics, and similar
             diagnostic information collected through hosting and analytics tools.
           </li>
           <li>
-            <strong>Communications</strong> — messages you send to us (support, feedback, legal
+            <strong>Communications</strong>, messages you send to us (support, feedback, legal
             inquiries) and related metadata.
           </li>
         </ul>
@@ -142,8 +142,8 @@ export const PRIVACY_POLICY_SECTIONS: LegalSection[] = [
     content: (
       <>
         <p>
-          Content you publish — including feed posts, trade shares, comments, profile posts,
-          messages, and Trade Room participation — may be visible to other users according to your
+          Content you publish, including feed posts, trade shares, comments, profile posts,
+          messages, and Trade Room participation, may be visible to other users according to your
           settings and the feature you use.
         </p>
         <p>
@@ -163,13 +163,13 @@ export const PRIVACY_POLICY_SECTIONS: LegalSection[] = [
         <p>We use analytics and performance tools to understand how the Service is used and to improve reliability, including:</p>
         <ul>
           <li>
-            <strong>Vercel Analytics</strong> — aggregated usage and traffic metrics.
+            <strong>Vercel Analytics</strong>, aggregated usage and traffic metrics.
           </li>
           <li>
-            <strong>Vercel Speed Insights</strong> — performance and Core Web Vitals data.
+            <strong>Vercel Speed Insights</strong>, performance and Core Web Vitals data.
           </li>
           <li>
-            <strong>Server and application logs</strong> — error reporting, security monitoring, and
+            <strong>Server and application logs</strong>, error reporting, security monitoring, and
             operational diagnostics through our hosting infrastructure.
           </li>
         </ul>
@@ -192,11 +192,11 @@ export const PRIVACY_POLICY_SECTIONS: LegalSection[] = [
         </p>
         <ul>
           <li>
-            <strong>Essential cookies/storage</strong> — required for authentication, security, and
+            <strong>Essential cookies/storage</strong>, required for authentication, security, and
             core functionality (including Supabase session management).
           </li>
           <li>
-            <strong>Analytics cookies/scripts</strong> — used by Vercel Analytics and Speed Insights
+            <strong>Analytics cookies/scripts</strong>, used by Vercel Analytics and Speed Insights
             as described above.
           </li>
         </ul>
@@ -218,22 +218,22 @@ export const PRIVACY_POLICY_SECTIONS: LegalSection[] = [
         </p>
         <ul>
           <li>
-            <strong>Supabase</strong> — authentication, database, storage, and backend
+            <strong>Supabase</strong>, authentication, database, storage, and backend
             infrastructure.
           </li>
           <li>
-            <strong>Stripe</strong> — subscription billing and affiliate/payout processing where
+            <strong>Stripe</strong>, subscription billing and affiliate/payout processing where
             applicable.
           </li>
           <li>
-            <strong>Vercel</strong> — hosting, deployment, analytics, and speed insights.
+            <strong>Vercel</strong>, hosting, deployment, analytics, and speed insights.
           </li>
           <li>
-            <strong>Google</strong> — optional sign-in (Google OAuth) and Google Workspace for
+            <strong>Google</strong>, optional sign-in (Google OAuth) and Google Workspace for
             business email and operations.
           </li>
           <li>
-            <strong>AI service providers</strong> — when you use AI Analyst, trade context
+            <strong>AI service providers</strong>, when you use AI Analyst, trade context
             you submit may be processed by third-party AI providers, including OpenAI where
             applicable, to generate responses. AI output may be inaccurate, incomplete, delayed, or
             incorrect and is for educational purposes only, not financial advice. Do not submit
@@ -275,18 +275,18 @@ export const PRIVACY_POLICY_SECTIONS: LegalSection[] = [
         <p>We may share information:</p>
         <ul>
           <li>
-            <strong>With other users</strong> — according to your sharing settings and public profile
+            <strong>With other users</strong>, according to your sharing settings and public profile
             choices.
           </li>
           <li>
-            <strong>With service providers</strong> — listed under Third-Party Services.
+            <strong>With service providers</strong>, listed under Third-Party Services.
           </li>
           <li>
-            <strong>For legal reasons</strong> — if required by law, subpoena, or to protect rights,
+            <strong>For legal reasons</strong>, if required by law, subpoena, or to protect rights,
             safety, and integrity of the Service.
           </li>
           <li>
-            <strong>Business transfers</strong> — in connection with a merger, acquisition, or sale
+            <strong>Business transfers</strong>, in connection with a merger, acquisition, or sale
             of assets, subject to continued protection consistent with this policy.
           </li>
         </ul>

@@ -140,7 +140,7 @@ export const ONBOARDING_PAGE_METADATA = buildAppPageMetadata(
 
 export const CHOOSE_PLAN_PAGE_METADATA = buildAppPageMetadata(
   "Choose Your Plan",
-  "Choose your TradeTraxs plan — Free or Pro trading journal.",
+  "Choose your TradeTraxs plan. Free or Pro trading journal.",
   "/choose-plan"
 )
 

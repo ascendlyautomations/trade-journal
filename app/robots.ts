@@ -49,6 +49,7 @@ const DISALLOW_PATHS = [
   "/reset-password",
   "/finish-trial",
   "/login",
+  "/creator",
   "/csv-support",
   "/search",
   "/chat",

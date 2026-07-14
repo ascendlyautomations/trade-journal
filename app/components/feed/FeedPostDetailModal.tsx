@@ -191,11 +191,11 @@ export default function FeedPostDetailModal({
         />
       }
       collapsibleContent={
-        <div className="space-y-3 border-b border-white/10 px-4 py-4 text-sm">
-          <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0 space-y-3 overflow-hidden border-b border-white/10 px-4 py-4 text-xs md:text-sm">
+          <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 md:flex-nowrap">
             <div className="flex min-w-0 items-center gap-3">
               <div
-                className={`shrink-0 text-lg font-semibold tabular-nums ${
+                className={`shrink-0 text-base font-semibold tabular-nums md:text-lg ${
                   modalPostDetails.pnlPositive
                     ? "text-emerald-400"
                     : "text-red-400"
@@ -203,25 +203,25 @@ export default function FeedPostDetailModal({
               >
                 {formatSignedPnlDisplay(modalPostDetails.pnl)}
               </div>
-              <div className="flex min-w-0 items-center gap-2 text-sm font-medium text-white">
-                <span className="truncate">
+              <div className="flex min-w-0 items-center gap-2 text-xs font-medium text-white md:text-sm">
+                <span className="min-w-0 truncate">
                   {modalPostDetails.ticker} • {modalPostDetails.dir}
                 </span>
                 {modalPostDetails.acctNorm ? (
                   <span
-                    className={`rounded-full px-2 py-0.5 text-xs ${getModeStyles(modalPostDetails.acctStyleKey)}`}
+                    className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] md:text-xs ${getModeStyles(modalPostDetails.acctStyleKey)}`}
                   >
                     {modalPostDetails.acctNorm}
                   </span>
                 ) : null}
               </div>
             </div>
-            <div className="flex shrink-0 items-center gap-2 text-sm text-gray-300">
+            <div className="flex shrink-0 items-center gap-2 text-xs text-gray-300 md:text-sm">
               {post.rr != null && post.rr !== "" ? (
                 <span className="tabular-nums">RR {formatRR(post.rr)}</span>
               ) : null}
               {modalPostDetails.points !== null ? (
-                <span className="rounded-md bg-white/10 px-2 py-0.5 text-gray-200">
+                <span className="rounded-md bg-white/10 px-2 py-0.5 text-[10px] text-gray-200 md:text-sm">
                   {formatPoints(modalPostDetails.points)} pts
                 </span>
               ) : null}
@@ -230,8 +230,8 @@ export default function FeedPostDetailModal({
 
           {modalPostDetails.publicDesc ? (
             <ExpandableText
-              className="text-sm leading-relaxed text-white"
-              textClassName="text-white"
+              className="min-w-0 text-xs leading-relaxed text-white md:text-sm"
+              textClassName="break-words text-white"
             >
               {modalPostDetails.publicDesc}
             </ExpandableText>

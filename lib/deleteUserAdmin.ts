@@ -1034,6 +1034,14 @@ export async function deleteUserAdmin(
       targetUserId
     )
   )
+  await runLoggedStep(targetUserId, "Creator code redemptions cleanup", () =>
+    tryDeleteWhere(
+      step(targetUserId, "Creator code redemptions cleanup", "creator_code_redemptions"),
+      supabase,
+      "user_id",
+      targetUserId
+    )
+  )
   await runLoggedStep(targetUserId, "User accounts cleanup", () =>
     tryDeleteWhere(
       step(targetUserId, "User accounts cleanup", "user_accounts"),

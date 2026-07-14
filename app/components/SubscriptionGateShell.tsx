@@ -8,6 +8,10 @@ import {
   isSubscriptionGateSuspended,
   needsSubscriptionCheckout,
 } from "@/lib/subscriptionAccess"
+import {
+  buildCreatorRedeemPath,
+  getPendingCreatorCode,
+} from "@/lib/creatorAccess"
 
 /**
  * Blocks app access until standard users complete Stripe checkout.
@@ -29,6 +33,13 @@ export default function SubscriptionGateShell({
     if (isSubscriptionGateSuspended(user.id, { membershipReconciling })) return
     if (!needsSubscriptionCheckout(profile)) return
     if (isAllowedPathWithoutSubscription(pathname)) return
+
+    const pendingCreatorCode = getPendingCreatorCode()
+    if (pendingCreatorCode) {
+      router.replace(buildCreatorRedeemPath(pendingCreatorCode))
+      return
+    }
+
     router.replace("/finish-trial")
   }, [loading, user, profile, pathname, router, membershipReconciling])
 

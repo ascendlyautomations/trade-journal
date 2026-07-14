@@ -88,7 +88,7 @@ const RAW_FEED_ROWS: Record<string, unknown>[] = [
       duration_seconds: 1080,
       duration_text: "18m",
       public_description:
-        "Clean opening drive long — waited for liquidity sweep, entered on 1m BOS. Took partials at VWAP extension.",
+        "Clean opening drive long. Waited for liquidity sweep, entered on 1m BOS. Took partials at VWAP extension.",
       reels: {
         id: "demo-reel-1",
         user_id: DEMO_USER_ID,
@@ -152,7 +152,7 @@ const RAW_FEED_ROWS: Record<string, unknown>[] = [
       duration_seconds: 600,
       duration_text: "10m",
       public_description:
-        "Took a loss today — rushed entry before confirmation. Journal notes saved for review.",
+        "Took a loss today. Rushed entry before confirmation. Journal notes saved for review.",
     },
   },
   {
@@ -178,7 +178,7 @@ const RAW_FEED_ROWS: Record<string, unknown>[] = [
       trade_date: isoTradeTime(3, 9).slice(0, 10),
       duration_seconds: 1200,
       duration_text: "20m",
-      public_description: "London open continuation — held through first pullback with plan intact.",
+      public_description: "London open continuation. Held through first pullback with plan intact.",
     },
   },
   {
@@ -204,7 +204,7 @@ const RAW_FEED_ROWS: Record<string, unknown>[] = [
       trade_date: isoTradeTime(4, 13).slice(0, 10),
       duration_seconds: 720,
       duration_text: "12m",
-      public_description: "Afternoon fade into close — textbook mean reversion setup.",
+      public_description: "Afternoon fade into close. Textbook mean reversion setup.",
     },
   },
   {
@@ -230,7 +230,7 @@ const RAW_FEED_ROWS: Record<string, unknown>[] = [
       trade_date: isoTradeTime(5, 10).slice(0, 10),
       duration_seconds: 960,
       duration_text: "16m",
-      public_description: "Passed my eval last week — sharing the trade that put me over profit target.",
+      public_description: "Passed my eval last week. Sharing the trade that put me over profit target.",
     },
   },
   {
@@ -247,7 +247,7 @@ const RAW_FEED_ROWS: Record<string, unknown>[] = [
     id: "demo-profile-2",
     user_id: DEMO_USER_SARAH,
     content:
-      "Just hit 5 winning days on my eval — consistency rule was the hardest part. Tracking everything in Prop Firm Mode helped.",
+      "Just hit 5 winning days on my eval. Consistency rule was the hardest part. Tracking everything in Prop Firm Mode helped.",
     image_url: demoPostImageUrl("demo-profile-2"),
     created_at: isoTradeTime(1, 16),
     room_id: null,
@@ -333,7 +333,7 @@ const RAW_FEED_ROWS: Record<string, unknown>[] = [
     created_at: isoTradeTime(1, 15),
     trades: {
       id: "dt-24",
-      public_description: "NQ opening drive — liquidity sweep and BOS entry.",
+      public_description: "NQ opening drive, liquidity sweep and BOS entry.",
       is_public: true,
       ticker: "NQ",
       direction: "Long",
@@ -345,7 +345,7 @@ const RAW_FEED_ROWS: Record<string, unknown>[] = [
   {
     id: "demo-reel-2",
     user_id: DEMO_USER_ALEX,
-    caption: "How I Passed My Eval — rule tracking workflow",
+    caption: "How I Passed My Eval, rule tracking workflow",
     video_url:
       "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
     thumbnail_url: demoReelThumbnailUrl("demo-reel-2"),
@@ -359,7 +359,7 @@ const RAW_FEED_ROWS: Record<string, unknown>[] = [
   {
     id: "demo-reel-3",
     user_id: DEMO_USER_ELI,
-    caption: "3 Mistakes From Last Week — journal review",
+    caption: "3 Mistakes From Last Week, journal review",
     video_url:
       "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4",
     thumbnail_url: demoReelThumbnailUrl("demo-reel-3"),
@@ -415,7 +415,7 @@ export const DEMO_FEED_COMMENTS: Record<string, any[]> = {
       id: "demo-comment-1",
       post_id: "demo-post-1",
       user_id: DEMO_USER_ALEX,
-      content: "Clean execution — that BOS entry was textbook.",
+      content: "Clean execution. That BOS entry was textbook.",
       created_at: isoTradeTime(0, 11),
       profiles: profileFor(DEMO_USER_ALEX),
     },
@@ -433,7 +433,7 @@ export const DEMO_FEED_COMMENTS: Record<string, any[]> = {
       id: "demo-comment-3",
       post_id: "demo-post-2",
       user_id: DEMO_USER_ID,
-      content: "Nice reversal — been waiting for that level all week.",
+      content: "Nice reversal. Been waiting for that level all week.",
       created_at: isoTradeTime(1, 12),
       profiles: profileFor(DEMO_USER_ID),
     },
@@ -453,7 +453,7 @@ export const DEMO_FEED_COMMENTS: Record<string, any[]> = {
       id: "demo-comment-5",
       reel_id: "demo-reel-1",
       user_id: DEMO_USER_MIKE,
-      content: "This breakdown helped my morning routine — thanks!",
+      content: "This breakdown helped my morning routine. Thanks!",
       created_at: isoTradeTime(1, 16),
       profiles: profileFor(DEMO_USER_MIKE),
     },
@@ -463,7 +463,7 @@ export const DEMO_FEED_COMMENTS: Record<string, any[]> = {
       id: "demo-comment-6",
       reel_id: "demo-reel-2",
       user_id: DEMO_USER_SARAH,
-      content: "This eval workflow is exactly what I needed — saving this.",
+      content: "This eval workflow is exactly what I needed. Saving this.",
       created_at: isoTradeTime(3, 11),
       profiles: profileFor(DEMO_USER_SARAH),
     },
@@ -473,7 +473,7 @@ export const DEMO_FEED_COMMENTS: Record<string, any[]> = {
       id: "demo-comment-7",
       reel_id: "demo-reel-3",
       user_id: DEMO_USER_JORDAN,
-      content: "Honest review — appreciate the transparency on the losses.",
+      content: "Honest review. Appreciate the transparency on the losses.",
       created_at: isoTradeTime(6, 12),
       profiles: profileFor(DEMO_USER_JORDAN),
     },

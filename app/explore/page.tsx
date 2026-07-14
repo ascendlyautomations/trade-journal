@@ -21,7 +21,6 @@ import {
   type ExploreProfile,
 } from "@/lib/exploreDiscover"
 import {
-  categoryTabFromTraderType,
   discoverFilterAvailability,
   EXPLORE_DEFAULT_FILTERS,
   filterExploreProfiles,
@@ -50,10 +49,13 @@ const SEARCH_PROFILE_FIELDS =
 const SEARCH_MIN_CHARS = 2
 
 const PANEL_CLASS =
-  "rounded-xl border border-white/10 bg-white/10 p-2.5 backdrop-blur-md md:p-3"
+  "rounded-xl border border-white/10 bg-white/5 p-2.5 backdrop-blur-md md:p-3"
 
 const SEARCH_INPUT_CLASS =
-  "w-full rounded-xl border border-white/10 bg-black/30 p-3 text-sm text-white placeholder:text-gray-500 focus:border-blue-400/50 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+  "min-w-0 flex-1 rounded-xl border border-white/15 bg-black/40 p-3 text-sm text-white placeholder:text-gray-400 focus:border-blue-400/50 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+
+const FILTER_TOGGLE_CLASS =
+  "inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/5 px-3 py-3 text-sm font-medium text-white transition hover:bg-white/10"
 
 type TradeMetaRow = {
   user_id: string
@@ -63,9 +65,8 @@ type TradeMetaRow = {
 }
 
 export default function ExplorePage() {
-  const { user, profile: viewerProfile } = useUserProfile()
+  const { user } = useUserProfile()
   const initialLoadDone = useRef(false)
-  const defaultCategorySet = useRef(false)
   const [loading, setLoading] = useState(true)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [followingIds, setFollowingIds] = useState<Set<string>>(new Set())
@@ -78,6 +79,9 @@ export default function ExplorePage() {
   >({})
   const [discoverFilters, setDiscoverFilters] =
     useState<ExploreDiscoverFilters>(EXPLORE_DEFAULT_FILTERS)
+  const [draftFilters, setDraftFilters] =
+    useState<ExploreDiscoverFilters>(EXPLORE_DEFAULT_FILTERS)
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const [search, setSearch] = useState("")
   const [results, setResults] = useState<
     Pick<ExploreProfile, "id" | "username" | "name" | "avatar_url" | "is_private">[]
@@ -102,14 +106,19 @@ export default function ExplorePage() {
     discoverFilters.market,
   ])
 
-  useEffect(() => {
-    if (defaultCategorySet.current || !viewerProfile?.trader_type) return
-    defaultCategorySet.current = true
-    setDiscoverFilters((prev) => ({
-      ...prev,
-      category: categoryTabFromTraderType(viewerProfile.trader_type),
-    }))
-  }, [viewerProfile?.trader_type])
+  function toggleFiltersPanel() {
+    if (filtersOpen) {
+      setFiltersOpen(false)
+      return
+    }
+    setDraftFilters(discoverFilters)
+    setFiltersOpen(true)
+  }
+
+  function applyDiscoverFilters() {
+    setDiscoverFilters(draftFilters)
+    setFiltersOpen(false)
+  }
 
   async function loadTradeMetaRows() {
     if (isDemoModeActive()) {
@@ -481,33 +490,52 @@ export default function ExplorePage() {
   return (
     <div className="w-full px-2 pb-3 pt-0 text-white md:px-4 md:pb-10">
       <div className="relative z-0 mx-auto mt-2.5 flex w-full max-w-7xl flex-col gap-3 px-1 md:gap-4 md:px-6">
-        <header>
-          <p className="text-xs font-semibold uppercase tracking-wide text-blue-300">
-            Discover
-          </p>
-          <h1 className="mt-0.5 text-2xl font-semibold text-blue-300 md:text-3xl">
+        <header className="hidden md:block">
+          <h1 className="text-lg font-semibold text-white md:text-xl">
             Explore
           </h1>
-          <p className="mt-1 text-sm text-gray-400">
-            Find traders to follow by market, style, and session.
-          </p>
         </header>
 
         <section className={`${PANEL_CLASS} relative z-20`}>
-          <label htmlFor="explore-search" className="sr-only">
-            Search traders
-          </label>
-          <input
-            id="explore-search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by username or display name…"
-            className={SEARCH_INPUT_CLASS}
-          />
+          <div className="flex items-stretch gap-2">
+            <label htmlFor="explore-search" className="sr-only">
+              Search traders
+            </label>
+            <input
+              id="explore-search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by username or display name…"
+              className={SEARCH_INPUT_CLASS}
+            />
+            <button
+              type="button"
+              onClick={toggleFiltersPanel}
+              aria-expanded={filtersOpen}
+              aria-controls="explore-filters-panel"
+              aria-label="Filter"
+              className={FILTER_TOGGLE_CLASS}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.75"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-5 w-5 shrink-0"
+                aria-hidden
+              >
+                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+              </svg>
+              <span className="hidden md:inline">Filter</span>
+            </button>
+          </div>
 
           {search.trim().length > 0 &&
           search.trim().length < SEARCH_MIN_CHARS ? (
-            <p className="mt-2 text-xs text-gray-500">
+            <p className="mt-2 text-xs text-gray-400">
               Type at least {SEARCH_MIN_CHARS} characters to search.
             </p>
           ) : null}
@@ -569,11 +597,11 @@ export default function ExplorePage() {
                       className="h-10 w-10 shrink-0 border border-white/10"
                     />
                     <div className="min-w-0">
-                      <p className="truncate font-medium text-gray-100">
+                      <p className="truncate font-semibold text-white">
                         {result.name?.trim() || result.username}
                       </p>
                       {result.username ? (
-                        <p className="truncate text-xs text-gray-400">
+                        <p className="truncate text-xs text-gray-300">
                           @{result.username}
                         </p>
                       ) : null}
@@ -595,15 +623,27 @@ export default function ExplorePage() {
           ) : null}
         </section>
 
-        {!loading ? (
-          <section className={PANEL_CLASS}>
+        {filtersOpen && !loading ? (
+          <section
+            id="explore-filters-panel"
+            className={PANEL_CLASS}
+          >
             <ExploreDiscoverBar
-              filters={discoverFilters}
+              filters={draftFilters}
               onChange={(patch) =>
-                setDiscoverFilters((prev) => ({ ...prev, ...patch }))
+                setDraftFilters((prev) => ({ ...prev, ...patch }))
               }
               availability={filterAvailability}
             />
+            <div className="mt-3.5 flex justify-end border-t border-white/10 pt-3">
+              <button
+                type="button"
+                onClick={applyDiscoverFilters}
+                className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600"
+              >
+                Apply Filters
+              </button>
+            </div>
           </section>
         ) : null}
 
@@ -632,7 +672,7 @@ export default function ExplorePage() {
           />
         ) : (
           <section className={PANEL_CLASS}>
-            <p className="mb-3 text-xs text-gray-400">
+            <p className="mb-3 text-xs text-gray-300">
               Showing {visibleTraders.length.toLocaleString()} of{" "}
               {displayedTraders.length.toLocaleString()} trader
               {displayedTraders.length === 1 ? "" : "s"}

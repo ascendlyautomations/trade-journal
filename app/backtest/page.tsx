@@ -329,7 +329,7 @@ export default function BacktestPage() {
             })}
             {Object.keys(strategyMap).length === 0 ? (
               <p className="text-sm text-gray-400">
-                No strategy labels yet — add a strategy name on backtest trades.
+                No strategy labels yet. Add a strategy name on backtest trades.
               </p>
             ) : null}
           </div>
@@ -369,6 +369,7 @@ export default function BacktestPage() {
 
       {editingTrade ? (
         <InputTradeForm
+          key={String(editingTrade.id)}
           existingTrade={editingTrade}
           onClose={() => setEditingTrade(null)}
           onSave={() => {

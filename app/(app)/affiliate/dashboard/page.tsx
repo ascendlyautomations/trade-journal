@@ -352,7 +352,7 @@ export default function AffiliateDashboard() {
 
               {referralCode && (
                 <div className="mb-6 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-50">
-                  You&apos;re set up as an affiliate. Share your link below — your code is{" "}
+                  You&apos;re set up as an affiliate. Share your link below. Your code is{" "}
                   <span className="font-mono font-semibold text-white">{referralCode}</span>.
                 </div>
               )}
@@ -370,7 +370,7 @@ export default function AffiliateDashboard() {
                     ${recordedEarnings.toFixed(2)}
                   </p>
                   <p className="mt-2 text-xs text-gray-500">
-                    {Math.round(COMMISSION_RATE * 100)}% of paid TraxPro invoices — recorded from Stripe
+                    {Math.round(COMMISSION_RATE * 100)}% of paid TraxPro invoices, recorded from Stripe
                     commissions.
                   </p>
                 </div>
@@ -393,7 +393,7 @@ export default function AffiliateDashboard() {
                     {trialUserCount}
                   </p>
                   <p className="mt-2 text-xs text-amber-100/60">
-                    Referred users currently in a free trial — no commission yet.
+                    Referred users currently in a free trial, no commission yet.
                   </p>
                 </div>
                 <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-5 backdrop-blur-md">
@@ -411,7 +411,7 @@ export default function AffiliateDashboard() {
                     {cancelledSubscriberCount}
                   </p>
                   <p className="mt-2 text-xs text-red-100/60">
-                    Subscriptions ended or inactive — no future commissions.
+                    Subscriptions ended or inactive, no future commissions.
                   </p>
                 </div>
               </div>
@@ -535,7 +535,7 @@ export default function AffiliateDashboard() {
 
               {latestApp?.status === "approved" && (
                 <div className="mb-6 rounded-xl border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm text-amber-50">
-                  You&apos;re approved — add a requested code on your next application or contact support if
+                  You&apos;re approved. Add a requested code on your next application or contact support if
                   your referral code hasn&apos;t appeared yet.
                 </div>
               )}

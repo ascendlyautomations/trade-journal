@@ -291,7 +291,7 @@ export default function AffiliatePayoutsPage() {
               </h1>
               <p className="mt-1 text-sm text-gray-400">
                 Total earnings reflect recorded Stripe commissions ({Math.round(COMMISSION_RATE * 100)}% of paid
-                invoices). Payout request statuses reserve or consume balance — not Stripe settlement timing. You
+                invoices). Payout request statuses reserve or consume balance, not Stripe settlement timing. You
                 need at least{" "}
                 <strong className="text-gray-200">${minimumPayout.toFixed(0)}</strong>{" "}
                 <span className="text-gray-500">available</span> before you can submit a payout request.
@@ -335,7 +335,7 @@ export default function AffiliatePayoutsPage() {
             <>
               {balanceRpcError ? (
                 <div className="mb-6 rounded-xl border border-red-400/40 bg-red-500/15 px-4 py-3 text-sm text-red-100">
-                  Could not load payout balance ({balanceRpcError}). Try Refresh — if this persists, the payout balance
+                  Could not load payout balance ({balanceRpcError}). Try Refresh. If this persists, the payout balance
                   function may need to be applied on the database.
                 </div>
               ) : null}
@@ -353,7 +353,7 @@ export default function AffiliatePayoutsPage() {
                     ${formatMoney(totalEarnings)}
                   </p>
                   <p className="mt-1 text-xs text-gray-500">
-                    Cumulative commission from paid TraxPro invoices — matches the Affiliate dashboard.
+                    Cumulative commission from paid TraxPro invoices. Matches the Affiliate dashboard.
                   </p>
                   <p className="mt-2 border-t border-white/10 pt-2 text-xs text-gray-400">
                     Paid out via completed requests (status paid):{" "}
@@ -414,8 +414,8 @@ export default function AffiliatePayoutsPage() {
                   Your affiliate profile isn&apos;t fully linked yet. Contact support or visit{" "}
                   <Link href="/affiliate/dashboard" className="font-medium text-blue-300 underline hover:text-blue-200">
                     Affiliate Dashboard
-                  </Link>{" "}
-                  — payout requests unlock once your account is connected.
+                  </Link>
+                  . Payout requests unlock once your account is connected.
                 </div>
               ) : null}
 
@@ -448,7 +448,7 @@ export default function AffiliatePayoutsPage() {
                   You need at least <strong className="text-white">${minimumPayout.toFixed(0)}</strong> available to
                   request a payout. You currently have{" "}
                   <span className="tabular-nums font-semibold text-white">${formatMoney(availableToRequest)}</span>{" "}
-                  available — keep earning referrals until you reach the minimum.
+                  available. Keep earning referrals until you reach the minimum.
                 </div>
               ) : null}
 
@@ -473,8 +473,8 @@ export default function AffiliatePayoutsPage() {
                             ? `You need at least $${minimumPayout.toFixed(0)} available to request a payout.`
                             : payoutBalance && availableToRequest <= 0
                               ? pendingReserved > 0.001
-                                ? `Nothing left to request — $${formatMoney(pendingReserved)} reserved by pending request(s).`
-                                : `Nothing left to request — remaining balance is consumed by approved or paid requests.`
+                                ? `Nothing left to request. $${formatMoney(pendingReserved)} reserved by pending request(s).`
+                                : `Nothing left to request. Remaining balance is consumed by approved or paid requests.`
                               : null}
                   </span>
                 ) : null}

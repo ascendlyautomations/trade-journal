@@ -31,7 +31,7 @@ const DEMO_MESSAGES: DemoMessageRow[] = [
     id: "demo-msg-1",
     conversation_id: DEMO_CONVERSATION_ALEX,
     sender_id: DEMO_USER_ALEX,
-    content: "Hey Maya — loved your NQ opening drive breakdown. What timeframe do you use for the sweep?",
+    content: "Hey Maya, loved your NQ opening drive breakdown. What timeframe do you use for the sweep?",
     created_at: isoDemoDaysAgo(0, 9),
     seen_by: [DEMO_USER_ID],
     profiles: {
@@ -55,7 +55,7 @@ const DEMO_MESSAGES: DemoMessageRow[] = [
     id: "demo-msg-3",
     conversation_id: DEMO_CONVERSATION_ALEX,
     sender_id: DEMO_USER_ALEX,
-    content: "Makes sense. I'll try that tomorrow — appreciate the detail.",
+    content: "Makes sense. I'll try that tomorrow. Appreciate the detail.",
     created_at: isoDemoDaysAgo(0, 10),
     seen_by: [DEMO_USER_ID],
     profiles: {
@@ -67,7 +67,7 @@ const DEMO_MESSAGES: DemoMessageRow[] = [
     id: "demo-msg-4",
     conversation_id: DEMO_CONVERSATION_JORDAN,
     sender_id: DEMO_USER_JORDAN,
-    content: "Rough session today — rushed my entry before confirmation. Your journal template helped me spot the mistake though.",
+    content: "Rough session today. Rushed my entry before confirmation. Your journal template helped me spot the mistake though.",
     created_at: isoDemoDaysAgo(1, 14),
     seen_by: [DEMO_USER_ID],
     profiles: {
@@ -79,7 +79,7 @@ const DEMO_MESSAGES: DemoMessageRow[] = [
     id: "demo-msg-5",
     conversation_id: DEMO_CONVERSATION_JORDAN,
     sender_id: DEMO_USER_ID,
-    content: "Happens to everyone. Write down the trigger you skipped — that's the lesson for next time.",
+    content: "Happens to everyone. Write down the trigger you skipped. That's the lesson for next time.",
     created_at: isoDemoDaysAgo(1, 15),
     seen_by: [DEMO_USER_ID, DEMO_USER_JORDAN],
     profiles: {
@@ -91,7 +91,7 @@ const DEMO_MESSAGES: DemoMessageRow[] = [
     id: "demo-msg-6",
     conversation_id: DEMO_CONVERSATION_GROUP,
     sender_id: DEMO_USER_SARAH,
-    content: "Morning desk is live — who's trading NQ today?",
+    content: "Morning desk is live. Who's trading NQ today?",
     created_at: isoDemoDaysAgo(0, 8),
     seen_by: [DEMO_USER_ID],
     profiles: {

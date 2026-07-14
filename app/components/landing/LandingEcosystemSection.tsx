@@ -29,7 +29,7 @@ const ECOSYSTEM = [
   },
   {
     title: "Trade Rooms",
-    description: "Trade alongside your network — live discussion, shared context.",
+    description: "Trade alongside your network. Live discussion, shared context.",
     tag: "Social",
   },
   {
@@ -54,7 +54,7 @@ const ECOSYSTEM = [
   },
   {
     title: "Performance Dashboard",
-    description: "Understand what’s working — and what’s quietly costing you.",
+    description: "Understand what’s working, and what’s quietly costing you.",
     tag: "Analytics",
   },
   {
@@ -64,7 +64,7 @@ const ECOSYSTEM = [
   },
   {
     title: "Prop Firm Mode",
-    description: "Stay funded — track rules, drawdown, and payout progress.",
+    description: "Stay funded. Track rules, drawdown, and payout progress.",
     tag: "TraxPro",
   },
   {
@@ -100,7 +100,7 @@ export default function LandingEcosystemSection() {
             Community at the center. Everything else connected.
           </h2>
           <p className={`${LANDING_LEAD} mx-auto mt-6`}>
-            Journaling and analytics are powerful — but they&apos;re one part of a bigger picture.
+            Journaling and analytics are powerful, but they&apos;re one part of a bigger picture.
             TradeTraxs ties social, tracking, and insight together so you grow faster together.
           </p>
         </div>

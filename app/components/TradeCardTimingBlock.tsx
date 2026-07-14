@@ -12,7 +12,7 @@ type TradeCardTimingBlockProps = {
 
 export default function TradeCardTimingBlock({
   trade,
-  className = "text-xs text-gray-400",
+  className = "text-[11px] leading-snug text-gray-400 md:text-xs md:leading-normal",
   onViewReel,
 }: TradeCardTimingBlockProps) {
   const timing = useMemo(() => buildTradeTimingPresentation(trade), [trade])
@@ -22,13 +22,15 @@ export default function TradeCardTimingBlock({
   }
 
   return (
-    <div className={className}>
-      <div className="space-y-0.5">
-        {timing.priceRow ? <p>{timing.priceRow}</p> : null}
+    <div className={`min-w-0 overflow-hidden ${className}`.trim()}>
+      <div className="min-w-0 space-y-0">
+        {timing.priceRow ? (
+          <p className="min-w-0 break-words">{timing.priceRow}</p>
+        ) : null}
         {timing.dateTimeRow || onViewReel ? (
-          <div className="flex items-start justify-between gap-3">
+          <div className="flex min-w-0 items-start justify-between gap-3">
             {timing.dateTimeRow ? (
-              <p className="min-w-0 flex-1">{timing.dateTimeRow}</p>
+              <p className="min-w-0 flex-1 break-words">{timing.dateTimeRow}</p>
             ) : (
               <span className="flex-1" aria-hidden />
             )}

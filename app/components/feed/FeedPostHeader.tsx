@@ -44,7 +44,7 @@ function FeedPostHeader({
     ) : null)
 
   const className =
-    "flex cursor-pointer items-center gap-3 border-b border-white/5 p-4 transition-colors" +
+    "flex cursor-pointer items-center gap-3 border-b border-white/5 px-4 py-2.5 transition-colors" +
     (preview ? "" : " hover:bg-white/5")
 
   const inner = (
@@ -54,7 +54,7 @@ function FeedPostHeader({
         className="h-10 w-10 shrink-0 ring-2 ring-white/10"
       />
       <div className="min-w-0">
-        <p className="truncate text-sm font-semibold text-white sm:text-base">
+        <p className="truncate text-sm font-semibold text-white md:text-base">
           {username}
         </p>
         {metaRow}

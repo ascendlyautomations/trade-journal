@@ -182,12 +182,12 @@ function TradesPageTradeCard({
   )
 
   return (
-    <div className="w-full bg-white/5 border border-white/10 backdrop-blur-md px-2 py-3 md:px-4 rounded-xl shadow hover:border-white/20 transition-colors duration-200">
+    <div className="w-full min-w-0 overflow-hidden bg-white/5 border border-white/10 backdrop-blur-md px-2 py-3 md:px-4 rounded-xl shadow hover:border-white/20 transition-colors duration-200">
       <div className="flex flex-col gap-2.5 md:flex-row">
-        <div className="min-w-0 flex-1 space-y-1 text-base text-gray-200">
+        <div className="min-w-0 flex-1 space-y-1 overflow-hidden text-sm text-gray-200 md:text-base">
           <div className="flex items-center justify-between gap-1.5 md:hidden">
-            <h2 className="min-w-0 flex-1 text-lg font-semibold leading-tight">
-              <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-0.5">
+            <h2 className="min-w-0 flex-1 text-base font-semibold leading-tight md:text-lg">
+              <span className="inline-flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
                 {tradeTitle}
               </span>
             </h2>
@@ -208,7 +208,7 @@ function TradesPageTradeCard({
           />
 
           <div
-            className={`inline-block px-3 py-1 rounded-lg text-lg font-bold mt-1 ${
+            className={`mt-1 inline-block rounded-lg px-3 py-1 text-base font-bold md:text-lg ${
               (Number(trade.pnl) || 0) >= 0
                 ? "bg-green-500/20 text-green-400"
                 : "bg-red-500/20 text-red-400"
@@ -217,32 +217,32 @@ function TradesPageTradeCard({
             {formatMoneyUnknown(trade.pnl)}
           </div>
 
-          <div className="flex gap-2 mt-2 flex-wrap">
-            <span className="bg-white/10 px-2 py-1 rounded text-xs">
+          <div className="mt-2 flex flex-wrap gap-2">
+            <span className="rounded bg-white/10 px-2 py-1 text-[10px] md:text-xs">
               RR: {formatNumberUnknown(trade.rr)}
             </span>
 
-            <span className="bg-white/10 px-2 py-1 rounded text-xs">
+            <span className="rounded bg-white/10 px-2 py-1 text-[10px] md:text-xs">
               Pts: {formatTradePoints(trade)}
             </span>
 
             {isCopyTradedTrade(trade) ? <CopyTradedBadge /> : null}
           </div>
 
-          <p className="text-sm">
+          <p className="text-xs md:text-sm">
             <span className="text-gray-400">Contracts:</span>{" "}
             {trade.contracts != null
               ? Number(trade.contracts).toLocaleString()
               : "-"}
           </p>
-          <p className="text-sm">
+          <p className="text-xs md:text-sm">
             <span className="text-gray-400">Session:</span> {trade.session}
           </p>
 
-          <div className="mt-1 flex flex-wrap items-center gap-2">
+          <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2">
             {trade.mode !== "backtest" && trade.account_type ? (
               <span
-                className={`px-2 py-0.5 text-xs rounded-full font-medium ${
+                className={`rounded-full px-2 py-0.5 text-[10px] font-medium md:text-xs ${
                   acctLower === "funded"
                     ? "bg-green-500/20 text-green-400"
                     : acctLower === "eval"
@@ -259,14 +259,14 @@ function TradesPageTradeCard({
             ) : null}
 
             {acctLower === "backtest" ? (
-              <span className="rounded bg-blue-500 px-2 py-1 text-xs text-white">
+              <span className="rounded bg-blue-500 px-2 py-1 text-[10px] text-white md:text-xs">
                 Backtest
               </span>
             ) : null}
 
             {hasAccountLine ? (
-              <div className="flex items-center gap-2 text-sm text-gray-300">
-                <span>{accountNameSizeLine}</span>
+              <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-gray-300 md:text-sm">
+                <span className="min-w-0 break-words">{accountNameSizeLine}</span>
                 {accountNumberDisplay ? (
                   <span className="opacity-70">
                     • #{accountNumberDisplay}
@@ -276,13 +276,13 @@ function TradesPageTradeCard({
             ) : null}
 
             {!trade.account_type && !hasAccountLine ? (
-              <span className="text-xs text-gray-500">—</span>
+              <span className="text-[10px] text-gray-500 md:text-xs">—</span>
             ) : null}
           </div>
 
           {trade.public_description ? (
             <ExpandableText
-              className="mt-2 text-sm text-gray-300"
+              className="mt-2 min-w-0 text-xs text-gray-300 md:text-sm"
               label="Public Description:"
               stopPropagation
             >
@@ -291,47 +291,49 @@ function TradesPageTradeCard({
           ) : null}
 
           {trade.strategy ? (
-            <p className="text-xs text-gray-400">Strategy: {trade.strategy}</p>
+            <p className="break-words text-[10px] text-gray-400 md:text-xs">
+              Strategy: {trade.strategy}
+            </p>
           ) : null}
 
           {trade.notes ? (
             <ExpandableText
-              className="text-sm text-gray-300"
+              className="min-w-0 text-xs text-gray-300 md:text-sm"
               label="Notes:"
               stopPropagation
             >
               {trade.notes}
             </ExpandableText>
           ) : (
-            <p className="text-sm">
+            <p className="text-xs md:text-sm">
               <span className="text-gray-400">Notes:</span> -
             </p>
           )}
 
           {showAdvanced ? (
-            <div className="mt-3 text-sm text-gray-300 space-y-1 border-t border-white/10 pt-3">
-              <p className="text-sm">
+            <div className="mt-3 space-y-1 border-t border-white/10 pt-3 text-xs text-gray-300 md:text-sm">
+              <p>
                 <span className="text-gray-400">Entry:</span>{" "}
                 {formatTradePrice(entryPrice)}
               </p>
-              <p className="text-sm">
+              <p>
                 <span className="text-gray-400">Exit:</span>{" "}
                 {formatTradePrice(exitPrice)}
               </p>
-              <p className="text-sm">
+              <p>
                 <span className="text-gray-400">Entry Time:</span>{" "}
                 {formatTradeClockTime(trade.entry_time, {
                   sameDayAs: trade.created_at,
                 })}
               </p>
-              <p className="text-sm">
+              <p>
                 <span className="text-gray-400">Exit Time:</span>{" "}
                 {formatTradeClockTime(trade.exit_time, {
                   sameDayAs: trade.created_at,
                 })}
               </p>
               {showDuration ? (
-                <p className="text-sm">
+                <p>
                   <span className="text-gray-400">Duration:</span>{" "}
                   {durationDisplay}
                 </p>
@@ -352,61 +354,61 @@ function TradesPageTradeCard({
           </div>
 
           {hasPsychology ? (
-            <div className="mt-3 space-y-1">
-              <p className="text-sm text-gray-400 mb-2">Psychology</p>
+            <div className="mt-3 space-y-1 text-xs md:text-sm">
+              <p className="mb-2 text-xs text-gray-400 md:text-sm">Psychology</p>
               {trade.confidence != null && trade.confidence !== "" ? (
-                <p className="text-sm text-gray-300">
+                <p className="text-gray-300">
                   <span className="text-gray-400">Confidence:</span>{" "}
                   {trade.confidence}
                 </p>
               ) : null}
               {trade.emotion != null && String(trade.emotion).trim() !== "" ? (
-                <p className="text-sm text-gray-300">
+                <p className="text-gray-300">
                   <span className="text-gray-400">Emotion:</span> {trade.emotion}
                 </p>
               ) : null}
               {trade.followed_plan != null ? (
-                <p className="text-sm text-gray-300">
+                <p className="text-gray-300">
                   <span className="text-gray-400">Followed Plan:</span>{" "}
                   {trade.followed_plan ? "Yes" : "No"}
                 </p>
               ) : null}
               {trade.mistake_type != null &&
               String(trade.mistake_type).trim() !== "" ? (
-                <p className="text-sm text-gray-300">
+                <p className="text-gray-300">
                   <span className="text-gray-400">Mistake:</span>{" "}
                   {trade.mistake_type}
                 </p>
               ) : null}
               {trade.market_condition != null &&
               String(trade.market_condition).trim() !== "" ? (
-                <p className="text-sm text-gray-300">
+                <p className="text-gray-300">
                   <span className="text-gray-400">Market:</span>{" "}
                   {trade.market_condition}
                 </p>
               ) : null}
               {trade.timeframe != null && String(trade.timeframe).trim() !== "" ? (
-                <p className="text-sm text-gray-300">
+                <p className="text-gray-300">
                   <span className="text-gray-400">Timeframe:</span>{" "}
                   {trade.timeframe}
                 </p>
               ) : null}
               {trade.news_event != null ? (
-                <p className="text-sm text-gray-300">
+                <p className="text-gray-300">
                   <span className="text-gray-400">News Event:</span>{" "}
                   {trade.news_event ? "Yes" : "No"}
                 </p>
               ) : null}
               {trade.trade_type != null &&
               String(trade.trade_type).trim() !== "" ? (
-                <p className="text-sm text-gray-300">
+                <p className="text-gray-300">
                   <span className="text-gray-400">Type:</span> {trade.trade_type}
                 </p>
               ) : null}
               {trade.psychology_notes != null &&
               String(trade.psychology_notes).trim() !== "" ? (
                 <ExpandableText
-                  className="mt-2 text-sm text-gray-300"
+                  className="mt-2 min-w-0 text-xs text-gray-300 md:text-sm"
                   label="Psych Notes:"
                   stopPropagation
                 >
@@ -423,13 +425,15 @@ function TradesPageTradeCard({
           src={screenshotUrl}
           alt=""
           maxHeightClassName={TRADE_PAGE_SCREENSHOT_MAX_HEIGHT_CLASS}
-          className="mt-4 rounded-lg"
+          className="mx-auto mt-4 block rounded-lg"
           onClick={() => onImageClick(screenshotUrl)}
         />
       ) : null}
 
       {trade.created_at ? (
-        <p className="text-xs text-gray-400 mt-3">{formatEST(trade.created_at)}</p>
+        <p className="mt-3 text-[10px] text-gray-400 md:text-xs">
+          {formatEST(trade.created_at)}
+        </p>
       ) : null}
     </div>
   )

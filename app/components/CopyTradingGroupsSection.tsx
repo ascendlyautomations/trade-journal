@@ -256,7 +256,7 @@ export default function CopyTradingGroupsSection({
                         </ul>
                       ) : (
                         <p className="mt-2 text-sm text-amber-200/90">
-                          No linked accounts — edit this group to add accounts.
+                          No linked accounts. Edit this group to add accounts.
                         </p>
                       )}
                     </div>

@@ -9,7 +9,7 @@ const DEMO_ACHIEVEMENT_RECORDS: Achievement[] = [
     user_id: DEMO_USER_ID,
     achievement_type: ACHIEVEMENT_TYPE.PROP_FIRM_PAYOUT,
     title: "First Prop Firm Payout",
-    description: "Apex 150K funded account — first withdrawal",
+    description: "Apex 150K funded account. First withdrawal",
     badge_key: "prop_payout",
     tier: "gold",
     category: "prop_firm_payouts",

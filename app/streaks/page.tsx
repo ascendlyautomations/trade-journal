@@ -20,7 +20,7 @@ export default function StreaksPage() {
         <div className="mx-auto max-w-6xl space-y-6">
           <header className="rounded-xl border border-white/10 bg-white/5 p-5 md:p-6">
             <h1 className="text-2xl font-semibold text-blue-300 md:text-3xl">
-              🔥 Streaks
+              Streaks
             </h1>
             <p className="mt-2 max-w-3xl text-sm leading-relaxed text-gray-300 md:text-base">
               Build consistency one day at a time. Track your trading habits and
@@ -35,7 +35,7 @@ export default function StreaksPage() {
           ) : (
             <div className="grid gap-5 lg:grid-cols-3 lg:gap-6">
               <StreakCard
-                icon="📈"
+                
                 title="Trading Journal Streak"
                 description="Log at least one trade each weekday. Weekends never break your streak."
                 stats={
@@ -50,7 +50,7 @@ export default function StreaksPage() {
                 loading={loading}
               />
               <StreakCard
-                icon="📝"
+               
                 title="Posting Streak"
                 description="Share at least one public trade, post, or clip each weekday. Weekends are free."
                 stats={
@@ -65,7 +65,7 @@ export default function StreaksPage() {
                 loading={loading}
               />
               <StreakCard
-                icon="🏆"
+                
                 title="Winning Streak"
                 description="Consecutive winning trades. Break-even trades do not reset your streak."
                 stats={

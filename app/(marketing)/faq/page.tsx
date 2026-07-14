@@ -4,8 +4,9 @@ import { useMemo, useState } from "react"
 import Fuse, { type IFuseOptions } from "fuse.js"
 import FaqQuestionModal from "@/app/components/marketing/FaqQuestionModal"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
-import { TRADETRAXS_FAQ_ITEMS, type FaqItem } from "@/lib/faqContent"
 import { COMPANY_PAGE_TOP } from "@/lib/companyPageUi"
+import { PAGE_HEADING_MARKETING_CLASS } from "@/lib/pageHeadingStyles"
+import { TRADETRAXS_FAQ_ITEMS, type FaqItem } from "@/lib/faqContent"
 
 const fuseOptions: IFuseOptions<FaqItem> = {
   includeScore: true,
@@ -45,10 +46,10 @@ export default function FAQPage() {
       <div
         className={`min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-6 pb-12 text-white ${COMPANY_PAGE_TOP}`}
       >
-        <h1 className="mb-2 text-center text-3xl font-bold text-blue-300">
+        <h1 className={`mb-2 text-center ${PAGE_HEADING_MARKETING_CLASS}`}>
           FAQ
         </h1>
-        <p className="mb-6 text-center text-sm text-gray-400">
+        <p className="mb-4 text-center text-sm text-gray-400 md:mb-5">
           Quick answers about TradeTraxs
         </p>
 

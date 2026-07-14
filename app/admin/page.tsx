@@ -329,7 +329,7 @@ export default function AdminPage() {
             <AdminModuleCard
               href="/admin/payout-requests"
               title="Affiliate payout requests"
-              description="Placeholder — affiliate-submitted payout requests (table ready; review UI next phase)."
+              description="Placeholder. Affiliate-submitted payout requests (table ready; review UI next phase)."
               variant="emerald"
             />
             <AdminModuleCard

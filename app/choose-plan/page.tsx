@@ -12,6 +12,7 @@ import {
   setCheckoutBillingInterval,
   setSignupIntent,
 } from "@/lib/signupFlow"
+import { getPendingCreatorCode, isCreatorFlowActive, buildCreatorSignupPath } from "@/lib/creatorAccess"
 import {
   TRAXPRO_DEFAULT_BILLING_INTERVAL,
   type TraxProBillingIntervalId,
@@ -28,13 +29,24 @@ export default function ChoosePlanPage() {
   useEffect(() => {
     if (loading) return
     if (!user) {
-      router.replace("/login?tab=signup")
+      const pendingCreatorCode = getPendingCreatorCode()
+      router.replace(
+        pendingCreatorCode
+          ? buildCreatorSignupPath(pendingCreatorCode)
+          : "/login?tab=signup"
+      )
       return
     }
     if (!profile) return
 
     if (!profileNeedsOnboarding(profile)) {
       router.replace(resolvePostAuthAppPath(profile))
+      return
+    }
+
+    // Creator invite: profile setup only — never Choose Plan / billing.
+    if (isCreatorFlowActive() || getPendingCreatorCode()) {
+      router.replace("/onboarding")
       return
     }
 

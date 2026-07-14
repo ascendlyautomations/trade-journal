@@ -34,13 +34,14 @@ function computeTooltipPosition(
   return { top, left }
 }
 
-/** Compact ? help — hover on desktop, tap toggle on mobile. */
+/** Compact ? help — hover on desktop, tap/click toggle everywhere. */
 export default function HelpHint({ body, className }: HelpHintProps) {
   const [open, setOpen] = useState(false)
   const [hoverCapable, setHoverCapable] = useState(false)
   const [position, setPosition] = useState<TooltipPosition | null>(null)
   const rootRef = useRef<HTMLSpanElement>(null)
-  const triggerRef = useRef<HTMLSpanElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const tooltipRef = useRef<HTMLSpanElement>(null)
   const tooltipId = useId()
 
   useEffect(() => {
@@ -85,15 +86,18 @@ export default function HelpHint({ body, className }: HelpHintProps) {
     if (!open) return
 
     function handlePointerDown(event: PointerEvent) {
-      if (!rootRef.current?.contains(event.target as Node)) {
-        setOpen(false)
-      }
+      const target = event.target as Node | null
+      if (!target) return
+      if (rootRef.current?.contains(target)) return
+      if (tooltipRef.current?.contains(target)) return
+      setOpen(false)
     }
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") setOpen(false)
     }
 
+    // Bubble phase so the trigger's stopPropagation can keep the tip open.
     document.addEventListener("pointerdown", handlePointerDown)
     document.addEventListener("keydown", handleKeyDown)
     return () => {
@@ -107,6 +111,7 @@ export default function HelpHint({ body, className }: HelpHintProps) {
   const tooltip =
     open && position ? (
       <span
+        ref={tooltipRef}
         id={tooltipId}
         role="tooltip"
         style={{
@@ -114,7 +119,8 @@ export default function HelpHint({ body, className }: HelpHintProps) {
           left: position.left,
           width: TOOLTIP_WIDTH_PX,
         }}
-        className="pointer-events-none fixed z-[1100] rounded-lg border border-white/15 bg-[#0f172a] px-3 py-2.5 text-left shadow-lg"
+        // Above Getting Started drawers (z-[10000]) and other app chrome.
+        className="pointer-events-none fixed z-[11000] rounded-lg border border-white/15 bg-[#0f172a] px-3 py-2.5 text-left shadow-lg"
       >
         <span className="block text-xs font-semibold text-gray-100">How?</span>
         {bodyParagraphs.map((paragraph, index) => (
@@ -142,20 +148,24 @@ export default function HelpHint({ body, className }: HelpHintProps) {
         if (hoverCapable) setOpen(false)
       }}
     >
-      <span
+      <button
         ref={triggerRef}
-        role="button"
-        tabIndex={0}
+        type="button"
         aria-label="Help"
         aria-expanded={open}
         aria-describedby={open ? tooltipId : undefined}
         onPointerDown={(event) => {
+          // Keep parent Link/button from treating this as a row activation.
+          event.preventDefault()
           event.stopPropagation()
         }}
         onClick={(event) => {
           event.preventDefault()
           event.stopPropagation()
-          if (!hoverCapable) toggleOpen()
+          // Desktop: click must open (do not toggle-closed after hover already opened).
+          // Mobile: tap toggles open/closed.
+          if (hoverCapable) setOpen(true)
+          else toggleOpen()
         }}
         onKeyDown={(event) => {
           if (event.key === "Enter" || event.key === " ") {
@@ -167,7 +177,7 @@ export default function HelpHint({ body, className }: HelpHintProps) {
         className="inline-flex h-5 w-5 cursor-pointer items-center justify-center rounded-full border border-white/20 text-[11px] font-semibold leading-none text-gray-400 transition hover:border-white/35 hover:text-gray-200"
       >
         ?
-      </span>
+      </button>
       {typeof document !== "undefined" && tooltip
         ? createPortal(tooltip, document.body)
         : null}

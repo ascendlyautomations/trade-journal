@@ -169,7 +169,7 @@ export default function BugReportModal({
 
         {success ? (
           <p className="rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
-            Thanks — your report was submitted.
+            Thanks. Your report was submitted.
           </p>
         ) : (
           <form className="space-y-1" onSubmit={(e) => void handleSubmit(e)}>

@@ -557,7 +557,7 @@ export default function AdminUsersPage() {
 
             {listError ? (
               <p className="mt-3 text-sm text-red-300">
-                {listError} — ensure migrations for <code className="rounded bg-black/30 px-1">admin_list_users</code>{" "}
+                {listError}. Ensure migrations for <code className="rounded bg-black/30 px-1">admin_list_users</code>{" "}
                 are applied.
               </p>
             ) : null}
@@ -1037,7 +1037,7 @@ export default function AdminUsersPage() {
               <div>
                 <h2 className="text-lg font-semibold text-red-100">Delete selected users</h2>
                 <p className="mt-1 text-sm text-gray-400">
-                  Pre-beta cleanup — uses the same permanent delete workflow as single-user deletion.
+                  Pre-beta cleanup. Uses the same permanent delete workflow as single-user deletion.
                 </p>
               </div>
               <button
@@ -1080,7 +1080,7 @@ export default function AdminUsersPage() {
                       {bulkDeleteOutcome.skipped.map((u) => (
                         <li key={u.id}>
                           <span className="font-medium text-white">{u.username}</span>
-                          <span className="text-gray-500"> — {u.reason}</span>
+                          <span className="text-gray-500">, {u.reason}</span>
                         </li>
                       ))}
                     </ul>

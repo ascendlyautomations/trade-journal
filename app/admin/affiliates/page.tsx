@@ -199,7 +199,7 @@ export default function AdminAffiliateApplicationsPage() {
     if (o) return o.toUpperCase()
     const req = selected?.requested_code?.trim()
     if (req) return req.toUpperCase()
-    return "— will be auto-generated from username + 3 digits"
+    return "Will be auto-generated from username + 3 digits"
   }, [finalCodeOverride, selected?.requested_code])
 
   async function handleApprove() {
@@ -268,7 +268,7 @@ export default function AdminAffiliateApplicationsPage() {
       setTab("approved")
       setSuccessBanner({
         message: `Affiliate approved successfully${
-          json.code ? ` — code ${json.code}` : ""
+          json.code ? `, code ${json.code}` : ""
         }. New codes use a 10% first-invoice discount (duration once).`,
         variant: "success",
       })
@@ -459,7 +459,7 @@ export default function AdminAffiliateApplicationsPage() {
               <div>
                 <dt className="text-xs text-gray-500">Requested affiliate code</dt>
                 <dd className="font-mono text-emerald-200">
-                  {selected.requested_code?.trim() || "— (none — auto on approve if no override)"}
+                  {selected.requested_code?.trim() || "(none, auto on approve if no override)"}
                 </dd>
               </div>
               <div>
@@ -536,7 +536,7 @@ export default function AdminAffiliateApplicationsPage() {
                   </label>
                   <label className="block">
                     <span className="text-xs text-gray-400">
-                      Stripe promo code ID (optional — leave blank to auto-create a 10% once promo)
+                      Stripe promo code ID (optional, leave blank to auto-create a 10% once promo)
                     </span>
                     <input
                       type="text"

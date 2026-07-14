@@ -1,6 +1,5 @@
 "use client"
 import Link from "next/link"
-import EmptyState from "../components/ui/EmptyState"
 import { SkeletonCalendarPage } from "../components/ui/skeletons"
 import TradesPageTradeCard from "../components/TradesPageTradeCard"
 import TradesPageOverlays from "../components/TradesPageOverlays"
@@ -371,7 +370,7 @@ export default function CalendarPage() {
   return (
     <>
 
-      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white py-6">
+      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white pt-3 pb-6">
 
         <div className="max-w-7xl mx-auto w-full px-4">
 
@@ -379,22 +378,6 @@ export default function CalendarPage() {
             <SkeletonCalendarPage />
           ) : (
             <>
-          {trades.length === 0 ? (
-            <EmptyState
-              title="No Trades Yet"
-              description="Start tracking your performance by logging your first trade."
-              action={
-                <Link
-                  href="/app"
-                  className="text-sm font-medium text-blue-300 hover:text-blue-200"
-                >
-                  Add Trade →
-                </Link>
-              }
-              className="mb-6 py-10"
-            />
-          ) : null}
-
           <div className="grid grid-cols-1 md:grid-cols-[2fr_1.4fr] gap-4 md:gap-8 items-start">
 
           {/* LEFT SIDE (CALENDAR) */}
@@ -472,6 +455,9 @@ export default function CalendarPage() {
             {/* CALENDAR GRID */}
             <div className="space-y-2">
               {weeks.map((week, weekIndex) => {
+                const weekHasDays = week.some((day) => day != null)
+                if (!weekHasDays) return null
+
                 const weekTotal = Number(getWeekTotal(week) ?? 0)
                 const mobileWeek = week.filter((day, dayIndex) => {
                   if (day === null) {
@@ -499,7 +485,11 @@ export default function CalendarPage() {
                       )}
                     </div>
 
-                    <div className="relative z-0 w-full flex justify-center mt-1 md:mt-2 pointer-events-none">
+                    <div
+                      className={`relative z-0 mt-1 w-full justify-end md:mt-2 pointer-events-none ${
+                        hideMobileWeek ? "hidden md:flex" : "flex"
+                      }`}
+                    >
                       <span
                         className={`rounded-full px-3 py-1 text-xs md:text-sm font-semibold ${
                           weekTotal >= 0
@@ -567,13 +557,25 @@ export default function CalendarPage() {
                 <>
                   <h3 className="text-blue-400 font-semibold mb-3">Monthly Stats</h3>
 
-                  <div className="space-y-2 text-sm">
-                    <p>Total Trades: {totalTrades}</p>
-                    <p>Win Rate: {winRate.toFixed(1)}%</p>
-                    <p className={totalPnL > 0 ? "text-emerald-400" : totalPnL < 0 ? "text-red-400" : ""}>
-                      Total P&L: {formatPNL(totalPnL)}
-                    </p>
-                  </div>
+                  {trades.length === 0 ? (
+                    <div className="space-y-2 text-sm">
+                      <p className="text-gray-400">No trades yet</p>
+                      <Link
+                        href="/app"
+                        className="inline-block text-sm font-medium text-blue-300 hover:text-blue-200"
+                      >
+                        Add Trade →
+                      </Link>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 text-sm">
+                      <p>Total Trades: {totalTrades}</p>
+                      <p>Win Rate: {winRate.toFixed(1)}%</p>
+                      <p className={totalPnL > 0 ? "text-emerald-400" : totalPnL < 0 ? "text-red-400" : ""}>
+                        Total P&L: {formatPNL(totalPnL)}
+                      </p>
+                    </div>
+                  )}
                 </>
               )}
             </div>

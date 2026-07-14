@@ -26,7 +26,7 @@ export type LandingComparisonRow = {
 }
 
 export const LANDING_COMPARISON_SUBTITLE =
-  "TradeTraxs combines powerful analytics, AI-powered insights, social trading, and professional journaling into one complete platform—something most trading journals simply don't offer."
+  "TradeTraxs combines powerful analytics, AI-powered insights, social trading, and professional journaling into one complete platform, something most trading journals simply don't offer."
 
 export const LANDING_COMPARISON_MOBILE_PREVIEW_COUNT = 3
 

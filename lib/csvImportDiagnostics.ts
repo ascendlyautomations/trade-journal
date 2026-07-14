@@ -173,7 +173,7 @@ const OPTIONAL_FLEX_FIELDS: LogicalField[] = [
 function buildRrImportNote(row: CsvRow): string {
   const header = findCsvRrColumnHeader(row)
   if (header) return `✓ Risk:Reward column detected (${header})`
-  return "Risk:Reward not found — skipped."
+  return "Risk:Reward not found. Skipped."
 }
 
 function collectDetectedColumns(row: CsvRow, format: CsvFileFormat): string[] {

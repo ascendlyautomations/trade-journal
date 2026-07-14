@@ -377,7 +377,7 @@ function buildOpportunities(trades: any[], metrics: TradingReportMetrics): strin
   const lossesAfterWins = detectLossesAfterWinStreak(trades)
   if (lossesAfterWins >= 2) {
     opportunities.push(
-      `${lossesAfterWins} losing trades followed consecutive winners — watch for overconfidence.`
+      `${lossesAfterWins} losing trades followed consecutive winners. Watch for overconfidence.`
     )
   }
 
@@ -402,13 +402,13 @@ function buildOpportunities(trades: any[], metrics: TradingReportMetrics): strin
 
   if (metrics.averageRr != null && metrics.averageRr < 1 && metrics.tradesTaken >= 3) {
     opportunities.push(
-      `Average Risk:Reward was ${formatRR(metrics.averageRr)} — review exits and stop placement.`
+      `Average Risk:Reward was ${formatRR(metrics.averageRr)}. Review exits and stop placement.`
     )
   }
 
   if (metrics.profitFactor != null && metrics.profitFactor < 1 && metrics.tradesTaken >= 3) {
     opportunities.push(
-      `Profit factor was ${metrics.profitFactor.toFixed(2)} — losses exceeded gains.`
+      `Profit factor was ${metrics.profitFactor.toFixed(2)}. Losses exceeded gains.`
     )
   }
 
@@ -468,7 +468,7 @@ function buildKeyTakeaway(
   opportunities: string[]
 ): string {
   if (metrics.tradesTaken === 0) {
-    return "Consistent journaling unlocks sharper weekly and monthly intelligence — log your next trade to start building your report history."
+    return "Consistent journaling unlocks sharper weekly and monthly intelligence. Log your next trade to start building your report history."
   }
 
   if (strengths.length > 0 && opportunities.length > 0) {
@@ -476,11 +476,11 @@ function buildKeyTakeaway(
   }
 
   if (metrics.netPnl > 0) {
-    return `Your edge showed up in the data this period — protect it by doubling down on what worked and trimming the sessions that dragged performance.`
+    return `Your edge showed up in the data this period. Protect it by doubling down on what worked and trimming the sessions that dragged performance.`
   }
 
   if (metrics.netPnl < 0) {
-    return `This period highlights where leakage occurred — use the session and timing breakdowns above to tighten execution next week.`
+    return `This period highlights where leakage occurred. Use the session and timing breakdowns above to tighten execution next week.`
   }
 
   return `Stay process-focused: the metrics above show where your execution helped and where small adjustments can compound over the next reporting period.`

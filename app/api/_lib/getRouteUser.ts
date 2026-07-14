@@ -11,8 +11,22 @@ const supabaseService = createClient(
 /**
  * Resolves the current Supabase user from request cookies, with optional Authorization: Bearer fallback
  * (same pattern as `app/api/create-checkout-session/route.ts`).
+ *
+ * Prefer Bearer when present — browser sessions use localStorage, so cookie auth often
+ * does an empty round-trip before the Bearer fallback.
  */
 export async function getRouteUser(req: Request): Promise<User | null> {
+  const authHeader = req.headers.get("authorization") || ""
+  const bearer = authHeader.startsWith("Bearer ")
+    ? authHeader.slice("Bearer ".length).trim()
+    : ""
+
+  if (bearer) {
+    const { data: tokenData, error: tokenErr } =
+      await supabaseService.auth.getUser(bearer)
+    if (!tokenErr && tokenData.user) return tokenData.user
+  }
+
   const cookieStore = await cookies()
   const supabaseAuth = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -28,15 +42,7 @@ export async function getRouteUser(req: Request): Promise<User | null> {
     data: { user: cookieUser },
   } = await supabaseAuth.auth.getUser()
 
-  if (cookieUser) return cookieUser
-
-  const authHeader = req.headers.get("authorization") || ""
-  const bearer = authHeader.startsWith("Bearer ") ? authHeader.slice("Bearer ".length).trim() : ""
-  if (!bearer) return null
-
-  const { data: tokenData, error: tokenErr } = await supabaseService.auth.getUser(bearer)
-  if (tokenErr || !tokenData.user) return null
-  return tokenData.user
+  return cookieUser ?? null
 }
 
 export { supabaseService as supabaseServiceRole }

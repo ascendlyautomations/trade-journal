@@ -1,10 +1,10 @@
 import type { ReactNode } from "react"
 import Link from "next/link"
-import { PAGE_HEADING_LARGE_CLASS } from "@/lib/pageHeadingStyles"
+import { PAGE_HEADING_MARKETING_CLASS } from "@/lib/pageHeadingStyles"
 import {
-  COMPANY_PAGE_BACK_GAP,
   COMPANY_PAGE_HEADER_MARGIN,
   COMPANY_PAGE_SHELL,
+  COMPANY_PAGE_SUBTITLE_GAP,
   COMPANY_PAGE_TOP,
 } from "@/lib/companyPageUi"
 
@@ -12,8 +12,6 @@ type CompanyPageShellProps = {
   title: string
   subtitle: string
   children: ReactNode
-  backHref?: string
-  backLabel?: string
   maxWidthClass?: string
   heroActions?: ReactNode
 }
@@ -89,8 +87,6 @@ export default function CompanyPageShell({
   title,
   subtitle,
   children,
-  backHref = "/",
-  backLabel = "← Back to home",
   maxWidthClass = "max-w-3xl",
   heroActions,
 }: CompanyPageShellProps) {
@@ -98,14 +94,10 @@ export default function CompanyPageShell({
     <div className={`${COMPANY_PAGE_SHELL} ${COMPANY_PAGE_TOP}`}>
       <div className={`mx-auto w-full ${maxWidthClass}`}>
         <header className={`${COMPANY_PAGE_HEADER_MARGIN} text-center`}>
-          <Link
-            href={backHref}
-            className={`${COMPANY_PAGE_BACK_GAP} inline-block text-sm text-gray-400 transition hover:text-gray-200`}
+          <h1 className={PAGE_HEADING_MARKETING_CLASS}>{title}</h1>
+          <p
+            className={`mx-auto max-w-2xl text-sm leading-relaxed text-gray-400 sm:text-base ${COMPANY_PAGE_SUBTITLE_GAP}`}
           >
-            {backLabel}
-          </Link>
-          <h1 className={PAGE_HEADING_LARGE_CLASS}>{title}</h1>
-          <p className="mx-auto mt-4 max-w-2xl text-sm leading-relaxed text-gray-400 sm:text-base">
             {subtitle}
           </p>
           {heroActions}

@@ -63,7 +63,7 @@ export function softwareApplicationJsonLd() {
     operatingSystem: "Web",
     url: SITE_URL,
     description:
-      "TradeTraxs is AI-powered trading journal software for futures and active traders — log trades, analyze performance, and connect with the trading community.",
+      "TradeTraxs is AI-powered trading journal software for futures and active traders. Log trades, analyze performance, and connect with the trading community.",
     offers: [
       {
         "@type": "Offer",

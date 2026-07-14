@@ -128,9 +128,13 @@ export default function TradesPage() {
     }
 
     const trade = trades.find((t) => String(t.id) === editId)
-    if (trade) {
-      setEditingTrade({ ...trade })
-    }
+    if (!trade) return
+
+    // Keep the same object while the modal is open so trade-cache refreshes
+    // do not wipe in-progress edits via InputTradeForm hydration.
+    setEditingTrade((prev) =>
+      prev && String(prev.id) === editId ? prev : { ...trade }
+    )
   }, [loading, trades])
 
   const handleEditTrade = useCallback((trade: any) => {

@@ -17,7 +17,7 @@ const FEATURES: {
 }[] = [
   {
     title: "Dashboard Analytics",
-    body: "Equity curve, sessions, win rate—your edge in one glance.",
+    body: "Equity curve, sessions, win rate. Your edge in one glance.",
   },
   {
     title: "Trading Calendar",
@@ -34,12 +34,12 @@ const FEATURES: {
   },
   {
     title: "Community Feed",
-    body: "Share trades with context. Learn from executions—not opinions.",
+    body: "Share trades with context. Learn from executions, not opinions.",
     highlight: true,
   },
   {
     title: "Leaderboards",
-    body: "Rankings built on performance—stack up on consistency.",
+    body: "Rankings built on performance. Stack up on consistency.",
   },
 ]
 

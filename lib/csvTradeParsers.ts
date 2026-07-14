@@ -1684,7 +1684,7 @@ export function buildTradesFromParsedCsv(
         rowResults.push({
           ok: false,
           rowNumber,
-          reason: "No recognized columns — check headers match Date, Symbol, Direction, PnL, etc.",
+          reason: "No recognized columns. Check headers match Date, Symbol, Direction, PnL, etc.",
         })
         return
       }

@@ -3,6 +3,7 @@ import {
   isTraxProBillingIntervalId,
   TRAXPRO_DEFAULT_BILLING_INTERVAL,
 } from "./traxProBillingPlans"
+import { isCreatorFlowActive } from "./creatorAccess"
 
 const SIGNUP_FLOW_KEY = "tt_signup_flow"
 const SIGNUP_INTENT_KEY = "tt_signup_intent"
@@ -69,8 +70,12 @@ export function clearSignupIntent(): void {
   }
 }
 
-/** Where new users go for profile setup — plan selection first when intent is unset. */
+/**
+ * Where new users go for profile setup.
+ * Creator invite flow and explicit plan intent skip Choose Plan.
+ */
 export function resolveSignupProfileSetupPath(): "/choose-plan" | "/onboarding" {
+  if (isCreatorFlowActive()) return "/onboarding"
   return getSignupIntent() ? "/onboarding" : "/choose-plan"
 }
 

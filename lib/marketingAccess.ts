@@ -27,7 +27,13 @@ export function isInAppEntryFlow(
   return profileNeedsOnboarding(profile) || needsSubscriptionCheckout(profile)
 }
 
-/** Marketing navbar on public marketing pages (logged-out or completed members). */
+/**
+ * Marketing navbar on public marketing / legal pages.
+ *
+ * Logged-out visitors (including mid-logout while auth is still resolving) must
+ * ALWAYS see PublicNavbar — never a blank header. The app Navbar is intentionally
+ * unmounted on these routes, so hiding PublicNavbar leaves no chrome at all.
+ */
 export function shouldShowMarketingNavbar(
   pathname: string | null | undefined,
   user: MarketingUser,
@@ -35,14 +41,25 @@ export function shouldShowMarketingNavbar(
   loading: boolean,
 ): boolean {
   if (!pathname || isStandaloneFlowRoute(pathname)) return false
-  if (isSignupFlowActive()) return false
-  if (isInAppEntryFlow(user, profile, loading)) return false
   if (!isMarketingRoute(pathname) && !isPublicLegalRoute(pathname)) {
     return false
   }
-  if (!user && !loading) return true
-  if (loading) return false
-  return shouldShowCustomerHomeChrome(user, profile, loading)
+
+  // Visitors / post-logout: always show, even while auth loading flips during clear.
+  if (!isAuthenticatedAppUser(user)) {
+    return true
+  }
+
+  if (isSignupFlowActive()) return false
+
+  // Only hide after auth has settled and we know the user still needs entry flow.
+  // Do not hide while loading — that blanks the homepage during logout races.
+  if (!loading && isInAppEntryFlow(user, profile, false)) {
+    return false
+  }
+
+  // Members on marketing pages (or still hydrating): keep PublicNavbar visible.
+  return true
 }
 
 export function hasCompletedAppEntry(

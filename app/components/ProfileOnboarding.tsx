@@ -19,6 +19,7 @@ import { TRADER_TYPE_OPTIONS, normalizeTraderType } from "@/lib/traderType"
 import CustomSelect from "@/app/components/CustomSelect"
 import { useAutoResizeTextarea } from "@/lib/useAutoResizeTextarea"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
+import NativeDateInput from "@/app/components/ui/NativeDateInput"
 import { feedbackPresets } from "@/lib/feedbackPresets"
 import {
   getLocalTodayDateInputValue,
@@ -63,7 +64,7 @@ type ProfileOnboardingProps = {
   initialPrimaryMarket?: string | null
   initialStartedTrading?: string | null
   initialAvatarUrl?: string | null
-  onComplete: (patch: Record<string, unknown>) => void
+  onComplete: (patch: Record<string, unknown>) => void | Promise<void>
 }
 
 export default function ProfileOnboarding({
@@ -115,7 +116,6 @@ export default function ProfileOnboarding({
     },
     onValidationError: setError,
   })
-  const startedTradingInputRef = useRef<HTMLInputElement>(null)
   const formShellRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -135,16 +135,6 @@ export default function ProfileOnboarding({
       cancelled = true
     }
   }, [userId, initialName])
-
-  function openStartedTradingPicker() {
-    const el = startedTradingInputRef.current
-    if (!el) return
-    try {
-      el.showPicker()
-    } catch {
-      el.focus()
-    }
-  }
 
   function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     avatarCrop.handleFileSelected(e.target.files?.[0])
@@ -243,18 +233,20 @@ export default function ProfileOnboarding({
         return
       }
 
-      const { error: mirrorErr } = await mirrorAccountSettingsOnboardingCompleted(
-        supabase,
-        userId,
-        true
-      )
-      if (mirrorErr) {
-        console.error("mirror account_settings.onboarding_completed:", mirrorErr)
-      }
-
       clearOnboardingFlag()
       notifyBetaSignupAfterOnboardingComplete("onboarding")
-      onComplete(patch)
+      // Mirror is not on the critical path for navigation / creator redeem.
+      void mirrorAccountSettingsOnboardingCompleted(supabase, userId, true).then(
+        ({ error: mirrorErr }) => {
+          if (mirrorErr) {
+            console.error(
+              "mirror account_settings.onboarding_completed:",
+              mirrorErr
+            )
+          }
+        }
+      )
+      await onComplete(patch)
     } finally {
       savingRef.current = false
       setSaving(false)
@@ -364,15 +356,13 @@ export default function ProfileOnboarding({
               Select the date you began trading
             </p>
             <div className="mb-4 w-full min-w-0">
-              <input
-                ref={startedTradingInputRef}
-                type="date"
+              <NativeDateInput
                 required
                 max={localTodayDate}
                 value={startedTrading}
                 onChange={(e) => handleStartedTradingChange(e.target.value)}
-                onFocus={openStartedTradingPicker}
-                className={`${inputClass} tt-timeframe-date cursor-pointer text-sm [color-scheme:dark]`}
+                className="border-white/10 bg-white/10 focus-within:ring-2 focus-within:ring-blue-400"
+                aria-label="Started trading date"
               />
             </div>
 

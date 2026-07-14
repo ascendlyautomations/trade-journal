@@ -11,6 +11,10 @@ import {
   resolvePostAuthAppPath,
 } from "@/lib/subscriptionAccess"
 import { resolveSignupProfileSetupPath } from "@/lib/signupFlow"
+import {
+  buildCreatorRedeemPath,
+  getPendingCreatorCode,
+} from "@/lib/creatorAccess"
 import { useUserProfile } from "@/lib/useUserProfile"
 
 /**
@@ -28,7 +32,9 @@ export default function MarketingGateShell({ children }: { children: ReactNode }
   const inEntryFlow =
     onMarketingRoute &&
     !gateSuspended &&
-    isInAppEntryFlow(user, profile, loading)
+    !!user &&
+    !loading &&
+    isInAppEntryFlow(user, profile, false)
 
   useEffect(() => {
     if (!onMarketingRoute || loading || !user) return
@@ -40,6 +46,11 @@ export default function MarketingGateShell({ children }: { children: ReactNode }
     }
 
     if (needsSubscriptionCheckout(profile)) {
+      const pendingCreatorCode = getPendingCreatorCode()
+      if (pendingCreatorCode) {
+        router.replace(buildCreatorRedeemPath(pendingCreatorCode))
+        return
+      }
       router.replace("/finish-trial")
       return
     }

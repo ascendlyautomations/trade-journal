@@ -59,6 +59,7 @@ import { supabase } from "../../../lib/supabaseClient"
 import { toUserFacingErrorMessage } from "@/lib/userFacingError"
 import { devLog } from "@/lib/devLog"
 import { isProActive } from "../../../lib/subscription"
+import { CREATOR_ACCESS_SUCCESS_MESSAGE } from "@/lib/creatorAccess"
 import { filterTradesForPerformanceSharePool } from "@/lib/performanceShare"
 import { excludeBacktestTrades } from "@/lib/tradeModeFilters"
 import { useCopyTradingGroups } from "@/lib/useCopyTradingGroups"
@@ -719,6 +720,7 @@ export default function Dashboard() {
         onboardingCompleted,
         allComplete: gettingStartedProgress.allComplete,
         hasSeenOnboardingCompletePopup,
+        tradeCount: checklistSignals.tradeCount,
       })
 
     auditLogDashboardDecision({
@@ -730,12 +732,14 @@ export default function Dashboard() {
         ? "waiting for profile or checklist signals"
         : !onboardingCompleted
           ? "profile onboarding incomplete"
-          : gettingStartedProgress.allComplete ||
-              hasSeenOnboardingCompletePopup
-            ? "getting started complete or popup seen"
-            : renderChecklist
-              ? "active getting started — auto-show allowed"
-              : "session dismissed or no user",
+          : checklistSignals.tradeCount > 0
+            ? "first trade logged — checklist moves to navbar"
+            : gettingStartedProgress.allComplete ||
+                hasSeenOnboardingCompletePopup
+              ? "getting started complete or popup seen"
+              : renderChecklist
+                ? "active getting started — auto-show until first trade"
+                : "session dismissed or no user",
     })
   }, [
     user?.id,
@@ -744,6 +748,7 @@ export default function Dashboard() {
     checklistSignalsReady,
     checklistSignals.onboardingCompleted,
     checklistSignals.hasSeenOnboardingCompletePopup,
+    checklistSignals.tradeCount,
     gettingStartedProgress.allComplete,
     hasSeenOnboardingCompletePopup,
   ])
@@ -761,6 +766,22 @@ export default function Dashboard() {
     url.searchParams.delete("checkout")
     window.history.replaceState({}, "", `${url.pathname}${url.search}`)
   }, [user?.id])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const params = new URLSearchParams(window.location.search)
+    if (params.get("creator") !== "activated") return
+
+    showPopup({
+      type: "success",
+      message: CREATOR_ACCESS_SUCCESS_MESSAGE,
+      persist: true,
+    })
+
+    const url = new URL(window.location.href)
+    url.searchParams.delete("creator")
+    window.history.replaceState({}, "", `${url.pathname}${url.search}`)
+  }, [showPopup])
 
   useEffect(() => {
     return subscribeStripeReconciliationComplete(() => {
@@ -1400,9 +1421,12 @@ const biggestLoss = losses.length > 0
       onboardingCompleted: onboardingCompletedForAutoShow,
       allComplete: gettingStartedProgress.allComplete,
       hasSeenOnboardingCompletePopup: hasSeenOnboardingCompletePopupForAutoShow,
+      tradeCount: checklistSignals.tradeCount,
     })
 
-  const renderGettingStartedChecklist = () =>
+  const renderGettingStartedChecklist = (options?: {
+    showWelcomeHeading?: boolean
+  }) =>
     showOnboardingSection && user?.id ? (
       <GettingStartedChecklist
         progress={gettingStartedProgress}
@@ -1411,18 +1435,23 @@ const biggestLoss = losses.length > 0
         firstPrivateTradeId={checklistSignals.firstPrivateTradeId}
         onChecklistRefresh={() => void refreshChecklistSignals()}
         defaultExpanded
+        showWelcomeHeading={options?.showWelcomeHeading === true}
       />
     ) : null
 
-  /** Desktop auto-show — unchanged. */
+  /** Desktop: dashboard card until first trade only. */
   const gettingStartedSection = (() => {
     const checklist = renderGettingStartedChecklist()
-    return checklist ? <div className="hidden md:block">{checklist}</div> : null
+    return checklist ? (
+      <div className="hidden md:block">{checklist}</div>
+    ) : null
   })()
 
-  /** Mobile: show checklist while getting-started tasks remain (not only before first trade). */
+  /** Mobile: dashboard card until first trade only (then navbar entry). */
   const gettingStartedSectionMobile = (() => {
-    const checklist = renderGettingStartedChecklist()
+    const checklist = renderGettingStartedChecklist({
+      showWelcomeHeading: true,
+    })
     return checklist ? <div className="md:hidden">{checklist}</div> : null
   })()
 
@@ -1708,7 +1737,7 @@ const biggestLoss = losses.length > 0
         onComplete={() => void handleImportModalComplete()}
       />
 
-      <div className="w-full px-3 pb-3 pt-0 text-white md:px-10 md:pb-10">
+      <div className="w-full px-3 pb-3 pt-4 text-white md:px-10 md:pb-10 md:pt-0">
 
         <div className="relative z-50 mx-auto w-full max-w-[1600px] px-4 md:px-6">
           {!hasNoTrades && !statsStillLoading ? (
@@ -1761,7 +1790,7 @@ const biggestLoss = losses.length > 0
           />
         </div>
 
-          <div className="relative z-0 mx-auto flex w-full max-w-[1600px] flex-col gap-4 overflow-visible px-4 md:gap-8 md:px-6">
+          <div className="relative z-0 mx-auto flex w-full max-w-[1600px] flex-col gap-2 overflow-visible px-4 md:gap-3 md:px-6">
 
   {gettingStartedSectionMobile}
 
@@ -1769,48 +1798,55 @@ const biggestLoss = losses.length > 0
     <SkeletonDashboardShell />
   ) : hasNoTrades ? (
     <>
-      <div className="rounded-xl border border-white/10 bg-white/5 p-5 backdrop-blur-md md:p-8">
-        <h2 className="text-xl font-semibold text-blue-300 md:text-3xl">
-          Welcome to TradeTraxs
-        </h2>
-        
-        <p className="mt-2 max-w-2xl text-xs text-gray-300 md:mt-3 md:text-base">
-          Get started by logging your first trade or importing your trading history.
-        </p>
-        <div className="mt-4 flex flex-wrap items-center gap-2 md:mt-6 md:gap-3">
-          <Link
-            href="/app"
-            className="inline-flex min-h-[44px] items-center rounded-lg bg-blue-500 px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-blue-600 md:px-4 md:text-sm disabled:hover:bg-blue-500"
-          >
-            Add Trade
-          </Link>
-          <button
-            type="button"
-            onClick={() => {
-              if (isDemoModeActive()) {
-                requestDemoSignup("save")
-                return
-              }
-              setShowImportModal(true)
-            }}
-            className="inline-flex min-h-[44px] items-center rounded-lg border border-white/20 bg-white/10 px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-white/15 md:px-4 md:text-sm"
-          >
-            Import CSV
-          </button>
-        </div>
-        <div className="mt-5 border-t border-white/10 pt-4 md:mt-8 md:pt-6">
-          <p className="text-xs font-medium text-gray-300 md:text-sm">
-            After your first trade you&apos;ll unlock:
+      {/* Desktop: match section gap (gap-2 / md:gap-3). Mobile: contents dissolves so layout stays unchanged. */}
+      <div className="mt-2 flex flex-col gap-2 max-md:mt-0 max-md:contents md:gap-3">
+        {(() => {
+          const checklist = renderGettingStartedChecklist({
+            showWelcomeHeading: true,
+          })
+          return checklist ? (
+            <div className="hidden md:block">{checklist}</div>
+          ) : null
+        })()}
+        <div className="rounded-xl border border-white/10 bg-white/5 px-5 pb-4 pt-3.5 backdrop-blur-md md:px-6 md:pb-5 md:pt-4">
+          <p className="max-w-2xl text-sm font-medium text-gray-200 md:text-base">
+            Get started by logging your first trade or importing your trading history.
           </p>
-          <ul className="mt-2 space-y-1.5 text-xs text-gray-400 md:mt-3 md:space-y-2 md:text-sm">
-            <li>• Performance statistics</li>
-            <li>• Equity curve tracking</li>
-            <li>• Session &amp; weekday analysis</li>
-            <li>• Symbol performance insights</li>
-          </ul>
+          <div className="mt-3 flex flex-wrap items-center gap-2 md:mt-3.5 md:gap-3">
+            <Link
+              href="/app"
+              className="inline-flex min-h-[44px] items-center rounded-lg bg-blue-500 px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-blue-600 md:px-4 md:text-sm disabled:hover:bg-blue-500"
+            >
+              Add Trade
+            </Link>
+            <button
+              type="button"
+              onClick={() => {
+                if (isDemoModeActive()) {
+                  requestDemoSignup("save")
+                  return
+                }
+                setShowImportModal(true)
+              }}
+              className="inline-flex min-h-[44px] items-center rounded-lg border border-white/20 bg-white/10 px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-white/15 md:px-4 md:text-sm"
+            >
+              Import CSV
+            </button>
+          </div>
+          <div className="mt-3.5 pt-3 md:mt-4 md:pt-3.5">
+            <div className="mb-2.5 h-px w-16 bg-white/10 md:mb-3" aria-hidden />
+            <p className="text-xs font-medium text-gray-200">
+              After your first trade you&apos;ll unlock:
+            </p>
+            <ul className="mt-1.5 space-y-1 text-xs text-gray-400">
+              <li>• Performance statistics</li>
+              <li>• Equity curve tracking</li>
+              <li>• Session &amp; weekday analysis</li>
+              <li>• Symbol performance insights</li>
+            </ul>
+          </div>
         </div>
       </div>
-      {gettingStartedSection}
     </>
   ) : totalTrades === 0 ? (
     <>
@@ -1837,7 +1873,7 @@ const biggestLoss = losses.length > 0
         </Suspense>
       ) : null}
   {/* TOP: STATS + CHART */}
-  <div className="grid gap-3 overflow-visible md:gap-6 lg:grid-cols-3">
+  <div className="grid gap-2 overflow-visible md:gap-3 lg:grid-cols-3">
 
     {/* LEFT: STATS */}
     <DashboardStatsGrid
@@ -1874,7 +1910,7 @@ const biggestLoss = losses.length > 0
     />
 
     {/* RIGHT: CHARTS */}
-    <div className="space-y-3 overflow-visible md:space-y-6 lg:col-span-2">
+    <div className="space-y-2 overflow-visible md:space-y-3 lg:col-span-2">
       {showEquity ? (
         <DashboardEquityCurve
           variant="desktop"
@@ -1888,7 +1924,7 @@ const biggestLoss = losses.length > 0
         />
       ) : null}
 
-      <div className="grid grid-cols-1 gap-4 md:gap-6 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-2 md:gap-3 lg:grid-cols-2">
         {showSessions ? (
           <>
             <div className="hidden md:block">{recentTradesSection}</div>
@@ -1903,7 +1939,7 @@ const biggestLoss = losses.length > 0
   </div>
 
   {/* SYMBOL + P&L BY WEEKDAY */}
-  <div className="grid grid-cols-1 gap-3 md:gap-6 lg:grid-cols-3 lg:items-stretch">
+  <div className="grid grid-cols-1 gap-2 md:gap-3 lg:grid-cols-3 lg:items-stretch">
 
     <div className="h-full overflow-x-auto rounded-xl border border-white/10 bg-white/10 p-2.5 md:p-4 lg:col-span-2">
       <h3 className={dashboardInsightTitleClass}>Symbol Performance</h3>
@@ -1952,7 +1988,7 @@ const biggestLoss = losses.length > 0
 
   </div>
 
-  <div className="grid grid-cols-1 gap-3 md:gap-6 lg:grid-cols-3 lg:items-stretch">
+  <div className="grid grid-cols-1 gap-2 md:gap-3 lg:grid-cols-3 lg:items-stretch">
     <DashboardLongShort
       performance={longShortPerformance}
       totalTrades={totalTrades}
@@ -1963,7 +1999,7 @@ const biggestLoss = losses.length > 0
   </div>
 
           {(showInsights || showBestSetup) ? (
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-6">
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2 md:gap-3">
             {showInsights ? (
             <div className={dashboardInsightCardClass}>
                 <h3 className={dashboardInsightTitleClass}>Performance Insights</h3>
@@ -2010,7 +2046,7 @@ const biggestLoss = losses.length > 0
                   </div>
                 ) : (
                   <p className={dashboardInsightEmptyClass}>
-                    Not enough sample size yet — need at least 3 trades in a session,
+                    Not enough sample size yet. Need at least 3 trades in a session,
                     symbol, or direction bucket (with current filters).
                   </p>
                 )}
@@ -2074,7 +2110,7 @@ const biggestLoss = losses.length > 0
           ) : null}
 
           {(showInsights || showWorstSetup || showWarnings) ? (
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-6">
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2 md:gap-3">
             {showInsights ? (
             <div className={dashboardInsightCardClass}>
                 <h3 className={dashboardInsightTitleClass}>Advanced Edge</h3>
@@ -2095,7 +2131,7 @@ const biggestLoss = losses.length > 0
                   </div>
                 ) : (
                   <p className={dashboardInsightEmptyClass}>
-                    No qualifying combined setup yet — need 3+ trades with consistent
+                    No qualifying combined setup yet. Need 3+ trades with consistent
                     session, symbol, and direction data.
                   </p>
                 )}
@@ -2151,7 +2187,7 @@ const biggestLoss = losses.length > 0
         </>
       ) : (
         <>
-          <div className="grid gap-3 overflow-visible md:gap-6 lg:grid-cols-3">
+          <div className="grid gap-2 overflow-visible md:gap-3 lg:grid-cols-3">
             <DashboardStatsGrid
               isPro={false}
               totalTrades={totalTrades}
@@ -2175,7 +2211,7 @@ const biggestLoss = losses.length > 0
               mobileSessionsSlot={sessionPerformanceSection}
               bestWinStreak={bestWinStreak}
             />
-            <div className="space-y-3 overflow-visible md:space-y-6 lg:col-span-2">
+            <div className="space-y-2 overflow-visible md:space-y-3 lg:col-span-2">
               {showEquity ? (
                 <DashboardEquityCurve
                   variant="desktop"

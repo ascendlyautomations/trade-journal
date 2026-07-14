@@ -10,7 +10,7 @@ import {
 
 describe("tradeScreenshotDisplay", () => {
   it("caps feed thumbnail height", () => {
-    expect(TRADE_SCREENSHOT_MAX_HEIGHT_PX).toBe(560)
+    expect(TRADE_SCREENSHOT_MAX_HEIGHT_PX).toBe(440)
   })
 
   it("uses a max-height class for Trades-page previews", () => {

@@ -27,6 +27,8 @@ export type GettingStartedChecklistProps = {
   defaultExpanded?: boolean
   /** When true, omit outer card chrome (parent supplies container). */
   embedded?: boolean
+  /** Dashboard empty-state: show Welcome headline above Getting Started. */
+  showWelcomeHeading?: boolean
   className?: string
 }
 
@@ -67,59 +69,67 @@ function ChecklistItemRow({
   firstPrivateTradeId?: string | null
   onOpenPopularRooms: () => void
 }) {
-  const row = (
+  const help = <HelpHint body={GETTING_STARTED_ITEM_HELP[item.id].body} />
+
+  const labelRow = (
     <span
-      className={`flex items-start gap-3 text-sm md:text-base ${
+      className={`flex min-w-0 flex-1 items-start gap-3 text-sm md:text-base ${
         item.complete ? "text-gray-500" : "text-gray-200"
       }`}
     >
       <span className="mt-0.5 shrink-0 text-base leading-none" aria-hidden>
         {item.complete ? "☑" : "☐"}
       </span>
-      <span className="flex min-w-0 flex-1 items-center gap-2">
-        <span
-          className={
-            item.complete ? "line-through" : "font-medium text-gray-100"
-          }
-        >
-          {item.label}
-        </span>
-        <HelpHint body={GETTING_STARTED_ITEM_HELP[item.id].body} />
+      <span
+        className={
+          item.complete
+            ? "min-w-0 flex-1 line-through"
+            : "min-w-0 flex-1 font-medium text-gray-100"
+        }
+      >
+        {item.label}
       </span>
     </span>
   )
 
   if (item.complete) {
-    return <li key={item.id}>{row}</li>
+    return (
+      <li className="flex items-center gap-2">
+        {labelRow}
+        {help}
+      </li>
+    )
   }
 
   if (item.id === "room") {
     return (
-      <li key={item.id}>
+      <li className="flex items-center gap-2">
         <button
           type="button"
           onClick={onOpenPopularRooms}
-          className="block w-full rounded-lg text-left transition hover:bg-white/5 -mx-2 px-2 py-1"
+          className="-mx-2 min-w-0 flex-1 rounded-lg px-2 py-1 text-left transition hover:bg-white/5"
         >
-          {row}
+          {labelRow}
         </button>
+        {help}
       </li>
     )
   }
 
   const href = itemHref(item.id, { profileId, firstPrivateTradeId })
   return (
-    <li key={item.id}>
+    <li className="flex items-center gap-2">
       {href ? (
         <Link
           href={href}
-          className="block rounded-lg transition hover:bg-white/5 -mx-2 px-2 py-1"
+          className="-mx-2 min-w-0 flex-1 rounded-lg px-2 py-1 transition hover:bg-white/5"
         >
-          {row}
+          {labelRow}
         </Link>
       ) : (
-        row
+        <div className="min-w-0 flex-1">{labelRow}</div>
       )}
+      {help}
     </li>
   )
 }
@@ -133,6 +143,7 @@ export default function GettingStartedChecklist({
   alwaysExpanded = false,
   defaultExpanded = true,
   embedded = false,
+  showWelcomeHeading = false,
   className = "",
 }: GettingStartedChecklistProps) {
   const { items, completedCount, totalCount } = progress
@@ -213,6 +224,11 @@ export default function GettingStartedChecklist({
   return (
     <>
       <div className={shellClass}>
+        {showWelcomeHeading ? (
+          <h2 className="mb-4 text-xl font-semibold text-blue-300 md:mb-5 md:text-3xl">
+            Welcome to TradeTraxs
+          </h2>
+        ) : null}
         {header}
 
         {isExpanded ? (

@@ -37,7 +37,7 @@ export default function SystemMilestonesSection({
             id="system-milestones-heading"
             className="text-lg font-semibold text-white"
           >
-            ⭐ Milestones
+            Milestones
           </h2>
           <p className="mt-1 text-sm text-gray-400">
             Permanent unlocks earned across your trading journey.

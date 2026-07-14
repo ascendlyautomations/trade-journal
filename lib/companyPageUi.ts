@@ -6,8 +6,8 @@ export const COMPANY_PAGE_SHELL =
 /** Offset below fixed PublicNavbar — single source; pairs with AppShellPadding skip on marketing routes. */
 export const COMPANY_PAGE_TOP = "pt-[calc(var(--navbar-height)+7px)]"
 
-/** Space between back link and page title. */
-export const COMPANY_PAGE_BACK_GAP = "mb-2"
-
 /** Space below hero header before main content. */
-export const COMPANY_PAGE_HEADER_MARGIN = "mb-8 md:mb-10"
+export const COMPANY_PAGE_HEADER_MARGIN = "mb-5 md:mb-6"
+
+/** Gap between marketing page title and subtitle (mobile tighter). */
+export const COMPANY_PAGE_SUBTITLE_GAP = "mt-2 md:mt-3"

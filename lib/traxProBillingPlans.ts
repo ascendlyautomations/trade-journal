@@ -56,7 +56,7 @@ export const TRAXPRO_BILLING_PLANS: readonly TraxProBillingPlan[] = [
     label: "6 Months",
     settingsPlanLabel: "6-Month Plan",
     settingsBilledLabel: "Every 6 Months",
-    checkoutOptionLabel: "6 Months — Save 5%",
+    checkoutOptionLabel: "6 Months, Save 5%",
     intervalMonths: 6,
     savePercent: 5,
     billingCadenceLabel: "Billed every 6 months",

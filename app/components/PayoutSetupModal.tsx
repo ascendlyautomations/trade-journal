@@ -148,7 +148,7 @@ export default function PayoutSetupModal({
     >
       <p className="text-sm leading-relaxed text-gray-300">
         Set your account balance and drawdown rules after this payout. Lifetime
-        trades and statistics stay unchanged — only the current payout cycle
+        trades and statistics stay unchanged. Only the current payout cycle
         resets.
       </p>
 
@@ -238,7 +238,7 @@ export default function PayoutSetupModal({
                   Keep trailing drawdown
                 </p>
                 <p className="mt-1 text-xs leading-relaxed text-gray-400">
-                  Same growth and withdrawal — current balance{" "}
+                  Same growth and withdrawal. Current balance{" "}
                   {formatPropfirmUsd(trailingExample.after)}. Drawdown floor
                   stays at the previous trailing level (e.g.{" "}
                   {formatPropfirmUsd(trailingExample.floor)}).

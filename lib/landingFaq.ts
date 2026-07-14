@@ -13,7 +13,7 @@ export type LandingFaqItem = { q: string; a: string }
 export const LANDING_FAQ_ITEMS: LandingFaqItem[] = [
   {
     q: "What is TradeTraxs?",
-    a: "TradeTraxs is the first social platform built specifically for traders — where you can track trades, analyze performance, and connect with a community built for how you actually trade.",
+    a: "TradeTraxs is the first social platform built specifically for traders, where you can track trades, analyze performance, and connect with a community built for how you actually trade.",
   },
   {
     q: "Can I track multiple trading accounts?",

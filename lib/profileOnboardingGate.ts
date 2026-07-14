@@ -47,6 +47,7 @@ export const ONBOARDING_ALLOWED_PATH_PREFIXES = [
   "/choose-plan",
   "/login",
   "/reset-password",
+  "/creator",
   "/privacy",
   "/terms",
   "/refund-policy",

@@ -262,7 +262,7 @@ export default function AdminBetaDashboardPage() {
           <section className="rounded-xl border border-white/10 bg-white/5 p-5">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-400">Recent beta activity</h2>
             <p className="mt-1 text-xs text-gray-500">
-              Bug reports, feature requests, beta room messages, and beta tester trades — newest first.
+              Bug reports, feature requests, beta room messages, and beta tester trades, newest first.
             </p>
 
             <div className="mt-4">

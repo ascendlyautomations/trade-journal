@@ -292,7 +292,7 @@ export default function ReelComposerModal({
               className="flex w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-white/20 bg-white/5 px-4 py-10 text-center transition hover:border-emerald-400/40 hover:bg-emerald-500/10 disabled:opacity-60"
             >
               <span className="text-2xl" aria-hidden>
-                🎥
+                
               </span>
               <span className="text-sm font-medium text-white">
                 {validating ? "Checking video…" : "Upload Video"}

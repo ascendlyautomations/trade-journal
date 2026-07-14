@@ -11,7 +11,7 @@ export default function AffiliateProgramPageClient() {
     <AffiliateProgramApplyProvider>
       <CompanyPageShell
         title="Affiliate Program"
-        subtitle="The TradeTraxs Affiliate Program is live — partner with us and earn recurring commissions by referring traders to the platform."
+        subtitle="The TradeTraxs Affiliate Program is live. Partner with us and earn recurring commissions by referring traders to the platform."
         maxWidthClass="max-w-4xl"
         heroActions={<AffiliateProgramHeroApplyButton />}
       >

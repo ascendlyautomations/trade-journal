@@ -10,7 +10,7 @@ const SECTIONS = [
       <>
         <p>
           TradeTraxs exists to help traders learn, improve, and grow together. Our community is
-          built on accountability, education, and respect — whether you are sharing a trade,
+          built on accountability, education, and respect, whether you are sharing a trade,
           asking for feedback, or celebrating progress.
         </p>
         <p>
@@ -35,7 +35,7 @@ const SECTIONS = [
     title: "Constructive Feedback",
     body: (
       <p>
-        Share feedback that helps others improve. Be specific, thoughtful, and professional —
+        Share feedback that helps others improve. Be specific, thoughtful, and professional,
         especially when commenting on trades, journals, or shared performance.
       </p>
     ),

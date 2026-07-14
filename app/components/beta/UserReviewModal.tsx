@@ -210,7 +210,7 @@ export default function UserReviewModal({
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder='Short headline — e.g. "Exactly what I needed"'
+              placeholder='Short headline, e.g. "Exactly what I needed"'
               maxLength={120}
               className={submissionInput}
               disabled={busy}
@@ -234,7 +234,7 @@ export default function UserReviewModal({
               required
             />
             <p className="mt-1 text-xs text-gray-500">
-              Recommended length: {REVIEW_MIN}–{REVIEW_MAX} characters ({reviewLength}/{REVIEW_MAX})
+              Recommended length: {REVIEW_MIN}-{REVIEW_MAX} characters ({reviewLength}/{REVIEW_MAX})
             </p>
           </div>
 

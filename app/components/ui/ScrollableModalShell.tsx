@@ -86,7 +86,7 @@ export default function ScrollableModalShell({
       onClick={closeDisabled ? undefined : handleOverlayClick}
     >
       <div
-        className={cn("absolute inset-0", backdropClassName)}
+        className={cn("absolute inset-0 z-0", backdropClassName)}
         aria-hidden
       />
       <div
@@ -94,7 +94,7 @@ export default function ScrollableModalShell({
         aria-modal="true"
         aria-label={ariaLabel}
         className={cn(
-          "relative my-auto w-full",
+          "relative z-10 my-auto w-full",
           MODAL_PANEL_SHELL_CLASS,
           belowNavbar
             ? MODAL_PANEL_MAX_HEIGHT_BELOW_NAV_CLASS

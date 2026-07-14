@@ -5,6 +5,7 @@ import {
   PAGE_HEADING_CENTERED_CLASS,
   PAGE_HEADING_COLOR_CLASS,
   PAGE_HEADING_LARGE_CLASS,
+  PAGE_HEADING_MARKETING_CLASS,
 } from "./pageHeadingStyles"
 
 describe("pageHeadingStyles", () => {
@@ -14,6 +15,7 @@ describe("pageHeadingStyles", () => {
       PAGE_HEADING_CENTERED_CLASS,
       PAGE_HEADING_APP_CLASS,
       PAGE_HEADING_LARGE_CLASS,
+      PAGE_HEADING_MARKETING_CLASS,
       PAGE_HEADING_ADMIN_CLASS,
     ]) {
       expect(preset).toContain("text-blue-300")

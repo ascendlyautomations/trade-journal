@@ -158,6 +158,7 @@ export default function ReviewPage() {
 
       {editingTrade ? (
         <InputTradeForm
+          key={String(editingTrade.id)}
           existingTrade={editingTrade}
           forceMarkReviewedOnSave={true}
           onClose={() => setEditingTrade(null)}

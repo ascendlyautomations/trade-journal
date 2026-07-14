@@ -18,7 +18,7 @@ export default function ContactPageContent() {
 
   return (
     <>
-      <div className="mb-8 rounded-xl border border-white/10 bg-white/[0.06] p-6 text-center shadow-lg shadow-black/20">
+      <div className="mb-5 rounded-xl border border-white/10 bg-white/[0.06] p-6 text-center shadow-lg shadow-black/20 md:mb-8">
         <p className="text-sm text-gray-400">Email us anytime</p>
         <p className="mt-2 text-xl font-semibold text-blue-300">{SUPPORT_EMAIL}</p>
       </div>

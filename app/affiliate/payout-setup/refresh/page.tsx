@@ -10,7 +10,7 @@ export default function AffiliatePayoutSetupRefreshPage() {
           <h1 className="text-lg font-semibold text-amber-100">Onboarding link expired</h1>
           <p className="mt-2 text-sm text-amber-100/90">
             Stripe could not resume the previous session. Go back and tap{" "}
-            <strong className="text-white">Complete payout setup</strong> again — from your affiliate
+            <strong className="text-white">Complete payout setup</strong> again, from your affiliate
             dashboard, settings (Affiliate tab), or payouts page.
           </p>
           <div className="mt-6 flex flex-wrap justify-center gap-3">

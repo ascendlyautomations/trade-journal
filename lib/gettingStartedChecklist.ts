@@ -136,38 +136,48 @@ export function shouldShowGettingStartedIntroPopup(_options: {
   return false
 }
 
-/** Whether the checklist can be opened manually (navbar mobile entry, etc.). */
+/**
+ * Whether the checklist can be opened from the navbar (desktop chip / mobile menu).
+ * Shared completion state for desktop + mobile: hide only when every task is done.
+ * `hasSeenOnboardingCompletePopup` must NOT hide the entry while tasks remain —
+ * that flag only controls the completion celebration popup.
+ */
 export function shouldOfferGettingStartedChecklist(
   userId: string | null | undefined,
   options: {
-    hasSeenOnboardingCompletePopup: boolean
     allComplete: boolean
+    /** @deprecated Ignored for navbar visibility; kept for call-site compatibility. */
+    hasSeenOnboardingCompletePopup?: boolean
   }
 ): boolean {
-  return Boolean(
-    userId &&
-      !options.hasSeenOnboardingCompletePopup &&
-      !options.allComplete
-  )
+  return Boolean(userId && !options.allComplete)
 }
 
 /**
  * Whether the dashboard should embed the checklist automatically.
- * Show after profile onboarding is complete while getting-started tasks remain.
+ * Show after profile onboarding is complete, only until the first trade is logged.
+ * After the first trade, remaining tasks live in the navbar entry.
  */
 export function shouldAutoShowGettingStartedChecklist(
   userId: string | null | undefined,
   options: {
     onboardingCompleted: boolean
     allComplete?: boolean
+    /** @deprecated Ignored for dashboard card visibility while tasks remain. */
     hasSeenOnboardingCompletePopup?: boolean
+    /** When the user already has a trade, keep the checklist off the dashboard. */
+    tradeCount?: number
   }
 ): boolean {
   if (!userId || !options.onboardingCompleted) {
     return false
   }
 
-  if (options.allComplete || options.hasSeenOnboardingCompletePopup) {
+  if (options.allComplete) {
+    return false
+  }
+
+  if ((options.tradeCount ?? 0) > 0) {
     return false
   }
 

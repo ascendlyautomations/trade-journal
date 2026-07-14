@@ -2,9 +2,8 @@
 
 import { useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
-import ReelClipPlayback, {
-  type ReelClipPlaybackHandle,
-} from "@/app/components/ReelClipPlayback"
+import type { ReelClipPlaybackHandle } from "@/app/components/ReelClipPlayback"
+import DetailModalVideo from "@/app/components/ui/DetailModalVideo"
 import { ProfileAvatarImg } from "@/app/components/SafeProfileAvatar"
 import type { ReelRow } from "@/lib/reels"
 import { formatRelativeTime } from "@/lib/formatRelativeTime"
@@ -141,10 +140,10 @@ export default function ReelViewer({ reel, creator, onClose }: ReelViewerProps) 
           </button>
         </div>
 
-        <ReelClipPlayback
+        <DetailModalVideo
           ref={playbackRef}
-          videoUrl={reel.video_url}
-          thumbnailUrl={reel.thumbnail_url}
+          src={reel.video_url}
+          poster={reel.thumbnail_url}
           muted={muted}
           onPlayingChange={setPlaying}
         />

@@ -51,3 +51,18 @@ export function auditLogDashboardDecision(decision: OnboardingAuditDecision) {
 export function auditLogDashboardMounted(userId: string | null) {
   log("dashboard mounted", { userId })
 }
+
+export function auditLogNavbarDecision(payload: {
+  placement: string
+  visible: boolean
+  reason: string
+  signalsReady: boolean
+  tradeCount: number
+  completedCount: number
+  totalCount: number
+  allComplete: boolean
+  hasSeenOnboardingCompletePopup: boolean
+  hasFirstTrade: boolean
+}) {
+  log("navbar decision", payload)
+}

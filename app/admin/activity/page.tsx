@@ -77,7 +77,7 @@ export default function AdminActivityPage() {
 
           {error ? (
             <p className="text-sm text-red-300">
-              {error} — apply migrations for <code className="rounded bg-black/30 px-1">admin_recent_audit</code>.
+              {error}. Apply migrations for <code className="rounded bg-black/30 px-1">admin_recent_audit</code>.
             </p>
           ) : null}
 

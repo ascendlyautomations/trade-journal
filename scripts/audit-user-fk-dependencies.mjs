@@ -273,6 +273,10 @@ const DEPENDENCIES = [
     columns: [{ column: "user_id", ref: "auth.users", cleanup: "delete by user_id" }],
   },
   {
+    table: "creator_code_redemptions",
+    columns: [{ column: "user_id", ref: "auth.users", cleanup: "delete by user_id" }],
+  },
+  {
     table: "csv_support_requests",
     columns: [{ column: "user_id", ref: "auth.users", cleanup: "delete by user_id" }],
   },

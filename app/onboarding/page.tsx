@@ -14,19 +14,32 @@ import {
   getSignupIntent,
 } from "@/lib/signupFlow"
 import { isSubscriptionExempt } from "@/lib/subscriptionAccess"
+import {
+  buildCreatorSignupPath,
+  clearCreatorFlow,
+  getPendingCreatorCode,
+  isCreatorFlowActive,
+  redeemCreatorAccessCode,
+} from "@/lib/creatorAccess"
 
 export default function OnboardingPage() {
   const router = useRouter()
   const { user, profile, loading, setProfile, refreshProfile } = useUserProfile()
 
   useEffect(() => {
-    if (!loading && !user) {
-      router.replace("/login")
-    }
+    if (loading || user) return
+    const pendingCreatorCode = getPendingCreatorCode()
+    router.replace(
+      pendingCreatorCode
+        ? buildCreatorSignupPath(pendingCreatorCode)
+        : "/login"
+    )
   }, [loading, user, router])
 
   useEffect(() => {
     if (loading || !user) return
+    // Creator invite flow skips Choose Plan; still requires profile onboarding.
+    if (isCreatorFlowActive() || getPendingCreatorCode()) return
     if (!getSignupIntent()) {
       router.replace("/choose-plan")
     }
@@ -52,7 +65,14 @@ export default function OnboardingPage() {
     <ProfileOnboarding
       userId={user.id}
       initialUsername={profile?.username}
-      initialName={null}
+      initialName={
+        (typeof user.user_metadata?.full_name === "string"
+          ? user.user_metadata.full_name
+          : null) ||
+        (typeof user.user_metadata?.name === "string"
+          ? user.user_metadata.name
+          : null)
+      }
       initialBio={profile?.bio}
       initialTradingStyle={profile?.trading_style}
       initialTraderType={profile?.trader_type}
@@ -60,15 +80,56 @@ export default function OnboardingPage() {
       initialStartedTrading={profile?.started_trading}
       initialAvatarUrl={profile?.avatar_url}
       onComplete={async (patch) => {
-        const mergedProfile = profile ? { ...profile, ...patch } : { ...patch, id: user.id }
-        setProfile((p) => (p ? { ...p, ...patch } : p))
         notifyGettingStartedChecklistMaybeCompleted()
+
+        const pendingCreatorCode = getPendingCreatorCode()
+        if (pendingCreatorCode) {
+          // Redeem BEFORE setProfile(onboarding_completed). Updating the client
+          // profile first lets OnboardingGateShell navigate to /dashboard, then
+          // SubscriptionGateShell bounce to /creator — a second concurrent redeem.
+          const redeemResult = await redeemCreatorAccessCode(pendingCreatorCode)
+          if (!redeemResult.ok) {
+            console.error("[onboarding] creator redeem failed", {
+              code: pendingCreatorCode,
+              userId: user.id,
+              status: redeemResult.status,
+              error: redeemResult.error,
+              message: redeemResult.message,
+              result: redeemResult.result ?? null,
+            })
+            setProfile((p) => (p ? { ...p, ...patch } : p))
+            router.replace(
+              "/creator?code=" + encodeURIComponent(pendingCreatorCode)
+            )
+            return
+          }
+          clearCreatorFlow()
+          clearSignupIntent()
+          setProfile((p) =>
+            p
+              ? {
+                  ...p,
+                  ...patch,
+                  ...redeemResult.entitlement,
+                }
+              : p
+          )
+          void refreshProfile()
+          router.replace("/dashboard?creator=activated")
+          return
+        }
+
+        const mergedProfile = profile
+          ? { ...profile, ...patch }
+          : { ...patch, id: user.id }
+        setProfile((p) => (p ? { ...p, ...patch } : p))
+
         await refreshProfile()
 
         const { data: accessRow } = await supabase
           .from("profiles")
           .select(
-            "use_free_tier, is_beta_tester, referred_by, is_pro, subscription_status, trial_end, onboarding_completed, username, trader_type, trading_style, started_trading"
+            "use_free_tier, is_beta_tester, referred_by, is_pro, creator_access, subscription_status, trial_end, onboarding_completed, username, trader_type, trading_style, started_trading"
           )
           .eq("id", user.id)
           .maybeSingle()

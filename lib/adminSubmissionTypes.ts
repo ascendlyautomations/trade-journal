@@ -50,11 +50,11 @@ export const ADMIN_SUBMISSION_LABELS: Record<AdminSubmissionType, string> = {
   feedback_submission: "Feedback Submission",
   affiliate_application: "Affiliate Application",
   user_review: "User Review",
-  contact_general: "Public Contact — General",
-  contact_billing: "Public Contact — Billing",
-  contact_partnership: "Public Contact — Partnership",
-  contact_business: "Public Contact — Business",
-  contact_faq: "Public Contact — FAQ",
+  contact_general: "Public Contact, General",
+  contact_billing: "Public Contact, Billing",
+  contact_partnership: "Public Contact, Partnership",
+  contact_business: "Public Contact, Business",
+  contact_faq: "Public Contact, FAQ",
 }
 
 export function isPublicContactSubmissionType(

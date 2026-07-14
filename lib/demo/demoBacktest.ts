@@ -203,9 +203,9 @@ export function getDemoBacktestTrades(): Record<string, unknown>[] {
       }),
       public_description: null,
       is_public: false,
-      notes: `${seed.strategy} backtest — process review saved in journal.`,
+      notes: `${seed.strategy} backtest. Process review saved in journal.`,
       confluences: ["Session VWAP", "Higher-timeframe bias"],
-      psychology: "Patient — waited for full trigger confirmation.",
+      psychology: "Patient. Waited for full trigger confirmation.",
       ai_feedback: null,
     }
   }).sort(

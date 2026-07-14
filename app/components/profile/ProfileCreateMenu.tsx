@@ -194,9 +194,16 @@ export default function ProfileCreateMenu({
         onClick={() => setOpen((prev) => !prev)}
         aria-expanded={open}
         aria-haspopup="menu"
-        className={className ?? "px-6"}
+        aria-label="Create"
+        className={
+          className ??
+          "h-9 w-9 shrink-0 p-0 text-base leading-none sm:h-auto sm:w-auto sm:px-4 sm:py-1.5 sm:text-sm sm:leading-normal"
+        }
       >
-        + Create
+        <span className="sm:hidden" aria-hidden>
+          +
+        </span>
+        <span className="hidden sm:inline">+ Create</span>
       </Button>
     ) : (
       <button

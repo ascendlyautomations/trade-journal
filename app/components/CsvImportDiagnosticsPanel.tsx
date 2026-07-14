@@ -335,7 +335,7 @@ export default function CsvImportDiagnosticsPanel({
 
           {formatSubmitted ? (
             <p className="mt-2 text-xs text-emerald-200/90">
-              CSV format submitted — thank you.
+              CSV format submitted. Thank you.
             </p>
           ) : submitError && showCombinedPrimary ? (
             <p className="mt-2 text-xs text-amber-200/90">

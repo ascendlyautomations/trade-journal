@@ -15,7 +15,7 @@ export default function TradePublicShareToggle({
         <p className="text-sm font-medium text-white">Share Publicly</p>
         <p className="text-xs text-white/50">
           {isPublic
-            ? "🌎 This trade will be visible on your profile and feed."
+            ? "This trade will be visible on your profile and feed."
             : "🔒 Only you can see this trade."}
         </p>
       </div>

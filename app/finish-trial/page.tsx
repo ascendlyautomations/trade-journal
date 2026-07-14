@@ -20,6 +20,11 @@ import {
   type TraxProBillingIntervalId,
 } from "@/lib/traxProBillingPlans"
 import { setCheckoutBillingInterval } from "@/lib/signupFlow"
+import {
+  buildCreatorRedeemPath,
+  buildCreatorSignupPath,
+  getPendingCreatorCode,
+} from "@/lib/creatorAccess"
 import { LOADING_COPY } from "@/lib/loadingCopy"
 import { toUserFacingErrorMessage } from "@/lib/userFacingError"
 
@@ -37,7 +42,12 @@ export default function FinishTrialPage() {
   useEffect(() => {
     if (loading) return
     if (!user) {
-      router.replace("/login?tab=signup")
+      const pendingCreatorCode = getPendingCreatorCode()
+      router.replace(
+        pendingCreatorCode
+          ? buildCreatorSignupPath(pendingCreatorCode)
+          : "/login?tab=signup"
+      )
       return
     }
     if (isSubscriptionGateSuspended(user.id, { membershipReconciling })) {
@@ -45,6 +55,12 @@ export default function FinishTrialPage() {
       return
     }
     if (!profile) return
+
+    const pendingCreatorCode = getPendingCreatorCode()
+    if (pendingCreatorCode) {
+      router.replace(buildCreatorRedeemPath(pendingCreatorCode))
+      return
+    }
 
     const destination = resolvePostAuthAppPath(profile)
     if (destination === "/choose-plan" || destination === "/onboarding") {
@@ -119,7 +135,7 @@ export default function FinishTrialPage() {
         <h1 className="mt-2 text-3xl font-bold text-blue-300">Your profile is ready</h1>
         <p className="mt-4 text-sm leading-relaxed text-gray-300">
           Continue on the Free plan anytime, or start your{" "}
-          {TRAXPRO_TRIAL_HEADLINE.toLowerCase()} to unlock {TRADETRAXS_PRO_PLAN.name} —{" "}
+          {TRAXPRO_TRIAL_HEADLINE.toLowerCase()} to unlock {TRADETRAXS_PRO_PLAN.name}.{" "}
           {TRADETRAXS_PRO_PLAN.description}
         </p>
 
@@ -161,7 +177,7 @@ export default function FinishTrialPage() {
         </div>
 
         <p className="mt-4 text-center text-xs text-gray-500">
-          No pressure — upgrade whenever you&apos;re ready.
+          No pressure. Upgrade whenever you&apos;re ready.
         </p>
       </div>
     </div>

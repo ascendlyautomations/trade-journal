@@ -25,6 +25,12 @@ import { isStandaloneFlowRoute } from "@/lib/authRoutes"
 import { clearSignupFlow } from "@/lib/signupFlow"
 import { NAVBAR_BRAND_LINK_CLASS } from "@/lib/navbarBrand"
 import { useModalScrollLock } from "@/app/components/ui/modalLayout"
+import { fetchLatestAffiliateApplication } from "@/lib/affiliateApplication"
+import {
+  DESKTOP_NAV_MORE_DISPLAY_ORDER,
+  useDesktopNavOverflow,
+  type DesktopNavOverflowId,
+} from "@/app/components/useDesktopNavOverflow"
 
 export default function Navbar() {
   const pathname = usePathname()
@@ -42,6 +48,7 @@ export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false)
   const [openSection, setOpenSection] = useState<string | null>(null)
   const [activeMenu, setActiveMenu] = useState<string | null>(null)
+  const [moreSubmenu, setMoreSubmenu] = useState<string | null>(null)
   const [accountMenuOpen, setAccountMenuOpen] = useState(false)
   const [bugReportOpen, setBugReportOpen] = useState(false)
   const [unreadMessagesCount, setUnreadMessagesCount] = useState(0)
@@ -50,6 +57,7 @@ export default function Navbar() {
   const [hasFetchedNotifications, setHasFetchedNotifications] = useState(false)
   const [hasFetchedMessages, setHasFetchedMessages] = useState(false)
   const [hasFetchedAdmin, setHasFetchedAdmin] = useState(false)
+  const [hasAffiliateApplication, setHasAffiliateApplication] = useState(false)
   const [mounted, setMounted] = useState(false)
 
   const router = useRouter()
@@ -69,6 +77,7 @@ export default function Navbar() {
     e.preventDefault()
     setIsOpen(false)
     setActiveMenu(null)
+    setMoreSubmenu(null)
     setAccountMenuOpen(false)
     if (isDemoModeActive()) {
       exitDemoMode()
@@ -83,6 +92,7 @@ export default function Navbar() {
       e.preventDefault()
       setIsOpen(false)
       setActiveMenu(null)
+      setMoreSubmenu(null)
       setAccountMenuOpen(false)
       if (isDemoModeActive()) {
         exitDemoMode()
@@ -95,14 +105,19 @@ export default function Navbar() {
   const handleSignOut = useCallback(async () => {
     setIsOpen(false)
     setActiveMenu(null)
+    setMoreSubmenu(null)
     setAccountMenuOpen(false)
     disableDemoMode()
     clearSignupFlow()
-    if (user) {
+    try {
       await supabase.auth.signOut()
+    } catch (err) {
+      console.error("Sign out failed:", err)
     }
-    router.push("/")
-  }, [router, user])
+    // replace avoids keeping authenticated pages in history; PublicNavbar must
+    // paint immediately for logged-out marketing routes (see shouldShowMarketingNavbar).
+    router.replace("/")
+  }, [router])
 
   useEffect(() => {
     const syncDemo = () => setDemoActive(isDemoModeActive())
@@ -129,6 +144,7 @@ export default function Navbar() {
 
       if (navRef.current && !navRef.current.contains(el)) {
         setActiveMenu(null)
+        setMoreSubmenu(null)
         setAccountMenuOpen(false)
         setIsOpen(false)
         setOpenSection(null)
@@ -242,6 +258,35 @@ export default function Navbar() {
   }, [user?.id, loading, membershipReconciling, router])
 
   useEffect(() => {
+    if (!user?.id || loading) {
+      setHasAffiliateApplication(false)
+      return
+    }
+
+    if (isDemoUserId(user.id) || isDemoSupabaseBlocked()) {
+      setHasAffiliateApplication(false)
+      return
+    }
+
+    const referralCode =
+      profile?.referral_code != null ? String(profile.referral_code).trim() : ""
+    // Approved affiliates already get Dashboard/Payouts; skip application lookup.
+    if (referralCode.length > 0) {
+      setHasAffiliateApplication(false)
+      return
+    }
+
+    let cancelled = false
+    void fetchLatestAffiliateApplication(supabase, user.id).then((app) => {
+      if (!cancelled) setHasAffiliateApplication(Boolean(app?.id))
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [user?.id, loading, profile?.referral_code])
+
+  useEffect(() => {
     if (!user?.id || loading || membershipReconciling) {
       if (!user?.id) {
         setIsAdmin(false)
@@ -288,7 +333,12 @@ export default function Navbar() {
 
   function toggleMenu(menu: string) {
     setAccountMenuOpen(false)
+    setMoreSubmenu(null)
     setActiveMenu(activeMenu === menu ? null : menu)
+  }
+
+  function toggleMoreSubmenu(submenu: string) {
+    setMoreSubmenu(moreSubmenu === submenu ? null : submenu)
   }
 
   const handleToggleNotifications = async () => {
@@ -307,6 +357,7 @@ export default function Navbar() {
 
   const handleToggleAccountMenu = async () => {
     setActiveMenu(null)
+    setMoreSubmenu(null)
     setAccountMenuOpen((open) => !open)
 
     if (!hasFetchedAdmin && user?.id) {
@@ -329,6 +380,7 @@ export default function Navbar() {
     setIsOpen(false)
     setOpenSection(null)
     setActiveMenu(null)
+    setMoreSubmenu(null)
     setAccountMenuOpen(false)
   }, [pathname])
 
@@ -458,7 +510,9 @@ export default function Navbar() {
         { label: "Affiliate Dashboard", href: "/affiliate/dashboard" },
         { label: "Affiliate Payouts", href: "/payouts" },
       ]
-    : [{ label: "Become an Affiliate", href: "/affiliate" }]
+    : hasAffiliateApplication
+      ? [{ label: "View Application", href: "/affiliate/dashboard" }]
+      : [{ label: "Apply to Become an Affiliate", href: "/affiliate" }]
 
   const notificationBellControl = (
     iconClassName: string,
@@ -474,6 +528,7 @@ export default function Navbar() {
         void handleToggleNotifications()
         setAccountMenuOpen(false)
         setActiveMenu(null)
+        setMoreSubmenu(null)
         router.push("/notifications")
       }}
       onKeyDown={(e) => {
@@ -482,6 +537,7 @@ export default function Navbar() {
           void handleToggleNotifications()
           setAccountMenuOpen(false)
           setActiveMenu(null)
+          setMoreSubmenu(null)
           router.push("/notifications")
         }
       }}
@@ -497,6 +553,241 @@ export default function Navbar() {
     </div>
   )
 
+  const betaEligible = Boolean(profile?.is_beta_tester)
+  const desktopNavEnabled = !isHomePage && !!user
+  const {
+    containerRef: desktopNavContainerRef,
+    moreMeasureRef,
+    setPinnedRef,
+    setItemMeasureRef,
+    overflowIds,
+    isOverflowing,
+  } = useDesktopNavOverflow({
+    enabled: desktopNavEnabled,
+    measureKey: [
+      unreadMessagesCount,
+      betaEligible ? "beta" : "no-beta",
+      profileHref ?? "no-profile",
+      hasAffiliateAccess ? "aff" : hasAffiliateApplication ? "aff-app" : "aff-none",
+    ].join("|"),
+    betaEligible,
+  })
+
+  const overflowDisplayIds = DESKTOP_NAV_MORE_DISPLAY_ORDER.filter((id) =>
+    overflowIds.includes(id)
+  )
+
+  const moreMenuActive =
+    overflowIds.some((id) => {
+      if (id === "messages") return isActive("/messages")
+      if (id === "analytics") {
+        return isGroupActive([
+          "/analytics",
+          "/backtest",
+          "/calendar",
+          "/streaks",
+          "/achievements",
+          "/analyst",
+        ])
+      }
+      if (id === "community") {
+        return isGroupActive([
+          "/community",
+          "/feed",
+          "/trade-rooms",
+          "/leaderboard",
+          "/explore",
+        ])
+      }
+      if (id === "affiliate") {
+        return isGroupActive([
+          "/affiliate/dashboard",
+          "/affiliate/payout-setup",
+          "/payouts",
+        ])
+      }
+      if (id === "beta") return isActive("/beta")
+      return false
+    }) || activeMenu === "more"
+
+  const navTriggerClass = (active: boolean) =>
+    `shrink-0 rounded px-2 py-1 transition ${
+      active
+        ? "bg-blue-500/20 text-blue-300"
+        : "text-gray-300 hover:text-white"
+    }`
+
+  const renderMoreOverflowItem = (id: DesktopNavOverflowId) => {
+    if (id === "messages") {
+      return (
+        <IntentPrefetchLink
+          key="messages"
+          href="/messages"
+          className={`flex items-center justify-between gap-2 rounded px-3 py-2 ${
+            isActive("/messages")
+              ? "bg-blue-500/20 text-blue-300"
+              : "text-gray-300 hover:bg-white/10"
+          }`}
+          onClick={() => {
+            void handleToggleMessages()
+            setActiveMenu(null)
+            setMoreSubmenu(null)
+          }}
+        >
+          <span>Messages</span>
+          {unreadMessagesCount > 0 ? (
+            <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-xs tabular-nums text-white">
+              {unreadMessagesCount > 9 ? "9+" : unreadMessagesCount}
+            </span>
+          ) : null}
+        </IntentPrefetchLink>
+      )
+    }
+
+    if (id === "beta") {
+      return (
+        <IntentPrefetchLink
+          key="beta"
+          href="/beta"
+          className={`block rounded px-3 py-2 ${
+            isActive("/beta")
+              ? "bg-blue-500/20 text-blue-300"
+              : "text-gray-300 hover:bg-white/10"
+          }`}
+          onClick={() => {
+            setActiveMenu(null)
+            setMoreSubmenu(null)
+          }}
+        >
+          Beta Hub
+        </IntentPrefetchLink>
+      )
+    }
+
+    if (id === "analytics") {
+      return (
+        <div key="analytics">
+          <button
+            type="button"
+            onClick={() => toggleMoreSubmenu("analytics")}
+            className={`flex w-full items-center justify-between rounded px-3 py-2 text-left ${
+              isGroupActive([
+                "/analytics",
+                "/backtest",
+                "/calendar",
+                "/streaks",
+                "/achievements",
+                "/analyst",
+              ]) || moreSubmenu === "analytics"
+                ? "bg-blue-500/20 text-blue-300"
+                : "text-gray-300 hover:bg-white/10"
+            }`}
+          >
+            <span>Analytics</span>
+            <span aria-hidden>{moreSubmenu === "analytics" ? "▾" : "▸"}</span>
+          </button>
+          {moreSubmenu === "analytics" ? (
+            <div className="border-t border-white/5 pb-1 pl-2">
+              {renderAnalyticsDropdown("desktop")}
+            </div>
+          ) : null}
+        </div>
+      )
+    }
+
+    if (id === "community") {
+      return (
+        <div key="community">
+          <button
+            type="button"
+            onClick={() => toggleMoreSubmenu("community")}
+            className={`flex w-full items-center justify-between rounded px-3 py-2 text-left ${
+              isGroupActive([
+                "/community",
+                "/feed",
+                "/trade-rooms",
+                "/leaderboard",
+                "/explore",
+              ]) || moreSubmenu === "community"
+                ? "bg-blue-500/20 text-blue-300"
+                : "text-gray-300 hover:bg-white/10"
+            }`}
+          >
+            <span>Community</span>
+            <span aria-hidden>{moreSubmenu === "community" ? "▾" : "▸"}</span>
+          </button>
+          {moreSubmenu === "community" ? (
+            <div className="border-t border-white/5 pb-1 pl-2">
+              {communityLinks.map((item) => (
+                <IntentPrefetchLink
+                  key={item.href}
+                  href={item.href}
+                  className={`block rounded px-3 py-2 ${
+                    isActive(item.href)
+                      ? "bg-blue-500/20 text-blue-300"
+                      : "text-gray-300 hover:bg-white/10"
+                  }`}
+                  onClick={() => {
+                    setActiveMenu(null)
+                    setMoreSubmenu(null)
+                  }}
+                >
+                  {item.label}
+                </IntentPrefetchLink>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      )
+    }
+
+    if (id === "affiliate") {
+      return (
+        <div key="affiliate">
+          <button
+            type="button"
+            onClick={() => toggleMoreSubmenu("affiliate")}
+            className={`flex w-full items-center justify-between rounded px-3 py-2 text-left ${
+              isGroupActive([
+                "/affiliate/dashboard",
+                "/affiliate/payout-setup",
+                "/payouts",
+              ]) || moreSubmenu === "affiliate"
+                ? "bg-blue-500/20 text-blue-300"
+                : "text-gray-300 hover:bg-white/10"
+            }`}
+          >
+            <span>Affiliate</span>
+            <span aria-hidden>{moreSubmenu === "affiliate" ? "▾" : "▸"}</span>
+          </button>
+          {moreSubmenu === "affiliate" ? (
+            <div className="border-t border-white/5 pb-1 pl-2">
+              {affiliateLinks.map((item) => (
+                <IntentPrefetchLink
+                  key={item.href}
+                  href={item.href}
+                  className={`block rounded px-3 py-2 ${
+                    isActive(item.href)
+                      ? "bg-blue-500/20 text-blue-300"
+                      : "text-gray-300 hover:bg-white/10"
+                  }`}
+                  onClick={() => {
+                    setActiveMenu(null)
+                    setMoreSubmenu(null)
+                  }}
+                >
+                  {item.label}
+                </IntentPrefetchLink>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      )
+    }
+
+    return null
+  }
+
   if (isStandalone) return null
 
   const navbar = (
@@ -511,7 +802,7 @@ export default function Navbar() {
       <div className="flex h-16 w-full shrink-0 items-center border-b border-white/5 bg-[#0b1f3a]">
         <div className="flex h-full w-full items-center gap-2 px-4 md:gap-3 md:px-6">
         {/* LEFT */}
-        <div className="flex min-w-0 items-center gap-3">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
           <IntentPrefetchLink
             href="/"
             onClick={handleLogoClick}
@@ -552,165 +843,240 @@ export default function Navbar() {
           ) : null}
 
           {!isHomePage && user ? (
-            <div className="hidden min-w-0 items-center gap-3 text-sm md:flex">
-              <IntentPrefetchLink
-                href="/app"
-                className={`shrink-0 rounded px-2 py-1 transition ${
-                  isActive("/app")
-                    ? "bg-blue-500/20 text-blue-300"
-                    : "text-gray-300 hover:text-white"
-                }`}
+            <div
+              ref={desktopNavContainerRef}
+              className="relative hidden min-w-0 flex-1 items-center gap-3 text-sm md:flex"
+            >
+              {/* Off-screen measurers — keep widths in sync without affecting layout */}
+              <div
+                aria-hidden
+                className="pointer-events-none fixed left-[-9999px] top-0 flex items-center gap-3 text-sm"
               >
-                Add Trade
-              </IntentPrefetchLink>
-              <IntentPrefetchLink
-                href="/dashboard"
-                className={`shrink-0 rounded px-2 py-1 transition ${
-                  isActive("/dashboard")
-                    ? "bg-blue-500/20 text-blue-300"
-                    : "text-gray-300 hover:text-white"
-                }`}
-              >
-                Dashboard
-              </IntentPrefetchLink>
-              <IntentPrefetchLink
-                href="/trades"
-                className={`shrink-0 rounded px-2 py-1 transition ${
-                  isActive("/trades")
-                    ? "bg-blue-500/20 text-blue-300"
-                    : "text-gray-300 hover:text-white"
-                }`}
-              >
-                Trades
-              </IntentPrefetchLink>
-              {profileHref ? (
-                <IntentPrefetchLink
-                  href={profileHref}
-                  className={`shrink-0 rounded px-2 py-1 transition ${
-                    isGroupActive(["/profile"])
-                      ? "bg-blue-500/20 text-blue-300"
-                      : "text-gray-300 hover:text-white"
-                  }`}
-                >
-                  Profile
-                </IntentPrefetchLink>
-              ) : (
-                <span className="shrink-0 rounded px-2 py-1 text-gray-500">
-                  Profile
-                </span>
-              )}
-              <IntentPrefetchLink
-                href="/messages"
-                className={`inline-flex shrink-0 items-center gap-2 rounded px-2 py-1 transition ${
-                  isActive("/messages")
-                    ? "bg-blue-500/20 text-blue-300"
-                    : "text-gray-300 hover:text-white"
-                }`}
-                onClick={() => {
-                  void handleToggleMessages()
-                }}
-              >
-                Messages
-                {unreadMessagesCount > 0 ? (
-                  <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-xs tabular-nums text-white">
-                    {unreadMessagesCount > 9 ? "9+" : unreadMessagesCount}
-                  </span>
-                ) : null}
-              </IntentPrefetchLink>
-
-              <div className="relative">
                 <button
+                  ref={moreMeasureRef}
                   type="button"
-                  onClick={() => toggleMenu("analytics")}
-                  className={`shrink-0 rounded px-2 py-1 transition ${
-                    isGroupActive([
-                      "/analytics",
-                      "/backtest",
-                      "/calendar",
-                      "/streaks",
-                      "/achievements",
-                      "/analyst",
-                    ])
-                      ? "bg-blue-500/20 text-blue-300"
-                      : "text-gray-300 hover:text-white"
-                  }`}
+                  tabIndex={-1}
+                  className="shrink-0 rounded px-2 py-1"
+                >
+                  More ▾
+                </button>
+                <span
+                  ref={setItemMeasureRef("messages")}
+                  className="inline-flex shrink-0 items-center gap-2 rounded px-2 py-1"
+                >
+                  Messages
+                  {unreadMessagesCount > 0 ? (
+                    <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-xs tabular-nums text-white">
+                      {unreadMessagesCount > 9 ? "9+" : unreadMessagesCount}
+                    </span>
+                  ) : null}
+                </span>
+                <span
+                  ref={setItemMeasureRef("analytics")}
+                  className="shrink-0 rounded px-2 py-1"
                 >
                   Analytics ▾
-                </button>
-                {activeMenu === "analytics" ? (
-                  <div className="absolute top-full z-[9999] mt-2 w-56 rounded border border-white/10 bg-[#1e293b] shadow-lg">
-                    {renderAnalyticsDropdown("desktop")}
-                  </div>
-                ) : null}
-              </div>
-
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => toggleMenu("community")}
-                  className={`shrink-0 rounded px-2 py-1 transition ${
-                    isGroupActive([
-                      "/community",
-                      "/feed",
-                      "/trade-rooms",
-                      "/leaderboard",
-                      "/explore",
-                    ])
-                      ? "bg-blue-500/20 text-blue-300"
-                      : "text-gray-300 hover:text-white"
-                  }`}
+                </span>
+                <span
+                  ref={setItemMeasureRef("community")}
+                  className="shrink-0 rounded px-2 py-1"
                 >
                   Community ▾
-                </button>
-                {activeMenu === "community" ? (
-                  <div className="absolute top-full z-[9999] mt-2 w-56 rounded border border-white/10 bg-[#1e293b] shadow-lg">
-                    {communityLinks.map((item) => (
-                      <IntentPrefetchLink
-                        key={item.href}
-                        href={item.href}
-                        className={`block rounded px-3 py-2 ${
-                          isActive(item.href)
-                            ? "bg-blue-500/20 text-blue-300"
-                            : "text-gray-300 hover:bg-white/10"
-                        }`}
-                      >
-                        {item.label}
-                      </IntentPrefetchLink>
-                    ))}
-                  </div>
+                </span>
+                <span
+                  ref={setItemMeasureRef("affiliate")}
+                  className="shrink-0 rounded px-2 py-1"
+                >
+                  Affiliate ▾
+                </span>
+                {betaEligible ? (
+                  <span
+                    ref={setItemMeasureRef("beta")}
+                    className="shrink-0 rounded border px-3 py-1.5 text-sm font-medium border-yellow-400/30"
+                  >
+                    Beta Hub
+                  </span>
                 ) : null}
               </div>
 
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => toggleMenu("affiliate")}
-                  className={`shrink-0 rounded px-2 py-1 transition ${
-                    isGroupActive(["/affiliate/dashboard", "/affiliate/payout-setup", "/payouts"])
+              <span ref={setPinnedRef("add-trade")} className="shrink-0">
+                <IntentPrefetchLink
+                  href="/app"
+                  className={navTriggerClass(isActive("/app"))}
+                >
+                  Add Trade
+                </IntentPrefetchLink>
+              </span>
+              <span ref={setPinnedRef("dashboard")} className="shrink-0">
+                <IntentPrefetchLink
+                  href="/dashboard"
+                  className={navTriggerClass(isActive("/dashboard"))}
+                >
+                  Dashboard
+                </IntentPrefetchLink>
+              </span>
+              <span ref={setPinnedRef("trades")} className="shrink-0">
+                <IntentPrefetchLink
+                  href="/trades"
+                  className={navTriggerClass(isActive("/trades"))}
+                >
+                  Trades
+                </IntentPrefetchLink>
+              </span>
+              <span ref={setPinnedRef("profile")} className="shrink-0">
+                {profileHref ? (
+                  <IntentPrefetchLink
+                    href={profileHref}
+                    className={navTriggerClass(isGroupActive(["/profile"]))}
+                  >
+                    Profile
+                  </IntentPrefetchLink>
+                ) : (
+                  <span className="shrink-0 rounded px-2 py-1 text-gray-500">
+                    Profile
+                  </span>
+                )}
+              </span>
+
+              {!isOverflowing("messages") ? (
+                <IntentPrefetchLink
+                  href="/messages"
+                  className={`inline-flex shrink-0 items-center gap-2 rounded px-2 py-1 transition ${
+                    isActive("/messages")
                       ? "bg-blue-500/20 text-blue-300"
                       : "text-gray-300 hover:text-white"
                   }`}
+                  onClick={() => {
+                    void handleToggleMessages()
+                  }}
                 >
-                  Affiliate ▾
-                </button>
-                {activeMenu === "affiliate" ? (
-                  <div className="absolute top-full z-[9999] mt-2 w-56 rounded border border-white/10 bg-[#1e293b] shadow-lg">
-                    {affiliateLinks.map((item) => (
-                      <IntentPrefetchLink
-                        key={item.href}
-                        href={item.href}
-                        className={`block rounded px-3 py-2 ${
-                          isActive(item.href)
-                            ? "bg-blue-500/20 text-blue-300"
-                            : "text-gray-300 hover:bg-white/10"
-                        }`}
-                      >
-                        {item.label}
-                      </IntentPrefetchLink>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
+                  Messages
+                  {unreadMessagesCount > 0 ? (
+                    <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-xs tabular-nums text-white">
+                      {unreadMessagesCount > 9 ? "9+" : unreadMessagesCount}
+                    </span>
+                  ) : null}
+                </IntentPrefetchLink>
+              ) : null}
+
+              {!isOverflowing("analytics") ? (
+                <div className="relative shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => toggleMenu("analytics")}
+                    className={navTriggerClass(
+                      isGroupActive([
+                        "/analytics",
+                        "/backtest",
+                        "/calendar",
+                        "/streaks",
+                        "/achievements",
+                        "/analyst",
+                      ])
+                    )}
+                  >
+                    Analytics ▾
+                  </button>
+                  {activeMenu === "analytics" ? (
+                    <div className="absolute top-full z-[9999] mt-2 w-56 rounded border border-white/10 bg-[#1e293b] shadow-lg">
+                      {renderAnalyticsDropdown("desktop")}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {!isOverflowing("community") ? (
+                <div className="relative shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => toggleMenu("community")}
+                    className={navTriggerClass(
+                      isGroupActive([
+                        "/community",
+                        "/feed",
+                        "/trade-rooms",
+                        "/leaderboard",
+                        "/explore",
+                      ])
+                    )}
+                  >
+                    Community ▾
+                  </button>
+                  {activeMenu === "community" ? (
+                    <div className="absolute top-full z-[9999] mt-2 w-56 rounded border border-white/10 bg-[#1e293b] shadow-lg">
+                      {communityLinks.map((item) => (
+                        <IntentPrefetchLink
+                          key={item.href}
+                          href={item.href}
+                          className={`block rounded px-3 py-2 ${
+                            isActive(item.href)
+                              ? "bg-blue-500/20 text-blue-300"
+                              : "text-gray-300 hover:bg-white/10"
+                          }`}
+                        >
+                          {item.label}
+                        </IntentPrefetchLink>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {!isOverflowing("affiliate") ? (
+                <div className="relative shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => toggleMenu("affiliate")}
+                    className={navTriggerClass(
+                      isGroupActive([
+                        "/affiliate/dashboard",
+                        "/affiliate/payout-setup",
+                        "/payouts",
+                      ])
+                    )}
+                  >
+                    Affiliate ▾
+                  </button>
+                  {activeMenu === "affiliate" ? (
+                    <div className="absolute top-full z-[9999] mt-2 w-56 rounded border border-white/10 bg-[#1e293b] shadow-lg">
+                      {affiliateLinks.map((item) => (
+                        <IntentPrefetchLink
+                          key={item.href}
+                          href={item.href}
+                          className={`block rounded px-3 py-2 ${
+                            isActive(item.href)
+                              ? "bg-blue-500/20 text-blue-300"
+                              : "text-gray-300 hover:bg-white/10"
+                          }`}
+                        >
+                          {item.label}
+                        </IntentPrefetchLink>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {overflowDisplayIds.length > 0 ? (
+                <div className="relative shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => toggleMenu("more")}
+                    aria-expanded={activeMenu === "more"}
+                    aria-haspopup="menu"
+                    className={navTriggerClass(moreMenuActive)}
+                  >
+                    More ▾
+                  </button>
+                  {activeMenu === "more" ? (
+                    <div className="absolute top-full z-[9999] mt-2 w-56 rounded border border-white/10 bg-[#1e293b] shadow-lg">
+                      {overflowDisplayIds.map((id) =>
+                        renderMoreOverflowItem(id)
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           ) : null}
         </div>
@@ -778,7 +1144,9 @@ export default function Navbar() {
 
                 {notificationBellControl("text-xl", "mr-2")}
 
-                {profile?.is_beta_tester ? (
+                <GettingStartedMobileEntry placement="desktop-nav" />
+
+                {profile?.is_beta_tester && !isOverflowing("beta") ? (
                   <IntentPrefetchLink
                     href="/beta"
                     className={`shrink-0 rounded border px-3 py-1.5 text-sm font-medium transition ${

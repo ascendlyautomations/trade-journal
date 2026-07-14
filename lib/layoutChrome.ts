@@ -5,6 +5,8 @@ import { shouldRenderGlobalAppNavbar } from "@/lib/appNavbarShell"
 export const STANDALONE_LAYOUT_SEGMENTS = new Set([
   "login",
   "reset-password",
+  /** Creator invite auth + redeem — never show marketing Login/Sign Up. */
+  "creator",
   "onboarding",
   "choose-plan",
   "finish-trial",

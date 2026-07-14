@@ -236,7 +236,7 @@ export default function PostSetupImportModal({ open, onComplete }: Props) {
             Finish Setting Up Your Account
           </h2>
           <p className="mt-2 text-center text-sm text-emerald-200/90">
-            Seamlessly import your past trades and start with real data — not a blank slate.
+            Seamlessly import your past trades and start with real data, not a blank slate.
           </p>
           <p className="mt-4 text-center text-sm leading-relaxed text-gray-400">
             Already using another journal? Bring your data with you in seconds.

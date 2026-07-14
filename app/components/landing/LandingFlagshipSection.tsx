@@ -34,7 +34,7 @@ export default function LandingFlagshipSection() {
             Six experiences. One platform.
           </h2>
           <p className={`${LANDING_LEAD} mx-auto mt-5`}>
-            Everything traders use today — connected in one home.
+            Everything traders use today, connected in one home.
           </p>
         </div>
 

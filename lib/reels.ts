@@ -241,6 +241,62 @@ export function resolveReelCaption(
   return trimmed !== "" ? trimmed : null
 }
 
+/**
+ * Effective visibility for listing. Trade-linked reels follow trades.is_public;
+ * standalone reels use their own visibility column.
+ */
+export function resolveReelVisibility(
+  reel: {
+    trade_id?: string | null
+    visibility?: ReelVisibility | null
+    trades?: ReelRow["trades"]
+  } | null | undefined
+): ReelVisibility {
+  if (!reel) return "private"
+  if (isTradeAttachedReel(reel)) {
+    return resolveReelTradeJoin(reel)?.is_public === true ? "public" : "private"
+  }
+  return reel.visibility === "private" ? "private" : "public"
+}
+
+/** Profile / public grids: trade-linked reels only when the linked trade is public. */
+export function isReelListedOnProfile(
+  reel: {
+    trade_id?: string | null
+    visibility?: ReelVisibility | null
+    trades?: ReelRow["trades"]
+  } | null | undefined
+): boolean {
+  if (!reel) return false
+  if (isTradeAttachedReel(reel)) {
+    return resolveReelTradeJoin(reel)?.is_public === true
+  }
+  return true
+}
+
+export function visibilityFromTradePublic(isPublic: boolean): ReelVisibility {
+  return isPublic ? "public" : "private"
+}
+
+/** Keep denormalized reels.visibility aligned when a trade's share setting changes. */
+export async function syncTradeLinkedReelVisibility(
+  supabase: SupabaseClient,
+  tradeId: string,
+  isPublic: boolean
+): Promise<void> {
+  const id = String(tradeId ?? "").trim()
+  if (!id) return
+
+  const { error } = await supabase
+    .from("reels")
+    .update({ visibility: visibilityFromTradePublic(isPublic) })
+    .eq("trade_id", id)
+
+  if (error) {
+    console.error("[syncTradeLinkedReelVisibility]", error)
+  }
+}
+
 export async function deleteReelStorageFiles(
   supabase: SupabaseClient,
   reel: { video_url?: string | null; thumbnail_url?: string | null }
@@ -492,7 +548,7 @@ export async function publishTradeReel(
 
   const { data: tradeRow, error: tradeError } = await supabase
     .from("trades")
-    .select("id")
+    .select("id, is_public")
     .eq("id", input.tradeId)
     .eq("user_id", input.userId)
     .maybeSingle()
@@ -511,7 +567,13 @@ export async function publishTradeReel(
     return { error: "Trade not found or you do not have permission to attach a replay." }
   }
 
-  logTradeReel("trade verified", { tradeId: tradeRow.id })
+  const reelVisibility = visibilityFromTradePublic(tradeRow.is_public === true)
+
+  logTradeReel("trade verified", {
+    tradeId: tradeRow.id,
+    isPublic: tradeRow.is_public === true,
+    visibility: reelVisibility,
+  })
 
   const { data: existing, error: existingError } = await supabase
     .from("reels")
@@ -624,7 +686,7 @@ export async function publishTradeReel(
       video_url: videoUpload.publicUrl,
       thumbnail_url: resolvedThumbnailUrl,
       duration_seconds: durationSeconds,
-      visibility: "public",
+      visibility: reelVisibility,
     })
     .select(REEL_ROW_SELECT)
     .single()
@@ -744,6 +806,10 @@ export async function fetchReelsByTradeIds(
   return map
 }
 
+function filterProfileListedReels(reels: ReelRow[]): ReelRow[] {
+  return reels.filter((row) => isReelListedOnProfile(row))
+}
+
 export async function fetchUserProfileReels(
   supabase: SupabaseClient,
   userId: string
@@ -755,7 +821,7 @@ export async function fetchUserProfileReels(
     .order("created_at", { ascending: false })
 
   if (!error) {
-    const reels = (data ?? []) as ReelRow[]
+    const reels = filterProfileListedReels((data ?? []) as ReelRow[])
     devLog("[fetchUserProfileReels] loaded", {
       userId,
       total: reels.length,
@@ -777,7 +843,11 @@ export async function fetchUserProfileReels(
     return []
   }
 
-  return hydrateReelsWithTrades(supabase, (fallback ?? []) as ReelRow[])
+  const hydrated = await hydrateReelsWithTrades(
+    supabase,
+    (fallback ?? []) as ReelRow[]
+  )
+  return filterProfileListedReels(hydrated)
 }
 
 export async function replaceTradeReelVideo(

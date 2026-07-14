@@ -161,7 +161,7 @@ export const COOKIE_POLICY_SECTIONS: LegalSection[] = [
           Where required, we ask for your consent before treating analytics as enabled. If you
           choose <strong>Essential Only</strong> in our cookie banner, we record that analytics
           preferences are disabled even if some analytics scripts are still loaded for core
-          operation — we use your stored preference to guide future analytics implementations.
+          operation. We use your stored preference to guide future analytics implementations.
         </p>
       </>
     ),

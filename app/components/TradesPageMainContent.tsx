@@ -116,7 +116,7 @@ function TradesPageMainContent({
   return (
     <>
       <h1 className="sr-only">Trades</h1>
-      <div className="w-full mt-2.5 mb-1.5">
+      <div className="w-full mt-2.5">
         <TradeFilterBar
           variant="trades"
           fullWidth
@@ -240,7 +240,7 @@ function TradesPageMainContent({
           <div
             aria-busy="true"
             aria-label="Loading trade statistics"
-            className="w-full grid grid-cols-2 md:grid-cols-4 gap-2 mb-3 mt-0"
+            className="mt-2.5 w-full grid grid-cols-2 md:grid-cols-4 gap-2"
           >
             {Array.from({ length: 4 }).map((_, i) => (
               <SkeletonStatsCard key={i} />
@@ -249,7 +249,7 @@ function TradesPageMainContent({
           <div
             aria-busy="true"
             aria-label="Loading trades"
-            className="w-full grid grid-cols-1 md:grid-cols-2 gap-4"
+            className="mt-2.5 w-full grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2.5"
           >
             {Array.from({ length: 6 }).map((_, i) => (
               <SkeletonTradesPageTradeCard key={i} />
@@ -258,7 +258,7 @@ function TradesPageMainContent({
         </>
       ) : (
         <>
-          <div className="w-full grid grid-cols-2 md:grid-cols-4 gap-2 mb-3 mt-0">
+          <div className="mt-2.5 w-full grid grid-cols-2 md:grid-cols-4 gap-2">
             <Stat
               title="Trades"
               value={tradeStats.totalTrades.toLocaleString(undefined, {
@@ -274,7 +274,7 @@ function TradesPageMainContent({
             <Stat title="Avg RR" value={formatRR(tradeStats.avgRR)} />
           </div>
 
-          <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="mt-2.5 w-full grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2.5">
             {displayedTrades.length === 0 ? (
               <div className="md:col-span-2">
                 <EmptyState
@@ -297,13 +297,7 @@ function TradesPageMainContent({
                       >
                         Add Trade
                       </Link>
-                      <button
-                        type="button"
-                        onClick={onImportCsv}
-                        className="rounded-lg border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/15"
-                      >
-                        Import CSV
-                      </button>
+                      
                     </div>
                     )
                   }
@@ -335,7 +329,7 @@ function TradesPageMainContent({
           </div>
 
           {visibleCount < visibleTradesLength ? (
-            <div className="flex justify-center mt-4">
+            <div className="mt-2.5 flex justify-center">
               <button
                 type="button"
                 onClick={onLoadMore}

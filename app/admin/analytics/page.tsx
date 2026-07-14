@@ -153,7 +153,7 @@ export default function AdminAnalyticsPage() {
                 Analytics
               </h1>
               <p className="mt-1 text-sm text-gray-400">
-                Aggregated product metrics (UTC). DAU/WAU count distinct users with recent activity — see note below.
+                Aggregated product metrics (UTC). DAU/WAU count distinct users with recent activity. See note below.
               </p>
             </div>
             <Link href="/admin" className="rounded bg-white/10 px-3 py-2 text-sm hover:bg-white/20">
@@ -177,9 +177,9 @@ export default function AdminAnalyticsPage() {
                 <MetricCard
                   label="Daily active users"
                   value={bundle.dailyActiveUsers}
-                  hint="Rolling 24h — distinct users with tracked activity"
+                  hint="Rolling 24h, distinct users with tracked activity"
                 />
-                <MetricCard label="Weekly active users" value={bundle.weeklyActiveUsers} hint="Rolling 7d — same activity sources as DAU" />
+                <MetricCard label="Weekly active users" value={bundle.weeklyActiveUsers} hint="Rolling 7d, same activity sources as DAU" />
                 <MetricCard label="Trades logged today" value={bundle.tradesToday} />
                 <MetricCard label="Trades logged this week" value={bundle.tradesWeek} />
                 <MetricCard label="Posts created today" value={bundle.postsToday} />

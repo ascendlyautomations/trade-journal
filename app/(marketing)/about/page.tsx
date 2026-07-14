@@ -33,7 +33,6 @@ import {
   LANDING_SECTION_SPACING,
   LANDING_TITLE_GRADIENT,
 } from "@/lib/landingPageUi"
-import { COMPANY_PAGE_TOP } from "@/lib/companyPageUi"
 
 function ProseSection({
   heading,
@@ -146,18 +145,18 @@ export default function AboutPage() {
         />
 
         <div className="relative z-10">
-          <header className={`${LANDING_SECTION_SHELL} px-4 ${COMPANY_PAGE_TOP} text-center`}>
+          <header className={`${LANDING_SECTION_SHELL} px-4 pt-[calc(var(--navbar-height)+21px)] text-center`}>
             <p className={LANDING_EYEBROW}>{ABOUT_PAGE_EYEBROW}</p>
-            <h1 className="mt-3 text-4xl font-bold tracking-tight text-white md:text-5xl lg:text-6xl">
+            <h1 className="mt-2 text-xl font-bold tracking-tight text-white md:mt-2 md:text-3xl">
               {ABOUT_HERO.heading}
             </h1>
-            <p className={`${LANDING_LEAD} mx-auto mt-6 max-w-3xl`}>
+            <p className={`${LANDING_LEAD} mx-auto mt-3 max-w-3xl md:mt-3`}>
               {ABOUT_HERO.subheading}
             </p>
           </header>
 
           <section
-            className={`${LANDING_SECTION_BORDER} ${LANDING_SECTION_SPACING}`}
+            className={`${LANDING_SECTION_BORDER} pt-6 pb-12 md:pt-10 md:pb-28`}
             aria-labelledby="about-story-heading"
           >
             <div className={LANDING_SECTION_SHELL}>
@@ -244,7 +243,7 @@ export default function AboutPage() {
                   ))}
                 </div>
                 <p className="mt-8 text-sm font-semibold text-white">
-                  — {ABOUT_FOUNDER_NOTE.signature}
+                  {ABOUT_FOUNDER_NOTE.signature}
                   <br />
                   <span className="font-normal text-gray-400">
                     {ABOUT_FOUNDER_NOTE.role}

@@ -293,7 +293,7 @@ export default function CsvImportPanel({
         const { preview } = applyParsePreview(filtered)
 
         if (isCsvFormatUnrecognized(preview.summary)) {
-          openFailureModal("Unsupported CSV format — no rows could be imported.")
+          openFailureModal("Unsupported CSV format. No rows could be imported.")
           return
         }
 

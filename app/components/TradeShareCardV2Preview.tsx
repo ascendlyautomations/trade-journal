@@ -65,7 +65,7 @@ export default function TradeShareCardV2Preview() {
     <div className="mx-auto max-w-6xl px-4 py-10">
       <header className="mb-10 text-center">
         <p className="text-xs font-semibold uppercase tracking-[0.28em] text-cyan-400/80">
-          Preview only — not wired to export
+          Preview only, not wired to export
         </p>
         <h1 className="mt-2 text-3xl font-bold text-white">
           Trade Share Card V2
@@ -123,7 +123,7 @@ export default function TradeShareCardV2Preview() {
         <ul className="mt-2 list-inside list-disc space-y-1">
           <li>@username, symbol, large P&amp;L, long/short pill, RR, date</li>
           <li>TradeTraxs logo + footer tagline</li>
-          <li>Win/loss background tint (no blur — export-safe CSS)</li>
+          <li>Win/loss background tint (no blur, export-safe CSS)</li>
         </ul>
         <p className="mt-4 text-xs text-gray-500">
           Approve layout here before swapping into{" "}

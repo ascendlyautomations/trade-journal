@@ -36,77 +36,76 @@ export const SYSTEM_MILESTONES: readonly SystemMilestone[] = [
     id: "first_trade",
     title: "First Trade",
     description: "Logged your first trade in TradeTraxs.",
-    icon: "🎯",
+    
     isUnlocked: (s) => s.tradeCount >= 1,
   },
   {
     id: "trades_10",
     title: "10 Trades Logged",
     description: "Built the habit with ten logged trades.",
-    icon: "📓",
+    
     isUnlocked: (s) => s.tradeCount >= 10,
   },
   {
     id: "trades_100",
     title: "100 Trades Logged",
-    description: "Consistency compounds — one hundred trades logged.",
-    icon: "📊",
+    description: "Consistency compounds. One hundred trades logged.",
+    
     isUnlocked: (s) => s.tradeCount >= 100,
   },
   {
     id: "trades_500",
     title: "500 Trades Logged",
     description: "Five hundred trades in the journal.",
-    icon: "🏅",
+    
     isUnlocked: (s) => s.tradeCount >= 500,
   },
   {
     id: "trades_1000",
     title: "1000 Trades Logged",
-    description: "A thousand-trade journal — elite consistency.",
-    icon: "💎",
+    description: "A thousand-trade journal. Elite consistency.",
     isUnlocked: (s) => s.tradeCount >= 1000,
   },
   {
     id: "profile_completed",
     title: "Profile Completed",
     description: "Your trader profile is set up and ready to share.",
-    icon: "👤",
+    
     isUnlocked: (s) => s.onboardingCompleted,
   },
   {
     id: "onboarding_completed",
     title: "Completed Onboarding",
     description: "Finished the TradeTraxs onboarding flow.",
-    icon: "✅",
+   
     isUnlocked: (s) => s.onboardingCompleted,
   },
   {
     id: "likes_100",
     title: "100 Likes Received",
     description: "The community has liked your content 100 times.",
-    icon: "❤️",
+    
     isUnlocked: (s) => s.likesReceivedCount >= 100,
   },
   {
     id: "first_public_trade",
     title: "First Public Trade",
     description: "Shared your first public trade with the community.",
-    icon: "🌍",
+    
     isUnlocked: (s) => s.publicTradeCount >= 1,
   },
   {
     id: "first_reel",
     title: "First Clip",
     description: "Published your first trading clip.",
-    icon: "🎬",
+   
     isUnlocked: (s) => s.reelCount >= 1,
   },
   {
     id: "first_comment",
     title: "First Comment",
     description: "Joined the conversation with your first comment.",
-    icon: "💬",
+    
     isUnlocked: (s) => s.commentCount >= 1,
   },
 ]

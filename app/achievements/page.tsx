@@ -230,7 +230,7 @@ export default function AchievementsPage() {
             <SkeletonAchievementsGrid count={6} />
           ) : visible.length === 0 ? (
             <EmptyState
-              icon="🏆"
+            
               title={
                 achievements.length === 0
                   ? "No achievements yet"
