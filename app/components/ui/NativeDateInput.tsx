@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef } from "react"
+import { useEffect, useRef } from "react"
 import { cn } from "./cn"
 
 function supportsShowPicker(input: HTMLInputElement): boolean {
@@ -8,12 +8,30 @@ function supportsShowPicker(input: HTMLInputElement): boolean {
 }
 
 /**
+ * Safari (macOS/iOS) exposes showPicker for date/time but has a known bug:
+ * the picker often cannot be dismissed by clicking outside. Prefer the native
+ * indicator / focus path on WebKit; keep showPicker for Chromium only.
+ */
+export function isSafariWebKit(): boolean {
+  if (typeof navigator === "undefined") return false
+  const ua = navigator.userAgent
+  if (/CriOS|FxiOS|EdgiOS|OPiOS/i.test(ua)) return false
+  return /Safari/i.test(ua) && !/Chrome|Chromium|Android/i.test(ua)
+}
+
+export function canUseProgrammaticShowPicker(
+  input: HTMLInputElement | null | undefined
+): boolean {
+  if (!input || !supportsShowPicker(input)) return false
+  return !isSafariWebKit()
+}
+
+/**
  * Chromium helper: open via showPicker, blurring first when already focused
- * so a second click reopens. iOS Safari has no reliable showPicker — rely on
- * the full-field ::-webkit-calendar-picker-indicator hit target instead.
+ * so a second click reopens. Never call on Safari — use the native indicator.
  */
 export function openNativeDatePicker(input: HTMLInputElement | null | undefined) {
-  if (!input || !supportsShowPicker(input)) return
+  if (!canUseProgrammaticShowPicker(input) || !input) return
 
   const tryShowPicker = () => {
     try {
@@ -38,6 +56,27 @@ export function openNativeDatePicker(input: HTMLInputElement | null | undefined)
   tryShowPicker()
 }
 
+function useDismissNativeTemporalField(
+  inputRef: React.RefObject<HTMLInputElement | null>
+) {
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return
+      const input = inputRef.current
+      if (!input || document.activeElement !== input) return
+      e.preventDefault()
+      input.blur()
+    }
+
+    window.addEventListener("keydown", onKeyDown)
+    return () => {
+      window.removeEventListener("keydown", onKeyDown)
+    }
+  }, [inputRef])
+}
+
+export { useDismissNativeTemporalField }
+
 type NativeDateInputProps = Omit<
   React.InputHTMLAttributes<HTMLInputElement>,
   "type"
@@ -53,6 +92,7 @@ export default function NativeDateInput({
   ...props
 }: NativeDateInputProps) {
   const inputRef = useRef<HTMLInputElement>(null)
+  useDismissNativeTemporalField(inputRef)
 
   return (
     <div
@@ -66,7 +106,7 @@ export default function NativeDateInput({
         if (e.target !== e.currentTarget) return
         const input = inputRef.current
         if (!input) return
-        if (supportsShowPicker(input)) {
+        if (canUseProgrammaticShowPicker(input)) {
           e.preventDefault()
           openNativeDatePicker(input)
         } else {
@@ -87,17 +127,25 @@ export default function NativeDateInput({
         }}
         onClick={(e) => {
           onClick?.(e)
-          // Chromium: ensure reopen when already focused.
-          // iOS: leave native full-field indicator alone — do not blur/re-click.
+          // Chromium only — Safari showPicker traps outside-click dismissal.
           const input = inputRef.current
-          if (input && supportsShowPicker(input)) {
+          if (input && canUseProgrammaticShowPicker(input)) {
             openNativeDatePicker(input)
           }
         }}
         onChange={(e) => {
           onChange?.(e)
-          // Release focus after selection so the next tap reopens cleanly.
-          e.currentTarget.blur()
+          // Chromium: release focus so the next tap reopens cleanly.
+          // Safari: blur after the native sheet applies the value so the form
+          // is not left with a sticky focused temporal control.
+          const input = e.currentTarget
+          if (canUseProgrammaticShowPicker(input)) {
+            input.blur()
+          } else {
+            requestAnimationFrame(() => {
+              if (document.activeElement === input) input.blur()
+            })
+          }
         }}
         onBlur={(e) => {
           onBlur?.(e)

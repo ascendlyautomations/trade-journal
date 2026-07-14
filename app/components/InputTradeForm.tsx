@@ -55,6 +55,7 @@ import TradeAccountPicker from "@/app/components/TradeAccountPicker"
 import CustomSelect from "@/app/components/CustomSelect"
 import { SELECT_TRIGGER_COMPACT_CLASS } from "@/lib/accountDropdownStyles"
 import NativeDateInput from "@/app/components/ui/NativeDateInput"
+import NativeTimeInput from "@/app/components/ui/NativeTimeInput"
 import CsvImportUnsupportedBanner from "@/app/components/CsvImportUnsupportedBanner"
 import CsvImportDiagnosticsPanel from "@/app/components/CsvImportDiagnosticsPanel"
 import type { CsvImportDiagnostics } from "@/lib/csvImportDiagnostics"
@@ -279,8 +280,6 @@ export default function InputTradeForm({
   const [entryTime, setEntryTime] = useState("")
   const [exitTime, setExitTime] = useState("")
   const fileInputRef = imageCrop.fileInputRef
-  const entryTimeRef = useRef<HTMLInputElement>(null)
-  const exitTimeRef = useRef<HTMLInputElement>(null)
 
   const [planProfile, setPlanProfile] = useState<{
     is_pro?: boolean | null
@@ -2181,23 +2180,13 @@ export default function InputTradeForm({
                 <label className={fieldLabelClass} htmlFor="entry-time">
                   Entry Time
                 </label>
-                <div
-                  className="relative w-full cursor-pointer"
-                  onClick={() => entryTimeRef.current?.showPicker?.()}
-                >
-                  <input
-                    ref={entryTimeRef}
-                    id="entry-time"
-                    type="time"
-                    tabIndex={13}
-                    value={entryTime}
-                    onChange={(e) => setEntryTime(e.target.value)}
-                    className="w-full p-2 pr-10 rounded bg-[#0f172a] border border-white/10 text-white [color-scheme:dark]"
-                  />
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2 text-white pointer-events-none">
-                    🕒
-                  </div>
-                </div>
+                <NativeTimeInput
+                  id="entry-time"
+                  tabIndex={13}
+                  value={entryTime}
+                  onChange={(e) => setEntryTime(e.target.value)}
+                  className="mt-0"
+                />
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2">
@@ -2217,23 +2206,13 @@ export default function InputTradeForm({
                 <label className={fieldLabelClass} htmlFor="exit-time">
                   Exit Time
                 </label>
-                <div
-                  className="relative w-full cursor-pointer"
-                  onClick={() => exitTimeRef.current?.showPicker?.()}
-                >
-                  <input
-                    ref={exitTimeRef}
-                    id="exit-time"
-                    type="time"
-                    tabIndex={15}
-                    value={exitTime}
-                    onChange={(e) => setExitTime(e.target.value)}
-                    className="w-full p-2 pr-10 rounded bg-[#0f172a] border border-white/10 text-white [color-scheme:dark]"
-                  />
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2 text-white pointer-events-none">
-                    🕒
-                  </div>
-                </div>
+                <NativeTimeInput
+                  id="exit-time"
+                  tabIndex={15}
+                  value={exitTime}
+                  onChange={(e) => setExitTime(e.target.value)}
+                  className="mt-0"
+                />
               </div>
             </div>
             {duration && (

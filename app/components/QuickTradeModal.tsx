@@ -25,6 +25,7 @@ import CustomSelect from "@/app/components/CustomSelect"
 import { SELECT_TRIGGER_COMPACT_CLASS } from "@/lib/accountDropdownStyles"
 import ScrollableModalShell from "@/app/components/ui/ScrollableModalShell"
 import NativeDateInput from "@/app/components/ui/NativeDateInput"
+import NativeTimeInput from "@/app/components/ui/NativeTimeInput"
 import { FeedbackModal, useFeedbackPopup, buttonVariants } from "@/app/components/ui"
 import {
   parseQuickCsvImport,
@@ -170,31 +171,14 @@ function TimeField({
   return (
     <div>
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
-      <div
-        className="relative mt-2 cursor-pointer"
-        onClick={() => openTimePicker(id)}
-      >
-        <input
-          id={id}
-          type="time"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className={`${INPUT_CLASS} pr-10`}
-        />
-        <span
-          className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
-          aria-hidden
-        >
-          🕒
-        </span>
-      </div>
+      <NativeTimeInput
+        id={id}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="mt-2 h-12 rounded-lg"
+      />
     </div>
   )
-}
-
-function openTimePicker(id: string) {
-  const el = document.getElementById(id) as HTMLInputElement | null
-  el?.showPicker?.()
 }
 
 export default function QuickTradeModal({
