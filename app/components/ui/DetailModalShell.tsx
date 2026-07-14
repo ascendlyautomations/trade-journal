@@ -3,6 +3,7 @@
 import { useCallback, useEffect, type ReactNode } from "react"
 import ModalCloseButton from "./ModalCloseButton"
 import { useModalScrollLock } from "./modalLayout"
+import { cn } from "./cn"
 
 /** Matches Navbar `h-16` / root layout `pt-16`. */
 export const NAVBAR_HEIGHT_CLASS = "top-16"
@@ -40,6 +41,11 @@ type DetailModalShellProps = {
   splitPanel?: ReactNode
   /** Hides the stacked mobile media slot when comments are focused. */
   suppressMobileSplitMedia?: boolean
+  /**
+   * Profile reel viewer only: nudge under the navbar and tighten vertical
+   * media sizing for short laptop screens. Leave off elsewhere.
+   */
+  compactVertical?: boolean
   zIndexClass?: string
   backdropClassName?: string
 }
@@ -55,6 +61,7 @@ export default function DetailModalShell({
   splitMedia,
   splitPanel,
   suppressMobileSplitMedia = false,
+  compactVertical = false,
   zIndexClass = "z-[9000]",
   backdropClassName = "bg-black/70",
 }: DetailModalShellProps) {
@@ -81,7 +88,12 @@ export default function DetailModalShell({
     layout === "split" && splitPanel != null ? (
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
         {splitMedia ? (
-          <div className="hidden md:flex md:min-h-0 md:flex-1 md:items-center md:justify-center md:border-r md:border-white/10 md:p-3">
+          <div
+            className={cn(
+              "hidden md:flex md:min-h-0 md:flex-1 md:items-center md:justify-center md:border-r md:border-white/10 md:p-3",
+              compactVertical && "tt-profile-reel-media"
+            )}
+          >
             {splitMedia}
           </div>
         ) : null}
@@ -111,7 +123,12 @@ export default function DetailModalShell({
 
   return (
     <div
-      className={`fixed inset-x-0 bottom-0 ${NAVBAR_HEIGHT_CLASS} flex flex-col overflow-hidden p-3 sm:p-4 ${backdropClassName} ${zIndexClass}`}
+      className={cn(
+        `fixed inset-x-0 bottom-0 ${NAVBAR_HEIGHT_CLASS} flex flex-col overflow-hidden ${backdropClassName} ${zIndexClass}`,
+        compactVertical
+          ? "px-3 pb-2.5 pt-1.5 sm:px-4 sm:pb-3 sm:pt-2"
+          : "p-3 sm:p-4"
+      )}
       onClick={onClose}
       role="presentation"
     >
@@ -119,13 +136,27 @@ export default function DetailModalShell({
         role="dialog"
         aria-modal="true"
         aria-label={ariaLabel}
-        className={`mx-auto flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-xl border border-white/10 bg-[#0f172a]/95 text-gray-100 shadow-xl backdrop-blur-xl ${dialogWidthClass}`}
-        style={{
-          maxHeight: "calc(100dvh - var(--navbar-height, 4rem) - 1.5rem)",
-        }}
+        className={cn(
+          "mx-auto flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-xl border border-white/10 bg-[#0f172a]/95 text-gray-100 shadow-xl backdrop-blur-xl",
+          dialogWidthClass,
+          compactVertical && "tt-profile-reel-dialog"
+        )}
+        style={
+          compactVertical
+            ? undefined
+            : {
+                maxHeight:
+                  "calc(100dvh - var(--navbar-height, 4rem) - 1.5rem)",
+              }
+        }
         onClick={stopPropagation}
       >
-        <header className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-[#0f172a]/95 px-3 py-2.5 backdrop-blur-xl">
+        <header
+          className={cn(
+            "flex shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-[#0f172a]/95 px-3 backdrop-blur-xl",
+            compactVertical ? "py-2 sm:py-2.5" : "py-2.5"
+          )}
+        >
           <p className="min-w-0 truncate text-sm font-semibold text-white">
             {title || "\u00a0"}
           </p>

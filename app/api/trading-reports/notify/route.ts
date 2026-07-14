@@ -28,8 +28,8 @@ export async function POST(req: Request) {
   const title =
     body.title?.trim() ||
     (kind === "weekly"
-      ? "📈 Your Weekly Trading Report is Ready"
-      : "📈 Your Monthly Trading Report is Ready")
+      ? "Your Weekly Trading Report is Ready"
+      : "Your Monthly Trading Report is Ready")
   const href = body.href?.trim() || `/dashboard?report=${encodeURIComponent(periodKey || "weekly_last")}`
 
   if (!periodKey || !periodId) {

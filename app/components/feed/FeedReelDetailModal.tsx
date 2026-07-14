@@ -41,6 +41,8 @@ type FeedReelDetailModalProps = {
   onDeleteReel?: () => void
   onReplaceReelVideo?: () => void
   isTradeAttachedReel?: boolean
+  /** Profile page only — tighter vertical fit for short laptop screens. */
+  compactVertical?: boolean
 }
 
 export default function FeedReelDetailModal({
@@ -66,6 +68,7 @@ export default function FeedReelDetailModal({
   onDeleteReel,
   onReplaceReelVideo,
   isTradeAttachedReel = false,
+  compactVertical = false,
 }: FeedReelDetailModalProps) {
   const pid = String(post.id)
   const playbackRef = useRef<ReelClipPlaybackHandle>(null)
@@ -129,6 +132,7 @@ export default function FeedReelDetailModal({
       ref={playbackRef}
       src={String(post.video_url)}
       poster={String(post.thumbnail_url)}
+      compactVertical={compactVertical}
     />
   )
 
@@ -230,6 +234,7 @@ export default function FeedReelDetailModal({
       splitMedia={splitMedia}
       splitPanel={splitPanel}
       suppressMobileSplitMedia={commentsFocused}
+      compactVertical={compactVertical}
     />
   )
 }

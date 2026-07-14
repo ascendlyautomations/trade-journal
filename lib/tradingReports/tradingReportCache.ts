@@ -131,8 +131,8 @@ function maybeQueueNotifications(userId: string, snapshot: TradingReportsSnapsho
       kind: report.kind,
       title:
         report.kind === "weekly"
-          ? "📈 Your Weekly Trading Report is Ready"
-          : "📈 Your Monthly Trading Report is Ready",
+          ? "Your Weekly Trading Report is Ready"
+          : "Your Monthly Trading Report is Ready",
     })
   }
 }

@@ -869,7 +869,7 @@ export function tradingReportNotificationTitle(
 ): string {
   const meta = parseTradingReportNotificationContent(notification.content)
   if (meta.title?.trim()) return meta.title.trim()
-  return "📈 Your Trading Report is Ready"
+  return "Your Trading Report is Ready"
 }
 
 export function tradingReportNotificationBody(
