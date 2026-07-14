@@ -109,6 +109,17 @@ input[type="time"] {
   color-scheme: dark;
 }
 
+/* Safari/iOS: neutralize native select chrome when any residual <select> remains. */
+select {
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%249ca3af' d='M1.41 0L6 4.58 10.59 0 12 1.41l-6 6-6-6z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 0.75rem;
+  padding-right: 2rem;
+}
+
 input[type="date"]:hover::-webkit-calendar-picker-indicator,
 input[type="time"]:hover::-webkit-calendar-picker-indicator {
   opacity: 1;
@@ -156,6 +167,20 @@ input[type="time"]:hover::-webkit-calendar-picker-indicator {
   touch-action: manipulation;
   -webkit-appearance: none;
   appearance: none;
+}
+
+/* Form-compact date fields (Input Trade) — keep native picker, tighter chrome. */
+.tt-date-field.tt-date-field--compact .tt-date-field-input {
+  min-height: 0;
+  padding: 0.5rem;
+  padding-right: 2.5rem;
+}
+
+@media (min-width: 1024px) {
+  .tt-date-field.tt-date-field--compact .tt-date-field-input {
+    padding: 0.625rem;
+    padding-right: 2.5rem;
+  }
 }
 
 .tt-date-field-input::-webkit-datetime-edit,

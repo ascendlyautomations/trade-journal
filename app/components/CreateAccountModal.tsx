@@ -18,6 +18,8 @@ import {
 } from "@/lib/createAccountForm"
 import type { TradingAccountPropFirmRules } from "@/lib/tradingAccounts"
 import ScrollableModalShell from "@/app/components/ui/ScrollableModalShell"
+import CustomSelect from "@/app/components/CustomSelect"
+import { SELECT_MODAL_TRIGGER_CLASS } from "@/lib/accountDropdownStyles"
 import { cn } from "@/app/components/ui/cn"
 
 export type PropFirmRules = TradingAccountPropFirmRules
@@ -72,9 +74,6 @@ const emptyForm = {
 
 const inputClass =
   "mt-1 w-full rounded-lg border border-white/10 bg-[#0f172a] p-2.5 text-white placeholder:text-gray-500 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
-
-const selectClass =
-  "mt-1 w-full rounded-lg border border-white/10 bg-[#0f172a] p-2.5 text-white focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
 
 function formatNumber(value: string | number) {
   if (!value) return ""
@@ -353,20 +352,16 @@ export default function CreateAccountModal({
         <div className="space-y-4">
           <label className="block">
             <span className="text-xs text-gray-400">Account type</span>
-            <select
+            <CustomSelect
               value={category}
               disabled={categoryLocked}
-              onChange={(e) =>
-                handleCategoryChange(e.target.value as AccountType)
-              }
-              className={`${selectClass} disabled:cursor-not-allowed disabled:opacity-70`}
-            >
-              {ACCOUNT_TYPES.map((type) => (
-                <option key={type} value={type}>
-                  {type}
-                </option>
-              ))}
-            </select>
+              onChange={(val) => handleCategoryChange(val as AccountType)}
+              triggerClassName={SELECT_MODAL_TRIGGER_CLASS}
+              options={ACCOUNT_TYPES.map((type) => ({
+                label: type,
+                value: type,
+              }))}
+            />
           </label>
 
           <label className="block">
@@ -431,18 +426,13 @@ export default function CreateAccountModal({
           {showsAccountModeSelector(category) ? (
             <label className="block">
               <span className="text-xs text-gray-400">Account mode</span>
-              <select
+              <CustomSelect
                 value={mode}
                 disabled={modeLocked}
-                onChange={(e) => setMode(e.target.value)}
-                className={`${selectClass} disabled:cursor-not-allowed disabled:opacity-70`}
-              >
-                {accountModeOptions(category).map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+                onChange={setMode}
+                triggerClassName={SELECT_MODAL_TRIGGER_CLASS}
+                options={accountModeOptions(category)}
+              />
             </label>
           ) : null}
 
@@ -450,20 +440,21 @@ export default function CreateAccountModal({
             <>
               <div className="space-y-1">
                 <div className="text-xs text-gray-400">Consistency Rule</div>
-                <select
+                <CustomSelect
                   value={consistencyMode}
-                  onChange={(e) => {
-                    const next = e.target.value as "na" | "required"
+                  onChange={(val) => {
+                    const next = val as "na" | "required"
                     setConsistencyMode(next)
                     if (next === "na") {
                       setConsistency("")
                     }
                   }}
-                  className={selectClass}
-                >
-                  <option value="na">Does Not Apply</option>
-                  <option value="required">Required</option>
-                </select>
+                  triggerClassName={SELECT_MODAL_TRIGGER_CLASS}
+                  options={[
+                    { label: "Does Not Apply", value: "na" },
+                    { label: "Required", value: "required" },
+                  ]}
+                />
               </div>
 
               {consistencyMode === "required" ? (
@@ -546,21 +537,22 @@ export default function CreateAccountModal({
 
               <div className="space-y-1">
                 <div className="text-xs text-gray-400">Winning Days</div>
-                <select
+                <CustomSelect
                   value={winningDaysMode}
-                  onChange={(e) => {
-                    const next = e.target.value as "na" | "required"
+                  onChange={(val) => {
+                    const next = val as "na" | "required"
                     setWinningDaysMode(next)
                     if (next === "na") {
                       setWinningDays("")
                       setWinningDayThreshold("")
                     }
                   }}
-                  className={selectClass}
-                >
-                  <option value="na">Does Not Apply</option>
-                  <option value="required">Required</option>
-                </select>
+                  triggerClassName={SELECT_MODAL_TRIGGER_CLASS}
+                  options={[
+                    { label: "Does Not Apply", value: "na" },
+                    { label: "Required", value: "required" },
+                  ]}
+                />
               </div>
 
               {winningDaysMode === "required" ? (

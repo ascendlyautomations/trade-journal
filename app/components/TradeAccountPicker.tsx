@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import { useRouter } from "next/navigation"
 import {
   navigateToManageAccounts,
@@ -23,12 +24,18 @@ import {
   ACCOUNT_DROPDOWN_FILTER_WRAPPER_CLASS,
   ACCOUNT_DROPDOWN_ITEM_CLASS,
   ACCOUNT_DROPDOWN_MANAGE_CLASS,
-  ACCOUNT_DROPDOWN_PANEL_CLASS,
+  ACCOUNT_DROPDOWN_PORTAL_MENU_CLASS,
   ACCOUNT_DROPDOWN_ROW_TEXT_CLASS,
   ACCOUNT_DROPDOWN_SUBMISSION_WRAPPER_CLASS,
   ACCOUNT_DROPDOWN_TRIGGER_CLASS,
 } from "@/lib/accountDropdownStyles"
 import { cn } from "@/app/components/ui/cn"
+
+type MenuPosition = {
+  top: number
+  left: number
+  width: number
+}
 
 /** Mirrors `InputTradeForm` account row shape after `accounts` fetch. */
 export type TradeAccountOption = {
@@ -228,6 +235,25 @@ export default function TradeAccountPicker({
   const [open, setOpen] = useState(false)
   const [menuView, setMenuView] = useState<MenuView>("accounts")
   const [accountsExpanded, setAccountsExpanded] = useState(false)
+  const [menuPosition, setMenuPosition] = useState<MenuPosition | null>(null)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  function updateMenuPosition() {
+    const trigger = triggerRef.current
+    if (!trigger) return
+    const rect = trigger.getBoundingClientRect()
+    const viewportPad = 8
+    setMenuPosition({
+      top: rect.bottom + 4,
+      left: Math.min(
+        rect.left,
+        Math.max(viewportPad, window.innerWidth - rect.width - viewportPad)
+      ),
+      width: rect.width,
+    })
+  }
 
   const selectedCopyGroup = useMemo(
     () =>
@@ -289,16 +315,38 @@ export default function TradeAccountPicker({
     selectedCopyGroup,
   ])
 
+  useLayoutEffect(() => {
+    if (!open) {
+      setMenuPosition(null)
+      return
+    }
+    updateMenuPosition()
+    window.addEventListener("resize", updateMenuPosition)
+    window.addEventListener("scroll", updateMenuPosition, true)
+    return () => {
+      window.removeEventListener("resize", updateMenuPosition)
+      window.removeEventListener("scroll", updateMenuPosition, true)
+    }
+  }, [open, menuView, accountsExpanded])
+
   useEffect(() => {
+    if (!open) return
     function handleClickOutside(e: MouseEvent) {
-      const target = e.target as HTMLElement
-      if (!target.closest(".trade-account-picker")) {
-        setOpen(false)
-      }
+      const target = e.target as Node
+      if (rootRef.current?.contains(target)) return
+      if (menuRef.current?.contains(target)) return
+      setOpen(false)
+    }
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false)
     }
     document.addEventListener("mousedown", handleClickOutside)
-    return () => document.removeEventListener("mousedown", handleClickOutside)
-  }, [])
+    document.addEventListener("keydown", handleKeyDown)
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside)
+      document.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [open])
 
   useEffect(() => {
     if (!open) {
@@ -494,14 +542,18 @@ export default function TradeAccountPicker({
       )}
     >
       <div
+        ref={rootRef}
         className={cn(
           "relative w-full min-w-0 trade-account-picker",
           !isFilterMode && "flex-1 md:flex-none"
         )}
       >
         <button
+          ref={triggerRef}
           id={triggerId}
           type="button"
+          aria-haspopup="listbox"
+          aria-expanded={open}
           onClick={() => setOpen((prev) => !prev)}
           className={resolvedTriggerClassName}
         >
@@ -517,34 +569,47 @@ export default function TradeAccountPicker({
               </span>
             )}
           </span>
-          <span className="shrink-0 text-gray-400">▾</span>
+          <span className="shrink-0 text-gray-400" aria-hidden="true">
+            ▾
+          </span>
         </button>
 
-        {open ? (
-          <div
-            className={cn(
-              ACCOUNT_DROPDOWN_PANEL_CLASS,
-              // Pin footer actions (Add Account) — do not clip the whole panel.
-              "max-h-none overflow-hidden p-0"
-            )}
-          >
-            {showCopyTrading ? (
-              <div className="relative overflow-hidden">
-                <div
-                  className={cn(
-                    "flex w-[200%] transition-transform duration-200 ease-out",
-                    menuView === "copy-groups" ? "-translate-x-1/2" : "translate-x-0"
-                  )}
-                >
-                  <div className="w-1/2 shrink-0">{accountsPanel}</div>
-                  <div className="w-1/2 shrink-0">{copyGroupsPanel}</div>
-                </div>
-              </div>
-            ) : (
-              accountsPanel
-            )}
-          </div>
-        ) : null}
+        {open && menuPosition
+          ? createPortal(
+              <div
+                ref={menuRef}
+                className={cn(
+                  ACCOUNT_DROPDOWN_PORTAL_MENU_CLASS,
+                  // Pin footer actions (Add Account) — do not clip the whole panel.
+                  "max-h-none overflow-hidden p-0 max-md:w-max max-md:min-w-full max-md:max-w-[calc(100vw-1.5rem)]"
+                )}
+                style={{
+                  top: menuPosition.top,
+                  left: menuPosition.left,
+                  width: menuPosition.width,
+                }}
+              >
+                {showCopyTrading ? (
+                  <div className="relative overflow-hidden">
+                    <div
+                      className={cn(
+                        "flex w-[200%] transition-transform duration-200 ease-out",
+                        menuView === "copy-groups"
+                          ? "-translate-x-1/2"
+                          : "translate-x-0"
+                      )}
+                    >
+                      <div className="w-1/2 shrink-0">{accountsPanel}</div>
+                      <div className="w-1/2 shrink-0">{copyGroupsPanel}</div>
+                    </div>
+                  </div>
+                ) : (
+                  accountsPanel
+                )}
+              </div>,
+              document.body
+            )
+          : null}
       </div>
 
       {!isFilterMode && showExternalCreateButton && onOpenCreate ? (

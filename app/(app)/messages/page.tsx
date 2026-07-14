@@ -31,6 +31,10 @@ import { markConversationOpenFromInbox } from "@/lib/conversationOpenIntent"
 import { useRouter } from "next/navigation"
 import MessagesConversationList from "../../components/messages/MessagesConversationList"
 import EmptyState from "../../components/ui/EmptyState"
+import {
+  ConfirmModal,
+  useDeleteChatConfirmation,
+} from "../../components/ui"
 import { SkeletonMessagesConversationList } from "../../components/ui/skeletons"
 import { useUserProfile } from "@/lib/UserProfileProvider"
 import { DELETED_USER_LABEL, isDirectConversationPeerDeleted } from "@/lib/deletedUserDisplay"
@@ -563,7 +567,6 @@ export default function MessagesPage() {
 
   const handleDeleteConversation = useCallback(
     async (conversationId: string) => {
-      if (!confirm("Delete this chat?")) return
       if (!user) return
 
       await supabase
@@ -576,6 +579,17 @@ export default function MessagesPage() {
       setOpenConvoMenuId(null)
     },
     [user]
+  )
+
+  const { requestDelete: requestDeleteConversation, confirmModalProps: deleteChatConfirmProps } =
+    useDeleteChatConfirmation(handleDeleteConversation)
+
+  const handleRequestDeleteConversation = useCallback(
+    (conversationId: string) => {
+      setOpenConvoMenuId(null)
+      requestDeleteConversation(conversationId)
+    },
+    [requestDeleteConversation]
   )
 
   const handlePinConversation = useCallback(
@@ -972,7 +986,7 @@ export default function MessagesPage() {
                 onToggleMenu={handleToggleConvoMenu}
                 onPin={handlePinConversation}
                 onMarkUnread={handleMarkConversationUnread}
-                onDelete={handleDeleteConversation}
+                onDelete={handleRequestDeleteConversation}
               />
             )}
           </div>
@@ -1181,6 +1195,8 @@ export default function MessagesPage() {
           </div>
         </div>
       )}
+
+      <ConfirmModal {...deleteChatConfirmProps} />
     </>
   )
 }

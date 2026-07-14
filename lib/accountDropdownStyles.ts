@@ -53,3 +53,29 @@ export const ACCOUNT_DROPDOWN_OPTION_CLASS =
   "w-full px-3 py-2 text-left text-sm text-white focus:outline-none hover:bg-[#1f2937]"
 
 export const ACCOUNT_DROPDOWN_OPTION_SELECTED_CLASS = "bg-[#1f2937] font-medium"
+
+/**
+ * Cross-browser form selects (CustomSelect). Same closed-state chrome as native
+ * fields, without account-picker desktop width. Prefer these over raw <select>
+ * so Safari does not apply OS-native control chrome.
+ */
+export const SELECT_TRIGGER_CLASS =
+  "flex w-full min-w-0 cursor-pointer items-center justify-between rounded-lg border border-white/10 bg-[#0f172a] p-2.5 text-left text-sm text-white transition-colors hover:bg-[#1e293b] focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+
+/** Compact pad — matches InputTradeForm / QuickTrade modal field height. */
+export const SELECT_TRIGGER_COMPACT_CLASS =
+  "flex w-full min-w-0 cursor-pointer items-center justify-between rounded border border-white/10 bg-[#0f172a] p-2 text-left text-sm text-white transition-colors hover:bg-[#1e293b] focus:outline-none focus:ring-2 focus:ring-blue-500/40 lg:rounded-lg lg:p-2.5"
+
+/** Filter-bar / toolbar selects — fixed 34px height, no forced desktop width. */
+export const SELECT_FILTER_TRIGGER_CLASS =
+  "flex h-[34px] w-full min-w-0 cursor-pointer items-center justify-between rounded-md border border-white/10 bg-[#0f172a] px-3 py-1 text-left text-sm text-white hover:bg-[#1e293b] focus:outline-none focus:ring-2 focus:ring-blue-500 md:w-auto md:shrink-0"
+
+/** Admin / toolbar inline filters. */
+export const SELECT_INLINE_TRIGGER_CLASS =
+  "flex h-[34px] w-full min-w-0 cursor-pointer items-center justify-between rounded-md border border-white/10 bg-[#0f172a] px-3 py-1.5 text-left text-sm text-white hover:bg-[#1e293b] focus:outline-none focus:ring-2 focus:ring-blue-500"
+
+/** Create-account modal selects (emerald focus ring). */
+export const SELECT_MODAL_TRIGGER_CLASS =
+  "mt-1 flex w-full min-w-0 cursor-pointer items-center justify-between rounded-lg border border-white/10 bg-[#0f172a] p-2.5 text-left text-sm text-white focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
+
+export const SELECT_MENU_CLASS = ACCOUNT_DROPDOWN_PORTAL_MENU_CLASS

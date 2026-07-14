@@ -11,8 +11,8 @@ import { createPortal } from "react-dom"
 import {
   ACCOUNT_DROPDOWN_OPTION_CLASS,
   ACCOUNT_DROPDOWN_OPTION_SELECTED_CLASS,
-  ACCOUNT_DROPDOWN_PORTAL_MENU_CLASS,
-  ACCOUNT_DROPDOWN_TRIGGER_CLASS,
+  SELECT_MENU_CLASS,
+  SELECT_TRIGGER_CLASS,
 } from "@/lib/accountDropdownStyles"
 
 interface Option {
@@ -28,13 +28,16 @@ interface Props {
   placeholder?: string
   triggerClassName?: string
   menuClassName?: string
+  /** Root wrapper classes (width / shrink). */
+  className?: string
   /** Portal target; defaults to document.body. Use modal overlay for correct stacking. */
   portalContainerRef?: RefObject<HTMLElement | null>
+  id?: string
+  disabled?: boolean
+  tabIndex?: number
+  "aria-label"?: string
+  "aria-labelledby"?: string
 }
-
-const DEFAULT_TRIGGER_CLASS = ACCOUNT_DROPDOWN_TRIGGER_CLASS
-
-const DEFAULT_MENU_CLASS = ACCOUNT_DROPDOWN_PORTAL_MENU_CLASS
 
 type MenuPosition = {
   top: number
@@ -47,9 +50,15 @@ export default function CustomSelect({
   onChange,
   options,
   placeholder = "Select an option",
-  triggerClassName = DEFAULT_TRIGGER_CLASS,
-  menuClassName = DEFAULT_MENU_CLASS,
+  triggerClassName = SELECT_TRIGGER_CLASS,
+  menuClassName = SELECT_MENU_CLASS,
+  className = "",
   portalContainerRef,
+  id,
+  disabled = false,
+  tabIndex = 0,
+  "aria-label": ariaLabel,
+  "aria-labelledby": ariaLabelledBy,
 }: Props) {
   const [open, setOpen] = useState(false)
   const [menuPosition, setMenuPosition] = useState<MenuPosition | null>(null)
@@ -63,15 +72,19 @@ export default function CustomSelect({
     if (!trigger) return
 
     const rect = trigger.getBoundingClientRect()
+    const viewportPad = 8
     setMenuPosition({
       top: rect.bottom + 4,
-      left: rect.left,
+      left: Math.min(
+        rect.left,
+        Math.max(viewportPad, window.innerWidth - rect.width - viewportPad)
+      ),
       width: rect.width,
     })
   }
 
   useLayoutEffect(() => {
-    if (!open) {
+    if (!open || disabled) {
       setMenuPosition(null)
       return
     }
@@ -85,7 +98,7 @@ export default function CustomSelect({
       window.removeEventListener("resize", updateMenuPosition)
       window.removeEventListener("scroll", updateMenuPosition, true)
     }
-  }, [open])
+  }, [open, disabled])
 
   useLayoutEffect(() => {
     if (!open) return
@@ -94,6 +107,8 @@ export default function CustomSelect({
   }, [open, portalContainerRef])
 
   useEffect(() => {
+    if (!open) return
+
     function handleOutsideClick(event: MouseEvent) {
       const target = event.target as Node
       if (rootRef.current?.contains(target)) return
@@ -101,16 +116,29 @@ export default function CustomSelect({
       setOpen(false)
     }
 
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false)
+    }
+
     document.addEventListener("mousedown", handleOutsideClick)
-    return () => document.removeEventListener("mousedown", handleOutsideClick)
-  }, [])
+    document.addEventListener("keydown", handleKeyDown)
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick)
+      document.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [open])
+
+  useEffect(() => {
+    if (disabled) setOpen(false)
+  }, [disabled])
 
   const selected = options.find((opt) => opt.value === value)
 
   const menu =
-    open && menuPosition ? (
+    open && menuPosition && !disabled ? (
       <div
         ref={menuRef}
+        role="listbox"
         className={menuClassName}
         style={{
           top: menuPosition.top,
@@ -134,6 +162,8 @@ export default function CustomSelect({
             <button
               key={opt.value}
               type="button"
+              role="option"
+              aria-selected={isSelected}
               onClick={() => {
                 onChange(opt.value)
                 setOpen(false)
@@ -150,19 +180,31 @@ export default function CustomSelect({
     ) : null
 
   return (
-    <div ref={rootRef} className="relative w-full">
+    <div ref={rootRef} className={`relative w-full min-w-0 ${className}`}>
       <div
         ref={triggerRef}
-        role="button"
-        tabIndex={0}
-        onClick={() => setOpen((prev) => !prev)}
+        id={id}
+        role="combobox"
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        aria-label={ariaLabel}
+        aria-labelledby={ariaLabelledBy}
+        aria-disabled={disabled || undefined}
+        tabIndex={disabled ? -1 : tabIndex}
+        onClick={() => {
+          if (disabled) return
+          setOpen((prev) => !prev)
+        }}
         onKeyDown={(e) => {
+          if (disabled) return
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault()
             setOpen((prev) => !prev)
           }
         }}
-        className={`${triggerClassName} min-w-0 gap-2`}
+        className={`${triggerClassName} min-w-0 gap-2 ${
+          disabled ? "cursor-not-allowed opacity-70" : ""
+        }`}
       >
         <span
           className={`min-w-0 flex-1 truncate text-left md:whitespace-normal md:overflow-visible ${
@@ -171,7 +213,9 @@ export default function CustomSelect({
         >
           {selected?.label ?? placeholder}
         </span>
-        <span className="ml-2 shrink-0 text-gray-400">▾</span>
+        <span className="ml-2 shrink-0 text-gray-400" aria-hidden="true">
+          ▾
+        </span>
       </div>
 
       {portalTarget && menu ? createPortal(menu, portalTarget) : null}

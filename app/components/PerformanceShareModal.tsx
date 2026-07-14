@@ -8,6 +8,7 @@ import {
   captureShareCardElementToPng,
 } from "@/lib/shareImageCapture"
 import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
+import NativeDateInput from "@/app/components/ui/NativeDateInput"
 import {
   MODAL_BODY_SCROLL_CLASS,
   MODAL_FOOTER_CLASS,
@@ -262,20 +263,20 @@ export default function PerformanceShareModal({
           <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="block text-sm text-gray-300">
               <span className="mb-1 block text-xs text-gray-500">Start date</span>
-              <input
-                type="date"
+              <NativeDateInput
                 value={customRangeStart}
                 onChange={(e) => setCustomRangeStart(e.target.value)}
-                className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white"
+                className="rounded-lg border border-white/10 bg-white/5"
+                aria-label="Start date"
               />
             </label>
             <label className="block text-sm text-gray-300">
               <span className="mb-1 block text-xs text-gray-500">End date</span>
-              <input
-                type="date"
+              <NativeDateInput
                 value={customRangeEnd}
                 onChange={(e) => setCustomRangeEnd(e.target.value)}
-                className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white"
+                className="rounded-lg border border-white/10 bg-white/5"
+                aria-label="End date"
               />
             </label>
           </div>

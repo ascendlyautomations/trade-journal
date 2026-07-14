@@ -12,7 +12,6 @@ import { devLog } from "@/lib/devLog"
 import { useRouter } from "next/navigation"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import AuthPasswordInput from "@/app/components/ui/AuthPasswordInput"
-import { isBetaReferralRef } from "@/lib/betaReferralCode"
 import { persistReferralCodeFromUrl } from "@/lib/referralPersistence"
 import { enterSignupFlow, setCheckoutBillingInterval, setSignupIntent, getSignupIntent, type SignupIntent } from "@/lib/signupFlow"
 import SignupPlanPicker from "@/app/components/SignupPlanPicker"
@@ -58,8 +57,6 @@ export default function LoginPage() {
   const [googleLoading, setGoogleLoading] = useState(false)
   const [agreedToTerms, setAgreedToTerms] = useState(false)
   const checkoutInFlightRef = useRef(false)
-  const [isBetaSignup, setIsBetaSignup] = useState(false)
-  const [betaWelcomeExpanded, setBetaWelcomeExpanded] = useState(false)
   const [billingInterval, setBillingInterval] = useState<TraxProBillingIntervalId>(
     TRAXPRO_DEFAULT_BILLING_INTERVAL
   )
@@ -111,15 +108,10 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (typeof window === "undefined") return
-    const ref = persistReferralCodeFromUrl()
+    persistReferralCodeFromUrl()
     const params = new URLSearchParams(window.location.search)
     if (params.get("tab") === "signup") {
       setIsLogin(false)
-    }
-    if (!ref) return
-    if (isBetaReferralRef(ref)) {
-      setIsLogin(false)
-      setIsBetaSignup(true)
     }
   }, [])
 
@@ -458,102 +450,18 @@ export default function LoginPage() {
     <div className="relative z-10 flex w-full max-w-6xl flex-col items-center justify-between px-6 md:flex-row">
 
       {/* LEFT TEXT */}
-      <div
-        className={`max-w-lg text-center max-md:pt-3 md:text-left ${
-          isBetaSignup ? "mb-4 md:mb-0" : "mb-10 md:mb-0"
-        }`}
-      >
-        {isBetaSignup ? (
-          <>
-            <h1 className="mb-3 text-2xl font-bold leading-tight text-blue-300 sm:text-4xl md:mb-5 md:text-[2.5rem]">
-              🎉 Welcome to the TradeTraxs Beta!
-            </h1>
+      <div className="mb-10 max-w-lg text-center max-md:pt-3 md:mb-0 md:text-left">
+        <p className="text-sm tracking-widest text-blue-300 mb-5">
+          WELCOME TO
+        </p>
 
-            {/* Desktop — full message (unchanged) */}
-            <div className="hidden space-y-3 text-base leading-relaxed text-gray-300 md:block">
-              <p>
-                First off, thank you so much for being a beta tester for TradeTraxs.
-              </p>
-              <p>
-                The fact that you&apos;re here means a lot to me. I&apos;ve spent hundreds of hours
-                building this platform, and now I finally get to put it in the hands of likeminded traders.
-              </p>
-              <p>
-                As you use the app, please don&apos;t be afraid to tell me what you love, what you
-                hate, what&apos;s confusing, or what features you wish existed. Honest feedback is
-                the most valuable thing you can give me right now.
-              </p>
-              <p>
-                You have a real opportunity to help shape the future of TradeTraxs. Many of the
-                features and improvements added during beta will come directly from suggestions made
-                by you all.
-              </p>
-              <p>
-                Thank you again for taking the time to test the platform. I&apos;m excited to hear
-                your feedback and continue building something awesome together.
-              </p>
-              <p className="pt-1 font-medium text-amber-100/90">Nick</p>
-            </div>
+        <h1 className="text-5xl font-bold mb-4 text-blue-300">
+          TradeTraxs
+        </h1>
 
-            {/* Mobile — teaser + expandable remainder */}
-            <div className="md:hidden">
-              <p className="text-sm leading-relaxed text-gray-300">
-                First off, thank you so much for being a beta tester for TradeTraxs.
-              </p>
-              <div
-                className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${
-                  betaWelcomeExpanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
-                }`}
-              >
-                <div className="overflow-hidden">
-                  <div className="space-y-3 pt-3 text-sm leading-relaxed text-gray-300">
-                    <p>
-                      The fact that you&apos;re here means a lot to me. I&apos;ve spent hundreds of hours
-                      building this platform, and now I finally get to put it in the hands of likeminded traders.
-                    </p>
-                    <p>
-                      As you use the app, please don&apos;t be afraid to tell me what you love, what you
-                      hate, what&apos;s confusing, or what features you wish existed. Honest feedback is
-                      the most valuable thing you can give me right now.
-                    </p>
-                    <p>
-                      You have a real opportunity to help shape the future of TradeTraxs. Many of the
-                      features and improvements added during beta will come directly from suggestions made
-                      by you all.
-                    </p>
-                    <p>
-                      Thank you again for taking the time to test the platform. I&apos;m excited to hear
-                      your feedback and continue building something awesome together.
-                    </p>
-                    <p className="font-medium text-amber-100/90">Nick</p>
-                  </div>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setBetaWelcomeExpanded((open) => !open)}
-                aria-expanded={betaWelcomeExpanded}
-                className="mt-4 text-sm font-medium text-amber-300/90 underline-offset-2 transition hover:text-amber-200 hover:underline"
-              >
-                {betaWelcomeExpanded ? "Read Less" : "Read More"}
-              </button>
-            </div>
-          </>
-        ) : (
-          <>
-            <p className="text-sm tracking-widest text-blue-300 mb-5">
-              WELCOME TO
-            </p>
-
-            <h1 className="text-5xl font-bold mb-4 text-blue-300">
-              TradeTraxs
-            </h1>
-
-            <p className="text-lg text-gray-300">
-              Track. Analyze. Socialize. Dominate your trading.
-            </p>
-          </>
-        )}
+        <p className="text-lg text-gray-300">
+          Track. Analyze. Socialize. Dominate your trading.
+        </p>
       </div>
 
       {/* RIGHT LOGIN CARD */}

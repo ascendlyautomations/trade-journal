@@ -13,6 +13,8 @@ import {
 } from "@/lib/bugReports"
 import { supabase } from "@/lib/supabaseClient"
 import ImageLightbox from "@/app/components/ui/ImageLightbox"
+import CustomSelect from "@/app/components/CustomSelect"
+import { SELECT_TRIGGER_CLASS } from "@/lib/accountDropdownStyles"
 
 type StatusFilter = "all" | BugReportStatus
 type SeverityFilter = "all" | BugReportSeverity
@@ -377,17 +379,16 @@ export default function AdminBugReportsPage() {
 
               <div className="rounded border border-white/10 bg-black/20 p-3">
                 <label className="text-xs text-gray-400">Status</label>
-                <select
+                <CustomSelect
                   value={detailStatus}
-                  onChange={(e) => setDetailStatus(e.target.value as BugReportStatus)}
-                  className="mt-1 w-full rounded border border-white/10 bg-[#111827] p-2 text-sm"
-                >
-                  {BUG_REPORT_STATUS_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(val) => setDetailStatus(val as BugReportStatus)}
+                  className="mt-1"
+                  triggerClassName={SELECT_TRIGGER_CLASS}
+                  options={BUG_REPORT_STATUS_OPTIONS.map((opt) => ({
+                    label: opt.label,
+                    value: opt.value,
+                  }))}
+                />
                 {selected.resolved_at ? (
                   <p className="mt-2 text-xs text-gray-500">
                     Resolved at {new Date(selected.resolved_at).toLocaleString()}

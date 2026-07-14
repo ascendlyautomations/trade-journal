@@ -43,6 +43,7 @@ import { useAchievementPropFirmEvalContinuance } from "@/app/components/achievem
 import TradeAccountPicker, {
   type TradeAccountOption,
 } from "@/app/components/TradeAccountPicker"
+import CustomSelect from "@/app/components/CustomSelect"
 import CreateAccountModal from "@/app/components/CreateAccountModal"
 import PayoutSetupModal, {
   type PayoutSetupValues,
@@ -854,20 +855,19 @@ export default function AchievementUploadModal({
         <div className="grid gap-2 sm:grid-cols-2 sm:gap-3">
           <label className="text-xs text-gray-300">
             Achievement Type
-            <select
+            <CustomSelect
               value={form.achievement_type}
               disabled={lockAchievementType}
-              onChange={(e) =>
-                setForm((prev) => ({ ...prev, achievement_type: e.target.value }))
+              onChange={(val) =>
+                setForm((prev) => ({ ...prev, achievement_type: val }))
               }
-              className="mt-1.5 h-11 w-full rounded-lg border border-white/15 bg-[#0a1329] px-3 text-sm text-white outline-none transition focus:border-blue-400/60 focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-70"
-            >
-              {ACHIEVEMENT_TYPE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+              className="mt-1.5"
+              triggerClassName="flex h-11 w-full min-w-0 cursor-pointer items-center justify-between rounded-lg border border-white/15 bg-[#0a1329] px-3 text-left text-sm text-white outline-none transition focus:border-blue-400/60 focus:ring-2 focus:ring-blue-500/20"
+              options={ACHIEVEMENT_TYPE_OPTIONS.map((option) => ({
+                label: option.label,
+                value: option.value,
+              }))}
+            />
           </label>
           <label className="text-xs text-gray-300">
             Title

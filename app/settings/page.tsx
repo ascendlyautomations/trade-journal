@@ -4,6 +4,7 @@ import { SkeletonSettingsPage } from "../components/ui/skeletons"
 
 import { ProfileAvatarImg } from "../components/SafeProfileAvatar"
 import AffiliateApplyModal from "../components/AffiliateApplyModal"
+import CustomSelect from "@/app/components/CustomSelect"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "../../lib/supabaseClient"
@@ -1008,11 +1009,11 @@ export default function SettingsPage() {
             </div>
 
             {activeTab === "profile" && (
-              <div className="space-y-6 rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm">
+              <div className="space-y-3.5 rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm">
                 <div>
                   <span
                     id="settings-avatar-label"
-                    className="mb-2 block text-sm text-gray-400"
+                    className="mb-1 block text-sm text-gray-400"
                   >
                     Profile picture
                   </span>
@@ -1040,7 +1041,7 @@ export default function SettingsPage() {
                 <div>
                   <label
                     htmlFor="settings-display-name"
-                    className="mb-1 block text-sm text-gray-400"
+                    className="mb-0.5 block text-sm text-gray-400"
                   >
                     Display name
                   </label>
@@ -1056,7 +1057,7 @@ export default function SettingsPage() {
                 <div>
                   <label
                     htmlFor="settings-username"
-                    className="mb-1 block text-sm text-gray-400"
+                    className="mb-0.5 block text-sm text-gray-400"
                   >
                     Username
                   </label>
@@ -1071,7 +1072,7 @@ export default function SettingsPage() {
                     disabled={atUsernameChangeLimit}
                     className="w-full rounded-xl border border-white/10 bg-black/30 p-3 placeholder:text-gray-500 disabled:cursor-not-allowed disabled:opacity-50"
                   />
-                  <p className="mt-2 text-xs text-gray-400">
+                  <p className="mt-1 text-xs text-gray-400">
                     You may change your username up to 2 times.
                   </p>
                   {atUsernameChangeLimit ? (
@@ -1115,7 +1116,7 @@ export default function SettingsPage() {
                 </div>
 
                 <div>
-                  <label htmlFor="settings-bio" className="mb-1 block text-sm text-gray-400">
+                  <label htmlFor="settings-bio" className="mb-0.5 block text-sm text-gray-400">
                     Bio
                   </label>
                   <textarea
@@ -1132,7 +1133,7 @@ export default function SettingsPage() {
                 <div>
                   <label
                     htmlFor="settings-trading-style"
-                    className="mb-1 block text-sm text-gray-400"
+                    className="mb-0.5 block text-sm text-gray-400"
                   >
                     Trading style
                   </label>
@@ -1151,31 +1152,29 @@ export default function SettingsPage() {
                 <div>
                   <label
                     htmlFor="settings-trader-type"
-                    className="mb-1 block text-sm text-gray-400"
+                    className="mb-0.5 block text-sm text-gray-400"
                   >
                     Trader Type
                   </label>
-                  <select
+                  <CustomSelect
                     id="settings-trader-type"
                     value={traderType}
-                    onChange={(e) =>
-                      setTraderType(normalizeTraderType(e.target.value))
+                    onChange={(val) =>
+                      setTraderType(normalizeTraderType(val))
                     }
-                    className="w-full rounded-xl border border-white/10 bg-black/30 p-3 text-white"
-                  >
-                    <option value="">Select trader type (optional)</option>
-                    {TRADER_TYPE_OPTIONS.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
+                    placeholder="Select trader type (optional)"
+                    triggerClassName="flex w-full min-w-0 cursor-pointer items-center justify-between rounded-xl border border-white/10 bg-black/30 p-3 text-left text-sm text-white"
+                    options={TRADER_TYPE_OPTIONS.map((option) => ({
+                      label: option,
+                      value: option,
+                    }))}
+                  />
                 </div>
 
                 <div>
                   <label
                     htmlFor="settings-primary-market"
-                    className="mb-1 block text-sm text-gray-400"
+                    className="mb-0.5 block text-sm text-gray-400"
                   >
                     Primary market
                   </label>
@@ -1191,7 +1190,7 @@ export default function SettingsPage() {
                 <div>
                   <label
                     htmlFor="settings-started-trading"
-                    className="mb-1 block text-sm text-gray-400"
+                    className="mb-0.5 block text-sm text-gray-400"
                   >
                     Started trading date
                   </label>

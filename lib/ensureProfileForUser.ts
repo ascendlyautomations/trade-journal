@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { isBetaReferralRef } from "@/lib/betaReferralCode"
 import { REFERRAL_CODE_STORAGE_KEY } from "@/lib/referralPersistence"
 
 export type EnsureProfileOptions = {
@@ -25,7 +26,17 @@ export function readStoredReferralCode(): string | null {
   try {
     const raw = localStorage.getItem(REFERRAL_CODE_STORAGE_KEY)
     const trimmed = raw?.trim()
-    return trimmed || null
+    if (!trimmed) return null
+    // Closed beta invite leftover in storage — ignore.
+    if (isBetaReferralRef(trimmed)) {
+      try {
+        localStorage.removeItem(REFERRAL_CODE_STORAGE_KEY)
+      } catch {
+        /* ignore */
+      }
+      return null
+    }
+    return trimmed
   } catch {
     return null
   }
@@ -51,7 +62,7 @@ function resolveDisplayName(
 /**
  * Idempotent profile shell creation. Inserts only when no row exists for userId.
  * Never sets or overwrites username — NULL means "not chosen yet".
- * Beta tester flags are applied by DB trigger on referred_by (e.g. TRAXBETA).
+ * Beta enrollment is closed — beta invite codes are not stored as referred_by.
  */
 export async function ensureProfileForUser(
   supabase: SupabaseClient,
@@ -81,6 +92,9 @@ export async function ensureProfileForUser(
 
   const trimmedRef =
     referredBy != null ? String(referredBy).trim().toUpperCase() : ""
+  // Ignore closed beta invite codes so they cannot attribute or grant access.
+  const resolvedReferredBy =
+    trimmedRef && !isBetaReferralRef(trimmedRef) ? trimmedRef : null
   const displayName = resolveDisplayName(options.name, userMetadata)
 
   const { error: insertErr } = await supabase.from("profiles").insert({
@@ -91,7 +105,7 @@ export async function ensureProfileForUser(
     subscription_status: "inactive",
     created_at: new Date().toISOString(),
     referral_code: generateProfileReferralCode(),
-    referred_by: trimmedRef || null,
+    referred_by: resolvedReferredBy,
   })
 
   if (insertErr) {

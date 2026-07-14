@@ -23,7 +23,7 @@ export const submissionInput =
   "mb-4 w-full rounded-xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400"
 
 export const submissionSelect =
-  "mb-4 w-full rounded-xl border border-white/10 bg-[#111827] px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+  "mb-4 flex w-full min-w-0 cursor-pointer items-center justify-between rounded-xl border border-white/10 bg-[#111827] px-4 py-3 text-left text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-400"
 
 export const submissionTextarea =
   "mb-4 w-full resize-none rounded-xl border border-white/10 bg-white/10 px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400"

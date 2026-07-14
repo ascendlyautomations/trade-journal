@@ -21,6 +21,8 @@ import CreateAccountModal, {
 import TradeAccountPicker, {
   type TradeAccountOption,
 } from "@/app/components/TradeAccountPicker"
+import CustomSelect from "@/app/components/CustomSelect"
+import { SELECT_TRIGGER_COMPACT_CLASS } from "@/lib/accountDropdownStyles"
 import ScrollableModalShell from "@/app/components/ui/ScrollableModalShell"
 import NativeDateInput from "@/app/components/ui/NativeDateInput"
 import { FeedbackModal, useFeedbackPopup, buttonVariants } from "@/app/components/ui"
@@ -1110,15 +1112,17 @@ export default function QuickTradeModal({
               </div>
               <div>
                 <FieldLabel htmlFor="quick-trade-direction">Direction</FieldLabel>
-                <select
+                <CustomSelect
                   id="quick-trade-direction"
                   value={direction}
-                  onChange={(e) => handleDirectionChange(e.target.value)}
-                  className={`${INPUT_CLASS} mt-2`}
-                >
-                  <option value="Long">Long</option>
-                  <option value="Short">Short</option>
-                </select>
+                  onChange={handleDirectionChange}
+                  className="mt-2"
+                  triggerClassName={SELECT_TRIGGER_COMPACT_CLASS}
+                  options={[
+                    { label: "Long", value: "Long" },
+                    { label: "Short", value: "Short" },
+                  ]}
+                />
               </div>
             </div>
 

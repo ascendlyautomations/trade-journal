@@ -3,13 +3,23 @@
 import { useEffect, useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
 import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
+import NativeDateInput from "@/app/components/ui/NativeDateInput"
 import { DASHBOARD_MOBILE_TIMEFRAME_BTN_CLASS } from "@/app/components/dashboard/dashboardHeaderMobileUi"
 import TradeAccountPicker from "@/app/components/TradeAccountPicker"
+import CustomSelect from "@/app/components/CustomSelect"
+import { SELECT_FILTER_TRIGGER_CLASS } from "@/lib/accountDropdownStyles"
 import type { CopyTradingGroup } from "@/lib/copyTradingGroups"
 
 /** Shared with account pickers — same destination as the filter bar action. */
 export const MANAGE_ACCOUNTS_SETTINGS_HREF = "/settings#trading-accounts" as const
 export const MANAGE_ACCOUNTS_VALUE = "__manage_accounts__"
+
+const MODE_OPTIONS = [
+  { label: "All Modes", value: "all" },
+  { label: "Live", value: "live" },
+  { label: "Funded", value: "funded" },
+  { label: "Eval", value: "eval" },
+] as const
 
 export function navigateToManageAccounts(
   router: ReturnType<typeof useRouter>
@@ -146,14 +156,6 @@ export default function TradeFilterBar({
   const timeframeButtonLabel =
     selectedTimeframe === ALL_TIMEFRAME_LABEL ? "Timeframe" : selectedTimeframe
 
-  function openNativeDatePicker(input: HTMLInputElement) {
-    try {
-      input.showPicker()
-    } catch {
-      input.focus()
-    }
-  }
-
   function renderAccountSelect(className = "") {
     return (
       <TradeAccountPicker
@@ -205,16 +207,13 @@ export default function TradeFilterBar({
 
             <div className="flex w-full gap-2 md:w-auto md:items-center">
               <div className="flex-1 md:flex-none">
-                <select
+                <CustomSelect
                   value={accountTypeFilter}
-                  onChange={(e) => onAccountTypeChange(e.target.value)}
-                  className="h-[34px] w-full min-w-0 rounded-md border border-white/10 bg-[#0f172a] px-2 py-1 text-sm text-white hover:bg-[#1e293b] focus:outline-none focus:ring-2 focus:ring-blue-500 md:w-auto md:shrink-0 md:px-3"
-                >
-                  <option value="all">All Modes</option>
-                  <option value="live">Live</option>
-                  <option value="funded">Funded</option>
-                  <option value="eval">Eval</option>
-                </select>
+                  onChange={onAccountTypeChange}
+                  className="md:w-auto"
+                  triggerClassName={SELECT_FILTER_TRIGGER_CLASS}
+                  options={[...MODE_OPTIONS]}
+                />
               </div>
               <div className="flex-1 md:flex-none">
                 <button
@@ -254,16 +253,13 @@ export default function TradeFilterBar({
                     mobileThreeRowLayout ? "flex-1" : "flex-[1.5]"
                   }`}
                 >
-                  <select
+                  <CustomSelect
                     value={accountTypeFilter}
-                    onChange={(e) => onAccountTypeChange(e.target.value)}
-                    className="h-[34px] w-full min-w-0 rounded-md border border-white/10 bg-[#0f172a] px-2 py-1 text-sm text-white hover:bg-[#1e293b] focus:outline-none focus:ring-2 focus:ring-blue-500 md:w-auto md:shrink-0 md:px-3"
-                  >
-                    <option value="all">All Modes</option>
-                    <option value="live">Live</option>
-                    <option value="funded">Funded</option>
-                    <option value="eval">Eval</option>
-                  </select>
+                    onChange={onAccountTypeChange}
+                    className="md:w-auto"
+                    triggerClassName={SELECT_FILTER_TRIGGER_CLASS}
+                    options={[...MODE_OPTIONS]}
+                  />
                 </div>
                 {publicNextToModes ? (
                   <div
@@ -285,16 +281,13 @@ export default function TradeFilterBar({
                 ) : null}
               </div>
             ) : (
-              <select
+              <CustomSelect
                 value={accountTypeFilter}
-                onChange={(e) => onAccountTypeChange(e.target.value)}
-                className="h-[34px] shrink-0 rounded-md border border-white/10 bg-[#0f172a] px-3 py-1 text-sm text-white hover:bg-[#1e293b] focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="all">All Modes</option>
-                <option value="live">Live</option>
-                <option value="funded">Funded</option>
-                <option value="eval">Eval</option>
-              </select>
+                onChange={onAccountTypeChange}
+                className="w-auto shrink-0"
+                triggerClassName={SELECT_FILTER_TRIGGER_CLASS}
+                options={[...MODE_OPTIONS]}
+              />
             )}
 
             {mobileThreeRowLayout ? (
@@ -366,16 +359,15 @@ export default function TradeFilterBar({
             <div className="mt-5">
               <p className="text-sm text-white/60 mb-2">Specific Date</p>
 
-              <input
-                type="date"
+              <NativeDateInput
                 value={startDate}
-                onFocus={(e) => openNativeDatePicker(e.currentTarget)}
                 onChange={(e) => {
                   const v = e.target.value
                   setStartDate(v)
                   setEndDate(v)
                 }}
-                className="tt-timeframe-date h-11 w-full min-w-0 cursor-pointer rounded-xl border border-blue-400/20 bg-[#0b2345] px-3 py-2 text-sm text-white shadow-inner shadow-black/20 transition hover:border-blue-300/40 focus:border-emerald-400/60 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 [color-scheme:dark]"
+                className="h-11 rounded-xl border border-blue-400/20 bg-[#0b2345] shadow-inner shadow-black/20 transition hover:border-blue-300/40 focus-within:border-emerald-400/60 focus-within:ring-2 focus-within:ring-emerald-500/30"
+                aria-label="Specific date"
               />
 
               <button
@@ -397,20 +389,18 @@ export default function TradeFilterBar({
             <div className="mt-5">
               <p className="text-sm text-white/60 mb-2">Custom Range</p>
 
-              <div className="flex items-center gap-2 overflow-hidden">
-                <input
-                  type="date"
+              <div className="flex items-center gap-2 overflow-visible">
+                <NativeDateInput
                   value={startDate}
-                  onFocus={(e) => openNativeDatePicker(e.currentTarget)}
                   onChange={(e) => setStartDate(e.target.value)}
-                  className="tt-timeframe-date h-11 w-full min-w-0 cursor-pointer rounded-xl border border-blue-400/20 bg-[#0b2345] px-3 py-2 text-sm text-white shadow-inner shadow-black/20 transition hover:border-blue-300/40 focus:border-emerald-400/60 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 [color-scheme:dark]"
+                  className="h-11 min-w-0 flex-1 rounded-xl border border-blue-400/20 bg-[#0b2345] shadow-inner shadow-black/20 transition hover:border-blue-300/40 focus-within:border-emerald-400/60 focus-within:ring-2 focus-within:ring-emerald-500/30"
+                  aria-label="Range start date"
                 />
-                <input
-                  type="date"
+                <NativeDateInput
                   value={endDate}
-                  onFocus={(e) => openNativeDatePicker(e.currentTarget)}
                   onChange={(e) => setEndDate(e.target.value)}
-                  className="tt-timeframe-date h-11 w-full min-w-0 cursor-pointer rounded-xl border border-blue-400/20 bg-[#0b2345] px-3 py-2 text-sm text-white shadow-inner shadow-black/20 transition hover:border-blue-300/40 focus:border-emerald-400/60 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 [color-scheme:dark]"
+                  className="h-11 min-w-0 flex-1 rounded-xl border border-blue-400/20 bg-[#0b2345] shadow-inner shadow-black/20 transition hover:border-blue-300/40 focus-within:border-emerald-400/60 focus-within:ring-2 focus-within:ring-emerald-500/30"
+                  aria-label="Range end date"
                 />
               </div>
 

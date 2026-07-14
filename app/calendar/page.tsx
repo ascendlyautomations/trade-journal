@@ -27,6 +27,8 @@ import { getCachedTrades } from "@/lib/appDataCache"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 import { tradeAnalysisHref } from "@/lib/tradeAnalysisNavigation"
+import CustomSelect from "@/app/components/CustomSelect"
+import { SELECT_TRIGGER_CLASS } from "@/lib/accountDropdownStyles"
 export default function CalendarPage() {
   useScrollPageTopOnMount()
   const router = useRouter()
@@ -407,37 +409,40 @@ export default function CalendarPage() {
             </div>
 
             <div className="flex items-center gap-3 flex-wrap w-full max-w-xl mx-auto mb-3 md:mb-4">
-              <select
+              <CustomSelect
                 value={accountFilter}
-                onChange={(e) => {
-                  setAccountFilter(e.target.value)
+                onChange={(val) => {
+                  setAccountFilter(val)
                   setSelectedDate(null)
                   setSelectedTrades([])
                 }}
-                className="flex-1 min-w-[140px] bg-[#0f172a] border border-white/10 px-3 py-2 rounded text-white"
-              >
-                <option value="all">All Accounts</option>
-                {accountFilterOptions.map(({ value, label }) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-              <select
+                className="flex-1 min-w-[140px]"
+                triggerClassName={SELECT_TRIGGER_CLASS}
+                options={[
+                  { label: "All Accounts", value: "all" },
+                  ...accountFilterOptions.map(({ value, label }) => ({
+                    value,
+                    label,
+                  })),
+                ]}
+              />
+              <CustomSelect
                 value={selectedMode}
-                onChange={(e) => {
-                  setSelectedMode(e.target.value)
+                onChange={(val) => {
+                  setSelectedMode(val)
                   setSelectedDate(null)
                   setSelectedTrades([])
                 }}
-                className="flex-1 min-w-[140px] bg-[#0b1f3a] text-white border border-white/10 rounded-lg px-3 py-2"
-              >
-                <option value="all">All Modes</option>
-                <option value="live">Live</option>
-                <option value="funded">Funded</option>
-                <option value="eval">Eval</option>
-                <option value="backtest">Backtest</option>
-              </select>
+                className="flex-1 min-w-[140px]"
+                triggerClassName="flex w-full min-w-0 cursor-pointer items-center justify-between rounded-lg border border-white/10 bg-[#0b1f3a] px-3 py-2 text-left text-sm text-white"
+                options={[
+                  { label: "All Modes", value: "all" },
+                  { label: "Live", value: "live" },
+                  { label: "Funded", value: "funded" },
+                  { label: "Eval", value: "eval" },
+                  { label: "Backtest", value: "backtest" },
+                ]}
+              />
             </div>
 
             {/* WEEKDAY LABELS — Sun–Fri mobile, full week desktop */}

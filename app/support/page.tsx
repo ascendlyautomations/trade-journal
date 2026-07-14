@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react"
 import ImageCropModal from "@/app/components/ImageCropModal"
+import CustomSelect from "@/app/components/CustomSelect"
 import { useImageCropUpload } from "@/lib/useImageCropUpload"
 import { useRouter } from "next/navigation"
 import { supabase } from "../../lib/supabaseClient"
@@ -178,17 +179,15 @@ export default function SupportPage() {
             </p>
 
             <label className={submissionLabel}>Category</label>
-            <select
+            <CustomSelect
               value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              className={submissionSelect}
-            >
-              {CATEGORIES.map((c) => (
-                <option key={c.value} value={c.value}>
-                  {c.label}
-                </option>
-              ))}
-            </select>
+              onChange={setCategory}
+              triggerClassName={submissionSelect}
+              options={CATEGORIES.map((c) => ({
+                label: c.label,
+                value: c.value,
+              }))}
+            />
 
             <label className={submissionLabel}>Subject</label>
             <input

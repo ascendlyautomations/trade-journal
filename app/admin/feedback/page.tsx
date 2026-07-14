@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation"
 import { getCurrentAdminCheckResult } from "@/lib/adminUsers"
 import { supabase } from "@/lib/supabaseClient"
 import ImageLightbox from "@/app/components/ui/ImageLightbox"
+import CustomSelect from "@/app/components/CustomSelect"
+import { SELECT_TRIGGER_CLASS } from "@/lib/accountDropdownStyles"
 
 type FeedbackTab = "unviewed" | "viewed"
 
@@ -283,16 +285,18 @@ export default function AdminFeedbackPage() {
                 <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
                     <label className="text-xs text-gray-400">Status</label>
-                    <select
+                    <CustomSelect
                       value={detailStatus}
-                      onChange={(e) => setDetailStatus(e.target.value)}
-                      className="mt-1 w-full rounded border border-white/10 bg-[#111827] p-2 text-sm"
-                    >
-                      <option value="open">open</option>
-                      <option value="planned">planned</option>
-                      <option value="in_progress">in_progress</option>
-                      <option value="resolved">resolved</option>
-                    </select>
+                      onChange={setDetailStatus}
+                      className="mt-1"
+                      triggerClassName={SELECT_TRIGGER_CLASS}
+                      options={[
+                        { label: "open", value: "open" },
+                        { label: "planned", value: "planned" },
+                        { label: "in_progress", value: "in_progress" },
+                        { label: "resolved", value: "resolved" },
+                      ]}
+                    />
                   </div>
                   <div>
                     <label className="text-xs text-gray-400">Admin Notes</label>

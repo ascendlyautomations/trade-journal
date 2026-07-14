@@ -1,8 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
-import { BETA_REFERRAL_CODE, isBetaReferralRef } from "@/lib/betaReferralCode"
-import {
-  clearStoredReferralCode,
-} from "@/lib/referralPersistence"
+import { isBetaReferralRef } from "@/lib/betaReferralCode"
+import { clearStoredReferralCode } from "@/lib/referralPersistence"
 import { readStoredReferralCode } from "@/lib/ensureProfileForUser"
 
 function clearStoredReferralCodeIfBeta(): void {
@@ -11,73 +9,21 @@ function clearStoredReferralCodeIfBeta(): void {
   }
 }
 
-/** Clear beta referral from storage after flags are confirmed on profile. */
-export function clearBetaReferralAfterApply(isBetaTester: boolean | null | undefined): void {
-  if (isBetaTester === true) {
-    clearStoredReferralCodeIfBeta()
-  }
+/** Clear leftover beta invite codes from storage (enrollment is closed). */
+export function clearBetaReferralAfterApply(
+  _isBetaTester?: boolean | null
+): void {
+  clearStoredReferralCodeIfBeta()
 }
 
 /**
- * Backfill beta access for OAuth users whose profile was created without referred_by.
- * DB trigger sets is_beta_tester + is_pro when referred_by = TRAXBETA10302.
+ * Public beta enrollment is closed. Never applies TRAXBETA10302; only clears
+ * leftover stored beta invite codes.
  */
 export async function applyBetaReferralIfEligible(
-  supabase: SupabaseClient,
-  userId: string
+  _supabase: SupabaseClient,
+  _userId: string
 ): Promise<{ applied: boolean }> {
-  const storedRef = readStoredReferralCode()
-  if (!isBetaReferralRef(storedRef)) {
-    return { applied: false }
-  }
-
-  const { data: profile, error } = await supabase
-    .from("profiles")
-    .select("is_beta_tester, referred_by")
-    .eq("id", userId)
-    .maybeSingle()
-
-  if (error || !profile) {
-    if (error) console.error("applyBetaReferralIfEligible fetch:", error)
-    return { applied: false }
-  }
-
-  if (profile.is_beta_tester === true) {
-    clearStoredReferralCodeIfBeta()
-    return { applied: false }
-  }
-
-  const referredBy = profile.referred_by != null ? String(profile.referred_by).trim() : ""
-  if (referredBy) {
-    return { applied: false }
-  }
-
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
-  const accessToken = session?.access_token
-  if (!accessToken) {
-    return { applied: false }
-  }
-
-  const res = await fetch("/api/profile/apply-beta-referral", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${accessToken}`,
-    },
-    body: JSON.stringify({ code: BETA_REFERRAL_CODE }),
-  })
-
-  if (!res.ok) {
-    const payload = (await res.json().catch(() => null)) as { error?: string } | null
-    console.error(
-      "applyBetaReferralIfEligible update:",
-      payload?.error ?? res.statusText
-    )
-    return { applied: false }
-  }
-
-  clearStoredReferralCode()
-  return { applied: true }
+  clearStoredReferralCodeIfBeta()
+  return { applied: false }
 }

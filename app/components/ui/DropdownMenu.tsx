@@ -1,6 +1,13 @@
 "use client"
 
-import { useEffect, useRef, useState, type ReactNode } from "react"
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react"
+import { createPortal } from "react-dom"
 
 export type DropdownMenuItem = {
   id: string
@@ -20,6 +27,12 @@ type DropdownMenuProps = {
   menuClassName?: string
 }
 
+type MenuPosition = {
+  top: number
+  left: number
+  minWidth: number
+}
+
 export default function DropdownMenu({
   trigger,
   items,
@@ -30,15 +43,49 @@ export default function DropdownMenu({
   menuClassName = "",
 }: DropdownMenuProps) {
   const [open, setOpen] = useState(false)
+  const [menuPosition, setMenuPosition] = useState<MenuPosition | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  function updateMenuPosition() {
+    const triggerEl = triggerRef.current
+    if (!triggerEl) return
+    const rect = triggerEl.getBoundingClientRect()
+    const minWidth = Math.max(rect.width, 10.5 * 16)
+    const left =
+      align === "right"
+        ? Math.max(8, rect.right - minWidth)
+        : Math.min(rect.left, window.innerWidth - minWidth - 8)
+    setMenuPosition({
+      top: rect.bottom + 4,
+      left,
+      minWidth,
+    })
+  }
+
+  useLayoutEffect(() => {
+    if (!open || disabled) {
+      setMenuPosition(null)
+      return
+    }
+    updateMenuPosition()
+    window.addEventListener("resize", updateMenuPosition)
+    window.addEventListener("scroll", updateMenuPosition, true)
+    return () => {
+      window.removeEventListener("resize", updateMenuPosition)
+      window.removeEventListener("scroll", updateMenuPosition, true)
+    }
+  }, [open, disabled, align])
 
   useEffect(() => {
     if (!open) return
 
     function handlePointerDown(event: globalThis.MouseEvent) {
-      if (!containerRef.current?.contains(event.target as Node)) {
-        setOpen(false)
-      }
+      const target = event.target as Node
+      if (containerRef.current?.contains(target)) return
+      if (menuRef.current?.contains(target)) return
+      setOpen(false)
     }
 
     function handleKeyDown(event: KeyboardEvent) {
@@ -59,12 +106,48 @@ export default function DropdownMenu({
     setOpen((prev) => !prev)
   }
 
+  const menu =
+    open && menuPosition ? (
+      <div
+        ref={menuRef}
+        role="menu"
+        className={`fixed z-[1500] min-w-[10.5rem] overflow-hidden rounded-lg border border-white/10 bg-[#0f172a] py-1 shadow-xl ${menuClassName}`}
+        style={{
+          top: menuPosition.top,
+          left: menuPosition.left,
+          minWidth: menuPosition.minWidth,
+        }}
+      >
+        {items.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            role="menuitem"
+            disabled={item.disabled}
+            onClick={(event) => {
+              event.stopPropagation()
+              if (item.disabled || !item.onSelect) return
+              item.onSelect()
+              setOpen(false)
+            }}
+            className={`flex w-full items-center px-3 py-2 text-left text-sm transition ${
+              item.disabled
+                ? "cursor-default text-gray-400"
+                : item.variant === "danger"
+                  ? "text-red-300 hover:bg-white/10"
+                  : "text-gray-100 hover:bg-white/10"
+            } disabled:opacity-100`}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+    ) : null
+
   return (
-    <div
-      ref={containerRef}
-      className={`relative inline-flex ${className}`}
-    >
+    <div ref={containerRef} className={`relative inline-flex ${className}`}>
       <button
+        ref={triggerRef}
         type="button"
         onClick={handleTriggerClick}
         disabled={disabled}
@@ -75,36 +158,9 @@ export default function DropdownMenu({
         {trigger}
       </button>
 
-      {open ? (
-        <div
-          role="menu"
-          className={`absolute top-full z-50 mt-1 min-w-[10.5rem] overflow-hidden rounded-lg border border-white/10 bg-[#0f172a] py-1 shadow-xl ${align === "right" ? "right-0" : "left-0"} ${menuClassName}`}
-        >
-          {items.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              role="menuitem"
-              disabled={item.disabled}
-              onClick={(event) => {
-                event.stopPropagation()
-                if (item.disabled || !item.onSelect) return
-                item.onSelect()
-                setOpen(false)
-              }}
-              className={`flex w-full items-center px-3 py-2 text-left text-sm transition ${
-                item.disabled
-                  ? "cursor-default text-gray-400"
-                  : item.variant === "danger"
-                    ? "text-red-300 hover:bg-white/10"
-                    : "text-gray-100 hover:bg-white/10"
-              } disabled:opacity-100`}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-      ) : null}
+      {typeof document !== "undefined" && menu
+        ? createPortal(menu, document.body)
+        : null}
     </div>
   )
 }

@@ -31,7 +31,7 @@ export default function TradingReportsDashboardCard({
             </p>
           </div>
           <h2 className="hidden min-w-0 truncate text-sm font-semibold leading-snug text-white md:block lg:text-[0.9375rem]">
-            <span>📈 Trading Reports</span>
+            <span>Trading Reports</span>
             <span className="font-normal text-gray-400">
               , AI-powered summaries of your recent trading performance.
             </span>

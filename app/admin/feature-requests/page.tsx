@@ -11,6 +11,7 @@ import {
   type FeatureRequestStatus,
 } from "@/lib/featureRequests"
 import { supabase } from "@/lib/supabaseClient"
+import CustomSelect from "@/app/components/CustomSelect"
 
 type StatusFilter = "all" | FeatureRequestStatus
 
@@ -300,17 +301,16 @@ export default function AdminFeatureRequestsPage() {
 
             <label className="block text-xs uppercase tracking-wide text-gray-500">
               Status
-              <select
+              <CustomSelect
                 value={detailStatus}
-                onChange={(e) => setDetailStatus(e.target.value as FeatureRequestStatus)}
-                className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white"
-              >
-                {FEATURE_REQUEST_STATUS_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
+                onChange={(val) => setDetailStatus(val as FeatureRequestStatus)}
+                className="mt-1"
+                triggerClassName="flex w-full min-w-0 cursor-pointer items-center justify-between rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-left text-sm text-white"
+                options={FEATURE_REQUEST_STATUS_OPTIONS.map((opt) => ({
+                  label: opt.label,
+                  value: opt.value,
+                }))}
+              />
             </label>
 
             <div className="mt-4">

@@ -16,6 +16,8 @@ import { isProActive } from "@/lib/subscription"
 import { supabaseBearerHeaders } from "@/lib/supabaseBearerFetch"
 import { supabase } from "@/lib/supabaseClient"
 import { toUserFacingErrorMessage } from "@/lib/userFacingError"
+import CustomSelect from "@/app/components/CustomSelect"
+import { SELECT_TRIGGER_CLASS } from "@/lib/accountDropdownStyles"
 
 const PAGE_SIZE = 20
 
@@ -519,39 +521,45 @@ export default function AdminUsersPage() {
               </div>
               <div>
                 <label className="text-xs text-gray-400">Ban status</label>
-                <select
+                <CustomSelect
                   value={bannedFilter}
-                  onChange={(e) => setBannedFilter(e.target.value as typeof bannedFilter)}
-                  className="mt-1 w-full rounded-lg border border-white/10 bg-[#111827] px-3 py-2 text-sm md:w-40"
-                >
-                  <option value="all">All</option>
-                  <option value="banned">Banned</option>
-                  <option value="active">Active</option>
-                </select>
+                  onChange={(val) => setBannedFilter(val as typeof bannedFilter)}
+                  className="mt-1 md:w-40"
+                  triggerClassName={SELECT_TRIGGER_CLASS}
+                  options={[
+                    { label: "All", value: "all" },
+                    { label: "Banned", value: "banned" },
+                    { label: "Active", value: "active" },
+                  ]}
+                />
               </div>
               <div>
                 <label className="text-xs text-gray-400">Pro</label>
-                <select
+                <CustomSelect
                   value={proFilter}
-                  onChange={(e) => setProFilter(e.target.value as typeof proFilter)}
-                  className="mt-1 w-full rounded-lg border border-white/10 bg-[#111827] px-3 py-2 text-sm md:w-40"
-                >
-                  <option value="all">All</option>
-                  <option value="pro">Pro</option>
-                  <option value="non_pro">Non‑Pro</option>
-                </select>
+                  onChange={(val) => setProFilter(val as typeof proFilter)}
+                  className="mt-1 md:w-40"
+                  triggerClassName={SELECT_TRIGGER_CLASS}
+                  options={[
+                    { label: "All", value: "all" },
+                    { label: "Pro", value: "pro" },
+                    { label: "Non‑Pro", value: "non_pro" },
+                  ]}
+                />
               </div>
               <div>
                 <label className="text-xs text-gray-400">Privacy</label>
-                <select
+                <CustomSelect
                   value={privacyFilter}
-                  onChange={(e) => setPrivacyFilter(e.target.value as typeof privacyFilter)}
-                  className="mt-1 w-full rounded-lg border border-white/10 bg-[#111827] px-3 py-2 text-sm md:w-40"
-                >
-                  <option value="all">All</option>
-                  <option value="private">Private</option>
-                  <option value="public">Public</option>
-                </select>
+                  onChange={(val) => setPrivacyFilter(val as typeof privacyFilter)}
+                  className="mt-1 md:w-40"
+                  triggerClassName={SELECT_TRIGGER_CLASS}
+                  options={[
+                    { label: "All", value: "all" },
+                    { label: "Private", value: "private" },
+                    { label: "Public", value: "public" },
+                  ]}
+                />
               </div>
             </div>
 

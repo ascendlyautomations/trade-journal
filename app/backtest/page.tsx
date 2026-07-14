@@ -23,6 +23,7 @@ import { TRADES_APP_SELECT } from "@/lib/publicAccountPrivacy"
 import { useUserProfile } from "@/lib/UserProfileProvider"
 import { SkeletonBacktestPageContent } from "../components/ui/skeletons"
 import ImageLightbox from "../components/ui/ImageLightbox"
+import CustomSelect from "@/app/components/CustomSelect"
 
 const InputTradeForm = dynamic(() => import("../components/InputTradeForm"), {
   ssr: false,
@@ -210,17 +211,16 @@ export default function BacktestPage() {
 
           <div className="mb-3 flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-4">
-              <select
+              <CustomSelect
                 value={selectedStrategy}
-                onChange={(e) => setSelectedStrategy(e.target.value)}
-                className="rounded-lg border border-white/10 bg-black/40 px-4 py-2 text-white"
-              >
-                {strategies.map((s) => (
-                  <option key={s} value={s}>
-                    {s === "all" ? "All Strategies" : s}
-                  </option>
-                ))}
-              </select>
+                onChange={setSelectedStrategy}
+                className="w-auto"
+                triggerClassName="flex min-w-0 cursor-pointer items-center justify-between rounded-lg border border-white/10 bg-black/40 px-4 py-2 text-left text-sm text-white"
+                options={strategies.map((s) => ({
+                  label: s === "all" ? "All Strategies" : s,
+                  value: s,
+                }))}
+              />
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <button

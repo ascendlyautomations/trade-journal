@@ -3699,6 +3699,173 @@ function CommunityContent() {
                       </p>
                     </div>
                   ) : null}
+                  {pinnedMessages.length > 0 ? (
+                    <div
+                      className={`space-y-3 ${
+                        messages.length > 0 ? "mb-3" : ""
+                      }`}
+                    >
+                      {pinnedMessages.map((msg) => {
+                        const parentMessage = resolveParentMessage(
+                          msg,
+                          messagesById
+                        )
+                        const parentTargetId = String(
+                          parentMessage?.id ?? msg.parent_message_id
+                        )
+                        return (
+                          <div
+                            key={msg.id}
+                            id={roomMessageElementId(msg.id)}
+                            data-room-message-id={msg.id}
+                            className="group relative rounded-xl bg-white/5 p-3"
+                          >
+                            <div className="mb-1 flex flex-wrap items-center gap-2">
+                              <ProfileAvatarLink
+                                userId={msg.user_id}
+                                username={msg.profiles?.username}
+                                src={msg.profiles?.avatar_url}
+                                imgClassName="h-6 w-6 shrink-0 rounded-full"
+                              />
+                              <ProfileUsernameLink
+                                userId={msg.user_id}
+                                username={msg.profiles?.username}
+                                className="text-sm font-semibold"
+                              />
+                              <span className="text-xs text-gray-400">
+                                {formatRelativeTime(msg.created_at)}
+                              </span>
+                              <span className="rounded-md bg-white/10 px-1.5 py-0.5 text-[10px] font-medium text-gray-400">
+                                Pinned
+                              </span>
+                              {isOwner ? (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    void handleTogglePin(msg.id, msg.pinned)
+                                  }
+                                  className="ml-0.5 text-xs text-yellow-400"
+                                  aria-label="Unpin message"
+                                >
+                                  📌
+                                </button>
+                              ) : null}
+                              <RoomMessageActionsMenu
+                                message={msg}
+                                viewerUserId={user?.id}
+                                isRoomOwner={isOwner}
+                                activeMenuId={activeMessageMenuId}
+                                setActiveMenuId={setActiveMessageMenuId}
+                                onEdit={() => startEditMessage(msg)}
+                                onDelete={() => void handleDeleteMessage(msg.id)}
+                                deleting={deletingMessageId === msg.id}
+                              />
+                            </div>
+                            {msg.parent_message_id ? (
+                              <ReplyReferenceBlock
+                                parentMessageId={msg.parent_message_id}
+                                parentMessage={parentMessage}
+                                targetElementId={roomMessageElementId(
+                                  parentTargetId
+                                )}
+                                onJumpToParent={() =>
+                                  scrollToRoomMessage(parentTargetId)
+                                }
+                                onUnavailable={() =>
+                                  showPopup({
+                                    type: "info",
+                                    message: "Original message unavailable",
+                                  })
+                                }
+                              />
+                            ) : null}
+                            <div className="text-sm">
+                              {msg.type === "image" ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      if (msg.image_url) {
+                                        setLightboxImageUrl(msg.image_url)
+                                      }
+                                    }}
+                                    className="mt-1 block max-w-full cursor-zoom-in"
+                                    aria-label="View image full screen"
+                                  >
+                                    <img
+                                      src={msg.image_url || ""}
+                                      className="max-w-xs rounded"
+                                      alt=""
+                                      loading="lazy"
+                                      decoding="async"
+                                    />
+                                  </button>
+                                  {msg.content?.trim() ? (
+                                    <p className="mt-2 whitespace-pre-wrap break-words text-sm text-white">
+                                      {msg.content}
+                                    </p>
+                                  ) : null}
+                                </>
+                              ) : msg.type === "trade" ? (
+                                <SharedTradeMessageCard
+                                  tradeId={msg.trade_id ?? msg.trades?.id}
+                                  viewerUserId={user?.id}
+                                  onViewTrade={viewSharedTrade}
+                                />
+                              ) : editingMessageId === msg.id &&
+                                canEditRoomMessage(user?.id, msg) ? (
+                                <div className="space-y-2">
+                                  <textarea
+                                    value={editingMessageContent}
+                                    onChange={(e) =>
+                                      setEditingMessageContent(e.target.value)
+                                    }
+                                    rows={3}
+                                    className="w-full rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm text-white"
+                                  />
+                                  <div className="flex gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        void handleSaveEditMessage(msg.id)
+                                      }
+                                      disabled={!editingMessageContent.trim()}
+                                      className="rounded-md bg-blue-500 px-3 py-1 text-xs text-white hover:bg-blue-600 disabled:opacity-50 disabled:hover:bg-blue-500"
+                                    >
+                                      Save
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={cancelEditMessage}
+                                      className="rounded-md px-3 py-1 text-xs text-gray-400 hover:text-white"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <p className="whitespace-pre-wrap break-words text-sm text-white">
+                                  {msg.content}
+                                </p>
+                              )}
+                            </div>
+                            {!needsJoin ? (
+                              <RoomMessageFooter
+                                messageId={msg.id}
+                                reactions={msg.room_message_reactions}
+                                viewerUserId={user?.id}
+                                onReply={() => startReplyToMessage(msg)}
+                                onToggle={(id, reaction) =>
+                                  void toggleRoomMessageReaction(id, reaction)
+                                }
+                              />
+                            ) : null}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ) : null}
                   {messages.length > 0 ? (
                 <div className="space-y-3">
                   {messages.map((msg) => {
@@ -3853,166 +4020,6 @@ function CommunityContent() {
                     </div>
                   )})}
                 </div>
-                  ) : null}
-                  {pinnedMessages.length > 0 ? (
-                    <div className="mt-3 rounded-lg border border-yellow-500/20 bg-yellow-500/10 p-3">
-                      <p className="mb-2 text-xs text-yellow-400">Pinned</p>
-
-                      <div className="space-y-2">
-                        {pinnedMessages.map((msg) => {
-                          const parentMessage = resolveParentMessage(
-                            msg,
-                            messagesById
-                          )
-                          const parentTargetId = String(
-                            parentMessage?.id ?? msg.parent_message_id
-                          )
-                          return (
-                          <div
-                            key={msg.id}
-                            id={roomMessageElementId(msg.id)}
-                            data-room-message-id={msg.id}
-                            className="group relative rounded-lg bg-black/20 p-2"
-                          >
-                            <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-                              <div className="flex min-w-0 flex-wrap items-center gap-2">
-                                <ProfileUsernameLink
-                                  userId={msg.user_id}
-                                  username={msg.profiles?.username}
-                                  className="text-xs text-gray-400"
-                                />
-                                <span className="text-xs text-gray-400">
-                                  {formatRelativeTime(msg.created_at)}
-                                </span>
-                              </div>
-                              <div className="flex shrink-0 items-center gap-1">
-                                {isOwner ? (
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      void handleTogglePin(msg.id, msg.pinned)
-                                    }
-                                    className={`text-xs ${
-                                      msg.pinned ? "text-yellow-400" : "text-gray-400"
-                                    }`}
-                                  >
-                                    📌
-                                  </button>
-                                ) : null}
-                                <RoomMessageActionsMenu
-                                  message={msg}
-                                  viewerUserId={user?.id}
-                                  isRoomOwner={isOwner}
-                                  activeMenuId={activeMessageMenuId}
-                                  setActiveMenuId={setActiveMessageMenuId}
-                                  onEdit={() => startEditMessage(msg)}
-                                  onDelete={() => void handleDeleteMessage(msg.id)}
-                                  deleting={deletingMessageId === msg.id}
-                                />
-                              </div>
-                            </div>
-                            {msg.parent_message_id ? (
-                              <ReplyReferenceBlock
-                                parentMessageId={msg.parent_message_id}
-                                parentMessage={parentMessage}
-                                targetElementId={roomMessageElementId(
-                                  parentTargetId
-                                )}
-                                onJumpToParent={() =>
-                                  scrollToRoomMessage(parentTargetId)
-                                }
-                                onUnavailable={() =>
-                                  showPopup({
-                                    type: "info",
-                                    message: "Original message unavailable",
-                                  })
-                                }
-                              />
-                            ) : null}
-                            <div className="text-sm text-white">
-                              {msg.type === "image" ? (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      if (msg.image_url) {
-                                        setLightboxImageUrl(msg.image_url)
-                                      }
-                                    }}
-                                    className="mt-1 block max-w-full cursor-zoom-in"
-                                    aria-label="View image full screen"
-                                  >
-                                    <img
-                                      src={msg.image_url || ""}
-                                      className="max-h-24 rounded"
-                                      alt=""
-                                      loading="lazy"
-                                      decoding="async"
-                                    />
-                                  </button>
-                                  {msg.content?.trim() ? (
-                                    <p className="mt-1 whitespace-pre-wrap break-words text-xs text-white">
-                                      {msg.content}
-                                    </p>
-                                  ) : null}
-                                </>
-                              ) : msg.type === "trade" ? (
-                                <SharedTradeMessageCard
-                                  tradeId={msg.trade_id ?? msg.trades?.id}
-                                  viewerUserId={user?.id}
-                                  onViewTrade={viewSharedTrade}
-                                />
-                              ) : editingMessageId === msg.id &&
-                                canEditRoomMessage(user?.id, msg) ? (
-                                <div className="space-y-2">
-                                  <textarea
-                                    value={editingMessageContent}
-                                    onChange={(e) =>
-                                      setEditingMessageContent(e.target.value)
-                                    }
-                                    rows={3}
-                                    className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white"
-                                  />
-                                  <div className="flex gap-2">
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        void handleSaveEditMessage(msg.id)
-                                      }
-                                      disabled={!editingMessageContent.trim()}
-                                      className="rounded-md bg-blue-500 px-3 py-1 text-xs text-white hover:bg-blue-600 disabled:opacity-50 disabled:hover:bg-blue-500"
-                                    >
-                                      Save
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={cancelEditMessage}
-                                      className="rounded-md px-3 py-1 text-xs text-gray-400 hover:text-white"
-                                    >
-                                      Cancel
-                                    </button>
-                                  </div>
-                                </div>
-                              ) : (
-                                <span className="whitespace-pre-wrap break-words">{msg.content}</span>
-                              )}
-                            </div>
-                            {!needsJoin ? (
-                              <RoomMessageFooter
-                                messageId={msg.id}
-                                reactions={msg.room_message_reactions}
-                                viewerUserId={user?.id}
-                                onReply={() => startReplyToMessage(msg)}
-                                onToggle={(id, reaction) =>
-                                  void toggleRoomMessageReaction(id, reaction)
-                                }
-                              />
-                            ) : null}
-                          </div>
-                        )})}
-                      </div>
-                    </div>
                   ) : null}
                 </>
               )}

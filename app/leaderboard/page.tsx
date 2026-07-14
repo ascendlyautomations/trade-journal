@@ -9,6 +9,7 @@ import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { getDemoLeaderboardTrades } from "@/lib/demo/demoLeaderboard"
 import { getDemoProfileById } from "@/lib/demo/demoProfile"
 import { useUserProfile } from "@/lib/UserProfileProvider"
+import CustomSelect from "@/app/components/CustomSelect"
 import {
   LineChart,
   Line,
@@ -32,6 +33,7 @@ import { formatRR, formatSignedPnlDisplay, pnlTextClassName } from "@/lib/format
 import { profilePath } from "@/lib/profileRoutes"
 import EmptyState from "../components/ui/EmptyState"
 import { SkeletonLeaderboardPage } from "../components/ui/skeletons"
+import NativeDateInput from "@/app/components/ui/NativeDateInput"
 
 type LeaderboardProfile = {
   id: string
@@ -41,10 +43,10 @@ type LeaderboardProfile = {
 }
 
 const LEADERBOARD_SELECT_CLASS =
-  "w-full shrink-0 rounded border border-white/10 bg-[#1e293b] px-4 py-2 sm:w-auto"
+  "flex w-full shrink-0 cursor-pointer items-center justify-between rounded border border-white/10 bg-[#1e293b] px-4 py-2 text-left text-sm text-white sm:w-auto"
 
 const LEADERBOARD_DATE_INPUT_CLASS =
-  "tt-timeframe-date h-11 w-full min-w-0 cursor-pointer rounded-xl border border-blue-400/20 bg-[#0b2345] px-3 py-2 text-sm text-white shadow-inner shadow-black/20 transition hover:border-blue-300/40 focus:border-emerald-400/60 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 [color-scheme:dark]"
+  "h-11 rounded-xl border border-blue-400/20 bg-[#0b2345] shadow-inner shadow-black/20 transition hover:border-blue-300/40 focus-within:border-emerald-400/60 focus-within:ring-2 focus-within:ring-emerald-500/30"
 
 const LEADERBOARD_EMPTY_DESCRIPTION =
   "There isn't enough leaderboard data for the selected timeframe."
@@ -53,14 +55,6 @@ const LEADERBOARD_EMPTY_HINT = "Try another timeframe or account filter."
 
 function leaderboardEmptyDescription(): string {
   return `${LEADERBOARD_EMPTY_DESCRIPTION} ${LEADERBOARD_EMPTY_HINT}`
-}
-
-function openNativeDatePicker(input: HTMLInputElement) {
-  try {
-    input.showPicker()
-  } catch {
-    input.focus()
-  }
 }
 
 type TooltipPayload = {
@@ -356,30 +350,34 @@ export default function Leaderboard() {
               Leaderboard
             </h1>
             <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
-              <select
+              <CustomSelect
                 value={view}
-                onChange={(e) => setView(e.target.value as LeaderboardView)}
-                className={LEADERBOARD_SELECT_CLASS}
-              >
-                <option value="7D">7D</option>
-                <option value="30D">30D</option>
-                <option value="90D">90D</option>
-                <option value="YTD">YTD</option>
-                <option value="ALL">ALL</option>
-                <option value="Custom">Custom</option>
-              </select>
-              <select
+                onChange={(val) => setView(val as LeaderboardView)}
+                className="sm:w-auto"
+                triggerClassName={LEADERBOARD_SELECT_CLASS}
+                options={[
+                  { label: "7D", value: "7D" },
+                  { label: "30D", value: "30D" },
+                  { label: "90D", value: "90D" },
+                  { label: "YTD", value: "YTD" },
+                  { label: "ALL", value: "ALL" },
+                  { label: "Custom", value: "Custom" },
+                ]}
+              />
+              <CustomSelect
                 value={accountTypeFilter}
-                onChange={(e) =>
-                  setAccountTypeFilter(e.target.value as LeaderboardAccountTypeFilter)
+                onChange={(val) =>
+                  setAccountTypeFilter(val as LeaderboardAccountTypeFilter)
                 }
-                className={LEADERBOARD_SELECT_CLASS}
-              >
-                <option value="all">All Accounts</option>
-                <option value="live">Live</option>
-                <option value="funded">Funded</option>
-                <option value="eval">Eval</option>
-              </select>
+                className="sm:w-auto"
+                triggerClassName={LEADERBOARD_SELECT_CLASS}
+                options={[
+                  { label: "All Accounts", value: "all" },
+                  { label: "Live", value: "live" },
+                  { label: "Funded", value: "funded" },
+                  { label: "Eval", value: "eval" },
+                ]}
+              />
             </div>
           </div>
 
@@ -387,22 +385,20 @@ export default function Leaderboard() {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
               <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm">
                 <span className="text-gray-400">Start Date</span>
-                <input
-                  type="date"
+                <NativeDateInput
                   value={customRangeStart}
-                  onFocus={(e) => openNativeDatePicker(e.currentTarget)}
                   onChange={(e) => setCustomRangeStart(e.target.value)}
                   className={LEADERBOARD_DATE_INPUT_CLASS}
+                  aria-label="Start date"
                 />
               </label>
               <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm">
                 <span className="text-gray-400">End Date</span>
-                <input
-                  type="date"
+                <NativeDateInput
                   value={customRangeEnd}
-                  onFocus={(e) => openNativeDatePicker(e.currentTarget)}
                   onChange={(e) => setCustomRangeEnd(e.target.value)}
                   className={LEADERBOARD_DATE_INPUT_CLASS}
+                  aria-label="End date"
                 />
               </label>
             </div>

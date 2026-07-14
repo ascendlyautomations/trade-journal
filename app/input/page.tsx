@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { Button, Modal, cn } from "@/app/components/ui"
+import CustomSelect from "@/app/components/CustomSelect"
+import { SELECT_TRIGGER_CLASS } from "@/lib/accountDropdownStyles"
 import { useUserProfile } from "@/lib/useUserProfile"
 
 export default function InputPage() {
@@ -98,24 +100,26 @@ export default function InputPage() {
             className="w-full p-3 bg-[#0f172a] border border-white/10 rounded"
           />
 
-          <select
+          <CustomSelect
             value={direction}
-            onChange={(e) => setDirection(e.target.value)}
-            className="w-full p-3 bg-[#0f172a] border border-white/10 rounded"
-          >
-            <option>Long</option>
-            <option>Short</option>
-          </select>
+            onChange={setDirection}
+            triggerClassName={SELECT_TRIGGER_CLASS}
+            options={[
+              { label: "Long", value: "Long" },
+              { label: "Short", value: "Short" },
+            ]}
+          />
 
-          <select
+          <CustomSelect
             value={session}
-            onChange={(e) => setSession(e.target.value)}
-            className="w-full p-3 bg-[#0f172a] border border-white/10 rounded"
-          >
-            <option value="NY">NY</option>
-            <option value="London">London</option>
-            <option value="Asia">Asia</option>
-          </select>
+            onChange={setSession}
+            triggerClassName={SELECT_TRIGGER_CLASS}
+            options={[
+              { label: "NY", value: "NY" },
+              { label: "London", value: "London" },
+              { label: "Asia", value: "Asia" },
+            ]}
+          />
 
           <input
             placeholder="P&L"

@@ -22,6 +22,7 @@ import {
   submissionTitle,
 } from "@/lib/submissionFormStyles"
 import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
+import CustomSelect from "@/app/components/CustomSelect"
 import { useModalScrollLock } from "@/app/components/ui/modalLayout"
 import ImageCropModal from "@/app/components/ImageCropModal"
 import { useImageCropUpload } from "@/lib/useImageCropUpload"
@@ -204,19 +205,17 @@ export default function BugReportModal({
             <label className={submissionLabel} htmlFor="bug-severity">
               Severity
             </label>
-            <select
+            <CustomSelect
               id="bug-severity"
               value={severity}
-              onChange={(e) => setSeverity(e.target.value as BugReportSeverity)}
+              onChange={(val) => setSeverity(val as BugReportSeverity)}
               disabled={busy}
-              className={submissionSelect}
-            >
-              {BUG_REPORT_SEVERITY_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
+              triggerClassName={submissionSelect}
+              options={BUG_REPORT_SEVERITY_OPTIONS.map((opt) => ({
+                label: opt.label,
+                value: opt.value,
+              }))}
+            />
 
             <label className={submissionLabel} htmlFor="bug-screenshot">
               Screenshot (optional)

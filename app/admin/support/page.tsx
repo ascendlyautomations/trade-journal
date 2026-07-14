@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation"
 import { getCurrentAdminCheckResult } from "@/lib/adminUsers"
 import { supabase } from "@/lib/supabaseClient"
 import ImageLightbox from "@/app/components/ui/ImageLightbox"
+import CustomSelect from "@/app/components/CustomSelect"
+import { SELECT_TRIGGER_CLASS } from "@/lib/accountDropdownStyles"
 
 type SupportListTab = "unviewed" | "viewed" | "open" | "in_progress" | "resolved"
 
@@ -301,15 +303,17 @@ export default function AdminSupportPage() {
                 <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
                   <div>
                     <label className="text-xs text-gray-400">Status</label>
-                    <select
+                    <CustomSelect
                       value={detailStatus}
-                      onChange={(e) => setDetailStatus(e.target.value)}
-                      className="mt-1 w-full rounded border border-white/10 bg-[#111827] p-2 text-sm"
-                    >
-                      <option value="open">open</option>
-                      <option value="in_progress">in_progress</option>
-                      <option value="resolved">resolved</option>
-                    </select>
+                      onChange={setDetailStatus}
+                      className="mt-1"
+                      triggerClassName={SELECT_TRIGGER_CLASS}
+                      options={[
+                        { label: "open", value: "open" },
+                        { label: "in_progress", value: "in_progress" },
+                        { label: "resolved", value: "resolved" },
+                      ]}
+                    />
                   </div>
                   <div>
                     <label className="text-xs text-gray-400">Admin notes</label>

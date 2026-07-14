@@ -62,6 +62,10 @@ export {
   DELETE_TRADE_CONFIRM_COPY,
 } from "./useDeleteTradeConfirmation"
 export {
+  useDeleteChatConfirmation,
+  DELETE_CHAT_CONFIRM_COPY,
+} from "./useDeleteChatConfirmation"
+export {
   useDeleteAchievementConfirmation,
   DELETE_ACHIEVEMENT_CONFIRM_COPY,
 } from "./useDeleteAchievementConfirmation"

@@ -15,6 +15,8 @@ import {
   type CsvSupportRequestStatus,
 } from "@/lib/adminCsvSupport"
 import { supabase } from "@/lib/supabaseClient"
+import CustomSelect from "@/app/components/CustomSelect"
+import { SELECT_TRIGGER_CLASS } from "@/lib/accountDropdownStyles"
 
 type StatusFilter = "all" | CsvSupportRequestStatus
 
@@ -412,19 +414,18 @@ export default function AdminCsvSupportPage() {
 
               <div className="rounded border border-white/10 bg-black/20 p-3">
                 <label className="text-xs text-gray-400">Status</label>
-                <select
+                <CustomSelect
                   value={detailStatus}
-                  onChange={(e) =>
-                    setDetailStatus(e.target.value as CsvSupportRequestStatus)
+                  onChange={(val) =>
+                    setDetailStatus(val as CsvSupportRequestStatus)
                   }
-                  className="mt-1 w-full rounded border border-white/10 bg-[#111827] p-2 text-sm md:max-w-xs"
-                >
-                  {CSV_SUPPORT_STATUS_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
+                  className="mt-1 md:max-w-xs"
+                  triggerClassName={SELECT_TRIGGER_CLASS}
+                  options={CSV_SUPPORT_STATUS_OPTIONS.map((opt) => ({
+                    label: opt.label,
+                    value: opt.value,
+                  }))}
+                />
               </div>
             </div>
           </div>

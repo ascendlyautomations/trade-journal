@@ -52,6 +52,9 @@ import CreateAccountModal, {
   type Props as CreateAccountModalProps,
 } from "@/components/CreateAccountModal"
 import TradeAccountPicker from "@/app/components/TradeAccountPicker"
+import CustomSelect from "@/app/components/CustomSelect"
+import { SELECT_TRIGGER_COMPACT_CLASS } from "@/lib/accountDropdownStyles"
+import NativeDateInput from "@/app/components/ui/NativeDateInput"
 import CsvImportUnsupportedBanner from "@/app/components/CsvImportUnsupportedBanner"
 import CsvImportDiagnosticsPanel from "@/app/components/CsvImportDiagnosticsPanel"
 import type { CsvImportDiagnostics } from "@/lib/csvImportDiagnostics"
@@ -276,8 +279,8 @@ export default function InputTradeForm({
   const [entryTime, setEntryTime] = useState("")
   const [exitTime, setExitTime] = useState("")
   const fileInputRef = imageCrop.fileInputRef
-  const entryDateRef = useRef<HTMLInputElement>(null)
-  const exitDateRef = useRef<HTMLInputElement>(null)
+  const entryTimeRef = useRef<HTMLInputElement>(null)
+  const exitTimeRef = useRef<HTMLInputElement>(null)
 
   const [planProfile, setPlanProfile] = useState<{
     is_pro?: boolean | null
@@ -2039,33 +2042,35 @@ export default function InputTradeForm({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2">
           <div>
             <label className={fieldLabelClass}>Direction</label>
-            <select
+            <CustomSelect
               tabIndex={4}
               value={direction}
-              onChange={(e) => setDirection(e.target.value)}
-              className="w-full p-2 lg:p-2.5 rounded bg-[#0f172a] border border-white/10"
-            >
-              <option>Long</option>
-              <option>Short</option>
-            </select>
+              onChange={setDirection}
+              triggerClassName={SELECT_TRIGGER_COMPACT_CLASS}
+              options={[
+                { label: "Long", value: "Long" },
+                { label: "Short", value: "Short" },
+              ]}
+            />
           </div>
 
           <div>
             <label className={fieldLabelClass}>Session</label>
-            <select
+            <CustomSelect
               tabIndex={5}
               value={session}
-              onChange={(e) => {
+              onChange={(val) => {
                 setSessionManuallySet(true)
-                setSession(e.target.value)
+                setSession(val)
               }}
-              className="w-full p-2 lg:p-2.5 rounded bg-[#0f172a] border border-white/10"
-            >
-              <option value="NY">NY</option>
-              <option value="London">London</option>
-              <option value="Asia">Asia</option>
-              <option value="After">After</option>
-            </select>
+              triggerClassName={SELECT_TRIGGER_COMPACT_CLASS}
+              options={[
+                { label: "NY", value: "NY" },
+                { label: "London", value: "London" },
+                { label: "Asia", value: "Asia" },
+                { label: "After", value: "After" },
+              ]}
+            />
           </div>
           </div>
 
@@ -2161,42 +2166,33 @@ export default function InputTradeForm({
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2">
               <div>
-                <label className={fieldLabelClass}>Entry Date</label>
-                <div
-                  className="relative w-full cursor-pointer"
-                  onClick={() => entryDateRef.current?.showPicker?.()}
-                >
-                  <input
-                    ref={entryDateRef}
-                    id="entry-date"
-                    type="date"
-                    tabIndex={12}
-                    value={entryDate}
-                    onChange={(e) => handleEntryDateChange(e.target.value)}
-                    className="w-full p-2 pr-10 rounded bg-[#0f172a] border border-white/10 text-white"
-                  />
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2 text-white pointer-events-none">
-                    📅
-                  </div>
-                </div>
+                <label className={fieldLabelClass} htmlFor="entry-date">
+                  Entry Date
+                </label>
+                <NativeDateInput
+                  id="entry-date"
+                  tabIndex={12}
+                  value={entryDate}
+                  onChange={(e) => handleEntryDateChange(e.target.value)}
+                  className="tt-date-field--compact mt-0 rounded border border-white/10 bg-[#0f172a]"
+                />
               </div>
               <div>
-                <label className={fieldLabelClass}>Entry Time</label>
+                <label className={fieldLabelClass} htmlFor="entry-time">
+                  Entry Time
+                </label>
                 <div
                   className="relative w-full cursor-pointer"
-                  onClick={() =>
-                    (
-                      document.getElementById("entry-time") as HTMLInputElement | null
-                    )?.showPicker?.()
-                  }
+                  onClick={() => entryTimeRef.current?.showPicker?.()}
                 >
                   <input
+                    ref={entryTimeRef}
                     id="entry-time"
                     type="time"
                     tabIndex={13}
                     value={entryTime}
                     onChange={(e) => setEntryTime(e.target.value)}
-                    className="w-full p-2 pr-10 rounded bg-[#0f172a] border border-white/10 text-white"
+                    className="w-full p-2 pr-10 rounded bg-[#0f172a] border border-white/10 text-white [color-scheme:dark]"
                   />
                   <div className="absolute right-3 top-1/2 -translate-y-1/2 text-white pointer-events-none">
                     🕒
@@ -2206,42 +2202,33 @@ export default function InputTradeForm({
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2">
               <div>
-                <label className={fieldLabelClass}>Exit Date</label>
-                <div
-                  className="relative w-full cursor-pointer"
-                  onClick={() => exitDateRef.current?.showPicker?.()}
-                >
-                  <input
-                    ref={exitDateRef}
-                    id="exit-date"
-                    type="date"
-                    tabIndex={14}
-                    value={exitDate}
-                    onChange={(e) => handleExitDateChange(e.target.value)}
-                    className="w-full p-2 pr-10 rounded bg-[#0f172a] border border-white/10 text-white"
-                  />
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2 text-white pointer-events-none">
-                    📅
-                  </div>
-                </div>
+                <label className={fieldLabelClass} htmlFor="exit-date">
+                  Exit Date
+                </label>
+                <NativeDateInput
+                  id="exit-date"
+                  tabIndex={14}
+                  value={exitDate}
+                  onChange={(e) => handleExitDateChange(e.target.value)}
+                  className="tt-date-field--compact mt-0 rounded border border-white/10 bg-[#0f172a]"
+                />
               </div>
               <div>
-                <label className={fieldLabelClass}>Exit Time</label>
+                <label className={fieldLabelClass} htmlFor="exit-time">
+                  Exit Time
+                </label>
                 <div
                   className="relative w-full cursor-pointer"
-                  onClick={() =>
-                    (
-                      document.getElementById("exit-time") as HTMLInputElement | null
-                    )?.showPicker?.()
-                  }
+                  onClick={() => exitTimeRef.current?.showPicker?.()}
                 >
                   <input
+                    ref={exitTimeRef}
                     id="exit-time"
                     type="time"
                     tabIndex={15}
                     value={exitTime}
                     onChange={(e) => setExitTime(e.target.value)}
-                    className="w-full p-2 pr-10 rounded bg-[#0f172a] border border-white/10 text-white"
+                    className="w-full p-2 pr-10 rounded bg-[#0f172a] border border-white/10 text-white [color-scheme:dark]"
                   />
                   <div className="absolute right-3 top-1/2 -translate-y-1/2 text-white pointer-events-none">
                     🕒
@@ -2286,35 +2273,34 @@ export default function InputTradeForm({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2">
           <div>
             <label className={fieldLabelClass}>Trade Conviction</label>
-            <select
+            <CustomSelect
               tabIndex={18}
               value={confidence}
-              onChange={(e) => setConfidence(e.target.value)}
-              className="w-full p-2 lg:p-2.5 bg-[#0f172a] border border-white/10 rounded"
-            >
-              <option value="">Conviction Level</option>
-              <option value="1">1 - Bad</option>
-              <option value="2">2</option>
-              <option value="3">3</option>
-              <option value="4">4</option>
-              <option value="5">5 - Good</option>
-            </select>
+              onChange={setConfidence}
+              placeholder="Conviction Level"
+              triggerClassName={SELECT_TRIGGER_COMPACT_CLASS}
+              options={[
+                { label: "1 - Bad", value: "1" },
+                { label: "2", value: "2" },
+                { label: "3", value: "3" },
+                { label: "4", value: "4" },
+                { label: "5 - Good", value: "5" },
+              ]}
+            />
           </div>
           <div>
             <label className={fieldLabelClass}>Timeframe</label>
-            <select
+            <CustomSelect
               tabIndex={21}
               value={timeframe}
-              onChange={(e) => setTimeframe(e.target.value)}
-              className="w-full p-2 lg:p-2.5 bg-[#0f172a] border border-white/10 rounded"
-            >
-              <option value="">Select timeframe</option>
-              {tradeTimeframeOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
+              onChange={setTimeframe}
+              placeholder="Select timeframe"
+              triggerClassName={SELECT_TRIGGER_COMPACT_CLASS}
+              options={tradeTimeframeOptions.map((option) => ({
+                label: option,
+                value: option,
+              }))}
+            />
             {timeframe === "Custom" ? (
               <div className="mt-2">
                 <label className={fieldLabelClass}>Custom Timeframe</label>
@@ -2332,22 +2318,23 @@ export default function InputTradeForm({
           </div>
           <div>
             <label className={fieldLabelClass}>Emotion</label>
-            <select
+            <CustomSelect
               tabIndex={19}
               value={emotion}
-              onChange={(e) => setEmotion(e.target.value)}
-              className="w-full p-2 lg:p-2.5 bg-[#0f172a] border border-white/10 rounded"
-            >
-              <option value="">Select emotion</option>
-              <option value="Confident">Confident</option>
-              <option value="Calm">Calm</option>
-              <option value="Focused">Focused</option>
-              <option value="Fearful">Fearful</option>
-              <option value="FOMO">FOMO</option>
-              <option value="Overconfident">Overconfident</option>
-              <option value="Hesitant">Hesitant</option>
-              <option value="Frustrated">Frustrated</option>
-            </select>
+              onChange={setEmotion}
+              placeholder="Select emotion"
+              triggerClassName={SELECT_TRIGGER_COMPACT_CLASS}
+              options={[
+                { label: "Confident", value: "Confident" },
+                { label: "Calm", value: "Calm" },
+                { label: "Focused", value: "Focused" },
+                { label: "Fearful", value: "Fearful" },
+                { label: "FOMO", value: "FOMO" },
+                { label: "Overconfident", value: "Overconfident" },
+                { label: "Hesitant", value: "Hesitant" },
+                { label: "Frustrated", value: "Frustrated" },
+              ]}
+            />
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-6">
             <label className="flex items-center gap-2 text-sm">
@@ -2371,22 +2358,23 @@ export default function InputTradeForm({
           </div>
           <div>
             <label className={fieldLabelClass}>Market</label>
-            <select
+            <CustomSelect
               tabIndex={20}
               value={market}
-              onChange={(e) => setMarket(e.target.value)}
-              className="w-full p-2 lg:p-2.5 bg-[#0f172a] border border-white/10 rounded"
-            >
-              <option value="">Select market condition</option>
-              <option value="Trending">Trending</option>
-              <option value="Strong Trend">Strong Trend</option>
-              <option value="Ranging">Ranging</option>
-              <option value="Choppy">Choppy</option>
-              <option value="Low Volume">Low Volume</option>
-              <option value="High Volume">High Volume</option>
-              <option value="News Driven">News Driven</option>
-              <option value="Volatile">Volatile</option>
-            </select>
+              onChange={setMarket}
+              placeholder="Select market condition"
+              triggerClassName={SELECT_TRIGGER_COMPACT_CLASS}
+              options={[
+                { label: "Trending", value: "Trending" },
+                { label: "Strong Trend", value: "Strong Trend" },
+                { label: "Ranging", value: "Ranging" },
+                { label: "Choppy", value: "Choppy" },
+                { label: "Low Volume", value: "Low Volume" },
+                { label: "High Volume", value: "High Volume" },
+                { label: "News Driven", value: "News Driven" },
+                { label: "Volatile", value: "Volatile" },
+              ]}
+            />
           </div>
           <div className="space-y-1">
           <div>
