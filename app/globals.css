@@ -169,7 +169,7 @@ input[type="time"]:hover::-webkit-calendar-picker-indicator {
   appearance: none;
 }
 
-/* Form-compact date fields (Input Trade) — keep native picker, tighter chrome. */
+/* Form-compact date fields (Input Trade) â€” keep native picker, tighter chrome. */
 .tt-date-field.tt-date-field--compact .tt-date-field-input {
   min-height: 0;
   padding: 0.5rem;
@@ -199,7 +199,7 @@ input[type="time"]:hover::-webkit-calendar-picker-indicator {
   padding: 0;
 }
 
-/* Higher specificity than global date hover rules — keep native icon hidden. */
+/* Higher specificity than global date hover rules â€” keep native icon hidden. */
 .tt-date-field input.tt-date-field-input[type="date"]::-webkit-calendar-picker-indicator {
   opacity: 0;
   position: absolute;
@@ -233,7 +233,7 @@ input[type="time"]:hover::-webkit-calendar-picker-indicator {
   font-size: 1rem;
 }
 
-/* Auth password fields — light text; hide browser-native reveal (styled via AuthPasswordInput). */
+/* Auth password fields â€” light text; hide browser-native reveal (styled via AuthPasswordInput). */
 .tt-auth-password {
   color: #ffffff;
   color-scheme: dark;
@@ -252,93 +252,5 @@ input[type="time"]:hover::-webkit-calendar-picker-indicator {
   to {
     opacity: 1;
     transform: scale(1);
-  }
-}
-
-/*
- * Reel / clip video shell — Safari clips native media controls outside
- * border-radius on <video>. Wrap + overflow + compositing layer keeps chrome
- * inside the rounded frame without changing Chromium layout.
- */
-.tt-reel-video-shell {
-  overflow: hidden;
-  isolation: isolate;
-  /* Promote a containing layer so WebKit paints controls inside the clip. */
-  -webkit-transform: translateZ(0);
-  transform: translateZ(0);
-  /*
-   * Opaque mask forces a clipping context on WebKit (desktop + iOS Safari).
-   * Fully opaque gradient — no soft edges; Chromium appearance unchanged.
-   */
-  -webkit-mask-image: linear-gradient(#fff, #fff);
-  mask-image: linear-gradient(#fff, #fff);
-}
-
-.tt-reel-video-shell > .tt-reel-video {
-  display: block;
-  max-width: 100%;
-}
-
-/* Keep fullscreen / volume / timeline usable; only contain painting. */
-.tt-reel-video-shell video::-webkit-media-controls-enclosure {
-  max-width: 100%;
-  box-sizing: border-box;
-}
-
-.tt-reel-video-shell video::-webkit-media-controls-panel {
-  max-width: 100%;
-  box-sizing: border-box;
-}
-
-/*
- * Profile page reel modal only (`compactVertical`).
- * Short laptops sit closer to the navbar with ~5–10% shorter video height;
- * tall desktops keep near-full media sizing. 9:16 aspect + object-contain.
- */
-.tt-profile-reel-dialog {
-  max-height: calc(100dvh - var(--navbar-height, 4rem) - 0.85rem);
-}
-
-@media (max-height: 900px) {
-  .tt-profile-reel-dialog {
-    max-height: calc(100dvh - var(--navbar-height, 4rem) - 0.5rem);
-  }
-
-  .tt-profile-reel-media {
-    padding: 0.5rem !important;
-  }
-}
-
-@media (min-height: 901px) {
-  .tt-profile-reel-dialog {
-    max-height: calc(100dvh - var(--navbar-height, 4rem) - 1.25rem);
-  }
-}
-
-.tt-profile-reel-video {
-  max-height: 55dvh;
-}
-
-@media (min-width: 768px) {
-  .tt-profile-reel-video {
-    max-height: min(100%, 70dvh);
-  }
-}
-
-@media (min-width: 768px) and (max-height: 900px) {
-  .tt-profile-reel-video {
-    max-height: min(100%, 64dvh);
-  }
-}
-
-@media (min-width: 768px) and (min-height: 901px) {
-  .tt-profile-reel-video {
-    max-height: min(100%, 78dvh);
-  }
-}
-
-@media (min-width: 1280px) and (min-height: 960px) {
-  .tt-profile-reel-video {
-    max-height: 100%;
   }
 }

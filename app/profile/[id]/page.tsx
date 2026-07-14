@@ -4278,7 +4278,6 @@ function ProfilePageContent() {
           onDeleteReel={() => requestDeleteReel(selectedReelDetail)}
           onReplaceReelVideo={() => handleReplaceReelVideo(selectedReelDetail)}
           isTradeAttachedReel={isTradeAttachedReel(selectedReelDetail)}
-          compactVertical
         />
       ) : null}
 
