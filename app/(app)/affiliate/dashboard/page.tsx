@@ -280,7 +280,7 @@ export default function AffiliateDashboard() {
   const applyButtonLabel = applicationLocked
     ? "View Application"
     : isPending
-      ? "Edit Application"
+      ? "View Application"
       : "Become an Affiliate"
 
   const applyButtonClassName = applicationLocked

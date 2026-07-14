@@ -216,18 +216,10 @@ export default function CopyTradingGroupsSection({
           <p className="mt-4 text-sm text-red-300">{error}</p>
         ) : groups.length === 0 ? (
           <EmptyState
-            icon="📑"
+           
             title="No copy trading groups yet"
             description="Create a group to journal the same trade across multiple accounts at once."
-            action={
-              <button
-                type="button"
-                onClick={openCreate}
-                className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600"
-              >
-                + Create Copy Trading Group
-              </button>
-            }
+            
             className="mt-4"
           />
         ) : (
