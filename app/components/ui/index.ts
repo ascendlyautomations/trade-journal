@@ -84,6 +84,8 @@ export type { ShareModalSendButtonProps } from "./ShareModalSendButton"
 export { default as ScrollableModalShell } from "./ScrollableModalShell"
 export type { ScrollableModalShellProps } from "./ScrollableModalShell"
 export {
+  DETAIL_MODAL_STACKED_Z_INDEX_CLASS,
+  DETAIL_MODAL_Z_INDEX_CLASS,
   MODAL_BODY_SCROLL_CLASS,
   MODAL_FOOTER_CLASS,
   MODAL_HEADER_CLASS,
@@ -92,6 +94,7 @@ export {
   MODAL_PANEL_SHELL_CLASS,
   MODAL_PANEL_SURFACE_CLASS,
   useModalScrollLock,
+  useStackedModalEscape,
 } from "./modalLayout"
 export {
   lockPageScroll,

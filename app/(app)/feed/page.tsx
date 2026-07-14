@@ -201,6 +201,10 @@ function FeedPageContent() {
   const [tradeExpandSignal, setTradeExpandSignal] = useState(0)
   /** Modal-owned post data for URL deep links — independent of the feed array. */
   const [feedModalPost, setFeedModalPost] = useState<FeedItem | null>(null)
+  /** Clip opened from Trade Details — stacked above the trade modal without closing it. */
+  const [stackedAttachedReel, setStackedAttachedReel] = useState<FeedItem | null>(
+    null
+  )
   const [sharePostId, setSharePostId] = useState<string | null>(null)
   const [openReelMenuId, setOpenReelMenuId] = useState<string | null>(null)
   const [editingReel, setEditingReel] = useState<ReelRow | null>(null)
@@ -1617,13 +1621,14 @@ function FeedPageContent() {
         },
         post.profiles
       )
-      setFeedModalPost(reelPost)
-      feedDeepLinkHandledRef.current = null
-      clearFeedDeepLinkParams()
-      setSelectedPostId(String(reel.id))
+      setStackedAttachedReel(reelPost)
     },
-    [clearFeedDeepLinkParams]
+    []
   )
+
+  const handleCloseStackedAttachedReel = useCallback(() => {
+    setStackedAttachedReel(null)
+  }, [])
 
   const handleSharePost = useCallback((post: any) => {
     if (guardDemoFeedWrite("default")) return
@@ -1633,6 +1638,7 @@ function FeedPageContent() {
   const handleCloseDetailModal = useCallback(() => {
     setSelectedPostId(null)
     setFeedModalPost(null)
+    setStackedAttachedReel(null)
     feedDeepLinkHandledRef.current = null
     clearFeedDeepLinkParams()
   }, [clearFeedDeepLinkParams])
@@ -2721,7 +2727,7 @@ function FeedPageContent() {
         />
       ) : null}
 
-      {selectedPostId || sharePostId ? (
+      {selectedPostId || sharePostId || stackedAttachedReel ? (
         <FeedPostOverlays
           selectedPostId={selectedPostId}
           selectedPost={selectedPost}
@@ -2738,6 +2744,28 @@ function FeedPageContent() {
           openCommentsRef={openCommentsRef}
           openTradeRef={openTradeRef}
           tradeExpandSignal={tradeExpandSignal}
+          stackedAttachedReel={stackedAttachedReel}
+          stackedAttachedReelComments={
+            stackedAttachedReel
+              ? commentsByPost[String(stackedAttachedReel.id)] ?? EMPTY_COMMENTS
+              : EMPTY_COMMENTS
+          }
+          stackedAttachedReelLikeMeta={
+            stackedAttachedReel
+              ? likesByPost[String(stackedAttachedReel.id)] ?? EMPTY_LIKE_META
+              : EMPTY_LIKE_META
+          }
+          stackedAttachedReelLikeBusy={
+            stackedAttachedReel
+              ? !!likeBusyByPost[String(stackedAttachedReel.id)]
+              : false
+          }
+          stackedAttachedReelCommentSubmitting={
+            stackedAttachedReel
+              ? !!commentSubmitting[String(stackedAttachedReel.id)]
+              : false
+          }
+          onCloseStackedAttachedReel={handleCloseStackedAttachedReel}
           onCloseDetailModal={handleCloseDetailModal}
           onCloseShareOverlay={handleCloseShareOverlay}
           onToggleLike={toggleLike}

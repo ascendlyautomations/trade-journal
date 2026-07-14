@@ -17,6 +17,7 @@ import TradeReelSummaryStrip from "./TradeReelSummaryStrip"
 import { feedCommentTarget } from "./feedPostHelpers"
 import { resolveReelCaption } from "@/lib/reels"
 import type { FeedLikeMeta } from "./FeedPostCard"
+import { DETAIL_MODAL_STACKED_Z_INDEX_CLASS } from "@/app/components/ui/modalLayout"
 
 type FeedReelDetailModalProps = {
   post: any
@@ -42,6 +43,11 @@ type FeedReelDetailModalProps = {
   onDeleteReel?: () => void
   onReplaceReelVideo?: () => void
   isTradeAttachedReel?: boolean
+  /**
+   * When opened above another detail modal (e.g. View Clip from Trade Details),
+   * use the stacked z-index so this shell sits on top without unmounting the parent.
+   */
+  stacked?: boolean
 }
 
 export default function FeedReelDetailModal({
@@ -68,6 +74,7 @@ export default function FeedReelDetailModal({
   onDeleteReel,
   onReplaceReelVideo,
   isTradeAttachedReel = false,
+  stacked = false,
 }: FeedReelDetailModalProps) {
   const pid = String(post.id)
   const playbackRef = useRef<ReelClipPlaybackHandle>(null)
@@ -233,6 +240,9 @@ export default function FeedReelDetailModal({
       splitMedia={splitMedia}
       splitPanel={splitPanel}
       suppressMobileSplitMedia={commentsFocused}
+      zIndexClass={
+        stacked ? DETAIL_MODAL_STACKED_Z_INDEX_CLASS : undefined
+      }
     />
   )
 }

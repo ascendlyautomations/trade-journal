@@ -22,6 +22,13 @@ type FeedPostOverlaysProps = {
   openCommentsRef: MutableRefObject<Record<string, boolean>>
   openTradeRef?: MutableRefObject<Record<string, boolean>>
   tradeExpandSignal?: number
+  /** Clip layered above an open trade/post detail (View Clip). */
+  stackedAttachedReel?: any | null
+  stackedAttachedReelComments?: any[]
+  stackedAttachedReelLikeMeta?: FeedLikeMeta
+  stackedAttachedReelLikeBusy?: boolean
+  stackedAttachedReelCommentSubmitting?: boolean
+  onCloseStackedAttachedReel?: () => void
   onCloseDetailModal: () => void
   onCloseShareOverlay: () => void
   onToggleLike: (post: any) => void
@@ -51,6 +58,12 @@ function FeedPostOverlays({
   openCommentsRef,
   openTradeRef,
   tradeExpandSignal = 0,
+  stackedAttachedReel = null,
+  stackedAttachedReelComments = [],
+  stackedAttachedReelLikeMeta = { count: 0, liked: false },
+  stackedAttachedReelLikeBusy = false,
+  stackedAttachedReelCommentSubmitting = false,
+  onCloseStackedAttachedReel,
   onCloseDetailModal,
   onCloseShareOverlay,
   onToggleLike,
@@ -65,6 +78,10 @@ function FeedPostOverlays({
   onReplaceReelVideo,
   onOpenAttachedReel,
 }: FeedPostOverlaysProps) {
+  const stackedReelId = stackedAttachedReel
+    ? String(stackedAttachedReel.id)
+    : null
+
   return (
     <>
       {selectedPost && selectedPostId ? (
@@ -137,6 +154,39 @@ function FeedPostOverlays({
             onOpenAttachedReel={onOpenAttachedReel}
           />
         )
+      ) : null}
+
+      {stackedAttachedReel && stackedReelId && onCloseStackedAttachedReel ? (
+        <FeedReelDetailModal
+          key={`stacked-reel-${stackedReelId}`}
+          post={stackedAttachedReel}
+          user={user}
+          comments={stackedAttachedReelComments}
+          likeMeta={stackedAttachedReelLikeMeta}
+          likeBusy={stackedAttachedReelLikeBusy}
+          commentSubmitting={stackedAttachedReelCommentSubmitting}
+          draftSyncRef={draftSyncRef}
+          openCommentsRef={openCommentsRef}
+          openTradeRef={openTradeRef}
+          tradeExpandSignal={tradeExpandSignal}
+          onClose={onCloseStackedAttachedReel}
+          onToggleLike={onToggleLike}
+          onSubmitComment={onSubmitComment}
+          onDeleteComment={onDeleteComment}
+          onTogglePinComment={onTogglePinComment}
+          onSharePost={onSharePost}
+          canManageReel={
+            user?.id != null &&
+            String(user.id) === String(stackedAttachedReel.user_id)
+          }
+          menuOpen={openReelMenuId === stackedReelId}
+          onMenuToggle={() => onReelMenuToggle?.(stackedReelId)}
+          onEditReel={() => onEditReel?.(stackedAttachedReel)}
+          onDeleteReel={() => onDeleteReel?.(stackedAttachedReel)}
+          onReplaceReelVideo={() => onReplaceReelVideo?.(stackedAttachedReel)}
+          isTradeAttachedReel={isTradeAttachedReel(stackedAttachedReel)}
+          stacked
+        />
       ) : null}
 
       {sharePost ? (

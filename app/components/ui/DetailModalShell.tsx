@@ -1,8 +1,12 @@
 "use client"
 
-import { useCallback, useEffect, type ReactNode } from "react"
+import { useCallback, type ReactNode } from "react"
 import ModalCloseButton from "./ModalCloseButton"
-import { useModalScrollLock } from "./modalLayout"
+import {
+  DETAIL_MODAL_Z_INDEX_CLASS,
+  useModalScrollLock,
+  useStackedModalEscape,
+} from "./modalLayout"
 
 /** Matches Navbar `h-16` / root layout `pt-16`. */
 export const NAVBAR_HEIGHT_CLASS = "top-16"
@@ -55,19 +59,11 @@ export default function DetailModalShell({
   splitMedia,
   splitPanel,
   suppressMobileSplitMedia = false,
-  zIndexClass = "z-[9000]",
+  zIndexClass = DETAIL_MODAL_Z_INDEX_CLASS,
   backdropClassName = "bg-black/70",
 }: DetailModalShellProps) {
   useModalScrollLock(true)
-
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose()
-    }
-    window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
-  }, [onClose])
-
+  useStackedModalEscape(true, onClose)
   const stopPropagation = useCallback((e: React.MouseEvent) => {
     e.stopPropagation()
   }, [])

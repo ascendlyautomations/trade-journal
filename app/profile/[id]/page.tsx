@@ -4245,41 +4245,6 @@ function ProfilePageContent() {
           }}
         />
       ) : null}
-      {selectedReelDetail ? (
-        <FeedReelDetailModal
-          post={selectedReelDetail}
-          user={currentUserId ? { id: currentUserId } : null}
-          comments={commentsByPost[String(selectedReelDetail.id)] || []}
-          likeMeta={
-            likesByPost[String(selectedReelDetail.id)] || EMPTY_LIKE_META
-          }
-          likeBusy={!!likeBusyByPost[String(selectedReelDetail.id)]}
-          commentSubmitting={
-            !!commentSubmitting[String(selectedReelDetail.id)]
-          }
-          draftSyncRef={feedDraftSyncRef}
-          openCommentsRef={feedOpenCommentsRef}
-          onClose={() => setSelectedReelDetail(null)}
-          onToggleLike={(post) => void handleReelLike(String(post.id))}
-          onSubmitComment={submitReelComment}
-          onDeleteComment={deleteComment}
-          onTogglePinComment={togglePinComment}
-          onSharePost={(post) => setSharePost(post)}
-          canManageReel={currentUserId === profile?.id}
-          menuOpen={openMenuId === String(selectedReelDetail.id)}
-          onMenuToggle={() =>
-            setOpenMenuId((prev) =>
-              prev === String(selectedReelDetail.id)
-                ? null
-                : String(selectedReelDetail.id)
-            )
-          }
-          onEditReel={() => handleStartEditReel(selectedReelDetail)}
-          onDeleteReel={() => requestDeleteReel(selectedReelDetail)}
-          onReplaceReelVideo={() => handleReplaceReelVideo(selectedReelDetail)}
-          isTradeAttachedReel={isTradeAttachedReel(selectedReelDetail)}
-        />
-      ) : null}
 
       <input
         ref={replaceReelInputRef}
@@ -5382,6 +5347,43 @@ function ProfilePageContent() {
             onImageClick={setScreenshotLightboxUrl}
           />
         </DetailModalShell>
+      ) : null}
+
+      {selectedReelDetail ? (
+        <FeedReelDetailModal
+          post={selectedReelDetail}
+          user={currentUserId ? { id: currentUserId } : null}
+          comments={commentsByPost[String(selectedReelDetail.id)] || []}
+          likeMeta={
+            likesByPost[String(selectedReelDetail.id)] || EMPTY_LIKE_META
+          }
+          likeBusy={!!likeBusyByPost[String(selectedReelDetail.id)]}
+          commentSubmitting={
+            !!commentSubmitting[String(selectedReelDetail.id)]
+          }
+          draftSyncRef={feedDraftSyncRef}
+          openCommentsRef={feedOpenCommentsRef}
+          onClose={() => setSelectedReelDetail(null)}
+          onToggleLike={(post) => void handleReelLike(String(post.id))}
+          onSubmitComment={submitReelComment}
+          onDeleteComment={deleteComment}
+          onTogglePinComment={togglePinComment}
+          onSharePost={(post) => setSharePost(post)}
+          canManageReel={currentUserId === profile?.id}
+          menuOpen={openMenuId === String(selectedReelDetail.id)}
+          onMenuToggle={() =>
+            setOpenMenuId((prev) =>
+              prev === String(selectedReelDetail.id)
+                ? null
+                : String(selectedReelDetail.id)
+            )
+          }
+          onEditReel={() => handleStartEditReel(selectedReelDetail)}
+          onDeleteReel={() => requestDeleteReel(selectedReelDetail)}
+          onReplaceReelVideo={() => handleReplaceReelVideo(selectedReelDetail)}
+          isTradeAttachedReel={isTradeAttachedReel(selectedReelDetail)}
+          stacked={selectedTradeDetail != null}
+        />
       ) : null}
 
       {selectedPostDetail ? (

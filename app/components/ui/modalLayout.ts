@@ -34,6 +34,19 @@ export const MODAL_HEADER_CLASS = "shrink-0 border-b border-white/10"
 export const MODAL_FOOTER_CLASS =
   `shrink-0 border-t border-white/10 ${MODAL_PANEL_SURFACE_CLASS}`
 
+/**
+ * Modal stacking (lowest → highest among common overlays):
+ * - DetailModalShell root: 9000
+ * - ImageLightbox: 10001
+ * - Modal / ScrollableModalShell / stacked DetailModalShell: 10050
+ * - FeedbackModal / ReelViewer: 10060
+ * - Dropdown menus: 10070
+ */
+export const DETAIL_MODAL_Z_INDEX_CLASS = "z-[9000]"
+
+/** Child DetailModalShell above another detail overlay (e.g. clip over trade). */
+export const DETAIL_MODAL_STACKED_Z_INDEX_CLASS = "z-[10050]"
+
 export { lockPageScroll, resetPageScrollLock, unlockPageScroll }
 
 /** Prevent the page behind an open modal from scrolling (reference-counted). */
@@ -45,6 +58,44 @@ export function useModalScrollLock(open: boolean) {
       unlockPageScroll()
     }
   }, [open])
+}
+
+type EscapeLayer = {
+  id: number
+  onClose: () => void
+}
+
+let escapeLayerId = 0
+const escapeLayers: EscapeLayer[] = []
+
+/**
+ * Escape closes only the topmost registered modal layer so stacked
+ * DetailModalShells unwind one at a time.
+ */
+export function useStackedModalEscape(active: boolean, onClose: () => void) {
+  useEffect(() => {
+    if (!active) return
+
+    const id = ++escapeLayerId
+    const layer: EscapeLayer = { id, onClose }
+    escapeLayers.push(layer)
+
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== "Escape") return
+      const top = escapeLayers[escapeLayers.length - 1]
+      if (!top || top.id !== id) return
+      e.preventDefault()
+      e.stopPropagation()
+      onClose()
+    }
+
+    window.addEventListener("keydown", onKey)
+    return () => {
+      window.removeEventListener("keydown", onKey)
+      const idx = escapeLayers.findIndex((entry) => entry.id === id)
+      if (idx >= 0) escapeLayers.splice(idx, 1)
+    }
+  }, [active, onClose])
 }
 
 /** Resets scroll lock when the route changes so stale locks never persist. */

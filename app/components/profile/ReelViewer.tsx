@@ -7,7 +7,11 @@ import DetailModalVideo from "@/app/components/ui/DetailModalVideo"
 import { ProfileAvatarImg } from "@/app/components/SafeProfileAvatar"
 import type { ReelRow } from "@/lib/reels"
 import { formatRelativeTime } from "@/lib/formatRelativeTime"
-import { useModalScrollLock } from "@/app/components/ui/modalLayout"
+import {
+  DETAIL_MODAL_STACKED_Z_INDEX_CLASS,
+  useModalScrollLock,
+  useStackedModalEscape,
+} from "@/app/components/ui/modalLayout"
 
 type ReelViewerProps = {
   reel: ReelRow | null
@@ -72,15 +76,7 @@ export default function ReelViewer({ reel, creator, onClose }: ReelViewerProps) 
   }, [reel])
 
   useModalScrollLock(Boolean(reel))
-
-  useEffect(() => {
-    if (!reel) return
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose()
-    }
-    window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
-  }, [reel, onClose])
+  useStackedModalEscape(Boolean(reel), onClose)
 
   useEffect(() => {
     playbackRef.current?.pause()
@@ -106,7 +102,7 @@ export default function ReelViewer({ reel, creator, onClose }: ReelViewerProps) 
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[10060] flex items-center justify-center bg-black/90 p-4"
+      className={`fixed inset-0 ${DETAIL_MODAL_STACKED_Z_INDEX_CLASS} flex items-center justify-center bg-black/90 p-4`}
       role="presentation"
       onClick={onClose}
     >
