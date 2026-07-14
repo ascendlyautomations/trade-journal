@@ -39,6 +39,7 @@ type FeedProfilePostDetailModalProps = {
   onToggleLike: (post: any) => void
   onSubmitComment: (post: any, text: string) => Promise<boolean>
   onDeleteComment?: (comment: any) => Promise<boolean>
+  onTogglePinComment?: (comment: any, pinned: boolean) => Promise<boolean>
   onSharePost: (post: any) => void
 }
 
@@ -55,6 +56,7 @@ export default function FeedProfilePostDetailModal({
   onToggleLike,
   onSubmitComment,
   onDeleteComment,
+  onTogglePinComment,
   onSharePost,
 }: FeedProfilePostDetailModalProps) {
   const pid = String(post.id)
@@ -216,6 +218,7 @@ export default function FeedProfilePostDetailModal({
             onSubmitComment(context, text, parentCommentId)
           }
           onDeleteComment={onDeleteComment}
+          onTogglePinComment={onTogglePinComment}
         />
       }
     />

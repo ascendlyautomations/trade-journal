@@ -33,6 +33,7 @@ type FeedReelDetailModalProps = {
   onToggleLike: (post: any) => void
   onSubmitComment: (post: any, text: string) => Promise<boolean>
   onDeleteComment?: (comment: any) => Promise<boolean>
+  onTogglePinComment?: (comment: any, pinned: boolean) => Promise<boolean>
   onSharePost: (post: any) => void
   canManageReel?: boolean
   menuOpen?: boolean
@@ -60,6 +61,7 @@ export default function FeedReelDetailModal({
   onToggleLike,
   onSubmitComment,
   onDeleteComment,
+  onTogglePinComment,
   onSharePost,
   canManageReel = false,
   menuOpen = false,
@@ -220,6 +222,7 @@ export default function FeedReelDetailModal({
             onSubmitComment(context, text, parentCommentId)
           }
           onDeleteComment={onDeleteComment}
+          onTogglePinComment={onTogglePinComment}
         />
       }
     />

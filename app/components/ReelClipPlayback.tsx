@@ -12,6 +12,7 @@ import {
 } from "react"
 import ReelClipPlayOverlay from "@/app/components/ReelClipPlayOverlay"
 import { getReelPosterImageUrl, firstVisibleReelSeekTime } from "@/lib/reelVideo"
+import { cn } from "@/app/components/ui/cn"
 
 export type ReelClipPlaybackHandle = {
   play: () => Promise<void>
@@ -118,22 +119,46 @@ const ReelClipPlayback = forwardRef(function ReelClipPlayback(
 
   const showImagePoster = !hasStarted && !!imagePosterUrl
   const showPlayOverlay = !playing
+  const showNativeControls = nativeControls && hasStarted && playing
+
+  // Match radius from caller classes so the clip shell (not <video>) owns Safari clipping.
+  const shellRadiusClass = /\brounded-xl\b/.test(videoClassName)
+    ? "rounded-xl"
+    : /\brounded-2xl\b/.test(videoClassName)
+      ? "rounded-2xl"
+      : /\brounded-md\b/.test(videoClassName)
+        ? "rounded-md"
+        : "rounded-lg"
 
   return (
     <div className={className}>
-      <div className="relative w-full">
+      {/*
+        Safari paints native <video controls> outside the video’s own border-radius.
+        Clip on this compositing shell so chrome stays inside the rounded frame.
+      */}
+      <div
+        className={cn(
+          "tt-reel-video-shell relative w-full overflow-hidden",
+          shellRadiusClass
+        )}
+      >
         <video
           ref={videoRef}
           src={videoUrl}
           poster={imagePosterUrl ?? undefined}
-          className={`${videoClassName} relative z-0 block transition-opacity duration-200 ${
+          className={cn(
+            videoClassName,
+            "tt-reel-video relative z-0 block transition-opacity duration-200",
             showImagePoster ? "opacity-0" : "opacity-100"
-          }`}
+          )}
           style={{ aspectRatio: "9/16" }}
           playsInline
+          // Older iOS WebKit still keys off the legacy attribute.
+          {...{ "webkit-playsinline": "true" }}
           preload="auto"
           muted={muted}
-          controls={nativeControls && hasStarted && playing}
+          controls={showNativeControls}
+          controlsList="nodownload"
           onPlay={() => {
             setHasStarted(true)
             syncPlaying(true)
@@ -147,7 +172,10 @@ const ReelClipPlayback = forwardRef(function ReelClipPlayback(
             src={imagePosterUrl}
             alt=""
             draggable={false}
-            className={`absolute inset-0 z-[1] block ${videoClassName}`}
+            className={cn(
+              "absolute inset-0 z-[1] block h-full w-full object-contain",
+              videoClassName
+            )}
           />
         ) : null}
 

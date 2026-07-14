@@ -39,7 +39,18 @@ import {
   writeTradeSocial,
   appendTradeSocialComment,
   patchTradeSocialLikes,
+  patchTradeSocialComments,
 } from "@/lib/tradeSocialCache"
+import {
+  clearCommentReplyDraft,
+  startCommentReply,
+  type CommentReplyTarget,
+} from "@/lib/commentReplyUx"
+import {
+  applyPinnedCommentState,
+  canPinComment,
+  pinTradeComment,
+} from "@/lib/pinComment"
 
 type TradeSocialContextValue = {
   tradeId: string
@@ -62,6 +73,7 @@ type TradeSocialContextValue = {
   handleLike: () => Promise<void>
   handleComment: () => Promise<void>
   handleDeleteComment: (comment: any) => Promise<boolean>
+  handleTogglePinComment: (comment: any, pinned: boolean) => Promise<boolean>
 }
 
 const TradeSocialContext = createContext<TradeSocialContextValue | null>(null)
@@ -230,6 +242,28 @@ export function TradeSocialProvider({
           )
           appendTradeSocialComment(resolvedId, data)
         })()
+      }
+    )
+
+    channel.on(
+      "postgres_changes",
+      {
+        event: "UPDATE",
+        schema: "public",
+        table: "trade_comments",
+        filter: `trade_id=eq.${resolvedId}`,
+      },
+      (payload) => {
+        const row = payload.new as {
+          id?: string
+          pinned?: boolean | null
+          parent_comment_id?: string | null
+        }
+        const id = row?.id != null ? String(row.id) : ""
+        if (!id) return
+        setComments((prev) =>
+          applyPinnedCommentState(prev, id, row.pinned === true)
+        )
       }
     )
 
@@ -428,6 +462,47 @@ export function TradeSocialProvider({
     [currentUserId, resolvedId, showPopup]
   )
 
+  const handleTogglePinComment = useCallback(
+    async (comment: any, pinned: boolean) => {
+      if (!resolvedId || !currentUserId) return false
+      if (
+        !canPinComment({
+          viewerUserId: currentUserId,
+          contentOwnerUserId: tradeOwnerUserId,
+        })
+      ) {
+        return false
+      }
+      if (comment.parent_comment_id) return false
+
+      const commentId = String(comment.id)
+      let previous: any[] = []
+      let nextComments: any[] = []
+      setComments((prev) => {
+        previous = prev
+        nextComments = applyPinnedCommentState(prev, commentId, pinned)
+        return nextComments
+      })
+      patchTradeSocialComments(resolvedId, nextComments)
+
+      const { error } = await pinTradeComment(supabase, {
+        commentId,
+        pinned,
+        parentCommentId: comment.parent_comment_id ?? null,
+      })
+
+      if (error) {
+        setComments(previous)
+        patchTradeSocialComments(resolvedId, previous)
+        showPopup({ type: "error", message: handleSupabaseError(error) })
+        return false
+      }
+
+      return true
+    },
+    [currentUserId, resolvedId, showPopup, tradeOwnerUserId]
+  )
+
   const value = useMemo<TradeSocialContextValue | null>(() => {
     if (!resolvedId) return null
     return {
@@ -451,6 +526,7 @@ export function TradeSocialProvider({
       handleLike,
       handleComment,
       handleDeleteComment,
+      handleTogglePinComment,
     }
   }, [
     resolvedId,
@@ -470,6 +546,7 @@ export function TradeSocialProvider({
     handleLike,
     handleComment,
     handleDeleteComment,
+    handleTogglePinComment,
   ])
 
   if (!resolvedId || !value) return null
@@ -582,7 +659,9 @@ export function TradeSocialCommentsSection({
     setReplyTarget,
     handleComment,
     handleDeleteComment,
+    handleTogglePinComment,
     currentUserId,
+    tradeOwnerUserId,
     commentSubmitting,
   } = useTradeSocial()
 
@@ -664,6 +743,7 @@ export function TradeSocialCommentsSection({
     <FeedCommentList
       comments={comments}
       currentUserId={currentUserId}
+      contentOwnerUserId={tradeOwnerUserId}
       replyAvatarClassName="h-6 w-6 shrink-0 rounded-full object-cover"
       likesByCommentId={likesByCommentId}
       onToggleCommentLike={canLikeComments ? toggleCommentLikeFor : undefined}
@@ -683,6 +763,9 @@ export function TradeSocialCommentsSection({
           trade_id: comment.trade_id ?? tradeId,
         })
       }
+      onTogglePin={(comment, pinned) => {
+        void handleTogglePinComment(comment, pinned)
+      }}
     />
   )
 

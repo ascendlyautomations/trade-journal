@@ -3735,9 +3735,21 @@ function CommunityContent() {
                               <span className="text-xs text-gray-400">
                                 {formatRelativeTime(msg.created_at)}
                               </span>
-                              <span className="rounded-md bg-white/10 px-1.5 py-0.5 text-[10px] font-medium text-gray-400">
-                                Pinned
-                              </span>
+                              {isOwner ? (
+                                <span className="rounded-md bg-white/10 px-1.5 py-0.5 text-[10px] font-medium text-gray-400">
+                                  Pinned
+                                </span>
+                              ) : (
+                                <span
+                                  className="inline-flex items-center gap-1 rounded-full border border-sky-500/35 bg-sky-500/15 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-sky-300"
+                                  aria-label="Pinned message"
+                                >
+                                  <span aria-hidden className="text-[11px] leading-none">
+                                    📌
+                                  </span>
+                                  Pinned
+                                </span>
+                              )}
                               {isOwner ? (
                                 <button
                                   type="button"

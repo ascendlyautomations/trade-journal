@@ -15,6 +15,12 @@ import {
   filterCommentsAfterDelete,
 } from "@/lib/deleteComment"
 import {
+  applyPinnedCommentState,
+  canPinComment,
+  pinCommentByKind,
+  resolveCommentPinTarget,
+} from "@/lib/pinComment"
+import {
   deleteLikeNotification,
   ensureLikeNotification,
 } from "@/lib/likeNotifications"
@@ -59,6 +65,7 @@ import {
   normalizeTradeFeedItem,
   postAttachedReel,
   postTradeOwnerUserId,
+  feedContentOwnerUserId,
   queryFeedComments,
   reelDetailFeedItem,
   withInsertedParentCommentId,
@@ -2461,6 +2468,63 @@ function FeedPageContent() {
     [posts]
   )
 
+  const togglePinComment = useCallback(
+    async (comment: any, pinned: boolean) => {
+      if (!user) return false
+      if (comment.parent_comment_id) return false
+
+      const target = resolveCommentPinTarget(comment)
+      if (!target) {
+        console.error("[comment-pin] aborted: missing comment target", comment)
+        return false
+      }
+
+      const contentPost =
+        postsById.get(target.stateKey) ??
+        (feedModalPost && String(feedModalPost.id) === target.stateKey
+          ? feedModalPost
+          : null)
+      const ownerId = feedContentOwnerUserId(contentPost)
+
+      if (
+        !canPinComment({
+          viewerUserId: user.id,
+          contentOwnerUserId: ownerId,
+        })
+      ) {
+        return false
+      }
+
+      const commentId = String(comment.id)
+      let previous: any[] = []
+      setCommentsByPost((prev) => {
+        previous = prev[target.stateKey] ?? EMPTY_COMMENTS
+        return {
+          ...prev,
+          [target.stateKey]: applyPinnedCommentState(previous, commentId, pinned),
+        }
+      })
+
+      const { error } = await pinCommentByKind(supabase, target.kind, {
+        commentId,
+        pinned,
+        parentCommentId: comment.parent_comment_id ?? null,
+      })
+
+      if (error) {
+        setCommentsByPost((prev) => ({
+          ...prev,
+          [target.stateKey]: previous,
+        }))
+        showPopup({ type: "error", message: handleSupabaseError(error) })
+        return false
+      }
+
+      return true
+    },
+    [feedModalPost, postsById, showPopup, user]
+  )
+
   const selectedPost = useMemo(() => {
     if (!selectedPostId) return null
     if (feedModalPost && String(feedModalPost.id) === selectedPostId) {
@@ -2679,6 +2743,7 @@ function FeedPageContent() {
           onToggleLike={toggleLike}
           onSubmitComment={submitComment}
           onDeleteComment={deleteComment}
+          onTogglePinComment={togglePinComment}
           onSharePost={handleSharePost}
           openReelMenuId={openReelMenuId}
           onReelMenuToggle={handleReelMenuToggle}

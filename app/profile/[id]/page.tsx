@@ -75,6 +75,12 @@ import {
   filterCommentsAfterDelete,
 } from "@/lib/deleteComment"
 import {
+  applyPinnedCommentState,
+  canPinComment,
+  pinCommentByKind,
+  resolveCommentPinTarget,
+} from "@/lib/pinComment"
+import {
   deleteLikeNotification,
   ensureLikeNotification,
 } from "@/lib/likeNotifications"
@@ -703,6 +709,7 @@ function PostCard({
   commentSubmitting,
   currentUserId,
   onDeleteComment,
+  onTogglePinComment,
   onOpenDetail,
   inDetailModal = false,
   disableOpen,
@@ -732,6 +739,7 @@ function PostCard({
   commentSubmitting?: boolean
   currentUserId?: string | null
   onDeleteComment?: (comment: any) => Promise<boolean>
+  onTogglePinComment?: (comment: any, pinned: boolean) => Promise<boolean>
   onOpenDetail?: () => void
   inDetailModal?: boolean
   disableOpen?: boolean
@@ -782,6 +790,7 @@ function PostCard({
     <FeedCommentList
       comments={comments || []}
       currentUserId={currentUserId}
+      contentOwnerUserId={profile?.id}
       likesByCommentId={likesByCommentId}
       onToggleCommentLike={canLikeComments ? toggleCommentLikeFor : undefined}
       isCommentLikeBusy={isCommentLikeBusy}
@@ -799,8 +808,15 @@ function PostCard({
           ? (comment) =>
               setPendingDelete({
                 ...comment,
-                post_id: comment.post_id ?? post.id,
+                profile_post_id: comment.profile_post_id ?? post.id,
               })
+          : undefined
+      }
+      onTogglePin={
+        onTogglePinComment
+          ? (comment, pinned) => {
+              void onTogglePinComment(comment, pinned)
+            }
           : undefined
       }
       deleteMenuClassName="z-[9100]"
@@ -3305,6 +3321,63 @@ function ProfilePageContent() {
     return true
   }
 
+  async function togglePinComment(comment: any, pinned: boolean) {
+    if (!currentUserId) return false
+    if (comment.parent_comment_id) return false
+
+    const target = resolveCommentPinTarget(comment)
+    if (!target) {
+      console.error("[comment-pin] aborted: missing comment target", comment)
+      return false
+    }
+
+    const ownerId = profile?.id ?? null
+    if (
+      !canPinComment({
+        viewerUserId: currentUserId,
+        contentOwnerUserId: ownerId,
+      })
+    ) {
+      return false
+    }
+
+    const commentId = String(comment.id)
+    let previous: any[] = []
+    setCommentsByPost((prev) => {
+      previous = prev[target.stateKey] ?? []
+      return {
+        ...prev,
+        [target.stateKey]: applyPinnedCommentState(previous, commentId, pinned),
+      }
+    })
+
+    if (feedDeepLinkPost && String(feedDeepLinkPost.id) === target.stateKey) {
+      setFeedDeepLinkComments((prev) =>
+        applyPinnedCommentState(prev, commentId, pinned)
+      )
+    }
+
+    const { error } = await pinCommentByKind(supabase, target.kind, {
+      commentId,
+      pinned,
+      parentCommentId: comment.parent_comment_id ?? null,
+    })
+
+    if (error) {
+      setCommentsByPost((prev) => ({
+        ...prev,
+        [target.stateKey]: previous,
+      }))
+      if (feedDeepLinkPost && String(feedDeepLinkPost.id) === target.stateKey) {
+        setFeedDeepLinkComments(previous)
+      }
+      showPopup({ type: "error", message: handleSupabaseError(error) })
+      return false
+    }
+
+    return true
+  }
+
   async function handleDeletePost(postId: string) {
     const confirmDelete = window.confirm("Delete this post?")
     if (!confirmDelete) return
@@ -4190,6 +4263,7 @@ function ProfilePageContent() {
           onToggleLike={(post) => void handleReelLike(String(post.id))}
           onSubmitComment={submitReelComment}
           onDeleteComment={deleteComment}
+          onTogglePinComment={togglePinComment}
           onSharePost={(post) => setSharePost(post)}
           canManageReel={currentUserId === profile?.id}
           menuOpen={openMenuId === String(selectedReelDetail.id)}
@@ -4830,6 +4904,7 @@ function ProfilePageContent() {
                           commentSubmitting={!!commentSubmitting[key]}
                           currentUserId={currentUserId}
                           onDeleteComment={deleteComment}
+                          onTogglePinComment={togglePinComment}
                           onSharePost={
                             currentUserId ? handleSharePost : undefined
                           }
@@ -5287,6 +5362,14 @@ function ProfilePageContent() {
             profile={profile}
             shareProfile={viewerShareProfile}
             canManageTrade={currentUserId === profile.id}
+            attachedReel={
+              tradeReelsByTradeId[String(selectedTradeDetail.id)] ?? null
+            }
+            onOpenReplay={() => {
+              const reel =
+                tradeReelsByTradeId[String(selectedTradeDetail.id)]
+              if (reel) openReelDetail(reel)
+            }}
             onStartEditTrade={() => {
               openEditTradeModal(selectedTradeDetail)
               setSelectedTradeDetail(null)
@@ -5356,6 +5439,7 @@ function ProfilePageContent() {
             commentSubmitting={!!commentSubmitting[String(selectedPostDetail.id)]}
             currentUserId={currentUserId}
             onDeleteComment={deleteComment}
+            onTogglePinComment={togglePinComment}
             disableOpen
             onImageClick={setScreenshotLightboxUrl}
             onSharePost={currentUserId ? handleSharePost : undefined}
@@ -5376,6 +5460,7 @@ function ProfilePageContent() {
           onToggleLike={toggleFeedDeepLinkLike}
           onSubmitComment={submitFeedDeepLinkComment}
           onDeleteComment={deleteComment}
+          onTogglePinComment={togglePinComment}
           onSharePost={currentUserId ? handleSharePost : undefined}
         />
       ) : null}
@@ -5410,6 +5495,7 @@ function ProfilePageContent() {
           onToggleLike={(post) => void handleAchievementLike(String(post.id))}
           onSubmitComment={submitAchievementPostComment}
           onDeleteComment={deleteComment}
+          onTogglePinComment={togglePinComment}
           onSharePost={(post) => {
             const achievement = post.achievements as Achievement | undefined
             if (achievement) {

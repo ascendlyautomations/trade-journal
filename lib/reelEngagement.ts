@@ -21,7 +21,7 @@ export const REEL_COMMENT_CORE_SELECT =
   "id, reel_id, user_id, content, created_at, profiles(username, avatar_url)"
 
 export const REEL_COMMENTS_SELECT =
-  `${REEL_COMMENT_CORE_SELECT}, parent_comment_id`
+  `${REEL_COMMENT_CORE_SELECT}, parent_comment_id, pinned`
 
 export const REEL_COMMENT_INSERT_SELECT = REEL_COMMENT_CORE_SELECT
 
@@ -43,14 +43,14 @@ export function reelOwnerUserId(post: {
   return String(id)
 }
 
-function isMissingParentCommentIdColumn(error: {
+function isMissingCommentSchemaColumn(error: {
   code?: string
   message?: string
 } | null): boolean {
   if (!error) return false
   if (error.code === "PGRST204") return true
   const msg = (error.message ?? "").toLowerCase()
-  return msg.includes("parent_comment_id")
+  return msg.includes("parent_comment_id") || msg.includes("pinned")
 }
 
 export async function queryReelComments<T extends { data: unknown; error: unknown }>(
@@ -59,9 +59,18 @@ export async function queryReelComments<T extends { data: unknown; error: unknow
   const full = await run(REEL_COMMENTS_SELECT)
   if (
     !full.error ||
-    !isMissingParentCommentIdColumn(full.error as { code?: string; message?: string })
+    !isMissingCommentSchemaColumn(full.error as { code?: string; message?: string })
   ) {
     return full
+  }
+  const withParent = await run(`${REEL_COMMENT_CORE_SELECT}, parent_comment_id`)
+  if (
+    !withParent.error ||
+    !isMissingCommentSchemaColumn(
+      withParent.error as { code?: string; message?: string }
+    )
+  ) {
+    return withParent
   }
   return run(REEL_COMMENT_CORE_SELECT)
 }

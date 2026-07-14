@@ -256,6 +256,41 @@ input[type="time"]:hover::-webkit-calendar-picker-indicator {
 }
 
 /*
+ * Reel / clip video shell — Safari clips native media controls outside
+ * border-radius on <video>. Wrap + overflow + compositing layer keeps chrome
+ * inside the rounded frame without changing Chromium layout.
+ */
+.tt-reel-video-shell {
+  overflow: hidden;
+  isolation: isolate;
+  /* Promote a containing layer so WebKit paints controls inside the clip. */
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  /*
+   * Opaque mask forces a clipping context on WebKit (desktop + iOS Safari).
+   * Fully opaque gradient — no soft edges; Chromium appearance unchanged.
+   */
+  -webkit-mask-image: linear-gradient(#fff, #fff);
+  mask-image: linear-gradient(#fff, #fff);
+}
+
+.tt-reel-video-shell > .tt-reel-video {
+  display: block;
+  max-width: 100%;
+}
+
+/* Keep fullscreen / volume / timeline usable; only contain painting. */
+.tt-reel-video-shell video::-webkit-media-controls-enclosure {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.tt-reel-video-shell video::-webkit-media-controls-panel {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/*
  * Profile page reel modal only (`compactVertical`).
  * Short laptops sit closer to the navbar with ~5–10% shorter video height;
  * tall desktops keep near-full media sizing. 9:16 aspect + object-contain.

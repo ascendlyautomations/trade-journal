@@ -58,6 +58,24 @@ export function postTradeOwnerUserId(post: {
   return null
 }
 
+/** Content owner who may pin comments on this feed item. */
+export function feedContentOwnerUserId(
+  post: unknown
+): string | null {
+  if (!post || typeof post !== "object") return null
+  const row = post as {
+    feedKind?: string
+    user_id?: string | null
+    trades?: { user_id?: string | null } | { user_id?: string | null }[] | null
+  }
+  if (row.feedKind === "trade" || row.trades != null) {
+    return postTradeOwnerUserId(row)
+  }
+  const fromPost = row.user_id
+  if (fromPost != null && String(fromPost).trim() !== "") return String(fromPost)
+  return null
+}
+
 export function normalizeTradeFeedItem(row: Record<string, unknown>): FeedItem {
   return {
     ...row,
@@ -164,34 +182,46 @@ export function dedupeFeedItems(items: FeedItem[]): FeedItem[] {
   return out
 }
 
-/** Feed comments without reply column (works before reply migration). */
+/** Feed comments without reply / pin columns (works before migrations). */
 export const FEED_COMMENT_CORE_SELECT =
   "id, post_id, user_id, content, created_at, profiles(username, avatar_url)"
 
-/** Feed comments including reply reference column (no PostgREST parent embed). */
+/** Feed comments including reply + pin columns. */
 export const FEED_COMMENTS_SELECT =
-  `${FEED_COMMENT_CORE_SELECT}, parent_comment_id`
+  `${FEED_COMMENT_CORE_SELECT}, parent_comment_id, pinned`
 
 /** Insert return shape — core columns only to avoid PGRST200 / missing-column failures. */
 export const FEED_COMMENT_INSERT_SELECT = FEED_COMMENT_CORE_SELECT
 
-function isMissingParentCommentIdColumn(error: {
+function isMissingCommentSchemaColumn(error: {
   code?: string
   message?: string
 } | null): boolean {
   if (!error) return false
   if (error.code === "PGRST204") return true
   const msg = (error.message ?? "").toLowerCase()
-  return msg.includes("parent_comment_id")
+  return msg.includes("parent_comment_id") || msg.includes("pinned")
 }
 
-/** Select feed comments, falling back when parent_comment_id column is absent. */
+/** Select feed comments, falling back when newer columns are absent. */
 export async function queryFeedComments<T extends { data: unknown; error: unknown }>(
   run: (select: string) => Promise<T>
 ): Promise<T> {
   const full = await run(FEED_COMMENTS_SELECT)
-  if (!full.error || !isMissingParentCommentIdColumn(full.error as { code?: string; message?: string })) {
+  if (
+    !full.error ||
+    !isMissingCommentSchemaColumn(full.error as { code?: string; message?: string })
+  ) {
     return full
+  }
+  const withParent = await run(`${FEED_COMMENT_CORE_SELECT}, parent_comment_id`)
+  if (
+    !withParent.error ||
+    !isMissingCommentSchemaColumn(
+      withParent.error as { code?: string; message?: string }
+    )
+  ) {
+    return withParent
   }
   return run(FEED_COMMENT_CORE_SELECT)
 }

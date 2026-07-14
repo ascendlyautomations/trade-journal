@@ -27,6 +27,7 @@ type FeedPostOverlaysProps = {
   onToggleLike: (post: any) => void
   onSubmitComment: (post: any, text: string) => Promise<boolean>
   onDeleteComment?: (comment: any) => Promise<boolean>
+  onTogglePinComment?: (comment: any, pinned: boolean) => Promise<boolean>
   onSharePost: (post: any) => void
   openReelMenuId?: string | null
   onReelMenuToggle?: (reelId: string) => void
@@ -55,6 +56,7 @@ function FeedPostOverlays({
   onToggleLike,
   onSubmitComment,
   onDeleteComment,
+  onTogglePinComment,
   onSharePost,
   openReelMenuId = null,
   onReelMenuToggle,
@@ -83,6 +85,7 @@ function FeedPostOverlays({
             onToggleLike={onToggleLike}
             onSubmitComment={onSubmitComment}
             onDeleteComment={onDeleteComment}
+            onTogglePinComment={onTogglePinComment}
             onSharePost={onSharePost}
             canManageReel={
               user?.id != null &&
@@ -111,6 +114,7 @@ function FeedPostOverlays({
             onToggleLike={onToggleLike}
             onSubmitComment={onSubmitComment}
             onDeleteComment={onDeleteComment}
+            onTogglePinComment={onTogglePinComment}
             onSharePost={onSharePost}
           />
         ) : (
@@ -128,6 +132,7 @@ function FeedPostOverlays({
             onToggleLike={onToggleLike}
             onSubmitComment={onSubmitComment}
             onDeleteComment={onDeleteComment}
+            onTogglePinComment={onTogglePinComment}
             onSharePost={onSharePost}
             onOpenAttachedReel={onOpenAttachedReel}
           />

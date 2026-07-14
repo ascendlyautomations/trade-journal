@@ -10,24 +10,28 @@ import type { CommentLikeMeta } from "@/lib/commentLikes"
 type FeedCommentListProps = {
   comments: any[]
   currentUserId?: string | null
+  contentOwnerUserId?: string | null
   replyAvatarClassName?: string
   likesByCommentId?: Record<string, CommentLikeMeta>
   onToggleCommentLike?: (comment: any) => void
   isCommentLikeBusy?: (commentId: string) => boolean
   onReply?: (comment: any) => void
   onRequestDelete?: (comment: any) => void
+  onTogglePin?: (comment: any, pinned: boolean) => void
   deleteMenuClassName?: string
 }
 
 function FeedCommentList({
   comments,
   currentUserId,
+  contentOwnerUserId,
   replyAvatarClassName,
   likesByCommentId,
   onToggleCommentLike,
   isCommentLikeBusy,
   onReply,
   onRequestDelete,
+  onTogglePin,
   deleteMenuClassName,
 }: FeedCommentListProps) {
   const { topLevel, repliesByRootId } = useMemo(
@@ -51,11 +55,13 @@ function FeedCommentList({
               comment={comment}
               mentionUserIdsByUsername={mentionUserIdsByUsername}
               currentUserId={currentUserId}
+              contentOwnerUserId={contentOwnerUserId}
               likeMeta={likesByCommentId?.[rootId]}
               onToggleLike={onToggleCommentLike}
               likeDisabled={isCommentLikeBusy?.(rootId) ?? false}
               onReply={onReply}
               onRequestDelete={onRequestDelete}
+              onTogglePin={onTogglePin}
               deleteMenuClassName={deleteMenuClassName}
             />
             <CommentReplyThread
@@ -63,12 +69,14 @@ function FeedCommentList({
               topLevelCommentCount={topLevel.length}
               mentionUserIdsByUsername={mentionUserIdsByUsername}
               currentUserId={currentUserId}
+              contentOwnerUserId={contentOwnerUserId}
               replyAvatarClassName={replyAvatarClassName}
               likesByCommentId={likesByCommentId}
               onToggleCommentLike={onToggleCommentLike}
               isCommentLikeBusy={isCommentLikeBusy}
               onReply={onReply}
               onRequestDelete={onRequestDelete}
+              onTogglePin={onTogglePin}
               deleteMenuClassName={deleteMenuClassName}
             />
           </div>

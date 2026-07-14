@@ -111,7 +111,7 @@ export default function DropdownMenu({
       <div
         ref={menuRef}
         role="menu"
-        className={`fixed z-[1500] min-w-[10.5rem] overflow-hidden rounded-lg border border-white/10 bg-[#0f172a] py-1 shadow-xl ${menuClassName}`}
+        className={`fixed z-[10070] min-w-[10.5rem] overflow-hidden rounded-lg border border-white/10 bg-[#0f172a] py-1 shadow-xl ${menuClassName}`}
         style={{
           top: menuPosition.top,
           left: menuPosition.left,

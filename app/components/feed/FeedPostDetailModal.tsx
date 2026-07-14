@@ -45,6 +45,7 @@ type FeedPostDetailModalProps = {
   onToggleLike: (post: any) => void
   onSubmitComment: (post: any, text: string) => Promise<boolean>
   onDeleteComment?: (comment: any) => Promise<boolean>
+  onTogglePinComment?: (comment: any, pinned: boolean) => Promise<boolean>
   onSharePost: (post: any) => void
   onOpenAttachedReel?: (post: any, reel: ReelRow) => void
 }
@@ -62,6 +63,7 @@ export default function FeedPostDetailModal({
   onToggleLike,
   onSubmitComment,
   onDeleteComment,
+  onTogglePinComment,
   onSharePost,
   onOpenAttachedReel,
 }: FeedPostDetailModalProps) {
@@ -261,6 +263,7 @@ export default function FeedPostDetailModal({
             onSubmitComment(context, text, parentCommentId)
           }
           onDeleteComment={onDeleteComment}
+          onTogglePinComment={onTogglePinComment}
         />
       }
     />

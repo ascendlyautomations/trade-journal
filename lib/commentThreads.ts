@@ -27,6 +27,7 @@ export function buildCommentThreads<
     id: string | number
     parent_comment_id?: string | null
     created_at?: string | null
+    pinned?: boolean | null
   },
 >(
   comments: T[]
@@ -35,11 +36,15 @@ export function buildCommentThreads<
   const topLevel: T[] = []
   const repliesByRootId = new Map<string, T[]>()
 
-  const sorted = [...comments].sort(
-    (a, b) =>
+  const sorted = [...comments].sort((a, b) => {
+    const aPinned = a.pinned === true && !a.parent_comment_id ? 1 : 0
+    const bPinned = b.pinned === true && !b.parent_comment_id ? 1 : 0
+    if (aPinned !== bPinned) return bPinned - aPinned
+    return (
       new Date(a.created_at ?? 0).getTime() -
       new Date(b.created_at ?? 0).getTime()
-  )
+    )
+  })
 
   for (const comment of sorted) {
     if (!comment.parent_comment_id) {
@@ -51,6 +56,18 @@ export function buildCommentThreads<
     const list = repliesByRootId.get(rootId) ?? []
     list.push(comment)
     repliesByRootId.set(rootId, list)
+  }
+
+  // Replies stay chronological under each parent.
+  for (const [rootId, list] of repliesByRootId) {
+    repliesByRootId.set(
+      rootId,
+      [...list].sort(
+        (a, b) =>
+          new Date(a.created_at ?? 0).getTime() -
+          new Date(b.created_at ?? 0).getTime()
+      )
+    )
   }
 
   return { topLevel, repliesByRootId }

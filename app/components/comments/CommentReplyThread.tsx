@@ -10,12 +10,14 @@ type CommentReplyThreadProps = {
   topLevelCommentCount: number
   mentionUserIdsByUsername: Map<string, string>
   currentUserId?: string | null
+  contentOwnerUserId?: string | null
   replyAvatarClassName?: string
   likesByCommentId?: Record<string, CommentLikeMeta>
   onToggleCommentLike?: (comment: any) => void
   isCommentLikeBusy?: (commentId: string) => boolean
   onReply?: (comment: any) => void
   onRequestDelete?: (comment: any) => void
+  onTogglePin?: (comment: any, pinned: boolean) => void
   deleteMenuClassName?: string
 }
 
@@ -24,12 +26,14 @@ function CommentReplyThread({
   topLevelCommentCount,
   mentionUserIdsByUsername,
   currentUserId,
+  contentOwnerUserId,
   replyAvatarClassName = "h-6 w-6 shrink-0 rounded-full object-cover",
   likesByCommentId,
   onToggleCommentLike,
   isCommentLikeBusy,
   onReply,
   onRequestDelete,
+  onTogglePin,
   deleteMenuClassName,
 }: CommentReplyThreadProps) {
   const [expanded, setExpanded] = useState(false)
@@ -51,12 +55,14 @@ function CommentReplyThread({
             comment={reply}
             mentionUserIdsByUsername={mentionUserIdsByUsername}
             currentUserId={currentUserId}
+            contentOwnerUserId={contentOwnerUserId}
             avatarClassName={replyAvatarClassName}
             likeMeta={likesByCommentId?.[String(reply.id)]}
             onToggleLike={onToggleCommentLike}
             likeDisabled={isCommentLikeBusy?.(String(reply.id)) ?? false}
             onReply={onReply}
             onRequestDelete={onRequestDelete}
+            onTogglePin={onTogglePin}
             deleteMenuClassName={deleteMenuClassName}
           />
         ))}

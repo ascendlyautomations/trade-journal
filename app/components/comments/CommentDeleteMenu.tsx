@@ -1,16 +1,57 @@
 "use client"
 
-import DropdownMenu from "@/app/components/ui/DropdownMenu"
+import DropdownMenu, {
+  type DropdownMenuItem,
+} from "@/app/components/ui/DropdownMenu"
 
-type CommentDeleteMenuProps = {
-  onDelete: () => void
+type CommentActionsMenuProps = {
+  canPin?: boolean
+  isPinned?: boolean
+  canDelete?: boolean
+  onPin?: () => void
+  onUnpin?: () => void
+  onDelete?: () => void
   menuClassName?: string
 }
 
-export default function CommentDeleteMenu({
+export default function CommentActionsMenu({
+  canPin = false,
+  isPinned = false,
+  canDelete = false,
+  onPin,
+  onUnpin,
   onDelete,
   menuClassName,
-}: CommentDeleteMenuProps) {
+}: CommentActionsMenuProps) {
+  const items: DropdownMenuItem[] = []
+
+  if (canPin) {
+    if (isPinned) {
+      items.push({
+        id: "unpin",
+        label: "Unpin Comment",
+        onSelect: onUnpin,
+      })
+    } else {
+      items.push({
+        id: "pin",
+        label: "Pin Comment",
+        onSelect: onPin,
+      })
+    }
+  }
+
+  if (canDelete && onDelete) {
+    items.push({
+      id: "delete",
+      label: "Delete Comment",
+      variant: "danger",
+      onSelect: onDelete,
+    })
+  }
+
+  if (items.length === 0) return null
+
   return (
     <DropdownMenu
       stopPropagation
@@ -24,14 +65,24 @@ export default function CommentDeleteMenu({
           ⋯
         </span>
       }
-      items={[
-        {
-          id: "delete",
-          label: "Delete",
-          variant: "danger",
-          onSelect: onDelete,
-        },
-      ]}
+      items={items}
+    />
+  )
+}
+
+/** @deprecated Prefer CommentActionsMenu */
+export function CommentDeleteMenu({
+  onDelete,
+  menuClassName,
+}: {
+  onDelete: () => void
+  menuClassName?: string
+}) {
+  return (
+    <CommentActionsMenu
+      canDelete
+      onDelete={onDelete}
+      menuClassName={menuClassName}
     />
   )
 }

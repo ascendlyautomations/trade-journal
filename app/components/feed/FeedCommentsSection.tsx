@@ -21,7 +21,10 @@ import {
   commentLikeSourceFromFeedPost,
 } from "@/lib/commentLikes"
 import { useCommentLikes } from "@/lib/useCommentLikes"
-import type { FeedCommentTarget } from "./feedPostHelpers"
+import {
+  feedContentOwnerUserId,
+  type FeedCommentTarget,
+} from "./feedPostHelpers"
 
 type FeedCommentsSectionProps = {
   target: FeedCommentTarget
@@ -35,6 +38,7 @@ type FeedCommentsSectionProps = {
     parentCommentId?: string | null
   ) => Promise<boolean>
   onDeleteComment?: (comment: any) => Promise<boolean>
+  onTogglePinComment?: (comment: any, pinned: boolean) => Promise<boolean>
   /** Scroll container for the comment list only (modal layout). */
   listScrollRef?: RefObject<HTMLDivElement | null>
 }
@@ -47,9 +51,11 @@ function FeedCommentsSection({
   draftSyncRef,
   onSubmitComment,
   onDeleteComment,
+  onTogglePinComment,
   listScrollRef,
 }: FeedCommentsSectionProps) {
   const contentId = target.contentId
+  const contentOwnerUserId = feedContentOwnerUserId(target.submitContext)
   const submitContext =
     target.submitContext && typeof target.submitContext === "object"
       ? (target.submitContext as Record<string, unknown>)
@@ -185,12 +191,20 @@ function FeedCommentsSection({
     <FeedCommentList
       comments={comments}
       currentUserId={user?.id}
+      contentOwnerUserId={contentOwnerUserId}
       likesByCommentId={likesByCommentId}
       onToggleCommentLike={canLikeComments ? toggleCommentLikeFor : undefined}
       isCommentLikeBusy={isCommentLikeBusy}
       onReply={handleReply}
       onRequestDelete={
         onDeleteComment ? (comment) => setPendingDelete(comment) : undefined
+      }
+      onTogglePin={
+        onTogglePinComment
+          ? (comment, pinned) => {
+              void onTogglePinComment(comment, pinned)
+            }
+          : undefined
       }
       deleteMenuClassName="z-[9100]"
     />
