@@ -84,14 +84,16 @@ export default function FeedbackModal({
       >
         <ModalCloseButton
           onClick={onClose}
-          className="absolute right-3 top-3 z-10"
+          className="absolute right-3 top-5 z-10"
         />
         {title ? (
-          <h3 className="mb-2 pr-10 text-base font-semibold text-white">{title}</h3>
+          <h3 className="mb-2 pr-12 text-base font-semibold text-white">
+            {title}
+          </h3>
         ) : null}
         <p
           className={cn(
-            "whitespace-pre-line text-sm font-medium",
+            "whitespace-pre-line pr-12 text-sm font-medium",
             messageStyles[type]
           )}
         >

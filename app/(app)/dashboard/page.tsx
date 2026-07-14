@@ -1833,7 +1833,7 @@ const biggestLoss = losses.length > 0
               Import CSV
             </button>
           </div>
-          <div className="mt-3.5 pt-3 md:mt-4 md:pt-3.5">
+          <div className="mt-2 md:mt-2.5">
             <div className="mb-2.5 h-px w-16 bg-white/10 md:mb-3" aria-hidden />
             <p className="text-xs font-medium text-gray-200">
               After your first trade you&apos;ll unlock:
