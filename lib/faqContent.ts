@@ -23,7 +23,7 @@ export const TRADETRAXS_FAQ_ITEMS: FaqItem[] = [
   {
     question: "How does TradeTraxs work?",
     answer:
-      "TradeTraxs is a cloud-based trading journal and performance analytics platform. You log or import trades, review trading statistics and AI-powered trade analysis, and optionally connect with other traders through Trade Rooms, Direct Messages, and the community feed.",
+      "TradeTraxs is a social trading platform with an AI trading journal and advanced analytics. You log or import trades, review performance with AI, share clips, and connect with other traders through Trade Rooms, Direct Messages, and the community feed.",
   },
   {
     question: "How do I get started with TradeTraxs?",
@@ -33,7 +33,7 @@ export const TRADETRAXS_FAQ_ITEMS: FaqItem[] = [
   {
     question: "Do I need a broker to use TradeTraxs?",
     answer:
-      "No. TradeTraxs is trading journal software, not a broker. You can manually add trades or import them from supported brokers. Your broker relationship stays separate from your TradeTraxs journal.",
+      "No. TradeTraxs is a social trading platform and trading journal, not a broker. You can manually add trades or import them from supported brokers. Your broker relationship stays separate from your TradeTraxs journal.",
   },
   {
     question: "Can I manually add trades?",

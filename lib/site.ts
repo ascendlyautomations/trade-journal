@@ -9,7 +9,7 @@ export const OG_IMAGE_WIDTH = 1200
 export const OG_IMAGE_HEIGHT = 630
 
 export const DEFAULT_OG_IMAGE_ALT =
-  "TradeTraxs, AI trading journal and trade analysis software"
+  "TradeTraxs, social trading platform, AI trading journal, and advanced analytics"
 
 export const SITE_NAME = "TradeTraxs"
 
@@ -20,24 +20,24 @@ export const SITE_NAME_VARIANTS = [
 ] as const
 
 export const DEFAULT_SITE_DESCRIPTION =
-  "TradeTraxs is the AI-powered trading journal app for futures and active traders. Log trades, analyze performance, and connect with the trading community."
+  "TradeTraxs is the social platform built for traders. Journal your trades, share clips, connect with other traders, analyze with AI, and build Trade Rooms."
 
 export const HOME_PAGE_TITLE =
-  "TradeTraxs | AI Trading Journal & Trade Analysis Software"
+  "TradeTraxs | Social Trading Platform • AI Trading Journal & Advanced Analytics"
 
 /** Primary SEO keywords — used in metadata keywords field on key pages. */
 export const SITE_KEYWORDS = [
   "TradeTraxs",
   "tradetraxs",
   "Trade Traxs",
-  "TradeTraxs trading journal",
-  "TradeTraxs app",
+  "social trading platform",
   "AI trading journal",
+  "advanced trading analytics",
   "trading journal",
+  "TradeTraxs app",
   "futures trading journal",
-  "trading journal software",
-  "trading journal app",
-  "trade analysis software",
+  "trading community",
+  "trade rooms",
 ] as const
 
 export const TWITTER_HANDLE = "@tradetraxs"

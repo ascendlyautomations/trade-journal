@@ -6,7 +6,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: SITE_NAME,
     short_name: SITE_NAME,
     description:
-      "AI-powered trading journal app for futures and active traders.",
+      "Social trading platform with an AI trading journal and advanced analytics.",
     start_url: "/",
     display: "standalone",
     background_color: "#0f172a",
@@ -33,7 +33,7 @@ export default function manifest(): MetadataRoute.Manifest {
         sizes: "1200x630",
         type: "image/png",
         form_factor: "wide",
-        label: `${SITE_NAME} trading journal`,
+        label: `${SITE_NAME} social trading platform`,
       },
     ],
     id: SITE_URL,

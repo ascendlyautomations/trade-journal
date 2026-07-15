@@ -1,5 +1,7 @@
 /**
  * Generate public/og-image.png (1200×630) for Open Graph / Twitter cards.
+ * Uses the branded background only — do not composite a second logo (the
+ * background already includes the TradeTraxs mark).
  * Run: node scripts/generate-og-image.mjs
  */
 import fs from "node:fs"
@@ -8,54 +10,24 @@ import sharp from "sharp"
 
 const root = path.resolve(process.cwd(), "public")
 const out = path.join(root, "og-image.png")
-const bg = path.join(root, "tradetrax-bg.webp")
-const logo = path.join(root, "logo.png")
+const bgWebp = path.join(root, "tradetrax-bg.webp")
+const bgPng = path.join(root, "tradetrax-bg.png")
 
 const WIDTH = 1200
 const HEIGHT = 630
 
 async function main() {
-  if (!fs.existsSync(bg)) {
-    throw new Error("Missing tradetrax-bg.webp")
-  }
-  if (!fs.existsSync(logo)) {
-    throw new Error("Missing logo.png")
+  const bg = fs.existsSync(bgWebp)
+    ? bgWebp
+    : fs.existsSync(bgPng)
+      ? bgPng
+      : null
+  if (!bg) {
+    throw new Error("Missing tradetrax-bg.webp (or tradetrax-bg.png)")
   }
 
-  const background = await sharp(bg)
+  await sharp(bg)
     .resize(WIDTH, HEIGHT, { fit: "cover", position: "center" })
-    .modulate({ brightness: 0.55 })
-    .toBuffer()
-
-  const logoBuffer = await sharp(logo)
-    .resize(280, 280, { fit: "inside", withoutEnlargement: true })
-    .png()
-    .toBuffer()
-
-  const logoMeta = await sharp(logoBuffer).metadata()
-  const logoW = logoMeta.width ?? 280
-  const logoH = logoMeta.height ?? 280
-
-  const titleSvg = `
-    <svg width="${WIDTH}" height="${HEIGHT}">
-      <style>
-        .title { fill: #93c5fd; font-size: 52px; font-family: Arial, Helvetica, sans-serif; font-weight: 700; }
-        .subtitle { fill: #e2e8f0; font-size: 28px; font-family: Arial, Helvetica, sans-serif; font-weight: 400; }
-      </style>
-      <text x="600" y="420" text-anchor="middle" class="title">TradeTraxs</text>
-      <text x="600" y="470" text-anchor="middle" class="subtitle">AI Trading Journal &amp; Analytics</text>
-    </svg>
-  `
-
-  await sharp(background)
-    .composite([
-      {
-        input: logoBuffer,
-        top: Math.round(HEIGHT / 2 - logoH / 2 - 60),
-        left: Math.round(WIDTH / 2 - logoW / 2),
-      },
-      { input: Buffer.from(titleSvg), top: 0, left: 0 },
-    ])
     .png({ compressionLevel: 9 })
     .toFile(out)
 
