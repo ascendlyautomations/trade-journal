@@ -40,10 +40,24 @@ interface Props {
 }
 
 type MenuPosition = {
-  top: number
+  /** Viewport top when opening below the trigger. */
+  top?: number
+  /** Viewport bottom when opening above — keeps the menu attached to the trigger. */
+  bottom?: number
   left: number
   width: number
+  maxHeight: number
 }
+
+const MENU_GAP_PX = 4
+const VIEWPORT_PAD_PX = 8
+/** Preferred cap (`max-h-60`). */
+const MENU_PREFERRED_MAX_HEIGHT_PX = 240
+/**
+ * Prefer opening below + scrolling unless there is less than this much room
+ * under the trigger. Only then consider flipping above.
+ */
+const MENU_MIN_USABLE_BELOW_PX = 72
 
 export default function CustomSelect({
   value,
@@ -72,14 +86,42 @@ export default function CustomSelect({
     if (!trigger) return
 
     const rect = trigger.getBoundingClientRect()
-    const viewportPad = 8
+    const spaceBelow =
+      window.innerHeight - rect.bottom - MENU_GAP_PX - VIEWPORT_PAD_PX
+    const spaceAbove = rect.top - MENU_GAP_PX - VIEWPORT_PAD_PX
+
+    // Default: open below. Flip only when below is unusable and above is better.
+    const openAbove =
+      spaceBelow < MENU_MIN_USABLE_BELOW_PX && spaceAbove > spaceBelow
+
+    const maxHeight = Math.max(
+      48,
+      Math.min(
+        MENU_PREFERRED_MAX_HEIGHT_PX,
+        openAbove ? spaceAbove : spaceBelow
+      )
+    )
+
+    const left = Math.min(
+      rect.left,
+      Math.max(VIEWPORT_PAD_PX, window.innerWidth - rect.width - VIEWPORT_PAD_PX)
+    )
+
+    if (openAbove) {
+      setMenuPosition({
+        bottom: window.innerHeight - rect.top + MENU_GAP_PX,
+        left,
+        width: rect.width,
+        maxHeight,
+      })
+      return
+    }
+
     setMenuPosition({
-      top: rect.bottom + 4,
-      left: Math.min(
-        rect.left,
-        Math.max(viewportPad, window.innerWidth - rect.width - viewportPad)
-      ),
+      top: rect.bottom + MENU_GAP_PX,
+      left,
       width: rect.width,
+      maxHeight,
     })
   }
 
@@ -116,15 +158,19 @@ export default function CustomSelect({
       setOpen(false)
     }
 
+    // Capture so Escape closes the select before parent modal listeners.
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpen(false)
+      if (event.key !== "Escape") return
+      event.preventDefault()
+      event.stopPropagation()
+      setOpen(false)
     }
 
     document.addEventListener("mousedown", handleOutsideClick)
-    document.addEventListener("keydown", handleKeyDown)
+    document.addEventListener("keydown", handleKeyDown, true)
     return () => {
       document.removeEventListener("mousedown", handleOutsideClick)
-      document.removeEventListener("keydown", handleKeyDown)
+      document.removeEventListener("keydown", handleKeyDown, true)
     }
   }, [open])
 
@@ -141,9 +187,11 @@ export default function CustomSelect({
         role="listbox"
         className={menuClassName}
         style={{
-          top: menuPosition.top,
+          top: menuPosition.top ?? "auto",
+          bottom: menuPosition.bottom ?? "auto",
           left: menuPosition.left,
           width: menuPosition.width,
+          maxHeight: menuPosition.maxHeight,
         }}
       >
         {options.map((opt) => {

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useRef } from "react"
 import { cn } from "./cn"
 import {
   canUseProgrammaticShowPicker,
@@ -15,9 +15,10 @@ type NativeTimeInputProps = Omit<
 
 /**
  * Cross-browser time field for trade forms.
- * - Chromium: optional showPicker on field chrome / click (reliable dismiss).
- * - Safari macOS/iOS: native type=time only — never call showPicker (traps UX).
- * Users can type HH:MM or use the native control affordance.
+ *
+ * Safari note: never stretch the calendar-picker-indicator over the whole
+ * field and never blur() inside onChange — both block Safari's editable
+ * HH:MM segments during manual entry.
  */
 export default function NativeTimeInput({
   className,
@@ -39,6 +40,7 @@ export default function NativeTimeInput({
         className
       )}
       onPointerDown={(e) => {
+        // Only when clicking empty chrome around the input (not the input itself).
         if (e.target !== e.currentTarget) return
         const input = inputRef.current
         if (!input) return
@@ -64,21 +66,23 @@ export default function NativeTimeInput({
         }}
         onClick={(e) => {
           onClick?.(e)
+          // Chromium only: optional picker open. Do not call on Safari —
+          // showPicker / click interference breaks segment editing.
           const input = inputRef.current
           if (input && canUseProgrammaticShowPicker(input)) {
-            openNativeDatePicker(input)
+            // Only open picker when the click lands on the indicator region
+            // (right edge). Clicks on HH:MM segments must remain editable.
+            const rect = input.getBoundingClientRect()
+            const nearIcon = e.clientX >= rect.right - 40
+            if (nearIcon) {
+              openNativeDatePicker(input)
+            }
           }
         }}
         onChange={(e) => {
+          // Do not blur here — Safari fires change while editing segments;
+          // blurring aborts manual entry. Leave focus until the user leaves.
           onChange?.(e)
-          const input = e.currentTarget
-          if (canUseProgrammaticShowPicker(input)) {
-            input.blur()
-          } else {
-            requestAnimationFrame(() => {
-              if (document.activeElement === input) input.blur()
-            })
-          }
         }}
         onBlur={(e) => {
           onBlur?.(e)

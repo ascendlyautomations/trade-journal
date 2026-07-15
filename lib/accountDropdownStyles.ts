@@ -45,9 +45,13 @@ export const ACCOUNT_DROPDOWN_SUBMISSION_WRAPPER_CLASS =
 export const ACCOUNT_DROPDOWN_TRIGGER_COMPACT_CLASS =
   ACCOUNT_DROPDOWN_FILTER_TRIGGER_CLASS
 
-/** Portaled menu shell — CustomSelect and other fixed-position menus. */
+/**
+ * Portaled menu shell — CustomSelect and other fixed-position menus.
+ * Must sit above ScrollableModalShell (z-10050) / FeedbackModal (z-10060);
+ * same layer as DropdownMenu (see modalLayout stacking notes).
+ */
 export const ACCOUNT_DROPDOWN_PORTAL_MENU_CLASS =
-  "fixed z-[1500] max-h-60 overflow-x-hidden overflow-y-auto rounded-lg border border-white/10 bg-[#0f172a] shadow-lg"
+  "fixed z-[10070] max-h-60 overflow-x-hidden overflow-y-auto rounded-lg border border-white/10 bg-[#0f172a] shadow-lg"
 
 export const ACCOUNT_DROPDOWN_OPTION_CLASS =
   "w-full px-3 py-2 text-left text-sm text-white focus:outline-none hover:bg-[#1f2937]"

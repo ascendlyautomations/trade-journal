@@ -40,7 +40,7 @@ export const MODAL_FOOTER_CLASS =
  * - ImageLightbox: 10001
  * - Modal / ScrollableModalShell / stacked DetailModalShell: 10050
  * - FeedbackModal / ReelViewer: 10060
- * - Dropdown menus: 10070
+ * - Dropdown menus / CustomSelect portals: 10070 (DropdownMenu + ACCOUNT_DROPDOWN_PORTAL_MENU_CLASS)
  */
 export const DETAIL_MODAL_Z_INDEX_CLASS = "z-[9000]"
 

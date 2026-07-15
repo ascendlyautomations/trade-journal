@@ -225,7 +225,7 @@ export default function LandingPageClient({
                 type="button"
                 disabled={checkoutLoading || loading}
                 onClick={() => void handleSubscribe()}
-                className="min-w-[200px] rounded-xl bg-blue-500 px-6 py-3 font-semibold text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-blue-500 md:min-w-[220px] md:px-8 md:py-3.5"
+                className="min-w-[168px] rounded-xl bg-blue-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-blue-500 md:min-w-[220px] md:px-8 md:py-3.5 md:text-base"
               >
                 {checkoutLoading ? "Starting trial…" : trialCtaLabel}
               </button>
@@ -233,7 +233,7 @@ export default function LandingPageClient({
               <button
                 type="button"
                 onClick={handleExploreDemo}
-                className="min-w-[200px] rounded-lg border border-white/20 px-6 py-3 font-semibold transition hover:bg-white/10 md:min-w-[220px] md:px-8 md:py-3.5"
+                className="min-w-[168px] rounded-lg border border-white/20 px-5 py-2.5 text-sm font-semibold transition hover:bg-white/10 md:min-w-[220px] md:px-8 md:py-3.5 md:text-base"
               >
                 Explore the Demo
               </button>
