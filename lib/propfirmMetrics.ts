@@ -16,7 +16,7 @@
  * | Max / daily drawdown rules | Payout cycle | `cycleTrailingMetrics`, `cycleDailyMetrics.worstDailyLossUsed` |
  * | Consistency | Payout cycle | `cycleConsistencyMetrics` |
  * | Cycle P&L | Payout cycle | `cyclePnL` |
- * | Profit target % | Payout cycle | `cycleProgress.progressPercent` |
+ * | Profit target % (0–100 fill) | Payout cycle | `cycleProgress.progressPercent` (|pnl|/target) |
  * | Drawdown used % | Payout cycle | `cycleProgress.ddPercent` |
  * | Account status | Payout cycle | `cycleProgress.status` |
  * | Today P&L | Futures trading day | Current session bucket from all trades (`lifetimeDailyMetrics.todayPnL`) |
@@ -803,8 +803,10 @@ export function computePropfirmProgress(
   const maxDdLimit = Number(account?.max_drawdown) || 0
   const drawdownUsed = trailingMetrics.maxDrawdownUsed
 
+  // Always 0–100 fill width (left-origin bar). Uses |cyclePnL| / profitTarget so
+  // losses never produce a negative CSS width (invalid → auto/full bar).
   const progressPercent = profitTarget
-    ? Math.min((cyclePnL / profitTarget) * 100, 100)
+    ? Math.min((Math.abs(cyclePnL) / profitTarget) * 100, 100)
     : 0
 
   const isPassed = !!account && profitTarget > 0 && cyclePnL >= profitTarget

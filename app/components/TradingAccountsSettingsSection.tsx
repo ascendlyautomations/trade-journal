@@ -307,9 +307,9 @@ export default function TradingAccountsSettingsSection({
         </p>
 
         {loading && accounts.length === 0 ? (
-          <p className="mt-4 text-sm text-gray-500">Loading accounts…</p>
+          <p className="mt-4 text-sm text-gray-400">Loading accounts…</p>
         ) : accounts.length === 0 ? (
-          <p className="mt-4 text-sm text-gray-500">No accounts yet.</p>
+          <p className="mt-4 text-sm text-gray-400">No accounts yet.</p>
         ) : (
           <>
             <label className="mt-4 block">
@@ -319,12 +319,12 @@ export default function TradingAccountsSettingsSection({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search accounts..."
-                className="w-full rounded-xl border border-white/10 bg-black/30 p-3 text-sm text-white placeholder:text-gray-500"
+                className="w-full rounded-xl border border-white/10 bg-black/30 p-3 text-sm text-white placeholder:text-gray-400"
               />
             </label>
 
             {filteredAccounts.length === 0 ? (
-              <p className="mt-4 text-sm text-gray-500">
+              <p className="mt-4 text-sm text-gray-400">
                 No accounts match your search.
               </p>
             ) : (
@@ -354,17 +354,17 @@ export default function TradingAccountsSettingsSection({
                         </p>
                         <dl className="mt-2 space-y-1 text-sm text-gray-400">
                           <div className="flex gap-2">
-                            <dt className="shrink-0 text-gray-500">Category:</dt>
+                            <dt className="shrink-0 text-gray-400">Category:</dt>
                             <dd>{account.category || "Personal"}</dd>
                           </div>
                           {modeLabel ? (
                             <div className="flex gap-2">
-                              <dt className="shrink-0 text-gray-500">Mode:</dt>
+                              <dt className="shrink-0 text-gray-400">Mode:</dt>
                               <dd>{modeLabel}</dd>
                             </div>
                           ) : null}
                           <div className="flex gap-2">
-                            <dt className="shrink-0 text-gray-500">Status:</dt>
+                            <dt className="shrink-0 text-gray-400">Status:</dt>
                             <dd
                               className={
                                 isActive ? "text-emerald-300" : "text-red-300/90"
@@ -386,7 +386,7 @@ export default function TradingAccountsSettingsSection({
                                 })
                               }
                               placeholder="Note (e.g. blown, passed...)"
-                              className="w-full rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-sm text-white placeholder:text-gray-500"
+                              className="w-full rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-sm text-white placeholder:text-gray-400"
                             />
                             <div className="flex flex-wrap items-center gap-3">
                               <button
@@ -411,7 +411,7 @@ export default function TradingAccountsSettingsSection({
                           <>
                             {noteText ? (
                               <div className="mt-3 text-sm text-gray-400">
-                                <span className="text-gray-500">Note:</span>
+                                <span className="text-gray-400">Note:</span>
                                 <p className="mt-1 whitespace-pre-wrap text-gray-300">
                                   {noteText}
                                 </p>
@@ -459,7 +459,7 @@ export default function TradingAccountsSettingsSection({
                 <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-sm text-gray-400">
                     Showing {rangeStart}–{rangeEnd} of {filteredAccounts.length}
-                    <span className="text-gray-500">
+                    <span className="text-gray-400">
                       {" "}
                       · Page {safePage + 1} of {pageCount}
                     </span>

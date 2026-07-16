@@ -1636,7 +1636,7 @@ const biggestLoss = losses.length > 0
                   setEditingTrade(trade)
                 }
               }}
-              className="w-full cursor-pointer rounded-lg border border-white/10 bg-white/5 p-2.5 text-left text-xs backdrop-blur-sm transition hover:border-white/20 hover:bg-white/[0.07] md:p-3 md:text-sm"
+              className="w-full cursor-pointer rounded-lg border border-white/10 bg-white/5 p-2.5 text-left text-xs transition hover:bg-white/[0.07] md:p-3 md:text-sm"
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 space-y-0.5 md:space-y-1">
@@ -1955,7 +1955,7 @@ const biggestLoss = losses.length > 0
       ) : (
       <table className="w-full min-w-[520px] text-[11px] md:text-sm">
         <thead>
-          <tr className="border-b border-white/10 text-gray-300">
+          <tr className="border-b border-white/10 text-gray-400">
             <th className="py-1.5 text-center md:py-2">Ticker</th>
             <th className="py-1.5 text-center md:py-2">Trades</th>
             <th className="py-1.5 text-center md:py-2">Win %</th>
@@ -1963,7 +1963,7 @@ const biggestLoss = losses.length > 0
             <th className="py-1.5 text-center md:py-2">Avg RR</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody className="text-white">
           {symbolPerformanceRows.map((row) => (
             <tr key={row.ticker} className="border-b border-white/10 hover:bg-white/10">
               <td className="py-1.5 text-center md:py-2">{row.ticker}</td>

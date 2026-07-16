@@ -178,7 +178,7 @@ export default function DashboardFilters({
         <div className="-mt-1 mb-2 flex justify-end md:justify-start md:mb-3">
           <Link
             href="/analytics/propfirm"
-            className="text-xs text-blue-300/70 transition hover:text-blue-200"
+            className="text-xs text-blue-300 transition hover:text-blue-200"
           >
             View Prop Firm Dashboard →
           </Link>

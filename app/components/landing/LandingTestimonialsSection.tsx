@@ -65,7 +65,7 @@ function TestimonialCard({ testimonial }: { testimonial: PublicUserReview }) {
         />
         <div className="min-w-0">
           <p className="truncate font-medium text-white">{displayName}</p>
-          <p className="mt-0.5 truncate text-sm text-gray-500">
+          <p className="mt-0.5 truncate text-sm text-gray-400">
             {[username, dateLabel].filter(Boolean).join(" · ")}
           </p>
         </div>
@@ -112,7 +112,7 @@ export default function LandingTestimonialsSection({
                   {stats.averageRating.toFixed(1)}/5
                 </span>
               </div>
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-gray-400">
                 Based on {stats.count} approved review{stats.count === 1 ? "" : "s"}
               </p>
             </div>

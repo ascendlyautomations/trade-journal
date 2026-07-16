@@ -128,7 +128,7 @@ export default function FeedProfilePostDetailModal({
         onClick={setLightboxUrl}
       />
     ) : (
-      <div className="flex h-full w-full items-center justify-center p-6 text-sm text-white/45">
+      <div className="flex h-full w-full items-center justify-center p-6 text-sm text-gray-400">
         No certificate image
       </div>
     )

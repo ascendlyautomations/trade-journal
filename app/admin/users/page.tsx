@@ -516,7 +516,7 @@ export default function AdminUsersPage() {
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Username, name, or email"
-                  className="mt-1 w-full rounded-lg border border-white/10 bg-[#111827] px-3 py-2 text-sm text-white placeholder-gray-500"
+                  className="mt-1 w-full rounded-lg border border-white/10 bg-[#111827] px-3 py-2 text-sm text-white placeholder-gray-400"
                 />
               </div>
               <div>
@@ -575,11 +575,11 @@ export default function AdminUsersPage() {
                 <span className="tabular-nums">
                   Showing {rangeStart}–{rangeEnd} of {total}
                 </span>
-                <span className="mx-2 text-gray-600">·</span>
+                <span className="mx-2 text-gray-400">·</span>
                 <span className="tabular-nums">
                   Page {currentPage} of {totalPages}
                 </span>
-                {listLoading ? <span className="ml-2 text-gray-500">Loading…</span> : null}
+                {listLoading ? <span className="ml-2 text-gray-400">Loading…</span> : null}
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <button
@@ -725,14 +725,14 @@ export default function AdminUsersPage() {
                         <td className="whitespace-nowrap px-3 py-2 text-xs text-gray-400 tabular-nums">
                           {row.created_at ? new Date(row.created_at).toLocaleDateString() : "—"}
                         </td>
-                        <td className="px-3 py-2">{pro ? <span className="text-emerald-400">Yes</span> : <span className="text-gray-500">No</span>}</td>
+                        <td className="px-3 py-2">{pro ? <span className="text-emerald-400">Yes</span> : <span className="text-gray-400">No</span>}</td>
                         <td className="px-3 py-2">{row.is_private ? "Yes" : "No"}</td>
                         <td className="px-3 py-2">{row.is_banned ? <span className="text-red-300">Yes</span> : "No"}</td>
                         <td className="px-3 py-2">
                           {row.is_beta_tester ? (
                             <span className="text-amber-400">Yes</span>
                           ) : (
-                            <span className="text-gray-500">No</span>
+                            <span className="text-gray-400">No</span>
                           )}
                         </td>
                         <td className="max-w-[100px] truncate px-3 py-2 text-xs text-gray-400">{row.referral_code || "—"}</td>
@@ -777,21 +777,21 @@ export default function AdminUsersPage() {
 
             <dl className="mt-4 space-y-2 text-sm">
               <div className="flex justify-between gap-2">
-                <dt className="text-gray-500">User id</dt>
+                <dt className="text-gray-400">User id</dt>
                 <dd className="truncate font-mono text-xs text-gray-300">{selected.id}</dd>
               </div>
               <div className="flex justify-between gap-2">
-                <dt className="text-gray-500">Email</dt>
+                <dt className="text-gray-400">Email</dt>
                 <dd className="truncate text-gray-200">{selected.email || "—"}</dd>
               </div>
               <div className="flex justify-between gap-2">
-                <dt className="text-gray-500">Joined</dt>
+                <dt className="text-gray-400">Joined</dt>
                 <dd className="text-gray-200 tabular-nums">
                   {selected.created_at ? new Date(selected.created_at).toLocaleString() : "—"}
                 </dd>
               </div>
               <div className="flex justify-between gap-2">
-                <dt className="text-gray-500">Pro</dt>
+                <dt className="text-gray-400">Pro</dt>
                 <dd className="text-gray-200">
                   {isProActive({ is_pro: selected.is_pro, subscription_status: selected.subscription_status }) ? (
                     <span className="text-emerald-400">Yes</span>
@@ -801,33 +801,33 @@ export default function AdminUsersPage() {
                 </dd>
               </div>
               <div className="flex justify-between gap-2">
-                <dt className="text-gray-500">Privacy</dt>
+                <dt className="text-gray-400">Privacy</dt>
                 <dd className="text-gray-200">{selected.is_private ? "Private" : "Public"}</dd>
               </div>
               <div className="flex justify-between gap-2">
-                <dt className="text-gray-500">Banned</dt>
+                <dt className="text-gray-400">Banned</dt>
                 <dd className={selected.is_banned ? "text-red-300" : "text-gray-200"}>
                   {selected.is_banned ? "Yes" : "No"}
                 </dd>
               </div>
               <div className="flex justify-between gap-2">
-                <dt className="text-gray-500">Beta tester</dt>
+                <dt className="text-gray-400">Beta tester</dt>
                 <dd className={selected.is_beta_tester ? "text-amber-400" : "text-gray-200"}>
                   {selected.is_beta_tester ? "Yes" : "No"}
                 </dd>
               </div>
               <div className="flex justify-between gap-2">
-                <dt className="text-gray-500">Subscription</dt>
+                <dt className="text-gray-400">Subscription</dt>
                 <dd className="text-gray-200">{selected.subscription_status || "—"}</dd>
               </div>
               <div className="flex justify-between gap-2">
-                <dt className="text-gray-500">Referral code</dt>
+                <dt className="text-gray-400">Referral code</dt>
                 <dd className="truncate text-gray-200">{selected.referral_code || "—"}</dd>
               </div>
             </dl>
 
             <div className="mt-4">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">Activity (database)</h3>
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400">Activity (database)</h3>
               {countsError ? (
                 <p className="mt-2 text-xs text-gray-400">
                   Counts unavailable: {countsError}
@@ -835,31 +835,31 @@ export default function AdminUsersPage() {
               ) : null}
               <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
                 <div className="rounded-lg border border-white/10 bg-black/30 p-3 text-center">
-                  <p className="text-xs text-gray-500">Trades</p>
+                  <p className="text-xs text-gray-400">Trades</p>
                   <p className="text-xl font-semibold tabular-nums text-white">
                     {countsLoading ? "…" : counts?.trades ?? "—"}
                   </p>
                 </div>
                 <div className="rounded-lg border border-white/10 bg-black/30 p-3 text-center">
-                  <p className="text-xs text-gray-500">Posts</p>
+                  <p className="text-xs text-gray-400">Posts</p>
                   <p className="text-xl font-semibold tabular-nums text-white">
                     {countsLoading ? "…" : counts?.posts ?? "—"}
                   </p>
                 </div>
                 <div className="rounded-lg border border-white/10 bg-black/30 p-3 text-center">
-                  <p className="text-xs text-gray-500">Achievements</p>
+                  <p className="text-xs text-gray-400">Achievements</p>
                   <p className="text-xl font-semibold tabular-nums text-white">
                     {countsLoading ? "…" : counts?.achievements ?? "—"}
                   </p>
                 </div>
                 <div className="rounded-lg border border-white/10 bg-black/30 p-3 text-center">
-                  <p className="text-xs text-gray-500">Feedback</p>
+                  <p className="text-xs text-gray-400">Feedback</p>
                   <p className="text-xl font-semibold tabular-nums text-white">
                     {countsLoading ? "…" : counts?.feedback ?? "—"}
                   </p>
                 </div>
                 <div className="rounded-lg border border-white/10 bg-black/30 p-3 text-center">
-                  <p className="text-xs text-gray-500">Support tickets</p>
+                  <p className="text-xs text-gray-400">Support tickets</p>
                   <p className="text-xl font-semibold tabular-nums text-white">
                     {countsLoading ? "…" : counts?.supportTickets ?? "—"}
                   </p>
@@ -975,7 +975,7 @@ export default function AdminUsersPage() {
                         ["Stripe customer", deletePreview.stripeCustomerId || "—"],
                       ].map(([label, value]) => (
                         <div key={label} className="flex justify-between gap-2 rounded bg-black/30 px-3 py-2">
-                          <dt className="text-gray-500">{label}</dt>
+                          <dt className="text-gray-400">{label}</dt>
                           <dd className="truncate text-right text-gray-200">{String(value)}</dd>
                         </div>
                       ))}
@@ -1088,7 +1088,7 @@ export default function AdminUsersPage() {
                       {bulkDeleteOutcome.skipped.map((u) => (
                         <li key={u.id}>
                           <span className="font-medium text-white">{u.username}</span>
-                          <span className="text-gray-500">, {u.reason}</span>
+                          <span className="text-gray-400">, {u.reason}</span>
                         </li>
                       ))}
                     </ul>

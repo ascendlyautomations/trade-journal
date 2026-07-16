@@ -72,7 +72,7 @@ function CommentReplyThread({
         <button
           type="button"
           onClick={() => setExpanded((prev) => !prev)}
-          className="text-xs font-medium text-gray-500 transition hover:text-gray-300"
+          className="text-xs font-medium text-gray-400 transition hover:text-gray-300"
         >
           {expanded ? "Hide replies" : collapsedLabel}
         </button>

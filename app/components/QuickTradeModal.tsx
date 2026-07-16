@@ -34,7 +34,16 @@ import {
 import { feedbackPresets, persistentError } from "@/lib/feedbackPresets"
 import { handleTradeNumericInput } from "@/lib/formatMoney"
 import TradeFormCurrencyInput from "@/app/components/trade/TradeFormCurrencyInput"
-import { TRADE_OPTIONAL_ATTACHMENT_LABEL_CLASS } from "@/lib/tradeFormUi"
+import {
+  QUICK_TRADE_INPUT_CLASS,
+  QUICK_TRADE_LABEL_CLASS,
+  TRADE_OPTIONAL_ATTACHMENT_LABEL_CLASS,
+} from "@/lib/tradeFormUi"
+import {
+  READABLE_PLACEHOLDER_CLASS,
+  READABLE_SECONDARY_CLASS,
+} from "@/lib/readableTextStyles"
+import { cn } from "@/app/components/ui/cn"
 import { assertCanCreateTradingAccount, FREE_PLAN_ACCOUNT_LIMIT } from "@/lib/tradingAccounts"
 import { assertRequiredAccountValue } from "@/lib/createAccountForm"
 import {
@@ -50,7 +59,7 @@ import {
   parseTradePriceInput,
   type TradeDirection,
 } from "@/lib/inferTradeDirection"
-import CommunitySharePreviewPanel from "@/app/components/CommunitySharePreviewPanel"
+import CommunitySharePreviewModal from "@/app/components/CommunitySharePreviewModal"
 import TradePublicShareToggle from "@/app/components/TradePublicShareToggle"
 import TradeReelAttachment from "@/app/components/TradeReelAttachment"
 import { publishTradeReel } from "@/lib/reels"
@@ -84,10 +93,9 @@ type QuickTradeModalProps = {
   initialCsvPatch?: QuickTradeCsvFormPatch | null
 }
 
-const INPUT_CLASS =
-  "h-12 w-full rounded-lg border border-white/15 bg-[#0a1329] px-3 text-base text-white placeholder:text-slate-500 outline-none transition focus:border-blue-400/60 focus:ring-2 focus:ring-blue-500/20"
+const INPUT_CLASS = QUICK_TRADE_INPUT_CLASS
 
-const LABEL_CLASS = "block text-xs font-medium text-gray-300"
+const LABEL_CLASS = QUICK_TRADE_LABEL_CLASS
 
 const FIELD_PAIR_ROW_CLASS = "grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5"
 
@@ -221,6 +229,7 @@ export default function QuickTradeModal({
   const [exitPrice, setExitPrice] = useState("")
   const [description, setDescription] = useState("")
   const [isPublic, setIsPublic] = useState(false)
+  const [communityPreviewOpen, setCommunityPreviewOpen] = useState(false)
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const [image, setImage] = useState<File | null>(null)
   const imageCrop = useTradeImageCropUpload({
@@ -235,6 +244,11 @@ export default function QuickTradeModal({
   const [csvPasteOpen, setCsvPasteOpen] = useState(false)
   const [csvPasteText, setCsvPasteText] = useState("")
   const [csvImportError, setCsvImportError] = useState<string | null>(null)
+  /** Full list of CSV-derived trades for this Quick Input session (all batches). */
+  const [csvQueuePatches, setCsvQueuePatches] = useState<QuickTradeCsvFormPatch[]>(
+    []
+  )
+  const [csvQueueIndex, setCsvQueueIndex] = useState(0)
   const [planProfile, setPlanProfile] = useState<{
     is_pro?: boolean | null
     subscription_status?: string | null
@@ -260,6 +274,7 @@ export default function QuickTradeModal({
     setExitPrice("")
     setDescription("")
     setIsPublic(false)
+    setCommunityPreviewOpen(false)
     setImage(null)
     imageCrop.resetFileInput()
     setPendingReelFile(null)
@@ -270,6 +285,8 @@ export default function QuickTradeModal({
     setCsvPasteOpen(false)
     setCsvPasteText("")
     setCsvImportError(null)
+    setCsvQueuePatches([])
+    setCsvQueueIndex(0)
     setPlanProfile(null)
   }, [])
 
@@ -320,6 +337,18 @@ export default function QuickTradeModal({
     setPlanProfile(data ?? null)
   }, [])
 
+  function clearEphemeralTradeFields() {
+    setDescription("")
+    setIsPublic(false)
+    setCommunityPreviewOpen(false)
+    setImage(null)
+    imageCrop.resetFileInput()
+    setPendingReelFile(null)
+    setPreviewUrl(null)
+    setAdvancedOpen(false)
+    setDecimalError("")
+  }
+
   function applyQuickCsvPatch(patch: QuickTradeCsvFormPatch) {
     setCsvImportError(null)
     setTicker(patch.ticker)
@@ -333,6 +362,7 @@ export default function QuickTradeModal({
     setExitTime(patch.exitTime)
     setEntryPrice(patch.entryPrice)
     setExitPrice(patch.exitPrice)
+    setDescription(patch.description)
     const inferred = inferTradeDirectionFromPrices(
       parseTradePriceInput(patch.entryPrice),
       parseTradePriceInput(patch.exitPrice)
@@ -347,12 +377,43 @@ export default function QuickTradeModal({
       setDirection("Long")
       setDirectionManuallySet(false)
     }
-    if (patch.description) {
-      setDescription(patch.description)
-    }
     if (csvPatchHasPrices(patch)) {
       setAdvancedOpen(true)
+    } else {
+      setAdvancedOpen(false)
     }
+  }
+
+  function applyQueuedTradePatch(
+    patch: QuickTradeCsvFormPatch,
+    accountList: TradeAccountOption[]
+  ) {
+    clearEphemeralTradeFields()
+    applyQuickCsvPatch(patch)
+    const matched = resolveQuickTradeAccountFromCsvPatch(accountList, patch)
+    if (matched) {
+      setSelectedAccount(matched)
+      setSelectedCopyGroupId(null)
+    }
+  }
+
+  function beginCsvQueue(patches: QuickTradeCsvFormPatch[]) {
+    if (patches.length === 0) return
+    setCsvQueuePatches(patches)
+    setCsvQueueIndex(0)
+    setCsvPasteOpen(false)
+    setCsvPasteText("")
+    applyQueuedTradePatch(patches[0], accounts)
+  }
+
+  function advanceCsvQueue(
+    nextIndex: number,
+    patches: QuickTradeCsvFormPatch[]
+  ) {
+    const nextPatch = patches[nextIndex]
+    if (!nextPatch) return
+    setCsvQueueIndex(nextIndex)
+    applyQueuedTradePatch(nextPatch, accounts)
   }
 
   function handleEntryPriceChange(value: string) {
@@ -394,13 +455,15 @@ export default function QuickTradeModal({
   }, [open, initialCsvPatch, resetForm])
 
   useEffect(() => {
-    if (!open || !initialCsvPatch || accounts.length === 0) return
-    const matched = resolveQuickTradeAccountFromCsvPatch(accounts, initialCsvPatch)
+    if (!open || accounts.length === 0) return
+    const patch = csvQueuePatches[csvQueueIndex] ?? initialCsvPatch
+    if (!patch) return
+    const matched = resolveQuickTradeAccountFromCsvPatch(accounts, patch)
     if (matched) {
       setSelectedAccount(matched)
       setSelectedCopyGroupId(null)
     }
-  }, [open, initialCsvPatch, accounts])
+  }, [open, initialCsvPatch, csvQueuePatches, csvQueueIndex, accounts])
 
   useEffect(() => {
     if (!open || !userId) return
@@ -474,6 +537,7 @@ export default function QuickTradeModal({
       entryPrice: entryPrice.trim() === "" ? null : entryPrice,
       exitPrice: exitPrice.trim() === "" ? null : exitPrice,
       tradeDate: entryDate,
+      attachedReel: pendingReelFile ? true : null,
     })
   }, [
     userId,
@@ -495,6 +559,7 @@ export default function QuickTradeModal({
     exitTime,
     entryPrice,
     exitPrice,
+    pendingReelFile,
   ])
 
   const communityPreviewUser = useMemo(
@@ -529,8 +594,17 @@ export default function QuickTradeModal({
   )
 
   function handleClose() {
-    if (busy) return
+    if (busy || communityPreviewOpen) return
     onClose()
+  }
+
+  function handlePrimaryAction() {
+    if (isPublic) {
+      if (!communityPreviewPost || !communityPreviewUser) return
+      setCommunityPreviewOpen(true)
+      return
+    }
+    void handleSave()
   }
 
   function handleAutoFillFromCsvPaste() {
@@ -539,7 +613,7 @@ export default function QuickTradeModal({
       setCsvImportError(result.message)
       return
     }
-    applyQuickCsvPatch(result.patch)
+    beginCsvQueue(result.patches)
   }
 
   function handleUploadCsvClick() {
@@ -577,7 +651,7 @@ export default function QuickTradeModal({
       setCsvImportError(result.message)
       return
     }
-    applyQuickCsvPatch(result.patch)
+    beginCsvQueue(result.patches)
   }
 
   async function handleCreateAccountSave(newAccount: CreateAccountSavePayload) {
@@ -688,10 +762,17 @@ export default function QuickTradeModal({
       return
     }
 
-    if (uploadingRef.current) return
+    if (uploadingRef.current || busy) return
 
     const reelFile = pendingReelFileRef.current ?? pendingReelFile
+    const queuePatchesSnapshot = csvQueuePatches
+    const queueIndexSnapshot = csvQueueIndex
+    const hasQueuedTrades = queuePatchesSnapshot.length > 1
+    const hasMoreQueuedTrades =
+      hasQueuedTrades && queueIndexSnapshot < queuePatchesSnapshot.length - 1
+
     uploadingRef.current = true
+    setBusy(true)
 
     const parsedPnl = Number(String(pnl).replace(/,/g, "").replace(/\$/g, ""))
     const parsedPoints = Number(String(points).replace(/,/g, ""))
@@ -713,7 +794,8 @@ export default function QuickTradeModal({
     try {
       await runUpload({
         title: uploadTitle,
-        onDismissCompose: onClose,
+        // Keep the modal open while more CSV trades remain in this session.
+        onDismissCompose: hasMoreQueuedTrades ? undefined : onClose,
         execute: async (report) => {
           if (selectedCopyGroup && userId) {
             const groupAccounts = resolveCopyGroupAccounts(
@@ -782,12 +864,17 @@ export default function QuickTradeModal({
             }
 
             notifyGettingStartedChecklistMaybeCompleted()
-            showPopup(
-              isPublic
-                ? feedbackPresets.postPublished()
-                : feedbackPresets.tradeSaveSuccess()
-            )
+            if (!hasMoreQueuedTrades) {
+              showPopup(
+                isPublic
+                  ? feedbackPresets.postPublished()
+                  : feedbackPresets.tradeSaveSuccess()
+              )
+            }
             onSaved?.()
+            if (hasMoreQueuedTrades) {
+              advanceCsvQueue(queueIndexSnapshot + 1, queuePatchesSnapshot)
+            }
             return
           }
 
@@ -857,18 +944,24 @@ export default function QuickTradeModal({
           }
 
           notifyGettingStartedChecklistMaybeCompleted()
-          showPopup(
-            result.posted
-              ? feedbackPresets.postPublished()
-              : feedbackPresets.tradeSaveSuccess()
-          )
+          if (!hasMoreQueuedTrades) {
+            showPopup(
+              result.posted
+                ? feedbackPresets.postPublished()
+                : feedbackPresets.tradeSaveSuccess()
+            )
+          }
           onSaved?.()
+          if (hasMoreQueuedTrades) {
+            advanceCsvQueue(queueIndexSnapshot + 1, queuePatchesSnapshot)
+          }
         },
       })
     } catch {
       // Error UI handled by upload progress overlay (retry/cancel).
     } finally {
       uploadingRef.current = false
+      setBusy(false)
     }
   }
 
@@ -876,6 +969,16 @@ export default function QuickTradeModal({
 
   const canCreateMoreAccounts =
     isPro || entryEnabledAccountCount < FREE_PLAN_ACCOUNT_LIMIT
+
+  const csvQueueTotal = csvQueuePatches.length
+  const isMultiTradeSession = csvQueueTotal > 1
+  const hasMoreQueuedTrades =
+    isMultiTradeSession && csvQueueIndex < csvQueueTotal - 1
+  const currentTradeNumber = csvQueueIndex + 1
+  const progressPercent =
+    csvQueueTotal > 0 ? (currentTradeNumber / csvQueueTotal) * 100 : 0
+  const saveTradeLabel = hasMoreQueuedTrades ? "Save & Next" : "Save Trade"
+  const postTradeLabel = hasMoreQueuedTrades ? "Post & Next" : "Post Trade"
 
   function selectTradeImage(file: File | undefined) {
     imageCrop.handleFileSelected(file)
@@ -896,7 +999,7 @@ export default function QuickTradeModal({
         onClose={handleClose}
         ariaLabel="Quick Trade"
         belowNavbar
-        closeDisabled={busy}
+        closeDisabled={busy || communityPreviewOpen}
         overlayClassName="z-[150] bg-black/75 backdrop-blur-md"
         backdropClassName="bg-transparent"
         panelClassName="max-w-lg rounded-2xl border-white/10 bg-gradient-to-br from-[#0f172a] via-[#0b1532] to-[#0a2230] shadow-2xl shadow-blue-900/20 sm:max-w-xl md:max-w-2xl"
@@ -908,9 +1011,30 @@ export default function QuickTradeModal({
             <h2 className="text-xl font-semibold tracking-tight text-white">
               Quick Trade
             </h2>
-            <p className="mt-1 text-sm text-slate-300">
-              Log the essentials in under 30 seconds.
-            </p>
+            {isMultiTradeSession ? (
+              <div className="mt-3">
+                <p className="text-sm font-medium text-blue-300">
+                  Trade {currentTradeNumber} of {csvQueueTotal}
+                </p>
+                <div
+                  className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/10"
+                  role="progressbar"
+                  aria-valuenow={currentTradeNumber}
+                  aria-valuemin={1}
+                  aria-valuemax={csvQueueTotal}
+                  aria-label={`Trade ${currentTradeNumber} of ${csvQueueTotal}`}
+                >
+                  <div
+                    className="h-full rounded-full bg-blue-500 transition-[width] duration-300 ease-out"
+                    style={{ width: `${progressPercent}%` }}
+                  />
+                </div>
+              </div>
+            ) : (
+              <p className={cn("mt-1 text-sm", READABLE_SECONDARY_CLASS)}>
+                Log the essentials in under 30 seconds.
+              </p>
+            )}
           </>
         }
         footer={
@@ -919,17 +1043,21 @@ export default function QuickTradeModal({
               type="button"
               disabled={busy}
               onClick={handleClose}
-              className="h-11 rounded-lg border border-white/20 bg-white/5 px-4 text-sm font-medium text-slate-200 transition hover:bg-white/10 disabled:opacity-50"
+              className="h-11 rounded-lg border border-white/20 bg-white/5 px-4 text-sm font-medium text-gray-200 transition hover:bg-white/10 disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               type="button"
-              disabled={accountLoading || uploadingRef.current}
-              onClick={() => void handleSave()}
+              disabled={
+                accountLoading ||
+                uploadingRef.current ||
+                (isPublic && !communityPreviewPost)
+              }
+              onClick={handlePrimaryAction}
               className={QUICK_TRADE_PRIMARY_BUTTON_CLASS}
             >
-              {isPublic ? "Post Trade" : "Save Trade"}
+              {isPublic ? "Preview Public Trade Post" : saveTradeLabel}
             </button>
           </div>
         }
@@ -956,7 +1084,8 @@ export default function QuickTradeModal({
             <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-4">
               <p className="text-sm font-medium text-white">Quick CSV Import</p>
               <p className="mt-1 text-sm leading-relaxed text-gray-400">
-                Quickly autofill this trade using a single trade from your broker.
+                Autofill one or more trades from your broker CSV. Review and save
+                them one at a time.
               </p>
               <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                 <button
@@ -998,7 +1127,10 @@ export default function QuickTradeModal({
                       if (csvImportError) setCsvImportError(null)
                     }}
                     placeholder={`Symbol,Entry Time,Exit Time,Contracts,Points,PnL\nES,2026-07-01 09:35,2026-07-01 09:48,2,18.5,450`}
-                    className="w-full rounded-lg border border-white/15 bg-[#0a1329] px-3 py-3 font-mono text-sm text-white placeholder:text-slate-500 outline-none transition focus:border-blue-400/60 focus:ring-2 focus:ring-blue-500/20"
+                    className={cn(
+                      "w-full rounded-lg border border-white/15 bg-[#0a1329] px-3 py-3 font-mono text-sm text-white outline-none transition focus:border-blue-400/60 focus:ring-2 focus:ring-blue-500/20",
+                      READABLE_PLACEHOLDER_CLASS
+                    )}
                   />
                   <button
                     type="button"
@@ -1157,7 +1289,7 @@ export default function QuickTradeModal({
                 aria-expanded={advancedOpen}
               >
                 Advanced Details
-                <span className="text-gray-500" aria-hidden>
+                <span className="text-gray-400" aria-hidden>
                   {advancedOpen ? "▲" : "▼"}
                 </span>
               </button>
@@ -1236,24 +1368,36 @@ export default function QuickTradeModal({
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Quick note for your journal or profile..."
-                className="mt-2 w-full rounded-lg border border-white/15 bg-[#0a1329] px-3 py-3 text-base text-white placeholder:text-slate-500 outline-none transition focus:border-blue-400/60 focus:ring-2 focus:ring-blue-500/20"
+                className={cn("mt-2", INPUT_CLASS, "h-auto py-3")}
               />
             </div>
 
             {/* Share to Community */}
             <TradePublicShareToggle
               isPublic={isPublic}
-              onToggle={() => setIsPublic((prev) => !prev)}
+              onToggle={() => {
+                setIsPublic((prev) => {
+                  const next = !prev
+                  if (!next) setCommunityPreviewOpen(false)
+                  return next
+                })
+              }}
             />
-
-            {isPublic ? (
-              <CommunitySharePreviewPanel
-                post={communityPreviewPost}
-                user={communityPreviewUser}
-              />
-            ) : null}
         </div>
       </ScrollableModalShell>
+      <CommunitySharePreviewModal
+        open={communityPreviewOpen}
+        onClose={() => setCommunityPreviewOpen(false)}
+        onPostTrade={() => void handleSave()}
+        submitting={busy}
+        postTradeDisabled={accountLoading || uploadingRef.current}
+        title="Preview Public Trade Post"
+        subtitle="This is how your trade will appear in the feed."
+        postTradeLabel={postTradeLabel}
+        submittingLabel="Posting…"
+        post={communityPreviewPost}
+        user={communityPreviewUser}
+      />
       <CreateAccountModal
         open={showCreateAccountModal}
         onClose={() => setShowCreateAccountModal(false)}

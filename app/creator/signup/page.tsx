@@ -409,7 +409,7 @@ function CreatorSignupInner() {
             </div>
           )}
 
-          <p className="mt-6 text-center text-xs text-gray-500 md:mt-4">
+          <p className="mt-6 text-center text-xs text-gray-400 md:mt-4">
             <a
               href="/privacy"
               className="text-gray-400 transition hover:text-gray-300 hover:underline"
@@ -425,7 +425,7 @@ function CreatorSignupInner() {
             </a>
           </p>
 
-          <p className="mt-3 text-center text-xs text-gray-500">
+          <p className="mt-3 text-center text-xs text-gray-400">
             Invite code:{" "}
             <span className="font-medium text-gray-400">{code}</span>
           </p>

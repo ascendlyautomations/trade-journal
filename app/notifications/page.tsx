@@ -202,7 +202,7 @@ function GroupedNotificationCardView({
               ) : (
                 <span className="font-medium text-gray-200">{name}</span>
               )}
-              <span className="text-gray-500">: </span>
+              <span className="text-gray-400">: </span>
               {preview}
             </li>
           )
@@ -304,7 +304,7 @@ function GroupedNotificationCardView({
               ) : (
                 <span className="font-medium text-gray-200">{name}</span>
               )}
-              <span className="text-gray-500">: </span>
+              <span className="text-gray-400">: </span>
               {entry.preview ?? "New message"}
             </li>
           )

@@ -111,4 +111,43 @@ describe("buildCommunitySharePreviewPost", () => {
     assert.equal(post.trades.exit_price, 23458)
     assert.equal(post.trades.trade_date, "2026-06-02")
   })
+
+  it("embeds trades.reels so Feed View Clip badge can render", () => {
+    const post = buildCommunitySharePreviewPost({
+      userId: "user-1",
+      username: "trader",
+      avatarUrl: null,
+      pnl: 100,
+      rr: 2,
+      points: 10,
+      ticker: "NQ",
+      direction: "Long",
+      accountMode: "live",
+      isPro: true,
+      publicDescription: "Test",
+      imageUrl: null,
+      attachedReel: true,
+    })
+
+    assert.equal(post.trades.reels?.id, "community-preview-reel")
+  })
+
+  it("omits trades.reels when no clip is attached", () => {
+    const post = buildCommunitySharePreviewPost({
+      userId: "user-1",
+      username: "trader",
+      avatarUrl: null,
+      pnl: 100,
+      rr: 2,
+      points: 10,
+      ticker: "NQ",
+      direction: "Long",
+      accountMode: "live",
+      isPro: true,
+      publicDescription: "Test",
+      imageUrl: null,
+    })
+
+    assert.equal(post.trades.reels, undefined)
+  })
 })

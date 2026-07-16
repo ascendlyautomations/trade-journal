@@ -363,7 +363,7 @@ export default function AdminCsvSupportPage() {
                     selected.user_id ? profilesByUserId[selected.user_id] : null
                   )}
                   {selected.user_id ? (
-                    <span className="ml-2 font-mono text-gray-500">{selected.user_id}</span>
+                    <span className="ml-2 font-mono text-gray-400">{selected.user_id}</span>
                   ) : null}
                 </p>
               </div>
@@ -400,7 +400,7 @@ export default function AdminCsvSupportPage() {
                 <p className="mt-1 break-all font-mono text-sm text-gray-200">
                   {selected.csv_file_url || "—"}
                 </p>
-                <p className="mt-2 text-xs text-gray-500">
+                <p className="mt-2 text-xs text-gray-400">
                   Filename: {csvStorageFilename(selected.csv_file_url)}
                 </p>
               </div>

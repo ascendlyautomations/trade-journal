@@ -176,7 +176,7 @@ export default function FinishTrialPage() {
           </Button>
         </div>
 
-        <p className="mt-4 text-center text-xs text-gray-500">
+        <p className="mt-4 text-center text-xs text-gray-400">
           No pressure. Upgrade whenever you&apos;re ready.
         </p>
       </div>

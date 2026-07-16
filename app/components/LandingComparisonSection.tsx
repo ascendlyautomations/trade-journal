@@ -103,7 +103,7 @@ export default function LandingComparisonSection() {
               <tr className="border-b border-white/10">
                 <th
                   scope="col"
-                  className="px-4 py-4 text-xs font-semibold uppercase tracking-wide text-gray-500"
+                  className="px-4 py-4 text-xs font-semibold uppercase tracking-wide text-gray-400"
                 >
                   Feature
                 </th>
@@ -168,7 +168,7 @@ export default function LandingComparisonSection() {
           ) : null}
         </div>
 
-        <p className="mx-auto mt-4 max-w-3xl text-center text-xs leading-relaxed text-gray-500 md:mt-6">
+        <p className="mx-auto mt-4 max-w-3xl text-center text-xs leading-relaxed text-gray-400 md:mt-6">
           Feature availability based on publicly available information and may vary by platform,
           plan, or configuration.
         </p>

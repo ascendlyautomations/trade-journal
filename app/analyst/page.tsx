@@ -181,7 +181,7 @@ function AnalystTradeDetailPanel({
             <div className="min-w-0 flex-1">
               <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
                 Selected Trade{" "}
-                <span className="normal-case tracking-normal text-gray-500">
+                <span className="normal-case tracking-normal text-gray-400">
                   {tradePanelExpanded
                     ? "(Click to Collapse)"
                     : "(Click to Expand)"}
@@ -774,7 +774,7 @@ function AnalystPageContent() {
                           {formatEST(trade.created_at)} • {trade.session}
                         </p>
 
-                        <p className="text-xs text-gray-500">
+                        <p className="text-xs text-gray-400">
                           {formatTradeAccountDisplay(trade) || "—"}
                         </p>
                       </div>

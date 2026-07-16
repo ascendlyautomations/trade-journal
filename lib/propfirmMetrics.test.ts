@@ -12,6 +12,7 @@ const {
   computeConsistencyRule,
   computeDailyMetrics,
   computePayoutDrawdownFloor,
+  computePropfirmProgress,
   computeTrailingDrawdown,
   countWinningDays,
   dedupeTradesById,
@@ -417,6 +418,47 @@ describe("computePropfirmEquityCurveYTicks", () => {
   it("uses rounded 500/1000 steps for typical domains", () => {
     const ticks = computePropfirmEquityCurveYTicks([47750, 51800])
     assert.deepEqual(ticks, [47000, 48000, 49000, 50000, 51000, 52000])
+  })
+})
+
+describe("computePropfirmProgress", () => {
+  const trailing = {
+    currentBalance: 50000,
+    peakBalance: 50000,
+    drawdownFloor: 48000,
+    distanceToDD: 2000,
+    maxDrawdownUsed: 0,
+    breachedTrailingDD: false,
+  }
+  const account = {
+    account_size: "50K",
+    max_drawdown: 2000,
+    profit_target: 3000,
+  }
+
+  it("returns 0–100 fill percent from |pnl| / target (breakeven at 0)", () => {
+    const atZero = computePropfirmProgress(0, trailing, account)
+    assert.equal(atZero.progressPercent, 0)
+    assert.equal(atZero.totalPnL, 0)
+
+    const profit = computePropfirmProgress(1500, trailing, account)
+    assert.equal(profit.progressPercent, 50)
+    assert.equal(profit.totalPnL, 1500)
+
+    const loss = computePropfirmProgress(-1500, trailing, account)
+    assert.equal(loss.progressPercent, 50)
+    assert.equal(loss.totalPnL, -1500)
+  })
+
+  it("clamps profit and loss fill to 100 so bars cannot overflow", () => {
+    const overTarget = computePropfirmProgress(9000, trailing, account)
+    assert.equal(overTarget.progressPercent, 100)
+    assert.equal(overTarget.isPassed, true)
+
+    const deepLoss = computePropfirmProgress(-9000, trailing, account)
+    assert.equal(deepLoss.progressPercent, 100)
+    assert.equal(deepLoss.isPassed, false)
+    assert.equal(deepLoss.totalPnL, -9000)
   })
 })
 

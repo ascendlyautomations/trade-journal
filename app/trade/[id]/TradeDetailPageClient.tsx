@@ -152,7 +152,7 @@ export default function TradeDetailPageClient({
       <span className={pnlPositive ? "text-emerald-400" : "text-red-400"}>
         {pnlLabel}
       </span>
-      <span className="text-gray-500"> · </span>
+      <span className="text-gray-400"> · </span>
       <span>
         {trade.ticker ?? "—"} · {trade.direction ?? "—"}
       </span>

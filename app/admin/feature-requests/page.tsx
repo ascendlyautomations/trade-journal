@@ -193,11 +193,11 @@ export default function AdminFeatureRequestsPage() {
               placeholder="Search title or description…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="mb-4 w-full max-w-md rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-400/50"
+              className="mb-4 w-full max-w-md rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400/50"
             />
 
             <div>
-              <p className="mb-2 text-xs uppercase tracking-wide text-gray-500">Status</p>
+              <p className="mb-2 text-xs uppercase tracking-wide text-gray-400">Status</p>
               <div className="flex flex-wrap gap-2">
                 {filterBtn("status-all", statusFilter === "all", "All", () => setStatusFilter("all"))}
                 {FEATURE_REQUEST_STATUS_OPTIONS.map((opt) =>
@@ -211,7 +211,7 @@ export default function AdminFeatureRequestsPage() {
               </div>
             </div>
 
-            <p className="mt-4 text-xs text-gray-500">
+            <p className="mt-4 text-xs text-gray-400">
               Showing {filteredCountLabel} ({rows.length} {rows.length === 1 ? "request" : "requests"})
             </p>
 
@@ -249,7 +249,7 @@ export default function AdminFeatureRequestsPage() {
                       </span>
                     </div>
                     <p className="mt-1 line-clamp-2 text-sm text-gray-300">{previewText(row.description)}</p>
-                    <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500">
+                    <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-gray-400">
                       <span className="truncate">{row.user_id}</span>
                       <span className="shrink-0 tabular-nums">
                         {row.created_at ? new Date(row.created_at).toLocaleString() : "—"}
@@ -299,7 +299,7 @@ export default function AdminFeatureRequestsPage() {
               </div>
             </div>
 
-            <label className="block text-xs uppercase tracking-wide text-gray-500">
+            <label className="block text-xs uppercase tracking-wide text-gray-400">
               Status
               <CustomSelect
                 value={detailStatus}
@@ -314,7 +314,7 @@ export default function AdminFeatureRequestsPage() {
             </label>
 
             <div className="mt-4">
-              <p className="text-xs uppercase tracking-wide text-gray-500">Description</p>
+              <p className="text-xs uppercase tracking-wide text-gray-400">Description</p>
               <p className="mt-2 whitespace-pre-wrap text-sm text-gray-200">{selected.description}</p>
             </div>
           </div>

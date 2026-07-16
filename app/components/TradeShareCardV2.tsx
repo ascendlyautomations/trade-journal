@@ -216,11 +216,11 @@ export default function TradeShareCardV2({
               className="font-bold tabular-nums text-white/95"
               style={{ fontSize: rrSize }}
             >
-              <span className="font-semibold text-white/45">RR </span>
+              <span className="font-semibold text-gray-400">RR </span>
               {rrDisplay}
             </p>
             <p
-              className="font-medium text-white/50"
+              className="font-medium text-gray-400"
               style={{ fontSize: isStory ? 18 : 16 }}
             >
               {dateDisplay}
@@ -250,7 +250,7 @@ export default function TradeShareCardV2({
               {SITE_NAME}
             </p>
             <p
-              className="mt-1 font-medium uppercase tracking-[0.2em] text-white/45"
+              className="mt-1 font-medium uppercase tracking-[0.2em] text-gray-400"
               style={{ fontSize: isStory ? 11 : 10 }}
             >
               Journal · Review · Improve

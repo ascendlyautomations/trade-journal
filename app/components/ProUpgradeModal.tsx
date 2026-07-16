@@ -48,7 +48,7 @@ export default function ProUpgradeModal({
           <p className="mt-2 text-sm text-gray-400">
             {PRO_UPGRADE_ANALYTICS_SUBHEADLINE}
           </p>
-          <p className="mt-5 text-xs font-medium uppercase tracking-wide text-gray-500">
+          <p className="mt-5 text-xs font-medium uppercase tracking-wide text-gray-400">
             {PRO_UPGRADE_ANALYTICS_SECTION_LABEL}
           </p>
           <ul className="mx-auto mt-3 max-w-sm space-y-2 text-left text-sm text-gray-200">
@@ -75,7 +75,7 @@ export default function ProUpgradeModal({
       ) : (
         <>
           {title ? (
-            <p className="mb-1 text-xs font-medium uppercase tracking-wide text-gray-500">
+            <p className="mb-1 text-xs font-medium uppercase tracking-wide text-gray-400">
               {title}
             </p>
           ) : null}

@@ -44,7 +44,7 @@ export default function SystemMilestonesSection({
           </p>
         </div>
         {!loading && signals ? (
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-gray-400">
             {unlockedCount} of {milestones.length} unlocked
           </p>
         ) : null}

@@ -232,7 +232,7 @@ export default function ShareTradeButton({
               <button
                 type="button"
                 onClick={() => setIsOpen(false)}
-                className="mt-4 text-sm text-white/50 hover:text-white"
+                className="mt-4 text-sm text-gray-400 hover:text-white"
               >
                 Cancel
               </button>

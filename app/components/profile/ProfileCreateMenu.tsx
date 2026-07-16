@@ -74,7 +74,7 @@ function MenuOptionsList({
             onClick={() => onItemAction(item)}
             className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition ${
               item.disabled
-                ? "cursor-not-allowed text-gray-500"
+                ? "cursor-not-allowed text-gray-400"
                 : "text-gray-100 hover:bg-emerald-500/15 hover:text-emerald-100"
             }`}
           >

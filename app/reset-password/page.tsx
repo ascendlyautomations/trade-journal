@@ -237,7 +237,7 @@ export default function ResetPasswordPage() {
                   {fieldErrors.password ? (
                     <p className="mt-1 text-xs text-red-400">{fieldErrors.password}</p>
                   ) : (
-                    <p className="mt-1 text-xs text-white/50">
+                    <p className="mt-1 text-xs text-gray-400">
                       Must be at least {PASSWORD_MIN_LENGTH} characters.
                     </p>
                   )}

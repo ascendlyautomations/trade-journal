@@ -14,11 +14,11 @@ export const SOLID_PRIMARY_BUTTON_CORE =
 const variantClasses: Record<ButtonVariant, string> = {
   primary: SOLID_PRIMARY_BUTTON_CORE,
   secondary:
-    "border border-white/10 bg-white/5 text-gray-100 hover:bg-white/10 disabled:hover:bg-white/5",
+    "border border-white/15 bg-white/5 text-gray-100 hover:bg-white/10 disabled:hover:bg-white/5",
   accent:
     "bg-blue-500 text-white hover:bg-blue-600 disabled:hover:bg-blue-500",
   ghost:
-    "bg-transparent text-gray-300 hover:text-white hover:bg-white/5 disabled:hover:bg-transparent",
+    "bg-transparent text-gray-200 hover:text-white hover:bg-white/5 disabled:hover:bg-transparent",
 }
 
 const sizeClasses: Record<ButtonSize, string> = {

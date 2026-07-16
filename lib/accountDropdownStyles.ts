@@ -1,15 +1,20 @@
 /** Shared vertical spacing for account dropdown menus (filter bar + picker). */
 
+import {
+  READABLE_DISABLED_TEXT_CLASS,
+  READABLE_PRIMARY_CLASS,
+} from "@/lib/readableTextStyles"
+
 export const ACCOUNT_DROPDOWN_ROW_HEIGHT_CLASS = "flex min-h-9 items-center"
 
 export const ACCOUNT_DROPDOWN_ROW_TEXT_CLASS =
   "min-w-0 flex-1 truncate whitespace-nowrap"
 
 export const ACCOUNT_DROPDOWN_ITEM_CLASS =
-  `${ACCOUNT_DROPDOWN_ROW_HEIGHT_CLASS} cursor-pointer px-3 py-2 text-sm text-white hover:bg-[#1f2937]`
+  `${ACCOUNT_DROPDOWN_ROW_HEIGHT_CLASS} cursor-pointer px-3 py-2 text-sm ${READABLE_PRIMARY_CLASS} hover:bg-[#1f2937]`
 
 export const ACCOUNT_DROPDOWN_DIVIDER_CLASS =
-  "pointer-events-none select-none px-3 text-xs leading-none text-gray-500 max-md:overflow-hidden max-md:whitespace-nowrap"
+  `pointer-events-none select-none px-3 text-xs leading-none ${READABLE_DISABLED_TEXT_CLASS} max-md:overflow-hidden max-md:whitespace-nowrap`
 
 export const ACCOUNT_DROPDOWN_MANAGE_CLASS =
   `${ACCOUNT_DROPDOWN_ROW_HEIGHT_CLASS} cursor-pointer px-3 py-2 text-sm text-white hover:bg-[#1f2937]`

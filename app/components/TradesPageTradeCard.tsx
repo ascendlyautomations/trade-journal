@@ -276,7 +276,7 @@ function TradesPageTradeCard({
             ) : null}
 
             {!trade.account_type && !hasAccountLine ? (
-              <span className="text-[10px] text-gray-500 md:text-xs">—</span>
+              <span className="text-[10px] text-gray-400 md:text-xs">—</span>
             ) : null}
           </div>
 

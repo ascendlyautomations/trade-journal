@@ -31,7 +31,7 @@ function PreviewCard({ title, variant, children }: PreviewCardProps) {
     >
       <h3 className={titleClass}>
         {title}{" "}
-        <span className="text-gray-500" aria-hidden>
+        <span className="text-gray-400" aria-hidden>
           🔒
         </span>
       </h3>
@@ -110,7 +110,7 @@ function WeekdayPerformancePlaceholder() {
       </svg>
       <div className="mt-2 flex justify-between px-1">
         {["Mon", "Tue", "Wed", "Thu", "Fri"].map((day) => (
-          <span key={day} className="text-[10px] text-gray-500 md:text-xs">
+          <span key={day} className="text-[10px] text-gray-400 md:text-xs">
             {day}
           </span>
         ))}
@@ -133,7 +133,7 @@ function TradingHoursPlaceholder() {
           />
         ))}
       </div>
-      <div className="flex justify-between text-[10px] text-gray-500 md:text-xs">
+      <div className="flex justify-between text-[10px] text-gray-400 md:text-xs">
         <span>Best hour</span>
         <span>Worst hour</span>
       </div>

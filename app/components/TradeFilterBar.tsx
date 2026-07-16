@@ -357,7 +357,7 @@ export default function TradeFilterBar({
             </div>
 
             <div className="mt-5">
-              <p className="text-sm text-white/60 mb-2">Specific Date</p>
+              <p className="mb-2 text-sm text-gray-400">Specific Date</p>
 
               <NativeDateInput
                 value={startDate}
@@ -387,7 +387,7 @@ export default function TradeFilterBar({
             </div>
 
             <div className="mt-5">
-              <p className="text-sm text-white/60 mb-2">Custom Range</p>
+              <p className="mb-2 text-sm text-gray-400">Custom Range</p>
 
               <div className="flex items-center gap-2 overflow-visible">
                 <NativeDateInput
@@ -437,7 +437,7 @@ export default function TradeFilterBar({
             <button
               type="button"
               onClick={() => setTimeframeOpen(false)}
-              className="mt-4 text-sm text-white/50 hover:text-white"
+              className="mt-4 text-sm text-gray-400 hover:text-white"
             >
               Cancel
             </button>

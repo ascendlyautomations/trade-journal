@@ -251,7 +251,7 @@ function AffiliateApplyFormInner(
               onChange={(e) => setSocialHandle(e.target.value)}
               required={canEditFields}
               disabled={!canEditFields}
-              className="mt-1 w-full rounded-lg border border-white/10 bg-[#0f172a] p-2.5 text-sm text-white placeholder:text-gray-500 disabled:cursor-not-allowed disabled:opacity-60"
+              className="mt-1 w-full rounded-lg border border-white/10 bg-[#0f172a] p-2.5 text-sm text-white placeholder:text-gray-400 disabled:cursor-not-allowed disabled:opacity-60"
               placeholder="@you or profile URL"
             />
           </div>
@@ -265,7 +265,7 @@ function AffiliateApplyFormInner(
               onChange={(e) => setFollowers(e.target.value)}
               required={canEditFields}
               disabled={!canEditFields}
-              className="mt-1 w-full rounded-lg border border-white/10 bg-[#0f172a] p-2.5 text-sm text-white placeholder:text-gray-500 disabled:cursor-not-allowed disabled:opacity-60"
+              className="mt-1 w-full rounded-lg border border-white/10 bg-[#0f172a] p-2.5 text-sm text-white placeholder:text-gray-400 disabled:cursor-not-allowed disabled:opacity-60"
               placeholder="Approximate follower count"
             />
           </div>
@@ -276,13 +276,13 @@ function AffiliateApplyFormInner(
               onChange={(e) => setRequestedCode(e.target.value.toUpperCase())}
               aria-invalid={codeAvailability === "taken"}
               disabled={!canEditFields}
-              className="mt-1 w-full rounded-lg border border-white/10 bg-[#0f172a] p-2.5 font-mono text-sm text-white placeholder:text-gray-500 disabled:cursor-not-allowed disabled:opacity-60"
+              className="mt-1 w-full rounded-lg border border-white/10 bg-[#0f172a] p-2.5 font-mono text-sm text-white placeholder:text-gray-400 disabled:cursor-not-allowed disabled:opacity-60"
               placeholder="YOURCODE"
             />
             {normalizedRequestedCode ? (
               <div className="mt-1.5 min-h-[1.25rem] text-xs">
                 {codeAvailability === "checking" ? (
-                  <span className="text-gray-500">Checking availability…</span>
+                  <span className="text-gray-400">Checking availability…</span>
                 ) : codeAvailability === "taken" ? (
                   <span className="text-red-300">This code is already taken</span>
                 ) : codeAvailability === "available" ? (

@@ -149,7 +149,7 @@ function ConversationDateDivider({ label }: { label: string }) {
       aria-label={label}
     >
       <div className="h-px min-w-0 flex-1 bg-white/10" aria-hidden />
-      <span className="shrink-0 text-[11px] font-medium tracking-wide text-gray-500">
+      <span className="shrink-0 text-[11px] font-medium tracking-wide text-gray-400">
         {label}
       </span>
       <div className="h-px min-w-0 flex-1 bg-white/10" aria-hidden />
@@ -168,7 +168,7 @@ function DmClusterTimestamp({
   if (!label) return null
   return (
     <p
-      className={`mt-1 px-1 text-[11px] leading-none text-gray-500 ${
+      className={`mt-1 px-1 text-[11px] leading-none text-gray-400 ${
         isMe ? "self-end text-right" : "self-start text-left"
       }`}
     >

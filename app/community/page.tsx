@@ -3445,7 +3445,7 @@ function CommunityContent() {
                         type="text"
                         value={roomName}
                         onChange={(e) => setRoomName(e.target.value)}
-                        className="w-full rounded-xl border border-white/10 bg-black/30 p-3 text-sm text-white placeholder:text-gray-500"
+                        className="w-full rounded-xl border border-white/10 bg-black/30 p-3 text-sm text-white placeholder:text-gray-400"
                         placeholder="Room name"
                       />
                       <button
@@ -3469,7 +3469,7 @@ function CommunityContent() {
                           <span className="font-medium text-white">
                             Show on my profile
                           </span>
-                          <span className="mt-1 block text-xs leading-relaxed text-gray-500">
+                          <span className="mt-1 block text-xs leading-relaxed text-gray-400">
                             If off, users can only join via invite link.
                           </span>
                         </span>
@@ -3577,7 +3577,7 @@ function CommunityContent() {
                               e.stopPropagation()
                               openChannelSettings(section)
                             }}
-                            className="shrink-0 px-2 py-2 text-xs text-gray-500 hover:text-white"
+                            className="shrink-0 px-2 py-2 text-xs text-gray-400 hover:text-white"
                           >
                             ✏️
                           </button>
@@ -3694,7 +3694,7 @@ function CommunityContent() {
                       <p className="text-sm font-medium text-gray-300">
                         No messages yet
                       </p>
-                      <p className="mt-1 text-sm text-gray-500">
+                      <p className="mt-1 text-sm text-gray-400">
                         Say hello or share a setup to start the conversation.
                       </p>
                     </div>
@@ -4147,7 +4147,7 @@ function CommunityContent() {
               type="text"
               value={newSectionName}
               onChange={(e) => setNewSectionName(e.target.value)}
-              className="mb-3 w-full rounded border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-gray-500"
+              className="mb-3 w-full rounded border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-gray-400"
               placeholder="Channel name"
             />
 
@@ -4205,7 +4205,7 @@ function CommunityContent() {
                 type="text"
                 value={editSectionName}
                 onChange={(e) => setEditSectionName(e.target.value)}
-                className="mb-3 w-full rounded border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-gray-500"
+                className="mb-3 w-full rounded border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-gray-400"
                 placeholder="Channel name"
               />
 
@@ -4305,7 +4305,7 @@ function CommunityContent() {
               type="text"
               value={memberSearchQuery}
               onChange={(e) => setMemberSearchQuery(e.target.value)}
-              className="mb-3 w-full shrink-0 rounded border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-gray-500"
+              className="mb-3 w-full shrink-0 rounded border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-gray-400"
               placeholder="Search members"
             />
 
@@ -4365,7 +4365,7 @@ function CommunityContent() {
                               ) : null}
                             </div>
                             {isSelf ? (
-                              <span className="shrink-0 text-xs text-gray-500">
+                              <span className="shrink-0 text-xs text-gray-400">
                                 Owner
                               </span>
                             ) : (
@@ -4577,7 +4577,7 @@ function CommunityContent() {
               type="text"
               value={roomName}
               onChange={(e) => setRoomName(e.target.value)}
-              className="mb-3 w-full rounded border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-gray-500"
+              className="mb-3 w-full rounded border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-gray-400"
               placeholder="Room name"
             />
 

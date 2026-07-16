@@ -43,9 +43,9 @@ export default function ProfileReelCard({ reel, onOpen }: ProfileReelCardProps) 
         {caption ? (
           <p className="line-clamp-2 text-sm text-gray-100">{caption}</p>
         ) : (
-          <p className="text-sm italic text-gray-500">No caption</p>
+          <p className="text-sm italic text-gray-400">No caption</p>
         )}
-        <p className="text-[11px] text-gray-500">
+        <p className="text-[11px] text-gray-400">
           {formatRelativeTime(reel.created_at)}
         </p>
       </div>

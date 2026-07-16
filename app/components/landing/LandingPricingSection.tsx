@@ -152,7 +152,7 @@ export default function LandingPricingSection({
                   >
                     {checkoutLoading ? "Starting trial…" : `Start ${TRAXPRO_TRIAL_HEADLINE}!`}
                   </button>
-                  <p className="mt-3 text-center text-xs leading-relaxed text-gray-500 md:mt-4">
+                  <p className="mt-3 text-center text-xs leading-relaxed text-gray-400 md:mt-4">
                     {TRAXPRO_CHECKOUT_FINE_PRINT}
                   </p>
                 </>

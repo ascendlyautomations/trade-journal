@@ -80,7 +80,15 @@ import {
   handleTradeNumericInput,
 } from "@/lib/formatMoney"
 import {
+  TRADE_FIELD_CHECKBOX_LABEL_CLASS,
+  TRADE_FIELD_CONTROL_CLASS,
+  TRADE_FIELD_CONTROL_LG_CLASS,
+  TRADE_FIELD_CURRENCY_CONTROL_CLASS,
+  TRADE_FIELD_HELPER_CLASS,
   TRADE_FIELD_LABEL_CLASS,
+  TRADE_FIELD_PUBLIC_NOTES_CLASS,
+  TRADE_FIELD_SECTION_TITLE_CLASS,
+  TRADE_FIELD_TEXTAREA_CLASS,
   TRADE_FULL_INPUT_MEDIA_UPLOAD_CLASS,
 } from "@/lib/tradeFormUi"
 import {
@@ -97,7 +105,10 @@ import { postImageSrc } from "@/app/components/feed/feedPostHelpers"
 import { ConfirmModal, FeedbackModal, Modal, useDeleteReelConfirmation, useFeedbackPopup } from "@/app/components/ui"
 import ScrollableModalShell from "@/app/components/ui/ScrollableModalShell"
 import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
-import { formatAccountNameWithSizeDisplay } from "@/lib/tradeAccountDisplay"
+import {
+  formatAccountNameWithSizeDisplay,
+  safeAccountNumberLabel,
+} from "@/lib/tradeAccountDisplay"
 import {
   invalidateTradesCache,
   prependTradeInCache,
@@ -1774,6 +1785,7 @@ export default function InputTradeForm({
       entryPrice: entryPrice.trim() === "" ? null : entryPrice,
       exitPrice: exitPrice.trim() === "" ? null : exitPrice,
       tradeDate: entryDate,
+      attachedReel: pendingReelFile ? true : attachedReel,
     })
   }, [
     userId,
@@ -1797,6 +1809,8 @@ export default function InputTradeForm({
     exitTime,
     entryPrice,
     exitPrice,
+    pendingReelFile,
+    attachedReel,
   ])
 
   const communityPreviewUser = useMemo(
@@ -1851,7 +1865,7 @@ export default function InputTradeForm({
                 type="button"
                 onClick={handleUploadCsvGuardClick}
                 disabled={!onUploadCsvClick || csvLoading || csvImportBlocked}
-                className="shrink-0 flex-1 px-3 py-2 text-sm rounded-lg bg-blue-500 disabled:opacity-60"
+                className="shrink-0 flex-1 px-3 py-2 text-sm rounded-lg bg-blue-500 text-white disabled:opacity-60"
               >
                 Upload CSV
               </button>
@@ -1859,7 +1873,7 @@ export default function InputTradeForm({
                 type="button"
                 onClick={onReviewCsvClick}
                 disabled={!onReviewCsvClick}
-                className="shrink-0 relative flex-1 px-3 py-2 text-sm rounded-lg bg-blue-500 hover:bg-blue-600 disabled:opacity-60 disabled:hover:bg-blue-500"
+                className="shrink-0 relative flex-1 px-3 py-2 text-sm rounded-lg bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-60 disabled:hover:bg-blue-500"
               >
                 Review CSV
                 {reviewCount > 0 ? (
@@ -1920,7 +1934,7 @@ export default function InputTradeForm({
                   type="button"
                   onClick={handleUploadCsvGuardClick}
                   disabled={!onUploadCsvClick || csvLoading || csvImportBlocked}
-                  className="shrink-0 px-4 py-2 text-sm rounded-lg bg-blue-500 disabled:opacity-60"
+                  className="shrink-0 px-4 py-2 text-sm rounded-lg bg-blue-500 text-white disabled:opacity-60"
                 >
                   Upload CSV
                 </button>
@@ -1946,7 +1960,7 @@ export default function InputTradeForm({
                   type="button"
                   onClick={onReviewCsvClick}
                   disabled={!onReviewCsvClick}
-                  className="shrink-0 relative px-4 py-2 text-sm rounded-lg bg-blue-500 hover:bg-blue-600 disabled:opacity-60 disabled:hover:bg-blue-500"
+                  className="shrink-0 relative px-4 py-2 text-sm rounded-lg bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-60 disabled:hover:bg-blue-500"
                 >
                   Review CSV
                   {reviewCount > 0 ? (
@@ -1995,7 +2009,7 @@ export default function InputTradeForm({
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="px-4 pb-4 pt-3 rounded-xl bg-[#0b1220]/60 border border-white/5">
-          <h3 className="text-sm text-gray-400 mb-2">Trade</h3>
+          <h3 className={TRADE_FIELD_SECTION_TITLE_CLASS}>Trade</h3>
           <div className="space-y-2">
           <div>
             <label className={fieldLabelClass}>P&amp;L</label>
@@ -2005,7 +2019,7 @@ export default function InputTradeForm({
               allowNegative
               onDecimalError={setDecimalError}
               tabIndex={1}
-              inputClassName="w-full pl-8 pr-3 py-2 rounded bg-[#0f172a] border border-white/10 focus:border-green-500 outline-none"
+              inputClassName={TRADE_FIELD_CURRENCY_CONTROL_CLASS}
             />
           </div>
           {decimalError && (
@@ -2022,7 +2036,7 @@ export default function InputTradeForm({
               tabIndex={2}
               value={ticker}
               onChange={(e) => setTicker(e.target.value.toUpperCase())}
-              className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
+              className={TRADE_FIELD_CONTROL_CLASS}
             />
           </div>
 
@@ -2034,7 +2048,7 @@ export default function InputTradeForm({
               tabIndex={3}
               value={strategy}
               onChange={(e) => setStrategy(e.target.value)}
-              className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
+              className={TRADE_FIELD_CONTROL_CLASS}
             />
           </div>
 
@@ -2087,7 +2101,7 @@ export default function InputTradeForm({
                     onDecimalError: setDecimalError,
                   })
                 }
-                className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
+                className={TRADE_FIELD_CONTROL_CLASS}
               />
             </div>
             <div>
@@ -2104,7 +2118,7 @@ export default function InputTradeForm({
                     onDecimalError: setDecimalError,
                   })
                 }
-                className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
+                className={TRADE_FIELD_CONTROL_CLASS}
               />
             </div>
           </div>
@@ -2121,7 +2135,7 @@ export default function InputTradeForm({
                   onDecimalError: setDecimalError,
                 })
               }
-              className="w-full p-2 rounded bg-[#0f172a] border border-white/10"
+              className={TRADE_FIELD_CONTROL_CLASS}
             />
           </div>
 
@@ -2132,7 +2146,7 @@ export default function InputTradeForm({
               tabIndex={9}
               value={confluences}
               onChange={(e) => setConfluences(e.target.value)}
-              className="w-full p-2 lg:p-2.5 h-20 lg:h-24 rounded bg-[#0f172a] border border-white/10"
+              className={TRADE_FIELD_TEXTAREA_CLASS}
             />
           </div>
 
@@ -2140,7 +2154,7 @@ export default function InputTradeForm({
         </div>
 
         <div className="px-4 pb-4 pt-3 rounded-xl bg-[#0b1220]/60 border border-white/5">
-          <h3 className="text-sm text-gray-400 mb-2">Execution</h3>
+          <h3 className={TRADE_FIELD_SECTION_TITLE_CLASS}>Execution</h3>
           <div className="space-y-2">
           <div className="space-y-2 mb-4">
             <div>
@@ -2150,7 +2164,7 @@ export default function InputTradeForm({
                 onChange={setEntryPrice}
                 onDecimalError={setDecimalError}
                 tabIndex={10}
-                inputClassName="w-full pl-8 pr-3 py-2 rounded bg-[#0f172a] border border-white/10 focus:border-green-500 outline-none"
+                inputClassName={TRADE_FIELD_CURRENCY_CONTROL_CLASS}
               />
             </div>
             <div>
@@ -2160,7 +2174,7 @@ export default function InputTradeForm({
                 onChange={setExitPrice}
                 onDecimalError={setDecimalError}
                 tabIndex={11}
-                inputClassName="w-full pl-8 pr-3 py-2 rounded bg-[#0f172a] border border-white/10 focus:border-green-500 outline-none"
+                inputClassName={TRADE_FIELD_CURRENCY_CONTROL_CLASS}
               />
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2">
@@ -2216,7 +2230,7 @@ export default function InputTradeForm({
               </div>
             </div>
             {duration && (
-              <p className="text-xs text-gray-400">
+              <p className={TRADE_FIELD_HELPER_CLASS}>
                 Duration: {duration}
               </p>
             )}
@@ -2234,7 +2248,7 @@ export default function InputTradeForm({
               value={publicDescription}
               onChange={(e) => setPublicDescription(e.target.value)}
               placeholder="Insert public thoughts..."
-              className="w-full p-2 lg:p-2.5 rounded-lg bg-[#0f172a] text-white border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[80px] lg:min-h-[96px]"
+              className={TRADE_FIELD_PUBLIC_NOTES_CLASS}
             />
           </div>
 
@@ -2247,7 +2261,7 @@ export default function InputTradeForm({
         </div>
 
         <div className="px-4 pb-4 pt-3 rounded-xl bg-[#0b1220]/60 border border-white/5">
-          <h3 className="text-sm text-gray-400 mb-2">Psychology</h3>
+          <h3 className={TRADE_FIELD_SECTION_TITLE_CLASS}>Psychology</h3>
           <div className="space-y-2">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2">
           <div>
@@ -2289,7 +2303,7 @@ export default function InputTradeForm({
                   value={customTimeframe}
                   onChange={(e) => setCustomTimeframe(e.target.value)}
                   placeholder="e.g. 45 Second, 2 Minute, 12 Minute, 3 Hour"
-                  className="w-full p-2 lg:p-2.5 bg-[#0f172a] border border-white/10 rounded text-white"
+                  className={TRADE_FIELD_CONTROL_LG_CLASS}
                 />
               </div>
             ) : null}
@@ -2316,7 +2330,7 @@ export default function InputTradeForm({
             />
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-6">
-            <label className="flex items-center gap-2 text-sm">
+            <label className={TRADE_FIELD_CHECKBOX_LABEL_CLASS}>
               <input
                 type="checkbox"
                 tabIndex={22}
@@ -2325,7 +2339,7 @@ export default function InputTradeForm({
               />
               Followed Bias?
             </label>
-            <label className="flex items-center gap-2 text-sm">
+            <label className={TRADE_FIELD_CHECKBOX_LABEL_CLASS}>
               <input
                 type="checkbox"
                 tabIndex={23}
@@ -2363,7 +2377,7 @@ export default function InputTradeForm({
               tabIndex={24}
               value={psychologyNotes}
               onChange={(e) => setPsychologyNotes(e.target.value)}
-              className="w-full p-2 lg:p-2.5 h-20 lg:h-24 xl:h-28 rounded bg-[#0f172a] border border-white/10 text-white"
+              className={`${TRADE_FIELD_TEXTAREA_CLASS} xl:h-28`}
             />
           </div>
 
@@ -2592,13 +2606,13 @@ export default function InputTradeForm({
     >
       <div className="rounded-lg border border-white/10 bg-white/5 p-3 space-y-2">
           <p className="text-sm font-medium text-white">Accounts</p>
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-gray-400">
             Inactive accounts stay linked to trades but are hidden from the
             account picker. Read-only accounts keep full history and cannot
             receive new trades on Free.
           </p>
           {accounts.length === 0 ? (
-            <p className="text-sm text-gray-500">No accounts yet.</p>
+            <p className="text-sm text-gray-400">No accounts yet.</p>
           ) : (
             <>
               {visibleAccountsInSettings.map((account) => {
@@ -2606,6 +2620,8 @@ export default function InputTradeForm({
                   account.name,
                   account.size
                 )
+                const accountIdLabel =
+                  safeAccountNumberLabel(account.account_number) ?? "--"
                 return (
                   <div
                     key={String(account.id)}
@@ -2615,6 +2631,9 @@ export default function InputTradeForm({
                       <div className="min-w-0 flex-1">
                         <span className="block truncate text-sm text-white">
                           {title || "—"}
+                        </span>
+                        <span className="mt-0.5 block truncate text-xs text-gray-400">
+                          · ID: {accountIdLabel}
                         </span>
                         {account.can_add_trades === false ? (
                           <span className="mt-1 inline-flex rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-200">
@@ -2678,7 +2697,7 @@ export default function InputTradeForm({
                             })
                           }
                           placeholder="Note (e.g. blown, passed...)"
-                          className="w-full rounded border border-white/10 bg-white/5 px-2 py-1.5 text-sm text-white placeholder:text-gray-500"
+                          className="w-full rounded border border-white/10 bg-white/5 px-2 py-1.5 text-sm text-white placeholder:text-gray-400"
                         />
                         <div className="flex flex-wrap items-center gap-3">
                           <button

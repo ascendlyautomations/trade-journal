@@ -136,8 +136,6 @@ import { loadFollowUiSnapshot } from "@/lib/followActions"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 import {
-  getDemoFollowersModalUsers,
-  getDemoFollowingModalUsers,
   getDemoProfileMetadata,
   getDemoProfileReels,
   getDemoReelsByTradeIds,
@@ -147,6 +145,8 @@ import {
   resolveDemoProfileBySegment,
 } from "@/lib/demo/demoProfile"
 import FollowButton from "../../components/FollowButton"
+import FollowListModal from "@/app/components/FollowListModal"
+import { invalidateFollowListCache } from "@/lib/followListPage"
 import { logSupabaseError } from "@/lib/logSupabaseError"
 import { ensureDmConversation } from "@/lib/dmConversation"
 import { dmThreadPath } from "@/lib/messageRoutes"
@@ -387,7 +387,7 @@ function TradeCard({
       >
         {pnlLabel}
       </span>
-      <span className="text-gray-500"> · </span>
+      <span className="text-gray-400"> · </span>
       <span>
         {ticker} · {direction}
       </span>
@@ -546,7 +546,7 @@ function TradeCard({
   const tradeImageBlock = imageSrc ? (
     <DetailModalImage src={imageSrc} onClick={onImageClick} />
   ) : (
-    <div className="flex min-h-[80px] w-full items-center justify-center bg-gradient-to-br from-white/5 to-white/[0.02] text-xs text-gray-500">
+    <div className="flex min-h-[80px] w-full items-center justify-center bg-gradient-to-br from-white/5 to-white/[0.02] text-xs text-gray-400">
       No screenshot
     </div>
   )
@@ -654,7 +654,7 @@ function TradeCard({
           logContext="profile-trade-card"
         />
       ) : (
-        <div className="flex min-h-[5rem] w-full items-center justify-center bg-gradient-to-br from-white/5 to-white/[0.02] py-8 text-xs text-gray-500">
+        <div className="flex min-h-[5rem] w-full items-center justify-center bg-gradient-to-br from-white/5 to-white/[0.02] py-8 text-xs text-gray-400">
           No screenshot
         </div>
       )}
@@ -853,7 +853,7 @@ function PostCard({
           }
         }}
         placeholder={replyTarget ? "Add to reply…" : "Add a comment..."}
-        className="flex-1 rounded-lg border border-white/10 bg-[#0f172a] px-3 py-2 text-sm text-white placeholder:text-gray-500"
+        className="flex-1 rounded-lg border border-white/10 bg-[#0f172a] px-3 py-2 text-sm text-white placeholder:text-gray-400"
       />
       <button
         type="button"
@@ -1293,8 +1293,6 @@ function ProfilePageContent() {
   const [room, setRoom] = useState<any | null>(null)
   const [showFollowers, setShowFollowers] = useState(false)
   const [showFollowing, setShowFollowing] = useState(false)
-  const [followersModalUsers, setFollowersModalUsers] = useState<any[]>([])
-  const [followingModalUsers, setFollowingModalUsers] = useState<any[]>([])
   const [wallPosts, setWallPosts] = useState<any[]>([])
   const [wallPostsReady, setWallPostsReady] = useState(false)
   const [profileReels, setProfileReels] = useState<ReelRow[]>([])
@@ -1685,6 +1683,10 @@ function ProfilePageContent() {
       setLoading(false)
       return
     }
+
+    // Close follow modals when navigating to another profile.
+    setShowFollowers(false)
+    setShowFollowing(false)
 
     const cached = readProfileSession(profileId)
     if (cached) {
@@ -2443,62 +2445,16 @@ function ProfilePageContent() {
     setShowFollowing(false)
   }
 
-  async function openFollowersModal() {
+  function openFollowersModal() {
     if (!profile) return
     setShowFollowing(false)
     setShowFollowers(true)
-
-    if (isDemoModeActive() && isDemoProfileId(profile.id)) {
-      setFollowersModalUsers(getDemoFollowersModalUsers(profile.id))
-      return
-    }
-
-    const { data: rows } = await supabase
-      .from("followers")
-      .select("follower_id")
-      .eq("following_id", profile.id)
-
-    const ids = [...new Set(rows?.map((r) => r.follower_id).filter(Boolean) ?? [])]
-    if (ids.length === 0) {
-      setFollowersModalUsers([])
-      return
-    }
-
-    const { data: profs } = await supabase
-      .from("profiles")
-      .select("id, username, avatar_url, name")
-      .in("id", ids)
-
-    setFollowersModalUsers(profs ?? [])
   }
 
-  async function openFollowingModal() {
+  function openFollowingModal() {
     if (!profile) return
     setShowFollowers(false)
     setShowFollowing(true)
-
-    if (isDemoModeActive() && isDemoProfileId(profile.id)) {
-      setFollowingModalUsers(getDemoFollowingModalUsers(profile.id))
-      return
-    }
-
-    const { data: rows } = await supabase
-      .from("followers")
-      .select("following_id")
-      .eq("follower_id", profile.id)
-
-    const ids = [...new Set(rows?.map((r) => r.following_id).filter(Boolean) ?? [])]
-    if (ids.length === 0) {
-      setFollowingModalUsers([])
-      return
-    }
-
-    const { data: profs } = await supabase
-      .from("profiles")
-      .select("id, username, avatar_url, name")
-      .in("id", ids)
-
-    setFollowingModalUsers(profs ?? [])
   }
 
   async function handleCreatePost() {
@@ -3508,6 +3464,10 @@ function ProfilePageContent() {
       setIsFollowing(following)
       if (!profile) return
 
+      // Follow graph changed — drop session caches so modals stay accurate.
+      invalidateFollowListCache(profile.id)
+      if (currentUserId) invalidateFollowListCache(currentUserId)
+
       if (!following && profile.is_private === true) {
         setAllTrades([])
         setVisibleTradeCount(PAGE_SIZE)
@@ -3522,7 +3482,7 @@ function ProfilePageContent() {
 
       setFollowersCount(followersN ?? 0)
     },
-    [profile]
+    [profile, currentUserId]
   )
 
   const handleProfileRequestedChange = useCallback(
@@ -4162,7 +4122,7 @@ function ProfilePageContent() {
                 {lastProfileFetchError}
               </p>
             ) : null}
-            <p className="mt-3 text-xs text-gray-500">
+            <p className="mt-3 text-xs text-gray-400">
               Compare NEXT_PUBLIC_SUPABASE_URL with production. If the list probe
               in the console shows rows but this id returns nothing, suspect RLS
               or a UUID that exists only in the other project.
@@ -4341,7 +4301,7 @@ function ProfilePageContent() {
 
                         {profile.username ? (
                           <>
-                            <span className="text-gray-500">|</span>
+                            <span className="text-gray-400">|</span>
                             <span className="text-sm text-gray-400">
                               {profile.username}
                             </span>
@@ -4580,7 +4540,7 @@ function ProfilePageContent() {
           </div>
 
           {!statsVisible && profile.is_private === true ? (
-            <p className="text-center text-xs text-gray-500">
+            <p className="text-center text-xs text-gray-400">
               Follow to unlock trading stats in this row.
             </p>
           ) : null}
@@ -5248,7 +5208,7 @@ function ProfilePageContent() {
                     : "What's on your mind?"
                 }
                 rows={4}
-                className="mb-3 w-full resize-none rounded-lg border border-white/10 bg-[#020617] p-2 text-sm text-white placeholder:text-gray-500"
+                className="mb-3 w-full resize-none rounded-lg border border-white/10 bg-[#020617] p-2 text-sm text-white placeholder:text-gray-400"
               />
 
               {pendingRoomShare ? (
@@ -5273,7 +5233,7 @@ function ProfilePageContent() {
                     className="max-h-48 w-full rounded-xl border border-white/10 object-contain"
                   />
                   {postImage ? (
-                    <p className="mt-1.5 text-xs text-gray-500">
+                    <p className="mt-1.5 text-xs text-gray-400">
                       {formatPostFileSize(postImage.size)}
                     </p>
                   ) : null}
@@ -5584,117 +5544,20 @@ function ProfilePageContent() {
         />
       ) : null}
 
-      {showFollowers && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
-          onClick={closeFollowModals}
-        >
-          <div
-            className="max-h-[400px] w-80 overflow-y-auto rounded-xl border border-white/10 bg-[#0f172a] p-6 shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 className="mb-4 text-lg font-semibold text-gray-100">Followers</h2>
-
-            {followersModalUsers.length === 0 ? (
-              isOwnProfile ? (
-                <EmptyState
-                  title="No Followers Yet"
-                  description="Post consistently and engage with other traders to grow your audience."
-                  className="py-6"
-                />
-              ) : (
-                <p className="text-sm text-gray-400">No followers yet.</p>
-              )
-            ) : (
-              <div className="space-y-1">
-                {followersModalUsers.map((u) => (
-                  <ProfileLink
-                    key={u.id}
-                    userId={u.id}
-                    username={u.username}
-                    onClick={closeFollowModals}
-                    className="flex cursor-pointer items-center gap-3 rounded-lg p-2 transition hover:bg-white/10"
-                  >
-                    <ProfileAvatarImg
-                      src={u.avatar_url}
-                      className="h-8 w-8"
-                    />
-                    <span className="text-white">{u.username}</span>
-                  </ProfileLink>
-                ))}
-              </div>
-            )}
-
-            <button
-              type="button"
-              onClick={closeFollowModals}
-              className="mt-4 w-full rounded-lg bg-white/10 p-2 text-white transition hover:bg-white/20"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
-
-      {showFollowing && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
-          onClick={closeFollowModals}
-        >
-          <div
-            className="max-h-[400px] w-80 overflow-y-auto rounded-xl border border-white/10 bg-[#0f172a] p-6 shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 className="mb-4 text-lg font-semibold text-gray-100">Following</h2>
-
-            {followingModalUsers.length === 0 ? (
-              isOwnProfile ? (
-                <EmptyState
-                  title="Not Following Anyone"
-                  description="Follow traders to customize your feed."
-                  action={
-                    <Link
-                      href="/explore"
-                      className="text-sm font-medium text-blue-300 hover:text-blue-200"
-                    >
-                      Explore Traders →
-                    </Link>
-                  }
-                  className="py-6"
-                />
-              ) : (
-                <p className="text-sm text-gray-400">Not following anyone yet.</p>
-              )
-            ) : (
-              <div className="space-y-1">
-                {followingModalUsers.map((u) => (
-                  <ProfileLink
-                    key={u.id}
-                    userId={u.id}
-                    username={u.username}
-                    onClick={closeFollowModals}
-                    className="flex cursor-pointer items-center gap-3 rounded-lg p-2 transition hover:bg-white/10"
-                  >
-                    <ProfileAvatarImg
-                      src={u.avatar_url}
-                      className="h-8 w-8"
-                    />
-                    <span className="text-white">{u.username}</span>
-                  </ProfileLink>
-                ))}
-              </div>
-            )}
-
-            <button
-              type="button"
-              onClick={closeFollowModals}
-              className="mt-4 w-full rounded-lg bg-white/10 p-2 text-white transition hover:bg-white/20"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
+      <FollowListModal
+        open={showFollowers}
+        onClose={closeFollowModals}
+        profileId={profile?.id ?? ""}
+        kind="followers"
+        isOwnProfile={isOwnProfile}
+      />
+      <FollowListModal
+        open={showFollowing}
+        onClose={closeFollowModals}
+        profileId={profile?.id ?? ""}
+        kind="following"
+        isOwnProfile={isOwnProfile}
+      />
 
       <ImageCropModal
         open={postImageCrop.cropSourceFile != null}

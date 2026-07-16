@@ -75,7 +75,7 @@ export default function AffiliatePayoutSetupCard({ affiliateConnect, show }: Pro
       </p>
 
       {!hasAffiliateRow ? (
-        <p className="mt-2 text-xs text-gray-500">
+        <p className="mt-2 text-xs text-gray-400">
           After your application is approved and your affiliate record is ready, you can complete payout setup
           here.
         </p>
@@ -97,7 +97,7 @@ export default function AffiliatePayoutSetupCard({ affiliateConnect, show }: Pro
           {error ? (
             <p className="text-xs text-red-300">{error}</p>
           ) : (
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-gray-400">
               You&apos;ll finish identity and bank details on Stripe&apos;s secure page.
             </p>
           )}

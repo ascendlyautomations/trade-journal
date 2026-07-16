@@ -81,7 +81,7 @@ export default function TradeReelSummaryStrip({
           <span className="font-medium text-white">
             {ticker} · {direction}
           </span>
-          <span className="text-gray-500">·</span>
+          <span className="text-gray-400">·</span>
           <span
             className={
               Number.isFinite(pnl)
@@ -93,11 +93,11 @@ export default function TradeReelSummaryStrip({
           >
             {pnlLabel}
           </span>
-          <span className="text-gray-500">·</span>
+          <span className="text-gray-400">·</span>
           <span className="text-gray-300">RR {rr}</span>
           {outcome ? (
             <>
-              <span className="text-gray-500">·</span>
+              <span className="text-gray-400">·</span>
               <span
                 className={
                   outcome === "WIN"

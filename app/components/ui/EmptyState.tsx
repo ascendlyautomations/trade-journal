@@ -1,4 +1,8 @@
 import type { ReactNode } from "react"
+import {
+  READABLE_EMPTY_CLASS,
+  READABLE_PRIMARY_CLASS,
+} from "@/lib/readableTextStyles"
 import { cn } from "./cn"
 
 export type EmptyStateProps = {
@@ -31,9 +35,13 @@ export default function EmptyState({
           {icon}
         </div>
       ) : null}
-      <h3 className="text-base font-semibold text-white">{title}</h3>
+      <h3 className={`text-base font-semibold ${READABLE_PRIMARY_CLASS}`}>
+        {title}
+      </h3>
       {description ? (
-        <p className="mt-2 max-w-sm text-sm text-gray-400">{description}</p>
+        <p className={`mt-2 max-w-sm text-sm ${READABLE_EMPTY_CLASS}`}>
+          {description}
+        </p>
       ) : null}
       {action ? <div className="mt-4">{action}</div> : null}
     </div>

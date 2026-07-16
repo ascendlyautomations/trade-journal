@@ -21,6 +21,11 @@ import {
   XAxis,
   YAxis,
 } from "recharts"
+import {
+  chartAxisTick,
+  chartCartesianGridProps,
+  chartTooltipStyles,
+} from "@/lib/chartTheme"
 
 function MetricCard({
   label,
@@ -35,7 +40,7 @@ function MetricCard({
     <div className="rounded-xl border border-white/10 bg-white/5 p-4 shadow-sm">
       <p className="text-xs font-medium uppercase tracking-wide text-gray-400">{label}</p>
       <p className="mt-2 text-2xl font-semibold tabular-nums text-white">{value}</p>
-      {hint ? <p className="mt-1 text-xs text-gray-500">{hint}</p> : null}
+      {hint ? <p className="mt-1 text-xs text-gray-400">{hint}</p> : null}
     </div>
   )
 }
@@ -196,14 +201,14 @@ export default function AdminAnalyticsPage() {
               <section className="rounded-xl border border-white/10 bg-white/5 p-4 md:p-5">
                 <h2 className="text-lg font-semibold text-white">How DAU / WAU are calculated</h2>
                 <p className="mt-2 text-sm text-gray-300">{DAU_DEFINITION}</p>
-                <p className="mt-2 text-xs text-gray-500">
+                <p className="mt-2 text-xs text-gray-400">
                   Windows: DAU uses the last 24 hours; WAU uses the last 7 days. Both are rolling windows in UTC.
                 </p>
               </section>
 
               <section className="space-y-4">
                 <h2 className="text-lg font-semibold text-white">Daily trends (UTC)</h2>
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-gray-400">
                   Each point is <code className="rounded bg-black/40 px-1">{"{ day, count }"}</code> from{" "}
                   <code className="rounded bg-black/40 px-1">series.usersPerDay</code>,{" "}
                   <code className="rounded bg-black/40 px-1">series.tradesPerDay</code>,{" "}
@@ -222,16 +227,16 @@ export default function AdminAnalyticsPage() {
                       <div className="h-56 w-full">
                         <ResponsiveContainer width="100%" height="100%">
                           <LineChart data={c.data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                            <XAxis dataKey="day" tick={{ fill: "#94a3b8", fontSize: 11 }} />
+                            <CartesianGrid strokeDasharray="3 3" {...chartCartesianGridProps} />
+                            <XAxis dataKey="day" {...chartAxisTick(11)} />
                             <YAxis
                               width={40}
-                              tick={{ fill: "#94a3b8", fontSize: 11 }}
+                              {...chartAxisTick(11)}
                               allowDecimals={false}
                               domain={[0, "auto"]}
                             />
                             <Tooltip
-                              contentStyle={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 8 }}
+                              {...chartTooltipStyles}
                               formatter={(value: number | string) => [value, "count"]}
                               labelFormatter={(label) => `Day ${label}`}
                             />

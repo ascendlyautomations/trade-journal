@@ -483,7 +483,7 @@ export default function Navbar() {
               }
               role="presentation"
             >
-              <span className="text-[10px] font-medium uppercase tracking-wide text-gray-500">
+              <span className="text-[10px] font-medium uppercase tracking-wide text-gray-400">
                 TradeTraxs Pro
               </span>
             </div>
@@ -659,7 +659,7 @@ export default function Navbar() {
             setMoreSubmenu(null)
           }}
         >
-          Beta Hub
+          Beta
         </IntentPrefetchLink>
       )
     }
@@ -687,7 +687,7 @@ export default function Navbar() {
             <span aria-hidden>{moreSubmenu === "analytics" ? "▾" : "▸"}</span>
           </button>
           {moreSubmenu === "analytics" ? (
-            <div className="border-t border-white/5 pb-1 pl-2">
+            <div className="border-t border-white/10 pb-1 pl-2">
               {renderAnalyticsDropdown("desktop")}
             </div>
           ) : null}
@@ -717,7 +717,7 @@ export default function Navbar() {
             <span aria-hidden>{moreSubmenu === "community" ? "▾" : "▸"}</span>
           </button>
           {moreSubmenu === "community" ? (
-            <div className="border-t border-white/5 pb-1 pl-2">
+            <div className="border-t border-white/10 pb-1 pl-2">
               {communityLinks.map((item) => (
                 <IntentPrefetchLink
                   key={item.href}
@@ -761,7 +761,7 @@ export default function Navbar() {
             <span aria-hidden>{moreSubmenu === "affiliate" ? "▾" : "▸"}</span>
           </button>
           {moreSubmenu === "affiliate" ? (
-            <div className="border-t border-white/5 pb-1 pl-2">
+            <div className="border-t border-white/10 pb-1 pl-2">
               {affiliateLinks.map((item) => (
                 <IntentPrefetchLink
                   key={item.href}
@@ -799,7 +799,7 @@ export default function Navbar() {
           : "overflow-visible"
       }`}
     >
-      <div className="flex h-16 w-full shrink-0 items-center border-b border-white/5 bg-[#0b1f3a]">
+      <div className="flex h-16 w-full shrink-0 items-center border-b border-white/10 bg-[#0b1f3a]">
         <div className="flex h-full w-full items-center gap-2 px-4 md:gap-3 md:px-6">
         {/* LEFT */}
         <div className="flex min-w-0 flex-1 items-center gap-3">
@@ -894,7 +894,7 @@ export default function Navbar() {
                     ref={setItemMeasureRef("beta")}
                     className="shrink-0 rounded border px-3 py-1.5 text-sm font-medium border-yellow-400/30"
                   >
-                    Beta Hub
+                    Beta
                   </span>
                 ) : null}
               </div>
@@ -932,7 +932,7 @@ export default function Navbar() {
                     Profile
                   </IntentPrefetchLink>
                 ) : (
-                  <span className="shrink-0 rounded px-2 py-1 text-gray-500">
+                  <span className="shrink-0 rounded px-2 py-1 text-gray-400">
                     Profile
                   </span>
                 )}
@@ -1155,7 +1155,7 @@ export default function Navbar() {
                         : "border-yellow-400/30 bg-yellow-500/20 text-yellow-300 hover:bg-yellow-500/30"
                     }`}
                   >
-                    Beta Hub
+                    Beta
                   </IntentPrefetchLink>
                 ) : null}
 
@@ -1254,7 +1254,7 @@ export default function Navbar() {
       </div>
 
       {mobileMenuOpen ? (
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain border-t border-white/5 bg-[#0b1f3a] [webkit-overflow-scrolling:touch] md:hidden">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain border-t border-white/10 bg-[#0b1f3a] [webkit-overflow-scrolling:touch] md:hidden">
           <div className="flex w-full flex-col gap-2 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] pt-1.5 text-sm text-white md:px-6">
           {showReturnToApp ? (
             <button
@@ -1315,7 +1315,7 @@ export default function Navbar() {
               Profile
             </IntentPrefetchLink>
           ) : (
-            <span className="rounded-lg px-3 py-2 text-gray-500">Profile</span>
+            <span className="rounded-lg px-3 py-2 text-gray-400">Profile</span>
           )}
 
           <IntentPrefetchLink
@@ -1446,7 +1446,7 @@ export default function Navbar() {
             </IntentPrefetchLink>
           ) : null}
 
-          <div className="flex flex-col gap-1 border-t border-white/5 pt-1.5">
+          <div className="flex flex-col gap-1 border-t border-white/10 pt-1.5">
             {isAdmin ? (
               <IntentPrefetchLink
                 href="/admin"

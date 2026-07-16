@@ -20,6 +20,12 @@ import type { TradingAccountPropFirmRules } from "@/lib/tradingAccounts"
 import ScrollableModalShell from "@/app/components/ui/ScrollableModalShell"
 import CustomSelect from "@/app/components/CustomSelect"
 import { SELECT_MODAL_TRIGGER_CLASS } from "@/lib/accountDropdownStyles"
+import {
+  READABLE_FIELD_HELPER_CLASS,
+  READABLE_FIELD_LABEL_CLASS,
+  READABLE_PLACEHOLDER_CLASS,
+  READABLE_SECONDARY_CLASS,
+} from "@/lib/readableTextStyles"
 import { cn } from "@/app/components/ui/cn"
 
 export type PropFirmRules = TradingAccountPropFirmRules
@@ -72,8 +78,16 @@ const emptyForm = {
   winningDayThreshold: "",
 }
 
-const inputClass =
-  "mt-1 w-full rounded-lg border border-white/10 bg-[#0f172a] p-2.5 text-white placeholder:text-gray-500 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
+const inputClass = cn(
+  "mt-1 w-full rounded-lg border border-white/10 bg-[#0f172a] p-2.5 text-white focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30",
+  READABLE_PLACEHOLDER_CLASS
+)
+
+/** Prop-firm rule inputs share the same readable chrome as primary fields. */
+const propFirmInputClass = cn(
+  "w-full rounded-lg border border-white/10 bg-[#0f172a] py-2 text-white focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30",
+  READABLE_PLACEHOLDER_CLASS
+)
 
 function formatNumber(value: string | number) {
   if (!value) return ""
@@ -312,7 +326,12 @@ export default function CreateAccountModal({
             {heading}
           </h2>
           {subheading ? (
-            <p className="mt-1 text-sm leading-relaxed text-gray-400">
+            <p
+              className={cn(
+                "mt-1 text-sm leading-relaxed",
+                READABLE_SECONDARY_CLASS
+              )}
+            >
               {subheading}
             </p>
           ) : null}
@@ -351,7 +370,7 @@ export default function CreateAccountModal({
     >
         <div className="space-y-4">
           <label className="block">
-            <span className="text-xs text-gray-400">Account type</span>
+            <span className={READABLE_FIELD_LABEL_CLASS}>Account type</span>
             <CustomSelect
               value={category}
               disabled={categoryLocked}
@@ -365,7 +384,7 @@ export default function CreateAccountModal({
           </label>
 
           <label className="block">
-            <span className="text-xs text-gray-400">Account name</span>
+            <span className={READABLE_FIELD_LABEL_CLASS}>Account name</span>
             <input
               type="text"
               value={name}
@@ -374,13 +393,13 @@ export default function CreateAccountModal({
               placeholder={accountNamePlaceholder(category)}
               autoComplete="off"
             />
-            <p className="mt-1 text-xs text-gray-500">
+            <p className={READABLE_FIELD_HELPER_CLASS}>
               {accountNameHelperText(category)}
             </p>
           </label>
 
           <label className="block">
-            <span className="text-xs text-gray-400">Account Value</span>
+            <span className={READABLE_FIELD_LABEL_CLASS}>Account Value</span>
             <div className="relative mt-1">
               <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">
                 $
@@ -407,12 +426,12 @@ export default function CreateAccountModal({
                 {sizeError}
               </p>
             ) : (
-              <p className="mt-1 text-xs text-gray-500">{ACCOUNT_SIZE_HELPER}</p>
+              <p className={READABLE_FIELD_HELPER_CLASS}>{ACCOUNT_SIZE_HELPER}</p>
             )}
           </label>
 
           <label className="block">
-            <span className="text-xs text-gray-400">Account ID</span>
+            <span className={READABLE_FIELD_LABEL_CLASS}>Account ID</span>
             <input
               type="text"
               value={id}
@@ -425,7 +444,7 @@ export default function CreateAccountModal({
 
           {showsAccountModeSelector(category) ? (
             <label className="block">
-              <span className="text-xs text-gray-400">Account mode</span>
+              <span className={READABLE_FIELD_LABEL_CLASS}>Account mode</span>
               <CustomSelect
                 value={mode}
                 disabled={modeLocked}
@@ -439,7 +458,7 @@ export default function CreateAccountModal({
           {category === "Prop Firm" && (
             <>
               <div className="space-y-1">
-                <div className="text-xs text-gray-400">Consistency Rule</div>
+                <div className={READABLE_FIELD_LABEL_CLASS}>Consistency Rule</div>
                 <CustomSelect
                   value={consistencyMode}
                   onChange={(val) => {
@@ -459,7 +478,7 @@ export default function CreateAccountModal({
 
               {consistencyMode === "required" ? (
                 <div className="space-y-1">
-                  <div className="text-xs text-gray-400">Consistency Threshold</div>
+                  <div className={READABLE_FIELD_LABEL_CLASS}>Consistency Threshold</div>
                   <div className="relative w-full">
                     <input
                       type="text"
@@ -467,7 +486,7 @@ export default function CreateAccountModal({
                       onChange={(e) =>
                         handleNumberChange(e.target.value, setConsistency)
                       }
-                      className="w-full pr-8 pl-3 py-2 rounded-lg bg-[#0f172a] border border-white/10 text-white focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
+                      className={cn(propFirmInputClass, "pl-3 pr-8")}
                       placeholder="Consistency Threshold"
                     />
 
@@ -479,7 +498,7 @@ export default function CreateAccountModal({
               ) : null}
 
               <div className="space-y-1">
-                <div className="text-xs text-gray-400">Max Drawdown</div>
+                <div className={READABLE_FIELD_LABEL_CLASS}>Max Drawdown</div>
                 <div className="relative w-full">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
                     $
@@ -491,14 +510,14 @@ export default function CreateAccountModal({
                     onChange={(e) =>
                       handleNumberChange(e.target.value, setMaxDrawdown)
                     }
-                    className="w-full pl-8 pr-3 py-2 rounded-lg bg-[#0f172a] border border-white/10 text-white focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
+                    className={cn(propFirmInputClass, "pl-8 pr-3")}
                     placeholder="Max Drawdown"
                   />
                 </div>
               </div>
 
               <div className="space-y-1">
-                <div className="text-xs text-gray-400">Daily Drawdown</div>
+                <div className={READABLE_FIELD_LABEL_CLASS}>Daily Drawdown</div>
                 <div className="relative w-full">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
                     $
@@ -510,14 +529,14 @@ export default function CreateAccountModal({
                     onChange={(e) =>
                       handleNumberChange(e.target.value, setDailyDrawdown)
                     }
-                    className="w-full pl-8 pr-3 py-2 rounded-lg bg-[#0f172a] border border-white/10 text-white focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
+                    className={cn(propFirmInputClass, "pl-8 pr-3")}
                     placeholder="Daily Drawdown"
                   />
                 </div>
               </div>
 
               <div className="space-y-1">
-                <div className="text-xs text-gray-400">Profit Target</div>
+                <div className={READABLE_FIELD_LABEL_CLASS}>Profit Target</div>
                 <div className="relative w-full">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
                     $
@@ -529,14 +548,14 @@ export default function CreateAccountModal({
                     onChange={(e) =>
                       handleNumberChange(e.target.value, setProfitTarget)
                     }
-                    className="w-full pl-8 pr-3 py-2 rounded-lg bg-[#0f172a] border border-white/10 text-white focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
+                    className={cn(propFirmInputClass, "pl-8 pr-3")}
                     placeholder="Profit Target"
                   />
                 </div>
               </div>
 
               <div className="space-y-1">
-                <div className="text-xs text-gray-400">Winning Days</div>
+                <div className={READABLE_FIELD_LABEL_CLASS}>Winning Days</div>
                 <CustomSelect
                   value={winningDaysMode}
                   onChange={(val) => {
@@ -558,7 +577,7 @@ export default function CreateAccountModal({
               {winningDaysMode === "required" ? (
                 <>
                   <div className="space-y-1">
-                    <div className="text-xs text-gray-400">Minimum Winning Days</div>
+                    <div className={READABLE_FIELD_LABEL_CLASS}>Minimum Winning Days</div>
                     <div className="relative w-full">
                       <input
                         type="text"
@@ -566,14 +585,14 @@ export default function CreateAccountModal({
                         onChange={(e) =>
                           handleNumberChange(e.target.value, setWinningDays)
                         }
-                        className="w-full px-3 py-2 rounded-lg bg-[#0f172a] border border-white/10 text-white focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
+                        className={cn(propFirmInputClass, "px-3")}
                         placeholder="Minimum Winning Days"
                       />
                     </div>
                   </div>
 
                   <div className="space-y-1">
-                    <div className="text-xs text-gray-400">Winning Day Threshold</div>
+                    <div className={READABLE_FIELD_LABEL_CLASS}>Winning Day Threshold</div>
                     <div className="relative w-full">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
                         $
@@ -585,7 +604,7 @@ export default function CreateAccountModal({
                         onChange={(e) =>
                           handleNumberChange(e.target.value, setWinningDayThreshold)
                         }
-                        className="w-full pl-8 pr-3 py-2 rounded-lg bg-[#0f172a] border border-white/10 text-white focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
+                        className={cn(propFirmInputClass, "pl-8 pr-3")}
                         placeholder="Winning Day Threshold"
                       />
                     </div>

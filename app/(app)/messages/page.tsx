@@ -908,29 +908,29 @@ export default function MessagesPage() {
 
         <div className="mx-auto flex h-full min-h-0 w-full max-w-3xl flex-col">
 
-          <div className="mb-4 flex shrink-0 justify-start gap-2 pt-4">
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search conversations..."
+            className="mt-4 mb-3 w-full shrink-0 rounded border border-white/10 bg-black p-3 focus:border-emerald-400 focus:outline-none"
+          />
+
+          <div className="mb-4 flex shrink-0 justify-start gap-2">
             <button
               type="button"
               onClick={openDMModal}
-              className="w-auto rounded-lg bg-blue-500 px-3 py-2 text-white hover:bg-blue-600"
+              className="min-h-9 w-auto rounded-lg bg-blue-500 px-2.5 py-1.5 text-sm text-white hover:bg-blue-600"
             >
               New Chat
             </button>
             <button
               type="button"
               onClick={() => setShowGroupModal(true)}
-              className="w-auto rounded-lg bg-blue-500 px-3 py-2 text-white hover:bg-blue-600"
+              className="min-h-9 w-auto rounded-lg bg-blue-500 px-2.5 py-1.5 text-sm text-white hover:bg-blue-600"
             >
               New Group
             </button>
           </div>
-
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search conversations..."
-            className="mb-6 w-full shrink-0 rounded border border-white/10 bg-black p-3 focus:border-emerald-400 focus:outline-none"
-          />
 
           <div className="min-h-0 flex-1 overflow-y-auto">
             {showSkeleton ? (

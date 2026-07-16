@@ -68,7 +68,7 @@ export default function DashboardHoldTime({
       ) : (
         <div className="space-y-3 md:space-y-4">
           <div className="flex min-h-[76px] flex-col items-center justify-center rounded-xl border border-white/10 bg-white/5 p-2.5 text-center md:min-h-[90px] md:p-3">
-            <p className="mb-0.5 text-[11px] text-gray-300 md:mb-1 md:text-sm">
+            <p className="mb-0.5 text-[11px] text-gray-400 md:mb-1 md:text-sm">
               Average Hold Time
             </p>
             <p className="text-base font-semibold tabular-nums text-white md:text-xl">
@@ -81,7 +81,7 @@ export default function DashboardHoldTime({
           </div>
 
           <div>
-            <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-gray-300 md:mb-2 md:text-xs">
+            <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-gray-400 md:mb-2 md:text-xs">
               Hold Time Breakdown
             </p>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:gap-3">
@@ -101,7 +101,7 @@ export default function DashboardHoldTime({
           </div>
 
           <div>
-            <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-gray-300 md:mb-2 md:text-xs">
+            <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-gray-400 md:mb-2 md:text-xs">
               Trade Duration Extremes
             </p>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:gap-3">

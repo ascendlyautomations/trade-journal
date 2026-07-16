@@ -40,7 +40,7 @@ export default function LandingFaqSection() {
                   aria-expanded={isOpen}
                 >
                   <span>{item.q}</span>
-                  <span className="shrink-0 text-gray-500" aria-hidden>
+                  <span className="shrink-0 text-gray-400" aria-hidden>
                     {isOpen ? "−" : "+"}
                   </span>
                 </button>
@@ -54,7 +54,7 @@ export default function LandingFaqSection() {
           })}
         </div>
 
-        <p className="mt-6 text-center text-sm text-gray-500 md:mt-8">
+        <p className="mt-6 text-center text-sm text-gray-400 md:mt-8">
           <Link href="/faq" className="text-emerald-400 transition hover:text-emerald-300">
             View full FAQ →
           </Link>

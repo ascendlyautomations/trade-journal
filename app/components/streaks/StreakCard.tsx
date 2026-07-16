@@ -39,31 +39,31 @@ export default function StreakCard({
         <div className="mt-auto space-y-5">
           <div className="grid grid-cols-3 gap-3 text-center sm:gap-4">
             <div>
-              <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
                 Current
               </p>
               <p className="mt-1 text-2xl font-bold tabular-nums text-white">
                 {stats.current}
               </p>
-              <p className="text-xs text-gray-500">{stats.unitLabel}</p>
+              <p className="text-xs text-gray-400">{stats.unitLabel}</p>
             </div>
             <div>
-              <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
                 Longest
               </p>
               <p className="mt-1 text-2xl font-bold tabular-nums text-emerald-300">
                 {stats.longest}
               </p>
-              <p className="text-xs text-gray-500">{stats.unitLabel}</p>
+              <p className="text-xs text-gray-400">{stats.unitLabel}</p>
             </div>
             <div>
-              <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
                 Next Goal
               </p>
               <p className="mt-1 text-2xl font-bold tabular-nums text-blue-300">
                 {stats.nextMilestone ?? "—"}
               </p>
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-gray-400">
                 {stats.nextMilestone != null ? stats.unitLabel : "Maxed"}
               </p>
             </div>

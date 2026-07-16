@@ -1,14 +1,13 @@
 import type { HTMLAttributes, ReactNode } from "react"
+import { READABLE_CARD_TEXT_CLASS } from "@/lib/readableTextStyles"
 import { cn } from "./cn"
 
 export type CardVariant = "glass" | "solid" | "panel"
 
 const variantClasses: Record<CardVariant, string> = {
-  glass:
-    "rounded-xl border border-white/10 bg-white/5 shadow-lg shadow-black/20",
-  solid: "rounded-xl border border-white/10 bg-[#0f172a]",
-  panel:
-    "rounded-2xl border border-white/10 bg-white/10 shadow-2xl backdrop-blur-xl",
+  glass: `rounded-xl border border-white/10 bg-white/5 shadow-lg shadow-black/20 ${READABLE_CARD_TEXT_CLASS}`,
+  solid: `rounded-xl border border-white/10 bg-[#0f172a] ${READABLE_CARD_TEXT_CLASS}`,
+  panel: `rounded-2xl border border-white/10 bg-white/10 shadow-2xl backdrop-blur-xl ${READABLE_CARD_TEXT_CLASS}`,
 }
 
 export type CardProps = HTMLAttributes<HTMLDivElement> & {

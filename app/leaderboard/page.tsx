@@ -34,6 +34,11 @@ import { profilePath } from "@/lib/profileRoutes"
 import EmptyState from "../components/ui/EmptyState"
 import { SkeletonLeaderboardPage } from "../components/ui/skeletons"
 import NativeDateInput from "@/app/components/ui/NativeDateInput"
+import {
+  chartAxisTick,
+  chartCartesianGridProps,
+  READABLE_CHART_TICK,
+} from "@/lib/chartTheme"
 
 type LeaderboardProfile = {
   id: string
@@ -544,11 +549,23 @@ export default function Leaderboard() {
             ) : (
               <ResponsiveContainer width="100%" height={360}>
                 <LineChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                  <XAxis dataKey="label" stroke="#94a3b8" />
-                  <YAxis stroke="#94a3b8" tickFormatter={yAxisTickFormatter} width={72} />
+                  <CartesianGrid strokeDasharray="3 3" {...chartCartesianGridProps} />
+                  <XAxis
+                    dataKey="label"
+                    stroke={READABLE_CHART_TICK}
+                    tick={{ fill: READABLE_CHART_TICK, fontSize: 12 }}
+                  />
+                  <YAxis
+                    {...chartAxisTick(12)}
+                    tickFormatter={yAxisTickFormatter}
+                    width={72}
+                  />
                   <Tooltip content={(props) => <LeaderboardTooltip {...props} />} />
-                  <Legend />
+                  <Legend
+                    formatter={(value) => (
+                      <span className="text-xs text-gray-300">{value}</span>
+                    )}
+                  />
 
                   <Line
                     type="monotone"

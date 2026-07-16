@@ -204,7 +204,7 @@ export default function AdminFeedbackPage() {
                       <span>{row.email || row.user_id || "Unknown user"}</span>
                       <span>{row.screenshot_url ? "Has screenshot" : "No screenshot"}</span>
                     </div>
-                    <p className="mt-1 text-xs text-gray-500">
+                    <p className="mt-1 text-xs text-gray-400">
                       {row.created_at ? new Date(row.created_at).toLocaleString() : "—"}
                     </p>
                   </button>

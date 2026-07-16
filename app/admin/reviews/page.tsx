@@ -262,10 +262,10 @@ export default function AdminReviewsPage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search title, review, or username…"
-          className="w-full max-w-md rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-400"
+          className="w-full max-w-md rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400"
         />
 
-        <p className="text-xs text-gray-500">
+        <p className="text-xs text-gray-400">
           Showing {rows.length} · {filteredCountLabel}
           {listLoading ? " · loading…" : ""}
         </p>
@@ -315,13 +315,13 @@ export default function AdminReviewsPage() {
             {selected ? (
               <div className="space-y-4">
                 <div>
-                  <p className="text-xs uppercase tracking-wide text-gray-500">Selected</p>
+                  <p className="text-xs uppercase tracking-wide text-gray-400">Selected</p>
                   <h2 className="mt-1 text-lg font-semibold text-white">
                     {selected.title?.trim() || "Untitled review"}
                   </h2>
                   <p className="mt-1 text-sm text-gray-400">{displayUser(selected)}</p>
                   {selected.display_name ? (
-                    <p className="text-sm text-gray-500">{selected.display_name}</p>
+                    <p className="text-sm text-gray-400">{selected.display_name}</p>
                   ) : null}
                   <div className="mt-2">
                     <StarRatingDisplay rating={selected.rating} />
@@ -339,7 +339,7 @@ export default function AdminReviewsPage() {
                   </span>
                 </p>
 
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-gray-400">
                   Submitted {new Date(selected.created_at).toLocaleString()} · v{selected.version}
                 </p>
 
@@ -384,7 +384,7 @@ export default function AdminReviewsPage() {
                 </div>
               </div>
             ) : (
-              <p className="text-sm text-gray-500">Select a review to manage.</p>
+              <p className="text-sm text-gray-400">Select a review to manage.</p>
             )}
           </aside>
         </div>

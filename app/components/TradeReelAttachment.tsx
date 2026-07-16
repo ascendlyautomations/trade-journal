@@ -215,7 +215,7 @@ export default function TradeReelAttachment({
       )}
 
       {variant === "quick" && !showAttached && !pendingFile ? (
-        <p className="mt-1.5 text-xs text-gray-500">
+        <p className="mt-1.5 text-xs text-gray-400">
           MP4 or MOV · up to {REEL_MAX_DURATION_LABEL}
         </p>
       ) : null}

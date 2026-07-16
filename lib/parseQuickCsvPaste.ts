@@ -11,10 +11,13 @@ import { toDateInputValue, toTimeInputValue } from "@/lib/inputTradeDateTime"
 
 const QUICK_CSV_PLACEHOLDER_USER_ID = "00000000-0000-0000-0000-000000000000"
 
-export const QUICK_CSV_MULTI_TRADE_MESSAGE =
-  "This Quick Trade importer only supports one trade at a time. Please upload a CSV containing a header row and a single trade."
+/** Max trades shown/processed per Quick Input batch before auto-continuing. */
+export const QUICK_CSV_BATCH_SIZE = 10
 
 export const QUICK_CSV_PARSE_FAILED_MESSAGE = "Unable to read this CSV row."
+
+export const QUICK_CSV_EMPTY_MESSAGE =
+  "No trades found in this CSV. Check that your file has a header row and at least one trade."
 
 export type QuickTradeCsvFormPatch = {
   ticker: string
@@ -35,7 +38,7 @@ export type QuickTradeCsvFormPatch = {
 }
 
 export type ParseQuickCsvImportResult =
-  | { ok: true; patch: QuickTradeCsvFormPatch }
+  | { ok: true; patches: QuickTradeCsvFormPatch[]; patch: QuickTradeCsvFormPatch }
   | { ok: false; message: string }
 
 function splitDateTimeCell(raw: string): { date: string; time: string } {
@@ -118,18 +121,19 @@ function nonEmptyRawLines(text: string): string[][] {
   ) as string[][]
 }
 
-function extractSingleCsvRow(
+/**
+ * Extract all trade rows from Quick CSV paste/upload text.
+ * Supports header + N data rows, header + single value line, or headerless single line.
+ */
+function extractCsvRows(
   text: string
 ):
-  | { ok: true; row: CsvRow }
-  | { ok: false; code: "empty" | "multi_trade" | "parse_failed" } {
+  | { ok: true; rows: CsvRow[] }
+  | { ok: false; code: "empty" | "parse_failed" } {
   const trimmed = text.trim()
   if (!trimmed) return { ok: false, code: "empty" }
 
   const rawLines = nonEmptyRawLines(trimmed)
-  if (rawLines.length > 2) {
-    return { ok: false, code: "multi_trade" }
-  }
 
   const headerParse = Papa.parse<CsvRow>(trimmed, {
     header: true,
@@ -141,28 +145,25 @@ function extractSingleCsvRow(
     (headerParse.data ?? []).filter(Boolean) as CsvRow[]
   )
 
-  if (dataRows.length > 1) {
-    return { ok: false, code: "multi_trade" }
-  }
-
-  if (dataRows.length === 1) {
-    return { ok: true, row: dataRows[0] }
+  if (dataRows.length >= 1) {
+    return { ok: true, rows: dataRows }
   }
 
   if (rawLines.length === 2) {
     const headerLine = rawLines[0].map((cell) => String(cell ?? "").trim())
     const valueLine = rawLines[1].map((cell) => String(cell ?? "").trim())
-    return { ok: true, row: rowFromHeaderLinePair(headerLine, valueLine) }
+    return { ok: true, rows: [rowFromHeaderLinePair(headerLine, valueLine)] }
   }
 
   if (rawLines.length === 1) {
     const cells = rawLines[0].map((cell) => String(cell ?? "").trim())
     const row = headerlessRowFromCells(cells)
     if (!row) return { ok: false, code: "parse_failed" }
-    return { ok: true, row }
+    return { ok: true, rows: [row] }
   }
 
-  return { ok: false, code: "empty" }
+  if (rawLines.length === 0) return { ok: false, code: "empty" }
+  return { ok: false, code: "parse_failed" }
 }
 
 export function quickTradeFormPatchFromCsvTrade(
@@ -210,41 +211,36 @@ export function quickTradeFormPatchFromCsvTrade(
   }
 }
 
-function messageForExtractError(
-  code: "empty" | "multi_trade" | "parse_failed"
-): string {
-  if (code === "multi_trade") return QUICK_CSV_MULTI_TRADE_MESSAGE
+function messageForExtractError(code: "empty" | "parse_failed"): string {
+  if (code === "empty") return QUICK_CSV_EMPTY_MESSAGE
   return QUICK_CSV_PARSE_FAILED_MESSAGE
 }
 
-/** Parse one CSV trade (header + single row) through the standard import pipeline. */
+/** Parse CSV trade(s) through the standard import pipeline (1–N rows). */
 export function parseQuickCsvImport(text: string): ParseQuickCsvImportResult {
-  const extracted = extractSingleCsvRow(text)
+  const extracted = extractCsvRows(text)
   if (!extracted.ok) {
     return { ok: false, message: messageForExtractError(extracted.code) }
   }
 
   const parsed = buildTradesFromParsedCsv(
-    [extracted.row],
+    extracted.rows,
     QUICK_CSV_PLACEHOLDER_USER_ID
   )
 
-  if (parsed.parsedTrades.length > 1) {
-    return { ok: false, message: QUICK_CSV_MULTI_TRADE_MESSAGE }
-  }
-
-  const trade = parsed.parsedTrades[0]
-  if (!trade) {
+  if (parsed.parsedTrades.length === 0) {
     return { ok: false, message: QUICK_CSV_PARSE_FAILED_MESSAGE }
   }
 
+  const patches = parsed.parsedTrades.map(quickTradeFormPatchFromCsvTrade)
   return {
     ok: true,
-    patch: quickTradeFormPatchFromCsvTrade(trade),
+    patches,
+    patch: patches[0],
   }
 }
 
-/** Read a `.csv` file and autofill one trade through the standard import pipeline. */
+/** Read a `.csv` file and autofill trade(s) through the standard import pipeline. */
 export async function parseQuickCsvFile(
   file: File
 ): Promise<ParseQuickCsvImportResult> {

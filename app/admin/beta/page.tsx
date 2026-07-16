@@ -30,7 +30,7 @@ function MetricCard({
     <div className="rounded-xl border border-white/10 bg-white/5 p-4 shadow-sm">
       <p className="text-xs font-medium uppercase tracking-wide text-gray-400">{label}</p>
       <p className="mt-2 text-2xl font-semibold tabular-nums text-white">{value}</p>
-      {hint ? <p className="mt-1 text-xs text-gray-500">{hint}</p> : null}
+      {hint ? <p className="mt-1 text-xs text-gray-400">{hint}</p> : null}
     </div>
   )
 }
@@ -187,7 +187,7 @@ export default function AdminBetaDashboardPage() {
                 Beta tester engagement, participation, and submission queues.
               </p>
             </div>
-            {loading ? <p className="text-sm text-gray-500">Refreshing metrics…</p> : null}
+            {loading ? <p className="text-sm text-gray-400">Refreshing metrics…</p> : null}
           </div>
 
           {loadError ? (
@@ -261,7 +261,7 @@ export default function AdminBetaDashboardPage() {
 
           <section className="rounded-xl border border-white/10 bg-white/5 p-5">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-400">Recent beta activity</h2>
-            <p className="mt-1 text-xs text-gray-500">
+            <p className="mt-1 text-xs text-gray-400">
               Bug reports, feature requests, beta room messages, and beta tester trades, newest first.
             </p>
 
@@ -271,7 +271,7 @@ export default function AdminBetaDashboardPage() {
                 value={activitySearch}
                 onChange={(e) => setActivitySearch(e.target.value)}
                 placeholder="Search by username or user ID…"
-                className="w-full max-w-md rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-400/40"
+                className="w-full max-w-md rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400/40"
               />
             </div>
 
@@ -283,16 +283,16 @@ export default function AdminBetaDashboardPage() {
             ) : null}
 
             {activityLoading && activityRows.length === 0 ? (
-              <p className="mt-4 text-sm text-gray-500">Loading activity…</p>
+              <p className="mt-4 text-sm text-gray-400">Loading activity…</p>
             ) : !activityRows.length ? (
-              <p className="mt-4 text-sm text-gray-500">
+              <p className="mt-4 text-sm text-gray-400">
                 {debouncedActivitySearch.trim() ? "No activity matches your search." : "No recent activity yet."}
               </p>
             ) : (
               <div className="mt-4 overflow-x-auto">
                 <table className="w-full min-w-[640px] text-left text-sm">
                   <thead>
-                    <tr className="border-b border-white/10 text-xs uppercase tracking-wide text-gray-500">
+                    <tr className="border-b border-white/10 text-xs uppercase tracking-wide text-gray-400">
                       <th className="pb-2 pr-4 font-medium">When</th>
                       <th className="pb-2 pr-4 font-medium">Type</th>
                       <th className="pb-2 pr-4 font-medium">User</th>

@@ -149,8 +149,11 @@ function FeedPostCard({
         publicDesc={publicDesc}
         timingTrade={tradeRow}
         onViewReel={
-          attachedReel && onOpenAttachedReel
-            ? () => onOpenAttachedReel(post, attachedReel)
+          attachedReel
+            ? () => {
+                // Preview: show Feed-identical View Clip badge; open only when wired.
+                onOpenAttachedReel?.(post, attachedReel)
+              }
             : undefined
         }
       />

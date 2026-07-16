@@ -317,7 +317,7 @@ export default function ProfileOnboarding({
                 setUsername(sanitizeUsernameInputForTyping(e.target.value))
               }
             />
-            <p className="mb-4 text-xs text-gray-500">{USERNAME_FORMAT_HINT}</p>
+            <p className="mb-4 text-xs text-gray-400">{USERNAME_FORMAT_HINT}</p>
 
             <label className="mb-1 block text-xs font-medium text-gray-300">
               Trading style <span className="text-red-400">*</span>
@@ -352,7 +352,7 @@ export default function ProfileOnboarding({
             <label className="mb-1 block text-xs font-medium text-gray-300">
               Started trading <span className="text-red-400">*</span>
             </label>
-            <p className="mb-2 text-xs text-gray-500">
+            <p className="mb-2 text-xs text-gray-400">
               Select the date you began trading
             </p>
             <div className="mb-4 w-full min-w-0">

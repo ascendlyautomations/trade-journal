@@ -381,7 +381,7 @@ export default function AdminAffiliateApplicationsPage() {
             {loading ? (
               <p className="p-6 text-sm text-gray-400">Loading…</p>
             ) : rows.length === 0 ? (
-              <p className="p-6 text-sm text-gray-500">No {tab} applications.</p>
+              <p className="p-6 text-sm text-gray-400">No {tab} applications.</p>
             ) : (
               <ul className="divide-y divide-white/10">
                 {rows.map((row) => (
@@ -404,7 +404,7 @@ export default function AdminAffiliateApplicationsPage() {
                           req: {row.requested_code?.trim() || "—"}
                         </span>
                         <span>{formatTs(row.created_at)}</span>
-                        <span className="uppercase text-gray-500">{row.status}</span>
+                        <span className="uppercase text-gray-400">{row.status}</span>
                       </div>
                     </button>
                   </li>
@@ -437,38 +437,38 @@ export default function AdminAffiliateApplicationsPage() {
             </div>
 
             <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.07] p-4">
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Social presence</p>
+              <p className="text-xs font-medium uppercase tracking-wide text-gray-400">Social presence</p>
               <p className="mt-1 break-all font-mono text-lg font-semibold text-blue-200">
                 {selected.social_handle?.trim() || "—"}
               </p>
               <p className="mt-3 text-sm">
-                <span className="text-gray-500">Followers </span>
+                <span className="text-gray-400">Followers </span>
                 <span className="font-semibold text-white">{formatFollowers(selected.followers)}</span>
               </p>
             </div>
 
             <dl className="mt-4 space-y-3 text-sm">
               <div>
-                <dt className="text-xs text-gray-500">Username</dt>
+                <dt className="text-xs text-gray-400">Username</dt>
                 <dd className="text-gray-200">{applicantProfile(selected)?.username || "—"}</dd>
               </div>
               <div>
-                <dt className="text-xs text-gray-500">Name</dt>
+                <dt className="text-xs text-gray-400">Name</dt>
                 <dd className="text-gray-200">{applicantProfile(selected)?.name || "—"}</dd>
               </div>
               <div>
-                <dt className="text-xs text-gray-500">Requested affiliate code</dt>
+                <dt className="text-xs text-gray-400">Requested affiliate code</dt>
                 <dd className="font-mono text-emerald-200">
                   {selected.requested_code?.trim() || "(none, auto on approve if no override)"}
                 </dd>
               </div>
               <div>
-                <dt className="text-xs text-gray-500">Created</dt>
+                <dt className="text-xs text-gray-400">Created</dt>
                 <dd className="text-xs text-gray-400">{formatTs(selected.created_at)}</dd>
               </div>
               {selected.status !== "pending" ? (
                 <div>
-                  <dt className="text-xs text-gray-500">Reviewed</dt>
+                  <dt className="text-xs text-gray-400">Reviewed</dt>
                   <dd className="text-xs text-gray-400">{formatTs(selected.reviewed_at)}</dd>
                 </div>
               ) : null}
@@ -478,17 +478,17 @@ export default function AdminAffiliateApplicationsPage() {
               <div className="mt-4 rounded-lg border border-white/10 bg-white/5 px-3 py-3 text-xs">
                 <p className="font-medium text-gray-300">Stripe payout setup</p>
                 {affStripe == null ? (
-                  <p className="mt-1 text-gray-500">Loading…</p>
+                  <p className="mt-1 text-gray-400">Loading…</p>
                 ) : (
                   <dl className="mt-2 space-y-1.5 text-gray-300">
                     <div>
-                      <span className="text-gray-500">Connected account ID </span>
+                      <span className="text-gray-400">Connected account ID </span>
                       <span className="break-all font-mono text-gray-200">
                         {affStripe.stripe_connected_account_id || "—"}
                       </span>
                     </div>
                     <div>
-                      <span className="text-gray-500">Onboarding complete </span>
+                      <span className="text-gray-400">Onboarding complete </span>
                       {affStripe.stripe_onboarding_complete ? (
                         <span className="text-emerald-300">Yes</span>
                       ) : (
@@ -496,7 +496,7 @@ export default function AdminAffiliateApplicationsPage() {
                       )}
                     </div>
                     <div>
-                      <span className="text-gray-500">Payouts enabled </span>
+                      <span className="text-gray-400">Payouts enabled </span>
                       {affStripe.stripe_payouts_enabled ? (
                         <span className="text-emerald-300">Yes</span>
                       ) : (
@@ -529,7 +529,7 @@ export default function AdminAffiliateApplicationsPage() {
                       value={finalCodeOverride}
                       onChange={(e) => setFinalCodeOverride(e.target.value)}
                       disabled={actionBusy}
-                      className="mt-1 w-full rounded-lg border border-white/15 bg-[#0f172a]/80 px-3 py-2 font-mono text-sm text-white placeholder:text-gray-600 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/40 disabled:opacity-50"
+                      className="mt-1 w-full rounded-lg border border-white/15 bg-[#0f172a]/80 px-3 py-2 font-mono text-sm text-white placeholder:text-gray-400 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/40 disabled:opacity-50"
                       placeholder="Leave blank to use requested code or auto-generate"
                       autoComplete="off"
                     />
@@ -543,7 +543,7 @@ export default function AdminAffiliateApplicationsPage() {
                       value={stripePromoId}
                       onChange={(e) => setStripePromoId(e.target.value)}
                       disabled={actionBusy}
-                      className="mt-1 w-full rounded-lg border border-white/15 bg-[#0f172a]/80 px-3 py-2 font-mono text-sm text-white placeholder:text-gray-600 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/40 disabled:opacity-50"
+                      className="mt-1 w-full rounded-lg border border-white/15 bg-[#0f172a]/80 px-3 py-2 font-mono text-sm text-white placeholder:text-gray-400 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/40 disabled:opacity-50"
                       placeholder="promo_…"
                       autoComplete="off"
                     />
@@ -555,7 +555,7 @@ export default function AdminAffiliateApplicationsPage() {
                       onChange={(e) => setRejectNotes(e.target.value)}
                       disabled={actionBusy}
                       rows={2}
-                      className="mt-1 w-full resize-none rounded-lg border border-white/15 bg-[#0f172a]/80 px-3 py-2 text-sm text-white placeholder:text-gray-600 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/40 disabled:opacity-50"
+                      className="mt-1 w-full resize-none rounded-lg border border-white/15 bg-[#0f172a]/80 px-3 py-2 text-sm text-white placeholder:text-gray-400 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/40 disabled:opacity-50"
                       placeholder="Visible on the application when rejected"
                     />
                   </label>

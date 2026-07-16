@@ -69,7 +69,7 @@ function FlagshipBlock({
             </h3>
             <p className="text-sm leading-relaxed text-gray-400 md:text-lg">{flagship.tagline}</p>
             {flagship.bonuses ? (
-              <p className="text-sm text-gray-500">{flagship.bonuses}</p>
+              <p className="text-sm text-gray-400">{flagship.bonuses}</p>
             ) : null}
           </div>
           <div className="min-w-0 flex-1">

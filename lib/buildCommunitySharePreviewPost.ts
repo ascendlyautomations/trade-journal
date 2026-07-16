@@ -1,7 +1,8 @@
 /** Build a feed-shaped post object from Input Trade form state (no DB writes). */
 
 import { resolveFeedTradeAccountType } from "./feedAccountType.ts"
-import { resolveTradePoints } from "./resolveTradePoints"
+import { resolveTradePoints } from "./resolveTradePoints.ts"
+import type { ReelRow } from "./reels.ts"
 
 export type CommunitySharePreviewInput = {
   userId: string
@@ -23,6 +24,37 @@ export type CommunitySharePreviewInput = {
   entryPrice?: string | number | null
   exitPrice?: string | number | null
   tradeDate?: string | null
+  /**
+   * Linked clip for Feed parity (`trades.reels`).
+   * Pass a real ReelRow in edit mode, or `true` when a pending reel file
+   * is attached before upload (preview stub).
+   */
+  attachedReel?: ReelRow | true | null
+}
+
+/** Minimal reel join shape so `postAttachedReel` / View Clip badge match Feed. */
+export function buildCommunitySharePreviewReelStub(
+  userId: string,
+  tradeId = "community-preview"
+): Pick<
+  ReelRow,
+  | "id"
+  | "user_id"
+  | "video_url"
+  | "thumbnail_url"
+  | "duration_seconds"
+  | "trade_id"
+  | "visibility"
+> {
+  return {
+    id: "community-preview-reel",
+    user_id: userId,
+    video_url: "preview",
+    thumbnail_url: "",
+    duration_seconds: null,
+    trade_id: tradeId,
+    visibility: "public",
+  }
 }
 
 function parseNumericField(value: string | number): number | null {
@@ -51,10 +83,18 @@ export function buildCommunitySharePreviewPost(
     isPro: input.isPro,
   })
 
+  const tradeId = "community-preview"
+  const attachedReel =
+    input.attachedReel === true
+      ? buildCommunitySharePreviewReelStub(input.userId, tradeId)
+      : input.attachedReel && typeof input.attachedReel === "object"
+        ? input.attachedReel
+        : null
+
   return {
     id: "community-preview",
     user_id: input.userId,
-    trade_id: "community-preview",
+    trade_id: tradeId,
     created_at: new Date().toISOString(),
     pnl,
     rr,
@@ -76,6 +116,8 @@ export function buildCommunitySharePreviewPost(
       entry_price: entryPrice,
       exit_price: exitPrice,
       trade_date: input.tradeDate ?? null,
+      // Same join shape the Feed uses so `postAttachedReel` finds the clip.
+      ...(attachedReel ? { reels: attachedReel } : {}),
     },
   }
 }

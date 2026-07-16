@@ -406,7 +406,7 @@ export default function Calendar({
                         ) : null}
                       </div>
                       {modeLower !== "backtest" && accountLineWithType ? (
-                        <p className="mt-1 text-xs text-gray-500">
+                        <p className="mt-1 text-xs text-gray-400">
                           {accountLineWithType}
                         </p>
                       ) : null}
@@ -497,7 +497,7 @@ export default function Calendar({
                     ) : null}
                   </div>
                   {modeLower !== "backtest" && accountLineWithType ? (
-                    <p className="mt-2 text-xs text-gray-500">
+                    <p className="mt-2 text-xs text-gray-400">
                       {accountLineWithType}
                     </p>
                   ) : null}

@@ -23,7 +23,7 @@ type TradingReportModalProps = {
 function MetricCell({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border border-white/10 bg-white/5 p-3">
-      <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500">
+      <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
         {label}
       </p>
       <p className="mt-1 text-sm font-semibold tabular-nums text-white md:text-base">
@@ -66,7 +66,7 @@ export default function TradingReportModal({
     >
       <div className="space-y-6">
         <header className="space-y-2 border-b border-white/10 pb-4 pr-12">
-          <p className="text-xs font-medium uppercase tracking-wider text-blue-300/90">
+          <p className="text-xs font-medium uppercase tracking-wider text-blue-300">
             Intelligence Report
           </p>
           <h2 className="text-xl font-semibold text-white md:text-2xl">
@@ -85,7 +85,7 @@ export default function TradingReportModal({
                 className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition md:text-sm ${
                   periodKey === option.key
                     ? "border-blue-400/60 bg-blue-500/20 text-white"
-                    : "border-white/10 bg-white/5 text-gray-300 hover:bg-white/10"
+                    : "border-white/10 bg-white/5 text-gray-200 hover:bg-white/10"
                 }`}
               >
                 {option.label}
@@ -101,7 +101,7 @@ export default function TradingReportModal({
         ) : (
           <>
             <section className={`${dashboardInsightCardClass} space-y-2`}>
-              <h3 className="text-sm font-semibold text-gray-200">Summary</h3>
+              <h3 className="text-sm font-semibold text-white">Summary</h3>
               <p className="text-sm leading-relaxed text-gray-300">
                 {report.executiveSummary}
               </p>
@@ -109,7 +109,7 @@ export default function TradingReportModal({
 
             {metrics ? (
               <section className="space-y-3">
-                <h3 className="text-sm font-semibold text-gray-200">Key Metrics</h3>
+                <h3 className="text-sm font-semibold text-white">Key Metrics</h3>
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
                   <MetricCell label="Net P&L" value={formatMetricPnl(metrics.netPnl)} />
                   <MetricCell
@@ -239,7 +239,7 @@ export default function TradingReportModal({
             ) : null}
 
             <section className={`${dashboardInsightCardClass} space-y-2`}>
-              <h3 className="text-sm font-semibold text-gray-200">Key Takeaway</h3>
+              <h3 className="text-sm font-semibold text-white">Key Takeaway</h3>
               <p className="text-sm leading-relaxed text-gray-300">{report.keyTakeaway}</p>
             </section>
           </>

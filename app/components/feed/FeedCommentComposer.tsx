@@ -82,7 +82,7 @@ function FeedCommentComposer({
           onClick={stopPropagation}
           onFocus={stopPropagation}
           onKeyDown={handleKeyDown}
-          className="flex-1 min-w-0 p-2 bg-[#1e293b] text-white rounded-lg border border-gray-600 text-sm placeholder:text-gray-500"
+          className="flex-1 min-w-0 p-2 bg-[#1e293b] text-white rounded-lg border border-gray-600 text-sm placeholder:text-gray-400"
         />
         <button
           type="button"

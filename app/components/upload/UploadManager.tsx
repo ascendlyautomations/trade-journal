@@ -42,7 +42,7 @@ function UploadJobRow({ job }: { job: UploadJob }) {
             ✓
           </span>
         ) : isQueued ? (
-          <span className="shrink-0 text-[10px] font-medium uppercase tracking-wide text-gray-500">
+          <span className="shrink-0 text-[10px] font-medium uppercase tracking-wide text-gray-400">
             Queued
           </span>
         ) : (

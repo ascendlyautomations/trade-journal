@@ -115,7 +115,7 @@ function CsvSupportForm() {
         value={brokerName}
         onChange={(e) => setBrokerName(e.target.value)}
         placeholder="e.g. Tradovate, NinjaTrader, TopStep"
-        className="mb-4 w-full rounded-xl border border-white/10 bg-[#111827] px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-400"
+        className="mb-4 w-full rounded-xl border border-white/10 bg-[#111827] px-4 py-3 text-sm text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400"
         required
       />
       <datalist id="csv-support-brokers">

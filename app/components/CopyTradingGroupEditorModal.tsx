@@ -20,7 +20,7 @@ type CopyTradingGroupEditorModalProps = {
 }
 
 const inputClass =
-  "mt-1.5 w-full rounded-lg border border-white/10 bg-[#0f172a] p-2.5 text-white placeholder:text-gray-500 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
+  "mt-1.5 w-full rounded-lg border border-white/10 bg-[#0f172a] p-2.5 text-white placeholder:text-gray-400 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30"
 
 export default function CopyTradingGroupEditorModal({
   open,
@@ -138,7 +138,7 @@ export default function CopyTradingGroupEditorModal({
       <div className="mt-5 flex min-h-0 flex-1 flex-col pb-2">
         <p className="shrink-0 text-sm font-medium text-gray-200">Trading accounts</p>
         {selectableAccounts.length === 0 ? (
-          <p className="mt-2 text-sm text-gray-500">
+          <p className="mt-2 text-sm text-gray-400">
             Create trading accounts first, then link them to a copy group.
           </p>
         ) : (

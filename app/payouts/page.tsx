@@ -69,17 +69,17 @@ function PayoutRequestCard({ row }: { row: AffiliatePayoutRequestRow }) {
       </div>
       <dl className="mt-2 grid gap-1 text-xs text-gray-400 sm:grid-cols-2">
         <div>
-          <dt className="inline text-gray-500">Requested </dt>
+          <dt className="inline text-gray-400">Requested </dt>
           <dd className="inline text-gray-300">{formatTs(row.requested_at)}</dd>
         </div>
         <div>
-          <dt className="inline text-gray-500">Paid </dt>
+          <dt className="inline text-gray-400">Paid </dt>
           <dd className="inline text-gray-300">{formatTs(row.paid_at)}</dd>
         </div>
       </dl>
       {row.status === "rejected" && row.admin_notes?.trim() ? (
         <p className="mt-2 border-t border-white/10 pt-2 text-xs text-gray-400">
-          <span className="text-gray-500">Note: </span>
+          <span className="text-gray-400">Note: </span>
           {row.admin_notes.trim()}
         </p>
       ) : null}
@@ -294,7 +294,7 @@ export default function AffiliatePayoutsPage() {
                 invoices). Payout request statuses reserve or consume balance, not Stripe settlement timing. You
                 need at least{" "}
                 <strong className="text-gray-200">${minimumPayout.toFixed(0)}</strong>{" "}
-                <span className="text-gray-500">available</span> before you can submit a payout request.
+                <span className="text-gray-400">available</span> before you can submit a payout request.
               </p>
             </div>
             <button
@@ -352,7 +352,7 @@ export default function AffiliatePayoutsPage() {
                   <p className="mt-1 text-2xl font-bold tabular-nums text-emerald-400">
                     ${formatMoney(totalEarnings)}
                   </p>
-                  <p className="mt-1 text-xs text-gray-500">
+                  <p className="mt-1 text-xs text-gray-400">
                     Cumulative commission from paid TraxPro invoices. Matches the Affiliate dashboard.
                   </p>
                   <p className="mt-2 border-t border-white/10 pt-2 text-xs text-gray-400">
@@ -365,7 +365,7 @@ export default function AffiliatePayoutsPage() {
                   <p className="mt-1 text-2xl font-bold tabular-nums text-blue-300">
                     ${formatMoney(earningsSinceLastPayout)}
                   </p>
-                  <p className="mt-2 text-xs text-gray-500">
+                  <p className="mt-2 text-xs text-gray-400">
                     Total earnings minus amounts on <strong className="text-gray-400">approved</strong> or{" "}
                     <strong className="text-gray-400">paid</strong> payout requests (${formatMoney(consumedApprovedAndPaid)}{" "}
                     consumed).
@@ -376,7 +376,7 @@ export default function AffiliatePayoutsPage() {
                   <p className="mt-1 text-2xl font-bold tabular-nums text-white">
                     ${formatMoney(availableToRequest)}
                   </p>
-                  <p className="mt-2 text-xs text-gray-500">
+                  <p className="mt-2 text-xs text-gray-400">
                     Earnings since last payout (${formatMoney(earningsSinceLastPayout)}) minus{" "}
                     <strong className="text-gray-400">pending</strong> requests (${formatMoney(pendingReserved)}). Approved
                     (${formatMoney(approvedReserved)}) is already deducted in “earnings since last payout”.
@@ -387,7 +387,7 @@ export default function AffiliatePayoutsPage() {
                   <p className="mt-1 text-2xl font-bold tabular-nums text-amber-200">
                     ${formatMoney(minimumPayout)}
                   </p>
-                  <p className="mt-2 text-xs text-gray-500">
+                  <p className="mt-2 text-xs text-gray-400">
                     You need at least this much <strong className="text-gray-300">available</strong> before the Request
                     payout button unlocks.
                   </p>
@@ -395,7 +395,7 @@ export default function AffiliatePayoutsPage() {
               </div>
 
               {payoutBalance?.lastPaidAt ? (
-                <p className="mb-6 text-xs text-gray-500">
+                <p className="mb-6 text-xs text-gray-400">
                   Last paid payout request:{" "}
                   <span className="tabular-nums text-gray-400">{formatTs(payoutBalance.lastPaidAt)}</span>
                 </p>
@@ -462,7 +462,7 @@ export default function AffiliatePayoutsPage() {
                   Request payout
                 </button>
                 {!canRequestPayout && affiliateRowId ? (
-                  <span className="text-xs text-gray-500">
+                  <span className="text-xs text-gray-400">
                     {!payoutSetupComplete
                       ? "Finish Stripe payout setup on the Affiliate Dashboard first."
                       : balanceRpcError
@@ -484,7 +484,7 @@ export default function AffiliatePayoutsPage() {
                 {payoutRows.length === 0 ? (
                   <div className="rounded-xl border border-white/10 bg-white/5 p-10 text-center">
                     <p className="text-sm font-medium text-gray-300">No payout requests yet</p>
-                    <p className="mt-2 text-sm text-gray-500">
+                    <p className="mt-2 text-sm text-gray-400">
                       When you submit a request, it will appear here with status updates.
                     </p>
                   </div>

@@ -211,7 +211,7 @@ export default function CopyTradingGroupsSection({
             <ProGate isPro={false} />
           </div>
         ) : loading ? (
-          <p className="mt-4 text-sm text-gray-500">{LOADING_COPY.copyTradingGroups}</p>
+          <p className="mt-4 text-sm text-gray-400">{LOADING_COPY.copyTradingGroups}</p>
         ) : error ? (
           <p className="mt-4 text-sm text-red-300">{error}</p>
         ) : groups.length === 0 ? (
@@ -234,7 +234,7 @@ export default function CopyTradingGroupsSection({
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
                       <h4 className="text-base font-semibold text-white">{group.name}</h4>
-                      <p className="mt-1 text-xs text-gray-500">
+                      <p className="mt-1 text-xs text-gray-400">
                         {linkedAccounts.length} linked account
                         {linkedAccounts.length === 1 ? "" : "s"}
                       </p>

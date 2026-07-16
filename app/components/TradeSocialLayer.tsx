@@ -803,7 +803,7 @@ export function TradeSocialCommentsSection({
               }
             }}
             placeholder={replyTarget ? "Add to reply…" : "Add a comment…"}
-            className="flex-1 min-w-0 rounded-lg border border-gray-600 bg-[#1e293b] p-2 text-sm text-white placeholder:text-gray-500"
+            className="flex-1 min-w-0 rounded-lg border border-gray-600 bg-[#1e293b] p-2 text-sm text-white placeholder:text-gray-400"
           />
 
           <button

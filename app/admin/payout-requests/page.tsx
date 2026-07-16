@@ -294,19 +294,19 @@ export default function AdminPayoutRequestsPage() {
               <span className="text-gray-400">
                 Pending: <span className="font-semibold tabular-nums text-amber-200">{counts.pending}</span>
               </span>
-              <span className="text-gray-600">·</span>
+              <span className="text-gray-400">·</span>
               <span className="text-gray-400">
                 Approved: <span className="font-semibold tabular-nums text-blue-200">{counts.approved}</span>
               </span>
-              <span className="text-gray-600">·</span>
+              <span className="text-gray-400">·</span>
               <span className="text-gray-400">
                 Paid: <span className="font-semibold tabular-nums text-emerald-200">{counts.paid}</span>
               </span>
-              <span className="text-gray-600">·</span>
+              <span className="text-gray-400">·</span>
               <span className="text-gray-400">
                 Rejected: <span className="font-semibold tabular-nums text-red-200/90">{counts.rejected}</span>
               </span>
-              <span className="text-gray-600">·</span>
+              <span className="text-gray-400">·</span>
               <span className="text-gray-400">
                 Total: <span className="font-semibold tabular-nums text-white">{counts.all}</span>
               </span>
@@ -340,7 +340,7 @@ export default function AdminPayoutRequestsPage() {
             {loading ? (
               <p className="p-6 text-sm text-gray-400">Loading…</p>
             ) : rows.length === 0 ? (
-              <p className="p-6 text-sm text-gray-500">No {tab === "all" ? "" : tab} payout requests.</p>
+              <p className="p-6 text-sm text-gray-400">No {tab === "all" ? "" : tab} payout requests.</p>
             ) : (
               <ul className="divide-y divide-white/10">
                 {rows.map((row) => (
@@ -352,7 +352,7 @@ export default function AdminPayoutRequestsPage() {
                     >
                       <div className="min-w-0">
                         <p className="truncate font-medium text-white">{userLabel(row)}</p>
-                        <p className="truncate text-xs text-gray-500 font-mono">{row.user_id}</p>
+                        <p className="truncate text-xs text-gray-400 font-mono">{row.user_id}</p>
                       </div>
                       <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-400">
                         <span className="font-semibold tabular-nums text-emerald-200">${formatMoney(row.amount)}</span>
@@ -398,41 +398,41 @@ export default function AdminPayoutRequestsPage() {
 
             <dl className="mt-4 space-y-3 text-sm">
               <div>
-                <dt className="text-xs text-gray-500">Request ID</dt>
+                <dt className="text-xs text-gray-400">Request ID</dt>
                 <dd className="break-all font-mono text-xs text-gray-300">{selected.id}</dd>
               </div>
               <div>
-                <dt className="text-xs text-gray-500">User ID</dt>
+                <dt className="text-xs text-gray-400">User ID</dt>
                 <dd className="break-all font-mono text-xs text-gray-300">{selected.user_id}</dd>
               </div>
               <div>
-                <dt className="text-xs text-gray-500">Affiliate code</dt>
+                <dt className="text-xs text-gray-400">Affiliate code</dt>
                 <dd className="font-mono text-emerald-200">
                   {selected.affiliate_code || selected.profile_referral_code || "—"}
                 </dd>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
-                  <dt className="text-xs text-gray-500">Username</dt>
+                  <dt className="text-xs text-gray-400">Username</dt>
                   <dd className="text-gray-200">{selected.username || "—"}</dd>
                 </div>
                 <div>
-                  <dt className="text-xs text-gray-500">Name</dt>
+                  <dt className="text-xs text-gray-400">Name</dt>
                   <dd className="text-gray-200">{selected.name || "—"}</dd>
                 </div>
               </div>
               {selected.referral_earnings != null && Number.isFinite(selected.referral_earnings) ? (
                 <div>
-                  <dt className="text-xs text-gray-500">Recorded referral earnings (profile)</dt>
+                  <dt className="text-xs text-gray-400">Recorded referral earnings (profile)</dt>
                   <dd className="tabular-nums text-emerald-200">${formatMoney(selected.referral_earnings)}</dd>
                 </div>
               ) : null}
               <div>
-                <dt className="text-xs text-gray-500">Amount</dt>
+                <dt className="text-xs text-gray-400">Amount</dt>
                 <dd className="text-xl font-semibold tabular-nums text-white">${formatMoney(selected.amount)}</dd>
               </div>
               <div>
-                <dt className="text-xs text-gray-500">Status</dt>
+                <dt className="text-xs text-gray-400">Status</dt>
                 <dd>
                   <span
                     className={`inline-block rounded-full border px-2.5 py-0.5 text-xs font-medium uppercase ${statusBadgeClass(selected.status)}`}
@@ -442,24 +442,24 @@ export default function AdminPayoutRequestsPage() {
                 </dd>
               </div>
               <div>
-                <dt className="text-xs text-gray-500">Requested</dt>
+                <dt className="text-xs text-gray-400">Requested</dt>
                 <dd className="text-xs text-gray-400">{formatTs(selected.requested_at)}</dd>
               </div>
               <div>
-                <dt className="text-xs text-gray-500">Reviewed</dt>
+                <dt className="text-xs text-gray-400">Reviewed</dt>
                 <dd className="text-xs text-gray-400">{formatTs(selected.reviewed_at)}</dd>
               </div>
               <div>
-                <dt className="text-xs text-gray-500">Paid</dt>
+                <dt className="text-xs text-gray-400">Paid</dt>
                 <dd className="text-xs text-gray-400">{formatTs(selected.paid_at)}</dd>
               </div>
               <div>
-                <dt className="text-xs text-gray-500">Stripe transfer</dt>
+                <dt className="text-xs text-gray-400">Stripe transfer</dt>
                 <dd className="break-all font-mono text-xs text-gray-300">
                   {selected.stripe_transfer_id || selected.payout_reference || "—"}
                 </dd>
                 {selected.status === "paid" && (selected.stripe_transfer_id || selected.payout_reference) ? (
-                  <p className="mt-1 text-xs text-gray-500">
+                  <p className="mt-1 text-xs text-gray-400">
                     Bank deposit runs on Stripe&apos;s payout schedule for the connected account (not instant from
                     this app).
                   </p>
@@ -475,12 +475,12 @@ export default function AdminPayoutRequestsPage() {
                   onChange={(e) => setNotesDraft(e.target.value)}
                   disabled={actionBusy}
                   rows={3}
-                  className="mt-1 w-full resize-none rounded-lg border border-white/15 bg-[#0f172a]/80 px-3 py-2 text-sm text-white placeholder:text-gray-600 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/40 disabled:opacity-50"
+                  className="mt-1 w-full resize-none rounded-lg border border-white/15 bg-[#0f172a]/80 px-3 py-2 text-sm text-white placeholder:text-gray-400 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/40 disabled:opacity-50"
                   placeholder="Internal notes for this request"
                 />
               </label>
               {selected.status === "approved" ? (
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-gray-400">
                   Mark paid sends funds to the affiliate&apos;s Stripe connected account via a Transfer. Stripe
                   handles paying out to their bank on its usual schedule.
                 </p>
@@ -525,7 +525,7 @@ export default function AdminPayoutRequestsPage() {
                 ) : null}
               </div>
               {selected.status === "paid" || selected.status === "rejected" ? (
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-gray-400">
                   This request is closed. Use Refresh after any external DB changes.
                 </p>
               ) : null}

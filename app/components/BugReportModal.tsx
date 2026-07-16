@@ -236,7 +236,7 @@ export default function BugReportModal({
               />
             </label>
 
-            <div className="mb-4 rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-xs text-gray-500">
+            <div className="mb-4 rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-xs text-gray-400">
               <p>
                 <span className="text-gray-400">Page:</span> {pageUrl || "—"}
               </p>

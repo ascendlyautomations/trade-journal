@@ -12,6 +12,11 @@ import {
   XAxis,
   YAxis,
 } from "recharts"
+import {
+  chartAxisTick,
+  chartCartesianGridProps,
+  chartTooltipStyles,
+} from "@/lib/chartTheme"
 import { supabase } from "@/lib/supabaseClient"
 import {
   buildPropfirmEquityCurveData,
@@ -64,6 +69,7 @@ import PayoutSetupModal, {
   type PayoutSetupValues,
 } from "@/app/components/PayoutSetupModal"
 import PropFirmPayoutHistoryModal from "@/app/components/propfirm/PropFirmPayoutHistoryModal"
+import PropfirmProfitTargetProgressBar from "@/app/components/propfirm/PropfirmProfitTargetProgressBar"
 import { useUserProfile } from "@/lib/useUserProfile"
 import {
   buildPayoutCycleContext,
@@ -234,11 +240,10 @@ function PropfirmEquityCurve({ data }: { data: PropfirmEquityCurvePoint[] }) {
               data={data}
               margin={{ top: 4, right: 12, left: 8, bottom: 10 }}
             >
-              <CartesianGrid stroke="#334155" strokeDasharray="3 3" />
+              <CartesianGrid {...chartCartesianGridProps} strokeDasharray="3 3" />
               <XAxis
                 dataKey="date"
-                stroke="#94a3b8"
-                tick={{ fill: "#94a3b8", fontSize: 11 }}
+                {...chartAxisTick(11)}
                 tickFormatter={(value) => {
                   const label = String(value)
                   if (label === "Start") return label
@@ -250,8 +255,7 @@ function PropfirmEquityCurve({ data }: { data: PropfirmEquityCurvePoint[] }) {
                 minTickGap={20}
               />
               <YAxis
-                stroke="#94a3b8"
-                tick={{ fill: "#94a3b8", fontSize: 11 }}
+                {...chartAxisTick(11)}
                 tickFormatter={(value) => formatPropfirmUsd(Number(value))}
                 width={72}
                 domain={yAxisDomain}
@@ -266,12 +270,11 @@ function PropfirmEquityCurve({ data }: { data: PropfirmEquityCurvePoint[] }) {
                   return [formatPropfirmUsd(Number(value)), "Day P&L"]
                 }}
                 labelFormatter={(label) => `Day: ${String(label)}`}
+                {...chartTooltipStyles}
                 contentStyle={{
-                  backgroundColor: "#0f172a",
-                  border: "1px solid rgba(255,255,255,0.12)",
+                  ...chartTooltipStyles.contentStyle,
                   borderRadius: "10px",
                 }}
-                labelStyle={{ color: "#94a3b8" }}
               />
               <Line
                 type="monotone"
@@ -1608,18 +1611,21 @@ export default function PropFirmPage() {
                   <span>Profit target (cycle)</span>
                   <span
                     className={`font-semibold tabular-nums ${
-                      progressPercent >= 100 ? "text-emerald-300" : "text-blue-300"
+                      cyclePnL < 0
+                        ? "text-red-400"
+                        : progressPercent >= 100
+                          ? "text-emerald-300"
+                          : "text-blue-300"
                     }`}
                   >
+                    {cyclePnL < 0 ? "-" : ""}
                     {progressPercent.toFixed(0)}%
                   </span>
                 </div>
-                <div className="h-2 w-full overflow-hidden rounded-full bg-white/10">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-blue-500 to-emerald-500 transition-[width] duration-300"
-                    style={{ width: `${progressPercent}%` }}
-                  />
-                </div>
+                <PropfirmProfitTargetProgressBar
+                  progressPercent={progressPercent}
+                  negative={cyclePnL < 0}
+                />
               </div>
 
               <div>

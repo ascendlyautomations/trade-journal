@@ -2,7 +2,7 @@
 
 import type { ChangeEvent } from "react"
 import Link from "next/link"
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { supabase } from "../../../lib/supabaseClient"
 import { feedbackPresets } from "@/lib/feedbackPresets"
@@ -95,6 +95,7 @@ import {
   removeFeedReelFromSessionsForUser,
   type FeedSessionSnapshot,
 } from "@/lib/feedSessionCache"
+import { readExploreSession } from "@/lib/exploreSessionCache"
 import { ConfirmModal, FeedbackModal, useDeleteReelConfirmation, useFeedbackPopup } from "@/app/components/ui"
 import { useModalScrollLock } from "@/app/components/ui/modalLayout"
 import EmptyState from "@/app/components/ui/EmptyState"
@@ -170,7 +171,11 @@ function FeedPageContent() {
   const pageRef = useRef(0)
   const loadingRef = useRef(false)
   const hasMoreRef = useRef(true)
-  const [mode, setMode] = useState<"global" | "following">("following")
+  const [mode, setMode] = useState<"global" | "following">("global")
+  const [feedDefaultModeReady, setFeedDefaultModeReady] = useState(false)
+  const userPickedModeRef = useRef(false)
+  const defaultModeResolvedRef = useRef(false)
+  const defaultModeUserIdRef = useRef<string | null>(null)
   const [contentType, setContentType] = useState<FeedContentFilter>("all")
   const mergeBufferRef = useRef<FeedItem[]>([])
   const tradePageRef = useRef(0)
@@ -239,6 +244,46 @@ function FeedPageContent() {
     feedRequestGenerationRef.current += 1
     return feedRequestGenerationRef.current
   }, [])
+
+  const handleFeedModeChange = useCallback((next: "global" | "following") => {
+    userPickedModeRef.current = true
+    defaultModeResolvedRef.current = true
+    setMode(next)
+  }, [])
+
+  useLayoutEffect(() => {
+    if (!user?.id) {
+      setFeedDefaultModeReady(false)
+      defaultModeUserIdRef.current = null
+      return
+    }
+
+    if (defaultModeUserIdRef.current !== user.id) {
+      defaultModeUserIdRef.current = user.id
+      defaultModeResolvedRef.current = false
+      userPickedModeRef.current = false
+      setMode("global")
+    }
+
+    if (userPickedModeRef.current) {
+      defaultModeResolvedRef.current = true
+      setFeedDefaultModeReady(true)
+      return
+    }
+
+    if (!defaultModeResolvedRef.current) {
+      const explore = readExploreSession()
+      if (explore?.currentUserId === user.id) {
+        followingIdsRef.current = explore.followingIds
+        if (explore.followingIds.length > 0) {
+          setMode("following")
+        }
+        defaultModeResolvedRef.current = true
+      }
+    }
+
+    setFeedDefaultModeReady(true)
+  }, [user?.id])
 
   const buildFeedSnapshot = useCallback(
     (
@@ -854,6 +899,7 @@ function FeedPageContent() {
       loadingRef.current = true
 
       if (currentPage === 0 && isActive()) {
+        feedEmptyStateRef.current = null
         setFeedEmptyState(null)
         setFeedLoadError(null)
       }
@@ -866,6 +912,18 @@ function FeedPageContent() {
         if (mode === "following") {
           setFollowingStoryUserIds([...new Set([...followingIds, userId])])
         }
+
+        // Prefer explore/following cache when present; otherwise resolve once from this
+        // fetch (already required for scoped feed queries) — no extra DB round-trip.
+        if (!defaultModeResolvedRef.current && !userPickedModeRef.current) {
+          defaultModeResolvedRef.current = true
+          if (followingIds.length > 0 && mode === "global") {
+            if (!isActive()) return
+            setMode("following")
+            return
+          }
+        }
+
         let list: FeedItem[] = []
 
         if (contentType === "all") {
@@ -907,6 +965,7 @@ function FeedPageContent() {
             if (!isActive()) return
             hasMoreRef.current = false
             setHasMore(false)
+            feedEmptyStateRef.current = "following_nobody"
             setFeedEmptyState("following_nobody")
             hasLoadedFeedRef.current = true
             setFeedReady(true)
@@ -924,6 +983,12 @@ function FeedPageContent() {
             hasMoreRef.current = false
             setHasMore(false)
           }
+
+          // All-tab empty: no merged items after every stream is exhausted (or empty).
+          if (currentPage === 0 && list.length === 0) {
+            feedEmptyStateRef.current = "no_posts"
+            setFeedEmptyState("no_posts")
+          }
         } else if (contentType === "trades") {
           const result = await fetchTradeFeedBatch(supabase, {
             scope: mode,
@@ -938,6 +1003,7 @@ function FeedPageContent() {
             if (!isActive()) return
             hasMoreRef.current = false
             setHasMore(false)
+            feedEmptyStateRef.current = "following_nobody"
             setFeedEmptyState("following_nobody")
             hasLoadedFeedRef.current = true
             setFeedReady(true)
@@ -965,6 +1031,7 @@ function FeedPageContent() {
             if (!isActive()) return
             hasMoreRef.current = false
             setHasMore(false)
+            feedEmptyStateRef.current = "following_nobody"
             setFeedEmptyState("following_nobody")
             hasLoadedFeedRef.current = true
             setFeedReady(true)
@@ -992,6 +1059,7 @@ function FeedPageContent() {
             if (!isActive()) return
             hasMoreRef.current = false
             setHasMore(false)
+            feedEmptyStateRef.current = "following_nobody"
             setFeedEmptyState("following_nobody")
             hasLoadedFeedRef.current = true
             setFeedReady(true)
@@ -1019,6 +1087,7 @@ function FeedPageContent() {
             if (!isActive()) return
             hasMoreRef.current = false
             setHasMore(false)
+            feedEmptyStateRef.current = "following_nobody"
             setFeedEmptyState("following_nobody")
             hasLoadedFeedRef.current = true
             setFeedReady(true)
@@ -1042,15 +1111,20 @@ function FeedPageContent() {
         postsRef.current = painted
         setPosts(painted)
 
+        if (currentPage === 0 && list.length === 0) {
+          // Keep ref in sync so session snapshots never persist an empty feed
+          // without an empty-state marker (which rendered as a blank All tab).
+          if (feedEmptyStateRef.current == null) {
+            feedEmptyStateRef.current = "no_posts"
+            setFeedEmptyState("no_posts")
+          }
+        }
+
         const { enriched, likesMap, commentsMap } = await loadEngagementForPosts(
           list,
           { id: userId }
         )
         if (!isActive()) return
-
-        if (currentPage === 0 && list.length === 0) {
-          setFeedEmptyState("no_posts")
-        }
 
         const enrichedById = new Map(
           enriched.map((p) => [String(p.id), p] as const)
@@ -1072,6 +1146,7 @@ function FeedPageContent() {
 
         persistFeedSnapshot(nextPosts, mergedLikes, mergedComments, {
           hasLoaded: hasLoadedFeedRef.current,
+          feedEmptyState: feedEmptyStateRef.current,
         }, requestGen)
 
         const nextPage =
@@ -1114,6 +1189,7 @@ function FeedPageContent() {
     setLikesByPost({})
     setCommentsByPost({})
     setFeedEmptyState(null)
+    feedEmptyStateRef.current = null
     setFeedLoadError(null)
     setPage(0)
     setHasMore(true)
@@ -1136,6 +1212,7 @@ function FeedPageContent() {
     setPosts(cached.posts)
     setLikesByPost(cached.likesByPost)
     setCommentsByPost(cached.commentsByPost)
+    feedEmptyStateRef.current = cached.feedEmptyState
     setFeedEmptyState(cached.feedEmptyState)
     setFeedLoadError(null)
     setPage(cached.page)
@@ -1164,7 +1241,7 @@ function FeedPageContent() {
   }, [])
 
   useEffect(() => {
-    if (!user?.id) return
+    if (!user?.id || !feedDefaultModeReady) return
 
     const feedInitKey = `${user.id}:${mode}:${contentType}`
     if (feedInitKeyRef.current === feedInitKey && hasLoadedFeedRef.current) {
@@ -1187,6 +1264,7 @@ function FeedPageContent() {
     user?.id,
     mode,
     contentType,
+    feedDefaultModeReady,
     loadPosts,
     resetFeedState,
     restoreFeedSession,
@@ -2598,7 +2676,7 @@ function FeedPageContent() {
       <ConfirmModal {...deleteReelConfirmProps} />
       <div className="flex justify-center px-4 py-6 sm:py-8 pb-10">
         <div className="w-full max-w-xl space-y-6">
-          <FeedModeToggle mode={mode} onModeChange={setMode} />
+          <FeedModeToggle mode={mode} onModeChange={handleFeedModeChange} />
           <FeedContentToggle
             contentType={contentType}
             onContentTypeChange={setContentType}
@@ -2637,7 +2715,7 @@ function FeedPageContent() {
                 </button>
               }
             />
-          ) : feedReady && !loading && uniquePosts.length === 0 && feedEmptyState ? (
+          ) : feedReady && !loading && uniquePosts.length === 0 ? (
             <EmptyState
               title={
                 feedEmptyState === "following_nobody"

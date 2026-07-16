@@ -164,7 +164,7 @@ export default function PayoutSetupModal({
           className={INPUT_CLASS}
         />
         {balanceAfter != null ? (
-          <span className="mt-1 block text-xs text-gray-500">
+          <span className="mt-1 block text-xs text-gray-400">
             New current balance: {formatPropfirmUsd(balanceAfter)}
           </span>
         ) : null}

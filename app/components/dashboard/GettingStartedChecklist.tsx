@@ -74,7 +74,7 @@ function ChecklistItemRow({
   const labelRow = (
     <span
       className={`flex min-w-0 flex-1 items-start gap-3 text-sm md:text-base ${
-        item.complete ? "text-gray-500" : "text-gray-200"
+        item.complete ? "text-gray-400" : "text-gray-200"
       }`}
     >
       <span className="mt-0.5 shrink-0 text-base leading-none" aria-hidden>

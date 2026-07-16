@@ -509,7 +509,7 @@ export default function TradeAccountPicker({
 
       <div className="max-h-60 overflow-y-auto overscroll-contain">
         {copyGroups.length === 0 ? (
-          <div className="px-3 py-2 text-sm text-gray-500">
+          <div className="px-3 py-2 text-sm text-gray-400">
             No copy trading groups yet.
           </div>
         ) : (

@@ -369,7 +369,7 @@ export default function AffiliateDashboard() {
                   <p className="mt-1 text-2xl font-bold text-emerald-400">
                     ${recordedEarnings.toFixed(2)}
                   </p>
-                  <p className="mt-2 text-xs text-gray-500">
+                  <p className="mt-2 text-xs text-gray-400">
                     {Math.round(COMMISSION_RATE * 100)}% of paid TraxPro invoices, recorded from Stripe
                     commissions.
                   </p>
@@ -425,7 +425,7 @@ export default function AffiliateDashboard() {
                   Share your link
                 </h2>
                 <>
-                  <p className="mt-1 text-xs text-gray-500">Your code</p>
+                  <p className="mt-1 text-xs text-gray-400">Your code</p>
                   <p className="mt-0.5 font-mono text-lg font-semibold text-white">{referralCode}</p>
                   <p className="mt-4 text-sm text-gray-400">Referral link</p>
                   <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -478,7 +478,7 @@ export default function AffiliateDashboard() {
                               {referredSubscriberStatusLabel(u.status)}
                             </span>
                             <div className="text-right">
-                              <p className="text-xs text-gray-500">Commission earned</p>
+                              <p className="text-xs text-gray-400">Commission earned</p>
                               <p
                                 className={`text-sm font-semibold tabular-nums ${
                                   u.commissionEarned > 0 ? "text-emerald-400" : "text-gray-400"

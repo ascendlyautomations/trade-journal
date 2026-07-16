@@ -220,7 +220,7 @@ export default function AdminSupportPage() {
                       </div>
                     </div>
                     <p className="mt-1 line-clamp-2 text-sm text-gray-300">{previewMessage(row.message)}</p>
-                    <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500">
+                    <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-gray-400">
                       <span className="truncate">{row.email || row.user_id || "Unknown user"}</span>
                       <span className="shrink-0 tabular-nums">
                         {row.created_at ? new Date(row.created_at).toLocaleString() : "—"}

@@ -1,6 +1,7 @@
 "use client"
 
 import DashboardWidgetEmptyState from "@/app/components/dashboard/DashboardWidgetEmptyState"
+import { dashboardWidgetSectionTitleClass } from "@/app/components/dashboard/dashboardInsightStyles"
 import { formatCurrency } from "@/lib/formatCurrency"
 
 export type DashboardMaxDrawdownProps = {
@@ -20,7 +21,7 @@ export default function DashboardMaxDrawdown({
   if (variant === "compact") {
     return (
       <div className="rounded-xl border border-white/10 bg-white/10 p-2.5 backdrop-blur-md md:p-4">
-        <h3 className="mb-1.5 text-[11px] text-gray-300 md:mb-2 md:text-sm">Max Drawdown</h3>
+        <h3 className={dashboardWidgetSectionTitleClass}>Max Drawdown</h3>
         {showEmpty ? (
           <p className="text-[11px] text-gray-400 md:text-sm">
             Upload your first trade to unlock this metric.

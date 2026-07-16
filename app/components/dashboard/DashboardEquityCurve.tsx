@@ -11,6 +11,12 @@ import {
   ResponsiveContainer,
 } from "recharts"
 import DashboardWidgetEmptyState from "@/app/components/dashboard/DashboardWidgetEmptyState"
+import {
+  chartAxisTick,
+  chartCartesianGridProps,
+  chartTooltipStyles,
+} from "@/lib/chartTheme"
+import { READABLE_SECONDARY_CLASS } from "@/lib/readableTextStyles"
 import { formatEST } from "@/lib/formatEST"
 import { formatCurrency } from "@/lib/formatCurrency"
 import { formatDecimal } from "@/lib/formatDisplay"
@@ -66,11 +72,10 @@ export default function DashboardEquityCurve({
               data={data}
               margin={{ top: 10, right: 12, left: 12, bottom: 20 }}
             >
-              <CartesianGrid stroke="#334155" />
+              <CartesianGrid {...chartCartesianGridProps} />
               <XAxis
                 dataKey="date"
-                stroke="#94a3b8"
-                tick={{ fill: "#94a3b8", fontSize: 11 }}
+                {...chartAxisTick(11)}
                 tickFormatter={(value) => {
                   const d = new Date(String(value))
                   if (Number.isNaN(d.getTime())) return String(value).slice(0, 10)
@@ -83,8 +88,7 @@ export default function DashboardEquityCurve({
                 height={48}
               />
               <YAxis
-                stroke="#94a3b8"
-                tick={{ fill: "#94a3b8", fontSize: 11 }}
+                {...chartAxisTick(11)}
                 tickFormatter={(value) =>
                   Number(value) < 0
                     ? `-$${Math.abs(Number(value)).toLocaleString(undefined, {
@@ -108,12 +112,7 @@ export default function DashboardEquityCurve({
                   const s = String(label)
                   return formatEST(s) || s
                 }}
-                contentStyle={{
-                  backgroundColor: "#0f172a",
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  borderRadius: "8px",
-                }}
-                labelStyle={{ color: "#94a3b8" }}
+                {...chartTooltipStyles}
               />
               <Line
                 type="monotone"
@@ -147,11 +146,10 @@ export default function DashboardEquityCurve({
             data={data}
             margin={{ top: 10, right: 20, left: 20, bottom: 20 }}
           >
-            <CartesianGrid stroke="#334155" />
+            <CartesianGrid {...chartCartesianGridProps} />
             <XAxis
               dataKey="date"
-              stroke="#94a3b8"
-              tick={{ fill: "#94a3b8", fontSize: 12 }}
+              {...chartAxisTick(12)}
               tickFormatter={(value) => {
                 const d = new Date(String(value))
                 if (Number.isNaN(d.getTime())) return String(value).slice(0, 10)
@@ -164,8 +162,7 @@ export default function DashboardEquityCurve({
               height={48}
             />
             <YAxis
-              stroke="#94a3b8"
-              tick={{ fill: "#94a3b8", fontSize: 12 }}
+              {...chartAxisTick(12)}
               tickFormatter={(value) =>
                 Number(value) < 0
                   ? `-$${Math.abs(Number(value)).toLocaleString(undefined, {
@@ -191,17 +188,12 @@ export default function DashboardEquityCurve({
                 const s = String(label)
                 return formatEST(s) || s
               }}
-              contentStyle={{
-                backgroundColor: "#0f172a",
-                border: "1px solid rgba(255,255,255,0.1)",
-                borderRadius: "8px",
-              }}
-              labelStyle={{ color: "#94a3b8" }}
+              {...chartTooltipStyles}
             />
             <Legend
               wrapperStyle={{ paddingTop: 8 }}
               formatter={(value) => (
-                <span className="text-gray-300 text-xs">{value}</span>
+                <span className={`text-xs ${READABLE_SECONDARY_CLASS}`}>{value}</span>
               )}
             />
             <Line

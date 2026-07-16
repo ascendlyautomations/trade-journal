@@ -656,7 +656,7 @@ export default function LoginPage() {
           </div>
         )}
 
-        <p className="mt-6 text-center text-xs text-gray-500 md:mt-4">
+        <p className="mt-6 text-center text-xs text-gray-400 md:mt-4">
           <a
             href="/privacy"
             className="text-gray-400 transition hover:text-gray-300 hover:underline"

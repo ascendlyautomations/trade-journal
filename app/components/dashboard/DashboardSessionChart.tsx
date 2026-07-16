@@ -8,12 +8,18 @@ import {
   ResponsiveContainer,
 } from "recharts"
 import DashboardWidgetEmptyState from "@/app/components/dashboard/DashboardWidgetEmptyState"
+import { dashboardWidgetSubtitleClass } from "@/app/components/dashboard/dashboardInsightStyles"
+import { chartTooltipStyles } from "@/lib/chartTheme"
 import { formatCurrency } from "@/lib/formatCurrency"
 import {
   DASHBOARD_SESSION_COLORS,
   DASHBOARD_SESSION_DISPLAY_ORDER,
   type DashboardSessionBucket,
 } from "@/lib/dashboardSessionBuckets"
+import {
+  READABLE_LABEL_CLASS,
+  READABLE_PRIMARY_CLASS,
+} from "@/lib/readableTextStyles"
 
 function formatNumber(value: number) {
   if (value === null || value === undefined) return "-"
@@ -60,7 +66,7 @@ export default function DashboardSessionChart({
       ) : (
       <div className="flex flex-1 flex-col gap-3 md:gap-4">
         <div className="flex min-h-[220px] flex-col md:min-h-[240px]">
-          <p className="mb-1.5 text-[11px] text-gray-300 md:mb-2 md:text-sm">Trades by Session</p>
+          <p className={dashboardWidgetSubtitleClass}>Trades by Session</p>
           <div className="min-h-0 flex-1 w-full overflow-hidden">
             <ResponsiveContainer width="100%" height={240}>
               <PieChart>
@@ -80,18 +86,18 @@ export default function DashboardSessionChart({
                       fill={
                         DASHBOARD_SESSION_COLORS[
                           entry.name as DashboardSessionBucket
-                        ] ?? "#94a3b8"
+                        ] ?? "#9ca3af"
                       }
                     />
                   ))}
                 </Pie>
-                <Tooltip />
+                <Tooltip {...chartTooltipStyles} />
               </PieChart>
             </ResponsiveContainer>
           </div>
         </div>
         <div className="flex flex-col">
-          <p className="mb-1.5 text-[11px] text-gray-300 md:mb-2 md:text-sm">Session breakdown</p>
+          <p className={dashboardWidgetSubtitleClass}>Session breakdown</p>
           <div className="grid grid-cols-3 gap-1.5 md:gap-3">
             {DASHBOARD_SESSION_DISPLAY_ORDER.map((name) => {
               const s = sessionBuckets[name]
@@ -108,12 +114,13 @@ export default function DashboardSessionChart({
                   className="rounded-lg border border-white/10 bg-white/5 p-1.5 text-center text-[10px] md:p-3 md:text-sm"
                 >
                   <p className={`mb-1 font-semibold md:mb-2 ${titleColor}`}>{name}</p>
-                  <p className="text-gray-300">
-                    <span className="text-gray-400">Trades:</span>{" "}
+                  <p className={READABLE_PRIMARY_CLASS}>
+                    <span className={READABLE_LABEL_CLASS}>Trades:</span>{" "}
                     {formatNumber(s.totalTrades)}
                   </p>
-                  <p className="text-gray-300">
-                    <span className="text-gray-400">Win rate:</span> {wr.toFixed(1)}%
+                  <p className={READABLE_PRIMARY_CLASS}>
+                    <span className={READABLE_LABEL_CLASS}>Win rate:</span>{" "}
+                    {wr.toFixed(1)}%
                   </p>
                   <p
                     className={`mt-0.5 text-xs font-semibold tabular-nums md:mt-1 md:text-lg ${

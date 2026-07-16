@@ -135,7 +135,7 @@ export default function RoomNotificationSettingsSheet({
         </div>
 
         <div className="shrink-0 border-t border-white/10 px-4 py-3">
-          <p className="text-center text-xs text-gray-500">
+          <p className="text-center text-xs text-gray-400">
             Changes save instantly
           </p>
         </div>

@@ -127,7 +127,7 @@ export default function AffiliatePayoutRequestModal({
           <label className="block">
             <span className="text-xs text-gray-400">Amount (USD)</span>
             <div className="relative mt-1">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">$</span>
               <input
                 type="text"
                 inputMode="decimal"
@@ -135,7 +135,7 @@ export default function AffiliatePayoutRequestModal({
                 value={amountInput}
                 onChange={(e) => setAmountInput(e.target.value)}
                 disabled={busy}
-                className="w-full rounded-lg border border-white/15 bg-[#0f172a]/80 py-2 pl-7 pr-3 font-mono text-sm text-white placeholder:text-gray-600 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/40 disabled:opacity-50"
+                className="w-full rounded-lg border border-white/15 bg-[#0f172a]/80 py-2 pl-7 pr-3 font-mono text-sm text-white placeholder:text-gray-400 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/40 disabled:opacity-50"
                 placeholder={max >= min && min > 0 ? `${min.toFixed(2)} – ${max.toFixed(2)}` : "0.00"}
               />
             </div>
@@ -150,7 +150,7 @@ export default function AffiliatePayoutRequestModal({
           </button>
         </form>
 
-        <p className="mt-4 text-xs text-gray-500">
+        <p className="mt-4 text-xs text-gray-400">
           Requests are reviewed by the team. Amount must be between the minimum and your available balance.
         </p>
       </div>

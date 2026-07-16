@@ -242,7 +242,7 @@ export default function PostSetupImportModal({ open, onComplete }: Props) {
             Already using another journal? Bring your data with you in seconds.
           </p>
 
-          <p className="mb-2 mt-6 text-xs font-medium uppercase tracking-wide text-gray-500">
+          <p className="mb-2 mt-6 text-xs font-medium uppercase tracking-wide text-gray-400">
             Trading account
           </p>
           <TradeAccountPicker
@@ -266,7 +266,7 @@ export default function PostSetupImportModal({ open, onComplete }: Props) {
           </ol>
 
           <div className="mt-6 border-t border-white/10 pt-6">
-            <p className="mb-4 text-xs font-medium uppercase tracking-wide text-gray-500">
+            <p className="mb-4 text-xs font-medium uppercase tracking-wide text-gray-400">
               CSV upload
             </p>
             <CsvImportPanel

@@ -49,7 +49,7 @@ export default function FeedAchievementDetailMeta({
           {description}
         </p>
       ) : null}
-      <div className="space-y-0.5 pt-0.5 text-xs text-white/50">
+      <div className="space-y-0.5 pt-0.5 text-xs text-gray-400">
         <p>Unlocked {unlockDate}</p>
         {showPrivacy ? (
           <p>{achievement.is_public ? "Public" : "Private"}</p>

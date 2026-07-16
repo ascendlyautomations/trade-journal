@@ -26,13 +26,13 @@ export default function TradingReportsDashboardCard({
             <h2 className="text-sm font-semibold text-white">
               Trading Reports
             </h2>
-            <p className="mt-0.5 text-xs leading-snug text-gray-400">
+            <p className="mt-0.5 text-xs leading-snug text-gray-300">
               AI-powered summaries of your recent trading performance.
             </p>
           </div>
           <h2 className="hidden min-w-0 truncate text-sm font-semibold leading-snug text-white md:block lg:text-[0.9375rem]">
             <span>Trading Reports</span>
-            <span className="font-normal text-gray-400">
+            <span className="font-normal text-gray-300">
               , AI-powered summaries of your recent trading performance.
             </span>
           </h2>

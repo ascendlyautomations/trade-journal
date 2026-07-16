@@ -876,7 +876,7 @@ export default function AchievementUploadModal({
               value={form.title}
               onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))}
               placeholder="e.g. First payout from Apex"
-              className="mt-1.5 h-11 w-full rounded-lg border border-white/15 bg-[#0a1329] px-3 text-sm text-white placeholder:text-slate-500 outline-none transition focus:border-blue-400/60 focus:ring-2 focus:ring-blue-500/20"
+              className="mt-1.5 h-11 w-full rounded-lg border border-white/15 bg-[#0a1329] px-3 text-sm text-white placeholder:text-gray-400 outline-none transition focus:border-blue-400/60 focus:ring-2 focus:ring-blue-500/20"
             />
           </label>
           <label className="text-xs text-gray-300 sm:col-span-2">
@@ -904,7 +904,7 @@ export default function AchievementUploadModal({
                   setForm((prev) => ({ ...prev, payout_amount: e.target.value }))
                 }
                 placeholder="3500"
-                className="mt-1.5 h-11 w-full rounded-lg border border-white/15 bg-[#0a1329] px-3 text-sm text-white placeholder:text-slate-500 outline-none transition focus:border-blue-400/60 focus:ring-2 focus:ring-blue-500/20"
+                className="mt-1.5 h-11 w-full rounded-lg border border-white/15 bg-[#0a1329] px-3 text-sm text-white placeholder:text-gray-400 outline-none transition focus:border-blue-400/60 focus:ring-2 focus:ring-blue-500/20"
               />
             </label>
           ) : null}
@@ -988,7 +988,7 @@ export default function AchievementUploadModal({
                 setForm((prev) => ({ ...prev, description: e.target.value }))
               }
               placeholder="What happened and why it matters..."
-              className="mt-1.5 w-full rounded-lg border border-white/15 bg-[#0a1329] px-3 py-2.5 text-sm text-white placeholder:text-slate-500 outline-none transition focus:border-blue-400/60 focus:ring-2 focus:ring-blue-500/20"
+              className="mt-1.5 w-full rounded-lg border border-white/15 bg-[#0a1329] px-3 py-2.5 text-sm text-white placeholder:text-gray-400 outline-none transition focus:border-blue-400/60 focus:ring-2 focus:ring-blue-500/20"
             />
           </label>
 

@@ -245,7 +245,7 @@ function FeedCommentsSection({
           {hasComments ? (
             commentList
           ) : (
-            <p className="text-sm text-white/40">No comments yet.</p>
+            <p className="text-sm text-gray-400">No comments yet.</p>
           )}
         </div>
         {composer ? <div className="shrink-0 pt-2">{composer}</div> : null}

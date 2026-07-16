@@ -153,7 +153,7 @@ export default function NativeDateInput({
         className="tt-date-field-input w-full cursor-pointer border-0 bg-transparent text-white outline-none [color-scheme:dark]"
         {...props}
       />
-      <span className="tt-date-field-icon text-gray-400" aria-hidden="true">
+      <span className="tt-date-field-icon text-gray-300" aria-hidden="true">
         📅
       </span>
     </div>

@@ -1,5 +1,4 @@
 "use client"
-import Link from "next/link"
 import { SkeletonCalendarPage } from "../components/ui/skeletons"
 import TradesPageTradeCard from "../components/TradesPageTradeCard"
 import TradesPageOverlays from "../components/TradesPageOverlays"
@@ -28,7 +27,9 @@ import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 import { tradeAnalysisHref } from "@/lib/tradeAnalysisNavigation"
 import CustomSelect from "@/app/components/CustomSelect"
+import CalendarMonthlyStats from "@/app/components/CalendarMonthlyStats"
 import { SELECT_TRIGGER_CLASS } from "@/lib/accountDropdownStyles"
+import { computePeriodTradeStats } from "@/lib/periodTradeStats"
 export default function CalendarPage() {
   useScrollPageTopOnMount()
   const router = useRouter()
@@ -186,11 +187,10 @@ export default function CalendarPage() {
   })
 
   const monthTrades = Object.values(dailyData).flatMap((d: any) => d.trades)
-
-  const totalTrades = safeTradeCount(monthTrades.length)
-  const wins = monthTrades.filter((t: any) => t.pnl > 0)
-  const winRate = totalTrades ? (wins.length / totalTrades) * 100 : 0
-  const totalPnL = monthTrades.reduce((sum: number, t: any) => sum + (t.pnl || 0), 0)
+  const monthDailyPnls = Object.values(dailyData).map((d: any) => Number(d.pnl) || 0)
+  const monthlyStats = computePeriodTradeStats(monthTrades, {
+    dailyPnls: monthDailyPnls,
+  })
 
   const calendarDays = []
   for (let i = 0; i < 42; i++) {
@@ -560,27 +560,14 @@ export default function CalendarPage() {
                 </>
               ) : (
                 <>
-                  <h3 className="text-blue-400 font-semibold mb-3">Monthly Stats</h3>
-
-                  {trades.length === 0 ? (
-                    <div className="space-y-2 text-sm">
-                      <p className="text-gray-400">No trades yet</p>
-                      <Link
-                        href="/app"
-                        className="inline-block text-sm font-medium text-blue-300 hover:text-blue-200"
-                      >
-                        Add Trade →
-                      </Link>
-                    </div>
-                  ) : (
-                    <div className="space-y-2 text-sm">
-                      <p>Total Trades: {totalTrades}</p>
-                      <p>Win Rate: {winRate.toFixed(1)}%</p>
-                      <p className={totalPnL > 0 ? "text-emerald-400" : totalPnL < 0 ? "text-red-400" : ""}>
-                        Total P&L: {formatPNL(totalPnL)}
-                      </p>
-                    </div>
-                  )}
+                  <h3 className="text-blue-400 font-semibold mb-3">
+                    Monthly Statistics
+                  </h3>
+                  <CalendarMonthlyStats
+                    stats={monthlyStats}
+                    formatPNL={formatPNL}
+                    hasAnyTrades={trades.length > 0}
+                  />
                 </>
               )}
             </div>

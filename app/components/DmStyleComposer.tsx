@@ -36,7 +36,7 @@ const desktopActionBtnClass =
   "flex shrink-0 items-center justify-center rounded bg-[#1f2937] p-2 md:hover:bg-[#334155] disabled:cursor-not-allowed disabled:opacity-50"
 
 const messageFieldClass =
-  "min-w-0 flex-1 resize-none rounded bg-[#111827] px-3 py-2 text-sm leading-normal text-white placeholder:text-gray-500 disabled:opacity-60"
+  "min-w-0 flex-1 resize-none rounded bg-[#111827] px-3 py-2 text-sm leading-normal text-white placeholder:text-gray-400 disabled:opacity-60"
 
 const MAX_TEXTAREA_LINES = 3
 

@@ -105,11 +105,17 @@ export function computeSideExpectancy(trades: { pnl?: unknown }[]): number {
   return winRate * avgWin - lossRate * avgLoss
 }
 
-/** Matches dashboard calculateStreaks maxWinStreak (chronological order). */
-export function computeSideMaxWinStreak(trades: { pnl?: unknown }[]): number {
-  if (trades.length === 0) return 0
+/** Matches dashboard calculateStreaks (chronological order). */
+export function computeTradePnlStreaks(trades: { pnl?: unknown }[]): {
+  maxWinStreak: number
+  maxLossStreak: number
+} {
+  if (trades.length === 0) {
+    return { maxWinStreak: 0, maxLossStreak: 0 }
+  }
 
   let maxWinStreak = 0
+  let maxLossStreak = 0
   let tempStreak = 0
   let tempType: "win" | "loss" | "even" | null = null
 
@@ -128,9 +134,18 @@ export function computeSideMaxWinStreak(trades: { pnl?: unknown }[]): number {
     if (type === "win" && tempStreak > maxWinStreak) {
       maxWinStreak = tempStreak
     }
+
+    if (type === "loss" && tempStreak > maxLossStreak) {
+      maxLossStreak = tempStreak
+    }
   }
 
-  return maxWinStreak
+  return { maxWinStreak, maxLossStreak }
+}
+
+/** Matches dashboard calculateStreaks maxWinStreak (chronological order). */
+export function computeSideMaxWinStreak(trades: { pnl?: unknown }[]): number {
+  return computeTradePnlStreaks(trades).maxWinStreak
 }
 
 export function computeDirectionEdge(

@@ -399,7 +399,7 @@ export default function ImageCropModal({
             </div>
 
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-xs text-gray-500">{IMAGE_CROP_EDITOR_HELP}</p>
+              <p className="text-xs text-gray-400">{IMAGE_CROP_EDITOR_HELP}</p>
               <button
                 type="button"
                 disabled={

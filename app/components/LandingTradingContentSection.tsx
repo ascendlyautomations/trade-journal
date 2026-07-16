@@ -176,7 +176,7 @@ export default function LandingTradingContentSection() {
         })}
       </div>
 
-      <p className="mx-auto mt-12 max-w-2xl text-center text-sm leading-relaxed text-gray-500">
+      <p className="mx-auto mt-12 max-w-2xl text-center text-sm leading-relaxed text-gray-400">
         Where trading meets content, and content meets real markets.
       </p>
     </section>

@@ -53,7 +53,7 @@ function PayoutHistoryCard({
             </p>
           ) : null}
           <p
-            className={`text-xs uppercase tracking-wide text-gray-500 ${
+            className={`text-xs uppercase tracking-wide text-gray-400 ${
               showAccountName ? "mt-1" : ""
             }`}
           >

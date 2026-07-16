@@ -86,7 +86,7 @@ export default function AdminActivityPage() {
               <li key={r.id} className="rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="font-medium text-emerald-300">{r.action}</span>
-                  <span className="text-xs text-gray-500 tabular-nums">
+                  <span className="text-xs text-gray-400 tabular-nums">
                     {r.created_at ? new Date(r.created_at).toLocaleString() : "—"}
                   </span>
                 </div>

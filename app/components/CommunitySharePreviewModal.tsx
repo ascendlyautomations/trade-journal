@@ -1,9 +1,11 @@
 "use client"
 
-import { useEffect } from "react"
 import CommunitySharePreviewPanel from "@/app/components/CommunitySharePreviewPanel"
 import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
-import { useModalScrollLock } from "@/app/components/ui/modalLayout"
+import {
+  useModalScrollLock,
+  useStackedModalEscape,
+} from "@/app/components/ui/modalLayout"
 
 type CommunitySharePreviewModalProps = {
   open: boolean
@@ -19,6 +21,12 @@ type CommunitySharePreviewModalProps = {
   user: { id: string } | null
 }
 
+/**
+ * Stacked above ScrollableModalShell (z-10050) / Quick Trade, below FeedbackModal (z-10060).
+ * Escape / outside-click close only this layer — parent trade modals stay open underneath.
+ */
+export const COMMUNITY_SHARE_PREVIEW_Z_INDEX_CLASS = "z-[10055]"
+
 export default function CommunitySharePreviewModal({
   open,
   onClose,
@@ -33,21 +41,13 @@ export default function CommunitySharePreviewModal({
   user,
 }: CommunitySharePreviewModalProps) {
   useModalScrollLock(open)
-
-  useEffect(() => {
-    if (!open || submitting) return
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose()
-    }
-    window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
-  }, [open, onClose, submitting])
+  useStackedModalEscape(open && !submitting, onClose)
 
   if (!open || !post) return null
 
   return (
     <div
-      className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center bg-black/70 p-3 sm:p-4"
+      className={`fixed inset-0 ${COMMUNITY_SHARE_PREVIEW_Z_INDEX_CLASS} flex items-end justify-center bg-black/70 p-3 sm:items-center sm:p-4`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="community-share-preview-title"
@@ -67,7 +67,7 @@ export default function CommunitySharePreviewModal({
             >
               {title}
             </h2>
-            <p className="text-xs text-white/50">
+            <p className="text-xs text-gray-400">
               {subtitle}
             </p>
           </div>

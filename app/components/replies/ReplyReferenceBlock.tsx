@@ -46,7 +46,7 @@ export default function ReplyReferenceBlock({
 
   if (messageUnavailable || commentUnavailable) {
     return (
-      <p className={`text-xs italic text-gray-500 ${className}`}>
+      <p className={`text-xs italic text-gray-400 ${className}`}>
         Original message unavailable
       </p>
     )
@@ -72,7 +72,7 @@ export default function ReplyReferenceBlock({
     >
       <p className="truncate text-xs font-medium text-gray-300">{authorName}</p>
       {clipped ? (
-        <p className="mt-0.5 line-clamp-2 text-xs text-gray-500">{clipped}</p>
+        <p className="mt-0.5 line-clamp-2 text-xs text-gray-400">{clipped}</p>
       ) : null}
     </button>
   )

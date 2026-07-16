@@ -30,12 +30,12 @@ export default function LockedFeature({
         )}
       >
         {title ? (
-          <p className="mb-1 text-xs font-medium uppercase tracking-wide text-gray-500">
+          <p className="mb-1 text-xs font-medium uppercase tracking-wide text-gray-400">
             {title}
           </p>
         ) : null}
-        <p className="text-sm font-medium text-white/90">🔒 Pro feature</p>
-        <p className="mt-1 text-xs text-emerald-300/90">Tap to unlock</p>
+        <p className="text-sm font-medium text-white">🔒 Pro feature</p>
+        <p className="mt-1 text-xs text-emerald-300">Tap to unlock</p>
       </button>
     )
   }
@@ -50,7 +50,7 @@ export default function LockedFeature({
       )}
     >
       {title ? (
-        <p className="mb-1 text-xs font-medium uppercase tracking-wide text-gray-500">
+        <p className="mb-1 text-xs font-medium uppercase tracking-wide text-gray-400">
           {title}
         </p>
       ) : null}

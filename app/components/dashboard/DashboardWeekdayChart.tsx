@@ -10,6 +10,11 @@ import {
   ResponsiveContainer,
 } from "recharts"
 import DashboardWidgetEmptyState from "@/app/components/dashboard/DashboardWidgetEmptyState"
+import {
+  chartAxisTick,
+  chartCartesianGridProps,
+  chartTooltipStyles,
+} from "@/lib/chartTheme"
 import { formatPnlCurrency } from "@/lib/formatMoney"
 
 export type WeekdayChartPoint = {
@@ -46,15 +51,10 @@ export default function DashboardWeekdayChart({
             data={data}
             margin={{ top: 10, right: 20, left: 20, bottom: 20 }}
           >
-            <CartesianGrid stroke="#334155" />
-            <XAxis
-              dataKey="day"
-              stroke="#94a3b8"
-              tick={{ fill: "#94a3b8", fontSize: 12 }}
-            />
+            <CartesianGrid {...chartCartesianGridProps} />
+            <XAxis dataKey="day" {...chartAxisTick(12)} />
             <YAxis
-              stroke="#94a3b8"
-              tick={{ fill: "#94a3b8", fontSize: 12 }}
+              {...chartAxisTick(12)}
               tickFormatter={(value) =>
                 Number(value) < 0
                   ? `-$${Math.abs(Number(value)).toLocaleString()}`
@@ -69,6 +69,7 @@ export default function DashboardWeekdayChart({
                 })
               }
               labelFormatter={(label) => `${label}`}
+              {...chartTooltipStyles}
             />
             <Line
               type="monotone"

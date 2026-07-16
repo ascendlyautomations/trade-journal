@@ -61,7 +61,7 @@ function FeaturedTradePlaceholder() {
       <p className="text-base font-medium text-gray-300">
         No featured trades yet this week.
       </p>
-      <p className="mt-2 max-w-sm text-sm leading-relaxed text-gray-500">
+      <p className="mt-2 max-w-sm text-sm leading-relaxed text-gray-400">
         Log great trades and yours could be featured next.
       </p>
     </div>

@@ -19,7 +19,7 @@ type Props = {
 }
 
 const inputClassName =
-  "w-full rounded-xl border border-white/10 bg-black/30 p-3 placeholder:text-gray-500"
+  "w-full rounded-xl border border-white/10 bg-black/30 p-3 placeholder:text-gray-400"
 
 export default function CreatePasswordModal({
   open,

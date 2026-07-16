@@ -223,7 +223,7 @@ export default function AdminBugReportsPage() {
 
             <div className="space-y-3">
               <div>
-                <p className="mb-2 text-xs uppercase tracking-wide text-gray-500">Status</p>
+                <p className="mb-2 text-xs uppercase tracking-wide text-gray-400">Status</p>
                 <div className="flex flex-wrap gap-2">
                   {filterBtn("status-all", statusFilter === "all", "All", () => setStatusFilter("all"))}
                   {BUG_REPORT_STATUS_OPTIONS.map((opt) =>
@@ -238,7 +238,7 @@ export default function AdminBugReportsPage() {
               </div>
 
               <div>
-                <p className="mb-2 text-xs uppercase tracking-wide text-gray-500">Severity</p>
+                <p className="mb-2 text-xs uppercase tracking-wide text-gray-400">Severity</p>
                 <div className="flex flex-wrap gap-2">
                   {filterBtn("severity-all", severityFilter === "all", "All", () => setSeverityFilter("all"))}
                   {BUG_REPORT_SEVERITY_OPTIONS.map((opt) =>
@@ -253,7 +253,7 @@ export default function AdminBugReportsPage() {
               </div>
             </div>
 
-            <p className="mt-4 text-xs text-gray-500">
+            <p className="mt-4 text-xs text-gray-400">
               Showing {filteredCountLabel} ({rows.length} {rows.length === 1 ? "report" : "reports"})
             </p>
 
@@ -287,7 +287,7 @@ export default function AdminBugReportsPage() {
                       </div>
                     </div>
                     <p className="mt-1 line-clamp-2 text-sm text-gray-300">{previewText(row.description)}</p>
-                    <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500">
+                    <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-gray-400">
                       <span className="truncate">{row.user_id}</span>
                       <span className="shrink-0 tabular-nums">
                         {row.created_at ? new Date(row.created_at).toLocaleString() : "—"}
@@ -390,7 +390,7 @@ export default function AdminBugReportsPage() {
                   }))}
                 />
                 {selected.resolved_at ? (
-                  <p className="mt-2 text-xs text-gray-500">
+                  <p className="mt-2 text-xs text-gray-400">
                     Resolved at {new Date(selected.resolved_at).toLocaleString()}
                   </p>
                 ) : null}

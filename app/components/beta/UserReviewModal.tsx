@@ -203,7 +203,7 @@ export default function UserReviewModal({
 
           <div>
             <label htmlFor="user-review-title" className={submissionLabel}>
-              Title <span className="text-gray-500">(optional)</span>
+              Title <span className="text-gray-400">(optional)</span>
             </label>
             <input
               id="user-review-title"
@@ -233,7 +233,7 @@ export default function UserReviewModal({
               disabled={busy}
               required
             />
-            <p className="mt-1 text-xs text-gray-500">
+            <p className="mt-1 text-xs text-gray-400">
               Recommended length: {REVIEW_MIN}-{REVIEW_MAX} characters ({reviewLength}/{REVIEW_MAX})
             </p>
           </div>

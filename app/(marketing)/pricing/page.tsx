@@ -207,7 +207,7 @@ export default function PricingPage() {
             </ul>
           </section>
 
-          <p className="mt-12 text-sm text-gray-500">
+          <p className="mt-12 text-sm text-gray-400">
             <Link href="/" className="text-blue-400 hover:underline">
               ← Back to home
             </Link>

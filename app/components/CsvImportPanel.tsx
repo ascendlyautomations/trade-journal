@@ -652,7 +652,7 @@ export default function CsvImportPanel({
           contracts, session, account fields.
         </p>
       ) : (
-        <p className="text-xs text-gray-500">
+        <p className="text-xs text-gray-400">
           Tradovate exports or flexible CSV with date, symbol, side, and P&amp;L columns.
         </p>
       )}

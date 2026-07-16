@@ -124,7 +124,7 @@ function FeedStoriesBar({
         {otherUsers.length === 0 ? (
           <div className="min-w-0 flex-1 px-2 py-1">
             <p className="text-sm font-medium text-gray-300">No Stories Yet</p>
-            <p className="mt-0.5 text-xs text-gray-500">
+            <p className="mt-0.5 text-xs text-gray-400">
               Stories from traders you follow will appear here.
             </p>
           </div>

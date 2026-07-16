@@ -174,7 +174,7 @@ export default function SharedTradeMessageCard({
             {trade.created_at ? (
               <time
                 dateTime={String(trade.created_at)}
-                className="text-[10px] text-gray-500"
+                className="text-[10px] text-gray-400"
               >
                 {formatPostedTimestamp(trade.created_at)}
               </time>
@@ -238,7 +238,7 @@ export default function SharedTradeMessageCard({
 
         {hideViewTradeAction ? null : (
           <>
-            <p className="mt-2.5 border-t border-gray-700/40 pt-2 text-center text-[10px] font-medium uppercase tracking-wide text-gray-500">
+            <p className="mt-2.5 border-t border-gray-700/40 pt-2 text-center text-[10px] font-medium uppercase tracking-wide text-gray-400">
               Shared Trade
             </p>
 

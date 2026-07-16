@@ -231,7 +231,7 @@ export default function PerformanceShareModal({
                 Pick a window, then download a PNG for Instagram or X.
               </p>
               {subtitle ? (
-                <p className="mt-2 text-xs text-gray-500">{subtitle}</p>
+                <p className="mt-2 text-xs text-gray-400">{subtitle}</p>
               ) : null}
             </div>
             <ModalCloseButton onClick={onClose} />
@@ -239,7 +239,7 @@ export default function PerformanceShareModal({
         </div>
 
         <div className={`${MODAL_BODY_SCROLL_CLASS} px-5 py-4 md:px-6`}>
-        <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">
+        <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-400">
           Timeframe
         </p>
         <div className="mb-6 grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -262,7 +262,7 @@ export default function PerformanceShareModal({
         {windowKey === "custom" ? (
           <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="block text-sm text-gray-300">
-              <span className="mb-1 block text-xs text-gray-500">Start date</span>
+              <span className="mb-1 block text-xs text-gray-400">Start date</span>
               <NativeDateInput
                 value={customRangeStart}
                 onChange={(e) => setCustomRangeStart(e.target.value)}
@@ -271,7 +271,7 @@ export default function PerformanceShareModal({
               />
             </label>
             <label className="block text-sm text-gray-300">
-              <span className="mb-1 block text-xs text-gray-500">End date</span>
+              <span className="mb-1 block text-xs text-gray-400">End date</span>
               <NativeDateInput
                 value={customRangeEnd}
                 onChange={(e) => setCustomRangeEnd(e.target.value)}
@@ -285,7 +285,7 @@ export default function PerformanceShareModal({
         <div className="mb-4 rounded-xl border border-white/10 bg-black/20 p-4">
           <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
             <div>
-              <p className="text-xs text-gray-500">P&amp;L</p>
+              <p className="text-xs text-gray-400">P&amp;L</p>
               <p
                 className={`font-semibold tabular-nums ${
                   stats.totalPnL >= 0 ? "text-emerald-400" : "text-red-400"
@@ -297,19 +297,19 @@ export default function PerformanceShareModal({
               </p>
             </div>
             <div>
-              <p className="text-xs text-gray-500">Win rate</p>
+              <p className="text-xs text-gray-400">Win rate</p>
               <p className="font-semibold tabular-nums text-white">
                 {stats.totalTrades ? `${stats.winRate.toFixed(1)}%` : "—"}
               </p>
             </div>
             <div>
-              <p className="text-xs text-gray-500">Trades</p>
+              <p className="text-xs text-gray-400">Trades</p>
               <p className="font-semibold tabular-nums text-white">
                 {stats.totalTrades}
               </p>
             </div>
             <div>
-              <p className="text-xs text-gray-500">Avg RR</p>
+              <p className="text-xs text-gray-400">Avg RR</p>
               <p className="font-semibold tabular-nums text-white">
                 {formatRR(stats.avgRR)}
               </p>
@@ -401,7 +401,7 @@ export default function PerformanceShareModal({
             <button
               type="button"
               onClick={() => setPerfShareActionsOpen(false)}
-              className="mt-4 text-sm text-white/50 hover:text-white"
+              className="mt-4 text-sm text-gray-400 hover:text-white"
             >
               Cancel
             </button>

@@ -1050,7 +1050,7 @@ export default function SettingsPage() {
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     placeholder="How your name appears on TradeTraxs"
-                    className="w-full rounded-xl border border-white/10 bg-black/30 p-3 placeholder:text-gray-500"
+                    className="w-full rounded-xl border border-white/10 bg-black/30 p-3 placeholder:text-gray-400"
                   />
                 </div>
 
@@ -1070,7 +1070,7 @@ export default function SettingsPage() {
                     placeholder="username"
                     autoComplete="username"
                     disabled={atUsernameChangeLimit}
-                    className="w-full rounded-xl border border-white/10 bg-black/30 p-3 placeholder:text-gray-500 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="w-full rounded-xl border border-white/10 bg-black/30 p-3 placeholder:text-gray-400 disabled:cursor-not-allowed disabled:opacity-50"
                   />
                   <p className="mt-1 text-xs text-gray-400">
                     You may change your username up to 2 times.
@@ -1126,7 +1126,7 @@ export default function SettingsPage() {
                     onChange={(e) => setBio(e.target.value)}
                     placeholder="Tell others about your trading"
                     rows={3}
-                    className="w-full resize-none overflow-hidden rounded-xl border border-white/10 bg-black/30 p-3 leading-normal placeholder:text-gray-500"
+                    className="w-full resize-none overflow-hidden rounded-xl border border-white/10 bg-black/30 p-3 leading-normal placeholder:text-gray-400"
                   />
                 </div>
 
@@ -1145,7 +1145,7 @@ export default function SettingsPage() {
                       setTradingStyle(e.target.value)
                     }}
                     placeholder="e.g. ICT, scalping, swing"
-                    className="w-full rounded-xl border border-white/10 bg-black/30 p-3 placeholder:text-gray-500"
+                    className="w-full rounded-xl border border-white/10 bg-black/30 p-3 placeholder:text-gray-400"
                   />
                 </div>
 
@@ -1183,7 +1183,7 @@ export default function SettingsPage() {
                     value={primaryMarket}
                     onChange={(e) => setPrimaryMarket(e.target.value)}
                     placeholder="e.g. NQ, ES, Gold, BTC, EUR/USD"
-                    className="w-full rounded-xl border border-white/10 bg-black/30 p-3 placeholder:text-gray-500"
+                    className="w-full rounded-xl border border-white/10 bg-black/30 p-3 placeholder:text-gray-400"
                   />
                 </div>
 
@@ -1353,7 +1353,7 @@ export default function SettingsPage() {
                     Email tied to your TradeTraxs account
                   </p>
                   <div className="mt-4">
-                    <label htmlFor="settings-email" className="text-xs text-gray-500">
+                    <label htmlFor="settings-email" className="text-xs text-gray-400">
                       Email
                     </label>
                     <p
@@ -1406,7 +1406,7 @@ export default function SettingsPage() {
                           value={newPassword}
                           onChange={(e) => setNewPassword(e.target.value)}
                           placeholder="Enter new password"
-                          className="w-full rounded-xl border border-white/10 bg-black/30 p-3 placeholder:text-gray-500"
+                          className="w-full rounded-xl border border-white/10 bg-black/30 p-3 placeholder:text-gray-400"
                         />
                       </div>
                       <div className="mt-4">
@@ -1422,7 +1422,7 @@ export default function SettingsPage() {
                           value={confirmPassword}
                           onChange={(e) => setConfirmPassword(e.target.value)}
                           placeholder="Confirm new password"
-                          className="w-full rounded-xl border border-white/10 bg-black/30 p-3 placeholder:text-gray-500"
+                          className="w-full rounded-xl border border-white/10 bg-black/30 p-3 placeholder:text-gray-400"
                         />
                       </div>
                       <button
@@ -1452,7 +1452,7 @@ export default function SettingsPage() {
                           value={newPassword}
                           onChange={(e) => setNewPassword(e.target.value)}
                           placeholder="Enter new password"
-                          className="w-full rounded-xl border border-white/10 bg-black/30 p-3 placeholder:text-gray-500"
+                          className="w-full rounded-xl border border-white/10 bg-black/30 p-3 placeholder:text-gray-400"
                         />
                       </div>
                       <div className="mt-4">
@@ -1468,7 +1468,7 @@ export default function SettingsPage() {
                           value={confirmPassword}
                           onChange={(e) => setConfirmPassword(e.target.value)}
                           placeholder="Confirm new password"
-                          className="w-full rounded-xl border border-white/10 bg-black/30 p-3 placeholder:text-gray-500"
+                          className="w-full rounded-xl border border-white/10 bg-black/30 p-3 placeholder:text-gray-400"
                         />
                       </div>
                       <button
@@ -1576,7 +1576,7 @@ export default function SettingsPage() {
               <div className="space-y-6 rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm">
                 <div className="space-y-4">
                   <div className="rounded-xl border border-white/10 bg-black/20 p-4">
-                    <p className="text-xs text-gray-500">Plan name</p>
+                    <p className="text-xs text-gray-400">Plan name</p>
                     {proPlanDisplay ? (
                       <div className="mt-1">
                         <p className="font-semibold text-white">
@@ -1589,7 +1589,7 @@ export default function SettingsPage() {
                         ) : null}
                         {proPlanDisplay.billedLabel ? (
                           <p className="mt-2 text-sm text-gray-400">
-                            <span className="text-gray-500">Billed: </span>
+                            <span className="text-gray-400">Billed: </span>
                             {proPlanDisplay.billedLabel}
                           </p>
                         ) : null}
@@ -1611,7 +1611,7 @@ export default function SettingsPage() {
 
                   <div className="rounded-xl border border-white/10 bg-black/20 p-4 space-y-3">
                     <div>
-                      <p className="text-xs text-gray-500">Status</p>
+                      <p className="text-xs text-gray-400">Status</p>
                       <p className="mt-1 text-sm text-gray-400">
                         Billing: {isProActive(profile) ? "Pro" : "Free"}
                       </p>
@@ -1623,7 +1623,7 @@ export default function SettingsPage() {
 
                     {shouldShowTrialInfo(profile) ? (
                       <div className="border-t border-white/10 pt-3">
-                        <p className="text-xs text-gray-500">Trial Ends</p>
+                        <p className="text-xs text-gray-400">Trial Ends</p>
                         <p className="mt-1 text-sm font-medium text-amber-200">
                           {formatSubscriptionDateTime(profile?.trial_end)}
                         </p>
@@ -1632,7 +1632,7 @@ export default function SettingsPage() {
 
                     {shouldShowRenewsOn(profile) ? (
                       <div className="border-t border-white/10 pt-3">
-                        <p className="text-xs text-gray-500">Renews On</p>
+                        <p className="text-xs text-gray-400">Renews On</p>
                         <p className="mt-1 text-sm font-medium text-emerald-200">
                           {formatSubscriptionDateTime(profile?.current_period_end)}
                         </p>
@@ -1641,7 +1641,7 @@ export default function SettingsPage() {
 
                     {shouldShowScheduledCancellation(profile) ? (
                       <div className="border-t border-white/10 pt-3">
-                        <p className="text-xs text-gray-500">Cancellation Scheduled</p>
+                        <p className="text-xs text-gray-400">Cancellation Scheduled</p>
                         <p className="mt-1 text-sm font-medium text-red-200">
                           {formatScheduledCancellation(profile)}
                         </p>
@@ -1656,7 +1656,7 @@ export default function SettingsPage() {
                       {TRADETRAXS_PRO_FEATURES_HEADING}
                     </p>
                   ) : (
-                    <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                    <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
                       {getPlanFeaturesSectionHeading("free")}
                     </p>
                   )}

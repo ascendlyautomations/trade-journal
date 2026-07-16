@@ -5,6 +5,8 @@ import {
   handleTradeNumericInput,
   type TradeNumericInputOptions,
 } from "@/lib/formatMoney"
+import { TRADE_FIELD_INPUT_TEXT_CLASS } from "@/lib/tradeFormUi"
+import { cn } from "@/app/components/ui/cn"
 
 type TradeFormCurrencyInputProps = {
   id?: string
@@ -47,7 +49,7 @@ export default function TradeFormCurrencyInput({
             onDecimalError,
           })
         }
-        className={inputClassName}
+        className={cn(TRADE_FIELD_INPUT_TEXT_CLASS, inputClassName)}
       />
     </div>
   )

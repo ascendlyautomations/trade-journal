@@ -322,7 +322,7 @@ export default function AdminPage() {
                     </span>
                   </div>
                 ) : (
-                  <span className="text-[10px] text-gray-500">—</span>
+                  <span className="text-[10px] text-gray-400">—</span>
                 )
               }
             />
@@ -353,23 +353,23 @@ export default function AdminPage() {
               </p>
             ) : null}
             {!auditPreview.length && !auditError ? (
-              <p className="mt-3 text-sm text-gray-500">No audit events yet.</p>
+              <p className="mt-3 text-sm text-gray-400">No audit events yet.</p>
             ) : (
               <ul className="mt-3 space-y-2">
                 {auditPreview.map((r) => (
                   <li key={r.id} className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
                     <span className="text-gray-200">
                       <span className="font-medium text-emerald-300">{r.action}</span>
-                      <span className="text-gray-500"> · </span>
+                      <span className="text-gray-400"> · </span>
                       <span className="text-gray-400">{r.admin_email || r.admin_user_id}</span>
                       {r.target_email || r.target_user_id ? (
-                        <span className="text-gray-500">
+                        <span className="text-gray-400">
                           {" "}
                           → {r.target_email || r.target_user_id}
                         </span>
                       ) : null}
                     </span>
-                    <span className="text-xs text-gray-500 tabular-nums">
+                    <span className="text-xs text-gray-400 tabular-nums">
                       {r.created_at ? new Date(r.created_at).toLocaleString() : ""}
                     </span>
                   </li>

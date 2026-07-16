@@ -95,7 +95,7 @@ export default function AffiliateProgramCtaSection() {
             </Link>
           )}
         </div>
-        <p className="mt-4 text-xs text-gray-500">
+        <p className="mt-4 text-xs text-gray-400">
           Already an approved affiliate?{" "}
           <Link href="/affiliate/dashboard" className="text-blue-300 hover:text-blue-200">
             Open your dashboard

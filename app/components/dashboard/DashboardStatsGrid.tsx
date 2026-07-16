@@ -1,6 +1,10 @@
 "use client"
 
 import type { ReactNode } from "react"
+import {
+  dashboardStatLabelClass,
+  dashboardWidgetSectionTitleClass,
+} from "@/app/components/dashboard/dashboardInsightStyles"
 import { formatCurrency } from "@/lib/formatCurrency"
 import { formatDecimal, formatRR } from "@/lib/formatDisplay"
 
@@ -93,7 +97,7 @@ function Stat({
 
   return (
     <div className="flex min-h-[76px] w-full flex-col items-center justify-center rounded-xl border border-white/10 bg-white/10 p-2.5 text-center backdrop-blur-md md:min-h-[90px] md:p-4">
-      <p className="mb-0.5 text-[11px] text-gray-300 md:mb-1 md:text-sm">{title}</p>
+      <p className={dashboardStatLabelClass}>{title}</p>
       <div className="w-full text-center">
         <span
           className={`block text-center text-sm font-semibold leading-tight whitespace-nowrap tabular-nums md:text-lg lg:text-xl ${color}`}
@@ -260,7 +264,7 @@ export default function DashboardStatsGrid({
       </div>
 
       <div className="rounded-xl border border-white/10 bg-white/10 p-2.5 backdrop-blur-md md:hidden md:p-4">
-        <h3 className="text-[11px] text-gray-300 md:text-sm">
+        <h3 className={`${dashboardWidgetSectionTitleClass} mb-0`}>
           Expectancy
           {expectancyData ? (
             <>
@@ -286,7 +290,7 @@ export default function DashboardStatsGrid({
       </div>
 
       <div className="rounded-xl border border-white/10 bg-white/10 p-2.5 backdrop-blur-md md:p-4">
-        <h3 className="mb-1.5 text-[11px] text-gray-300 md:mb-2 md:text-sm">Streaks</h3>
+        <h3 className={dashboardWidgetSectionTitleClass}>Streaks</h3>
 
         {streakData ? (
           <>
@@ -322,14 +326,14 @@ export default function DashboardStatsGrid({
       </div>
 
       <div className="rounded-xl border border-white/10 bg-white/10 p-2.5 backdrop-blur-md md:p-4">
-        <h3 className="mb-1.5 text-[11px] text-gray-300 md:mb-2 md:text-sm">Trading Hours</h3>
+        <h3 className={dashboardWidgetSectionTitleClass}>Trading Hours</h3>
 
         {hourData === null ? (
           <p className="text-[11px] text-gray-400 md:text-sm">
             Complete more trades to view trading hour insights.
           </p>
         ) : !hourData.hasValidTradingHoursData ? (
-          <p className="text-xs text-white/60 md:text-sm">
+          <p className="text-xs text-gray-400 md:text-sm">
             Add entry/exit times to unlock trading hour insights
           </p>
         ) : (

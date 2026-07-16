@@ -77,7 +77,7 @@ export default function TradeShareCardV2Preview() {
       </header>
 
       <div className="mb-10 flex flex-wrap items-center justify-center gap-3">
-        <span className="text-sm text-gray-500">Mock trade:</span>
+        <span className="text-sm text-gray-400">Mock trade:</span>
         {(["win", "loss"] as const).map((key) => (
           <button
             key={key}
@@ -125,7 +125,7 @@ export default function TradeShareCardV2Preview() {
           <li>TradeTraxs logo + footer tagline</li>
           <li>Win/loss background tint (no blur, export-safe CSS)</li>
         </ul>
-        <p className="mt-4 text-xs text-gray-500">
+        <p className="mt-4 text-xs text-gray-400">
           Approve layout here before swapping into{" "}
           <code className="text-gray-400">ShareTradeButton</code> export path.
         </p>

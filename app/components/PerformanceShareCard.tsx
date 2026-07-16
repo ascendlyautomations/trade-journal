@@ -15,6 +15,7 @@ import type { EquityCurvePoint, PerformanceStats } from "@/lib/performanceShare"
 import { SITE_NAME } from "@/lib/site"
 import { PERFORMANCE_SHARE_EXPORT_WIDTH } from "@/lib/shareImageCaptureConstants"
 import { formatHoldDurationSeconds } from "@/lib/tradeTimingDisplay"
+import { READABLE_CHART_TICK } from "@/lib/chartTheme"
 
 export type PerformanceShareCardProps = {
   /** For html-to-image: target this id with `document.getElementById` */
@@ -204,7 +205,7 @@ const PerformanceShareCard = forwardRef<HTMLDivElement, PerformanceShareCardProp
                       dataKey="index"
                       type="number"
                       tickFormatter={(value) => String(Math.floor(Number(value)))}
-                      tick={{ fill: "#94a3b8", fontSize: 10 }}
+                      tick={{ fill: READABLE_CHART_TICK, fontSize: 10 }}
                       axisLine={false}
                       tickLine={false}
                     />
@@ -212,7 +213,7 @@ const PerformanceShareCard = forwardRef<HTMLDivElement, PerformanceShareCardProp
                       tickFormatter={(value) =>
                         `$${Math.round(Number(value)).toLocaleString()}`
                       }
-                      tick={{ fill: "#94a3b8", fontSize: 10 }}
+                      tick={{ fill: READABLE_CHART_TICK, fontSize: 10 }}
                       axisLine={false}
                       tickLine={false}
                       width={48}

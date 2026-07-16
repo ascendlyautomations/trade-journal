@@ -15,7 +15,7 @@ const FOOTER_LINK_CLASS =
   "text-[13px] text-gray-400 transition hover:text-gray-300"
 
 const FOOTER_HEADING_CLASS =
-  "text-[10px] font-medium uppercase tracking-[0.14em] text-gray-500"
+  "text-[10px] font-medium uppercase tracking-[0.14em] text-gray-400"
 
 const FOOTER_SOCIAL_ICON_BUTTON =
   "inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/[0.03] text-gray-400 transition duration-200 hover:scale-105 hover:border-emerald-400/30 hover:bg-white/[0.06] hover:text-emerald-300 motion-reduce:transition-none motion-reduce:hover:scale-100"
@@ -141,14 +141,14 @@ export default function MarketingFooter() {
             >
               TradeTraxs
             </Link>
-            <p className="text-center text-xs leading-snug text-gray-500">
+            <p className="text-center text-xs leading-snug text-gray-400">
               {LANDING_BRAND_TAGLINE}
             </p>
           </div>
 
           <div className="mt-4 grid grid-cols-2 gap-x-5 gap-y-3">
             <nav aria-label="Product" className="text-left">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
                 Product
               </p>
               <ul className="mt-2 space-y-1.5">
@@ -167,7 +167,7 @@ export default function MarketingFooter() {
               </ul>
             </nav>
             <nav aria-label="Company" className="text-left">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
                 Company
               </p>
               <ul className="mt-2 space-y-1.5">
@@ -189,7 +189,7 @@ export default function MarketingFooter() {
               </ul>
             </nav>
             <nav aria-label="Legal" className="text-left">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
                 Legal
               </p>
               <ul className="mt-2 space-y-1.5">
@@ -228,7 +228,7 @@ export default function MarketingFooter() {
             >
               TradeTraxs
             </Link>
-            <p className="mt-2 max-w-xs text-[13px] leading-relaxed text-gray-500">
+            <p className="mt-2 max-w-xs text-[13px] leading-relaxed text-gray-400">
               {FOOTER_DESCRIPTION}
             </p>
             <FooterSocialLinks className="mt-4" />

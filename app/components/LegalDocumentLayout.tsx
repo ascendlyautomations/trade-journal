@@ -31,7 +31,7 @@ export default function LegalDocumentLayout({
           <header className="mb-10 text-center md:mb-6">
             <h1 className={PAGE_HEADING_MARKETING_CLASS}>{title}</h1>
             <p className="mt-3 text-sm text-gray-300">{subtitle}</p>
-            <p className="mt-2 text-xs text-gray-500">Last updated: {LEGAL_LAST_UPDATED}</p>
+            <p className="mt-2 text-xs text-gray-400">Last updated: {LEGAL_LAST_UPDATED}</p>
           </header>
 
           <nav
@@ -77,7 +77,7 @@ export default function LegalDocumentLayout({
                 {relatedHref.label}
               </Link>
             </p>
-            <p className="mt-4 text-xs leading-relaxed text-gray-500">
+            <p className="mt-4 text-xs leading-relaxed text-gray-400">
               This document is provided for informational purposes during the TradeTraxs beta.
               It is not legal advice. Have qualified counsel review before relying on it for
               compliance.

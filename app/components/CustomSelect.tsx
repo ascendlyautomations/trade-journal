@@ -14,6 +14,11 @@ import {
   SELECT_MENU_CLASS,
   SELECT_TRIGGER_CLASS,
 } from "@/lib/accountDropdownStyles"
+import {
+  READABLE_DISABLED_TEXT_CLASS,
+  READABLE_PLACEHOLDER_TEXT_CLASS,
+  READABLE_PRIMARY_CLASS,
+} from "@/lib/readableTextStyles"
 
 interface Option {
   label: string
@@ -200,7 +205,7 @@ export default function CustomSelect({
             return (
               <div
                 key={opt.value}
-                className="pointer-events-none select-none px-3 py-1.5 text-xs leading-none text-gray-500"
+                className={`pointer-events-none select-none px-3 py-1.5 text-xs leading-none ${READABLE_DISABLED_TEXT_CLASS}`}
               >
                 {opt.label}
               </div>
@@ -256,12 +261,15 @@ export default function CustomSelect({
       >
         <span
           className={`min-w-0 flex-1 truncate text-left md:whitespace-normal md:overflow-visible ${
-            selected ? "text-white" : "text-gray-400"
+            selected ? READABLE_PRIMARY_CLASS : READABLE_PLACEHOLDER_TEXT_CLASS
           }`}
         >
           {selected?.label ?? placeholder}
         </span>
-        <span className="ml-2 shrink-0 text-gray-400" aria-hidden="true">
+        <span
+          className={`ml-2 shrink-0 ${READABLE_PLACEHOLDER_TEXT_CLASS}`}
+          aria-hidden="true"
+        >
           ▾
         </span>
       </div>

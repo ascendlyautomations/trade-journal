@@ -14,7 +14,7 @@ export function DashboardPlanIndicator({
   className = "",
 }: DashboardPlanIndicatorProps) {
   return (
-    <div className={`shrink-0 text-xs text-white/70 md:text-sm ${className}`}>
+    <div className={`shrink-0 text-xs text-gray-400 md:text-sm ${className}`}>
       Plan:{" "}
       <span
         className={`font-medium ${isPro ? "text-green-400" : "text-gray-300"}`}

@@ -353,7 +353,7 @@ export default function ShareToConversationsModal({
             placeholder={captionPlaceholder}
             value={shareMessage}
             onChange={(e) => setShareMessage(e.target.value)}
-            className="mb-3 w-full resize-none rounded bg-white/5 p-2 text-sm"
+            className="mb-3 w-full resize-none rounded bg-white/5 p-2 text-sm text-white placeholder:text-gray-400"
             rows={postId ? undefined : 2}
           />
 

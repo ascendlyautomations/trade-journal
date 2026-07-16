@@ -23,7 +23,13 @@ import {
   YAxis,
   CartesianGrid,
 } from "recharts"
+import {
+  chartAxisTick,
+  chartCartesianGridProps,
+  chartTooltipStyles,
+} from "@/lib/chartTheme"
 import InstagramAdShell from "./InstagramAdShell"
+import PropfirmProfitTargetProgressBar from "@/app/components/propfirm/PropfirmProfitTargetProgressBar"
 
 const RULE_CHIP_CLASS =
   "flex items-center gap-2.5 rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-sm"
@@ -140,11 +146,10 @@ export default function PropFirmAdPreview() {
                 data={equityCurve}
                 margin={{ top: 8, right: 16, left: 8, bottom: 8 }}
               >
-                <CartesianGrid stroke="#334155" />
+                <CartesianGrid {...chartCartesianGridProps} />
                 <XAxis
                   dataKey="date"
-                  stroke="#94a3b8"
-                  tick={{ fill: "#94a3b8", fontSize: 11 }}
+                  {...chartAxisTick(11)}
                   tickFormatter={(value) => {
                     const d = new Date(String(value))
                     if (Number.isNaN(d.getTime())) return String(value).slice(0, 10)
@@ -154,8 +159,7 @@ export default function PropFirmAdPreview() {
                   minTickGap={28}
                 />
                 <YAxis
-                  stroke="#94a3b8"
-                  tick={{ fill: "#94a3b8", fontSize: 11 }}
+                  {...chartAxisTick(11)}
                   width={64}
                   tickFormatter={(value) =>
                     `$${Number(value).toLocaleString(undefined, {
@@ -163,13 +167,7 @@ export default function PropFirmAdPreview() {
                     })}`
                   }
                 />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "#0f172a",
-                    border: "1px solid rgba(255,255,255,0.1)",
-                    borderRadius: "8px",
-                  }}
-                />
+                <Tooltip {...chartTooltipStyles} />
                 <Line
                   type="monotone"
                   dataKey="balance"
@@ -252,7 +250,7 @@ export default function PropFirmAdPreview() {
           <div className={dashboardInsightCardClass}>
             <h2 className={`${dashboardInsightTitleClass} mb-3`}>
               Progress{" "}
-              <span className="text-xs font-normal text-gray-500">
+              <span className="text-xs font-normal text-gray-400">
                 (current cycle)
               </span>
             </h2>
@@ -288,16 +286,24 @@ export default function PropFirmAdPreview() {
               <div>
                 <div className="mb-1.5 flex justify-between text-sm text-gray-400">
                   <span>Profit target (cycle)</span>
-                  <span className="tabular-nums">
+                  <span
+                    className={`tabular-nums font-semibold ${
+                      cyclePnL < 0
+                        ? "text-red-400"
+                        : progressPercent >= 100
+                          ? "text-emerald-300"
+                          : "text-blue-300"
+                    }`}
+                  >
+                    {cyclePnL < 0 ? "-" : ""}
                     {progressPercent.toFixed(0)}%
                   </span>
                 </div>
-                <div className="h-2.5 w-full overflow-hidden rounded-full bg-white/10">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-blue-500 to-emerald-500"
-                    style={{ width: `${Math.min(100, progressPercent)}%` }}
-                  />
-                </div>
+                <PropfirmProfitTargetProgressBar
+                  progressPercent={progressPercent}
+                  negative={cyclePnL < 0}
+                  className="h-2.5"
+                />
               </div>
               <div>
                 <div className="mb-1.5 flex justify-between text-sm text-gray-400">

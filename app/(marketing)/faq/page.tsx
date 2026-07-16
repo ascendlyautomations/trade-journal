@@ -64,7 +64,7 @@ export default function FAQPage() {
             onChange={(e) => handleQueryChange(e.target.value)}
             placeholder="Ask a question..."
             autoComplete="off"
-            className="w-full rounded-xl border border-white/10 bg-[#1e293b]/90 px-4 py-3 text-sm text-white placeholder:text-gray-500 shadow-lg shadow-black/20 outline-none transition focus:border-emerald-400/50 focus:ring-2 focus:ring-emerald-400/20"
+            className="w-full rounded-xl border border-white/10 bg-[#1e293b]/90 px-4 py-3 text-sm text-white placeholder:text-gray-400 shadow-lg shadow-black/20 outline-none transition focus:border-emerald-400/50 focus:ring-2 focus:ring-emerald-400/20"
           />
         </div>
 

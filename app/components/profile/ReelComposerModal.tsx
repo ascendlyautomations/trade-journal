@@ -241,7 +241,7 @@ export default function ReelComposerModal({
             </p>
           ) : (
             <>
-              <p className="text-center text-xs text-gray-500">
+              <p className="text-center text-xs text-gray-400">
                 Video cannot be changed after publishing.
               </p>
               <div>
@@ -259,7 +259,7 @@ export default function ReelComposerModal({
                   maxLength={2200}
                   placeholder="Write a caption…"
                   disabled={publishing}
-                  className="w-full resize-none rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-gray-500 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30 disabled:opacity-60"
+                  className="w-full resize-none rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-gray-400 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30 disabled:opacity-60"
                 />
               </div>
             </>
@@ -329,7 +329,7 @@ export default function ReelComposerModal({
                   maxLength={2200}
                   placeholder="Write a caption…"
                   disabled={publishing}
-                  className="w-full resize-none rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-gray-500 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30 disabled:opacity-60"
+                  className="w-full resize-none rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-gray-400 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30 disabled:opacity-60"
                 />
               </div>
             </div>

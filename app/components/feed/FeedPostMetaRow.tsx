@@ -22,7 +22,7 @@ export default function FeedPostMetaRow({
       <span className={labelClassName}>{label}</span>
       {timeLabel ? (
         <>
-          <span aria-hidden="true" className="mx-1 text-gray-500">
+          <span aria-hidden="true" className="mx-1 text-gray-400">
             ·
           </span>
           <time dateTime={createdAt ?? undefined} className="text-gray-400">

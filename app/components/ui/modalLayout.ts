@@ -24,7 +24,7 @@ export const MODAL_PANEL_SURFACE_CLASS =
   "bg-[#0f172a]/95 backdrop-blur-xl"
 
 export const MODAL_PANEL_SHELL_CLASS =
-  `flex flex-col overflow-hidden rounded-xl border border-white/10 ${MODAL_PANEL_SURFACE_CLASS} text-gray-100 shadow-xl`
+  `flex flex-col overflow-hidden rounded-xl border border-white/15 ${MODAL_PANEL_SURFACE_CLASS} text-gray-100 shadow-xl`
 
 export const MODAL_BODY_SCROLL_CLASS =
   "min-h-0 flex-1 overflow-y-auto overscroll-contain"
@@ -39,6 +39,7 @@ export const MODAL_FOOTER_CLASS =
  * - DetailModalShell root: 9000
  * - ImageLightbox: 10001
  * - Modal / ScrollableModalShell / stacked DetailModalShell: 10050
+ * - CommunitySharePreviewModal (preview over Quick/Add Trade): 10055
  * - FeedbackModal / ReelViewer: 10060
  * - Dropdown menus / CustomSelect portals: 10070 (DropdownMenu + ACCOUNT_DROPDOWN_PORTAL_MENU_CLASS)
  */
