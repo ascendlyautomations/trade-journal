@@ -147,7 +147,7 @@ export default function BetaHubPage() {
               onClick={() => setReviewModalOpen(true)}
               className={ACTION_CARD_CLASS}
             >
-              <p className="font-semibold text-white">⭐ Leave a Review</p>
+              <p className="font-semibold text-white">Leave a Review</p>
               <p className="mt-2 mb-5 flex-1 text-sm text-gray-400">
                 Tell us what you honestly think about TradeTraxs. Your review may be featured on
                 our homepage.

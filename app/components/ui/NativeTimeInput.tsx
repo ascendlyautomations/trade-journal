@@ -1,10 +1,9 @@
 "use client"
 
-import { useRef } from "react"
+import { useLayoutEffect, useRef, useState } from "react"
 import { cn } from "./cn"
 import {
-  canUseProgrammaticShowPicker,
-  openNativeDatePicker,
+  openNativeTimePicker,
   useDismissNativeTemporalField,
 } from "./NativeDateInput"
 
@@ -14,11 +13,34 @@ type NativeTimeInputProps = Omit<
 >
 
 /**
+ * Normalize to HH:MM for trade forms (Safari may emit HH:MM:SS).
+ */
+function normalizeTimeValue(raw: string): string {
+  const s = String(raw ?? "").trim()
+  if (!s) return ""
+  const match = /^(\d{1,2}):(\d{2})/.exec(s)
+  if (!match) return s
+  return `${String(Number(match[1])).padStart(2, "0")}:${match[2]}`
+}
+
+/**
  * Cross-browser time field for trade forms.
  *
- * Safari note: never stretch the calendar-picker-indicator over the whole
- * field and never blur() inside onChange — both block Safari's editable
- * HH:MM segments during manual entry.
+ * Root cause (Safari / WebKit only):
+ * A React-controlled `<input type="time" value={...}>` writes the DOM
+ * `.value` on every re-render. WebKit’s time control edits HH / MM as
+ * separate shadow-DOM segments; assigning `.value` mid-edit resets the
+ * caret, overwrites the in-progress segment, or drops the keystroke.
+ * Chromium tolerates the same controlled pattern, which is why Windows/
+ * Chrome appeared fine while macOS/iOS Safari did not.
+ *
+ * Fix (shared, not Apple-only): keep the input uncontrolled for React
+ * (`value` prop never set). Sync from props imperatively only while
+ * blurred. Still forward onChange so parent state / duration stay live.
+ *
+ * Clock affordance: an explicit button calls showPicker() (Safari macOS +
+ * Chromium) or focus/click (iOS wheel). Do not stretch the native
+ * calendar-picker-indicator over the full field — that blocks segment edits.
  */
 export default function NativeTimeInput({
   className,
@@ -27,11 +49,36 @@ export default function NativeTimeInput({
   onClick,
   onChange,
   onBlur,
+  onInput,
+  value,
+  defaultValue,
   step = 60,
   ...props
 }: NativeTimeInputProps) {
   const inputRef = useRef<HTMLInputElement>(null)
+  const [focused, setFocused] = useState(false)
   useDismissNativeTemporalField(inputRef)
+
+  const normalizedValue = normalizeTimeValue(
+    String(value ?? defaultValue ?? "")
+  )
+
+  // Sync external value → DOM only when not editing. Writing `.value`
+  // while focused is exactly what breaks Safari segment typing.
+  useLayoutEffect(() => {
+    if (focused) return
+    const input = inputRef.current
+    if (!input) return
+    if (input.value !== normalizedValue) {
+      input.value = normalizedValue
+    }
+  }, [normalizedValue, focused])
+
+  const openClock = (e: React.SyntheticEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    openNativeTimePicker(inputRef.current)
+  }
 
   return (
     <div
@@ -39,60 +86,63 @@ export default function NativeTimeInput({
         "tt-time-field w-full min-w-0 cursor-pointer rounded border border-white/10 bg-[#0f172a]",
         className
       )}
-      onPointerDown={(e) => {
-        // Only when clicking empty chrome around the input (not the input itself).
-        if (e.target !== e.currentTarget) return
-        const input = inputRef.current
-        if (!input) return
-        if (canUseProgrammaticShowPicker(input)) {
-          e.preventDefault()
-          openNativeDatePicker(input)
-        } else {
-          try {
-            input.focus({ preventScroll: true })
-          } catch {
-            input.focus()
-          }
-        }
-      }}
     >
       <input
+        {...props}
         ref={inputRef}
         id={id}
         type="time"
         step={step}
+        // Uncontrolled: do not pass `value`. defaultValue stays "" so iOS
+        // Clear empties the field; displayed value is set via layout effect.
+        defaultValue=""
         onFocus={(e) => {
+          setFocused(true)
           onFocus?.(e)
         }}
         onClick={(e) => {
           onClick?.(e)
-          // Chromium only: optional picker open. Do not call on Safari —
-          // showPicker / click interference breaks segment editing.
-          const input = inputRef.current
-          if (input && canUseProgrammaticShowPicker(input)) {
-            // Only open picker when the click lands on the indicator region
-            // (right edge). Clicks on HH:MM segments must remain editable.
-            const rect = input.getBoundingClientRect()
-            const nearIcon = e.clientX >= rect.right - 40
-            if (nearIcon) {
-              openNativeDatePicker(input)
-            }
-          }
+        }}
+        onInput={(e) => {
+          onInput?.(e)
         }}
         onChange={(e) => {
-          // Do not blur here — Safari fires change while editing segments;
-          // blurring aborts manual entry. Leave focus until the user leaves.
+          // Do not assign input.value here — that reintroduces the WebKit bug.
+          // Keep defaultValue "" so iOS Clear empties instead of restoring
+          // a stale attribute value.
+          e.currentTarget.defaultValue = ""
           onChange?.(e)
         }}
         onBlur={(e) => {
+          const input = e.currentTarget
+          const next = normalizeTimeValue(input.value)
+          if (input.value !== next) {
+            input.value = next
+          }
+          input.defaultValue = ""
+          setFocused(false)
+          // Commit normalized value to parent after editing finishes.
+          onChange?.(e)
           onBlur?.(e)
         }}
-        className="tt-time-field-input h-full min-h-[2.5rem] w-full cursor-pointer border-0 bg-transparent p-2 pr-10 text-white outline-none [color-scheme:dark]"
-        {...props}
+        className="tt-time-field-input h-full min-h-[2.5rem] w-full cursor-text border-0 bg-transparent p-2 pr-11 text-white outline-none [color-scheme:dark]"
       />
-      <span className="tt-time-field-icon text-gray-300" aria-hidden="true">
-        🕒
-      </span>
+      <button
+        type="button"
+        className="tt-time-field-icon"
+        aria-label="Open time picker"
+        tabIndex={-1}
+        onMouseDown={(e) => {
+          // Preserve user activation; avoid stealing focus before showPicker.
+          e.preventDefault()
+        }}
+        onPointerDown={(e) => {
+          e.preventDefault()
+        }}
+        onClick={openClock}
+      >
+        <span aria-hidden="true">🕒</span>
+      </button>
     </div>
   )
 }

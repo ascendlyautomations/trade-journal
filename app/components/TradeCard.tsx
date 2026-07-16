@@ -123,7 +123,7 @@ export default function TradeCard({
               Pts: {formatTradePoints(trade)}
             </span>
 
-            {isCopyTradedTrade(trade) ? <CopyTradedBadge /> : null}
+            {isCopyTradedTrade(trade) ? <CopyTradedBadge trade={trade} /> : null}
           </div>
           <p className="text-xs md:text-sm">
             <span className="text-gray-400">Contracts:</span>{" "}

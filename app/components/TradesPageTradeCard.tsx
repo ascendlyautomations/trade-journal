@@ -15,14 +15,21 @@ import { tradeScreenshotPublicUrl } from "@/lib/storagePublicUrl"
 import SavedImage from "@/app/components/ui/SavedImage"
 import { TRADE_PAGE_SCREENSHOT_MAX_HEIGHT_CLASS } from "@/lib/tradeScreenshotDisplay"
 import CopyTradedBadge from "@/app/components/trade/CopyTradedBadge"
+import TradeCopyTradingDetails from "@/app/components/trade/TradeCopyTradingDetails"
 import ExpandableText from "@/app/components/ui/ExpandableText"
 import { isCopyTradedTrade } from "@/lib/tradeCopyTrading"
+import {
+  isCopyTradedMode,
+  resolveTradeModeBadgeLabel,
+} from "@/lib/tradeMode"
 import { type ReelRow } from "@/lib/reels"
 
 export type TradesPageTradeCardProps = {
   trade: any
   showAdvanced: boolean
   accountRow?: any | null
+  /** Optional account directory for Copy Trading source/destination labels. */
+  accounts?: readonly any[]
   shareProfile?: { referral_code?: string | null } | null
   attachedReel?: ReelRow | null
   onOpenReplay?: () => void
@@ -37,6 +44,7 @@ function TradesPageTradeCard({
   trade,
   showAdvanced,
   accountRow = null,
+  accounts = [],
   shareProfile = null,
   onEdit,
   onDelete,
@@ -226,7 +234,9 @@ function TradesPageTradeCard({
               Pts: {formatTradePoints(trade)}
             </span>
 
-            {isCopyTradedTrade(trade) ? <CopyTradedBadge /> : null}
+            {isCopyTradedTrade(trade) ? (
+              <CopyTradedBadge trade={trade} />
+            ) : null}
           </div>
 
           <p className="text-xs md:text-sm">
@@ -240,25 +250,36 @@ function TradesPageTradeCard({
           </p>
 
           <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2">
-            {trade.mode !== "backtest" && trade.account_type ? (
+            {!isCopyTradedMode(trade) && resolveTradeModeBadgeLabel(trade) ? (
               <span
                 className={`rounded-full px-2 py-0.5 text-[10px] font-medium md:text-xs ${
                   acctLower === "funded"
                     ? "bg-green-500/20 text-green-400"
                     : acctLower === "eval"
                       ? "bg-yellow-500/20 text-yellow-400"
-                      : acctLower === "live"
+                      : acctLower === "live" ||
+                          String(trade.trade_mode ?? "").toLowerCase() === "live"
                         ? "bg-blue-500/20 text-blue-400"
-                        : acctLower === "backtest"
+                        : acctLower === "backtest" ||
+                            String(trade.trade_mode ?? "").toLowerCase() ===
+                              "backtest"
                           ? "bg-indigo-500/20 text-indigo-300"
-                          : "bg-gray-500/20 text-gray-400"
+                          : String(trade.trade_mode ?? "").toLowerCase() ===
+                              "sim"
+                            ? "bg-cyan-500/20 text-cyan-300"
+                            : String(trade.trade_mode ?? "").toLowerCase() ===
+                                "replay"
+                              ? "bg-purple-500/20 text-purple-300"
+                              : "bg-gray-500/20 text-gray-400"
                 }`}
               >
-                {trade.account_type}
+                {resolveTradeModeBadgeLabel(trade)}
               </span>
             ) : null}
 
-            {acctLower === "backtest" ? (
+            {acctLower === "backtest" &&
+            !trade.trade_mode &&
+            !isCopyTradedMode(trade) ? (
               <span className="rounded bg-blue-500 px-2 py-1 text-[10px] text-white md:text-xs">
                 Backtest
               </span>
@@ -275,7 +296,9 @@ function TradesPageTradeCard({
               </div>
             ) : null}
 
-            {!trade.account_type && !hasAccountLine ? (
+            {!resolveTradeModeBadgeLabel(trade) &&
+            !hasAccountLine &&
+            !isCopyTradedMode(trade) ? (
               <span className="text-[10px] text-gray-400 md:text-xs">—</span>
             ) : null}
           </div>
@@ -312,6 +335,17 @@ function TradesPageTradeCard({
 
           {showAdvanced ? (
             <div className="mt-3 space-y-1 border-t border-white/10 pt-3 text-xs text-gray-300 md:text-sm">
+              <TradeCopyTradingDetails
+                trade={trade}
+                accounts={
+                  accounts.length > 0
+                    ? accounts
+                    : accountRow
+                      ? [accountRow]
+                      : []
+                }
+                className="mb-2"
+              />
               <p>
                 <span className="text-gray-400">Entry:</span>{" "}
                 {formatTradePrice(entryPrice)}

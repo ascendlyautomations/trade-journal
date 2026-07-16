@@ -16,6 +16,7 @@ import { scheduleDeferredWork } from "../../lib/scheduleDeferredWork"
 import { subscribeNotificationChanges } from "../../lib/notificationRealtime"
 import { ProfileAvatarImg } from "./SafeProfileAvatar"
 import BugReportModal from "./BugReportModal"
+import UserReviewModal from "./beta/UserReviewModal"
 import GettingStartedMobileEntry from "./GettingStartedMobileEntry"
 import { isDemoUserId } from "@/lib/demo/constants"
 import { getDemoUnreadNotificationCount } from "@/lib/demo/demoNotifications"
@@ -51,6 +52,7 @@ export default function Navbar() {
   const [moreSubmenu, setMoreSubmenu] = useState<string | null>(null)
   const [accountMenuOpen, setAccountMenuOpen] = useState(false)
   const [bugReportOpen, setBugReportOpen] = useState(false)
+  const [reviewModalOpen, setReviewModalOpen] = useState(false)
   const [unreadMessagesCount, setUnreadMessagesCount] = useState(0)
   const [unreadCount, setUnreadCount] = useState(0)
   const [isAdmin, setIsAdmin] = useState(false)
@@ -1208,11 +1210,24 @@ export default function Navbar() {
                         type="button"
                         onClick={() => {
                           setAccountMenuOpen(false)
+                          setReviewModalOpen(true)
+                        }}
+                        className="w-full px-4 py-2 text-left text-sm hover:bg-white/10"
+                      >
+                        <span className="inline-flex items-center gap-2">
+                          <span aria-hidden="true">⭐</span>
+                          Leave a Review
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAccountMenuOpen(false)
                           setBugReportOpen(true)
                         }}
                         className="w-full px-4 py-2 text-left text-sm hover:bg-white/10"
                       >
-                        Report bug
+                        Report Bug
                       </button>
 
                       <button
@@ -1476,10 +1491,23 @@ export default function Navbar() {
               className="rounded-lg px-3 py-2 text-left text-white hover:text-blue-400"
               onClick={() => {
                 closeMobile()
+                setReviewModalOpen(true)
+              }}
+            >
+              <span className="inline-flex items-center gap-2">
+                <span aria-hidden="true">⭐</span>
+                Leave a Review
+              </span>
+            </button>
+            <button
+              type="button"
+              className="rounded-lg px-3 py-2 text-left text-white hover:text-blue-400"
+              onClick={() => {
+                closeMobile()
                 setBugReportOpen(true)
               }}
             >
-              Report bug
+              Report Bug
             </button>
 
             <button
@@ -1514,6 +1542,11 @@ export default function Navbar() {
       ) : null}
 
       <BugReportModal open={bugReportOpen} onClose={() => setBugReportOpen(false)} />
+      <UserReviewModal
+        open={reviewModalOpen}
+        userId={user?.id ?? null}
+        onClose={() => setReviewModalOpen(false)}
+      />
     </div>
   )
 

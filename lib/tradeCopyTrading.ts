@@ -3,12 +3,17 @@ import { ensureManualUserAccountRegistered } from "./ensureManualUserAccount"
 import { prependTradeInCache } from "./appDataCache"
 import { assertAccountAllowsNewTrades } from "./freePlanAccountSlots"
 import type { TradingAccountListItem } from "./tradingAccounts"
+import { isCopyTradedMode } from "./tradeMode"
 import { toUserFacingErrorMessage, USER_FACING_ERROR_MESSAGES } from "./userFacingError"
 
 export function isCopyTradedTrade(
-  trade: { copy_trading_group_id?: string | null } | null | undefined
+  trade: {
+    trade_mode?: unknown
+    copied_account_ids?: unknown
+    copy_trading_group_id?: string | null
+  } | null | undefined
 ): boolean {
-  return trade?.copy_trading_group_id != null && String(trade.copy_trading_group_id).trim() !== ""
+  return isCopyTradedMode(trade)
 }
 
 export type ManualTradeAccountSnapshot = {
@@ -40,22 +45,27 @@ type InsertCopyTradedTradesParams = {
   client: SupabaseClient
   userId: string
   isPro: boolean
-  groupId: string
+  /** Optional legacy copy-trading group link. */
+  groupId?: string | null
   accounts: TradingAccountListItem[]
   tradeTemplate: Record<string, unknown>
   isPublic: boolean
   postCaption?: string | null
+  sourceAccountId?: string | null
+  copiedAccountIds?: readonly string[]
 }
 
 export async function insertCopyTradedTrades({
   client,
   userId,
   isPro,
-  groupId,
+  groupId = null,
   accounts,
   tradeTemplate,
   isPublic,
   postCaption = null,
+  sourceAccountId = null,
+  copiedAccountIds = [],
 }: InsertCopyTradedTradesParams): Promise<
   | { ok: true; trades: Record<string, unknown>[] }
   | { ok: false; message: string }
@@ -102,6 +112,18 @@ export async function insertCopyTradedTrades({
     }
   }
 
+  const normalizedCopied = [
+    ...new Set(
+      (copiedAccountIds ?? [])
+        .map((id) => String(id ?? "").trim())
+        .filter(Boolean)
+    ),
+  ]
+  const normalizedSource =
+    sourceAccountId != null && String(sourceAccountId).trim() !== ""
+      ? String(sourceAccountId).trim()
+      : null
+
   const rows = accounts.map((account) => {
     const snapshot = accountToTradeSnapshot(account)
     return {
@@ -112,7 +134,10 @@ export async function insertCopyTradedTrades({
       mode: snapshot.mode,
       account_category: snapshot.category,
       account_type: snapshot.type,
-      copy_trading_group_id: groupId,
+      trade_mode: "copy_traded",
+      source_account_id: normalizedSource,
+      copied_account_ids: normalizedCopied,
+      ...(groupId ? { copy_trading_group_id: groupId } : {}),
     }
   })
 

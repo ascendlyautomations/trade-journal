@@ -11,6 +11,7 @@ export const TRADE_ACCOUNT_IDENTIFIER_KEYS = [
   "locked_account_name",
   "locked_account_number",
   "locked_account_id",
+  "source_account_id",
 ] as const
 
 /** Additional trade fields that reveal account sizing / labels to the public. */
@@ -60,6 +61,9 @@ export const PUBLIC_TRADE_SELECT = [
   "news_event",
   "psychology_notes",
   "reviewed",
+  "trade_mode",
+  "copied_account_ids",
+  "copy_trading_group_id",
 ].join(", ")
 
 /** Owner trade columns for app cache (dashboard, trades, calendar, analyst). */
@@ -71,6 +75,7 @@ export const TRADES_APP_SELECT = [
   "account_category",
   "top_confluences",
   "is_initial_import",
+  "source_account_id",
 ].join(", ")
 
 export function tradeSelectForViewer(isOwner: boolean): string {

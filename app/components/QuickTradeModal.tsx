@@ -856,6 +856,11 @@ export default function QuickTradeModal({
               tradeTemplate,
               isPublic,
               postCaption: description.trim() || null,
+              sourceAccountId: groupAccounts[0]?.id ?? null,
+              copiedAccountIds: groupAccounts
+                .slice(1)
+                .map((account) => String(account.id))
+                .filter(Boolean),
             })
 
             if (!copyResult.ok) {

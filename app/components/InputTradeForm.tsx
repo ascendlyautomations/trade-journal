@@ -46,7 +46,7 @@ import { parseOptionalRr } from "@/lib/tradeRr"
 import {
   resolveCopyGroupAccounts,
 } from "@/lib/copyTradingGroups"
-import { insertCopyTradedTrades } from "@/lib/tradeCopyTrading"
+import { insertCopyTradedTrades, isCopyTradedTrade } from "@/lib/tradeCopyTrading"
 import { useCopyTradingGroups } from "@/lib/useCopyTradingGroups"
 import CreateAccountModal, {
   type Props as CreateAccountModalProps,
@@ -107,8 +107,14 @@ import ScrollableModalShell from "@/app/components/ui/ScrollableModalShell"
 import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
 import {
   formatAccountNameWithSizeDisplay,
+  formatTradingAccountSelectorLabel,
   safeAccountNumberLabel,
 } from "@/lib/tradeAccountDisplay"
+import {
+  TRADE_MODE_OPTIONS,
+  normalizeTradeMode,
+  type TradeMode,
+} from "@/lib/tradeMode"
 import {
   invalidateTradesCache,
   prependTradeInCache,
@@ -201,6 +207,11 @@ export default function InputTradeForm({
   const [selectedCopyGroupId, setSelectedCopyGroupId] = useState<string | null>(
     null
   )
+  const [tradeMode, setTradeMode] = useState<TradeMode>("live")
+  const [copySourceAccountId, setCopySourceAccountId] = useState<string>("")
+  const [copyDestinationAccountIds, setCopyDestinationAccountIds] = useState<
+    string[]
+  >([])
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showAccountWarning, setShowAccountWarning] = useState(false)
 
@@ -611,6 +622,24 @@ export default function InputTradeForm({
           ? String(acctCat).trim()
           : undefined,
     })
+    const loadedTradeMode =
+      normalizeTradeMode((t as { trade_mode?: unknown }).trade_mode) ??
+      (isCopyTradedTrade(t) ? "copy_traded" : null) ??
+      normalizeTradeMode(t.mode) ??
+      "live"
+    setTradeMode(loadedTradeMode)
+    const sourceId = String(
+      (t as { source_account_id?: unknown }).source_account_id ??
+        t.account_id ??
+        ""
+    ).trim()
+    setCopySourceAccountId(sourceId)
+    const copiedRaw = (t as { copied_account_ids?: unknown }).copied_account_ids
+    setCopyDestinationAccountIds(
+      Array.isArray(copiedRaw)
+        ? copiedRaw.map((id) => String(id ?? "").trim()).filter(Boolean)
+        : []
+    )
     setTradeType(t.trade_type ?? "")
     setConfidence(
       t.confidence != null && t.confidence !== "" ? String(t.confidence) : ""
@@ -693,6 +722,9 @@ export default function InputTradeForm({
     setExitTime("")
     setSelectedAccount(null)
     setSelectedCopyGroupId(null)
+    setTradeMode("live")
+    setCopySourceAccountId("")
+    setCopyDestinationAccountIds([])
     setConfidence("")
     setEmotion("")
     setFollowedPlan(false)
@@ -919,6 +951,143 @@ export default function InputTradeForm({
       ? (copyGroups.find((group) => group.id === selectedCopyGroupId) ?? null)
       : null
 
+    // Explicit Copy Traded mode: source + destination accounts (no group required).
+    if (tradeMode === "copy_traded" && !isEditMode && !selectedCopyGroup) {
+      const sourceId = copySourceAccountId.trim()
+      const destIds = copyDestinationAccountIds
+        .map((id) => String(id).trim())
+        .filter((id) => id && id !== sourceId)
+
+      if (!sourceId) {
+        showPopup(
+          persistentError(
+            "Source Account Required",
+            "Select the account where this trade originated."
+          )
+        )
+        throw new Error("Copy traded source required")
+      }
+      if (destIds.length === 0) {
+        showPopup(
+          persistentError(
+            "Copied Accounts Required",
+            "Select at least one destination account for Copy Traded."
+          )
+        )
+        throw new Error("Copy traded destinations required")
+      }
+
+      const byId = new Map(
+        accounts.map((account) => [String(account.id), account] as const)
+      )
+      const sourceAccount = byId.get(sourceId)
+      if (!sourceAccount) {
+        showPopup(
+          persistentError("Source Account Required", "Source account not found.")
+        )
+        throw new Error("Copy traded source missing")
+      }
+      const destAccounts = destIds
+        .map((id) => byId.get(id))
+        .filter((account): account is (typeof accounts)[number] => Boolean(account))
+
+      if (destAccounts.length === 0) {
+        showPopup(
+          persistentError(
+            "Copied Accounts Required",
+            "Select at least one valid destination account."
+          )
+        )
+        throw new Error("Copy traded destinations missing")
+      }
+
+      const now = new Date()
+      const tradeTemplate = {
+        ticker,
+        direction,
+        pnl: pnl ? Number(pnl) : null,
+        rr: parsedRR,
+        points: hasStoredTradePoints(points) ? Number(points) : null,
+        contracts: contracts ? Number(contracts) : null,
+        session: sessionToSave,
+        notes: confluences || null,
+        public_description: publicDescription,
+        image_url: screenshotUrl,
+        image_display_mode: screenshotDisplayMode,
+        strategy: strategy || null,
+        user_id: userId,
+        created_at: now.toISOString(),
+        date: now.toISOString(),
+        trade_date: entryDate,
+        entry_price: entryPrice ? Number(entryPrice) : null,
+        exit_price: exitPrice ? Number(exitPrice) : null,
+        entry_time: buildDateTime(entryDate, entryTime),
+        exit_time: buildDateTime(exitDate, exitTime),
+        psychology_notes: psychologyVal,
+        trade_type: tradeTypeToSave,
+        confidence: confidence ? Number(confidence) : null,
+        emotion: emotion || null,
+        followed_plan: followedPlan,
+        mistake_type: mistakeType || null,
+        market_condition: market || null,
+        news_event: newsEvent,
+        timeframe: timeframeToSave,
+        is_public: isPublic,
+      }
+
+      const copyResult = await insertCopyTradedTrades({
+        client: supabase,
+        userId,
+        isPro: userIsPro,
+        accounts: [sourceAccount, ...destAccounts],
+        tradeTemplate,
+        isPublic,
+        postCaption: confluences,
+        sourceAccountId: sourceId,
+        copiedAccountIds: destIds,
+      })
+
+      if (!copyResult.ok) {
+        showPopup(
+          persistentError(
+            "Save Failed",
+            handleSupabaseError(copyResult.message)
+          )
+        )
+        throw new Error(copyResult.message)
+      }
+
+      for (const trade of copyResult.trades) {
+        const replayError = await syncTradeReplayAfterSave(
+          userId,
+          String(trade.id),
+          reelFileAtSubmit,
+          report
+        )
+        if (replayError) {
+          showPopup(
+            persistentError(
+              "Clip Upload Failed",
+              `Trades saved, but replay could not be uploaded for every account: ${replayError}`
+            )
+          )
+        }
+      }
+
+      void refreshPlanAndAccountLock()
+      setCommunityPreviewOpen(false)
+      resetCreateForm()
+      onSave?.()
+      showPopup(
+        isPublic
+          ? feedbackPresets.postPublished()
+          : feedbackPresets.tradeSaveSuccess()
+      )
+      notifyGettingStartedChecklistMaybeCompleted()
+      releaseSubmit()
+      return
+    }
+
     if (selectedCopyGroup && !isEditMode) {
       const groupAccounts = resolveCopyGroupAccounts(selectedCopyGroup, accounts)
       if (groupAccounts.length === 0) {
@@ -930,6 +1099,12 @@ export default function InputTradeForm({
         )
         throw new Error("Copy group empty")
       }
+
+      const sourceAccount = groupAccounts[0]
+      const copiedIds = groupAccounts
+        .slice(1)
+        .map((account) => String(account.id))
+        .filter(Boolean)
 
       const now = new Date()
       const tradeTemplate = {
@@ -974,6 +1149,8 @@ export default function InputTradeForm({
         tradeTemplate,
         isPublic,
         postCaption: confluences,
+        sourceAccountId: sourceAccount?.id ?? null,
+        copiedAccountIds: copiedIds,
       })
 
       if (!copyResult.ok) {
@@ -1098,6 +1275,15 @@ export default function InputTradeForm({
         account_type: rowAcct.type,
         mode: rowAcct.mode,
         account_category: rowAcct.category,
+        trade_mode: tradeMode,
+        source_account_id:
+          tradeMode === "copy_traded" ? copySourceAccountId || rowAcct.id : null,
+        copied_account_ids:
+          tradeMode === "copy_traded"
+            ? copyDestinationAccountIds.filter(
+                (id) => id && id !== (copySourceAccountId || rowAcct.id)
+              )
+            : [],
         strategy:
           String(strategy).trim() !== "" ? String(strategy).trim() : null,
         account_size: rowAcct.size,
@@ -1259,6 +1445,15 @@ export default function InputTradeForm({
       mode: rowAcct.mode,
       account_category: rowAcct.category ?? null,
       account_type: rowAcct.type,
+      trade_mode: tradeMode,
+      source_account_id:
+        tradeMode === "copy_traded" ? copySourceAccountId || rowAcct.id : null,
+      copied_account_ids:
+        tradeMode === "copy_traded"
+          ? copyDestinationAccountIds.filter(
+              (id) => id && id !== (copySourceAccountId || rowAcct.id)
+            )
+          : [],
       strategy: strategy || null,
       user_id: userId,
       created_at: now.toISOString(),
@@ -2011,6 +2206,102 @@ export default function InputTradeForm({
         <div className="px-4 pb-4 pt-3 rounded-xl bg-[#0b1220]/60 border border-white/5">
           <h3 className={TRADE_FIELD_SECTION_TITLE_CLASS}>Trade</h3>
           <div className="space-y-2">
+          <div>
+            <label className={fieldLabelClass}>Trade Mode</label>
+            <CustomSelect
+              value={tradeMode}
+              onChange={(value) => {
+                const next = normalizeTradeMode(value) ?? "live"
+                setTradeMode(next)
+                if (next !== "copy_traded") {
+                  setSelectedCopyGroupId(null)
+                } else if (selectedAccount?.id && !copySourceAccountId) {
+                  setCopySourceAccountId(String(selectedAccount.id))
+                }
+              }}
+              options={TRADE_MODE_OPTIONS.map((option) => ({
+                value: option.value,
+                label: option.label,
+              }))}
+              className="mt-0"
+            />
+          </div>
+
+          {tradeMode === "copy_traded" ? (
+            <div className="space-y-3 rounded-lg border border-violet-500/20 bg-violet-500/5 p-3">
+              <div>
+                <label className={fieldLabelClass}>Source Account</label>
+                <CustomSelect
+                  value={copySourceAccountId}
+                  onChange={(value) => {
+                    const next = String(value ?? "")
+                    setCopySourceAccountId(next)
+                    setCopyDestinationAccountIds((prev) =>
+                      prev.filter((id) => id !== next)
+                    )
+                    const matched = accounts.find(
+                      (account) => String(account.id) === next
+                    )
+                    if (matched) {
+                      setSelectedAccount(matched)
+                      setSelectedCopyGroupId(null)
+                    }
+                  }}
+                  options={[
+                    { value: "", label: "Select source account" },
+                    ...pickerAccounts.map((account) => ({
+                      value: String(account.id),
+                      label: formatTradingAccountSelectorLabel(account),
+                    })),
+                  ]}
+                />
+              </div>
+              <div>
+                <p className={fieldLabelClass}>Copied Accounts</p>
+                <div className="mt-1 max-h-40 space-y-1.5 overflow-y-auto rounded-lg border border-white/10 bg-black/20 p-2">
+                  {pickerAccounts.filter(
+                    (account) => String(account.id) !== copySourceAccountId
+                  ).length === 0 ? (
+                    <p className="px-1 py-2 text-xs text-gray-400">
+                      Add another account to copy this trade to.
+                    </p>
+                  ) : (
+                    pickerAccounts
+                      .filter(
+                        (account) => String(account.id) !== copySourceAccountId
+                      )
+                      .map((account) => {
+                        const id = String(account.id)
+                        const checked = copyDestinationAccountIds.includes(id)
+                        return (
+                          <label
+                            key={id}
+                            className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-sm text-gray-200 hover:bg-white/5"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => {
+                                setCopyDestinationAccountIds((prev) =>
+                                  checked
+                                    ? prev.filter((value) => value !== id)
+                                    : [...prev, id]
+                                )
+                              }}
+                              className="rounded border-white/20 bg-transparent"
+                            />
+                            <span className="min-w-0 truncate">
+                              {formatTradingAccountSelectorLabel(account)}
+                            </span>
+                          </label>
+                        )
+                      })
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
           <div>
             <label className={fieldLabelClass}>P&amp;L</label>
             <TradeFormCurrencyInput

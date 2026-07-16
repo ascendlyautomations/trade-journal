@@ -311,6 +311,7 @@ function TradesPageMainContent({
                   trade={trade}
                   showAdvanced={showAdvanced}
                   accountRow={accountById[String(trade.account_id ?? "")]}
+                  accounts={Object.values(accountById)}
                   shareProfile={gateProfile}
                   attachedReel={tradeReelsByTradeId[String(trade.id)] ?? null}
                   onOpenReplay={

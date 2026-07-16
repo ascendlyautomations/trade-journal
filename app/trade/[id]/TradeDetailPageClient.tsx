@@ -18,11 +18,15 @@ import {
   formatTradePoints,
 } from "@/lib/formatDisplay"
 import {
-  PUBLIC_TRADE_SELECT,
   sanitizeTradeForViewer,
+  tradeSelectForViewer,
 } from "@/lib/publicAccountPrivacy"
 import { resolveTradePoints } from "@/lib/resolveTradePoints"
 import TradeScreenshotImage from "@/app/components/trade/TradeScreenshotImage"
+import TradeCopyTradingDetails from "@/app/components/trade/TradeCopyTradingDetails"
+import CopyTradedBadge from "@/app/components/trade/CopyTradedBadge"
+import { isCopyTradedTrade } from "@/lib/tradeCopyTrading"
+import { ACCOUNTS_SELECT } from "@/lib/appDataCache"
 import { profilePath } from "@/lib/profileRoutes"
 import { profileSeoDisplayName } from "@/lib/publicSeo"
 import { readTradeDetail, writeTradeDetail } from "@/lib/tradeDetailCache"
@@ -57,6 +61,7 @@ export default function TradeDetailPageClient({
   const [commentsFocused, setCommentsFocused] = useState(false)
   const [attachedReel, setAttachedReel] = useState<ReelRow | null>(null)
   const [selectedReplay, setSelectedReplay] = useState<ReelRow | null>(null)
+  const [ownerAccounts, setOwnerAccounts] = useState<any[]>([])
 
   useEffect(() => {
     if (!tradeId) {
@@ -83,18 +88,26 @@ export default function TradeDetailPageClient({
       const sessionUserId = session?.user?.id
       setUserId(sessionUserId)
 
+      // Probe ownership with a light select, then fetch full row for the viewer.
+      const { data: ownershipRow } = await supabase
+        .from("trades")
+        .select("user_id")
+        .eq("id", tradeId)
+        .maybeSingle()
+
+      const isOwner =
+        sessionUserId != null &&
+        ownershipRow?.user_id != null &&
+        String(sessionUserId) === String(ownershipRow.user_id)
+
       const { data, error } = await supabase
         .from("trades")
-        .select(PUBLIC_TRADE_SELECT)
+        .select(tradeSelectForViewer(isOwner))
         .eq("id", tradeId)
         .maybeSingle()
 
       if (cancelled) return
 
-      const isOwner =
-        sessionUserId != null &&
-        data?.user_id != null &&
-        String(sessionUserId) === String(data.user_id)
       const resolvedTrade = error
         ? null
         : sanitizeTradeForViewer(data, { isOwner })
@@ -115,6 +128,21 @@ export default function TradeDetailPageClient({
           if (!cancelled) setOwnerProfile(owner)
         } else if (!cancelled) {
           setOwnerProfile(null)
+        }
+      }
+
+      if (isOwner && sessionUserId) {
+        const { data: accountRows } = await supabase
+          .from("accounts")
+          .select(ACCOUNTS_SELECT)
+          .eq("user_id", sessionUserId)
+        if (!cancelled) {
+          setOwnerAccounts(
+            (accountRows ?? []).map((row) => ({
+              ...row,
+              size: row.account_size,
+            }))
+          )
         }
       }
 
@@ -180,6 +208,11 @@ export default function TradeDetailPageClient({
         <div>
           <p className="text-lg font-semibold">{trade.ticker}</p>
           <p className="text-xs text-gray-400">{trade.direction}</p>
+          {isCopyTradedTrade(trade) ? (
+            <div className="mt-1">
+              <CopyTradedBadge trade={trade} />
+            </div>
+          ) : null}
         </div>
         <span
           className={`text-sm font-semibold tabular-nums ${
@@ -197,6 +230,11 @@ export default function TradeDetailPageClient({
           </span>
         </p>
       ) : null}
+      <TradeCopyTradingDetails
+        trade={trade}
+        accounts={ownerAccounts}
+        className="mt-2"
+      />
       {ownerProfile ? (
         <Link
           href={profilePath(ownerProfile)}

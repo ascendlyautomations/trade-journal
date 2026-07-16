@@ -56,6 +56,38 @@ export function openNativeDatePicker(input: HTMLInputElement | null | undefined)
   tryShowPicker()
 }
 
+/**
+ * Open a time picker from a direct user gesture (e.g. clock button).
+ *
+ * Unlike date fields, Safari macOS supports showPicker for `type="time"` and
+ * users need the clock UI when they tap the icon. iOS often lacks showPicker
+ * for time — fall back to focus/click so the native wheel still opens.
+ * Must be called synchronously from a click/pointer handler (user activation).
+ */
+export function openNativeTimePicker(input: HTMLInputElement | null | undefined) {
+  if (!input) return
+
+  if (supportsShowPicker(input)) {
+    try {
+      input.showPicker()
+      return
+    } catch {
+      // NotAllowedError / unsupported context — fall through.
+    }
+  }
+
+  try {
+    input.focus({ preventScroll: true })
+  } catch {
+    input.focus()
+  }
+  try {
+    input.click()
+  } catch {
+    // ignore
+  }
+}
+
 function useDismissNativeTemporalField(
   inputRef: React.RefObject<HTMLInputElement | null>
 ) {
