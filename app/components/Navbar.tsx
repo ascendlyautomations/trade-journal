@@ -1215,7 +1215,7 @@ export default function Navbar() {
                         className="w-full px-4 py-2 text-left text-sm hover:bg-white/10"
                       >
                         <span className="inline-flex items-center gap-2">
-                          <span aria-hidden="true">⭐</span>
+                          
                           Leave a Review
                         </span>
                       </button>
@@ -1495,7 +1495,7 @@ export default function Navbar() {
               }}
             >
               <span className="inline-flex items-center gap-2">
-                <span aria-hidden="true">⭐</span>
+                
                 Leave a Review
               </span>
             </button>
