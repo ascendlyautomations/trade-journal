@@ -11,7 +11,7 @@ import { toDateInputValue, toTimeInputValue } from "@/lib/inputTradeDateTime"
 
 const QUICK_CSV_PLACEHOLDER_USER_ID = "00000000-0000-0000-0000-000000000000"
 
-/** Max trades shown/processed per Quick Input batch before auto-continuing. */
+/** Max trades shown/processed per Quick Trade batch before auto-continuing. */
 export const QUICK_CSV_BATCH_SIZE = 10
 
 export const QUICK_CSV_PARSE_FAILED_MESSAGE = "Unable to read this CSV row."

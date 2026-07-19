@@ -12,7 +12,7 @@ const DETAIL_MAX_HEIGHT_PX = 720
 
 type FeedPostScreenshotProps = {
   imageSrc: string | null
-  variant?: "thumbnail" | "detail"
+  variant?: "thumbnail" | "detail" | "message"
   /**
    * When set, media sits in a shared aspect-ratio frame (homepage featured cards).
    * Image is contained — no second crop of the saved upload.
@@ -21,6 +21,7 @@ type FeedPostScreenshotProps = {
   imgClassName?: string
   wrapperClassName?: string
   onImageClick?: (url: string) => void
+  priority?: boolean
 }
 
 function FeedPostScreenshot({
@@ -30,7 +31,15 @@ function FeedPostScreenshot({
   imgClassName,
   wrapperClassName,
   onImageClick,
+  priority = false,
 }: FeedPostScreenshotProps) {
+  const preset =
+    variant === "detail"
+      ? "feed-detail"
+      : variant === "message"
+        ? "message-preview"
+        : "feed-thumb"
+
   if (fixedFrameClassName) {
     return (
       <div
@@ -40,9 +49,11 @@ function FeedPostScreenshot({
         {imageSrc ? (
           <TradeScreenshotImage
             src={imageSrc}
-            preset={variant === "detail" ? "feed-detail" : "feed-thumb"}
+            preset={preset}
+            fallbackToOriginal={variant !== "message"}
             objectFit="contain"
             fillFrame
+            priority={priority}
             className={imgClassName ?? TRADE_IMAGE_MEDIA_FRAME_IMG_CLASS}
             onClick={onImageClick}
             logContext={`feed-post-screenshot:${variant}:framed`}
@@ -57,11 +68,15 @@ function FeedPostScreenshot({
   const image = (
     <TradeScreenshotImage
       src={imageSrc}
-      preset={variant === "detail" ? "feed-detail" : "feed-thumb"}
+      preset={preset}
+      fallbackToOriginal={variant !== "message"}
       className={imgClassName}
       maxHeightPx={
-        variant === "detail" ? DETAIL_MAX_HEIGHT_PX : TRADE_SCREENSHOT_MAX_HEIGHT_PX
+        variant === "detail" || variant === "message"
+          ? DETAIL_MAX_HEIGHT_PX
+          : TRADE_SCREENSHOT_MAX_HEIGHT_PX
       }
+      priority={priority}
       onClick={onImageClick}
       logContext={`feed-post-screenshot:${variant}`}
     />

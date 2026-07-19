@@ -95,7 +95,7 @@ export const feedbackPresets = {
     type: "info",
     title: "Single Trade Detected",
     message:
-      "We found one trade in your CSV. We've opened Quick Input so you can quickly review and save it.",
+      "We found one trade in your CSV. We've opened Quick Trade so you can quickly review and save it.",
     persist: true,
     dismissLabel: "Got it",
     onDismiss: onContinue,

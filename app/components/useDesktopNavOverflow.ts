@@ -10,7 +10,6 @@ import {
 
 /** Left-cluster items: first listed = first moved into More as space shrinks. */
 export const DESKTOP_NAV_LEFT_OVERFLOW_ORDER = [
-  "affiliate",
   "community",
   "analytics",
   "messages",
@@ -24,7 +23,6 @@ export const DESKTOP_NAV_MORE_DISPLAY_ORDER = [
   "messages",
   "analytics",
   "community",
-  "affiliate",
   "beta",
 ] as const
 

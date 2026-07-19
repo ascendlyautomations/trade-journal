@@ -16,6 +16,7 @@ type ReelVideoPosterFrameProps = {
   alt?: string
   className?: string
   imagePreset?: "reel-thumb"
+  priority?: boolean
 }
 
 function PrimedVideoPoster({
@@ -60,6 +61,7 @@ export default function ReelVideoPosterFrame({
   alt = "",
   className = "h-full w-full object-cover",
   imagePreset = "reel-thumb",
+  priority = false,
 }: ReelVideoPosterFrameProps) {
   const imagePosterUrl = getReelPosterImageUrl(thumbnailUrl)
   const frameVideoUrl = imagePosterUrl
@@ -95,6 +97,8 @@ export default function ReelVideoPosterFrame({
         originalSrc={imagePosterUrl}
         preset={imagePreset}
         alt={alt}
+        priority={priority}
+        localTransformWidth={priority ? 640 : undefined}
         className={className}
       />
     )

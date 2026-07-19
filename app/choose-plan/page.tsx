@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import SignupPlanPicker from "@/app/components/SignupPlanPicker"
 import { useUserProfile } from "@/lib/useUserProfile"
 import { profileNeedsOnboarding } from "@/lib/profileOnboardingGate"
+import { isEarlyAccessActive } from "@/lib/earlyAccess"
 import { resolvePostAuthAppPath } from "@/lib/subscriptionAccess"
 import {
   enterSignupFlow,
@@ -38,6 +39,13 @@ export default function ChoosePlanPage() {
       return
     }
     if (!profile) return
+
+    if (isEarlyAccessActive(profile)) {
+      router.replace(
+        profileNeedsOnboarding(profile) ? "/onboarding" : "/dashboard"
+      )
+      return
+    }
 
     if (!profileNeedsOnboarding(profile)) {
       router.replace(resolvePostAuthAppPath(profile))

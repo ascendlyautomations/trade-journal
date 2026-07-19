@@ -1,6 +1,8 @@
 "use client"
 
+import { useState } from "react"
 import Link from "next/link"
+import BugReportModal from "@/app/components/BugReportModal"
 import {
   submissionPageShell,
   submissionSubtitle,
@@ -64,7 +66,28 @@ function FeatureRequestIcon({ className }: { className?: string }) {
   )
 }
 
-const HELP_OPTIONS = [
+function BugReportIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M8 9h8M9 13h6M12 5v2M7 7l-2-2M17 7l2-2M5 12h2M17 12h2M7 17l-2 2M17 17l2 2"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M8 8.5A4 4 0 0 1 12 5a4 4 0 0 1 4 3.5V15a4 4 0 0 1-8 0V8.5z"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+const HELP_LINK_OPTIONS = [
   {
     href: "/support",
     title: "Contact Support",
@@ -97,7 +120,7 @@ function HelpOptionCard({
   description,
   cta,
   Icon,
-}: (typeof HELP_OPTIONS)[number]) {
+}: (typeof HELP_LINK_OPTIONS)[number]) {
   return (
     <Link href={href} className={HELP_CARD_CLASS}>
       <div className={HELP_CARD_ICON_WRAPPER}>
@@ -111,6 +134,8 @@ function HelpOptionCard({
 }
 
 export default function HelpCenterPage() {
+  const [bugReportOpen, setBugReportOpen] = useState(false)
+
   return (
     <>
       <div className={submissionPageShell}>
@@ -122,13 +147,35 @@ export default function HelpCenterPage() {
             </p>
           </header>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {HELP_OPTIONS.map((option) => (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-2">
+            {HELP_LINK_OPTIONS.map((option) => (
               <HelpOptionCard key={option.href} {...option} />
             ))}
+            <button
+              type="button"
+              onClick={() => setBugReportOpen(true)}
+              className={`${HELP_CARD_CLASS} text-left`}
+            >
+              <div className={HELP_CARD_ICON_WRAPPER}>
+                <BugReportIcon className="h-6 w-6" />
+              </div>
+              <h2 className="text-lg font-semibold text-white group-hover:text-blue-100">
+                Report a Bug
+              </h2>
+              <p className="mt-2 mb-5 flex-1 text-sm leading-relaxed text-gray-300">
+                Found something broken? Report it so we can investigate and fix
+                the issue quickly.
+              </p>
+              <span className={HELP_CARD_BUTTON}>Report a Bug</span>
+            </button>
           </div>
         </div>
       </div>
+
+      <BugReportModal
+        open={bugReportOpen}
+        onClose={() => setBugReportOpen(false)}
+      />
     </>
   )
 }

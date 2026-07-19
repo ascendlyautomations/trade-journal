@@ -37,6 +37,7 @@ import {
   searchDemoExploreProfiles,
 } from "@/lib/demo/demoExplore"
 import { useUserProfile } from "@/lib/UserProfileProvider"
+import { scheduleDeferredWork } from "@/lib/scheduleDeferredWork"
 
 const EXPLORE_PAGE_SIZE = 16
 
@@ -204,12 +205,14 @@ export default function ExplorePage() {
     if (cached.scrollY > 0) {
       requestAnimationFrame(() => window.scrollTo(0, cached.scrollY))
     }
-    void loadTradeMetaRows()
+    scheduleDeferredWork(() => {
+      void loadTradeMetaRows()
+    }, 1000)
   }
 
   useEffect(() => {
     if (isDemoModeActive() && !user?.id) return
-    const cached = readExploreSession()
+    const cached = readExploreSession(user?.id ?? null)
     if (cached) {
       restoreExploreSession(cached)
       return
@@ -306,32 +309,33 @@ export default function ExplorePage() {
 
     setCurrentUserId(user?.id ?? null)
 
-    const [followingRes, requestsRes, followsYouRes] = await Promise.all([
-      user?.id
-        ? supabase
-            .from("followers")
-            .select("following_id")
-            .eq("follower_id", user.id)
-        : Promise.resolve({ data: null }),
-      user?.id
-        ? supabase
-            .from("follow_requests")
-            .select("target_id")
-            .eq("requester_id", user.id)
-            .eq("status", "pending")
-        : Promise.resolve({ data: null }),
-      user?.id
-        ? supabase
-            .from("followers")
-            .select("follower_id")
-            .eq("following_id", user.id)
-        : Promise.resolve({ data: null }),
+    const [
+      [followingRes, requestsRes, followsYouRes],
+      { added, hasMore, error: profilesError },
+    ] = await Promise.all([
+      Promise.all([
+        user?.id
+          ? supabase
+              .from("followers")
+              .select("following_id")
+              .eq("follower_id", user.id)
+          : Promise.resolve({ data: null }),
+        user?.id
+          ? supabase
+              .from("follow_requests")
+              .select("target_id")
+              .eq("requester_id", user.id)
+              .eq("status", "pending")
+          : Promise.resolve({ data: null }),
+        user?.id
+          ? supabase
+              .from("followers")
+              .select("follower_id")
+              .eq("following_id", user.id)
+          : Promise.resolve({ data: null }),
+      ]),
+      fetchProfileBatch(0, EXPLORE_PAGE_SIZE),
     ])
-
-    const { added, hasMore, error: profilesError } = await fetchProfileBatch(
-      0,
-      EXPLORE_PAGE_SIZE
-    )
     if (profilesError) {
       setProfiles([])
       setHasMoreProfiles(false)
@@ -343,8 +347,6 @@ export default function ExplorePage() {
     setProfiles(added)
     setHasMoreProfiles(hasMore)
     setExploreLoadError(null)
-
-    await loadTradeMetaRows()
 
     setFollowingIds(
       new Set((followingRes.data || []).map((row) => String(row.following_id)))
@@ -375,6 +377,9 @@ export default function ExplorePage() {
 
     initialLoadDone.current = true
     setLoading(false)
+    scheduleDeferredWork(() => {
+      void loadTradeMetaRows()
+    }, 1000)
   }
 
   useEffect(() => {

@@ -8,6 +8,7 @@ import {
   previewFromMessage,
   updateConversationPreview,
 } from "./conversationInboxSync"
+import { fetchHiddenBlockedDmConversationIds } from "./conversationBlocks"
 
 export type ShareConversationRow = {
   id: string
@@ -91,10 +92,16 @@ export async function fetchUserDmConversations(
 ): Promise<{ rows: DmConversationRow[]; error: Error | null }> {
   console.log("SHARED_LOADER_CALLED", { userId })
 
-  const { data: membershipRows, error: membershipError } = await supabase
-    .from("conversation_participants")
-    .select("conversation_id")
-    .eq("user_id", userId)
+  const [
+    { data: membershipRows, error: membershipError },
+    hiddenBlockedConversationIds,
+  ] = await Promise.all([
+    supabase
+      .from("conversation_participants")
+      .select("conversation_id")
+      .eq("user_id", userId),
+    fetchHiddenBlockedDmConversationIds(supabase),
+  ])
 
   if (membershipError) {
     console.error("fetchUserDmConversations participants:", membershipError)
@@ -103,9 +110,9 @@ export async function fetchUserDmConversations(
 
   const conversationIds = [
     ...new Set(
-      (membershipRows || []).map(
-        (row: { conversation_id: string }) => row.conversation_id
-      )
+      (membershipRows || [])
+        .map((row: { conversation_id: string }) => row.conversation_id)
+        .filter((id) => !hiddenBlockedConversationIds.has(id))
     ),
   ]
 

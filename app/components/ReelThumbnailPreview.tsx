@@ -9,6 +9,7 @@ export type ReelThumbnailPreviewProps = {
   reel: Pick<ReelRow, "thumbnail_url" | "video_url" | "duration_seconds">
   onClick?: () => void
   className?: string
+  priority?: boolean
   /** Defaults to max-w-[280px] — use a smaller width on compact trade cards. */
   maxWidthClass?: string
 }
@@ -18,6 +19,7 @@ function ReelThumbnailPreview({
   onClick,
   className = "",
   maxWidthClass = "max-w-[280px]",
+  priority = false,
 }: ReelThumbnailPreviewProps) {
   const interactive = onClick != null
 
@@ -39,6 +41,7 @@ function ReelThumbnailPreview({
       <ReelVideoPosterFrame
         thumbnailUrl={reel.thumbnail_url}
         videoUrl={reel.video_url}
+        priority={priority}
         className="aspect-[9/16] w-full object-cover"
       />
       <ReelClipPlayOverlay />

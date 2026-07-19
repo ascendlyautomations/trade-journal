@@ -12,6 +12,7 @@ export type ConversationSessionSnapshot = {
   urlSegment: string
   messages: any[]
   messagesLoaded: boolean
+  hasOlderMessages?: boolean
   conversation: any | null
   participants: any[]
   otherUser: any | null
@@ -141,6 +142,7 @@ export function updateConversationMessages(
     urlSegment: meta?.urlSegment ?? "",
     messages,
     messagesLoaded: true,
+    hasOlderMessages: meta?.hasOlderMessages ?? false,
     conversation: meta?.conversation ?? null,
     participants: meta?.participants ?? [],
     otherUser: meta?.otherUser ?? null,

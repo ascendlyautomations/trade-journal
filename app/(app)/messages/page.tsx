@@ -16,10 +16,10 @@ import { markConversationMessagesSeen } from "@/lib/conversationReadMarking"
 import {
   dispatchUnreadMessagesRefresh,
   fetchUnreadCountForConversation as fetchUnreadCountForConversationShared,
-  fetchUnreadMessageRows,
+  fetchUnreadCountsForConversations,
   markConversationUnread,
-  normalizeSeenBy,
 } from "../../../lib/messageUnread"
+import { fetchMutedConversationIds } from "@/lib/conversationMemberPreferences"
 import {
   applyInboxPatchesToConversations,
   CONVERSATION_UPDATED_EVENT,
@@ -375,21 +375,22 @@ export default function MessagesPage() {
     }
 
     const convoIds = rows.map((c) => c.id)
-    const msgRows = await fetchUnreadMessageRows(userId, convoIds)
+    const [cursorCounts, mutedIds] = await Promise.all([
+      fetchUnreadCountsForConversations(userId, convoIds),
+      fetchMutedConversationIds(userId, convoIds),
+    ])
 
     traceMessagesInbox("step:3-unread", {
       source,
-      unreadMessageRowCount: msgRows?.length ?? 0,
+      unreadConversationCount: Object.values(cursorCounts).filter(
+        (count) => count > 0
+      ).length,
+      mutedConversationCount: mutedIds.size,
     })
 
     const unreadByConvo: Record<string, number> = {}
-    for (const cid of convoIds) unreadByConvo[cid] = 0
-    for (const m of msgRows || []) {
-      const cid = m.conversation_id as string
-      if (!m.sender_id || m.sender_id === userId) continue
-      const seen = normalizeSeenBy(m.seen_by)
-      if (seen.includes(userId)) continue
-      unreadByConvo[cid] = (unreadByConvo[cid] || 0) + 1
+    for (const cid of convoIds) {
+      unreadByConvo[cid] = mutedIds.has(cid) ? 0 : cursorCounts[cid] ?? 0
     }
 
     const convoData = rows.map((conv) =>
@@ -445,7 +446,7 @@ export default function MessagesPage() {
       cachedLength: cached?.conversations.length ?? 0,
     })
 
-    if (cached?.conversations.length) {
+    if (cached) {
       setConversations(cached.conversations)
       setLoading(false)
     }
@@ -471,38 +472,18 @@ export default function MessagesPage() {
 
     const onWindowFocus = () => refresh()
 
-    let intervalId: ReturnType<typeof setInterval> | null = null
-
-    const stopInterval = () => {
-      if (intervalId != null) {
-        clearInterval(intervalId)
-        intervalId = null
-      }
-    }
-
-    const startInterval = () => {
-      stopInterval()
-      if (document.hidden) return
-      intervalId = window.setInterval(refresh, 45_000)
-    }
-
     const onVisibilityChange = () => {
       if (document.visibilityState === "visible") {
         refresh()
-        startInterval()
-      } else {
-        stopInterval()
       }
     }
 
     window.addEventListener("focus", onWindowFocus)
     document.addEventListener("visibilitychange", onVisibilityChange)
-    startInterval()
 
     return () => {
       window.removeEventListener("focus", onWindowFocus)
       document.removeEventListener("visibilitychange", onVisibilityChange)
-      stopInterval()
     }
   }, [user?.id, fetchConversations])
 

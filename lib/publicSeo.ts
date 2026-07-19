@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import { unstable_cache } from "next/cache"
 import {
   isExcludedPublicUserId,
   isExcludedPublicUsername,
@@ -75,7 +76,7 @@ export function isPublicTradeForIndexing(
   return true
 }
 
-export async function fetchProfileForSeo(
+async function fetchProfileForSeoUncached(
   segment: string
 ): Promise<ProfileSeoData | null> {
   const admin = createSupabaseAdmin()
@@ -94,6 +95,18 @@ export async function fetchProfileForSeo(
   const { data, error } = await query.maybeSingle()
   if (error || !data) return null
   return data
+}
+
+const fetchProfileForSeoCached = unstable_cache(
+  fetchProfileForSeoUncached,
+  ["public-profile-seo-v1"],
+  { revalidate: 300 }
+)
+
+export async function fetchProfileForSeo(
+  segment: string
+): Promise<ProfileSeoData | null> {
+  return fetchProfileForSeoCached(segment)
 }
 
 export async function fetchTradeForSeo(

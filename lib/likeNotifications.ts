@@ -9,6 +9,7 @@ export type LikeNotificationTarget =
   | {
       kind: "comment"
       commentId: string
+      commentSource?: string | null
       postId?: string | null
       tradeId?: string | null
       profilePostId?: string | null
@@ -24,33 +25,29 @@ type LikeNotificationParams = {
 
 const UNIQUE_VIOLATION = "23505"
 
+async function authFetch(
+  supabase: SupabaseClient,
+  method: "POST" | "DELETE",
+  target: LikeNotificationTarget
+): Promise<Response | null> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+  if (!session?.access_token) return null
+  return fetch("/api/notifications/like", {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${session.access_token}`,
+    },
+    body: JSON.stringify({ target }),
+  })
+}
+
 function dispatchNotificationRefresh() {
   if (typeof window === "undefined") return
   window.dispatchEvent(new CustomEvent("notification-update"))
   window.dispatchEvent(new CustomEvent("tj-unread-notifications-refresh"))
-}
-
-function applyTargetFilter<
-  Q extends {
-    eq: (column: string, value: string) => Q
-  },
->(query: Q, target: LikeNotificationTarget): Q {
-  if (target.kind === "trade") {
-    return query.eq("trade_id", target.tradeId)
-  }
-  if (target.kind === "post") {
-    return query.eq("post_id", target.postId)
-  }
-  if (target.kind === "profile_post") {
-    return query.eq("profile_post_id", target.profilePostId)
-  }
-  if (target.kind === "achievement_post") {
-    return query.eq("achievement_post_id", target.achievementPostId)
-  }
-  if (target.kind === "comment") {
-    return query.eq("comment_id", target.commentId)
-  }
-  return query.eq("reel_id", target.reelId)
 }
 
 export function buildLikeNotificationInsertPayload(
@@ -97,18 +94,15 @@ export async function ensureLikeNotification(
   supabase: SupabaseClient,
   params: LikeNotificationParams
 ): Promise<void> {
-  if (params.recipientUserId === params.senderUserId) return
-
-  const { error } = await supabase
-    .from("notifications")
-    .insert(buildLikeNotificationInsertPayload(params))
-
-  if (error) {
-    if (error.code === UNIQUE_VIOLATION) {
+  const response = await authFetch(supabase, "POST", params.target)
+  if (!response) return
+  if (!response.ok) {
+    const body = await response.text()
+    if (response.status === 409 || body.includes(UNIQUE_VIOLATION)) {
       dispatchNotificationRefresh()
       return
     }
-    console.error("Like notification insert error:", error.message, error)
+    console.error("Like notification insert error:", response.status, body)
     return
   }
 
@@ -120,21 +114,14 @@ export async function deleteLikeNotification(
   supabase: SupabaseClient,
   params: LikeNotificationParams
 ): Promise<void> {
-  if (params.recipientUserId === params.senderUserId) return
-
-  let query = supabase
-    .from("notifications")
-    .delete()
-    .eq("type", "like")
-    .eq("user_id", params.recipientUserId)
-    .eq("sender_id", params.senderUserId)
-
-  query = applyTargetFilter(query, params.target)
-
-  const { error } = await query
-
-  if (error) {
-    console.error("Like notification delete error:", error.message, error)
+  const response = await authFetch(supabase, "DELETE", params.target)
+  if (!response) return
+  if (!response.ok) {
+    console.error(
+      "Like notification delete error:",
+      response.status,
+      await response.text()
+    )
     return
   }
 

@@ -23,14 +23,14 @@ export const ACCOUNT_DROPDOWN_MANAGE_CLASS =
 export const ACCOUNT_DROPDOWN_ACTION_CLASS =
   `${ACCOUNT_DROPDOWN_ROW_HEIGHT_CLASS} cursor-pointer px-3 py-2 text-sm text-blue-400 hover:bg-[#1f2937]`
 
-/** Desktop width for trigger + menu (dashboard, trades, input trade, quick input). */
+/** Desktop width for trigger + menu (dashboard, trades, input trade, quick trade). */
 export const ACCOUNT_DROPDOWN_DESKTOP_WIDTH_CLASS =
   "md:min-w-[20rem] md:w-[20rem] md:shrink-0"
 
 export const ACCOUNT_DROPDOWN_PANEL_CLASS =
   "absolute z-[110] mt-1 max-h-60 w-full max-md:w-max max-md:min-w-full max-md:max-w-[calc(100vw-1.5rem)] overflow-x-hidden overflow-y-auto rounded-lg border border-white/10 bg-[#0f172a] shadow-lg"
 
-/** Closed trigger — Input Trade / Quick Input / submission surfaces. */
+/** Closed trigger — Input Trade / Quick Trade / submission surfaces. */
 export const ACCOUNT_DROPDOWN_TRIGGER_CLASS =
   `flex w-full min-w-0 cursor-pointer items-center justify-between rounded-lg border border-white/10 bg-[#0f172a] p-2.5 text-left text-sm text-white transition-colors hover:bg-[#1e293b] focus:outline-none focus:ring-2 focus:ring-blue-500/40 ${ACCOUNT_DROPDOWN_DESKTOP_WIDTH_CLASS}`
 
@@ -42,7 +42,7 @@ export const ACCOUNT_DROPDOWN_FILTER_TRIGGER_CLASS =
 export const ACCOUNT_DROPDOWN_FILTER_WRAPPER_CLASS =
   `w-full md:w-auto ${ACCOUNT_DROPDOWN_DESKTOP_WIDTH_CLASS}`
 
-/** Outer wrapper for submission-mode picker (Input Trade, Quick Input, /app). */
+/** Outer wrapper for submission-mode picker (Input Trade, Quick Trade, /app). */
 export const ACCOUNT_DROPDOWN_SUBMISSION_WRAPPER_CLASS =
   `w-full ${ACCOUNT_DROPDOWN_DESKTOP_WIDTH_CLASS}`
 

@@ -1,20 +1,27 @@
 "use client"
 
-import { useEffect } from "react"
-import * as Sentry from "@sentry/nextjs"
+import { useEffect, useRef } from "react"
 import { useUserProfile } from "@/lib/useUserProfile"
 
 /** Attach Supabase user id to Sentry events when a session exists. */
 export default function SentryIdentifyUser() {
   const { user } = useUserProfile()
+  const identifiedUserRef = useRef(false)
 
   useEffect(() => {
     const userId = user?.id
     if (typeof userId === "string" && userId.trim()) {
-      Sentry.setUser({ id: userId })
+      identifiedUserRef.current = true
+      void import("@sentry/nextjs").then((Sentry) => {
+        Sentry.setUser({ id: userId })
+      })
       return
     }
-    Sentry.setUser(null)
+    if (!identifiedUserRef.current) return
+    identifiedUserRef.current = false
+    void import("@sentry/nextjs").then((Sentry) => {
+      Sentry.setUser(null)
+    })
   }, [user?.id])
 
   return null

@@ -1,4 +1,5 @@
 import { supabase } from "./supabaseClient"
+import { readStoredReferralCode } from "./referralPersistence"
 import { markStripeReconciliationPending } from "./stripeReconciliation"
 import type { TraxProBillingIntervalId } from "./traxProBillingPlans"
 import { TRAXPRO_DEFAULT_BILLING_INTERVAL } from "./traxProBillingPlans"
@@ -32,11 +33,7 @@ export async function startTraxProCheckout(
     },
     body: JSON.stringify({
       billingInterval,
-      referralCode:
-        options.referralCode ??
-        (typeof window !== "undefined"
-          ? localStorage.getItem("referral_code")
-          : null),
+      referralCode: options.referralCode ?? readStoredReferralCode(),
     }),
   })
 

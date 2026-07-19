@@ -1,7 +1,13 @@
 "use client"
 
 import IntentPrefetchLink from "@/lib/IntentPrefetchLink"
-import { useCallback, useEffect, useState, useRef, type MouseEvent } from "react"
+import {
+  useCallback,
+  useEffect,
+  useState,
+  useRef,
+  type MouseEvent as ReactMouseEvent,
+} from "react"
 import { createPortal } from "react-dom"
 import { supabase } from "../../lib/supabaseClient"
 import { useRouter, usePathname } from "next/navigation"
@@ -15,7 +21,6 @@ import { prefetchCriticalAppRoutes } from "../../lib/routePrefetch"
 import { scheduleDeferredWork } from "../../lib/scheduleDeferredWork"
 import { subscribeNotificationChanges } from "../../lib/notificationRealtime"
 import { ProfileAvatarImg } from "./SafeProfileAvatar"
-import BugReportModal from "./BugReportModal"
 import UserReviewModal from "./beta/UserReviewModal"
 import GettingStartedMobileEntry from "./GettingStartedMobileEntry"
 import { isDemoUserId } from "@/lib/demo/constants"
@@ -26,18 +31,20 @@ import { isStandaloneFlowRoute } from "@/lib/authRoutes"
 import { clearSignupFlow } from "@/lib/signupFlow"
 import { NAVBAR_BRAND_LINK_CLASS } from "@/lib/navbarBrand"
 import { useModalScrollLock } from "@/app/components/ui/modalLayout"
-import { fetchLatestAffiliateApplication } from "@/lib/affiliateApplication"
 import {
   DESKTOP_NAV_MORE_DISPLAY_ORDER,
   useDesktopNavOverflow,
   type DesktopNavOverflowId,
 } from "@/app/components/useDesktopNavOverflow"
+import { useEarlyAccessPromotion } from "@/lib/useEarlyAccessPromotion"
 
 export default function Navbar() {
   const pathname = usePathname()
   const isStandalone = isStandaloneFlowRoute(pathname)
 
   const { user, profile, loading, membershipReconciling } = useUserProfile()
+  const { enabled: earlyAccessPromotionEnabled } =
+    useEarlyAccessPromotion()
   const profileHref =
     profile != null
       ? profilePath(profile)
@@ -51,7 +58,6 @@ export default function Navbar() {
   const [activeMenu, setActiveMenu] = useState<string | null>(null)
   const [moreSubmenu, setMoreSubmenu] = useState<string | null>(null)
   const [accountMenuOpen, setAccountMenuOpen] = useState(false)
-  const [bugReportOpen, setBugReportOpen] = useState(false)
   const [reviewModalOpen, setReviewModalOpen] = useState(false)
   const [unreadMessagesCount, setUnreadMessagesCount] = useState(0)
   const [unreadCount, setUnreadCount] = useState(0)
@@ -59,7 +65,6 @@ export default function Navbar() {
   const [hasFetchedNotifications, setHasFetchedNotifications] = useState(false)
   const [hasFetchedMessages, setHasFetchedMessages] = useState(false)
   const [hasFetchedAdmin, setHasFetchedAdmin] = useState(false)
-  const [hasAffiliateApplication, setHasAffiliateApplication] = useState(false)
   const [mounted, setMounted] = useState(false)
 
   const router = useRouter()
@@ -75,7 +80,7 @@ export default function Navbar() {
   const isGroupActive = (paths: string[]) =>
     paths.some((p) => pathname.startsWith(p))
 
-  function handleLogoClick(e: MouseEvent<HTMLAnchorElement>) {
+  function handleLogoClick(e: ReactMouseEvent<HTMLAnchorElement>) {
     e.preventDefault()
     setIsOpen(false)
     setActiveMenu(null)
@@ -90,7 +95,7 @@ export default function Navbar() {
   }
 
   const handleReturnToApp = useCallback(
-    (e: MouseEvent<HTMLButtonElement>) => {
+    (e: ReactMouseEvent<HTMLButtonElement>) => {
       e.preventDefault()
       setIsOpen(false)
       setActiveMenu(null)
@@ -258,35 +263,6 @@ export default function Navbar() {
     if (!user?.id || loading || membershipReconciling) return
     prefetchCriticalAppRoutes(router)
   }, [user?.id, loading, membershipReconciling, router])
-
-  useEffect(() => {
-    if (!user?.id || loading) {
-      setHasAffiliateApplication(false)
-      return
-    }
-
-    if (isDemoUserId(user.id) || isDemoSupabaseBlocked()) {
-      setHasAffiliateApplication(false)
-      return
-    }
-
-    const referralCode =
-      profile?.referral_code != null ? String(profile.referral_code).trim() : ""
-    // Approved affiliates already get Dashboard/Payouts; skip application lookup.
-    if (referralCode.length > 0) {
-      setHasAffiliateApplication(false)
-      return
-    }
-
-    let cancelled = false
-    void fetchLatestAffiliateApplication(supabase, user.id).then((app) => {
-      if (!cancelled) setHasAffiliateApplication(Boolean(app?.id))
-    })
-
-    return () => {
-      cancelled = true
-    }
-  }, [user?.id, loading, profile?.referral_code])
 
   useEffect(() => {
     if (!user?.id || loading || membershipReconciling) {
@@ -497,8 +473,7 @@ export default function Navbar() {
   }
 
   const communityLinks: { label: string; href: string }[] = [
-    { label: "Feed", href: "/feed" },
-    { label: "Trade Rooms", href: "/trade-rooms" },
+    { label: "Trade Rooms", href: "/community" },
     { label: "Leaderboard", href: "/leaderboard" },
     { label: "Explore", href: "/explore" },
   ]
@@ -506,15 +481,9 @@ export default function Navbar() {
   const affiliateReferralCode =
     profile?.referral_code != null ? String(profile.referral_code).trim() : ""
   const hasAffiliateAccess = affiliateReferralCode.length > 0
-
-  const affiliateLinks: { label: string; href: string }[] = hasAffiliateAccess
-    ? [
-        { label: "Affiliate Dashboard", href: "/affiliate/dashboard" },
-        { label: "Affiliate Payouts", href: "/payouts" },
-      ]
-    : hasAffiliateApplication
-      ? [{ label: "View Application", href: "/affiliate/dashboard" }]
-      : [{ label: "Apply to Become an Affiliate", href: "/affiliate" }]
+  const affiliateMenuItem = hasAffiliateAccess
+    ? { label: "Affiliate Dashboard", href: "/affiliate/dashboard" }
+    : { label: "Become an Affiliate", href: "/affiliate" }
 
   const notificationBellControl = (
     iconClassName: string,
@@ -570,7 +539,6 @@ export default function Navbar() {
       unreadMessagesCount,
       betaEligible ? "beta" : "no-beta",
       profileHref ?? "no-profile",
-      hasAffiliateAccess ? "aff" : hasAffiliateApplication ? "aff-app" : "aff-none",
     ].join("|"),
     betaEligible,
   })
@@ -595,17 +563,9 @@ export default function Navbar() {
       if (id === "community") {
         return isGroupActive([
           "/community",
-          "/feed",
           "/trade-rooms",
           "/leaderboard",
           "/explore",
-        ])
-      }
-      if (id === "affiliate") {
-        return isGroupActive([
-          "/affiliate/dashboard",
-          "/affiliate/payout-setup",
-          "/payouts",
         ])
       }
       if (id === "beta") return isActive("/beta")
@@ -706,7 +666,6 @@ export default function Navbar() {
             className={`flex w-full items-center justify-between rounded px-3 py-2 text-left ${
               isGroupActive([
                 "/community",
-                "/feed",
                 "/trade-rooms",
                 "/leaderboard",
                 "/explore",
@@ -721,50 +680,6 @@ export default function Navbar() {
           {moreSubmenu === "community" ? (
             <div className="border-t border-white/10 pb-1 pl-2">
               {communityLinks.map((item) => (
-                <IntentPrefetchLink
-                  key={item.href}
-                  href={item.href}
-                  className={`block rounded px-3 py-2 ${
-                    isActive(item.href)
-                      ? "bg-blue-500/20 text-blue-300"
-                      : "text-gray-300 hover:bg-white/10"
-                  }`}
-                  onClick={() => {
-                    setActiveMenu(null)
-                    setMoreSubmenu(null)
-                  }}
-                >
-                  {item.label}
-                </IntentPrefetchLink>
-              ))}
-            </div>
-          ) : null}
-        </div>
-      )
-    }
-
-    if (id === "affiliate") {
-      return (
-        <div key="affiliate">
-          <button
-            type="button"
-            onClick={() => toggleMoreSubmenu("affiliate")}
-            className={`flex w-full items-center justify-between rounded px-3 py-2 text-left ${
-              isGroupActive([
-                "/affiliate/dashboard",
-                "/affiliate/payout-setup",
-                "/payouts",
-              ]) || moreSubmenu === "affiliate"
-                ? "bg-blue-500/20 text-blue-300"
-                : "text-gray-300 hover:bg-white/10"
-            }`}
-          >
-            <span>Affiliate</span>
-            <span aria-hidden>{moreSubmenu === "affiliate" ? "▾" : "▸"}</span>
-          </button>
-          {moreSubmenu === "affiliate" ? (
-            <div className="border-t border-white/10 pb-1 pl-2">
-              {affiliateLinks.map((item) => (
                 <IntentPrefetchLink
                   key={item.href}
                   href={item.href}
@@ -831,16 +746,18 @@ export default function Navbar() {
               >
                 FAQ
               </IntentPrefetchLink>
-              <IntentPrefetchLink
-                href="/pricing"
-                className={`shrink-0 rounded px-2 py-1 transition ${
-                  isActive("/pricing")
-                    ? "bg-blue-500/20 text-blue-300"
-                    : "text-gray-300 hover:text-white"
-                }`}
-              >
-                Pricing
-              </IntentPrefetchLink>
+              {!earlyAccessPromotionEnabled ? (
+                <IntentPrefetchLink
+                  href="/pricing"
+                  className={`shrink-0 rounded px-2 py-1 transition ${
+                    isActive("/pricing")
+                      ? "bg-blue-500/20 text-blue-300"
+                      : "text-gray-300 hover:text-white"
+                  }`}
+                >
+                  Pricing
+                </IntentPrefetchLink>
+              ) : null}
             </div>
           ) : null}
 
@@ -885,12 +802,6 @@ export default function Navbar() {
                 >
                   Community ▾
                 </span>
-                <span
-                  ref={setItemMeasureRef("affiliate")}
-                  className="shrink-0 rounded px-2 py-1"
-                >
-                  Affiliate ▾
-                </span>
                 {betaEligible ? (
                   <span
                     ref={setItemMeasureRef("beta")}
@@ -923,6 +834,14 @@ export default function Navbar() {
                   className={navTriggerClass(isActive("/trades"))}
                 >
                   Trades
+                </IntentPrefetchLink>
+              </span>
+              <span ref={setPinnedRef("feed")} className="shrink-0">
+                <IntentPrefetchLink
+                  href="/feed"
+                  className={navTriggerClass(isActive("/feed"))}
+                >
+                  Feed
                 </IntentPrefetchLink>
               </span>
               <span ref={setPinnedRef("profile")} className="shrink-0">
@@ -995,7 +914,6 @@ export default function Navbar() {
                     className={navTriggerClass(
                       isGroupActive([
                         "/community",
-                        "/feed",
                         "/trade-rooms",
                         "/leaderboard",
                         "/explore",
@@ -1007,41 +925,6 @@ export default function Navbar() {
                   {activeMenu === "community" ? (
                     <div className="absolute top-full z-[9999] mt-2 w-56 rounded border border-white/10 bg-[#1e293b] shadow-lg">
                       {communityLinks.map((item) => (
-                        <IntentPrefetchLink
-                          key={item.href}
-                          href={item.href}
-                          className={`block rounded px-3 py-2 ${
-                            isActive(item.href)
-                              ? "bg-blue-500/20 text-blue-300"
-                              : "text-gray-300 hover:bg-white/10"
-                          }`}
-                        >
-                          {item.label}
-                        </IntentPrefetchLink>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-
-              {!isOverflowing("affiliate") ? (
-                <div className="relative shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => toggleMenu("affiliate")}
-                    className={navTriggerClass(
-                      isGroupActive([
-                        "/affiliate/dashboard",
-                        "/affiliate/payout-setup",
-                        "/payouts",
-                      ])
-                    )}
-                  >
-                    Affiliate ▾
-                  </button>
-                  {activeMenu === "affiliate" ? (
-                    <div className="absolute top-full z-[9999] mt-2 w-56 rounded border border-white/10 bg-[#1e293b] shadow-lg">
-                      {affiliateLinks.map((item) => (
                         <IntentPrefetchLink
                           key={item.href}
                           href={item.href}
@@ -1185,7 +1068,7 @@ export default function Navbar() {
                   </button>
 
                   {accountMenuOpen ? (
-                    <div className="absolute right-0 top-full z-50 mt-2 w-48 rounded-lg border border-gray-600 bg-[#1e293b] shadow-lg">
+                    <div className="absolute right-0 top-full z-50 mt-2 w-52 rounded-lg border border-gray-600 bg-[#1e293b] shadow-lg">
                       <button
                         type="button"
                         onClick={() => {
@@ -1195,6 +1078,16 @@ export default function Navbar() {
                         className="w-full px-4 py-2 text-left text-sm hover:bg-white/10"
                       >
                         Settings
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAccountMenuOpen(false)
+                          router.push(affiliateMenuItem.href)
+                        }}
+                        className="w-full px-4 py-2 text-left text-sm hover:bg-white/10"
+                      >
+                        {affiliateMenuItem.label}
                       </button>
                       <button
                         type="button"
@@ -1214,22 +1107,8 @@ export default function Navbar() {
                         }}
                         className="w-full px-4 py-2 text-left text-sm hover:bg-white/10"
                       >
-                        <span className="inline-flex items-center gap-2">
-                          
-                          Leave a Review
-                        </span>
+                        Leave a Review
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setAccountMenuOpen(false)
-                          setBugReportOpen(true)
-                        }}
-                        className="w-full px-4 py-2 text-left text-sm hover:bg-white/10"
-                      >
-                        Report Bug
-                      </button>
-
                       <button
                         type="button"
                         onClick={() => {
@@ -1270,12 +1149,12 @@ export default function Navbar() {
 
       {mobileMenuOpen ? (
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain border-t border-white/10 bg-[#0b1f3a] [webkit-overflow-scrolling:touch] md:hidden">
-          <div className="flex w-full flex-col gap-2 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] pt-1.5 text-sm text-white md:px-6">
+          <div className="flex w-full flex-col gap-1 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] pt-1.5 text-sm text-white md:px-6">
           {showReturnToApp ? (
             <button
               type="button"
               onClick={handleReturnToApp}
-              className="rounded-lg bg-blue-500 px-3 py-2 font-medium text-white transition hover:bg-blue-600"
+              className="rounded-lg bg-blue-500 px-3 py-1.5 font-medium text-white transition hover:bg-blue-600"
             >
               Return to App
             </button>
@@ -1283,7 +1162,7 @@ export default function Navbar() {
           {user ? <GettingStartedMobileEntry placement="menu" /> : null}
           <IntentPrefetchLink
             href="/app"
-            className={`rounded-lg px-3 py-2 transition ${
+            className={`rounded-lg px-3 py-1.5 transition ${
               isActive("/app")
                 ? "bg-blue-500/20 text-blue-300"
                 : "text-gray-300 hover:text-white"
@@ -1295,7 +1174,7 @@ export default function Navbar() {
 
           <IntentPrefetchLink
             href="/dashboard"
-            className={`rounded-lg px-3 py-2 transition ${
+            className={`rounded-lg px-3 py-1.5 transition ${
               isActive("/dashboard")
                 ? "bg-blue-500/20 text-blue-300"
                 : "text-gray-300 hover:text-white"
@@ -1307,7 +1186,7 @@ export default function Navbar() {
 
           <IntentPrefetchLink
             href="/trades"
-            className={`rounded-lg px-3 py-2 transition ${
+            className={`rounded-lg px-3 py-1.5 transition ${
               isActive("/trades")
                 ? "bg-blue-500/20 text-blue-300"
                 : "text-gray-300 hover:text-white"
@@ -1317,10 +1196,22 @@ export default function Navbar() {
             Trades
           </IntentPrefetchLink>
 
+          <IntentPrefetchLink
+            href="/feed"
+            className={`rounded-lg px-3 py-1.5 transition ${
+              isActive("/feed")
+                ? "bg-blue-500/20 text-blue-300"
+                : "text-gray-300 hover:text-white"
+            }`}
+            onClick={closeMobile}
+          >
+            Feed
+          </IntentPrefetchLink>
+
           {profileHref ? (
             <IntentPrefetchLink
               href={profileHref}
-              className={`rounded-lg px-3 py-2 transition ${
+              className={`rounded-lg px-3 py-1.5 transition ${
                 isGroupActive(["/profile"])
                   ? "bg-blue-500/20 text-blue-300"
                   : "text-gray-300 hover:text-white"
@@ -1330,12 +1221,12 @@ export default function Navbar() {
               Profile
             </IntentPrefetchLink>
           ) : (
-            <span className="rounded-lg px-3 py-2 text-gray-400">Profile</span>
+            <span className="rounded-lg px-3 py-1.5 text-gray-400">Profile</span>
           )}
 
           <IntentPrefetchLink
             href="/messages"
-            className={`flex items-center justify-between rounded-lg px-3 py-2 transition ${
+            className={`flex items-center justify-between rounded-lg px-3 py-1.5 transition ${
               isActive("/messages")
                 ? "bg-blue-500/20 text-blue-300"
                 : "text-gray-300 hover:text-white"
@@ -1356,7 +1247,7 @@ export default function Navbar() {
           <div>
             <button
               type="button"
-              className={`flex w-full items-center justify-between rounded-lg px-3 py-2 transition ${
+              className={`flex w-full items-center justify-between rounded-lg px-3 py-1.5 transition ${
                 isGroupActive([
                   "/analytics",
                   "/backtest",
@@ -1374,7 +1265,7 @@ export default function Navbar() {
               <span className="text-gray-400 tabular-nums">{openSection === "analytics" ? "−" : "+"}</span>
             </button>
             {openSection === "analytics" ? (
-              <div className="mt-1.5 space-y-1 pl-3 text-sm">
+              <div className="mt-1 space-y-0.5 pl-3 text-sm">
                 {renderAnalyticsDropdown("mobile")}
               </div>
             ) : null}
@@ -1383,8 +1274,8 @@ export default function Navbar() {
           <div>
             <button
               type="button"
-              className={`flex w-full items-center justify-between rounded-lg px-3 py-2 transition ${
-                isGroupActive(["/community", "/feed", "/trade-rooms", "/leaderboard", "/explore"])
+              className={`flex w-full items-center justify-between rounded-lg px-3 py-1.5 transition ${
+                isGroupActive(["/community", "/trade-rooms", "/leaderboard", "/explore"])
                   ? "bg-blue-500/20 text-blue-300"
                   : "text-gray-300 hover:text-white"
               }`}
@@ -1394,41 +1285,8 @@ export default function Navbar() {
               <span className="text-gray-400 tabular-nums">{openSection === "community" ? "−" : "+"}</span>
             </button>
             {openSection === "community" ? (
-              <div className="mt-1.5 space-y-1 pl-3 text-sm">
+              <div className="mt-1 space-y-0.5 pl-3 text-sm">
                 {communityLinks.map((item) => (
-                  <IntentPrefetchLink
-                    key={item.href}
-                    href={item.href}
-                    className={`block rounded-lg px-3 py-1.5 ${
-                      isActive(item.href)
-                        ? "bg-blue-500/20 text-blue-300"
-                        : "hover:bg-white/10 text-gray-300"
-                    }`}
-                    onClick={closeMobile}
-                  >
-                    {item.label}
-                  </IntentPrefetchLink>
-                ))}
-              </div>
-            ) : null}
-          </div>
-
-          <div>
-            <button
-              type="button"
-              className={`flex w-full items-center justify-between rounded-lg px-3 py-2 transition ${
-                isGroupActive(["/affiliate/dashboard", "/affiliate/payout-setup", "/payouts"])
-                  ? "bg-blue-500/20 text-blue-300"
-                  : "text-gray-300 hover:text-white"
-              }`}
-              onClick={() => toggleSection("affiliate")}
-            >
-              <span>Affiliate</span>
-              <span className="text-gray-400 tabular-nums">{openSection === "affiliate" ? "−" : "+"}</span>
-            </button>
-            {openSection === "affiliate" ? (
-              <div className="mt-1.5 space-y-1 pl-3 text-sm">
-                {affiliateLinks.map((item) => (
                   <IntentPrefetchLink
                     key={item.href}
                     href={item.href}
@@ -1449,7 +1307,7 @@ export default function Navbar() {
           {profile?.is_beta_tester ? (
             <IntentPrefetchLink
               href="/beta"
-              className={`flex items-center gap-2 rounded-lg px-3 py-2 transition ${
+              className={`flex items-center gap-2 rounded-lg px-3 py-1.5 transition ${
                 isActive("/beta")
                   ? "border border-yellow-400/40 bg-yellow-500/25 text-yellow-200"
                   : "border border-yellow-400/25 bg-yellow-500/15 text-yellow-300 hover:bg-yellow-500/25"
@@ -1465,7 +1323,7 @@ export default function Navbar() {
             {isAdmin ? (
               <IntentPrefetchLink
                 href="/admin"
-                className="rounded-lg px-3 py-2 text-white hover:text-blue-400"
+                className="rounded-lg px-3 py-1.5 text-white hover:text-blue-400"
                 onClick={closeMobile}
               >
                 Admin
@@ -1474,45 +1332,48 @@ export default function Navbar() {
 
             <IntentPrefetchLink
               href="/settings#account"
-              className="rounded-lg px-3 py-2 text-white hover:text-blue-400"
+              className="rounded-lg px-3 py-1.5 text-white hover:text-blue-400"
               onClick={closeMobile}
             >
               Settings
             </IntentPrefetchLink>
             <IntentPrefetchLink
+              href={affiliateMenuItem.href}
+              className={`rounded-lg px-3 py-1.5 transition ${
+                isGroupActive([
+                  "/affiliate",
+                  "/affiliate/dashboard",
+                  "/affiliate/payout-setup",
+                  "/payouts",
+                ])
+                  ? "bg-blue-500/20 text-blue-300"
+                  : "text-white hover:text-blue-400"
+              }`}
+              onClick={closeMobile}
+            >
+              {affiliateMenuItem.label}
+            </IntentPrefetchLink>
+            <IntentPrefetchLink
               href="/help"
-              className="rounded-lg px-3 py-2 text-white hover:text-blue-400"
+              className="rounded-lg px-3 py-1.5 text-white hover:text-blue-400"
               onClick={closeMobile}
             >
               Help Center
             </IntentPrefetchLink>
             <button
               type="button"
-              className="rounded-lg px-3 py-2 text-left text-white hover:text-blue-400"
+              className="rounded-lg px-3 py-1.5 text-left text-white hover:text-blue-400"
               onClick={() => {
                 closeMobile()
                 setReviewModalOpen(true)
               }}
             >
-              <span className="inline-flex items-center gap-2">
-                
-                Leave a Review
-              </span>
-            </button>
-            <button
-              type="button"
-              className="rounded-lg px-3 py-2 text-left text-white hover:text-blue-400"
-              onClick={() => {
-                closeMobile()
-                setBugReportOpen(true)
-              }}
-            >
-              Report Bug
+              Leave a Review
             </button>
 
             <button
               type="button"
-              className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-white hover:text-blue-400"
+              className="flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-left text-white hover:text-blue-400"
               onClick={() => {
                 void handleToggleNotifications()
                 closeMobile()
@@ -1529,7 +1390,7 @@ export default function Navbar() {
 
             <button
               type="button"
-              className="w-full rounded-lg px-3 py-2 text-left text-sm text-red-400 hover:text-red-300"
+              className="w-full rounded-lg px-3 py-1.5 text-left text-sm text-red-400 hover:text-red-300"
               onClick={() => {
                 void handleSignOut()
               }}
@@ -1541,7 +1402,6 @@ export default function Navbar() {
         </div>
       ) : null}
 
-      <BugReportModal open={bugReportOpen} onClose={() => setBugReportOpen(false)} />
       <UserReviewModal
         open={reviewModalOpen}
         userId={user?.id ?? null}

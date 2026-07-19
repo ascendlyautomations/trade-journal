@@ -22,7 +22,7 @@ export default function PopularTradeRoomsModal({
     onJoined?.()
     onClose()
     const target = room.slug ?? room.id
-    router.push(`/trade-rooms?room=${encodeURIComponent(String(target))}`)
+    router.push(`/community?room=${encodeURIComponent(String(target))}`)
   }
 
   return (

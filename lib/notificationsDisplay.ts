@@ -913,7 +913,7 @@ export function buildTradeRoomHref(
   }
 ): string {
   const slug = roomSlug.trim()
-  if (!slug) return "/trade-rooms"
+  if (!slug) return "/community"
 
   const params = new URLSearchParams()
   params.set("room", slug)
@@ -924,7 +924,7 @@ export function buildTradeRoomHref(
   const messageId = opts?.messageId?.trim()
   if (messageId) params.set("message", messageId)
 
-  return `/trade-rooms?${params.toString()}`
+  return `/community?${params.toString()}`
 }
 
 function feedContentHref(opts: {
@@ -1039,7 +1039,7 @@ export function getGroupedNotificationHref(
         messageId: card.message_id,
       })
     }
-    return "/trade-rooms"
+    return "/community"
   }
 
   const n = card.notification
@@ -1047,7 +1047,7 @@ export function getGroupedNotificationHref(
     const meta = parseRoomJoinContent(n.content)
     const slug = meta.room_slug?.trim()
     if (slug) return buildTradeRoomHref(slug)
-    return "/trade-rooms"
+    return "/community"
   }
 
   if (n.type === "room_message") {
@@ -1059,7 +1059,7 @@ export function getGroupedNotificationHref(
         messageId: meta.message_id,
       })
     }
-    return "/trade-rooms"
+    return "/community"
   }
 
   return "/notifications"
@@ -1105,7 +1105,7 @@ export function getNotificationHref(
     const meta = parseRoomJoinContent(n.content)
     const slug = meta.room_slug?.trim()
     if (slug) return buildTradeRoomHref(slug)
-    return "/trade-rooms"
+    return "/community"
   }
 
   if (n.type === "room_message") {
@@ -1117,7 +1117,7 @@ export function getNotificationHref(
         messageId: meta.message_id,
       })
     }
-    return "/trade-rooms"
+    return "/community"
   }
 
   if (n.type === "follow" && n.sender_id) {

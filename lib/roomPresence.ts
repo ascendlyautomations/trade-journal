@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
-export const ROOM_PRESENCE_HEARTBEAT_MS = 10_000
-export const ROOM_PRESENCE_ACTIVE_THRESHOLD_MS = 30_000
+export const ROOM_PRESENCE_HEARTBEAT_MS = 60_000
+export const ROOM_PRESENCE_ACTIVE_THRESHOLD_MS = 135_000
 
 export type RoomActivePresence = {
   user_id: string
@@ -100,9 +100,17 @@ export function createRoomPresenceSession(
   let stopped = false
   let inFlight: Promise<void> | null = null
   let intervalId: ReturnType<typeof setInterval> | null = null
+  const visibilityDocument =
+    typeof document === "undefined" ? null : document
 
   const runTick = async () => {
-    if (stopped) return
+    if (
+      stopped ||
+      inFlight ||
+      visibilityDocument?.visibilityState === "hidden"
+    ) {
+      return
+    }
 
     const task = (async () => {
       if (stopped) return
@@ -126,19 +134,46 @@ export function createRoomPresenceSession(
     }
   }
 
-  void runTick()
-  intervalId = globalThis.setInterval(() => {
+  const stopInterval = () => {
+    if (intervalId == null) return
+    globalThis.clearInterval(intervalId)
+    intervalId = null
+  }
+
+  const startInterval = () => {
+    if (stopped || intervalId != null) return
+    intervalId = globalThis.setInterval(() => {
+      void runTick()
+    }, heartbeatMs) as ReturnType<typeof setInterval>
+  }
+
+  const handleVisibilityChange = () => {
+    if (visibilityDocument?.visibilityState === "hidden") {
+      stopInterval()
+      return
+    }
     void runTick()
-  }, heartbeatMs) as ReturnType<typeof setInterval>
+    startInterval()
+  }
+
+  if (visibilityDocument?.visibilityState !== "hidden") {
+    void runTick()
+    startInterval()
+  }
+  visibilityDocument?.addEventListener(
+    "visibilitychange",
+    handleVisibilityChange
+  )
 
   const stop = async () => {
     if (stopped) return
     stopped = true
 
-    if (intervalId != null) {
-      globalThis.clearInterval(intervalId)
-      intervalId = null
-    }
+    stopInterval()
+    visibilityDocument?.removeEventListener(
+      "visibilitychange",
+      handleVisibilityChange
+    )
 
     if (inFlight) {
       try {

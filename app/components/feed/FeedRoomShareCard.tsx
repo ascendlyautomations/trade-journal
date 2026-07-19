@@ -19,12 +19,14 @@ type FeedRoomShareCardProps = {
   post: RoomSharePostFields
   viewerUserId?: string | null
   className?: string
+  mediaPriority?: boolean
 }
 
 export default function FeedRoomShareCard({
   post,
   viewerUserId,
   className = "",
+  mediaPriority = false,
 }: FeedRoomShareCardProps) {
   const router = useRouter()
   const { showPopup } = useFeedbackPopup()
@@ -92,7 +94,7 @@ export default function FeedRoomShareCard({
             ? String(room.id)
             : joinedRoomId
 
-      router.push(`/trade-rooms?room=${encodeURIComponent(key)}`)
+      router.push(`/community?room=${encodeURIComponent(key)}`)
     },
     [router]
   )
@@ -157,7 +159,8 @@ export default function FeedRoomShareCard({
         <img
           src={logoSrc}
           alt=""
-          loading="lazy"
+          loading={mediaPriority ? "eager" : "lazy"}
+          fetchPriority={mediaPriority ? "high" : undefined}
           decoding="async"
           className="h-14 w-14 shrink-0 rounded-full border border-white/10 object-cover"
           onError={(e) => {

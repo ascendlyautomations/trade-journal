@@ -78,7 +78,7 @@ export type CsvImportPanelProps = {
   requireSelectedAccount?: boolean
   /** Label stored in csv_support_requests notes when user submits a failed file */
   importSource?: string
-  /** When a CSV contains exactly one valid trade, route to Quick Input instead of bulk import. */
+  /** When a CSV contains exactly one valid trade, route to Quick Trade instead of bulk import. */
   onSingleTradeDetected?: (patch: QuickTradeCsvFormPatch) => void
 }
 

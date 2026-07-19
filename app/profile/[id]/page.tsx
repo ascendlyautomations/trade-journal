@@ -1,11 +1,7 @@
 "use client"
 
-import Link from "next/link"
-import EmptyState from "../../components/ui/EmptyState"
-import { SkeletonProfilePage, SkeletonTradeCard } from "../../components/ui/skeletons"
-import AchievementCard from "../../components/AchievementCard"
+import { SkeletonProfilePage } from "../../components/ui/skeletons"
 import AchievementDetailModal from "../../components/AchievementDetailModal"
-import ProfileAchievementSocialCard from "../../components/ProfileAchievementSocialCard"
 import FeedProfilePostDetailModal from "../../components/feed/FeedProfilePostDetailModal"
 import type { ChangeEvent } from "react"
 import {
@@ -28,41 +24,21 @@ import {
   mapUploadBytesToPercent,
 } from "@/lib/uploadProgress/reportProgress"
 import { useUploadProgress } from "@/lib/uploadProgress/UploadProgressProvider"
-import { normalizeTraderType } from "@/lib/traderType"
 import { useParams, useRouter, useSearchParams } from "next/navigation"
 import FeedPostDetailModal from "../../components/feed/FeedPostDetailModal"
-import DetailModalShell, {
-  scrollModalCommentsPane,
-} from "../../components/ui/DetailModalShell"
-import DropdownMenu from "@/app/components/ui/DropdownMenu"
-import DetailModalImage from "../../components/ui/DetailModalImage"
-import TradeScreenshotImage from "@/app/components/trade/TradeScreenshotImage"
+import DetailModalShell from "../../components/ui/DetailModalShell"
 import ImageLightbox from "../../components/ui/ImageLightbox"
 import { EMPTY_LIKE_META } from "../../components/feed/FeedPostCard"
-import FeedCommentList from "../../components/feed/FeedCommentList"
-import { useCommentLikes } from "@/lib/useCommentLikes"
-import ReplyComposerStrip from "@/app/components/replies/ReplyComposerStrip"
-import {
-  clearCommentReplyDraft,
-  startCommentReply,
-  type CommentReplyTarget,
-} from "@/lib/commentReplyUx"
-import EngagementCountButton from "../../components/EngagementCountButton"
-import { CommentFocusCompactStrip } from "@/app/components/comments/CommentFocusCompactStrip"
-import MobileCommentFocusLayout from "@/app/components/comments/MobileCommentFocusLayout"
 import {
   FEED_COMMENT_INSERT_SELECT,
   FEED_POSTS_SELECT,
-  postImageSrc,
   postTradeOwnerUserId,
   queryFeedComments,
   reelDetailFeedItem,
-  withInsertedParentCommentId,
 } from "../../components/feed/feedPostHelpers"
 import FeedRoomShareCard from "../../components/feed/FeedRoomShareCard"
 import {
   buildRoomSharePostInsert,
-  isRoomSharePost,
   pendingRoomShareFromRoom,
   type PendingRoomShareDraft,
 } from "@/lib/roomSharePost"
@@ -100,38 +76,20 @@ import {
   insertAchievementPostCommentNotifications,
   insertAchievementPostLikeNotification,
   loadAchievementPostEngagementMaps,
-  queryAchievementPostComments,
   withInsertedAchievementPostParentCommentId,
 } from "@/lib/achievementPostEngagement"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import { supabaseMutationFeedback } from "@/lib/supabaseMutationFeedback"
 import { feedbackPresets, persistentError } from "@/lib/feedbackPresets"
-import {
-  TradeSocialProvider,
-  TradeSocialEngagementBar,
-  TradeSocialCommentsSection,
-} from "../../components/TradeSocialLayer"
-import ShareTradeButton from "../../components/ShareTradeButton"
 import ShareToConversationsModal from "../../components/ShareToConversationsModal"
-import Calendar from "../../components/Calendar"
 import {
   type Achievement,
   fetchVisibleProfileAchievements,
-  formatAchievementDate,
-  sumPayoutAchievementTotals,
 } from "../../../lib/achievements"
 import {
   ensureOwnAchievementsLoaded,
   getOwnAchievementsSnapshot,
 } from "@/lib/userAchievementsCache"
-import { formatPnlCurrency } from "../../../lib/formatMoney"
-import { formatRR, formatTradePoints } from "@/lib/formatDisplay"
-import { averageRrFromTrades } from "@/lib/tradeRr"
-import { resolveTradePoints } from "@/lib/resolveTradePoints"
-import TradeCardTimingBlock from "../../components/TradeCardTimingBlock"
-import ExpandableText from "../../components/ui/ExpandableText"
-import FeedPostMetaRow from "@/app/components/feed/FeedPostMetaRow"
-import { createUserRoom } from "@/lib/createUserRoom"
 import { loadFollowUiSnapshot } from "@/lib/followActions"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
@@ -144,18 +102,30 @@ import {
   isDemoProfileId,
   resolveDemoProfileBySegment,
 } from "@/lib/demo/demoProfile"
-import FollowButton from "../../components/FollowButton"
 import FollowListModal from "@/app/components/FollowListModal"
 import { invalidateFollowListCache } from "@/lib/followListPage"
 import { logSupabaseError } from "@/lib/logSupabaseError"
 import { ensureDmConversation } from "@/lib/dmConversation"
 import { dmThreadPath } from "@/lib/messageRoutes"
-import { ConfirmModal, FeedbackModal, useDeleteTradeConfirmation, useDeleteReelConfirmation, useFeedbackPopup, Button } from "@/app/components/ui"
+import { ConfirmModal, FeedbackModal, useDeleteTradeConfirmation, useDeleteReelConfirmation, useFeedbackPopup } from "@/app/components/ui"
 import { useModalScrollLock } from "@/app/components/ui/modalLayout"
-import ProfileCreateMenu from "../../components/profile/ProfileCreateMenu"
+import ProfileAchievementsTab from "../../components/profile/ProfileAchievementsTab"
+import ProfileCalendarTab from "../../components/profile/ProfileCalendarTab"
+import ProfileHeader from "../../components/profile/ProfileHeader"
+import ProfileOverviewStats from "../../components/profile/ProfileOverviewStats"
+import ProfilePostsTab from "../../components/profile/ProfilePostsTab"
+import ProfileReelsTab from "../../components/profile/ProfileReelsTab"
+import ProfileStatisticsTab, {
+  type ProfileStatisticsMode,
+} from "../../components/profile/ProfileStatisticsTab"
+import ProfileTabs, {
+  type ProfileTab,
+} from "../../components/profile/ProfileTabs"
+import ProfileTradesTab from "../../components/profile/ProfileTradesTab"
+import TradeCard from "../../components/profile/ProfileTradeCard"
+import PostCard from "../../components/profile/ProfilePostCard"
 import QuickTradeModal from "../../components/QuickTradeModal"
 import ReelComposerModal from "../../components/profile/ReelComposerModal"
-import ProfileReelCard from "../../components/profile/ProfileReelCard"
 import FeedReelDetailModal from "../../components/feed/FeedReelDetailModal"
 import { type ReelRow, deleteReel, fetchReelsByTradeIds, fetchUserProfileReels, replaceTradeReelVideo, isTradeAttachedReel } from "@/lib/reels"
 import {
@@ -170,12 +140,10 @@ import {
   toggleReelLike,
   withInsertedReelParentCommentId,
 } from "@/lib/reelEngagement"
-import { ProfileAvatarImg } from "../../components/SafeProfileAvatar"
 import StoryComposeModal from "../../components/feed/StoryComposeModal"
 import ImageCropModal from "../../components/ImageCropModal"
 import { useImageCropUpload } from "@/lib/useImageCropUpload"
 import FeedStoryViewer from "../../components/feed/FeedStoryViewer"
-import StoryAvatarRing from "../../components/feed/StoryAvatarRing"
 import { publishStory } from "@/lib/publishStory"
 import {
   getActiveStoriesForUser,
@@ -189,1032 +157,54 @@ import {
 } from "@/lib/storyComposeHelpers"
 import { isProfileUuidSegment, profilePath } from "@/lib/profileRoutes"
 import {
+  aliasProfileSession,
   patchProfileSession,
   readProfileSession,
   writeProfileSession,
 } from "@/lib/profileSessionCache"
-import {
-  ProfileAvatarLink,
-  ProfileLink,
-  ProfileUsernameLink,
-} from "@/app/components/ProfileLink"
 import { normalizeProfileUsername } from "@/lib/profileUsername"
 import { useUserProfile } from "@/lib/UserProfileProvider"
 import { notifyGettingStartedChecklistMaybeCompleted } from "@/lib/gettingStartedProgressSync"
 import {
-  formatPublicAccountTypeLabel,
   PUBLIC_TRADE_SELECT,
   sanitizeTradeForViewer,
   sanitizeTradesForViewer,
   tradeSelectForViewer,
 } from "@/lib/publicAccountPrivacy"
+import { useProfileStatistics } from "./useProfileStatistics"
+import { scheduleDeferredWork } from "@/lib/scheduleDeferredWork"
 
-const ProfileEquityLineChart = dynamic(
-  () => import("@/app/components/profile/ProfileEquityLineChart"),
-  {
-    loading: () => (
-      <div className="h-full min-h-[280px] animate-pulse rounded-lg bg-white/5" />
-    ),
-  }
-)
 const InputTradeForm = dynamic(() => import("../../components/InputTradeForm"), {
   ssr: false,
 })
+
+type ProfilePrefetchResource =
+  | "posts"
+  | "reels"
+  | "analytics"
+  | "achievements"
+  | "room"
+
+const PROFILE_PREFETCH_ORDER: readonly ProfilePrefetchResource[] = [
+  "posts",
+  "reels",
+  // One existing analytics query supplies both Statistics and Calendar.
+  "analytics",
+  "achievements",
+  "room",
+]
 
 /** Public profile columns only — never fetch billing, referral, or moderation fields here. */
 const PUBLIC_PROFILE_SELECT =
   "id, username, name, bio, avatar_url, trading_style, trader_type, primary_market, started_trading, is_private, created_at" as const
 
-const PRIVATE_PROFILE_TAB_COPY = {
-  trades: "This trader has chosen to keep their trades private.",
-  reels: "Clips are only visible to approved followers.",
-  posts: "Posts are only visible to approved followers.",
-} as const
-
-function PrivateProfileTabMessage({
-  variant,
-}: {
-  variant: keyof typeof PRIVATE_PROFILE_TAB_COPY
-}) {
-  return (
-    <div className="rounded-xl border border-white/10 bg-white/5 p-6 py-16 text-center">
-      <p className="text-lg text-gray-100">🔒 Private Profile</p>
-      <p className="mt-2 text-sm text-gray-400">
-        {PRIVATE_PROFILE_TAB_COPY[variant]}
-      </p>
-      <p className="mt-2 text-sm text-gray-400">
-        Follow this trader to request access.
-      </p>
-    </div>
-  )
-}
+const PROFILE_SUMMARY_TRADE_SELECT =
+  "id, created_at, pnl, rr, mode, account_type" as const
 
 function formatPostFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
-
-function profileWallImageSrc(imageUrl: string | null | undefined): string | null {
-  const raw = imageUrl != null ? String(imageUrl).trim() : ""
-  if (!raw) return null
-  if (raw.startsWith("http") || raw.startsWith("blob:")) return raw
-  if (raw.startsWith("/")) return raw
-  const base = process.env.NEXT_PUBLIC_SUPABASE_URL
-  if (!base) return null
-  return `${base}/storage/v1/object/public/profile_posts/${raw}`
-}
-
-function getExperience(startDate: string | null | undefined) {
-  if (!startDate) return ""
-
-  const start = new Date(startDate)
-  if (Number.isNaN(start.getTime())) return ""
-
-  const now = new Date()
-
-  const months =
-    (now.getFullYear() - start.getFullYear()) * 12 +
-    (now.getMonth() - start.getMonth())
-
-  const years = Math.floor(months / 12)
-  const remainingMonths = months % 12
-
-  return `${years}y ${remainingMonths}m`
-}
-
-function formatProfileMetadataLine(profile: {
-  trading_style?: string | null
-  trading_model?: string | null
-  trader_type?: string | null
-  primary_market?: string | null
-  started_trading?: string | null
-}) {
-  const parts: string[] = [
-    profile.trading_style?.trim() ||
-      profile.trading_model?.trim() ||
-      "—",
-  ]
-  const traderType = normalizeTraderType(profile.trader_type)
-  if (traderType) parts.push(traderType)
-  const market = profile.primary_market?.trim()
-  if (market) parts.push(market)
-  parts.push(getExperience(profile.started_trading) || "N/A")
-  return parts.join(" • ")
-}
-
-function formatMoney(v: number) {
-  return v < 0
-    ? `-$${Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: 2 })}`
-    : `$${v.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
-}
-
-
-function TradeCard({
-  trade,
-  profile,
-  shareProfile,
-  canManageTrade,
-  onStartEditTrade,
-  onTogglePinTrade,
-  onDeleteTrade,
-  showInteractions,
-  onOpenDetail,
-  onOpenComments,
-  attachedReel,
-  onOpenReplay,
-  commentsExpanded = false,
-  scrollToCommentsOnMount = false,
-  inDetailModal = false,
-  disableOpen,
-  onImageClick,
-}: {
-  trade: any
-  profile: any
-  /** Logged-in viewer profile (referral_code for share PNG) */
-  shareProfile?: { referral_code?: string | null } | null
-  canManageTrade?: boolean
-  onStartEditTrade?: () => void
-  onTogglePinTrade?: () => void
-  onDeleteTrade?: () => void
-  showInteractions?: boolean
-  onOpenDetail?: () => void
-  onOpenComments?: () => void
-  attachedReel?: ReelRow | null
-  onOpenReplay?: () => void
-  commentsExpanded?: boolean
-  scrollToCommentsOnMount?: boolean
-  inDetailModal?: boolean
-  disableOpen?: boolean
-  onImageClick?: (url: string) => void
-}) {
-  const commentsScrollRef = useRef<HTMLDivElement>(null)
-  const [commentsFocused, setCommentsFocused] = useState(
-    Boolean(scrollToCommentsOnMount)
-  )
-  const imageSrc = postImageSrc(trade.image_url)
-  const pnlRaw = Number(trade.pnl)
-  const pnl = Number.isFinite(pnlRaw) ? pnlRaw : NaN
-  const direction = trade.direction ?? "—"
-  const ticker = trade.ticker ?? "—"
-  const accountTypeNorm = String(trade.account_type ?? "").trim().toLowerCase()
-  const rr =
-    trade.rr != null && trade.rr !== "" ? formatRR(trade.rr) : "—"
-  const resolvedPoints = resolveTradePoints(trade)
-  const pointsLabel =
-    resolvedPoints !== null ? formatTradePoints(trade) : null
-  const pnlLabel = Number.isFinite(pnl)
-    ? `${pnl >= 0 ? "+" : ""}${formatMoney(pnl)}`
-    : "—"
-  const desc = trade.public_description
-    ? String(trade.public_description).trim()
-    : ""
-
-  useEffect(() => {
-    if (scrollToCommentsOnMount) setCommentsFocused(true)
-  }, [scrollToCommentsOnMount, trade.id])
-
-  const tradeCompactMeta = (
-    <>
-      <span
-        className={
-          Number.isFinite(pnl)
-            ? pnl >= 0
-              ? "text-emerald-400"
-              : "text-red-400"
-            : "text-gray-400"
-        }
-      >
-        {pnlLabel}
-      </span>
-      <span className="text-gray-400"> · </span>
-      <span>
-        {ticker} · {direction}
-      </span>
-    </>
-  )
-
-  const tradeDetails = (
-    <>
-      <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 overflow-hidden text-xs text-gray-100 md:text-sm">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <span
-            className={
-              `shrink-0 text-sm font-bold tabular-nums md:text-base ${
-                Number.isFinite(pnl)
-                  ? pnl >= 0
-                    ? "text-emerald-400"
-                    : "text-red-400"
-                  : "text-gray-400"
-              }`
-            }
-          >
-            {pnlLabel}
-          </span>
-
-          {trade.id ? (
-            <Link
-              href={`/trade/${trade.id}`}
-              className="min-w-0 truncate font-medium text-white hover:text-blue-200"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {ticker} · {direction}
-            </Link>
-          ) : (
-            <span className="min-w-0 truncate font-medium text-white">
-              {ticker} · {direction}
-            </span>
-          )}
-
-          {accountTypeNorm ? (
-            <span
-              className={`
-          shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium md:text-xs
-          ${
-            accountTypeNorm === "funded"
-              ? "bg-green-500/20 text-green-400 border border-green-400/30"
-              : accountTypeNorm === "eval"
-                ? "bg-yellow-500/20 text-yellow-300 border border-yellow-400/30"
-                : accountTypeNorm === "live"
-                  ? "bg-blue-500/20 text-blue-300 border border-blue-400/30"
-                  : "bg-white/10 text-white/60"
-          }
-        `}
-            >
-              {formatPublicAccountTypeLabel(accountTypeNorm) ?? accountTypeNorm.toUpperCase()}
-            </span>
-          ) : null}
-        </div>
-        <div className="flex shrink-0 items-center gap-3 text-xs tabular-nums text-gray-300 md:text-sm">
-          <span>RR {rr}</span>
-          {pointsLabel ? <span>Pts {pointsLabel}</span> : null}
-        </div>
-      </div>
-      {desc ? (
-        <ExpandableText
-          className="min-w-0 px-1 text-xs leading-relaxed text-white md:text-sm"
-          textClassName="break-words text-white"
-          stopPropagation
-        >
-          {desc}
-        </ExpandableText>
-      ) : null}
-      <TradeCardTimingBlock
-        trade={trade}
-        onViewReel={
-          attachedReel && onOpenReplay ? onOpenReplay : undefined
-        }
-      />
-    </>
-  )
-
-  const cardShellClass = inDetailModal
-    ? "flex min-h-0 flex-1 flex-col overflow-hidden bg-transparent md:flex-row"
-    : `h-fit w-full overflow-hidden rounded-xl border border-white/10 bg-white/5 shadow-lg shadow-black/20 ${
-        onOpenDetail && !disableOpen
-          ? "cursor-pointer transition-all duration-200 hover:border-white/20 hover:bg-white/[0.07] hover:shadow-xl"
-          : ""
-      }`
-
-  const tradeAuthorHeader = (
-    <div className="flex shrink-0 items-center justify-between border-b border-white/5 px-4 py-3">
-      <div className="flex min-w-0 items-center gap-3">
-        <ProfileAvatarImg
-          src={profile.avatar_url}
-          className="h-10 w-10 shrink-0 ring-2 ring-white/10"
-        />
-        <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-white">
-            {profile.username || "User"}
-          </p>
-          <FeedPostMetaRow
-            label="Trade"
-            labelClassName="font-medium text-amber-400/90"
-            createdAt={trade.created_at}
-            suffix={
-              trade.is_pinned ? (
-                <span className="ml-1.5" aria-label="Pinned">
-                  📌
-                </span>
-              ) : null
-            }
-          />
-        </div>
-      </div>
-      <div className="flex shrink-0 items-center gap-1">
-        <div onClick={(e) => e.stopPropagation()}>
-          <ShareTradeButton
-            variant="icon"
-            trade={trade}
-            profile={shareProfile ?? null}
-            mode="message-only"
-          />
-        </div>
-        {canManageTrade ? (
-          <div onClick={(e) => e.stopPropagation()}>
-            <DropdownMenu
-              stopPropagation
-              menuClassName="z-[9100]"
-              trigger={
-                <span className="px-1 text-gray-400 hover:text-white">•••</span>
-              }
-              items={[
-                {
-                  id: "edit",
-                  label: "Edit Trade",
-                  onSelect: () => onStartEditTrade?.(),
-                },
-                {
-                  id: "pin",
-                  label: trade.is_pinned ? "Unpin Trade" : "Pin Trade",
-                  onSelect: () => onTogglePinTrade?.(),
-                },
-                {
-                  id: "delete",
-                  label: "Delete Trade",
-                  variant: "danger",
-                  onSelect: () => onDeleteTrade?.(),
-                },
-              ]}
-            />
-          </div>
-        ) : null}
-      </div>
-    </div>
-  )
-
-  const tradeImageBlock = imageSrc ? (
-    <DetailModalImage src={imageSrc} onClick={onImageClick} />
-  ) : (
-    <div className="flex min-h-[80px] w-full items-center justify-center bg-gradient-to-br from-white/5 to-white/[0.02] text-xs text-gray-400">
-      No screenshot
-    </div>
-  )
-
-  if (inDetailModal) {
-    return (
-      <article className={cardShellClass}>
-        {imageSrc ? (
-          <div className="hidden md:flex md:min-h-0 md:flex-1 md:items-center md:justify-center md:border-r md:border-white/10 md:p-3">
-            {tradeImageBlock}
-          </div>
-        ) : null}
-
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:w-[400px] md:shrink-0 lg:w-[420px]">
-          {showInteractions ? (
-            <TradeSocialProvider
-              tradeId={trade.id}
-              currentUserId={trade.currentUserId}
-              tradeOwnerUserId={trade.user_id}
-              commentsExpanded={commentsExpanded}
-              onRequestComments={commentsExpanded ? undefined : onOpenComments}
-              scrollToCommentsOnMount={scrollToCommentsOnMount}
-              enableRealtime
-            >
-              <MobileCommentFocusLayout
-                commentsFocused={commentsFocused}
-                header={tradeAuthorHeader}
-                compactHeader={
-                  <CommentFocusCompactStrip
-                    userId={String(profile.id ?? "")}
-                    username={profile.username}
-                    avatarUrl={profile.avatar_url}
-                    meta={
-                      <>
-                        <FeedPostMetaRow
-                          label="Trade"
-                          labelClassName="font-medium text-amber-400/90"
-                          createdAt={trade.created_at}
-                        />
-                        <div className="mt-0.5 truncate text-xs font-medium text-gray-300">
-                          {tradeCompactMeta}
-                        </div>
-                      </>
-                    }
-                    onExpand={() => setCommentsFocused(false)}
-                  />
-                }
-                mobileMedia={imageSrc ? tradeImageBlock : undefined}
-                engagement={
-                  <TradeSocialEngagementBar
-                    onCommentsFocus={() => setCommentsFocused(true)}
-                  />
-                }
-                engagementClassName="shrink-0 border-t border-white/10 px-4 py-2 md:border-t-0"
-                collapsibleContent={
-                  <div className="space-y-3 px-4 pb-3 pt-4">{tradeDetails}</div>
-                }
-                comments={
-                  commentsExpanded ? (
-                    <TradeSocialCommentsSection
-                      className="px-4 pb-4"
-                      scrollContainerRef={commentsScrollRef}
-                    />
-                  ) : null
-                }
-              />
-            </TradeSocialProvider>
-          ) : (
-            <>
-              {tradeAuthorHeader}
-              {imageSrc ? (
-                <div className="shrink-0 md:hidden">{tradeImageBlock}</div>
-              ) : null}
-              <div className="space-y-3 p-4">{tradeDetails}</div>
-            </>
-          )}
-        </div>
-      </article>
-    )
-  }
-
-  return (
-    <article
-      className={cardShellClass}
-      role={onOpenDetail && !disableOpen ? "button" : undefined}
-      tabIndex={onOpenDetail && !disableOpen ? 0 : undefined}
-      onClick={() => {
-        if (onOpenDetail && !disableOpen) onOpenDetail()
-      }}
-      onKeyDown={(e) => {
-        if (!onOpenDetail || disableOpen) return
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault()
-          onOpenDetail()
-        }
-      }}
-    >
-      {tradeAuthorHeader}
-
-      {imageSrc ? (
-        <TradeScreenshotImage
-          src={imageSrc}
-          preset="feed-thumb"
-          onClick={onImageClick}
-          logContext="profile-trade-card"
-        />
-      ) : (
-        <div className="flex min-h-[5rem] w-full items-center justify-center bg-gradient-to-br from-white/5 to-white/[0.02] py-8 text-xs text-gray-400">
-          No screenshot
-        </div>
-      )}
-
-      {showInteractions ? (
-        <div onKeyDown={(e) => e.stopPropagation()}>
-          <TradeSocialProvider
-            tradeId={trade.id}
-            currentUserId={trade.currentUserId}
-            tradeOwnerUserId={trade.user_id}
-            commentsExpanded={commentsExpanded}
-            onRequestComments={commentsExpanded ? undefined : onOpenComments}
-            scrollToCommentsOnMount={scrollToCommentsOnMount}
-          >
-            <div className="border-t border-white/10 px-4 py-2">
-              <TradeSocialEngagementBar />
-            </div>
-            <div className="space-y-3 px-4 pb-3">{tradeDetails}</div>
-            {commentsExpanded ? (
-              <TradeSocialCommentsSection className="px-4 pb-4" />
-            ) : null}
-          </TradeSocialProvider>
-        </div>
-      ) : (
-        <div className="space-y-3 p-4">{tradeDetails}</div>
-      )}
-    </article>
-  )
-}
-
-function PostCard({
-  post,
-  profile,
-  canManagePost,
-  menuOpen,
-  onMenuToggle,
-  onStartEditPost,
-  onTogglePinPost,
-  onSavePost,
-  onDeletePost,
-  showInteractions,
-  onLike,
-  likeBusy = false,
-  onOpenComments,
-  showCommentsPanel,
-  scrollToCommentsOnMount,
-  likeMeta,
-  comments,
-  commentText,
-  onCommentChange,
-  onCommentSubmit,
-  commentSubmitting,
-  currentUserId,
-  onDeleteComment,
-  onTogglePinComment,
-  onOpenDetail,
-  inDetailModal = false,
-  disableOpen,
-  onImageClick,
-  onSharePost,
-}: {
-  post: any
-  profile: any
-  canManagePost?: boolean
-  menuOpen?: boolean
-  onMenuToggle?: () => void
-  onStartEditPost?: () => void
-  onTogglePinPost?: () => void
-  onSavePost?: () => void
-  onDeletePost?: () => void
-  showInteractions?: boolean
-  onLike?: () => void
-  likeBusy?: boolean
-  onOpenComments?: () => void
-  showCommentsPanel?: boolean
-  scrollToCommentsOnMount?: boolean
-  likeMeta?: { count: number; liked: boolean }
-  comments?: any[]
-  commentText?: string
-  onCommentChange?: (value: string) => void
-  onCommentSubmit?: (parentCommentId?: string | null) => void
-  commentSubmitting?: boolean
-  currentUserId?: string | null
-  onDeleteComment?: (comment: any) => Promise<boolean>
-  onTogglePinComment?: (comment: any, pinned: boolean) => Promise<boolean>
-  onOpenDetail?: () => void
-  inDetailModal?: boolean
-  disableOpen?: boolean
-  onImageClick?: (url: string) => void
-  onSharePost?: (post: any) => void
-}) {
-  const commentsScrollRef = useRef<HTMLDivElement>(null)
-  const [replyTarget, setReplyTarget] = useState<CommentReplyTarget | null>(null)
-  const [pendingDelete, setPendingDelete] = useState<any>(null)
-  const [deleteBusy, setDeleteBusy] = useState(false)
-  const [commentsFocused, setCommentsFocused] = useState(
-    Boolean(scrollToCommentsOnMount && showCommentsPanel)
-  )
-  const imgSrc = profileWallImageSrc(post.image_url)
-  const postCommentInputId = `profile-comment-input-${post.id}`
-
-  useEffect(() => {
-    if (scrollToCommentsOnMount && showCommentsPanel) setCommentsFocused(true)
-  }, [scrollToCommentsOnMount, showCommentsPanel, post.id])
-
-  useEffect(() => {
-    setReplyTarget(null)
-  }, [post.id])
-
-  useEffect(() => {
-    if (!showCommentsPanel || !scrollToCommentsOnMount) return
-    requestAnimationFrame(() => {
-      if (inDetailModal) {
-        scrollModalCommentsPane(commentsScrollRef.current)
-        return
-      }
-      const section = document.getElementById(`profile-post-comments-${post.id}`)
-      section?.scrollIntoView({ behavior: "smooth", block: "nearest" })
-      const input = section?.querySelector("input")
-      if (input instanceof HTMLInputElement) input.focus()
-    })
-  }, [inDetailModal, post.id, scrollToCommentsOnMount, showCommentsPanel])
-
-  const { likesByCommentId, toggleCommentLikeFor, isCommentLikeBusy, canLikeComments } =
-    useCommentLikes({
-      source: "profile_post_comments",
-      comments: comments || [],
-      currentUserId,
-      notificationParent: { profilePostId: String(post.id) },
-    })
-
-  const commentsList = (
-    <FeedCommentList
-      comments={comments || []}
-      currentUserId={currentUserId}
-      contentOwnerUserId={profile?.id}
-      likesByCommentId={likesByCommentId}
-      onToggleCommentLike={canLikeComments ? toggleCommentLikeFor : undefined}
-      isCommentLikeBusy={isCommentLikeBusy}
-      onReply={(comment) => {
-        startCommentReply({
-          comment,
-          allComments: comments || [],
-          setReplyTarget,
-          setDraft: (value) => onCommentChange?.(value),
-          inputId: postCommentInputId,
-        })
-      }}
-      onRequestDelete={
-        onDeleteComment
-          ? (comment) =>
-              setPendingDelete({
-                ...comment,
-                profile_post_id: comment.profile_post_id ?? post.id,
-              })
-          : undefined
-      }
-      onTogglePin={
-        onTogglePinComment
-          ? (comment, pinned) => {
-              void onTogglePinComment(comment, pinned)
-            }
-          : undefined
-      }
-      deleteMenuClassName="z-[9100]"
-    />
-  )
-
-  const commentsComposer = (
-    <div className="flex flex-col gap-2">
-      {replyTarget ? (
-        <ReplyComposerStrip
-          authorName={replyTarget.authorName}
-          preview={replyTarget.preview}
-          onCancel={() =>
-            clearCommentReplyDraft({
-              setReplyTarget,
-              setDraft: (value) => onCommentChange?.(value),
-            })
-          }
-        />
-      ) : null}
-      <div className="flex gap-2">
-      <input
-        id={postCommentInputId}
-        value={commentText || ""}
-        onChange={(e) => onCommentChange?.(e.target.value)}
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault()
-            if (!commentSubmitting) {
-              onCommentSubmit?.(replyTarget?.parentCommentId ?? null)
-              setReplyTarget(null)
-            }
-          }
-        }}
-        placeholder={replyTarget ? "Add to reply…" : "Add a comment..."}
-        className="flex-1 rounded-lg border border-white/10 bg-[#0f172a] px-3 py-2 text-sm text-white placeholder:text-gray-400"
-      />
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation()
-          onCommentSubmit?.(replyTarget?.parentCommentId ?? null)
-          setReplyTarget(null)
-        }}
-        disabled={commentSubmitting || !(commentText || "").trim()}
-        className="rounded-lg bg-blue-500 px-3 py-2 text-sm text-white disabled:opacity-40"
-      >
-        Post
-      </button>
-      </div>
-    </div>
-  )
-
-  const commentsPanel = showCommentsPanel ? (
-    <div
-      id={`profile-post-comments-${post.id}`}
-      className="mt-3 space-y-3"
-    >
-      <div className="max-h-48 space-y-1 overflow-y-auto text-sm text-gray-300">
-        {commentsList}
-      </div>
-      {commentsComposer}
-    </div>
-  ) : null
-
-  const cardShellClass = inDetailModal
-    ? "flex min-h-0 flex-1 flex-col overflow-hidden bg-transparent md:flex-row"
-    : `h-fit w-full overflow-hidden rounded-xl border border-white/10 bg-white/5 shadow-lg shadow-black/20 ${
-        onOpenDetail && !disableOpen
-          ? "cursor-pointer transition-all duration-200 hover:border-white/20 hover:bg-white/[0.07] hover:shadow-xl"
-          : ""
-      }`
-
-  const postAuthorHeader = (
-    <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/5 p-4">
-      <div className="flex min-w-0 items-center gap-3">
-        <ProfileAvatarImg
-          src={profile.avatar_url}
-          className="h-10 w-10 ring-2 ring-white/10"
-        />
-        <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-white">
-            {profile.username || "User"}
-          </p>
-          <FeedPostMetaRow
-            label="Post"
-            createdAt={post.created_at}
-            suffix={
-              post.is_pinned ? (
-                <span className="ml-2 text-yellow-400" aria-label="Pinned">
-                  📌
-                </span>
-              ) : null
-            }
-          />
-        </div>
-      </div>
-      {canManagePost ? (
-        <div className="relative">
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation()
-              onMenuToggle?.()
-            }}
-            className="px-1 text-gray-400 hover:text-white"
-          >
-            •••
-          </button>
-          {menuOpen ? (
-            <div
-              className="absolute right-0 z-50 mt-2 w-40 rounded-lg border border-white/10 bg-[#020617] shadow-lg"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onStartEditPost?.()
-                }}
-                className="block w-full px-4 py-2 text-left text-sm hover:bg-white/10"
-              >
-                Edit Post
-              </button>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onTogglePinPost?.()
-                }}
-                className="block w-full px-4 py-2 text-left text-sm hover:bg-white/10"
-              >
-                {post.is_pinned ? "Unpin Post" : "Pin Post"}
-              </button>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onSavePost?.()
-                }}
-                className="block w-full px-4 py-2 text-left text-sm hover:bg-white/10"
-              >
-                Save Post
-              </button>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onDeletePost?.()
-                }}
-                className="block w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-white/10"
-              >
-                Delete Post
-              </button>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-    </div>
-  )
-
-  const postImageBlock =
-    imgSrc != null ? (
-      <DetailModalImage src={imgSrc} onClick={onImageClick} />
-    ) : null
-
-  const postEngagementRow = showInteractions ? (
-    <div className="flex items-center gap-4 px-1 text-sm">
-      <EngagementCountButton
-        icon={<span>{likeMeta?.liked ? "❤️" : "🤍"}</span>}
-        count={likeMeta?.count ?? 0}
-        ariaLabel={likeMeta?.liked ? "Unlike" : "Like"}
-        disabled={likeBusy}
-        onClick={(e) => {
-          e.stopPropagation()
-          onLike?.()
-        }}
-        className="text-gray-300 hover:text-white"
-        countClassName="tabular-nums"
-      />
-      <EngagementCountButton
-        icon={<span>💬</span>}
-        count={comments?.length ?? 0}
-        ariaLabel="View comments"
-        onClick={(e) => {
-          e.stopPropagation()
-          setCommentsFocused(true)
-          onOpenComments?.()
-          if (inDetailModal && showCommentsPanel) {
-            requestAnimationFrame(() => {
-              scrollModalCommentsPane(commentsScrollRef.current)
-            })
-          }
-        }}
-        className="text-gray-300 hover:text-white"
-        countClassName="tabular-nums"
-      />
-      {onSharePost ? (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation()
-            onSharePost(post)
-          }}
-          className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/5 text-gray-300 transition hover:bg-white/10 hover:text-white"
-          aria-label="Share post"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className="h-4 w-4"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            aria-hidden
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 16V4m0 0l-4 4m4-4l4 4M4 20h16"
-            />
-          </svg>
-        </button>
-      ) : null}
-    </div>
-  ) : null
-
-  const postContentBlock = (
-    <div className="shrink-0 space-y-3 p-4">
-      {post.content ? (
-        <p className="px-1 text-sm leading-relaxed text-white">{post.content}</p>
-      ) : null}
-      {showInteractions ? (
-        <div className="border-t border-white/10 pt-3">
-          {postEngagementRow}
-          {!inDetailModal ? commentsPanel : null}
-        </div>
-      ) : null}
-    </div>
-  )
-
-  const postCollapsibleContent = (
-    <div className="shrink-0 space-y-3 p-4">
-      {post.content ? (
-        <p className="px-1 text-sm leading-relaxed text-white">{post.content}</p>
-      ) : null}
-    </div>
-  )
-
-  const deleteModal = onDeleteComment ? (
-    <ConfirmModal
-      open={pendingDelete != null}
-      title="Delete Comment?"
-      description="This action cannot be undone."
-      confirmLabel="Delete"
-      destructive
-      loading={deleteBusy}
-      onCancel={() => {
-        if (!deleteBusy) setPendingDelete(null)
-      }}
-      onConfirm={async () => {
-        if (!pendingDelete || !onDeleteComment) return
-        devLog("[comment-delete] confirm", {
-          commentId: String(pendingDelete.id),
-          postId: pendingDelete.post_id ?? post.id,
-        })
-        setDeleteBusy(true)
-        try {
-          const ok = await onDeleteComment({
-            ...pendingDelete,
-            post_id: pendingDelete.post_id ?? post.id,
-          })
-          devLog("[comment-delete] handler finished", {
-            commentId: String(pendingDelete.id),
-            ok,
-          })
-          if (ok) setPendingDelete(null)
-        } finally {
-          setDeleteBusy(false)
-        }
-      }}
-    />
-  ) : null
-
-  if (inDetailModal) {
-    const postCommentsPanel = showCommentsPanel ? (
-      <div
-        id={`profile-post-comments-${post.id}`}
-        className="flex min-h-0 flex-1 flex-col overflow-hidden"
-      >
-        <div
-          ref={commentsScrollRef}
-          className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pt-3"
-        >
-          {commentsList}
-        </div>
-        <div className="shrink-0 px-4 pb-4 pt-3">{commentsComposer}</div>
-      </div>
-    ) : null
-
-    return (
-      <>
-        <article className={cardShellClass}>
-          {isRoomSharePost(post) ? (
-            <div className="hidden md:flex md:min-h-0 md:flex-1 md:items-center md:justify-center md:border-r md:border-white/10 md:p-3">
-              <FeedRoomShareCard
-                post={post}
-                viewerUserId={currentUserId ?? null}
-                className="w-full max-w-md"
-              />
-            </div>
-          ) : imgSrc ? (
-            <div className="hidden md:flex md:min-h-0 md:flex-1 md:items-center md:justify-center md:border-r md:border-white/10 md:p-3">
-              {postImageBlock}
-            </div>
-          ) : null}
-
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:w-[400px] md:shrink-0 lg:w-[420px]">
-            <MobileCommentFocusLayout
-              commentsFocused={commentsFocused}
-              header={postAuthorHeader}
-              compactHeader={
-                <CommentFocusCompactStrip
-                  userId={String(profile.id ?? "")}
-                  username={profile.username}
-                  avatarUrl={profile.avatar_url}
-                  meta={
-                    <FeedPostMetaRow label="Post" createdAt={post.created_at} />
-                  }
-                  onExpand={() => setCommentsFocused(false)}
-                />
-              }
-              mobileMedia={
-                isRoomSharePost(post) ? (
-                  <FeedRoomShareCard
-                    post={post}
-                    viewerUserId={currentUserId ?? null}
-                    className="mx-4 my-3"
-                  />
-                ) : (
-                  postImageBlock ?? undefined
-                )
-              }
-              engagement={postEngagementRow}
-              engagementClassName="shrink-0 border-b border-white/10 px-4 py-2"
-              collapsibleContent={postCollapsibleContent}
-              comments={postCommentsPanel}
-            />
-          </div>
-        </article>
-        {deleteModal}
-      </>
-    )
-  }
-
-  return (
-    <>
-      <article
-      className={cardShellClass}
-      role={onOpenDetail && !disableOpen ? "button" : undefined}
-      tabIndex={onOpenDetail && !disableOpen ? 0 : undefined}
-      onClick={() => {
-        if (onOpenDetail && !disableOpen) onOpenDetail()
-      }}
-      onKeyDown={(e) => {
-        if (!onOpenDetail || disableOpen) return
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault()
-          onOpenDetail()
-        }
-      }}
-    >
-      {postAuthorHeader}
-
-      {isRoomSharePost(post) ? (
-        <div className="p-4" onClick={(e) => e.stopPropagation()}>
-          <FeedRoomShareCard
-            post={post}
-            viewerUserId={currentUserId ?? null}
-          />
-        </div>
-      ) : imgSrc ? (
-        <div className="w-full">
-          <TradeScreenshotImage
-            src={imgSrc}
-            preset="feed-thumb"
-            className="rounded-none"
-            logContext="profile-post-card"
-          />
-        </div>
-      ) : null}
-
-      {postContentBlock}
-    </article>
-      {deleteModal}
-    </>
-  )
 }
 
 function scrollToProfileTarget(elementId: string) {
@@ -1260,7 +250,14 @@ function ProfilePageContent() {
 
   const [profile, setProfile] = useState<any>(null)
   const [allTrades, setAllTrades] = useState<any[]>([])
-  const [visibleTradeCount, setVisibleTradeCount] = useState(PAGE_SIZE)
+  const [, setVisibleTradeCount] = useState(PAGE_SIZE)
+  const [tradeHasMore, setTradeHasMore] = useState(false)
+  const [tradesReady, setTradesReady] = useState(false)
+  const [summaryTrades, setSummaryTrades] = useState<any[]>([])
+  const [summaryReady, setSummaryReady] = useState(false)
+  const [analyticsTradeRows, setAnalyticsTradeRows] = useState<any[]>([])
+  const [analyticsTradesReady, setAnalyticsTradesReady] = useState(false)
+  const [analyticsTradesLoading, setAnalyticsTradesLoading] = useState(false)
   const [loading, setLoading] = useState(true)
   const [metaLoading, setMetaLoading] = useState(false)
   const [tradesLoading, setTradesLoading] = useState(false)
@@ -1289,8 +286,8 @@ function ProfilePageContent() {
     [profile, currentUserId, isFollowing]
   )
   const [messageBusy, setMessageBusy] = useState(false)
-  const [creatingRoom, setCreatingRoom] = useState(false)
   const [room, setRoom] = useState<any | null>(null)
+  const [roomReady, setRoomReady] = useState(false)
   const [showFollowers, setShowFollowers] = useState(false)
   const [showFollowing, setShowFollowing] = useState(false)
   const [wallPosts, setWallPosts] = useState<any[]>([])
@@ -1302,11 +299,34 @@ function ProfilePageContent() {
   >({})
   const replaceReelInputRef = useRef<HTMLInputElement>(null)
   const [replacingReelPost, setReplacingReelPost] = useState<any | null>(null)
-  const [activeTab, setActiveTab] = useState<
-    "trades" | "reels" | "posts" | "calendar" | "stats" | "achievements"
-  >(
-    "trades"
-  )
+  const [activeTab, setActiveTab] = useState<ProfileTab>("trades")
+  const [profilePrefetchStep, setProfilePrefetchStep] = useState<{
+    profileId: string
+    resource: ProfilePrefetchResource
+  } | null>(null)
+  const prefetchProfileRef = useRef(profileId)
+  const prefetchGenerationRef = useRef(0)
+  const prefetchStartedGenerationRef = useRef(-1)
+  if (prefetchProfileRef.current !== profileId) {
+    prefetchProfileRef.current = profileId
+    prefetchGenerationRef.current += 1
+  }
+  const prefetchStepForCurrentProfile =
+    profilePrefetchStep?.profileId === profileId
+      ? profilePrefetchStep.resource
+      : null
+  const prefetchingPosts = prefetchStepForCurrentProfile === "posts"
+  const prefetchingReels = prefetchStepForCurrentProfile === "reels"
+  const prefetchingAnalytics = prefetchStepForCurrentProfile === "analytics"
+  const prefetchingAchievements =
+    prefetchStepForCurrentProfile === "achievements"
+  const prefetchingRoom = prefetchStepForCurrentProfile === "room"
+  const postsRequested = activeTab === "posts" || prefetchingPosts
+  const reelsRequested = activeTab === "reels" || prefetchingReels
+  const analyticsRequested =
+    activeTab === "calendar" || activeTab === "stats" || prefetchingAnalytics
+  const achievementsRequested =
+    activeTab === "achievements" || prefetchingAchievements
   const [showCreatePost, setShowCreatePost] = useState(false)
   const [showReelComposer, setShowReelComposer] = useState(false)
   const [showQuickTrade, setShowQuickTrade] = useState(false)
@@ -1345,8 +365,10 @@ function ProfilePageContent() {
   const [editingPost, setEditingPost] = useState<any | null>(null)
   const [editContent, setEditContent] = useState("")
   const [editingTrade, setEditingTrade] = useState<any | null>(null)
-  const [selectedMode, setSelectedMode] = useState("all")
+  const [selectedMode, setSelectedMode] =
+    useState<ProfileStatisticsMode>("all")
   const [achievements, setAchievements] = useState<Achievement[]>([])
+  const [achievementsReady, setAchievementsReady] = useState(false)
   const [achievementPostIds, setAchievementPostIds] = useState<Record<string, string>>({})
   const [selectedAchievementPostDetail, setSelectedAchievementPostDetail] =
     useState<any | null>(null)
@@ -1365,7 +387,6 @@ function ProfilePageContent() {
     useState(false)
   const feedDraftSyncRef = useRef<Record<string, string>>({})
   const feedOpenCommentsRef = useRef<Record<string, boolean>>({})
-  const creatingRoomRef = useRef(false)
   const creatingPostRef = useRef(false)
   const uploadingPostRef = useRef(false)
   const uploadingStoryRef = useRef(false)
@@ -1374,6 +395,9 @@ function ProfilePageContent() {
   const STORY_SLIDE_MS = 7000
   const [profileStoryOpen, setProfileStoryOpen] = useState(false)
   const [profileStoryIndex, setProfileStoryIndex] = useState(0)
+  const [profileStoriesRequested, setProfileStoriesRequested] = useState(false)
+  const roomRequested = profileStoriesRequested || prefetchingRoom
+  const profileStoryTriggerRef = useRef<HTMLDivElement>(null)
   const likeBusyRef = useRef<Set<string>>(new Set())
   const commentSubmittingRef = useRef<Set<string>>(new Set())
   const feedDeepLinkLikeBusyRef = useRef(false)
@@ -1439,7 +463,62 @@ function ProfilePageContent() {
   )
 
   const { storiesByUser: profileStoriesByUser, loadStories: loadProfileStories } =
-    useActiveStories(profileStoryUserIds, !!profile?.id)
+    useActiveStories(profileStoryUserIds, !!profile?.id && profileStoriesRequested)
+
+  useEffect(() => {
+    setProfileStoriesRequested(false)
+    const node = profileStoryTriggerRef.current
+    if (!node || !profile?.id) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setProfileStoriesRequested(true)
+          observer.disconnect()
+        }
+      },
+      { rootMargin: "100px" }
+    )
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [profile?.id])
+
+  useEffect(() => {
+    if (!profile?.id || !roomRequested || roomReady) return
+    let cancelled = false
+
+    void (async () => {
+      let roomRow: (Record<string, unknown> & { owner_user_id?: string }) | null =
+        null
+      if (isDemoModeActive() && isDemoProfileId(String(profile.id))) {
+        roomRow =
+          getDemoProfileMetadata(String(profile.id), currentUserId)?.roomRow ?? null
+      } else {
+        const { data, error } = await supabase
+          .from("rooms")
+          .select("*")
+          .eq("owner_user_id", profile.id)
+          .maybeSingle()
+        if (error) console.error(error)
+        roomRow = data ?? null
+      }
+      if (cancelled) return
+      const resolved =
+        roomRow && roomRow.owner_user_id === profile.id ? roomRow : null
+      setRoom(resolved)
+      setRoomReady(true)
+      patchProfileSession(profileId, { room: resolved, roomReady: true })
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [
+    currentUserId,
+    profile?.id,
+    profileId,
+    roomRequested,
+    roomReady,
+  ])
 
   const profileHasActiveStory = userHasActiveStory(
     profileStoriesByUser,
@@ -1591,14 +670,16 @@ function ProfilePageContent() {
   ])
 
   const fetchTradesForProfile = useCallback(
-    async (forProfileId: string) => {
+    async (forProfileId: string, offset: number) => {
       const isOwner =
         currentUserId != null && String(currentUserId) === String(forProfileId)
 
       if (isDemoModeActive() && isDemoProfileId(forProfileId)) {
-        return getDemoProfileTrades(forProfileId, currentUserId) as Awaited<
-          ReturnType<typeof sanitizeTradesForViewer>
-        >
+        const rows = getDemoProfileTrades(forProfileId, currentUserId)
+        return {
+          rows: rows.slice(offset, offset + PAGE_SIZE),
+          hasMore: rows.length > offset + PAGE_SIZE,
+        }
       }
 
       const { data, error } = await supabase
@@ -1607,55 +688,111 @@ function ProfilePageContent() {
         .eq("user_id", forProfileId)
         .eq("is_public", true)
         .order("created_at", { ascending: false })
+        .range(offset, offset + PAGE_SIZE)
 
       if (error) {
-        console.error("all trades fetch:", error)
-        return []
+        console.error("profile trades page fetch:", error)
+        return { rows: [], hasMore: false }
       }
 
+      const rows = sanitizeTradesForViewer(data || [], { isOwner })
+      return {
+        rows: rows.slice(0, PAGE_SIZE),
+        hasMore: rows.length > PAGE_SIZE,
+      }
+    },
+    [currentUserId]
+  )
+
+  const fetchAllTradesForAnalytics = useCallback(
+    async (forProfileId: string) => {
+      const isOwner =
+        currentUserId != null && String(currentUserId) === String(forProfileId)
+      if (isDemoModeActive() && isDemoProfileId(forProfileId)) {
+        return getDemoProfileTrades(forProfileId, currentUserId)
+      }
+      const { data, error } = await supabase
+        .from("trades")
+        .select(tradeSelectForViewer(isOwner))
+        .eq("user_id", forProfileId)
+        .eq("is_public", true)
+        .order("created_at", { ascending: false })
+      if (error) {
+        console.error("profile analytics trades fetch:", error)
+        return []
+      }
       return sanitizeTradesForViewer(data || [], { isOwner })
     },
     [currentUserId]
   )
 
+  const fetchSummaryTrades = useCallback(async (forProfileId: string) => {
+    if (isDemoModeActive() && isDemoProfileId(forProfileId)) {
+      return getDemoProfileTrades(forProfileId, currentUserId)
+    }
+    const { data, error } = await supabase
+      .from("trades")
+      .select(PROFILE_SUMMARY_TRADE_SELECT)
+      .eq("user_id", forProfileId)
+      .eq("is_public", true)
+      .order("created_at", { ascending: false })
+    if (error) {
+      console.error("profile summary fetch:", error)
+      return []
+    }
+    return data || []
+  }, [currentUserId])
+
   const refreshProfileMedia = useCallback(async () => {
     if (!profile?.id) return
 
     const userId = String(profile.id)
-    const [trades, reels] = await Promise.all([
-      fetchTradesForProfile(userId),
-      fetchProfileReels(userId),
+    const [page, summary] = await Promise.all([
+      fetchTradesForProfile(userId, 0),
+      fetchSummaryTrades(userId),
     ])
-
-    setAllTrades(trades)
-    setProfileReels(reels)
-
-    const tradeIds = trades
-      .map((trade) => String(trade.id))
-      .filter((id) => id.trim() !== "")
-
-    if (tradeIds.length === 0) {
-      setTradeReelsByTradeId({})
-      return
-    }
-
-    if (isDemoModeActive() && isDemoProfileId(userId)) {
-      const map = getDemoReelsByTradeIds(userId, tradeIds)
-      const record: Record<string, ReelRow> = {}
-      map.forEach((reel, tradeId) => {
-        record[tradeId] = reel
-      })
-      setTradeReelsByTradeId(record)
-      return
-    }
-
-    const map = await fetchReelsByTradeIds(supabase, tradeIds)
-    const record: Record<string, ReelRow> = {}
-    map.forEach((reel, tradeId) => {
-      record[tradeId] = reel
+    setAllTrades(page.rows)
+    setVisibleTradeCount(page.rows.length)
+    setTradeHasMore(page.hasMore)
+    setTradesReady(true)
+    setSummaryTrades(summary)
+    setSummaryReady(true)
+    patchProfileSession(profileId, {
+      allTrades: page.rows,
+      visibleTradeCount: page.rows.length,
+      tradeHasMore: page.hasMore,
+      tradesReady: true,
+      summaryTrades: summary,
+      summaryReady: true,
     })
-    setTradeReelsByTradeId(record)
-  }, [fetchProfileReels, fetchTradesForProfile, profile?.id])
+  }, [fetchSummaryTrades, fetchTradesForProfile, profile?.id, profileId])
+
+  const loadMoreTrades = useCallback(async () => {
+    if (!profile?.id || tradesLoading || !tradeHasMore) return
+    setTradesLoading(true)
+    try {
+      const page = await fetchTradesForProfile(String(profile.id), allTrades.length)
+      const merged = mergeUniqueById(allTrades, page.rows)
+      setAllTrades(merged)
+      setVisibleTradeCount(merged.length)
+      setTradeHasMore(page.hasMore)
+      patchProfileSession(profileId, {
+        allTrades: merged,
+        visibleTradeCount: merged.length,
+        tradeHasMore: page.hasMore,
+        tradesReady: true,
+      })
+    } finally {
+      setTradesLoading(false)
+    }
+  }, [
+    allTrades,
+    fetchTradesForProfile,
+    profile?.id,
+    profileId,
+    tradeHasMore,
+    tradesLoading,
+  ])
 
   const publicTradesByDate = useMemo(
     () =>
@@ -1669,17 +806,25 @@ function ProfilePageContent() {
   )
 
   const trades = useMemo(
-    () => publicTradesByDate.slice(0, visibleTradeCount),
-    [publicTradesByDate, visibleTradeCount]
+    () => publicTradesByDate,
+    [publicTradesByDate]
   )
 
-  const hasMore = visibleTradeCount < publicTradesByDate.length
+  const hasMore = tradeHasMore
 
   useEffect(() => {
     if (!profileId) {
       setProfile(null)
+      setRoom(null)
+      setRoomReady(false)
       setAllTrades([])
       setVisibleTradeCount(PAGE_SIZE)
+      setTradeHasMore(false)
+      setTradesReady(false)
+      setSummaryTrades([])
+      setSummaryReady(false)
+      setAnalyticsTradeRows([])
+      setAnalyticsTradesReady(false)
       setLoading(false)
       return
     }
@@ -1692,6 +837,7 @@ function ProfilePageContent() {
     if (cached) {
       setProfile(cached.profile)
       setRoom(cached.room)
+      setRoomReady(cached.roomReady ?? cached.room != null)
       setFollowersCount(cached.followersCount)
       setFollowingCount(cached.followingCount)
       setIsFollowing(cached.isFollowing)
@@ -1700,7 +846,23 @@ function ProfilePageContent() {
       setAllTrades(cached.allTrades)
       setWallPosts(cached.wallPosts)
       setVisibleTradeCount(cached.visibleTradeCount)
-      setWallPostsReady(true)
+      setTradeHasMore(cached.tradeHasMore ?? false)
+      setTradesReady(cached.tradesReady ?? cached.allTrades.length > 0)
+      setWallPostsReady(cached.wallPostsReady ?? cached.wallPosts.length > 0)
+      setProfileReels((cached.profileReels ?? []) as ReelRow[])
+      setProfileReelsReady(cached.profileReelsReady ?? false)
+      setAchievements((cached.achievements ?? []) as Achievement[])
+      setAchievementsReady(cached.achievementsReady ?? false)
+      setAnalyticsTradeRows((cached.analyticsTrades ?? []) as any[])
+      setAnalyticsTradesReady(cached.analyticsTradesReady ?? false)
+      setSummaryTrades((cached.summaryTrades ?? []) as any[])
+      setSummaryReady(cached.summaryReady ?? false)
+      if (cached.activeTab) {
+        setActiveTab(cached.activeTab as typeof activeTab)
+      }
+      if (cached.selectedMode) {
+        setSelectedMode(cached.selectedMode as ProfileStatisticsMode)
+      }
       setLoading(false)
       setMetaLoading(false)
       setTradesLoading(false)
@@ -1717,7 +879,20 @@ function ProfilePageContent() {
     setProfile(null)
     setAllTrades([])
     setVisibleTradeCount(PAGE_SIZE)
+    setTradeHasMore(false)
+    setTradesReady(false)
     setWallPosts([])
+    setWallPostsReady(false)
+    setProfileReels([])
+    setProfileReelsReady(false)
+    setAchievements([])
+    setAchievementsReady(false)
+    setAnalyticsTradeRows([])
+    setAnalyticsTradesReady(false)
+    setSummaryTrades([])
+    setSummaryReady(false)
+    setRoom(null)
+    setRoomReady(false)
     setLoading(true)
 
     fetchProfile(profileId)
@@ -1725,35 +900,185 @@ function ProfilePageContent() {
   }, [profileId])
 
   useEffect(() => {
-    if (!profile?.id || !canViewTrades) {
-      setAllTrades([])
-      setVisibleTradeCount(PAGE_SIZE)
-      setTradesLoading(false)
+    if (!profile?.id || !canViewTrades || activeTab !== "trades" || tradesReady) {
+      // Only clear when a resolved profile is genuinely not viewable; while the
+      // profile is still restoring (null), clearing here would wipe cached trades.
+      if (profile?.id && !canViewTrades) {
+        setAllTrades([])
+        setTradeHasMore(false)
+        setTradesReady(false)
+        setTradesLoading(false)
+      }
       return
     }
 
     let cancelled = false
-    const showTradeSkeleton = allTrades.length === 0
-    if (showTradeSkeleton) {
-      setTradesLoading(true)
-    }
+    setTradesLoading(true)
 
     void (async () => {
-      const rows = await fetchTradesForProfile(profile.id)
+      const page = await fetchTradesForProfile(profile.id, 0)
       if (!cancelled) {
-        setAllTrades(rows)
+        setAllTrades(page.rows)
+        setVisibleTradeCount(page.rows.length)
+        setTradeHasMore(page.hasMore)
+        setTradesReady(true)
         setTradesLoading(false)
-        patchProfileSession(profileId, { allTrades: rows })
+        patchProfileSession(profileId, {
+          allTrades: page.rows,
+          visibleTradeCount: page.rows.length,
+          tradeHasMore: page.hasMore,
+          tradesReady: true,
+        })
       }
     })()
 
     return () => {
       cancelled = true
     }
-  }, [profile?.id, canViewTrades, fetchTradesForProfile, profileId])
+  }, [
+    activeTab,
+    canViewTrades,
+    fetchTradesForProfile,
+    profile?.id,
+    profileId,
+    tradesReady,
+  ])
 
   useEffect(() => {
-    if (!allTrades.length) {
+    if (!profile?.id || !canViewTrades || summaryReady) return
+    let cancelled = false
+    void fetchSummaryTrades(String(profile.id)).then((rows) => {
+      if (cancelled) return
+      setSummaryTrades(rows)
+      setSummaryReady(true)
+      patchProfileSession(profileId, { summaryTrades: rows, summaryReady: true })
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [canViewTrades, fetchSummaryTrades, profile?.id, profileId, summaryReady])
+
+  // Start secondary work only after the critical profile is interactive:
+  // header resolved, default Trades usable, and overview summary available.
+  // Each completion schedules the next resource in a separate idle slice, so
+  // tab warming never creates a request burst or competes with first paint.
+  useEffect(() => {
+    if (!profileId || loading || !profile?.id) return
+    if (canViewTrades && (!tradesReady || !summaryReady)) return
+
+    const generation = prefetchGenerationRef.current
+    if (prefetchStartedGenerationRef.current === generation) return
+    prefetchStartedGenerationRef.current = generation
+
+    scheduleDeferredWork(() => {
+      if (
+        prefetchGenerationRef.current !== generation ||
+        prefetchProfileRef.current !== profileId
+      ) {
+        return
+      }
+      setProfilePrefetchStep({
+        profileId,
+        resource: PROFILE_PREFETCH_ORDER[0],
+      })
+    }, 1000)
+  }, [
+    canViewTrades,
+    loading,
+    profile?.id,
+    profileId,
+    summaryReady,
+    tradesReady,
+  ])
+
+  useEffect(() => {
+    const step = profilePrefetchStep
+    if (!step || step.profileId !== profileId) return
+
+    const ready =
+      step.resource === "posts"
+        ? wallPostsReady
+        : step.resource === "reels"
+          ? profileReelsReady
+          : step.resource === "analytics"
+            ? analyticsTradesReady
+            : step.resource === "achievements"
+              ? achievementsReady
+              : roomReady
+    if (!ready) return
+
+    const currentIndex = PROFILE_PREFETCH_ORDER.indexOf(step.resource)
+    const nextResource = PROFILE_PREFETCH_ORDER[currentIndex + 1]
+    const generation = prefetchGenerationRef.current
+    scheduleDeferredWork(() => {
+      if (
+        prefetchGenerationRef.current !== generation ||
+        prefetchProfileRef.current !== step.profileId
+      ) {
+        return
+      }
+      setProfilePrefetchStep(
+        nextResource
+          ? { profileId: step.profileId, resource: nextResource }
+          : null
+      )
+    }, 750)
+  }, [
+    achievementsReady,
+    analyticsTradesReady,
+    profileId,
+    profilePrefetchStep,
+    profileReelsReady,
+    roomReady,
+    wallPostsReady,
+  ])
+
+  useEffect(() => {
+    if (
+      !profile?.id ||
+      !canViewTrades ||
+      !analyticsRequested ||
+      analyticsTradesReady
+    ) {
+      return
+    }
+    let cancelled = false
+    setAnalyticsTradesLoading(true)
+    void fetchAllTradesForAnalytics(String(profile.id)).then((rows) => {
+      if (cancelled) return
+      setAnalyticsTradeRows(rows)
+      setAnalyticsTradesReady(true)
+      setAnalyticsTradesLoading(false)
+      patchProfileSession(profileId, {
+        analyticsTrades: rows,
+        analyticsTradesReady: true,
+      })
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [
+    analyticsRequested,
+    analyticsTradesReady,
+    canViewTrades,
+    fetchAllTradesForAnalytics,
+    profile?.id,
+    profileId,
+  ])
+
+  useEffect(() => {
+    // Guard on profile?.id: on remount the profile is briefly null before the
+    // session cache restore commits, and clearing then would discard cached
+    // trades while tradesReady stays true (blocking any refetch).
+    if (profile?.id && !canViewTrades) {
+      setAllTrades([])
+      setVisibleTradeCount(PAGE_SIZE)
+      setTradesLoading(false)
+    }
+  }, [profile?.id, canViewTrades])
+
+  useEffect(() => {
+    if (activeTab !== "trades" || !allTrades.length) {
       setTradeReelsByTradeId({})
       return
     }
@@ -1791,18 +1116,13 @@ function ProfilePageContent() {
     return () => {
       cancelled = true
     }
-  }, [allTrades, profile?.id])
+  }, [activeTab, allTrades, profile?.id])
 
   useEffect(() => {
-    setVisibleTradeCount(PAGE_SIZE)
-  }, [profile?.id])
-
-  useEffect(() => {
-    if (!profile?.id) {
-      setWallPosts([])
-      setWallPostsReady(true)
-      return
-    }
+    // Profile is null during the first commit on remount (before the session
+    // cache restore applies); clearing here would wipe cached posts.
+    if (!profile?.id) return
+    if (!postsRequested || wallPostsReady) return
 
     let cancelled = false
     setWallPostsReady(false)
@@ -1813,7 +1133,7 @@ function ProfilePageContent() {
         if (cancelled) return
         setWallPosts(data)
         setWallPostsReady(true)
-        patchProfileSession(profileId, { wallPosts: data })
+        patchProfileSession(profileId, { wallPosts: data, wallPostsReady: true })
         return
       }
 
@@ -1832,7 +1152,10 @@ function ProfilePageContent() {
       }
       setWallPosts(data || [])
       setWallPostsReady(true)
-      patchProfileSession(profileId, { wallPosts: data || [] })
+      patchProfileSession(profileId, {
+        wallPosts: data || [],
+        wallPostsReady: true,
+      })
     }
 
     void fetchWallPosts()
@@ -1840,14 +1163,12 @@ function ProfilePageContent() {
     return () => {
       cancelled = true
     }
-  }, [profile?.id])
+  }, [postsRequested, profile?.id, profileId, wallPostsReady])
 
   useEffect(() => {
-    if (!profile?.id) {
-      setProfileReels([])
-      setProfileReelsReady(true)
-      return
-    }
+    // See posts effect: don't clear cached reels while profile is restoring.
+    if (!profile?.id) return
+    if (!reelsRequested || profileReelsReady) return
 
     let cancelled = false
     setProfileReelsReady(false)
@@ -1869,6 +1190,10 @@ function ProfilePageContent() {
         }
       }
       setProfileReelsReady(true)
+      patchProfileSession(profileId, {
+        profileReels: data,
+        profileReelsReady: true,
+      })
     }
 
     void loadReels()
@@ -1876,10 +1201,17 @@ function ProfilePageContent() {
     return () => {
       cancelled = true
     }
-  }, [currentUserId, fetchProfileReels, profile?.id])
+  }, [
+    currentUserId,
+    fetchProfileReels,
+    profile?.id,
+    profileId,
+    profileReelsReady,
+    reelsRequested,
+  ])
 
   useEffect(() => {
-    if (!profile?.id || profileReels.length === 0) return
+    if (activeTab !== "reels" || !profile?.id || profileReels.length === 0) return
     if (isDemoModeActive()) return
 
     const reelIds = profileReels.map((row) => String(row.id))
@@ -1918,13 +1250,12 @@ function ProfilePageContent() {
     return () => {
       void supabase.removeChannel(channel)
     }
-  }, [profile?.id, profileReels, currentUserId])
+  }, [activeTab, profile?.id, profileReels, currentUserId])
 
   useEffect(() => {
-    if (!profile?.id) {
-      setAchievements([])
-      return
-    }
+    // See posts effect: don't clear cached achievements while profile is restoring.
+    if (!profile?.id) return
+    if (!achievementsRequested || achievementsReady) return
     let cancelled = false
     async function fetchProfileAchievements() {
       const isOwner =
@@ -1932,12 +1263,24 @@ function ProfilePageContent() {
       if (isOwner) {
         const cached = getOwnAchievementsSnapshot(profile.id)
         if (cached) {
-          if (!cancelled) setAchievements(cached)
+          if (!cancelled) {
+            setAchievements(cached)
+            setAchievementsReady(true)
+            patchProfileSession(profileId, {
+              achievements: cached,
+              achievementsReady: true,
+            })
+          }
           return
         }
         const data = await ensureOwnAchievementsLoaded(supabase, profile.id)
         if (cancelled) return
         setAchievements(data)
+        setAchievementsReady(true)
+        patchProfileSession(profileId, {
+          achievements: data,
+          achievementsReady: true,
+        })
         return
       }
       const query = await fetchVisibleProfileAchievements(profile.id)
@@ -1946,18 +1289,31 @@ function ProfilePageContent() {
       if (error) {
         console.error("profile achievements fetch:", error)
         setAchievements([])
+        setAchievementsReady(true)
         return
       }
-      setAchievements((data || []) as Achievement[])
+      const rows = (data || []) as Achievement[]
+      setAchievements(rows)
+      setAchievementsReady(true)
+      patchProfileSession(profileId, {
+        achievements: rows,
+        achievementsReady: true,
+      })
     }
     void fetchProfileAchievements()
     return () => {
       cancelled = true
     }
-  }, [profile?.id, currentUserId])
+  }, [
+    achievementsReady,
+    achievementsRequested,
+    currentUserId,
+    profile?.id,
+    profileId,
+  ])
 
   useEffect(() => {
-    if (!achievements.length) {
+    if (activeTab !== "achievements" || !achievements.length) {
       setAchievementPostIds({})
       return
     }
@@ -1988,7 +1344,7 @@ function ProfilePageContent() {
     return () => {
       cancelled = true
     }
-  }, [achievements, currentUserId])
+  }, [achievements, activeTab, currentUserId])
 
   useEffect(() => {
     if (!profileId || loading) return
@@ -2000,6 +1356,11 @@ function ProfilePageContent() {
     window.addEventListener("scroll", onScroll, { passive: true })
     return () => window.removeEventListener("scroll", onScroll)
   }, [profileId, loading])
+
+  useEffect(() => {
+    if (!profileId || loading) return
+    patchProfileSession(profileId, { activeTab, selectedMode })
+  }, [activeTab, loading, profileId, selectedMode])
 
   const profileOverlayOpen =
     showCreatePost ||
@@ -2074,13 +1435,8 @@ function ProfilePageContent() {
           ? loadFollowUiSnapshot(supabase, uid, prof.id)
           : Promise.resolve(null)
 
-      const [snapshot, roomRes, followersRes, followingRes] = await Promise.all([
+      const [snapshot, followersRes, followingRes] = await Promise.all([
         followPromise,
-        supabase
-          .from("rooms")
-          .select("*")
-          .eq("owner_user_id", prof.id)
-          .maybeSingle(),
         supabase
           .from("followers")
           .select("*", { count: "exact", head: true })
@@ -2104,22 +1460,12 @@ function ProfilePageContent() {
       setIsRequested(requested)
       setFollowsYou(profileFollowsYou)
 
-      const roomRow = roomRes.data
-      if (roomRes.error) {
-        console.error(roomRes.error)
-      }
-
-      setRoom(
-        roomRow && roomRow.owner_user_id === prof.id ? roomRow : null
-      )
-
       const followersN = followersRes.count ?? 0
       const followingN = followingRes.count ?? 0
       setFollowersCount(followersN)
       setFollowingCount(followingN)
 
       patchProfileSession(segment, {
-        room: roomRow && roomRow.owner_user_id === prof.id ? roomRow : null,
         followersCount: followersN,
         followingCount: followingN,
         isFollowing: following,
@@ -2127,7 +1473,7 @@ function ProfilePageContent() {
         followsYou: profileFollowsYou,
       })
 
-      return { following, requested, profileFollowsYou, roomRow, followersN, followingN }
+      return { following, requested, profileFollowsYou, followersN, followingN }
     },
     []
   )
@@ -2160,6 +1506,7 @@ function ProfilePageContent() {
 
       if (lookupByUuid && prof.username) {
         const target = profilePath(prof)
+        aliasProfileSession(segment, String(prof.username).trim())
         const qs = searchParams.toString()
         router.replace(qs ? `${target}?${qs}` : target, { scroll: false })
       }
@@ -2211,18 +1558,14 @@ function ProfilePageContent() {
         setIsFollowing(meta.following)
         setIsRequested(meta.requested)
         setFollowsYou(meta.profileFollowsYou)
-        setRoom(
-          meta.roomRow && meta.roomRow.owner_user_id === demoProf.id
-            ? meta.roomRow
-            : null
-        )
         setFollowersCount(meta.followersN)
         setFollowingCount(meta.followingN)
       }
 
       writeProfileSession(segment, {
         profile: demoProf,
-        room: meta?.roomRow ?? null,
+        room: null,
+        roomReady: false,
         followersCount: meta?.followersN ?? 0,
         followingCount: meta?.followingN ?? 0,
         isFollowing: meta?.following ?? false,
@@ -2318,10 +1661,8 @@ function ProfilePageContent() {
       const meta = await applyProfileMetadata(segment, prof, uid)
       writeProfileSession(segment, {
         profile: prof,
-        room:
-          meta.roomRow && meta.roomRow.owner_user_id === prof.id
-            ? meta.roomRow
-            : null,
+        room: null,
+        roomReady: false,
         followersCount: meta.followersN,
         followingCount: meta.followingN,
         isFollowing: meta.following,
@@ -2335,6 +1676,7 @@ function ProfilePageContent() {
 
       if (lookupByUuid && prof.username) {
         const target = profilePath(prof)
+        aliasProfileSession(segment, String(prof.username).trim())
         const qs = searchParams.toString()
         router.replace(qs ? `${target}?${qs}` : target, { scroll: false })
       }
@@ -2392,51 +1734,6 @@ function ProfilePageContent() {
       router.push(dmThreadPath(profile))
     } finally {
       setMessageBusy(false)
-    }
-  }
-
-  async function handleCreateRoom() {
-    if (isDemoModeActive()) {
-      requestDemoSignup("room")
-      return
-    }
-    if (creatingRoomRef.current || creatingRoom) return
-    creatingRoomRef.current = true
-    setCreatingRoom(true)
-
-    try {
-      if (!viewerUser?.id) return
-
-      const { data: existing, error: existingErr } = await supabase
-        .from("rooms")
-        .select("*")
-        .eq("owner_user_id", viewerUser.id)
-        .maybeSingle()
-
-      if (existingErr) {
-        console.error(existingErr)
-      }
-
-      if (existing) {
-        setRoom(existing)
-        router.push(
-          `/trade-rooms?room=${encodeURIComponent(String(existing.slug ?? existing.id))}`
-        )
-        return
-      }
-
-      const username =
-        String(viewerContextProfile?.username ?? "").trim() || "user"
-      const newRoom = await createUserRoom(viewerUser.id, username)
-      setRoom(newRoom)
-      router.push(
-        `/trade-rooms?room=${encodeURIComponent(String(newRoom.slug))}&setup=true`
-      )
-    } catch (err) {
-      console.error(err)
-    } finally {
-      creatingRoomRef.current = false
-      setCreatingRoom(false)
     }
   }
 
@@ -3425,6 +2722,11 @@ function ProfilePageContent() {
         String(t.id) === String(trade.id) ? { ...t, is_pinned: !t.is_pinned } : t
       )
     )
+    setAnalyticsTradeRows((prev) =>
+      prev.map((t) =>
+        String(t.id) === String(trade.id) ? { ...t, is_pinned: !t.is_pinned } : t
+      )
+    )
   }
 
   const performDeleteTrade = useCallback(async (tradeId: string) => {
@@ -3434,6 +2736,12 @@ function ProfilePageContent() {
     }
     await deleteUserTrade(supabase, tradeId)
     setAllTrades((prev) => prev.filter((t) => String(t.id) !== String(tradeId)))
+    setAnalyticsTradeRows((prev) =>
+      prev.filter((t) => String(t.id) !== String(tradeId))
+    )
+    setSummaryTrades((prev) =>
+      prev.filter((t) => String(t.id) !== String(tradeId))
+    )
     setSelectedTradeDetail((prev) =>
       prev && String(prev.id) === String(tradeId) ? null : prev
     )
@@ -3670,8 +2978,6 @@ function ProfilePageContent() {
 
   useEffect(() => {
     if (!profile?.id || loading) return
-    if (searchParams.get("post")?.trim() && !wallPostsReady) return
-    if (searchParams.get("reel")?.trim() && !profileReelsReady) return
 
     const postParam = searchParams.get("post")?.trim()
     const achievementParam = searchParams.get("achievement")?.trim()
@@ -3679,12 +2985,28 @@ function ProfilePageContent() {
     const tradeParam = searchParams.get("trade")?.trim()
     const openComments = searchParams.get("comments") === "1"
     const tabParam = searchParams.get("tab")?.trim()
-    if (tabParam === "achievements") {
-      setActiveTab("achievements")
+    const requestedTab =
+      reelParam
+        ? "reels"
+        : postParam
+          ? "posts"
+          : achievementParam
+            ? "achievements"
+            : tradeParam
+              ? "trades"
+              : tabParam
+    if (
+      requestedTab === "trades" ||
+      requestedTab === "reels" ||
+      requestedTab === "posts" ||
+      requestedTab === "calendar" ||
+      requestedTab === "stats" ||
+      requestedTab === "achievements"
+    ) {
+      setActiveTab(requestedTab)
     }
-    if (tabParam === "reels") {
-      setActiveTab("reels")
-    }
+    if (postParam && !wallPostsReady) return
+    if (reelParam && !profileReelsReady) return
     const key = reelParam
       ? `reel:${reelParam}:${openComments ? "1" : "0"}`
       : achievementParam
@@ -3917,177 +3239,42 @@ function ProfilePageContent() {
     [currentUserId, feedDeepLinkComments]
   )
 
-  const sortedTrades = [...trades].sort((a, b) => {
-    if (a.is_pinned && !b.is_pinned) return -1
-    if (!a.is_pinned && b.is_pinned) return 1
-    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  const {
+    sortedTrades,
+    filteredTrades,
+    statsVisible,
+    overviewStatsVisible,
+    biggestWin,
+    biggestLoss,
+    longTrades,
+    equityData,
+    currentEquity,
+    overviewTotalTrades,
+    overviewWinRate,
+    overviewTotalPnL,
+    overviewAvgRR,
+    overviewPayoutTotal,
+    currentStreakLabel,
+    profitFactor,
+    avgWinner,
+    avgLoser,
+    profitPerTrade,
+    maxWinStreak,
+    maxLossStreak,
+    sessionTotal,
+    sessionBreakdown,
+  } = useProfileStatistics({
+    visibleTrades: trades,
+    analyticsTradeRows,
+    summaryTrades,
+    selectedMode,
+    canViewTrades,
+    analyticsTradesReady,
+    analyticsTradesLoading,
+    summaryReady,
+    achievements,
+    achievementsReady,
   })
-
-  const profilePublicTrades = useMemo(
-    () => allTrades.filter((trade) => trade.is_public === true),
-    [allTrades]
-  )
-
-  const filteredTrades = profilePublicTrades.filter((trade) => {
-    if (selectedMode === "all") return true
-    const m = selectedMode.toLowerCase()
-    const modeStr = String(trade.mode ?? "").trim().toLowerCase()
-    const typeStr = String(trade.account_type ?? "").trim().toLowerCase()
-    return modeStr === m || typeStr === m
-  })
-
-  // Profile statistics use public trades only; backtest-mode trades are excluded.
-  const analyticsTrades = filteredTrades.filter((trade) => {
-    const modeStr = String(trade.mode ?? "").trim().toLowerCase()
-    const typeStr = String(trade.account_type ?? "").trim().toLowerCase()
-    return modeStr !== "backtest" && typeStr !== "backtest"
-  })
-
-  const profileOverviewTrades = profilePublicTrades.filter((trade) => {
-    const modeStr = String(trade.mode ?? "").trim().toLowerCase()
-    const typeStr = String(trade.account_type ?? "").trim().toLowerCase()
-    return modeStr !== "backtest" && typeStr !== "backtest"
-  })
-
-  const statsVisible = canViewTrades && !tradesLoading
-
-  const totalTrades = canViewTrades ? analyticsTrades.length : 0
-  const wins = canViewTrades ? analyticsTrades.filter((t) => t.pnl > 0).length : 0
-  const totalPnL = canViewTrades
-    ? analyticsTrades.reduce((sum, t) => sum + (t.pnl || 0), 0)
-    : 0
-
-  const biggestWin = analyticsTrades.length
-    ? Math.max(...analyticsTrades.map((t) => t.pnl || 0))
-    : 0
-
-  const losingPnls = analyticsTrades
-    .map((t) => Number(t.pnl) || 0)
-    .filter((pnl) => pnl < 0)
-  const biggestLoss = losingPnls.length > 0 ? Math.min(...losingPnls) : null
-
-  const longTrades = analyticsTrades.filter((t) => t.direction === "Long").length
-
-  const equityData = analyticsTrades
-    .slice()
-    .reverse()
-    .reduce(
-      (acc: { index: number; equity: number }[], trade, i) => {
-        const prev = acc[i - 1]?.equity || 0
-        acc.push({
-          index: i,
-          equity: prev + (trade.pnl || 0),
-        })
-        return acc
-      },
-      [] as { index: number; equity: number }[]
-    )
-
-  const currentEquity =
-    equityData.length > 0 ? equityData[equityData.length - 1].equity : 0
-
-  const overviewTotalTrades = statsVisible ? profileOverviewTrades.length : 0
-  const overviewWins = statsVisible
-    ? profileOverviewTrades.filter((t) => (Number(t.pnl) || 0) > 0).length
-    : 0
-  const overviewWinRate =
-    statsVisible && overviewTotalTrades ? (overviewWins / overviewTotalTrades) * 100 : 0
-  const overviewTotalPnL = statsVisible
-    ? profileOverviewTrades.reduce((sum, t) => sum + (Number(t.pnl) || 0), 0)
-    : 0
-  const overviewAvgRR = statsVisible
-    ? averageRrFromTrades(profileOverviewTrades)
-    : null
-  const overviewPayoutTotal = statsVisible
-    ? sumPayoutAchievementTotals(achievements)
-    : 0
-  const currentStreakLabel = (() => {
-    if (!statsVisible || profileOverviewTrades.length === 0) return "—"
-    const ordered = [...profileOverviewTrades].sort(
-      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-    )
-    let streak = 0
-    let sign: 1 | -1 | 0 = 0
-    for (const trade of ordered) {
-      const pnl = Number(trade.pnl) || 0
-      const nextSign: 1 | -1 | 0 = pnl > 0 ? 1 : pnl < 0 ? -1 : 0
-      if (nextSign === 0) {
-        streak = 0
-        sign = 0
-        continue
-      }
-      if (nextSign === sign) {
-        streak += 1
-      } else {
-        sign = nextSign
-        streak = 1
-      }
-    }
-    if (sign === 1 && streak > 0) return `W${streak}`
-    if (sign === -1 && streak > 0) return `L${streak}`
-    return "—"
-  })()
-  const grossWins = analyticsTrades.reduce((sum, t) => {
-    const pnl = Number(t.pnl) || 0
-    return pnl > 0 ? sum + pnl : sum
-  }, 0)
-  const grossLosses = analyticsTrades.reduce((sum, t) => {
-    const pnl = Number(t.pnl) || 0
-    return pnl < 0 ? sum + pnl : sum
-  }, 0)
-  const profitFactor =
-    statsVisible && grossLosses < 0 ? grossWins / Math.abs(grossLosses) : null
-  const avgWinner = wins > 0 ? grossWins / wins : null
-  const lossCount = canViewTrades ? analyticsTrades.filter((t) => (Number(t.pnl) || 0) < 0).length : 0
-  const avgLoser = lossCount > 0 ? grossLosses / lossCount : null
-  const profitPerTrade = totalTrades > 0 ? totalPnL / totalTrades : null
-  const { maxWinStreak, maxLossStreak } = (() => {
-    const ordered = [...analyticsTrades].sort(
-      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-    )
-    let currentWin = 0
-    let currentLoss = 0
-    let maxWin = 0
-    let maxLoss = 0
-    for (const trade of ordered) {
-      const pnl = Number(trade.pnl) || 0
-      if (pnl > 0) {
-        currentWin += 1
-        currentLoss = 0
-      } else if (pnl < 0) {
-        currentLoss += 1
-        currentWin = 0
-      } else {
-        currentWin = 0
-        currentLoss = 0
-      }
-      if (currentWin > maxWin) maxWin = currentWin
-      if (currentLoss > maxLoss) maxLoss = currentLoss
-    }
-    return { maxWinStreak: maxWin, maxLossStreak: maxLoss }
-  })()
-  const sessionCounts = analyticsTrades.reduce<Record<string, number>>((acc, trade) => {
-    const raw = String(trade.session ?? "").toLowerCase().trim()
-    let label: "NY" | "London" | "Asia" | null = null
-    if (raw.includes("ny") || raw.includes("new york")) label = "NY"
-    else if (raw.includes("london") || raw.includes("ldn") || raw.includes("uk")) label = "London"
-    else if (raw.includes("asia") || raw.includes("asian") || raw.includes("tokyo")) label = "Asia"
-    if (!label) return acc
-    acc[label] = (acc[label] || 0) + 1
-    return acc
-  }, {})
-  const sessionTotal = Object.values(sessionCounts).reduce((sum, count) => sum + count, 0)
-  const sessionBreakdown = (["NY", "London", "Asia"] as const)
-    .map((label) => {
-      const count = sessionCounts[label] || 0
-      const pct = sessionTotal > 0 ? (count / sessionTotal) * 100 : 0
-      return { label, count, pct }
-    })
-    .filter((row) => row.count > 0)
-
-  function formatCurrency(value: number) {
-    return `${value < 0 ? "-" : ""}$${Math.abs(value).toLocaleString()}`
-  }
 
   if (!profileId) {
     return (
@@ -4253,902 +3440,236 @@ function ProfilePageContent() {
 
       <div className="w-full text-gray-100">
         <div className="mx-auto max-w-5xl space-y-4 px-4 pt-4 pb-6 sm:px-6 lg:px-8">
-          <div className="relative bg-white/5 border border-white/10 rounded-xl p-6 backdrop-blur-md">
-            {currentUserId === profile.id ? (
-              <input
-                id="storyUploadInput"
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => void handleStoryFileSelect(e)}
-              />
-            ) : null}
-            <div className="flex flex-col items-center text-center sm:items-stretch sm:text-left md:block">
-              <div className="flex w-full flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                <div className="flex min-w-0 w-full flex-1 flex-col items-center gap-2 sm:flex-row sm:items-center sm:gap-6">
-                  {profileHasActiveStory ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setProfileStoryIndex(0)
-                        setProfileStoryOpen(true)
-                      }}
-                      className="shrink-0 rounded-full outline-none transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-emerald-400/60"
-                      aria-label={`View ${profile.username || "user"}'s story`}
-                    >
-                      <StoryAvatarRing
-                        profile={profile}
-                        hasActiveStory
-                        priority
-                        sizeClassName="h-20 w-20 md:h-24 md:w-24"
-                      />
-                    </button>
-                  ) : (
-                    <StoryAvatarRing
-                      profile={profile}
-                      hasActiveStory={false}
-                      priority
-                      sizeClassName="h-20 w-20 md:h-24 md:w-24"
-                    />
-                  )}
+          <ProfileHeader
+            profile={profile}
+            currentUserId={currentUserId}
+            storyTriggerRef={profileStoryTriggerRef}
+            hasActiveStory={profileHasActiveStory}
+            followersCount={followersCount}
+            followingCount={followingCount}
+            metaLoading={metaLoading}
+            followingIds={profileFollowingIds}
+            requestedIds={profileRequestedIds}
+            followsYouIds={profileFollowsYouIds}
+            messageBusy={messageBusy}
+            hasRoom={hasRoom}
+            canShowVisitorRoomCta={canShowVisitorRoomCta}
+            onStoryFileSelect={(event) => void handleStoryFileSelect(event)}
+            onOpenStory={() => {
+              setProfileStoryIndex(0)
+              setProfileStoryOpen(true)
+            }}
+            onFollowingChange={handleProfileFollowingChange}
+            onRequestedChange={handleProfileRequestedChange}
+            onMessage={handleMessage}
+            onOpenFollowers={() => void openFollowersModal()}
+            onOpenFollowing={() => void openFollowingModal()}
+            onEditProfile={() => router.push("/settings#profile")}
+            onCreateStory={openCreateStory}
+            onCreatePost={openCreatePostModal}
+            onCreateReel={openCreateReelModal}
+            onCreateQuickTrade={openQuickTradeModal}
+            onCreateRoom={() => router.push("/community?create=true")}
+            onViewRoom={() =>
+              router.push(
+                `/community?room=${encodeURIComponent(profileRoomKey!)}`
+              )
+            }
+          />
 
-                  <div className="flex min-w-0 w-full flex-1 flex-col justify-center text-center sm:text-left">
-                    <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start sm:gap-3">
-                      <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
-                        <h2 className="text-lg font-semibold text-white md:text-xl">
-                          {profile.name || profile.username || "User"}
-                        </h2>
+          <ProfileOverviewStats
+            visible={overviewStatsVisible}
+            isPrivate={profile.is_private === true}
+            totalTrades={overviewTotalTrades}
+            winRate={overviewWinRate}
+            totalPnl={overviewTotalPnL}
+            payoutTotal={overviewPayoutTotal}
+            averageRr={overviewAvgRR}
+            streakLabel={currentStreakLabel}
+          />
 
-                        {profile.username ? (
-                          <>
-                            <span className="text-gray-400">|</span>
-                            <span className="text-sm text-gray-400">
-                              {profile.username}
-                            </span>
-                          </>
-                        ) : null}
-
-                        {currentUserId === profile.id && (
-                          <div className="hidden items-center gap-2 sm:flex">
-                            <button
-                              type="button"
-                              onClick={() => router.push("/settings#profile")}
-                              className="rounded-md bg-gray-600 px-2 py-1 text-xs text-gray-100 hover:bg-gray-500 md:bg-white/10 md:px-2 md:py-0.5 md:text-xs md:hover:bg-white/20"
-                            >
-                              Edit Profile
-                            </button>
-                          </div>
-                        )}
-                      </div>
-
-                      {currentUserId && currentUserId !== profile.id && (
-                        <div className="flex w-full flex-wrap items-center justify-center gap-2 sm:w-auto sm:justify-start">
-                          <FollowButton
-                            targetUserId={profile.id}
-                            currentUserId={currentUserId}
-                            targetIsPrivate={profile.is_private}
-                            followingIds={profileFollowingIds}
-                            requestedIds={profileRequestedIds}
-                            followsYouIds={profileFollowsYouIds}
-                            onFollowingChange={handleProfileFollowingChange}
-                            onRequestedChange={handleProfileRequestedChange}
-                            stopPropagation={false}
-                          />
-
-                          <button
-                            type="button"
-                            onClick={handleMessage}
-                            disabled={messageBusy}
-                            className="rounded-md border border-white/10 bg-white/10 px-3 py-1 text-sm text-gray-100 hover:bg-white/20 disabled:opacity-50"
-                          >
-                            Message
-                          </button>
-                        </div>
-                      )}
-                    </div>
-
-                    <p className="mt-1 flex flex-wrap items-center justify-center gap-1 text-sm text-gray-400 sm:justify-start">
-                      <span
-                        role="button"
-                        tabIndex={0}
-                        onClick={openFollowersModal}
-                        onKeyDown={(e) =>
-                          e.key === "Enter" && openFollowersModal()
-                        }
-                        className="cursor-pointer tabular-nums hover:text-white"
-                      >
-                        <span className="font-semibold text-gray-200">
-                          {metaLoading ? (
-                            <span className="inline-block h-4 w-8 animate-pulse rounded bg-white/10 align-middle" />
-                          ) : (
-                            followersCount
-                          )}
-                        </span>{" "}
-                        Followers
-                      </span>
-                      <span aria-hidden="true">•</span>
-                      <span
-                        role="button"
-                        tabIndex={0}
-                        onClick={openFollowingModal}
-                        onKeyDown={(e) =>
-                          e.key === "Enter" && openFollowingModal()
-                        }
-                        className="cursor-pointer tabular-nums hover:text-white"
-                      >
-                        <span className="font-semibold text-gray-200">
-                          {metaLoading ? (
-                            <span className="inline-block h-4 w-8 animate-pulse rounded bg-white/10 align-middle" />
-                          ) : (
-                            followingCount
-                          )}
-                        </span>{" "}
-                        Following
-                      </span>
-                    </p>
-
-                    <p className="mt-1 text-sm text-gray-400">
-                      {formatProfileMetadataLine(profile)}
-                    </p>
-
-                    <p className="mt-2 whitespace-pre-wrap break-words px-4 text-sm leading-relaxed text-gray-300 md:px-0">
-                    {profile.bio || "No bio yet"}
-                  </p>
-
-                  {isOwnProfile ? (
-                    hasRoom ? (
-                      <div className="mt-3 flex flex-wrap items-center justify-center gap-2 sm:justify-start">
-                        <Button
-                          type="button"
-                          variant="primary"
-                          size="md"
-                          onClick={() =>
-                            router.push(
-                              `/trade-rooms?room=${encodeURIComponent(
-                                profileRoomKey!
-                              )}`
-                            )
-                          }
-                          className="px-4 py-1.5 sm:px-4 sm:py-1.5"
-                        >
-                          View Trade Room
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="mt-3 flex flex-wrap items-center justify-center gap-2 sm:justify-start">
-                        <button
-                          type="button"
-                          onClick={() => router.push("/trade-rooms?create=true")}
-                          disabled={creatingRoom}
-                          className="rounded-xl bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-blue-500 sm:px-4 sm:py-1.5"
-                        >
-                          {creatingRoom ? "Creating…" : "Create Trade Room"}
-                        </button>
-                      </div>
-                    )
-                  ) : canShowVisitorRoomCta ? (
-                    <div className="mt-3">
-                      <Button
-                        type="button"
-                        variant="primary"
-                        size="md"
-                        onClick={() =>
-                          router.push(
-                            `/trade-rooms?room=${encodeURIComponent(
-                              profileRoomKey!
-                            )}`
-                          )
-                        }
-                        className="px-4 py-1.5 sm:px-4 sm:py-1.5"
-                      >
-                        View Trade Room
-                      </Button>
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-
-              {currentUserId === profile.id ? (
-                <div className="absolute right-4 top-4 z-10 flex items-center gap-2 sm:relative sm:right-auto sm:top-auto sm:mt-0 sm:flex sm:shrink-0 sm:justify-end sm:pt-2">
-                  <ProfileCreateMenu
-                    onCreateStory={openCreateStory}
-                    onCreatePost={openCreatePostModal}
-                    onCreateReel={openCreateReelModal}
-                    onCreateQuickTrade={openQuickTradeModal}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => router.push("/settings#profile")}
-                    className="inline-flex items-center justify-center rounded-lg border border-white/10 bg-white/5 p-2 text-gray-100 transition hover:bg-white/10 sm:hidden"
-                    aria-label="Edit Profile"
-                    title="Edit Profile"
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.75"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      className="h-5 w-5"
-                      aria-hidden
-                    >
-                      <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
-                      <circle cx="12" cy="12" r="3" />
-                    </svg>
-                  </button>
-                </div>
-              ) : null}
-            </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6 md:gap-4">
-            <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-center">
-              <p className="text-xs text-gray-400">Trades</p>
-              <p className="text-lg font-semibold tabular-nums text-white">
-                {statsVisible ? overviewTotalTrades : "—"}
-              </p>
-            </div>
-            <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-center">
-              <p className="text-xs text-gray-400">Win %</p>
-              <p className="text-lg font-semibold tabular-nums text-white">
-                {statsVisible ? `${overviewWinRate.toFixed(1)}%` : "—"}
-              </p>
-            </div>
-            <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-center">
-              <p className="text-xs text-gray-400">Net P&amp;L</p>
-              <p
-                className={`text-lg font-semibold tabular-nums ${
-                  !statsVisible
-                    ? "text-white"
-                    : overviewTotalPnL >= 0
-                      ? "text-emerald-400"
-                      : "text-red-400"
-                }`}
-              >
-                {statsVisible ? formatMoney(overviewTotalPnL) : "—"}
-              </p>
-            </div>
-            <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-center">
-              <p className="text-xs text-gray-400">Payout Total</p>
-              <p className="text-lg font-semibold tabular-nums text-emerald-400">
-                {statsVisible ? formatMoney(overviewPayoutTotal) : "—"}
-              </p>
-            </div>
-            <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-center">
-              <p className="text-xs text-gray-400">Avg RR</p>
-              <p className="text-lg font-semibold tabular-nums text-white">
-                {statsVisible ? formatRR(overviewAvgRR) : "—"}
-              </p>
-            </div>
-            <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-center">
-              <p className="text-xs text-gray-400">Streak</p>
-              <p
-                className={`text-lg font-semibold tabular-nums ${
-                  currentStreakLabel.startsWith("W")
-                    ? "text-emerald-400"
-                    : currentStreakLabel.startsWith("L")
-                      ? "text-red-400"
-                      : "text-white"
-                }`}
-              >
-                {currentStreakLabel}
-              </p>
-            </div>
-          </div>
-
-          {!statsVisible && profile.is_private === true ? (
-            <p className="text-center text-xs text-gray-400">
-              Follow to unlock trading stats in this row.
-            </p>
-          ) : null}
-
-          <div className="mt-4 flex justify-around border-b border-white/10 sm:mt-6 sm:justify-start sm:gap-6 sm:pb-2">
-            <button
-              type="button"
-              className={`text-sm font-medium border-b-2 py-2 sm:py-0 ${
-                activeTab === "trades"
-                  ? "border-blue-400 text-white sm:border-blue-500 sm:pb-1"
-                  : "border-transparent text-gray-400 sm:border-b-0"
-              }`}
-              onClick={() => setActiveTab("trades")}
-            >
-              Trades
-            </button>
-
-            <button
-              type="button"
-              className={`text-sm font-medium border-b-2 py-2 sm:py-0 ${
-                activeTab === "reels"
-                  ? "border-blue-400 text-white sm:border-blue-500 sm:pb-1"
-                  : "border-transparent text-gray-400 sm:border-b-0"
-              }`}
-              onClick={() => setActiveTab("reels")}
-            >
-              Clips
-            </button>
-
-            <button
-              type="button"
-              className={`text-sm font-medium border-b-2 py-2 sm:py-0 ${
-                activeTab === "posts"
-                  ? "border-blue-400 text-white sm:border-blue-500 sm:pb-1"
-                  : "border-transparent text-gray-400 sm:border-b-0"
-              }`}
-              onClick={() => setActiveTab("posts")}
-            >
-              Posts
-            </button>
-
-            <button
-              type="button"
-              aria-label="Stats"
-              className={`text-sm font-medium border-b-2 py-2 sm:py-0 ${
-                activeTab === "stats"
-                  ? "border-blue-400 text-white sm:border-blue-500 sm:pb-1"
-                  : "border-transparent text-gray-400 sm:border-b-0"
-              }`}
-              onClick={() => setActiveTab("stats")}
-            >
-              <span className="hidden sm:inline">Stats</span>
-              <span className="sm:hidden" aria-hidden>
-                📊
-              </span>
-            </button>
-
-            <button
-              type="button"
-              aria-label="Calendar"
-              className={`text-sm font-medium border-b-2 py-2 sm:py-0 ${
-                activeTab === "calendar"
-                  ? "border-blue-400 text-white sm:border-blue-500 sm:pb-1"
-                  : "border-transparent text-gray-400 sm:border-b-0"
-              }`}
-              onClick={() => setActiveTab("calendar")}
-            >
-              <span className="hidden sm:inline">Calendar</span>
-              <span className="sm:hidden" aria-hidden>
-                📅
-              </span>
-            </button>
-            <button
-              type="button"
-              aria-label="Achievements"
-              className={`text-sm font-medium border-b-2 py-2 sm:py-0 ${
-                activeTab === "achievements"
-                  ? "border-blue-400 text-white sm:border-blue-500 sm:pb-1"
-                  : "border-transparent text-gray-400 sm:border-b-0"
-              }`}
-              onClick={() => setActiveTab("achievements")}
-            >
-              <span className="hidden sm:inline">Achievements</span>
-              <span className="sm:hidden" aria-hidden>
-                🏆
-              </span>
-            </button>
-          </div>
+          <ProfileTabs activeTab={activeTab} onTabChange={setActiveTab} />
 
           <div className="mt-3 space-y-6 px-2 md:mt-4 md:px-0">
             {activeTab === "trades" && (
-              <div className="mt-4 w-full pb-8">
-                {tradesLoading && sortedTrades.length === 0 ? (
-                  <div className="grid grid-cols-1 gap-x-6 gap-y-8 md:grid-cols-2">
-                    {Array.from({ length: 4 }).map((_, i) => (
-                      <SkeletonTradeCard key={i} />
-                    ))}
-                  </div>
-                ) : sortedTrades.length === 0 ? (
-                  isOwnProfile ? (
-                    <EmptyState
-                      title="Share Your First Trade"
-                      description="Your public trading history will appear here."
-                      action={
-                        <Link
-                          href="/app"
-                          className="text-sm font-medium text-blue-300 hover:text-blue-200"
-                        >
-                          Add Trade →
-                        </Link>
-                      }
-                      className="py-10"
-                    />
-                  ) : !canViewTrades ? (
-                    <PrivateProfileTabMessage variant="trades" />
-                  ) : (
-                    <p className="text-center text-sm text-gray-400">
-                      No public trades yet.
-                    </p>
-                  )
-                ) : (
-                  <div className="grid grid-cols-1 gap-x-6 gap-y-8 md:grid-cols-2">
-                    {sortedTrades.map((trade) => (
-                      <div key={trade.id} id={`trade-${trade.id}`}>
-                      <TradeCard
-                        trade={{ ...trade, currentUserId }}
-                        profile={profile}
-                        shareProfile={viewerShareProfile}
-                        canManageTrade={currentUserId === profile.id}
-                        attachedReel={tradeReelsByTradeId[String(trade.id)] ?? null}
-                        onOpenReplay={() => {
-                          const reel = tradeReelsByTradeId[String(trade.id)]
-                          if (reel) openReelDetail(reel)
-                        }}
-                        onStartEditTrade={() => {
-                          openEditTradeModal(trade)
-                        }}
-                        onTogglePinTrade={() => void handlePinTrade(trade)}
-                        onDeleteTrade={() => void handleDeleteTrade(String(trade.id))}
-                        showInteractions={true}
-                        onOpenDetail={() => {
-                          setTradeDetailFocusComments(false)
-                          setSelectedTradeDetail({ ...trade, currentUserId })
-                        }}
-                        onOpenComments={() => {
-                          setTradeDetailFocusComments(true)
-                          setSelectedTradeDetail({ ...trade, currentUserId })
-                        }}
-                      />
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {hasMore && canViewTrades ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setVisibleTradeCount((count) => count + PAGE_SIZE)
+              <ProfileTradesTab
+                trades={sortedTrades}
+                loading={tradesLoading}
+                isOwnProfile={isOwnProfile}
+                canView={canViewTrades}
+                hasMore={hasMore}
+                onLoadMore={loadMoreTrades}
+                renderTrade={(trade) => (
+                  <TradeCard
+                    trade={trade}
+                    profile={profile}
+                    currentUserId={currentUserId}
+                    shareProfile={viewerShareProfile}
+                    canManageTrade={currentUserId === profile.id}
+                    attachedReel={
+                      tradeReelsByTradeId[String(trade.id)] ?? null
+                    }
+                    onOpenReplay={() => {
+                      const reel = tradeReelsByTradeId[String(trade.id)]
+                      if (reel) openReelDetail(reel)
                     }}
-                    className="mt-4 w-full rounded bg-white/10 py-2 hover:bg-white/20"
-                  >
-                    Load More
-                  </button>
-                ) : null}
-              </div>
+                    onStartEditTrade={() => openEditTradeModal(trade)}
+                    onTogglePinTrade={() => void handlePinTrade(trade)}
+                    onDeleteTrade={() =>
+                      void handleDeleteTrade(String(trade.id))
+                    }
+                    showInteractions
+                    onOpenDetail={() => {
+                      setTradeDetailFocusComments(false)
+                      setSelectedTradeDetail({ ...trade, currentUserId })
+                    }}
+                    onOpenComments={() => {
+                      setTradeDetailFocusComments(true)
+                      setSelectedTradeDetail({ ...trade, currentUserId })
+                    }}
+                  />
+                )}
+              />
             )}
 
             {activeTab === "reels" && (
-              <div className="mt-4 w-full pb-8">
-                {!profileReelsReady ? (
-                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-                    {Array.from({ length: 3 }).map((_, i) => (
-                      <div
-                        key={i}
-                        className="aspect-[9/16] animate-pulse rounded-xl border border-white/10 bg-white/5"
-                      />
-                    ))}
-                  </div>
-                ) : profileReels.length === 0 ? (
-                  isOwnProfile ? (
-                    <EmptyState
-                      title="No Clips Yet"
-                      description="Share short vertical videos with your followers."
-                      action={
-                        <button
-                          type="button"
-                          onClick={openCreateReelModal}
-                          className="text-sm font-medium text-blue-300 hover:text-blue-200"
-                        >
-                          Create Clip →
-                        </button>
-                      }
-                      className="py-10"
-                    />
-                  ) : !canViewTrades ? (
-                    <PrivateProfileTabMessage variant="reels" />
-                  ) : (
-                    <p className="text-center text-sm text-gray-400">
-                      No clips yet.
-                    </p>
-                  )
-                ) : (
-                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-                    {profileReels.map((reel) => (
-                      <ProfileReelCard
-                        key={reel.id}
-                        reel={reel}
-                        onOpen={() => openReelDetail(reel)}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
+              <ProfileReelsTab
+                ready={profileReelsReady}
+                reels={profileReels}
+                isOwnProfile={isOwnProfile}
+                canView={canViewTrades}
+                onCreateReel={openCreateReelModal}
+                onOpenReel={openReelDetail}
+              />
             )}
 
             {activeTab === "posts" && (
-              <div className="mt-4 w-full pb-8">
-                {sortedPosts.length === 0 ? (
-                  isOwnProfile ? (
-                    <EmptyState
-                      title="No Posts Yet"
-                      description="Share trades and updates with the community."
-                      action={
-                        <ProfileCreateMenu
-                          variant="link"
-                          onCreateStory={openCreateStory}
-                          onCreatePost={openCreatePostModal}
-                          onCreateReel={openCreateReelModal}
-                          onCreateQuickTrade={openQuickTradeModal}
-                        />
+              <ProfilePostsTab
+                posts={sortedPosts}
+                ready={wallPostsReady}
+                isOwnProfile={isOwnProfile}
+                canView={canViewTrades}
+                onCreateStory={openCreateStory}
+                onCreatePost={openCreatePostModal}
+                onCreateReel={openCreateReelModal}
+                onCreateQuickTrade={openQuickTradeModal}
+                renderPost={(post) => {
+                  const key = String(post.id)
+                  return (
+                    <PostCard
+                      post={post}
+                      profile={profile}
+                      canManagePost={currentUserId === profile.id}
+                      menuOpen={openMenuId === key}
+                      onMenuToggle={() =>
+                        setOpenMenuId((prev) => (prev === key ? null : key))
                       }
-                      className="py-10"
+                      onStartEditPost={() => {
+                        setEditingPost(post)
+                        setEditContent(post.content || "")
+                        setOpenMenuId(null)
+                      }}
+                      onTogglePinPost={() => void handlePinPost(post)}
+                      onSavePost={() => void handleSavePost(key)}
+                      onDeletePost={() => void handleDeletePost(key)}
+                      showInteractions
+                      onLike={() => void handleLike(key, "post")}
+                      likeBusy={!!likeBusyByPost[key]}
+                      onOpenComments={() => {
+                        setPostDetailFocusComments(true)
+                        setSelectedPostDetail(post)
+                      }}
+                      onOpenDetail={() => {
+                        setPostDetailFocusComments(false)
+                        setSelectedPostDetail(post)
+                      }}
+                      likeMeta={
+                        likesByPost[key] || { count: 0, liked: false }
+                      }
+                      comments={commentsByPost[key] || []}
+                      commentText={commentDraft[key] || ""}
+                      onCommentChange={(value) =>
+                        setCommentDraft((prev) => ({
+                          ...prev,
+                          [key]: value,
+                        }))
+                      }
+                      onCommentSubmit={(parentCommentId) =>
+                        void submitComment(key, "post", parentCommentId)
+                      }
+                      commentSubmitting={!!commentSubmitting[key]}
+                      currentUserId={currentUserId}
+                      onDeleteComment={deleteComment}
+                      onTogglePinComment={togglePinComment}
+                      onSharePost={
+                        currentUserId ? handleSharePost : undefined
+                      }
                     />
-                  ) : !canViewTrades ? (
-                    <PrivateProfileTabMessage variant="posts" />
-                  ) : (
-                    <p className="text-center text-sm text-gray-400">
-                      No posts yet.
-                    </p>
                   )
-                ) : (
-                  <div className="grid grid-cols-1 gap-x-6 gap-y-8 md:grid-cols-2">
-                    {sortedPosts.map((post) => {
-                      const key = String(post.id)
-                      return (
-                        <div key={post.id} id={`post-${key}`}>
-                        <PostCard
-                          post={post}
-                          profile={profile}
-                          canManagePost={currentUserId === profile.id}
-                          menuOpen={openMenuId === key}
-                          onMenuToggle={() =>
-                            setOpenMenuId((prev) => (prev === key ? null : key))
-                          }
-                          onStartEditPost={() => {
-                            setEditingPost(post)
-                            setEditContent(post.content || "")
-                            setOpenMenuId(null)
-                          }}
-                          onTogglePinPost={() => void handlePinPost(post)}
-                          onSavePost={() => void handleSavePost(key)}
-                          onDeletePost={() => void handleDeletePost(key)}
-                          showInteractions={true}
-                          onLike={() => void handleLike(key, "post")}
-                          likeBusy={!!likeBusyByPost[key]}
-                          onOpenComments={() => {
-                            setPostDetailFocusComments(true)
-                            setSelectedPostDetail(post)
-                          }}
-                          onOpenDetail={() => {
-                            setPostDetailFocusComments(false)
-                            setSelectedPostDetail(post)
-                          }}
-                          likeMeta={
-                            likesByPost[key] || { count: 0, liked: false }
-                          }
-                          comments={commentsByPost[key] || []}
-                          commentText={commentDraft[key] || ""}
-                          onCommentChange={(value) =>
-                            setCommentDraft((prev) => ({ ...prev, [key]: value }))
-                          }
-                          onCommentSubmit={(parentCommentId) =>
-                            void submitComment(key, "post", parentCommentId)
-                          }
-                          commentSubmitting={!!commentSubmitting[key]}
-                          currentUserId={currentUserId}
-                          onDeleteComment={deleteComment}
-                          onTogglePinComment={togglePinComment}
-                          onSharePost={
-                            currentUserId ? handleSharePost : undefined
-                          }
-                        />
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
+                }}
+              />
             )}
 
             {activeTab === "calendar" && (
-              <div className="mt-4">
-                {!canViewTrades ? (
-                  <div className="rounded-xl border border-white/10 bg-white/5 p-6 py-16 text-center">
-                    <p className="text-lg text-gray-100">Private Profile</p>
-                    <p className="mt-2 text-sm text-gray-400">
-                      Follow this user to see their trades and stats.
-                    </p>
-                  </div>
-                ) : (
-                  <Calendar
-                    trades={filteredTrades}
-                    showAccountFilter={false}
-                    showControls={false}
-                    showAccountIdentifiers={isOwnProfile}
-                  />
-                )}
-              </div>
+              <ProfileCalendarTab
+                canView={canViewTrades}
+                loading={
+                  analyticsTradesLoading || !analyticsTradesReady
+                }
+                trades={filteredTrades}
+                isOwnProfile={isOwnProfile}
+              />
             )}
 
             {activeTab === "stats" && (
-              <div className="space-y-6">
-                {!canViewTrades ? (
-                  <div className="rounded-xl border border-white/10 bg-white/5 p-6 py-16 text-center">
-                    <p className="text-lg text-gray-100">Private Profile</p>
-                    <p className="mt-2 text-sm text-gray-400">
-                      Follow this user to see their trades and stats.
-                    </p>
-                  </div>
-                ) : (
-                  <>
-                    <div className="mb-4 flex items-center justify-between">
-                      <div className="flex flex-wrap items-center gap-2 md:gap-3">
-                        {(
-                          [
-                            { id: "all", label: "All" },
-                            { id: "eval", label: "Eval" },
-                            { id: "funded", label: "Funded" },
-                            { id: "live", label: "Live" },
-                          ] as const
-                        ).map(({ id, label }) => (
-                          <button
-                            key={id}
-                            type="button"
-                            onClick={() => setSelectedMode(id)}
-                            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition ${
-                              selectedMode === id
-                                ? "bg-blue-500 text-white"
-                                : "bg-white/5 text-white/70 hover:bg-white/10"
-                            }`}
-                          >
-                            {label}
-                          </button>
-                        ))}
-                      </div>
-                      <div />
-                    </div>
-
-                    {filteredTrades.length === 0 ? (
-                      <p className="text-sm text-gray-400">
-                        No trades for this filter selection
-                      </p>
-                    ) : null}
-
-                    <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-                      <Stat
-                        title="Profit Factor"
-                        value={
-                          statsVisible
-                            ? profitFactor == null
-                              ? "—"
-                              : profitFactor.toLocaleString(undefined, {
-                                  minimumFractionDigits: 0,
-                                  maximumFractionDigits: 2,
-                                })
-                            : "—"
-                        }
-                        positive={profitFactor != null ? profitFactor >= 1 : undefined}
-                      />
-                      <Stat
-                        title="Avg Winner"
-                        value={statsVisible && avgWinner != null ? formatCurrency(avgWinner) : "—"}
-                        positive
-                      />
-                      <Stat
-                        title="Avg Loser"
-                        value={statsVisible && avgLoser != null ? formatCurrency(avgLoser) : "—"}
-                        positive={false}
-                      />
-                      <Stat
-                        title="Profit / Trade"
-                        value={statsVisible && profitPerTrade != null ? formatCurrency(profitPerTrade) : "—"}
-                        positive={profitPerTrade != null ? profitPerTrade >= 0 : undefined}
-                      />
-                      <Stat
-                        title="Biggest Win"
-                        value={formatPnlCurrency(biggestWin)}
-                        positive
-                      />
-                      <Stat
-                        title="Biggest Loss"
-                        value={
-                          biggestLoss != null ? formatPnlCurrency(biggestLoss) : "—"
-                        }
-                        positive={false}
-                      />
-                      <Stat title="Long Trades" value={longTrades} />
-                      <Stat
-                        title="Largest Streaks"
-                        value={`W${maxWinStreak} / L${maxLossStreak}`}
-                      />
-                    </div>
-
-                    <div className="rounded-xl border border-white/10 bg-white/5 p-4 md:p-5">
-                      <div className="mb-3 flex items-center justify-between">
-                        <h3 className="text-base font-semibold text-white">Trading Sessions</h3>
-                        <p className="text-xs text-gray-400">
-                          {sessionTotal > 0 ? `${sessionTotal} trades tagged` : "No session data"}
-                        </p>
-                      </div>
-                      {sessionBreakdown.length === 0 ? (
-                        <p className="text-sm text-gray-400">
-                          Add session tags to trades to unlock this breakdown.
-                        </p>
-                      ) : (
-                        <div className="space-y-2.5">
-                          {sessionBreakdown.map((row) => (
-                            <div key={row.label} className="space-y-1">
-                              <div className="flex items-center justify-between text-sm">
-                                <span className="font-medium text-gray-200">{row.label}</span>
-                                <span className="tabular-nums text-gray-300">
-                                  {row.pct.toFixed(0)}%
-                                </span>
-                              </div>
-                              <div className="h-2 overflow-hidden rounded-full bg-white/10">
-                                <div
-                                  className="h-full rounded-full bg-gradient-to-r from-blue-500 to-emerald-400"
-                                  style={{ width: `${Math.max(4, Math.round(row.pct))}%` }}
-                                />
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="rounded-xl border border-white/10 bg-white/5 p-4 md:p-6">
-                      <div className="mb-3 flex flex-col gap-1 sm:mb-4 sm:flex-row sm:items-end sm:justify-between">
-                        <h2 className="text-lg font-semibold text-white">
-                          Equity Curve
-                        </h2>
-                        {filteredTrades.length > 0 ? (
-                          <p
-                            className={`text-lg font-bold tabular-nums sm:text-xl ${
-                              currentEquity >= 0
-                                ? "text-green-400"
-                                : "text-red-400"
-                            }`}
-                          >
-                            {formatMoney(currentEquity)}
-                          </p>
-                        ) : null}
-                      </div>
-
-                      <div
-                        className={`w-full md:h-64 ${
-                          equityChartNarrow
-                            ? "h-[min(52vw,340px)] min-h-[280px]"
-                            : "h-72"
-                        }`}
-                      >
-                        <ProfileEquityLineChart
-                          data={equityData}
-                          narrow={equityChartNarrow}
-                        />
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
+              <ProfileStatisticsTab
+                canView={canViewTrades}
+                loading={
+                  analyticsTradesLoading || !analyticsTradesReady
+                }
+                selectedMode={selectedMode}
+                onModeChange={setSelectedMode}
+                filteredTradesCount={filteredTrades.length}
+                statsVisible={statsVisible}
+                profitFactor={profitFactor}
+                averageWinner={avgWinner}
+                averageLoser={avgLoser}
+                profitPerTrade={profitPerTrade}
+                biggestWin={biggestWin}
+                biggestLoss={biggestLoss}
+                longTrades={longTrades}
+                maxWinStreak={maxWinStreak}
+                maxLossStreak={maxLossStreak}
+                sessionTotal={sessionTotal}
+                sessionBreakdown={sessionBreakdown}
+                currentEquity={currentEquity}
+                equityData={equityData}
+                equityChartNarrow={equityChartNarrow}
+              />
             )}
 
             {activeTab === "achievements" && (
-              <div className="space-y-4">
-                {achievements.length === 0 ? (
-                  <div className="rounded-xl border border-white/10 bg-white/5 p-6 text-center">
-                    <p className="text-sm text-gray-300">
-                      {currentUserId === profile.id
-                        ? "No achievements yet."
-                        : "No public achievements yet."}
-                    </p>
-                  </div>
-                ) : (
-                  <>
-                    {achievements.some((a) => a.is_featured) ? (
-                      <div className="space-y-2">
-                        <h3 className="text-sm font-semibold text-white">Featured</h3>
-                        <div className="grid gap-3 sm:grid-cols-2">
-                          {achievements
-                            .filter((a) => a.is_featured)
-                            .map((a) => {
-                              const postId = achievementPostIds[String(a.id)]
-                              if (!postId) {
-                                return (
-                                  <AchievementCard
-                                    key={a.id}
-                                    achievement={a}
-                                    featured
-                                    showVisibility={false}
-                                    onOpenDetail={setSelectedAchievementDetail}
-                                  />
-                                )
-                              }
-
-                              return (
-                                <ProfileAchievementSocialCard
-                                  key={a.id}
-                                  achievement={a}
-                                  achievementPostId={postId}
-                                  profileUserId={String(profile.id)}
-                                  featured
-                                  showVisibility={false}
-                                  currentUser={
-                                    currentUserId ? { id: currentUserId } : null
-                                  }
-                                  likeMeta={
-                                    likesByPost[postId] || { count: 0, liked: false }
-                                  }
-                                  likeBusy={!!likeBusyByPost[postId]}
-                                  comments={commentsByPost[postId] || []}
-                                  onLike={() => void handleAchievementLike(postId)}
-                                  onSelectPost={() => {
-                                    openAchievementPostModal(
-                                      buildAchievementPostStub(a, postId),
-                                      false
-                                    )
-                                  }}
-                                  onOpenComments={() => {
-                                    openAchievementPostModal(
-                                      buildAchievementPostStub(a, postId),
-                                      true
-                                    )
-                                  }}
-                                  onSharePost={
-                                    currentUserId
-                                      ? () => handleShareAchievement(a, postId)
-                                      : undefined
-                                  }
-                                />
-                              )
-                            })}
-                        </div>
-                      </div>
-                    ) : null}
-                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                      {achievements
-                        .filter((a) => !a.is_featured)
-                        .map((a) => {
-                          const postId = achievementPostIds[String(a.id)]
-                          if (!postId) {
-                            return (
-                              <AchievementCard
-                                key={a.id}
-                                achievement={a}
-                                onOpenDetail={setSelectedAchievementDetail}
-                              />
-                            )
-                          }
-
-                          return (
-                            <ProfileAchievementSocialCard
-                              key={a.id}
-                              achievement={a}
-                              achievementPostId={postId}
-                              profileUserId={String(profile.id)}
-                              currentUser={
-                                currentUserId ? { id: currentUserId } : null
-                              }
-                              likeMeta={
-                                likesByPost[postId] || { count: 0, liked: false }
-                              }
-                              likeBusy={!!likeBusyByPost[postId]}
-                              comments={commentsByPost[postId] || []}
-                              onLike={() => void handleAchievementLike(postId)}
-                              onSelectPost={() => {
-                                openAchievementPostModal(
-                                  buildAchievementPostStub(a, postId),
-                                  false
-                                )
-                              }}
-                              onOpenComments={() => {
-                                openAchievementPostModal(
-                                  buildAchievementPostStub(a, postId),
-                                  true
-                                )
-                              }}
-                              onSharePost={
-                                currentUserId
-                                  ? () => handleShareAchievement(a, postId)
-                                  : undefined
-                              }
-                            />
-                          )
-                        })}
-                    </div>
-                  </>
-                )}
-              </div>
+              <ProfileAchievementsTab
+                ready={achievementsReady}
+                achievements={achievements}
+                profileUserId={String(profile.id)}
+                currentUserId={currentUserId}
+                achievementPostIds={achievementPostIds}
+                likesByPost={likesByPost}
+                likeBusyByPost={likeBusyByPost}
+                commentsByPost={commentsByPost}
+                onOpenDetail={setSelectedAchievementDetail}
+                onLike={(postId) => void handleAchievementLike(postId)}
+                onOpenPost={(achievement, postId, focusComments) =>
+                  openAchievementPostModal(
+                    buildAchievementPostStub(achievement, postId),
+                    focusComments
+                  )
+                }
+                onShare={(achievement, postId) =>
+                  handleShareAchievement(achievement, postId)
+                }
+              />
             )}
           </div>
 
@@ -5284,6 +3805,7 @@ function ProfilePageContent() {
             inDetailModal
             trade={selectedTradeDetail}
             profile={profile}
+            currentUserId={currentUserId}
             shareProfile={viewerShareProfile}
             canManageTrade={currentUserId === profile.id}
             attachedReel={
@@ -5537,7 +4059,11 @@ function ProfilePageContent() {
           onSave={() => {
             if (profile?.id) {
               setVisibleTradeCount(PAGE_SIZE)
-              void fetchTradesForProfile(profile.id).then(setAllTrades)
+              void fetchTradesForProfile(profile.id, 0).then((page) => {
+                setAllTrades(page.rows)
+                setTradeHasMore(page.hasMore)
+                setTradesReady(true)
+              })
             }
             setEditingTrade(null)
           }}
@@ -5581,26 +4107,5 @@ export default function ProfilePage() {
     >
       <ProfilePageContent />
     </Suspense>
-  )
-}
-
-function Stat({
-  title,
-  value,
-  positive,
-}: {
-  title: string
-  value: React.ReactNode
-  positive?: boolean
-}) {
-  let color = "text-gray-100"
-  if (positive === true) color = "text-green-400"
-  if (positive === false) color = "text-red-400"
-
-  return (
-    <div className="flex h-full flex-col items-center justify-center gap-1 rounded-xl border border-white/10 bg-white/5 p-6 text-center">
-      <p className="text-xs text-blue-300">{title}</p>
-      <p className={`text-lg font-semibold tabular-nums ${color}`}>{value}</p>
-    </div>
   )
 }

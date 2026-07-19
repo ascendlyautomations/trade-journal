@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { useRouter } from "next/navigation"
 import InputTradeForm from "../components/InputTradeForm"
@@ -9,23 +9,36 @@ import { useToast } from "@/app/components/ui"
 import { TRADES_APP_SELECT } from "@/lib/publicAccountPrivacy"
 import { useUserProfile } from "@/lib/useUserProfile"
 
+const TRADES_PER_PAGE = 50
+
+type ReviewTrade = {
+  id: string | number
+  ticker?: string | null
+  direction?: string | null
+  pnl?: string | number | null
+  created_at: string
+  [key: string]: unknown
+}
+
 export default function ReviewPage() {
   const toast = useToast()
   const { user, loading: profileLoading } = useUserProfile()
-  const [trades, setTrades] = useState<any[]>([])
-  const [editingTrade, setEditingTrade] = useState<any | null>(null)
+  const [trades, setTrades] = useState<ReviewTrade[]>([])
+  const [editingTrade, setEditingTrade] = useState<ReviewTrade | null>(null)
   const [showApproveAllConfirm, setShowApproveAllConfirm] = useState(false)
   const [bulkApproving, setBulkApproving] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [currentPage, setCurrentPage] = useState(1)
 
   const router = useRouter()
 
-  useEffect(() => {
-    if (profileLoading) return
-    fetchTrades()
-  }, [profileLoading, user?.id])
+  const pageCount = Math.max(1, Math.ceil(trades.length / TRADES_PER_PAGE))
+  const visibleTrades = useMemo(() => {
+    const start = (currentPage - 1) * TRADES_PER_PAGE
+    return trades.slice(start, start + TRADES_PER_PAGE)
+  }, [currentPage, trades])
 
-  async function fetchTrades() {
+  const fetchTrades = useCallback(async () => {
     const { data } = await supabase
       .from("trades")
       .select(TRADES_APP_SELECT)
@@ -34,9 +47,22 @@ export default function ReviewPage() {
       .eq("reviewed", false)
       .order("created_at", { ascending: true })
 
-    setTrades(data || [])
+    const nextTrades = (data || []) as ReviewTrade[]
+    const nextPageCount = Math.max(
+      1,
+      Math.ceil(nextTrades.length / TRADES_PER_PAGE)
+    )
+    setTrades(nextTrades)
+    setCurrentPage((page) => Math.min(page, nextPageCount))
     setLoading(false)
-  }
+  }, [user?.id])
+
+  useEffect(() => {
+    if (profileLoading) return
+    // The state updates happen after the Supabase request resolves.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void fetchTrades()
+  }, [fetchTrades, profileLoading])
 
   async function handleApproveAll() {
     if (!user?.id) return
@@ -94,11 +120,37 @@ export default function ReviewPage() {
 
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white">
         <div className="max-w-6xl mx-auto p-4 md:p-8">
-          <div className="mb-6 flex items-center justify-between gap-3">
-            <h1 className="text-2xl text-blue-300 font-bold">
+          <div className="mb-6 md:flex md:items-center md:justify-between md:gap-3">
+            <div className="md:hidden">
+              <h1 className="text-2xl font-bold leading-tight text-blue-300">
+                Review CSV Import
+              </h1>
+              <p className="mt-1 text-sm font-medium text-gray-300">
+                {trades.length} Pending
+              </p>
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => router.push("/app")}
+                  className="h-10 min-w-0 rounded-lg bg-white/10 px-3 text-sm font-medium hover:bg-white/20"
+                >
+                  Back
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowApproveAllConfirm(true)}
+                  disabled={!trades.length}
+                  className="h-10 min-w-0 rounded-lg bg-blue-500 px-3 text-sm font-semibold hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-blue-500"
+                >
+                  Approve All
+                </button>
+              </div>
+            </div>
+
+            <h1 className="hidden text-2xl font-bold text-blue-300 md:block">
               Review CSV Inputs ({trades.length} pending)
             </h1>
-            <div className="flex items-center gap-2">
+            <div className="hidden items-center gap-2 md:flex">
               <button
                 type="button"
                 onClick={() => setShowApproveAllConfirm(true)}
@@ -118,7 +170,7 @@ export default function ReviewPage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {trades.map((trade, i) => (
+            {visibleTrades.map((trade, i) => (
               <button
                 key={trade.id}
                 type="button"
@@ -127,7 +179,8 @@ export default function ReviewPage() {
               >
                 <div className="flex items-center justify-between">
                   <p className="font-semibold">
-                    {i + 1}. {trade.ticker || "—"} • {trade.direction || "—"}
+                    {(currentPage - 1) * TRADES_PER_PAGE + i + 1}.{" "}
+                    {trade.ticker || "—"} • {trade.direction || "—"}
                   </p>
                   <span
                     className={`font-semibold ${
@@ -153,6 +206,43 @@ export default function ReviewPage() {
               </button>
             ))}
           </div>
+
+          {pageCount > 1 ? (
+            <nav
+              aria-label="CSV review pages"
+              className="mt-6 flex items-center justify-between gap-3"
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  setCurrentPage((page) => Math.max(1, page - 1))
+                  window.scrollTo({ top: 0, behavior: "smooth" })
+                }}
+                disabled={currentPage === 1}
+                className="h-10 rounded-lg bg-white/10 px-4 text-sm font-medium hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Previous
+              </button>
+              <p className="min-w-0 text-center text-sm text-gray-300">
+                Page {currentPage} of {pageCount}
+                <span className="hidden sm:inline">
+                  {" "}
+                  · {visibleTrades.length} of {trades.length} trades
+                </span>
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setCurrentPage((page) => Math.min(pageCount, page + 1))
+                  window.scrollTo({ top: 0, behavior: "smooth" })
+                }}
+                disabled={currentPage === pageCount}
+                className="h-10 rounded-lg bg-white/10 px-4 text-sm font-medium hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Next
+              </button>
+            </nav>
+          ) : null}
         </div>
       </div>
 

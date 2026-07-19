@@ -40,6 +40,7 @@ export default function LandingAnalyticsShowcaseSection() {
               alt="TradeTraxs analytics, know your edge with performance insights"
               objectPositionClass="object-top"
               size="large"
+              loadImage={visible}
             />
           </div>
         </div>

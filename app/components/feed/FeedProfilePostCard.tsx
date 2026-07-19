@@ -14,8 +14,10 @@ type FeedProfilePostCardProps = {
   user: any
   likeMeta?: FeedLikeMeta
   likeBusy?: boolean
+  commentCount?: number
   comments?: any[]
-  commentSubmitting: boolean
+  mediaPriority?: boolean
+  commentSubmitting?: boolean
   onSelectPost: (post: any) => void
   onOpenComments: (post: any) => void
   onToggleLike: (post: any) => void
@@ -27,8 +29,9 @@ function FeedProfilePostCard({
   user,
   likeMeta = { count: 0, liked: false },
   likeBusy = false,
-  comments = [],
-  commentSubmitting: _commentSubmitting,
+  commentCount,
+  comments = EMPTY_COMMENTS,
+  mediaPriority = false,
   onSelectPost,
   onOpenComments,
   onToggleLike,
@@ -85,16 +88,20 @@ function FeedProfilePostCard({
 
       {isRoomSharePost(post) ? (
         <div className="px-4 pt-3">
-          <FeedRoomShareCard post={post} viewerUserId={user?.id ?? null} />
+          <FeedRoomShareCard
+            post={post}
+            viewerUserId={user?.id ?? null}
+            mediaPriority={mediaPriority}
+          />
         </div>
       ) : (
-        <FeedPostScreenshot imageSrc={imageSrc} />
+        <FeedPostScreenshot imageSrc={imageSrc} priority={mediaPriority} />
       )}
 
       <FeedPostActions
         post={post}
         user={user}
-        comments={comments}
+        commentCount={commentCount ?? comments.length}
         likeMeta={likeMeta}
         likeBusy={likeBusy}
         onToggleLike={onToggleLike}
@@ -114,3 +121,5 @@ function FeedProfilePostCard({
 }
 
 export default memo(FeedProfilePostCard)
+
+const EMPTY_COMMENTS: any[] = []

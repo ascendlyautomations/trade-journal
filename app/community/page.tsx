@@ -108,6 +108,7 @@ import {
   ProfileAvatarLink,
   ProfileUsernameLink,
 } from "../components/ProfileLink"
+import StorageImage from "../components/ui/StorageImage"
 
 type Room = {
   id: string
@@ -120,6 +121,8 @@ type Room = {
   owner_user_id?: string | null
   show_on_profile?: boolean | null
 }
+
+const memberRoomsRequestByUser = new Map<string, Promise<Room[]>>()
 
 /** Default room on load: user's owned room when present, otherwise first in list order. */
 function pickInitialTradeRoomId(rooms: Room[], userId: string): string | null {
@@ -165,27 +168,9 @@ type RoomMessage = {
 }
 
 /** PostgREST embed: disambiguate trade_id vs pinned_trade_id FKs (PGRST201). */
-const ROOM_MESSAGE_SELECT_SHAPE = `
-  *,
-  trades!room_messages_trade_id_fkey (
-    id,
-    ticker,
-    image_url,
-    pnl,
-    rr
-  ),
-  profiles (
-    username,
-    avatar_url
-  ),
-  room_message_reactions (
-    id,
-    user_id,
-    reaction
-  )
-`
+const ROOM_MESSAGE_PAGE_SIZE = 25
 
-const ROOM_MESSAGE_REALTIME_SELECT = `
+const ROOM_MESSAGE_SELECT_SHAPE = `
   id,
   room_id,
   user_id,
@@ -199,10 +184,7 @@ const ROOM_MESSAGE_REALTIME_SELECT = `
   image_url,
   created_at,
   trades!room_messages_trade_id_fkey (
-    id,
-    image_url,
-    pnl,
-    rr
+    id
   ),
   profiles (
     username,
@@ -210,10 +192,13 @@ const ROOM_MESSAGE_REALTIME_SELECT = `
   ),
   room_message_reactions (
     id,
+    message_id,
     user_id,
     reaction
   )
 `
+
+const ROOM_MESSAGE_REALTIME_SELECT = ROOM_MESSAGE_SELECT_SHAPE
 
 type ActivePresence = {
   user_id: string
@@ -270,6 +255,19 @@ function normalizeRoomMessageSeenBy(raw: unknown): string[] {
   return raw.map((x) => String(x)).filter(Boolean)
 }
 
+function isMissingRoomReadCursorRpc(error: {
+  code?: string
+  message?: string
+}): boolean {
+  const message = String(error.message ?? "").toLowerCase()
+  return (
+    error.code === "PGRST202" ||
+    error.code === "42883" ||
+    message.includes("could not find the function") ||
+    message.includes("schema cache")
+  )
+}
+
 function roomMessageIsUnreadForUser(
   msg: { user_id: string; seen_by?: unknown },
   userId: string
@@ -291,6 +289,27 @@ async function fetchUnreadByRoomIds(
   const unread: Record<string, boolean> = {}
   if (roomIds.length === 0) return unread
 
+  const { data: cursorRows, error: cursorError } = await supabase.rpc(
+    "get_room_unread_counts",
+    { p_room_ids: roomIds }
+  )
+  if (!cursorError) {
+    for (const row of (cursorRows ?? []) as Array<{
+      room_id: string
+      unread_count: number | string
+    }>) {
+      if ((Number(row.unread_count) || 0) > 0) {
+        unread[String(row.room_id)] = true
+      }
+    }
+    return unread
+  }
+  if (!isMissingRoomReadCursorRpc(cursorError)) {
+    console.error("fetchUnreadByRoomIds cursor:", cursorError)
+    return unread
+  }
+
+  // Deployment-safe fallback only until the read-cursor migration is available.
   const { data, error } = await supabase
     .from("room_messages")
     .select("room_id, user_id, seen_by")
@@ -313,6 +332,16 @@ async function fetchUnreadByRoomIds(
 async function markAllRoomMessagesSeenForUser(roomId: string, userId: string) {
   if (isDemoSupabaseBlocked()) return
 
+  const { error: cursorError } = await supabase.rpc("mark_room_read", {
+    p_room_id: roomId,
+  })
+  if (!cursorError) return
+  if (!isMissingRoomReadCursorRpc(cursorError)) {
+    console.error("markAllRoomMessagesSeenForUser cursor:", cursorError)
+    return
+  }
+
+  // Deployment-safe fallback only until the read-cursor migration is available.
   const { data, error } = await supabase
     .from("room_messages")
     .select("id, user_id, seen_by")
@@ -366,29 +395,6 @@ function roomMessageMatchesSectionFilter(
   return true
 }
 
-async function appendSelfToSeenByForRoomMessage(
-  messageId: string,
-  userId: string
-) {
-  if (isDemoSupabaseBlocked()) return
-
-  const { data, error } = await supabase
-    .from("room_messages")
-    .select("seen_by, user_id")
-    .eq("id", messageId)
-    .maybeSingle()
-
-  if (error || !data || data.user_id === userId) return
-
-  const seen = normalizeRoomMessageSeenBy(data.seen_by)
-  if (seen.includes(userId)) return
-
-  await supabase
-    .from("room_messages")
-    .update({ seen_by: [...seen, userId] })
-    .eq("id", messageId)
-}
-
 function CommunityContent() {
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const router = useRouter()
@@ -412,12 +418,17 @@ function CommunityContent() {
   const [messages, setMessages] = useState<RoomMessage[]>([])
   const [pinnedMessages, setPinnedMessages] = useState<RoomMessage[]>([])
   const [messagesByRoom, setMessagesByRoom] = useState<
-    Record<string, { pinned: RoomMessage[]; main: RoomMessage[] }>
+    Record<
+      string,
+      { pinned: RoomMessage[]; main: RoomMessage[]; hasOlder?: boolean }
+    >
   >({})
   const [loadingRooms, setLoadingRooms] = useState(true)
   const [creatingRoom, setCreatingRoom] = useState(false)
   const creatingRoomRef = useRef(false)
   const [loadingMessages, setLoadingMessages] = useState(false)
+  const [loadingOlderMessages, setLoadingOlderMessages] = useState(false)
+  const [hasOlderMessages, setHasOlderMessages] = useState(false)
   const [draft, setDraft] = useState("")
   const [activeUsers, setActiveUsers] = useState<ActivePresence[]>([])
   const [typingUsers, setTypingUsers] = useState<string[]>([])
@@ -519,14 +530,20 @@ function CommunityContent() {
   })
   const sectionsRef = useRef(sections)
   const roomIdsForUnreadRef = useRef<string[]>([])
+  const markedReadRoomKeyRef = useRef<string | null>(null)
   const messagesByRoomRef = useRef<
-    Record<string, { pinned: RoomMessage[]; main: RoomMessage[] }>
+    Record<
+      string,
+      { pinned: RoomMessage[]; main: RoomMessage[]; hasOlder?: boolean }
+    >
   >({})
   const roomMessagesFetchGenRef = useRef(0)
   const pendingScrollMessageIdRef = useRef<string | null>(null)
   const scrollContextRef = useRef<string | null>(null)
   const didInitialScrollRef = useRef(false)
   const userNearBottomRef = useRef(true)
+  const loadingOlderMessagesRef = useRef(false)
+  const loadOlderRoomMessagesRef = useRef<() => void>(() => {})
 
   messagesByRoomRef.current = messagesByRoom
 
@@ -620,6 +637,9 @@ function CommunityContent() {
 
     const onScroll = () => {
       userNearBottomRef.current = isScrollContainerNearBottom(el)
+      if (el.scrollTop < 80) {
+        loadOlderRoomMessagesRef.current()
+      }
     }
 
     el.addEventListener("scroll", onScroll, { passive: true })
@@ -710,7 +730,7 @@ function CommunityContent() {
   const navigateToCreateDiscover = useCallback(() => {
     setMobileRoomsOpen(false)
     setSelectedRoomId(null)
-    router.push("/trade-rooms?create=true")
+    router.push("/community?create=true")
   }, [router])
 
   const userOwnsRoom = useMemo(() => {
@@ -782,11 +802,15 @@ function CommunityContent() {
 
   useEffect(() => {
     if (!selectedRoomId || !user?.id || needsJoin || loadingMessages) return
+    const markKey = `${selectedRoomId}:${user.id}`
+    if (markedReadRoomKeyRef.current === markKey) return
+
     const roomIds = roomIdsForUnreadRef.current
     let cancelled = false
     void (async () => {
       await markAllRoomMessagesSeenForUser(selectedRoomId, user.id)
       if (cancelled) return
+      markedReadRoomKeyRef.current = markKey
       const next = await fetchUnreadByRoomIds(roomIds, user.id)
       if (!cancelled) setUnreadByRoomId(next)
     })()
@@ -799,6 +823,7 @@ function CommunityContent() {
     if (!user?.id) return
 
     const refreshUnread = () => {
+      if (document.visibilityState !== "visible") return
       const ids = roomIdsForUnreadRef.current
       if (ids.length === 0) return
       void (async () => {
@@ -812,7 +837,7 @@ function CommunityContent() {
     }
 
     document.addEventListener("visibilitychange", onVis)
-    const intervalId = window.setInterval(refreshUnread, 45000)
+    const intervalId = window.setInterval(refreshUnread, 60_000)
 
     return () => {
       document.removeEventListener("visibilitychange", onVis)
@@ -904,12 +929,42 @@ function CommunityContent() {
   useEffect(() => {
     if (!selectedRoomId || needsJoin || !user?.id) {
       setRoomNotificationsEnabled(true)
-      setChannelNotificationPrefs({})
       return
     }
 
     if (isDemoSupabaseBlocked()) {
       setRoomNotificationsEnabled(true)
+      return
+    }
+
+    let cancelled = false
+    void (async () => {
+      const { data, error } = await supabase
+        .from("room_members")
+        .select("notification_enabled")
+        .eq("room_id", selectedRoomId)
+        .eq("user_id", user.id)
+        .is("left_at", null)
+        .maybeSingle()
+
+      if (cancelled) return
+      if (!error && data) {
+        setRoomNotificationsEnabled(data.notification_enabled !== false)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [selectedRoomId, needsJoin, user?.id])
+
+  useEffect(() => {
+    if (!selectedRoomId || needsJoin || !user?.id) {
+      setChannelNotificationPrefs({})
+      return
+    }
+
+    if (isDemoSupabaseBlocked()) {
       setChannelNotificationPrefs(
         getDemoChannelNotificationPrefs(sectionsRef.current)
       )
@@ -917,29 +972,14 @@ function CommunityContent() {
     }
 
     let cancelled = false
-    void (async () => {
-      const [{ data, error }, channelPrefs] = await Promise.all([
-        supabase
-          .from("room_members")
-          .select("notification_enabled")
-          .eq("room_id", selectedRoomId)
-          .eq("user_id", user.id)
-          .is("left_at", null)
-          .maybeSingle(),
-        fetchRoomChannelNotificationPrefs(
-          supabase,
-          selectedRoomId,
-          user.id,
-          sectionsRef.current
-        ),
-      ])
-
-      if (cancelled) return
-      if (!error && data) {
-        setRoomNotificationsEnabled(data.notification_enabled !== false)
-      }
-      setChannelNotificationPrefs(channelPrefs)
-    })()
+    void fetchRoomChannelNotificationPrefs(
+      supabase,
+      selectedRoomId,
+      user.id,
+      sectionsRef.current
+    ).then((channelPrefs) => {
+      if (!cancelled) setChannelNotificationPrefs(channelPrefs)
+    })
 
     return () => {
       cancelled = true
@@ -1049,28 +1089,19 @@ function CommunityContent() {
   }, [user?.id])
 
   useEffect(() => {
-    async function checkOwner() {
-      if (!selectedRoomId || !user?.id) {
-        setIsOwner(false)
-        return
-      }
-
-      if (isDemoUserId(user.id)) {
-        setIsOwner(fetchDemoRoomOwnerUserId(selectedRoomId) === user.id)
-        return
-      }
-
-      const { data } = await supabase
-        .from("rooms")
-        .select("owner_user_id")
-        .eq("id", selectedRoomId)
-        .maybeSingle()
-
-      setIsOwner(data?.owner_user_id === user.id)
+    if (!selectedRoomId || !user?.id) {
+      setIsOwner(false)
+      return
     }
-
-    void checkOwner()
-  }, [selectedRoomId, user?.id])
+    if (isDemoUserId(user.id)) {
+      setIsOwner(fetchDemoRoomOwnerUserId(selectedRoomId) === user.id)
+      return
+    }
+    const room =
+      rooms.find((entry) => entry.id === selectedRoomId) ??
+      (inviteTargetRoom?.id === selectedRoomId ? inviteTargetRoom : null)
+    setIsOwner(room?.owner_user_id === user.id)
+  }, [selectedRoomId, user?.id, rooms, inviteTargetRoom])
 
   useEffect(() => {
     setActiveMessageMenuId(null)
@@ -1079,14 +1110,14 @@ function CommunityContent() {
   }, [selectedRoomId, selectedSectionId])
 
   useEffect(() => {
-    if (!selectedRoomId) {
+    if (!selectedRoomId || !isOwner || needsJoin) {
       setActiveMembers(0)
       setLeftMembers(0)
       return
     }
 
     void loadMemberStats(selectedRoomId)
-  }, [selectedRoomId])
+  }, [selectedRoomId, isOwner, needsJoin])
 
   useEffect(() => {
     if (!showManageMembers || !selectedRoomId || !isOwner) return
@@ -1234,6 +1265,7 @@ function CommunityContent() {
         if (loadGen !== roomMessagesFetchGenRef.current) return
         setPinnedMessages(cached.pinned)
         setMessages(cached.main)
+        setHasOlderMessages(cached.hasOlder ?? false)
         setLoadingMessages(false)
         return
       }
@@ -1248,6 +1280,7 @@ function CommunityContent() {
       if (loadGen !== roomMessagesFetchGenRef.current) return
       setPinnedMessages(demo.pinned as RoomMessage[])
       setMessages(demo.main as RoomMessage[])
+      setHasOlderMessages(false)
       setLoadingMessages(false)
       messagesByRoomRef.current[cacheKey] = demo
       return
@@ -1272,7 +1305,8 @@ function CommunityContent() {
       .select(ROOM_MESSAGE_SELECT_SHAPE)
       .eq("pinned", false)
       .order("created_at", { ascending: false })
-      .limit(100)
+      .order("id", { ascending: false })
+      .limit(ROOM_MESSAGE_PAGE_SIZE + 1)
 
     mainQ = applySectionFiltersToQuery(
       mainQ,
@@ -1284,7 +1318,6 @@ function CommunityContent() {
     const [pinnedRes, mainRes] = await Promise.all([pinnedQ, mainQ])
 
     if (loadGen !== roomMessagesFetchGenRef.current) {
-      setLoadingMessages(false)
       return
     }
 
@@ -1297,7 +1330,7 @@ function CommunityContent() {
 
     const pinnedData = pinnedRes.error
       ? []
-      : (((pinnedRes.data || []) as RoomMessage[]).slice().reverse() as RoomMessage[])
+      : ((pinnedRes.data || []) as unknown as RoomMessage[]).slice().reverse()
     setPinnedMessages(pinnedData)
 
     if (mainRes.error) {
@@ -1307,12 +1340,16 @@ function CommunityContent() {
       )
       setMessages([])
       setPinnedMessages([])
+      setHasOlderMessages(false)
       setLoadingMessages(false)
       return
     }
 
-    const mainData = ((mainRes.data || []) as RoomMessage[]).slice().reverse()
+    const mainRows = (mainRes.data || []) as unknown as RoomMessage[]
+    const pageHasOlder = mainRows.length > ROOM_MESSAGE_PAGE_SIZE
+    const mainData = mainRows.slice(0, ROOM_MESSAGE_PAGE_SIZE).reverse()
     setMessages(mainData)
+    setHasOlderMessages(pageHasOlder)
 
     if (process.env.NODE_ENV !== "production") {
       console.log("[room_messages fetch] result", {
@@ -1326,17 +1363,108 @@ function CommunityContent() {
 
     setMessagesByRoom((prev) => ({
       ...prev,
-      [cacheKey]: { pinned: pinnedData, main: mainData },
+      [cacheKey]: {
+        pinned: pinnedData,
+        main: mainData,
+        hasOlder: pageHasOlder,
+      },
     }))
 
     if (userIdRef.current) {
       patchRoomMessagesInSession(userIdRef.current, cacheKey, {
         pinned: pinnedData,
         main: mainData,
+        hasOlder: pageHasOlder,
       })
     }
 
     setLoadingMessages(false)
+  }
+
+  async function loadOlderRoomMessages() {
+    if (
+      loadingOlderMessagesRef.current ||
+      !hasOlderMessages ||
+      !selectedRoomId
+    ) {
+      return
+    }
+
+    const cacheKey = buildRoomMessagesCacheKey(
+      selectedRoomId,
+      sections,
+      selectedSectionId
+    )
+    const cached = messagesByRoomRef.current[cacheKey]
+    const currentMessages = cached?.main ?? messages
+    const oldest = currentMessages[0]
+    if (!oldest?.created_at || !oldest?.id) return
+
+    const el = messagesScrollRef.current
+    const previousScrollHeight = el?.scrollHeight ?? 0
+    loadingOlderMessagesRef.current = true
+    setLoadingOlderMessages(true)
+    try {
+      let query = supabase
+        .from("room_messages")
+        .select(ROOM_MESSAGE_SELECT_SHAPE)
+        .eq("pinned", false)
+        .or(
+          `created_at.lt.${oldest.created_at},and(created_at.eq.${oldest.created_at},id.lt.${oldest.id})`
+        )
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .limit(ROOM_MESSAGE_PAGE_SIZE + 1)
+
+      query = applySectionFiltersToQuery(
+        query,
+        selectedRoomId,
+        sections,
+        selectedSectionId
+      )
+
+      const { data, error } = await query
+      if (error) {
+        console.error("room_messages older fetch:", error)
+        return
+      }
+
+      const rows = (data || []) as unknown as RoomMessage[]
+      const nextHasOlder = rows.length > ROOM_MESSAGE_PAGE_SIZE
+      const older = rows.slice(0, ROOM_MESSAGE_PAGE_SIZE).reverse()
+      const byId = new Map<string, RoomMessage>()
+      for (const message of [...older, ...currentMessages]) {
+        byId.set(String(message.id), message)
+      }
+      const merged = [...byId.values()].sort(
+        (a, b) =>
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime() ||
+          String(a.id).localeCompare(String(b.id))
+      )
+
+      setMessages(merged)
+      setHasOlderMessages(nextHasOlder)
+      const entry = {
+        pinned: cached?.pinned ?? pinnedMessages,
+        main: merged,
+        hasOlder: nextHasOlder,
+      }
+      setMessagesByRoom((prev) => ({ ...prev, [cacheKey]: entry }))
+      if (userIdRef.current) {
+        patchRoomMessagesInSession(userIdRef.current, cacheKey, entry)
+      }
+
+      requestAnimationFrame(() => {
+        if (el) el.scrollTop += el.scrollHeight - previousScrollHeight
+      })
+    } finally {
+      loadingOlderMessagesRef.current = false
+      setLoadingOlderMessages(false)
+    }
+  }
+
+  loadOlderRoomMessagesRef.current = () => {
+    void loadOlderRoomMessages()
   }
 
   async function handleTogglePin(
@@ -1409,13 +1537,21 @@ function CommunityContent() {
         if (entry.pinned.some((m) => m.id === row.id)) return prev
         return {
           ...prev,
-          [cacheKey]: { pinned: [...entry.pinned, row], main: entry.main },
+          [cacheKey]: {
+            ...entry,
+            pinned: [...entry.pinned, row],
+            main: entry.main,
+          },
         }
       }
       if (entry.main.some((m) => m.id === row.id)) return prev
       return {
         ...prev,
-        [cacheKey]: { pinned: entry.pinned, main: [...entry.main, row] },
+        [cacheKey]: {
+          ...entry,
+          pinned: entry.pinned,
+          main: [...entry.main, row],
+        },
       }
     })
   }
@@ -1614,7 +1750,7 @@ function CommunityContent() {
 
     const { data, error } = await supabase
       .from("room_sections")
-      .select("*")
+      .select("id, room_id, name, position, allow_members_chat")
       .eq("room_id", roomId)
       .order("position", { ascending: true })
 
@@ -1903,16 +2039,17 @@ function CommunityContent() {
       return
     }
 
-    const { count: active } = await supabase
-      .from("room_members")
-      .select("*", { count: "exact", head: true })
-      .eq("room_id", roomId)
-      .is("left_at", null)
-
-    const { count: total } = await supabase
-      .from("room_members")
-      .select("*", { count: "exact", head: true })
-      .eq("room_id", roomId)
+    const [{ count: active }, { count: total }] = await Promise.all([
+      supabase
+        .from("room_members")
+        .select("*", { count: "exact", head: true })
+        .eq("room_id", roomId)
+        .is("left_at", null),
+      supabase
+        .from("room_members")
+        .select("*", { count: "exact", head: true })
+        .eq("room_id", roomId),
+    ])
 
     setActiveMembers(active || 0)
     setLeftMembers((total || 0) - (active || 0))
@@ -2113,39 +2250,46 @@ function CommunityContent() {
       return fetchDemoMemberRooms(userId)
     }
 
-    const { data: memberships, error: memErr } = await supabase
-      .from("room_members")
-      .select("room_id")
-      .eq("user_id", userId)
-      .is("left_at", null)
+    const pending = memberRoomsRequestByUser.get(userId)
+    if (pending) return pending
 
-    if (memErr) {
-      console.error("room_members fetch:", memErr)
-      return []
+    const request = (async () => {
+      const { data, error } = await supabase
+        .from("room_members")
+        .select(`
+          room_id,
+          room:rooms!room_members_room_id_fkey (
+            id,
+            name,
+            description,
+            slug,
+            image_url,
+            owner_user_id,
+            show_on_profile
+          )
+        `)
+        .eq("user_id", userId)
+        .is("left_at", null)
+
+      if (error) {
+        console.error("member rooms fetch:", error)
+        return []
+      }
+
+      return (data ?? [])
+        .flatMap((membership) => {
+          const room = membership.room as Room | Room[] | null
+          return Array.isArray(room) ? room : room ? [room] : []
+        })
+        .sort((a, b) => String(a.name ?? "").localeCompare(String(b.name ?? "")))
+    })()
+
+    memberRoomsRequestByUser.set(userId, request)
+    try {
+      return await request
+    } finally {
+      memberRoomsRequestByUser.delete(userId)
     }
-
-    const roomIds = [
-      ...new Set(
-        (memberships ?? []).map((m: { room_id: string }) => m.room_id)
-      ),
-    ]
-
-    if (roomIds.length === 0) {
-      return []
-    }
-
-    const { data, error } = await supabase
-      .from("rooms")
-      .select("id, name, description, slug, image_url, owner_user_id, show_on_profile")
-      .in("id", roomIds)
-      .order("name", { ascending: true })
-
-    if (error) {
-      console.error("rooms fetch:", error)
-      return []
-    }
-
-    return (data ?? []) as Room[]
   }
 
   async function joinRoom(roomId: string) {
@@ -2199,6 +2343,7 @@ function CommunityContent() {
 
     const nextRooms = await loadMemberRooms(authUser.id)
     setRooms(nextRooms)
+    writeRoomSession(authUser.id, { rooms: nextRooms })
     setInviteTargetRoom(null)
     setSelectedRoomId(roomId)
 
@@ -2221,9 +2366,15 @@ function CommunityContent() {
     id: string
     slug?: string | null
   }) {
-    await joinRoom(room.id)
+    if (!user?.id) return
+    const nextRooms = await loadMemberRooms(user.id)
+    setRooms(nextRooms)
+    writeRoomSession(user.id, { rooms: nextRooms })
+    setInviteTargetRoom(null)
+    setSelectedRoomId(room.id)
+    setRoomNotificationsEnabled(true)
     const target = room.slug ?? room.id
-    router.replace(`/trade-rooms?room=${encodeURIComponent(String(target))}`)
+    router.replace(`/community?room=${encodeURIComponent(String(target))}`)
   }
 
   async function handleLeaveRoom() {
@@ -2251,16 +2402,17 @@ function CommunityContent() {
       return
     }
 
-    setRooms((prev) => prev.filter((r) => r.id !== leftRoomId))
+    setRooms((prev) => {
+      const next = prev.filter((r) => r.id !== leftRoomId)
+      writeRoomSession(authUser.id, { rooms: next })
+      return next
+    })
     setSelectedRoomId(null)
     setActiveUsers([])
 
-    const nextRooms = await loadMemberRooms(authUser.id)
-    setRooms(nextRooms)
-
     setActiveMembers((prev) => Math.max(0, prev - 1))
     setLeftMembers((prev) => prev + 1)
-    router.push("/trade-rooms")
+    router.push("/community")
   }
 
   async function handleCreateRoom() {
@@ -2288,7 +2440,7 @@ function CommunityContent() {
 
       if (existing) {
         router.push(
-          `/trade-rooms?room=${encodeURIComponent(String(existing.slug ?? existing.id))}`
+          `/community?room=${encodeURIComponent(String(existing.slug ?? existing.id))}`
         )
         return
       }
@@ -2302,7 +2454,7 @@ function CommunityContent() {
       setMobileRoomsOpen(false)
 
       router.push(
-        `/trade-rooms?room=${encodeURIComponent(slug)}&setup=true`
+        `/community?room=${encodeURIComponent(slug)}&setup=true`
       )
     } catch (err) {
       console.error(err)
@@ -2385,23 +2537,31 @@ function CommunityContent() {
   useEffect(() => {
     if (!user?.id) {
       if (!profileLoading && !isDemoModeActive()) {
-        const returnPath = `/trade-rooms${window.location.search}`
+        const returnPath = `/community${window.location.search}`
         router.push(`/login?next=${encodeURIComponent(returnPath)}`)
       }
       return
     }
 
+    let cancelled = false
     const init = async () => {
       const cached = readRoomSession(user.id)
-      if (cached?.rooms.length) {
+      const rp = roomParam?.trim()
+      if (cached) {
         setRooms(cached.rooms)
         if (Object.keys(cached.messagesByKey).length > 0) {
           setMessagesByRoom(cached.messagesByKey)
         }
         setLoadingRooms(false)
+        if (cached.rooms.length > 0 && !rp && !createMode) {
+          const defaultRoomId = pickInitialTradeRoomId(cached.rooms, user.id)
+          if (defaultRoomId) setSelectedRoomId(defaultRoomId)
+        }
+        return
       }
 
       const nextRooms = await loadMemberRooms(user.id)
+      if (cancelled) return
       setRooms(nextRooms)
       setLoadingRooms(false)
 
@@ -2411,16 +2571,22 @@ function CommunityContent() {
         sectionsByRoom: cached?.sectionsByRoom ?? {},
       })
 
-      const rp = searchParams.get("room")
-      const createRp = searchParams.get("create") === "true"
-      if (nextRooms.length > 0 && !rp && !createRp) {
+      if (nextRooms.length > 0 && !rp && !createMode) {
         const defaultRoomId = pickInitialTradeRoomId(nextRooms, user.id)
         if (defaultRoomId) setSelectedRoomId(defaultRoomId)
       }
     }
 
     void init()
-  }, [user?.id, profileLoading, router, searchParams])
+    return () => {
+      cancelled = true
+    }
+  }, [user?.id, profileLoading, router, roomParam, createMode])
+
+  useEffect(() => {
+    if (!user?.id || loadingRooms) return
+    writeRoomSession(user.id, { rooms })
+  }, [rooms, loadingRooms, user?.id])
 
   useEffect(() => {
     if (!roomParam || loadingRooms) return
@@ -2506,13 +2672,24 @@ function CommunityContent() {
       const uid = userIdRef.current
       const cachedSession = uid ? readRoomSession(uid) : null
       const cachedSections = cachedSession?.sectionsByRoom[selectedRoomId]
+      const preferredSectionId = deepLinkSectionId
+      if (messageParam?.trim() && selectedRoomMatchesUrl) {
+        pendingScrollMessageIdRef.current = messageParam.trim()
+      } else {
+        pendingScrollMessageIdRef.current = null
+      }
       if (cachedSections) {
+        const cachedActiveSectionId =
+          preferredSectionId &&
+          cachedSections.list.some((section) => section.id === preferredSectionId)
+            ? preferredSectionId
+            : cachedSections.activeSectionId
         setSections(cachedSections.list)
-        setSelectedSectionId(cachedSections.activeSectionId)
+        setSelectedSectionId(cachedActiveSectionId)
         const cacheKey = buildRoomMessagesCacheKey(
           selectedRoomId,
           cachedSections.list,
-          cachedSections.activeSectionId
+          cachedActiveSectionId
         )
         const cachedMsgs =
           cachedSession?.messagesByKey[cacheKey] ??
@@ -2520,15 +2697,16 @@ function CommunityContent() {
         if (cachedMsgs) {
           setPinnedMessages(cachedMsgs.pinned)
           setMessages(cachedMsgs.main)
+          setHasOlderMessages(cachedMsgs.hasOlder ?? false)
           setLoadingMessages(false)
+          return
         }
-      }
-
-      const preferredSectionId = deepLinkSectionId
-      if (messageParam?.trim() && selectedRoomMatchesUrl) {
-        pendingScrollMessageIdRef.current = messageParam.trim()
-      } else {
-        pendingScrollMessageIdRef.current = null
+        await fetchRoomMessages(
+          selectedRoomId,
+          cachedSections.list,
+          cachedActiveSectionId
+        )
+        return
       }
 
       const { list, activeSectionId } = await loadSections(
@@ -2617,7 +2795,7 @@ function CommunityContent() {
         }
         if (!data) return
 
-        const row = data as RoomMessage
+        const row = data as unknown as RoomMessage
         if (
           !roomMessageMatchesSectionFilter(
             row,
@@ -2642,7 +2820,7 @@ function CommunityContent() {
 
         const viewerId = userIdRef.current
         if (viewerId && row.user_id !== viewerId) {
-          await appendSelfToSeenByForRoomMessage(id, viewerId)
+          await markAllRoomMessagesSeenForUser(selectedRoomId, viewerId)
           const next = await fetchUnreadByRoomIds(
             roomIdsForUnreadRef.current,
             viewerId
@@ -2912,7 +3090,7 @@ function CommunityContent() {
             }
 
             if (insertedRow) {
-              appendRoomMessageToState(insertedRow as RoomMessage)
+              appendRoomMessageToState(insertedRow as unknown as RoomMessage)
               void createRoomMessageNotifications(supabase, insertedRow.id)
             }
 
@@ -2967,7 +3145,7 @@ function CommunityContent() {
       }
 
       if (insertedRow) {
-        appendRoomMessageToState(insertedRow as RoomMessage)
+        appendRoomMessageToState(insertedRow as unknown as RoomMessage)
         void createRoomMessageNotifications(supabase, insertedRow.id)
       }
 
@@ -3043,7 +3221,7 @@ function CommunityContent() {
     }
 
     if (insertedRow) {
-      appendRoomMessageToState(insertedRow as RoomMessage)
+      appendRoomMessageToState(insertedRow as unknown as RoomMessage)
       void createRoomMessageNotifications(supabase, insertedRow.id)
     }
 
@@ -3219,20 +3397,21 @@ function CommunityContent() {
                             setMobileRoomsOpen(false)
                             const target = String(room.slug ?? room.id)
                             router.push(
-                              `/trade-rooms?room=${encodeURIComponent(target)}`
+                              `/community?room=${encodeURIComponent(target)}`
                             )
                           }}
                           className={itemClass}
                         >
-                          <img
+                          <StorageImage
                             src={sidebarAvatarSrc}
+                            originalSrc={sidebarAvatarSrc}
+                            preset="avatar"
+                            transformWidth={64}
+                            transformHeight={64}
                             alt="room avatar"
-                            loading="lazy"
-                            decoding="async"
+                            intrinsicWidth={32}
+                            intrinsicHeight={32}
                             className="h-8 w-8 shrink-0 rounded-full object-cover"
-                            onError={(e) => {
-                              e.currentTarget.src = "/default-avatar.png"
-                            }}
                           />
                           <div className="flex min-w-0 flex-1 items-center">
                             <span className="min-w-0 flex-1 truncate">
@@ -3268,6 +3447,7 @@ function CommunityContent() {
             {showCreateDiscoverView ? (
               <TradeRoomsDiscoverView
                 showCreateSection={showCreateFirstRoomCard}
+                showExploreSection={createMode}
                 creatingRoom={creatingRoom}
                 onCreateRoom={() => void handleCreateRoom()}
                 memberRoomIds={memberRoomIds}
@@ -3288,16 +3468,21 @@ function CommunityContent() {
             <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             <div className="hidden border-b border-white/10 px-4 py-3 md:block">
               <div className="flex items-center gap-3">
-                <img
+                <StorageImage
                   src={
                     (roomImage ??
                       selectedRoom?.image_url ??
                       inviteTargetRoom?.image_url) ||
                     "/default-avatar.png"
                   }
+                  preset="avatar"
+                  transformWidth={96}
+                  transformHeight={96}
+                  localTransformWidth={96}
+                  priority
+                  intrinsicWidth={48}
+                  intrinsicHeight={48}
                   alt="Room Avatar"
-                  loading="lazy"
-                  decoding="async"
                   className="h-12 w-12 shrink-0 rounded-full object-cover"
                 />
 
@@ -3679,6 +3864,11 @@ function CommunityContent() {
                 ref={messagesScrollRef}
                 className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-3"
               >
+              {loadingOlderMessages ? (
+                <p className="pb-2 text-center text-xs text-gray-500">
+                  Loading older messages…
+                </p>
+              ) : null}
               {!selectedRoomId ? (
                 <p className="text-sm text-gray-400">Pick a room to start chatting.</p>
               ) : loadingMessages ? (
@@ -3805,12 +3995,14 @@ function CommunityContent() {
                                     className="mt-1 block max-w-full cursor-zoom-in"
                                     aria-label="View image full screen"
                                   >
-                                    <img
-                                      src={msg.image_url || ""}
+                                    <StorageImage
+                                      src={msg.image_url}
+                                      originalSrc={msg.image_url}
+                                      preset="message-preview"
+                                      fallbackToOriginal={false}
+                                      intrinsicWidth={640}
                                       className="max-w-xs rounded"
                                       alt=""
-                                      loading="lazy"
-                                      decoding="async"
                                     />
                                   </button>
                                   {msg.content?.trim() ? (
@@ -3824,6 +4016,8 @@ function CommunityContent() {
                                   tradeId={msg.trade_id ?? msg.trades?.id}
                                   viewerUserId={user?.id}
                                   onViewTrade={viewSharedTrade}
+                                  deferUntilVisible
+                                  optimizeMessagePreview
                                 />
                               ) : editingMessageId === msg.id &&
                                 canEditRoomMessage(user?.id, msg) ? (
@@ -3963,12 +4157,14 @@ function CommunityContent() {
                               className="mt-1 block max-w-full cursor-zoom-in"
                               aria-label="View image full screen"
                             >
-                              <img
-                                src={msg.image_url || ""}
+                              <StorageImage
+                                src={msg.image_url}
+                                originalSrc={msg.image_url}
+                                preset="message-preview"
+                                fallbackToOriginal={false}
+                                intrinsicWidth={640}
                                 className="max-w-xs rounded"
                                 alt=""
-                                loading="lazy"
-                                decoding="async"
                               />
                             </button>
                             {msg.content?.trim() ? (
@@ -3982,6 +4178,8 @@ function CommunityContent() {
                             tradeId={msg.trade_id ?? msg.trades?.id}
                             viewerUserId={user?.id}
                             onViewTrade={viewSharedTrade}
+                            deferUntilVisible
+                            optimizeMessagePreview
                           />
                         ) : editingMessageId === msg.id &&
                           canEditRoomMessage(user?.id, msg) ? (
@@ -4569,6 +4767,7 @@ function CommunityContent() {
                 if (deletingSectionId || deleteSectionConfirm) return
                 setShowRoomSettings(false)
               }}
+              disabled={deletingSectionId != null || deleteSectionConfirm != null}
               className="absolute right-4 top-4 z-10"
             />
             <h2 className="mb-3 pr-12 text-lg font-semibold">Room Settings</h2>

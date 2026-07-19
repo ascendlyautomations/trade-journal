@@ -115,7 +115,7 @@ export async function POST(req: Request) {
 
     const { data: initialProfile, error: profileError } = await supabase
       .from("profiles")
-      .select("id, stripe_customer_id, is_pro, subscription_status, referred_by, trial_end")
+      .select("id, stripe_customer_id, is_pro, creator_access, subscription_status, referred_by, trial_end, early_access_enrolled_at, early_access_started_at, early_access_ends_at, early_access_status, early_access_campaign_id, early_access_enrollment_source")
       .eq("id", user.id)
       .maybeSingle()
 
@@ -131,7 +131,10 @@ export async function POST(req: Request) {
 
     if (profile && isProActive(profile)) {
       return Response.json(
-        { error: "You already have an active subscription." },
+        {
+          error:
+            "You already have active Pro access. Stripe Checkout is not required.",
+        },
         { status: 409 }
       )
     }
@@ -173,7 +176,7 @@ export async function POST(req: Request) {
 
       const refetch = await supabase
         .from("profiles")
-        .select("id, stripe_customer_id, referred_by, trial_end")
+        .select("id, stripe_customer_id, is_pro, creator_access, subscription_status, referred_by, trial_end, early_access_enrolled_at, early_access_started_at, early_access_ends_at, early_access_status, early_access_campaign_id, early_access_enrollment_source")
         .eq("id", user.id)
         .maybeSingle()
 

@@ -15,6 +15,8 @@ type TradeScreenshotImageProps = {
   fillFrame?: boolean
   onClick?: (url: string) => void
   logContext?: string
+  priority?: boolean
+  fallbackToOriginal?: boolean
 }
 
 /**
@@ -30,6 +32,8 @@ export default function TradeScreenshotImage({
   objectFit = "contain",
   fillFrame = false,
   onClick,
+  priority = false,
+  fallbackToOriginal = true,
 }: TradeScreenshotImageProps) {
   const clickHandler = onClick
     ? (event: React.SyntheticEvent) => {
@@ -51,6 +55,10 @@ export default function TradeScreenshotImage({
       originalSrc={src}
       preset={preset}
       alt={alt}
+      priority={priority}
+      fallbackToOriginal={fallbackToOriginal}
+      intrinsicWidth={828}
+      localTransformWidth={priority ? 828 : undefined}
       className={`${sizingClass} ${onClick ? "cursor-pointer" : ""} ${className}`}
       style={
         objectFit === "contain" && !fillFrame && maxHeightPx != null

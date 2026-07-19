@@ -145,6 +145,21 @@ export async function ensureDmConversation(
     return { ok: true, conversationId: existingId, existing: true }
   }
 
+  const { data: blocked } = await client.rpc("users_have_active_block", {
+    p_user_a: currentUserId,
+    p_user_b: otherUserId,
+  })
+  if (blocked === true) {
+    return {
+      ok: false,
+      error: {
+        message: "Direct messaging is unavailable while a user block is active.",
+        code: "P0001",
+      } as PostgrestError,
+      phase: "conversation",
+    }
+  }
+
   const conversationId = newConversationId()
   const dmConvoPayload = { id: conversationId, is_group: false as const }
 

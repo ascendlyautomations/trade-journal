@@ -67,6 +67,7 @@ export default function CookieConsentBanner() {
           </button>
           <Link
             href="/cookie-policy"
+            prefetch={false}
             className="rounded-lg px-3 py-2 text-sm font-medium text-blue-300 transition hover:text-blue-200"
           >
             Cookie Policy

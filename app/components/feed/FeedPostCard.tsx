@@ -26,15 +26,17 @@ export type FeedPostCardProps = {
   user: any
   likeMeta?: FeedLikeMeta
   likeBusy?: boolean
+  commentCount?: number
   comments?: any[]
-  commentSubmitting: boolean
+  mediaPriority?: boolean
+  commentSubmitting?: boolean
   draftSyncRef?: MutableRefObject<Record<string, string>>
   /** Read-only preview: no post detail navigation. */
   preview?: boolean
   onSelectPost: (post: any) => void
   onOpenComments: (post: any) => void
   onToggleLike: (post: any) => void
-  onSubmitComment: (post: any, text: string) => Promise<boolean>
+  onSubmitComment?: (post: any, text: string) => Promise<boolean>
   onSharePost: (post: any) => void
   onOpenAttachedReel?: (post: any, reel: ReelRow) => void
   /** Shared aspect-ratio media frame for homepage featured trade cards (contain, no re-crop). */
@@ -46,14 +48,13 @@ function FeedPostCard({
   user,
   likeMeta = EMPTY_LIKE_META,
   likeBusy = false,
+  commentCount,
   comments = EMPTY_COMMENTS,
-  commentSubmitting: _commentSubmitting,
-  draftSyncRef: _draftSyncRef,
+  mediaPriority = false,
   preview = false,
   onSelectPost,
   onOpenComments,
   onToggleLike,
-  onSubmitComment: _onSubmitComment,
   onSharePost,
   onOpenAttachedReel,
   screenshotFixedFrameClassName,
@@ -84,9 +85,9 @@ function FeedPostCard({
     return trimmed !== "" ? trimmed : null
   }, [post.profiles?.avatar_url])
   const profileUsername = post.profiles?.username || "User"
-  const tradeRow = useMemo(() => postTradeJoin(post), [post.trades])
+  const tradeRow = useMemo(() => postTradeJoin(post), [post])
   const attachedReel = useMemo(() => postAttachedReel(post), [post])
-  const publicDesc = useMemo(() => postPublicDescription(post), [post.trades])
+  const publicDesc = useMemo(() => postPublicDescription(post), [post])
   const pnl = useMemo(() => Number(post.pnl), [post.pnl])
   const pnlPositive = !Number.isNaN(pnl) && pnl >= 0
   const tradeDisplay = useMemo(() => {
@@ -124,13 +125,14 @@ function FeedPostCard({
 
       <FeedPostScreenshot
         imageSrc={imageSrc}
+        priority={mediaPriority}
         fixedFrameClassName={screenshotFixedFrameClassName}
       />
 
       <FeedPostActions
         post={post}
         user={user}
-        comments={comments}
+        commentCount={commentCount ?? comments.length}
         likeMeta={likeMeta}
         likeBusy={likeBusy}
         onToggleLike={onToggleLike}

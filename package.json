@@ -11,6 +11,7 @@
     "test:achievements": "node --experimental-strip-types --test lib/achievements.test.ts",
     "test:user-facing-error": "node --experimental-strip-types --test lib/userFacingError.test.ts",
     "test:affiliate": "node --experimental-strip-types --test lib/affiliateEarnings.test.ts lib/affiliateStripeDiscount.test.ts",
+    "test:referral-attribution": "node --experimental-strip-types --test lib/referralAttribution.test.ts lib/referralPersistence.test.ts",
     "migrate:affiliate-promos": "node scripts/migrate-affiliate-promos-to-once.mjs",
     "generate:og-image": "node scripts/generate-og-image.mjs",
     "export:marketing-ads": "node scripts/export-marketing-ads.mjs"

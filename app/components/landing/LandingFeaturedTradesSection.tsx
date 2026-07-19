@@ -1,12 +1,12 @@
 "use client"
 
+import dynamic from "next/dynamic"
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import FeedPostCard, {
   EMPTY_COMMENTS,
   EMPTY_LIKE_META,
   type FeedLikeMeta,
 } from "@/app/components/feed/FeedPostCard"
-import FeedPostDetailModal from "@/app/components/feed/FeedPostDetailModal"
 import { queryFeedComments } from "@/app/components/feed/feedPostHelpers"
 import type { FeedItem } from "@/app/components/feed/feedPostHelpers"
 import type { FeaturedTradesWeekResponse } from "@/lib/featuredTradesWeek"
@@ -23,6 +23,10 @@ import {
 import { TRADE_IMAGE_MEDIA_FRAME_CLASS } from "@/lib/tradeImageAspect"
 import { supabase } from "@/lib/supabaseClient"
 import { useUserProfile } from "@/lib/useUserProfile"
+
+const FeedPostDetailModal = dynamic(
+  () => import("@/app/components/feed/FeedPostDetailModal")
+)
 
 type FeaturedSlot = {
   key: "bestPnl" | "highestRr"

@@ -40,7 +40,7 @@ export default function DashboardGearSettings({
       <button
         type="button"
         onClick={onToggleShowControls}
-        className={`${DASHBOARD_MOBILE_GEAR_BTN_CLASS} md:rounded-lg md:bg-transparent md:p-2 md:hover:bg-white/10`}
+        className={DASHBOARD_MOBILE_GEAR_BTN_CLASS}
         aria-label="Dashboard controls"
         aria-expanded={showControls}
       >

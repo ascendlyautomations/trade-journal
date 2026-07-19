@@ -1,12 +1,16 @@
 "use client"
 
 import { memo, type MutableRefObject } from "react"
+import dynamic from "next/dynamic"
 import FeedPostDetailModal from "./FeedPostDetailModal"
 import FeedProfilePostDetailModal from "./FeedProfilePostDetailModal"
 import FeedReelDetailModal from "./FeedReelDetailModal"
-import ShareToConversationsModal from "@/app/components/ShareToConversationsModal"
 import type { FeedLikeMeta } from "./FeedPostCard"
 import { isTradeAttachedReel } from "@/lib/reels"
+
+const ShareToConversationsModal = dynamic(
+  () => import("@/app/components/ShareToConversationsModal")
+)
 
 type FeedPostOverlaysProps = {
   selectedPostId: string | null
@@ -15,6 +19,7 @@ type FeedPostOverlaysProps = {
   sharePost: any | null
   user: any
   selectedPostComments: any[]
+  selectedPostCommentCount: number
   selectedPostLikeMeta: FeedLikeMeta
   selectedPostLikeBusy?: boolean
   selectedPostCommentSubmitting: boolean
@@ -25,6 +30,7 @@ type FeedPostOverlaysProps = {
   /** Clip layered above an open trade/post detail (View Clip). */
   stackedAttachedReel?: any | null
   stackedAttachedReelComments?: any[]
+  stackedAttachedReelCommentCount?: number
   stackedAttachedReelLikeMeta?: FeedLikeMeta
   stackedAttachedReelLikeBusy?: boolean
   stackedAttachedReelCommentSubmitting?: boolean
@@ -51,6 +57,7 @@ function FeedPostOverlays({
   sharePost,
   user,
   selectedPostComments,
+  selectedPostCommentCount,
   selectedPostLikeMeta,
   selectedPostLikeBusy = false,
   selectedPostCommentSubmitting,
@@ -60,6 +67,7 @@ function FeedPostOverlays({
   tradeExpandSignal = 0,
   stackedAttachedReel = null,
   stackedAttachedReelComments = [],
+  stackedAttachedReelCommentCount = 0,
   stackedAttachedReelLikeMeta = { count: 0, liked: false },
   stackedAttachedReelLikeBusy = false,
   stackedAttachedReelCommentSubmitting = false,
@@ -91,6 +99,7 @@ function FeedPostOverlays({
             post={selectedPost}
             user={user}
             comments={selectedPostComments}
+            commentCount={selectedPostCommentCount}
             likeMeta={selectedPostLikeMeta}
             likeBusy={selectedPostLikeBusy}
             commentSubmitting={selectedPostCommentSubmitting}
@@ -122,6 +131,7 @@ function FeedPostOverlays({
             post={selectedPost}
             user={user}
             comments={selectedPostComments}
+            commentCount={selectedPostCommentCount}
             likeMeta={selectedPostLikeMeta}
             likeBusy={selectedPostLikeBusy}
             commentSubmitting={selectedPostCommentSubmitting}
@@ -140,6 +150,7 @@ function FeedPostOverlays({
             post={selectedPost}
             user={user}
             comments={selectedPostComments}
+            commentCount={selectedPostCommentCount}
             likeMeta={selectedPostLikeMeta}
             likeBusy={selectedPostLikeBusy}
             commentSubmitting={selectedPostCommentSubmitting}
@@ -162,6 +173,7 @@ function FeedPostOverlays({
           post={stackedAttachedReel}
           user={user}
           comments={stackedAttachedReelComments}
+          commentCount={stackedAttachedReelCommentCount}
           likeMeta={stackedAttachedReelLikeMeta}
           likeBusy={stackedAttachedReelLikeBusy}
           commentSubmitting={stackedAttachedReelCommentSubmitting}

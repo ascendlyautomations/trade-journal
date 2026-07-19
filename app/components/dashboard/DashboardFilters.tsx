@@ -5,6 +5,7 @@ import Link from "next/link"
 import TradeFilterBar, {
   type TradeFilterBarProps,
 } from "@/app/components/TradeFilterBar"
+import Button from "@/app/components/ui/Button"
 import PerformanceShareButton from "@/app/components/PerformanceShareButton"
 import DashboardGearSettings from "./DashboardGearSettings"
 import { DashboardPlanIndicator } from "./DashboardHeader"
@@ -31,6 +32,8 @@ export type DashboardFiltersProps = {
   showPublicOnly: boolean
   onTogglePublicOnly: () => void
   onOpenPerformanceShare: () => void
+  /** Opens the existing Quick Trade flow. */
+  onOpenQuickInput: () => void
   /** Opens the trading report modal (mobile header row 3). */
   onOpenTradingReport?: () => void
   showTradingReportButton?: boolean
@@ -69,6 +72,7 @@ export default function DashboardFilters({
   showPublicOnly,
   onTogglePublicOnly,
   onOpenPerformanceShare,
+  onOpenQuickInput,
   onOpenTradingReport,
   showTradingReportButton = false,
   showControls,
@@ -107,6 +111,29 @@ export default function DashboardFilters({
         mobileThreeRowLayout
         leading={<DashboardPlanIndicator isPro={isPro} />}
         leadingOverlay
+        beforeAccountSelect={
+          <Button
+            type="button"
+            variant="primary"
+            size="md"
+            onClick={onOpenQuickInput}
+            className="h-[34px] shrink-0 whitespace-nowrap py-0"
+          >
+            Quick Trade
+          </Button>
+        }
+        accountSelectAccessory={
+          <Button
+            type="button"
+            variant="primary"
+            size="md"
+            onClick={onOpenQuickInput}
+            aria-label="Quick Trade"
+            className="h-9 w-9 shrink-0 p-0 text-base leading-none"
+          >
+            <span aria-hidden>+</span>
+          </Button>
+        }
         accounts={accounts}
         accountFilter={accountFilter}
         onAccountChange={onAccountChange}
@@ -158,7 +185,7 @@ export default function DashboardFilters({
             <button
               type="button"
               onClick={onTogglePublicOnly}
-              className={`hidden md:inline-flex shrink-0 whitespace-nowrap rounded-md px-3 py-2 text-sm ${
+              className={`hidden md:inline-flex h-[34px] items-center shrink-0 whitespace-nowrap rounded-md px-3 text-sm ${
                 showPublicOnly
                   ? "bg-blue-500 text-white hover:bg-blue-600"
                   : "bg-white/10 text-white hover:bg-white/20"

@@ -37,6 +37,10 @@ import { subscribeStripeReconciliationComplete } from "@/lib/stripeReconciliatio
 import { scheduleDeferredWork } from "@/lib/scheduleDeferredWork"
 import { applyStickyGettingStartedProgress } from "@/lib/gettingStartedSticky"
 import {
+  readCachedGettingStartedSignals,
+  writeCachedGettingStartedSignals,
+} from "@/lib/gettingStartedSignalsCache"
+import {
   GETTING_STARTED_INTRO_POPUP_TITLE,
   markGettingStartedIntroSeen,
 } from "@/lib/gettingStartedIntro"
@@ -75,11 +79,13 @@ function computeRawProgress(
 
 function computeProgressFromSignals(
   signals: GettingStartedChecklistSignals,
-  userId: string
+  userId: string,
+  options?: { readOnly?: boolean }
 ) {
   const base = computeRawProgress(signals)
   return applyStickyGettingStartedProgress(base, userId, {
     profilePostCount: signals.profilePostCount,
+    readOnly: options?.readOnly,
   })
 }
 
@@ -213,6 +219,9 @@ export function GettingStartedProgressProvider({
             ...signalsRef.current,
             hasSeenGettingStartedIntro: true,
           }
+          if (signalsReadyRef.current) {
+            writeCachedGettingStartedSignals(userId, signalsRef.current)
+          }
         }
       })()
     }
@@ -230,6 +239,9 @@ export function GettingStartedProgressProvider({
           signalsRef.current = {
             ...signalsRef.current,
             hasSeenOnboardingCompletePopup: true,
+          }
+          if (signalsReadyRef.current) {
+            writeCachedGettingStartedSignals(userId, signalsRef.current)
           }
         }
       })()
@@ -332,6 +344,7 @@ export function GettingStartedProgressProvider({
       signalsRef.current = next
       setSignalsReady(true)
       signalsReadyRef.current = true
+      writeCachedGettingStartedSignals(userId, next)
 
       const batch = isBaselineFetch
         ? fromUserAction
@@ -394,6 +407,11 @@ export function GettingStartedProgressProvider({
       completionPopupActiveRef.current = false
       baselineResolvedRef.current = false
       prevMountedUserIdRef.current = nextUserId
+      // Never carry one user's resolved signals over to another user.
+      setSignals(EMPTY_SIGNALS)
+      signalsRef.current = EMPTY_SIGNALS
+      setSignalsReady(false)
+      signalsReadyRef.current = false
       gsDebug("user changed, reset baseline", { userId: nextUserId })
     }
 
@@ -404,6 +422,25 @@ export function GettingStartedProgressProvider({
       signalsReadyRef.current = false
       baselineResolvedRef.current = false
       return
+    }
+
+    // Cache-first: restore the last resolved signals for this user from
+    // sessionStorage so reloads never regress to the "nothing completed"
+    // defaults (which flashes onboarding UI for completed users). The
+    // deferred fetch below still runs and reconciles with the database.
+    if (!signalsReadyRef.current) {
+      const cached = readCachedGettingStartedSignals(nextUserId)
+      if (cached) {
+        setSignals(cached)
+        signalsRef.current = cached
+        setSignalsReady(true)
+        signalsReadyRef.current = true
+        gsDebug("signals hydrated from session cache", {
+          userId: nextUserId,
+          tradeCount: cached.tradeCount,
+          onboardingCompleted: cached.onboardingCompleted,
+        })
+      }
     }
 
     if (profileLoading && !profile) return
@@ -453,8 +490,13 @@ export function GettingStartedProgressProvider({
         hasPublicTrade: false,
       })
     }
-    return computeProgressFromSignals(signals, user.id)
-  }, [user?.id, signals])
+    // Before the signals resolve (fetch or session-cache hydration) the
+    // defaults would make the sticky reconciliation wipe valid local
+    // milestones — merge read-only until real signals are in.
+    return computeProgressFromSignals(signals, user.id, {
+      readOnly: !signalsReady,
+    })
+  }, [user?.id, signals, signalsReady])
 
   const value = useMemo(
     () => ({

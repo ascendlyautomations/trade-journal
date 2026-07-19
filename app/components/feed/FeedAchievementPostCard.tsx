@@ -12,8 +12,10 @@ type FeedAchievementPostCardProps = {
   user: any
   likeMeta?: FeedLikeMeta
   likeBusy?: boolean
+  commentCount?: number
   comments?: any[]
-  commentSubmitting: boolean
+  mediaPriority?: boolean
+  commentSubmitting?: boolean
   onSelectPost: (post: any) => void
   onOpenComments: (post: any) => void
   onToggleLike: (post: any) => void
@@ -25,8 +27,9 @@ function FeedAchievementPostCard({
   user,
   likeMeta = { count: 0, liked: false },
   likeBusy = false,
-  comments = [],
-  commentSubmitting: _commentSubmitting,
+  commentCount,
+  comments = EMPTY_COMMENTS,
+  mediaPriority = false,
   onSelectPost,
   onOpenComments,
   onToggleLike,
@@ -79,13 +82,17 @@ function FeedAchievementPostCard({
       />
 
       <div className="px-4 pt-3">
-        <AchievementCard achievement={achievement} showVisibility={false} />
+        <AchievementCard
+          achievement={achievement}
+          showVisibility={false}
+          mediaPriority={mediaPriority}
+        />
       </div>
 
       <FeedPostActions
         post={post}
         user={user}
-        comments={comments}
+        commentCount={commentCount ?? comments.length}
         likeMeta={likeMeta}
         likeBusy={likeBusy}
         onToggleLike={onToggleLike}
@@ -97,3 +104,5 @@ function FeedAchievementPostCard({
 }
 
 export default memo(FeedAchievementPostCard)
+
+const EMPTY_COMMENTS: any[] = []

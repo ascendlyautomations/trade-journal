@@ -1,4 +1,4 @@
-/** Canonical trade direction values used by manual entry, Quick Input, and CSV import. */
+/** Canonical trade direction values used by manual entry, Quick Trade, and CSV import. */
 export type TradeDirection = "Long" | "Short"
 
 export function parseTradePriceInput(raw: string): number | null {

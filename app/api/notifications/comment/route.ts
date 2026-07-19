@@ -1,7 +1,8 @@
 import { getRouteUser, supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
 import { isServerCommentNotificationAllowed } from "@/lib/serverNotificationPreferences"
-import { resolveCommentNotificationRecipient } from "@/lib/server/resolveCommentNotificationRecipient"
 import type { CommentNotificationKind } from "@/lib/notificationPreferences"
+import { parseLeadingCommentMention } from "@/lib/commentReplyUx"
+import { normalizeProfileUsername } from "@/lib/profileUsername"
 
 type CommentTargetBody = {
   postId?: string | null
@@ -11,34 +12,148 @@ type CommentTargetBody = {
   reelId?: string | null
 }
 
-async function commentAuthoredByUser(
+type ResolvedComment = {
+  sourceTable:
+    | "comments"
+    | "trade_comments"
+    | "profile_post_comments"
+    | "achievement_post_comments"
+    | "reel_comments"
+  targetTable: "posts" | "trades" | "profile_posts" | "achievement_posts" | "reels"
+  targetColumn:
+    | "post_id"
+    | "trade_id"
+    | "profile_post_id"
+    | "achievement_post_id"
+    | "reel_id"
+  targetId: string
+  content: string
+  parentCommentId: string | null
+}
+
+const COMMENT_SOURCES: Array<{
+  sourceTable: ResolvedComment["sourceTable"]
+  targetTable: ResolvedComment["targetTable"]
+  targetColumn: ResolvedComment["targetColumn"]
+}> = [
+  { sourceTable: "comments", targetTable: "posts", targetColumn: "post_id" },
+  {
+    sourceTable: "trade_comments",
+    targetTable: "trades",
+    targetColumn: "trade_id",
+  },
+  {
+    sourceTable: "profile_post_comments",
+    targetTable: "profile_posts",
+    targetColumn: "profile_post_id",
+  },
+  {
+    sourceTable: "achievement_post_comments",
+    targetTable: "achievement_posts",
+    targetColumn: "achievement_post_id",
+  },
+  {
+    sourceTable: "reel_comments",
+    targetTable: "reels",
+    targetColumn: "reel_id",
+  },
+]
+
+async function resolveAuthoredComment(
   commentId: string,
   userId: string
-): Promise<boolean> {
-  const tables = [
-    { table: "comments" as const, column: "id" },
-    { table: "trade_comments" as const, column: "id" },
-    { table: "profile_post_comments" as const, column: "id" },
-    { table: "achievement_post_comments" as const, column: "id" },
-    { table: "reel_comments" as const, column: "id" },
-  ]
-
-  for (const { table } of tables) {
+): Promise<ResolvedComment | null> {
+  for (const source of COMMENT_SOURCES) {
     const { data, error } = await supabaseServiceRole
-      .from(table)
-      .select("id")
+      .from(source.sourceTable)
+      .select(`id, user_id, content, parent_comment_id, ${source.targetColumn}`)
       .eq("id", commentId)
       .eq("user_id", userId)
       .maybeSingle()
-
     if (error) {
-      console.error(`[api/notifications/comment] ${table} lookup failed`, error)
-      return false
+      console.error(
+        `[api/notifications/comment] ${source.sourceTable} lookup failed`,
+        error
+      )
+      return null
     }
-    if (data) return true
+    const row = data as Record<string, unknown> | null
+    const targetId = row?.[source.targetColumn]
+    if (row && targetId) {
+      return {
+        ...source,
+        targetId: String(targetId),
+        content: String(row.content ?? "").trim().slice(0, 200),
+        parentCommentId: row.parent_comment_id
+          ? String(row.parent_comment_id)
+          : null,
+      }
+    }
+  }
+  return null
+}
+
+async function resolveCommentRecipients(
+  comment: ResolvedComment,
+  senderUserId: string
+): Promise<Array<{ userId: string; kind: CommentNotificationKind }>> {
+  const { data: owner } = await supabaseServiceRole
+    .from(comment.targetTable)
+    .select("user_id")
+    .eq("id", comment.targetId)
+    .maybeSingle()
+  const ownerUserId = owner?.user_id ? String(owner.user_id) : ""
+
+  if (!comment.parentCommentId) {
+    return ownerUserId && ownerUserId !== senderUserId
+      ? [{ userId: ownerUserId, kind: "comment" }]
+      : []
   }
 
-  return false
+  const recipients = new Map<string, CommentNotificationKind>()
+  const { data: parent } = await supabaseServiceRole
+    .from(comment.sourceTable)
+    .select(`user_id, ${comment.targetColumn}`)
+    .eq("id", comment.parentCommentId)
+    .maybeSingle()
+  const parentRow = parent as Record<string, unknown> | null
+  if (
+    parentRow?.user_id &&
+    String(parentRow[comment.targetColumn] ?? "") === comment.targetId &&
+    String(parentRow.user_id) !== senderUserId
+  ) {
+    recipients.set(String(parentRow.user_id), "reply")
+  }
+
+  const { username } = parseLeadingCommentMention(comment.content)
+  if (username) {
+    const { data: mentionedProfile } = await supabaseServiceRole
+      .from("profiles")
+      .select("id, username")
+      .eq("username", normalizeProfileUsername(username))
+      .maybeSingle()
+    const mentionedUserId = mentionedProfile?.id
+      ? String(mentionedProfile.id)
+      : ""
+
+    if (mentionedUserId && mentionedUserId !== senderUserId) {
+      const { data: participated } = await supabaseServiceRole
+        .from(comment.sourceTable)
+        .select("id")
+        .eq(comment.targetColumn, comment.targetId)
+        .eq("user_id", mentionedUserId)
+        .limit(1)
+        .maybeSingle()
+      if (participated) {
+        recipients.set(
+          mentionedUserId,
+          mentionedUserId !== ownerUserId ? "mention" : recipients.get(mentionedUserId) ?? "reply"
+        )
+      }
+    }
+  }
+
+  return [...recipients].map(([userId, kind]) => ({ userId, kind }))
 }
 
 export async function POST(req: Request) {
@@ -64,87 +179,48 @@ export async function POST(req: Request) {
     return Response.json({ error: "Invalid JSON body" }, { status: 400 })
   }
 
-  const recipientUserIdFromClient = body.recipientUserId?.trim()
   const commentId = body.commentId?.trim()
-  const content = body.content?.trim().slice(0, 200) ?? ""
 
   if (!commentId) {
     return Response.json({ error: "Invalid notification payload" }, { status: 400 })
   }
 
-  const authored = await commentAuthoredByUser(commentId, user.id)
-  if (!authored) {
+  // Recipient, content, parent, and target all come from the authenticated
+  // author's persisted comment. Client-provided recipient/target fields are ignored.
+  const resolvedComment = await resolveAuthoredComment(commentId, user.id)
+  if (!resolvedComment) {
     return Response.json({ error: "Comment not found" }, { status: 404 })
   }
 
-  const hasTarget =
-    body.profilePostId ||
-    body.achievementPostId ||
-    body.reelId ||
-    body.postId ||
-    body.tradeId
-
-  if (!hasTarget) {
-    return Response.json({ error: "Missing comment target" }, { status: 400 })
-  }
-
-  // Prefer the explicit recipient from the client (reply parent author, mention
-  // target, or content owner). Fall back to server-resolved content owner when
-  // the client omits recipientUserId.
-  const ownerUserId = await resolveCommentNotificationRecipient({
-    postId: body.postId,
-    tradeId: body.tradeId,
-    profilePostId: body.profilePostId,
-    achievementPostId: body.achievementPostId,
-    reelId: body.reelId,
-  })
-
-  const recipientUserId = recipientUserIdFromClient || ownerUserId || null
-
-  if (!recipientUserId || recipientUserId === user.id) {
-    return Response.json({ error: "Invalid notification recipient" }, { status: 400 })
-  }
-
-  const isAchievement = Boolean(body.achievementPostId)
-  const isReel = Boolean(body.reelId)
-  const kind: CommentNotificationKind = body.kind ?? "comment"
-  const allowed = await isServerCommentNotificationAllowed(
-    recipientUserId,
-    kind,
-    isAchievement
-  )
-  if (!allowed) {
+  const recipients = await resolveCommentRecipients(resolvedComment, user.id)
+  if (!recipients.length) {
     return Response.json({ ok: true, skipped: true })
   }
 
-  const insertRow: Record<string, unknown> = {
-    user_id: recipientUserId,
-    sender_id: user.id,
-    type: "comment",
-    comment_id: commentId,
-    content,
+  const rows: Record<string, unknown>[] = []
+  for (const recipient of recipients) {
+    const allowed = await isServerCommentNotificationAllowed(
+      recipient.userId,
+      recipient.kind,
+      resolvedComment.targetColumn === "achievement_post_id"
+    )
+    if (!allowed) continue
+    rows.push({
+      user_id: recipient.userId,
+      sender_id: user.id,
+      type: "comment",
+      comment_id: commentId,
+      content: resolvedComment.content,
+      [resolvedComment.targetColumn]: resolvedComment.targetId,
+    })
   }
 
-  if (body.profilePostId) {
-    insertRow.profile_post_id = body.profilePostId
-  } else if (body.achievementPostId) {
-    insertRow.achievement_post_id = body.achievementPostId
-  } else if (body.reelId) {
-    insertRow.reel_id = body.reelId
-  } else if (body.postId) {
-    insertRow.post_id = body.postId
-    if (body.tradeId) insertRow.trade_id = body.tradeId
-  } else if (body.tradeId) {
-    insertRow.trade_id = body.tradeId
-  } else {
-    return Response.json({ error: "Missing comment target" }, { status: 400 })
-  }
+  if (!rows.length) return Response.json({ ok: true, skipped: true })
 
   const { data, error: insertErr } = await supabaseServiceRole
     .from("notifications")
-    .insert(insertRow)
+    .insert(rows)
     .select("id, comment_id")
-    .single()
 
   if (insertErr) {
     if (insertErr.code === "23505") {
@@ -154,7 +230,10 @@ export async function POST(req: Request) {
     return Response.json({ error: insertErr.message }, { status: 500 })
   }
 
-  if (!data?.comment_id || String(data.comment_id) !== commentId) {
+  if (
+    !data?.length ||
+    data.some((row) => !row.comment_id || String(row.comment_id) !== commentId)
+  ) {
     console.error("[api/notifications/comment] comment_id not persisted", {
       expected: commentId,
       row: data,
@@ -162,7 +241,7 @@ export async function POST(req: Request) {
     return Response.json({ error: "comment_id not persisted" }, { status: 500 })
   }
 
-  return Response.json({ ok: true, id: data.id })
+  return Response.json({ ok: true, ids: data.map((row) => row.id) })
 }
 
 export async function DELETE(req: Request) {

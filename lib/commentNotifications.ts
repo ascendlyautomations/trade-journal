@@ -27,22 +27,6 @@ async function authFetch(
   })
 }
 
-function targetToApiFields(target: CommentNotificationTarget) {
-  if (target.kind === "post") {
-    return { postId: target.postId, tradeId: target.tradeId ?? null }
-  }
-  if (target.kind === "trade") {
-    return { tradeId: target.tradeId }
-  }
-  if (target.kind === "profile_post") {
-    return { profilePostId: target.profilePostId }
-  }
-  if (target.kind === "achievement_post") {
-    return { achievementPostId: target.achievementPostId }
-  }
-  return { reelId: target.reelId }
-}
-
 export type CommentNotificationTarget =
   | { kind: "post"; postId: string; tradeId?: string | null }
   | { kind: "trade"; tradeId: string }
@@ -157,8 +141,6 @@ export async function ensureCommentNotification(
   supabase: SupabaseClient,
   params: CommentNotificationParams
 ): Promise<void> {
-  if (params.recipientUserId === params.senderUserId) return
-
   const commentId = String(params.commentId ?? "").trim()
   if (!commentId) {
     console.error("Comment notification skipped: missing commentId", params)
@@ -168,11 +150,7 @@ export async function ensureCommentNotification(
   const res = await authFetch(supabase, "/api/notifications/comment", {
     method: "POST",
     body: JSON.stringify({
-      recipientUserId: params.recipientUserId,
       commentId,
-      content: params.content,
-      kind: params.kind ?? "comment",
-      ...targetToApiFields(params.target),
     }),
   })
 
@@ -220,61 +198,15 @@ export async function ensureCommentNotificationsForInsert(
     return
   }
 
-  const recipients = resolveCommentNotificationRecipients({
+  // One authenticated request is enough: the server reads the persisted
+  // comment and resolves content owner, reply target, and mention target.
+  await ensureCommentNotification(supabase, {
+    recipientUserId: "",
     senderUserId: params.senderUserId,
-    ownerUserId: params.ownerUserId,
-    parentCommentId: params.parentCommentId,
+    commentId,
     content: params.content,
-    existingComments: params.existingComments,
+    target: params.target,
   })
-
-  const parentId =
-    params.parentCommentId != null ? String(params.parentCommentId) : ""
-  const ownerId =
-    params.ownerUserId != null ? String(params.ownerUserId).trim() : ""
-  const { username: mentionedUsername } = parseLeadingCommentMention(
-    params.content ?? ""
-  )
-  const mentionedUserId =
-    mentionedUsername && params.existingComments?.length
-      ? String(
-          params.existingComments.find(
-            (c) =>
-              normalizeProfileUsername(
-                (c as { profiles?: { username?: string | null } }).profiles
-                  ?.username ?? ""
-              ) === mentionedUsername
-          )?.user_id ?? ""
-        ).trim()
-      : ""
-
-  for (const recipientUserId of recipients) {
-    let kind: CommentNotificationKind = "comment"
-    if (parentId) {
-      const parent = params.existingComments?.find(
-        (c) => String(c.id) === parentId
-      )
-      if (parent && String(parent.user_id) === recipientUserId) {
-        kind = "reply"
-      }
-    }
-    if (
-      mentionedUserId &&
-      recipientUserId === mentionedUserId &&
-      recipientUserId !== ownerId
-    ) {
-      kind = "mention"
-    }
-
-    await ensureCommentNotification(supabase, {
-      recipientUserId,
-      senderUserId: params.senderUserId,
-      commentId,
-      content: params.content,
-      target: params.target,
-      kind,
-    })
-  }
 }
 
 /** Remove notification(s) for a deleted comment (author-initiated cleanup). */

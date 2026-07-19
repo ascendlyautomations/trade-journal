@@ -1,14 +1,20 @@
 "use client"
 
+import dynamic from "next/dynamic"
 import Image from "next/image"
 import { useState } from "react"
-import ImageLightbox from "@/app/components/ui/ImageLightbox"
+
+const ImageLightbox = dynamic(
+  () => import("@/app/components/ui/ImageLightbox")
+)
 
 type LandingShowcaseImageProps = {
   src: string
   alt: string
   objectPositionClass?: string
   size?: "standard" | "large"
+  /** Keep below-fold screenshots out of the network waterfall until their section is visible. */
+  loadImage?: boolean
 }
 
 function MagnifyIcon({ className }: { className?: string }) {
@@ -32,6 +38,7 @@ export default function LandingShowcaseImage({
   alt,
   objectPositionClass = "object-center",
   size = "standard",
+  loadImage = true,
 }: LandingShowcaseImageProps) {
   const [lightboxOpen, setLightboxOpen] = useState(false)
 
@@ -44,20 +51,21 @@ export default function LandingShowcaseImage({
         aria-label={`View larger: ${alt}`}
       >
         <div className="relative aspect-[3/2] w-full">
-          <Image
-            src={src}
-            alt={alt}
-            fill
-            unoptimized
-            quality={100}
-            className={`object-contain ${objectPositionClass}`}
-            sizes={
-              size === "large"
-                ? "(max-width: 1280px) 100vw, 1152px"
-                : "(max-width: 1024px) 100vw, 720px"
-            }
-            loading="lazy"
-          />
+          {loadImage ? (
+            <Image
+              src={src}
+              alt={alt}
+              fill
+              quality={85}
+              className={`object-contain ${objectPositionClass}`}
+              sizes={
+                size === "large"
+                  ? "(max-width: 1280px) 100vw, 1152px"
+                  : "(max-width: 1024px) 100vw, 720px"
+              }
+              loading="lazy"
+            />
+          ) : null}
         </div>
 
         <div className="pointer-events-none absolute inset-0 flex items-end justify-center bg-gradient-to-t from-black/35 via-transparent to-transparent pb-4 opacity-0 transition-opacity duration-300 group-hover:opacity-100 group-focus-visible:opacity-100 motion-reduce:transition-none">
@@ -68,12 +76,14 @@ export default function LandingShowcaseImage({
         </div>
       </button>
 
-      <ImageLightbox
-        imageUrl={lightboxOpen ? src : null}
-        alt={alt}
-        belowNavbar
-        onClose={() => setLightboxOpen(false)}
-      />
+      {lightboxOpen ? (
+        <ImageLightbox
+          imageUrl={src}
+          alt={alt}
+          belowNavbar
+          onClose={() => setLightboxOpen(false)}
+        />
+      ) : null}
     </>
   )
 }

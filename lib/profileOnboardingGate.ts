@@ -45,6 +45,7 @@ export const ONBOARDING_ALLOWED_EXACT_PATHS = [] as const
 export const ONBOARDING_ALLOWED_PATH_PREFIXES = [
   "/onboarding",
   "/choose-plan",
+  "/early-access",
   "/login",
   "/reset-password",
   "/creator",

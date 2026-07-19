@@ -104,11 +104,13 @@ export async function fetchCommentLikeMetaByIds(
 
 function buildCommentLikeNotificationTarget(
   commentId: string,
+  commentSource: CommentLikeSource,
   parent: CommentLikeNotificationParent
 ) {
   return {
     kind: "comment" as const,
     commentId,
+    commentSource,
     postId: parent.postId ?? null,
     tradeId: parent.tradeId ?? null,
     profilePostId: parent.profilePostId ?? null,
@@ -165,7 +167,11 @@ export async function toggleCommentLike(
         await deleteLikeNotification(client, {
           recipientUserId: authorUserId,
           senderUserId: userId,
-          target: buildCommentLikeNotificationTarget(commentId, notificationParent),
+          target: buildCommentLikeNotificationTarget(
+            commentId,
+            commentSource,
+            notificationParent
+          ),
         })
       }
 
@@ -196,7 +202,11 @@ export async function toggleCommentLike(
       await ensureLikeNotification(client, {
         recipientUserId: authorUserId,
         senderUserId: userId,
-        target: buildCommentLikeNotificationTarget(commentId, notificationParent),
+        target: buildCommentLikeNotificationTarget(
+          commentId,
+          commentSource,
+          notificationParent
+        ),
       })
     }
 

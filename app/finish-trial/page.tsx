@@ -7,6 +7,7 @@ import { useUserProfile } from "@/lib/useUserProfile"
 import { supabase } from "@/lib/supabaseClient"
 import { markProfileUseFreeTier } from "@/lib/markFreeTierSignup"
 import { startTraxProCheckout } from "@/lib/startTraxProCheckout"
+import { isEarlyAccessActive } from "@/lib/earlyAccess"
 import {
   isSubscriptionGateSuspended,
   needsSubscriptionCheckout,
@@ -55,6 +56,11 @@ export default function FinishTrialPage() {
       return
     }
     if (!profile) return
+
+    if (isEarlyAccessActive(profile)) {
+      router.replace("/dashboard")
+      return
+    }
 
     const pendingCreatorCode = getPendingCreatorCode()
     if (pendingCreatorCode) {

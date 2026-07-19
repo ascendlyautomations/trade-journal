@@ -14,4 +14,4 @@ export const DASHBOARD_MOBILE_ICON_BTN_CLASS =
   "inline-flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-md bg-white/10 text-base text-white transition hover:bg-white/20"
 
 export const DASHBOARD_MOBILE_GEAR_BTN_CLASS =
-  "inline-flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-md bg-[#1f2937] text-white transition hover:bg-[#1f2937]/90"
+  "inline-flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-md bg-white/10 text-white transition hover:bg-white/20"

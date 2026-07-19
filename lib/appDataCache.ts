@@ -335,7 +335,7 @@ export async function ensureAccountsLoaded(
 export async function ensureTradesLoaded(
   supabase: SupabaseClient,
   userId: string,
-  options?: { force?: boolean }
+  options?: { force?: boolean; isRetry?: boolean }
 ): Promise<any[]> {
   if (isDemoUserId(userId)) {
     const cached = getCachedTrades(userId)
@@ -349,11 +349,10 @@ export async function ensureTradesLoaded(
   if (entry?.loading) {
     return new Promise((resolve) => {
       const unsub = subscribeAppDataCache(() => {
-        const hit = getCachedTrades(userId)
-        if (hit && !tradesByUser.get(userId)?.loading) {
-          unsub()
-          resolve(hit)
-        }
+        const mem = tradesByUser.get(userId)
+        if (mem?.loading) return
+        unsub()
+        resolve(getCachedTrades(userId) ?? ((mem?.data ?? EMPTY_TRADES) as any[]))
       })
     })
   }
@@ -370,11 +369,31 @@ export async function ensureTradesLoaded(
   })
   if (!wasLoading) notify()
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("trades")
     .select(TRADES_APP_SELECT)
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
+
+  // A failed fetch must never be cached as a valid empty history — that makes
+  // a trade-owning user look like a 0-trade user (false empty dashboard).
+  if (error) {
+    tradesByUser.set(userId, {
+      userId,
+      data: previousData,
+      fetchedAt: entry?.fetchedAt ?? 0,
+      invalidated: true,
+      loading: false,
+    })
+    notify()
+    // One delayed retry recovers transient startup failures (token refresh).
+    if (!options?.isRetry) {
+      setTimeout(() => {
+        void ensureTradesLoaded(supabase, userId, { isRetry: true })
+      }, 4000)
+    }
+    return previousData
+  }
 
   const next = data?.length ? data : (EMPTY_TRADES as any[])
   setTradesCache(userId, next)

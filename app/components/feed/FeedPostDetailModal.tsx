@@ -36,6 +36,7 @@ type FeedPostDetailModalProps = {
   post: any
   user: any
   comments: any[]
+  commentCount: number
   likeMeta: FeedLikeMeta
   likeBusy?: boolean
   commentSubmitting: boolean
@@ -54,6 +55,7 @@ export default function FeedPostDetailModal({
   post,
   user,
   comments,
+  commentCount,
   likeMeta,
   likeBusy = false,
   commentSubmitting,
@@ -185,6 +187,7 @@ export default function FeedPostDetailModal({
           post={post}
           user={user}
           comments={comments}
+          commentCount={commentCount}
           likeMeta={likeMeta}
           likeBusy={likeBusy}
           onToggleLike={onToggleLike}

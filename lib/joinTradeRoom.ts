@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { createRoomJoinNotification } from "@/lib/createRoomJoinNotification"
 import { notifyGettingStartedChecklistMaybeCompleted } from "@/lib/gettingStartedProgressSync"
+import { clearRoomSessionsForUser } from "@/lib/roomSessionCache"
 import { toUserFacingErrorMessage } from "@/lib/userFacingError"
 
 export type JoinTradeRoomResult =
@@ -47,6 +48,7 @@ export async function joinTradeRoom(
   }
 
   if (!alreadyActive) {
+    clearRoomSessionsForUser(userId)
     await createRoomJoinNotification(supabase, roomId)
     notifyGettingStartedChecklistMaybeCompleted()
   }

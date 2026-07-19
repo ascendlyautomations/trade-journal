@@ -13,6 +13,7 @@ import {
   getCheckoutBillingInterval,
   getSignupIntent,
 } from "@/lib/signupFlow"
+import { isEarlyAccessActive } from "@/lib/earlyAccess"
 import { isSubscriptionExempt } from "@/lib/subscriptionAccess"
 import {
   buildCreatorSignupPath,
@@ -40,10 +41,12 @@ export default function OnboardingPage() {
     if (loading || !user) return
     // Creator invite flow skips Choose Plan; still requires profile onboarding.
     if (isCreatorFlowActive() || getPendingCreatorCode()) return
+    // Active Early Access users already skipped plan selection.
+    if (isEarlyAccessActive(profile)) return
     if (!getSignupIntent()) {
       router.replace("/choose-plan")
     }
-  }, [loading, user, router])
+  }, [loading, user, profile, router])
 
   if (loading) {
     return (
@@ -129,14 +132,18 @@ export default function OnboardingPage() {
         const { data: accessRow } = await supabase
           .from("profiles")
           .select(
-            "use_free_tier, is_beta_tester, referred_by, is_pro, creator_access, subscription_status, trial_end, onboarding_completed, username, trader_type, trading_style, started_trading"
+            "use_free_tier, is_beta_tester, referred_by, is_pro, creator_access, subscription_status, trial_end, onboarding_completed, username, trader_type, trading_style, started_trading, early_access_enrolled_at, early_access_started_at, early_access_ends_at, early_access_status, early_access_campaign_id, early_access_enrollment_source"
           )
           .eq("id", user.id)
           .maybeSingle()
 
         const accessProfile = { ...mergedProfile, ...accessRow }
 
-        if (isSubscriptionExempt(accessProfile)) {
+        // Early Access and other Pro exemptions must never open Stripe.
+        if (
+          isEarlyAccessActive(accessProfile) ||
+          isSubscriptionExempt(accessProfile)
+        ) {
           clearSignupIntent()
           router.replace("/dashboard")
           router.refresh()

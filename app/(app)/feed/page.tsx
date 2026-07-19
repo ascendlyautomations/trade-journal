@@ -2,6 +2,7 @@
 
 import type { ChangeEvent } from "react"
 import Link from "next/link"
+import dynamic from "next/dynamic"
 import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { supabase } from "../../../lib/supabaseClient"
@@ -47,10 +48,7 @@ import FeedLoadMoreFooter from "../../components/feed/FeedLoadMoreFooter"
 import FeedContentToggle from "../../components/feed/FeedContentToggle"
 import FeedModeToggle from "../../components/feed/FeedModeToggle"
 import FeedPostList from "../../components/feed/FeedPostList"
-import FeedPostOverlays from "../../components/feed/FeedPostOverlays"
 import FeedStoriesBar from "../../components/feed/FeedStoriesBar"
-import FeedStoryViewer from "../../components/feed/FeedStoryViewer"
-import StoryComposeModal from "../../components/feed/StoryComposeModal"
 import {
   EMPTY_COMMENTS,
   EMPTY_LIKE_META,
@@ -96,7 +94,7 @@ import {
   type FeedSessionSnapshot,
 } from "@/lib/feedSessionCache"
 import { readExploreSession } from "@/lib/exploreSessionCache"
-import { ConfirmModal, FeedbackModal, useDeleteReelConfirmation, useFeedbackPopup } from "@/app/components/ui"
+import { useDeleteReelConfirmation, useFeedbackPopup } from "@/app/components/ui"
 import { useModalScrollLock } from "@/app/components/ui/modalLayout"
 import EmptyState from "@/app/components/ui/EmptyState"
 import { SkeletonFeedPage } from "@/app/components/ui/skeletons"
@@ -119,7 +117,6 @@ import {
   withInsertedReelParentCommentId,
 } from "@/lib/reelEngagement"
 import { useUserProfile } from "@/lib/UserProfileProvider"
-import ReelComposerModal from "@/app/components/profile/ReelComposerModal"
 import { deleteReel, isTradeAttachedReel, replaceTradeReelVideo, type ReelRow } from "@/lib/reels"
 import {
   feedDeepLinkSessionKey,
@@ -134,6 +131,25 @@ import {
   loadDemoFeedEngagement,
 } from "@/lib/demo/demoFeed"
 import type { DemoSignupReason } from "@/lib/demo/DemoModeContext"
+
+const FeedPostOverlays = dynamic(
+  () => import("../../components/feed/FeedPostOverlays")
+)
+const FeedStoryViewer = dynamic(
+  () => import("../../components/feed/FeedStoryViewer")
+)
+const StoryComposeModal = dynamic(
+  () => import("../../components/feed/StoryComposeModal")
+)
+const ReelComposerModal = dynamic(
+  () => import("@/app/components/profile/ReelComposerModal")
+)
+const FeedbackModal = dynamic(
+  () => import("@/app/components/ui/FeedbackModal")
+)
+const ConfirmModal = dynamic(
+  () => import("@/app/components/ui/ConfirmModal")
+)
 
 /** Auto-advance each slide (Instagram-style). */
 const STORY_SLIDE_MS = 7000
@@ -194,13 +210,20 @@ function FeedPageContent() {
   const hasLoadedFeedRef = useRef(false)
   const followingIdsRef = useRef<string[]>([])
   const [likesByPost, setLikesByPost] = useState<Record<string, LikeMeta>>({})
+  const [commentCountsByPost, setCommentCountsByPost] = useState<
+    Record<string, number>
+  >({})
   const [commentsByPost, setCommentsByPost] = useState<Record<string, any[]>>({})
   const postsRef = useRef<any[]>([])
   postsRef.current = posts
   const likesByPostRef = useRef(likesByPost)
   likesByPostRef.current = likesByPost
+  const commentCountsByPostRef = useRef(commentCountsByPost)
+  commentCountsByPostRef.current = commentCountsByPost
   const commentsByPostRef = useRef(commentsByPost)
   commentsByPostRef.current = commentsByPost
+  const commentsLoadedRef = useRef<Set<string>>(new Set())
+  const commentsLoadingRef = useRef<Map<string, Promise<any[]>>>(new Map())
   const [commentSubmitting, setCommentSubmitting] = useState<Record<string, boolean>>({})
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null)
   const [tradeExpandSignal, setTradeExpandSignal] = useState(0)
@@ -294,6 +317,7 @@ function FeedPageContent() {
     ): FeedSessionSnapshot => ({
       posts: nextPosts,
       likesByPost: nextLikes,
+      commentCountsByPost: { ...commentCountsByPostRef.current },
       commentsByPost: nextComments,
       page: pageRef.current,
       hasMore: hasMoreRef.current,
@@ -708,12 +732,22 @@ function FeedPageContent() {
       return {
         enriched: [] as any[],
         likesMap: {} as Record<string, LikeMeta>,
-        commentsMap: {} as Record<string, any[]>,
+        commentCountsMap: {} as Record<string, number>,
       }
     }
 
     if (isDemoUserId(currentUser?.id)) {
-      return loadDemoFeedEngagement(postList, currentUser)
+      const demo = await loadDemoFeedEngagement(postList, currentUser)
+      return {
+        enriched: demo.enriched,
+        likesMap: demo.likesMap,
+        commentCountsMap: Object.fromEntries(
+          Object.entries(demo.commentsMap).map(([id, comments]) => [
+            id,
+            comments.length,
+          ])
+        ),
+      }
     }
 
     const tradeIds = postList
@@ -758,13 +792,7 @@ function FeedPageContent() {
         ? supabase.from("likes").select("post_id, user_id").in("post_id", tradeIds)
         : Promise.resolve({ data: [] as { post_id: string; user_id: string }[] }),
       tradeIds.length
-        ? queryFeedComments((select) =>
-            supabase
-              .from("comments")
-              .select(select)
-              .in("post_id", tradeIds)
-              .order("created_at", { ascending: true })
-          )
+        ? supabase.from("comments").select("post_id").in("post_id", tradeIds)
         : Promise.resolve({ data: [] as any[] }),
       profileIds.length
         ? supabase
@@ -773,13 +801,10 @@ function FeedPageContent() {
             .in("profile_post_id", profileIds)
         : Promise.resolve({ data: [] as { profile_post_id: string; user_id: string }[] }),
       profileIds.length
-        ? queryProfilePostComments((select) =>
-            supabase
-              .from("profile_post_comments")
-              .select(select)
-              .in("profile_post_id", profileIds)
-              .order("created_at", { ascending: true })
-          )
+        ? supabase
+            .from("profile_post_comments")
+            .select("profile_post_id")
+            .in("profile_post_id", profileIds)
         : Promise.resolve({ data: [] as any[] }),
       achievementIds.length
         ? supabase
@@ -790,13 +815,10 @@ function FeedPageContent() {
             data: [] as { achievement_post_id: string; user_id: string }[],
           }),
       achievementIds.length
-        ? queryAchievementPostComments((select) =>
-            supabase
-              .from("achievement_post_comments")
-              .select(select)
-              .in("achievement_post_id", achievementIds)
-              .order("created_at", { ascending: true })
-          )
+        ? supabase
+            .from("achievement_post_comments")
+            .select("achievement_post_id")
+            .in("achievement_post_id", achievementIds)
         : Promise.resolve({ data: [] as any[] }),
       reelIds.length
         ? supabase
@@ -807,22 +829,19 @@ function FeedPageContent() {
             data: [] as { reel_id: string; user_id: string }[],
           }),
       reelIds.length
-        ? queryReelComments((select) =>
-            supabase
-              .from("reel_comments")
-              .select(select)
-              .in("reel_id", reelIds)
-              .order("created_at", { ascending: true })
-          )
+        ? supabase
+            .from("reel_comments")
+            .select("reel_id")
+            .in("reel_id", reelIds)
         : Promise.resolve({ data: [] as any[] }),
     ])
 
     const likesMap: Record<string, LikeMeta> = {}
-    const commentsMap: Record<string, any[]> = {}
+    const commentCountsMap: Record<string, number> = {}
     for (const p of postList) {
       const key = String(p.id)
       likesMap[key] = { count: 0, liked: false }
-      commentsMap[key] = []
+      commentCountsMap[key] = 0
     }
 
     for (const row of tradeLikesRows || []) {
@@ -852,23 +871,19 @@ function FeedPageContent() {
 
     for (const c of tradeCommentsRows || []) {
       const pid = String(c.post_id)
-      if (!commentsMap[pid]) commentsMap[pid] = []
-      commentsMap[pid].push(c)
+      commentCountsMap[pid] = (commentCountsMap[pid] ?? 0) + 1
     }
     for (const c of profileCommentsRows || []) {
       const pid = String(c.profile_post_id)
-      if (!commentsMap[pid]) commentsMap[pid] = []
-      commentsMap[pid].push(c)
+      commentCountsMap[pid] = (commentCountsMap[pid] ?? 0) + 1
     }
     for (const c of achievementCommentsRows || []) {
       const pid = String(c.achievement_post_id)
-      if (!commentsMap[pid]) commentsMap[pid] = []
-      commentsMap[pid].push(c)
+      commentCountsMap[pid] = (commentCountsMap[pid] ?? 0) + 1
     }
     for (const c of reelCommentsRows || []) {
       const pid = String(c.reel_id)
-      if (!commentsMap[pid]) commentsMap[pid] = []
-      commentsMap[pid].push(c)
+      commentCountsMap[pid] = (commentCountsMap[pid] ?? 0) + 1
     }
 
     const enriched = postList.map((p) => {
@@ -878,8 +893,163 @@ function FeedPageContent() {
         likesCount: likesMap[key]?.count ?? 0,
       }
     })
-    return { enriched, likesMap, commentsMap }
+    return { enriched, likesMap, commentCountsMap }
   }, [])
+
+  const loadCommentsForPost = useCallback(
+    (post: any): Promise<any[]> => {
+      const pid = String(post.id)
+      if (commentsLoadedRef.current.has(pid)) {
+        return Promise.resolve(commentsByPostRef.current[pid] ?? EMPTY_COMMENTS)
+      }
+
+      const pending = commentsLoadingRef.current.get(pid)
+      if (pending) return pending
+
+      const request = (async () => {
+        try {
+          let comments: any[] = []
+
+          if (isDemoUserId(userIdRef.current)) {
+            const demoUserId = userIdRef.current
+            if (!demoUserId) return EMPTY_COMMENTS
+            const demo = await loadDemoFeedEngagement(
+              [post],
+              { id: demoUserId }
+            )
+            comments = demo.commentsMap[pid] ?? []
+          } else if (isProfileFeedPost(post)) {
+            const result = await queryProfilePostComments(async (select) =>
+              supabase
+                .from("profile_post_comments")
+                .select(select)
+                .eq("profile_post_id", pid)
+                .order("created_at", { ascending: true })
+            )
+            if (result.error) throw result.error
+            comments = (result.data ?? []) as any[]
+          } else if (isAchievementFeedPost(post)) {
+            const result = await queryAchievementPostComments(async (select) =>
+              supabase
+                .from("achievement_post_comments")
+                .select(select)
+                .eq("achievement_post_id", pid)
+                .order("created_at", { ascending: true })
+            )
+            if (result.error) throw result.error
+            comments = (result.data ?? []) as any[]
+          } else if (isReelFeedPost(post)) {
+            const result = await queryReelComments(async (select) =>
+              supabase
+                .from("reel_comments")
+                .select(select)
+                .eq("reel_id", pid)
+                .order("created_at", { ascending: true })
+            )
+            if (result.error) throw result.error
+            comments = (result.data ?? []) as any[]
+          } else {
+            const result = await queryFeedComments(async (select) =>
+              supabase
+                .from("comments")
+                .select(select)
+                .eq("post_id", pid)
+                .order("created_at", { ascending: true })
+            )
+            if (result.error) throw result.error
+            comments = (result.data ?? []) as any[]
+          }
+
+          const nextComments = {
+            ...commentsByPostRef.current,
+            [pid]: comments,
+          }
+          const nextCounts = {
+            ...commentCountsByPostRef.current,
+            [pid]: comments.length,
+          }
+          commentsByPostRef.current = nextComments
+          commentCountsByPostRef.current = nextCounts
+          commentsLoadedRef.current.add(pid)
+          setCommentsByPost(nextComments)
+          setCommentCountsByPost(nextCounts)
+          persistFeedSnapshot(
+            postsRef.current,
+            likesByPostRef.current,
+            nextComments
+          )
+          return comments
+        } catch (error) {
+          console.error("[feed] load comments:", error)
+          return commentsByPostRef.current[pid] ?? EMPTY_COMMENTS
+        } finally {
+          commentsLoadingRef.current.delete(pid)
+        }
+      })()
+
+      commentsLoadingRef.current.set(pid, request)
+      return request
+    },
+    [persistFeedSnapshot]
+  )
+
+  const appendLoadedComment = useCallback(
+    (pid: string, comment: any) => {
+      const current = commentsByPostRef.current[pid] ?? EMPTY_COMMENTS
+      if (current.some((row: any) => row.id === comment.id)) return
+
+      const nextComments = {
+        ...commentsByPostRef.current,
+        [pid]: [...current, comment],
+      }
+      const nextCounts = {
+        ...commentCountsByPostRef.current,
+        [pid]: (commentCountsByPostRef.current[pid] ?? current.length) + 1,
+      }
+      commentsByPostRef.current = nextComments
+      commentCountsByPostRef.current = nextCounts
+      commentsLoadedRef.current.add(pid)
+      setCommentsByPost(nextComments)
+      setCommentCountsByPost(nextCounts)
+      persistFeedSnapshot(
+        postsRef.current,
+        likesByPostRef.current,
+        nextComments
+      )
+    },
+    [persistFeedSnapshot]
+  )
+
+  const removeLoadedComment = useCallback(
+    (pid: string, commentId: string) => {
+      const current = commentsByPostRef.current[pid] ?? EMPTY_COMMENTS
+      const filtered = filterCommentsAfterDelete(current, commentId)
+      if (filtered.length === current.length) return
+
+      const nextComments = {
+        ...commentsByPostRef.current,
+        [pid]: filtered,
+      }
+      const nextCounts = {
+        ...commentCountsByPostRef.current,
+        [pid]: Math.max(
+          0,
+          (commentCountsByPostRef.current[pid] ?? current.length) -
+            (current.length - filtered.length)
+        ),
+      }
+      commentsByPostRef.current = nextComments
+      commentCountsByPostRef.current = nextCounts
+      setCommentsByPost(nextComments)
+      setCommentCountsByPost(nextCounts)
+      persistFeedSnapshot(
+        postsRef.current,
+        likesByPostRef.current,
+        nextComments
+      )
+    },
+    [persistFeedSnapshot]
+  )
 
   const loadPosts = useCallback(
     async (pageOverride?: number) => {
@@ -1120,7 +1290,7 @@ function FeedPageContent() {
           }
         }
 
-        const { enriched, likesMap, commentsMap } = await loadEngagementForPosts(
+        const { enriched, likesMap, commentCountsMap } = await loadEngagementForPosts(
           list,
           { id: userId }
         )
@@ -1133,18 +1303,22 @@ function FeedPageContent() {
           (p) => enrichedById.get(String(p.id)) ?? p
         )
         const mergedLikes = { ...likesByPostRef.current, ...likesMap }
-        const mergedComments = { ...commentsByPostRef.current, ...commentsMap }
+        const mergedCommentCounts = {
+          ...commentCountsByPostRef.current,
+          ...commentCountsMap,
+        }
         postsRef.current = nextPosts
         setPosts(nextPosts)
         setLikesByPost(mergedLikes)
-        setCommentsByPost(mergedComments)
+        commentCountsByPostRef.current = mergedCommentCounts
+        setCommentCountsByPost(mergedCommentCounts)
 
         if (currentPage === 0) {
           hasLoadedFeedRef.current = true
           setFeedReady(true)
         }
 
-        persistFeedSnapshot(nextPosts, mergedLikes, mergedComments, {
+        persistFeedSnapshot(nextPosts, mergedLikes, commentsByPostRef.current, {
           hasLoaded: hasLoadedFeedRef.current,
           feedEmptyState: feedEmptyStateRef.current,
         }, requestGen)
@@ -1187,7 +1361,11 @@ function FeedPageContent() {
     setFeedReady(false)
     setPosts([])
     setLikesByPost({})
+    setCommentCountsByPost({})
     setCommentsByPost({})
+    commentCountsByPostRef.current = {}
+    commentsLoadedRef.current.clear()
+    commentsLoadingRef.current.clear()
     setFeedEmptyState(null)
     feedEmptyStateRef.current = null
     setFeedLoadError(null)
@@ -1211,7 +1389,19 @@ function FeedPageContent() {
     feedInitKeyRef.current = key
     setPosts(cached.posts)
     setLikesByPost(cached.likesByPost)
+    const cachedCommentCounts =
+      cached.commentCountsByPost ??
+      Object.fromEntries(
+        Object.entries(cached.commentsByPost).map(([id, comments]) => [
+          id,
+          comments.length,
+        ])
+      )
+    commentCountsByPostRef.current = cachedCommentCounts
+    setCommentCountsByPost(cachedCommentCounts)
     setCommentsByPost(cached.commentsByPost)
+    commentsByPostRef.current = cached.commentsByPost
+    commentsLoadedRef.current = new Set(Object.keys(cached.commentsByPost))
     feedEmptyStateRef.current = cached.feedEmptyState
     setFeedEmptyState(cached.feedEmptyState)
     setFeedLoadError(null)
@@ -1305,14 +1495,13 @@ function FeedPageContent() {
         if (!data) return
         if (realtimeGeneration !== feedRequestGenerationRef.current) return
 
-        const item = normalizeTradeFeedItem(data as Record<string, unknown>)
-        const { enriched, likesMap, commentsMap } = await loadEngagementForPosts(
-          [item],
-          { id: userId }
-        )
-        if (realtimeGeneration !== feedRequestGenerationRef.current) return
-        const post = enriched[0]
-        if (!post) return
+        // INSERT rows cannot have engagement yet in the normal creation flow.
+        // Seed empty metadata and let the existing engagement realtime handlers
+        // apply later changes instead of issuing a global engagement refetch.
+        const post = normalizeTradeFeedItem(data as Record<string, unknown>)
+        const postId = String(post.id)
+        const likesMap = { [postId]: { count: 0, liked: false } }
+        const commentCountsMap = { [postId]: 0 }
 
         setPosts((prev) => {
           if (realtimeGeneration !== feedRequestGenerationRef.current) return prev
@@ -1322,19 +1511,20 @@ function FeedPageContent() {
             ...likesByPostRef.current,
             ...likesMap,
           }
-          const mergedComments = {
-            ...commentsByPostRef.current,
-            ...commentsMap,
+          const mergedCommentCounts = {
+            ...commentCountsByPostRef.current,
+            ...commentCountsMap,
           }
+          commentCountsByPostRef.current = mergedCommentCounts
+          setCommentCountsByPost(mergedCommentCounts)
           persistFeedSnapshot(
             next,
             mergedLikes,
-            mergedComments,
+            commentsByPostRef.current,
             undefined,
             realtimeGeneration
           )
           setLikesByPost(mergedLikes)
-          setCommentsByPost(mergedComments)
           return next
         })
       }
@@ -1344,7 +1534,7 @@ function FeedPageContent() {
     return () => {
       void supabase.removeChannel(channel)
     }
-  }, [user?.id, mode, contentType, loadEngagementForPosts, persistFeedSnapshot])
+  }, [user?.id, mode, contentType, persistFeedSnapshot])
 
   useEffect(() => {
     if (!user?.id || isDemoModeActive()) return
@@ -1380,14 +1570,10 @@ function FeedPageContent() {
         if (!data) return
         if (realtimeGeneration !== feedRequestGenerationRef.current) return
 
-        const item = normalizeProfileFeedItem(data as Record<string, unknown>)
-        const { enriched, likesMap, commentsMap } = await loadEngagementForPosts(
-          [item],
-          { id: userId }
-        )
-        if (realtimeGeneration !== feedRequestGenerationRef.current) return
-        const post = enriched[0]
-        if (!post) return
+        const post = normalizeProfileFeedItem(data as Record<string, unknown>)
+        const postId = String(post.id)
+        const likesMap = { [postId]: { count: 0, liked: false } }
+        const commentCountsMap = { [postId]: 0 }
 
         setPosts((prev) => {
           if (realtimeGeneration !== feedRequestGenerationRef.current) return prev
@@ -1397,19 +1583,20 @@ function FeedPageContent() {
             ...likesByPostRef.current,
             ...likesMap,
           }
-          const mergedComments = {
-            ...commentsByPostRef.current,
-            ...commentsMap,
+          const mergedCommentCounts = {
+            ...commentCountsByPostRef.current,
+            ...commentCountsMap,
           }
+          commentCountsByPostRef.current = mergedCommentCounts
+          setCommentCountsByPost(mergedCommentCounts)
           persistFeedSnapshot(
             next,
             mergedLikes,
-            mergedComments,
+            commentsByPostRef.current,
             undefined,
             realtimeGeneration
           )
           setLikesByPost(mergedLikes)
-          setCommentsByPost(mergedComments)
           return next
         })
       }
@@ -1419,7 +1606,7 @@ function FeedPageContent() {
     return () => {
       void supabase.removeChannel(channel)
     }
-  }, [user?.id, mode, contentType, loadEngagementForPosts, persistFeedSnapshot])
+  }, [user?.id, mode, contentType, persistFeedSnapshot])
 
   useEffect(() => {
     if (!user?.id || isDemoModeActive()) return
@@ -1456,14 +1643,10 @@ function FeedPageContent() {
         if (!data) return
         if (realtimeGeneration !== feedRequestGenerationRef.current) return
 
-        const item = normalizeAchievementFeedItem(data as Record<string, unknown>)
-        const { enriched, likesMap, commentsMap } = await loadEngagementForPosts(
-          [item],
-          { id: userId }
-        )
-        if (realtimeGeneration !== feedRequestGenerationRef.current) return
-        const post = enriched[0]
-        if (!post) return
+        const post = normalizeAchievementFeedItem(data as Record<string, unknown>)
+        const postId = String(post.id)
+        const likesMap = { [postId]: { count: 0, liked: false } }
+        const commentCountsMap = { [postId]: 0 }
 
         setPosts((prev) => {
           if (realtimeGeneration !== feedRequestGenerationRef.current) return prev
@@ -1473,19 +1656,20 @@ function FeedPageContent() {
             ...likesByPostRef.current,
             ...likesMap,
           }
-          const mergedComments = {
-            ...commentsByPostRef.current,
-            ...commentsMap,
+          const mergedCommentCounts = {
+            ...commentCountsByPostRef.current,
+            ...commentCountsMap,
           }
+          commentCountsByPostRef.current = mergedCommentCounts
+          setCommentCountsByPost(mergedCommentCounts)
           persistFeedSnapshot(
             next,
             mergedLikes,
-            mergedComments,
+            commentsByPostRef.current,
             undefined,
             realtimeGeneration
           )
           setLikesByPost(mergedLikes)
-          setCommentsByPost(mergedComments)
           return next
         })
       }
@@ -1495,7 +1679,7 @@ function FeedPageContent() {
     return () => {
       void supabase.removeChannel(channel)
     }
-  }, [user?.id, mode, contentType, loadEngagementForPosts, persistFeedSnapshot])
+  }, [user?.id, mode, contentType, persistFeedSnapshot])
 
   useEffect(() => {
     if (!user?.id || isDemoModeActive()) return
@@ -1531,14 +1715,18 @@ function FeedPageContent() {
         if (!data) return
         if (realtimeGeneration !== feedRequestGenerationRef.current) return
 
-        const item = normalizeReelFeedItem(data as Record<string, unknown>)
-        const { enriched, likesMap, commentsMap } = await loadEngagementForPosts(
-          [item],
-          { id: userId }
-        )
-        if (realtimeGeneration !== feedRequestGenerationRef.current) return
-        const post = enriched[0]
-        if (!post) return
+        const post = normalizeReelFeedItem(data as Record<string, unknown>)
+        // Match dedupeFeedItems: trade-attached reels already render on the trade card.
+        if (
+          post.trade_id != null &&
+          String(post.trade_id).trim() !== "" &&
+          (contentType === "all" || contentType === "trades")
+        ) {
+          return
+        }
+        const postId = String(post.id)
+        const likesMap = { [postId]: { count: 0, liked: false } }
+        const commentCountsMap = { [postId]: 0 }
 
         setPosts((prev) => {
           if (realtimeGeneration !== feedRequestGenerationRef.current) return prev
@@ -1548,19 +1736,20 @@ function FeedPageContent() {
             ...likesByPostRef.current,
             ...likesMap,
           }
-          const mergedComments = {
-            ...commentsByPostRef.current,
-            ...commentsMap,
+          const mergedCommentCounts = {
+            ...commentCountsByPostRef.current,
+            ...commentCountsMap,
           }
+          commentCountsByPostRef.current = mergedCommentCounts
+          setCommentCountsByPost(mergedCommentCounts)
           persistFeedSnapshot(
             next,
             mergedLikes,
-            mergedComments,
+            commentsByPostRef.current,
             undefined,
             realtimeGeneration
           )
           setLikesByPost(mergedLikes)
-          setCommentsByPost(mergedComments)
           return next
         })
       }
@@ -1570,7 +1759,7 @@ function FeedPageContent() {
     return () => {
       void supabase.removeChannel(channel)
     }
-  }, [user?.id, mode, contentType, loadEngagementForPosts, persistFeedSnapshot])
+  }, [user?.id, mode, contentType, persistFeedSnapshot])
 
   useEffect(() => {
     if (!user?.id || isDemoModeActive()) return
@@ -1654,29 +1843,32 @@ function FeedPageContent() {
 
   const handleSelectPost = useCallback(
     (post: any) => {
+      void loadCommentsForPost(post)
       setFeedModalPost(null)
       feedDeepLinkHandledRef.current = null
       clearFeedDeepLinkParams()
       setSelectedPostId(String(post.id))
     },
-    [clearFeedDeepLinkParams]
+    [clearFeedDeepLinkParams, loadCommentsForPost]
   )
 
   const handleOpenPostComments = useCallback(
     (post: any) => {
       const pid = String(post.id)
+      void loadCommentsForPost(post)
       openCommentsRef.current[pid] = true
       setFeedModalPost(null)
       feedDeepLinkHandledRef.current = null
       clearFeedDeepLinkParams()
       setSelectedPostId(pid)
     },
-    [clearFeedDeepLinkParams]
+    [clearFeedDeepLinkParams, loadCommentsForPost]
   )
 
   const handleOpenLinkedTrade = useCallback(
     (post: any) => {
       const pid = String(post.id)
+      void loadCommentsForPost(post)
       openTradeRef.current[pid] = true
       if (selectedPostId === pid) {
         setTradeExpandSignal((value) => value + 1)
@@ -1687,7 +1879,7 @@ function FeedPageContent() {
       clearFeedDeepLinkParams()
       setSelectedPostId(pid)
     },
-    [clearFeedDeepLinkParams, selectedPostId]
+    [clearFeedDeepLinkParams, loadCommentsForPost, selectedPostId]
   )
 
   const handleOpenAttachedReel = useCallback(
@@ -1699,9 +1891,10 @@ function FeedPageContent() {
         },
         post.profiles
       )
+      void loadCommentsForPost(reelPost)
       setStackedAttachedReel(reelPost)
     },
-    []
+    [loadCommentsForPost]
   )
 
   const handleCloseStackedAttachedReel = useCallback(() => {
@@ -2135,7 +2328,7 @@ function FeedPageContent() {
       const isProfile = isProfileFeedPost(post)
       const isAchievement = isAchievementFeedPost(post)
       const isReel = isReelFeedPost(post)
-      const existingComments = commentsByPost[pid] ?? EMPTY_COMMENTS
+      const existingComments = commentsByPostRef.current[pid] ?? EMPTY_COMMENTS
 
       if (isProfile) {
         const insertPayload: Record<string, unknown> = {
@@ -2176,16 +2369,7 @@ function FeedPageContent() {
           parentCommentId
         )
 
-        setCommentsByPost((prev) => {
-          const currentComments = prev[pid] ?? EMPTY_COMMENTS
-          const nextComments = currentComments.some((c: any) => c.id === insertedRow.id)
-            ? currentComments
-            : [...currentComments, insertedRow]
-          return {
-            ...prev,
-            [pid]: nextComments,
-          }
-        })
+        appendLoadedComment(pid, insertedRow)
 
         const ownerId = profilePostOwnerUserId(post)
         if (ownerId) {
@@ -2242,16 +2426,7 @@ function FeedPageContent() {
           parentCommentId
         )
 
-        setCommentsByPost((prev) => {
-          const currentComments = prev[pid] ?? EMPTY_COMMENTS
-          const nextComments = currentComments.some((c: any) => c.id === insertedRow.id)
-            ? currentComments
-            : [...currentComments, insertedRow]
-          return {
-            ...prev,
-            [pid]: nextComments,
-          }
-        })
+        appendLoadedComment(pid, insertedRow)
 
         const ownerId = reelOwnerUserId(post)
         if (ownerId) {
@@ -2308,16 +2483,7 @@ function FeedPageContent() {
           parentCommentId
         )
 
-        setCommentsByPost((prev) => {
-          const currentComments = prev[pid] ?? EMPTY_COMMENTS
-          const nextComments = currentComments.some((c: any) => c.id === insertedRow.id)
-            ? currentComments
-            : [...currentComments, insertedRow]
-          return {
-            ...prev,
-            [pid]: nextComments,
-          }
-        })
+        appendLoadedComment(pid, insertedRow)
 
         const ownerId = achievementPostOwnerUserId(post)
         if (ownerId) {
@@ -2371,16 +2537,7 @@ function FeedPageContent() {
 
       const insertedRow = withInsertedParentCommentId(newRow, parentCommentId)
 
-      setCommentsByPost((prev) => {
-        const currentComments = prev[pid] ?? EMPTY_COMMENTS
-        const nextComments = currentComments.some((c: any) => c.id === insertedRow.id)
-          ? currentComments
-          : [...currentComments, insertedRow]
-        return {
-          ...prev,
-          [pid]: nextComments,
-        }
-      })
+      appendLoadedComment(pid, insertedRow)
 
       const notifyUserId = postTradeOwnerUserId(post)
       await ensureCommentNotificationsForInsert(supabase, {
@@ -2399,7 +2556,7 @@ function FeedPageContent() {
         setCommentSubmitting((s) => ({ ...s, [pid]: false }))
       }
     },
-    [user, showPopup, commentsByPost]
+    [user, showPopup, appendLoadedComment]
   )
 
   const deleteComment = useCallback(
@@ -2430,13 +2587,7 @@ function FeedPageContent() {
           return false
         }
 
-        setCommentsByPost((prev) => ({
-          ...prev,
-          [profilePostId]: filterCommentsAfterDelete(
-            prev[profilePostId] ?? EMPTY_COMMENTS,
-            String(comment.id)
-          ),
-        }))
+        removeLoadedComment(profilePostId, String(comment.id))
 
         return true
       }
@@ -2461,13 +2612,7 @@ function FeedPageContent() {
           return false
         }
 
-        setCommentsByPost((prev) => ({
-          ...prev,
-          [achievementPostId]: filterCommentsAfterDelete(
-            prev[achievementPostId] ?? EMPTY_COMMENTS,
-            String(comment.id)
-          ),
-        }))
+        removeLoadedComment(achievementPostId, String(comment.id))
 
         return true
       }
@@ -2492,13 +2637,7 @@ function FeedPageContent() {
           return false
         }
 
-        setCommentsByPost((prev) => ({
-          ...prev,
-          [reelId]: filterCommentsAfterDelete(
-            prev[reelId] ?? EMPTY_COMMENTS,
-            String(comment.id)
-          ),
-        }))
+        removeLoadedComment(reelId, String(comment.id))
 
         return true
       }
@@ -2527,13 +2666,7 @@ function FeedPageContent() {
         return false
       }
 
-      setCommentsByPost((prev) => ({
-        ...prev,
-        [postId]: filterCommentsAfterDelete(
-          prev[postId] ?? EMPTY_COMMENTS,
-          String(comment.id)
-        ),
-      }))
+      removeLoadedComment(postId, String(comment.id))
 
       if (process.env.NODE_ENV !== "production") {
         console.log("[comment-delete] local state updated", {
@@ -2544,7 +2677,7 @@ function FeedPageContent() {
 
       return true
     },
-    [user, showPopup]
+    [user, showPopup, removeLoadedComment]
   )
 
   const { uniquePosts, postsById } = useMemo(
@@ -2651,7 +2784,8 @@ function FeedPageContent() {
       const row = await fetchFeedDeepLinkContent(supabase, target)
       if (!row) return
 
-      const { enriched, likesMap, commentsMap } = await loadEngagementForPosts(
+      const { enriched, likesMap, commentCountsMap } =
+        await loadEngagementForPosts(
         [row],
         { id: user.id }
       )
@@ -2662,18 +2796,32 @@ function FeedPageContent() {
       setFeedModalPost(post)
       setSelectedPostId(String(post.id))
       setLikesByPost((prev) => ({ ...prev, ...likesMap }))
-      setCommentsByPost((prev) => ({ ...prev, ...commentsMap }))
+      commentCountsByPostRef.current = {
+        ...commentCountsByPostRef.current,
+        ...commentCountsMap,
+      }
+      setCommentCountsByPost(commentCountsByPostRef.current)
+      void loadCommentsForPost(post)
       if (target.openComments) {
         openCommentsRef.current[String(post.id)] = true
       }
     })()
-  }, [searchParams, user?.id, loadEngagementForPosts])
+  }, [
+    searchParams,
+    user?.id,
+    loadEngagementForPosts,
+    loadCommentsForPost,
+  ])
 
   return (
     <div className="w-full text-white">
       <h1 className="sr-only">Feed</h1>
-      <FeedbackModal {...feedbackModalProps} />
-      <ConfirmModal {...deleteReelConfirmProps} />
+      {feedbackModalProps.isOpen ? (
+        <FeedbackModal {...feedbackModalProps} />
+      ) : null}
+      {deleteReelConfirmProps.open ? (
+        <ConfirmModal {...deleteReelConfirmProps} />
+      ) : null}
       <div className="flex justify-center px-4 py-6 sm:py-8 pb-10">
         <div className="w-full max-w-xl space-y-6">
           <FeedModeToggle mode={mode} onModeChange={handleFeedModeChange} />
@@ -2755,15 +2903,12 @@ function FeedPageContent() {
               user={user}
               likesByPost={likesByPost}
               likeBusyByPost={likeBusyByPost}
-              commentsByPost={commentsByPost}
-              commentSubmitting={commentSubmitting}
-              draftSyncRef={draftSyncRef}
+              commentCountsByPost={commentCountsByPost}
               onSelectPost={handleSelectPost}
               onOpenComments={handleOpenPostComments}
               onOpenLinkedTrade={handleOpenLinkedTrade}
               onOpenAttachedReel={handleOpenAttachedReel}
               onToggleLike={toggleLike}
-              onSubmitComment={submitComment}
               onSharePost={handleSharePost}
               openReelMenuId={openReelMenuId}
               onReelMenuToggle={handleReelMenuToggle}
@@ -2813,6 +2958,9 @@ function FeedPageContent() {
           sharePost={sharePost}
           user={user}
           selectedPostComments={selectedPostComments}
+          selectedPostCommentCount={
+            selectedPostId ? commentCountsByPost[selectedPostId] ?? 0 : 0
+          }
           selectedPostLikeMeta={selectedPostLikeMeta}
           selectedPostLikeBusy={
             selectedPostId ? !!likeBusyByPost[selectedPostId] : false
@@ -2827,6 +2975,11 @@ function FeedPageContent() {
             stackedAttachedReel
               ? commentsByPost[String(stackedAttachedReel.id)] ?? EMPTY_COMMENTS
               : EMPTY_COMMENTS
+          }
+          stackedAttachedReelCommentCount={
+            stackedAttachedReel
+              ? commentCountsByPost[String(stackedAttachedReel.id)] ?? 0
+              : 0
           }
           stackedAttachedReelLikeMeta={
             stackedAttachedReel
@@ -2882,15 +3035,17 @@ function FeedPageContent() {
         />
       ) : null}
 
-      <StoryComposeModal
-        open={storyComposeOpen}
-        posting={postingStory}
-        profile={currentUserProfile}
-        previewUrl={pendingStoryPreviewUrl}
-        onClose={closeStoryCompose}
-        onPost={() => void handlePostStory()}
-        onReplaceImage={(file) => void setStoryDraft(file)}
-      />
+      {storyComposeOpen ? (
+        <StoryComposeModal
+          open
+          posting={postingStory}
+          profile={currentUserProfile}
+          previewUrl={pendingStoryPreviewUrl}
+          onClose={closeStoryCompose}
+          onPost={() => void handlePostStory()}
+          onReplaceImage={(file) => void setStoryDraft(file)}
+        />
+      ) : null}
     </div>
   )
 }

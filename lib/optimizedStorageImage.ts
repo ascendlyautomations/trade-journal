@@ -14,6 +14,9 @@ export type StorageImagePreset =
   | "reel-thumb"
   | "achievement"
   | "trade-thumb"
+  | "message-preview"
+  | "message-thumb"
+  | "message-story-thumb"
 
 type TransformOptions = {
   width?: number
@@ -34,6 +37,14 @@ const PRESET_TRANSFORMS: Record<
   "reel-thumb": { width: 560, height: 996, quality: 75, resize: "cover" },
   achievement: { width: 800, quality: 75 },
   "trade-thumb": { width: 800, quality: 75 },
+  "message-preview": { width: 720, quality: 72, resize: "contain" },
+  "message-thumb": { width: 320, height: 320, quality: 70, resize: "cover" },
+  "message-story-thumb": {
+    width: 96,
+    height: 96,
+    quality: 68,
+    resize: "cover",
+  },
 }
 
 export function isSupabaseStoragePublicUrl(url: string): boolean {

@@ -8,11 +8,14 @@ export const APP_PREFETCH_SECONDARY_ROUTES = [
   "/trades",
   "/feed",
   "/messages",
+  "/community",
+  "/explore",
 ] as const
 
 const prefetchedHrefs = new Set<string>()
 let criticalPrefetchDone = false
 let secondaryPrefetchDone = false
+let prefetchGeneration = 0
 
 function normalizeHref(href: string): string | null {
   const trimmed = href.trim()
@@ -47,12 +50,20 @@ export function prefetchSecondaryAppRoutes(
 ) {
   if (secondaryPrefetchDone) return
   secondaryPrefetchDone = true
-  for (const href of APP_PREFETCH_SECONDARY_ROUTES) {
-    prefetchRoute(router, href)
+  const routes = [
+    ...APP_PREFETCH_SECONDARY_ROUTES,
+    ...(profileHref ? [profileHref] : []),
+  ]
+  if (typeof window === "undefined") {
+    for (const href of routes) prefetchRoute(router, href)
+    return
   }
-  if (profileHref) {
-    prefetchRoute(router, profileHref)
-  }
+  const generation = prefetchGeneration
+  routes.forEach((href, index) => {
+    window.setTimeout(() => {
+      if (generation === prefetchGeneration) prefetchRoute(router, href)
+    }, index * 250)
+  })
 }
 
 /** Intent-based prefetch (hover / focus / tap) — deduped per session. */
@@ -64,6 +75,7 @@ export function prefetchRouteOnIntent(
 }
 
 export function resetRoutePrefetchSession() {
+  prefetchGeneration += 1
   criticalPrefetchDone = false
   secondaryPrefetchDone = false
   prefetchedHrefs.clear()

@@ -7,6 +7,7 @@ export type FeedEmptyState = "following_nobody" | "no_posts" | null
 export type FeedSessionSnapshot = {
   posts: any[]
   likesByPost: Record<string, LikeMeta>
+  commentCountsByPost: Record<string, number>
   commentsByPost: Record<string, any[]>
   page: number
   hasMore: boolean
@@ -45,6 +46,10 @@ export function prependFeedPost(key: string, post: any) {
     likesByPost: {
       ...session.likesByPost,
       [postId]: session.likesByPost[postId] ?? { count: 0, liked: false },
+    },
+    commentCountsByPost: {
+      ...session.commentCountsByPost,
+      [postId]: session.commentCountsByPost[postId] ?? 0,
     },
     commentsByPost: {
       ...session.commentsByPost,

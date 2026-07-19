@@ -1,6 +1,6 @@
 "use client"
 
-import { memo } from "react"
+import { memo, useCallback } from "react"
 import { PostInteractionsEngagement } from "@/app/components/PostInteractions"
 import LinkedTradeBadge from "./LinkedTradeBadge"
 import type { FeedLikeMeta } from "./FeedPostCard"
@@ -8,7 +8,7 @@ import type { FeedLikeMeta } from "./FeedPostCard"
 type FeedReelCardActionsProps = {
   post: any
   user: any
-  comments: any[]
+  commentCount: number
   likeMeta: FeedLikeMeta
   likeBusy?: boolean
   showLinkedTradeBadge?: boolean
@@ -21,7 +21,7 @@ type FeedReelCardActionsProps = {
 function FeedReelCardActions({
   post,
   user,
-  comments,
+  commentCount,
   likeMeta,
   likeBusy = false,
   showLinkedTradeBadge = false,
@@ -30,6 +30,11 @@ function FeedReelCardActions({
   onSharePost,
   onOpenLinkedTrade,
 }: FeedReelCardActionsProps) {
+  const handleOpenComments = useCallback(
+    () => onOpenComments(),
+    [onOpenComments]
+  )
+
   return (
     <div className="border-t border-white/10 px-4 py-2">
       <div className="flex items-center justify-between gap-3">
@@ -37,11 +42,12 @@ function FeedReelCardActions({
           <PostInteractionsEngagement
             post={post}
             user={user}
-            comments={comments}
+          comments={EMPTY_COMMENTS}
+          commentCount={commentCount}
             likeMeta={likeMeta}
             likeBusy={likeBusy}
             onToggleLike={onToggleLike}
-            onOpenComments={(_postId) => onOpenComments()}
+            onOpenComments={handleOpenComments}
             onSharePost={onSharePost}
             stopPropagation
           />
@@ -60,3 +66,5 @@ function FeedReelCardActions({
 }
 
 export default memo(FeedReelCardActions)
+
+const EMPTY_COMMENTS: any[] = []

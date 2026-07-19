@@ -57,7 +57,7 @@ export default function BetaHubPage() {
   }, [loading, user, profile?.is_beta_tester, router])
 
   function joinBetaDiscussion() {
-    router.push(`/trade-rooms?room=${encodeURIComponent(BETA_ROOM_SLUG)}`)
+    router.push(`/community?room=${encodeURIComponent(BETA_ROOM_SLUG)}`)
   }
 
   if (checking) {

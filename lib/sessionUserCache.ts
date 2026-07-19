@@ -15,6 +15,7 @@ import {
 import { clearAllTradingAccountsSettingsCaches } from "./tradingAccountsSettingsCache"
 import { clearAllUserAchievementsCaches } from "./userAchievementsCache"
 import { clearAllUserStreaksCaches } from "./userStreaksCache"
+import { clearAllCachedGettingStartedSignals } from "./gettingStartedSignalsCache"
 
 /** Clear every session-scoped user cache (sign-out / account switch). */
 export function clearAllSessionUserDataCaches() {
@@ -24,6 +25,7 @@ export function clearAllSessionUserDataCaches() {
   clearAllTradingAccountsSettingsCaches()
   clearAllUserAchievementsCaches()
   clearAllUserStreaksCaches()
+  clearAllCachedGettingStartedSignals()
 }
 
 /** Profile or subscription fields changed — drop extended profile + bootstrap slices. */

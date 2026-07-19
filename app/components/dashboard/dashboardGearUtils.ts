@@ -3,6 +3,7 @@ import {
   buildAccountFilterOptionsFromRows,
   tradeMatchesAccountFilter,
 } from "@/lib/tradeAccountDisplay"
+import type { DashboardGearPersistedPrefs } from "./dashboardGearTypes"
 import type { CopyTradingGroup } from "@/lib/copyTradingGroups"
 import {
   isCopyGroupFilterValue,
@@ -69,11 +70,11 @@ export const DASHBOARD_VALID_ACCOUNT_TYPE_FILTERS = [
 export type DashboardAccountOption = { value: string; label?: string }
 
 type TradeForAccountFilter = {
-  account_name?: unknown
-  account_size?: unknown
-  account_id?: unknown
-  mode?: unknown
-  account_type?: unknown
+  account_name?: string | null
+  account_size?: string | null
+  account_id?: string | null
+  mode?: string | null
+  account_type?: string | null
 }
 
 export function sanitizeDashboardTimeFilter(value: string | undefined): string {

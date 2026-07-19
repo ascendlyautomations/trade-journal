@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react"
 import { GoogleSignInButton, FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
 import { supabase } from "@/lib/supabaseClient"
 import {
+  clearStoredReferralCode,
   ensureProfileForUser,
   readStoredReferralCode,
 } from "@/lib/ensureProfileForUser"
@@ -13,7 +14,7 @@ import { useRouter } from "next/navigation"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import AuthPasswordInput from "@/app/components/ui/AuthPasswordInput"
 import { persistReferralCodeFromUrl } from "@/lib/referralPersistence"
-import { enterSignupFlow, setCheckoutBillingInterval, setSignupIntent, getSignupIntent, type SignupIntent } from "@/lib/signupFlow"
+import { clearSignupIntent, enterSignupFlow, setCheckoutBillingInterval, setSignupIntent, getSignupIntent, type SignupIntent } from "@/lib/signupFlow"
 import SignupPlanPicker from "@/app/components/SignupPlanPicker"
 import { markProfileUseFreeTier } from "@/lib/markFreeTierSignup"
 import {
@@ -29,6 +30,9 @@ import {
   getPendingCreatorCode,
   normalizeCreatorAccessCode,
 } from "@/lib/creatorAccess"
+import { enrollCurrentUserEarlyAccess } from "@/lib/earlyAccessClient"
+import { useEarlyAccessPromotion } from "@/lib/useEarlyAccessPromotion"
+import { markEarlyAccessOAuthSignupPending } from "@/lib/earlyAccess"
 
 function getSafeNextPath(): string | null {
   if (typeof window === "undefined") return null
@@ -45,6 +49,8 @@ function getSafeNextPath(): string | null {
 
 export default function LoginPage() {
   const { user, loading: authLoading } = useUserProfile()
+  const { enabled: earlyAccessPromotionEnabled } =
+    useEarlyAccessPromotion()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [name, setName] = useState("")
@@ -259,6 +265,7 @@ export default function LoginPage() {
         name: name?.trim() || null,
         referredBy: referralCode,
         userMetadata: user.user_metadata,
+        signupFlowSource: "standard_email",
       })
 
       if (!ensureResult.ok) {
@@ -273,14 +280,61 @@ export default function LoginPage() {
         notifyAffiliateReferralAttribution()
       }
 
-      if (intent === "free") {
+      // Referral is in auth metadata (and possibly the profile). Clear browser
+      // state so a later login on this device cannot attribute a different account.
+      // Cross-device email verification still uses metadata via enroll / backfill.
+      if (referralCode?.trim()) {
+        clearStoredReferralCode()
+      }
+
+      let earlyAccessEnrolled = false
+      if (earlyAccessPromotionEnabled) {
+        // Always enroll after a brand-new standard signup attempt. Auth triggers
+        // often create the profile shell first, so ensureResult.created may be
+        // false even for eligible accounts.
+        try {
+          let enrollment =
+            await enrollCurrentUserEarlyAccess("standard_email")
+          if (enrollment === "ineligible") {
+            enrollment = await enrollCurrentUserEarlyAccess("standard_email")
+          }
+          earlyAccessEnrolled =
+            enrollment === "enrolled" || enrollment === "already_enrolled"
+          if (enrollment === "disabled") {
+            clearSignupIntent()
+            setSignupPlanIntent(null)
+            router.push("/choose-plan")
+            return
+          }
+          if (!earlyAccessEnrolled) {
+            console.error("Early Access enrollment rejected:", enrollment)
+            showPopup({
+              type: "error",
+              message:
+                "This account could not be enrolled in Early Access. Please try again before continuing.",
+            })
+            return
+          }
+        } catch (error) {
+          console.error("Early Access enrollment failed:", error)
+          showPopup({
+            type: "error",
+            message:
+              "Early Access enrollment is temporarily unavailable. Please try again.",
+          })
+          return
+        }
+      }
+
+      if (!earlyAccessEnrolled && intent === "free") {
         const freeResult = await markProfileUseFreeTier(supabase, user.id)
         if (!freeResult.ok) {
           console.error("Failed to mark free tier at signup:", freeResult.error)
         }
       }
 
-      if (shouldStartCheckout()) {
+      // Never open Stripe Checkout for an Early Access signup.
+      if (!earlyAccessEnrolled && shouldStartCheckout()) {
         try {
           await startCheckoutAfterAuth(user.id)
           return
@@ -293,7 +347,11 @@ export default function LoginPage() {
         }
       }
 
-      router.push(getSafeNextPath() ?? "/onboarding")
+      router.push(
+        earlyAccessEnrolled
+          ? "/early-access/welcome"
+          : getSafeNextPath() ?? "/onboarding"
+      )
     } catch (err) {
       console.error(
         "ERROR:",
@@ -364,16 +422,20 @@ export default function LoginPage() {
     }
 
     if (!isLogin) {
-      const intent = signupPlanIntent ?? getSignupIntent()
-      if (!intent) {
-        showPopup({
-          type: "error",
-          message:
-            "Choose Start Free Trial or Continue Free below before signing up with Google.",
-        })
-        return
+      if (earlyAccessPromotionEnabled) {
+        applySignupPlanIntent("trial")
+      } else {
+        const intent = signupPlanIntent ?? getSignupIntent()
+        if (!intent) {
+          showPopup({
+            type: "error",
+            message:
+              "Choose Start Free Trial or Continue Free below before signing up with Google.",
+          })
+          return
+        }
+        applySignupPlanIntent(intent)
       }
-      applySignupPlanIntent(intent)
     }
 
     setGoogleLoading(true)
@@ -381,11 +443,18 @@ export default function LoginPage() {
     try {
     if (!isLogin) {
       enterSignupFlow()
+      if (earlyAccessPromotionEnabled) {
+        markEarlyAccessOAuthSignupPending()
+      }
     }
-    let redirectPath = isLogin ? "/dashboard" : "/onboarding"
-    if (shouldStartCheckout()) {
+    let redirectPath = isLogin
+      ? "/dashboard"
+      : earlyAccessPromotionEnabled
+        ? "/early-access/welcome"
+        : "/onboarding"
+    if (isLogin && shouldStartCheckout()) {
       redirectPath = "/login?next=checkout"
-    } else {
+    } else if (isLogin) {
       const next = getSafeNextPath()
       if (next) redirectPath = next
     }
@@ -603,31 +672,56 @@ export default function LoginPage() {
 
         {!isLogin ? (
           <div className="mt-6 md:mt-4">
-            <div className="relative mb-6 md:mb-4">
-              <div className="absolute inset-0 flex items-center" aria-hidden>
-                <div className="w-full border-t border-white/10" />
+            {earlyAccessPromotionEnabled ? (
+              <div className="space-y-3">
+                <div className="rounded-xl border border-blue-400/20 bg-blue-400/10 p-3 text-left">
+                  <p className="text-sm font-semibold text-blue-200">
+                    TradeTraxs Early Access
+                  </p>
+                  <p className="mt-1 text-xs leading-relaxed text-gray-200">
+                    New accounts include 21 days of complimentary Pro access.
+                    No card required. Complete the Traxs Pro For Life checklist
+                    for a chance at permanent Pro.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={!agreedToTerms || loading}
+                  onClick={() => void handleSignUp("trial")}
+                  className="w-full rounded-xl bg-blue-500 py-3 font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50 md:py-2.5"
+                >
+                  {loading ? "Creating Account…" : "Join Early Access"}
+                </button>
               </div>
-              <p className="relative mx-auto w-fit bg-transparent px-3 text-center text-xs text-gray-400">
-                Choose how you&apos;d like to get started
-              </p>
-            </div>
+            ) : (
+              <>
+                <div className="relative mb-6 md:mb-4">
+                  <div className="absolute inset-0 flex items-center" aria-hidden>
+                    <div className="w-full border-t border-white/10" />
+                  </div>
+                  <p className="relative mx-auto w-fit bg-transparent px-3 text-center text-xs text-gray-400">
+                    Choose how you&apos;d like to get started
+                  </p>
+                </div>
 
-            <div className="space-y-3 md:space-y-2.5">
-              <SignupPlanPicker
-                billingInterval={billingInterval}
-                onBillingIntervalChange={(interval) => {
-                  setBillingInterval(interval)
-                  setCheckoutBillingInterval(interval)
-                }}
-                selectedIntent={signupPlanIntent}
-                onSelectIntent={applySignupPlanIntent}
-                onSelectTrial={() => void handleSignUp("trial")}
-                onSelectFree={() => void handleSignUp("free")}
-                disabled={!agreedToTerms}
-                loading={loading}
-                billingPickerName="login-signup-billing"
-              />
-            </div>
+                <div className="space-y-3 md:space-y-2.5">
+                  <SignupPlanPicker
+                    billingInterval={billingInterval}
+                    onBillingIntervalChange={(interval) => {
+                      setBillingInterval(interval)
+                      setCheckoutBillingInterval(interval)
+                    }}
+                    selectedIntent={signupPlanIntent}
+                    onSelectIntent={applySignupPlanIntent}
+                    onSelectTrial={() => void handleSignUp("trial")}
+                    onSelectFree={() => void handleSignUp("free")}
+                    disabled={!agreedToTerms}
+                    loading={loading}
+                    billingPickerName="login-signup-billing"
+                  />
+                </div>
+              </>
+            )}
           </div>
         ) : null}
 

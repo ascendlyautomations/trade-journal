@@ -64,6 +64,7 @@ describe("isAllowedPathDuringOnboarding", () => {
   it("allows auth, onboarding, and legal routes only", () => {
     assert.equal(isAllowedPathDuringOnboarding("/onboarding"), true)
     assert.equal(isAllowedPathDuringOnboarding("/choose-plan"), true)
+    assert.equal(isAllowedPathDuringOnboarding("/early-access/welcome"), true)
     assert.equal(isAllowedPathDuringOnboarding("/login"), true)
     assert.equal(isAllowedPathDuringOnboarding("/reset-password"), true)
     assert.equal(isAllowedPathDuringOnboarding("/privacy"), true)

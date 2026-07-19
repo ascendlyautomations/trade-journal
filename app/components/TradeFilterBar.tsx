@@ -79,6 +79,10 @@ export type TradeFilterBarProps = {
    * centered controls — used for dashboard Plan badge (desktop/tablet only).
    */
   leadingOverlay?: boolean
+  /** Rendered immediately before the account selector (dashboard Add Trade, desktop). */
+  beforeAccountSelect?: ReactNode
+  /** Rendered to the right of the account selector on mobile (dashboard "+" action). */
+  accountSelectAccessory?: ReactNode
   /** Appended controls (e.g. Show Advanced, Public Trades, settings) */
   trailing?: ReactNode
   /** PRO copy trading groups for unified account picker */
@@ -113,6 +117,8 @@ export default function TradeFilterBar({
   onCustomRangeApply,
   leading,
   leadingOverlay = false,
+  beforeAccountSelect,
+  accountSelectAccessory,
   trailing,
   settingsNextToModes,
   publicNextToModes,
@@ -201,9 +207,18 @@ export default function TradeFilterBar({
           >
             <div className="flex justify-center md:justify-start">{renderLeading()}</div>
 
-            <div className="w-full md:w-auto">
-              {renderAccountSelect()}
-            </div>
+            {accountSelectAccessory ? (
+              <div className="flex w-full min-w-0 items-center gap-2 md:w-auto">
+                <div className="min-w-0 flex-1 md:flex-none">
+                  {renderAccountSelect()}
+                </div>
+                <div className="shrink-0 md:hidden">{accountSelectAccessory}</div>
+              </div>
+            ) : (
+              <div className="w-full md:w-auto">
+                {renderAccountSelect()}
+              </div>
+            )}
 
             <div className="flex w-full gap-2 md:w-auto md:items-center">
               <div className="flex-1 md:flex-none">
@@ -219,7 +234,7 @@ export default function TradeFilterBar({
                 <button
                   type="button"
                   onClick={() => setTimeframeOpen(true)}
-                  className="w-full rounded-lg bg-white/10 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/20 md:w-auto"
+                  className="w-full rounded-lg bg-white/10 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/20 md:h-[34px] md:w-auto md:py-0"
                 >
                   {timeframeButtonLabel}
                 </button>
@@ -240,7 +255,20 @@ export default function TradeFilterBar({
           >
             {renderLeading()}
 
-            {renderAccountSelect()}
+            {beforeAccountSelect ? (
+              <div className="hidden md:contents">{beforeAccountSelect}</div>
+            ) : null}
+
+            {accountSelectAccessory ? (
+              <div className="flex w-full min-w-0 items-center gap-2 md:contents">
+                <div className="min-w-0 flex-1 md:contents">
+                  {renderAccountSelect()}
+                </div>
+                <div className="shrink-0 md:hidden">{accountSelectAccessory}</div>
+              </div>
+            ) : (
+              renderAccountSelect()
+            )}
 
             {settingsNextToModes || publicNextToModes ? (
               <div
@@ -296,7 +324,7 @@ export default function TradeFilterBar({
                   <button
                     type="button"
                     onClick={() => setTimeframeOpen(true)}
-                    className={`${DASHBOARD_MOBILE_TIMEFRAME_BTN_CLASS} md:h-auto md:w-auto md:rounded-lg md:px-4 md:py-2`}
+                    className={`${DASHBOARD_MOBILE_TIMEFRAME_BTN_CLASS} md:w-auto md:rounded-lg md:px-4`}
                   >
                     {timeframeButtonLabel}
                   </button>

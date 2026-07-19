@@ -17,10 +17,23 @@ export type ExploreSessionSnapshot = {
 
 let session: ExploreSessionSnapshot | null = null
 
-export function readExploreSession(): ExploreSessionSnapshot | null {
+function exploreCacheUserKey(userId: string | null | undefined): string {
+  const trimmed = userId != null ? String(userId).trim() : ""
+  return trimmed || "__anonymous__"
+}
+
+export function readExploreSession(
+  userId?: string | null
+): ExploreSessionSnapshot | null {
   if (!session) return null
   if (Date.now() - session.fetchedAt > DEFAULT_STALE_MS) {
     session = null
+    return null
+  }
+  if (
+    userId !== undefined &&
+    exploreCacheUserKey(session.currentUserId) !== exploreCacheUserKey(userId)
+  ) {
     return null
   }
   return session

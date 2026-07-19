@@ -5,7 +5,11 @@ import FreePlanAccountSlotModal, {
   type FreePlanSlotAccountOption,
 } from "@/app/components/FreePlanAccountSlotModal"
 import { supabase } from "@/lib/supabaseClient"
-import { ACCOUNTS_SELECT, invalidateAccountsCache } from "@/lib/appDataCache"
+import {
+  ensureAccountsLoaded,
+  ensureTradesLoaded,
+  invalidateAccountsCache,
+} from "@/lib/appDataCache"
 import {
   needsFreePlanAccountSlotSelection,
 } from "@/lib/freePlanAccountSlots"
@@ -103,26 +107,21 @@ export default function FreePlanAccountSlotShell({
       return
     }
 
-    const [{ data: accountRows, error: accountsErr }, { data: tradeRows }] =
-      await Promise.all([
-        supabase
-          .from("accounts")
-          .select(ACCOUNTS_SELECT)
-          .eq("user_id", user.id),
-        supabase
-          .from("trades")
-          .select("account_id, pnl, exit_date, entry_date, created_at")
-          .eq("user_id", user.id),
+    let accountRows: unknown[]
+    let tradeRows: unknown[]
+    try {
+      ;[accountRows, tradeRows] = await Promise.all([
+        ensureAccountsLoaded(supabase, user.id),
+        ensureTradesLoaded(supabase, user.id),
       ])
-
-    if (accountsErr) {
-      console.error("[FreePlanAccountSlotShell] accounts", accountsErr)
+    } catch (error) {
+      console.error("[FreePlanAccountSlotShell] app data", error)
       setAccounts([])
       setRawCanAddFlags([])
       return
     }
 
-    const rows = (accountRows ?? []) as Record<string, unknown>[]
+    const rows = accountRows as Record<string, unknown>[]
     setRawCanAddFlags(
       rows.map((row) => ({
         id: String(row.id ?? ""),
@@ -134,7 +133,7 @@ export default function FreePlanAccountSlotShell({
               : null,
       }))
     )
-    setAccounts(buildSlotAccounts(rows, (tradeRows ?? []) as TradeStatRow[]))
+    setAccounts(buildSlotAccounts(rows, tradeRows as TradeStatRow[]))
   }, [user?.id, profile])
 
   useEffect(() => {

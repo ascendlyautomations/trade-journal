@@ -13,14 +13,16 @@ type FeedReelCardProps = {
   user: any
   likeMeta?: FeedLikeMeta
   likeBusy?: boolean
+  commentCount?: number
   comments?: any[]
-  commentSubmitting: boolean
+  mediaPriority?: boolean
+  commentSubmitting?: boolean
   canManageReel?: boolean
   menuOpen?: boolean
-  onMenuToggle?: () => void
-  onEditReel?: () => void
-  onDeleteReel?: () => void
-  onReplaceReelVideo?: () => void
+  onMenuToggle?: (reelId: string) => void
+  onEditReel?: (post: any) => void
+  onDeleteReel?: (post: any) => void
+  onReplaceReelVideo?: (post: any) => void
   onSelectPost: (post: any) => void
   onOpenComments: (post: any) => void
   onOpenLinkedTrade?: (post: any) => void
@@ -33,8 +35,9 @@ function FeedReelCard({
   user,
   likeMeta = { count: 0, liked: false },
   likeBusy = false,
-  comments = [],
-  commentSubmitting: _commentSubmitting,
+  commentCount,
+  comments = EMPTY_COMMENTS,
+  mediaPriority = false,
   canManageReel = false,
   menuOpen = false,
   onMenuToggle,
@@ -68,6 +71,22 @@ function FeedReelCard({
   const handleOpenLinkedTrade = useCallback(() => {
     onOpenLinkedTrade?.(post)
   }, [onOpenLinkedTrade, post])
+
+  const handleMenuToggle = useCallback(() => {
+    onMenuToggle?.(String(post.id))
+  }, [onMenuToggle, post.id])
+
+  const handleEdit = useCallback(() => {
+    onEditReel?.(post)
+  }, [onEditReel, post])
+
+  const handleDelete = useCallback(() => {
+    onDeleteReel?.(post)
+  }, [onDeleteReel, post])
+
+  const handleReplaceVideo = useCallback(() => {
+    onReplaceReelVideo?.(post)
+  }, [onReplaceReelVideo, post])
 
   const avatarUrl = useMemo(() => {
     const raw = post.profiles?.avatar_url
@@ -103,10 +122,10 @@ function FeedReelCard({
           <div className="pr-3">
             <FeedReelOwnerMenu
               menuOpen={menuOpen}
-              onMenuToggle={() => onMenuToggle?.()}
-              onEdit={() => onEditReel?.()}
-              onDelete={() => onDeleteReel?.()}
-              onReplaceVideo={() => onReplaceReelVideo?.()}
+              onMenuToggle={handleMenuToggle}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+              onReplaceVideo={handleReplaceVideo}
               isTradeAttached={tradeAttached}
             />
           </div>
@@ -114,7 +133,11 @@ function FeedReelCard({
       </div>
 
       <div className="px-4 pt-3">
-        <ReelThumbnailPreview reel={post} onClick={handleArticleClick} />
+        <ReelThumbnailPreview
+          reel={post}
+          onClick={handleArticleClick}
+          priority={mediaPriority}
+        />
         {caption ? (
           <p className="mt-3 line-clamp-3 whitespace-pre-wrap text-sm text-gray-200">
             {caption}
@@ -125,7 +148,7 @@ function FeedReelCard({
       <FeedReelCardActions
         post={post}
         user={user}
-        comments={comments}
+        commentCount={commentCount ?? comments.length}
         likeMeta={likeMeta}
         likeBusy={likeBusy}
         showLinkedTradeBadge={tradeAttached}
@@ -139,3 +162,5 @@ function FeedReelCard({
 }
 
 export default memo(FeedReelCard)
+
+const EMPTY_COMMENTS: any[] = []

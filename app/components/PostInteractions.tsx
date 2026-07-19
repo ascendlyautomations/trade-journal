@@ -13,6 +13,7 @@ type PostInteractionsBaseProps = {
   post: any
   user: any
   comments: any[]
+  commentCount?: number
   likeMeta: LikeMeta
   likeBusy?: boolean
   commentsOpen?: boolean
@@ -39,6 +40,7 @@ export function PostInteractionsEngagement({
   post,
   user,
   comments,
+  commentCount,
   likeMeta,
   likeBusy = false,
   onToggleLike,
@@ -46,7 +48,14 @@ export function PostInteractionsEngagement({
   onSharePost,
   stopPropagation = false,
   className = "",
-}: PostInteractionsBaseProps & { className?: string }) {
+}: Omit<
+  PostInteractionsBaseProps,
+  | "commentsOpen"
+  | "commentValue"
+  | "commentSubmitting"
+  | "onCommentChange"
+  | "onSubmitComment"
+> & { className?: string }) {
   const pid = String(post.id)
   const hydrationReady = useHydrationReady()
   // Auth is unavailable during SSR; defer auth-gated disabled until after hydration.
@@ -72,7 +81,7 @@ export function PostInteractionsEngagement({
         <EngagementCountButton
           variant="boxed"
           icon={<span>💬</span>}
-          count={comments.length}
+          count={commentCount ?? comments.length}
           ariaLabel="View comments"
           onClick={(e) => {
             if (stopPropagation) e.stopPropagation()

@@ -157,35 +157,46 @@ export function markProgressPopupShownForTasks(
   if (changed) writeShownProgressPopupTaskIds(userId, shown)
 }
 
-/** Merge server-derived completion with sticky local milestones (never uncheck). */
+/**
+ * Merge server-derived completion with sticky local milestones (never uncheck).
+ *
+ * `readOnly` is for renders that happen BEFORE the server signals resolve:
+ * the reconciliation rules below treat `progress` as DB truth, so running
+ * them against the empty pre-fetch defaults would wrongly wipe the sticky
+ * cache. In read-only mode the sticky set is merged as-is and localStorage
+ * is never mutated.
+ */
 export function applyStickyGettingStartedProgress(
   progress: GettingStartedProgress,
   userId: string,
-  options?: { profilePostCount?: number }
+  options?: { profilePostCount?: number; readOnly?: boolean }
 ): GettingStartedProgress {
   const sticky = readStickyCompletedItemIds(userId)
+  const readOnly = options?.readOnly === true
   let stickyChanged = false
 
-  // Clear wrongly stickied "post" from when feed trade rows counted as posts.
-  if (options?.profilePostCount === 0 && sticky.has("post")) {
-    sticky.delete("post")
-    stickyChanged = true
-  }
+  if (!readOnly) {
+    // Clear wrongly stickied "post" from when feed trade rows counted as posts.
+    if (options?.profilePostCount === 0 && sticky.has("post")) {
+      sticky.delete("post")
+      stickyChanged = true
+    }
 
-  // DB is source of truth when no action tasks are complete — discard stale sticky.
-  if (serverActionTasksComplete(progress) === 0) {
-    for (const id of ACTION_ITEM_IDS) {
-      if (sticky.has(id)) {
-        sticky.delete(id)
-        stickyChanged = true
+    // DB is source of truth when no action tasks are complete — discard stale sticky.
+    if (serverActionTasksComplete(progress) === 0) {
+      for (const id of ACTION_ITEM_IDS) {
+        if (sticky.has(id)) {
+          sticky.delete(id)
+          stickyChanged = true
+        }
       }
     }
-  }
 
-  for (const item of progress.items) {
-    if (item.complete && !sticky.has(item.id)) {
-      sticky.add(item.id)
-      stickyChanged = true
+    for (const item of progress.items) {
+      if (item.complete && !sticky.has(item.id)) {
+        sticky.add(item.id)
+        stickyChanged = true
+      }
     }
   }
 

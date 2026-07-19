@@ -72,6 +72,7 @@ import { isTradeOwnedByUser } from "@/lib/tradeShareAccess"
 import ReplyComposerStrip from "@/app/components/replies/ReplyComposerStrip"
 import ReplyReferenceBlock from "@/app/components/replies/ReplyReferenceBlock"
 import ImageLightbox from "@/app/components/ui/ImageLightbox"
+import StorageImage from "@/app/components/ui/StorageImage"
 import {
   buildReplyTargetFromMessage,
   dmMessageElementId,
@@ -124,6 +125,19 @@ import {
   resolveDemoConversationIdFromSegment,
 } from "@/lib/demo/demoMessages"
 import { queryDmMessages } from "@/lib/dmMessageSelect"
+import ConversationSettingsModal from "@/app/components/messages/ConversationSettingsModal"
+import SharedMediaModal from "@/app/components/messages/SharedMediaModal"
+import {
+  fetchConversationNotificationsEnabled,
+  setConversationNotificationsEnabled,
+} from "@/lib/conversationMemberPreferences"
+import { ConfirmModal } from "@/app/components/ui"
+import {
+  fetchDmBlockStatus,
+  setDmUserBlocked,
+  type DmBlockStatus,
+} from "@/lib/conversationBlocks"
+import { clearMessagesInboxSessionsForUser } from "@/lib/messagesInboxSessionCache"
 
 const DM_SHARE_CARD_CLASS = "w-full max-w-[min(100%,22rem)]"
 
@@ -409,6 +423,10 @@ function PostMessageBubble({
     () => !initialPost && Boolean(dmPostPreviewCacheKey(message))
   )
   const [lightboxImageUrl, setLightboxImageUrl] = useState<string | null>(null)
+  const initialPostRef = useRef(initialPost)
+  const onPostLoadedRef = useRef(onPostLoaded)
+  initialPostRef.current = initialPost
+  onPostLoadedRef.current = onPostLoaded
   const isProfileShare =
     message.type === "profile_post" || Boolean(message.profile_post_id)
   const isAchievementShare =
@@ -417,6 +435,13 @@ function PostMessageBubble({
     message.type === "reel" || Boolean(message.reel_id)
 
   useEffect(() => {
+    const cachedPost = initialPostRef.current
+    if (cachedPost) {
+      setPost(cachedPost)
+      setPostLoading(false)
+      return
+    }
+
     const reelId =
       message.reel_id != null ? String(message.reel_id) : ""
     const achievementPostId =
@@ -434,10 +459,8 @@ function PostMessageBubble({
         return
       }
       let cancelled = false
-      if (!initialPost) {
-        setPostLoading(true)
-        setPost(null)
-      }
+      setPostLoading(true)
+      setPost(null)
       ;(async () => {
         const { data } = await supabase
           .from("reels")
@@ -450,7 +473,7 @@ function PostMessageBubble({
             : null
           setPost(loaded)
           setPostLoading(false)
-          onPostLoaded?.(loaded)
+          onPostLoadedRef.current?.(loaded)
         }
       })()
       return () => {
@@ -465,10 +488,8 @@ function PostMessageBubble({
         return
       }
       let cancelled = false
-      if (!initialPost) {
-        setPostLoading(true)
-        setPost(null)
-      }
+      setPostLoading(true)
+      setPost(null)
       ;(async () => {
         const { data } = await supabase
           .from("achievement_posts")
@@ -478,7 +499,7 @@ function PostMessageBubble({
         if (!cancelled) {
           setPost(data ?? null)
           setPostLoading(false)
-          onPostLoaded?.(data ?? null)
+          onPostLoadedRef.current?.(data ?? null)
         }
       })()
       return () => {
@@ -493,10 +514,8 @@ function PostMessageBubble({
         return
       }
       let cancelled = false
-      if (!initialPost) {
-        setPostLoading(true)
-        setPost(null)
-      }
+      setPostLoading(true)
+      setPost(null)
       ;(async () => {
         const { data } = await supabase
           .from("profile_posts")
@@ -506,7 +525,7 @@ function PostMessageBubble({
         if (!cancelled) {
           setPost(data ?? null)
           setPostLoading(false)
-          onPostLoaded?.(data ?? null)
+          onPostLoadedRef.current?.(data ?? null)
         }
       })()
       return () => {
@@ -520,10 +539,8 @@ function PostMessageBubble({
       return
     }
     let cancelled = false
-    if (!initialPost) {
-      setPostLoading(true)
-      setPost(null)
-    }
+    setPostLoading(true)
+    setPost(null)
     ;(async () => {
       const { data } = await supabase
         .from("posts")
@@ -533,7 +550,7 @@ function PostMessageBubble({
       if (!cancelled) {
         setPost(data ?? null)
         setPostLoading(false)
-        onPostLoaded?.(data ?? null)
+        onPostLoadedRef.current?.(data ?? null)
       }
     })()
     return () => {
@@ -547,8 +564,6 @@ function PostMessageBubble({
     message.post_id,
     message.profile_post_id,
     message.reel_id,
-    initialPost,
-    onPostLoaded,
   ])
 
   if (message.deleted_for_everyone) {
@@ -662,7 +677,7 @@ function PostMessageBubble({
             {imageSrc ? (
               <FeedPostScreenshot
                 imageSrc={imageSrc}
-                variant="detail"
+                variant="message"
                 wrapperClassName="mb-3 w-full overflow-hidden rounded-lg border border-gray-700 bg-black/30"
                 onImageClick={setLightboxImageUrl}
               />
@@ -794,8 +809,11 @@ function StoryReplyMessageBubble({
 
           <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2">
             {storyImageUrl ? (
-              <img
+              <StorageImage
                 src={storyImageUrl}
+                originalSrc={storyImageUrl}
+                preset="message-story-thumb"
+                fallbackToOriginal={false}
                 alt=""
                 className="h-10 w-10 shrink-0 rounded-md object-cover ring-1 ring-white/15"
                 draggable={false}
@@ -851,6 +869,7 @@ function buildTypingIndicatorText(
 }
 
 export default function DMPage() {
+  const messagePageSize = 50
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const { user: profileUser } = useUserProfile()
   const params = useParams()
@@ -861,7 +880,30 @@ export default function DMPage() {
   )
 
   const [messages, setMessages] = useState<any[]>([])
+  const sharedMediaRefreshKey = useMemo(() => {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = messages[index]
+      if (message?.deleted_for_everyone) continue
+      const storyImage =
+        message?.type === STORY_REPLY_MESSAGE_TYPE
+          ? decodeStoryReplyContent(message.content)?.story_image_url
+          : null
+      if (
+        message?.image_url ||
+        message?.trade_id ||
+        message?.post_id ||
+        message?.profile_post_id ||
+        message?.reel_id ||
+        storyImage
+      ) {
+        return String(message.id)
+      }
+    }
+    return null
+  }, [messages])
   const [messagesLoaded, setMessagesLoaded] = useState(false)
+  const [hasOlderMessages, setHasOlderMessages] = useState(false)
+  const [loadingOlderMessages, setLoadingOlderMessages] = useState(false)
   const [messagesLoadError, setMessagesLoadError] = useState<string | null>(null)
   const [input, setInput] = useState("")
   const [replyTarget, setReplyTarget] = useState<ReplyTarget | null>(null)
@@ -878,12 +920,25 @@ export default function DMPage() {
   const [sendingMessage, setSendingMessage] = useState(false)
   const sendingMessageRef = useRef(false)
   const [typingUsers, setTypingUsers] = useState<string[]>([])
-  const [showGroupSettings, setShowGroupSettings] = useState(false)
+  const [showConversationSettings, setShowConversationSettings] =
+    useState(false)
   const [groupName, setGroupName] = useState("")
   const [groupImage, setGroupImage] = useState<File | null>(null)
   const [savingGroupSettings, setSavingGroupSettings] = useState(false)
   const [groupSettingsSuccess, setGroupSettingsSuccess] = useState("")
   const [showAddMembers, setShowAddMembers] = useState(false)
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true)
+  const [notificationsSaving, setNotificationsSaving] = useState(false)
+  const [pinSaving, setPinSaving] = useState(false)
+  const [leaveBusy, setLeaveBusy] = useState(false)
+  const [confirmLeaveOpen, setConfirmLeaveOpen] = useState(false)
+  const [showSharedMedia, setShowSharedMedia] = useState(false)
+  const [dmBlockStatus, setDmBlockStatus] = useState<DmBlockStatus | null>(null)
+  const [blockStatusLoading, setBlockStatusLoading] = useState(false)
+  const [blockSaving, setBlockSaving] = useState(false)
+  const [blockConfirmation, setBlockConfirmation] = useState<boolean | null>(
+    null
+  )
   const [allUsers, setAllUsers] = useState<any[]>([])
   const [selectedUsers, setSelectedUsers] = useState<any[]>([])
   const [showTradePicker, setShowTradePicker] = useState(false)
@@ -954,6 +1009,11 @@ export default function DMPage() {
   })
   const fileRef = dmImageCrop.fileInputRef
 
+  useEffect(() => {
+    if (!previewUrl?.startsWith("blob:")) return
+    return () => URL.revokeObjectURL(previewUrl)
+  }, [previewUrl])
+
   const scrollRef = useRef<HTMLDivElement>(null)
   const userIdRef = useRef<string | null>(null)
   const conversationIdRef = useRef<string | null>(null)
@@ -983,6 +1043,8 @@ export default function DMPage() {
   const postsByIdRef = useRef(postsById)
   postsByIdRef.current = postsById
   const restoredFromCacheRef = useRef(false)
+  const loadOlderMessagesRef = useRef<() => void>(() => {})
+  const loadingOlderMessagesRef = useRef(false)
 
   const bumpMessageLayout = useCallback(() => {
     setMessageLayoutGeneration((generation) => generation + 1)
@@ -1033,6 +1095,7 @@ export default function DMPage() {
     setActiveConversationId(conversationId)
     setPageAccess("allowed")
     setMessages(cached.messages)
+    setHasOlderMessages(cached.hasOlderMessages ?? false)
     setMessagesLoaded(true)
     setMessagesLoadError(null)
     setConversation(cached.conversation)
@@ -1091,6 +1154,7 @@ export default function DMPage() {
       urlSegment: urlSegmentRef.current,
       messages,
       messagesLoaded,
+      hasOlderMessages,
       conversation,
       participants,
       otherUser,
@@ -1112,6 +1176,7 @@ export default function DMPage() {
     otherUser,
     input,
     replyTarget,
+    hasOlderMessages,
   ])
 
   persistConversationCacheRef.current = persistConversationCache
@@ -1149,6 +1214,9 @@ export default function DMPage() {
     )
     if (!userNearBottomRef.current) {
       scrollAnchorRef.current = null
+    }
+    if (el.scrollTop < 80) {
+      loadOlderMessagesRef.current()
     }
 
     const uid = userIdRef.current
@@ -1413,6 +1481,33 @@ export default function DMPage() {
   }, [conversation?.name])
 
   useEffect(() => {
+    if (
+      !activeConversationId ||
+      !user?.id ||
+      conversation?.is_group !== false ||
+      isDemoSupabaseBlocked()
+    ) {
+      setDmBlockStatus(null)
+      setBlockStatusLoading(false)
+      return
+    }
+
+    let cancelled = false
+    setBlockStatusLoading(true)
+    void fetchDmBlockStatus(activeConversationId).then((result) => {
+      if (cancelled) return
+      setBlockStatusLoading(false)
+      if (result.ok) {
+        setDmBlockStatus(result.status)
+      }
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeConversationId, conversation?.is_group, user?.id])
+
+  useEffect(() => {
     if (!showAddMembers) return
 
     setSelectedUsers([])
@@ -1473,14 +1568,20 @@ export default function DMPage() {
 
     if (!cached.newestTimestamp) return
 
-    const { data: incoming } = await queryDmMessages((select) =>
-      supabase
+    const { data: incoming } = await queryDmMessages((select) => {
+      let query = supabase
         .from("messages")
         .select(select)
         .eq("conversation_id", conversationId)
-        .gt("created_at", cached.newestTimestamp)
         .order("created_at", { ascending: true })
-    )
+        .order("id", { ascending: true })
+      query = cached.newestMessageId
+        ? query.or(
+            `created_at.gt.${cached.newestTimestamp},and(created_at.eq.${cached.newestTimestamp},id.gt.${cached.newestMessageId})`
+          )
+        : query.gt("created_at", cached.newestTimestamp)
+      return query
+    })
 
     if (!incoming?.length) return
 
@@ -1730,6 +1831,10 @@ export default function DMPage() {
       setConversation(demo.conversation)
       setParticipants(demo.participants)
       setOtherUser(demo.otherUser)
+      void fetchConversationNotificationsEnabled(
+        currentUserId,
+        conversationId
+      ).then(setNotificationsEnabled)
       conversationMetaRef.current = {
         conversation: demo.conversation,
         participants: demo.participants,
@@ -1757,11 +1862,17 @@ export default function DMPage() {
 
     const { data: convo } = await supabase
       .from("conversations")
-      .select("id, is_group, name, avatar_url")
+      .select("id, is_group, name, avatar_url, is_pinned")
       .eq("id", conversationId)
       .maybeSingle()
 
     setConversation(convo || null)
+
+    const notifEnabled = await fetchConversationNotificationsEnabled(
+      currentUserId,
+      conversationId
+    )
+    setNotificationsEnabled(notifEnabled)
 
     const { data } = await supabase
       .from("conversation_participants")
@@ -1840,7 +1951,9 @@ export default function DMPage() {
         .from("messages")
         .select(select)
         .eq("conversation_id", conversationId)
-        .order("created_at", { ascending: true })
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .limit(messagePageSize + 1)
     )
 
     console.log("[dm-thread-load] result", {
@@ -1859,15 +1972,18 @@ export default function DMPage() {
       return
     }
 
+    const fetchedPage = (fetched || []).slice(0, messagePageSize)
+    const pageHasOlder = (fetched?.length ?? 0) > messagePageSize
     const deletedIds = await fetchConversationDeletedMessageIds(
       currentUserId,
-      (fetched || []).map((message) => String(message.id))
+      fetchedPage.map((message) => String(message.id))
     )
 
-    const filteredMessages = filterMessagesForUser(fetched || [], deletedIds)
+    const filteredMessages = filterMessagesForUser(fetchedPage, deletedIds)
     const sorted = sortMessagesByCreatedAt(filteredMessages)
 
     setMessages(sorted)
+    setHasOlderMessages(pageHasOlder)
     setMessagesLoadError(null)
     prevLastMessageIdRef.current = null
     scrollAnchorRef.current = {
@@ -1882,6 +1998,7 @@ export default function DMPage() {
       urlSegment: urlSegmentRef.current,
       messages: sorted,
       messagesLoaded: true,
+      hasOlderMessages: pageHasOlder,
       conversation: meta.conversation,
       participants: meta.participants,
       otherUser: meta.otherUser,
@@ -1895,6 +2012,62 @@ export default function DMPage() {
       tradesById: tradesByIdRef.current,
       postsById: postsByIdRef.current,
     })
+  }
+
+  async function loadOlderMessages() {
+    if (loadingOlderMessagesRef.current || !hasOlderMessages) return
+    const currentUserId = userIdRef.current
+    const conversationId = conversationIdRef.current
+    const oldest = messages[0]
+    const el = scrollRef.current
+    if (!currentUserId || !conversationId || !oldest?.created_at || !oldest?.id) return
+
+    loadingOlderMessagesRef.current = true
+    setLoadingOlderMessages(true)
+    const previousScrollHeight = el?.scrollHeight ?? 0
+    try {
+      const cursor = `created_at.lt.${oldest.created_at},and(created_at.eq.${oldest.created_at},id.lt.${oldest.id})`
+      const { data: fetched, error } = await queryDmMessages((select) =>
+        supabase
+          .from("messages")
+          .select(select)
+          .eq("conversation_id", conversationId)
+          .or(cursor)
+          .order("created_at", { ascending: false })
+          .order("id", { ascending: false })
+          .limit(messagePageSize + 1)
+      )
+      if (error) {
+        console.error("[dm-thread-load-older] query failed", error)
+        return
+      }
+
+      const fetchedPage = (fetched || []).slice(0, messagePageSize)
+      const deletedIds = await fetchConversationDeletedMessageIds(
+        currentUserId,
+        fetchedPage.map((message) => String(message.id))
+      )
+      const older = sortMessagesByCreatedAt(
+        filterMessagesForUser(fetchedPage, deletedIds)
+      )
+      const nextHasOlder = (fetched?.length ?? 0) > messagePageSize
+      setHasOlderMessages(nextHasOlder)
+      patchConversationSession(currentUserId, conversationId, {
+        hasOlderMessages: nextHasOlder,
+      })
+      setMessagesWithCache((current) => mergeMessageLists(older, current))
+
+      requestAnimationFrame(() => {
+        if (el) el.scrollTop += el.scrollHeight - previousScrollHeight
+      })
+    } finally {
+      loadingOlderMessagesRef.current = false
+      setLoadingOlderMessages(false)
+    }
+  }
+
+  loadOlderMessagesRef.current = () => {
+    void loadOlderMessages()
   }
 
   function removeImage() {
@@ -1923,6 +2096,13 @@ export default function DMPage() {
     }
     if (sendingMessageRef.current || sendingMessage) return
     if (!user || pageAccess !== "allowed" || !activeConversationId) return
+    if (dmBlockStatus?.blockedByMe || dmBlockStatus?.blockedByOther) {
+      showPopup({
+        type: "error",
+        message: "Direct messaging is unavailable while this user is blocked.",
+      })
+      return
+    }
     if (!input.trim() && !selectedFile) return
 
     sendingMessageRef.current = true
@@ -1936,11 +2116,27 @@ export default function DMPage() {
       if (selectedFile.type?.startsWith("image/")) {
         uploadFile = await compressScreenshot(selectedFile)
       }
-      const fileName = `${Date.now()}-${uploadFile.name}`
+      // Storage RLS requires the authenticated user's id as the first folder.
+      const fileName = `${user.id}/${Date.now()}-${uploadFile.name}`
 
-      await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from("screenshots")
-        .upload(fileName, uploadFile)
+        .upload(fileName, uploadFile, {
+          cacheControl: "31536000",
+          upsert: false,
+        })
+      if (uploadError) {
+        logSupabaseError("sendMessage image upload", uploadError, {
+          bucket: "screenshots",
+          path: fileName,
+          userId: user.id,
+        })
+        showPopup({
+          type: "error",
+          message: "Could not upload this image. Please try again.",
+        })
+        return
+      }
 
       imageUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/screenshots/${fileName}`
     }
@@ -2091,7 +2287,139 @@ export default function DMPage() {
     setSavingGroupSettings(false)
     setGroupImage(null)
     setGroupSettingsSuccess("Saved")
-    setShowGroupSettings(false)
+    showPopup({ type: "success", message: "Group details saved." })
+  }
+
+  async function handleNotificationsToggle(enabled: boolean) {
+    if (!user?.id || !activeConversationId || pageAccess !== "allowed") return
+    const previous = notificationsEnabled
+    setNotificationsEnabled(enabled)
+    setNotificationsSaving(true)
+    const result = await setConversationNotificationsEnabled(
+      user.id,
+      activeConversationId,
+      enabled
+    )
+    setNotificationsSaving(false)
+    if (!result.ok) {
+      setNotificationsEnabled(previous)
+      showPopup({ type: "error", message: result.message })
+      return
+    }
+    window.dispatchEvent(new CustomEvent("tj-unread-messages-refresh"))
+  }
+
+  async function handlePinToggle(pinned: boolean) {
+    if (!user?.id || !conversation?.id || pageAccess !== "allowed") return
+    setPinSaving(true)
+    const { error } = await supabase
+      .from("conversations")
+      .update({ is_pinned: pinned })
+      .eq("id", conversation.id)
+    setPinSaving(false)
+    if (error) {
+      showPopup({
+        type: "error",
+        message: "Could not update pin. Try again.",
+      })
+      return
+    }
+    setConversation((prev: any) =>
+      prev ? { ...prev, is_pinned: pinned } : prev
+    )
+  }
+
+  async function handleBlockConfirmation() {
+    if (
+      blockConfirmation == null ||
+      !activeConversationId ||
+      !user?.id ||
+      conversation?.is_group
+    ) {
+      return
+    }
+
+    const shouldBlock = blockConfirmation
+    setBlockSaving(true)
+    const result = await setDmUserBlocked(activeConversationId, shouldBlock)
+    setBlockSaving(false)
+
+    if (!result.ok) {
+      showPopup({
+        type: "error",
+        message: shouldBlock
+          ? "Could not block this user. Try again."
+          : "Could not unblock this user. Try again.",
+      })
+      return
+    }
+
+    setDmBlockStatus(result.status)
+    setBlockConfirmation(null)
+    setShowConversationSettings(false)
+    clearMessagesInboxSessionsForUser(user.id)
+    window.dispatchEvent(new CustomEvent("tj-unread-messages-refresh"))
+
+    if (shouldBlock) {
+      showPopup({ type: "success", message: "User blocked." })
+      router.replace("/messages")
+      return
+    }
+
+    showPopup({ type: "success", message: "User unblocked." })
+  }
+
+  async function handleLeaveConversation() {
+    if (!user || pageAccess !== "allowed" || !conversation?.id) return
+    setLeaveBusy(true)
+
+    if (conversation.is_group) {
+      const meRow = participants.find((p: any) => p.user_id === user.id)
+      const rawProf = meRow?.profiles
+      const prof = Array.isArray(rawProf) ? rawProf[0] : rawProf
+      const displayName = prof?.username || "Someone"
+
+      const leaveSystemPayload = {
+        conversation_id: conversation.id,
+        content: `${displayName} left the group`,
+        sender_id: null,
+        is_system: true,
+        channel: null,
+      }
+      const { error: leaveSystemErr } = await supabase
+        .from("messages")
+        .insert(leaveSystemPayload)
+      if (leaveSystemErr) {
+        logSupabaseError(
+          "handleLeaveConversation system message insert",
+          leaveSystemErr,
+          {
+            table: "messages",
+            query: "insert",
+            payload: leaveSystemPayload,
+            userId: user.id,
+            conversationId: conversation.id,
+          }
+        )
+        setLeaveBusy(false)
+        showPopup({
+          type: "error",
+          message: "Could not leave the group. Try again.",
+        })
+        return
+      }
+    }
+
+    await supabase
+      .from("conversation_participants")
+      .delete()
+      .eq("conversation_id", conversation.id)
+      .eq("user_id", user.id)
+
+    setLeaveBusy(false)
+    setConfirmLeaveOpen(false)
+    setShowConversationSettings(false)
+    router.push("/messages")
   }
 
   async function deleteForMe(message: any) {
@@ -2173,46 +2501,6 @@ export default function DMPage() {
     setSelectedUsers([])
   }
 
-  async function handleLeaveGroup() {
-    if (!user || pageAccess !== "allowed") return
-    if (!conversation?.id || !conversation?.is_group) return
-
-    const meRow = participants.find((p: any) => p.user_id === user.id)
-    const rawProf = meRow?.profiles
-    const prof = Array.isArray(rawProf) ? rawProf[0] : rawProf
-    const displayName = prof?.username || "Someone"
-
-    const leaveSystemPayload = {
-      conversation_id: conversation.id,
-      content: `${displayName} left the group`,
-      sender_id: null,
-      is_system: true,
-      channel: null,
-    }
-    const { error: leaveSystemErr } = await supabase
-      .from("messages")
-      .insert(leaveSystemPayload)
-    if (leaveSystemErr) {
-      logSupabaseError("handleLeaveGroup system message insert", leaveSystemErr, {
-        table: "messages",
-        query: "insert",
-        payload: leaveSystemPayload,
-        userId: user.id,
-        conversationId: conversation.id,
-      })
-      return
-    }
-
-    await supabase
-      .from("conversation_participants")
-      .delete()
-      .eq("conversation_id", conversation.id)
-      .eq("user_id", user.id)
-
-    setShowGroupSettings(false)
-    router.push("/messages")
-  }
-
   async function deleteForEveryone(message: any) {
     if (!user || pageAccess !== "allowed") return
     if (message.sender_id !== user.id) return
@@ -2246,6 +2534,10 @@ export default function DMPage() {
     profiles: Array.isArray(m.profiles) ? m.profiles[0] : m.profiles
   }))
   const existingMemberIds = members.map((m: any) => m.user_id)
+  const dmMessagingBlocked =
+    conversation?.is_group === false &&
+    (dmBlockStatus?.blockedByMe === true ||
+      dmBlockStatus?.blockedByOther === true)
   const filteredAddMemberUsers = allUsers.filter(
     (u) => !existingMemberIds.includes(u.id)
   )
@@ -2257,6 +2549,14 @@ export default function DMPage() {
   )
 
   const messagesById = useMemo(() => indexCommentsById(messages), [messages])
+  const groupAvatarPreviewUrl = useMemo(() => {
+    if (!groupImage) return null
+    return URL.createObjectURL(groupImage)
+  }, [groupImage])
+  useEffect(() => {
+    if (!groupAvatarPreviewUrl) return
+    return () => URL.revokeObjectURL(groupAvatarPreviewUrl)
+  }, [groupAvatarPreviewUrl])
   const lastMessage = messages[messages.length - 1]
   const allSeen =
     !!lastMessage &&
@@ -2363,13 +2663,12 @@ export default function DMPage() {
 
             <div className="ml-auto flex items-center gap-2">
               <button
+                type="button"
+                aria-label="Conversation settings"
+                title="Conversation settings"
                 onClick={() => {
-                  if (conversation?.is_group) {
-                    setGroupName(conversation?.name || "")
-                    setShowGroupSettings(true)
-                    return
-                  }
-                  router.push("/settings")
+                  setGroupName(conversation?.name || "")
+                  setShowConversationSettings(true)
                 }}
                 className="p-2 md:px-3 md:py-1 md:bg-white/10 md:rounded md:hover:bg-white/20 md:text-sm"
               >
@@ -2385,6 +2684,11 @@ export default function DMPage() {
             onScroll={handleMessagesScroll}
             className="min-h-0 flex-1 overflow-y-auto overflow-x-visible px-2 py-3 md:p-4"
           >
+            {loadingOlderMessages ? (
+              <p className="pb-2 text-center text-xs text-gray-500">
+                Loading older messages…
+              </p>
+            ) : null}
             {messagesLoaded && messages.length === 0 ? (
               messagesLoadError ? (
                 <EmptyState
@@ -2634,12 +2938,13 @@ export default function DMPage() {
                                   className="block max-w-full cursor-zoom-in"
                                   aria-label="View image full screen"
                                 >
-                                  <img
+                                  <StorageImage
                                     src={message.image_url}
+                                    originalSrc={message.image_url}
+                                    preset="message-preview"
+                                    fallbackToOriginal={false}
                                     className="max-h-64 rounded-lg"
                                     alt=""
-                                    loading="lazy"
-                                    decoding="async"
                                     onLoad={bumpMessageLayout}
                                     onError={bumpMessageLayout}
                                   />
@@ -2707,12 +3012,18 @@ export default function DMPage() {
               }
             }}
             onSend={() => void sendMessage()}
-            placeholder="Send message..."
-            sendDisabled={sendingMessage}
+            placeholder={
+              dmMessagingBlocked
+                ? "Direct messaging is unavailable"
+                : "Send message..."
+            }
+            sendDisabled={sendingMessage || dmMessagingBlocked}
             onImageChange={handleImageChange}
-            imageDisabled={false}
+            imageDisabled={dmMessagingBlocked}
             fileInputRef={fileRef}
-            onTradeClick={() => setShowTradePicker(true)}
+            onTradeClick={() => {
+              if (!dmMessagingBlocked) setShowTradePicker(true)
+            }}
             beforeRow={
               replyTarget ? (
                 <ReplyComposerStrip
@@ -2743,114 +3054,105 @@ export default function DMPage() {
 
       </div>
 
-      {showGroupSettings && conversation?.is_group ? (
-        <div
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-          onClick={() => {
-            setShowGroupSettings(false)
-            setShowAddMembers(false)
-            setSelectedUsers([])
-          }}
-        >
-          <div
-            className="bg-[#0f172a] border border-gray-600 rounded-2xl p-6 w-full max-w-md shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 className="text-white text-xl font-semibold mb-4">
-              Group Settings
-            </h2>
-            <div className="flex items-center gap-3 mb-3">
-              <img
-                src={
-                  groupImage
-                    ? URL.createObjectURL(groupImage)
-                    : conversation?.avatar_url || "/group-default.png"
-                }
-                alt=""
-                loading="lazy"
-                decoding="async"
-                onError={(e) => {
-                  e.currentTarget.src = "/group-default.png"
-                }}
-                className="w-16 h-16 rounded-full object-cover border border-gray-600 hover:scale-105 transition cursor-pointer"
-              />
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleFileChange}
-                className="text-gray-300 mt-2"
-              />
-            </div>
-            <input
-              value={groupName}
-              onChange={(e) => setGroupName(e.target.value)}
-              placeholder="Group name"
-              className="w-full p-3 rounded-lg bg-[#1e293b] text-white border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <div className="mt-6">
-              <p className="text-gray-400 text-sm mb-3">
-                Members ({members.length})
-              </p>
+      <ConversationSettingsModal
+        open={showConversationSettings}
+        onClose={() => setShowConversationSettings(false)}
+        isGroup={Boolean(conversation?.is_group)}
+        title={title}
+        notificationsEnabled={notificationsEnabled}
+        notificationsSaving={notificationsSaving}
+        onNotificationsChange={(enabled) => {
+          void handleNotificationsToggle(enabled)
+        }}
+        isPinned={conversation?.is_pinned === true}
+        pinSaving={pinSaving}
+        onPinChange={(pinned) => {
+          void handlePinToggle(pinned)
+        }}
+        members={members}
+        onViewSharedMedia={() => {
+          setShowConversationSettings(false)
+          setShowSharedMedia(true)
+        }}
+        blockedByMe={dmBlockStatus?.blockedByMe === true}
+        blockedByOther={dmBlockStatus?.blockedByOther === true}
+        blockStatusLoading={blockStatusLoading}
+        onBlockUserChange={
+          conversation?.is_group
+            ? undefined
+            : (blocked) => setBlockConfirmation(blocked)
+        }
+        onInviteMembers={
+          conversation?.is_group
+            ? () => {
+                setShowConversationSettings(false)
+                setShowAddMembers(true)
+              }
+            : undefined
+        }
+        onLeaveConversation={() => setConfirmLeaveOpen(true)}
+        leaveLabel={
+          conversation?.is_group ? "Leave Group" : "Leave Conversation"
+        }
+        leaveBusy={leaveBusy}
+        groupName={groupName}
+        onGroupNameChange={setGroupName}
+        groupAvatarUrl={conversation?.avatar_url ?? null}
+        groupAvatarPreviewUrl={groupAvatarPreviewUrl}
+        onGroupAvatarChange={handleFileChange}
+        onSaveGroupDetails={() => {
+          void saveGroupSettings()
+        }}
+        groupDetailsSaving={savingGroupSettings}
+      />
 
-              <div className="flex flex-wrap gap-3">
-                {members.map((m: any, i: number) => (
-                  <ProfileLink
-                    key={i}
-                    userId={m.profiles?.id ?? m.user_id}
-                    username={m.profiles?.username}
-                    className="flex cursor-pointer items-center gap-2 rounded-lg bg-[#1e293b] px-3 py-2 transition hover:bg-[#334155]"
-                  >
-                    <ProfileAvatarImg
-                      src={m.profiles?.avatar_url}
-                      className="h-6 w-6"
-                    />
-                    <span className="text-sm text-white">
-                      {m.profiles?.username}
-                    </span>
-                  </ProfileLink>
-                ))}
-              </div>
+      <SharedMediaModal
+        open={showSharedMedia}
+        conversationId={activeConversationId}
+        refreshKey={sharedMediaRefreshKey}
+        onClose={() => setShowSharedMedia(false)}
+      />
 
-              <div className="mt-4">
-                <button
-                  type="button"
-                  onClick={() => setShowAddMembers(true)}
-                  className="w-full bg-[#1e293b] hover:bg-[#334155] text-white py-2 rounded-lg transition"
-                >
-                  + Add Members
-                </button>
-              </div>
-            </div>
+      <ConfirmModal
+        open={blockConfirmation != null}
+        onCancel={() => setBlockConfirmation(null)}
+        onConfirm={handleBlockConfirmation}
+        title={
+          blockConfirmation
+            ? `Block ${title}?`
+            : `Unblock ${title}?`
+        }
+        description={
+          blockConfirmation
+            ? "Neither of you will be able to send direct messages while this block is active. This conversation will be removed from your inbox and will no longer contribute unread badges. Existing message history will not be deleted."
+            : "You will both be able to continue this direct conversation. The other user will not be notified."
+        }
+        confirmLabel={blockConfirmation ? "Block User" : "Unblock User"}
+        cancelLabel="Cancel"
+        destructive={blockConfirmation === true}
+        loading={blockSaving}
+        loadingLabel={blockConfirmation ? "Blocking…" : "Unblocking…"}
+      />
 
-            <div className="border-t border-gray-700 my-6" />
-
-            <div className="mt-8 flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setShowGroupSettings(false)}
-                className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={saveGroupSettings}
-                disabled={savingGroupSettings}
-                className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg disabled:opacity-50"
-              >
-                {savingGroupSettings ? "Saving..." : "Save"}
-              </button>
-            </div>
-            <button
-              type="button"
-              onClick={handleLeaveGroup}
-              className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg w-full mt-6"
-            >
-              Leave Group
-            </button>
-          </div>
-        </div>
-      ) : null}
+      <ConfirmModal
+        open={confirmLeaveOpen}
+        onCancel={() => setConfirmLeaveOpen(false)}
+        onConfirm={() => {
+          void handleLeaveConversation()
+        }}
+        title={
+          conversation?.is_group ? "Leave Group?" : "Leave Conversation?"
+        }
+        description={
+          conversation?.is_group
+            ? "You will be removed from this group. You can be invited back later."
+            : "This chat will be removed from your inbox. Message history is not deleted for the other person."
+        }
+        confirmLabel={conversation?.is_group ? "Leave Group" : "Leave"}
+        cancelLabel="Cancel"
+        destructive
+        loading={leaveBusy}
+      />
 
       {showAddMembers && conversation?.is_group ? (
         <div

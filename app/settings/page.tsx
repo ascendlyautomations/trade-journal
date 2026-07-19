@@ -788,7 +788,7 @@ export default function SettingsPage() {
       }
 
       router.push(
-        `/trade-rooms?room=${encodeURIComponent(slug)}&setup=true`
+        `/community?room=${encodeURIComponent(slug)}&setup=true`
       )
     } catch (err) {
       console.error(err)

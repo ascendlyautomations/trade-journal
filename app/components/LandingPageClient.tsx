@@ -1,5 +1,7 @@
 "use client"
 
+import dynamic from "next/dynamic"
+import Image from "next/image"
 import { useEffect, useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
 import LandingComparisonSection from "./LandingComparisonSection"
@@ -7,10 +9,9 @@ import LandingFeatureShowcaseSections from "./LandingFeatureShowcaseSections"
 import LandingFinalCtaSection from "./LandingFinalCtaSection"
 import LandingProblemSection from "./landing/LandingProblemSection"
 import LandingAnalyticsShowcaseSection from "./landing/LandingAnalyticsShowcaseSection"
-import LandingPricingSection from "./landing/LandingPricingSection"
 import LandingFaqSection from "./landing/LandingFaqSection"
 import LandingComingSoonSection from "./landing/LandingComingSoonSection"
-import { ConfirmModal, FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
+import { useFeedbackPopup } from "@/app/components/ui/useFeedbackPopup"
 import MarketingFooter from "./marketing/MarketingFooter"
 import { TRAXPRO_TRIAL_HEADLINE } from "@/lib/traxProPricing"
 import { useUserProfile } from "@/lib/useUserProfile"
@@ -25,6 +26,17 @@ import {
 import { clearSignupFlow, enterSignupFlow, getCheckoutBillingInterval, resolveSignupProfileSetupPath, setCheckoutBillingInterval } from "@/lib/signupFlow"
 import type { TraxProBillingIntervalId } from "@/lib/traxProBillingPlans"
 import { startTraxProCheckout } from "@/lib/startTraxProCheckout"
+import { useEarlyAccessPromotion } from "@/lib/useEarlyAccessPromotion"
+
+const ConfirmModal = dynamic(
+  () => import("@/app/components/ui/ConfirmModal")
+)
+const FeedbackModal = dynamic(
+  () => import("@/app/components/ui/FeedbackModal")
+)
+const LandingPricingSection = dynamic(
+  () => import("./landing/LandingPricingSection")
+)
 
 type LandingPageClientProps = {
   featuredTradesSection: ReactNode
@@ -38,6 +50,8 @@ export default function LandingPageClient({
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const router = useRouter()
   const { user, profile, loading, membershipReconciling } = useUserProfile()
+  const { enabled: earlyAccessPromotionEnabled } =
+    useEarlyAccessPromotion()
   const [checkoutLoading, setCheckoutLoading] = useState(false)
   const [loggedInDemoModalOpen, setLoggedInDemoModalOpen] = useState(false)
   const [loggedInTrialModalOpen, setLoggedInTrialModalOpen] = useState(false)
@@ -45,7 +59,9 @@ export default function LandingPageClient({
   const isAuthenticatedUser = !!user && !isDemoUserId(user.id)
   const hasActiveMembershipAccess =
     isAuthenticatedUser && !!profile && hasActiveMembership(profile)
-  const trialCtaLabel = `Start ${TRAXPRO_TRIAL_HEADLINE}!`
+  const trialCtaLabel = earlyAccessPromotionEnabled
+    ? "Join Early Access"
+    : `Start ${TRAXPRO_TRIAL_HEADLINE}!`
 
   useEffect(() => {
     if (hasActiveMembershipAccess) clearSignupFlow()
@@ -164,37 +180,51 @@ export default function LandingPageClient({
 
   return (
     <>
-      <FeedbackModal {...feedbackModalProps} />
-      <ConfirmModal
-        open={loggedInDemoModalOpen}
-        title="Already Logged In"
-        description="You're already signed in. Please sign out first if you'd like to explore the demo experience."
-        cancelLabel="Cancel"
-        confirmLabel="Return to App"
-        onCancel={() => setLoggedInDemoModalOpen(false)}
-        onConfirm={() => {
-          setLoggedInDemoModalOpen(false)
-          router.push("/dashboard")
-        }}
-      />
-      <ConfirmModal
-        open={loggedInTrialModalOpen}
-        title="You're Already Covered"
-        description="You already have an active 14-day free trial or subscription. Return to the app to continue trading."
-        cancelLabel="Cancel"
-        confirmLabel="Return to App"
-        onCancel={() => setLoggedInTrialModalOpen(false)}
-        onConfirm={() => {
-          setLoggedInTrialModalOpen(false)
-          router.push("/dashboard")
-        }}
-      />
+      {feedbackModalProps.isOpen ? <FeedbackModal {...feedbackModalProps} /> : null}
+      {loggedInDemoModalOpen ? (
+        <ConfirmModal
+          open
+          title="Already Logged In"
+          description="You're already signed in. Please sign out first if you'd like to explore the demo experience."
+          cancelLabel="Cancel"
+          confirmLabel="Return to App"
+          onCancel={() => setLoggedInDemoModalOpen(false)}
+          onConfirm={() => {
+            setLoggedInDemoModalOpen(false)
+            router.push("/dashboard")
+          }}
+        />
+      ) : null}
+      {loggedInTrialModalOpen ? (
+        <ConfirmModal
+          open
+          title="You're Already Covered"
+          description="You already have an active 14-day free trial or subscription. Return to the app to continue trading."
+          cancelLabel="Cancel"
+          confirmLabel="Return to App"
+          onCancel={() => setLoggedInTrialModalOpen(false)}
+          onConfirm={() => {
+            setLoggedInTrialModalOpen(false)
+            router.push("/dashboard")
+          }}
+        />
+      ) : null}
 
       <div className="relative min-h-screen overflow-hidden text-gray-100">
         <div
-          className="pointer-events-none absolute inset-0 z-0 bg-[url('/images/hero-bg.webp')] bg-cover bg-center bg-no-repeat opacity-[0.52] blur-[1px]"
+          className="pointer-events-none absolute inset-0 z-0 overflow-hidden opacity-[0.52] blur-[1px]"
           aria-hidden
-        />
+        >
+          <Image
+            src="/images/hero-bg.webp"
+            alt=""
+            fill
+            priority
+            quality={75}
+            sizes="100vw"
+            className="object-cover object-center"
+          />
+        </div>
         <div
           className="pointer-events-none absolute inset-0 z-[1] bg-gradient-to-b from-[#0a0f1c]/80 via-[#0a0f1c]/60 to-[#0a0f1c]/90"
           aria-hidden
@@ -245,14 +275,16 @@ export default function LandingPageClient({
           <LandingAnalyticsShowcaseSection />
           <LandingComparisonSection />
           {featuredTradesSection}
-          <LandingPricingSection
-            checkoutLoading={checkoutLoading}
-            onStartTrial={(interval) => void handleSubscribe(interval)}
-            onStartFree={() => {
-              enterSignupFlow()
-              router.push("/login?tab=signup")
-            }}
-          />
+          {!earlyAccessPromotionEnabled ? (
+            <LandingPricingSection
+              checkoutLoading={checkoutLoading}
+              onStartTrial={(interval) => void handleSubscribe(interval)}
+              onStartFree={() => {
+                enterSignupFlow()
+                router.push("/login?tab=signup")
+              }}
+            />
+          ) : null}
           {testimonialsSection}
           <LandingFaqSection />
           <LandingComingSoonSection />

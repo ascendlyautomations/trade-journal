@@ -25,9 +25,13 @@ type StorageImageProps = Omit<
   originalSrc?: string | null
   transformWidth?: number
   transformHeight?: number
+  /** Optional Next image optimization width for local public assets. */
+  localTransformWidth?: number
   priority?: boolean
   intrinsicWidth?: number
   intrinsicHeight?: number
+  /** Disable original-byte fallback for bandwidth-sensitive previews. */
+  fallbackToOriginal?: boolean
 }
 
 /**
@@ -39,9 +43,11 @@ export default function StorageImage({
   originalSrc,
   transformWidth,
   transformHeight,
+  localTransformWidth,
   priority = false,
   intrinsicWidth,
   intrinsicHeight,
+  fallbackToOriginal = true,
   alt = "",
   onError,
   onLoad,
@@ -53,12 +59,22 @@ export default function StorageImage({
   )
 
   const optimized = useMemo(
-    () =>
-      optimizeStorageImageUrl(src, preset, {
+    () => {
+      const normalized = normalizeImageSrc(src)
+      if (
+        normalized?.startsWith("/") &&
+        !normalized.startsWith("//") &&
+        localTransformWidth
+      ) {
+        return `/_next/image?url=${encodeURIComponent(normalized)}&w=${localTransformWidth}&q=75`
+      }
+
+      return optimizeStorageImageUrl(src, preset, {
         width: transformWidth,
         height: transformHeight,
-      }),
-    [src, preset, transformWidth, transformHeight]
+      })
+    },
+    [src, preset, transformWidth, transformHeight, localTransformWidth]
   )
 
   const [requestSrc, setRequestSrc] = useState<string | null>(
@@ -73,14 +89,14 @@ export default function StorageImage({
 
   const handleError = useCallback(
     (event: SyntheticEvent<HTMLImageElement>) => {
-      if (original && requestSrc !== original) {
+      if (fallbackToOriginal && original && requestSrc !== original) {
         setRequestSrc(original)
         return
       }
       setFailed(true)
       onError?.(event)
     },
-    [original, requestSrc, onError]
+    [fallbackToOriginal, original, requestSrc, onError]
   )
 
   const handleLoad = useCallback(

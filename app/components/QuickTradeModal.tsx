@@ -244,7 +244,7 @@ export default function QuickTradeModal({
   const [csvPasteOpen, setCsvPasteOpen] = useState(false)
   const [csvPasteText, setCsvPasteText] = useState("")
   const [csvImportError, setCsvImportError] = useState<string | null>(null)
-  /** Full list of CSV-derived trades for this Quick Input session (all batches). */
+  /** Full list of CSV-derived trades for this Quick Trade session (all batches). */
   const [csvQueuePatches, setCsvQueuePatches] = useState<QuickTradeCsvFormPatch[]>(
     []
   )

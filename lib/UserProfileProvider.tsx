@@ -24,6 +24,10 @@ import {
   readStoredReferralCode,
 } from "./ensureProfileForUser"
 import { notifyAffiliateReferralAttribution } from "./notifyAffiliateReferralAttribution"
+import {
+  getPendingCreatorCode,
+  isCreatorFlowActive,
+} from "./creatorAccess"
 import { supabase } from "./supabaseClient"
 import { clearAppDataCache } from "./appDataCache"
 import { invalidateExploreSession } from "./exploreSessionCache"
@@ -67,7 +71,7 @@ import { DEMO_USER_ID, isDemoUserId } from "./demo/constants"
  * Avoids duplicate `profiles` reads across Navbar, checklist, and key pages.
  */
 export const USER_PROFILE_SELECT =
-  "id, name, username, bio, is_private, avatar_url, trading_style, trading_model, trader_type, primary_market, started_trading, username_change_count, referral_code, referral_count, is_pro, creator_access, creator_code, creator_granted_at, subscription_status, cancel_at_period_end, cancel_at, trial_end, current_period_end, stripe_customer_id, is_banned, banned_reason, is_beta_tester, use_free_tier, onboarding_completed, has_seen_getting_started_intro, has_seen_onboarding_complete_popup, max_drawdown_limit, has_email_password" as const
+  "id, name, username, bio, is_private, avatar_url, trading_style, trading_model, trader_type, primary_market, started_trading, username_change_count, referral_code, referral_count, is_pro, creator_access, creator_code, creator_granted_at, subscription_status, cancel_at_period_end, cancel_at, trial_end, current_period_end, stripe_customer_id, is_banned, banned_reason, is_beta_tester, use_free_tier, onboarding_completed, has_seen_getting_started_intro, has_seen_onboarding_complete_popup, max_drawdown_limit, has_email_password, signup_flow_source, early_access_enrolled_at, early_access_started_at, early_access_ends_at, early_access_status, early_access_campaign_id, early_access_enrollment_source, lifetime_access_source, lifetime_access_granted_at" as const
 
 export type UserProfileSlice = {
   id: string
@@ -77,6 +81,16 @@ export type UserProfileSlice = {
   creator_access: boolean | null
   subscription_status: string | null
   trial_end: string | null
+  stripe_customer_id: string | null
+  signup_flow_source: string | null
+  early_access_enrolled_at: string | null
+  early_access_started_at: string | null
+  early_access_ends_at: string | null
+  early_access_status: string | null
+  early_access_campaign_id: string | null
+  early_access_enrollment_source: string | null
+  lifetime_access_source: string | null
+  lifetime_access_granted_at: string | null
   is_banned: boolean | null
   banned_reason: string | null
   referral_code: string | null
@@ -110,6 +124,38 @@ function pickUserProfileFields(row: unknown): UserProfileSlice | null {
     subscription_status:
       o.subscription_status != null ? String(o.subscription_status) : null,
     trial_end: o.trial_end != null ? String(o.trial_end) : null,
+    stripe_customer_id:
+      o.stripe_customer_id != null ? String(o.stripe_customer_id) : null,
+    signup_flow_source:
+      o.signup_flow_source != null ? String(o.signup_flow_source) : null,
+    early_access_enrolled_at:
+      o.early_access_enrolled_at != null
+        ? String(o.early_access_enrolled_at)
+        : null,
+    early_access_started_at:
+      o.early_access_started_at != null
+        ? String(o.early_access_started_at)
+        : null,
+    early_access_ends_at:
+      o.early_access_ends_at != null ? String(o.early_access_ends_at) : null,
+    early_access_status:
+      o.early_access_status != null ? String(o.early_access_status) : null,
+    early_access_campaign_id:
+      o.early_access_campaign_id != null
+        ? String(o.early_access_campaign_id)
+        : null,
+    early_access_enrollment_source:
+      o.early_access_enrollment_source != null
+        ? String(o.early_access_enrollment_source)
+        : null,
+    lifetime_access_source:
+      o.lifetime_access_source != null
+        ? String(o.lifetime_access_source)
+        : null,
+    lifetime_access_granted_at:
+      o.lifetime_access_granted_at != null
+        ? String(o.lifetime_access_granted_at)
+        : null,
     is_banned: typeof o.is_banned === "boolean" ? o.is_banned : null,
     banned_reason: o.banned_reason != null ? String(o.banned_reason) : null,
     referral_code: o.referral_code != null ? String(o.referral_code) : null,
@@ -389,8 +435,16 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
         cachedPicked?.onboarding_completed === true &&
         !isProActive({
           is_pro: cachedPicked.is_pro,
+          creator_access: cachedPicked.creator_access,
           subscription_status: cachedPicked.subscription_status,
           trial_end: cachedPicked.trial_end,
+          early_access_enrolled_at: cachedPicked.early_access_enrolled_at,
+          early_access_started_at: cachedPicked.early_access_started_at,
+          early_access_status: cachedPicked.early_access_status,
+          early_access_ends_at: cachedPicked.early_access_ends_at,
+          early_access_campaign_id: cachedPicked.early_access_campaign_id,
+          early_access_enrollment_source:
+            cachedPicked.early_access_enrollment_source,
         })
       if (cachedPicked) {
         setProfileState(cachedPicked)
@@ -423,6 +477,13 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
           name: null,
           referredBy: readStoredReferralCode(),
           userMetadata: sessionUser.user_metadata,
+          signupFlowSource:
+            isCreatorFlowActive() || getPendingCreatorCode()
+              ? "creator"
+              : String(sessionUser.app_metadata?.provider ?? "").toLowerCase() ===
+                  "email"
+                ? "standard_email"
+                : "standard_oauth",
         })
 
         if (ensureResult.ok) {

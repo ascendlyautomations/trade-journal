@@ -53,9 +53,13 @@ export default function ProfileEquityLineChart({
             const n = Number(value)
             if (!Number.isFinite(n)) return "$0"
             if (n < 0) {
-              return `-$${Math.abs(n).toLocaleString()}`
+              return `-$${Math.abs(n).toLocaleString(undefined, {
+                maximumFractionDigits: 2,
+              })}`
             }
-            return `$${n.toLocaleString()}`
+            return `$${n.toLocaleString(undefined, {
+              maximumFractionDigits: 2,
+            })}`
           }}
         />
         <Tooltip

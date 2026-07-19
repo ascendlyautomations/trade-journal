@@ -250,7 +250,8 @@ function TradesPageTradeCard({
           </p>
 
           <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2">
-            {!isCopyTradedMode(trade) && resolveTradeModeBadgeLabel(trade) ? (
+            {!isCopyTradedMode(trade) &&
+            resolveTradeModeBadgeLabel(trade, accountRow) ? (
               <span
                 className={`rounded-full px-2 py-0.5 text-[10px] font-medium md:text-xs ${
                   acctLower === "funded"
@@ -273,7 +274,7 @@ function TradesPageTradeCard({
                               : "bg-gray-500/20 text-gray-400"
                 }`}
               >
-                {resolveTradeModeBadgeLabel(trade)}
+                {resolveTradeModeBadgeLabel(trade, accountRow)}
               </span>
             ) : null}
 
@@ -296,7 +297,7 @@ function TradesPageTradeCard({
               </div>
             ) : null}
 
-            {!resolveTradeModeBadgeLabel(trade) &&
+            {!resolveTradeModeBadgeLabel(trade, accountRow) &&
             !hasAccountLine &&
             !isCopyTradedMode(trade) ? (
               <span className="text-[10px] text-gray-400 md:text-xs">—</span>

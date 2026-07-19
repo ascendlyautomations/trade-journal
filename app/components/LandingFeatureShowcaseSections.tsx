@@ -77,6 +77,7 @@ function FlagshipBlock({
               src={flagship.imageSrc}
               alt={flagship.imageAlt}
               objectPositionClass={flagship.imageObjectPosition ?? "object-center"}
+              loadImage={visible}
             />
           </div>
         </div>

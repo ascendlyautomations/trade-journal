@@ -3,34 +3,27 @@
 import DashboardFilters from "../../components/dashboard/DashboardFilters"
 import DashboardHeader from "../../components/dashboard/DashboardHeader"
 import GettingStartedChecklist from "../../components/dashboard/GettingStartedChecklist"
-import DashboardStatsGrid from "../../components/dashboard/DashboardStatsGrid"
-import DashboardLongShort from "../../components/dashboard/DashboardLongShort"
-import DashboardHoldTime from "../../components/dashboard/DashboardHoldTime"
-import DashboardMaxDrawdown from "../../components/dashboard/DashboardMaxDrawdown"
-import TradingReportsSection, {
-  type TradingReportsSectionHandle,
-} from "@/app/components/trading-reports/TradingReportsSection"
+import TraxsProForLifeCard from "../../components/dashboard/TraxsProForLifeCard"
+import DashboardAnalytics from "../../components/dashboard/DashboardAnalytics"
+import DashboardCharts from "../../components/dashboard/DashboardCharts"
+import DashboardInsights from "../../components/dashboard/DashboardInsights"
+import DashboardModals from "../../components/dashboard/DashboardModals"
+import DashboardRecentTrades from "../../components/dashboard/DashboardRecentTrades"
+import DashboardTradingReports from "../../components/dashboard/DashboardTradingReports"
+import type {
+  DashboardAccountRow,
+  DashboardTradeRow,
+} from "../../components/dashboard/dashboardTypes"
+import type { TradingReportsSectionHandle } from "@/app/components/trading-reports/TradingReportsSection"
 import dynamic from "next/dynamic"
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
-  dashboardInsightBodyClass,
-  dashboardInsightCardClass,
-  dashboardInsightEmptyClass,
-  dashboardInsightHelperClass,
-  dashboardInsightLabelClass,
-  dashboardInsightMetricNeutralClass,
-  dashboardInsightMetricNegativeClass,
-  dashboardInsightMetricPositiveClass,
-  dashboardInsightTitleClass,
-} from "../../components/dashboard/dashboardInsightStyles"
-import {
-  NegativeInsightLine,
-  PerformanceInsightLine,
-  PositiveInsightLine,
-  SymbolInsightLine,
-  WarningInsightLine,
-  WeekdayInsightLine,
-} from "../../components/dashboard/DashboardInsightHighlight"
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 import type {
   DashboardGearPersistedPrefs,
   GearDraftState,
@@ -44,11 +37,7 @@ import {
 } from "../../components/dashboard/dashboardGearUtils"
 import {
   buildAccountFilterOptionsFromRows,
-  tradeMatchesAccountFilter,
 } from "@/lib/tradeAccountDisplay"
-import DashboardPremiumPreviewSection from "../../components/dashboard/DashboardPremiumPreviewSection"
-import ProUpgradeModal from "../../components/ProUpgradeModal"
-import DashboardWidgetEmptyState from "../../components/dashboard/DashboardWidgetEmptyState"
 import EmptyState from "../../components/ui/EmptyState"
 import { SkeletonDashboardShell } from "../../components/ui/skeletons"
 import Link from "next/link"
@@ -57,7 +46,6 @@ import {
 } from "@/lib/profileSplitMirrorWrites"
 import { supabase } from "../../../lib/supabaseClient"
 import { toUserFacingErrorMessage } from "@/lib/userFacingError"
-import { devLog } from "@/lib/devLog"
 import { isProActive } from "../../../lib/subscription"
 import { CREATOR_ACCESS_SUCCESS_MESSAGE } from "@/lib/creatorAccess"
 import { filterTradesForPerformanceSharePool } from "@/lib/performanceShare"
@@ -67,29 +55,9 @@ import {
   isValidAccountFilterValue,
   resolveCopyGroupAccountIdsForFilter,
 } from "@/lib/tradeAccountSelection"
-import { formatEST } from "@/lib/formatEST"
-import { formatCurrency } from "@/lib/formatCurrency"
-import { formatRR } from "@/lib/formatDisplay"
-import ExpandableText from "../../components/ui/ExpandableText"
 import {
-  getTradingSession,
-  getTradingWeekday,
-} from "@/lib/formatDate"
-import { computeLongShortPerformance } from "@/lib/dashboardLongShortStats"
-import { averageRrFromTrades, hasStoredRr } from "@/lib/tradeRr"
-import { computeHoldTimeStats } from "@/lib/dashboardHoldTimeStats"
-import { computeMaxDrawdown } from "@/lib/dashboardMaxDrawdown"
-import {
-  compareDashboardTradesChronological,
   getDashboardTradingDayKey,
-  resolveDashboardTradeTimeSource,
-  tradeMatchesDashboardSelectedDate,
-  tradeMatchesDashboardTimeFilter,
 } from "@/lib/dashboardTradeDate"
-import {
-  DASHBOARD_SESSION_DISPLAY_ORDER,
-  normalizeSessionBucket,
-} from "@/lib/dashboardSessionBuckets"
 import { isDemoModeActive } from "@/lib/demo/demoMode"
 import { requestDemoSignup } from "@/lib/demo/requestDemoSignup"
 import {
@@ -109,6 +77,7 @@ import {
 } from "@/lib/onboardingChecklistAudit"
 import { useGettingStartedProgress } from "@/lib/GettingStartedProgressProvider"
 import { useUserProfile } from "@/lib/UserProfileProvider"
+import { shouldShowProForLifeCard } from "@/lib/earlyAccess"
 import { profilePath } from "@/lib/profileRoutes"
 import { usePrefetchSecondaryRoutesWhenReady } from "@/lib/usePrefetchSecondaryRoutesWhenReady"
 import { useCachedAccounts, useCachedTrades } from "@/lib/useAppDataCache"
@@ -118,31 +87,24 @@ import {
   getCachedTrades,
 } from "@/lib/appDataCache"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
+import { useDashboardModals } from "./useDashboardModals"
+import { useDashboardAnalytics } from "./useDashboardAnalytics"
 
-const DashboardEquityCurve = dynamic(
-  () => import("../../components/dashboard/DashboardEquityCurve"),
-  { loading: () => <div className="h-48 animate-pulse rounded-lg bg-white/5" /> }
+const DashboardPremiumPreviewSection = dynamic(
+  () => import("../../components/dashboard/DashboardPremiumPreviewSection"),
+  { loading: () => <div className="h-48 animate-pulse rounded-xl bg-white/5" /> }
 )
-const DashboardWeekdayChart = dynamic(
-  () => import("../../components/dashboard/DashboardWeekdayChart"),
-  { loading: () => <div className="h-48 animate-pulse rounded-lg bg-white/5" /> }
-)
-const DashboardSessionChart = dynamic(
-  () => import("../../components/dashboard/DashboardSessionChart"),
-  { loading: () => <div className="h-48 animate-pulse rounded-lg bg-white/5" /> }
-)
-const PerformanceShareModal = dynamic(
-  () => import("../../components/PerformanceShareModal"),
-  { ssr: false }
-)
-const PostSetupImportModal = dynamic(
-  () => import("../../components/PostSetupImportModal"),
-  { ssr: false }
-)
-const TradesPageOverlays = dynamic(
-  () => import("../../components/TradesPageOverlays"),
-  { ssr: false }
-)
+function DashboardDeferredSectionsSkeleton() {
+  return (
+    <div className="space-y-3" aria-hidden>
+      <div className="h-72 animate-pulse rounded-xl border border-white/10 bg-white/5" />
+      <div className="grid gap-3 md:grid-cols-2">
+        <div className="h-48 animate-pulse rounded-xl border border-white/10 bg-white/5" />
+        <div className="h-48 animate-pulse rounded-xl border border-white/10 bg-white/5" />
+      </div>
+    </div>
+  )
+}
 
 const DASHBOARD_GEAR_PREFS_KEY = "tradetrax_dashboard_prefs_v1"
 
@@ -166,394 +128,6 @@ function saveDashboardGearPrefs(p: DashboardGearPersistedPrefs) {
   }
 }
 
-type SetupGroupResult = {
-  type: string
-  value: string
-  totalPnL: number
-  trades: number
-  wins: number
-  avgPnL: number
-  winRate: number
-}
-
-function analyzeBestSetups(trades: any[]): SetupGroupResult[] {
-  const groupStats: Record<
-    string,
-    { type: string; value: string; totalPnL: number; trades: number; wins: number }
-  > = {}
-
-  trades.forEach((trade) => {
-    const { session, ticker, direction } = trade
-    const pnl = Number(trade.pnl) || 0
-
-    const groups = [
-      { type: "session", value: session ?? "—" },
-      { type: "ticker", value: ticker ?? "—" },
-      { type: "direction", value: direction ?? "—" },
-    ]
-
-    groups.forEach(({ type, value }) => {
-      const key = `${type}:${value}`
-
-      if (!groupStats[key]) {
-        groupStats[key] = {
-          type,
-          value: String(value),
-          totalPnL: 0,
-          trades: 0,
-          wins: 0,
-        }
-      }
-
-      groupStats[key].totalPnL += pnl
-      groupStats[key].trades += 1
-      if (pnl > 0) groupStats[key].wins += 1
-    })
-  })
-
-  return Object.values(groupStats)
-    .map((g) => ({
-      ...g,
-      avgPnL: g.trades ? g.totalPnL / g.trades : 0,
-      winRate: g.trades ? g.wins / g.trades : 0,
-    }))
-    .filter((g) => g.trades >= 3)
-    .sort((a, b) => b.avgPnL - a.avgPnL)
-}
-
-function formatPerformanceInsightMoney(v: number) {
-  const abs = Math.abs(v)
-  const formatted = abs.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })
-  return v < 0 ? `-$${formatted}` : `$${formatted}`
-}
-
-function generateInsights(results: SetupGroupResult[]): string[] {
-  if (!results.length) return []
-
-  const insights: string[] = []
-
-  const bestSession = results.find((r) => r.type === "session")
-  const bestTicker = results.find((r) => r.type === "ticker")
-  const bestDirection = results.find((r) => r.type === "direction")
-
-  const formatPct = (v: number) => `${(v * 100).toFixed(0)}%`
-
-  if (bestSession && bestSession.value !== "—") {
-    insights.push(
-      `You perform best trading ${bestSession.value} session (${formatPerformanceInsightMoney(
-        bestSession.avgPnL
-      )} avg, ${formatPct(bestSession.winRate)} win rate)`
-    )
-  }
-
-  if (bestTicker && bestTicker.value !== "—") {
-    insights.push(
-      `${bestTicker.value} is your most profitable market (${formatPerformanceInsightMoney(
-        bestTicker.avgPnL
-      )} avg per trade)`
-    )
-  }
-
-  if (bestDirection && bestDirection.value !== "—") {
-    insights.push(
-      `You are more profitable going ${bestDirection.value} (${formatPerformanceInsightMoney(
-        bestDirection.avgPnL
-      )} avg)`
-    )
-  }
-
-  return insights
-}
-
-type CombinedSetupResult = {
-  key: string
-  totalPnL: number
-  trades: number
-  wins: number
-  avgPnL: number
-  winRate: number
-}
-
-function analyzeCombinedSetups(trades: any[]): CombinedSetupResult[] {
-  const stats: Record<
-    string,
-    { key: string; totalPnL: number; trades: number; wins: number }
-  > = {}
-
-  trades.forEach((trade) => {
-    const { session, ticker, direction } = trade
-    const pnl = Number(trade.pnl) || 0
-
-    const s = session ?? "—"
-    const t = ticker ?? "—"
-    const d = direction ?? "—"
-
-    const combos = [
-      `session:${s}|ticker:${t}`,
-      `session:${s}|direction:${d}`,
-      `ticker:${t}|direction:${d}`,
-      `session:${s}|ticker:${t}|direction:${d}`,
-    ]
-
-    combos.forEach((key) => {
-      if (!stats[key]) {
-        stats[key] = { key, totalPnL: 0, trades: 0, wins: 0 }
-      }
-      stats[key].totalPnL += pnl
-      stats[key].trades += 1
-      if (pnl > 0) stats[key].wins += 1
-    })
-  })
-
-  return Object.values(stats)
-    .map((row) => ({
-      ...row,
-      avgPnL: row.trades ? row.totalPnL / row.trades : 0,
-      winRate: row.trades ? row.wins / row.trades : 0,
-    }))
-    .filter((row) => row.trades >= 3)
-    .sort((a, b) => b.avgPnL - a.avgPnL)
-}
-
-function formatCombo(key: string): string {
-  const parts = key.split("|").map((p) => {
-    const idx = p.indexOf(":")
-    return idx >= 0 ? p.slice(idx + 1) : p
-  })
-
-  if (parts.length === 2) {
-    return `${parts[1]} during ${parts[0]}`
-  }
-
-  if (parts.length === 3) {
-    return `${parts[1]} during ${parts[0]} going ${parts[2]}`
-  }
-
-  return parts.filter(Boolean).join(" ")
-}
-
-function generateCombinedInsights(results: CombinedSetupResult[]): string[] {
-  const meaningful = results.filter(
-    (r) => !r.key.includes("—") && !r.key.includes("undefined")
-  )
-  if (!meaningful.length) return []
-
-  const formatPct = (v: number) => `${(v * 100).toFixed(0)}%`
-
-  const best = meaningful[0]
-
-  return [
-    `Your strongest setup is trading ${formatCombo(
-      best.key
-    )} (${formatPerformanceInsightMoney(best.avgPnL)} avg, ${formatPct(
-      best.winRate
-    )} win rate over ${best.trades} trades)`,
-  ]
-}
-
-function generateWorstInsight(worst: CombinedSetupResult | undefined): string | null {
-  if (!worst) return null
-
-  const formatPct = (v: number) => `${(v * 100).toFixed(0)}%`
-
-  return `You struggle most trading ${formatCombo(
-    worst.key
-  )} (${formatPerformanceInsightMoney(worst.avgPnL)} avg, ${formatPct(
-    worst.winRate
-  )} win rate over ${worst.trades} trades)`
-}
-
-function detectLossStreak(trades: any[]): number | null {
-  if (trades.length < 4) return null
-
-  for (let i = 0; i <= trades.length - 4; i++) {
-    const a = Number(trades[i].pnl) || 0
-    const b = Number(trades[i + 1].pnl) || 0
-    const c = Number(trades[i + 2].pnl) || 0
-
-    if (a < 0 && b < 0 && c < 0) {
-      const nextTrades = trades.slice(i + 3, i + 8)
-      if (nextTrades.length === 0) return null
-
-      const wins = nextTrades.filter((t) => (Number(t.pnl) || 0) > 0).length
-      return wins / nextTrades.length
-    }
-  }
-
-  return null
-}
-
-function detectRRThreshold(trades: any[]): string | null {
-  const lowRR = trades.filter((t) => {
-    if (!hasStoredRr(t.rr)) return false
-    return Number(t.rr) < 1
-  })
-  const highRR = trades.filter((t) => {
-    if (!hasStoredRr(t.rr)) return false
-    return Number(t.rr) >= 1
-  })
-
-  if (lowRR.length < 3 || highRR.length < 3) return null
-
-  const lowWin = lowRR.filter((t) => (Number(t.pnl) || 0) > 0).length / lowRR.length
-  const highWin =
-    highRR.filter((t) => (Number(t.pnl) || 0) > 0).length / highRR.length
-
-  if (highWin > lowWin + 0.2) {
-    return "You perform significantly better when RR ≥ 1"
-  }
-
-  return null
-}
-
-function formatMoney(v: number) {
-  return v < 0
-    ? `-$${Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: 2 })}`
-    : `$${v.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
-}
-
-function calculateExpectancy(trades: any[]) {
-  if (!trades || trades.length === 0) return null
-
-  const wins = trades.filter((t) => (Number(t.pnl) || 0) > 0)
-  const losses = trades.filter((t) => (Number(t.pnl) || 0) < 0)
-
-  const winRate = wins.length / trades.length
-  const lossRate = losses.length / trades.length
-
-  const avgWin =
-    wins.length > 0
-      ? wins.reduce((sum, t) => sum + (Number(t.pnl) || 0), 0) / wins.length
-      : 0
-
-  const avgLoss =
-    losses.length > 0
-      ? Math.abs(
-          losses.reduce((sum, t) => sum + (Number(t.pnl) || 0), 0) /
-            losses.length
-        )
-      : 0
-
-  const expectancy = winRate * avgWin - lossRate * avgLoss
-
-  return {
-    expectancy,
-    winRate,
-    avgWin,
-    avgLoss,
-  }
-}
-
-function calculateStreaks(trades: any[]) {
-  if (!trades || trades.length === 0) return null
-
-  let currentStreak = 0
-  let currentType: "win" | "loss" | "even" | null = null
-
-  let maxWinStreak = 0
-  let maxLossStreak = 0
-
-  let tempStreak = 0
-  let tempType: "win" | "loss" | "even" | null = null
-
-  trades.forEach((trade) => {
-    const pnl = Number(trade.pnl) || 0
-    const type: "win" | "loss" | "even" =
-      pnl > 0 ? "win" : pnl < 0 ? "loss" : "even"
-
-    if (type === tempType) {
-      tempStreak++
-    } else {
-      tempStreak = 1
-      tempType = type
-    }
-
-    if (type === "win" && tempStreak > maxWinStreak) {
-      maxWinStreak = tempStreak
-    }
-
-    if (type === "loss" && tempStreak > maxLossStreak) {
-      maxLossStreak = tempStreak
-    }
-
-    currentStreak = tempStreak
-    currentType = tempType
-  })
-
-  return {
-    currentStreak,
-    currentType,
-    maxWinStreak,
-    maxLossStreak,
-  }
-}
-
-type TradingHoursSummary = {
-  hourlyMap: Record<number, number>
-  hasValidTradingHoursData: boolean
-  bestHour: number | null
-  worstHour: number | null
-}
-
-/** Hour from entry/exit time: full datetime, or HH:MM / HH:MM:SS. */
-function parseHourFromEntryOrExit(timeSource: unknown): number | null {
-  if (timeSource == null || timeSource === "") return null
-  const raw = String(timeSource).trim()
-  if (!raw) return null
-
-  const date = new Date(raw)
-  if (!Number.isNaN(date.getTime())) {
-    return date.getHours()
-  }
-
-  const m = raw.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/)
-  if (!m) return null
-  const h = parseInt(m[1], 10)
-  if (!Number.isFinite(h) || h < 0 || h > 23) return null
-  return h
-}
-
-function analyzeTradingHours(trades: any[]): TradingHoursSummary | null {
-  if (!trades || trades.length === 0) return null
-
-  const hourlyMap: Record<number, number> = {}
-
-  trades.forEach((trade) => {
-    const timeSource = resolveDashboardTradeTimeSource(trade)
-    if (!timeSource) return
-
-    const hour = parseHourFromEntryOrExit(timeSource)
-    if (hour === null) return
-
-    hourlyMap[hour] = (hourlyMap[hour] || 0) + (Number(trade.pnl) || 0)
-  })
-
-  const hasValidTradingHoursData = Object.keys(hourlyMap).length > 1
-
-  let bestHour: number | null = null
-  let worstHour: number | null = null
-
-  if (hasValidTradingHoursData) {
-    const rows = Object.entries(hourlyMap).map(([h, pnl]) => ({
-      hour: Number(h),
-      pnl,
-    }))
-    rows.sort((a, b) => b.pnl - a.pnl)
-    bestHour = rows[0].hour
-    worstHour = rows[rows.length - 1].hour
-  }
-
-  return {
-    hourlyMap,
-    hasValidTradingHoursData,
-    bestHour,
-    worstHour,
-  }
-}
-
 export default function Dashboard() {
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const {
@@ -567,6 +141,7 @@ export default function Dashboard() {
     profile,
     loading: profileLoading,
     setProfile,
+    refreshProfile,
   } = useUserProfile()
   const { trades, loading: tradesLoading } = useCachedTrades(user?.id)
   const { accounts: accountRows, loading: accountsLoading } =
@@ -592,16 +167,29 @@ export default function Dashboard() {
   const [gearDraft, setGearDraft] = useState<GearDraftState | null>(null)
   const [ddInputFocused, setDdInputFocused] = useState(false)
   const [savingGearSettings, setSavingGearSettings] = useState(false)
-  const [showPerformanceShare, setShowPerformanceShare] = useState(false)
-  const [showProUpgradeModal, setShowProUpgradeModal] = useState(false)
-  const openExportUpgradeModal = useCallback(() => {
-    setShowProUpgradeModal(true)
-  }, [])
+  const {
+    performanceShareOpen: showPerformanceShare,
+    openPerformanceShare,
+    closePerformanceShare,
+    quickTradeOpen: showQuickTrade,
+    openQuickTrade,
+    closeQuickTrade,
+    upgradeOpen: showProUpgradeModal,
+    openUpgrade: openExportUpgradeModal,
+    closeUpgrade,
+    importOpen: showImportModal,
+    openImport,
+    closeImport,
+    editingTrade,
+    setEditingTrade,
+    selectedImage,
+    closeImage,
+    sendTradeId,
+    closeSend,
+    closeTrade,
+  } = useDashboardModals()
   const tradingReportsRef = useRef<TradingReportsSectionHandle>(null)
-  const [showImportModal, setShowImportModal] = useState(false)
-  const [editingTrade, setEditingTrade] = useState<any | null>(null)
-  const [selectedImage, setSelectedImage] = useState<string | null>(null)
-  const [sendTradeId, setSendTradeId] = useState<string | null>(null)
+  const [deferredSectionsReady, setDeferredSectionsReady] = useState(false)
   const didHydrateDashboardPrefs = useRef(false)
   /** Same fetch as /trades — used only for filter dropdown labels (#account_number vs UUID). */
 
@@ -611,7 +199,7 @@ export default function Dashboard() {
     (accountsLoading && accountRows.length === 0)
 
   const accountById = useMemo(() => {
-    const m: Record<string, any> = {}
+    const m: Record<string, DashboardAccountRow> = {}
     accountRows.forEach((acc) => {
       m[String(acc.id)] = acc
     })
@@ -639,9 +227,10 @@ export default function Dashboard() {
   )
 
   const tradesExcludingBacktest = useMemo(
-    () => excludeBacktestTrades(trades),
+    () => excludeBacktestTrades([...trades]),
     [trades]
   )
+  const deferredTradesExcludingBacktest = useDeferredValue(tradesExcludingBacktest)
 
   function handleDashboardTimeframeChange(value: string) {
     setTimeFilter(value)
@@ -659,16 +248,19 @@ export default function Dashboard() {
   }
 
   const tradesForPerformanceSharePool = useMemo(
-    () =>
-      filterTradesForPerformanceSharePool(tradesExcludingBacktest, {
+    () => {
+      if (!showPerformanceShare) return []
+      return filterTradesForPerformanceSharePool(tradesExcludingBacktest, {
         selectedDate,
         accountFilter,
         accountTypeFilter,
         showPublicOnly,
         accountById,
         copyGroupAccountIds,
-      }),
+      })
+    },
     [
+      showPerformanceShare,
       tradesExcludingBacktest,
       selectedDate,
       accountFilter,
@@ -691,11 +283,11 @@ export default function Dashboard() {
   }, [user?.id])
 
   const handleImportModalComplete = useCallback(async () => {
-    setShowImportModal(false)
+    closeImport()
     notifyGettingStartedChecklistMaybeCompleted()
     dispatchGettingStartedSignalsRefresh()
     await refreshDashboardData()
-  }, [refreshDashboardData])
+  }, [closeImport, refreshDashboardData])
 
   useEffect(() => {
     auditLogDashboardMounted(user?.id ?? null)
@@ -709,30 +301,36 @@ export default function Dashboard() {
     if (!user?.id) return
 
     const profileLoaded = profile != null
-    const onboardingResolved = profileLoaded || checklistSignalsReady
     const onboardingCompleted = profileLoaded
       ? profile.onboarding_completed === true
       : checklistSignals.onboardingCompleted
+    // Mirrors the render gate: nothing mounts until the checklist signals are
+    // resolved (fetched or restored from the session cache); trades cache can
+    // only hide the card sooner via the max().
+    const effectiveTradeCount = Math.max(
+      checklistSignals.tradeCount,
+      trades.length
+    )
 
     const renderChecklist =
-      onboardingResolved &&
+      checklistSignalsReady &&
       shouldAutoShowGettingStartedChecklist(user.id, {
         onboardingCompleted,
         allComplete: gettingStartedProgress.allComplete,
         hasSeenOnboardingCompletePopup,
-        tradeCount: checklistSignals.tradeCount,
+        tradeCount: effectiveTradeCount,
       })
 
     auditLogDashboardDecision({
       source: "app/(app)/dashboard/page.tsx",
-      onboardingResolved,
+      onboardingResolved: checklistSignalsReady,
       onboardingCompleted,
       renderChecklist,
-      reason: !onboardingResolved
-        ? "waiting for profile or checklist signals"
+      reason: !checklistSignalsReady
+        ? "waiting for checklist signals (fetch or session cache)"
         : !onboardingCompleted
           ? "profile onboarding incomplete"
-          : checklistSignals.tradeCount > 0
+          : effectiveTradeCount > 0
             ? "first trade logged — checklist moves to navbar"
             : gettingStartedProgress.allComplete ||
                 hasSeenOnboardingCompletePopup
@@ -751,6 +349,7 @@ export default function Dashboard() {
     checklistSignals.tradeCount,
     gettingStartedProgress.allComplete,
     hasSeenOnboardingCompletePopup,
+    trades.length,
   ])
 
   useEffect(() => {
@@ -825,7 +424,9 @@ export default function Dashboard() {
       showWorstSetup,
       showWarnings,
       drawdownLimit:
-        raw != null && raw !== "" ? sanitizeDrawdownLimitInput(String(raw)) : "",
+        raw != null && String(raw) !== ""
+          ? sanitizeDrawdownLimitInput(String(raw))
+          : "",
     })
     // Snapshot when the panel opens only (avoid resetting drafts while editing).
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -883,12 +484,13 @@ export default function Dashboard() {
         showWarnings: typeof p.showWarnings === "boolean" ? p.showWarnings : true,
       })
     }
-  }, [pageDataLoading, tradesExcludingBacktest, accountRows, accountById])
-
-  function formatNumber(value: number) {
-    if (value === null || value === undefined) return "-"
-    return value.toLocaleString()
-  }
+  }, [
+    pageDataLoading,
+    tradesExcludingBacktest,
+    accountRows,
+    accountById,
+    copyGroups,
+  ])
 
   // 🔥 MEMOIZED CALCULATIONS (PERFORMANCE BOOST)
   const {
@@ -899,15 +501,11 @@ export default function Dashboard() {
     avgRR,
     biggestLoss,
     bestTrade,
-    maxStreak,
-    sessionStats,
     avgWin,
     avgLoss,
     bestDay,
     worstDay,
-    symbolStats,
     symbolPerformanceRows,
-    strategyPerformanceRows,
     longShortPerformance,
     holdTimeStats,
     maxDrawdown,
@@ -928,431 +526,8 @@ export default function Dashboard() {
     insightBestWeekday,
     insightBestWeekdayAvg,
     hasTradingDayTimeSource,
-  } = useMemo(() => {
-    if (process.env.NODE_ENV === "development") {
-      devLog("Trades:", tradesExcludingBacktest)
-      if (tradesExcludingBacktest.length)
-        devLog("Sample trade:", tradesExcludingBacktest[0])
-    }
-
-    /** Public trades: DB flag and/or non-empty public note (matches InputTradeForm / feed). */
-    function tradeIsPublic(t: any) {
-      if (t?.is_public === true) return true
-      const desc = t?.public_description
-      return typeof desc === "string" && desc.trim().length > 0
-    }
-
-    const now = new Date()
-
-    const withoutPublicFilter = tradesExcludingBacktest.filter((trade) => {
-      if (
-        selectedDate &&
-        !tradeMatchesDashboardSelectedDate(trade, selectedDate)
-      ) {
-        return false
-      }
-
-      if (
-        !tradeMatchesDashboardTimeFilter(
-          trade,
-          timeFilter,
-          now,
-          customRangeStart,
-          customRangeEnd
-        )
-      ) {
-        return false
-      }
-
-      if (
-        !tradeMatchesAccountFilter(
-          trade,
-          accountFilter,
-          accountById[String(trade.account_id ?? "").trim()],
-          { copyGroupAccountIds: copyGroupAccountIds ?? undefined }
-        )
-      ) {
-        return false
-      }
-
-      const tradeAcct = String(trade.mode ?? trade.account_type ?? "")
-        .toLowerCase()
-        .trim()
-      const selectedAcct = accountTypeFilter.toLowerCase().trim()
-      if (accountTypeFilter !== "all") {
-        if (tradeAcct !== selectedAcct) {
-          return false
-        }
-      }
-
-      return true
-    })
-
-    let filteredTrades = withoutPublicFilter
-    if (showPublicOnly) {
-      const publicFiltered = withoutPublicFilter.filter((t) => tradeIsPublic(t))
-      filteredTrades =
-        publicFiltered.length > 0 ? publicFiltered : withoutPublicFilter
-    }
-
-    filteredTrades = filteredTrades.sort(compareDashboardTradesChronological)
-
-    const totalTrades = filteredTrades.length
-    const wins = filteredTrades.filter(t => t.pnl > 0)
-    const winRate = totalTrades ? (wins.length / totalTrades) * 100 : 0
-    const totalPnL = filteredTrades.reduce((sum, t) => sum + (t.pnl || 0), 0)
-
-    const avgRR = averageRrFromTrades(filteredTrades)
-
-    const losses = filteredTrades
-  .map(t => Number(t.pnl) || 0)
-  .filter(p => p < 0)
-
-const biggestLoss = losses.length > 0
-  ? Math.min(...losses)
-  : 0
-
-    const bestTrade = filteredTrades.length
-      ? Math.max(...filteredTrades.map((t) => Number(t.pnl) || 0))
-      : 0
-
-    let currentStreak = 0
-    let maxStreak = 0
-    filteredTrades.forEach(t => {
-      if (t.pnl < 0) {
-        currentStreak++
-        if (currentStreak > maxStreak) maxStreak = currentStreak
-      } else {
-        currentStreak = 0
-      }
-    })
-
-    const sessionStats: any = {}
-    filteredTrades.forEach(t => {
-      if (!sessionStats[t.session]) {
-        sessionStats[t.session] = { pnl: 0, trades: 0, wins: 0 }
-      }
-      sessionStats[t.session].pnl += t.pnl || 0
-      sessionStats[t.session].trades += 1
-      if (t.pnl > 0) sessionStats[t.session].wins += 1
-    })
-
-    const symbolStats: Record<string, any> = {}
-
-    filteredTrades.forEach((t) => {
-      if (!symbolStats[t.ticker]) {
-        symbolStats[t.ticker] = {
-          pnl: 0,
-          trades: 0,
-          wins: 0
-        }
-      }
-
-      symbolStats[t.ticker].pnl += t.pnl || 0
-      symbolStats[t.ticker].trades += 1
-      if (t.pnl > 0) symbolStats[t.ticker].wins += 1
-    })
-
-    let insightBestSymbol: string | null = null
-    let insightBestSymbolAvg = -Infinity
-    Object.entries(symbolStats).forEach(([symbol, data]: [string, any]) => {
-      if (!symbol || symbol === "undefined" || data.trades < 3) return
-      const avg = Number(data.pnl) / data.trades
-      if (avg > insightBestSymbolAvg) {
-        insightBestSymbolAvg = avg
-        insightBestSymbol = symbol
-      }
-    })
-
-    const tickerAgg: Record<
-      string,
-      { totalPnL: number; wins: number; totalTrades: number; rrSum: number; rrCount: number }
-    > = {}
-
-    filteredTrades.forEach((t) => {
-      const ticker = t.ticker || "—"
-      if (!tickerAgg[ticker]) {
-        tickerAgg[ticker] = { totalPnL: 0, wins: 0, totalTrades: 0, rrSum: 0, rrCount: 0 }
-      }
-      tickerAgg[ticker].totalPnL += t.pnl || 0
-      tickerAgg[ticker].totalTrades += 1
-      if (t.pnl > 0) tickerAgg[ticker].wins += 1
-      if (hasStoredRr(t.rr)) {
-        tickerAgg[ticker].rrSum += Number(t.rr)
-        tickerAgg[ticker].rrCount += 1
-      }
-    })
-
-    const symbolPerformanceRows = Object.entries(tickerAgg)
-      .map(([ticker, s]) => ({
-        ticker,
-        totalTrades: s.totalTrades,
-        wins: s.wins,
-        winRate: s.totalTrades ? (s.wins / s.totalTrades) * 100 : 0,
-        totalPnL: s.totalPnL,
-        avgRR: s.rrCount ? s.rrSum / s.rrCount : null,
-      }))
-      .sort((a, b) => b.totalPnL - a.totalPnL)
-
-    const strategyAgg: Record<
-      string,
-      { totalPnL: number; wins: number; totalTrades: number; rrSum: number; rrCount: number }
-    > = {}
-
-    filteredTrades.forEach((t) => {
-      const strategy = (t.strategy && String(t.strategy).trim()) || ""
-      if (!strategy) return
-      if (!strategyAgg[strategy]) {
-        strategyAgg[strategy] = { totalPnL: 0, wins: 0, totalTrades: 0, rrSum: 0, rrCount: 0 }
-      }
-      strategyAgg[strategy].totalPnL += t.pnl || 0
-      strategyAgg[strategy].totalTrades += 1
-      if (t.pnl > 0) strategyAgg[strategy].wins += 1
-      if (hasStoredRr(t.rr)) {
-        strategyAgg[strategy].rrSum += Number(t.rr)
-        strategyAgg[strategy].rrCount += 1
-      }
-    })
-
-    const strategyPerformanceRows = Object.entries(strategyAgg)
-      .map(([strategy, s]) => ({
-        strategy,
-        totalTrades: s.totalTrades,
-        wins: s.wins,
-        winRate: s.totalTrades ? (s.wins / s.totalTrades) * 100 : 0,
-        totalPnL: s.totalPnL,
-        avgRR: s.rrCount ? s.rrSum / s.rrCount : null,
-      }))
-      .sort((a, b) => b.totalPnL - a.totalPnL)
-
-    const sessionBuckets: Record<"London" | "NY" | "Asia", { totalTrades: number; wins: number; totalPnL: number }> = {
-      London: { totalTrades: 0, wins: 0, totalPnL: 0 },
-      NY: { totalTrades: 0, wins: 0, totalPnL: 0 },
-      Asia: { totalTrades: 0, wins: 0, totalPnL: 0 }
-    }
-
-    filteredTrades.forEach((t) => {
-      const b = normalizeSessionBucket(t.session)
-      if (!b) return
-      sessionBuckets[b].totalTrades += 1
-      sessionBuckets[b].totalPnL += t.pnl || 0
-      if (t.pnl > 0) sessionBuckets[b].wins += 1
-    })
-
-    const sessionPieData = DASHBOARD_SESSION_DISPLAY_ORDER.map((name) => ({
-      name,
-      value: sessionBuckets[name].totalTrades,
-    }))
-
-    const weekdayMap: Record<"Mon" | "Tue" | "Wed" | "Thu" | "Fri", number> = {
-      Mon: 0,
-      Tue: 0,
-      Wed: 0,
-      Thu: 0,
-      Fri: 0
-    }
-
-    const tradingLongToShort: Record<
-      string,
-      keyof typeof weekdayMap
-    > = {
-      Monday: "Mon",
-      Tuesday: "Tue",
-      Wednesday: "Wed",
-      Thursday: "Thu",
-      Friday: "Fri",
-    }
-
-    filteredTrades.forEach((t) => {
-      const resolved = resolveDashboardTradeTimeSource(t)
-      if (!resolved) return
-      const longDay = getTradingWeekday(resolved)
-      if (!longDay) return
-      const short = tradingLongToShort[longDay]
-      if (!short) return
-      weekdayMap[short] += Number(t.pnl) || 0
-    })
-
-    const weekdayData = (["Mon", "Tue", "Wed", "Thu", "Fri"] as const).map((day) => ({
-      day,
-      pnl: weekdayMap[day]
-    }))
-
-    const weekdayInsightStats: Record<string, { pnl: number; trades: number }> = {}
-    filteredTrades.forEach((trade) => {
-      const resolved = resolveDashboardTradeTimeSource(trade)
-      if (!resolved) return
-      const day = getTradingWeekday(resolved)
-      if (!day) return
-      if (!weekdayInsightStats[day]) {
-        weekdayInsightStats[day] = { pnl: 0, trades: 0 }
-      }
-      weekdayInsightStats[day].pnl += Number(trade.pnl) || 0
-      weekdayInsightStats[day].trades += 1
-    })
-
-    let insightBestWeekday: string | null = null
-    let insightBestWeekdayAvg = -Infinity
-    Object.entries(weekdayInsightStats).forEach(([day, data]) => {
-      if (data.trades < 2) return
-      const avg = data.pnl / data.trades
-      if (avg > insightBestWeekdayAvg) {
-        insightBestWeekdayAvg = avg
-        insightBestWeekday = day
-      }
-    })
-
-    const bestStrategyRow = strategyPerformanceRows.find(
-      (row) => row.totalTrades >= 3
-    )
-    const bestSetup = bestStrategyRow
-      ? {
-          strategy: bestStrategyRow.strategy,
-          trades: bestStrategyRow.totalTrades,
-          winRate: bestStrategyRow.winRate,
-          totalPnL: bestStrategyRow.totalPnL,
-        }
-      : null
-
-    const setupResults = analyzeBestSetups(filteredTrades)
-    const insights = generateInsights(setupResults)
-
-    const combinedResults = analyzeCombinedSetups(filteredTrades)
-    const combinedInsights = generateCombinedInsights(combinedResults)
-
-    const meaningfulCombined = combinedResults.filter(
-      (r) => !r.key.includes("—") && !r.key.includes("undefined")
-    )
-    const worstResults = [...meaningfulCombined]
-      .filter((r) => r.trades >= 3)
-      .sort((a, b) => a.avgPnL - b.avgPnL)
-    const worst = worstResults[0]
-    const worstInsight = generateWorstInsight(worst)
-
-    const chronologicalTrades = [...filteredTrades].sort(
-      compareDashboardTradesChronological
-    )
-
-    const longShortPerformance = computeLongShortPerformance(filteredTrades)
-    const holdTimeStats = computeHoldTimeStats(filteredTrades)
-    const maxDrawdown = computeMaxDrawdown(filteredTrades)
-    const streakData = calculateStreaks(chronologicalTrades)
-    const expectancyData = calculateExpectancy(filteredTrades)
-    const hourData = analyzeTradingHours(filteredTrades)
-    let runningEquity = 0
-    const equityDrawdownChartData = chronologicalTrades.map((trade, index) => {
-      runningEquity += Number(trade.pnl) || 0
-
-      if (process.env.NODE_ENV === "development" && index < 5) {
-        devLog({
-          equity: runningEquity,
-        })
-      }
-
-      return {
-        date:
-          resolveDashboardTradeTimeSource(trade) ??
-          trade.created_at ??
-          "",
-        equity: runningEquity,
-      }
-    })
-    const lossStreakRate = detectLossStreak(chronologicalTrades)
-    const rrInsight = detectRRThreshold(filteredTrades)
-
-    const warnings: string[] = []
-    if (lossStreakRate !== null && Number.isFinite(lossStreakRate)) {
-      warnings.push(
-        `After 3 consecutive losses, your win rate drops to ${(
-          lossStreakRate * 100
-        ).toFixed(0)}% in the next few trades`
-      )
-    }
-    if (rrInsight) {
-      warnings.push(rrInsight)
-    }
-
-    const dailyMap: Record<string, number> = {}
-
-    filteredTrades.forEach((t) => {
-      const dateKey = getDashboardTradingDayKey(t)
-      if (!dateKey) return
-      dailyMap[dateKey] = (dailyMap[dateKey] || 0) + (Number(t.pnl) || 0)
-    })
-
-    const dailyPnLs = Object.values(dailyMap)
-
-    const bestDay = dailyPnLs.length > 0
-  ? Math.max(...dailyPnLs)
-  : 0
-
-    const worstDay = dailyPnLs.length > 0
-      ? Math.min(...dailyPnLs)
-      : 0
-
-    const winsOnly = filteredTrades.filter(t => t.pnl > 0)
-    const lossesOnly = filteredTrades.filter(t => t.pnl < 0)
-
-    const avgWin =
-      winsOnly.reduce((sum, t) => sum + t.pnl, 0) / (winsOnly.length || 1)
-
-    const avgLoss =
-      lossesOnly.reduce((sum, t) => sum + t.pnl, 0) / (lossesOnly.length || 1)
-
-    const hasTradingDayTimeSource = filteredTrades.some(
-      (t) => resolveDashboardTradeTimeSource(t) != null
-    )
-
-    if (process.env.NODE_ENV === "development") {
-      devLog(
-        filteredTrades.map((t) => ({
-          pnl: t.pnl,
-          session: getTradingSession(t.entry_time || t.exit_time),
-        }))
-      )
-    }
-
-    return {
-      filteredTrades,
-      totalTrades,
-      winRate,
-      totalPnL,
-      avgRR,
-      biggestLoss,
-      bestTrade,
-      maxStreak,
-      sessionStats,
-      avgWin,
-      avgLoss,
-      bestDay,
-      worstDay,
-      symbolStats,
-      symbolPerformanceRows,
-      strategyPerformanceRows,
-      longShortPerformance,
-      holdTimeStats,
-      maxDrawdown,
-      sessionBuckets,
-      bestSetup,
-      insights,
-      combinedInsights,
-      worstInsight,
-      warnings,
-      equityDrawdownChartData,
-      expectancyData,
-      streakData,
-      hourData,
-      weekdayData,
-      sessionPieData,
-      insightBestSymbol,
-      insightBestSymbolAvg,
-      insightBestWeekday,
-      insightBestWeekdayAvg,
-      hasTradingDayTimeSource,
-    }
-
-  }, [
-    tradesExcludingBacktest,
+  } = useDashboardAnalytics({
+    deferredTradesExcludingBacktest,
     showPublicOnly,
     accountFilter,
     accountTypeFilter,
@@ -1362,7 +537,7 @@ const biggestLoss = losses.length > 0
     customRangeEnd,
     accountById,
     copyGroupAccountIds,
-  ])
+  })
 
   useEffect(() => {
     if (accountFilter === "all") return
@@ -1389,7 +564,29 @@ const biggestLoss = losses.length > 0
   const dashboardHasCachedData =
     user?.id != null && getCachedTrades(user.id) != null
 
-  const statsStillLoading = pageDataLoading && !dashboardHasCachedData
+  const analyticsPending =
+    deferredTradesExcludingBacktest !== tradesExcludingBacktest
+  const statsStillLoading =
+    (pageDataLoading || analyticsPending) && !dashboardHasCachedData
+
+  useEffect(() => {
+    if (statsStillLoading) return
+    if (deferredSectionsReady) return
+
+    if ("requestIdleCallback" in window) {
+      const idleId = window.requestIdleCallback(
+        () => setDeferredSectionsReady(true),
+        { timeout: 1200 }
+      )
+      return () => window.cancelIdleCallback(idleId)
+    }
+
+    const timeoutId = globalThis.setTimeout(
+      () => setDeferredSectionsReady(true),
+      0
+    )
+    return () => globalThis.clearTimeout(timeoutId)
+  }, [deferredSectionsReady, statsStillLoading])
 
   const dashboardInteractive =
     user?.id != null && (!pageDataLoading || dashboardHasCachedData)
@@ -1406,8 +603,6 @@ const biggestLoss = losses.length > 0
   const hasNoTrades =
     !statsStillLoading && tradesExcludingBacktest.length === 0
 
-  const onboardingCompletedResolved =
-    profile != null || checklistSignalsReady
   const onboardingCompletedForAutoShow = profile
     ? profile.onboarding_completed === true
     : checklistSignals.onboardingCompleted
@@ -1415,13 +610,23 @@ const biggestLoss = losses.length > 0
     profile?.has_seen_onboarding_complete_popup === true ||
     checklistSignals.hasSeenOnboardingCompletePopup
 
+  // Trades cache only ever HIDES the card sooner (e.g. right after the first
+  // trade is logged, before the signals refetch lands) — it never shows it.
+  const tradeCountForAutoShow = Math.max(
+    checklistSignals.tradeCount,
+    trades.length
+  )
+
+  // The checklist mounts only once completion state is definitively known:
+  // signals resolved by the fetch or restored from the per-user session cache.
+  // While unresolved, render nothing — completed users must never see a flash.
   const showOnboardingSection =
-    onboardingCompletedResolved &&
+    checklistSignalsReady &&
     shouldAutoShowGettingStartedChecklist(user?.id, {
       onboardingCompleted: onboardingCompletedForAutoShow,
       allComplete: gettingStartedProgress.allComplete,
       hasSeenOnboardingCompletePopup: hasSeenOnboardingCompletePopupForAutoShow,
-      tradeCount: checklistSignals.tradeCount,
+      tradeCount: tradeCountForAutoShow,
     })
 
   const renderGettingStartedChecklist = (options?: {
@@ -1577,7 +782,7 @@ const biggestLoss = losses.length > 0
       showWarnings: gearDraft.showWarnings,
     })
 
-    setProfile((p: any) => (p ? { ...p, max_drawdown_limit: n } : p))
+    setProfile((p) => (p ? { ...p, max_drawdown_limit: n } : p))
     setShowControls(false)
   }
 
@@ -1585,144 +790,31 @@ const biggestLoss = losses.length > 0
     setShowControls(false)
   }
 
-  const recentTradesList = (filteredTrades || [])
-    .slice()
-    .sort(
-      (a, b) =>
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    )
-    .slice(0, 5)
+  const recentTradesList = useMemo(
+    () =>
+      (filteredTrades || [])
+        .slice()
+        .sort(
+          (a, b) =>
+            new Date(b.created_at as string).getTime() -
+            new Date(a.created_at as string).getTime()
+        )
+        .slice(0, 5),
+    [filteredTrades]
+  )
+
+  const handleSelectRecentTrade = useCallback(
+    (trade: DashboardTradeRow) => {
+      setEditingTrade(trade)
+    },
+    [setEditingTrade]
+  )
 
   const recentTradesSection = (
-    <div className={`h-full ${dashboardInsightCardClass}`}>
-      <h3 className={dashboardInsightTitleClass}>Recent Trades</h3>
-
-      <div className="max-h-[28rem] space-y-2 overflow-y-auto pr-1 md:space-y-3">
-        {recentTradesList.length === 0 ? (
-          <EmptyState
-            icon="📋"
-            title="No recent trades"
-            description="Your latest trades will appear here once you log activity."
-            action={
-              tradesExcludingBacktest.length === 0 ? (
-                <div className="flex flex-wrap items-center justify-center gap-2">
-                  <Link
-                    href="/app"
-                    className="rounded-lg bg-blue-500 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:hover:bg-blue-500"
-                  >
-                    + Add Trade
-                  </Link>
-                  <Link
-                    href="/import"
-                    className="rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-white/15"
-                  >
-                    Import CSV
-                  </Link>
-                </div>
-              ) : undefined
-            }
-            className="border-0 bg-transparent py-6"
-          />
-        ) : (
-          recentTradesList.map((trade) => (
-            <div
-              key={trade.id}
-              role="button"
-              tabIndex={0}
-              onClick={() => setEditingTrade(trade)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault()
-                  setEditingTrade(trade)
-                }
-              }}
-              className="w-full cursor-pointer rounded-lg border border-white/10 bg-white/5 p-2.5 text-left text-xs transition hover:bg-white/[0.07] md:p-3 md:text-sm"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0 space-y-0.5 md:space-y-1">
-                  <p className="truncate text-sm font-semibold text-white md:text-base">
-                    {trade.ticker}
-                    {trade.direction ? (
-                      <span className="font-normal text-gray-300">
-                        {" "}
-                        • {trade.direction}
-                      </span>
-                    ) : null}
-                  </p>
-                  <p
-                    className={`font-semibold tabular-nums ${
-                      (Number(trade.pnl) || 0) >= 0
-                        ? "text-green-400"
-                        : "text-red-400"
-                    }`}
-                  >
-                    {formatCurrency(Number(trade.pnl) || 0)}
-                  </p>
-                  <p className="text-[11px] text-gray-300 md:text-xs">
-                    RR{" "}
-                    {trade.rr != null && trade.rr !== ""
-                      ? formatRR(trade.rr)
-                      : "—"}
-                  </p>
-                  <p className="text-[10px] text-gray-400 md:text-xs">
-                    {formatEST(String(trade.created_at ?? ""))}
-                  </p>
-                </div>
-                <div className="flex shrink-0 flex-col items-end gap-1">
-                  {String(trade.mode ?? trade.account_type ?? "")
-                    .toLowerCase()
-                    .trim() === "backtest" ? (
-                    <span className="rounded-md bg-blue-500/80 px-1.5 py-0.5 text-[10px] font-medium text-white md:px-2 md:py-1 md:text-xs">
-                      Backtest
-                    </span>
-                  ) : null}
-                  {trade.public_description ? (
-                    <span className="rounded-md bg-green-500/20 px-1.5 py-0.5 text-[10px] font-medium text-green-400 md:px-2 md:py-1 md:text-xs">
-                      Posted
-                    </span>
-                  ) : (
-                    <span className="rounded-md bg-white/10 px-1.5 py-0.5 text-[10px] font-medium text-gray-300 md:px-2 md:py-1 md:text-xs">
-                      Private
-                    </span>
-                  )}
-                </div>
-              </div>
-              {trade.public_description ? (
-                <ExpandableText
-                  className="mt-1.5 text-xs text-gray-200 md:mt-2 md:text-sm"
-                  textClassName="text-gray-200"
-                  stopPropagation
-                >
-                  {trade.public_description}
-                </ExpandableText>
-              ) : null}
-              {trade.strategy ? (
-                <p className="mt-1 text-[10px] text-gray-300 md:text-xs">Strategy: {trade.strategy}</p>
-              ) : null}
-            </div>
-          ))
-        )}
-      </div>
-    </div>
-  )
-
-  const pnlByWeekdaySection = (
-    <DashboardWeekdayChart data={weekdayData} totalTrades={totalTrades} />
-  )
-
-  const sessionPerformanceSection = (
-    <DashboardSessionChart
-      sessionPieData={sessionPieData}
-      sessionBuckets={sessionBuckets}
-      totalTrades={totalTrades}
-    />
-  )
-
-  const mobileEquityChartSlot = (
-    <DashboardEquityCurve
-      variant="mobile"
-      data={equityDrawdownChartData}
-      totalTrades={totalTrades}
+    <DashboardRecentTrades
+      trades={recentTradesList}
+      hasAnyTrades={tradesExcludingBacktest.length > 0}
+      onSelectTrade={handleSelectRecentTrade}
     />
   )
 
@@ -1731,11 +823,6 @@ const biggestLoss = losses.length > 0
   return (
     <>
       <FeedbackModal {...feedbackModalProps} />
-
-      <PostSetupImportModal
-        open={showImportModal}
-        onComplete={() => void handleImportModalComplete()}
-      />
 
       <div className="w-full px-3 pb-3 pt-4 text-white md:px-10 md:pb-10 md:pt-0">
 
@@ -1767,7 +854,14 @@ const biggestLoss = losses.length > 0
                   openExportUpgradeModal()
                   return
                 }
-                setShowPerformanceShare(true)
+                openPerformanceShare()
+              }}
+              onOpenQuickInput={() => {
+                if (isDemoModeActive()) {
+                  requestDemoSignup("trade")
+                  return
+                }
+                openQuickTrade()
               }}
               showControls={showControls}
               onToggleShowControls={() => setShowControls((prev) => !prev)}
@@ -1791,6 +885,20 @@ const biggestLoss = losses.length > 0
         </div>
 
           <div className="relative z-0 mx-auto flex w-full max-w-[1600px] flex-col gap-2 overflow-visible px-4 md:gap-3 md:px-6">
+
+  {/* Large Founding Challenge card only until the first trade; afterwards it
+      stays reachable from the navbar Getting Started entry. */}
+  {user?.id &&
+  shouldShowProForLifeCard(profile) &&
+  checklistSignalsReady &&
+  checklistSignals.tradeCount === 0 ? (
+    <div className="mt-4 md:mt-6">
+      <TraxsProForLifeCard
+        referralCode={profile?.referral_code}
+        onAwarded={refreshProfile}
+      />
+    </div>
+  ) : null}
 
   {gettingStartedSectionMobile}
 
@@ -1826,7 +934,7 @@ const biggestLoss = losses.length > 0
                   requestDemoSignup("save")
                   return
                 }
-                setShowImportModal(true)
+                openImport()
               }}
               className="inline-flex min-h-[44px] items-center rounded-lg border border-white/20 bg-white/10 px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-white/15 md:px-4 md:text-sm"
             >
@@ -1862,368 +970,121 @@ const biggestLoss = losses.length > 0
       {gettingStartedSection}
       {dashboardUserIsPro ? (
         <>
-      {user?.id ? (
-        <Suspense fallback={null}>
-          <TradingReportsSection
-            ref={tradingReportsRef}
-            userId={user.id}
-            trades={tradesExcludingBacktest}
-            onViewTrade={(trade) => setEditingTrade(trade)}
-          />
-        </Suspense>
+      {user?.id && deferredSectionsReady ? (
+        <DashboardTradingReports
+          ref={tradingReportsRef}
+          userId={user.id}
+          trades={tradesExcludingBacktest}
+          onViewTrade={handleSelectRecentTrade}
+        />
       ) : null}
-  {/* TOP: STATS + CHART */}
-  <div className="grid gap-2 overflow-visible md:gap-3 lg:grid-cols-3">
+  <DashboardCharts
+    isPro
+    deferredSectionsReady={deferredSectionsReady}
+    equityData={equityDrawdownChartData}
+    weekdayData={weekdayData}
+    sessionPieData={sessionPieData}
+    sessionBuckets={sessionBuckets}
+    maxDrawdown={maxDrawdown}
+    showDrawdown={showDrawdown}
+    currentStreak={currentStreak}
+    avgDay={avgDay}
+    consistency={consistency}
+    recentTrades={recentTradesSection}
+    totalTrades={totalTrades}
+    winRate={winRate}
+    avgRR={avgRR}
+    totalPnL={totalPnL}
+    profitFactor={profitFactor}
+    avgWin={avgWin}
+    bestTrade={bestTrade}
+    avgLoss={avgLoss}
+    biggestLoss={biggestLoss}
+    bestDay={bestDay}
+    worstDay={worstDay}
+    showEquity={showEquity}
+    expectancyData={expectancyData}
+    streakData={streakData}
+    hourData={hourData}
+    showSessions={showSessions}
+    bestWinStreak={bestWinStreak}
+  />
 
-    {/* LEFT: STATS */}
-    <DashboardStatsGrid
-      isPro
-      totalTrades={totalTrades}
-      winRate={winRate}
-      avgRR={avgRR}
-      totalPnL={totalPnL}
-      profitFactor={profitFactor}
-      avgWin={avgWin}
-      bestTrade={bestTrade}
-      avgLoss={avgLoss}
-      biggestLoss={biggestLoss}
-      bestDay={bestDay}
-      worstDay={worstDay}
-      showEquity={showEquity}
-      mobileEquitySlot={mobileEquityChartSlot}
-      mobileWeekdayPnlSlot={pnlByWeekdaySection}
-      expectancyData={expectancyData}
-      streakData={streakData}
-      hourData={hourData}
-      showSessions={showSessions}
-      mobileSessionsSlot={sessionPerformanceSection}
-      bestWinStreak={bestWinStreak}
-      maxDrawdownSlot={
-        showDrawdown ? (
-          <DashboardMaxDrawdown
-            variant="compact"
-            maxDrawdown={maxDrawdown}
+  {!deferredSectionsReady ? (
+    <DashboardDeferredSectionsSkeleton />
+  ) : (
+  <>
+  <DashboardAnalytics
+    symbolPerformanceRows={symbolPerformanceRows}
+    hasAnyTrades={tradesExcludingBacktest.length > 0}
+    deferredSectionsReady={deferredSectionsReady}
+    weekdayData={weekdayData}
+    longShortPerformance={longShortPerformance}
+    holdTimeStats={holdTimeStats}
+    totalTrades={totalTrades}
+  />
+
+          <DashboardInsights
+            showInsights={showInsights}
+            showBestSetup={showBestSetup}
+            showWorstSetup={showWorstSetup}
+            showWarnings={showWarnings}
             totalTrades={totalTrades}
+            hasTradingDayTimeSource={hasTradingDayTimeSource}
+            insights={insights}
+            combinedInsights={combinedInsights}
+            worstInsight={worstInsight}
+            warnings={warnings}
+            insightBestSymbol={insightBestSymbol}
+            insightBestSymbolAvg={insightBestSymbolAvg}
+            insightBestWeekday={insightBestWeekday}
+            insightBestWeekdayAvg={insightBestWeekdayAvg}
+            bestSetup={bestSetup}
           />
-        ) : null
-      }
-    />
-
-    {/* RIGHT: CHARTS */}
-    <div className="space-y-2 overflow-visible md:space-y-3 lg:col-span-2">
-      {showEquity ? (
-        <DashboardEquityCurve
-          variant="desktop"
-          isPro
-          data={equityDrawdownChartData}
-          profitFactor={profitFactor}
-          currentStreak={currentStreak}
-          avgDay={avgDay}
-          consistency={consistency}
-          totalTrades={totalTrades}
-        />
-      ) : null}
-
-      <div className="grid grid-cols-1 gap-2 md:gap-3 lg:grid-cols-2">
-        {showSessions ? (
-          <>
-            <div className="hidden md:block">{recentTradesSection}</div>
-            <div className="hidden md:block">{sessionPerformanceSection}</div>
-          </>
-        ) : (
-          <div className="hidden md:block lg:col-span-2">{recentTradesSection}</div>
-        )}
-      </div>
-    </div>
-
-  </div>
-
-  {/* SYMBOL + P&L BY WEEKDAY */}
-  <div className="grid grid-cols-1 gap-2 md:gap-3 lg:grid-cols-3 lg:items-stretch">
-
-    <div className="h-full overflow-x-auto rounded-xl border border-white/10 bg-white/10 p-2.5 md:p-4 lg:col-span-2">
-      <h3 className={dashboardInsightTitleClass}>Symbol Performance</h3>
-
-      {symbolPerformanceRows.length === 0 ? (
-        <DashboardWidgetEmptyState
-          variant={
-            tradesExcludingBacktest.length === 0 ? "no-trades" : "needs-more-trades"
-          }
-          showImportCsv={tradesExcludingBacktest.length === 0}
-          className="py-8"
-        />
-      ) : (
-      <table className="w-full min-w-[520px] text-[11px] md:text-sm">
-        <thead>
-          <tr className="border-b border-white/10 text-gray-400">
-            <th className="py-1.5 text-center md:py-2">Ticker</th>
-            <th className="py-1.5 text-center md:py-2">Trades</th>
-            <th className="py-1.5 text-center md:py-2">Win %</th>
-            <th className="py-1.5 text-center md:py-2">Total P&L</th>
-            <th className="py-1.5 text-center md:py-2">Avg RR</th>
-          </tr>
-        </thead>
-        <tbody className="text-white">
-          {symbolPerformanceRows.map((row) => (
-            <tr key={row.ticker} className="border-b border-white/10 hover:bg-white/10">
-              <td className="py-1.5 text-center md:py-2">{row.ticker}</td>
-              <td className="py-1.5 text-center md:py-2">{formatNumber(row.totalTrades)}</td>
-              <td className="py-1.5 text-center md:py-2">{row.winRate.toFixed(1)}%</td>
-              <td
-                className={`py-1.5 text-center md:py-2 ${
-                  row.totalPnL >= 0 ? "text-green-400" : "text-red-400"
-                }`}
-              >
-                {formatCurrency(row.totalPnL)}
-              </td>
-              <td className="py-1.5 text-center md:py-2">{formatRR(row.avgRR)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      )}
-    </div>
-
-    <div className="hidden md:block">{pnlByWeekdaySection}</div>
-
-  </div>
-
-  <div className="grid grid-cols-1 gap-2 md:gap-3 lg:grid-cols-3 lg:items-stretch">
-    <DashboardLongShort
-      performance={longShortPerformance}
-      totalTrades={totalTrades}
-    />
-    <div className="lg:col-span-2">
-      <DashboardHoldTime stats={holdTimeStats} totalTrades={totalTrades} />
-    </div>
-  </div>
-
-          {(showInsights || showBestSetup) ? (
-          <div className="grid grid-cols-1 gap-2 md:grid-cols-2 md:gap-3">
-            {showInsights ? (
-            <div className={dashboardInsightCardClass}>
-                <h3 className={dashboardInsightTitleClass}>Performance Insights</h3>
-                <p className={dashboardInsightHelperClass}>
-                  Data-driven highlights (min. 3 trades per session, symbol, or
-                  direction). Respects current filters.
-                </p>
-                {totalTrades > 0 && !hasTradingDayTimeSource ? (
-                  <p className="mb-3 text-xs md:text-sm leading-relaxed text-amber-200/90">
-                    Trading day stats use entry/exit times with a 6PM EST session
-                    rollover. Add entry/exit times to unlock these insights.
-                  </p>
-                ) : null}
-                {insights.length > 0 ||
-                insightBestSymbol ||
-                insightBestWeekday ? (
-                  <div className="space-y-2">
-                    {insights.map((text, i) => (
-                      <p
-                        key={`${i}-${text.slice(0, 24)}`}
-                        className={dashboardInsightBodyClass}
-                      >
-                        • <PerformanceInsightLine text={text} />
-                      </p>
-                    ))}
-                    {insightBestSymbol ? (
-                      <p className={dashboardInsightBodyClass}>
-                        •{" "}
-                        <SymbolInsightLine
-                          symbol={insightBestSymbol}
-                          avgPnL={insightBestSymbolAvg}
-                        />
-                      </p>
-                    ) : null}
-                    {insightBestWeekday ? (
-                      <p className={dashboardInsightBodyClass}>
-                        •{" "}
-                        <WeekdayInsightLine
-                          weekday={insightBestWeekday}
-                          avgPnL={insightBestWeekdayAvg}
-                        />
-                      </p>
-                    ) : null}
-                  </div>
-                ) : (
-                  <p className={dashboardInsightEmptyClass}>
-                    Not enough sample size yet. Need at least 3 trades in a session,
-                    symbol, or direction bucket (with current filters).
-                  </p>
-                )}
-            </div>
-            ) : null}
-
-            {showBestSetup ? (
-            <div
-              className={`${dashboardInsightCardClass} ${!showInsights ? "md:col-span-2" : ""}`}
-            >
-              <h3 className={dashboardInsightTitleClass}>
-                Best Performing Strategy
-              </h3>
-              {bestSetup ? (
-                <div className={`space-y-2 ${dashboardInsightBodyClass}`}>
-                  <p>
-                    <span className={dashboardInsightLabelClass}>Strategy:</span>{" "}
-                    <span className={dashboardInsightMetricPositiveClass}>
-                      {bestSetup.strategy}
-                    </span>
-                  </p>
-                  <p>
-                    <span className={dashboardInsightLabelClass}>Win rate:</span>{" "}
-                    <span
-                      className={
-                        bestSetup.winRate > 50
-                          ? dashboardInsightMetricPositiveClass
-                          : dashboardInsightMetricNegativeClass
-                      }
-                    >
-                      {bestSetup.winRate.toFixed(1)}%
-                    </span>
-                  </p>
-                  <p>
-                    <span className={dashboardInsightLabelClass}>Total P&amp;L:</span>{" "}
-                    <span
-                      className={`tabular-nums ${
-                        bestSetup.totalPnL >= 0
-                          ? dashboardInsightMetricPositiveClass
-                          : dashboardInsightMetricNegativeClass
-                      }`}
-                    >
-                      {formatCurrency(bestSetup.totalPnL)}
-                    </span>
-                  </p>
-                  <p>
-                    <span className={dashboardInsightLabelClass}>Trades:</span>{" "}
-                    <span className={dashboardInsightMetricNeutralClass}>
-                      {bestSetup.trades}
-                    </span>
-                  </p>
-                </div>
-              ) : (
-                <p className={dashboardInsightEmptyClass}>
-                  Need at least 3 trades with the same strategy to rank setups.
-                </p>
-              )}
-            </div>
-            ) : null}
-          </div>
-          ) : null}
-
-          {(showInsights || showWorstSetup || showWarnings) ? (
-          <div className="grid grid-cols-1 gap-2 md:grid-cols-2 md:gap-3">
-            {showInsights ? (
-            <div className={dashboardInsightCardClass}>
-                <h3 className={dashboardInsightTitleClass}>Advanced Edge</h3>
-                <p className={dashboardInsightHelperClass}>
-                  Strongest combined setup (pairs or triples, min. 3 trades). Same
-                  filters as above.
-                </p>
-                {combinedInsights.length > 0 ? (
-                  <div className="space-y-2">
-                    {combinedInsights.map((text, i) => (
-                      <p
-                        key={`combo-${i}-${text.slice(0, 20)}`}
-                        className={`${dashboardInsightBodyClass} font-semibold`}
-                      >
-                        ⭐ <PositiveInsightLine text={text} />
-                      </p>
-                    ))}
-                  </div>
-                ) : (
-                  <p className={dashboardInsightEmptyClass}>
-                    No qualifying combined setup yet. Need 3+ trades with consistent
-                    session, symbol, and direction data.
-                  </p>
-                )}
-            </div>
-            ) : null}
-
-            {showWorstSetup ? (
-            <div className={dashboardInsightCardClass}>
-              <h3 className={dashboardInsightTitleClass}>Risk Insights</h3>
-              <p className={dashboardInsightHelperClass}>
-                Lowest-performing combined setup (same 3+ trade rule as Advanced Edge).
-              </p>
-              {worstInsight ? (
-                <p className={`${dashboardInsightBodyClass} font-semibold`}>
-                  ⚠️ <NegativeInsightLine text={worstInsight} />
-                </p>
-              ) : (
-                <p className={dashboardInsightEmptyClass}>
-                  No combined setup to rank yet, or filters removed too much data.
-                </p>
-              )}
-            </div>
-            ) : null}
-
-            {showWarnings ? (
-            <div className={`${dashboardInsightCardClass} md:col-span-2`}>
-              <h3 className={dashboardInsightTitleClass}>Behavior Warnings</h3>
-              <p className={dashboardInsightHelperClass}>
-                Post–loss streak win rate (next 5 trades) and RR sample comparison.
-              </p>
-              {warnings.length > 0 ? (
-                <div className="space-y-2">
-                  {warnings.map((w, i) => (
-                    <p
-                      key={`warn-${i}-${w.slice(0, 16)}`}
-                      className={dashboardInsightBodyClass}
-                    >
-                      🚨 <WarningInsightLine text={w} />
-                    </p>
-                  ))}
-                </div>
-              ) : (
-                <p className={dashboardInsightEmptyClass}>
-                  No behavioral flags for the current trade set.
-                </p>
-              )}
-            </div>
-            ) : null}
-          </div>
-          ) : null}
 
           <div className="md:hidden">{recentTradesSection}</div>
+  </>
+  )}
         </>
       ) : (
         <>
-          <div className="grid gap-2 overflow-visible md:gap-3 lg:grid-cols-3">
-            <DashboardStatsGrid
-              isPro={false}
-              totalTrades={totalTrades}
-              winRate={winRate}
-              avgRR={avgRR}
-              totalPnL={totalPnL}
-              profitFactor={profitFactor}
-              avgWin={avgWin}
-              bestTrade={bestTrade}
-              avgLoss={avgLoss}
-              biggestLoss={biggestLoss}
-              bestDay={bestDay}
-              worstDay={worstDay}
-              showEquity={showEquity}
-              mobileEquitySlot={mobileEquityChartSlot}
-              mobileWeekdayPnlSlot={pnlByWeekdaySection}
-              expectancyData={expectancyData}
-              streakData={streakData}
-              hourData={hourData}
-              showSessions={showSessions}
-              mobileSessionsSlot={sessionPerformanceSection}
-              bestWinStreak={bestWinStreak}
-            />
-            <div className="space-y-2 overflow-visible md:space-y-3 lg:col-span-2">
-              {showEquity ? (
-                <DashboardEquityCurve
-                  variant="desktop"
-                  isPro={false}
-                  data={equityDrawdownChartData}
-                  totalTrades={totalTrades}
-                />
-              ) : null}
-            </div>
-          </div>
+          <DashboardCharts
+            isPro={false}
+            deferredSectionsReady={deferredSectionsReady}
+            equityData={equityDrawdownChartData}
+            weekdayData={weekdayData}
+            sessionPieData={sessionPieData}
+            sessionBuckets={sessionBuckets}
+            maxDrawdown={maxDrawdown}
+            showDrawdown={showDrawdown}
+            currentStreak={currentStreak}
+            avgDay={avgDay}
+            consistency={consistency}
+            recentTrades={recentTradesSection}
+            totalTrades={totalTrades}
+            winRate={winRate}
+            avgRR={avgRR}
+            totalPnL={totalPnL}
+            profitFactor={profitFactor}
+            avgWin={avgWin}
+            bestTrade={bestTrade}
+            avgLoss={avgLoss}
+            biggestLoss={biggestLoss}
+            bestDay={bestDay}
+            worstDay={worstDay}
+            showEquity={showEquity}
+            expectancyData={expectancyData}
+            streakData={streakData}
+            hourData={hourData}
+            showSessions={showSessions}
+            bestWinStreak={bestWinStreak}
+          />
           {recentTradesSection}
-          <DashboardPremiumPreviewSection />
+          {deferredSectionsReady ? (
+            <DashboardPremiumPreviewSection />
+          ) : (
+            <DashboardDeferredSectionsSkeleton />
+          )}
         </>
       )}
     </>
@@ -2232,32 +1093,26 @@ const biggestLoss = losses.length > 0
           </div>
       </div>
 
-      <PerformanceShareModal
-        open={showPerformanceShare}
-        onClose={() => setShowPerformanceShare(false)}
-        tradePool={tradesForPerformanceSharePool}
-        subtitle="Dashboard · respects account, mode, date & public filters"
+      <DashboardModals
+        importOpen={showImportModal}
+        onImportComplete={() => void handleImportModalComplete()}
+        performanceShareOpen={showPerformanceShare}
+        onClosePerformanceShare={closePerformanceShare}
+        performanceShareTrades={tradesForPerformanceSharePool}
         profile={profile}
-        initialCustomRangeStart={customRangeStart}
-        initialCustomRangeEnd={customRangeEnd}
-      />
-      <ProUpgradeModal
-        open={showProUpgradeModal}
-        onClose={() => setShowProUpgradeModal(false)}
-        variant="custom"
-      />
-      <TradesPageOverlays
+        customRangeStart={customRangeStart}
+        customRangeEnd={customRangeEnd}
+        upgradeOpen={showProUpgradeModal}
+        onCloseUpgrade={closeUpgrade}
+        quickTradeOpen={showQuickTrade}
+        userId={user?.id ?? null}
+        onCloseQuickTrade={closeQuickTrade}
         selectedImage={selectedImage}
         editingTrade={editingTrade}
-        showPerformanceShare={false}
         sendTradeId={sendTradeId}
-        tradesForPerformanceSharePool={[]}
-        gateProfile={null}
-        onCloseImageLightbox={() => setSelectedImage(null)}
-        onCloseEditForm={() => setEditingTrade(null)}
-        onTradeFormSaved={() => setEditingTrade(null)}
-        onClosePerformanceShare={() => {}}
-        onCloseSendModal={() => setSendTradeId(null)}
+        onCloseImage={closeImage}
+        onCloseTrade={closeTrade}
+        onCloseSend={closeSend}
       />
     </>
   )

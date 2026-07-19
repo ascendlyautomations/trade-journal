@@ -6,6 +6,7 @@ import { GoogleSignInButton, FeedbackModal, useFeedbackPopup } from "@/app/compo
 import AuthPasswordInput from "@/app/components/ui/AuthPasswordInput"
 import { supabase } from "@/lib/supabaseClient"
 import {
+  clearStoredReferralCode,
   ensureProfileForUser,
   readStoredReferralCode,
 } from "@/lib/ensureProfileForUser"
@@ -110,6 +111,7 @@ function CreatorSignupInner() {
         name: name?.trim() || null,
         referredBy: referralCode,
         userMetadata: signedUpUser.user_metadata,
+        signupFlowSource: "creator",
       })
 
       if (!ensureResult.ok) {
@@ -120,6 +122,12 @@ function CreatorSignupInner() {
 
       if (ensureResult.created && referralCode?.trim()) {
         notifyAffiliateReferralAttribution()
+      }
+
+      // Referral is in auth metadata (and possibly the profile). Clear browser
+      // state so it cannot attribute a future account on this device.
+      if (referralCode?.trim()) {
+        clearStoredReferralCode()
       }
 
       prefetchCriticalAppRoutes(router)

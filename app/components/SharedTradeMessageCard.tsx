@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, type ReactNode } from "react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
 import TradeSocialLayer from "@/app/components/TradeSocialLayer"
 import {
   formatPoints,
@@ -43,6 +43,10 @@ export type SharedTradeMessageCardProps = {
   onTradeLoaded?: (trade: any | null) => void
   /** Hide footer View trade CTA (e.g. inline expand in reel viewer). */
   hideViewTradeAction?: boolean
+  /** Delay data/media work until the card approaches the viewport. */
+  deferUntilVisible?: boolean
+  /** Use a bandwidth-capped message preview while retaining the original lightbox. */
+  optimizeMessagePreview?: boolean
 }
 
 /**
@@ -60,6 +64,8 @@ export default function SharedTradeMessageCard({
   initialTrade = null,
   onTradeLoaded,
   hideViewTradeAction = false,
+  deferUntilVisible = false,
+  optimizeMessagePreview = false,
 }: SharedTradeMessageCardProps) {
   const resolvedClassName =
     className ??
@@ -71,21 +77,53 @@ export default function SharedTradeMessageCard({
     () => !initialTrade && Boolean(tradeId != null && String(tradeId).trim())
   )
   const [lightboxImageUrl, setLightboxImageUrl] = useState<string | null>(null)
+  const [canLoad, setCanLoad] = useState(!deferUntilVisible)
+  const deferredCardRef = useRef<HTMLDivElement | null>(null)
+  const initialTradeRef = useRef(initialTrade)
+  const onTradeLoadedRef = useRef(onTradeLoaded)
+  initialTradeRef.current = initialTrade
+  onTradeLoadedRef.current = onTradeLoaded
 
   const resolvedTradeId = tradeId != null ? String(tradeId).trim() : ""
 
   useEffect(() => {
+    if (!deferUntilVisible || canLoad) return
+    const element = deferredCardRef.current
+    if (!element || typeof IntersectionObserver === "undefined") {
+      setCanLoad(true)
+      return
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return
+        setCanLoad(true)
+        observer.disconnect()
+      },
+      { rootMargin: "400px 0px" }
+    )
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [canLoad, deferUntilVisible])
+
+  useEffect(() => {
+    if (!canLoad) return
     if (!resolvedTradeId) {
       setTrade(null)
       setTradeLoading(false)
       return
     }
 
-    let cancelled = false
-    if (!initialTrade) {
-      setTradeLoading(true)
-      setTrade(null)
+    const cachedTrade = initialTradeRef.current
+    if (cachedTrade) {
+      setTrade(cachedTrade)
+      setTradeLoading(false)
+      return
     }
+
+    let cancelled = false
+    setTradeLoading(true)
+    setTrade(null)
 
     void (async () => {
       const { data } = await supabase
@@ -117,13 +155,24 @@ export default function SharedTradeMessageCard({
 
       setTrade(sanitized)
       setTradeLoading(false)
-      onTradeLoaded?.(sanitized)
+      onTradeLoadedRef.current?.(sanitized)
     })()
 
     return () => {
       cancelled = true
     }
-  }, [resolvedTradeId, viewerUserId, onTradeLoaded])
+  }, [canLoad, resolvedTradeId, viewerUserId])
+
+  if (!canLoad) {
+    return (
+      <div
+        ref={deferredCardRef}
+        className={`${resolvedClassName} rounded-lg bg-[#1e293b] p-3 text-sm text-gray-400`}
+      >
+        Loading trade…
+      </div>
+    )
+  }
 
   if (!resolvedTradeId) {
     return (
@@ -221,6 +270,8 @@ export default function SharedTradeMessageCard({
             {layout === "dm" ? (
               <TradeScreenshotImage
                 src={imgSrc}
+                preset="message-preview"
+                fallbackToOriginal={false}
                 maxHeightPx={360}
                 className="rounded-lg border border-gray-700"
                 logContext="shared-trade-dm"
@@ -228,6 +279,8 @@ export default function SharedTradeMessageCard({
             ) : (
               <TradeScreenshotImage
                 src={imgSrc}
+                preset={optimizeMessagePreview ? "message-preview" : undefined}
+                fallbackToOriginal={!optimizeMessagePreview}
                 maxHeightPx={112}
                 className="rounded-lg border border-gray-700"
                 logContext="shared-trade-card"

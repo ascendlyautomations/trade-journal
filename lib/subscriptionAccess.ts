@@ -14,6 +14,12 @@ export type SubscriptionAccessProfile = ProfileOnboardingGateFields & {
   creator_access?: boolean | null
   subscription_status?: string | null
   trial_end?: string | null
+  early_access_enrolled_at?: string | null
+  early_access_started_at?: string | null
+  early_access_status?: string | null
+  early_access_ends_at?: string | null
+  early_access_campaign_id?: string | null
+  early_access_enrollment_source?: string | null
   is_beta_tester?: boolean | null
   referred_by?: string | null
   use_free_tier?: boolean | null
@@ -68,6 +74,7 @@ export const SUBSCRIPTION_GATE_PATH_PREFIXES = [
   "/login",
   "/onboarding",
   "/choose-plan",
+  "/early-access",
   "/reset-password",
   "/creator",
   "/privacy",

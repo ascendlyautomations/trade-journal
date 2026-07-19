@@ -10,6 +10,7 @@ import {
   buildAccountFilterOptionsFromRows,
 } from "@/lib/tradeAccountDisplay"
 import { useRouter } from "next/navigation"
+import dynamic from "next/dynamic"
 import TradesPageMainContent from "../../components/TradesPageMainContent"
 import TradesPageOverlays from "../../components/TradesPageOverlays"
 import ReelViewer from "../../components/profile/ReelViewer"
@@ -28,6 +29,11 @@ import {
 } from "@/lib/tradeAccountSelection"
 import { tradeAnalysisHref } from "@/lib/tradeAnalysisNavigation"
 import ProUpgradeModal from "../../components/ProUpgradeModal"
+
+const QuickTradeModal = dynamic(
+  () => import("../../components/QuickTradeModal"),
+  { ssr: false }
+)
 
 export default function TradesPage() {
   const { user, profile: gateProfile, loading: profileLoading } = useUserProfile()
@@ -64,6 +70,7 @@ export default function TradesPage() {
   const [selectedDate, setSelectedDate] = useState("")
   const [editingTrade, setEditingTrade] = useState<any | null>(null)
   const [showPerformanceShare, setShowPerformanceShare] = useState(false)
+  const [showQuickTrade, setShowQuickTrade] = useState(false)
   const [showExportUpgradeModal, setShowExportUpgradeModal] = useState(false)
   const [sendTradeId, setSendTradeId] = useState<string | null>(null)
   const [visibleCount, setVisibleCount] = useState(10)
@@ -238,6 +245,14 @@ export default function TradesPage() {
     setVisibleCount((prev) => prev + 10)
   }, [])
 
+  const handleOpenQuickInput = useCallback(() => {
+    if (isDemoModeActive()) {
+      requestDemoSignup("trade")
+      return
+    }
+    setShowQuickTrade(true)
+  }, [])
+
   const handleTradeFormSaved = useCallback(() => {
     if (isDemoModeActive()) {
       requestDemoSignup("save")
@@ -372,6 +387,7 @@ export default function TradesPage() {
             onSelectedDateChange={setSelectedDate}
             resultFilter={resultFilter}
             onResultFilterChange={setResultFilter}
+            onOpenQuickInput={handleOpenQuickInput}
             showAdvanced={showAdvanced}
             onToggleAdvanced={handleToggleAdvanced}
             showPublicOnly={showPublicOnly}
@@ -417,6 +433,11 @@ export default function TradesPage() {
         open={showExportUpgradeModal}
         onClose={() => setShowExportUpgradeModal(false)}
         variant="custom"
+      />
+      <QuickTradeModal
+        open={showQuickTrade}
+        userId={user?.id ?? null}
+        onClose={() => setShowQuickTrade(false)}
       />
 
       <ReelViewer

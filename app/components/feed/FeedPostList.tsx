@@ -1,8 +1,7 @@
 "use client"
 
-import { memo, type MutableRefObject } from "react"
+import { memo, useMemo } from "react"
 import FeedPostCard, {
-  EMPTY_COMMENTS,
   EMPTY_LIKE_META,
   type FeedLikeMeta,
 } from "./FeedPostCard"
@@ -15,15 +14,12 @@ type FeedPostListProps = {
   user: any
   likesByPost: Record<string, FeedLikeMeta>
   likeBusyByPost?: Record<string, boolean>
-  commentsByPost: Record<string, any[]>
-  commentSubmitting: Record<string, boolean>
-  draftSyncRef: MutableRefObject<Record<string, string>>
+  commentCountsByPost: Record<string, number>
   onSelectPost: (post: any) => void
   onOpenComments: (post: any) => void
   onOpenLinkedTrade?: (post: any) => void
   onOpenAttachedReel?: (post: any, reel: import("@/lib/reels").ReelRow) => void
   onToggleLike: (post: any) => void
-  onSubmitComment: (post: any, text: string) => Promise<boolean>
   onSharePost: (post: any) => void
   openReelMenuId?: string | null
   onReelMenuToggle?: (reelId: string) => void
@@ -37,15 +33,12 @@ function FeedPostList({
   user,
   likesByPost,
   likeBusyByPost = {},
-  commentsByPost,
-  commentSubmitting,
-  draftSyncRef,
+  commentCountsByPost,
   onSelectPost,
   onOpenComments,
   onOpenLinkedTrade,
   onOpenAttachedReel,
   onToggleLike,
-  onSubmitComment,
   onSharePost,
   openReelMenuId = null,
   onReelMenuToggle,
@@ -53,6 +46,20 @@ function FeedPostList({
   onDeleteReel,
   onReplaceReelVideo,
 }: FeedPostListProps) {
+  const firstMediaPostId = useMemo(
+    () =>
+      posts.find((post) =>
+        Boolean(
+          post.image_url ||
+            post.thumbnail_url ||
+            post.cover_url ||
+            post.room_logo ||
+            post.achievements?.image_url
+        )
+      )?.id ?? null,
+    [posts]
+  )
+
   return (
     <>
       {posts.map((post) => {
@@ -66,8 +73,8 @@ function FeedPostList({
               user={user}
               likeMeta={likesByPost[pid] ?? EMPTY_LIKE_META}
               likeBusy={!!likeBusyByPost[pid]}
-              comments={commentsByPost[pid] ?? EMPTY_COMMENTS}
-              commentSubmitting={!!commentSubmitting[pid]}
+              commentCount={commentCountsByPost[pid] ?? 0}
+              mediaPriority={String(firstMediaPostId) === pid}
               onSelectPost={onSelectPost}
               onOpenComments={onOpenComments}
               onToggleLike={onToggleLike}
@@ -84,8 +91,8 @@ function FeedPostList({
               user={user}
               likeMeta={likesByPost[pid] ?? EMPTY_LIKE_META}
               likeBusy={!!likeBusyByPost[pid]}
-              comments={commentsByPost[pid] ?? EMPTY_COMMENTS}
-              commentSubmitting={!!commentSubmitting[pid]}
+              commentCount={commentCountsByPost[pid] ?? 0}
+              mediaPriority={String(firstMediaPostId) === pid}
               onSelectPost={onSelectPost}
               onOpenComments={onOpenComments}
               onToggleLike={onToggleLike}
@@ -104,14 +111,14 @@ function FeedPostList({
               user={user}
               likeMeta={likesByPost[pid] ?? EMPTY_LIKE_META}
               likeBusy={!!likeBusyByPost[pid]}
-              comments={commentsByPost[pid] ?? EMPTY_COMMENTS}
-              commentSubmitting={!!commentSubmitting[pid]}
+              commentCount={commentCountsByPost[pid] ?? 0}
+              mediaPriority={String(firstMediaPostId) === pid}
               canManageReel={canManageReel}
               menuOpen={openReelMenuId === pid}
-              onMenuToggle={() => onReelMenuToggle?.(pid)}
-              onEditReel={() => onEditReel?.(post)}
-              onDeleteReel={() => onDeleteReel?.(post)}
-              onReplaceReelVideo={() => onReplaceReelVideo?.(post)}
+              onMenuToggle={onReelMenuToggle}
+              onEditReel={onEditReel}
+              onDeleteReel={onDeleteReel}
+              onReplaceReelVideo={onReplaceReelVideo}
               onSelectPost={onSelectPost}
               onOpenComments={onOpenComments}
               onOpenLinkedTrade={onOpenLinkedTrade}
@@ -128,14 +135,12 @@ function FeedPostList({
             user={user}
             likeMeta={likesByPost[pid] ?? EMPTY_LIKE_META}
             likeBusy={!!likeBusyByPost[pid]}
-            comments={commentsByPost[pid] ?? EMPTY_COMMENTS}
-            commentSubmitting={!!commentSubmitting[pid]}
-            draftSyncRef={draftSyncRef}
+            commentCount={commentCountsByPost[pid] ?? 0}
+            mediaPriority={String(firstMediaPostId) === pid}
             onSelectPost={onSelectPost}
             onOpenComments={onOpenComments}
             onOpenAttachedReel={onOpenAttachedReel}
             onToggleLike={onToggleLike}
-            onSubmitComment={onSubmitComment}
             onSharePost={onSharePost}
           />
         )

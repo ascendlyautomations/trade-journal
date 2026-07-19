@@ -20,6 +20,7 @@ type AchievementCardProps = {
   onOpenDetail?: (achievement: Achievement) => void
   onEdit?: () => void
   onDelete?: () => void
+  mediaPriority?: boolean
   /** @deprecated Prefer onOpenDetail — opens the full achievement modal. */
   onImageClick?: (imageSrc: string, achievement: Achievement) => void
 }
@@ -31,6 +32,7 @@ export default function AchievementCard({
   onOpenDetail,
   onEdit,
   onDelete,
+  mediaPriority = false,
   onImageClick,
 }: AchievementCardProps) {
   const imageSrc = achievementImagePublicUrl(achievement.image_url)
@@ -52,6 +54,7 @@ export default function AchievementCard({
       src={imageSrc}
       preset={CONTENT_IMAGE_DISPLAY_PRESET}
       alt={achievement.title}
+      priority={mediaPriority}
       className="rounded-md border border-white/10"
       logContext="achievement-card"
     />

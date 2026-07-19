@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { memo, type Dispatch, type SetStateAction } from "react"
 import EmptyState from "./ui/EmptyState"
+import Button from "./ui/Button"
 import TradeFilterBar from "./TradeFilterBar"
 import PerformanceShareButton from "./PerformanceShareButton"
 import TradesPageTradeCard from "./TradesPageTradeCard"
@@ -37,6 +38,8 @@ type TradesPageMainContentProps = {
   onSelectedDateChange: (value: string) => void
   resultFilter: "all" | "wins" | "losses"
   onResultFilterChange: Dispatch<SetStateAction<"all" | "wins" | "losses">>
+  /** Opens the existing Quick Trade flow. */
+  onOpenQuickInput: () => void
   showAdvanced: boolean
   onToggleAdvanced: () => void
   showPublicOnly: boolean
@@ -91,6 +94,7 @@ function TradesPageMainContent({
   onSelectedDateChange,
   resultFilter,
   onResultFilterChange,
+  onOpenQuickInput,
   showAdvanced,
   onToggleAdvanced,
   showPublicOnly,
@@ -134,12 +138,33 @@ function TradesPageMainContent({
           onCustomRangeApply={onCustomRangeApply}
           selectedDate={selectedDate}
           onSelectedDateChange={onSelectedDateChange}
+          accountSelectAccessory={
+            <Button
+              type="button"
+              variant="primary"
+              size="md"
+              onClick={onOpenQuickInput}
+              aria-label="Quick Trade"
+              className="h-9 w-9 shrink-0 p-0 text-base leading-none"
+            >
+              <span aria-hidden>+</span>
+            </Button>
+          }
           leading={
-            <div className="flex w-full shrink-0 flex-wrap items-center justify-center gap-2 md:w-auto md:flex-nowrap">
+            <div className="flex w-full shrink-0 flex-nowrap items-center justify-center gap-2 md:w-auto">
+              {/* Desktop-only Quick Trade button — styled like the Timeframe filter control. */}
+              <button
+                type="button"
+                onClick={onOpenQuickInput}
+                className="hidden h-[34px] shrink-0 items-center whitespace-nowrap rounded-lg bg-white/10 px-4 text-sm font-medium text-white transition hover:bg-white/20 md:inline-flex"
+              >
+                Quick Trade
+              </button>
+
               <button
                 type="button"
                 onClick={() => onResultFilterChange("all")}
-                className={`whitespace-nowrap rounded-md px-3 py-1 text-sm text-white ${
+                className={`inline-flex h-[34px] items-center whitespace-nowrap rounded-md px-3 text-sm text-white ${
                   resultFilter === "all"
                     ? "bg-blue-500 hover:bg-blue-600"
                     : "bg-white/10 hover:bg-white/20"
@@ -181,7 +206,7 @@ function TradesPageMainContent({
                       )
                     }
                   }}
-                  className={`relative flex h-8 w-28 cursor-pointer items-center rounded-full px-2 transition
+                  className={`relative flex h-[34px] w-28 cursor-pointer items-center rounded-full px-2 transition
                     ${resultFilter === "wins" ? "bg-emerald-500" : ""}
                     ${resultFilter === "losses" ? "bg-red-500" : ""}
                     ${resultFilter === "all" ? "bg-white/10" : ""}
@@ -213,14 +238,14 @@ function TradesPageMainContent({
               <button
                 type="button"
                 onClick={onToggleAdvanced}
-                className="order-1 flex-1 h-10 px-3 rounded bg-white/10 hover:bg-white/20 text-sm text-white flex items-center justify-center md:order-3 md:h-auto md:flex-none md:rounded-md md:px-3 md:py-1.5"
+                className="order-1 flex-1 h-10 px-3 rounded bg-white/10 hover:bg-white/20 text-sm text-white flex items-center justify-center md:order-3 md:h-[34px] md:flex-none md:rounded-md md:px-3 md:py-0"
               >
                 {showAdvanced ? "Hide Advanced" : "Show Advanced"}
               </button>
               <button
                 type="button"
                 onClick={onTogglePublicOnly}
-                className={`order-2 flex-[0.8] h-10 px-2 rounded text-sm font-medium transition flex items-center justify-center md:order-1 md:h-auto md:flex-none md:rounded-xl md:px-4 md:py-2
+                className={`order-2 flex-[0.8] h-10 px-2 rounded text-sm font-medium transition flex items-center justify-center md:order-1 md:h-[34px] md:flex-none md:rounded-xl md:px-4 md:py-0
                   ${
                     showPublicOnly
                       ? "bg-blue-500 text-white"

@@ -23,11 +23,35 @@ function shouldBypassSettingsProfileCache(
         : null,
     trial_end:
       cached.trial_end != null ? String(cached.trial_end) : null,
+    early_access_status:
+      cached.early_access_status != null
+        ? String(cached.early_access_status)
+        : null,
+    early_access_enrolled_at:
+      cached.early_access_enrolled_at != null
+        ? String(cached.early_access_enrolled_at)
+        : null,
+    early_access_started_at:
+      cached.early_access_started_at != null
+        ? String(cached.early_access_started_at)
+        : null,
+    early_access_ends_at:
+      cached.early_access_ends_at != null
+        ? String(cached.early_access_ends_at)
+        : null,
+    early_access_campaign_id:
+      cached.early_access_campaign_id != null
+        ? String(cached.early_access_campaign_id)
+        : null,
+    early_access_enrollment_source:
+      cached.early_access_enrollment_source != null
+        ? String(cached.early_access_enrollment_source)
+        : null,
   })
 }
 
 export const APP_PROFILE_SELECT =
-  "id, name, username, bio, is_private, avatar_url, trading_style, trading_model, trader_type, primary_market, started_trading, username_change_count, referral_code, referral_count, referral_earnings, is_pro, creator_access, creator_code, creator_granted_at, subscription_status, cancel_at_period_end, cancel_at, trial_end, current_period_end, stripe_customer_id, stripe_price_id, billing_interval, is_banned, banned_reason, is_beta_tester, use_free_tier, onboarding_completed, has_seen_getting_started_intro, has_seen_onboarding_complete_popup, max_drawdown_limit, has_email_password" as const
+  "id, name, username, bio, is_private, avatar_url, trading_style, trading_model, trader_type, primary_market, started_trading, username_change_count, referral_code, referral_count, referral_earnings, is_pro, creator_access, creator_code, creator_granted_at, subscription_status, cancel_at_period_end, cancel_at, trial_end, current_period_end, stripe_customer_id, stripe_price_id, billing_interval, is_banned, banned_reason, is_beta_tester, use_free_tier, onboarding_completed, has_seen_getting_started_intro, has_seen_onboarding_complete_popup, max_drawdown_limit, has_email_password, signup_flow_source, early_access_enrolled_at, early_access_started_at, early_access_ends_at, early_access_status, early_access_campaign_id, early_access_enrollment_source, lifetime_access_source, lifetime_access_granted_at" as const
 
 /** @deprecated Use APP_PROFILE_SELECT — kept for imports that expect this name. */
 export const SETTINGS_PROFILE_SELECT = APP_PROFILE_SELECT

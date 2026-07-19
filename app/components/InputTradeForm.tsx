@@ -111,7 +111,7 @@ import {
   safeAccountNumberLabel,
 } from "@/lib/tradeAccountDisplay"
 import {
-  TRADE_MODE_OPTIONS,
+  deriveTradeModeFromAccount,
   normalizeTradeMode,
   type TradeMode,
 } from "@/lib/tradeMode"
@@ -212,6 +212,15 @@ export default function InputTradeForm({
   const [copyDestinationAccountIds, setCopyDestinationAccountIds] = useState<
     string[]
   >([])
+
+  // Trade Mode is never user-selected: new trades derive it from the selected
+  // account (Sim → sim, Backtest → backtest, Live/Eval/Funded → live).
+  // Edit mode keeps the stored mode (including copy_traded metadata); copy
+  // groups stamp copy_traded in their own insert path.
+  useEffect(() => {
+    if (isEditMode) return
+    setTradeMode(deriveTradeModeFromAccount(selectedAccount))
+  }, [isEditMode, selectedAccount])
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showAccountWarning, setShowAccountWarning] = useState(false)
 
@@ -2042,7 +2051,7 @@ export default function InputTradeForm({
                 onClick={onQuickInputClick}
                 className={quickInputButtonClass}
               >
-                Quick Input
+                Quick Trade
               </button>
             ) : null}
             <button
@@ -2119,7 +2128,7 @@ export default function InputTradeForm({
                 onClick={onQuickInputClick}
                 className={quickInputButtonClass}
               >
-                Quick Input
+                Quick Trade
               </button>
             ) : null}
 
@@ -2202,31 +2211,10 @@ export default function InputTradeForm({
         />
       ) : null}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-3">
         <div className="px-4 pb-4 pt-3 rounded-xl bg-[#0b1220]/60 border border-white/5">
           <h3 className={TRADE_FIELD_SECTION_TITLE_CLASS}>Trade</h3>
           <div className="space-y-2">
-          <div>
-            <label className={fieldLabelClass}>Trade Mode</label>
-            <CustomSelect
-              value={tradeMode}
-              onChange={(value) => {
-                const next = normalizeTradeMode(value) ?? "live"
-                setTradeMode(next)
-                if (next !== "copy_traded") {
-                  setSelectedCopyGroupId(null)
-                } else if (selectedAccount?.id && !copySourceAccountId) {
-                  setCopySourceAccountId(String(selectedAccount.id))
-                }
-              }}
-              options={TRADE_MODE_OPTIONS.map((option) => ({
-                value: option.value,
-                label: option.label,
-              }))}
-              className="mt-0"
-            />
-          </div>
-
           {tradeMode === "copy_traded" ? (
             <div className="space-y-3 rounded-lg border border-violet-500/20 bg-violet-500/5 p-3">
               <div>
@@ -2319,31 +2307,34 @@ export default function InputTradeForm({
             </p>
           )}
 
-          <div>
-            <label className={fieldLabelClass}>Symbol / Ticker</label>
-            <input
-              type="text"
-              placeholder="e.g. MNQ, ES, AAPL"
-              tabIndex={2}
-              value={ticker}
-              onChange={(e) => setTicker(e.target.value.toUpperCase())}
-              className={TRADE_FIELD_CONTROL_CLASS}
-            />
+          {/* Mobile: Symbol + Strategy share a row; sm+ keeps the stacked layout. */}
+          <div className="grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-1">
+            <div>
+              <label className={fieldLabelClass}>Symbol / Ticker</label>
+              <input
+                type="text"
+                placeholder="e.g. MNQ, ES, AAPL"
+                tabIndex={2}
+                value={ticker}
+                onChange={(e) => setTicker(e.target.value.toUpperCase())}
+                className={TRADE_FIELD_CONTROL_CLASS}
+              />
+            </div>
+
+            <div>
+              <label className={fieldLabelClass}>Strategy Used</label>
+              <input
+                type="text"
+                placeholder="e.g. Breakout, Liquidity Sweep"
+                tabIndex={3}
+                value={strategy}
+                onChange={(e) => setStrategy(e.target.value)}
+                className={TRADE_FIELD_CONTROL_CLASS}
+              />
+            </div>
           </div>
 
-          <div>
-            <label className={fieldLabelClass}>Strategy Used</label>
-            <input
-              type="text"
-              placeholder="e.g. Breakout, Liquidity Sweep"
-              tabIndex={3}
-              value={strategy}
-              onChange={(e) => setStrategy(e.target.value)}
-              className={TRADE_FIELD_CONTROL_CLASS}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2">
+          <div className="grid grid-cols-2 gap-x-3 gap-y-2">
           <div>
             <label className={fieldLabelClass}>Direction</label>
             <CustomSelect
@@ -2378,7 +2369,7 @@ export default function InputTradeForm({
           </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2">
+          <div className="grid grid-cols-2 gap-x-3 gap-y-2">
             <div>
               <label className={fieldLabelClass}>Risk Reward</label>
               <input
@@ -2448,27 +2439,30 @@ export default function InputTradeForm({
           <h3 className={TRADE_FIELD_SECTION_TITLE_CLASS}>Execution</h3>
           <div className="space-y-2">
           <div className="space-y-2 mb-4">
-            <div>
-              <label className={fieldLabelClass}>Entry Price</label>
-              <TradeFormCurrencyInput
-                value={entryPrice}
-                onChange={setEntryPrice}
-                onDecimalError={setDecimalError}
-                tabIndex={10}
-                inputClassName={TRADE_FIELD_CURRENCY_CONTROL_CLASS}
-              />
+            {/* Mobile: prices share a row; sm+ keeps the stacked layout. */}
+            <div className="grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-1">
+              <div>
+                <label className={fieldLabelClass}>Entry Price</label>
+                <TradeFormCurrencyInput
+                  value={entryPrice}
+                  onChange={setEntryPrice}
+                  onDecimalError={setDecimalError}
+                  tabIndex={10}
+                  inputClassName={TRADE_FIELD_CURRENCY_CONTROL_CLASS}
+                />
+              </div>
+              <div>
+                <label className={fieldLabelClass}>Exit Price</label>
+                <TradeFormCurrencyInput
+                  value={exitPrice}
+                  onChange={setExitPrice}
+                  onDecimalError={setDecimalError}
+                  tabIndex={11}
+                  inputClassName={TRADE_FIELD_CURRENCY_CONTROL_CLASS}
+                />
+              </div>
             </div>
-            <div>
-              <label className={fieldLabelClass}>Exit Price</label>
-              <TradeFormCurrencyInput
-                value={exitPrice}
-                onChange={setExitPrice}
-                onDecimalError={setDecimalError}
-                tabIndex={11}
-                inputClassName={TRADE_FIELD_CURRENCY_CONTROL_CLASS}
-              />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2">
+            <div className="grid grid-cols-2 gap-x-3 gap-y-2">
               <div>
                 <label className={fieldLabelClass} htmlFor="entry-date">
                   Entry Date
@@ -2494,7 +2488,7 @@ export default function InputTradeForm({
                 />
               </div>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2">
+            <div className="grid grid-cols-2 gap-x-3 gap-y-2">
               <div>
                 <label className={fieldLabelClass} htmlFor="exit-date">
                   Exit Date
@@ -2554,7 +2548,7 @@ export default function InputTradeForm({
         <div className="px-4 pb-4 pt-3 rounded-xl bg-[#0b1220]/60 border border-white/5">
           <h3 className={TRADE_FIELD_SECTION_TITLE_CLASS}>Psychology</h3>
           <div className="space-y-2">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2">
+          <div className="grid grid-cols-2 gap-x-3 gap-y-2">
           <div>
             <label className={fieldLabelClass}>Trade Conviction</label>
             <CustomSelect
@@ -2620,7 +2614,7 @@ export default function InputTradeForm({
               ]}
             />
           </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-6">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
             <label className={TRADE_FIELD_CHECKBOX_LABEL_CLASS}>
               <input
                 type="checkbox"

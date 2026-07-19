@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabaseClient"
+import { clearRoomSessionsForUser } from "@/lib/roomSessionCache"
 
 export async function createUserRoom(userId: string, username: string) {
   // Generate slug (simple version)
@@ -41,5 +42,6 @@ export async function createUserRoom(userId: string, username: string) {
     throw memberError
   }
 
+  clearRoomSessionsForUser(userId)
   return data
 }

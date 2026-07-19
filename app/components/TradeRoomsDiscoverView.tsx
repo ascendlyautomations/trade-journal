@@ -6,6 +6,7 @@ import type { PopularTradeRoom } from "@/lib/popularTradeRooms"
 
 type TradeRoomsDiscoverViewProps = {
   showCreateSection: boolean
+  showExploreSection: boolean
   creatingRoom: boolean
   onCreateRoom: () => void
   memberRoomIds: ReadonlySet<string>
@@ -16,6 +17,7 @@ type TradeRoomsDiscoverViewProps = {
 
 export default function TradeRoomsDiscoverView({
   showCreateSection,
+  showExploreSection,
   creatingRoom,
   onCreateRoom,
   memberRoomIds,
@@ -36,16 +38,18 @@ export default function TradeRoomsDiscoverView({
           />
         ) : null}
 
-        <section className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm">
-          <PopularTradeRoomsPanel
-            active
-            heading={exploreHeading}
-            subheading={exploreSubheading}
-            listClassName="space-y-3"
-            memberRoomIds={memberRoomIds}
-            onJoined={onJoined}
-          />
-        </section>
+        {showExploreSection ? (
+          <section className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm">
+            <PopularTradeRoomsPanel
+              active
+              heading={exploreHeading}
+              subheading={exploreSubheading}
+              listClassName="space-y-3"
+              memberRoomIds={memberRoomIds}
+              onJoined={onJoined}
+            />
+          </section>
+        ) : null}
       </div>
     </div>
   )
