@@ -16,7 +16,7 @@ import {
   renderZoomPanCrop,
   type ZoomPanTransform,
 } from "@/lib/renderImageCrop"
-import { useModalScrollLock } from "@/app/components/ui/modalLayout"
+import { useModalScrollLock, MODAL_OVERLAY_SAFE_PADDING_CLASS } from "@/app/components/ui/modalLayout"
 
 type ImageCropModalProps = {
   open: boolean
@@ -297,7 +297,7 @@ export default function ImageCropModal({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[10070] flex items-start justify-center overscroll-contain p-4 sm:items-center"
+      className={`fixed inset-0 z-[10070] flex items-start justify-center overscroll-contain ${MODAL_OVERLAY_SAFE_PADDING_CLASS} sm:items-center`}
       role="presentation"
       onClick={(e) => e.stopPropagation()}
       onMouseDown={(e) => e.stopPropagation()}
@@ -311,7 +311,7 @@ export default function ImageCropModal({
         role="dialog"
         aria-modal="true"
         aria-label={preset.title}
-        className="relative my-auto flex w-full max-w-xl max-h-[min(92dvh,calc(100dvh-2rem))] flex-col overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-[#0f172a] via-[#132a4a] to-[#0f172a] shadow-2xl shadow-black/40"
+        className="relative my-auto flex w-full max-w-xl max-h-[min(92dvh,calc(100dvh-2rem-var(--safe-area-top)-var(--safe-area-bottom)))] flex-col overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-[#0f172a] via-[#132a4a] to-[#0f172a] shadow-2xl shadow-black/40"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="shrink-0 px-6 pb-4 pt-6">

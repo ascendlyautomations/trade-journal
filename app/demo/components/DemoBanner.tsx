@@ -12,7 +12,7 @@ export default function DemoBanner() {
 
   return (
     <div
-      className="fixed left-0 right-0 top-[var(--navbar-height)] z-[9998] flex h-10 items-center border-b border-emerald-500/25 bg-gradient-to-r from-[#0c2a45]/95 via-[#0b1f3a]/95 to-[#0a2238]/95 shadow-sm backdrop-blur-sm sm:h-14"
+      className="fixed left-0 right-0 top-[calc(var(--navbar-height)+var(--safe-area-top))] z-[9998] flex h-10 items-center border-b border-emerald-500/25 bg-gradient-to-r from-[#0c2a45]/95 via-[#0b1f3a]/95 to-[#0a2238]/95 shadow-sm backdrop-blur-sm sm:h-14"
       role="status"
       aria-live="polite"
     >

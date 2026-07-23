@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { hapticLight } from "@/lib/nativeHaptics"
 import { normalizeReelFeedItem } from "@/app/components/feed/feedPostHelpers"
 import { FEED_REELS_SELECT } from "@/lib/reels"
 import {
@@ -188,6 +189,7 @@ export async function toggleReelLike(
     : { count: meta.count + 1, liked: true }
 
   onMetaChange(optimistic)
+  hapticLight("like")
 
   try {
     if (meta.liked) {

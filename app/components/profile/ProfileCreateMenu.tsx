@@ -256,7 +256,7 @@ export default function ProfileCreateMenu({
                 Cancel
               </button>
             </div>
-            <div className="h-[max(0.75rem,env(safe-area-inset-bottom))]" />
+            <div className="h-[max(0.75rem,var(--safe-area-bottom))]" />
           </div>
         </div>,
         document.body

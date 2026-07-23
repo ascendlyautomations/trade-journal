@@ -1,6 +1,7 @@
 "use client"
 
 import DashboardFilters from "../../components/dashboard/DashboardFilters"
+import NativeIosPullToRefresh from "@/app/components/NativeIosPullToRefresh"
 import DashboardHeader from "../../components/dashboard/DashboardHeader"
 import GettingStartedChecklist from "../../components/dashboard/GettingStartedChecklist"
 import TraxsProForLifeCard from "../../components/dashboard/TraxsProForLifeCard"
@@ -284,6 +285,9 @@ export default function Dashboard() {
 
   const handleImportModalComplete = useCallback(async () => {
     closeImport()
+    void import("@/lib/nativeHaptics").then(({ hapticSuccess }) => {
+      hapticSuccess("trade-imported")
+    })
     notifyGettingStartedChecklistMaybeCompleted()
     dispatchGettingStartedSignalsRefresh()
     await refreshDashboardData()
@@ -805,6 +809,9 @@ export default function Dashboard() {
 
   const handleSelectRecentTrade = useCallback(
     (trade: DashboardTradeRow) => {
+      void import("@/lib/nativeHaptics").then(({ hapticLight }) => {
+        hapticLight("open-trade")
+      })
       setEditingTrade(trade)
     },
     [setEditingTrade]
@@ -824,6 +831,7 @@ export default function Dashboard() {
     <>
       <FeedbackModal {...feedbackModalProps} />
 
+      <NativeIosPullToRefresh onRefresh={refreshDashboardData}>
       <div className="w-full px-3 pb-3 pt-4 text-white md:px-10 md:pb-10 md:pt-0">
 
         <div className="relative z-50 mx-auto w-full max-w-[1600px] px-4 md:px-6">
@@ -1092,6 +1100,7 @@ export default function Dashboard() {
 
           </div>
       </div>
+      </NativeIosPullToRefresh>
 
       <DashboardModals
         importOpen={showImportModal}

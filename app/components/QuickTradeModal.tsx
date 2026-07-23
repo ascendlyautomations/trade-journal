@@ -762,6 +762,10 @@ export default function QuickTradeModal({
       return
     }
 
+    void import("@/lib/nativeHaptics").then(({ hapticMedium }) => {
+      hapticMedium("save-trade")
+    })
+
     if (uploadingRef.current || busy) return
 
     const reelFile = pendingReelFileRef.current ?? pendingReelFile

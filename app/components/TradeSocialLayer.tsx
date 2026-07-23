@@ -12,6 +12,7 @@ import {
   type RefObject,
 } from "react"
 import { supabase } from "../../lib/supabaseClient"
+import { randomId } from "@/lib/randomId"
 import FeedCommentList from "@/app/components/feed/FeedCommentList"
 import EngagementCountButton from "@/app/components/EngagementCountButton"
 import ReplyComposerStrip from "@/app/components/replies/ReplyComposerStrip"
@@ -188,7 +189,7 @@ export function TradeSocialProvider({
   useEffect(() => {
     if (!resolvedId || !enableRealtime) return
 
-    const topic = `trade-${resolvedId}-${crypto.randomUUID()}`
+    const topic = `trade-${resolvedId}-${randomId()}`
     const channel = supabase.channel(topic)
 
     channel.on(
@@ -279,6 +280,9 @@ export function TradeSocialProvider({
 
     likeBusyRef.current = true
     setLikeBusy(true)
+    void import("@/lib/nativeHaptics").then(({ hapticLight }) => {
+      hapticLight("like")
+    })
 
     try {
     const { data: existing } = await supabase

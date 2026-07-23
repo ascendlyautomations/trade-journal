@@ -1,4 +1,5 @@
 import Stripe from "stripe"
+import { getRequestOrigin } from "@/lib/requestOrigin"
 
 let stripeSingleton: Stripe | null = null
 let stripeSingletonKey: string | null = null
@@ -31,9 +32,7 @@ export function getStripeServer(): Stripe {
 export function resolveAppUrl(req: Request): string {
   const env = process.env.NEXT_PUBLIC_BASE_URL?.trim()
   if (env) return env.replace(/\/$/, "")
-  try {
-    return new URL(req.url).origin
-  } catch {
-    return "http://localhost:3000"
-  }
+  // Prefer Host / X-Forwarded-* — request.url is often localhost in Next.js
+  // even when the client connected via a LAN IP.
+  return getRequestOrigin(req).replace(/\/$/, "")
 }

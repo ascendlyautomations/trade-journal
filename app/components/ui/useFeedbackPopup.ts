@@ -49,6 +49,9 @@ export function useFeedbackPopup(options?: UseFeedbackPopupOptions) {
     ) {
       console.log("[getting-started] useFeedbackPopup showPopup", input.title)
     }
+    void import("@/lib/nativeHaptics").then(({ hapticForFeedbackType }) => {
+      hapticForFeedbackType(input.type)
+    })
     onDismissRef.current = input.onDismiss ?? null
     setState({
       isOpen: true,

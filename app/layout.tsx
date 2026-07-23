@@ -1,7 +1,6 @@
-import type { Metadata } from "next";
+import { Suspense } from "react"
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { Analytics } from "@vercel/analytics/next";
-import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 import BannedAccountShell from "./components/BannedAccountShell"
 import OnboardingGateShell from "./components/OnboardingGateShell"
@@ -18,6 +17,12 @@ import SubscriptionGateShell from "./components/SubscriptionGateShell"
 import FreePlanAccountSlotShell from "./components/FreePlanAccountSlotShell"
 import { UserProfileProvider } from "@/lib/UserProfileProvider"
 import { GettingStartedProgressProvider } from "@/lib/GettingStartedProgressProvider"
+import NativeAppShell from "./components/NativeAppShell"
+import NativeIosOAuthListener from "./components/NativeIosOAuthListener"
+import NativeIosPushRegistration from "./components/NativeIosPushRegistration"
+import NativeHomeRedirect from "./components/NativeHomeRedirect"
+import NativeSessionPersistence from "./components/NativeSessionPersistence"
+import NativeAwareVercelInsights from "./components/NativeAwareVercelInsights"
 import {
   DEFAULT_OG_IMAGE_ALT,
   DEFAULT_OG_IMAGE_PATH,
@@ -103,6 +108,14 @@ export const metadata: Metadata = {
       }
     : {}),
 }
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#0b1f3a",
+}
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -121,6 +134,13 @@ export default function RootLayout({
           <ReferralPersistence />
           <UserProfileProvider>
             <GettingStartedProgressProvider>
+            <NativeAppShell />
+            <NativeIosOAuthListener />
+            <NativeIosPushRegistration />
+            <NativeHomeRedirect />
+            <Suspense fallback={null}>
+              <NativeSessionPersistence />
+            </Suspense>
             <SentryIdentifyUser />
             <BannedAccountShell>
               <OnboardingGateShell>
@@ -139,8 +159,7 @@ export default function RootLayout({
           </UserProfileProvider>
           </UploadProgressProvider>
         </ToastRoot>
-        <Analytics />
-        <SpeedInsights />
+        <NativeAwareVercelInsights />
       </body>
     </html>
   );

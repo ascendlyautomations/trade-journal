@@ -1,5 +1,6 @@
 "use client"
 
+import dynamic from "next/dynamic"
 import { useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import type { ReelClipPlaybackHandle } from "@/app/components/ReelClipPlayback"
@@ -7,11 +8,17 @@ import DetailModalVideo from "@/app/components/ui/DetailModalVideo"
 import { ProfileAvatarImg } from "@/app/components/SafeProfileAvatar"
 import type { ReelRow } from "@/lib/reels"
 import { formatRelativeTime } from "@/lib/formatRelativeTime"
+import { useIsNativeIos } from "@/lib/useIsNativeIos"
 import {
   DETAIL_MODAL_STACKED_Z_INDEX_CLASS,
   useModalScrollLock,
   useStackedModalEscape,
 } from "@/app/components/ui/modalLayout"
+
+const NativeIosMediaViewer = dynamic(
+  () => import("@/app/components/ui/NativeIosMediaViewer"),
+  { ssr: false }
+)
 
 type ReelViewerProps = {
   reel: ReelRow | null
@@ -58,7 +65,11 @@ function VolumeOffIcon({ className }: { className?: string }) {
 const controlButtonClass =
   "flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-black/55 text-white shadow-lg backdrop-blur-sm transition hover:bg-white/15"
 
+/** Remember last exit time per video URL so reopen continues (native iOS). */
+const nativeVideoTimeByUrl = new Map<string, number>()
+
 export default function ReelViewer({ reel, creator, onClose }: ReelViewerProps) {
+  const nativeIos = useIsNativeIos()
   const playbackRef = useRef<ReelClipPlaybackHandle>(null)
   const [mounted, setMounted] = useState(false)
   const [playing, setPlaying] = useState(false)
@@ -75,19 +86,21 @@ export default function ReelViewer({ reel, creator, onClose }: ReelViewerProps) 
     }
   }, [reel])
 
-  useModalScrollLock(Boolean(reel))
-  useStackedModalEscape(Boolean(reel), onClose)
+  useModalScrollLock(Boolean(reel) && !nativeIos)
+  useStackedModalEscape(Boolean(reel) && !nativeIos, onClose)
 
   useEffect(() => {
+    if (nativeIos) return
     playbackRef.current?.pause()
     setPlaying(false)
-  }, [reel?.id])
+  }, [reel?.id, nativeIos])
 
   useEffect(() => {
+    if (nativeIos) return
     const video = playbackRef.current?.getVideoElement()
     if (!video) return
     video.muted = muted
-  }, [muted, reel?.id, playing])
+  }, [muted, reel?.id, playing, nativeIos])
 
   if (!reel || !mounted) return null
 
@@ -95,6 +108,29 @@ export default function ReelViewer({ reel, creator, onClose }: ReelViewerProps) 
     creator?.username?.trim() ||
     creator?.name?.trim() ||
     "Trader"
+
+  if (nativeIos) {
+    const initialTime = nativeVideoTimeByUrl.get(reel.video_url) ?? 0
+    return (
+      <NativeIosMediaViewer
+        open
+        items={[
+          {
+            type: "video",
+            url: reel.video_url,
+            poster: reel.thumbnail_url,
+            initialTime,
+            startMuted: true,
+          },
+        ]}
+        onClose={onClose}
+        zIndexClass={DETAIL_MODAL_STACKED_Z_INDEX_CLASS}
+        onVideoTime={(url, time) => {
+          nativeVideoTimeByUrl.set(url, time)
+        }}
+      />
+    )
+  }
 
   const toggleMute = () => {
     setMuted((prev) => !prev)

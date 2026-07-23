@@ -16,10 +16,12 @@ import type {
   UploadJob,
   UploadProgressReporter,
 } from "@/lib/uploadProgress/types"
+import { randomId } from "@/lib/randomId"
 import {
   toUserFacingErrorMessage,
   USER_FACING_ERROR_MESSAGES,
 } from "@/lib/userFacingError"
+import { hapticError, hapticMedium, hapticSuccess } from "@/lib/nativeHaptics"
 
 const MAX_CONCURRENT_UPLOADS = 2
 const SUCCESS_DISMISS_MS = 1400
@@ -152,6 +154,7 @@ export function UploadProgressProvider({ children }: { children: ReactNode }) {
                   finishRunningSlot(id)
                 },
               })
+              hapticSuccess("upload-complete")
               scheduleSuccessDismiss(id, task)
               resolveAttempt()
             } catch (err) {
@@ -174,6 +177,7 @@ export function UploadProgressProvider({ children }: { children: ReactNode }) {
                   finishRunningSlot(id)
                 },
               })
+              hapticError("upload-failed")
               finishRunningSlot(id)
               resolveAttempt()
             }
@@ -200,11 +204,12 @@ export function UploadProgressProvider({ children }: { children: ReactNode }) {
   const runUpload = useCallback(
     (options: TrackedUploadOptions): Promise<void> => {
       return new Promise((resolve, reject) => {
-        const id = crypto.randomUUID()
+        const id = randomId()
         const task: QueuedTask = { id, options, resolve, reject }
         const shouldQueue =
           runningIdsRef.current.size >= MAX_CONCURRENT_UPLOADS
 
+        hapticMedium("upload-start")
         setJobs((prev) => [
           ...prev,
           {

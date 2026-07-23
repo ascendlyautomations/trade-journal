@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation"
 import GettingStartedChecklist from "@/app/components/dashboard/GettingStartedChecklist"
 import TraxsProForLifeCard from "@/app/components/dashboard/TraxsProForLifeCard"
 import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
+import { NAVBAR_HEIGHT_CLASS } from "@/app/components/ui/DetailModalShell"
 import { useModalScrollLock } from "@/app/components/ui/modalLayout"
 import { useGettingStartedProgress } from "@/lib/GettingStartedProgressProvider"
 import { shouldOfferGettingStartedChecklist } from "@/lib/gettingStartedChecklist"
@@ -204,7 +205,7 @@ export default function GettingStartedMobileEntry({
             role="dialog"
             aria-modal="true"
             aria-label={`${drawerTitle} checklist`}
-            className="absolute right-0 top-16 bottom-0 flex w-full max-w-md flex-col border-l border-white/10 bg-[#0b1f3a] shadow-2xl"
+            className={`absolute right-0 ${NAVBAR_HEIGHT_CLASS} bottom-0 flex w-full max-w-md flex-col border-l border-white/10 bg-[#0b1f3a] shadow-2xl`}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3">
@@ -213,7 +214,7 @@ export default function GettingStartedMobileEntry({
               </h2>
               <ModalCloseButton onClick={closeDrawer} />
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto p-4 pb-6">
+            <div className="min-h-0 flex-1 overflow-y-auto p-4 pb-[max(1.5rem,var(--safe-area-bottom))]">
               <GettingStartedChecklist
                 progress={progress}
                 userId={user.id}

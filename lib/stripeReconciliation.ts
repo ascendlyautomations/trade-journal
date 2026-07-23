@@ -1,3 +1,5 @@
+import { hapticSuccess } from "@/lib/nativeHaptics"
+
 /** Client-side signals that Stripe checkout finished and membership must be reconciled. */
 
 const STRIPE_RETURN_AT_KEY = "tradetraxs_stripe_return_at_v1"
@@ -97,6 +99,7 @@ export function clearStripeReconciliationSignals() {
 
 export function dispatchStripeReconciliationComplete() {
   if (typeof window === "undefined") return
+  hapticSuccess("subscription-activated")
   window.dispatchEvent(new CustomEvent(STRIPE_RECONCILIATION_COMPLETE_EVENT))
 }
 

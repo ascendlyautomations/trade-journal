@@ -193,6 +193,15 @@ export default function SharedMediaModal({
       <ImageLightbox
         open={selected != null}
         imageUrl={selected?.imageUrl ?? null}
+        images={visibleItems.map((item) => item.imageUrl)}
+        initialIndex={
+          selected
+            ? Math.max(
+                0,
+                visibleItems.findIndex((item) => item.id === selected.id)
+              )
+            : 0
+        }
         alt="Shared conversation image"
         onClose={() => setSelected(null)}
         zIndexClass="z-[10100]"

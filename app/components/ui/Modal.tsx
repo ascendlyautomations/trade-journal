@@ -9,6 +9,7 @@ import {
   MODAL_BODY_SCROLL_CLASS,
   MODAL_FOOTER_CLASS,
   MODAL_HEADER_CLASS,
+  MODAL_OVERLAY_SAFE_PADDING_CLASS,
   MODAL_PANEL_MAX_HEIGHT_BELOW_NAV_CLASS,
   MODAL_PANEL_MAX_HEIGHT_CLASS,
   MODAL_PANEL_SHELL_CLASS,
@@ -23,7 +24,7 @@ export type ModalProps = {
   footer?: ReactNode
   /** Panel width cap */
   size?: "sm" | "md" | "lg"
-  /** Anchor overlay below the fixed navbar (top-16), top-aligned on all breakpoints. */
+  /** Anchor overlay below the fixed app chrome, top-aligned on all breakpoints. */
   belowNavbar?: boolean
   /** Disable the top-right close control (e.g. while saving). */
   closeDisabled?: boolean
@@ -78,8 +79,8 @@ export default function Modal({
     <div
       className={cn(
         belowNavbar
-          ? `${MODAL_FIXED_BELOW_NAVBAR_CLASS} z-[10050] p-4`
-          : "fixed inset-0 z-[10050] flex items-start justify-center overflow-y-auto overscroll-contain p-4 sm:items-center",
+          ? `${MODAL_FIXED_BELOW_NAVBAR_CLASS} z-[10050] p-4 pb-[max(1rem,var(--safe-area-bottom))]`
+          : `fixed inset-0 z-[10050] flex items-start justify-center overflow-y-auto overscroll-contain ${MODAL_OVERLAY_SAFE_PADDING_CLASS} sm:items-center`,
         className
       )}
       role="presentation"

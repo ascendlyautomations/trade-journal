@@ -8,13 +8,20 @@ import {
   unlockPageScroll,
 } from "@/lib/pageScrollLock"
 
-/** Panel never exceeds the viewport (centered modals). */
+/** Panel never exceeds the viewport (centered modals), respecting home indicator. */
 export const MODAL_PANEL_MAX_HEIGHT_CLASS =
-  "max-h-[min(90dvh,calc(100dvh-2rem))]"
+  "max-h-[min(90dvh,calc(100dvh-2rem-var(--safe-area-top)-var(--safe-area-bottom)))]"
 
-/** Panel below the fixed navbar (`h-16`). */
+/** Panel below the fixed app chrome (navbar + safe-area + demo banner). */
 export const MODAL_PANEL_MAX_HEIGHT_BELOW_NAV_CLASS =
-  "max-h-[min(90dvh,calc(100dvh-4rem-2rem))]"
+  "max-h-[min(90dvh,calc(100dvh-var(--app-header-offset)-var(--safe-area-bottom)-2rem))]"
+
+/**
+ * Full-viewport modal overlay padding — keeps panels clear of notch / home indicator.
+ * Use instead of bare `p-4` on shell-level centered modals.
+ */
+export const MODAL_OVERLAY_SAFE_PADDING_CLASS =
+  "p-4 pt-[max(1rem,var(--safe-area-top))] pb-[max(1rem,var(--safe-area-bottom))]"
 
 /**
  * Solid modal panel fill — page content must not show through the dialog.

@@ -49,7 +49,7 @@ export default function RoomNotificationSettingsSheet({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[10050] flex items-end justify-center md:items-center md:p-4"
+      className="fixed inset-0 z-[10050] flex items-end justify-center md:items-center md:p-4 md:pt-[max(1rem,var(--safe-area-top))] md:pb-[max(1rem,var(--safe-area-bottom))]"
       role="presentation"
       onClick={onClose}
     >
@@ -58,7 +58,7 @@ export default function RoomNotificationSettingsSheet({
         role="dialog"
         aria-modal="true"
         aria-labelledby="room-notification-settings-title"
-        className="relative z-10 flex max-h-[min(85svh,560px)] w-full max-w-md flex-col overflow-hidden rounded-t-2xl border border-white/10 bg-[#0b1f3a] text-white shadow-xl md:rounded-2xl"
+        className="relative z-10 flex max-h-[min(85svh,560px)] w-full max-w-md flex-col overflow-hidden rounded-t-2xl border border-white/10 bg-[#0b1f3a] text-white shadow-xl pb-[var(--safe-area-bottom)] md:rounded-2xl md:pb-0"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3">

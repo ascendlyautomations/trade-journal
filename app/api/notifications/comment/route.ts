@@ -241,6 +241,26 @@ export async function POST(req: Request) {
     return Response.json({ error: "comment_id not persisted" }, { status: 500 })
   }
 
+  const { scheduleIosPushDelivery } = await import(
+    "@/lib/server/push/deliverPushNotification"
+  )
+  const kindByUser = new Map(
+    recipients.map((r) => [r.userId, r.kind] as const)
+  )
+  for (const row of rows) {
+    const recipientUserId = String(row.user_id)
+    scheduleIosPushDelivery({
+      recipientUserId,
+      type: "comment",
+      sender_id: user.id,
+      comment_id: commentId,
+      content: resolvedComment.content,
+      commentKind: kindByUser.get(recipientUserId) ?? "comment",
+      prefsAlreadyChecked: true,
+      [resolvedComment.targetColumn]: resolvedComment.targetId,
+    })
+  }
+
   return Response.json({ ok: true, ids: data.map((row) => row.id) })
 }
 

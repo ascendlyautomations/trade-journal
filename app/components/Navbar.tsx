@@ -37,6 +37,8 @@ import {
   type DesktopNavOverflowId,
 } from "@/app/components/useDesktopNavOverflow"
 import { useEarlyAccessPromotion } from "@/lib/useEarlyAccessPromotion"
+import { isNativeIos } from "@/lib/nativePlatform"
+import { NATIVE_IOS_OPEN_APP_MENU_EVENT } from "@/lib/nativeIosAppMenu"
 
 export default function Navbar() {
   const pathname = usePathname()
@@ -66,6 +68,7 @@ export default function Navbar() {
   const [hasFetchedMessages, setHasFetchedMessages] = useState(false)
   const [hasFetchedAdmin, setHasFetchedAdmin] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const [iosNavbarHidden, setIosNavbarHidden] = useState(false)
 
   const router = useRouter()
   const isHomePage = pathname === "/"
@@ -117,6 +120,15 @@ export default function Navbar() {
     disableDemoMode()
     clearSignupFlow()
     try {
+      const { unregisterNativeIosPush, setNativeIosBadgeCount } = await import(
+        "@/lib/nativeIosPush"
+      )
+      await unregisterNativeIosPush({ allDevices: false })
+      await setNativeIosBadgeCount(0)
+    } catch {
+      /* ignore — web / plugin unavailable */
+    }
+    try {
       await supabase.auth.signOut()
     } catch (err) {
       console.error("Sign out failed:", err)
@@ -136,6 +148,47 @@ export default function Navbar() {
     setMounted(true)
   }, [])
 
+  // Capacitor iOS only: bottom-tab "More" opens this same hamburger menu.
+  useEffect(() => {
+    if (!isNativeIos()) return
+    const onOpen = () => {
+      setActiveMenu(null)
+      setAccountMenuOpen(false)
+      setMoreSubmenu(null)
+      setIsOpen(true)
+      setIosNavbarHidden(false)
+    }
+    window.addEventListener(NATIVE_IOS_OPEN_APP_MENU_EVENT, onOpen)
+    return () => window.removeEventListener(NATIVE_IOS_OPEN_APP_MENU_EVENT, onOpen)
+  }, [])
+
+  // Capacitor iOS only: Instagram/X-style hide on scroll down, show on scroll up.
+  useEffect(() => {
+    if (!isNativeIos()) return
+    setIosNavbarHidden(false)
+    let lastY = window.scrollY
+
+    const onScroll = () => {
+      if (isOpen) {
+        setIosNavbarHidden(false)
+        lastY = window.scrollY
+        return
+      }
+      const y = window.scrollY
+      if (y <= 8) {
+        setIosNavbarHidden(false)
+      } else if (y > lastY + 2) {
+        setIosNavbarHidden(true)
+      } else if (y < lastY - 1) {
+        setIosNavbarHidden(false)
+      }
+      lastY = y
+    }
+
+    window.addEventListener("scroll", onScroll, { passive: true })
+    return () => window.removeEventListener("scroll", onScroll)
+  }, [pathname, isOpen])
+
   const mobileMenuOpen = isOpen && showMobileNav
 
   useModalScrollLock(mobileMenuOpen)
@@ -148,6 +201,10 @@ export default function Navbar() {
     function handleClickOutside(e: MouseEvent) {
       const el = e.target as HTMLElement | null
       if (!el) return
+
+      if (el.closest("[data-native-ios-bottom-nav]")) {
+        return
+      }
 
       if (navRef.current && !navRef.current.contains(el)) {
         setActiveMenu(null)
@@ -202,6 +259,9 @@ export default function Navbar() {
     }
 
     setUnreadCount(count ?? 0)
+    void import("@/lib/nativeIosPush").then(({ setNativeIosBadgeCount }) => {
+      void setNativeIosBadgeCount(count ?? 0)
+    })
   }, [user])
 
   useEffect(() => {
@@ -496,6 +556,9 @@ export default function Navbar() {
       tabIndex={0}
       aria-label="Notifications"
       onClick={() => {
+        void import("@/lib/nativeHaptics").then(({ hapticLight }) => {
+          hapticLight("notifications")
+        })
         void handleToggleNotifications()
         setAccountMenuOpen(false)
         setActiveMenu(null)
@@ -505,6 +568,9 @@ export default function Navbar() {
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault()
+          void import("@/lib/nativeHaptics").then(({ hapticLight }) => {
+            hapticLight("notifications")
+          })
           void handleToggleNotifications()
           setAccountMenuOpen(false)
           setActiveMenu(null)
@@ -710,7 +776,9 @@ export default function Navbar() {
   const navbar = (
     <div
       ref={navRef}
-      className={`fixed left-0 top-0 z-[9999] w-full text-gray-100 ${
+      className={`fixed left-0 top-0 z-[9999] w-full bg-[#0b1f3a] pt-[var(--safe-area-top)] text-gray-100 transition-transform duration-200 ease-out will-change-transform ${
+        iosNavbarHidden && !mobileMenuOpen ? "-translate-y-full" : "translate-y-0"
+      } ${
         mobileMenuOpen
           ? "flex max-h-[100dvh] flex-col overflow-hidden md:block md:max-h-none md:overflow-visible"
           : "overflow-visible"
@@ -868,6 +936,9 @@ export default function Navbar() {
                       : "text-gray-300 hover:text-white"
                   }`}
                   onClick={() => {
+                    void import("@/lib/nativeHaptics").then(({ hapticLight }) => {
+                      hapticLight("open-messages")
+                    })
                     void handleToggleMessages()
                   }}
                 >
@@ -1011,6 +1082,9 @@ export default function Navbar() {
                     setOpenSection(null)
                     setIsOpen(false)
                   } else {
+                    void import("@/lib/nativeHaptics").then(({ hapticLight }) => {
+                      hapticLight("menu")
+                    })
                     setIsOpen(true)
                   }
                 }}
@@ -1149,7 +1223,7 @@ export default function Navbar() {
 
       {mobileMenuOpen ? (
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain border-t border-white/10 bg-[#0b1f3a] [webkit-overflow-scrolling:touch] md:hidden">
-          <div className="flex w-full flex-col gap-1 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] pt-1.5 text-sm text-white md:px-6">
+          <div className="flex w-full flex-col gap-1 px-4 pb-[calc(0.75rem+var(--safe-area-bottom)+var(--app-tab-bar-height))] pt-1.5 text-sm text-white md:px-6">
           {showReturnToApp ? (
             <button
               type="button"
@@ -1216,7 +1290,12 @@ export default function Navbar() {
                   ? "bg-blue-500/20 text-blue-300"
                   : "text-gray-300 hover:text-white"
               }`}
-              onClick={closeMobile}
+              onClick={() => {
+                void import("@/lib/nativeHaptics").then(({ hapticLight }) => {
+                  hapticLight("open-profile")
+                })
+                closeMobile()
+              }}
             >
               Profile
             </IntentPrefetchLink>
@@ -1232,6 +1311,9 @@ export default function Navbar() {
                 : "text-gray-300 hover:text-white"
             }`}
             onClick={() => {
+              void import("@/lib/nativeHaptics").then(({ hapticLight }) => {
+                hapticLight("open-messages")
+              })
               void handleToggleMessages()
               closeMobile()
             }}

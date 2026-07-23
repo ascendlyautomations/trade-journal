@@ -670,6 +670,12 @@ export default function AchievementUploadModal({
           report({ percent: 95, stage: "Finishing…" })
           await onSaved?.()
 
+          if (!snapshotEditingId) {
+            void import("@/lib/nativeHaptics").then(({ hapticSuccess }) => {
+              hapticSuccess("achievement-unlocked")
+            })
+          }
+
           if (
             !snapshotEditingId &&
             !deferPassedEvalContinuance &&

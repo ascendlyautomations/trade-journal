@@ -7,6 +7,7 @@ import {
   PERFORMANCE_SHARE_EXPORT_WIDTH,
   captureShareCardElementToPng,
 } from "@/lib/shareImageCapture"
+import { shareImage } from "@/lib/shareService"
 import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
 import NativeDateInput from "@/app/components/ui/NativeDateInput"
 import {
@@ -166,10 +167,11 @@ export default function PerformanceShareModal({
         warmupMs: 520,
         logContext: "performanceShare",
       })
-      const link = document.createElement("a")
-      link.download = `performance-${windowKey}-${Date.now()}.png`
-      link.href = dataUrl
-      link.click()
+      await shareImage(dataUrl, {
+        filename: `performance-${windowKey}-${Date.now()}.png`,
+        title: "TradeTraxs",
+        text: "Performance recap",
+      })
       devLog("[performanceShare] download success")
     } catch (e) {
       console.error("[performanceShare] download failure:", e)

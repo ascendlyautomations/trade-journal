@@ -19,6 +19,8 @@ import {
   enterCreatorFlow,
   normalizeCreatorAccessCode,
 } from "@/lib/creatorAccess"
+import { isNativeIos } from "@/lib/nativePlatform"
+import { startNativeIosGoogleOAuth } from "@/lib/nativeIosOAuth"
 
 function CreatorSignupInner() {
   const router = useRouter()
@@ -177,6 +179,15 @@ function CreatorSignupInner() {
 
     setGoogleLoading(true)
     try {
+      if (!redeemPath) return
+
+      // Capacitor iOS: in-app browser + custom-scheme callback.
+      // Web keeps the existing origin redirect flow unchanged.
+      if (isNativeIos()) {
+        await startNativeIosGoogleOAuth(redeemPath)
+        return
+      }
+
       await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {

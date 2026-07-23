@@ -216,5 +216,18 @@ export async function POST(req: Request) {
     return Response.json({ error: insertErr.message }, { status: 500 })
   }
 
+  const { scheduleIosPushDelivery } = await import(
+    "@/lib/server/push/deliverPushNotification"
+  )
+  for (const row of rows) {
+    scheduleIosPushDelivery({
+      recipientUserId: String(row.user_id),
+      type: "room_message",
+      sender_id: user.id,
+      content: row.content,
+      prefsAlreadyChecked: true,
+    })
+  }
+
   return Response.json({ ok: true, inserted: rows.length })
 }

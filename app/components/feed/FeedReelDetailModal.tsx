@@ -1,5 +1,6 @@
 "use client"
 
+import dynamic from "next/dynamic"
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react"
 import DetailModalShell, {
   scrollModalCommentsPane,
@@ -18,6 +19,12 @@ import { feedCommentTarget } from "./feedPostHelpers"
 import { resolveReelCaption } from "@/lib/reels"
 import type { FeedLikeMeta } from "./FeedPostCard"
 import { DETAIL_MODAL_STACKED_Z_INDEX_CLASS } from "@/app/components/ui/modalLayout"
+import { useIsNativeIos } from "@/lib/useIsNativeIos"
+
+const NativeIosMediaViewer = dynamic(
+  () => import("@/app/components/ui/NativeIosMediaViewer"),
+  { ssr: false }
+)
 
 type FeedReelDetailModalProps = {
   post: any
@@ -78,12 +85,15 @@ export default function FeedReelDetailModal({
   isTradeAttachedReel = false,
   stacked = false,
 }: FeedReelDetailModalProps) {
+  const nativeIos = useIsNativeIos()
   const pid = String(post.id)
   const playbackRef = useRef<ReelClipPlaybackHandle>(null)
   const commentsScrollRef = useRef<HTMLDivElement>(null)
   const [commentsFocused, setCommentsFocused] = useState(
     () => Boolean(openCommentsRef.current[pid])
   )
+  const [nativeFullscreen, setNativeFullscreen] = useState(false)
+  const [nativeStartTime, setNativeStartTime] = useState(0)
 
   const commentTarget = useMemo(
     () => feedCommentTarget(pid, post),
@@ -135,12 +145,66 @@ export default function FeedReelDetailModal({
     }
   }, [post])
 
+  const openNativeFullscreen = useCallback(() => {
+    if (!nativeIos) return
+    const video = playbackRef.current?.getVideoElement()
+    const time = video?.currentTime ?? 0
+    playbackRef.current?.pause()
+    setNativeStartTime(time)
+    setNativeFullscreen(true)
+  }, [nativeIos])
+
+  const closeNativeFullscreen = useCallback(() => {
+    setNativeFullscreen(false)
+  }, [])
+
+  const restoreInlineTime = useCallback(
+    (_url: string, time: number) => {
+      const video = playbackRef.current?.getVideoElement()
+      if (!video || !Number.isFinite(time)) return
+      try {
+        video.currentTime = time
+      } catch {
+        // Seek may fail if element was recycled.
+      }
+    },
+    []
+  )
+
   const splitMedia = (
-    <DetailModalVideo
-      ref={playbackRef}
-      src={String(post.video_url)}
-      poster={String(post.thumbnail_url)}
-    />
+    <div
+      className={nativeIos ? "relative" : undefined}
+      onClick={
+        nativeIos
+          ? (e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              openNativeFullscreen()
+            }
+          : undefined
+      }
+      role={nativeIos ? "button" : undefined}
+      tabIndex={nativeIos ? 0 : undefined}
+      aria-label={nativeIos ? "Open fullscreen video" : undefined}
+      onKeyDown={
+        nativeIos
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault()
+                openNativeFullscreen()
+              }
+            }
+          : undefined
+      }
+    >
+      <div className={nativeIos ? "pointer-events-none" : undefined}>
+        <DetailModalVideo
+          ref={playbackRef}
+          src={String(post.video_url)}
+          poster={String(post.thumbnail_url)}
+        />
+      </div>
+    </div>
   )
 
   const splitPanel = (
@@ -235,17 +299,36 @@ export default function FeedReelDetailModal({
   )
 
   return (
-    <DetailModalShell
-      ariaLabel="Clip details"
-      title="Clip"
-      layout="split"
-      onClose={onClose}
-      splitMedia={splitMedia}
-      splitPanel={splitPanel}
-      suppressMobileSplitMedia={commentsFocused}
-      zIndexClass={
-        stacked ? DETAIL_MODAL_STACKED_Z_INDEX_CLASS : undefined
-      }
-    />
+    <>
+      <DetailModalShell
+        ariaLabel="Clip details"
+        title="Clip"
+        layout="split"
+        onClose={onClose}
+        splitMedia={splitMedia}
+        splitPanel={splitPanel}
+        suppressMobileSplitMedia={commentsFocused}
+        zIndexClass={
+          stacked ? DETAIL_MODAL_STACKED_Z_INDEX_CLASS : undefined
+        }
+      />
+      {nativeIos && nativeFullscreen ? (
+        <NativeIosMediaViewer
+          open
+          items={[
+            {
+              type: "video",
+              url: String(post.video_url),
+              poster: String(post.thumbnail_url ?? ""),
+              initialTime: nativeStartTime,
+              startMuted: true,
+            },
+          ]}
+          onClose={closeNativeFullscreen}
+          zIndexClass={DETAIL_MODAL_STACKED_Z_INDEX_CLASS}
+          onVideoTime={restoreInlineTime}
+        />
+      ) : null}
+    </>
   )
 }

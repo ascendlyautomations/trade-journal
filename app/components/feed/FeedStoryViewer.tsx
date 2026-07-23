@@ -1,6 +1,7 @@
 "use client"
 
 import { memo, useMemo, useRef } from "react"
+import { NAVBAR_HEIGHT_CLASS } from "@/app/components/ui/DetailModalShell"
 import type { StoryBarProfile } from "./FeedStoriesBar"
 import StoryFrame from "./StoryFrame"
 import StoryReplyInput from "./StoryReplyInput"
@@ -192,7 +193,7 @@ function FeedStoryViewer({
 
   return (
     <div
-      className="fixed inset-x-0 bottom-0 top-16 z-[9999] flex items-start justify-center bg-black/95 px-2 pt-4 md:px-6 md:pt-5"
+      className={`fixed inset-x-0 bottom-0 ${NAVBAR_HEIGHT_CLASS} z-[9999] flex items-start justify-center bg-black/95 px-2 pt-4 pb-[max(1rem,var(--safe-area-bottom))] md:px-6 md:pt-5`}
       role="dialog"
       aria-modal="true"
       aria-label="Stories"

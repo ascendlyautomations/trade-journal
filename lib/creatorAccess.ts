@@ -1,4 +1,5 @@
 import { supabaseBearerHeaders } from "@/lib/supabaseBearerFetch"
+import { hapticSuccess } from "@/lib/nativeHaptics"
 
 /** Normalize creator invite codes for lookup (trim + uppercase). */
 export function normalizeCreatorAccessCode(raw: string | null | undefined): string {
@@ -160,6 +161,7 @@ async function redeemCreatorAccessCodeOnce(
       is_pro: true,
     }
 
+    hapticSuccess("creator-redeem")
     return {
       ok: true,
       alreadyGranted: payload.alreadyGranted === true,

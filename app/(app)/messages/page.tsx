@@ -1,8 +1,9 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { supabase } from "../../../lib/supabaseClient"
+import NativeIosPullToRefresh from "@/app/components/NativeIosPullToRefresh"
 import {
   isConversationParticipant,
   newConversationId,
@@ -141,6 +142,7 @@ export default function MessagesPage() {
 
   const router = useRouter()
   const user = authUser
+  const inboxScrollRef = useRef<HTMLDivElement | null>(null)
 
   function mergeNewConversation(prev: any[], newConversation: any) {
     if (prev.some((c) => c.id === newConversation.id)) return prev
@@ -489,6 +491,9 @@ export default function MessagesPage() {
 
   const openConversation = useCallback(
     (conversationId: string) => {
+      void import("@/lib/nativeHaptics").then(({ hapticLight }) => {
+        hapticLight("open-messages")
+      })
       const item = conversations.find((c) => c.id === conversationId)
       let path = groupThreadPath(conversationId)
       let urlSegment = conversationId
@@ -913,7 +918,14 @@ export default function MessagesPage() {
             </button>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          <NativeIosPullToRefresh
+            scrollRef={inboxScrollRef}
+            className="min-h-0 flex-1 overflow-y-auto"
+            onRefresh={async () => {
+              if (!authUser?.id) return
+              await fetchConversations(authUser.id, "pull-to-refresh")
+            }}
+          >
             {showSkeleton ? (
               <SkeletonMessagesConversationList />
             ) : showInboxLoadError ? (
@@ -970,7 +982,7 @@ export default function MessagesPage() {
                 onDelete={handleRequestDeleteConversation}
               />
             )}
-          </div>
+          </NativeIosPullToRefresh>
 
         </div>
 

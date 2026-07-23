@@ -11,6 +11,7 @@ import { uploadContentImageToStorage } from "@/lib/contentImagePipeline"
 import { createMonotonicReporter } from "@/lib/uploadProgress/reportProgress"
 import type { UploadProgressOptions } from "@/lib/uploadProgress/types"
 import { toUserFacingErrorMessage } from "@/lib/userFacingError"
+import { hapticSuccess } from "@/lib/nativeHaptics"
 
 export type ManualTradeAccount = {
   name: string
@@ -291,10 +292,12 @@ export async function saveManualTrade(
         error: postError,
       }
     }
+    hapticSuccess("trade-created")
     return { ok: true, trade: newTradeData, posted: true }
   }
 
   report({ percent: 95, stage: "Finishing…" })
+  hapticSuccess("trade-created")
   return { ok: true, trade: newTradeData, posted: false }
 }
 

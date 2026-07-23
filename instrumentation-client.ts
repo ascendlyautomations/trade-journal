@@ -14,7 +14,21 @@ function loadSentry() {
   return sentryPromise
 }
 
-if (window.location.pathname === "/") {
+/** Capacitor shell markers — avoid importing @capacitor/core here. */
+function isNativeShellClient(): boolean {
+  try {
+    if (/(?:^|;\s*)tt_native=1(?:;|$)/.test(document.cookie)) return true
+  } catch {
+    // ignore
+  }
+  try {
+    return /TradeTraxsNative/i.test(navigator.userAgent)
+  } catch {
+    return false
+  }
+}
+
+function deferSentryUntilIdle(delayMs: number) {
   const startOnInteraction = () => {
     void loadSentry()
   }
@@ -34,7 +48,15 @@ if (window.location.pathname === "/") {
   window.addEventListener("unhandledrejection", captureEarlyRejection, {
     once: true,
   })
-  window.setTimeout(startOnInteraction, 10_000)
+  window.setTimeout(startOnInteraction, delayMs)
+}
+
+// Marketing homepage + native Capacitor shell: don't compete with first paint.
+// Web non-homepage behavior is unchanged (immediate init).
+if (window.location.pathname === "/") {
+  deferSentryUntilIdle(10_000)
+} else if (isNativeShellClient()) {
+  deferSentryUntilIdle(8_000)
 } else {
   void loadSentry()
 }

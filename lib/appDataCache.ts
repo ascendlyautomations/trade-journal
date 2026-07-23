@@ -10,6 +10,9 @@ export const ACCOUNTS_SELECT =
 
 const DEFAULT_STALE_MS = 5 * 60 * 1000
 
+/** Recent window for first interactive dashboard paint; full history loads after. */
+export const INITIAL_TRADES_LIMIT = 120
+
 type CacheEntry<T> = {
   userId: string
   data: T
@@ -18,11 +21,15 @@ type CacheEntry<T> = {
   loading: boolean
 }
 
-type TradesEntry = CacheEntry<any[]>
+type TradesEntry = CacheEntry<any[]> & {
+  /** False while only the recent window is loaded; true after full history fetch. */
+  historyComplete: boolean
+}
 type AccountsEntry = CacheEntry<any[]>
 
 const tradesByUser = new Map<string, TradesEntry>()
 const accountsByUser = new Map<string, AccountsEntry>()
+const tradesHistoryInFlight = new Map<string, Promise<any[]>>()
 const listeners = new Set<() => void>()
 
 /** Stable empty snapshots — never allocate new arrays inside getSnapshot(). */
@@ -146,16 +153,24 @@ export function invalidateAllAppDataForUser(userId: string) {
 export function clearAppDataCache() {
   tradesByUser.clear()
   accountsByUser.clear()
+  tradesHistoryInFlight.clear()
   notify()
 }
 
-export function setTradesCache(userId: string, trades: any[]) {
+export function setTradesCache(
+  userId: string,
+  trades: any[],
+  options?: { historyComplete?: boolean }
+) {
   const prev = tradesByUser.get(userId)
+  const historyComplete =
+    options?.historyComplete ?? prev?.historyComplete ?? true
   if (
     prev &&
     prev.data === trades &&
     !prev.loading &&
-    !prev.invalidated
+    !prev.invalidated &&
+    prev.historyComplete === historyComplete
   ) {
     return
   }
@@ -165,6 +180,7 @@ export function setTradesCache(userId: string, trades: any[]) {
     fetchedAt: Date.now(),
     invalidated: false,
     loading: false,
+    historyComplete,
   })
   notify()
 }
@@ -332,6 +348,40 @@ export async function ensureAccountsLoaded(
   return next
 }
 
+/**
+ * Background full-history fetch. Does not flip `loading`, so recent trades
+ * stay usable for an interactive dashboard while history catches up.
+ */
+async function ensureFullTradesHistory(
+  supabase: SupabaseClient,
+  userId: string
+): Promise<any[]> {
+  const existing = tradesHistoryInFlight.get(userId)
+  if (existing) return existing
+
+  const promise = (async () => {
+    const { data, error } = await supabase
+      .from("trades")
+      .select(TRADES_APP_SELECT)
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+
+    if (error) {
+      // Leave the recent window in place; next ensureTradesLoaded can retry.
+      return getCachedTrades(userId) ?? (EMPTY_TRADES as any[])
+    }
+
+    const next = data?.length ? data : (EMPTY_TRADES as any[])
+    setTradesCache(userId, next, { historyComplete: true })
+    return next
+  })().finally(() => {
+    tradesHistoryInFlight.delete(userId)
+  })
+
+  tradesHistoryInFlight.set(userId, promise)
+  return promise
+}
+
 export async function ensureTradesLoaded(
   supabase: SupabaseClient,
   userId: string,
@@ -339,13 +389,19 @@ export async function ensureTradesLoaded(
 ): Promise<any[]> {
   if (isDemoUserId(userId)) {
     const cached = getCachedTrades(userId)
-    if (!cached) setTradesCache(userId, DEMO_TRADES)
+    if (!cached) setTradesCache(userId, DEMO_TRADES, { historyComplete: true })
     return getCachedTrades(userId) ?? DEMO_TRADES
   }
 
   const cached = getCachedTrades(userId)
   const entry = tradesByUser.get(userId)
-  if (cached && !options?.force) return cached
+  if (cached && !options?.force) {
+    // Fresh recent window: unblock UI now, finish history in the background.
+    if (!entry?.historyComplete) {
+      void ensureFullTradesHistory(supabase, userId)
+    }
+    return cached
+  }
   if (entry?.loading) {
     return new Promise((resolve) => {
       const unsub = subscribeAppDataCache(() => {
@@ -358,6 +414,7 @@ export async function ensureTradesLoaded(
   }
 
   const previousData = (entry?.data ?? EMPTY_TRADES) as any[]
+  const previousHistoryComplete = entry?.historyComplete ?? false
   const wasLoading = entry?.loading === true
 
   tradesByUser.set(userId, {
@@ -366,14 +423,17 @@ export async function ensureTradesLoaded(
     fetchedAt: entry?.fetchedAt ?? 0,
     invalidated: true,
     loading: true,
+    historyComplete: previousHistoryComplete,
   })
   if (!wasLoading) notify()
 
+  // Stage 1: recent trades only — dashboard becomes interactive sooner.
   const { data, error } = await supabase
     .from("trades")
     .select(TRADES_APP_SELECT)
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
+    .limit(INITIAL_TRADES_LIMIT)
 
   // A failed fetch must never be cached as a valid empty history — that makes
   // a trade-owning user look like a 0-trade user (false empty dashboard).
@@ -384,6 +444,7 @@ export async function ensureTradesLoaded(
       fetchedAt: entry?.fetchedAt ?? 0,
       invalidated: true,
       loading: false,
+      historyComplete: previousHistoryComplete,
     })
     notify()
     // One delayed retry recovers transient startup failures (token refresh).
@@ -396,6 +457,13 @@ export async function ensureTradesLoaded(
   }
 
   const next = data?.length ? data : (EMPTY_TRADES as any[])
-  setTradesCache(userId, next)
+  const historyComplete = next.length < INITIAL_TRADES_LIMIT
+  setTradesCache(userId, next, { historyComplete })
+
+  // Stage 2: remaining history after first paint (no loading flip).
+  if (!historyComplete) {
+    void ensureFullTradesHistory(supabase, userId)
+  }
+
   return next
 }

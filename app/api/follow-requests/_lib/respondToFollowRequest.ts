@@ -94,6 +94,16 @@ export async function approveFollowRequest(
       console.error("[follow-requests] follow notification insert failed", notifErr)
       return { ok: false, status: 500, error: toUserFacingErrorMessage(notifErr) }
     }
+  } else {
+    const { scheduleIosPushDelivery } = await import(
+      "@/lib/server/push/deliverPushNotification"
+    )
+    scheduleIosPushDelivery({
+      recipientUserId: req.target_id,
+      type: "follow",
+      sender_id: req.requester_id,
+      prefsAlreadyChecked: true,
+    })
   }
 
   return { ok: true }

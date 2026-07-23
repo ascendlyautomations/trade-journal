@@ -78,5 +78,16 @@ export async function POST(req: Request) {
     return jsonUserFacingError(error, 500, "[api/trading-reports/notify] insert")
   }
 
+  const { scheduleIosPushDelivery } = await import(
+    "@/lib/server/push/deliverPushNotification"
+  )
+  scheduleIosPushDelivery({
+    recipientUserId: user.id,
+    type: "trading_report",
+    sender_id: null,
+    content,
+    prefsAlreadyChecked: true,
+  })
+
   return Response.json({ ok: true })
 }

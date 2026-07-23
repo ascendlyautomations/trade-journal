@@ -9,6 +9,7 @@ import {
   MODAL_BODY_SCROLL_CLASS,
   MODAL_FOOTER_CLASS,
   MODAL_HEADER_CLASS,
+  MODAL_OVERLAY_SAFE_PADDING_CLASS,
   MODAL_PANEL_MAX_HEIGHT_BELOW_NAV_CLASS,
   MODAL_PANEL_MAX_HEIGHT_CLASS,
   MODAL_PANEL_SHELL_CLASS,
@@ -78,8 +79,8 @@ export default function ScrollableModalShell({
     <div
       className={cn(
         belowNavbar
-          ? `${MODAL_FIXED_BELOW_NAVBAR_CLASS} z-[10050] p-3 sm:p-4`
-          : "fixed inset-0 z-[10050] flex items-start justify-center overflow-y-auto overscroll-contain p-4 sm:items-center",
+          ? `${MODAL_FIXED_BELOW_NAVBAR_CLASS} z-[10050] p-3 pb-[max(0.75rem,var(--safe-area-bottom))] sm:p-4 sm:pb-[max(1rem,var(--safe-area-bottom))]`
+          : `fixed inset-0 z-[10050] flex items-start justify-center overflow-y-auto overscroll-contain ${MODAL_OVERLAY_SAFE_PADDING_CLASS} sm:items-center`,
         overlayClassName
       )}
       role="presentation"

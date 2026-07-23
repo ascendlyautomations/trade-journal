@@ -1,5 +1,6 @@
 /** Design canvas width — export at `pixelRatio` 2 → 1080px PNG width. */
 import { devLog } from "./devLog"
+import { shareImage } from "./shareService"
 
 export const TRADE_SHARE_EXPORT_WIDTH = 540
 
@@ -66,7 +67,9 @@ function slugPart(raw: string): string {
 }
 
 /**
- * Downloads the trade share card as PNG. Expects a mounted `#trade-share-export-{id}` node.
+ * Exports the trade share card as PNG.
+ * Web → browser download. Native iOS → system Share Sheet.
+ * Expects a mounted `#trade-share-export-{id}` node.
  */
 export async function downloadTradeShareCardPng(
   trade: {
@@ -124,10 +127,11 @@ export async function downloadTradeShareCardPng(
     backgroundColor: "#0b1a2a",
   })
 
-  const link = document.createElement("a")
   const ticker = slugPart(String(trade.ticker ?? "trade"))
   const idBit = trade.id != null ? String(trade.id).slice(0, 10) : "export"
-  link.download = `trade-${ticker}-${idBit}.png`
-  link.href = dataUrl
-  link.click()
+  await shareImage(dataUrl, {
+    filename: `trade-${ticker}-${idBit}.png`,
+    title: "TradeTraxs",
+    text: `${ticker} trade recap`,
+  })
 }

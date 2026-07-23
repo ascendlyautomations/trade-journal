@@ -15,6 +15,7 @@ import {
   getDemoFollowUiSnapshot,
   isDemoProfileId,
 } from "@/lib/demo/demoProfile"
+import { hapticLight } from "@/lib/nativeHaptics"
 
 export type FollowUiState = "none" | "following" | "requested"
 
@@ -131,6 +132,7 @@ export async function followOrRequest(
     }
 
     await createFollowRequestNotification(supabase, followerId, target.id)
+    hapticLight("follow")
     return { ok: true, state: "requested" }
   }
 
@@ -146,6 +148,7 @@ export async function followOrRequest(
 
   await createFollowNotification(supabase, followerId, target.id)
   notifyGettingStartedChecklistMaybeCompleted()
+  hapticLight("follow")
   return { ok: true, state: "following" }
 }
 
@@ -177,6 +180,7 @@ export async function unfollowOrCancelRequest(
     }
 
     await removeFollowNotification(supabase, followerId, targetId)
+    hapticLight("unfollow")
     return { ok: true, state: "none" }
   }
 
@@ -194,6 +198,7 @@ export async function unfollowOrCancelRequest(
     }
 
     await removeFollowRequestNotification(supabase, followerId, targetId)
+    hapticLight("unfollow")
     return { ok: true, state: "none" }
   }
 

@@ -1,6 +1,7 @@
 "use client"
 
 import Modal from "./Modal"
+import { useEffect, useRef } from "react"
 
 export type ConfirmModalProps = {
   open: boolean
@@ -28,6 +29,16 @@ export default function ConfirmModal({
   onCancel,
   onConfirm,
 }: ConfirmModalProps) {
+  const wasOpenRef = useRef(false)
+  useEffect(() => {
+    if (open && !wasOpenRef.current) {
+      void import("@/lib/nativeHaptics").then(({ hapticWarning }) => {
+        hapticWarning(destructive ? "confirm-destructive" : "confirm")
+      })
+    }
+    wasOpenRef.current = open
+  }, [open, destructive])
+
   return (
     <Modal
       open={open}

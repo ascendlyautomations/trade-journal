@@ -10,13 +10,27 @@ const SECURITY_HEADERS: Record<string, string> = {
   "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
 }
 
+function isPrivateLanIpv4(hostWithoutPort: string): boolean {
+  return /^(192\.168\.|10\.|172\.(1[6-9]|2\d|3[0-1])\.)\d/.test(hostWithoutPort)
+}
+
 function isLocalHost(host: string): boolean {
   const lower = host.toLowerCase()
+  const hostWithoutPort = lower.split(":")[0] ?? lower
   return (
     lower.startsWith("localhost") ||
     lower.startsWith("127.0.0.1") ||
-    lower.endsWith(".local")
+    lower.endsWith(".local") ||
+    // Capacitor physical-device dev loads http://<Mac-LAN-IP>:3000
+    isPrivateLanIpv4(hostWithoutPort)
   )
+}
+
+function isNativeShellRequest(request: NextRequest): boolean {
+  const ua = request.headers.get("user-agent") ?? ""
+  if (/TradeTraxsNative/i.test(ua)) return true
+  if (request.cookies.get("tt_native")?.value === "1") return true
+  return false
 }
 
 export function middleware(request: NextRequest) {
@@ -35,6 +49,24 @@ export function middleware(request: NextRequest) {
       url.protocol = "https:"
       return NextResponse.redirect(url, 308)
     }
+  }
+
+  // Capacitor server.url is the site origin (not /native). Send native `/`
+  // through the auth-aware cold-start entry without touching web marketing.
+  //
+  // Must use an absolute URL here: Next's middleware adapter does
+  // `new NextURL(Location)` without a base (see next/dist server web adapter),
+  // so a relative Location like "/native" throws TypeError: Invalid URL.
+  if (url.pathname === "/" && isNativeShellRequest(request)) {
+    const nativeUrl = request.nextUrl.clone()
+    nativeUrl.pathname = "/native"
+    nativeUrl.search = ""
+    nativeUrl.hash = ""
+    const response = NextResponse.redirect(nativeUrl, 307)
+    for (const [key, value] of Object.entries(SECURITY_HEADERS)) {
+      response.headers.set(key, value)
+    }
+    return response
   }
 
   const requestHeaders = new Headers(request.headers)

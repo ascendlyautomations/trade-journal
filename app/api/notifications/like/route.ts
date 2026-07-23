@@ -207,6 +207,18 @@ export async function POST(req: Request) {
     console.error("[api/notifications/like] insert failed", error)
     return Response.json({ error: error.message }, { status: 500 })
   }
+  if (!error) {
+    const { scheduleIosPushDelivery } = await import(
+      "@/lib/server/push/deliverPushNotification"
+    )
+    scheduleIosPushDelivery({
+      recipientUserId: resolved.recipientUserId,
+      type: "like",
+      sender_id: user.id,
+      prefsAlreadyChecked: true,
+      ...resolved.notificationTarget,
+    })
+  }
   return Response.json({ ok: true, deduplicated: error?.code === "23505" })
 }
 

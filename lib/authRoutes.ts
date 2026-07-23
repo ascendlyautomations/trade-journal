@@ -62,6 +62,7 @@ export function isPreCheckoutRoute(pathname: string | null | undefined): boolean
 export function isStandaloneFlowRoute(pathname: string | null | undefined): boolean {
   if (!pathname) return false
   return (
+    pathname === "/native" ||
     isAuthRoute(pathname) ||
     isOnboardingRoute(pathname) ||
     isPreCheckoutRoute(pathname)

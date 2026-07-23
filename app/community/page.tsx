@@ -14,6 +14,7 @@ import TradeRoomsDiscoverView from "../components/TradeRoomsDiscoverView"
 import CreateFirstTradeRoomCard from "../components/CreateFirstTradeRoomCard"
 import ExploreMoreTradeRoomsCard from "../components/ExploreMoreTradeRoomsCard"
 import EmptyState from "../components/ui/EmptyState"
+import NativeIosPullToRefresh from "@/app/components/NativeIosPullToRefresh"
 import {
   SkeletonCommunityPage,
   SkeletonLeaderboardRow,
@@ -2353,6 +2354,9 @@ function CommunityContent() {
         message: "You're already in this room",
       })
     } else {
+      void import("@/lib/nativeHaptics").then(({ hapticMedium }) => {
+        hapticMedium("join-room")
+      })
       await createRoomJoinNotification(supabase, roomId)
       notifyGettingStartedChecklistMaybeCompleted()
       setRoomNotificationsEnabled(true)
@@ -2401,6 +2405,10 @@ function CommunityContent() {
       console.error("handleLeaveRoom:", error)
       return
     }
+
+    void import("@/lib/nativeHaptics").then(({ hapticMedium }) => {
+      hapticMedium("leave-room")
+    })
 
     setRooms((prev) => {
       const next = prev.filter((r) => r.id !== leftRoomId)
@@ -3393,6 +3401,11 @@ function CommunityContent() {
                           key={room.id}
                           type="button"
                           onClick={() => {
+                            void import("@/lib/nativeHaptics").then(
+                              ({ hapticLight }) => {
+                                hapticLight("open-trade-room")
+                              }
+                            )
                             setSelectedRoomId(room.id)
                             setMobileRoomsOpen(false)
                             const target = String(room.slug ?? room.id)
@@ -3860,9 +3873,19 @@ function CommunityContent() {
                   </div>
                 ) : null}
 
-              <div
-                ref={messagesScrollRef}
+              <NativeIosPullToRefresh
+                scrollRef={messagesScrollRef}
                 className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-3"
+                onRefresh={async () => {
+                  if (selectedRoomId) {
+                    await refetchSections()
+                    return
+                  }
+                  if (!user?.id) return
+                  const nextRooms = await loadMemberRooms(user.id)
+                  setRooms(nextRooms)
+                  writeRoomSession(user.id, { rooms: nextRooms })
+                }}
               >
               {loadingOlderMessages ? (
                 <p className="pb-2 text-center text-xs text-gray-500">
@@ -4233,7 +4256,7 @@ function CommunityContent() {
                   ) : null}
                 </>
               )}
-              </div>
+              </NativeIosPullToRefresh>
               </div>
                 </div>
 

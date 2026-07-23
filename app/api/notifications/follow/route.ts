@@ -53,6 +53,16 @@ export async function POST(req: Request) {
     return Response.json({ error: insertErr.message }, { status: 500 })
   }
 
+  const { scheduleIosPushDelivery } = await import(
+    "@/lib/server/push/deliverPushNotification"
+  )
+  scheduleIosPushDelivery({
+    recipientUserId: followingId,
+    type: "follow",
+    sender_id: user.id,
+    prefsAlreadyChecked: true,
+  })
+
   return Response.json({ ok: true })
 }
 

@@ -41,7 +41,7 @@ export default function CsvImportFailureModal({
 
   return createPortal(
     <div
-      className={`fixed inset-0 z-[10050] flex items-end justify-center p-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:items-center md:pb-4 ${overlayClassName ?? ""}`}
+      className={`fixed inset-0 z-[10050] flex items-end justify-center p-4 pb-[max(1rem,var(--safe-area-bottom))] md:items-center md:pb-4 ${overlayClassName ?? ""}`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="csv-import-failure-title"

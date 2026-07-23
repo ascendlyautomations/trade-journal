@@ -5,6 +5,7 @@ import { excludeBacktestTrades } from "@/lib/tradeModeFilters"
 import { averageRrFromTrades } from "@/lib/tradeRr"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { supabase } from "../../../lib/supabaseClient"
+import NativeIosPullToRefresh from "@/app/components/NativeIosPullToRefresh"
 import { deleteUserTrade } from "@/lib/deleteTrade"
 import {
   buildAccountFilterOptionsFromRows,
@@ -37,10 +38,13 @@ const QuickTradeModal = dynamic(
 
 export default function TradesPage() {
   const { user, profile: gateProfile, loading: profileLoading } = useUserProfile()
-  const { trades: cachedTrades, loading: tradesLoading } = useCachedTrades(user?.id)
-  const { accounts: accountRows, loading: accountsLoading } = useCachedAccounts(
-    user?.id
-  )
+  const { trades: cachedTrades, loading: tradesLoading, refresh: refreshTrades } =
+    useCachedTrades(user?.id)
+  const {
+    accounts: accountRows,
+    loading: accountsLoading,
+    refresh: refreshAccounts,
+  } = useCachedAccounts(user?.id)
   const trades = useMemo(
     () => excludeBacktestTrades(cachedTrades),
     [cachedTrades]
@@ -149,6 +153,9 @@ export default function TradesPage() {
       requestDemoSignup("edit")
       return
     }
+    void import("@/lib/nativeHaptics").then(({ hapticLight }) => {
+      hapticLight("open-trade")
+    })
     setEditingTrade({ ...trade })
   }, [])
 
@@ -366,6 +373,11 @@ export default function TradesPage() {
 
   return (
     <>
+      <NativeIosPullToRefresh
+        onRefresh={async () => {
+          await Promise.all([refreshTrades(), refreshAccounts()])
+        }}
+      >
       <div className="w-full text-white px-2 pb-3 pt-0 md:px-4 md:pb-10">
 
         <div className="w-full px-1 md:px-6 md:max-w-[1600px] md:mx-auto">
@@ -411,6 +423,7 @@ export default function TradesPage() {
           />
         </div>
       </div>
+      </NativeIosPullToRefresh>
 
       <TradesPageOverlays
         selectedImage={selectedImage}

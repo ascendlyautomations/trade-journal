@@ -19,6 +19,11 @@ export {
 } from "./ImageViewerCloseButton"
 export type { ImageViewerCloseButtonProps } from "./ImageViewerCloseButton"
 export { default as ImageLightbox, IMAGE_LIGHTBOX_Z_INDEX_CLASS } from "./ImageLightbox"
+export { default as NativeIosMediaViewer } from "./NativeIosMediaViewer"
+export type {
+  NativeIosMediaItem,
+  NativeIosMediaViewerProps,
+} from "./NativeIosMediaViewer"
 export { default as SavedImage, SAVED_IMAGE_FIT_CLASS } from "./SavedImage"
 export { default as EmptyState } from "./EmptyState"
 export type { EmptyStateProps } from "./EmptyState"
@@ -89,6 +94,7 @@ export {
   MODAL_BODY_SCROLL_CLASS,
   MODAL_FOOTER_CLASS,
   MODAL_HEADER_CLASS,
+  MODAL_OVERLAY_SAFE_PADDING_CLASS,
   MODAL_PANEL_MAX_HEIGHT_BELOW_NAV_CLASS,
   MODAL_PANEL_MAX_HEIGHT_CLASS,
   MODAL_PANEL_SHELL_CLASS,

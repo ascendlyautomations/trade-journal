@@ -3,6 +3,7 @@ import { createRoomJoinNotification } from "@/lib/createRoomJoinNotification"
 import { notifyGettingStartedChecklistMaybeCompleted } from "@/lib/gettingStartedProgressSync"
 import { clearRoomSessionsForUser } from "@/lib/roomSessionCache"
 import { toUserFacingErrorMessage } from "@/lib/userFacingError"
+import { hapticMedium } from "@/lib/nativeHaptics"
 
 export type JoinTradeRoomResult =
   | { ok: true; alreadyMember: boolean }
@@ -53,5 +54,6 @@ export async function joinTradeRoom(
     notifyGettingStartedChecklistMaybeCompleted()
   }
 
+  hapticMedium("join-room")
   return { ok: true, alreadyMember: alreadyActive }
 }

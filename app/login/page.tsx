@@ -33,6 +33,9 @@ import {
 import { enrollCurrentUserEarlyAccess } from "@/lib/earlyAccessClient"
 import { useEarlyAccessPromotion } from "@/lib/useEarlyAccessPromotion"
 import { markEarlyAccessOAuthSignupPending } from "@/lib/earlyAccess"
+import NativeIosLoginShell from "@/app/components/NativeIosLoginShell"
+import { isNativeIos } from "@/lib/nativePlatform"
+import { startNativeIosGoogleOAuth } from "@/lib/nativeIosOAuth"
 
 function getSafeNextPath(): string | null {
   if (typeof window === "undefined") return null
@@ -458,6 +461,14 @@ export default function LoginPage() {
       const next = getSafeNextPath()
       if (next) redirectPath = next
     }
+
+    // Capacitor iOS: in-app browser + custom-scheme callback (never leave to Safari).
+    // Web (desktop + mobile Safari) keeps the existing origin redirect flow.
+    if (isNativeIos()) {
+      await startNativeIosGoogleOAuth(redirectPath)
+      return
+    }
+
     await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
@@ -493,22 +504,42 @@ export default function LoginPage() {
   }
 
   return (
-  <div className="relative flex min-h-screen items-center justify-center text-white">
-
+  <NativeIosLoginShell>
+  {(nativeIos) => (
+  <>
     {/* 🔥 FULL BACKGROUND IMAGE */}
     <img
       src="/tradetrax-bg.webp"
       alt="bg"
-      className="absolute inset-0 w-full h-full object-cover"
+      className={
+        nativeIos
+          ? "pointer-events-none fixed inset-0 h-full w-full object-cover"
+          : "pointer-events-none absolute inset-0 h-full w-full object-cover"
+      }
     />
 
     {/* 🔥 DARK OVERLAY (IMPORTANT FOR READABILITY) */}
-    <div className="absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
+    <div
+      className={
+        nativeIos
+          ? "pointer-events-none fixed inset-0 bg-black/70 backdrop-blur-sm"
+          : "pointer-events-none absolute inset-0 bg-black/70 backdrop-blur-sm"
+      }
+    />
 
     <button
       type="button"
       onClick={handleBack}
-      className="absolute left-3 top-3 z-20 inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/10 text-base leading-none text-gray-200 backdrop-blur-md transition hover:bg-white/15 hover:text-white md:left-6 md:top-6 md:h-auto md:min-h-[44px] md:w-auto md:gap-2 md:px-4 md:py-2 md:text-sm md:font-medium"
+      className={
+        nativeIos
+          ? "absolute left-4 z-20 inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/10 text-base leading-none text-gray-200 backdrop-blur-md transition hover:bg-white/15 hover:text-white"
+          : "absolute left-3 top-3 z-20 inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/10 text-base leading-none text-gray-200 backdrop-blur-md transition hover:bg-white/15 hover:text-white md:left-6 md:top-6 md:h-auto md:min-h-[44px] md:w-auto md:gap-2 md:px-4 md:py-2 md:text-sm md:font-medium"
+      }
+      style={
+        nativeIos
+          ? { top: "max(0.75rem, var(--safe-area-top))" }
+          : undefined
+      }
       aria-label="Go home"
     >
       <span aria-hidden="true">←</span>
@@ -516,25 +547,69 @@ export default function LoginPage() {
     </button>
 
     {/* 🔥 CONTENT */}
-    <div className="relative z-10 flex w-full max-w-6xl flex-col items-center justify-between px-6 md:flex-row">
+    <div
+      className={
+        nativeIos
+          ? "relative z-10 my-auto flex w-full max-w-6xl flex-col items-center justify-center gap-6 px-4"
+          : "relative z-10 flex w-full max-w-6xl flex-col items-center justify-between px-6 pb-[var(--safe-area-bottom)] md:flex-row"
+      }
+      style={
+        nativeIos
+          ? {
+              paddingTop:
+                "max(3.5rem, calc(var(--safe-area-top) + 2.75rem))",
+              paddingBottom:
+                "max(1rem, calc(var(--safe-area-bottom) + var(--keyboard-height, 0px)))",
+            }
+          : undefined
+      }
+    >
 
       {/* LEFT TEXT */}
-      <div className="mb-10 max-w-lg text-center max-md:pt-3 md:mb-0 md:text-left">
-        <p className="text-sm tracking-widest text-blue-300 mb-5">
+      <div
+        className={
+          nativeIos
+            ? "max-w-md text-center"
+            : "mb-10 max-w-lg text-center max-md:pt-3 md:mb-0 md:text-left"
+        }
+      >
+        <p
+          className={
+            nativeIos
+              ? "mb-2 text-sm tracking-widest text-blue-300"
+              : "mb-5 text-sm tracking-widest text-blue-300"
+          }
+        >
           WELCOME TO
         </p>
 
-        <h1 className="text-5xl font-bold mb-4 text-blue-300">
+        <h1
+          className={
+            nativeIos
+              ? "mb-2 text-4xl font-bold text-blue-300"
+              : "mb-4 text-5xl font-bold text-blue-300"
+          }
+        >
           TradeTraxs
         </h1>
 
-        <p className="text-lg text-gray-300">
+        <p
+          className={
+            nativeIos ? "text-base text-gray-300" : "text-lg text-gray-300"
+          }
+        >
           Track. Analyze. Socialize. Dominate your trading.
         </p>
       </div>
 
       {/* RIGHT LOGIN CARD */}
-      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-white/10 p-8 shadow-2xl backdrop-blur-xl md:py-6 md:px-8">
+      <div
+        className={
+          nativeIos
+            ? "w-full max-w-md rounded-2xl border border-white/10 bg-white/10 p-5 shadow-2xl backdrop-blur-xl"
+            : "w-full max-w-md rounded-2xl border border-white/10 bg-white/10 p-8 shadow-2xl backdrop-blur-xl md:px-8 md:py-6"
+        }
+      >
 
         {/* Toggle */}
         <div
@@ -768,6 +843,8 @@ export default function LoginPage() {
       </div>
     </div>
     <FeedbackModal {...feedbackModalProps} />
-  </div>
+  </>
+  )}
+  </NativeIosLoginShell>
 )
 }

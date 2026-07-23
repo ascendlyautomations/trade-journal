@@ -9,6 +9,7 @@ import {
 import { claimCurrentUserProForLife } from "@/lib/earlyAccessClient"
 import { useEarlyAccessChallengeProgress } from "@/lib/useEarlyAccessChallengeProgress"
 import { useToast } from "@/app/components/ui"
+import { shareUrl } from "@/lib/shareService"
 
 type TraxsProForLifeCardProps = {
   referralCode: string | null | undefined
@@ -157,20 +158,18 @@ export default function TraxsProForLifeCard({
 
   async function shareReferralLink() {
     if (!referralLink) return
-    if (!navigator.share) {
-      await copyReferralLink()
-      return
-    }
     try {
-      await navigator.share({
+      const result = await shareUrl({
         title: "Join me on TradeTraxs",
         text: "Create your TradeTraxs account using my referral link.",
         url: referralLink,
       })
-    } catch (error) {
-      if ((error as DOMException)?.name !== "AbortError") {
-        toast.error("Could not open sharing.")
+      // Web without Web Share API: fall back to clipboard (prior behavior).
+      if (!result.ok && !result.cancelled) {
+        await copyReferralLink()
       }
+    } catch {
+      toast.error("Could not open sharing.")
     }
   }
 

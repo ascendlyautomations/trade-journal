@@ -42,6 +42,9 @@ export default function ShareCopyLinkButton({
       return
     }
 
+    void import("@/lib/nativeHaptics").then(({ hapticLight }) => {
+      hapticLight("clipboard")
+    })
     setCopied(true)
     clearResetTimeout()
     resetTimeoutRef.current = setTimeout(() => {

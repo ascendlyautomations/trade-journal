@@ -99,7 +99,19 @@ export async function createAffiliateReferralNotification(
       referredUserId,
       error,
     })
+    return
   }
+
+  const { scheduleIosPushDelivery } = await import(
+    "@/lib/server/push/deliverPushNotification"
+  )
+  scheduleIosPushDelivery({
+    recipientUserId: affiliateUserId,
+    type: "affiliate_referral",
+    sender_id: referredUserId,
+    content: JSON.stringify(content),
+    prefsAlreadyChecked: true,
+  })
 }
 
 /** One commission notification per affiliate + referred user pair (first paid invoice only). */
@@ -142,5 +154,17 @@ export async function createAffiliateCommissionNotification(
       commissionAmount,
       error,
     })
+    return
   }
+
+  const { scheduleIosPushDelivery } = await import(
+    "@/lib/server/push/deliverPushNotification"
+  )
+  scheduleIosPushDelivery({
+    recipientUserId: affiliateUserId,
+    type: "affiliate_commission_earned",
+    sender_id: referredUserId,
+    content: JSON.stringify(content),
+    prefsAlreadyChecked: true,
+  })
 }

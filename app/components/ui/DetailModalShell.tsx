@@ -8,8 +8,8 @@ import {
   useStackedModalEscape,
 } from "./modalLayout"
 
-/** Matches Navbar `h-16` / root layout `pt-16`. */
-export const NAVBAR_HEIGHT_CLASS = "top-16"
+/** Matches fixed app chrome: navbar + safe-area-top (+ demo banner when active). */
+export const NAVBAR_HEIGHT_CLASS = "top-[var(--app-header-offset)]"
 export const NAVBAR_HEIGHT_REM = "4rem"
 
 /**
@@ -17,7 +17,7 @@ export const NAVBAR_HEIGHT_REM = "4rem"
  * Matches DetailModalShell / FeedStoryViewer — top-aligned, horizontally centered, scrollable.
  */
 export const MODAL_FIXED_BELOW_NAVBAR_CLASS =
-  "fixed inset-x-0 bottom-0 top-16 flex items-start justify-center overflow-y-auto"
+  "fixed inset-x-0 bottom-0 top-[var(--app-header-offset)] flex items-start justify-center overflow-y-auto"
 
 /** @deprecated Use MODAL_FIXED_BELOW_NAVBAR_CLASS */
 export const MODAL_OVERLAY_BELOW_NAVBAR_CLASS = MODAL_FIXED_BELOW_NAVBAR_CLASS
@@ -107,7 +107,7 @@ export default function DetailModalShell({
 
   return (
     <div
-      className={`fixed inset-x-0 bottom-0 ${NAVBAR_HEIGHT_CLASS} flex flex-col overflow-hidden p-3 sm:p-4 ${backdropClassName} ${zIndexClass}`}
+      className={`fixed inset-x-0 bottom-0 ${NAVBAR_HEIGHT_CLASS} flex flex-col overflow-hidden p-3 pb-[max(0.75rem,var(--safe-area-bottom))] sm:p-4 sm:pb-[max(1rem,var(--safe-area-bottom))] ${backdropClassName} ${zIndexClass}`}
       onClick={onClose}
       role="presentation"
     >
@@ -117,7 +117,8 @@ export default function DetailModalShell({
         aria-label={ariaLabel}
         className={`mx-auto flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-xl border border-white/10 bg-[#0f172a]/95 text-gray-100 shadow-xl backdrop-blur-xl ${dialogWidthClass}`}
         style={{
-          maxHeight: "calc(100dvh - var(--navbar-height, 4rem) - 1.5rem)",
+          maxHeight:
+            "calc(100dvh - var(--app-header-offset) - var(--safe-area-bottom) - 1.5rem)",
         }}
         onClick={stopPropagation}
       >

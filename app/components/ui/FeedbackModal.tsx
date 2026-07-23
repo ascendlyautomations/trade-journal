@@ -23,7 +23,7 @@ const messageStyles: Record<FeedbackPopupType, string> = {
 
 /** Above ScrollableModalShell / DetailModalShell overlays (z-[10050]). */
 export const FEEDBACK_MODAL_OVERLAY_CLASS =
-  "fixed inset-0 z-[10060] flex items-center justify-center"
+  "fixed inset-0 z-[10060] flex items-center justify-center p-4 pt-[max(1rem,var(--safe-area-top))] pb-[max(1rem,var(--safe-area-bottom))]"
 
 export type FeedbackModalProps = {
   isOpen: boolean

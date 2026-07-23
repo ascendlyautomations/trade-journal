@@ -8,14 +8,27 @@
    * light so unstyled copy never renders as dark-on-navy under light OS prefs.
    */
   --foreground: #e5e7eb;
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  /* Real device inset only — do not floor to 34px (breaks home-button iPhones). */
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
   --navbar-height: 4rem;
   --demo-banner-height: 0px;
-  --app-header-offset: var(--navbar-height);
+  /* Fixed navbar is h-16 below the status bar / Dynamic Island inset. */
+  --app-header-offset: calc(var(--navbar-height) + var(--safe-area-top));
+  /* iOS Capacitor tab bar — stays 0 on web / Android / Safari. */
+  --app-tab-bar-height: 0px;
+}
+
+/* Capacitor iOS shell only (class set by NativeAppShell). */
+html.tt-native-ios {
+  --app-tab-bar-height: 3.25rem;
 }
 
 html.tradetraxs-demo-banner-active {
   --demo-banner-height: 2.5rem;
-  --app-header-offset: calc(var(--navbar-height) + var(--demo-banner-height));
+  --app-header-offset: calc(
+    var(--navbar-height) + var(--safe-area-top) + var(--demo-banner-height)
+  );
 }
 
 @media (min-width: 640px) {
@@ -65,6 +78,14 @@ body {
     #065f46 100%
   );
 
+  /*
+   * Solid layer under the gradient. The shorthand above leaves
+   * background-color transparent, so any unpainted region (WKWebView
+   * transitions, fixed-attachment repaint gaps, overscroll) showed the
+   * white WebView surface. Must stay dark — matches navbar #0b1f3a.
+   */
+  background-color: #0b1f3a;
+
   background-repeat: no-repeat;
   background-size: cover;
   background-attachment: fixed;
@@ -72,6 +93,54 @@ body {
   /* Keep Tailwind + Geist font working */
   color: var(--foreground);
   font-family: var(--font-geist-sans), sans-serif;
+}
+
+/*
+ * iOS WKWebView / Mobile Safari: `background-attachment: fixed` leaves
+ * unpainted (white) regions during rubber-band overscroll and route paints.
+ * `scroll` keeps the solid #0b1f3a underlay visible. Desktop keeps `fixed`.
+ */
+@supports (-webkit-touch-callout: none) {
+  html,
+  body {
+    background-attachment: scroll;
+  }
+}
+
+/*
+ * Native shell (class set by NativeAppShell): tighten overscroll so bounce
+ * never reveals a foreign surface, and kill the gray tap flash.
+ */
+html.tt-native {
+  overscroll-behavior-y: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html.tt-native body {
+  overscroll-behavior-y: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/*
+ * Native iOS login (/login only via NativeIosLoginShell):
+ * keyboard height is driven by Capacitor Keyboard listeners.
+ * Padding uses this var so the submit control stays scrollable above the keyboard.
+ */
+html.tt-ios-auth {
+  --keyboard-height: 0px;
+}
+
+html.tt-ios-auth,
+html.tt-ios-auth body {
+  height: 100%;
+  overflow: hidden;
+}
+
+/* iOS zooms focused inputs under 16px — that feels like viewport jumping. */
+html.tt-ios-auth input,
+html.tt-ios-auth textarea,
+html.tt-ios-auth select {
+  font-size: 16px;
 }
 
 /*

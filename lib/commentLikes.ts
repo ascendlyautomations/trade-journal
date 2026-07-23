@@ -6,6 +6,7 @@ import {
   deleteLikeNotification,
   ensureLikeNotification,
 } from "./likeNotifications"
+import { hapticLight } from "@/lib/nativeHaptics"
 
 export type CommentLikeSource =
   | "comments"
@@ -147,6 +148,7 @@ export async function toggleCommentLike(
     : { count: meta.count + 1, liked: true }
 
   onMetaChange(optimistic)
+  hapticLight("like")
 
   try {
     if (meta.liked) {

@@ -16,6 +16,7 @@ import { resolveTradePoints } from "@/lib/resolveTradePoints"
 import { useEffect, useMemo, useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "../../lib/supabaseClient"
+import NativeIosPullToRefresh from "@/app/components/NativeIosPullToRefresh"
 import { deleteUserTrade } from "@/lib/deleteTrade"
 import { formatTradeAccountNameSizeLine } from "@/lib/tradeAccountDisplay"
 import { useScrollPageTopOnMount } from "@/lib/useScrollPageTopOnMount"
@@ -34,10 +35,14 @@ export default function CalendarPage() {
   useScrollPageTopOnMount()
   const router = useRouter()
   const { user, profile: shareProfile, loading: profileLoading } = useUserProfile()
-  const { trades, loading: tradesLoading } = useCachedTrades(user?.id)
-  const { accounts: accountRows, loading: accountsLoading } = useCachedAccounts(
+  const { trades, loading: tradesLoading, refresh: refreshTrades } = useCachedTrades(
     user?.id
   )
+  const {
+    accounts: accountRows,
+    loading: accountsLoading,
+    refresh: refreshAccounts,
+  } = useCachedAccounts(user?.id)
   const tradesLoaded =
     !profileLoading &&
     !(tradesLoading && trades.length === 0 && getCachedTrades(user?.id) == null) &&
@@ -372,6 +377,11 @@ export default function CalendarPage() {
   return (
     <>
 
+      <NativeIosPullToRefresh
+        onRefresh={async () => {
+          await Promise.all([refreshTrades(), refreshAccounts()])
+        }}
+      >
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white pt-3 pb-6">
 
         <div className="max-w-7xl mx-auto w-full px-4">
@@ -617,6 +627,7 @@ export default function CalendarPage() {
         </div>
 
       </div>
+      </NativeIosPullToRefresh>
       <TradesPageOverlays
         selectedImage={selectedImage}
         editingTrade={editingTrade}

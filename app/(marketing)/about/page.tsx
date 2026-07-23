@@ -145,7 +145,7 @@ export default function AboutPage() {
         />
 
         <div className="relative z-10">
-          <header className={`${LANDING_SECTION_SHELL} px-4 pt-[calc(var(--navbar-height)+21px)] text-center`}>
+          <header className={`${LANDING_SECTION_SHELL} px-4 pt-[calc(var(--navbar-height)+var(--safe-area-top)+21px)] text-center`}>
             <p className={LANDING_EYEBROW}>{ABOUT_PAGE_EYEBROW}</p>
             <h1 className="mt-2 text-xl font-bold tracking-tight text-white md:mt-2 md:text-3xl">
               {ABOUT_HERO.heading}

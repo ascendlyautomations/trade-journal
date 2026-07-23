@@ -102,6 +102,9 @@ export async function copyFeedDeepLinkToClipboard(
   }
   try {
     await navigator.clipboard.writeText(buildFeedDeepLinkAbsoluteUrl(target))
+    void import("@/lib/nativeHaptics").then(({ hapticLight }) => {
+      hapticLight("clipboard")
+    })
     return true
   } catch {
     return false

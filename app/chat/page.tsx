@@ -334,6 +334,7 @@ export default function ChatPage() {
               <input
                 ref={fileRef}
                 type="file"
+                accept="image/*"
                 onChange={(e) => imageCrop.handleFileSelected(e.target.files?.[0])}
                 className="text-sm"
               />

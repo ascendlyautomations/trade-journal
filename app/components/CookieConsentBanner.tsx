@@ -8,31 +8,36 @@ import {
   saveCookieConsent,
   type CookieConsentChoice,
 } from "@/lib/cookieConsent"
+import { isNativeIos } from "@/lib/nativePlatform"
+import { useIsNativeIos } from "@/lib/useIsNativeIos"
 
 export default function CookieConsentBanner() {
   const pathname = usePathname()
+  const nativeIos = useIsNativeIos()
+  // Sync check avoids a one-frame flash before useIsNativeIos hydrates.
+  const hideForNativeIos = nativeIos || isNativeIos()
   const [visible, setVisible] = useState(false)
   const isMarketingAdFrame =
     pathname === "/marketing" || Boolean(pathname?.startsWith("/marketing/"))
 
   useEffect(() => {
-    if (isMarketingAdFrame) {
+    if (hideForNativeIos || isMarketingAdFrame) {
       setVisible(false)
       return
     }
     setVisible(!hasCookieConsentChoice())
-  }, [isMarketingAdFrame])
+  }, [hideForNativeIos, isMarketingAdFrame])
 
   function handleChoice(choice: CookieConsentChoice) {
     saveCookieConsent(choice)
     setVisible(false)
   }
 
-  if (!visible || isMarketingAdFrame) return null
+  if (hideForNativeIos || !visible || isMarketingAdFrame) return null
 
   return (
     <div
-      className="fixed inset-x-0 bottom-0 z-[9990] border-t border-white/10 bg-[#0b1f3a]/95 px-4 py-4 text-white shadow-[0_-8px_32px_rgba(0,0,0,0.35)] backdrop-blur-md sm:px-6"
+      className="fixed inset-x-0 bottom-0 z-[9990] border-t border-white/10 bg-[#0b1f3a]/95 px-4 py-4 pb-[max(1rem,calc(var(--safe-area-bottom)+var(--app-tab-bar-height)+0.75rem))] text-white shadow-[0_-8px_32px_rgba(0,0,0,0.35)] backdrop-blur-md sm:px-6 sm:pb-4"
       role="dialog"
       aria-labelledby="cookie-consent-title"
       aria-describedby="cookie-consent-description"

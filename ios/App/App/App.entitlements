@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  TEMPORARY (Personal Team): Push Notifications entitlement removed so the
+	  app can sign without a paid Apple Developer Program membership.
+
+	  When enrollment is Active, restore:
+	    <key>aps-environment</key>
+	    <string>development</string>
+	  (use "production" for TestFlight / App Store) and re-enable the Push
+	  Notifications capability on the App target in Xcode. No JS/server changes needed.
+	-->
+</dict>
+</plist>

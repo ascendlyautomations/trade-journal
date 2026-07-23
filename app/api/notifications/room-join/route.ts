@@ -78,5 +78,20 @@ export async function POST(req: Request) {
     return Response.json({ error: insertErr.message }, { status: 500 })
   }
 
+  const { scheduleIosPushDelivery } = await import(
+    "@/lib/server/push/deliverPushNotification"
+  )
+  scheduleIosPushDelivery({
+    recipientUserId: String(roomRow.owner_user_id),
+    type: "room_join",
+    sender_id: user.id,
+    room_id: roomId,
+    content: JSON.stringify({
+      room_slug: roomRow.slug ?? null,
+      room_name: roomRow.name ?? null,
+    }),
+    prefsAlreadyChecked: true,
+  })
+
   return Response.json({ ok: true })
 }

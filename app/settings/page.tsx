@@ -713,6 +713,15 @@ export default function SettingsPage() {
 
       setShowDeleteConfirm(false)
       setConfirmText("")
+      try {
+        const { unregisterNativeIosPush, setNativeIosBadgeCount } = await import(
+          "@/lib/nativeIosPush"
+        )
+        await unregisterNativeIosPush({ allDevices: true })
+        await setNativeIosBadgeCount(0)
+      } catch {
+        /* ignore */
+      }
       await supabase.auth.signOut()
       window.location.href = "/"
     } catch (err) {

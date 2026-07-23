@@ -173,6 +173,7 @@ import {
 } from "@/lib/publicAccountPrivacy"
 import { useProfileStatistics } from "./useProfileStatistics"
 import { scheduleDeferredWork } from "@/lib/scheduleDeferredWork"
+import NativeIosPullToRefresh from "@/app/components/NativeIosPullToRefresh"
 
 const InputTradeForm = dynamic(() => import("../../components/InputTradeForm"), {
   ssr: false,
@@ -1770,6 +1771,10 @@ function ProfilePageContent() {
       return
     }
 
+    void import("@/lib/nativeHaptics").then(({ hapticMedium }) => {
+      hapticMedium("submit-post")
+    })
+
     uploadingPostRef.current = true
     const snapshotText = text
     const snapshotImage = postImage
@@ -2180,6 +2185,10 @@ function ProfilePageContent() {
 
     commentSubmittingRef.current.add(key)
     setCommentSubmitting((s) => ({ ...s, [key]: true }))
+
+    void import("@/lib/nativeHaptics").then(({ hapticMedium }) => {
+      hapticMedium("submit-comment")
+    })
 
     try {
     const postRow = posts.find((p) => String(p.id) === key)
@@ -3439,6 +3448,15 @@ function ProfilePageContent() {
       ) : null}
 
       <div className="w-full text-gray-100">
+        <NativeIosPullToRefresh
+          onRefresh={async () => {
+            if (!profileId) return
+            await Promise.all([
+              refreshProfileInBackground(profileId),
+              refreshProfileMedia(),
+            ])
+          }}
+        >
         <div className="mx-auto max-w-5xl space-y-4 px-4 pt-4 pb-6 sm:px-6 lg:px-8">
           <ProfileHeader
             profile={profile}
@@ -3674,6 +3692,7 @@ function ProfilePageContent() {
           </div>
 
         </div>
+        </NativeIosPullToRefresh>
 
       </div>
 

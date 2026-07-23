@@ -111,7 +111,7 @@ export default function UploadManager({
 
   return createPortal(
     <div
-      className="pointer-events-none fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-[199000] sm:inset-x-auto sm:bottom-4 sm:right-4 sm:w-full sm:max-w-sm"
+        className="pointer-events-none fixed inset-x-3 bottom-[max(0.75rem,calc(var(--safe-area-bottom)+var(--app-tab-bar-height)))] z-[199000] sm:inset-x-auto sm:bottom-4 sm:right-4 sm:w-full sm:max-w-sm"
       role="region"
       aria-label="Upload manager"
     >

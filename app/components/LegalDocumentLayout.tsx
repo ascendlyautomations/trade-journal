@@ -25,7 +25,7 @@ export default function LegalDocumentLayout({
 }: LegalDocumentLayoutProps) {
   return (
     <>
-      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 pb-16 pt-12 text-gray-100 md:px-6 md:pt-[calc(var(--navbar-height)+7px)]">
+      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 pb-16 pt-12 text-gray-100 md:px-6 md:pt-[calc(var(--navbar-height)+var(--safe-area-top)+7px)]">
         <article className="mx-auto max-w-3xl">
           <LegalPageBackButton />
           <header className="mb-10 text-center md:mb-6">

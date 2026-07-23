@@ -213,7 +213,7 @@ export default function DmStyleComposer({
         >
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
           <div
-            className="absolute bottom-0 left-0 right-0 rounded-t-2xl border-t border-white/10 bg-[#0f172a] p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl"
+            className="absolute bottom-0 left-0 right-0 rounded-t-2xl border-t border-white/10 bg-[#0f172a] p-4 pb-[max(1rem,var(--safe-area-bottom))] shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20" />

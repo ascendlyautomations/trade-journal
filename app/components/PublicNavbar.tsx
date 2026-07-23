@@ -148,7 +148,7 @@ export default function PublicNavbar() {
   }
 
   return (
-    <div className="fixed left-0 top-0 z-[9999] w-full overflow-visible text-white">
+    <div className="fixed left-0 top-0 z-[9999] w-full overflow-visible bg-[#0b1f3a] pt-[var(--safe-area-top)] text-white">
       <div className="flex h-16 w-full shrink-0 items-center border-b border-white/5 bg-[#0b1f3a]">
         <div className="flex h-full w-full items-center justify-between px-4 md:px-6">
           <div className="flex min-w-0 items-center gap-2 whitespace-nowrap sm:gap-3">
@@ -216,9 +216,9 @@ export default function PublicNavbar() {
       </div>
 
       {menuOpen ? (
-        <div className="max-h-[calc(100vh-4rem)] w-full overflow-y-auto border-t border-white/5 bg-[#0b1f3a] md:hidden">
+        <div className="max-h-[calc(100dvh-var(--app-header-offset))] w-full overflow-y-auto overscroll-y-contain border-t border-white/5 bg-[#0b1f3a] md:hidden">
           <nav
-            className="flex w-full flex-col gap-2 px-4 pb-3 pt-1.5 text-sm text-white md:px-6"
+            className="flex w-full flex-col gap-2 px-4 pb-[calc(0.75rem+var(--safe-area-bottom))] pt-1.5 text-sm text-white md:px-6"
             aria-label="Marketing menu"
           >
             {showReturnToApp ? (

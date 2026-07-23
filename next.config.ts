@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
+import { resolveAllowedDevOrigins } from "./lib/devServerLanHost";
 
 function supabaseStorageHostname(): string | undefined {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -12,8 +13,13 @@ function supabaseStorageHostname(): string | undefined {
 }
 
 const supabaseHost = supabaseStorageHostname()
+const allowedDevOrigins = resolveAllowedDevOrigins()
 
 const nextConfig: NextConfig = {
+  // Capacitor iOS loads http://<LAN-IP>:3000. Without this, Next 16 returns
+  // 403 for /_next/* fetches that send Origin: http://<LAN-IP>:3000 — which
+  // breaks post-login client navigation (dynamic chunk loads) on device.
+  ...(allowedDevOrigins.length > 0 ? { allowedDevOrigins } : {}),
   typescript: {
     ignoreBuildErrors: true,
   },

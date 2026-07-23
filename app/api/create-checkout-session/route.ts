@@ -20,6 +20,7 @@ import {
 import { devLog } from "@/lib/devLog"
 import { resolveCheckoutTrialPeriodDays } from "@/lib/checkoutTrial"
 import { toUserFacingErrorMessage, USER_FACING_ERROR_MESSAGES } from "@/lib/userFacingError"
+import { getRequestOrigin } from "@/lib/requestOrigin"
 
 export const runtime = "nodejs"
 
@@ -255,7 +256,7 @@ export async function POST(req: Request) {
     }
 
     const baseUrl =
-      process.env.NEXT_PUBLIC_BASE_URL?.trim() || new URL(req.url).origin
+      process.env.NEXT_PUBLIC_BASE_URL?.trim() || getRequestOrigin(req)
 
     const existingReferredBy =
       profile && "referred_by" in profile

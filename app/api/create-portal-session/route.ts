@@ -4,6 +4,7 @@ import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 import { devLog } from "@/lib/devLog"
 import { toUserFacingErrorMessage, USER_FACING_ERROR_MESSAGES } from "@/lib/userFacingError"
+import { getRequestOrigin } from "@/lib/requestOrigin"
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string)
 
@@ -81,7 +82,7 @@ export async function POST(req: Request) {
     }
 
     const baseUrl =
-      process.env.NEXT_PUBLIC_BASE_URL?.trim() || new URL(req.url).origin
+      process.env.NEXT_PUBLIC_BASE_URL?.trim() || getRequestOrigin(req)
 
     const session = await stripe.billingPortal.sessions.create({
       customer: profile.stripe_customer_id,

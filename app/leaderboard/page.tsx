@@ -33,6 +33,7 @@ import { formatRR, formatSignedPnlDisplay, pnlTextClassName } from "@/lib/format
 import { profilePath } from "@/lib/profileRoutes"
 import EmptyState from "../components/ui/EmptyState"
 import { SkeletonLeaderboardPage } from "../components/ui/skeletons"
+import NativeIosPullToRefresh from "@/app/components/NativeIosPullToRefresh"
 import NativeDateInput from "@/app/components/ui/NativeDateInput"
 import {
   chartAxisTick,
@@ -348,6 +349,11 @@ export default function Leaderboard() {
   return (
     <>
 
+      <NativeIosPullToRefresh
+        onRefresh={async () => {
+          await fetchData()
+        }}
+      >
       <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100 px-4 py-6 md:px-8 md:py-8">
         <div className="mx-auto max-w-7xl space-y-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -685,6 +691,7 @@ export default function Leaderboard() {
           </div>
         </div>
       </div>
+      </NativeIosPullToRefresh>
     </>
   )
 }

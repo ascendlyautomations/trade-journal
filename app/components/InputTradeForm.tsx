@@ -869,6 +869,10 @@ export default function InputTradeForm({
       return
     }
 
+    void import("@/lib/nativeHaptics").then(({ hapticMedium }) => {
+      hapticMedium(isEditMode ? "edit-trade" : "save-trade")
+    })
+
     const reelFileAtSubmit = pendingReelFileRef.current ?? pendingReelFile
     const uploadTitle = isPublic
       ? image || reelFileAtSubmit

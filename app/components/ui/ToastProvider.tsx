@@ -63,7 +63,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {children}
       <div
         aria-label="Notifications"
-        className="pointer-events-none fixed inset-x-0 bottom-0 z-[10000] flex flex-col items-center gap-2 p-4 sm:inset-x-auto sm:right-4 sm:bottom-4 sm:items-end sm:p-0"
+        className="pointer-events-none fixed inset-x-0 bottom-0 z-[10000] flex flex-col items-center gap-2 p-4 pb-[max(1rem,calc(var(--safe-area-bottom)+var(--app-tab-bar-height)))] sm:inset-x-auto sm:right-4 sm:bottom-4 sm:items-end sm:p-0"
       >
         {toasts.map((t) => (
           <Toast key={t.id} toast={t} onDismiss={dismiss} />

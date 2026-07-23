@@ -45,6 +45,7 @@ import {
   withInsertedProfilePostParentCommentId,
 } from "@/lib/profilePostEngagement"
 import FeedLoadMoreFooter from "../../components/feed/FeedLoadMoreFooter"
+import NativeIosPullToRefresh from "@/app/components/NativeIosPullToRefresh"
 import FeedContentToggle from "../../components/feed/FeedContentToggle"
 import FeedModeToggle from "../../components/feed/FeedModeToggle"
 import FeedPostList from "../../components/feed/FeedPostList"
@@ -1843,6 +1844,9 @@ function FeedPageContent() {
 
   const handleSelectPost = useCallback(
     (post: any) => {
+      void import("@/lib/nativeHaptics").then(({ hapticLight }) => {
+        hapticLight("open-trade-card")
+      })
       void loadCommentsForPost(post)
       setFeedModalPost(null)
       feedDeepLinkHandledRef.current = null
@@ -2323,6 +2327,10 @@ function FeedPageContent() {
 
       commentSubmittingRef.current.add(pid)
       setCommentSubmitting((s) => ({ ...s, [pid]: true }))
+
+      void import("@/lib/nativeHaptics").then(({ hapticMedium }) => {
+        hapticMedium("submit-comment")
+      })
 
       try {
       const isProfile = isProfileFeedPost(post)
@@ -2813,7 +2821,19 @@ function FeedPageContent() {
     loadCommentsForPost,
   ])
 
+  const handleNativePullToRefresh = useCallback(async () => {
+    bumpFeedRequestGeneration()
+    pageRef.current = 0
+    hasMoreRef.current = true
+    loadingRef.current = false
+    setPage(0)
+    setHasMore(true)
+    setFeedLoadError(null)
+    await loadPosts(0)
+  }, [bumpFeedRequestGeneration, loadPosts])
+
   return (
+    <NativeIosPullToRefresh onRefresh={handleNativePullToRefresh}>
     <div className="w-full text-white">
       <h1 className="sr-only">Feed</h1>
       {feedbackModalProps.isOpen ? (
@@ -3047,5 +3067,6 @@ function FeedPageContent() {
         />
       ) : null}
     </div>
+    </NativeIosPullToRefresh>
   )
 }

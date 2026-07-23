@@ -12,6 +12,7 @@ import {
   type CommentLikeNotificationParent,
   type CommentLikeSource,
 } from "@/lib/commentLikes"
+import { randomId } from "@/lib/randomId"
 
 export function useCommentLikes(args: {
   source: CommentLikeSource | null
@@ -67,7 +68,7 @@ export function useCommentLikes(args: {
   useEffect(() => {
     if (!source || !hasComments || isDemoModeActive()) return
 
-    const topic = `comment-likes-${source}-${crypto.randomUUID()}`
+    const topic = `comment-likes-${source}-${randomId()}`
     const channel = supabase.channel(topic)
 
     channel.on(

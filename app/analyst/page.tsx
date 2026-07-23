@@ -434,7 +434,7 @@ function AnalystMobileAnalysisSheet({
         <ModalCloseButton onClick={onClose} />
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-4 pb-[max(1rem,var(--safe-area-bottom))] pt-3">
         <AnalystTradeDetailPanel
           {...panelProps}
           selectedTrade={selectedTrade}
