@@ -8,6 +8,22 @@ export type ApnsAlertPayload = {
   href: string
   badge: number
   notificationType: string
+  /** iOS notification category for long-press actions. */
+  category?: string
+  conversationId?: string
+  roomId?: string
+  roomSlug?: string
+  followRequestId?: string
+  /**
+   * APNs thread-id — groups related alerts in Notification Center.
+   * For DMs this is stable per conversation (`dm:{conversationId}`).
+   */
+  threadId?: string
+  /**
+   * APNs collapse-id — replaces a prior undelivered/delivered alert with the
+   * same id so rapid messages in one conversation become one evolving banner.
+   */
+  collapseId?: string
 }
 
 type ApnsConfig = {
@@ -35,16 +51,6 @@ function readApnsConfig(): ApnsConfig | null {
     }
   }
   privateKeyPem = privateKeyPem.replace(/\\n/g, "\n")
-
-  // TEMPORARY diagnostics — remove after APNs E2E verification.
-  // Never log private key contents.
-  console.info("[apns:temp] readApnsConfig", {
-    keyId,
-    teamId,
-    bundleId,
-    hasPrivateKey: !!rawKey,
-    production: process.env.APNS_PRODUCTION,
-  })
 
   return {
     keyId,
@@ -127,7 +133,7 @@ export async function sendApnsAlert(
     : "https://api.sandbox.push.apple.com"
 
   // Custom keys outside `aps` are mapped into Capacitor `notification.data`
-  // (used for tap routing via `data.href`).
+  // (used for tap routing via `data.href` and notification actions).
   const body = JSON.stringify({
     aps: {
       alert: {
@@ -136,9 +142,19 @@ export async function sendApnsAlert(
       },
       badge: Math.max(0, Math.floor(payload.badge)),
       sound: "default",
+      ...(payload.category ? { category: payload.category } : {}),
+      ...(payload.threadId ? { "thread-id": payload.threadId } : {}),
     },
     href: payload.href,
     type: payload.notificationType,
+    ...(payload.conversationId
+      ? { conversationId: payload.conversationId }
+      : {}),
+    ...(payload.roomId ? { roomId: payload.roomId } : {}),
+    ...(payload.roomSlug ? { roomSlug: payload.roomSlug } : {}),
+    ...(payload.followRequestId
+      ? { followRequestId: payload.followRequestId }
+      : {}),
   })
 
   const jwt = createApnsJwt(config)
@@ -195,6 +211,7 @@ export async function sendApnsAlert(
       })
     })
 
+    const collapseId = payload.collapseId?.trim().slice(0, 64)
     const req = client.request({
       ":method": "POST",
       ":path": `/3/device/${deviceToken}`,
@@ -204,6 +221,7 @@ export async function sendApnsAlert(
       "apns-priority": "10",
       "apns-expiration": "0",
       "content-type": "application/json",
+      ...(collapseId ? { "apns-collapse-id": collapseId } : {}),
     })
 
     let status = 0

@@ -38,7 +38,12 @@ type FeedProfilePostDetailModalProps = {
   openCommentsRef: MutableRefObject<Record<string, boolean>>
   onClose: () => void
   onToggleLike: (post: any) => void
-  onSubmitComment: (post: any, text: string) => Promise<boolean>
+  onSubmitComment: (
+    post: any,
+    text: string,
+    parentCommentId?: string | null,
+    retryTempId?: string | null
+  ) => Promise<boolean>
   onDeleteComment?: (comment: any) => Promise<boolean>
   onTogglePinComment?: (comment: any, pinned: boolean) => Promise<boolean>
   onSharePost: (post: any) => void
@@ -217,8 +222,8 @@ export default function FeedProfilePostDetailModal({
           commentSubmitting={commentSubmitting}
           draftSyncRef={draftSyncRef}
           listScrollRef={commentsScrollRef}
-          onSubmitComment={(context, text, parentCommentId) =>
-            onSubmitComment(context, text, parentCommentId)
+          onSubmitComment={(context, text, parentCommentId, retryTempId) =>
+            onSubmitComment(context, text, parentCommentId, retryTempId)
           }
           onDeleteComment={onDeleteComment}
           onTogglePinComment={onTogglePinComment}

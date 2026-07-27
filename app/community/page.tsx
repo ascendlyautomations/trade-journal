@@ -102,6 +102,8 @@ import {
 import { canEditRoomMessage } from "@/lib/roomModeration"
 import RoomMessageActionsMenu from "../components/RoomMessageActionsMenu"
 import RoomMessageFooter from "../components/RoomMessageFooter"
+import SyncStatusText from "@/app/components/ui/SyncStatusText"
+import { MICRO } from "@/lib/microInteractions"
 import ShareRoomMenu from "../components/ShareRoomMenu"
 import SharedTradeMessageCard from "../components/SharedTradeMessageCard"
 import { getSharedTradeViewHref } from "@/lib/sharedContentNavigation"
@@ -154,6 +156,8 @@ type RoomMessage = {
   content: string
   image_url?: string | null
   created_at: string
+  /** Client-only optimistic send state */
+  send_status?: "sending" | "sent" | "failed" | null
   trades?: {
     id?: string
     ticker?: string | null
@@ -697,6 +701,24 @@ function CommunityContent() {
     [rooms, selectedRoomId]
   )
 
+  useEffect(() => {
+    void import("@/lib/messagingActiveContext").then(({ setActiveRoomContext }) => {
+      if (!selectedRoomId) {
+        setActiveRoomContext(null)
+        return
+      }
+      setActiveRoomContext({
+        roomId: selectedRoomId,
+        roomSlug: selectedRoom?.slug ?? null,
+      })
+    })
+    return () => {
+      void import("@/lib/messagingActiveContext").then(({ setActiveRoomContext }) => {
+        setActiveRoomContext(null)
+      })
+    }
+  }, [selectedRoomId, selectedRoom?.slug])
+
   /** Owner’s room(s) first; does not change fetch order in state, only sidebar display. */
   const sortedSidebarRooms = useMemo(() => {
     const uid = user?.id
@@ -714,6 +736,19 @@ function CommunityContent() {
       !rooms.some((r) => r.id === selectedRoomId)
     )
   }, [inviteTargetRoom, selectedRoomId, rooms])
+
+  useEffect(() => {
+    if (!user?.id || !selectedRoomId || needsJoin) return
+    void import("@/lib/notificationReadSync").then(
+      ({ markNotificationsReadForTarget }) => {
+        void markNotificationsReadForTarget(user.id, {
+          kind: "room",
+          roomId: selectedRoomId,
+          roomSlug: selectedRoom?.slug ?? null,
+        })
+      }
+    )
+  }, [user?.id, selectedRoomId, selectedRoom?.slug, needsJoin])
 
   const showCreateDiscoverView = useMemo(() => {
     if (loadingRooms) return false
@@ -1028,6 +1063,8 @@ function CommunityContent() {
       return
     }
 
+    const prev = roomNotificationsEnabled
+    setRoomNotificationsEnabled(enabled)
     setSavingRoomNotificationLevel(true)
     const { error } = await supabase
       .from("room_members")
@@ -1039,11 +1076,9 @@ function CommunityContent() {
 
     if (error) {
       console.error("handleToggleRoomNotificationLevel:", error)
+      setRoomNotificationsEnabled(prev)
       showPopup({ type: "error", message: "Failed to update notification setting" })
-      return
     }
-
-    setRoomNotificationsEnabled(enabled)
   }
 
   async function handleToggleChannelNotification(
@@ -1472,20 +1507,34 @@ function CommunityContent() {
     messageId: string,
     isPinned: boolean | null | undefined
   ) {
+    const nextPinned = !isPinned
+    const prevMessages = messages
+    const prevPinned = pinnedMessages
+
+    const moveOptimistic = (fromPinned: boolean) => {
+      if (fromPinned) {
+        const row = pinnedMessages.find((m) => m.id === messageId)
+        if (!row) return
+        setPinnedMessages((prev) => prev.filter((m) => m.id !== messageId))
+        setMessages((prev) => [...prev, { ...row, pinned: false }])
+      } else {
+        const row = messages.find((m) => m.id === messageId)
+        if (!row) return
+        setMessages((prev) => prev.filter((m) => m.id !== messageId))
+        setPinnedMessages((prev) => [...prev, { ...row, pinned: true }])
+      }
+    }
+    moveOptimistic(Boolean(isPinned))
+
     const { error } = await supabase
       .from("room_messages")
-      .update({ pinned: !isPinned })
+      .update({ pinned: nextPinned })
       .eq("id", messageId)
 
     if (error) {
       console.error("handleTogglePin:", error)
-      return
-    }
-
-    if (selectedRoomId) {
-      await fetchRoomMessages(selectedRoomId, sections, selectedSectionId, {
-        bypassCache: true,
-      })
+      setMessages(prevMessages)
+      setPinnedMessages(prevPinned)
     }
   }
 
@@ -1514,16 +1563,27 @@ function CommunityContent() {
       return
     }
 
+    const replaceTemp = (prev: RoomMessage[]) => {
+      if (prev.some((m) => m.id === row.id)) return prev
+      const tempIdx = prev.findIndex(
+        (m) =>
+          typeof m.id === "string" &&
+          String(m.id).startsWith("temp-") &&
+          m.user_id === row.user_id &&
+          String(m.content ?? "") === String(row.content ?? "")
+      )
+      if (tempIdx >= 0) {
+        const next = [...prev]
+        next[tempIdx] = row
+        return next
+      }
+      return [...prev, row]
+    }
+
     if (row.pinned === true) {
-      setPinnedMessages((prev) => {
-        if (prev.some((m) => m.id === row.id)) return prev
-        return [...prev, row]
-      })
+      setPinnedMessages((prev) => replaceTemp(prev))
     } else {
-      setMessages((prev) => {
-        if (prev.some((m) => m.id === row.id)) return prev
-        return [...prev, row]
-      })
+      setMessages((prev) => replaceTemp(prev))
     }
 
     const cacheKey = buildRoomMessagesCacheKey(
@@ -2387,12 +2447,27 @@ function CommunityContent() {
     if (!authUser?.id || !selectedRoomId) return
 
     const leftRoomId = selectedRoomId
+    const prevRooms = rooms
+    const prevSelected = selectedRoomId
+    const prevActiveMembers = activeMembers
+    const prevLeftMembers = leftMembers
 
     const stopPresence = presenceStopRef.current
     presenceStopRef.current = null
     if (stopPresence) {
       await stopPresence()
     }
+
+    setRooms((prev) => {
+      const next = prev.filter((r) => r.id !== leftRoomId)
+      writeRoomSession(authUser.id, { rooms: next })
+      return next
+    })
+    setSelectedRoomId(null)
+    setActiveUsers([])
+    setActiveMembers((prev) => Math.max(0, prev - 1))
+    setLeftMembers((prev) => prev + 1)
+    router.push("/community")
 
     const { error } = await supabase
       .from("room_members")
@@ -2403,24 +2478,17 @@ function CommunityContent() {
 
     if (error) {
       console.error("handleLeaveRoom:", error)
+      setRooms(prevRooms)
+      writeRoomSession(authUser.id, { rooms: prevRooms })
+      setSelectedRoomId(prevSelected)
+      setActiveMembers(prevActiveMembers)
+      setLeftMembers(prevLeftMembers)
       return
     }
 
     void import("@/lib/nativeHaptics").then(({ hapticMedium }) => {
       hapticMedium("leave-room")
     })
-
-    setRooms((prev) => {
-      const next = prev.filter((r) => r.id !== leftRoomId)
-      writeRoomSession(authUser.id, { rooms: next })
-      return next
-    })
-    setSelectedRoomId(null)
-    setActiveUsers([])
-
-    setActiveMembers((prev) => Math.max(0, prev - 1))
-    setLeftMembers((prev) => prev + 1)
-    router.push("/community")
   }
 
   async function handleCreateRoom() {
@@ -3119,9 +3187,35 @@ function CommunityContent() {
     sendingMessageRef.current = true
     setSendingMessage(true)
 
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const { sectionId: insertSectionId, source: sectionIdSource } =
+      resolveInsertSectionId()
+
+    const optimisticRow = {
+      id: tempId,
+      room_id: selectedRoomId,
+      user_id: user.id,
+      content,
+      section_id: insertSectionId,
+      created_at: new Date().toISOString(),
+      pinned: false,
+      type: "text",
+      send_status: "sending",
+      parent_message_id: roomMessageParentId() || null,
+      profiles: {
+        id: user.id,
+        username: profile?.username ?? null,
+        name: profile?.name ?? null,
+        avatar_url: profile?.avatar_url ?? null,
+      },
+    } as unknown as RoomMessage
+
+    setDraft("")
+    setReplyTarget(null)
+    clearComposerImage()
+    appendRoomMessageToState(optimisticRow)
+
     try {
-      const { sectionId: insertSectionId, source: sectionIdSource } =
-        resolveInsertSectionId()
       if (process.env.NODE_ENV !== "production") {
         console.log("[room_messages insert]", {
           selectedRoomId,
@@ -3148,7 +3242,11 @@ function CommunityContent() {
         .single()
       if (error) {
         console.error("room_messages insert:", error)
-        showPopup({ type: "error", message: handleSupabaseError(error) })
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === tempId ? { ...m, send_status: "failed" as const } : m
+          )
+        )
         return
       }
 
@@ -3156,10 +3254,61 @@ function CommunityContent() {
         appendRoomMessageToState(insertedRow as unknown as RoomMessage)
         void createRoomMessageNotifications(supabase, insertedRow.id)
       }
+    } finally {
+      sendingMessageRef.current = false
+      setSendingMessage(false)
+    }
+  }
 
-      setDraft("")
-      setReplyTarget(null)
-      clearComposerImage()
+  async function retryFailedRoomMessage(msg: RoomMessage) {
+    if (!user?.id || !selectedRoomId || !canPostInRoom) return
+    if (sendingMessageRef.current || sendingMessage) return
+    if (!String(msg.id).startsWith("temp-") || msg.send_status !== "failed") {
+      return
+    }
+
+    const tempId = msg.id
+    const content = String(msg.content ?? "").trim()
+    if (!content) return
+
+    sendingMessageRef.current = true
+    setSendingMessage(true)
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === tempId ? { ...m, send_status: "sending" as const } : m
+      )
+    )
+
+    try {
+      const { sectionId: insertSectionId } = resolveInsertSectionId()
+      const { data: insertedRow, error } = await supabase
+        .from("room_messages")
+        .insert({
+          room_id: selectedRoomId,
+          user_id: user.id,
+          content,
+          section_id: insertSectionId,
+          ...(msg.parent_message_id
+            ? { parent_message_id: msg.parent_message_id }
+            : {}),
+        })
+        .select(ROOM_MESSAGE_REALTIME_SELECT)
+        .single()
+
+      if (error) {
+        console.error("room_messages retry:", error)
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === tempId ? { ...m, send_status: "failed" as const } : m
+          )
+        )
+        return
+      }
+
+      if (insertedRow) {
+        appendRoomMessageToState(insertedRow as unknown as RoomMessage)
+        void createRoomMessageNotifications(supabase, insertedRow.id)
+      }
     } finally {
       sendingMessageRef.current = false
       setSendingMessage(false)
@@ -4107,7 +4256,11 @@ function CommunityContent() {
                       key={msg.id}
                       id={roomMessageElementId(msg.id)}
                       data-room-message-id={msg.id}
-                      className="group relative rounded-xl bg-white/5 p-3"
+                      className={`group relative rounded-xl bg-white/5 p-3 ${
+                        msg.send_status === "sending" || msg.send_status === "failed"
+                          ? MICRO.softEnter
+                          : ""
+                      }`.trim()}
                     >
                       <div className="mb-1 flex flex-wrap items-center gap-2">
                         <ProfileAvatarLink
@@ -4238,6 +4391,18 @@ function CommunityContent() {
                         ) : (
                           <p className="whitespace-pre-wrap break-words text-sm text-white">{msg.content}</p>
                         )}
+                        {msg.send_status === "sending" ||
+                        msg.send_status === "failed" ? (
+                          <SyncStatusText
+                            status={msg.send_status}
+                            align="left"
+                            onRetry={
+                              msg.send_status === "failed"
+                                ? () => void retryFailedRoomMessage(msg)
+                                : undefined
+                            }
+                          />
+                        ) : null}
                       </div>
                       {!needsJoin ? (
                         <RoomMessageFooter
@@ -4247,6 +4412,10 @@ function CommunityContent() {
                           onReply={() => startReplyToMessage(msg)}
                           onToggle={(id, reaction) =>
                             void toggleRoomMessageReaction(id, reaction)
+                          }
+                          disabled={
+                            msg.send_status === "sending" ||
+                            msg.send_status === "failed"
                           }
                         />
                       ) : null}

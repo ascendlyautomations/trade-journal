@@ -1,6 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
-/** Notify active room members (notification_enabled) after a message is posted. */
+/**
+ * After a Trade Room message: Messaging push for ordinary recipients;
+ * Activity `room_mention` (+ push) for @mentioned members.
+ * Does not create ordinary `room_message` Activity rows.
+ */
 export async function createRoomMessageNotifications(
   _supabase: SupabaseClient,
   messageId: string
@@ -35,6 +39,17 @@ export async function createRoomMessageNotifications(
     return false
   }
 
-  window.dispatchEvent(new CustomEvent("tj-unread-notifications-refresh"))
+  let mentionsInserted = 0
+  try {
+    const json = (await res.json()) as { mentionsInserted?: number }
+    mentionsInserted = Number(json.mentionsInserted ?? 0) || 0
+  } catch {
+    /* ignore parse errors */
+  }
+
+  window.dispatchEvent(new CustomEvent("tj-unread-messages-refresh"))
+  if (mentionsInserted > 0) {
+    window.dispatchEvent(new CustomEvent("tj-unread-notifications-refresh"))
+  }
   return true
 }

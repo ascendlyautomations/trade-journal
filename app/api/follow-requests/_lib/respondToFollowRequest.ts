@@ -106,6 +106,28 @@ export async function approveFollowRequest(
     })
   }
 
+  // Notify the requester that their follow request was accepted.
+  {
+    const { getServerNotificationPreferences } = await import(
+      "@/lib/serverNotificationPreferences"
+    )
+    const prefs = await getServerNotificationPreferences(req.requester_id)
+    if (
+      prefs.notifications_enabled &&
+      prefs.follow_request_accepts_enabled
+    ) {
+      const { scheduleIosPushDelivery } = await import(
+        "@/lib/server/push/deliverPushNotification"
+      )
+      scheduleIosPushDelivery({
+        recipientUserId: req.requester_id,
+        type: "follow_request_accepted",
+        sender_id: req.target_id,
+        prefsAlreadyChecked: true,
+      })
+    }
+  }
+
   return { ok: true }
 }
 

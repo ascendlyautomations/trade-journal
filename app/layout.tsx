@@ -20,9 +20,12 @@ import { GettingStartedProgressProvider } from "@/lib/GettingStartedProgressProv
 import NativeAppShell from "./components/NativeAppShell"
 import NativeIosOAuthListener from "./components/NativeIosOAuthListener"
 import NativeIosPushRegistration from "./components/NativeIosPushRegistration"
+import NativeUniversalLinksListener from "./components/NativeUniversalLinksListener"
 import NativeHomeRedirect from "./components/NativeHomeRedirect"
 import NativeSessionPersistence from "./components/NativeSessionPersistence"
+import NativeSilentCacheBootstrap from "./components/NativeSilentCacheBootstrap"
 import NativeAwareVercelInsights from "./components/NativeAwareVercelInsights"
+import MessagingInAppBanner from "./components/MessagingInAppBanner"
 import {
   DEFAULT_OG_IMAGE_ALT,
   DEFAULT_OG_IMAGE_PATH,
@@ -136,7 +139,10 @@ export default function RootLayout({
             <GettingStartedProgressProvider>
             <NativeAppShell />
             <NativeIosOAuthListener />
+            <NativeUniversalLinksListener />
             <NativeIosPushRegistration />
+            <NativeSilentCacheBootstrap />
+            <MessagingInAppBanner />
             <NativeHomeRedirect />
             <Suspense fallback={null}>
               <NativeSessionPersistence />

@@ -49,6 +49,8 @@ function StoryReplyInput({
       return
     }
 
+    const previous = trimmed
+    setText("")
     setSending(true)
     try {
       const result = await sendStoryReply(supabase, {
@@ -56,17 +58,18 @@ function StoryReplyInput({
         storyOwnerId,
         story,
         storyOwnerUsername,
-        text: trimmed,
+        text: previous,
       })
 
       if (!result.ok) {
+        setText(previous)
         onError?.(result.error)
         return
       }
 
-      setText("")
       onSent?.()
     } catch (err) {
+      setText(previous)
       onError?.(handleSupabaseError(err))
     } finally {
       setSending(false)

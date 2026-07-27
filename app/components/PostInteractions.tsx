@@ -2,6 +2,7 @@
 
 import FeedCommentItem from "@/app/components/feed/FeedCommentItem"
 import EngagementCountButton from "@/app/components/EngagementCountButton"
+import ActionButton from "@/app/components/ui/ActionButton"
 import { useHydrationReady } from "@/lib/useHydrationReady"
 
 type LikeMeta = {
@@ -58,8 +59,8 @@ export function PostInteractionsEngagement({
 > & { className?: string }) {
   const pid = String(post.id)
   const hydrationReady = useHydrationReady()
-  // Auth is unavailable during SSR; defer auth-gated disabled until after hydration.
-  const likeDisabled = !hydrationReady || !user || likeBusy
+  // Prevent double-taps while syncing, but keep full opacity (pulse instead of gray-out).
+  const likeDisabled = !hydrationReady || !user
 
   return (
     <div className={`text-sm ${className}`.trim()} {...guard(stopPropagation)}>
@@ -69,9 +70,12 @@ export function PostInteractionsEngagement({
           icon={<span>{likeMeta.liked ? "❤️" : "🤍"}</span>}
           count={likeMeta.count}
           ariaLabel={likeMeta.liked ? "Unlike" : "Like"}
-          disabled={likeDisabled}
+          disabled={likeDisabled || likeBusy}
+          syncing={likeBusy}
+          likedPop={likeMeta.liked}
           onClick={(e) => {
             if (stopPropagation) e.stopPropagation()
+            if (likeBusy) return
             onToggleLike(post)
           }}
           className={
@@ -182,17 +186,19 @@ export function PostInteractionsComments({
             }}
             className="flex-1 min-w-0 p-2 bg-[#1e293b] text-white rounded-lg border border-gray-600 text-sm placeholder:text-gray-400"
           />
-          <button
+          <ActionButton
             type="button"
-            disabled={commentSubmitting || !commentValue.trim()}
+            disabled={!commentValue.trim()}
+            syncing={commentSubmitting}
+            syncingLabel="Posting…"
             onClick={(e) => {
               if (stopPropagation) e.stopPropagation()
               onSubmitComment(post)
             }}
             className="bg-blue-500 px-3 rounded-lg text-white text-sm font-medium disabled:opacity-40 shrink-0"
           >
-            {commentSubmitting ? "…" : "Post"}
-          </button>
+            Post
+          </ActionButton>
         </div>
       ) : null}
     </div>

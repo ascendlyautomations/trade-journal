@@ -1,5 +1,10 @@
 import { getRouteUser, supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
-import { filterRecipientsByRoomMessagePreference } from "@/lib/serverNotificationPreferences"
+import { resolveMentionedUserIdsFromContent } from "@/lib/server/messaging/parseRoomMessageMentions"
+import {
+  filterRecipientsByRoomMentionPreference,
+  filterRecipientsByRoomMessagePreference,
+} from "@/lib/serverNotificationPreferences"
+import { scheduleMessagingPush } from "@/lib/server/push/messagingPush"
 import { jsonUserFacingError } from "@/lib/userFacingError"
 
 type RoomMessageMeta = {
@@ -10,15 +15,61 @@ type RoomMessageMeta = {
   section_id?: string | null
   section_name?: string | null
   message_preview?: string | null
+  sender_username?: string | null
+  sender_name?: string | null
+  is_reply?: boolean
 }
 
-function buildMessagePreview(content: string | null | undefined): string {
+function buildMessagePreview(
+  content: string | null | undefined,
+  type?: string | null
+): string {
+  if (type === "trade") return "Shared a trade"
+  if (type === "image") return "Photo"
   const text = String(content ?? "").trim()
   if (!text) return "New message"
-  if (text.length <= 120) return text
-  return `${text.slice(0, 120).trim()}…`
+  if (text.length <= 100) return text
+  const slice = text.slice(0, 100).trimEnd()
+  const lastSpace = slice.lastIndexOf(" ")
+  const base =
+    lastSpace >= 60 ? slice.slice(0, lastSpace) : slice
+  return `${base}…`
 }
 
+async function filterChannelMuted(
+  roomId: string,
+  sectionId: string,
+  recipientIds: string[]
+): Promise<string[]> {
+  if (recipientIds.length === 0) return []
+
+  const { data: mutedPrefs, error: prefsErr } = await supabaseServiceRole
+    .from("room_member_channel_preferences")
+    .select("user_id")
+    .eq("room_id", roomId)
+    .eq("section_id", sectionId)
+    .eq("notifications_enabled", false)
+    .in("user_id", recipientIds)
+
+  if (prefsErr) {
+    console.error(
+      "[api/notifications/room-message] channel prefs lookup failed",
+      prefsErr
+    )
+    throw prefsErr
+  }
+
+  const mutedUserIds = new Set(
+    (mutedPrefs ?? []).map((row) => String(row.user_id))
+  )
+  return recipientIds.filter((id) => !mutedUserIds.has(id))
+}
+
+/**
+ * Trade Room message fanout:
+ * - Ordinary members → Messaging push only (no Activity row)
+ * - @mentioned members → Activity `room_mention` + push (skip generic room push)
+ */
 export async function POST(req: Request) {
   const user = await getRouteUser(req)
   if (!user) {
@@ -39,7 +90,7 @@ export async function POST(req: Request) {
 
   const { data: messageRow, error: messageErr } = await supabaseServiceRole
     .from("room_messages")
-    .select("id, room_id, user_id, content, type, section_id")
+    .select("id, room_id, user_id, content, type, section_id, parent_message_id")
     .eq("id", messageId)
     .maybeSingle()
 
@@ -99,6 +150,143 @@ export async function POST(req: Request) {
     sectionName = sectionRow?.name ?? null
   }
 
+  const { data: senderProfile } = await supabaseServiceRole
+    .from("profiles")
+    .select("username, name")
+    .eq("id", user.id)
+    .maybeSingle()
+
+  const preview = buildMessagePreview(messageRow.content, messageRow.type)
+
+  const payload: RoomMessageMeta = {
+    message_id: messageId,
+    room_id: messageRow.room_id,
+    room_slug: roomRow?.slug ?? null,
+    room_name: roomRow?.name ?? null,
+    section_id: messageRow.section_id ?? null,
+    section_name: sectionName,
+    message_preview: preview,
+    sender_username: senderProfile?.username
+      ? String(senderProfile.username)
+      : null,
+    sender_name: senderProfile?.name ? String(senderProfile.name) : null,
+    is_reply: Boolean(messageRow.parent_message_id),
+  }
+  const content = JSON.stringify(payload)
+
+  // --- Mentions (Activity + push); may include muted-room members ---
+  const mentionedIds = await resolveMentionedUserIdsFromContent(
+    messageRow.content,
+    { excludeUserId: user.id }
+  )
+
+  let mentionRecipients: string[] = []
+  if (mentionedIds.length > 0) {
+    const { data: mentionMembers, error: mentionMembersErr } =
+      await supabaseServiceRole
+        .from("room_members")
+        .select("user_id")
+        .eq("room_id", messageRow.room_id)
+        .is("left_at", null)
+        .in("user_id", mentionedIds)
+
+    if (mentionMembersErr) {
+      console.error(
+        "[api/notifications/room-message] mention members lookup failed",
+        mentionMembersErr
+      )
+      return Response.json({ error: mentionMembersErr.message }, { status: 500 })
+    }
+
+    mentionRecipients = (mentionMembers ?? [])
+      .map((row) => String(row.user_id))
+      .filter(Boolean)
+
+    mentionRecipients = await filterRecipientsByRoomMentionPreference(
+      mentionRecipients
+    )
+
+    if (messageRow.section_id && mentionRecipients.length > 0) {
+      try {
+        mentionRecipients = await filterChannelMuted(
+          messageRow.room_id,
+          messageRow.section_id,
+          mentionRecipients
+        )
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "channel prefs failed"
+        return Response.json({ error: message }, { status: 500 })
+      }
+    }
+  }
+
+  const mentionedSet = new Set(mentionRecipients)
+  let mentionsInserted = 0
+
+  if (mentionRecipients.length > 0) {
+    const { data: existingMentions, error: existingMentionErr } =
+      await supabaseServiceRole
+        .from("notifications")
+        .select("user_id")
+        .eq("type", "room_mention")
+        .eq("room_message_id", messageId)
+        .in("user_id", mentionRecipients)
+
+    if (existingMentionErr) {
+      console.error(
+        "[api/notifications/room-message] mention duplicate lookup failed",
+        existingMentionErr
+      )
+      return Response.json({ error: existingMentionErr.message }, { status: 500 })
+    }
+
+    const alreadyMentioned = new Set(
+      (existingMentions ?? []).map((row) => String(row.user_id))
+    )
+
+    const mentionRows = mentionRecipients
+      .filter((id) => !alreadyMentioned.has(id))
+      .map((recipientId) => ({
+        user_id: recipientId,
+        sender_id: user.id,
+        type: "room_mention",
+        room_message_id: messageId,
+        content,
+      }))
+
+    if (mentionRows.length > 0) {
+      const { error: insertErr } = await supabaseServiceRole
+        .from("notifications")
+        .insert(mentionRows)
+
+      if (insertErr) {
+        if (insertErr.code !== "23505") {
+          console.error(
+            "[api/notifications/room-message] mention insert failed",
+            insertErr
+          )
+          return Response.json({ error: insertErr.message }, { status: 500 })
+        }
+      } else {
+        mentionsInserted = mentionRows.length
+      }
+
+      const { scheduleIosPushDelivery } = await import(
+        "@/lib/server/push/deliverPushNotification"
+      )
+      for (const row of mentionRows) {
+        scheduleIosPushDelivery({
+          recipientUserId: String(row.user_id),
+          type: "room_mention",
+          sender_id: user.id,
+          content: row.content,
+          prefsAlreadyChecked: true,
+        })
+      }
+    }
+  }
+
+  // --- Ordinary room members → Messaging push only (no Activity) ---
   const { data: members, error: membersErr } = await supabaseServiceRole
     .from("room_members")
     .select("user_id")
@@ -112,122 +300,52 @@ export async function POST(req: Request) {
     return Response.json({ error: membersErr.message }, { status: 500 })
   }
 
-  let recipientIds = (members ?? [])
+  let messagingRecipients = (members ?? [])
     .map((row) => String(row.user_id))
-    .filter(Boolean)
+    .filter((id) => id && !mentionedSet.has(id))
 
-  if (recipientIds.length === 0) {
-    return Response.json({ ok: true, inserted: 0 })
-  }
+  messagingRecipients =
+    await filterRecipientsByRoomMessagePreference(messagingRecipients)
 
-  recipientIds = await filterRecipientsByRoomMessagePreference(recipientIds)
-
-  if (recipientIds.length === 0) {
-    return Response.json({ ok: true, inserted: 0, skipped: "preferences" })
-  }
-
-  if (messageRow.section_id) {
-    const { data: mutedPrefs, error: prefsErr } = await supabaseServiceRole
-      .from("room_member_channel_preferences")
-      .select("user_id")
-      .eq("room_id", messageRow.room_id)
-      .eq("section_id", messageRow.section_id)
-      .eq("notifications_enabled", false)
-      .in("user_id", recipientIds)
-
-    if (prefsErr) {
-      console.error(
-        "[api/notifications/room-message] channel prefs lookup failed",
-        prefsErr
+  if (messageRow.section_id && messagingRecipients.length > 0) {
+    try {
+      messagingRecipients = await filterChannelMuted(
+        messageRow.room_id,
+        messageRow.section_id,
+        messagingRecipients
       )
-      return Response.json({ error: prefsErr.message }, { status: 500 })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "channel prefs failed"
+      return Response.json({ error: message }, { status: 500 })
     }
-
-    const mutedUserIds = new Set(
-      (mutedPrefs ?? []).map((row) => String(row.user_id))
-    )
-    recipientIds = recipientIds.filter((id) => !mutedUserIds.has(id))
   }
 
-  if (recipientIds.length === 0) {
-    return Response.json({ ok: true, inserted: 0, skipped: "channel_muted" })
-  }
-
-  const { data: existingRows, error: existingErr } = await supabaseServiceRole
-    .from("notifications")
-    .select("user_id")
-    .eq("type", "room_message")
-    .eq("room_message_id", messageId)
-    .in("user_id", recipientIds)
-
-  if (existingErr) {
-    console.error(
-      "[api/notifications/room-message] duplicate lookup failed",
-      existingErr
-    )
-    return Response.json({ error: existingErr.message }, { status: 500 })
-  }
-
-  const alreadyNotified = new Set(
-    (existingRows ?? []).map((row) => String(row.user_id))
-  )
-
-  const preview =
-    messageRow.type === "trade"
-      ? "Shared a trade"
-      : messageRow.type === "image"
-        ? "Sent an image"
-        : buildMessagePreview(messageRow.content)
-
-  const payload: RoomMessageMeta = {
-    message_id: messageId,
-    room_id: messageRow.room_id,
-    room_slug: roomRow?.slug ?? null,
-    room_name: roomRow?.name ?? null,
-    section_id: messageRow.section_id ?? null,
-    section_name: sectionName,
-    message_preview: preview,
-  }
-
-  const content = JSON.stringify(payload)
-  const rows = recipientIds
-    .filter((recipientId) => !alreadyNotified.has(recipientId))
-    .map((recipientId) => ({
-      user_id: recipientId,
-      sender_id: user.id,
-      type: "room_message",
-      room_message_id: messageId,
-      content,
-    }))
-
-  if (rows.length === 0) {
-    return Response.json({ ok: true, inserted: 0, skipped: recipientIds.length })
-  }
-
-  const { error: insertErr } = await supabaseServiceRole
-    .from("notifications")
-    .insert(rows)
-
-  if (insertErr) {
-    if (insertErr.code === "23505") {
-      return Response.json({ ok: true, inserted: 0, deduplicated: true })
+  for (const recipientId of messagingRecipients) {
+    if (messageRow.parent_message_id) {
+      // Direct replies always bypass room digest batching.
+      scheduleMessagingPush({
+        recipientUserId: recipientId,
+        kind: "room_message",
+        sender_id: user.id,
+        content,
+        prefsAlreadyChecked: true,
+      })
+    } else {
+      const { scheduleSmartRoomMessagePush } = await import(
+        "@/lib/server/push/smartRoomPush"
+      )
+      void scheduleSmartRoomMessagePush({
+        recipientUserId: recipientId,
+        senderId: user.id,
+        roomId: messageRow.room_id,
+        content,
+      })
     }
-    console.error("[api/notifications/room-message] insert failed", insertErr)
-    return Response.json({ error: insertErr.message }, { status: 500 })
   }
 
-  const { scheduleIosPushDelivery } = await import(
-    "@/lib/server/push/deliverPushNotification"
-  )
-  for (const row of rows) {
-    scheduleIosPushDelivery({
-      recipientUserId: String(row.user_id),
-      type: "room_message",
-      sender_id: user.id,
-      content: row.content,
-      prefsAlreadyChecked: true,
-    })
-  }
-
-  return Response.json({ ok: true, inserted: rows.length })
+  return Response.json({
+    ok: true,
+    mentionsInserted,
+    messagingPushed: messagingRecipients.length,
+  })
 }

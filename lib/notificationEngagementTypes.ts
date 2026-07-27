@@ -3,7 +3,8 @@ export const NOTIFICATION_ENGAGEMENT_TYPES = [
   "like",
   "comment",
   "room_join",
-  "room_message",
+  /** Trade Room @mentions only — ordinary room chat is Messaging-only (no Activity row). */
+  "room_mention",
   "follow",
   "follow_request",
 ] as const

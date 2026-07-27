@@ -56,6 +56,10 @@ import {
   type NotificationRecord,
   type SenderProfile,
 } from "@/lib/notificationsDisplay"
+import {
+  readNotificationsSession,
+  writeNotificationsSession,
+} from "@/lib/notificationsSessionCache"
 
 const NOTIFICATIONS_TABLE = "notifications"
 
@@ -328,7 +332,9 @@ function GroupedNotificationCardView({
       : card.kind === "trading_report_notification"
         ? tradingReportNotificationBody(card.notification)
       : card.kind === "room_message_group"
-        ? formatRoomMessageGroupSubtitle(card.totalMessages)
+        ? formatRoomMessageGroupSubtitle(card.totalMessages, {
+            isMention: card.isMention,
+          })
         : null
 
   return (
@@ -475,12 +481,28 @@ export default function NotificationsPage() {
   const [dismissingIds, setDismissingIds] = useState<Set<string>>(new Set())
   const [activeTab, setActiveTab] = useState<NotificationCenterTab>("all")
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set())
+  const paintedFromCacheRef = useRef(false)
 
   useEffect(() => {
     if (!profileLoading && !user && !isDemoModeActive()) {
       router.push("/login")
     }
   }, [profileLoading, user, router])
+
+  // Instant paint from session / durable cache, then sync in background.
+  useEffect(() => {
+    if (!userId) return
+    paintedFromCacheRef.current = false
+    const cached = readNotificationsSession(userId)
+    if (cached?.notifications?.length) {
+      setNotifications(cached.notifications as NotificationRecord[])
+      if (cached.senderProfiles) {
+        setSendersById(cached.senderProfiles as Record<string, SenderProfile>)
+      }
+      setLoading(false)
+      paintedFromCacheRef.current = true
+    }
+  }, [userId])
 
   const ensureSenderProfiles = useCallback(async (senderIds: string[]) => {
     const missing = senderIds.filter((id) => id && !sendersByIdRef.current[id])
@@ -513,7 +535,10 @@ export default function NotificationsPage() {
 
   const fetchNotifications = useCallback(async () => {
     if (!userId) return
-    setLoading(true)
+    const hadCachedPaint =
+      paintedFromCacheRef.current ||
+      (readNotificationsSession(userId)?.notifications?.length ?? 0) > 0
+    if (!hadCachedPaint) setLoading(true)
     setLoadError(null)
 
     if (isDemoUserId(userId)) {
@@ -526,11 +551,12 @@ export default function NotificationsPage() {
             .filter((id): id is string => typeof id === "string" && id.length > 0)
         )
       )
-      if (senderIds.length > 0) {
-        setSendersById(getDemoNotificationSenderProfiles(senderIds))
-      } else {
-        setSendersById({})
-      }
+      const demoProfiles =
+        senderIds.length > 0
+          ? getDemoNotificationSenderProfiles(senderIds)
+          : {}
+      setSendersById(demoProfiles)
+      writeNotificationsSession(userId, rows, demoProfiles)
       setLoading(false)
       return
     }
@@ -545,7 +571,7 @@ export default function NotificationsPage() {
 
     if (error) {
       logNotificationsQueryError("fetch", error, { userId })
-      setNotifications([])
+      if (!hadCachedPaint) setNotifications([])
       setLoadError("Could not load notifications right now.")
       setLoading(false)
       return
@@ -563,9 +589,12 @@ export default function NotificationsPage() {
     )
 
     if (senderIds.length > 0) {
-      void ensureSenderProfiles(senderIds)
+      void ensureSenderProfiles(senderIds).then(() => {
+        writeNotificationsSession(userId, rows, sendersByIdRef.current)
+      })
     } else {
       setSendersById({})
+      writeNotificationsSession(userId, rows, {})
     }
 
     setLoading(false)
@@ -703,14 +732,14 @@ export default function NotificationsPage() {
   async function markIdsRead(ids: string[]) {
     if (!userId || ids.length === 0) return
 
-    if (isDemoUserId(userId)) {
-      const idSet = new Set(ids)
-      setNotifications((prev) =>
-        prev.map((row) => (idSet.has(row.id) ? { ...row, read: true } : row))
-      )
-      window.dispatchEvent(new CustomEvent("tj-unread-notifications-refresh"))
-      return
-    }
+    const idSet = new Set(ids)
+    const snapshot = notifications
+    setNotifications((prev) =>
+      prev.map((row) => (idSet.has(row.id) ? { ...row, read: true } : row))
+    )
+    window.dispatchEvent(new CustomEvent("tj-unread-notifications-refresh"))
+
+    if (isDemoUserId(userId)) return
 
     const { error } = await supabase
       .from("notifications")
@@ -724,24 +753,19 @@ export default function NotificationsPage() {
         userId,
         columns: "update read = true",
       })
-      return
+      setNotifications(snapshot)
+      window.dispatchEvent(new CustomEvent("tj-unread-notifications-refresh"))
     }
-
-    const idSet = new Set(ids)
-    setNotifications((prev) =>
-      prev.map((row) => (idSet.has(row.id) ? { ...row, read: true } : row))
-    )
-    window.dispatchEvent(new CustomEvent("tj-unread-notifications-refresh"))
   }
 
   async function markAllAsRead() {
     if (!userId) return
 
-    if (isDemoUserId(userId)) {
-      setNotifications((prev) => prev.map((row) => ({ ...row, read: true })))
-      window.dispatchEvent(new CustomEvent("tj-unread-notifications-refresh"))
-      return
-    }
+    const snapshot = notifications
+    setNotifications((prev) => prev.map((row) => ({ ...row, read: true })))
+    window.dispatchEvent(new CustomEvent("tj-unread-notifications-refresh"))
+
+    if (isDemoUserId(userId)) return
 
     const { error } = await supabase
       .from("notifications")
@@ -755,21 +779,21 @@ export default function NotificationsPage() {
         userId,
         columns: "update read = true",
       })
-      return
+      setNotifications(snapshot)
+      window.dispatchEvent(new CustomEvent("tj-unread-notifications-refresh"))
     }
-
-    setNotifications((prev) => prev.map((row) => ({ ...row, read: true })))
-    window.dispatchEvent(new CustomEvent("tj-unread-notifications-refresh"))
   }
 
   async function clearAll() {
     if (!userId || clearing) return
     setClearing(true)
+    const snapshot = notifications
+    const sendersSnapshot = sendersById
+    setNotifications([])
+    setSendersById({})
+    setShowClearConfirm(false)
 
     if (isDemoUserId(userId)) {
-      setNotifications([])
-      setSendersById({})
-      setShowClearConfirm(false)
       setClearing(false)
       window.dispatchEvent(new CustomEvent("tj-unread-notifications-refresh"))
       return
@@ -777,21 +801,23 @@ export default function NotificationsPage() {
 
     const ok = await clearAllNotifications(supabase)
     if (!ok) {
+      setNotifications(snapshot)
+      setSendersById(sendersSnapshot)
       setClearing(false)
       return
     }
 
-    setNotifications([])
-    setSendersById({})
-    setShowClearConfirm(false)
     setClearing(false)
+    window.dispatchEvent(new CustomEvent("tj-unread-notifications-refresh"))
   }
 
   async function dismissIds(ids: string[]) {
     if (!userId || ids.length === 0) return
 
     const idSet = new Set(ids)
+    const snapshot = notifications
     setDismissingIds((prev) => new Set([...prev, ...ids]))
+    setNotifications((prev) => prev.filter((row) => !idSet.has(row.id)))
 
     if (isDemoUserId(userId)) {
       setDismissingIds((prev) => {
@@ -799,7 +825,6 @@ export default function NotificationsPage() {
         for (const id of ids) next.delete(id)
         return next
       })
-      setNotifications((prev) => prev.filter((row) => !idSet.has(row.id)))
       return
     }
 
@@ -810,9 +835,9 @@ export default function NotificationsPage() {
       return next
     })
 
-    if (!ok) return
-
-    setNotifications((prev) => prev.filter((row) => !idSet.has(row.id)))
+    if (!ok) {
+      setNotifications(snapshot)
+    }
   }
 
   function renderCard(card: GroupedNotificationCard) {

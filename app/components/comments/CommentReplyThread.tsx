@@ -18,6 +18,7 @@ type CommentReplyThreadProps = {
   onReply?: (comment: any) => void
   onRequestDelete?: (comment: any) => void
   onTogglePin?: (comment: any, pinned: boolean) => void
+  onRetryComment?: (comment: any) => void
   deleteMenuClassName?: string
 }
 
@@ -34,6 +35,7 @@ function CommentReplyThread({
   onReply,
   onRequestDelete,
   onTogglePin,
+  onRetryComment,
   deleteMenuClassName,
 }: CommentReplyThreadProps) {
   const [expanded, setExpanded] = useState(false)
@@ -63,6 +65,7 @@ function CommentReplyThread({
             onReply={onReply}
             onRequestDelete={onRequestDelete}
             onTogglePin={onTogglePin}
+            onRetryComment={onRetryComment}
             deleteMenuClassName={deleteMenuClassName}
           />
         ))}

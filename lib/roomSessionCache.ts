@@ -1,5 +1,8 @@
 /** Trade room session cache — rooms list, sections, and messages survive route remounts. */
 
+import { isNativeIos } from "@/lib/nativePlatform"
+import { persistRoomSession } from "@/lib/nativeSilentCacheBridge"
+
 const DEFAULT_STALE_MS = 5 * 60 * 1000
 const STORAGE_PREFIX = "tradetraxs:room-session:v1:"
 
@@ -60,13 +63,15 @@ function persistSnapshot(snapshot: RoomSessionSnapshot) {
       storageKey(snapshot.userId),
       JSON.stringify({
         ...snapshot,
-        // Message payloads can be large; keep those in memory and persist only
-        // the lightweight data needed to restore the rooms UI immediately.
-        messagesByKey: {},
+        // Web: strip messages to avoid quota. Native keeps messages in IndexedDB.
+        messagesByKey: isNativeIos() ? {} : {},
       })
     )
   } catch {
     // Memory caching remains available when session storage is unavailable/full.
+  }
+  if (isNativeIos()) {
+    persistRoomSession(snapshot.userId, snapshot)
   }
 }
 
@@ -86,11 +91,14 @@ export function readRoomSession(userId: string): RoomSessionSnapshot | null {
   const entry = sessions.get(key) ?? readStoredSnapshot(key)
   if (!entry) return null
   if (Date.now() - entry.fetchedAt > DEFAULT_STALE_MS) {
-    sessions.delete(key)
-    if (typeof window !== "undefined") {
-      window.sessionStorage.removeItem(storageKey(key))
+    // Native: still paint soft-stale rooms (SWR). Web: miss.
+    if (!(typeof window !== "undefined" && isNativeIos())) {
+      sessions.delete(key)
+      if (typeof window !== "undefined") {
+        window.sessionStorage.removeItem(storageKey(key))
+      }
+      return null
     }
-    return null
   }
   sessions.set(key, entry)
   return entry
@@ -116,6 +124,14 @@ export function writeRoomSession(
   }
   sessions.set(key, next)
   persistSnapshot(next)
+}
+
+export function seedRoomSession(snapshot: RoomSessionSnapshot) {
+  if (!snapshot?.userId) return
+  const key = String(snapshot.userId).trim()
+  const prev = sessions.get(key)
+  if (prev && prev.fetchedAt >= snapshot.fetchedAt) return
+  sessions.set(key, snapshot)
 }
 
 export function patchRoomMessagesInSession(

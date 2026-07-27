@@ -1,5 +1,8 @@
 /** Trade detail page cache — trade row + owner profile per trade id. */
 
+import { isNativeIos } from "@/lib/nativePlatform"
+import { persistTradeDetail } from "@/lib/nativeSilentCacheBridge"
+
 const DEFAULT_STALE_MS = 5 * 60 * 1000
 
 export type TradeDetailSnapshot = {
@@ -23,8 +26,10 @@ export function readTradeDetail(tradeId: string): TradeDetailSnapshot | null {
   const entry = sessions.get(key)
   if (!entry) return null
   if (Date.now() - entry.fetchedAt > DEFAULT_STALE_MS) {
-    sessions.delete(key)
-    return null
+    if (!(typeof window !== "undefined" && isNativeIos())) {
+      sessions.delete(key)
+      return null
+    }
   }
   return entry
 }
@@ -35,11 +40,20 @@ export function writeTradeDetail(
 ) {
   const key = String(tradeId).trim()
   if (!key) return
-  sessions.set(key, {
+  const full: TradeDetailSnapshot = {
     ...snapshot,
     tradeId: key,
     fetchedAt: Date.now(),
-  })
+  }
+  sessions.set(key, full)
+  persistTradeDetail(key, full)
+}
+
+export function seedTradeDetail(tradeId: string, snapshot: TradeDetailSnapshot) {
+  const key = String(tradeId).trim()
+  if (!key || sessions.has(key)) return
+  if (!snapshot || typeof snapshot !== "object") return
+  sessions.set(key, { ...snapshot, tradeId: key })
 }
 
 export function invalidateTradeDetail(tradeId: string) {

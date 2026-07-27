@@ -17,6 +17,7 @@ import {
   type ZoomPanTransform,
 } from "@/lib/renderImageCrop"
 import { useModalScrollLock, MODAL_OVERLAY_SAFE_PADDING_CLASS } from "@/app/components/ui/modalLayout"
+import ActionButton from "@/app/components/ui/ActionButton"
 
 type ImageCropModalProps = {
   open: boolean
@@ -427,14 +428,16 @@ export default function ImageCropModal({
             >
               Cancel
             </button>
-            <button
+            <ActionButton
               type="button"
-              disabled={saving || !imageSize}
+              disabled={!imageSize}
+              syncing={saving}
+              syncingLabel="Saving…"
               onClick={() => void handleSave()}
               className="h-11 rounded-lg bg-blue-500 px-5 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-blue-500"
             >
-              {saving ? "Saving…" : "Save"}
-            </button>
+              Save
+            </ActionButton>
           </div>
         </div>
       </div>

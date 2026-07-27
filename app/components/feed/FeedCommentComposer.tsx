@@ -2,6 +2,7 @@
 
 import { useCallback } from "react"
 import ReplyComposerStrip from "@/app/components/replies/ReplyComposerStrip"
+import ActionButton from "@/app/components/ui/ActionButton"
 import type { CommentReplyTarget } from "@/lib/commentReplyUx"
 
 type FeedCommentComposerProps = {
@@ -84,14 +85,16 @@ function FeedCommentComposer({
           onKeyDown={handleKeyDown}
           className="flex-1 min-w-0 p-2 bg-[#1e293b] text-white rounded-lg border border-gray-600 text-sm placeholder:text-gray-400"
         />
-        <button
+        <ActionButton
           type="button"
-          disabled={commentSubmitting || !commentValue.trim()}
+          disabled={!commentValue.trim()}
+          syncing={commentSubmitting}
+          syncingLabel="Posting…"
           onClick={handleSubmitClick}
           className="bg-blue-500 px-3 rounded-lg text-white text-sm font-medium disabled:opacity-40 shrink-0"
         >
-          {commentSubmitting ? "…" : "Post"}
-        </button>
+          Post
+        </ActionButton>
       </div>
     </div>
   )

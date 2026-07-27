@@ -259,10 +259,16 @@ export default function Navbar() {
     }
 
     setUnreadCount(count ?? 0)
-    void import("@/lib/nativeIosPush").then(({ setNativeIosBadgeCount }) => {
-      void setNativeIosBadgeCount(count ?? 0)
-    })
   }, [user])
+
+  useEffect(() => {
+    if (!user?.id) return
+    const activity = unreadCount ?? 0
+    const messages = unreadMessagesCount ?? 0
+    void import("@/lib/nativeIosPush").then(({ setNativeIosBadgeCount }) => {
+      void setNativeIosBadgeCount(activity + messages)
+    })
+  }, [user?.id, unreadCount, unreadMessagesCount])
 
   useEffect(() => {
     if (!user?.id) return

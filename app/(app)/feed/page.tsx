@@ -21,17 +21,12 @@ import {
   pinCommentByKind,
   resolveCommentPinTarget,
 } from "@/lib/pinComment"
-import {
-  deleteLikeNotification,
-  ensureLikeNotification,
-} from "@/lib/likeNotifications"
 import { ensureCommentNotificationsForInsert } from "@/lib/commentNotifications"
 import {
   ACHIEVEMENT_POST_COMMENT_INSERT_SELECT,
   FEED_ACHIEVEMENT_POSTS_SELECT,
   achievementPostOwnerUserId,
   insertAchievementPostCommentNotifications,
-  insertAchievementPostLikeNotification,
   isAchievementFeedPost,
   queryAchievementPostComments,
   withInsertedAchievementPostParentCommentId,
@@ -117,6 +112,8 @@ import {
   toggleReelLike,
   withInsertedReelParentCommentId,
 } from "@/lib/reelEngagement"
+import { toggleContentLike } from "@/lib/toggleContentLike"
+import { createOptimisticTempId } from "@/lib/optimisticMutation"
 import { useUserProfile } from "@/lib/UserProfileProvider"
 import { deleteReel, isTradeAttachedReel, replaceTradeReelVideo, type ReelRow } from "@/lib/reels"
 import {
@@ -1043,6 +1040,56 @@ function FeedPageContent() {
       commentCountsByPostRef.current = nextCounts
       setCommentsByPost(nextComments)
       setCommentCountsByPost(nextCounts)
+      persistFeedSnapshot(
+        postsRef.current,
+        likesByPostRef.current,
+        nextComments
+      )
+    },
+    [persistFeedSnapshot]
+  )
+
+  const patchLoadedComment = useCallback(
+    (pid: string, commentId: string, patch: Record<string, unknown>) => {
+      const current = commentsByPostRef.current[pid] ?? EMPTY_COMMENTS
+      let changed = false
+      const nextList = current.map((row: any) => {
+        if (String(row.id) !== String(commentId)) return row
+        changed = true
+        return { ...row, ...patch }
+      })
+      if (!changed) return
+
+      const nextComments = {
+        ...commentsByPostRef.current,
+        [pid]: nextList,
+      }
+      commentsByPostRef.current = nextComments
+      setCommentsByPost(nextComments)
+      persistFeedSnapshot(
+        postsRef.current,
+        likesByPostRef.current,
+        nextComments
+      )
+    },
+    [persistFeedSnapshot]
+  )
+
+  const replaceLoadedComment = useCallback(
+    (pid: string, tempId: string, row: any) => {
+      const current = commentsByPostRef.current[pid] ?? EMPTY_COMMENTS
+      let replaced = false
+      const nextList = current.map((comment: any) => {
+        if (String(comment.id) !== String(tempId)) return comment
+        replaced = true
+        return row
+      })
+      const nextComments = {
+        ...commentsByPostRef.current,
+        [pid]: replaced ? nextList : [...current, row],
+      }
+      commentsByPostRef.current = nextComments
+      setCommentsByPost(nextComments)
       persistFeedSnapshot(
         postsRef.current,
         likesByPostRef.current,
@@ -2103,26 +2150,57 @@ function FeedPageContent() {
       likeBusyRef.current.add(pid)
       setLikeBusyByPost((prev) => ({ ...prev, [pid]: true }))
 
-      try {
-      const meta = likesByPostRef.current[pid] ?? EMPTY_LIKE_META
+      const applyMeta = (next: { count: number; liked: boolean }) => {
+        setLikesByPost((prev) => {
+          const merged = { ...prev, [pid]: next }
+          persistFeedSnapshot(
+            postsRef.current,
+            merged,
+            commentsByPostRef.current
+          )
+          return merged
+        })
+      }
 
-      if (isReel) {
-        const ok = await toggleReelLike(supabase, {
-          reelId: pid,
-          userId: user.id,
-          ownerUserId: reelOwnerUserId(post),
-          meta,
-          onMetaChange: (next) => {
-            setLikesByPost((prev) => {
-              const merged = { ...prev, [pid]: next }
-              persistFeedSnapshot(
-                postsRef.current,
-                merged,
-                commentsByPostRef.current
-              )
-              return merged
+      try {
+        const meta = likesByPostRef.current[pid] ?? EMPTY_LIKE_META
+
+        if (isReel) {
+          const ok = await toggleReelLike(supabase, {
+            reelId: pid,
+            userId: user.id,
+            ownerUserId: reelOwnerUserId(post),
+            meta,
+            onMetaChange: applyMeta,
+          })
+          if (!ok) {
+            showPopup({
+              type: "error",
+              message: "Couldn't update like. Please try again.",
             })
-          },
+          }
+          return
+        }
+
+        const kind = isProfile
+          ? "profile_post"
+          : isAchievement
+            ? "achievement_post"
+            : "post"
+        const ownerId = isProfile
+          ? profilePostOwnerUserId(post)
+          : isAchievement
+            ? achievementPostOwnerUserId(post)
+            : postTradeOwnerUserId(post)
+
+        const ok = await toggleContentLike(supabase, {
+          kind,
+          contentId: pid,
+          userId: user.id,
+          ownerUserId: ownerId,
+          meta,
+          tradeId: post.trade_id ?? null,
+          onMetaChange: applyMeta,
         })
         if (!ok) {
           showPopup({
@@ -2130,183 +2208,6 @@ function FeedPageContent() {
             message: "Couldn't update like. Please try again.",
           })
         }
-        return
-      }
-
-      if (meta.liked) {
-        const ownerId = isProfile
-          ? profilePostOwnerUserId(post)
-          : isAchievement
-            ? achievementPostOwnerUserId(post)
-            : postTradeOwnerUserId(post)
-
-        const { error } = isProfile
-          ? await supabase
-              .from("profile_post_likes")
-              .delete()
-              .eq("profile_post_id", pid)
-              .eq("user_id", user.id)
-          : isAchievement
-            ? await supabase
-                .from("achievement_post_likes")
-                .delete()
-                .eq("achievement_post_id", pid)
-                .eq("user_id", user.id)
-            : await supabase
-                .from("likes")
-                .delete()
-                .eq("post_id", pid)
-                .eq("user_id", user.id)
-
-        if (error) {
-          console.error("Unlike error:", error)
-          showPopup({
-            type: "error",
-            message: "Couldn't update like. Please try again.",
-          })
-          return
-        }
-
-        if (ownerId) {
-          await deleteLikeNotification(supabase, {
-            recipientUserId: String(ownerId),
-            senderUserId: user.id,
-            target: isProfile
-              ? { kind: "profile_post", profilePostId: pid }
-              : isAchievement
-                ? { kind: "achievement_post", achievementPostId: pid }
-                : { kind: "post", postId: pid, tradeId: post.trade_id ?? null },
-          })
-        }
-
-        const newCount = Math.max(0, meta.count - 1)
-        setLikesByPost((prev) => ({
-          ...prev,
-          [pid]: { count: newCount, liked: false },
-        }))
-      } else if (isProfile) {
-        const likePayload = {
-          profile_post_id: pid,
-          user_id: user.id,
-        }
-        const { error } = await supabase.from("profile_post_likes").insert(likePayload)
-
-        if (error) {
-          console.error("[profile-post-like] insert failed", {
-            userId: user.id,
-            profilePostId: pid,
-            payload: likePayload,
-            supabaseError: {
-              code: error.code,
-              message: error.message,
-              details: error.details,
-              hint: error.hint,
-            },
-          })
-          showPopup({
-            type: "error",
-            message: "Couldn't update like. Please try again.",
-          })
-          return
-        }
-
-        setLikesByPost((prev) => ({
-          ...prev,
-          [pid]: { count: meta.count + 1, liked: true },
-        }))
-
-        const ownerId = profilePostOwnerUserId(post)
-        if (ownerId) {
-          await ensureLikeNotification(supabase, {
-            recipientUserId: ownerId,
-            senderUserId: user.id,
-            target: { kind: "profile_post", profilePostId: pid },
-          })
-        }
-      } else if (isAchievement) {
-        const likePayload = {
-          achievement_post_id: pid,
-          user_id: user.id,
-        }
-        const { error } = await supabase
-          .from("achievement_post_likes")
-          .insert(likePayload)
-
-        if (error) {
-          console.error("[achievement-post-like] insert failed", {
-            userId: user.id,
-            achievementPostId: pid,
-            payload: likePayload,
-            supabaseError: {
-              code: error.code,
-              message: error.message,
-              details: error.details,
-              hint: error.hint,
-            },
-          })
-          showPopup({
-            type: "error",
-            message: "Couldn't update like. Please try again.",
-          })
-          return
-        }
-
-        setLikesByPost((prev) => ({
-          ...prev,
-          [pid]: { count: meta.count + 1, liked: true },
-        }))
-
-        const ownerId = achievementPostOwnerUserId(post)
-        if (ownerId) {
-          await insertAchievementPostLikeNotification(supabase, {
-            achievementPostId: pid,
-            ownerUserId: ownerId,
-            senderUserId: user.id,
-          })
-        }
-      } else {
-        const likePayload = {
-          post_id: pid,
-          user_id: user.id,
-        }
-        const { error } = await supabase.from("likes").insert(likePayload)
-
-        if (error) {
-          console.error("[post-like] insert failed", {
-            userId: user.id,
-            postId: pid,
-            feedKind: post.feedKind ?? "unknown",
-            payload: likePayload,
-            supabaseError: {
-              code: error.code,
-              message: error.message,
-              details: error.details,
-              hint: error.hint,
-            },
-          })
-          showPopup({
-            type: "error",
-            message: "Couldn't update like. Please try again.",
-          })
-          return
-        }
-
-        const newCount = meta.count + 1
-        setLikesByPost((prev) => ({
-          ...prev,
-          [pid]: { count: newCount, liked: true },
-        }))
-
-        const notifyUserId = postTradeOwnerUserId(post)
-        const tradeId = post.trade_id
-        if (notifyUserId && notifyUserId !== user.id) {
-          await ensureLikeNotification(supabase, {
-            recipientUserId: String(notifyUserId),
-            senderUserId: user.id,
-            target: { kind: "post", postId: pid, tradeId: tradeId ?? null },
-          })
-        }
-      }
       } finally {
         likeBusyRef.current.delete(pid)
         setLikeBusyByPost((prev) => ({ ...prev, [pid]: false }))
@@ -2316,7 +2217,12 @@ function FeedPageContent() {
   )
 
   const submitComment = useCallback(
-    async (post: any, text: string, parentCommentId?: string | null) => {
+    async (
+      post: any,
+      text: string,
+      parentCommentId?: string | null,
+      retryTempId?: string | null
+    ) => {
       if (guardDemoFeedWrite("comment")) return false
       if (!user) return false
 
@@ -2337,6 +2243,28 @@ function FeedPageContent() {
       const isAchievement = isAchievementFeedPost(post)
       const isReel = isReelFeedPost(post)
       const existingComments = commentsByPostRef.current[pid] ?? EMPTY_COMMENTS
+      const tempId = retryTempId ?? createOptimisticTempId("temp-c")
+
+      if (retryTempId) {
+        patchLoadedComment(pid, tempId, { sync_status: "posting", content: trimmed })
+      } else {
+        const optimisticComment = {
+          id: tempId,
+          content: trimmed,
+          user_id: user.id,
+          created_at: new Date().toISOString(),
+          parent_comment_id: parentCommentId ?? null,
+          sync_status: "posting",
+          profiles: { username: null, avatar_url: null },
+        }
+        appendLoadedComment(pid, optimisticComment)
+      }
+
+      const failOptimistic = () =>
+        patchLoadedComment(pid, tempId, { sync_status: "failed" })
+      const confirmOptimistic = (row: any) => {
+        replaceLoadedComment(pid, tempId, row)
+      }
 
       if (isProfile) {
         const insertPayload: Record<string, unknown> = {
@@ -2368,8 +2296,8 @@ function FeedPageContent() {
               hint: error.hint,
             },
           })
-          showPopup({ type: "error", message: handleSupabaseError(error) })
-          return false
+          failOptimistic()
+          return true
         }
 
         const insertedRow = withInsertedProfilePostParentCommentId(
@@ -2377,7 +2305,7 @@ function FeedPageContent() {
           parentCommentId
         )
 
-        appendLoadedComment(pid, insertedRow)
+        confirmOptimistic(insertedRow)
 
         const ownerId = profilePostOwnerUserId(post)
         if (ownerId) {
@@ -2425,8 +2353,8 @@ function FeedPageContent() {
               hint: error.hint,
             },
           })
-          showPopup({ type: "error", message: handleSupabaseError(error) })
-          return false
+          failOptimistic()
+          return true
         }
 
         const insertedRow = withInsertedReelParentCommentId(
@@ -2434,7 +2362,7 @@ function FeedPageContent() {
           parentCommentId
         )
 
-        appendLoadedComment(pid, insertedRow)
+        confirmOptimistic(insertedRow)
 
         const ownerId = reelOwnerUserId(post)
         if (ownerId) {
@@ -2482,8 +2410,8 @@ function FeedPageContent() {
               hint: error.hint,
             },
           })
-          showPopup({ type: "error", message: handleSupabaseError(error) })
-          return false
+          failOptimistic()
+          return true
         }
 
         const insertedRow = withInsertedAchievementPostParentCommentId(
@@ -2491,7 +2419,7 @@ function FeedPageContent() {
           parentCommentId
         )
 
-        appendLoadedComment(pid, insertedRow)
+        confirmOptimistic(insertedRow)
 
         const ownerId = achievementPostOwnerUserId(post)
         if (ownerId) {
@@ -2539,13 +2467,13 @@ function FeedPageContent() {
             hint: error.hint,
           },
         })
-        showPopup({ type: "error", message: handleSupabaseError(error) })
-        return false
+        failOptimistic()
+        return true
       }
 
       const insertedRow = withInsertedParentCommentId(newRow, parentCommentId)
 
-      appendLoadedComment(pid, insertedRow)
+      confirmOptimistic(insertedRow)
 
       const notifyUserId = postTradeOwnerUserId(post)
       await ensureCommentNotificationsForInsert(supabase, {
@@ -2564,7 +2492,7 @@ function FeedPageContent() {
         setCommentSubmitting((s) => ({ ...s, [pid]: false }))
       }
     },
-    [user, showPopup, appendLoadedComment]
+    [user, appendLoadedComment, patchLoadedComment, replaceLoadedComment]
   )
 
   const deleteComment = useCallback(
@@ -2575,8 +2503,25 @@ function FeedPageContent() {
         return false
       }
 
+      const restoreComment = (postId: string, snapshot: any[]) => {
+        const nextComments = {
+          ...commentsByPostRef.current,
+          [postId]: snapshot,
+        }
+        commentsByPostRef.current = nextComments
+        setCommentsByPost(nextComments)
+        persistFeedSnapshot(
+          postsRef.current,
+          likesByPostRef.current,
+          nextComments
+        )
+      }
+
       const profilePostId = String(comment.profile_post_id ?? "")
       if (profilePostId) {
+        const snapshot =
+          commentsByPostRef.current[profilePostId] ?? EMPTY_COMMENTS
+        removeLoadedComment(profilePostId, String(comment.id))
         const { error, deleted } = await deleteProfilePostComment(supabase, {
           id: String(comment.id),
           user_id: user.id,
@@ -2591,17 +2536,19 @@ function FeedPageContent() {
             profilePostId,
             error,
           })
+          restoreComment(profilePostId, snapshot)
           showPopup({ type: "error", message: handleSupabaseError(error) })
           return false
         }
-
-        removeLoadedComment(profilePostId, String(comment.id))
 
         return true
       }
 
       const achievementPostId = String(comment.achievement_post_id ?? "")
       if (achievementPostId) {
+        const snapshot =
+          commentsByPostRef.current[achievementPostId] ?? EMPTY_COMMENTS
+        removeLoadedComment(achievementPostId, String(comment.id))
         const { error, deleted } = await deleteAchievementPostComment(supabase, {
           id: String(comment.id),
           user_id: user.id,
@@ -2616,17 +2563,18 @@ function FeedPageContent() {
             achievementPostId,
             error,
           })
+          restoreComment(achievementPostId, snapshot)
           showPopup({ type: "error", message: handleSupabaseError(error) })
           return false
         }
-
-        removeLoadedComment(achievementPostId, String(comment.id))
 
         return true
       }
 
       const reelId = String(comment.reel_id ?? "")
       if (reelId) {
+        const snapshot = commentsByPostRef.current[reelId] ?? EMPTY_COMMENTS
+        removeLoadedComment(reelId, String(comment.id))
         const { error, deleted } = await deleteReelComment(supabase, {
           id: String(comment.id),
           user_id: user.id,
@@ -2641,21 +2589,18 @@ function FeedPageContent() {
             reelId,
             error,
           })
+          restoreComment(reelId, snapshot)
           showPopup({ type: "error", message: handleSupabaseError(error) })
           return false
         }
-
-        removeLoadedComment(reelId, String(comment.id))
 
         return true
       }
 
       const postId = String(comment.post_id ?? "")
-      if (!postId) {
-        console.error("[comment-delete] aborted: missing post_id", comment)
-        return false
-      }
-
+      if (!postId) return false
+      const snapshot = commentsByPostRef.current[postId] ?? EMPTY_COMMENTS
+      removeLoadedComment(postId, String(comment.id))
       const { error, deleted } = await deleteFeedComment(supabase, {
         id: String(comment.id),
         user_id: user.id,
@@ -2670,22 +2615,14 @@ function FeedPageContent() {
           postId,
           error,
         })
+        restoreComment(postId, snapshot)
         showPopup({ type: "error", message: handleSupabaseError(error) })
         return false
       }
 
-      removeLoadedComment(postId, String(comment.id))
-
-      if (process.env.NODE_ENV !== "production") {
-        console.log("[comment-delete] local state updated", {
-          commentId: String(comment.id),
-          postId,
-        })
-      }
-
       return true
     },
-    [user, showPopup, removeLoadedComment]
+    [user, showPopup, removeLoadedComment, persistFeedSnapshot]
   )
 
   const { uniquePosts, postsById } = useMemo(

@@ -208,16 +208,48 @@ export async function POST(req: Request) {
     return Response.json({ error: error.message }, { status: 500 })
   }
   if (!error) {
-    const { scheduleIosPushDelivery } = await import(
-      "@/lib/server/push/deliverPushNotification"
+    const { enqueueLikePushBatch } = await import(
+      "@/lib/server/push/pushBatching"
     )
-    scheduleIosPushDelivery({
-      recipientUserId: resolved.recipientUserId,
-      type: "like",
-      sender_id: user.id,
-      prefsAlreadyChecked: true,
-      ...resolved.notificationTarget,
-    })
+    // Await so batch persistence + after() flush registration survive the response.
+    try {
+      await enqueueLikePushBatch({
+        recipientUserId: resolved.recipientUserId,
+        senderId: user.id,
+        notificationTarget: resolved.notificationTarget,
+      })
+    } catch (err) {
+      console.error("[api/notifications/like] enqueueLikePushBatch failed", err)
+    }
+
+    // Milestone pushes for public content likes only (never comments).
+    if (target.kind !== "comment") {
+      const { maybeNotifyLikeMilestone } = await import(
+        "@/lib/server/push/likeMilestones"
+      )
+      const entity =
+        target.kind === "trade"
+          ? { kind: "trade" as const, id: target.tradeId }
+          : target.kind === "post"
+            ? { kind: "post" as const, id: target.postId }
+            : target.kind === "profile_post"
+              ? { kind: "profile_post" as const, id: target.profilePostId }
+              : target.kind === "achievement_post"
+                ? {
+                    kind: "achievement_post" as const,
+                    id: target.achievementPostId,
+                  }
+                : target.kind === "reel"
+                  ? { kind: "reel" as const, id: target.reelId }
+                  : null
+      if (entity?.id) {
+        void maybeNotifyLikeMilestone({
+          ownerUserId: resolved.recipientUserId,
+          actorUserId: user.id,
+          entity,
+        })
+      }
+    }
   }
   return Response.json({ ok: true, deduplicated: error?.code === "23505" })
 }

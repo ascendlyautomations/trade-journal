@@ -1,5 +1,4 @@
 import { supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
-import { NOTIFICATION_INBOX_TYPES } from "@/lib/notificationEngagementTypes"
 import {
   isCommentNotificationAllowed,
   isNotificationPreferenceEnabled,
@@ -8,6 +7,8 @@ import {
 } from "@/lib/notificationPreferences"
 import { getServerNotificationPreferences } from "@/lib/serverNotificationPreferences"
 import { isApnsConfigured, sendApnsAlert } from "@/lib/server/push/apns"
+import { countAppIconBadge, invalidateAppIconBadgeCache } from "@/lib/server/push/messagingPush"
+import { categoryForNotificationType } from "@/lib/server/push/pushCategories"
 import {
   buildPushAlertCopy,
   buildPushDeepLinkHref,
@@ -30,14 +31,22 @@ function preferenceKeyForType(
   switch (type) {
     case "like":
       return opts.isAchievement ? "achievement_likes_enabled" : "likes_enabled"
+    case "like_milestone":
+    case "like_batch":
+      return opts.isAchievement ? "achievement_likes_enabled" : "likes_enabled"
     case "comment":
       return "comment_kind"
     case "follow":
+    case "follow_batch":
       return "followers_enabled"
     case "follow_request":
       return "follow_requests_enabled"
+    case "follow_request_accepted":
+      return "follow_request_accepts_enabled"
     case "room_message":
       return "room_messages_enabled"
+    case "room_mention":
+      return "room_mentions_enabled"
     case "room_join":
       return "room_joins_enabled"
     case "message":
@@ -77,21 +86,6 @@ async function shouldDeliverPush(
   }
   if (key == null) return true
   return isNotificationPreferenceEnabled(prefs, key)
-}
-
-async function countUnreadInbox(userId: string): Promise<number> {
-  const { count, error } = await supabaseServiceRole
-    .from("notifications")
-    .select("*", { count: "exact", head: true })
-    .eq("user_id", userId)
-    .eq("read", false)
-    .in("type", [...NOTIFICATION_INBOX_TYPES])
-
-  if (error) {
-    console.error("[push] unread count failed", error)
-    return 1
-  }
-  return count ?? 1
 }
 
 async function loadSenderProfile(senderId: string | null | undefined): Promise<{
@@ -141,7 +135,15 @@ export async function deliverIosPushNotification(
     if (!recipientUserId) return
 
     const allowed = await shouldDeliverPush(recipientUserId, input)
-    if (!allowed) return
+    if (!allowed) {
+      if (input.type === "follow" || input.type === "follow_batch") {
+        console.info("[follow-push] Push skipped by preferences", {
+          recipientUserId,
+          type: input.type,
+        })
+      }
+      return
+    }
 
     const { data: tokens, error: tokenErr } = await supabaseServiceRole
       .from("device_push_tokens")
@@ -153,7 +155,25 @@ export async function deliverIosPushNotification(
       console.error("[push] token lookup failed", tokenErr)
       return
     }
-    if (!tokens?.length) return
+    if (!tokens?.length) {
+      if (input.type === "follow" || input.type === "follow_batch") {
+        console.info("[follow-push] Recipient push token not found", {
+          recipientUserId,
+          type: input.type,
+        })
+      }
+      return
+    }
+
+    if (input.type === "follow" || input.type === "follow_batch") {
+      console.info("[follow-push] Recipient push token found", {
+        recipientUserId,
+        type: input.type,
+        tokenCount: tokens.length,
+      })
+    }
+
+    invalidateAppIconBadgeCache(recipientUserId)
 
     const sender = await loadSenderProfile(input.sender_id)
     const target: PushNotificationTarget = {
@@ -164,7 +184,31 @@ export async function deliverIosPushNotification(
     }
     const copy = buildPushAlertCopy(target)
     const href = buildPushDeepLinkHref(target)
-    const badge = await countUnreadInbox(recipientUserId)
+    // App icon = Activity unread + Messages unread (independent sources).
+    const badge = await countAppIconBadge(recipientUserId)
+    const category = categoryForNotificationType(input.type)
+
+    let followRequestId: string | undefined
+    if (input.type === "follow_request" && input.content) {
+      try {
+        const parsed = JSON.parse(input.content) as { follow_request_id?: string }
+        if (typeof parsed.follow_request_id === "string") {
+          followRequestId = parsed.follow_request_id
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+
+    if (input.type === "follow" || input.type === "follow_batch") {
+      console.info("[follow-push] APNs send attempted", {
+        recipientUserId,
+        type: input.type,
+        title: copy.title,
+        href,
+        tokenCount: tokens.length,
+      })
+    }
 
     await Promise.all(
       tokens.map(async (row) => {
@@ -176,7 +220,24 @@ export async function deliverIosPushNotification(
           href,
           badge,
           notificationType: input.type,
+          category,
+          followRequestId,
         })
+        if (input.type === "follow" || input.type === "follow_batch") {
+          if (result.ok) {
+            console.info("[follow-push] APNs success", {
+              recipientUserId,
+              type: input.type,
+            })
+          } else {
+            console.error("[follow-push] APNs failure", {
+              recipientUserId,
+              type: input.type,
+              status: result.status,
+              reason: result.reason,
+            })
+          }
+        }
         if (!result.ok && result.invalidToken) {
           await removeInvalidToken(deviceToken)
         } else if (!result.ok && result.reason !== "apns_not_configured") {

@@ -11,6 +11,7 @@ import { supabase } from "../../lib/supabaseClient"
 import { compressImage } from "@/lib/compressImage"
 import { uploadAvatarFile } from "@/lib/avatarUpload"
 import ImageCropModal from "@/app/components/ImageCropModal"
+import ActionButton from "@/app/components/ui/ActionButton"
 import { useImageCropUpload } from "@/lib/useImageCropUpload"
 import { useUploadProgress } from "@/lib/uploadProgress/UploadProgressProvider"
 import {
@@ -586,12 +587,39 @@ export default function SettingsPage() {
       updatePayload.username = cleanUsername
     }
 
+    const nextProfile: Record<string, unknown> = {
+      ...(profile ?? {}),
+      name: name.trim() || null,
+      is_private: isPrivate,
+      username: cleanUsername,
+      username_change_count: usernameChanged ? changeCount + 1 : changeCount,
+      bio,
+      avatar_url: avatarUrl,
+      trading_style: tradingStyle,
+      trader_type: traderType.trim() || null,
+      primary_market: primaryMarket.trim() || null,
+      trading_model: tradingModel || tradingStyle || null,
+      started_trading: startedTrading.trim() || null,
+    }
+    const previousProfile = profile
+    const previousShared = sharedProfile
+    setUsername(cleanUsername)
+    setProfile(nextProfile)
+    persistSettingsProfileEverywhere(user.id, nextProfile)
+    setSharedProfile((prev) => settingsSaveToSharedSlice(nextProfile, prev))
+
     const { error } = await supabase
       .from("profiles")
       .update(updatePayload)
       .eq("id", user.id)
 
     if (error) {
+      if (previousProfile) {
+        setProfile(previousProfile)
+        persistSettingsProfileEverywhere(user.id, previousProfile)
+      }
+      setSharedProfile(previousShared)
+      setUsername(String(previousProfile?.username ?? username))
       if (error.code === "23505" && isProfilesUsernameConflict(error)) {
         showPopup({ type: "error", message: "Username already in use" })
       } else {
@@ -613,26 +641,7 @@ export default function SettingsPage() {
       }
     }
 
-    const nextProfile: Record<string, unknown> = {
-      ...(profile ?? {}),
-      name: name.trim() || null,
-      is_private: isPrivate,
-      username: cleanUsername,
-      username_change_count: nextChangeCount,
-      bio,
-      avatar_url: avatarUrl,
-      trading_style: tradingStyle,
-      trader_type: traderType.trim() || null,
-      primary_market: primaryMarket.trim() || null,
-      trading_model: tradingModel || tradingStyle || null,
-      started_trading: startedTrading.trim() || null,
-    }
-
-    setUsername(cleanUsername)
-    setProfile(nextProfile)
     setAvatarFile(null)
-    persistSettingsProfileEverywhere(user.id, nextProfile)
-    setSharedProfile((prev) => settingsSaveToSharedSlice(nextProfile, prev))
     showPopup(feedbackPresets.profileSaveSuccess())
     } finally {
       savingProfileRef.current = false
@@ -1211,14 +1220,16 @@ export default function SettingsPage() {
                   />
                 </div>
 
-                <button
+                <ActionButton
                   type="button"
                   onClick={() => void saveProfileTab()}
-                  disabled={savingProfile || invalidStartedTradingDate}
+                  disabled={invalidStartedTradingDate}
+                  syncing={savingProfile}
+                  syncingLabel="Saving…"
                   className="w-full rounded-xl bg-blue-500 py-3 font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-blue-500"
                 >
-                  {savingProfile ? "Saving…" : "Save Profile"}
-                </button>
+                  Save Profile
+                </ActionButton>
               </div>
             )}
             {activeTab === "affiliate" && (

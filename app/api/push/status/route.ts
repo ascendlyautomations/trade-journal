@@ -6,9 +6,6 @@ export const dynamic = "force-dynamic"
 
 /**
  * Authenticated APNs / device-token health check (no secrets).
- * Used to verify Sprint 2 push infrastructure without a settings UI.
- *
- * TEMPORARY: `env` diagnostics — remove after APNs E2E verification.
  */
 export async function GET(req: Request) {
   const user = await getRouteUser(req)
@@ -35,12 +32,6 @@ export async function GET(req: Request) {
       configured: apns.configured,
       production: apns.production,
       bundleId: apns.bundleId,
-    },
-    // TEMPORARY diagnostics — booleans only; never expose secret values.
-    env: {
-      hasKeyId: Boolean(process.env.APNS_KEY_ID?.trim()),
-      hasTeamId: Boolean(process.env.APNS_TEAM_ID?.trim()),
-      hasPrivateKey: Boolean(process.env.APNS_PRIVATE_KEY?.trim()),
     },
     deviceTokenCount: count ?? 0,
     readyToDeliver: apns.configured && (count ?? 0) > 0,

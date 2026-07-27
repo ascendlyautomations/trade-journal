@@ -14,6 +14,8 @@ import {
 import DropdownMenu, {
   FOLLOW_RELATIONSHIP_FUTURE_MENU_ITEMS,
 } from "@/app/components/ui/DropdownMenu"
+import InlineMicroSpinner from "@/app/components/ui/InlineMicroSpinner"
+import { MICRO } from "@/lib/microInteractions"
 
 type FollowButtonProps = {
   targetUserId: string
@@ -44,9 +46,9 @@ function stateFromSets(
 }
 
 const FOLLOWING_BUTTON_CLASS =
-  "shrink-0 rounded-md bg-white/10 px-3 py-1 text-sm font-medium text-white transition hover:bg-white/20 disabled:opacity-50"
+  "shrink-0 rounded-md bg-white/10 px-3 py-1 text-sm font-medium text-white transition hover:bg-white/20 disabled:opacity-70"
 const PRIMARY_BUTTON_CLASS =
-  "shrink-0 rounded-md bg-blue-500 px-3 py-1 text-sm font-medium text-white transition hover:bg-blue-600 disabled:opacity-50"
+  "shrink-0 rounded-md bg-blue-500 px-3 py-1 text-sm font-medium text-white transition hover:bg-blue-600 disabled:opacity-70"
 
 export default function FollowButton({
   targetUserId,
@@ -106,25 +108,34 @@ export default function FollowButton({
   const handleUnfollowOrCancel = useCallback(async () => {
     if (!currentUserId || busyRef.current || busy) return
 
+    const prevState = followState
+    const nextState: FollowUiState = "none"
+    setFollowState(nextState)
+    onFollowingChange?.(targetUserId, false)
+    onRequestedChange?.(targetUserId, false)
+
     busyRef.current = true
     setBusy(true)
 
     try {
-    const result = await unfollowOrCancelRequest(
-      supabase,
-      currentUserId,
-      targetUserId,
-      followState === "requested" ? "requested" : "following"
-    )
+      const result = await unfollowOrCancelRequest(
+        supabase,
+        currentUserId,
+        targetUserId,
+        prevState === "requested" ? "requested" : "following"
+      )
 
-    if (!result.ok) {
-      console.error("[follow] unfollow/cancel failed", result.message)
-      return
-    }
+      if (!result.ok) {
+        console.error("[follow] unfollow/cancel failed", result.message)
+        setFollowState(prevState)
+        onFollowingChange?.(targetUserId, prevState === "following")
+        onRequestedChange?.(targetUserId, prevState === "requested")
+        return
+      }
 
-    setFollowState(result.state)
-    onFollowingChange?.(targetUserId, false)
-    onRequestedChange?.(targetUserId, false)
+      setFollowState(result.state)
+      onFollowingChange?.(targetUserId, false)
+      onRequestedChange?.(targetUserId, false)
     } finally {
       busyRef.current = false
       setBusy(false)
@@ -152,23 +163,32 @@ export default function FollowButton({
       return
     }
 
+    const prevState = followState
+    const optimisticState: FollowUiState = targetIsPrivate ? "requested" : "following"
+    setFollowState(optimisticState)
+    onFollowingChange?.(targetUserId, optimisticState === "following")
+    onRequestedChange?.(targetUserId, optimisticState === "requested")
+
     busyRef.current = true
     setBusy(true)
 
     try {
-    const result = await followOrRequest(supabase, currentUserId, {
-      id: targetUserId,
-      is_private: targetIsPrivate,
-    })
+      const result = await followOrRequest(supabase, currentUserId, {
+        id: targetUserId,
+        is_private: targetIsPrivate,
+      })
 
-    if (!result.ok) {
-      console.error("[follow] request failed", result.message)
-      return
-    }
+      if (!result.ok) {
+        console.error("[follow] request failed", result.message)
+        setFollowState(prevState)
+        onFollowingChange?.(targetUserId, prevState === "following")
+        onRequestedChange?.(targetUserId, prevState === "requested")
+        return
+      }
 
-    setFollowState(result.state)
-    onFollowingChange?.(targetUserId, result.state === "following")
-    onRequestedChange?.(targetUserId, result.state === "requested")
+      setFollowState(result.state)
+      onFollowingChange?.(targetUserId, result.state === "following")
+      onRequestedChange?.(targetUserId, result.state === "requested")
     } finally {
       busyRef.current = false
       setBusy(false)
@@ -184,11 +204,19 @@ export default function FollowButton({
         stopPropagation={stopPropagation}
         className={className}
         trigger={
-          <span className={`${FOLLOWING_BUTTON_CLASS} inline-flex items-center gap-1`}>
+          <span
+            className={`${FOLLOWING_BUTTON_CLASS} inline-flex items-center gap-1 ${
+              busy ? MICRO.syncPulse : ""
+            }`}
+          >
             <span>{relationshipLabel}</span>
-            <span className="text-[10px] opacity-80" aria-hidden>
-              ▼
-            </span>
+            {busy ? (
+              <InlineMicroSpinner className="h-3 w-3 opacity-80" label="Updating" />
+            ) : (
+              <span className="text-[10px] opacity-80" aria-hidden>
+                ▼
+              </span>
+            )}
           </span>
         }
         items={[
@@ -217,9 +245,15 @@ export default function FollowButton({
       type="button"
       onClick={handlePrimaryClick}
       disabled={busy}
-      className={`${buttonClass} ${className}`}
+      aria-busy={busy || undefined}
+      className={`${buttonClass} inline-flex items-center gap-1.5 ${className} ${
+        busy ? MICRO.syncPulse : ""
+      }`}
     >
-      {label}
+      <span>{label}</span>
+      {busy ? (
+        <InlineMicroSpinner className="h-3 w-3" label="Updating follow" />
+      ) : null}
     </button>
   )
 }

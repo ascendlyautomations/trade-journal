@@ -237,11 +237,11 @@ async function insertShareMessage(
   supabase: SupabaseClient,
   payload: Record<string, unknown>,
   logContext: { label: string; userId: string; conversationId: string }
-): Promise<{ createdAt: string | null; error: Error | null }> {
+): Promise<{ createdAt: string | null; messageId: string | null; error: Error | null }> {
   const { data, error } = await supabase
     .from("messages")
     .insert(payload)
-    .select("created_at")
+    .select("id, created_at")
     .single()
 
   if (error) {
@@ -252,12 +252,20 @@ async function insertShareMessage(
       userId: logContext.userId,
       conversationId: logContext.conversationId,
     })
-    return { createdAt: null, error: new Error(error.message) }
+    return { createdAt: null, messageId: null, error: new Error(error.message) }
+  }
+
+  const messageId = data?.id != null ? String(data.id) : null
+  if (messageId && typeof window !== "undefined") {
+    void import("@/lib/createDirectMessagePush").then(({ createDirectMessagePush }) => {
+      void createDirectMessagePush(supabase, messageId)
+    })
   }
 
   return {
     createdAt:
       data?.created_at != null ? String(data.created_at) : new Date().toISOString(),
+    messageId,
     error: null,
   }
 }

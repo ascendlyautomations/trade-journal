@@ -1,5 +1,8 @@
 /** Profile page session cache — survives route remounts for the same URL segment. */
 
+import { isNativeIos } from "@/lib/nativePlatform"
+import { persistProfileSession } from "@/lib/nativeSilentCacheBridge"
+
 const DEFAULT_STALE_MS = 5 * 60 * 1000
 
 export type ProfileSessionSnapshot = {
@@ -42,8 +45,11 @@ export function readProfileSession(
   const entry = sessions.get(key)
   if (!entry) return null
   if (Date.now() - entry.fetchedAt > DEFAULT_STALE_MS) {
-    sessions.delete(key)
-    return null
+    // Native: paint soft-stale profiles (5m soft window already elapsed → still OK).
+    if (!(typeof window !== "undefined" && isNativeIos())) {
+      sessions.delete(key)
+      return null
+    }
   }
   return entry
 }
@@ -54,11 +60,23 @@ export function writeProfileSession(
 ) {
   const key = urlSegment.trim()
   if (!key) return
-  sessions.set(key, {
+  const full: ProfileSessionSnapshot = {
     ...snapshot,
     urlSegment: key,
     fetchedAt: Date.now(),
-  })
+  }
+  sessions.set(key, full)
+  persistProfileSession(key, full)
+}
+
+export function seedProfileSession(
+  urlSegment: string,
+  snapshot: ProfileSessionSnapshot
+) {
+  const key = urlSegment.trim()
+  if (!key || sessions.has(key)) return
+  if (!snapshot || typeof snapshot !== "object") return
+  sessions.set(key, { ...snapshot, urlSegment: key })
 }
 
 export function patchProfileSession(
@@ -68,7 +86,9 @@ export function patchProfileSession(
   const key = urlSegment.trim()
   const prev = sessions.get(key)
   if (!prev) return
-  sessions.set(key, { ...prev, ...patch, fetchedAt: Date.now() })
+  const next = { ...prev, ...patch, fetchedAt: Date.now() }
+  sessions.set(key, next)
+  persistProfileSession(key, next)
 }
 
 export function invalidateProfileSession(urlSegment: string) {
@@ -82,15 +102,20 @@ export function aliasProfileSession(fromSegment: string, toSegment: string) {
   if (!fromKey || !toKey || fromKey === toKey) return
   const entry = sessions.get(fromKey)
   if (!entry) return
-  if (Date.now() - entry.fetchedAt > DEFAULT_STALE_MS) {
+  if (
+    Date.now() - entry.fetchedAt > DEFAULT_STALE_MS &&
+    !(typeof window !== "undefined" && isNativeIos())
+  ) {
     sessions.delete(fromKey)
     return
   }
-  sessions.set(toKey, {
+  const aliased = {
     ...entry,
     urlSegment: toKey,
     fetchedAt: Date.now(),
-  })
+  }
+  sessions.set(toKey, aliased)
+  persistProfileSession(toKey, aliased)
 }
 
 export function invalidateProfileSessionsForUser(profileUserId: string) {

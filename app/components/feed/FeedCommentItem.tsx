@@ -5,12 +5,23 @@ import { ProfileAvatarLink } from "@/app/components/ProfileLink"
 import { CommentAuthorLine } from "@/app/components/comments/CommentAuthorLine"
 import CommentActionsMenu from "@/app/components/comments/CommentDeleteMenu"
 import CommentContent from "@/app/components/comments/CommentContent"
+import SyncStatusText from "@/app/components/ui/SyncStatusText"
+import { MICRO } from "@/lib/microInteractions"
 import { devLog } from "@/lib/devLog"
 import CommentLikeActionButton from "@/app/components/comments/CommentLikeActionButton"
 import ReplyActionButton from "@/app/components/replies/ReplyActionButton"
 import { commentElementId } from "@/lib/replyReference"
 import type { CommentLikeMeta } from "@/lib/commentLikes"
 import { canPinComment, isCommentPinned } from "@/lib/pinComment"
+
+function commentSyncStatus(
+  comment: any
+): "idle" | "posting" | "failed" {
+  const status = comment?.sync_status
+  if (status === "posting" || status === "failed") return status
+  if (String(comment?.id ?? "").startsWith("temp-")) return "posting"
+  return "idle"
+}
 
 type FeedCommentItemProps = {
   comment: any
@@ -25,6 +36,7 @@ type FeedCommentItemProps = {
   onReply?: (comment: any) => void
   onRequestDelete?: (comment: any) => void
   onTogglePin?: (comment: any, pinned: boolean) => void
+  onRetryComment?: (comment: any) => void
   deleteMenuClassName?: string
 }
 
@@ -41,15 +53,19 @@ function FeedCommentItem({
   onReply,
   onRequestDelete,
   onTogglePin,
+  onRetryComment,
   deleteMenuClassName,
 }: FeedCommentItemProps) {
   const userId = String(comment.user_id ?? "")
   const username = comment.profiles?.username
   const isTopLevel = comment.parent_comment_id == null
   const pinned = isCommentPinned(comment)
+  const syncStatus = commentSyncStatus(comment)
+  const isOptimistic = syncStatus !== "idle"
   const canPin =
     isTopLevel &&
     onTogglePin != null &&
+    !isOptimistic &&
     canPinComment({
       viewerUserId: currentUserId,
       contentOwnerUserId,
@@ -57,13 +73,16 @@ function FeedCommentItem({
   const canDelete =
     currentUserId != null &&
     onRequestDelete != null &&
+    !isOptimistic &&
     String(currentUserId) === userId
   const showMenu = canPin || canDelete
 
   return (
     <div
       id={commentElementId(String(comment.id))}
-      className="group flex items-start gap-2"
+      className={`group flex items-start gap-2 ${
+        isOptimistic ? MICRO.softEnter : ""
+      } ${syncStatus === "posting" ? MICRO.syncPulse : ""}`.trim()}
     >
       <ProfileAvatarLink
         userId={userId}
@@ -116,7 +135,19 @@ function FeedCommentItem({
           mentionUserIdsByUsername={mentionUserIdsByUsername}
           stopPropagation={stopPropagation}
         />
-        {onToggleLike ? (
+        {syncStatus !== "idle" ? (
+          <SyncStatusText
+            status={syncStatus}
+            kind="comment"
+            align="left"
+            onRetry={
+              syncStatus === "failed" && onRetryComment
+                ? () => onRetryComment(comment)
+                : undefined
+            }
+          />
+        ) : null}
+        {!isOptimistic && onToggleLike ? (
           <div className="mt-0.5 flex items-center gap-3">
             <CommentLikeActionButton
               meta={likeMeta ?? { count: 0, liked: false }}
@@ -131,7 +162,7 @@ function FeedCommentItem({
               />
             ) : null}
           </div>
-        ) : onReply ? (
+        ) : !isOptimistic && onReply ? (
           <ReplyActionButton
             onReply={() => onReply(comment)}
             className="mt-0.5 px-0 py-0"

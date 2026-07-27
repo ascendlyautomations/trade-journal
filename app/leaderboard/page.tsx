@@ -40,6 +40,10 @@ import {
   chartCartesianGridProps,
   READABLE_CHART_TICK,
 } from "@/lib/chartTheme"
+import {
+  readLeaderboardSession,
+  writeLeaderboardSession,
+} from "@/lib/leaderboardSessionCache"
 
 type LeaderboardProfile = {
   id: string
@@ -208,16 +212,28 @@ export default function Leaderboard() {
   >({})
 
   useEffect(() => {
-    fetchData()
+    const cacheKey = user?.id ?? "__anonymous__"
+    const cached = readLeaderboardSession(cacheKey)
+    if (cached?.trades?.length) {
+      setTrades(cached.trades as TradeForLeaderboard[])
+      setUserId(user?.id ?? null)
+      setTradesLoading(false)
+    }
+    void fetchData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- paint cache then refresh when user changes
   }, [user?.id])
 
   async function fetchData() {
-    setTradesLoading(true)
+    const cacheKey = user?.id ?? "__anonymous__"
+    const hadCache = (readLeaderboardSession(cacheKey)?.trades?.length ?? 0) > 0
+    if (!hadCache) setTradesLoading(true)
     setLeaderboardLoadError(null)
     try {
       if (isDemoModeActive()) {
         setUserId(user?.id ?? null)
-        setTrades(getDemoLeaderboardTrades())
+        const demoTrades = getDemoLeaderboardTrades()
+        setTrades(demoTrades)
+        writeLeaderboardSession(cacheKey, demoTrades)
         return
       }
 
@@ -226,9 +242,10 @@ export default function Leaderboard() {
       const allTrades = await fetchLeaderboardTrades()
 
       setTrades(allTrades)
+      writeLeaderboardSession(cacheKey, allTrades)
     } catch (error) {
       console.error("[leaderboard] fetchData error:", error)
-      setTrades([])
+      if (!hadCache) setTrades([])
       setLeaderboardLoadError(
         error instanceof Error
           ? error.message

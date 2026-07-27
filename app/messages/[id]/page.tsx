@@ -47,6 +47,17 @@ import {
   buildDmThreadPath,
   isConversationUuidSegment,
 } from "@/lib/messageRoutes"
+import { createDirectMessagePush } from "@/lib/createDirectMessagePush"
+import {
+  createOptimisticTempId,
+} from "@/lib/optimisticMutation"
+import {
+  mergeRealtimeMessageIntoList,
+  markOptimisticMessageFailed,
+  replaceOptimisticMessage,
+} from "@/lib/optimisticMessage"
+import SyncStatusText from "@/app/components/ui/SyncStatusText"
+import { MICRO } from "@/lib/microInteractions"
 import { FEED_ACHIEVEMENT_POSTS_SELECT } from "@/lib/achievementPostEngagement"
 import { FEED_REELS_SELECT } from "@/lib/reelEngagement"
 import {
@@ -1133,6 +1144,59 @@ export default function DMPage() {
   }, [user?.id, activeConversationId])
 
   useEffect(() => {
+    void import("@/lib/messagingActiveContext").then(
+      ({ setActiveConversationId: setMessagingActiveConversation }) => {
+        setMessagingActiveConversation(activeConversationId)
+      }
+    )
+    return () => {
+      void import("@/lib/messagingActiveContext").then(
+        ({ setActiveConversationId: setMessagingActiveConversation }) => {
+          setMessagingActiveConversation(null)
+        }
+      )
+    }
+  }, [activeConversationId])
+
+  useEffect(() => {
+    if (!user?.id || !activeConversationId || pageAccess !== "allowed") return
+    void import("@/lib/notificationReadSync").then(
+      ({ markNotificationsReadForTarget }) => {
+        void markNotificationsReadForTarget(user.id, {
+          kind: "conversation",
+          conversationId: activeConversationId,
+        })
+      }
+    )
+    void (async () => {
+      try {
+        const { supabaseBearerHeaders } = await import(
+          "@/lib/supabaseBearerFetch"
+        )
+        const authHeaders = await supabaseBearerHeaders()
+        await fetch("/api/notifications/mark-read-target", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...authHeaders,
+          },
+          body: JSON.stringify({
+            conversationId: activeConversationId,
+            markConversationRead: false,
+          }),
+        })
+      } catch {
+        /* ignore — client-side notification read still ran */
+      }
+    })()
+    void import("@/lib/clearDeliveredConversationNotifications").then(
+      ({ clearDeliveredNotificationsForConversation }) => {
+        void clearDeliveredNotificationsForConversation(activeConversationId)
+      }
+    )
+  }, [user?.id, activeConversationId, pageAccess])
+
+  useEffect(() => {
     replyTargetRef.current = replyTarget
   }, [replyTarget])
 
@@ -1361,9 +1425,12 @@ export default function DMPage() {
               if (data) row = data
             }
             setMessagesWithCache((prev) => {
-              const without = prev.filter((x) => x.id !== raw.id)
-              const updated = [...without, row]
-              return sortMessagesByCreatedAt(updated)
+              const merged = mergeRealtimeMessageIntoList(
+                prev,
+                row,
+                userIdRef.current
+              )
+              return sortMessagesByCreatedAt(merged)
             })
 
             const uid = userIdRef.current
@@ -2089,7 +2156,12 @@ export default function DMPage() {
     groupImageCrop.handleFileSelected(file)
   }
 
-  async function sendMessage() {
+  async function sendMessage(opts?: {
+    retryTempId?: string
+    retryContent?: string
+    retryImageUrl?: string | null
+    retryParentId?: string | null
+  }) {
     if (isDemoModeActive()) {
       requestDemoSignup("comment")
       return
@@ -2103,90 +2175,180 @@ export default function DMPage() {
       })
       return
     }
-    if (!input.trim() && !selectedFile) return
+
+    const isRetry = Boolean(opts?.retryTempId)
+    const contentText = isRetry
+      ? String(opts?.retryContent ?? "")
+      : input
+    const selected = isRetry ? null : selectedFile
+    if (!contentText.trim() && !selected && !opts?.retryImageUrl) return
+
+    const tempId = opts?.retryTempId || createOptimisticTempId("temp")
+    const parentId = isRetry
+      ? opts?.retryParentId ?? null
+      : replyTargetRef.current?.id ?? null
+    const createdAt = new Date().toISOString()
+
+    // Capture + clear composer immediately (keep values for failure restore).
+    const prevInput = input
+    const prevReply = replyTarget
+    const prevFile = selectedFile
+    const prevPreview = previewUrl
+    const prevSelectedImage = selectedImage
+
+    if (!isRetry) {
+      setInput("")
+      setReplyTarget(null)
+      setSelectedFile(null)
+      setSelectedImage(null)
+      setPreviewUrl(null)
+      if (fileRef.current) fileRef.current.value = ""
+      setIsTyping(false)
+    }
+
+    const optimisticRow: any = {
+      id: tempId,
+      conversation_id: activeConversationId,
+      sender_id: user.id,
+      content: contentText || "",
+      image_url: opts?.retryImageUrl ?? (prevPreview || null),
+      channel: null,
+      type: "text",
+      created_at: createdAt,
+      parent_message_id: parentId,
+      client_temp_id: tempId,
+      send_status: "sending",
+      profiles: {
+        id: user.id,
+        username: null,
+        name: null,
+        avatar_url: null,
+      },
+    }
+
+    if (isRetry) {
+      setMessagesWithCache((prev) =>
+        prev.map((m) =>
+          String(m.id) === tempId
+            ? { ...m, send_status: "sending", content: contentText }
+            : m
+        )
+      )
+    } else {
+      setMessagesWithCache((prev) => [...prev, optimisticRow])
+      queueSmoothScrollToBottom()
+    }
 
     sendingMessageRef.current = true
     setSendingMessage(true)
 
     try {
-    let imageUrl = null
+      let imageUrl = opts?.retryImageUrl ?? null
 
-    if (selectedFile) {
-      let uploadFile: File = selectedFile
-      if (selectedFile.type?.startsWith("image/")) {
-        uploadFile = await compressScreenshot(selectedFile)
+      if (selected) {
+        let uploadFile: File = selected
+        if (selected.type?.startsWith("image/")) {
+          uploadFile = await compressScreenshot(selected)
+        }
+        const fileName = `${user.id}/${Date.now()}-${uploadFile.name}`
+
+        const { error: uploadError } = await supabase.storage
+          .from("screenshots")
+          .upload(fileName, uploadFile, {
+            cacheControl: "31536000",
+            upsert: false,
+          })
+        if (uploadError) {
+          logSupabaseError("sendMessage image upload", uploadError, {
+            bucket: "screenshots",
+            path: fileName,
+            userId: user.id,
+          })
+          setMessagesWithCache((prev) =>
+            markOptimisticMessageFailed(prev, tempId)
+          )
+          if (!isRetry) {
+            setInput(prevInput)
+            setReplyTarget(prevReply)
+            setSelectedFile(prevFile)
+            setPreviewUrl(prevPreview)
+            setSelectedImage(prevSelectedImage)
+          }
+          showPopup({
+            type: "error",
+            message: "Could not upload this image. Please try again.",
+          })
+          return
+        }
+
+        imageUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/screenshots/${fileName}`
+        setMessagesWithCache((prev) =>
+          prev.map((m) =>
+            String(m.id) === tempId ? { ...m, image_url: imageUrl } : m
+          )
+        )
       }
-      // Storage RLS requires the authenticated user's id as the first folder.
-      const fileName = `${user.id}/${Date.now()}-${uploadFile.name}`
 
-      const { error: uploadError } = await supabase.storage
-        .from("screenshots")
-        .upload(fileName, uploadFile, {
-          cacheControl: "31536000",
-          upsert: false,
-        })
-      if (uploadError) {
-        logSupabaseError("sendMessage image upload", uploadError, {
-          bucket: "screenshots",
-          path: fileName,
+      const sendPayload = {
+        conversation_id: activeConversationId,
+        sender_id: user.id,
+        content: contentText || "",
+        image_url: imageUrl,
+        channel: null,
+        ...(parentId ? { parent_message_id: parentId } : {}),
+      }
+      const { data: insertedMessage, error: sendErr } = await supabase
+        .from("messages")
+        .insert(sendPayload)
+        .select("id")
+        .single()
+      if (sendErr) {
+        logSupabaseError("sendMessage insert", sendErr, {
+          table: "messages",
+          query: "insert",
+          payload: sendPayload,
           userId: user.id,
         })
-        showPopup({
-          type: "error",
-          message: "Could not upload this image. Please try again.",
-        })
+        setMessagesWithCache((prev) =>
+          markOptimisticMessageFailed(prev, tempId)
+        )
+        if (!isRetry) {
+          setInput((cur) => (cur.trim() ? cur : prevInput))
+        }
+        showPopup(dmSendFeedback(sendErr))
         return
       }
 
-      imageUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/screenshots/${fileName}`
-    }
+      if (insertedMessage?.id) {
+        setMessagesWithCache((prev) =>
+          replaceOptimisticMessage(prev, tempId, {
+            ...optimisticRow,
+            id: insertedMessage.id,
+            image_url: imageUrl,
+            send_status: "sent",
+            client_temp_id: undefined,
+          })
+        )
+        void createDirectMessagePush(supabase, String(insertedMessage.id))
+      }
 
-    const sendPayload = {
-      conversation_id: activeConversationId,
-      sender_id: user.id,
-      content: input || "",
-      image_url: imageUrl,
-      channel: null,
-      ...(replyTargetRef.current?.id
-        ? { parent_message_id: replyTargetRef.current.id }
-        : {}),
-    }
-    const { error: sendErr } = await supabase.from("messages").insert(sendPayload)
-    if (sendErr) {
-      logSupabaseError("sendMessage insert", sendErr, {
-        table: "messages",
-        query: "insert",
-        payload: sendPayload,
-        userId: user.id,
+      const preview = previewFromMessage({
+        content: contentText || null,
+        image_url: imageUrl,
       })
-      showPopup(dmSendFeedback(sendErr))
-      return
-    }
+      const lastMessageAt = await updateConversationPreview(
+        supabase,
+        activeConversationId,
+        preview
+      )
 
-    const preview = previewFromMessage({
-      content: input || null,
-      image_url: imageUrl,
-    })
-    const lastMessageAt = await updateConversationPreview(
-      supabase,
-      activeConversationId,
-      preview
-    )
+      dispatchConversationInboxPatch({
+        conversationId: activeConversationId,
+        last_message: preview,
+        last_message_at: lastMessageAt,
+      })
 
-    dispatchConversationInboxPatch({
-      conversationId: activeConversationId,
-      last_message: preview,
-      last_message_at: lastMessageAt,
-    })
-
-    queueSmoothScrollToBottom()
-    setInput("")
-    setReplyTarget(null)
-    setSelectedFile(null)
-    setSelectedImage(null)
-    setPreviewUrl(null)
-    if (fileRef.current) fileRef.current.value = ""
-    setIsTyping(false)
+      queueSmoothScrollToBottom()
     } finally {
       sendingMessageRef.current = false
       setSendingMessage(false)
@@ -2224,9 +2386,11 @@ export default function DMPage() {
         ? { parent_message_id: replyTargetRef.current.id }
         : {}),
     }
-    const { error: tradeSendErr } = await supabase
+    const { data: insertedTradeMessage, error: tradeSendErr } = await supabase
       .from("messages")
       .insert(tradeSendPayload)
+      .select("id")
+      .single()
     if (tradeSendErr) {
       logSupabaseError("handleSendTrade insert", tradeSendErr, {
         table: "messages",
@@ -2236,6 +2400,10 @@ export default function DMPage() {
       })
       showPopup(dmSendFeedback(tradeSendErr, "Share Failed"))
       return
+    }
+
+    if (insertedTradeMessage?.id) {
+      void createDirectMessagePush(supabase, String(insertedTradeMessage.id))
     }
 
     const lastMsg = previewFromMessage({ type: "trade" })
@@ -2914,7 +3082,13 @@ export default function DMPage() {
                         <div
                           className={`p-3 rounded-xl overflow-visible ${
                             isMe ? "bg-blue-500" : "bg-gray-700"
-                          }`}
+                          } ${
+                            isMe &&
+                            (message.send_status === "sending" ||
+                              message.send_status === "failed")
+                              ? MICRO.softEnter
+                              : ""
+                          }`.trim()}
                         >
                           {message.deleted_for_everyone ? (
                             <p className="text-gray-400 italic">
@@ -2964,6 +3138,22 @@ export default function DMPage() {
                         </div>
                       </div>
                     </div>
+                    {isMe && message.send_status === "sending" ? (
+                      <SyncStatusText status="sending" />
+                    ) : null}
+                    {isMe && message.send_status === "failed" ? (
+                      <SyncStatusText
+                        status="failed"
+                        onRetry={() =>
+                          void sendMessage({
+                            retryTempId: String(message.id),
+                            retryContent: String(message.content ?? ""),
+                            retryImageUrl: message.image_url ?? null,
+                            retryParentId: message.parent_message_id ?? null,
+                          })
+                        }
+                      />
+                    ) : null}
                     {showTimestamp ? (
                       <DmClusterTimestamp
                         createdAt={message.created_at}

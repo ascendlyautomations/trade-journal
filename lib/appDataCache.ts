@@ -2,6 +2,11 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import { isDemoUserId } from "./demo/constants"
 import { DEMO_ACCOUNTS, DEMO_TRADES } from "./demo/fixtures"
 import { TRADES_APP_SELECT } from "./publicAccountPrivacy"
+import { isNativeIos } from "./nativePlatform"
+import {
+  persistDashboardAccounts,
+  persistDashboardTrades,
+} from "./nativeSilentCacheBridge"
 
 /** Shared client-side cache for trades and accounts (module-level, survives route remounts). */
 
@@ -9,6 +14,8 @@ export const ACCOUNTS_SELECT =
   "id, account_number, name, account_size, mode, category, is_active, can_add_trades, note, consistency, max_drawdown, daily_drawdown, profit_target, winning_days, winning_day_threshold" as const
 
 const DEFAULT_STALE_MS = 5 * 60 * 1000
+/** Native dashboard soft freshness window (SWR still serves stale). */
+const NATIVE_DASHBOARD_SOFT_MS = 45_000
 
 /** Recent window for first interactive dashboard paint; full history loads after. */
 export const INITIAL_TRADES_LIMIT = 120
@@ -59,7 +66,15 @@ export function getCachedTrades(userId: string | null | undefined): any[] | null
   if (!userId) return null
   const entry = tradesByUser.get(userId)
   if (!entry || entry.invalidated || entry.loading) return null
-  if (isStale(entry.fetchedAt)) return null
+  const softMs =
+    typeof window !== "undefined" && isNativeIos()
+      ? NATIVE_DASHBOARD_SOFT_MS
+      : DEFAULT_STALE_MS
+  // Native: serve soft-stale for instant paint (SWR). Web: miss when stale.
+  if (isStale(entry.fetchedAt, softMs)) {
+    if (typeof window !== "undefined" && isNativeIos()) return entry.data
+    return null
+  }
   return entry.data
 }
 
@@ -67,7 +82,14 @@ export function getCachedAccounts(userId: string | null | undefined): any[] | nu
   if (!userId) return null
   const entry = accountsByUser.get(userId)
   if (!entry || entry.invalidated || entry.loading) return null
-  if (isStale(entry.fetchedAt)) return null
+  const softMs =
+    typeof window !== "undefined" && isNativeIos()
+      ? NATIVE_DASHBOARD_SOFT_MS
+      : DEFAULT_STALE_MS
+  if (isStale(entry.fetchedAt, softMs)) {
+    if (typeof window !== "undefined" && isNativeIos()) return entry.data
+    return null
+  }
   return entry.data
 }
 
@@ -182,6 +204,7 @@ export function setTradesCache(
     loading: false,
     historyComplete,
   })
+  persistDashboardTrades(userId, trades)
   notify()
 }
 
@@ -199,6 +222,46 @@ export function setAccountsCache(userId: string, accounts: any[]) {
     userId,
     data: accounts,
     fetchedAt: Date.now(),
+    invalidated: false,
+    loading: false,
+  })
+  persistDashboardAccounts(userId, accounts)
+  notify()
+}
+
+/** Hydrate from IndexedDB without clobbering a fresher in-memory entry. */
+export function seedTradesCache(
+  userId: string,
+  trades: any[],
+  fetchedAt: number,
+  options?: { historyComplete?: boolean }
+) {
+  if (!userId) return
+  const prev = tradesByUser.get(userId)
+  if (prev && !prev.invalidated && prev.fetchedAt >= fetchedAt) return
+  tradesByUser.set(userId, {
+    userId,
+    data: trades,
+    fetchedAt,
+    invalidated: false,
+    loading: false,
+    historyComplete: options?.historyComplete ?? true,
+  })
+  notify()
+}
+
+export function seedAccountsCache(
+  userId: string,
+  accounts: any[],
+  fetchedAt: number
+) {
+  if (!userId) return
+  const prev = accountsByUser.get(userId)
+  if (prev && !prev.invalidated && prev.fetchedAt >= fetchedAt) return
+  accountsByUser.set(userId, {
+    userId,
+    data: accounts,
+    fetchedAt,
     invalidated: false,
     loading: false,
   })
@@ -292,7 +355,17 @@ export async function ensureAccountsLoaded(
 
   const cached = getCachedAccounts(userId)
   const entry = accountsByUser.get(userId)
-  if (cached && !options?.force) return cached
+  if (cached && !options?.force) {
+    if (
+      entry &&
+      typeof window !== "undefined" &&
+      isNativeIos() &&
+      isStale(entry.fetchedAt, NATIVE_DASHBOARD_SOFT_MS)
+    ) {
+      void ensureAccountsLoaded(supabase, userId, { force: true })
+    }
+    return cached
+  }
   if (entry?.loading) {
     return new Promise((resolve, reject) => {
       const unsub = subscribeAppDataCache(() => {
@@ -396,6 +469,14 @@ export async function ensureTradesLoaded(
   const cached = getCachedTrades(userId)
   const entry = tradesByUser.get(userId)
   if (cached && !options?.force) {
+    if (
+      entry &&
+      typeof window !== "undefined" &&
+      isNativeIos() &&
+      isStale(entry.fetchedAt, NATIVE_DASHBOARD_SOFT_MS)
+    ) {
+      void ensureTradesLoaded(supabase, userId, { force: true })
+    }
     // Fresh recent window: unblock UI now, finish history in the background.
     if (!entry?.historyComplete) {
       void ensureFullTradesHistory(supabase, userId)

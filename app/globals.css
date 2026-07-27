@@ -435,3 +435,112 @@ input[type="time"]:hover::-webkit-calendar-picker-indicator {
     transform: scale(1);
   }
 }
+
+/* ------------------ MICRO-INTERACTIONS (native feel) ------------------ */
+
+@keyframes tt-micro-like-pop {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.14);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes tt-micro-sync-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@keyframes tt-micro-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes tt-micro-soft-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes tt-micro-rollback {
+  from {
+    opacity: 0.55;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes tt-micro-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.tt-micro-like-pop {
+  animation: tt-micro-like-pop 180ms ease-out;
+}
+
+.tt-micro-sync-pulse {
+  animation: tt-micro-sync-pulse 900ms ease-in-out infinite;
+}
+
+.tt-micro-fade-in {
+  animation: tt-micro-fade-in 180ms ease-out;
+}
+
+.tt-micro-soft-enter {
+  animation: tt-micro-soft-enter 200ms ease-out;
+}
+
+.tt-micro-rollback {
+  animation: tt-micro-rollback 200ms ease-out;
+}
+
+.tt-micro-spinner {
+  width: 0.875rem;
+  height: 0.875rem;
+  animation: tt-micro-spin 0.65s linear infinite;
+}
+
+.tt-micro-status-sending {
+  color: rgb(156 163 175);
+}
+
+.tt-micro-status-failed {
+  color: rgb(248 113 113);
+}
+
+.tt-micro-status-sent {
+  color: rgb(156 163 175 / 0.7);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tt-micro-like-pop,
+  .tt-micro-sync-pulse,
+  .tt-micro-fade-in,
+  .tt-micro-soft-enter,
+  .tt-micro-rollback,
+  .tt-micro-spinner {
+    animation: none !important;
+  }
+}
+

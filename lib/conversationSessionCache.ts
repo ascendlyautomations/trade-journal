@@ -4,6 +4,7 @@ import {
   CONVERSATION_LRU_MAX_SIZE,
   ConversationLruStore,
 } from "./conversationLruStore"
+import { persistConversationSession } from "./nativeSilentCacheBridge"
 
 export { CONVERSATION_LRU_MAX_SIZE }
 
@@ -98,7 +99,7 @@ export function writeConversationSession(
 ) {
   const key = conversationSessionKey(userId, conversationId)
   const now = Date.now()
-  store.set(key, {
+  const full: ConversationSessionSnapshot = {
     ...snapshot,
     conversationId,
     unreadCount: snapshot.unreadCount ?? 0,
@@ -106,6 +107,24 @@ export function writeConversationSession(
     postsById: snapshot.postsById ?? {},
     lastAccessedAt: now,
     fetchedAt: now,
+  }
+  store.set(key, full)
+  persistConversationSession(userId, conversationId, full as unknown as Record<string, unknown>)
+}
+
+export function seedConversationSession(
+  userId: string,
+  conversationId: string,
+  snapshot: ConversationSessionSnapshot
+) {
+  const key = conversationSessionKey(userId, conversationId)
+  if (store.peek(key)) return
+  if (!snapshot || typeof snapshot !== "object") return
+  store.set(key, {
+    ...snapshot,
+    conversationId,
+    lastAccessedAt: snapshot.lastAccessedAt ?? snapshot.fetchedAt ?? Date.now(),
+    fetchedAt: snapshot.fetchedAt ?? Date.now(),
   })
 }
 

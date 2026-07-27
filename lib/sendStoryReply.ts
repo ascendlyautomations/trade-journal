@@ -76,12 +76,22 @@ export async function sendStoryReply(
     channel: null,
   }
 
-  const { error: insertErr } = await client.from("messages").insert(insertPayload)
+  const { data: insertedMessage, error: insertErr } = await client
+    .from("messages")
+    .insert(insertPayload)
+    .select("id")
+    .single()
   if (insertErr) {
     if (isFreePlanDailyDmLimitError(insertErr)) {
       return { ok: false, error: feedbackPresets.directMessageLimitReached().message }
     }
     return { ok: false, error: handleSupabaseError(insertErr) }
+  }
+
+  if (insertedMessage?.id && typeof window !== "undefined") {
+    void import("@/lib/createDirectMessagePush").then(({ createDirectMessagePush }) => {
+      void createDirectMessagePush(client, String(insertedMessage.id))
+    })
   }
 
   const preview = previewFromMessage({

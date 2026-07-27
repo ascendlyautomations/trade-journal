@@ -152,30 +152,36 @@ export default function FollowRequestsPanel({
 
   async function handleApprove(requestId: string) {
     if (busyId) return
+    const snapshot = requests
+    const removed = requests.find((row) => row.id === requestId)
     setBusyId(requestId)
+    setRequests((prev) => prev.filter((row) => row.id !== requestId))
 
     const result = await approveIncomingFollowRequest(supabase, requestId)
     if (!result.ok) {
+      setRequests(snapshot)
       setBusyId(null)
       return
     }
 
-    setRequests((prev) => prev.filter((row) => row.id !== requestId))
     setBusyId(null)
     onResolved?.()
+    void removed
   }
 
   async function handleDecline(requestId: string) {
     if (busyId) return
+    const snapshot = requests
     setBusyId(requestId)
+    setRequests((prev) => prev.filter((row) => row.id !== requestId))
 
     const result = await declineIncomingFollowRequest(supabase, requestId)
     if (!result.ok) {
+      setRequests(snapshot)
       setBusyId(null)
       return
     }
 
-    setRequests((prev) => prev.filter((row) => row.id !== requestId))
     setBusyId(null)
     onResolved?.()
   }

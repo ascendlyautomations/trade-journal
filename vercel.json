@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/push/flush-batches",
+      "schedule": "* * * * *"
+    }
+  ]
+}

@@ -1,7 +1,10 @@
 import type { TradeForLeaderboard } from "@/lib/leaderboardChart"
 import type { ExploreProfile, ExploreTopView } from "@/lib/exploreDiscover"
+import { isNativeIos } from "@/lib/nativePlatform"
+import { persistExploreSession } from "@/lib/nativeSilentCacheBridge"
 
 const DEFAULT_STALE_MS = 5 * 60 * 1000
+const NATIVE_SOFT_MS = 60_000
 
 export type ExploreSessionSnapshot = {
   currentUserId: string | null
@@ -26,9 +29,16 @@ export function readExploreSession(
   userId?: string | null
 ): ExploreSessionSnapshot | null {
   if (!session) return null
-  if (Date.now() - session.fetchedAt > DEFAULT_STALE_MS) {
-    session = null
-    return null
+  const softMs =
+    typeof window !== "undefined" && isNativeIos()
+      ? NATIVE_SOFT_MS
+      : DEFAULT_STALE_MS
+  if (Date.now() - session.fetchedAt > softMs) {
+    // Native: still paint soft-stale; web: miss.
+    if (!(typeof window !== "undefined" && isNativeIos())) {
+      session = null
+      return null
+    }
   }
   if (
     userId !== undefined &&
@@ -41,6 +51,13 @@ export function readExploreSession(
 
 export function writeExploreSession(snapshot: Omit<ExploreSessionSnapshot, "fetchedAt">) {
   session = { ...snapshot, fetchedAt: Date.now() }
+  persistExploreSession(snapshot.currentUserId, session)
+}
+
+export function seedExploreSession(snapshot: ExploreSessionSnapshot) {
+  if (!snapshot || typeof snapshot !== "object") return
+  if (session && session.fetchedAt >= snapshot.fetchedAt) return
+  session = snapshot
 }
 
 export function patchExploreSession(
@@ -48,6 +65,7 @@ export function patchExploreSession(
 ) {
   if (!session) return
   session = { ...session, ...patch, fetchedAt: Date.now() }
+  persistExploreSession(session.currentUserId, session)
 }
 
 export function getExploreTradesForView(
@@ -74,6 +92,7 @@ export function setExploreTradesForView(
       scrollY: 0,
       fetchedAt: Date.now(),
     }
+    persistExploreSession(null, session)
     return
   }
   session = {
@@ -81,6 +100,7 @@ export function setExploreTradesForView(
     tradesByView: { ...session.tradesByView, [view]: trades },
     fetchedAt: Date.now(),
   }
+  persistExploreSession(session.currentUserId, session)
 }
 
 export function invalidateExploreSession() {

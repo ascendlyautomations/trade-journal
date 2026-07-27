@@ -358,6 +358,8 @@ export default function ProfilePostCard({
         count={likeMeta?.count ?? 0}
         ariaLabel={likeMeta?.liked ? "Unlike" : "Like"}
         disabled={likeBusy}
+        syncing={likeBusy}
+        likedPop={!!likeMeta?.liked}
         onClick={(e) => {
           e.stopPropagation()
           onLike?.()

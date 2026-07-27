@@ -36,9 +36,9 @@ export async function resolveAffiliateUserIdFromCode(
 function formatReferralBody(username: string | null | undefined): string {
   const normalized = username ? normalizeProfileUsername(username) : ""
   if (normalized) {
-    return `@${normalized} just signed up using your referral code.`
+    return `@${normalized} signed up using your referral code.`
   }
-  return "A new user just signed up using your referral code."
+  return "A new user signed up using your referral code."
 }
 
 function formatCommissionBody(
@@ -48,9 +48,9 @@ function formatCommissionBody(
   const amountStr = amount.toFixed(2)
   const normalized = username ? normalizeProfileUsername(username) : ""
   if (normalized) {
-    return `@${normalized} became a paying TraxPro subscriber. You earned $${amountStr} in affiliate commission.`
+    return `@${normalized} became a paying TraxPro subscriber. You earned $${amountStr}.`
   }
-  return `A new user became a paying TraxPro subscriber. You earned $${amountStr} in affiliate commission.`
+  return `A referred user became a paying TraxPro subscriber. You earned $${amountStr}.`
 }
 
 async function loadReferredUsername(
@@ -79,7 +79,7 @@ export async function createAffiliateReferralNotification(
 
   const username = await loadReferredUsername(admin, referredUserId)
   const content: AffiliateNotificationContent = {
-    title: "🎉 New Referral!",
+    title: "New referral",
     body: formatReferralBody(username),
     href: "/affiliate/dashboard",
   }
@@ -133,7 +133,7 @@ export async function createAffiliateCommissionNotification(
 
   const username = await loadReferredUsername(admin, referredUserId)
   const content: AffiliateNotificationContent = {
-    title: "💰 Commission Earned!",
+    title: "Commission earned",
     body: formatCommissionBody(username, commissionAmount),
     href: "/affiliate/dashboard",
   }

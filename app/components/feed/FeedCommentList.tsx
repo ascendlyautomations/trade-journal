@@ -18,6 +18,7 @@ type FeedCommentListProps = {
   onReply?: (comment: any) => void
   onRequestDelete?: (comment: any) => void
   onTogglePin?: (comment: any, pinned: boolean) => void
+  onRetryComment?: (comment: any) => void
   deleteMenuClassName?: string
 }
 
@@ -32,6 +33,7 @@ function FeedCommentList({
   onReply,
   onRequestDelete,
   onTogglePin,
+  onRetryComment,
   deleteMenuClassName,
 }: FeedCommentListProps) {
   const { topLevel, repliesByRootId } = useMemo(
@@ -62,6 +64,7 @@ function FeedCommentList({
               onReply={onReply}
               onRequestDelete={onRequestDelete}
               onTogglePin={onTogglePin}
+              onRetryComment={onRetryComment}
               deleteMenuClassName={deleteMenuClassName}
             />
             <CommentReplyThread
@@ -77,6 +80,7 @@ function FeedCommentList({
               onReply={onReply}
               onRequestDelete={onRequestDelete}
               onTogglePin={onTogglePin}
+              onRetryComment={onRetryComment}
               deleteMenuClassName={deleteMenuClassName}
             />
           </div>

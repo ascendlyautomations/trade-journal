@@ -1,4 +1,5 @@
 import type { FeedItem } from "@/app/components/feed/feedPostHelpers"
+import { persistFeedSession } from "@/lib/nativeSilentCacheBridge"
 
 type LikeMeta = { count: number; liked: boolean }
 
@@ -33,6 +34,14 @@ export function readFeedSession(key: string): FeedSessionSnapshot | null {
 
 export function writeFeedSession(key: string, snapshot: FeedSessionSnapshot) {
   feedSessions.set(key, snapshot)
+  persistFeedSession(key, snapshot)
+}
+
+export function seedFeedSession(key: string, snapshot: FeedSessionSnapshot) {
+  const k = key.trim()
+  if (!k || feedSessions.has(k)) return
+  if (!snapshot || typeof snapshot !== "object") return
+  feedSessions.set(k, snapshot)
 }
 
 export function prependFeedPost(key: string, post: any) {

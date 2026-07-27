@@ -76,3 +76,31 @@ export async function filterRecipientsByRoomMessagePreference(
   }
   return allowed
 }
+
+export async function filterRecipientsByRoomMentionPreference(
+  recipientIds: string[]
+): Promise<string[]> {
+  if (recipientIds.length === 0) return []
+
+  const allowed: string[] = []
+  for (const recipientId of recipientIds) {
+    const prefs = await getServerNotificationPreferences(recipientId)
+    if (!prefs.notifications_enabled || !prefs.room_mentions_enabled) continue
+    allowed.push(recipientId)
+  }
+  return allowed
+}
+
+export async function filterRecipientsByDirectMessagePreference(
+  recipientIds: string[]
+): Promise<string[]> {
+  if (recipientIds.length === 0) return []
+
+  const allowed: string[] = []
+  for (const recipientId of recipientIds) {
+    const prefs = await getServerNotificationPreferences(recipientId)
+    if (!prefs.notifications_enabled || !prefs.direct_messages_enabled) continue
+    allowed.push(recipientId)
+  }
+  return allowed
+}

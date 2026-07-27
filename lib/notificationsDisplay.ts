@@ -125,6 +125,8 @@ export type RoomMessageNotificationGroup = {
   read: boolean
   latestAt: string
   totalMessages: number
+  /** True when this group is from Activity room @mentions (not legacy chat rows). */
+  isMention: boolean
   messages: RoomMessageEntry[]
 }
 
@@ -524,7 +526,10 @@ export function buildGroupedNotificationCards(
   const follows = rows.filter((row) => row.type === "follow")
   const followRequests = rows.filter((row) => row.type === "follow_request")
   const roomJoins = rows.filter((row) => row.type === "room_join")
-  const roomMessages = rows.filter((row) => row.type === "room_message")
+  // Legacy `room_message` rows may still exist; new Activity path uses `room_mention` only.
+  const roomMessages = rows.filter(
+    (row) => row.type === "room_message" || row.type === "room_mention"
+  )
   const affiliateNotifications = rows.filter(
     (row) =>
       row.type === "affiliate_referral" || row.type === "affiliate_commission_earned"
@@ -702,6 +707,9 @@ export type RoomMessageMeta = {
   section_id?: string | null
   section_name?: string | null
   message_preview?: string | null
+  sender_username?: string | null
+  sender_name?: string | null
+  is_reply?: boolean | null
 }
 
 function roomMessageGroupKey(meta: RoomMessageMeta): string {
@@ -744,6 +752,7 @@ export function groupRoomMessageNotifications(
       read: sorted.every((row) => row.read),
       latestAt: latest.created_at,
       totalMessages: sorted.length,
+      isMention: sorted.every((row) => row.type === "room_mention"),
       messages: sorted.map((row) => {
         const meta = parseRoomMessageContent(row.content)
         return {
@@ -776,7 +785,14 @@ export function formatRoomMessageGroupTitle(
   return formatRoomChannelTitle(group.room_name, group.section_name)
 }
 
-export function formatRoomMessageGroupSubtitle(totalMessages: number): string {
+export function formatRoomMessageGroupSubtitle(
+  totalMessages: number,
+  opts?: { isMention?: boolean }
+): string {
+  if (opts?.isMention) {
+    if (totalMessages <= 1) return "Mentioned you"
+    return `${totalMessages} mentions`
+  }
   if (totalMessages <= 0) return "New activity"
   if (totalMessages === 1) return "1 new message"
   return `${totalMessages} new messages`
@@ -1050,7 +1066,7 @@ export function getGroupedNotificationHref(
     return "/community"
   }
 
-  if (n.type === "room_message") {
+  if (n.type === "room_message" || n.type === "room_mention") {
     const meta = parseRoomMessageContent(n.content)
     const slug = meta.room_slug?.trim()
     if (slug) {
@@ -1108,7 +1124,7 @@ export function getNotificationHref(
     return "/community"
   }
 
-  if (n.type === "room_message") {
+  if (n.type === "room_message" || n.type === "room_mention") {
     const meta = parseRoomMessageContent(n.content)
     const slug = meta.room_slug?.trim()
     if (slug) {

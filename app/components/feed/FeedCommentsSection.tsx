@@ -35,7 +35,8 @@ type FeedCommentsSectionProps = {
   onSubmitComment: (
     submitContext: unknown,
     text: string,
-    parentCommentId?: string | null
+    parentCommentId?: string | null,
+    retryTempId?: string | null
   ) => Promise<boolean>
   onDeleteComment?: (comment: any) => Promise<boolean>
   onTogglePinComment?: (comment: any, pinned: boolean) => Promise<boolean>
@@ -169,6 +170,21 @@ function FeedCommentsSection({
     }
   }, [onDeleteComment, pendingDelete])
 
+  const handleRetryComment = useCallback(
+    (comment: any) => {
+      if (commentSubmitting) return
+      const text = String(comment.content ?? "").trim()
+      if (!text) return
+      void onSubmitComment(
+        target.submitContext,
+        text,
+        comment.parent_comment_id ?? null,
+        String(comment.id)
+      )
+    },
+    [commentSubmitting, onSubmitComment, target.submitContext]
+  )
+
   const stopPropagation = useCallback((e: React.SyntheticEvent) => {
     e.stopPropagation()
   }, [])
@@ -206,6 +222,7 @@ function FeedCommentsSection({
             }
           : undefined
       }
+      onRetryComment={handleRetryComment}
       deleteMenuClassName="z-[9100]"
     />
   )

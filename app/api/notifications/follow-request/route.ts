@@ -44,6 +44,7 @@ export async function POST(req: Request) {
       user_id: targetId,
       sender_id: user.id,
       type: "follow_request",
+      content: JSON.stringify({ follow_request_id: requestRow.id }),
     })
 
   if (insertErr) {
@@ -61,6 +62,7 @@ export async function POST(req: Request) {
     recipientUserId: targetId,
     type: "follow_request",
     sender_id: user.id,
+    content: JSON.stringify({ follow_request_id: requestRow.id }),
     prefsAlreadyChecked: true,
   })
 

@@ -33,12 +33,23 @@ function isNativeShellRequest(request: NextRequest): boolean {
   return false
 }
 
+function isAppleAppSiteAssociationPath(pathname: string): boolean {
+  return (
+    pathname === "/.well-known/apple-app-site-association" ||
+    pathname === "/apple-app-site-association"
+  )
+}
+
 export function middleware(request: NextRequest) {
   const host = request.headers.get("host") ?? ""
   const forwardedProto = request.headers.get("x-forwarded-proto")
   const url = request.nextUrl.clone()
 
-  if (!isLocalHost(host)) {
+  // Apple fetches AASA per Associated Domain. Do not 308 apex → www for these
+  // paths — both tradetraxs.com and www.tradetraxs.com must serve AASA directly.
+  const aasaPath = isAppleAppSiteAssociationPath(url.pathname)
+
+  if (!isLocalHost(host) && !aasaPath) {
     if (host !== CANONICAL_HOST) {
       url.host = CANONICAL_HOST
       url.protocol = "https:"
@@ -49,6 +60,11 @@ export function middleware(request: NextRequest) {
       url.protocol = "https:"
       return NextResponse.redirect(url, 308)
     }
+  }
+
+  if (aasaPath && !isLocalHost(host) && forwardedProto === "http") {
+    url.protocol = "https:"
+    return NextResponse.redirect(url, 308)
   }
 
   // Capacitor server.url is the site origin (not /native). Send native `/`

@@ -38,6 +38,9 @@ import { invalidateStoriesSession } from "./storiesSessionCache"
 import { resetRoutePrefetchSession } from "./routePrefetch"
 import { warmAppDataCaches, resetDataPrefetchSession } from "./dataPrefetch"
 import { resetNotificationRealtimeSession } from "./notificationRealtime"
+import { clearAllNotificationsSessions } from "./notificationsSessionCache"
+import { clearAllLeaderboardSessions } from "./leaderboardSessionCache"
+import { clearAllNativeSilentCache } from "./nativeSilentCacheBridge"
 import { fetchSettingsProfileRow } from "./settingsProfileSync"
 import { readSettingsProfileCache, writeSettingsProfileCache } from "./settingsProfileCache"
 import { clearAllMessagesInboxSessions } from "./messagesInboxSessionCache"
@@ -298,6 +301,9 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
       clearAllMessagesInboxSessions()
       clearAllRoomSessions()
       clearAllSessionUserDataCaches()
+      clearAllNotificationsSessions()
+      clearAllLeaderboardSessions()
+      void clearAllNativeSilentCache()
       if (signedOutUserId) {
         clearFeedSessionsForUser(signedOutUserId)
         clearConversationSessionsForUser(signedOutUserId)

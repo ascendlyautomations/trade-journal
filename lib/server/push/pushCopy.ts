@@ -5,6 +5,7 @@ import {
   parseRoomMessageContent,
 } from "@/lib/notificationsDisplay"
 import { profilePath } from "@/lib/profileRoutes"
+import { truncatePushPreview } from "@/lib/server/push/dmPushPreview"
 
 export type PushNotificationTarget = {
   type: string
@@ -24,7 +25,8 @@ export type PushNotificationTarget = {
   commentKind?: "comment" | "reply" | "mention"
 }
 
-function displayName(target: PushNotificationTarget): string {
+/** Prefer display name, then username — professional messaging style. */
+export function displayName(target: PushNotificationTarget): string {
   const name = target.senderName?.trim()
   if (name) return name
   const username = target.senderUsername?.trim()
@@ -44,64 +46,177 @@ function parseJsonContent(content: string | null | undefined): Record<string, un
   }
 }
 
-/** Concise native push copy — mirrors inbox semantics, not a second notification system. */
+function stringField(
+  json: Record<string, unknown> | null,
+  key: string
+): string {
+  const value = json?.[key]
+  return typeof value === "string" ? value.trim() : ""
+}
+
+function commentBody(target: PushNotificationTarget): string {
+  const raw = String(target.content ?? "").trim()
+  if (!raw) return ""
+  return truncatePushPreview(raw)
+}
+
+function likeTitle(target: PushNotificationTarget, who: string): string {
+  if (target.comment_id) return `${who} liked your comment`
+  if (target.achievement_post_id) return `${who} liked your achievement`
+  if (target.reel_id) return `${who} liked your reel`
+  if (target.trade_id && !target.post_id && !target.profile_post_id) {
+    return `${who} liked your trade`
+  }
+  return `${who} liked your post`
+}
+
+/** Concise native push copy — professional messaging style, no emojis. */
 export function buildPushAlertCopy(target: PushNotificationTarget): {
   title: string
   body: string
 } {
   const who = displayName(target)
   const type = target.type
+  const json = parseJsonContent(target.content)
 
   if (type === "like") {
-    return { title: "New Like", body: `${who} liked your post` }
+    return { title: likeTitle(target, who), body: "" }
   }
+
+  if (type === "like_batch" || type === "follow_batch") {
+    return {
+      title: stringField(json, "title") || (type === "follow_batch" ? "New followers" : "New likes"),
+      body: stringField(json, "body") || "",
+    }
+  }
+
+  if (type === "like_milestone") {
+    return {
+      title: stringField(json, "title") || "Engagement milestone",
+      body: stringField(json, "body") || "More traders are engaging with your content.",
+    }
+  }
+
   if (type === "comment") {
+    const body = commentBody(target)
     if (target.commentKind === "reply") {
-      return { title: "New Reply", body: `${who} replied to you` }
+      return { title: `${who} replied`, body }
     }
     if (target.commentKind === "mention") {
-      return { title: "Mention", body: `${who} mentioned you` }
+      return { title: `${who} mentioned you`, body }
     }
     if (target.achievement_post_id) {
-      return { title: "New Comment", body: `${who} commented on your achievement` }
+      return { title: `${who} commented on your achievement`, body }
+    }
+    if (target.reel_id) {
+      return { title: `${who} commented on your reel`, body }
     }
     if (target.trade_id && !target.post_id && !target.profile_post_id) {
-      return { title: "New Comment", body: `${who} commented on your trade` }
+      return { title: `${who} commented on your trade`, body }
     }
-    return { title: "New Comment", body: `${who} commented on your post` }
+    return { title: `${who} commented`, body }
   }
+
   if (type === "follow") {
-    return { title: "New Follower", body: `${who} started following you` }
+    return { title: `${who} followed you`, body: "" }
   }
+
   if (type === "follow_request") {
-    return { title: "Follow Request", body: `${who} requested to follow you` }
+    return { title: `${who} requested to follow you`, body: "" }
   }
+
+  if (type === "follow_request_accepted") {
+    return { title: `${who} accepted your follow request`, body: "" }
+  }
+
   if (type === "room_join") {
     const meta = parseRoomJoinContent(target.content)
     const room = meta.room_name?.trim() || "a trade room"
-    return { title: "Room Join", body: `${who} joined ${room}` }
+    return { title: who, body: `joined ${room}` }
   }
+
   if (type === "room_message") {
     const meta = parseRoomMessageContent(target.content)
     const room = meta.room_name?.trim() || "Trade Room"
-    return { title: "Room Message", body: `New message in ${room}` }
+    const preview = meta.message_preview?.trim() || "New message"
+    const isDigest = json?.is_digest === true
+    if (isDigest) {
+      return { title: room, body: preview }
+    }
+    const senderLabel =
+      stringField(json, "sender_name") ||
+      stringField(json, "sender_username") ||
+      who
+    const isReply = json?.is_reply === true
+    if (isReply) {
+      return {
+        title: room,
+        body: `${senderLabel} replied: ${preview}`,
+      }
+    }
+    return {
+      title: room,
+      body: `${senderLabel}: ${preview}`,
+    }
   }
+
+  if (type === "room_mention") {
+    const meta = parseRoomMessageContent(target.content)
+    const room = meta.room_name?.trim() || "Trade Room"
+    const preview = meta.message_preview?.trim() || ""
+    const senderLabel =
+      stringField(json, "sender_name") ||
+      stringField(json, "sender_username") ||
+      who
+    return {
+      title: room,
+      body: preview
+        ? `${senderLabel} mentioned you: ${preview}`
+        : `${senderLabel} mentioned you`,
+    }
+  }
+
   if (type === "affiliate_referral" || type === "affiliate_commission_earned") {
-    const json = parseJsonContent(target.content)
     return {
-      title: String(json?.title ?? "Affiliate"),
-      body: String(json?.body ?? "You have a new affiliate update"),
+      title: stringField(json, "title") || "Affiliate update",
+      body: stringField(json, "body") || "You have a new affiliate update.",
     }
   }
+
   if (type === "trading_report") {
-    const json = parseJsonContent(target.content)
     return {
-      title: String(json?.title ?? "Trading Report"),
-      body: String(json?.body ?? "Your trading report is ready"),
+      title: stringField(json, "title") || "Trading report",
+      body:
+        stringField(json, "body") || "Your trading summary is ready to review.",
     }
   }
+
   if (type === "message") {
-    return { title: "New Message", body: `${who} sent you a message` }
+    const preview = stringField(json, "message_preview") || "New message"
+    const isGroup = json?.is_group === true
+    const groupName = stringField(json, "group_name")
+    const batchCountRaw = json?.batch_count
+    const batchCount =
+      typeof batchCountRaw === "number"
+        ? batchCountRaw
+        : typeof batchCountRaw === "string"
+          ? Number.parseInt(batchCountRaw, 10)
+          : 1
+    const coalesced =
+      Number.isFinite(batchCount) && batchCount > 1
+        ? `${Math.floor(batchCount)} new messages`
+        : null
+
+    if (isGroup && groupName) {
+      return {
+        title: groupName,
+        body: coalesced ?? `${who}: ${preview}`,
+      }
+    }
+    return {
+      title: who,
+      body: coalesced ?? preview,
+    }
   }
 
   return { title: "TradeTraxs", body: "You have a new notification" }
@@ -111,7 +226,7 @@ export function buildPushAlertCopy(target: PushNotificationTarget): {
 export function buildPushDeepLinkHref(target: PushNotificationTarget): string {
   const type = target.type
 
-  if (type === "like" || type === "comment") {
+  if (type === "like" || type === "like_milestone" || type === "like_batch" || type === "comment") {
     if (target.reel_id) {
       return buildFeedDeepLinkHref({
         kind: "reel",
@@ -144,7 +259,17 @@ export function buildPushDeepLinkHref(target: PushNotificationTarget): string {
     return "/notifications"
   }
 
-  if (type === "follow" || type === "follow_request") {
+  if (
+    type === "follow" ||
+    type === "follow_request" ||
+    type === "follow_request_accepted" ||
+    type === "follow_batch"
+  ) {
+    if (type === "follow_batch") {
+      const json = parseJsonContent(target.content)
+      const href = typeof json?.href === "string" ? json.href.trim() : ""
+      if (href.startsWith("/")) return href
+    }
     if (target.sender_id) {
       return profilePath({
         id: String(target.sender_id),
@@ -167,7 +292,7 @@ export function buildPushDeepLinkHref(target: PushNotificationTarget): string {
     return "/community"
   }
 
-  if (type === "room_message") {
+  if (type === "room_message" || type === "room_mention") {
     const meta = parseRoomMessageContent(target.content)
     const slug = meta.room_slug?.trim()
     if (slug) {
@@ -177,6 +302,16 @@ export function buildPushDeepLinkHref(target: PushNotificationTarget): string {
       })
     }
     return "/community"
+  }
+
+  if (type === "message") {
+    const json = parseJsonContent(target.content)
+    const conversationId =
+      typeof json?.conversation_id === "string"
+        ? json.conversation_id.trim()
+        : ""
+    if (conversationId) return `/messages/${conversationId}`
+    return "/messages"
   }
 
   if (type === "affiliate_referral" || type === "affiliate_commission_earned") {

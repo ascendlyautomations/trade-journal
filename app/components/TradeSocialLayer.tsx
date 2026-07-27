@@ -15,14 +15,12 @@ import { supabase } from "../../lib/supabaseClient"
 import { randomId } from "@/lib/randomId"
 import FeedCommentList from "@/app/components/feed/FeedCommentList"
 import EngagementCountButton from "@/app/components/EngagementCountButton"
+import ActionButton from "@/app/components/ui/ActionButton"
 import ReplyComposerStrip from "@/app/components/replies/ReplyComposerStrip"
 import { feedbackPresets } from "@/lib/feedbackPresets"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import { devLog, devWarn } from "@/lib/devLog"
-import {
-  deleteLikeNotification,
-  ensureLikeNotification,
-} from "@/lib/likeNotifications"
+import { toggleContentLike } from "@/lib/toggleContentLike"
 import { ensureCommentNotificationsForInsert } from "@/lib/commentNotifications"
 import {
   deleteTradeComment,
@@ -73,6 +71,7 @@ type TradeSocialContextValue = {
   commentSubmitting: boolean
   handleLike: () => Promise<void>
   handleComment: () => Promise<void>
+  handleRetryComment: (comment: any) => Promise<void>
   handleDeleteComment: (comment: any) => Promise<boolean>
   handleTogglePinComment: (comment: any, pinned: boolean) => Promise<boolean>
 }
@@ -280,75 +279,45 @@ export function TradeSocialProvider({
 
     likeBusyRef.current = true
     setLikeBusy(true)
-    void import("@/lib/nativeHaptics").then(({ hapticLight }) => {
-      hapticLight("like")
-    })
+
+    const prevLiked = liked
+    const prevLikes = likes
+    const meta = { liked: prevLiked, count: prevLikes }
 
     try {
-    const { data: existing } = await supabase
-      .from("trade_likes")
-      .select("id")
-      .eq("trade_id", resolvedId)
-      .eq("user_id", currentUserId)
-      .maybeSingle()
-
-    if (existing) {
-      const { error } = await supabase
-        .from("trade_likes")
-        .delete()
-        .eq("trade_id", resolvedId)
-        .eq("user_id", currentUserId)
-
-      if (error) {
-        console.error("Unlike trade error:", error)
-        return
-      }
-
-      if (!suppressNotifications) {
-        const receiverId =
-          tradeOwnerUserId != null ? String(tradeOwnerUserId).trim() : ""
-        if (receiverId && receiverId !== currentUserId) {
-          await deleteLikeNotification(supabase, {
-            recipientUserId: receiverId,
-            senderUserId: currentUserId,
-            target: { kind: "trade", tradeId: resolvedId },
-          })
-        }
-      }
-
-      setLiked(false)
-      setLikes((prev) => Math.max(0, prev - 1))
-    } else {
-      const { error } = await supabase.from("trade_likes").insert({
-        trade_id: resolvedId,
-        user_id: currentUserId,
+      const ok = await toggleContentLike(supabase, {
+        kind: "trade",
+        contentId: resolvedId,
+        userId: currentUserId,
+        ownerUserId: suppressNotifications
+          ? null
+          : tradeOwnerUserId != null
+            ? String(tradeOwnerUserId)
+            : null,
+        meta,
+        onMetaChange: (next) => {
+          setLiked(next.liked)
+          setLikes(next.count)
+          patchTradeSocialLikes(resolvedId, next.liked, next.count)
+        },
       })
-
-      if (error) {
-        console.error("Like trade error:", error)
-        return
+      if (!ok) {
+        setLiked(prevLiked)
+        setLikes(prevLikes)
       }
-
-      setLiked(true)
-      setLikes((prev) => prev + 1)
-
-      if (!suppressNotifications) {
-        const receiverId =
-          tradeOwnerUserId != null ? String(tradeOwnerUserId).trim() : ""
-        if (receiverId && receiverId !== currentUserId) {
-          await ensureLikeNotification(supabase, {
-            recipientUserId: receiverId,
-            senderUserId: currentUserId,
-            target: { kind: "trade", tradeId: resolvedId },
-          })
-        }
-      }
-    }
     } finally {
       likeBusyRef.current = false
       setLikeBusy(false)
     }
-  }, [resolvedId, currentUserId, tradeOwnerUserId, suppressNotifications])
+  }, [
+    resolvedId,
+    currentUserId,
+    tradeOwnerUserId,
+    suppressNotifications,
+    liked,
+    likes,
+    likeBusy,
+  ])
 
   const handleComment = useCallback(async () => {
     if (
@@ -361,50 +330,68 @@ export function TradeSocialProvider({
       return
     }
 
+    const text = newComment.trim()
+    const parentCommentId = replyTargetRef.current?.parentCommentId ?? null
+    const tempId = `temp-c-${Date.now()}`
+    const optimistic = {
+      id: tempId,
+      trade_id: resolvedId,
+      user_id: currentUserId,
+      content: text,
+      created_at: new Date().toISOString(),
+      parent_comment_id: parentCommentId,
+      sync_status: "posting",
+      profiles: { username: null, avatar_url: null },
+    }
+
     commentSubmittingRef.current = true
     setCommentSubmitting(true)
+    setComments((prev) => [...prev, optimistic])
+    setNewComment("")
+    setReplyTarget(null)
 
     try {
-    const { data, error } = await supabase
-      .from("trade_comments")
-      .insert({
-        trade_id: resolvedId,
-        user_id: currentUserId,
-        content: newComment.trim(),
-        ...(replyTargetRef.current?.parentCommentId
-          ? { parent_comment_id: replyTargetRef.current.parentCommentId }
-          : {}),
-      })
-      .select("*, profiles(username, avatar_url)")
-      .single()
-
-    if (error) {
-      console.error("Trade comment error:", error)
-      showPopup({ type: "error", message: handleSupabaseError(error) })
-      return
-    }
-
-    if (data) {
-      const parentCommentId = replyTargetRef.current?.parentCommentId ?? null
-      const insertedRow = parentCommentId
-        ? { ...data, parent_comment_id: parentCommentId }
-        : data
-      setComments((prev) => [...prev, insertedRow])
-      setNewComment("")
-      setReplyTarget(null)
-
-      if (!suppressNotifications) {
-        await ensureCommentNotificationsForInsert(supabase, {
-          commentId: String(insertedRow.id),
-          senderUserId: currentUserId,
-          content: newComment.trim(),
-          target: { kind: "trade", tradeId: resolvedId },
-          ownerUserId: tradeOwnerUserId,
-          parentCommentId,
-          existingComments: comments,
+      const { data, error } = await supabase
+        .from("trade_comments")
+        .insert({
+          trade_id: resolvedId,
+          user_id: currentUserId,
+          content: text,
+          ...(parentCommentId ? { parent_comment_id: parentCommentId } : {}),
         })
+        .select("*, profiles(username, avatar_url)")
+        .single()
+
+      if (error) {
+        console.error("Trade comment error:", error)
+        setComments((prev) =>
+          prev.map((c) =>
+            c.id === tempId ? { ...c, sync_status: "failed" } : c
+          )
+        )
+        return
       }
-    }
+
+      if (data) {
+        const insertedRow = parentCommentId
+          ? { ...data, parent_comment_id: parentCommentId }
+          : data
+        setComments((prev) =>
+          prev.map((c) => (c.id === tempId ? insertedRow : c))
+        )
+
+        if (!suppressNotifications) {
+          await ensureCommentNotificationsForInsert(supabase, {
+            commentId: String(insertedRow.id),
+            senderUserId: currentUserId,
+            content: text,
+            target: { kind: "trade", tradeId: resolvedId },
+            ownerUserId: tradeOwnerUserId,
+            parentCommentId,
+            existingComments: comments,
+          })
+        }
+      }
     } finally {
       commentSubmittingRef.current = false
       setCommentSubmitting(false)
@@ -417,8 +404,69 @@ export function TradeSocialProvider({
     comments,
     tradeOwnerUserId,
     suppressNotifications,
-    showPopup,
   ])
+
+  const handleRetryComment = useCallback(
+    async (comment: any) => {
+      if (
+        !resolvedId ||
+        !currentUserId ||
+        commentSubmittingRef.current ||
+        commentSubmitting
+      ) {
+        return
+      }
+
+      const tempId = String(comment.id)
+      const text = String(comment.content ?? "").trim()
+      if (!text || !tempId.startsWith("temp-")) return
+
+      const parentCommentId = comment.parent_comment_id ?? null
+      commentSubmittingRef.current = true
+      setCommentSubmitting(true)
+      setComments((prev) =>
+        prev.map((c) =>
+          c.id === tempId ? { ...c, sync_status: "posting" } : c
+        )
+      )
+
+      try {
+        const { data, error } = await supabase
+          .from("trade_comments")
+          .insert({
+            trade_id: resolvedId,
+            user_id: currentUserId,
+            content: text,
+            ...(parentCommentId ? { parent_comment_id: parentCommentId } : {}),
+          })
+          .select("*, profiles(username, avatar_url)")
+          .single()
+
+        if (error) {
+          console.error("Trade comment retry error:", error)
+          setComments((prev) =>
+            prev.map((c) =>
+              c.id === tempId ? { ...c, sync_status: "failed" } : c
+            )
+          )
+          return
+        }
+
+        if (data) {
+          const insertedRow = parentCommentId
+            ? { ...data, parent_comment_id: parentCommentId }
+            : data
+          setComments((prev) =>
+            prev.map((c) => (c.id === tempId ? insertedRow : c))
+          )
+        }
+      } finally {
+        commentSubmittingRef.current = false
+        setCommentSubmitting(false)
+      }
+    },
+    [resolvedId, currentUserId, commentSubmitting]
+  )
 
   const handleDeleteComment = useCallback(
     async (comment: any) => {
@@ -529,6 +577,7 @@ export function TradeSocialProvider({
       commentSubmitting,
       handleLike,
       handleComment,
+      handleRetryComment,
       handleDeleteComment,
       handleTogglePinComment,
     }
@@ -549,6 +598,7 @@ export function TradeSocialProvider({
     commentSubmitting,
     handleLike,
     handleComment,
+    handleRetryComment,
     handleDeleteComment,
     handleTogglePinComment,
   ])
@@ -621,6 +671,8 @@ export function TradeSocialEngagementBar({
         count={likes}
         ariaLabel={liked ? "Unlike" : "Like"}
         disabled={likeDisabled}
+        syncing={likeBusy}
+        likedPop={liked}
         onClick={(e) => {
           e.stopPropagation()
           void handleLike()
@@ -662,6 +714,7 @@ export function TradeSocialCommentsSection({
     replyTarget,
     setReplyTarget,
     handleComment,
+    handleRetryComment,
     handleDeleteComment,
     handleTogglePinComment,
     currentUserId,
@@ -770,6 +823,9 @@ export function TradeSocialCommentsSection({
       onTogglePin={(comment, pinned) => {
         void handleTogglePinComment(comment, pinned)
       }}
+      onRetryComment={(comment) => {
+        void handleRetryComment(comment)
+      }}
     />
   )
 
@@ -810,9 +866,11 @@ export function TradeSocialCommentsSection({
             className="flex-1 min-w-0 rounded-lg border border-gray-600 bg-[#1e293b] p-2 text-sm text-white placeholder:text-gray-400"
           />
 
-          <button
+          <ActionButton
             type="button"
-            disabled={!newComment.trim() || commentSubmitting}
+            disabled={!newComment.trim()}
+            syncing={commentSubmitting}
+            syncingLabel="Posting…"
             onClick={(e) => {
               e.stopPropagation()
               void handleComment()
@@ -820,7 +878,7 @@ export function TradeSocialCommentsSection({
             className="shrink-0 rounded-lg bg-blue-500 px-3 text-sm font-medium text-white disabled:opacity-40"
           >
             Post
-          </button>
+          </ActionButton>
           </div>
         </div>
       ) : null

@@ -9,6 +9,7 @@ import {
   sanitizeDrawdownLimitInput,
 } from "./dashboardGearUtils"
 import { DASHBOARD_MOBILE_GEAR_BTN_CLASS } from "./dashboardHeaderMobileUi"
+import ActionButton from "@/app/components/ui/ActionButton"
 
 export type DashboardGearSettingsProps = {
   showControls: boolean
@@ -183,17 +184,19 @@ export default function DashboardGearSettings({
 
               <div className="mt-1 border-t border-white/10 pt-3">
                 <div className="flex gap-2">
-                  <button
+                  <ActionButton
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation()
                       onSaveGear()
                     }}
-                    disabled={savingGearSettings || !hasUser}
+                    disabled={!hasUser}
+                    syncing={savingGearSettings}
+                    syncingLabel="Saving…"
                     className="flex-1 rounded-lg bg-blue-500 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-blue-500"
                   >
-                    {savingGearSettings ? "Saving…" : "Save"}
-                  </button>
+                    Save
+                  </ActionButton>
                   <button
                     type="button"
                     onClick={(e) => {

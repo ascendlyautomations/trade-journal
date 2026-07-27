@@ -56,11 +56,8 @@ import {
   pinCommentByKind,
   resolveCommentPinTarget,
 } from "@/lib/pinComment"
-import {
-  deleteLikeNotification,
-  ensureLikeNotification,
-} from "@/lib/likeNotifications"
 import { ensureCommentNotificationsForInsert } from "@/lib/commentNotifications"
+import { toggleContentLike } from "@/lib/toggleContentLike"
 import {
   PROFILE_POST_COMMENT_INSERT_SELECT,
   insertProfilePostCommentNotifications,
@@ -74,7 +71,6 @@ import {
   fetchAchievementPostIdsByAchievementIds,
   fetchAchievementPostById,
   insertAchievementPostCommentNotifications,
-  insertAchievementPostLikeNotification,
   loadAchievementPostEngagementMaps,
   withInsertedAchievementPostParentCommentId,
 } from "@/lib/achievementPostEngagement"
@@ -2126,46 +2122,19 @@ function ProfilePageContent() {
     setLikeBusyByPost((prev) => ({ ...prev, [key]: true }))
 
     try {
-    const meta = likesByPost[key] || { count: 0, liked: false }
-    const postRow = posts.find((p) => String(p.id) === key)
-    const ownerId = profilePostOwnerUserId(postRow ?? { user_id: profile?.id })
-    if (meta.liked) {
-      const { error } = await supabase
-        .from("profile_post_likes")
-        .delete()
-        .eq("profile_post_id", key)
-        .eq("user_id", currentUserId)
-      if (error) return console.error(error)
-      if (ownerId) {
-        await deleteLikeNotification(supabase, {
-          recipientUserId: ownerId,
-          senderUserId: currentUserId,
-          target: { kind: "profile_post", profilePostId: key },
-        })
-      }
-      setLikesByPost((prev) => ({
-        ...prev,
-        [key]: { count: Math.max(0, meta.count - 1), liked: false },
-      }))
-      return
-    }
-    const { error } = await supabase.from("profile_post_likes").insert({
-      profile_post_id: key,
-      user_id: currentUserId,
-    })
-    if (error) return console.error(error)
-    setLikesByPost((prev) => ({
-      ...prev,
-      [key]: { count: meta.count + 1, liked: true },
-    }))
-
-    if (ownerId) {
-      await ensureLikeNotification(supabase, {
-        recipientUserId: ownerId,
-        senderUserId: currentUserId,
-        target: { kind: "profile_post", profilePostId: key },
+      const meta = likesByPost[key] || { count: 0, liked: false }
+      const postRow = posts.find((p) => String(p.id) === key)
+      const ownerId = profilePostOwnerUserId(postRow ?? { user_id: profile?.id })
+      await toggleContentLike(supabase, {
+        kind: "profile_post",
+        contentId: key,
+        userId: currentUserId,
+        ownerUserId: ownerId,
+        meta,
+        onMetaChange: (next) => {
+          setLikesByPost((prev) => ({ ...prev, [key]: next }))
+        },
       })
-    }
     } finally {
       likeBusyRef.current.delete(key)
       setLikeBusyByPost((prev) => ({ ...prev, [key]: false }))
@@ -2268,45 +2237,16 @@ function ProfilePageContent() {
     try {
       const meta = likesByPost[key] || { count: 0, liked: false }
       const ownerId = profile?.id ? String(profile.id) : null
-
-      if (meta.liked) {
-        const { error } = await supabase
-          .from("achievement_post_likes")
-          .delete()
-          .eq("achievement_post_id", key)
-          .eq("user_id", currentUserId)
-        if (error) return console.error(error)
-        if (ownerId) {
-          await deleteLikeNotification(supabase, {
-            recipientUserId: ownerId,
-            senderUserId: currentUserId,
-            target: { kind: "achievement_post", achievementPostId: key },
-          })
-        }
-        setLikesByPost((prev) => ({
-          ...prev,
-          [key]: { count: Math.max(0, meta.count - 1), liked: false },
-        }))
-        return
-      }
-
-      const { error } = await supabase.from("achievement_post_likes").insert({
-        achievement_post_id: key,
-        user_id: currentUserId,
+      await toggleContentLike(supabase, {
+        kind: "achievement_post",
+        contentId: key,
+        userId: currentUserId,
+        ownerUserId: ownerId,
+        meta,
+        onMetaChange: (next) => {
+          setLikesByPost((prev) => ({ ...prev, [key]: next }))
+        },
       })
-      if (error) return console.error(error)
-      setLikesByPost((prev) => ({
-        ...prev,
-        [key]: { count: meta.count + 1, liked: true },
-      }))
-
-      if (ownerId) {
-        await insertAchievementPostLikeNotification(supabase, {
-          achievementPostId: key,
-          ownerUserId: ownerId,
-          senderUserId: currentUserId,
-        })
-      }
     } finally {
       likeBusyRef.current.delete(key)
       setLikeBusyByPost((prev) => ({ ...prev, [key]: false }))
@@ -2703,12 +2643,15 @@ function ProfilePageContent() {
 
   async function handleSavePost(postId: string) {
     if (!currentUserId) return
+    setOpenMenuId(null)
     const { error } = await supabase.from("saved_posts").insert({
       user_id: currentUserId,
       post_id: postId,
     })
-    if (error) console.error(error)
-    setOpenMenuId(null)
+    if (error && error.code !== "23505") {
+      console.error(error)
+      showPopup({ type: "error", message: "Could not save post." })
+    }
   }
 
   function openEditTradeModal(trade: any) {
@@ -2716,26 +2659,37 @@ function ProfilePageContent() {
   }
 
   async function handlePinTrade(trade: any) {
-    const { error } = await supabase
-      .from("trades")
-      .update({ is_pinned: !trade.is_pinned })
-      .eq("id", trade.id)
-
-    if (error) {
-      console.error(error)
-      return
-    }
-
+    const nextPinned = !trade.is_pinned
+    const prevPinned = trade.is_pinned
     setAllTrades((prev) =>
       prev.map((t) =>
-        String(t.id) === String(trade.id) ? { ...t, is_pinned: !t.is_pinned } : t
+        String(t.id) === String(trade.id) ? { ...t, is_pinned: nextPinned } : t
       )
     )
     setAnalyticsTradeRows((prev) =>
       prev.map((t) =>
-        String(t.id) === String(trade.id) ? { ...t, is_pinned: !t.is_pinned } : t
+        String(t.id) === String(trade.id) ? { ...t, is_pinned: nextPinned } : t
       )
     )
+
+    const { error } = await supabase
+      .from("trades")
+      .update({ is_pinned: nextPinned })
+      .eq("id", trade.id)
+
+    if (error) {
+      console.error(error)
+      setAllTrades((prev) =>
+        prev.map((t) =>
+          String(t.id) === String(trade.id) ? { ...t, is_pinned: prevPinned } : t
+        )
+      )
+      setAnalyticsTradeRows((prev) =>
+        prev.map((t) =>
+          String(t.id) === String(trade.id) ? { ...t, is_pinned: prevPinned } : t
+        )
+      )
+    }
   }
 
   const performDeleteTrade = useCallback(async (tradeId: string) => {
@@ -2743,7 +2697,9 @@ function ProfilePageContent() {
       requestDemoSignup("delete")
       return
     }
-    await deleteUserTrade(supabase, tradeId)
+    const snapshotAll = allTrades
+    const snapshotAnalytics = analyticsTradeRows
+    const snapshotSummary = summaryTrades
     setAllTrades((prev) => prev.filter((t) => String(t.id) !== String(tradeId)))
     setAnalyticsTradeRows((prev) =>
       prev.filter((t) => String(t.id) !== String(tradeId))
@@ -2754,7 +2710,15 @@ function ProfilePageContent() {
     setSelectedTradeDetail((prev) =>
       prev && String(prev.id) === String(tradeId) ? null : prev
     )
-  }, [])
+    try {
+      await deleteUserTrade(supabase, tradeId)
+    } catch (err) {
+      console.error(err)
+      setAllTrades(snapshotAll)
+      setAnalyticsTradeRows(snapshotAnalytics)
+      setSummaryTrades(snapshotSummary)
+    }
+  }, [allTrades, analyticsTradeRows, summaryTrades])
 
   const { requestDelete: handleDeleteTrade, confirmModalProps: deleteTradeConfirmProps } =
     useDeleteTradeConfirmation(performDeleteTrade)
