@@ -8,6 +8,8 @@ import DetailModalImage from "@/app/components/ui/DetailModalImage"
 import ImageLightbox from "@/app/components/ui/ImageLightbox"
 import { PostInteractionsEngagement } from "@/app/components/PostInteractions"
 import TradeCardTimingBlock from "@/app/components/TradeCardTimingBlock"
+import ReelThumbnailPreview from "@/app/components/ReelThumbnailPreview"
+import CopyTradedBadge from "@/app/components/trade/CopyTradedBadge"
 import ExpandableText from "@/app/components/ui/ExpandableText"
 import { CommentFocusCompactStrip } from "@/app/components/comments/CommentFocusCompactStrip"
 import MobileCommentFocusLayout from "@/app/components/comments/MobileCommentFocusLayout"
@@ -17,12 +19,14 @@ import {
   formatSignedPnlDisplay,
 } from "@/lib/formatDisplay"
 import { resolveTradePoints } from "@/lib/resolveTradePoints"
+import { isCopyTradedMode } from "@/lib/tradeMode"
 import FeedCommentsSection from "./FeedCommentsSection"
 import FeedPostHeader from "./FeedPostHeader"
 import FeedPostMetaRow from "./FeedPostMetaRow"
 import {
   feedCommentTarget,
   getModeStyles,
+  normalizeFeedAccountType,
   postAttachedReel,
   postImageSrc,
   postPublicDescription,
@@ -109,14 +113,19 @@ export default function FeedPostDetailModal({
       ticker: tradeJoin?.ticker != null ? String(tradeJoin.ticker) : "—",
       dir: tradeJoin?.direction != null ? String(tradeJoin.direction) : "—",
       acctNorm: (() => {
-        const raw = String(tradeJoin?.account_type ?? "").trim().toLowerCase()
+        const raw = normalizeFeedAccountType(
+          tradeJoin?.account_type ?? tradeJoin?.mode
+        )
         return formatPublicAccountTypeLabel(raw) ?? raw
       })(),
-      acctStyleKey: String(tradeJoin?.account_type ?? "").trim().toLowerCase(),
+      acctStyleKey: normalizeFeedAccountType(
+        tradeJoin?.account_type ?? tradeJoin?.mode
+      ),
       pnl,
       pnlPositive: !Number.isNaN(pnl) && pnl >= 0,
       points: resolveTradePoints(tradeJoin),
       timingTrade: tradeJoin,
+      showCopyBadge: isCopyTradedMode(tradeJoin),
       postedAt: post.created_at,
       avatarUrl,
       username: post.profiles?.username || "User",
@@ -124,6 +133,12 @@ export default function FeedPostDetailModal({
   }, [post])
 
   const attachedReel = useMemo(() => postAttachedReel(post), [post])
+
+  const openAttachedReel = useCallback(() => {
+    if (attachedReel && onOpenAttachedReel) {
+      onOpenAttachedReel(post, attachedReel)
+    }
+  }, [attachedReel, onOpenAttachedReel, post])
 
   const pnlMeta = (
     <>
@@ -212,7 +227,12 @@ export default function FeedPostDetailModal({
                 <span className="min-w-0 truncate">
                   {modalPostDetails.ticker} • {modalPostDetails.dir}
                 </span>
-                {modalPostDetails.acctNorm ? (
+                {modalPostDetails.showCopyBadge ? (
+                  <CopyTradedBadge
+                    trade={modalPostDetails.timingTrade}
+                    className="shrink-0"
+                  />
+                ) : modalPostDetails.acctNorm ? (
                   <span
                     className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] md:text-xs ${getModeStyles(modalPostDetails.acctStyleKey)}`}
                   >
@@ -247,10 +267,20 @@ export default function FeedPostDetailModal({
               trade={modalPostDetails.timingTrade ?? {}}
               onViewReel={
                 attachedReel && onOpenAttachedReel
-                  ? () => onOpenAttachedReel(post, attachedReel)
+                  ? openAttachedReel
                   : undefined
               }
             />
+          ) : null}
+
+          {attachedReel && onOpenAttachedReel ? (
+            <div className="pt-1">
+              <ReelThumbnailPreview
+                reel={attachedReel}
+                onClick={openAttachedReel}
+                maxWidthClass="max-w-[140px]"
+              />
+            </div>
           ) : null}
         </div>
       }

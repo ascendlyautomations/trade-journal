@@ -21,6 +21,8 @@ import MobileCommentFocusLayout from "@/app/components/comments/MobileCommentFoc
 import { postImageSrc } from "@/app/components/feed/feedPostHelpers"
 import { ProfileAvatarImg } from "@/app/components/SafeProfileAvatar"
 import { formatPublicAccountTypeLabel } from "@/lib/publicAccountPrivacy"
+import { isCopyTradedMode } from "@/lib/tradeMode"
+import CopyTradedBadge from "@/app/components/trade/CopyTradedBadge"
 import type { ReelRow } from "@/lib/reels"
 import type {
   ProfileCardIdentity,
@@ -90,7 +92,11 @@ export default function ProfileTradeCard({
   const pnl = Number.isFinite(pnlRaw) ? pnlRaw : NaN
   const direction = trade.direction != null ? String(trade.direction) : "—"
   const ticker = trade.ticker != null ? String(trade.ticker) : "—"
-  const accountTypeNorm = String(trade.account_type ?? "").trim().toLowerCase()
+  const accountTypeNorm = String(
+    trade.account_type ?? trade.mode ?? ""
+  )
+    .trim()
+    .toLowerCase()
   const rr =
     trade.rr != null && trade.rr !== "" ? formatRR(trade.rr) : "—"
   const resolvedPoints = resolveTradePoints(trade)
@@ -102,6 +108,7 @@ export default function ProfileTradeCard({
   const desc = trade.public_description
     ? String(trade.public_description).trim()
     : ""
+  const showCopyBadge = isCopyTradedMode(trade)
 
   useEffect(() => {
     // This external focus request intentionally re-opens comments for deep links.
@@ -161,7 +168,9 @@ export default function ProfileTradeCard({
             </span>
           )}
 
-          {accountTypeNorm ? (
+          {showCopyBadge ? (
+            <CopyTradedBadge trade={trade} className="shrink-0" />
+          ) : accountTypeNorm ? (
             <span
               className={`
           shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium md:text-xs

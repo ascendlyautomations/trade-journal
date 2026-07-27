@@ -97,7 +97,7 @@ export function formatPublicAccountTypeLabel(
   if (norm === "personal") return "Personal"
   if (norm === "sim") return "Sim"
   if (norm === "broker") return "Broker"
-  if (norm === "prop firm" || norm === "prop_firm" || norm === "propfirm") {
+  if (norm === "prop firm" || norm === "prop_firm" || norm === "propfirm" || norm === "prop") {
     return "Prop Firm"
   }
   return norm.charAt(0).toUpperCase() + norm.slice(1)
