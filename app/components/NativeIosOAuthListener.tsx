@@ -11,7 +11,7 @@ import {
 
 /**
  * Capacitor iOS only: listen for OAuth deep-link return
- * (`com.tradetraxs.app://auth/callback`) and finish the Supabase session.
+ * (`com.tradetraxs.ios://auth/callback`) and finish the Supabase session.
  * No-ops on web / Android.
  */
 export default function NativeIosOAuthListener() {

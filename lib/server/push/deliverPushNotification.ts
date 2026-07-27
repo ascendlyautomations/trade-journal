@@ -128,7 +128,14 @@ export async function deliverIosPushNotification(
   input: DeliverPushInput
 ): Promise<void> {
   try {
-    if (!isApnsConfigured()) return
+    if (!isApnsConfigured()) {
+      if (process.env.NODE_ENV === "development") {
+        console.warn(
+          "[push] APNs env not configured — skipping iOS delivery. Set APNS_KEY_ID, APNS_TEAM_ID, APNS_PRIVATE_KEY."
+        )
+      }
+      return
+    }
 
     const recipientUserId = input.recipientUserId?.trim()
     if (!recipientUserId) return

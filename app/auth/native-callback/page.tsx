@@ -13,7 +13,7 @@ import { NATIVE_IOS_OAUTH_SCHEME } from "@/lib/nativeIosOAuthUrls"
  * leaving the user on tradetraxs.com inside the auth popup.
  *
  * This page immediately forwards query + hash to:
- *   com.tradetraxs.app://auth/callback?...
+ *   com.tradetraxs.ios://auth/callback?...
  * so the Capacitor app receives appUrlOpen and can dismiss the sheet.
  *
  * Web browsers should not normally hit this route; if they do, show a

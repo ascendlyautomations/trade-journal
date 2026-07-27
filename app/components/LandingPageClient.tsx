@@ -231,7 +231,7 @@ export default function LandingPageClient({
         />
 
         <div className="relative z-10">
-          <div className="relative flex flex-col items-center px-4 pt-[calc(6rem+var(--safe-area-top))] pb-14 text-center md:px-6 md:pt-36 md:pb-28">
+          <div className="relative flex flex-col items-center px-4 pt-24 pb-14 text-center md:px-6 md:pt-36 md:pb-28">
             <div
               className="pointer-events-none absolute inset-0 bg-gradient-to-r from-blue-500/10 via-emerald-500/10 to-transparent blur-3xl opacity-30"
               aria-hidden

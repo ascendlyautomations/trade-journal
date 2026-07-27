@@ -29,7 +29,8 @@ const appOrigin = isProduction
   : `http://${devServerHost}:3000`
 
 const config: CapacitorConfig = {
-  appId: 'com.tradetraxs.app',
+  // Must match Xcode PRODUCT_BUNDLE_IDENTIFIER and lib/nativeIosIdentity.ts
+  appId: 'com.tradetraxs.ios',
   appName: 'TradeTraxs',
   // Stub directory required by Capacitor sync. Not the application bundle.
   webDir: 'www',
@@ -67,7 +68,8 @@ const config: CapacitorConfig = {
       // Tint the area behind the keyboard with backgroundColor (#0b1f3a).
       autoBackdropColor: 'auto',
     },
-    // Foreground: badge only — avoid duplicate banners when in-app UI updates.
+    // Foreground presentation: badge only (in-app UI + Navbar already refresh).
+    // Background / quit: iOS still shows the APNs alert + sound from the payload.
     PushNotifications: {
       presentationOptions: ['badge'],
     },

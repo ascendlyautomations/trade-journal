@@ -7,7 +7,7 @@ const TOKEN_KEY = "tt_ios_push_device_token_v1"
 let registrationInFlight: Promise<void> | null = null
 let listenersAttached = false
 let lastRegisteredToken: string | null = null
-/** Once registration proves push is unavailable (e.g. no aps-environment), skip further attempts this session. */
+/** Once registration proves push is unavailable (e.g. missing aps-environment), skip further attempts this session. */
 let pushCapabilityUnavailable = false
 
 function readDenied(): boolean {
@@ -48,7 +48,15 @@ export function getStoredIosPushToken(): string | null {
   }
 }
 
+/** TEMPORARY diagnostics — never log full device tokens. Remove after verification. */
+function maskDeviceToken(token: string): string {
+  const t = token.trim()
+  if (t.length < 14) return "***"
+  return `${t.slice(0, 8)}...${t.slice(-6)}`
+}
+
 async function postRegister(deviceToken: string) {
+  const tokenPreview = maskDeviceToken(deviceToken)
   let appVersion: string | null = null
   try {
     const { Device } = await import("@capacitor/device")
@@ -57,6 +65,11 @@ async function postRegister(deviceToken: string) {
   } catch {
     /* ignore */
   }
+
+  // TEMPORARY diagnostics
+  console.info("[ios-push:temp] registration request → /api/push/register", {
+    tokenPreview,
+  })
 
   const headers = await supabaseBearerHeaders()
   const res = await fetch("/api/push/register", {
@@ -71,8 +84,22 @@ async function postRegister(deviceToken: string) {
       appVersion,
     }),
   })
+
+  const text = await res.text().catch(() => "")
+  // TEMPORARY diagnostics
+  console.info("[ios-push:temp] registration response", {
+    tokenPreview,
+    status: res.status,
+    ok: res.ok,
+    body: text.slice(0, 200),
+  })
+
   if (!res.ok) {
-    const text = await res.text().catch(() => "")
+    console.error("[ios-push:temp] registration failed", {
+      tokenPreview,
+      status: res.status,
+      body: text.slice(0, 200),
+    })
     throw new Error(`register failed: ${res.status} ${text}`)
   }
   lastRegisteredToken = deviceToken
@@ -143,16 +170,32 @@ async function ensureListeners(
   await PushNotifications.addListener("registration", (token) => {
     const value = String(token.value ?? "").trim()
     if (!value) return
-    void postRegister(value).catch(() => {
+    // TEMPORARY diagnostics — masked token only
+    console.info("[ios-push:temp] APNs token received from iOS", {
+      tokenPreview: maskDeviceToken(value),
+    })
+    void postRegister(value).catch((err) => {
+      console.error("[ios-push:temp] postRegister failed (will retry)", {
+        tokenPreview: maskDeviceToken(value),
+        error: err instanceof Error ? err.message : String(err),
+      })
       // Retry once after a short delay — silent on failure (e.g. offline).
       window.setTimeout(() => {
-        void postRegister(value).catch(() => {})
+        void postRegister(value).catch((retryErr) => {
+          console.error("[ios-push:temp] postRegister retry failed", {
+            tokenPreview: maskDeviceToken(value),
+            error:
+              retryErr instanceof Error ? retryErr.message : String(retryErr),
+          })
+        })
       }, 2500)
     })
   })
 
-  await PushNotifications.addListener("registrationError", () => {
-    // Missing Push capability / Personal Team builds — stay quiet.
+  await PushNotifications.addListener("registrationError", (err) => {
+    // TEMPORARY diagnostics
+    console.error("[ios-push:temp] APNs registrationError", err)
+    // Missing Push capability / unsigned entitlement — stay quiet for product UX.
     markPushUnavailable()
   })
 
@@ -185,7 +228,7 @@ async function ensureListeners(
 /**
  * Request permission (once), register for APNs, and persist the token.
  * No-ops on web / Android / when previously denied / when Push capability
- * is unavailable (e.g. Personal Team build without aps-environment).
+ * is unavailable (e.g. missing aps-environment or failed registration).
  */
 export async function registerNativeIosPush(opts?: {
   onForegroundNotification?: () => void
@@ -227,6 +270,13 @@ export async function registerNativeIosPush(opts?: {
       }
 
       if (receive !== "granted") return
+
+      // Refresh last_seen / reassign user even when iOS does not re-emit
+      // `registration` (common when the token is already known).
+      const stored = getStoredIosPushToken()
+      if (stored) {
+        void postRegister(stored).catch(() => {})
+      }
 
       await PushNotifications.register()
     } catch {

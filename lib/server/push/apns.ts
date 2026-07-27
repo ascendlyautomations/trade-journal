@@ -1,5 +1,6 @@
 import crypto from "crypto"
 import http2 from "http2"
+import { NATIVE_IOS_APP_ID } from "@/lib/nativeIosIdentity"
 
 export type ApnsAlertPayload = {
   title: string
@@ -21,7 +22,7 @@ function readApnsConfig(): ApnsConfig | null {
   const keyId = process.env.APNS_KEY_ID?.trim()
   const teamId = process.env.APNS_TEAM_ID?.trim()
   const bundleId =
-    process.env.APNS_BUNDLE_ID?.trim() || "com.tradetraxs.app"
+    process.env.APNS_BUNDLE_ID?.trim() || NATIVE_IOS_APP_ID
   const rawKey = process.env.APNS_PRIVATE_KEY?.trim()
   if (!keyId || !teamId || !rawKey) return null
 
@@ -34,6 +35,16 @@ function readApnsConfig(): ApnsConfig | null {
     }
   }
   privateKeyPem = privateKeyPem.replace(/\\n/g, "\n")
+
+  // TEMPORARY diagnostics — remove after APNs E2E verification.
+  // Never log private key contents.
+  console.info("[apns:temp] readApnsConfig", {
+    keyId,
+    teamId,
+    bundleId,
+    hasPrivateKey: !!rawKey,
+    production: process.env.APNS_PRODUCTION,
+  })
 
   return {
     keyId,
@@ -79,6 +90,29 @@ export function isApnsConfigured(): boolean {
   return readApnsConfig() != null
 }
 
+/** Safe for status endpoints — never exposes key material. */
+export function getApnsRuntimeInfo(): {
+  configured: boolean
+  production: boolean
+  bundleId: string
+} {
+  const config = readApnsConfig()
+  if (!config) {
+    return {
+      configured: false,
+      production: false,
+      bundleId: NATIVE_IOS_APP_ID,
+    }
+  }
+  return {
+    configured: true,
+    production: config.production,
+    bundleId: config.bundleId,
+  }
+}
+
+const APNS_REQUEST_TIMEOUT_MS = 12_000
+
 export async function sendApnsAlert(
   deviceToken: string,
   payload: ApnsAlertPayload
@@ -92,6 +126,8 @@ export async function sendApnsAlert(
     ? "https://api.push.apple.com"
     : "https://api.sandbox.push.apple.com"
 
+  // Custom keys outside `aps` are mapped into Capacitor `notification.data`
+  // (used for tap routing via `data.href`).
   const body = JSON.stringify({
     aps: {
       alert: {
@@ -109,13 +145,35 @@ export async function sendApnsAlert(
 
   return await new Promise<ApnsSendResult>((resolve) => {
     let settled = false
+    let client: http2.ClientHttp2Session | null = null
+    let timer: ReturnType<typeof setTimeout> | null = null
+
     const finish = (result: ApnsSendResult) => {
       if (settled) return
       settled = true
+      if (timer) clearTimeout(timer)
+      try {
+        client?.close()
+      } catch {
+        /* ignore */
+      }
       resolve(result)
     }
 
-    let client: http2.ClientHttp2Session
+    timer = setTimeout(() => {
+      try {
+        client?.destroy()
+      } catch {
+        /* ignore */
+      }
+      finish({
+        ok: false,
+        status: 0,
+        reason: "timeout",
+        invalidToken: false,
+      })
+    }, APNS_REQUEST_TIMEOUT_MS)
+
     try {
       client = http2.connect(host)
     } catch (err) {
@@ -144,6 +202,7 @@ export async function sendApnsAlert(
       "apns-topic": config.bundleId,
       "apns-push-type": "alert",
       "apns-priority": "10",
+      "apns-expiration": "0",
       "content-type": "application/json",
     })
 
@@ -157,7 +216,6 @@ export async function sendApnsAlert(
       chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
     })
     req.on("end", () => {
-      client.close()
       if (status === 200) {
         finish({ ok: true })
         return
@@ -179,7 +237,6 @@ export async function sendApnsAlert(
       finish({ ok: false, status, reason, invalidToken })
     })
     req.on("error", (err) => {
-      client.close()
       finish({
         ok: false,
         status: 0,

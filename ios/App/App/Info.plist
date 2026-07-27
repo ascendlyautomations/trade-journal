@@ -26,10 +26,10 @@
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>CFBundleURLName</key>
-			<string>com.tradetraxs.app</string>
+			<string>com.tradetraxs.ios</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>com.tradetraxs.app</string>
+				<string>com.tradetraxs.ios</string>
 			</array>
 		</dict>
 	</array>
@@ -52,6 +52,10 @@
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
 	<string>Main</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 	<key>UIRequiredDeviceCapabilities</key>
 	<array>
 		<string>armv7</string>

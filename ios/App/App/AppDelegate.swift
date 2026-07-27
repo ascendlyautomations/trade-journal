@@ -46,8 +46,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         return ApplicationDelegateProxy.shared.application(application, continue: userActivity, restorationHandler: restorationHandler)
     }
 
-    // TEMPORARY: kept for when Push Notifications entitlement is restored.
-    // Harmless without aps-environment (registration simply fails / is skipped in JS).
+    // Device token forwarding for @capacitor/push-notifications.
+    // Registration only succeeds once aps-environment is present (see App.entitlements)
+    // and Push Notifications is enabled on the App ID in Apple Developer.
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         NotificationCenter.default.post(name: .capacitorDidRegisterForRemoteNotifications, object: deviceToken)
     }

@@ -6,6 +6,13 @@ type RegisterBody = {
   appVersion?: string | null
 }
 
+/** TEMPORARY diagnostics — never log full device tokens. Remove after verification. */
+function maskDeviceToken(token: string): string {
+  const t = token.trim()
+  if (t.length < 14) return "***"
+  return `${t.slice(0, 8)}...${t.slice(-6)}`
+}
+
 /**
  * Upsert an iOS APNs device token for the authenticated user.
  * Reassigns the token if it was previously tied to another account.
@@ -35,6 +42,13 @@ export async function POST(req: Request) {
     return Response.json({ error: "Unsupported platform" }, { status: 400 })
   }
 
+  const tokenPreview = maskDeviceToken(deviceToken)
+  // TEMPORARY diagnostics
+  console.info("[api/push/register:temp] upsert start", {
+    tokenPreview,
+    userIdPrefix: user.id.slice(0, 8),
+  })
+
   const now = new Date().toISOString()
 
   const { data: existing, error: lookupErr } = await supabaseServiceRole
@@ -45,6 +59,10 @@ export async function POST(req: Request) {
 
   if (lookupErr) {
     console.error("[api/push/register] lookup failed", lookupErr)
+    console.error("[api/push/register:temp] lookup failed", {
+      tokenPreview,
+      message: lookupErr.message,
+    })
     return Response.json({ error: lookupErr.message }, { status: 500 })
   }
 
@@ -62,8 +80,14 @@ export async function POST(req: Request) {
 
     if (updateErr) {
       console.error("[api/push/register] update failed", updateErr)
+      console.error("[api/push/register:temp] update failed", {
+        tokenPreview,
+        message: updateErr.message,
+      })
       return Response.json({ error: updateErr.message }, { status: 500 })
     }
+    // TEMPORARY diagnostics
+    console.info("[api/push/register:temp] update success", { tokenPreview })
     return Response.json({ ok: true, updated: true })
   }
 
@@ -94,13 +118,27 @@ export async function POST(req: Request) {
         .eq("device_token", deviceToken)
       if (raceErr) {
         console.error("[api/push/register] race update failed", raceErr)
+        console.error("[api/push/register:temp] race update failed", {
+          tokenPreview,
+          message: raceErr.message,
+        })
         return Response.json({ error: raceErr.message }, { status: 500 })
       }
+      // TEMPORARY diagnostics
+      console.info("[api/push/register:temp] race update success", {
+        tokenPreview,
+      })
       return Response.json({ ok: true, updated: true })
     }
     console.error("[api/push/register] insert failed", insertErr)
+    console.error("[api/push/register:temp] insert failed", {
+      tokenPreview,
+      message: insertErr.message,
+    })
     return Response.json({ error: insertErr.message }, { status: 500 })
   }
 
+  // TEMPORARY diagnostics
+  console.info("[api/push/register:temp] insert success", { tokenPreview })
   return Response.json({ ok: true, created: true })
 }
