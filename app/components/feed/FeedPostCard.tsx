@@ -91,14 +91,16 @@ function FeedPostCard({
   const pnl = useMemo(() => Number(post.pnl), [post.pnl])
   const pnlPositive = !Number.isNaN(pnl) && pnl >= 0
   const tradeDisplay = useMemo(() => {
-    const accountTypeNorm = normalizeFeedAccountType(tradeRow?.account_type)
+    const accountTypeRaw = normalizeFeedAccountType(
+      tradeRow?.account_type ?? tradeRow?.mode
+    )
     const accountTypeLabel =
-      formatPublicAccountTypeLabel(accountTypeNorm) ?? accountTypeNorm
+      formatPublicAccountTypeLabel(accountTypeRaw) ?? accountTypeRaw
     return {
       tickerLabel: tradeRow?.ticker != null ? String(tradeRow.ticker) : "—",
       dirLabel: tradeRow?.direction != null ? String(tradeRow.direction) : "—",
       accountTypeNorm: accountTypeLabel,
-      accountTypeStyles: accountTypeNorm ? getModeStyles(accountTypeNorm) : "",
+      accountTypeStyles: accountTypeRaw ? getModeStyles(accountTypeRaw) : "",
     }
   }, [tradeRow])
   return (
@@ -150,6 +152,7 @@ function FeedPostCard({
         rr={post.rr}
         publicDesc={publicDesc}
         timingTrade={tradeRow}
+        attachedReel={attachedReel}
         onViewReel={
           attachedReel
             ? () => {

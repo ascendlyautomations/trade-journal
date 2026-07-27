@@ -1,6 +1,9 @@
 import { supabase } from "./supabaseClient"
 import { isDemoSupabaseBlocked } from "./demo/demoSupabaseGuard"
-import { normalizeSeenBy } from "./messageUnread"
+import {
+  dispatchUnreadMessagesRefresh,
+  normalizeSeenBy,
+} from "./messageUnread"
 
 const RECENT_MARK_MS = 8_000
 const recentMarks = new Map<string, number>()
@@ -34,7 +37,11 @@ export async function markConversationMessagesSeen(
   const key = markKey(userId, conversationId)
   const last = recentMarks.get(key)
   if (last != null && Date.now() - last < RECENT_MARK_MS) {
-    return inFlight.get(key) ?? Promise.resolve()
+    const pendingRecent = inFlight.get(key)
+    if (pendingRecent) return pendingRecent
+    // Cursor already advanced; still refresh Navbar in case it missed the prior event.
+    dispatchUnreadMessagesRefresh()
+    return
   }
 
   const pending = (async () => {
@@ -78,6 +85,8 @@ export async function markConversationMessagesSeen(
     }
 
     recentMarks.set(key, Date.now())
+    // Navbar listens for this event (same path as mark-unread / mute / block).
+    dispatchUnreadMessagesRefresh()
   })()
 
   inFlight.set(key, pending)

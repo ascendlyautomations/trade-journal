@@ -2,6 +2,8 @@
 
 import { memo } from "react"
 import TradeCardTimingBlock from "@/app/components/TradeCardTimingBlock"
+import ReelThumbnailPreview from "@/app/components/ReelThumbnailPreview"
+import CopyTradedBadge from "@/app/components/trade/CopyTradedBadge"
 import ExpandableText from "@/app/components/ui/ExpandableText"
 import {
   formatPoints,
@@ -9,6 +11,8 @@ import {
   formatSignedPnlDisplay,
 } from "@/lib/formatDisplay"
 import { resolveTradePoints } from "@/lib/resolveTradePoints"
+import { isCopyTradedMode } from "@/lib/tradeMode"
+import type { ReelRow } from "@/lib/reels"
 
 type FeedPostBodyProps = {
   pnl: number
@@ -21,6 +25,8 @@ type FeedPostBodyProps = {
   publicDesc: string | null
   timingTrade: Record<string, unknown> | null
   onViewReel?: () => void
+  /** Linked clip from trades.reels join — no extra fetch. */
+  attachedReel?: ReelRow | null
 }
 
 function FeedPostBody({
@@ -34,8 +40,10 @@ function FeedPostBody({
   publicDesc,
   timingTrade,
   onViewReel,
+  attachedReel = null,
 }: FeedPostBodyProps) {
   const resolvedPoints = resolveTradePoints(timingTrade)
+  const showCopyBadge = isCopyTradedMode(timingTrade)
   return (
     <div className="min-w-0 space-y-1.5 overflow-hidden px-4 pb-2.5 pt-0.5">
       <div className="flex min-w-0 flex-nowrap items-center justify-between gap-x-2">
@@ -52,7 +60,9 @@ function FeedPostBody({
             <span className="min-w-0 truncate">
               {tickerLabel} • {dirLabel}
             </span>
-            {accountTypeNorm ? (
+            {showCopyBadge ? (
+              <CopyTradedBadge trade={timingTrade} className="shrink-0" />
+            ) : accountTypeNorm ? (
               <span
                 className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] md:text-xs ${accountTypeStyles}`}
               >
@@ -88,6 +98,16 @@ function FeedPostBody({
           <TradeCardTimingBlock
             trade={timingTrade ?? {}}
             onViewReel={onViewReel}
+          />
+        </div>
+      ) : null}
+
+      {attachedReel && onViewReel ? (
+        <div className="pt-1">
+          <ReelThumbnailPreview
+            reel={attachedReel}
+            onClick={onViewReel}
+            maxWidthClass="max-w-[140px]"
           />
         </div>
       ) : null}
