@@ -1,4 +1,5 @@
 import { isNativeIos } from "@/lib/nativePlatform"
+import { isNativeIosPushBridgeReady } from "@/lib/nativeIosPush"
 
 /**
  * Remove delivered system notifications for one DM conversation only.
@@ -9,6 +10,8 @@ export async function clearDeliveredNotificationsForConversation(
 ): Promise<void> {
   const id = conversationId.trim()
   if (!id || typeof window === "undefined" || !isNativeIos()) return
+  // Capacitor rejects get/removeDelivered* until AppDelegate registration event.
+  if (!isNativeIosPushBridgeReady()) return
 
   try {
     const { PushNotifications } = await import(

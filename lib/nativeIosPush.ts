@@ -10,14 +10,30 @@ const PUSH_DEBUG = "[tt-push-debug]"
 let registrationInFlight: Promise<void> | null = null
 let listenersAttached = false
 let lastRegisteredToken: string | null = null
+/**
+ * Capacitor iOS PushNotificationsPlugin sets an internal
+ * `appDelegateRegistrationCalled` flag only after AppDelegate posts
+ * `.capacitorDidRegisterForRemoteNotifications` (or the fail event).
+ * `getDeliveredNotifications` / `removeDeliveredNotifications` reject with
+ * "event capacitorDidRegisterForRemoteNotifications not called" until then.
+ * `register()` resolves as soon as UIKit is asked to register — it does NOT
+ * wait for that callback — so we must not call delivered APIs until this is true.
+ */
+let apnsBridgeReady = false
 /** In-flight per-token posts so registration + stored refresh don't double-hit the API. */
 const postRegisterInFlight = new Map<string, Promise<void>>()
 let cachedAppVersion: string | null | undefined
+let cachedInstallationId: string | null | undefined
 /** Once registration proves push is unavailable (e.g. missing aps-environment), skip further attempts this session. */
 let pushCapabilityUnavailable = false
 /** TEMPORARY — set by registerNativeIosPush for token↔user correlation logs. */
 let debugUserId: string | null = null
 let appStateDebugListenerAttached = false
+
+/** True after native AppDelegate ↔ Capacitor push bridge has reported register/fail. */
+export function isNativeIosPushBridgeReady(): boolean {
+  return apnsBridgeReady
+}
 
 function pushDebugLog(message: string, data?: Record<string, unknown>) {
   const payload = {
@@ -27,6 +43,10 @@ function pushDebugLog(message: string, data?: Record<string, unknown>) {
   console.info(PUSH_DEBUG, message, payload)
 }
 
+/**
+ * Mirror of last observed system deny — debug / analytics only.
+ * Must NOT gate registration; always re-query checkPermissions().
+ */
 function readDenied(): boolean {
   if (typeof window === "undefined") return false
   try {
@@ -65,6 +85,38 @@ export function getStoredIosPushToken(): string | null {
   }
 }
 
+async function resolveInstallationId(): Promise<string | null> {
+  if (cachedInstallationId !== undefined) return cachedInstallationId
+  cachedInstallationId = null
+  try {
+    const { Device } = await import("@capacitor/device")
+    const { identifier } = await Device.getId()
+    const id = typeof identifier === "string" ? identifier.trim() : ""
+    cachedInstallationId = id || null
+  } catch {
+    cachedInstallationId = null
+  }
+  return cachedInstallationId
+}
+
+async function resolveAppVersion(): Promise<string | null> {
+  if (cachedAppVersion !== undefined) return cachedAppVersion
+  cachedAppVersion = null
+  try {
+    const { Device } = await import("@capacitor/device")
+    const info = await Device.getInfo()
+    cachedAppVersion = info.appVersion ?? null
+  } catch {
+    cachedAppVersion = null
+  }
+  return cachedAppVersion
+}
+
+/**
+ * Send the current APNs token to the server.
+ * Always includes installationId (IDFV) so rotated tokens replace the prior
+ * row for this install. Sends previousDeviceToken when local cache differs.
+ */
 async function postRegister(deviceToken: string) {
   const token = deviceToken.trim()
   if (!token) return
@@ -85,47 +137,24 @@ async function postRegister(deviceToken: string) {
   }
 
   const run = (async () => {
-    if (cachedAppVersion === undefined) {
-      cachedAppVersion = null
-      try {
-        const { Device } = await import("@capacitor/device")
-        const info = await Device.getInfo()
-        cachedAppVersion = info.appVersion ?? null
-      } catch {
-        /* ignore */
-      }
-    }
+    const [appVersion, installationId] = await Promise.all([
+      resolveAppVersion(),
+      resolveInstallationId(),
+    ])
 
-    // TEMPORARY [tt-push-debug] — correlate phone token with server env.
-    let apnsEnvironment: string | null = null
-    try {
-      const headers = await supabaseBearerHeaders()
-      const statusRes = await fetch("/api/push/status", { headers })
-      if (statusRes.ok) {
-        const statusJson = (await statusRes.json()) as {
-          apns?: { production?: boolean; bundleId?: string }
-        }
-        apnsEnvironment = statusJson.apns?.production
-          ? "production"
-          : "sandbox"
-        pushDebugLog("push status before register", {
-          userId: debugUserId,
-          deviceToken: token,
-          platform: "ios",
-          apnsEnvironment,
-          bundleId: statusJson.apns?.bundleId ?? null,
-        })
-      }
-    } catch {
-      /* ignore status probe failures */
-    }
+    const previousDeviceToken = getStoredIosPushToken()
+    const previous =
+      previousDeviceToken && previousDeviceToken !== token
+        ? previousDeviceToken
+        : null
 
     pushDebugLog("registration request", {
       userId: debugUserId,
       deviceToken: token,
+      previousDeviceToken: previous,
+      installationId,
       platform: "ios",
-      apnsEnvironment,
-      appVersion: cachedAppVersion ?? null,
+      appVersion,
     })
 
     const headers = await supabaseBearerHeaders()
@@ -137,8 +166,10 @@ async function postRegister(deviceToken: string) {
       },
       body: JSON.stringify({
         deviceToken: token,
+        previousDeviceToken: previous,
+        installationId,
         platform: "ios",
-        appVersion: cachedAppVersion ?? null,
+        appVersion,
       }),
     })
 
@@ -157,44 +188,13 @@ async function postRegister(deviceToken: string) {
       throw new Error(`register failed: ${res.status} ${text}`)
     }
 
-    // TEMPORARY [tt-push-debug] — verify DB round-trip matches phone token.
-    let storedMatches = false
-    let storedToken: string | null = null
-    try {
-      const json = (await res.json()) as {
-        ok?: boolean
-        debug?: {
-          userId?: string
-          platform?: string
-          deviceToken?: string
-          storedDeviceToken?: string
-          tokenMatchesStored?: boolean
-          apnsEnvironment?: string
-        }
-      }
-      storedToken =
-        typeof json.debug?.storedDeviceToken === "string"
-          ? json.debug.storedDeviceToken
-          : typeof json.debug?.deviceToken === "string"
-            ? json.debug.deviceToken
-            : null
-      storedMatches =
-        json.debug?.tokenMatchesStored === true ||
-        (storedToken != null && storedToken === token)
-      pushDebugLog("registration response / token verification", {
-        userId: json.debug?.userId ?? debugUserId,
-        platform: json.debug?.platform ?? "ios",
-        phoneToken: token,
-        storedDeviceToken: storedToken,
-        tokenMatchesStored: storedMatches,
-        apnsEnvironment: json.debug?.apnsEnvironment ?? apnsEnvironment,
-      })
-    } catch {
-      pushDebugLog("registration ok but debug payload parse failed", {
-        deviceToken: token,
-        userId: debugUserId,
-      })
-    }
+    pushDebugLog("registration ok", {
+      deviceToken: token,
+      previousDeviceToken: previous,
+      installationId,
+      userId: debugUserId,
+      rotated: Boolean(previous),
+    })
 
     lastRegisteredToken = token
     persistToken(token)
@@ -375,9 +375,18 @@ async function handlePushAction(opts: {
 function markPushUnavailable() {
   pushCapabilityUnavailable = true
   listenersAttached = false
+  // Failure still means AppDelegate posted the Capacitor event — delivered APIs are allowed.
+  apnsBridgeReady = true
 }
 
 async function logDeliveredNotifications(reason: string) {
+  if (!apnsBridgeReady) {
+    pushDebugLog("getDeliveredNotifications skipped (APNs bridge not ready)", {
+      reason,
+      userId: debugUserId,
+    })
+    return
+  }
   try {
     const { PushNotifications } = await import("@capacitor/push-notifications")
     const delivered = await PushNotifications.getDeliveredNotifications()
@@ -425,6 +434,7 @@ async function ensureListeners(
   await ensureAppStateDebugListener()
 
   await PushNotifications.addListener("registration", (token) => {
+    apnsBridgeReady = true
     const value = String(token.value ?? "").trim()
     // TEMPORARY [tt-push-debug] — log every registration callback.
     pushDebugLog("PushNotifications registration", {
@@ -432,10 +442,12 @@ async function ensureListeners(
       userId: debugUserId,
       platform: "ios",
       alreadyPostedThisSession: lastRegisteredToken === value,
+      storedToken: getStoredIosPushToken(),
     })
+    void logDeliveredNotifications("after:registration")
     if (!value) return
-    // Skip if we already posted this token this session (stored refresh).
-    if (lastRegisteredToken === value) return
+    // Always forward the current APNs token (rotation / reinstall / launch).
+    // postRegister no-ops if this exact token was already posted this session.
     void postRegister(value).catch((err) => {
       console.error("[ios-push] postRegister failed (will retry)", {
         error: err instanceof Error ? err.message : String(err),
@@ -453,6 +465,7 @@ async function ensureListeners(
   })
 
   await PushNotifications.addListener("registrationError", (err) => {
+    apnsBridgeReady = true
     pushDebugLog("PushNotifications registrationError", {
       error: err,
       userId: debugUserId,
@@ -583,9 +596,17 @@ async function ensureListeners(
 }
 
 /**
- * Request permission (once), register for APNs, and persist the token.
- * No-ops on web / Android / when previously denied / when Push capability
- * is unavailable (e.g. missing aps-environment or failed registration).
+ * Request permission (once when undetermined), register for APNs, and persist
+ * the token. No-ops on web / Android / when system permission is denied / when
+ * Push capability is unavailable.
+ *
+ * Permission source of truth on iOS:
+ * - `checkPermissions()` maps UNAuthorizationStatus (matches Settings / UNNotificationSettings).
+ * - `requestPermissions()` calls requestAuthorization and maps only the `granted`
+ *   Bool — that can disagree with authorizationStatus in edge cases. Only call it
+ *   when status is `prompt`, then re-check with checkPermissions().
+ * - Never skip checkPermissions based on a sticky localStorage flag; that drifts
+ *   after Settings changes or Xcode reinstalls that preserve WKWebView storage.
  */
 export async function registerNativeIosPush(opts?: {
   onForegroundNotification?: () => void
@@ -594,7 +615,6 @@ export async function registerNativeIosPush(opts?: {
 }): Promise<void> {
   if (!isNativeIos()) return
   if (pushCapabilityUnavailable) return
-  if (readDenied()) return
 
   if (opts?.userId) debugUserId = opts.userId.trim() || null
 
@@ -612,48 +632,59 @@ export async function registerNativeIosPush(opts?: {
         "@capacitor/push-notifications"
       )
 
-      const current = await PushNotifications.checkPermissions()
+      // Always ask Capacitor (→ UNUserNotificationCenter), never trust a cached deny.
+      let status = await PushNotifications.checkPermissions()
       pushDebugLog("checkPermissions", {
         userId: debugUserId,
-        receive: current.receive,
+        receive: status.receive,
+        stickyDeniedFlag: readDenied(),
       })
-      let receive = current.receive
 
-      if (receive === "denied") {
+      if (status.receive === "prompt") {
+        // First-time system prompt only. Do not call this every launch.
+        const requested = await PushNotifications.requestPermissions()
+        pushDebugLog("requestPermissions result", {
+          userId: debugUserId,
+          receive: requested.receive,
+        })
+        // Re-read authorizationStatus — authoritative vs requestAuthorization's Bool.
+        status = await PushNotifications.checkPermissions()
+        pushDebugLog("checkPermissions after request", {
+          userId: debugUserId,
+          receive: status.receive,
+          requestPermissionsReported: requested.receive,
+        })
+      }
+
+      if (status.receive === "granted") {
+        writeDenied(false)
+      } else if (status.receive === "denied") {
         writeDenied(true)
-        pushDebugLog("permission denied", { userId: debugUserId })
+        pushDebugLog("permission denied (authorizationStatus)", {
+          userId: debugUserId,
+        })
+        return
+      } else {
+        // prompt-with-rationale or unexpected — do not register yet.
+        pushDebugLog("permission not granted yet", {
+          userId: debugUserId,
+          receive: status.receive,
+        })
         return
       }
 
-      if (receive === "prompt") {
-        const requested = await PushNotifications.requestPermissions()
-        receive = requested.receive
-        pushDebugLog("requestPermissions result", {
-          userId: debugUserId,
-          receive,
-        })
-        if (receive !== "granted") {
-          writeDenied(true)
-          return
-        }
-        writeDenied(false)
-      }
-
-      if (receive !== "granted") return
-
-      // Refresh last_seen / reassign user even when iOS does not re-emit
-      // `registration` (common when the token is already known).
-      const stored = getStoredIosPushToken()
-      if (stored && lastRegisteredToken !== stored) {
-        void postRegister(stored).catch(() => {})
-      }
-
+      // Apple: call registerForRemoteNotifications on every launch so APNs
+      // returns the current token (unchanged tokens return quickly).
+      // Do not POST a cached token here — wait for the `registration` event
+      // so rotated tokens replace the previous row via installationId.
       pushDebugLog("PushNotifications.register() calling", {
         userId: debugUserId,
-        storedToken: stored,
+        storedToken: getStoredIosPushToken(),
       })
+      // register() only kicks off UIApplication.registerForRemoteNotifications()
+      // and resolves immediately. Do NOT call getDeliveredNotifications here —
+      // the plugin rejects until AppDelegate posts capacitorDidRegister…
       await PushNotifications.register()
-      void logDeliveredNotifications("after:register")
     } catch (err) {
       pushDebugLog("registerNativeIosPush threw", {
         error: err instanceof Error ? err.message : String(err),
