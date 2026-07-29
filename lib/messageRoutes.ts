@@ -5,6 +5,17 @@ export function isConversationUuidSegment(segment: string): boolean {
   return isProfileUuidSegment(segment)
 }
 
+/** True for `/messages/:id` threads — not the inbox `/messages`. */
+export function isDmConversationPath(
+  pathname: string | null | undefined
+): boolean {
+  if (!pathname) return false
+  const match = pathname.match(/^\/messages\/([^/]+)\/?$/)
+  if (!match) return false
+  const segment = match[1]?.trim()
+  return Boolean(segment)
+}
+
 export function buildDmThreadPath(username: string): string {
   const normalized = normalizeProfileUsername(username)
   return normalized ? `/messages/${normalized}` : "/messages"

@@ -2,6 +2,7 @@
 
 import {
   useEffect,
+  useLayoutEffect,
   useState,
   type PointerEvent,
   type ReactNode,
@@ -45,6 +46,8 @@ function scrollFocusedFieldIntoView() {
 }
 
 type NativeIosLoginShellProps = {
+  /** SSR/cookie-derived flag — must match first client render to avoid hydration mismatch. */
+  initialNativeIos?: boolean
   children: (nativeIos: boolean) => ReactNode
 }
 
@@ -57,13 +60,18 @@ type NativeIosLoginShellProps = {
  * No layout changes on web / Android (nativeIos === false).
  */
 export default function NativeIosLoginShell({
+  initialNativeIos = false,
   children,
 }: NativeIosLoginShellProps) {
-  const [nativeIos, setNativeIos] = useState(false)
+  const [nativeIos, setNativeIos] = useState(initialNativeIos)
 
-  useEffect(() => {
-    setNativeIos(isNativeIos())
-  }, [])
+  useLayoutEffect(() => {
+    const next = initialNativeIos || isNativeIos()
+    setNativeIos(next)
+    if (!next) return
+    document.documentElement.classList.add(IOS_AUTH_HTML_CLASS)
+    document.documentElement.style.setProperty(KEYBOARD_HEIGHT_VAR, "0px")
+  }, [initialNativeIos])
 
   useEffect(() => {
     if (!nativeIos) return
@@ -165,7 +173,7 @@ export default function NativeIosLoginShell({
     <div
       className={
         nativeIos
-          ? "relative flex h-[100dvh] max-h-[100dvh] flex-col overflow-x-hidden overflow-y-auto overscroll-y-contain text-white [-webkit-overflow-scrolling:touch]"
+          ? "relative flex h-[100dvh] max-h-[100dvh] flex-col overflow-x-hidden overflow-y-auto overscroll-y-contain bg-[#0b1f3a] text-white [-webkit-overflow-scrolling:touch]"
           : "relative flex min-h-screen items-center justify-center text-white"
       }
       onPointerDown={handlePointerDown}

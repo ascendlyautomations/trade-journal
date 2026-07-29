@@ -328,6 +328,7 @@ export async function POST(req: Request) {
         kind: "room_message",
         sender_id: user.id,
         content,
+        preferenceKey: "room_messages_enabled",
         prefsAlreadyChecked: true,
       })
     } else {

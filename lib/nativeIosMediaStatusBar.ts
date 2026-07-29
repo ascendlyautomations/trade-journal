@@ -27,7 +27,7 @@ export async function restoreNativeIosMediaStatusBar(): Promise<void> {
   try {
     const { StatusBar, Style } = await import("@capacitor/status-bar")
     await StatusBar.show()
-    await StatusBar.setOverlaysWebView({ overlay: false })
+    await StatusBar.setOverlaysWebView({ overlay: true })
     await StatusBar.setBackgroundColor({ color: "#0b1f3a" })
     await StatusBar.setStyle({ style: Style.Dark })
   } catch {

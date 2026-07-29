@@ -832,7 +832,10 @@ export default function Dashboard() {
       <FeedbackModal {...feedbackModalProps} />
 
       <NativeIosPullToRefresh onRefresh={refreshDashboardData}>
-      <div className="w-full px-3 pb-3 pt-4 text-white md:px-10 md:pb-10 md:pt-0">
+      <div
+        data-tt-native-surface="dashboard"
+        className="w-full px-3 pb-3 pt-4 text-white md:px-10 md:pb-10 md:pt-0"
+      >
 
         <div className="relative z-50 mx-auto w-full max-w-[1600px] px-4 md:px-6">
           {!hasNoTrades && !statsStillLoading ? (

@@ -17,11 +17,121 @@
   --app-header-offset: calc(var(--navbar-height) + var(--safe-area-top));
   /* iOS Capacitor tab bar — stays 0 on web / Android / Safari. */
   --app-tab-bar-height: 0px;
+  /* Total space reserved under scrollable app content (tab row + home indicator). */
+  --app-tab-bar-offset: 0px;
+  /*
+   * Full-bleed page shells (messages, community, etc.).
+   * Web: navbar height only (matches historical 100dvh-4rem).
+   * Native iOS: navbar + safe-area top + tab bar + safe-area bottom.
+   */
+  --app-viewport-height: calc(100dvh - 4rem);
 }
 
-/* Capacitor iOS shell only (class set by NativeAppShell). */
+/* Capacitor iOS shell only (class set by NativeAppShell / SSR). */
 html.tt-native-ios {
-  --app-tab-bar-height: 3.25rem;
+  /*
+   * UITabBar content row is 49pt. Safe-area is NOT part of this height —
+   * it is applied only as padding-bottom on the tab bar element so the home
+   * indicator sits under an empty extension of the same bar background.
+   */
+  --app-tab-bar-height: 49px;
+  --app-tab-bar-offset: calc(
+    var(--app-tab-bar-height) + env(safe-area-inset-bottom, 0px)
+  );
+  --app-viewport-height: calc(
+    100dvh - var(--app-header-offset) - var(--app-tab-bar-offset)
+  );
+
+  /*
+   * App surface tokens — single color foundations for native screens.
+   * Mid-stop from the former marketing gradient (#1e3a8a).
+   * Future light mode: swap these tokens, not per-page gradients.
+   */
+  --tt-surface: #1e3a8a;
+  --tt-surface-foreground: #f3f4f6;
+  --tt-surface-muted: #cbd5e1;
+  --tt-surface-elevated: rgb(15 23 42 / 0.45);
+  --tt-surface-border: rgb(255 255 255 / 0.14);
+  /* Fixed chrome (navbar / tab bar) stays distinct from content surface. */
+  --tt-chrome: #0b1f3a;
+}
+
+/*
+ * Shared native content surface (Dashboard, Feed, Messages, …).
+ * Cards / posts keep their own elevated styles — only the page canvas changes.
+ */
+html.tt-native-ios [data-tt-native-surface] {
+  background-image: none;
+  background-color: var(--tt-surface);
+  color: var(--tt-surface-foreground);
+}
+
+/* Messages inbox — spacing + search field polish on the shared surface. */
+html.tt-native-ios [data-tt-messages-inbox] {
+  padding-left: 1rem;
+  padding-right: 1rem;
+  padding-bottom: 1rem;
+  padding-top: 0;
+}
+
+html.tt-native-ios [data-tt-messages-inbox] [data-tt-messages-inbox-search] {
+  margin-top: 0.875rem;
+  margin-bottom: 0.75rem;
+  border-radius: 0.75rem;
+  border-color: var(--tt-surface-border);
+  background-color: var(--tt-surface-elevated);
+}
+
+html.tt-native-ios [data-tt-messages-inbox] [data-tt-messages-inbox-actions] {
+  margin-bottom: 0.875rem;
+  gap: 0.5rem;
+}
+
+/* Dashboard — tighten mobile rhythm on the shared surface. */
+html.tt-native-ios [data-tt-native-surface="dashboard"] {
+  padding-top: 0.875rem;
+  padding-bottom: 1rem;
+}
+
+/* Feed — balanced column padding on the shared surface. */
+html.tt-native-ios [data-tt-native-surface="feed"] [data-tt-feed-column] {
+  padding-top: 1.25rem;
+  padding-bottom: 1.5rem;
+}
+
+/*
+ * Native iOS tab bar — single continuous chrome (matches UITabBar geometry).
+ * Items live in --app-tab-bar-height. Home indicator uses padding-bottom only.
+ * Do not center icons in (height + safe-area); that puts them in the swipe zone.
+ */
+html.tt-native-ios [data-native-ios-bottom-nav].tt-ios-tab-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 9998;
+  margin: 0;
+  box-sizing: border-box;
+  border-top: 1px solid rgb(255 255 255 / 0.1);
+  background-color: var(--tt-chrome, #0b1f3a);
+  padding-top: 0;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: 0;
+  padding-right: 0;
+  color: #d1d5db;
+}
+
+html.tt-native-ios [data-native-ios-bottom-nav] .tt-ios-tab-bar__items {
+  box-sizing: border-box;
+  display: grid;
+  height: var(--app-tab-bar-height);
+  margin: 0;
+  padding: 0 2px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  align-items: stretch;
+  /* Clip so tab content can never paint into the home-indicator padding. */
+  overflow: hidden;
+  list-style: none;
 }
 
 html.tradetraxs-demo-banner-active {
@@ -114,11 +224,16 @@ body {
 html.tt-native {
   overscroll-behavior-y: none;
   -webkit-tap-highlight-color: transparent;
+  /* Solid shell color — never the marketing body gradient (#1e3a8a). */
+  background-color: #0b1f3a;
+  background-image: none;
 }
 
 html.tt-native body {
   overscroll-behavior-y: none;
   -webkit-tap-highlight-color: transparent;
+  background-color: #0b1f3a;
+  background-image: none;
 }
 
 /*
@@ -134,12 +249,27 @@ html.tt-ios-auth,
 html.tt-ios-auth body {
   height: 100%;
   overflow: hidden;
+  background-color: #0b1f3a;
+  background-image: none;
 }
 
 /* iOS zooms focused inputs under 16px — that feels like viewport jumping. */
 html.tt-ios-auth input,
 html.tt-ios-auth textarea,
 html.tt-ios-auth select {
+  font-size: 16px;
+}
+
+/*
+ * Native iOS DM thread: keyboard inset via useNativeIosKeyboardInset.
+ * Composer sits above max(safe-area, keyboard); 16px inputs avoid focus zoom.
+ */
+html.tt-ios-dm {
+  --keyboard-height: 0px;
+}
+
+html.tt-ios-dm textarea,
+html.tt-ios-dm input {
   font-size: 16px;
 }
 

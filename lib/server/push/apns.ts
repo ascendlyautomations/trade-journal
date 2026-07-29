@@ -159,6 +159,19 @@ export async function sendApnsAlert(
 
   const jwt = createApnsJwt(config)
 
+  // TEMPORARY [tt-push-debug] — exact payload after APNs accept path starts.
+  console.info("[tt-push-debug] APNs request", {
+    timestamp: new Date().toISOString(),
+    host: config.production
+      ? "api.push.apple.com"
+      : "api.sandbox.push.apple.com",
+    environment: config.production ? "production" : "sandbox",
+    bundleId: config.bundleId,
+    deviceToken,
+    notificationType: payload.notificationType,
+    apsPayload: JSON.parse(body) as unknown,
+  })
+
   return await new Promise<ApnsSendResult>((resolve) => {
     let settled = false
     let client: http2.ClientHttp2Session | null = null
@@ -234,19 +247,41 @@ export async function sendApnsAlert(
       chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
     })
     req.on("end", () => {
+      const responseBody = Buffer.concat(chunks).toString("utf8")
       if (status === 200) {
+        // TEMPORARY [tt-push-debug]
+        console.info("[tt-push-debug] APNs accepted (200)", {
+          timestamp: new Date().toISOString(),
+          deviceToken,
+          notificationType: payload.notificationType,
+          title: payload.title,
+          body: payload.body,
+          environment: config.production ? "production" : "sandbox",
+          bundleId: config.bundleId,
+        })
         finish({ ok: true })
         return
       }
       let reason = "unknown"
       try {
-        const parsed = JSON.parse(Buffer.concat(chunks).toString("utf8")) as {
+        const parsed = JSON.parse(responseBody) as {
           reason?: string
         }
         reason = parsed.reason ?? reason
       } catch {
         /* ignore */
       }
+      // TEMPORARY [tt-push-debug]
+      console.error("[tt-push-debug] APNs rejected", {
+        timestamp: new Date().toISOString(),
+        deviceToken,
+        notificationType: payload.notificationType,
+        status,
+        reason,
+        responseBody: responseBody.slice(0, 500),
+        environment: config.production ? "production" : "sandbox",
+        bundleId: config.bundleId,
+      })
       const invalidToken =
         status === 410 ||
         reason === "BadDeviceToken" ||

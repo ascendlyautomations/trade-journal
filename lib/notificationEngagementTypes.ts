@@ -7,6 +7,7 @@ export const NOTIFICATION_ENGAGEMENT_TYPES = [
   "room_mention",
   "follow",
   "follow_request",
+  "follow_request_accepted",
 ] as const
 
 export const NOTIFICATION_AFFILIATE_TYPES = [

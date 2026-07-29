@@ -13,6 +13,7 @@ import {
   useRef,
   type ChangeEvent,
 } from "react"
+import { ChevronLeft } from "lucide-react"
 import {
   formatConversationDateDividerLabel,
   formatDmClusterTime,
@@ -149,6 +150,8 @@ import {
   type DmBlockStatus,
 } from "@/lib/conversationBlocks"
 import { clearMessagesInboxSessionsForUser } from "@/lib/messagesInboxSessionCache"
+import { useIsNativeIos } from "@/lib/useIsNativeIos"
+import { useNativeIosKeyboardInset } from "@/lib/useNativeIosKeyboardInset"
 
 const DM_SHARE_CARD_CLASS = "w-full max-w-[min(100%,22rem)]"
 
@@ -883,6 +886,7 @@ export default function DMPage() {
   const messagePageSize = 50
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const { user: profileUser } = useUserProfile()
+  const nativeIos = useIsNativeIos()
   const params = useParams()
   const router = useRouter()
   const urlSegment = params.id as string
@@ -1027,6 +1031,20 @@ export default function DMPage() {
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const userIdRef = useRef<string | null>(null)
+
+  const keepComposerVisibleAboveKeyboard = useCallback(() => {
+    const el = scrollRef.current
+    if (!el) return
+    requestAnimationFrame(() => {
+      scrollContainerToBottom(el, { behavior: "auto" })
+    })
+  }, [])
+
+  useNativeIosKeyboardInset(nativeIos, {
+    htmlClass: "tt-ios-dm",
+    onKeyboardShow: keepComposerVisibleAboveKeyboard,
+  })
+
   const conversationIdRef = useRef<string | null>(null)
   const messagesChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(
     null
@@ -2753,7 +2771,13 @@ export default function DMPage() {
       <FeedbackModal {...feedbackModalProps} />
 
       {pageAccess !== "allowed" ? (
-        <div className="flex h-[calc(100dvh-4rem)] min-h-0 w-full flex-col items-center justify-center gap-4 bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 text-white">
+        <div
+          className={`flex min-h-0 w-full flex-col items-center justify-center gap-4 bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 text-white ${
+            nativeIos
+              ? "h-dvh pt-[var(--safe-area-top)] pb-[max(var(--safe-area-bottom),var(--keyboard-height,0px))]"
+              : "h-[var(--app-viewport-height)]"
+          }`}
+        >
           <button
             type="button"
             onClick={() => router.push("/messages")}
@@ -2776,60 +2800,58 @@ export default function DMPage() {
         </div>
       ) : (
       <>
-      <div className="flex h-[calc(100dvh-4rem)] min-h-0 w-full flex-col overflow-hidden bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 pb-4 pt-2 text-white">
+      <div
+        className={`flex min-h-0 w-full flex-col overflow-hidden bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white ${
+          nativeIos
+            ? "h-dvh pt-[var(--safe-area-top)] pb-[max(var(--safe-area-bottom),var(--keyboard-height,0px))]"
+            : "h-[var(--app-viewport-height)] px-4 pb-4 pt-2"
+        }`}
+      >
 
-        <div className="mx-auto flex h-full min-h-0 w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-white/10 bg-black/30">
+        <div
+          className={`mx-auto flex h-full min-h-0 w-full max-w-3xl flex-col overflow-hidden ${
+            nativeIos
+              ? "bg-black/30"
+              : "rounded-xl border border-white/10 bg-black/30"
+          }`}
+        >
 
           {/* HEADER */}
-          <div className="shrink-0 flex items-center justify-between px-3 py-2 border-b border-white/10 md:p-4 md:justify-start md:gap-3">
+          {nativeIos ? (
+            <div className="relative flex shrink-0 items-center justify-between border-b border-white/10 px-1 py-2">
+              <button
+                type="button"
+                aria-label="Back to messages"
+                onClick={() => router.push("/messages")}
+                className="-ml-0.5 flex h-11 w-11 items-center justify-center text-white"
+              >
+                <ChevronLeft className="h-7 w-7" strokeWidth={2.25} />
+              </button>
 
-            <button
-              onClick={() => router.push("/messages")}
-              className="p-2 md:text-sm md:px-3 md:py-1 md:bg-white/10 md:rounded md:hover:bg-white/20"
-            >
-              ←
-            </button>
-
-            <div className="flex items-center gap-3">
-              {conversation?.is_group ? (
-                <img
-                  src={
-                    conversation.avatar_url || "/group-default.png"
-                  }
-                  alt=""
-                  loading="lazy"
-                  decoding="async"
-                  onError={(e) => {
-                    e.currentTarget.src = "/group-default.png"
-                  }}
-                  className="hidden h-10 w-10 rounded-full object-cover transition hover:scale-105 cursor-pointer md:block"
-                />
-              ) : null}
-              <div className="flex flex-col leading-tight">
+              <div className="pointer-events-none absolute inset-x-14 top-1/2 flex -translate-y-1/2 items-center justify-center gap-2">
                 {conversation?.is_group ? (
-                  <span className="text-sm font-semibold">
-                    {conversation?.name || "Group Chat"}
-                  </span>
-                ) : otherUser?.id && !peerDeleted ? (
-                  <ProfileUsernameLink
-                    userId={otherUser.id}
-                    username={otherUser.username}
-                    className="text-sm font-semibold"
-                  >
-                    {title}
-                  </ProfileUsernameLink>
+                  <img
+                    src={conversation.avatar_url || "/group-default.png"}
+                    alt=""
+                    loading="lazy"
+                    decoding="async"
+                    onError={(e) => {
+                      e.currentTarget.src = "/group-default.png"
+                    }}
+                    className="h-8 w-8 shrink-0 rounded-full object-cover"
+                  />
                 ) : (
-                  <span className="text-sm font-semibold">{title}</span>
+                  <ProfileAvatarImg
+                    src={otherUser?.avatar_url}
+                    alt=""
+                    className="h-8 w-8 shrink-0 rounded-full object-cover"
+                  />
                 )}
-                <span className="text-xs text-gray-400">
-                  {conversation?.is_group
-                    ? `Group Chat • ${memberCount} members`
-                    : `Direct Message • ${memberCount} members`}
+                <span className="truncate text-sm font-semibold leading-tight">
+                  {title}
                 </span>
               </div>
-            </div>
 
-            <div className="ml-auto flex items-center gap-2">
               <button
                 type="button"
                 aria-label="Conversation settings"
@@ -2838,13 +2860,77 @@ export default function DMPage() {
                   setGroupName(conversation?.name || "")
                   setShowConversationSettings(true)
                 }}
-                className="p-2 md:px-3 md:py-1 md:bg-white/10 md:rounded md:hover:bg-white/20 md:text-sm"
+                className="flex h-11 w-11 items-center justify-center"
               >
                 ⚙️
               </button>
             </div>
+          ) : (
+            <div className="shrink-0 flex items-center justify-between px-3 py-2 border-b border-white/10 md:p-4 md:justify-start md:gap-3">
 
-          </div>
+              <button
+                onClick={() => router.push("/messages")}
+                className="p-2 md:text-sm md:px-3 md:py-1 md:bg-white/10 md:rounded md:hover:bg-white/20"
+              >
+                ←
+              </button>
+
+              <div className="flex items-center gap-3">
+                {conversation?.is_group ? (
+                  <img
+                    src={
+                      conversation.avatar_url || "/group-default.png"
+                    }
+                    alt=""
+                    loading="lazy"
+                    decoding="async"
+                    onError={(e) => {
+                      e.currentTarget.src = "/group-default.png"
+                    }}
+                    className="hidden h-10 w-10 rounded-full object-cover transition hover:scale-105 cursor-pointer md:block"
+                  />
+                ) : null}
+                <div className="flex flex-col leading-tight">
+                  {conversation?.is_group ? (
+                    <span className="text-sm font-semibold">
+                      {conversation?.name || "Group Chat"}
+                    </span>
+                  ) : otherUser?.id && !peerDeleted ? (
+                    <ProfileUsernameLink
+                      userId={otherUser.id}
+                      username={otherUser.username}
+                      className="text-sm font-semibold"
+                    >
+                      {title}
+                    </ProfileUsernameLink>
+                  ) : (
+                    <span className="text-sm font-semibold">{title}</span>
+                  )}
+                  <span className="text-xs text-gray-400">
+                    {conversation?.is_group
+                      ? `Group Chat • ${memberCount} members`
+                      : `Direct Message • ${memberCount} members`}
+                  </span>
+                </div>
+              </div>
+
+              <div className="ml-auto flex items-center gap-2">
+                <button
+                  type="button"
+                  aria-label="Conversation settings"
+                  title="Conversation settings"
+                  onClick={() => {
+                    setGroupName(conversation?.name || "")
+                    setShowConversationSettings(true)
+                  }}
+                  className="p-2 md:px-3 md:py-1 md:bg-white/10 md:rounded md:hover:bg-white/20 md:text-sm"
+                >
+                  ⚙️
+                </button>
+              </div>
+
+            </div>
+          )}
 
           {/* MESSAGES */}
           <div

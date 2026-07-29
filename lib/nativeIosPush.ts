@@ -4,6 +4,9 @@ import { supabaseBearerHeaders } from "@/lib/supabaseBearerFetch"
 const DENIED_KEY = "tt_ios_push_permission_denied_v1"
 const TOKEN_KEY = "tt_ios_push_device_token_v1"
 
+/** TEMPORARY — grep Safari/Xcode/WebView console for this prefix; remove after diagnosis. */
+const PUSH_DEBUG = "[tt-push-debug]"
+
 let registrationInFlight: Promise<void> | null = null
 let listenersAttached = false
 let lastRegisteredToken: string | null = null
@@ -12,6 +15,17 @@ const postRegisterInFlight = new Map<string, Promise<void>>()
 let cachedAppVersion: string | null | undefined
 /** Once registration proves push is unavailable (e.g. missing aps-environment), skip further attempts this session. */
 let pushCapabilityUnavailable = false
+/** TEMPORARY — set by registerNativeIosPush for token↔user correlation logs. */
+let debugUserId: string | null = null
+let appStateDebugListenerAttached = false
+
+function pushDebugLog(message: string, data?: Record<string, unknown>) {
+  const payload = {
+    timestamp: new Date().toISOString(),
+    ...(data ?? {}),
+  }
+  console.info(PUSH_DEBUG, message, payload)
+}
 
 function readDenied(): boolean {
   if (typeof window === "undefined") return false
@@ -56,7 +70,13 @@ async function postRegister(deviceToken: string) {
   if (!token) return
 
   // Already confirmed this session — skip redundant network/DB work.
-  if (lastRegisteredToken === token) return
+  if (lastRegisteredToken === token) {
+    pushDebugLog("postRegister skipped (already registered this session)", {
+      deviceToken: token,
+      userId: debugUserId,
+    })
+    return
+  }
 
   const existing = postRegisterInFlight.get(token)
   if (existing) {
@@ -75,6 +95,38 @@ async function postRegister(deviceToken: string) {
         /* ignore */
       }
     }
+
+    // TEMPORARY [tt-push-debug] — correlate phone token with server env.
+    let apnsEnvironment: string | null = null
+    try {
+      const headers = await supabaseBearerHeaders()
+      const statusRes = await fetch("/api/push/status", { headers })
+      if (statusRes.ok) {
+        const statusJson = (await statusRes.json()) as {
+          apns?: { production?: boolean; bundleId?: string }
+        }
+        apnsEnvironment = statusJson.apns?.production
+          ? "production"
+          : "sandbox"
+        pushDebugLog("push status before register", {
+          userId: debugUserId,
+          deviceToken: token,
+          platform: "ios",
+          apnsEnvironment,
+          bundleId: statusJson.apns?.bundleId ?? null,
+        })
+      }
+    } catch {
+      /* ignore status probe failures */
+    }
+
+    pushDebugLog("registration request", {
+      userId: debugUserId,
+      deviceToken: token,
+      platform: "ios",
+      apnsEnvironment,
+      appVersion: cachedAppVersion ?? null,
+    })
 
     const headers = await supabaseBearerHeaders()
     const res = await fetch("/api/push/register", {
@@ -96,8 +148,54 @@ async function postRegister(deviceToken: string) {
         status: res.status,
         body: text.slice(0, 200),
       })
+      pushDebugLog("registration failed", {
+        status: res.status,
+        body: text.slice(0, 200),
+        deviceToken: token,
+        userId: debugUserId,
+      })
       throw new Error(`register failed: ${res.status} ${text}`)
     }
+
+    // TEMPORARY [tt-push-debug] — verify DB round-trip matches phone token.
+    let storedMatches = false
+    let storedToken: string | null = null
+    try {
+      const json = (await res.json()) as {
+        ok?: boolean
+        debug?: {
+          userId?: string
+          platform?: string
+          deviceToken?: string
+          storedDeviceToken?: string
+          tokenMatchesStored?: boolean
+          apnsEnvironment?: string
+        }
+      }
+      storedToken =
+        typeof json.debug?.storedDeviceToken === "string"
+          ? json.debug.storedDeviceToken
+          : typeof json.debug?.deviceToken === "string"
+            ? json.debug.deviceToken
+            : null
+      storedMatches =
+        json.debug?.tokenMatchesStored === true ||
+        (storedToken != null && storedToken === token)
+      pushDebugLog("registration response / token verification", {
+        userId: json.debug?.userId ?? debugUserId,
+        platform: json.debug?.platform ?? "ios",
+        phoneToken: token,
+        storedDeviceToken: storedToken,
+        tokenMatchesStored: storedMatches,
+        apnsEnvironment: json.debug?.apnsEnvironment ?? apnsEnvironment,
+      })
+    } catch {
+      pushDebugLog("registration ok but debug payload parse failed", {
+        deviceToken: token,
+        userId: debugUserId,
+      })
+    }
+
     lastRegisteredToken = token
     persistToken(token)
   })()
@@ -279,15 +377,62 @@ function markPushUnavailable() {
   listenersAttached = false
 }
 
+async function logDeliveredNotifications(reason: string) {
+  try {
+    const { PushNotifications } = await import("@capacitor/push-notifications")
+    const delivered = await PushNotifications.getDeliveredNotifications()
+    pushDebugLog("getDeliveredNotifications", {
+      reason,
+      userId: debugUserId,
+      count: delivered.notifications?.length ?? 0,
+      notifications: delivered.notifications ?? [],
+    })
+  } catch (err) {
+    pushDebugLog("getDeliveredNotifications failed", {
+      reason,
+      error: err instanceof Error ? err.message : String(err),
+    })
+  }
+}
+
+async function ensureAppStateDebugListener() {
+  if (appStateDebugListenerAttached) return
+  appStateDebugListenerAttached = true
+  try {
+    const { App } = await import("@capacitor/app")
+    await App.addListener("appStateChange", ({ isActive }) => {
+      pushDebugLog("appStateChange", {
+        isActive,
+        userId: debugUserId,
+        visibility:
+          typeof document !== "undefined" ? document.visibilityState : null,
+      })
+      if (isActive) {
+        void logDeliveredNotifications("appStateChange:active")
+      }
+    })
+  } catch {
+    /* App plugin unavailable */
+  }
+}
+
 async function ensureListeners(
   onForegroundNotification?: () => void
 ) {
   if (listenersAttached || pushCapabilityUnavailable) return
 
   const { PushNotifications } = await import("@capacitor/push-notifications")
+  await ensureAppStateDebugListener()
 
   await PushNotifications.addListener("registration", (token) => {
     const value = String(token.value ?? "").trim()
+    // TEMPORARY [tt-push-debug] — log every registration callback.
+    pushDebugLog("PushNotifications registration", {
+      deviceToken: value,
+      userId: debugUserId,
+      platform: "ios",
+      alreadyPostedThisSession: lastRegisteredToken === value,
+    })
     if (!value) return
     // Skip if we already posted this token this session (stored refresh).
     if (lastRegisteredToken === value) return
@@ -308,6 +453,10 @@ async function ensureListeners(
   })
 
   await PushNotifications.addListener("registrationError", (err) => {
+    pushDebugLog("PushNotifications registrationError", {
+      error: err,
+      userId: debugUserId,
+    })
     console.error("[ios-push] APNs registrationError", err)
     // Missing Push capability / unsigned entitlement — stay quiet for product UX.
     markPushUnavailable()
@@ -317,6 +466,18 @@ async function ensureListeners(
   // in-app banner when the user is not viewing that conversation/room.
   // (capacitor.config presentationOptions is badge-only — no system banner.)
   await PushNotifications.addListener("pushNotificationReceived", (notification) => {
+    // TEMPORARY [tt-push-debug] — fires when app is foregrounded (willPresent path).
+    pushDebugLog("PushNotifications pushNotificationReceived", {
+      userId: debugUserId,
+      title: notification?.title ?? null,
+      body: notification?.body ?? null,
+      id: notification?.id ?? null,
+      data: notification?.data ?? null,
+      visibility:
+        typeof document !== "undefined" ? document.visibilityState : null,
+    })
+    void logDeliveredNotifications("after:pushNotificationReceived")
+
     onForegroundNotification?.()
     try {
       window.dispatchEvent(new Event("tj-unread-notifications-refresh"))
@@ -395,6 +556,16 @@ async function ensureListeners(
       const inputValue =
         typeof event.inputValue === "string" ? event.inputValue.trim() : ""
 
+      // TEMPORARY [tt-push-debug] — tap / action from notification.
+      pushDebugLog("PushNotifications pushNotificationActionPerformed", {
+        userId: debugUserId,
+        actionId,
+        inputValue: inputValue || null,
+        title: event.notification?.title ?? null,
+        body: event.notification?.body ?? null,
+        data: event.notification?.data ?? null,
+      })
+
       void handlePushAction({
         actionId,
         href,
@@ -418,10 +589,14 @@ async function ensureListeners(
  */
 export async function registerNativeIosPush(opts?: {
   onForegroundNotification?: () => void
+  /** TEMPORARY [tt-push-debug] — authenticated user id for token logs. */
+  userId?: string | null
 }): Promise<void> {
   if (!isNativeIos()) return
   if (pushCapabilityUnavailable) return
   if (readDenied()) return
+
+  if (opts?.userId) debugUserId = opts.userId.trim() || null
 
   if (registrationInFlight) {
     await registrationInFlight
@@ -438,16 +613,25 @@ export async function registerNativeIosPush(opts?: {
       )
 
       const current = await PushNotifications.checkPermissions()
+      pushDebugLog("checkPermissions", {
+        userId: debugUserId,
+        receive: current.receive,
+      })
       let receive = current.receive
 
       if (receive === "denied") {
         writeDenied(true)
+        pushDebugLog("permission denied", { userId: debugUserId })
         return
       }
 
       if (receive === "prompt") {
         const requested = await PushNotifications.requestPermissions()
         receive = requested.receive
+        pushDebugLog("requestPermissions result", {
+          userId: debugUserId,
+          receive,
+        })
         if (receive !== "granted") {
           writeDenied(true)
           return
@@ -464,8 +648,17 @@ export async function registerNativeIosPush(opts?: {
         void postRegister(stored).catch(() => {})
       }
 
+      pushDebugLog("PushNotifications.register() calling", {
+        userId: debugUserId,
+        storedToken: stored,
+      })
       await PushNotifications.register()
-    } catch {
+      void logDeliveredNotifications("after:register")
+    } catch (err) {
+      pushDebugLog("registerNativeIosPush threw", {
+        error: err instanceof Error ? err.message : String(err),
+        userId: debugUserId,
+      })
       // Plugin missing, entitlement absent, or bridge error — skip quietly.
       markPushUnavailable()
     } finally {

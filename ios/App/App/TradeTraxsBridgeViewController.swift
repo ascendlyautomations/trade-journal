@@ -3,6 +3,69 @@ import Capacitor
 import WebKit
 
 /**
+ * Full-bleed Splash cover that mirrors LaunchScreen.
+ * Installed on the UIWindow in AppDelegate before the first frame so the
+ * system launch image never hands off to the navy WebView shell.
+ */
+enum TradeTraxsLaunchSplash {
+  static let accessibilityIdentifier = "tt-native-splash-overlay"
+
+  /// Matches LaunchScreen + Capacitor `backgroundColor` (#0b1f3a).
+  static let shellBackground = UIColor(
+    red: 11.0 / 255.0,
+    green: 31.0 / 255.0,
+    blue: 58.0 / 255.0,
+    alpha: 1.0
+  )
+
+  @discardableResult
+  static func install(on host: UIView) -> UIView {
+    if let existing = find(in: host) {
+      if existing.superview !== host {
+        existing.removeFromSuperview()
+        host.addSubview(existing)
+        pin(existing, to: host)
+      }
+      host.bringSubviewToFront(existing)
+      return existing
+    }
+
+    let imageView = UIImageView(image: UIImage(named: "Splash"))
+    imageView.contentMode = .scaleAspectFill
+    imageView.clipsToBounds = true
+    imageView.backgroundColor = shellBackground
+    imageView.isUserInteractionEnabled = true
+    imageView.accessibilityIdentifier = accessibilityIdentifier
+    imageView.translatesAutoresizingMaskIntoConstraints = false
+    host.addSubview(imageView)
+    pin(imageView, to: host)
+    host.bringSubviewToFront(imageView)
+    return imageView
+  }
+
+  static func find(in root: UIView) -> UIView? {
+    if root.accessibilityIdentifier == accessibilityIdentifier {
+      return root
+    }
+    for subview in root.subviews {
+      if let found = find(in: subview) {
+        return found
+      }
+    }
+    return nil
+  }
+
+  private static func pin(_ overlay: UIView, to host: UIView) {
+    NSLayoutConstraint.activate([
+      overlay.topAnchor.constraint(equalTo: host.topAnchor),
+      overlay.leadingAnchor.constraint(equalTo: host.leadingAnchor),
+      overlay.trailingAnchor.constraint(equalTo: host.trailingAnchor),
+      overlay.bottomAnchor.constraint(equalTo: host.bottomAnchor),
+    ])
+  }
+}
+
+/**
  * Avoids a retain cycle: WKUserContentController strongly retains its handlers.
  */
 private final class WeakScriptMessageHandler: NSObject, WKScriptMessageHandler {
@@ -41,27 +104,25 @@ class TradeTraxsBridgeViewController: CAPBridgeViewController, WKScriptMessageHa
   private var splashOverlay: UIView?
   private var launchMessageHandler: WeakScriptMessageHandler?
 
-  /// Matches LaunchScreen + Capacitor `backgroundColor` (#0b1f3a).
-  private static let shellBackground = UIColor(
-    red: 11.0 / 255.0,
-    green: 31.0 / 255.0,
-    blue: 58.0 / 255.0,
-    alpha: 1.0
-  )
-
   override open func viewDidLoad() {
     super.viewDidLoad()
-    view.backgroundColor = Self.shellBackground
-    webView?.backgroundColor = Self.shellBackground
-    webView?.isOpaque = false
-    webView?.scrollView.backgroundColor = Self.shellBackground
+    view.backgroundColor = TradeTraxsLaunchSplash.shellBackground
+    webView?.backgroundColor = TradeTraxsLaunchSplash.shellBackground
+    // Opaque navy under page content — avoids any transparent reveal of UIWindow
+    // / system backgrounds in the status-bar band once splash dismisses.
+    webView?.isOpaque = true
+    webView?.scrollView.backgroundColor = TradeTraxsLaunchSplash.shellBackground
+    webView?.scrollView.contentInsetAdjustmentBehavior = .never
     installSplashOverlayIfNeeded()
+  }
+
+  override open var preferredStatusBarStyle: UIStatusBarStyle {
+    .lightContent
   }
 
   override open func viewDidAppear(_ animated: Bool) {
     super.viewDidAppear(animated)
-    // Prefer the window so the cover includes the status-bar band (LaunchScreen
-    // was full-bleed; the WebView sits below the status bar when overlay=false).
+    // Keep the cover on the window (full-bleed, including status-bar band).
     installSplashOverlayIfNeeded()
   }
 
@@ -130,25 +191,6 @@ class TradeTraxsBridgeViewController: CAPBridgeViewController, WKScriptMessageHa
     launchMessageHandler = proxy
     controller.add(proxy, name: Self.launchReadyHandlerName)
 
-    // Hide the login "Go home" control on native only (web app source unchanged).
-    let hideBackCSS = """
-    (function() {
-      if (window.__ttHideLoginBackWired) return;
-      window.__ttHideLoginBackWired = true;
-      var css = 'button[aria-label="Go home"]{display:none!important;visibility:hidden!important;pointer-events:none!important;opacity:0!important;}';
-      var style = document.createElement('style');
-      style.id = 'tt-native-login-back-style';
-      style.textContent = css;
-      function mount() {
-        var parent = document.head || document.documentElement;
-        if (parent && !document.getElementById('tt-native-login-back-style')) {
-          parent.appendChild(style);
-        }
-      }
-      mount();
-      document.addEventListener('DOMContentLoaded', mount);
-    })();
-    """
     // Keep the native Splash cover until login/dashboard (or restored route)
     // has a meaningful painted frame — no setTimeout.
     let launchReadyJS = """
@@ -164,15 +206,23 @@ class TradeTraxsBridgeViewController: CAPBridgeViewController, WKScriptMessageHa
         return p === '/' || p === '/native' || p.indexOf('/native/') === 0;
       }
 
+      function hasLoginUi() {
+        return !!(
+          document.querySelector('form') ||
+          document.querySelector('input[type="email"], input[type="password"], input[name="email"]') ||
+          document.querySelector('img[src*="tradetrax-bg"]')
+        );
+      }
+
       function isMeaningfulFrame() {
         var p = path();
         if (isTransitPath(p)) return false;
         var root = document.documentElement;
         if (!root) return false;
 
-        // Login: NativeIosLoginShell sets tt-ios-auth after the native chrome mounts.
+        // Login: SSR may already set tt-native-ios; tt-ios-auth follows on mount.
         if (p.indexOf('/login') === 0) {
-          return root.classList.contains('tt-ios-auth');
+          return (root.classList.contains('tt-ios-auth') || root.classList.contains('tt-native-ios')) && hasLoginUi();
         }
 
         // Authenticated app / restored deep links: NativeAppShell sets tt-native-ios.
@@ -217,9 +267,6 @@ class TradeTraxsBridgeViewController: CAPBridgeViewController, WKScriptMessageHa
     """
 
     controller.addUserScript(
-      WKUserScript(source: hideBackCSS, injectionTime: .atDocumentStart, forMainFrameOnly: true)
-    )
-    controller.addUserScript(
       WKUserScript(source: launchReadyJS, injectionTime: .atDocumentStart, forMainFrameOnly: true)
     )
   }
@@ -230,51 +277,32 @@ class TradeTraxsBridgeViewController: CAPBridgeViewController, WKScriptMessageHa
     let host: UIView
     if let window = view.window {
       host = window
+    } else if let window = (UIApplication.shared.delegate as? AppDelegate)?.window {
+      host = window
     } else if let webView {
       host = webView
     } else {
       host = view
     }
 
-    if let existing = splashOverlay {
-      if existing.superview !== host {
-        existing.removeFromSuperview()
-        host.addSubview(existing)
-        pinSplashOverlay(existing, to: host)
-      }
-      host.bringSubviewToFront(existing)
-      return
-    }
-
-    let imageView = UIImageView(image: UIImage(named: "Splash"))
-    imageView.contentMode = .scaleAspectFill
-    imageView.clipsToBounds = true
-    imageView.backgroundColor = Self.shellBackground
-    imageView.isUserInteractionEnabled = true
-    imageView.accessibilityIdentifier = "tt-native-splash-overlay"
-    imageView.translatesAutoresizingMaskIntoConstraints = false
-
-    host.addSubview(imageView)
-    pinSplashOverlay(imageView, to: host)
-    host.bringSubviewToFront(imageView)
-    splashOverlay = imageView
-  }
-
-  private func pinSplashOverlay(_ overlay: UIView, to host: UIView) {
-    NSLayoutConstraint.activate([
-      overlay.topAnchor.constraint(equalTo: host.topAnchor),
-      overlay.leadingAnchor.constraint(equalTo: host.leadingAnchor),
-      overlay.trailingAnchor.constraint(equalTo: host.trailingAnchor),
-      overlay.bottomAnchor.constraint(equalTo: host.bottomAnchor),
-    ])
+    splashOverlay = TradeTraxsLaunchSplash.install(on: host)
   }
 
   private func dismissSplashOverlay() {
     guard !splashDismissed else { return }
     splashDismissed = true
-    guard let overlay = splashOverlay else { return }
+    splashOverlay?.removeFromSuperview()
     splashOverlay = nil
-    overlay.removeFromSuperview()
+    // Sweep leftovers if the cover was parented to window and/or webView.
+    if let window = view.window {
+      TradeTraxsLaunchSplash.find(in: window)?.removeFromSuperview()
+    }
+    if let window = (UIApplication.shared.delegate as? AppDelegate)?.window {
+      TradeTraxsLaunchSplash.find(in: window)?.removeFromSuperview()
+    }
+    if let webView {
+      TradeTraxsLaunchSplash.find(in: webView)?.removeFromSuperview()
+    }
   }
 
   // MARK: - URL persistence

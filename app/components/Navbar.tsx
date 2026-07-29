@@ -22,6 +22,7 @@ import { scheduleDeferredWork } from "../../lib/scheduleDeferredWork"
 import { subscribeNotificationChanges } from "../../lib/notificationRealtime"
 import { ProfileAvatarImg } from "./SafeProfileAvatar"
 import UserReviewModal from "./beta/UserReviewModal"
+import BugReportModal from "./BugReportModal"
 import GettingStartedMobileEntry from "./GettingStartedMobileEntry"
 import { isDemoUserId } from "@/lib/demo/constants"
 import { getDemoUnreadNotificationCount } from "@/lib/demo/demoNotifications"
@@ -61,6 +62,7 @@ export default function Navbar() {
   const [moreSubmenu, setMoreSubmenu] = useState<string | null>(null)
   const [accountMenuOpen, setAccountMenuOpen] = useState(false)
   const [reviewModalOpen, setReviewModalOpen] = useState(false)
+  const [bugReportModalOpen, setBugReportModalOpen] = useState(false)
   const [unreadMessagesCount, setUnreadMessagesCount] = useState(0)
   const [unreadCount, setUnreadCount] = useState(0)
   const [isAdmin, setIsAdmin] = useState(false)
@@ -148,7 +150,7 @@ export default function Navbar() {
     setMounted(true)
   }, [])
 
-  // Capacitor iOS only: bottom-tab "More" opens this same hamburger menu.
+  // Capacitor iOS only: open this hamburger as the secondary "More" menu.
   useEffect(() => {
     if (!isNativeIos()) return
     const onOpen = () => {
@@ -1230,6 +1232,320 @@ export default function Navbar() {
       {mobileMenuOpen ? (
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain border-t border-white/10 bg-[#0b1f3a] [webkit-overflow-scrolling:touch] md:hidden">
           <div className="flex w-full flex-col gap-1 px-4 pb-[calc(0.75rem+var(--safe-area-bottom)+var(--app-tab-bar-height))] pt-1.5 text-sm text-white md:px-6">
+          {isNativeIos() ? (
+            <>
+              {/* Native iOS: primary tabs live in the bottom bar — this is More. */}
+              {showReturnToApp ? (
+                <button
+                  type="button"
+                  onClick={handleReturnToApp}
+                  className="rounded-lg bg-blue-500 px-3 py-1.5 font-medium text-white transition hover:bg-blue-600"
+                >
+                  Return to App
+                </button>
+              ) : null}
+              {user ? <GettingStartedMobileEntry placement="menu" /> : null}
+
+              <p className="px-3 pb-0.5 pt-1 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                Trading
+              </p>
+              <IntentPrefetchLink
+                href="/calendar"
+                className={`rounded-lg px-3 py-1.5 transition ${
+                  isActive("/calendar")
+                    ? "bg-blue-500/20 text-blue-300"
+                    : "text-gray-300 hover:text-white"
+                }`}
+                onClick={closeMobile}
+              >
+                Calendar
+              </IntentPrefetchLink>
+              <IntentPrefetchLink
+                href="/trades"
+                className={`rounded-lg px-3 py-1.5 transition ${
+                  isActive("/trades")
+                    ? "bg-blue-500/20 text-blue-300"
+                    : "text-gray-300 hover:text-white"
+                }`}
+                onClick={closeMobile}
+              >
+                Trades
+              </IntentPrefetchLink>
+              <IntentPrefetchLink
+                href="/backtest"
+                className={`flex items-center justify-between gap-2 rounded-lg px-3 py-1.5 transition ${
+                  isActive("/backtest")
+                    ? "bg-blue-500/20 text-blue-300"
+                    : isProUser
+                      ? "text-gray-300 hover:text-white"
+                      : "text-gray-400 hover:bg-white/10"
+                }`}
+                onClick={closeMobile}
+              >
+                <span>Backtest Lab</span>
+                {!isProUser ? proBadge : null}
+              </IntentPrefetchLink>
+              <IntentPrefetchLink
+                href="/analyst"
+                className={`flex items-center justify-between gap-2 rounded-lg px-3 py-1.5 transition ${
+                  isActive("/analyst")
+                    ? "bg-blue-500/20 text-blue-300"
+                    : isProUser
+                      ? "text-gray-300 hover:text-white"
+                      : "text-gray-400 hover:bg-white/10"
+                }`}
+                onClick={closeMobile}
+              >
+                <span>AI Trade Analyst</span>
+                {!isProUser ? proBadge : null}
+              </IntentPrefetchLink>
+              <IntentPrefetchLink
+                href="/import"
+                className={`rounded-lg px-3 py-1.5 transition ${
+                  isActive("/import")
+                    ? "bg-blue-500/20 text-blue-300"
+                    : "text-gray-300 hover:text-white"
+                }`}
+                onClick={closeMobile}
+              >
+                Import CSV
+              </IntentPrefetchLink>
+              <IntentPrefetchLink
+                href="/analytics/propfirm"
+                className={`flex items-center justify-between gap-2 rounded-lg px-3 py-1.5 transition ${
+                  isActive("/analytics/propfirm")
+                    ? "bg-blue-500/20 text-blue-300"
+                    : isProUser
+                      ? "text-gray-300 hover:text-white"
+                      : "text-gray-400 hover:bg-white/10"
+                }`}
+                onClick={closeMobile}
+              >
+                <span>Prop Firm Mode</span>
+                {!isProUser ? proBadge : null}
+              </IntentPrefetchLink>
+              <IntentPrefetchLink
+                href="/achievements"
+                className={`rounded-lg px-3 py-1.5 transition ${
+                  isActive("/achievements")
+                    ? "bg-blue-500/20 text-blue-300"
+                    : "text-gray-300 hover:text-white"
+                }`}
+                onClick={closeMobile}
+              >
+                Achievements
+              </IntentPrefetchLink>
+              <IntentPrefetchLink
+                href="/streaks"
+                className={`rounded-lg px-3 py-1.5 transition ${
+                  isActive("/streaks")
+                    ? "bg-blue-500/20 text-blue-300"
+                    : "text-gray-300 hover:text-white"
+                }`}
+                onClick={closeMobile}
+              >
+                Streaks
+              </IntentPrefetchLink>
+
+              <p className="px-3 pb-0.5 pt-2.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                Community
+              </p>
+              <IntentPrefetchLink
+                href="/explore"
+                className={`rounded-lg px-3 py-1.5 transition ${
+                  isActive("/explore")
+                    ? "bg-blue-500/20 text-blue-300"
+                    : "text-gray-300 hover:text-white"
+                }`}
+                onClick={closeMobile}
+              >
+                Explore
+              </IntentPrefetchLink>
+              <IntentPrefetchLink
+                href="/community"
+                className={`rounded-lg px-3 py-1.5 transition ${
+                  isActive("/community") || pathname.startsWith("/room/")
+                    ? "bg-blue-500/20 text-blue-300"
+                    : "text-gray-300 hover:text-white"
+                }`}
+                onClick={closeMobile}
+              >
+                Trade Rooms
+              </IntentPrefetchLink>
+              <IntentPrefetchLink
+                href="/leaderboard"
+                className={`rounded-lg px-3 py-1.5 transition ${
+                  isActive("/leaderboard")
+                    ? "bg-blue-500/20 text-blue-300"
+                    : "text-gray-300 hover:text-white"
+                }`}
+                onClick={closeMobile}
+              >
+                Leaderboard
+              </IntentPrefetchLink>
+
+              <p className="px-3 pb-0.5 pt-2.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                Account
+              </p>
+              <button
+                type="button"
+                className="flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-left text-gray-300 transition hover:text-white"
+                onClick={() => {
+                  void handleToggleNotifications()
+                  closeMobile()
+                  router.push("/notifications")
+                }}
+              >
+                <span>Notifications</span>
+                {unreadCount > 0 ? (
+                  <span className="rounded-full bg-red-500 px-2 py-0.5 text-xs text-white tabular-nums">
+                    {badgeText(unreadCount)}
+                  </span>
+                ) : null}
+              </button>
+              <IntentPrefetchLink
+                href="/settings#subscription"
+                className="rounded-lg px-3 py-1.5 text-gray-300 transition hover:text-white"
+                onClick={closeMobile}
+              >
+                Billing / Subscription
+              </IntentPrefetchLink>
+              <IntentPrefetchLink
+                href="/referrals"
+                className={`rounded-lg px-3 py-1.5 transition ${
+                  isActive("/referrals")
+                    ? "bg-blue-500/20 text-blue-300"
+                    : "text-gray-300 hover:text-white"
+                }`}
+                onClick={closeMobile}
+              >
+                Referrals
+              </IntentPrefetchLink>
+              <IntentPrefetchLink
+                href="/settings#account"
+                className="rounded-lg px-3 py-1.5 text-gray-300 transition hover:text-white"
+                onClick={closeMobile}
+              >
+                Settings
+              </IntentPrefetchLink>
+              <IntentPrefetchLink
+                href={affiliateMenuItem.href}
+                className={`rounded-lg px-3 py-1.5 transition ${
+                  isGroupActive([
+                    "/affiliate",
+                    "/affiliate/dashboard",
+                    "/affiliate/payout-setup",
+                    "/payouts",
+                  ])
+                    ? "bg-blue-500/20 text-blue-300"
+                    : "text-gray-300 hover:text-white"
+                }`}
+                onClick={closeMobile}
+              >
+                {affiliateMenuItem.label}
+              </IntentPrefetchLink>
+
+              <p className="px-3 pb-0.5 pt-2.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                Support
+              </p>
+              <button
+                type="button"
+                className="rounded-lg px-3 py-1.5 text-left text-gray-300 transition hover:text-white"
+                onClick={() => {
+                  closeMobile()
+                  setReviewModalOpen(true)
+                }}
+              >
+                Leave a Review
+              </button>
+              <button
+                type="button"
+                className="rounded-lg px-3 py-1.5 text-left text-gray-300 transition hover:text-white"
+                onClick={() => {
+                  closeMobile()
+                  setBugReportModalOpen(true)
+                }}
+              >
+                Report Bug
+              </button>
+              <IntentPrefetchLink
+                href="/feature-requests"
+                className={`rounded-lg px-3 py-1.5 transition ${
+                  isActive("/feature-requests")
+                    ? "bg-blue-500/20 text-blue-300"
+                    : "text-gray-300 hover:text-white"
+                }`}
+                onClick={closeMobile}
+              >
+                Feature Requests
+              </IntentPrefetchLink>
+              <IntentPrefetchLink
+                href="/help"
+                className="rounded-lg px-3 py-1.5 text-gray-300 transition hover:text-white"
+                onClick={closeMobile}
+              >
+                Help / Support
+              </IntentPrefetchLink>
+              <IntentPrefetchLink
+                href="/privacy"
+                className="rounded-lg px-3 py-1.5 text-gray-300 transition hover:text-white"
+                onClick={closeMobile}
+              >
+                Privacy Policy
+              </IntentPrefetchLink>
+              <IntentPrefetchLink
+                href="/terms"
+                className="rounded-lg px-3 py-1.5 text-gray-300 transition hover:text-white"
+                onClick={closeMobile}
+              >
+                Terms of Service
+              </IntentPrefetchLink>
+
+              {(profile?.is_beta_tester || isAdmin) ? (
+                <>
+                  <p className="px-3 pb-0.5 pt-2.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                    Developer
+                  </p>
+                  {profile?.is_beta_tester ? (
+                    <IntentPrefetchLink
+                      href="/beta"
+                      className={`flex items-center gap-2 rounded-lg px-3 py-1.5 transition ${
+                        isActive("/beta")
+                          ? "border border-yellow-400/40 bg-yellow-500/25 text-yellow-200"
+                          : "border border-yellow-400/25 bg-yellow-500/15 text-yellow-300 hover:bg-yellow-500/25"
+                      }`}
+                      onClick={closeMobile}
+                    >
+                      <span>Beta Hub</span>
+                      {betaBadge}
+                    </IntentPrefetchLink>
+                  ) : null}
+                  {isAdmin ? (
+                    <IntentPrefetchLink
+                      href="/admin"
+                      className="rounded-lg px-3 py-1.5 text-white hover:text-blue-400"
+                      onClick={closeMobile}
+                    >
+                      Admin
+                    </IntentPrefetchLink>
+                  ) : null}
+                </>
+              ) : null}
+
+              <div className="mt-1 border-t border-white/10 pt-1.5">
+                <button
+                  type="button"
+                  className="w-full rounded-lg px-3 py-1.5 text-left text-sm text-red-400 hover:text-red-300"
+                  onClick={() => {
+                    void handleSignOut()
+                  }}
+                >
+                  Sign Out
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
           {showReturnToApp ? (
             <button
               type="button"
@@ -1486,6 +1802,8 @@ export default function Navbar() {
               Sign Out
             </button>
           </div>
+            </>
+          )}
           </div>
         </div>
       ) : null}
@@ -1494,6 +1812,10 @@ export default function Navbar() {
         open={reviewModalOpen}
         userId={user?.id ?? null}
         onClose={() => setReviewModalOpen(false)}
+      />
+      <BugReportModal
+        open={bugReportModalOpen}
+        onClose={() => setBugReportModalOpen(false)}
       />
     </div>
   )

@@ -26,8 +26,9 @@ export default function NativeAppShell() {
       try {
         const { StatusBar, Style } = await import("@capacitor/status-bar")
         if (cancelled) return
-        // WebView laid out below the status bar (not under the notch).
-        await StatusBar.setOverlaysWebView({ overlay: false })
+        // Edge-to-edge WebView — one continuous paint surface (no StatusBar
+        // backgroundView strip above the WKWebView). Chrome uses CSS safe-area.
+        await StatusBar.setOverlaysWebView({ overlay: true })
         await StatusBar.setBackgroundColor({ color: "#0b1f3a" })
         await StatusBar.setStyle({ style: Style.Dark })
       } catch {

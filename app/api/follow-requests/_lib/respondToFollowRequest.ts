@@ -111,20 +111,37 @@ export async function approveFollowRequest(
     const { getServerNotificationPreferences } = await import(
       "@/lib/serverNotificationPreferences"
     )
-    const prefs = await getServerNotificationPreferences(req.requester_id)
+    const prefs = await getServerNotificationPreferences(req.requester_id, {
+      force: true,
+    })
     if (
       prefs.notifications_enabled &&
       prefs.follow_request_accepts_enabled
     ) {
-      const { scheduleIosPushDelivery } = await import(
-        "@/lib/server/push/deliverPushNotification"
-      )
-      scheduleIosPushDelivery({
-        recipientUserId: req.requester_id,
-        type: "follow_request_accepted",
-        sender_id: req.target_id,
-        prefsAlreadyChecked: true,
-      })
+      const { error: acceptNotifErr } = await supabaseServiceRole
+        .from("notifications")
+        .insert({
+          user_id: req.requester_id,
+          sender_id: req.target_id,
+          type: "follow_request_accepted",
+        })
+
+      if (acceptNotifErr && acceptNotifErr.code !== "23505") {
+        console.error(
+          "[follow-requests] accept notification insert failed",
+          acceptNotifErr
+        )
+      } else if (!acceptNotifErr) {
+        const { scheduleIosPushDelivery } = await import(
+          "@/lib/server/push/deliverPushNotification"
+        )
+        scheduleIosPushDelivery({
+          recipientUserId: req.requester_id,
+          type: "follow_request_accepted",
+          sender_id: req.target_id,
+          prefsAlreadyChecked: true,
+        })
+      }
     }
   }
 

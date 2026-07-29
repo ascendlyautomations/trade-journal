@@ -2771,7 +2771,7 @@ function FeedPageContent() {
 
   return (
     <NativeIosPullToRefresh onRefresh={handleNativePullToRefresh}>
-    <div className="w-full text-white">
+    <div data-tt-native-surface="feed" className="w-full text-white">
       <h1 className="sr-only">Feed</h1>
       {feedbackModalProps.isOpen ? (
         <FeedbackModal {...feedbackModalProps} />
@@ -2779,7 +2779,10 @@ function FeedPageContent() {
       {deleteReelConfirmProps.open ? (
         <ConfirmModal {...deleteReelConfirmProps} />
       ) : null}
-      <div className="flex justify-center px-4 py-6 sm:py-8 pb-10">
+      <div
+        data-tt-feed-column
+        className="flex justify-center px-4 py-6 sm:py-8 pb-10"
+      >
         <div className="w-full max-w-xl space-y-6">
           <FeedModeToggle mode={mode} onModeChange={handleFeedModeChange} />
           <FeedContentToggle

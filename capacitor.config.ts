@@ -58,7 +58,10 @@ const config: CapacitorConfig = {
     StatusBar: {
       style: 'DARK',
       backgroundColor: '#0b1f3a',
-      overlaysWebView: false,
+      // WebView must paint under the status bar. When false, Capacitor inserts a
+      // separate UIView (StatusBar.backgroundView) above the WKWebView — that
+      // native strip is what showed as a different-colored band on Login.
+      overlaysWebView: true,
     },
     Keyboard: {
       // Body-only resize keeps fixed chrome (navbar) stable; native resize

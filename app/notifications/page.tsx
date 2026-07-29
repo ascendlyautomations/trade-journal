@@ -38,6 +38,7 @@ import {
   filterGroupedCardsByTab,
   formatCommentGroupTitle,
   formatFollowGroupMessage,
+  formatFollowRequestAcceptedMessage,
   formatFollowRequestGroupMessage,
   formatLikeGroupMessage,
   formatRoomJoinMessage,
@@ -121,6 +122,8 @@ function cardStableKey(card: GroupedNotificationCard): string {
     case "follow_group":
     case "follow_request_group":
       return card.key
+    case "follow_request_accepted":
+      return `follow_request_accepted:${card.notification.id}`
     case "room_join":
       return `room_join:${card.notification.id}`
     case "room_message_group":
@@ -282,6 +285,12 @@ function GroupedNotificationCardView({
         })}
       </ul>
     )
+  } else if (card.kind === "follow_request_accepted") {
+    const sender = card.notification.sender_id
+      ? sendersById[card.notification.sender_id]
+      : undefined
+    title = formatFollowRequestAcceptedMessage(senderDisplayName(sender))
+    avatarUrl = sender?.avatar_url
   } else if (card.kind === "room_join") {
     const sender = card.notification.sender_id
       ? sendersById[card.notification.sender_id]
@@ -347,7 +356,9 @@ function GroupedNotificationCardView({
     >
       <div className="flex items-start gap-2 sm:gap-3">
         {avatarUrl != null &&
-        (card.kind === "room_join" || card.kind === "affiliate_notification") &&
+        (card.kind === "room_join" ||
+          card.kind === "follow_request_accepted" ||
+          card.kind === "affiliate_notification") &&
         card.notification.sender_id ? (
           <div className="relative shrink-0">
             <ProfileAvatarLink
@@ -714,7 +725,10 @@ export default function NotificationsPage() {
     const likes = groupedCards.filter((c) => c.kind === "like_group").length
     const comments = groupedCards.filter((c) => c.kind === "comment_group").length
     const followers = groupedCards.filter(
-      (c) => c.kind === "follow_group" || c.kind === "follow_request_group"
+      (c) =>
+        c.kind === "follow_group" ||
+        c.kind === "follow_request_group" ||
+        c.kind === "follow_request_accepted"
     ).length
     const rooms = groupedCards.filter((c) => c.kind === "room_message_group").length
     return { all: groupedCards.length, likes, comments, followers, rooms }

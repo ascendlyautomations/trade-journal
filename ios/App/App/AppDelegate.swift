@@ -8,19 +8,48 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Match LaunchScreen / Capacitor backgroundColor (#0b1f3a) so the handoff
-        // from the static launch image into the WebView never flashes white/black.
-        let launchBackground = UIColor(
-            red: 11.0 / 255.0,
-            green: 31.0 / 255.0,
-            blue: 58.0 / 255.0,
-            alpha: 1.0
-        )
+        // Match LaunchScreen / Capacitor backgroundColor (#0b1f3a).
+        let launchBackground = TradeTraxsLaunchSplash.shellBackground
         window?.backgroundColor = launchBackground
         window?.tintColor = launchBackground
 
+        // Install the Splash cover on the window BEFORE the first app frame so
+        // the system LaunchScreen hands off to the same image — never to the
+        // empty navy WebView shell. TradeTraxsBridgeViewController dismisses it
+        // once login/dashboard has a meaningful painted frame.
+        if let window {
+            TradeTraxsLaunchSplash.install(on: window)
+        }
+
         registerTradeTraxsNotificationCategories()
+
+        // TEMPORARY [tt-push-debug] — remove after delivery diagnosis.
+        TradeTraxsPushDebug.logNotificationSettings(reason: "didFinishLaunching")
+        // Capacitor sets UNUserNotificationCenter.delegate during plugin load;
+        // retry wrapping so we log without replacing presentation behavior.
+        schedulePushDebugDelegateInstall()
+
         return true
+    }
+
+    /// Portrait-only for the entire native shell (Info.plist + this mask).
+    /// System camera / photo pickers may still present briefly; after dismiss
+    /// the app returns to portrait because landscape is not a supported mask.
+    func application(
+        _ application: UIApplication,
+        supportedInterfaceOrientationsFor window: UIWindow?
+    ) -> UIInterfaceOrientationMask {
+        .portrait
+    }
+
+    /// TEMPORARY [tt-push-debug]
+    private func schedulePushDebugDelegateInstall() {
+        let delays: [TimeInterval] = [0.3, 1.0, 2.0, 5.0]
+        for delay in delays {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                TradeTraxsPushDebug.installDelegateWrapper()
+            }
+        }
     }
 
     /// Long-press actions for remote pushes (category must match APNs `aps.category`).
@@ -96,6 +125,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     func applicationDidEnterBackground(_ application: UIApplication) {
         persistWebViewUrlIfPossible()
+        // TEMPORARY [tt-push-debug]
+        NSLog("%@ applicationDidEnterBackground timestamp=%@", TradeTraxsPushDebug.prefix, ISO8601DateFormatter().string(from: Date()))
     }
 
     func applicationWillEnterForeground(_ application: UIApplication) {
@@ -104,6 +135,11 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     func applicationDidBecomeActive(_ application: UIApplication) {
         // Do not reload or re-navigate. Resume in place.
+
+        // TEMPORARY [tt-push-debug] — re-wrap if Capacitor replaced the delegate.
+        TradeTraxsPushDebug.installDelegateWrapper()
+        TradeTraxsPushDebug.logNotificationSettings(reason: "didBecomeActive")
+        TradeTraxsPushDebug.logDeliveredNotifications(reason: "didBecomeActive")
     }
 
     func applicationWillTerminate(_ application: UIApplication) {
@@ -127,11 +163,28 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     // Registration only succeeds once aps-environment is present (see App.entitlements)
     // and Push Notifications is enabled on the App ID in Apple Developer.
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        // TEMPORARY [tt-push-debug]
+        TradeTraxsPushDebug.logDeviceToken(deviceToken)
         NotificationCenter.default.post(name: .capacitorDidRegisterForRemoteNotifications, object: deviceToken)
     }
 
     func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        // TEMPORARY [tt-push-debug]
+        TradeTraxsPushDebug.logRegistrationFailure(error)
         NotificationCenter.default.post(name: .capacitorDidFailToRegisterForRemoteNotifications, object: error)
+    }
+
+    // TEMPORARY [tt-push-debug] — log silent/background delivery callbacks (alert pushes may not hit this).
+    func application(
+        _ application: UIApplication,
+        didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+        fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
+    ) {
+        TradeTraxsPushDebug.logRemoteNotification(
+            source: "didReceiveRemoteNotification",
+            userInfo: userInfo,
+            fetchCompletion: completionHandler
+        )
     }
 
     private func persistWebViewUrlIfPossible() {

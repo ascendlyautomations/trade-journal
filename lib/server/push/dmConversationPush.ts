@@ -3,7 +3,10 @@ import {
   DM_PUSH_BATCH_TTL_MS,
   dmPushThreadId,
 } from "@/lib/server/push/batchWindows"
-import { scheduleMessagingPush } from "@/lib/server/push/messagingPush"
+import {
+  scheduleMessagingPush,
+  type MessagingPushPreferenceKey,
+} from "@/lib/server/push/messagingPush"
 
 export type ScheduleDmConversationPushParams = {
   recipientUserId: string
@@ -13,6 +16,7 @@ export type ScheduleDmConversationPushParams = {
   preview: string
   isGroup: boolean
   groupName: string | null
+  preferenceKey?: MessagingPushPreferenceKey
 }
 
 /**
@@ -65,6 +69,7 @@ export async function scheduleDmConversationPush(
     kind: "message",
     sender_id: params.senderId,
     content,
+    preferenceKey: params.preferenceKey ?? "direct_messages_enabled",
     prefsAlreadyChecked: true,
   })
 }

@@ -1,4 +1,5 @@
 import { getRouteUser, supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
+import { getApnsRuntimeInfo } from "@/lib/server/push/apns"
 
 type RegisterBody = {
   deviceToken?: string
@@ -37,6 +38,17 @@ export async function POST(req: Request) {
   }
 
   const now = new Date().toISOString()
+  const apns = getApnsRuntimeInfo()
+
+  // TEMPORARY [tt-push-debug]
+  console.info("[tt-push-debug] register upsert", {
+    userId: user.id,
+    platform,
+    deviceToken,
+    apnsEnvironment: apns.production ? "production" : "sandbox",
+    bundleId: apns.bundleId,
+    timestamp: now,
+  })
 
   const { error } = await supabaseServiceRole.from("device_push_tokens").upsert(
     {
@@ -55,5 +67,42 @@ export async function POST(req: Request) {
     return Response.json({ error: error.message }, { status: 500 })
   }
 
-  return Response.json({ ok: true })
+  // TEMPORARY [tt-push-debug] — read back to prove DB matches phone token.
+  const { data: storedRows, error: readErr } = await supabaseServiceRole
+    .from("device_push_tokens")
+    .select("device_token, user_id, platform, updated_at")
+    .eq("user_id", user.id)
+    .eq("platform", "ios")
+
+  if (readErr) {
+    console.error("[tt-push-debug] register read-back failed", readErr)
+  }
+
+  const tokens = (storedRows ?? []).map((row) =>
+    String(row.device_token ?? "").trim()
+  )
+  const tokenMatchesStored = tokens.includes(deviceToken)
+
+  console.info("[tt-push-debug] register stored tokens for user", {
+    userId: user.id,
+    phoneToken: deviceToken,
+    storedTokens: tokens,
+    tokenMatchesStored,
+    apnsEnvironment: apns.production ? "production" : "sandbox",
+  })
+
+  return Response.json({
+    ok: true,
+    // TEMPORARY [tt-push-debug] — remove after diagnosis.
+    debug: {
+      userId: user.id,
+      platform: "ios",
+      deviceToken,
+      storedDeviceToken: tokens.find((t) => t === deviceToken) ?? tokens[0] ?? null,
+      storedTokens: tokens,
+      tokenMatchesStored,
+      apnsEnvironment: apns.production ? "production" : "sandbox",
+      bundleId: apns.bundleId,
+    },
+  })
 }

@@ -51,10 +51,11 @@ function preferenceKeyForType(
       return "room_joins_enabled"
     case "message":
       return "direct_messages_enabled"
+    case "trading_report":
+      return "product_updates_enabled"
     case "affiliate_referral":
     case "affiliate_commission_earned":
-    case "trading_report":
-      // No dedicated toggle — master switch only (matches DB insert guard).
+      // No dedicated Settings toggle yet — master switch only.
       return null
     default:
       return null
@@ -65,7 +66,10 @@ async function shouldDeliverPush(
   recipientUserId: string,
   input: DeliverPushInput
 ): Promise<boolean> {
-  const prefs = await getServerNotificationPreferences(recipientUserId)
+  // Fresh read so a Settings toggle OFF is respected immediately (no stale cache).
+  const prefs = await getServerNotificationPreferences(recipientUserId, {
+    force: true,
+  })
   if (!prefs.notifications_enabled) return false
 
   // Always re-check category toggles. DB BEFORE INSERT triggers that return null

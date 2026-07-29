@@ -1,7 +1,8 @@
 import { getRouteUser, supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
 import { buildDirectMessagePushPreview } from "@/lib/server/push/dmPushPreview"
 import { scheduleDmConversationPush } from "@/lib/server/push/dmConversationPush"
-import { filterRecipientsByDirectMessagePreference } from "@/lib/serverNotificationPreferences"
+import { filterRecipientsByDmMessageTypePreference } from "@/lib/serverNotificationPreferences"
+import type { MessagingPushPreferenceKey } from "@/lib/server/push/messagingPush"
 import { jsonUserFacingError } from "@/lib/userFacingError"
 
 /**
@@ -147,7 +148,10 @@ export async function POST(req: Request) {
   recipientIds = recipientIds.filter((id) => !muted.has(id))
 
   recipientIds = await filterBlockedRecipients(user.id, recipientIds)
-  recipientIds = await filterRecipientsByDirectMessagePreference(recipientIds)
+  recipientIds = await filterRecipientsByDmMessageTypePreference(
+    recipientIds,
+    messageRow.type
+  )
 
   if (recipientIds.length === 0) {
     return Response.json({
@@ -163,6 +167,19 @@ export async function POST(req: Request) {
       ? conversationRow.name.trim()
       : ""
 
+  const messageType = String(messageRow.type ?? "").trim()
+  let preferenceKey: MessagingPushPreferenceKey = "direct_messages_enabled"
+  if (messageType === "story_reply") {
+    preferenceKey = "story_replies_enabled"
+  } else if (
+    messageType === "trade" ||
+    messageType === "post" ||
+    messageType === "profile_post" ||
+    messageType === "achievement_post"
+  ) {
+    preferenceKey = "shares_enabled"
+  }
+
   for (const recipientId of recipientIds) {
     void scheduleDmConversationPush({
       recipientUserId: recipientId,
@@ -172,6 +189,7 @@ export async function POST(req: Request) {
       preview,
       isGroup,
       groupName: isGroup ? groupName || "Group" : null,
+      preferenceKey,
     })
   }
 

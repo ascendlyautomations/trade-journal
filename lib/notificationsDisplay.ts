@@ -100,6 +100,11 @@ export type RoomJoinNotificationItem = {
   notification: NotificationRecord
 }
 
+export type FollowRequestAcceptedNotificationItem = {
+  kind: "follow_request_accepted"
+  notification: NotificationRecord
+}
+
 export type RoomMessageNotificationItem = {
   kind: "room_message"
   notification: NotificationRecord
@@ -145,6 +150,7 @@ export type GroupedNotificationCard =
   | CommentNotificationGroup
   | FollowNotificationGroup
   | FollowRequestNotificationGroup
+  | FollowRequestAcceptedNotificationItem
   | RoomJoinNotificationItem
   | RoomMessageNotificationGroup
   | AffiliateNotificationItem
@@ -525,6 +531,9 @@ export function buildGroupedNotificationCards(
   const comments = rows.filter((row) => row.type === "comment")
   const follows = rows.filter((row) => row.type === "follow")
   const followRequests = rows.filter((row) => row.type === "follow_request")
+  const followRequestAccepted = rows.filter(
+    (row) => row.type === "follow_request_accepted"
+  )
   const roomJoins = rows.filter((row) => row.type === "room_join")
   // Legacy `room_message` rows may still exist; new Activity path uses `room_mention` only.
   const roomMessages = rows.filter(
@@ -543,6 +552,12 @@ export function buildGroupedNotificationCards(
     ...groupCommentNotifications(comments),
     ...groupFollowNotifications(follows, now),
     ...groupFollowRequestNotifications(followRequests, now),
+    ...followRequestAccepted.map(
+      (notification): FollowRequestAcceptedNotificationItem => ({
+        kind: "follow_request_accepted",
+        notification,
+      })
+    ),
     ...roomJoins.map(
       (notification): RoomJoinNotificationItem => ({
         kind: "room_join",
@@ -585,7 +600,9 @@ export function filterGroupedCardsByTab(
     case "followers":
       return cards.filter(
         (card) =>
-          card.kind === "follow_group" || card.kind === "follow_request_group"
+          card.kind === "follow_group" ||
+          card.kind === "follow_request_group" ||
+          card.kind === "follow_request_accepted"
       )
     case "rooms":
       return cards.filter((card) => card.kind === "room_message_group")
@@ -632,6 +649,7 @@ export function groupCardsByTimeSection(cards: GroupedNotificationCard[]) {
 
 export function groupedCardCreatedAt(card: GroupedNotificationCard): string {
   if (card.kind === "room_join") return card.notification.created_at
+  if (card.kind === "follow_request_accepted") return card.notification.created_at
   if (card.kind === "affiliate_notification") return card.notification.created_at
   if (card.kind === "trading_report_notification") return card.notification.created_at
   if (card.kind === "room_message_group") return card.latestAt
@@ -640,6 +658,7 @@ export function groupedCardCreatedAt(card: GroupedNotificationCard): string {
 
 export function groupedCardIsUnread(card: GroupedNotificationCard): boolean {
   if (card.kind === "room_join") return !card.notification.read
+  if (card.kind === "follow_request_accepted") return !card.notification.read
   if (card.kind === "affiliate_notification") return !card.notification.read
   if (card.kind === "trading_report_notification") return !card.notification.read
   if (card.kind === "room_message_group") return !card.read
@@ -648,6 +667,7 @@ export function groupedCardIsUnread(card: GroupedNotificationCard): boolean {
 
 export function groupedCardNotificationIds(card: GroupedNotificationCard): string[] {
   if (card.kind === "room_join") return [card.notification.id]
+  if (card.kind === "follow_request_accepted") return [card.notification.id]
   if (card.kind === "affiliate_notification") return [card.notification.id]
   if (card.kind === "trading_report_notification") return [card.notification.id]
   if (card.kind === "room_message_group") return card.notificationIds
@@ -921,6 +941,10 @@ export function formatFollowMessage(username: string): string {
   return `${username} started following you`
 }
 
+export function formatFollowRequestAcceptedMessage(username: string): string {
+  return `${username} accepted your follow request`
+}
+
 export function buildTradeRoomHref(
   roomSlug: string,
   opts?: {
@@ -1047,6 +1071,15 @@ export function getGroupedNotificationHref(
     return profilePath(owner)
   }
 
+  if (card.kind === "follow_request_accepted") {
+    const senderId = card.notification.sender_id
+    if (senderId) {
+      const sender = sendersById[senderId]
+      return profilePath({ id: senderId, username: sender?.username })
+    }
+    return "/notifications"
+  }
+
   if (card.kind === "room_message_group") {
     const slug = card.room_slug?.trim()
     if (slug) {
@@ -1137,6 +1170,11 @@ export function getNotificationHref(
   }
 
   if (n.type === "follow" && n.sender_id) {
+    const sender = sendersById[n.sender_id]
+    return profilePath({ id: n.sender_id, username: sender?.username })
+  }
+
+  if (n.type === "follow_request_accepted" && n.sender_id) {
     const sender = sendersById[n.sender_id]
     return profilePath({ id: n.sender_id, username: sender?.username })
   }

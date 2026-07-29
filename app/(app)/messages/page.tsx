@@ -1,6 +1,13 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 import Link from "next/link"
 import { supabase } from "../../../lib/supabaseClient"
 import NativeIosPullToRefresh from "@/app/components/NativeIosPullToRefresh"
@@ -51,6 +58,11 @@ import {
   readMessagesInboxSession,
   writeMessagesInboxSession,
 } from "@/lib/messagesInboxSessionCache"
+import {
+  consumeMessagesInboxScrollY,
+  saveMessagesInboxScrollY,
+} from "@/lib/messagesInboxScroll"
+import { isNativeIos } from "@/lib/nativePlatform"
 import {
   fetchUserDmConversations,
   type DmConversationRow,
@@ -143,6 +155,22 @@ export default function MessagesPage() {
   const router = useRouter()
   const user = authUser
   const inboxScrollRef = useRef<HTMLDivElement | null>(null)
+  const pendingInboxScrollRef = useRef<number | null>(null)
+
+  useLayoutEffect(() => {
+    if (!isNativeIos()) return
+    pendingInboxScrollRef.current = consumeMessagesInboxScrollY()
+  }, [])
+
+  useLayoutEffect(() => {
+    if (!isNativeIos()) return
+    const y = pendingInboxScrollRef.current
+    if (y == null || loading) return
+    const el = inboxScrollRef.current
+    if (!el) return
+    el.scrollTop = y
+    pendingInboxScrollRef.current = null
+  }, [loading, conversations.length])
 
   function mergeNewConversation(prev: any[], newConversation: any) {
     if (prev.some((c) => c.id === newConversation.id)) return prev
@@ -516,6 +544,9 @@ export default function MessagesPage() {
       )
 
       markConversationOpenFromInbox(conversationId, urlSegment)
+      if (isNativeIos()) {
+        saveMessagesInboxScrollY(inboxScrollRef.current?.scrollTop ?? 0)
+      }
       router.push(path)
 
       if (!user?.id) return
@@ -890,18 +921,26 @@ export default function MessagesPage() {
 
   return (
     <>
-      <div className="flex h-[calc(100dvh-4rem)] min-h-0 flex-col overflow-hidden bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white px-6 pb-6 pt-0">
+      <div
+        data-tt-native-surface="messages"
+        data-tt-messages-inbox
+        className="flex h-[var(--app-viewport-height)] min-h-0 flex-col overflow-hidden bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white px-6 pb-6 pt-0"
+      >
 
         <div className="mx-auto flex h-full min-h-0 w-full max-w-3xl flex-col">
 
           <input
+            data-tt-messages-inbox-search
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search conversations..."
             className="mt-4 mb-3 w-full shrink-0 rounded border border-white/10 bg-black p-3 focus:border-emerald-400 focus:outline-none"
           />
 
-          <div className="mb-4 flex shrink-0 justify-start gap-2">
+          <div
+            data-tt-messages-inbox-actions
+            className="mb-4 flex shrink-0 justify-start gap-2"
+          >
             <button
               type="button"
               onClick={openDMModal}

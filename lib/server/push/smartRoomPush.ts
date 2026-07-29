@@ -59,6 +59,7 @@ export async function scheduleSmartRoomMessagePush(params: {
     kind: "room_message",
     sender_id: params.senderId,
     content: params.content,
+    preferenceKey: "room_messages_enabled",
     prefsAlreadyChecked: true,
   })
 

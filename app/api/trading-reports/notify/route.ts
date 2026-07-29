@@ -64,6 +64,14 @@ export async function POST(req: Request) {
     return Response.json({ ok: true, skipped: true, dedupeToken })
   }
 
+  const { getServerNotificationPreferences } = await import(
+    "@/lib/serverNotificationPreferences"
+  )
+  const prefs = await getServerNotificationPreferences(user.id, { force: true })
+  if (!prefs.notifications_enabled || !prefs.product_updates_enabled) {
+    return Response.json({ ok: true, skipped: true, reason: "preferences" })
+  }
+
   const { error } = await supabaseServiceRole.from("notifications").insert({
     user_id: user.id,
     sender_id: null,

@@ -420,6 +420,7 @@ async function flushRoomDigestBatch(row: PushBatchRow) {
     kind: "room_message",
     sender_id: String(row.meta.last_sender_id ?? ""),
     content: JSON.stringify(payload),
+    preferenceKey: "room_messages_enabled",
     prefsAlreadyChecked: true,
   })
 }

@@ -1,5 +1,7 @@
 import { supabaseServiceRole } from "@/app/api/_lib/getRouteUser"
 import { NOTIFICATION_INBOX_TYPES } from "@/lib/notificationEngagementTypes"
+import { isNotificationPreferenceEnabled } from "@/lib/notificationPreferences"
+import { getServerNotificationPreferences } from "@/lib/serverNotificationPreferences"
 import { isApnsConfigured, sendApnsAlert } from "@/lib/server/push/apns"
 import {
   buildPushAlertCopy,
@@ -10,12 +12,20 @@ import { categoryForNotificationType } from "@/lib/server/push/pushCategories"
 
 export type MessagingPushKind = "message" | "room_message"
 
+export type MessagingPushPreferenceKey =
+  | "direct_messages_enabled"
+  | "story_replies_enabled"
+  | "shares_enabled"
+  | "room_messages_enabled"
+
 export type MessagingPushInput = {
   recipientUserId: string
   kind: MessagingPushKind
   sender_id: string
   content?: string | null
-  /** When true, preference checks already applied by caller. */
+  /** When set, this Settings key is enforced (in addition to the master switch). */
+  preferenceKey?: MessagingPushPreferenceKey
+  /** @deprecated Prefer preferenceKey. Kept for call-site compatibility. */
   prefsAlreadyChecked?: boolean
   senderUsername?: string | null
   senderName?: string | null
@@ -193,6 +203,18 @@ export async function deliverMessagingPush(
 
     const recipientUserId = input.recipientUserId?.trim()
     if (!recipientUserId) return
+
+    const prefs = await getServerNotificationPreferences(recipientUserId, {
+      force: true,
+    })
+    if (!prefs.notifications_enabled) return
+
+    const preferenceKey: MessagingPushPreferenceKey =
+      input.preferenceKey ??
+      (input.kind === "room_message"
+        ? "room_messages_enabled"
+        : "direct_messages_enabled")
+    if (!isNotificationPreferenceEnabled(prefs, preferenceKey)) return
 
     const { data: tokens, error: tokenErr } = await supabaseServiceRole
       .from("device_push_tokens")

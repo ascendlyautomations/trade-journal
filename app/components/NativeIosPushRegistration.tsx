@@ -30,7 +30,8 @@ export default function NativeIosPushRegistration() {
 
   useEffect(() => {
     if (!enabled || loading || !user?.id) return
-    void registerNativeIosPush()
+    // TEMPORARY [tt-push-debug] — pass userId for token correlation logs.
+    void registerNativeIosPush({ userId: user.id })
   }, [enabled, loading, user?.id])
 
   return null

@@ -26,6 +26,7 @@ import NativeSessionPersistence from "./components/NativeSessionPersistence"
 import NativeSilentCacheBootstrap from "./components/NativeSilentCacheBootstrap"
 import NativeAwareVercelInsights from "./components/NativeAwareVercelInsights"
 import MessagingInAppBanner from "./components/MessagingInAppBanner"
+import { isNativeIosShellRequest } from "@/lib/nativeRequest"
 import {
   DEFAULT_OG_IMAGE_ALT,
   DEFAULT_OG_IMAGE_PATH,
@@ -119,15 +120,27 @@ export const viewport: Viewport = {
   themeColor: "#0b1f3a",
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Paint native navy on first HTML — avoids body gradient (#1e3a8a) flashing
+  // as a light-blue strip above login before client NativeAppShell runs.
+  const nativeIos = await isNativeIosShellRequest()
+  const htmlClassName = [
+    geistSans.variable,
+    geistMono.variable,
+    "h-full antialiased",
+    nativeIos ? "tt-native tt-native-ios" : "",
+  ]
+    .filter(Boolean)
+    .join(" ")
+
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={htmlClassName}
     >
       <body className="flex flex-col">
         <JsonLd data={[organizationJsonLd(), websiteJsonLd()]} />
