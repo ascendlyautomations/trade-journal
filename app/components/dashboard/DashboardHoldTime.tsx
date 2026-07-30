@@ -1,6 +1,10 @@
 "use client"
 
 import DashboardWidgetEmptyState from "@/app/components/dashboard/DashboardWidgetEmptyState"
+import {
+  DASHBOARD_MOBILE_CARD_PAD_CLASS,
+  DASHBOARD_MOBILE_CARD_TITLE_CLASS,
+} from "@/app/components/dashboard/dashboardMobileUi"
 import { formatCurrency } from "@/lib/formatCurrency"
 import type { DurationExtreme, HoldTimeStats } from "@/lib/dashboardHoldTimeStats"
 import { formatHoldDurationSeconds } from "@/lib/tradeTimingDisplay"
@@ -52,8 +56,12 @@ export default function DashboardHoldTime({
   const showEmpty = totalTrades === 0
 
   return (
-    <div className="flex min-h-[180px] h-full flex-col rounded-xl border border-white/10 bg-white/10 p-2.5 backdrop-blur-md md:min-h-[200px] md:p-4">
-      <h2 className="mb-2 text-xs font-semibold text-blue-300 md:mb-3 md:text-base">
+    <div
+      className={`flex h-full min-h-[180px] flex-col rounded-xl border border-white/10 bg-white/10 p-2.5 backdrop-blur-md max-md:h-auto md:min-h-[200px] md:p-4 ${DASHBOARD_MOBILE_CARD_PAD_CLASS}`}
+    >
+      <h2
+        className={`mb-2 text-xs font-semibold text-blue-300 md:mb-3 md:text-base ${DASHBOARD_MOBILE_CARD_TITLE_CLASS}`}
+      >
         Hold Time
       </h2>
 
@@ -67,7 +75,7 @@ export default function DashboardHoldTime({
         <DashboardWidgetEmptyState variant="needs-duration" className="py-8" />
       ) : (
         <div className="space-y-3 md:space-y-4">
-          <div className="flex min-h-[76px] flex-col items-center justify-center rounded-xl border border-white/10 bg-white/5 p-2.5 text-center md:min-h-[90px] md:p-3">
+          <div className="flex min-h-[76px] flex-col items-center justify-center rounded-xl border border-white/10 bg-white/5 p-2.5 text-center max-md:py-2 md:min-h-[90px] md:p-3">
             <p className="mb-0.5 text-[11px] text-gray-400 md:mb-1 md:text-sm">
               Average Hold Time
             </p>

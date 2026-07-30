@@ -53,8 +53,8 @@ export default function DashboardSessionChart({
   const showEmpty = totalTrades === 0
 
   return (
-    <div className="flex min-h-[260px] h-full flex-col rounded-xl border border-white/10 bg-white/10 p-2.5 backdrop-blur-md md:min-h-[300px] md:p-4">
-      <h2 className="mb-2 text-xs font-semibold text-blue-300 md:mb-3 md:text-base">
+    <div className="flex h-full min-h-[260px] flex-col rounded-xl border border-white/10 bg-white/10 p-2.5 backdrop-blur-md max-md:h-auto max-md:px-2.5 max-md:pb-1.5 max-md:pt-2 md:min-h-[300px] md:p-4">
+      <h2 className="mb-2 text-xs font-semibold text-blue-300 max-md:mb-1 md:mb-3 md:text-base">
         Session Performance
       </h2>
       {showEmpty ? (

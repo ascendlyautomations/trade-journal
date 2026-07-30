@@ -834,10 +834,10 @@ export default function Dashboard() {
       <NativeIosPullToRefresh onRefresh={refreshDashboardData}>
       <div
         data-tt-native-surface="dashboard"
-        className="w-full px-3 pb-3 pt-4 text-white md:px-10 md:pb-10 md:pt-0"
+        className="w-full px-2.5 pb-3 pt-4 text-white max-md:px-2 md:px-10 md:pb-10 md:pt-0"
       >
 
-        <div className="relative z-50 mx-auto w-full max-w-[1600px] px-4 md:px-6">
+        <div className="relative z-50 mx-auto w-full max-w-[1600px] px-0 md:px-6">
           {!hasNoTrades && !statsStillLoading ? (
             <DashboardFilters
               isPro={isPro}
@@ -895,7 +895,7 @@ export default function Dashboard() {
           />
         </div>
 
-          <div className="relative z-0 mx-auto flex w-full max-w-[1600px] flex-col gap-2 overflow-visible px-4 md:gap-3 md:px-6">
+          <div className="relative z-0 mx-auto flex w-full max-w-[1600px] flex-col gap-2 overflow-visible px-0 md:gap-3 md:px-6">
 
   {/* Large Founding Challenge card only until the first trade; afterwards it
       stays reachable from the navbar Getting Started entry. */}

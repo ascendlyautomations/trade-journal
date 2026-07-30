@@ -107,7 +107,7 @@ export default function DashboardFilters({
   return (
     <div>
       <TradeFilterBar
-        className="mt-2 mb-2 md:mt-2.5 md:mb-3"
+        className="mt-1.5 mb-2 md:mt-2.5 md:mb-3"
         mobileThreeRowLayout
         leading={<DashboardPlanIndicator isPro={isPro} />}
         leadingOverlay

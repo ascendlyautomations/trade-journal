@@ -105,7 +105,7 @@ function DashboardCharts({
   )
 
   return (
-    <div className="grid gap-2 overflow-visible md:gap-3 lg:grid-cols-3">
+    <div className="grid gap-2 overflow-visible max-md:gap-2 md:gap-3 lg:grid-cols-3">
       <DashboardStatsGrid
         isPro={isPro}
         totalTrades={totalTrades}

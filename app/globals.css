@@ -91,8 +91,10 @@ html.tt-native-ios [data-tt-messages-inbox] [data-tt-messages-inbox-actions] {
 
 /* Dashboard — tighten mobile rhythm on the shared surface. */
 html.tt-native-ios [data-tt-native-surface="dashboard"] {
-  padding-top: 0.875rem;
+  padding-top: 0.75rem;
   padding-bottom: 1rem;
+  padding-left: max(0.5rem, env(safe-area-inset-left, 0px));
+  padding-right: max(0.5rem, env(safe-area-inset-right, 0px));
 }
 
 /* Feed — balanced column padding on the shared surface. */

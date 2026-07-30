@@ -60,17 +60,19 @@ export default function DashboardEquityCurve({
   const showEmpty = totalTrades === 0 || data.length === 0
 
   if (variant === "mobile") {
+    // Whitespace sources (mobile): card padding-bottom, title mb, LineChart margin.bottom.
+    // Chart size stays fixed at 268 — only those spacers are tightened.
     return (
-      <div className="col-span-2 block overflow-visible rounded-xl border border-white/10 bg-white/10 p-2.5 backdrop-blur-md md:hidden">
-        <h2 className="mb-2 text-xs font-semibold text-blue-300 md:mb-3 md:text-sm">Equity Curve</h2>
+      <div className="w-full block overflow-visible rounded-xl border border-white/10 bg-white/10 px-2.5 pb-1 pt-2 backdrop-blur-md md:hidden">
+        <h2 className="mb-1 text-xs font-semibold text-blue-300">Equity Curve</h2>
         {showEmpty ? (
           <ChartEmptyState />
         ) : (
-        <div className="h-[240px] w-full">
-          <ResponsiveContainer width="100%" height={240}>
+        <div className="h-[268px] w-full">
+          <ResponsiveContainer width="100%" height={268}>
             <LineChart
               data={data}
-              margin={{ top: 10, right: 12, left: 12, bottom: 20 }}
+              margin={{ top: 8, right: 8, left: 4, bottom: 4 }}
             >
               <CartesianGrid {...chartCartesianGridProps} />
               <XAxis

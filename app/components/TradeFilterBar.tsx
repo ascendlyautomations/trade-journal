@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
 import NativeDateInput from "@/app/components/ui/NativeDateInput"
 import { DASHBOARD_MOBILE_TIMEFRAME_BTN_CLASS } from "@/app/components/dashboard/dashboardHeaderMobileUi"
+import { DASHBOARD_MOBILE_FILTER_SHELL_CLASS } from "@/app/components/dashboard/dashboardMobileUi"
 import TradeAccountPicker from "@/app/components/TradeAccountPicker"
 import CustomSelect from "@/app/components/CustomSelect"
 import { SELECT_FILTER_TRIGGER_CLASS } from "@/lib/accountDropdownStyles"
@@ -249,7 +250,7 @@ export default function TradeFilterBar({
           <div
             className={
               mobileThreeRowLayout
-                ? `relative z-50 flex max-w-full overflow-visible rounded-xl border border-white/10 bg-white/5 px-3 py-2 backdrop-blur-md md:gap-3 md:px-4 md:py-3 w-full flex-col items-stretch gap-2 md:flex-row md:flex-wrap md:items-center md:justify-center lg:flex-nowrap`
+                ? `relative z-50 flex w-full max-w-full flex-col items-stretch gap-2 overflow-visible rounded-xl border border-white/10 bg-white/5 px-3 py-2 backdrop-blur-md ${DASHBOARD_MOBILE_FILTER_SHELL_CLASS} md:flex-row md:flex-wrap md:items-center md:justify-center md:gap-3 md:px-4 md:py-3 lg:flex-nowrap`
                 : `relative z-50 flex max-w-full overflow-visible rounded-xl border border-white/10 bg-white/5 px-3 py-2 backdrop-blur-md md:gap-3 md:px-4 md:py-3 flex-wrap items-center justify-center gap-2 lg:flex-nowrap`
             }
           >

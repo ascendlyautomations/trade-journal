@@ -2,6 +2,7 @@
 
 import DashboardWidgetEmptyState from "@/app/components/dashboard/DashboardWidgetEmptyState"
 import { dashboardWidgetSectionTitleClass } from "@/app/components/dashboard/dashboardInsightStyles"
+import { DASHBOARD_MOBILE_CARD_PAD_CLASS } from "@/app/components/dashboard/dashboardMobileUi"
 import { formatCurrency } from "@/lib/formatCurrency"
 
 export type DashboardMaxDrawdownProps = {
@@ -20,7 +21,9 @@ export default function DashboardMaxDrawdown({
 
   if (variant === "compact") {
     return (
-      <div className="rounded-xl border border-white/10 bg-white/10 p-2.5 backdrop-blur-md md:p-4">
+      <div
+        className={`rounded-xl border border-white/10 bg-white/10 p-2.5 backdrop-blur-md md:p-4 ${DASHBOARD_MOBILE_CARD_PAD_CLASS}`}
+      >
         <h3 className={dashboardWidgetSectionTitleClass}>Max Drawdown</h3>
         {showEmpty ? (
           <p className="text-[11px] text-gray-400 md:text-sm">

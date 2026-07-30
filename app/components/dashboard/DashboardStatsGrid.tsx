@@ -5,6 +5,10 @@ import {
   dashboardStatLabelClass,
   dashboardWidgetSectionTitleClass,
 } from "@/app/components/dashboard/dashboardInsightStyles"
+import {
+  DASHBOARD_MOBILE_CARD_PAD_CLASS,
+  DASHBOARD_MOBILE_STAT_PAD_CLASS,
+} from "@/app/components/dashboard/dashboardMobileUi"
 import { formatCurrency } from "@/lib/formatCurrency"
 import { formatDecimal, formatRR } from "@/lib/formatDisplay"
 
@@ -99,7 +103,7 @@ function Stat({
 
   return (
     <div
-      className={`flex min-h-[76px] w-full flex-col items-center justify-center rounded-xl border border-white/10 bg-white/10 p-2.5 text-center backdrop-blur-md md:min-h-[90px] md:p-4 ${className}`.trim()}
+      className={`flex h-full min-h-[76px] w-full flex-col items-center justify-center rounded-xl border border-white/10 bg-white/10 p-2.5 text-center backdrop-blur-md ${DASHBOARD_MOBILE_STAT_PAD_CLASS} md:min-h-[90px] md:p-4 ${className}`.trim()}
     >
       <p className={dashboardStatLabelClass}>{title}</p>
       <div className="w-full text-center">
@@ -236,19 +240,58 @@ export default function DashboardStatsGrid({
 
   return (
     <div className="flex flex-col gap-2 md:block md:space-y-3">
-      {/* Mobile card order (max-md negative order utilities): Trades / Win % on
-          row one, P&L / Expectancy on row two. Desktop keeps source order. */}
-      <div className="grid grid-cols-2 gap-2 md:gap-3">
-        <Stat
-          title="Trades"
-          value={formatNumber(totalTrades)}
-          className="max-md:-order-4"
-        />
-        <Stat
-          title="Win %"
-          value={`${winRate.toFixed(1)}%`}
-          className="max-md:-order-3"
-        />
+      {/* —— Mobile only: one 3×2 metrics grid, then original stacked sections —— */}
+      <div className="flex flex-col gap-2 md:hidden">
+        <div className="grid grid-cols-3 gap-2">
+          <Stat title="Trades" value={formatNumber(totalTrades)} />
+          <Stat title="Win %" value={`${winRate.toFixed(1)}%`} />
+          <Stat
+            title="P&L"
+            value={formatCurrency(totalPnL)}
+            positive={totalPnL >= 0}
+          />
+          <ExpectancyStat expectancyData={expectancyData} />
+          <Stat
+            title="Best Win Streak"
+            value={bestWinStreak}
+            subtitle={bestWinStreakSubtitle(bestWinStreak)}
+          />
+          <Stat title="Avg RR" value={formatRR(avgRR)} />
+        </div>
+
+        {showEquity ? mobileEquitySlot : null}
+        <div>{mobileWeekdayPnlSlot}</div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <Stat title="Avg Win" value={formatCurrency(avgWin)} positive />
+          <Stat
+            title="Best Trade"
+            value={formatCurrency(bestTrade)}
+            positive={bestTrade >= 0}
+          />
+          <Stat
+            title="Avg Loss"
+            value={formatCurrency(avgLoss)}
+            positive={false}
+          />
+          <Stat
+            title="Big Loss"
+            value={formatCurrency(biggestLoss)}
+            positive={false}
+          />
+          <Stat title="Best Day" value={formatCurrency(bestDay)} positive />
+          <Stat
+            title="Worst Day"
+            value={formatCurrency(worstDay)}
+            positive={false}
+          />
+        </div>
+      </div>
+
+      {/* —— Desktop only: original 2-col metrics grid (unchanged) —— */}
+      <div className="hidden md:grid md:grid-cols-2 md:gap-3">
+        <Stat title="Trades" value={formatNumber(totalTrades)} />
+        <Stat title="Win %" value={`${winRate.toFixed(1)}%`} />
         <Stat
           title="Best Win Streak"
           value={bestWinStreak}
@@ -259,14 +302,8 @@ export default function DashboardStatsGrid({
           title="P&L"
           value={formatCurrency(totalPnL)}
           positive={totalPnL >= 0}
-          className="max-md:-order-2"
         />
-        <ExpectancyStat
-          expectancyData={expectancyData}
-          className="max-md:-order-1 md:hidden"
-        />
-        {showEquity ? mobileEquitySlot : null}
-        <div className="col-span-2 block md:hidden">{mobileWeekdayPnlSlot}</div>
+        <ExpectancyStat expectancyData={expectancyData} />
         <Stat title="Avg Win" value={formatCurrency(avgWin)} positive />
         <Stat
           title="Best Trade"
@@ -279,14 +316,11 @@ export default function DashboardStatsGrid({
           value={formatCurrency(biggestLoss)}
           positive={false}
         />
-        <div className="hidden md:contents">
-          <ExpectancyStat expectancyData={expectancyData} />
-        </div>
         <Stat title="Best Day" value={formatCurrency(bestDay)} positive />
         <Stat title="Worst Day" value={formatCurrency(worstDay)} positive={false} />
       </div>
 
-      <div className="rounded-xl border border-white/10 bg-white/10 p-2.5 backdrop-blur-md md:p-4">
+      <div className={`rounded-xl border border-white/10 bg-white/10 p-2.5 backdrop-blur-md md:p-4 ${DASHBOARD_MOBILE_CARD_PAD_CLASS}`}>
         <h3 className={dashboardWidgetSectionTitleClass}>Streaks</h3>
 
         {streakData ? (
@@ -322,7 +356,7 @@ export default function DashboardStatsGrid({
         {showSessions ? mobileSessionsSlot : null}
       </div>
 
-      <div className="rounded-xl border border-white/10 bg-white/10 p-2.5 backdrop-blur-md md:p-4">
+      <div className={`rounded-xl border border-white/10 bg-white/10 p-2.5 backdrop-blur-md md:p-4 ${DASHBOARD_MOBILE_CARD_PAD_CLASS}`}>
         <h3 className={dashboardWidgetSectionTitleClass}>Trading Hours</h3>
 
         {hourData === null ? (
