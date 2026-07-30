@@ -2772,10 +2772,10 @@ export default function DMPage() {
 
       {pageAccess !== "allowed" ? (
         <div
-          className={`flex min-h-0 w-full flex-col items-center justify-center gap-4 bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 text-white ${
+          className={`flex min-h-0 w-full flex-col items-center justify-center gap-4 px-4 text-white ${
             nativeIos
-              ? "h-dvh pt-[var(--safe-area-top)] pb-[max(var(--safe-area-bottom),var(--keyboard-height,0px))]"
-              : "h-[var(--app-viewport-height)]"
+              ? "h-dvh bg-[var(--tt-surface)] pt-[var(--safe-area-top)] pb-[max(var(--safe-area-bottom),var(--keyboard-height,0px))]"
+              : "h-[var(--app-viewport-height)] bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46]"
           }`}
         >
           <button
@@ -2801,24 +2801,26 @@ export default function DMPage() {
       ) : (
       <>
       <div
-        className={`flex min-h-0 w-full flex-col overflow-hidden bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white ${
+        data-tt-dm-thread={nativeIos ? "true" : undefined}
+        className={`flex min-h-0 w-full flex-col overflow-hidden text-white ${
           nativeIos
-            ? "h-dvh pt-[var(--safe-area-top)] pb-[max(var(--safe-area-bottom),var(--keyboard-height,0px))]"
-            : "h-[var(--app-viewport-height)] px-4 pb-4 pt-2"
+            ? "h-dvh bg-[var(--tt-surface)]"
+            : "h-[var(--app-viewport-height)] bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] px-4 pb-4 pt-2"
         }`}
       >
 
         <div
           className={`mx-auto flex h-full min-h-0 w-full max-w-3xl flex-col overflow-hidden ${
-            nativeIos
-              ? "bg-black/30"
-              : "rounded-xl border border-white/10 bg-black/30"
+            nativeIos ? "" : "rounded-xl border border-white/10 bg-black/30"
           }`}
         >
 
           {/* HEADER */}
           {nativeIos ? (
-            <div className="relative flex shrink-0 items-center justify-between border-b border-white/10 px-1 py-2">
+            <div
+              data-tt-dm-header
+              className="relative flex shrink-0 items-center justify-between border-b border-white/10 bg-[var(--tt-surface)] px-1 pb-2.5 pt-[calc(var(--safe-area-top)+0.875rem)]"
+            >
               <button
                 type="button"
                 aria-label="Back to messages"
@@ -2828,7 +2830,7 @@ export default function DMPage() {
                 <ChevronLeft className="h-7 w-7" strokeWidth={2.25} />
               </button>
 
-              <div className="pointer-events-none absolute inset-x-14 top-1/2 flex -translate-y-1/2 items-center justify-center gap-2">
+              <div className="pointer-events-none absolute inset-x-14 top-[calc(var(--safe-area-top)+0.875rem)] bottom-2.5 flex items-center justify-center gap-2">
                 {conversation?.is_group ? (
                   <img
                     src={conversation.avatar_url || "/group-default.png"}
@@ -2935,8 +2937,11 @@ export default function DMPage() {
           {/* MESSAGES */}
           <div
             ref={scrollRef}
+            data-tt-dm-messages={nativeIos ? "true" : undefined}
             onScroll={handleMessagesScroll}
-            className="min-h-0 flex-1 overflow-y-auto overflow-x-visible px-2 py-3 md:p-4"
+            className={`min-h-0 flex-1 overflow-y-auto overflow-x-visible px-2 py-3 md:p-4${
+              nativeIos ? " bg-[var(--tt-surface)]" : ""
+            }`}
           >
             {loadingOlderMessages ? (
               <p className="pb-2 text-center text-xs text-gray-500">
@@ -3258,7 +3263,7 @@ export default function DMPage() {
 
           {/* INPUT */}
           {previewUrl ? (
-            <div className="px-2 pb-2">
+            <div className={`px-2 pb-2${nativeIos ? " bg-[var(--tt-surface)]" : ""}`}>
               <div className="relative w-fit">
                 <img
                   src={previewUrl}
@@ -3278,53 +3283,108 @@ export default function DMPage() {
             </div>
           ) : null}
 
-          <DmStyleComposer
-            value={input}
-            onChange={(v) => {
-              setInput(v)
-              if (!isTyping) {
-                setIsTyping(true)
-                sendTypingBroadcast()
+          {nativeIos ? (
+            <div
+              data-tt-dm-composer
+              className="shrink-0 bg-[var(--tt-surface)] pb-[max(var(--safe-area-bottom),var(--keyboard-height,0px))]"
+            >
+              <DmStyleComposer
+                value={input}
+                onChange={(v) => {
+                  setInput(v)
+                  if (!isTyping) {
+                    setIsTyping(true)
+                    sendTypingBroadcast()
+                  }
+                }}
+                onSend={() => void sendMessage()}
+                placeholder={
+                  dmMessagingBlocked
+                    ? "Direct messaging is unavailable"
+                    : "Send message..."
+                }
+                sendDisabled={sendingMessage || dmMessagingBlocked}
+                onImageChange={handleImageChange}
+                imageDisabled={dmMessagingBlocked}
+                fileInputRef={fileRef}
+                onTradeClick={() => {
+                  if (!dmMessagingBlocked) setShowTradePicker(true)
+                }}
+                beforeRow={
+                  replyTarget ? (
+                    <ReplyComposerStrip
+                      authorName={replyTarget.authorName}
+                      preview={replyTarget.preview}
+                      onCancel={() => setReplyTarget(null)}
+                    />
+                  ) : null
+                }
+                afterRow={
+                  <>
+                    {allSeen ? (
+                      <p className="text-xs text-gray-400">Seen</p>
+                    ) : null}
+                    {groupSettingsSuccess ? (
+                      <p className="mt-1 text-xs text-emerald-400">{groupSettingsSuccess}</p>
+                    ) : null}
+                    {selectedFile ? (
+                      <div className="mt-1 text-xs text-gray-400">
+                        <span>{selectedFile.name}</span>
+                      </div>
+                    ) : null}
+                  </>
+                }
+              />
+            </div>
+          ) : (
+            <DmStyleComposer
+              value={input}
+              onChange={(v) => {
+                setInput(v)
+                if (!isTyping) {
+                  setIsTyping(true)
+                  sendTypingBroadcast()
+                }
+              }}
+              onSend={() => void sendMessage()}
+              placeholder={
+                dmMessagingBlocked
+                  ? "Direct messaging is unavailable"
+                  : "Send message..."
               }
-            }}
-            onSend={() => void sendMessage()}
-            placeholder={
-              dmMessagingBlocked
-                ? "Direct messaging is unavailable"
-                : "Send message..."
-            }
-            sendDisabled={sendingMessage || dmMessagingBlocked}
-            onImageChange={handleImageChange}
-            imageDisabled={dmMessagingBlocked}
-            fileInputRef={fileRef}
-            onTradeClick={() => {
-              if (!dmMessagingBlocked) setShowTradePicker(true)
-            }}
-            beforeRow={
-              replyTarget ? (
-                <ReplyComposerStrip
-                  authorName={replyTarget.authorName}
-                  preview={replyTarget.preview}
-                  onCancel={() => setReplyTarget(null)}
-                />
-              ) : null
-            }
-            afterRow={
-              <>
-                {allSeen ? (
-                  <p className="text-xs text-gray-400">Seen</p>
-                ) : null}
-                {groupSettingsSuccess ? (
-                  <p className="mt-1 text-xs text-emerald-400">{groupSettingsSuccess}</p>
-                ) : null}
-                {selectedFile ? (
-                  <div className="mt-1 text-xs text-gray-400">
-                    <span>{selectedFile.name}</span>
-                  </div>
-                ) : null}
-              </>
-            }
-          />
+              sendDisabled={sendingMessage || dmMessagingBlocked}
+              onImageChange={handleImageChange}
+              imageDisabled={dmMessagingBlocked}
+              fileInputRef={fileRef}
+              onTradeClick={() => {
+                if (!dmMessagingBlocked) setShowTradePicker(true)
+              }}
+              beforeRow={
+                replyTarget ? (
+                  <ReplyComposerStrip
+                    authorName={replyTarget.authorName}
+                    preview={replyTarget.preview}
+                    onCancel={() => setReplyTarget(null)}
+                  />
+                ) : null
+              }
+              afterRow={
+                <>
+                  {allSeen ? (
+                    <p className="text-xs text-gray-400">Seen</p>
+                  ) : null}
+                  {groupSettingsSuccess ? (
+                    <p className="mt-1 text-xs text-emerald-400">{groupSettingsSuccess}</p>
+                  ) : null}
+                  {selectedFile ? (
+                    <div className="mt-1 text-xs text-gray-400">
+                      <span>{selectedFile.name}</span>
+                    </div>
+                  ) : null}
+                </>
+              }
+            />
+          )}
             
         </div>
 

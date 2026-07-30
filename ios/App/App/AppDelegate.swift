@@ -17,8 +17,84 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         // the system LaunchScreen hands off to the same image — never to the
         // empty navy WebView shell. TradeTraxsBridgeViewController dismisses it
         // once login/dashboard has a meaningful painted frame.
+        // TEMPORARY [tt-splash-debug]
+        TradeTraxsSplashDebugLog.clear()
+        TradeTraxsSplashDebugLog.line(
+            "[tt-splash] AppDelegate.didFinishLaunching windowNil=%@ windowKey=%@ scenes=%ld windows=%ld",
+            window == nil ? "true" : "false",
+            window?.isKeyWindow == true ? "true" : "false",
+            UIApplication.shared.connectedScenes.count,
+            UIApplication.shared.windows.count
+        )
         if let window {
+            TradeTraxsSplashDebugLog.line("[tt-splash] AppDelegate → TradeTraxsLaunchSplash.install()")
             TradeTraxsLaunchSplash.install(on: window)
+        } else {
+            TradeTraxsSplashDebugLog.line("[tt-splash] AppDelegate SKIP install — window nil")
+        }
+
+        // TEMPORARY [tt-splash-debug] — window/scene lifecycle only (no behavior change).
+        NotificationCenter.default.addObserver(
+            forName: UIWindow.didBecomeKeyNotification,
+            object: nil,
+            queue: .main
+        ) { note in
+            let win = note.object as? UIWindow
+            let hasOverlay = win.map { TradeTraxsLaunchSplash.find(in: $0) != nil } ?? false
+            TradeTraxsSplashDebugLog.line(
+                "[tt-splash] UIWindow.didBecomeKey windowId=%@ isKey=%@ hasOverlay=%@ level=%.1f windows=%ld",
+                win.map { String(describing: ObjectIdentifier($0)) } ?? "nil",
+                win?.isKeyWindow == true ? "true" : "false",
+                hasOverlay ? "true" : "false",
+                win?.windowLevel.rawValue ?? -1,
+                UIApplication.shared.windows.count
+            )
+            for (i, w) in UIApplication.shared.windows.enumerated() {
+                TradeTraxsSplashDebugLog.line(
+                    "[tt-splash] window[%ld] id=%@ key=%@ hidden=%@ level=%.1f overlay=%@ root=%@",
+                    i,
+                    String(describing: ObjectIdentifier(w)),
+                    w.isKeyWindow ? "true" : "false",
+                    w.isHidden ? "true" : "false",
+                    w.windowLevel.rawValue,
+                    TradeTraxsLaunchSplash.find(in: w) != nil ? "true" : "false",
+                    w.rootViewController.map { String(describing: type(of: $0)) } ?? "nil"
+                )
+            }
+        }
+        NotificationCenter.default.addObserver(
+            forName: UIScene.didActivateNotification,
+            object: nil,
+            queue: .main
+        ) { note in
+            let scene = note.object as? UIScene
+            TradeTraxsSplashDebugLog.line(
+                "[tt-splash] UIScene.didActivate session=%@ state=%ld",
+                scene?.session.persistentIdentifier ?? "nil",
+                scene.map { Int($0.activationState.rawValue) } ?? -1
+            )
+        }
+        NotificationCenter.default.addObserver(
+            forName: UIScene.willDeactivateNotification,
+            object: nil,
+            queue: .main
+        ) { note in
+            let scene = note.object as? UIScene
+            TradeTraxsSplashDebugLog.line(
+                "[tt-splash] UIScene.willDeactivate session=%@",
+                scene?.session.persistentIdentifier ?? "nil"
+            )
+        }
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            TradeTraxsSplashDebugLog.line(
+                "[tt-splash] UIApplication.didBecomeActive scenes=%ld windows=%ld",
+                UIApplication.shared.connectedScenes.count,
+                UIApplication.shared.windows.count
+            )
         }
 
         registerTradeTraxsNotificationCategories()

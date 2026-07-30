@@ -54,6 +54,8 @@ html.tt-native-ios {
   --tt-surface-border: rgb(255 255 255 / 0.14);
   /* Fixed chrome (navbar / tab bar) stays distinct from content surface. */
   --tt-chrome: #0b1f3a;
+  /* DM header + composer bar (matches existing DmStyleComposer mobile fill). */
+  --tt-dm-chrome: #0b1220;
 }
 
 /*
@@ -261,16 +263,52 @@ html.tt-ios-auth select {
 }
 
 /*
- * Native iOS DM thread: keyboard inset via useNativeIosKeyboardInset.
- * Composer sits above max(safe-area, keyboard); 16px inputs avoid focus zoom.
+ * Native iOS DM thread: one continuous --tt-surface canvas.
+ * Header / composer use the same fill as the message area; safe-area padding
+ * only shifts controls (no foreign color strips).
  */
 html.tt-ios-dm {
   --keyboard-height: 0px;
+  --tt-dm-chrome: var(--tt-surface);
+  background-color: var(--tt-surface);
+  background-image: none;
+}
+
+html.tt-ios-dm body {
+  background-color: var(--tt-surface);
+  background-image: none;
 }
 
 html.tt-ios-dm textarea,
 html.tt-ios-dm input {
   font-size: 16px;
+}
+
+html.tt-ios-dm [data-tt-dm-thread] {
+  background-image: none;
+  background-color: var(--tt-surface);
+  color: var(--tt-surface-foreground);
+}
+
+html.tt-ios-dm [data-tt-dm-header] {
+  background-color: var(--tt-surface);
+}
+
+html.tt-ios-dm [data-tt-dm-messages] {
+  background-color: var(--tt-surface);
+}
+
+html.tt-ios-dm [data-tt-dm-composer] {
+  background-color: var(--tt-surface);
+}
+
+/* Composer bar blends into the thread — no dark footer slab. */
+html.tt-ios-dm [data-tt-dm-composer] > div {
+  background-color: var(--tt-surface);
+  border-top-color: rgb(255 255 255 / 0.1);
+  /* Sit controls a touch lower / tighter to the home indicator. */
+  padding-top: 0.35rem;
+  padding-bottom: 0.35rem;
 }
 
 /*
