@@ -15,6 +15,8 @@ import {
   MODAL_PANEL_SHELL_CLASS,
   useModalScrollLock,
 } from "./modalLayout"
+import { usePlatformPresentation } from "@/app/components/platform/usePlatformPresentation"
+import NativeIosPlatformModal from "@/app/components/platform/native/NativeIosPlatformModal"
 
 export type ScrollableModalShellProps = {
   open: boolean
@@ -55,21 +57,41 @@ export default function ScrollableModalShell({
   footerClassName,
   onOverlayClick,
 }: ScrollableModalShellProps) {
+  const { isNativeIos } = usePlatformPresentation()
   const [mounted, setMounted] = useState(false)
-  useModalScrollLock(open)
+  useModalScrollLock(open && !isNativeIos)
 
   useEffect(() => {
     setMounted(true)
   }, [])
 
   useEffect(() => {
-    if (!open || closeDisabled) return
+    if (!open || closeDisabled || isNativeIos) return
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") onClose()
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [open, onClose, closeDisabled])
+  }, [open, onClose, closeDisabled, isNativeIos])
+
+  if (isNativeIos) {
+    return (
+      <NativeIosPlatformModal
+        open={open}
+        onClose={onClose}
+        ariaLabel={ariaLabel}
+        header={header}
+        footer={footer}
+        showCloseButton={showCloseButton}
+        closeDisabled={closeDisabled}
+        bodyClassName={cn(MODAL_BODY_SCROLL_CLASS, bodyClassName)}
+        footerClassName={footerClassName}
+        zIndexClass="z-[10050]"
+      >
+        {children}
+      </NativeIosPlatformModal>
+    )
+  }
 
   if (!open || !mounted) return null
 

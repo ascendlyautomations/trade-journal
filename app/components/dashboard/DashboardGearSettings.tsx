@@ -22,6 +22,181 @@ export type DashboardGearSettingsProps = {
   hasUser: boolean
   onSaveGear: () => void
   onCancelGear: () => void
+  /**
+   * When true, render preferences form only (no gear button / popup).
+   * Used by the native Dashboard filter sheet.
+   */
+  embedded?: boolean
+}
+
+function PreferencesForm({
+  gearDraft,
+  setGearDraft,
+  ddInputFocused,
+  setDdInputFocused,
+  savingGearSettings,
+  hasUser,
+  onSaveGear,
+  onCancelGear,
+  inputId = "dashboard-max-dd",
+}: {
+  gearDraft: GearDraftState | null
+  setGearDraft: Dispatch<SetStateAction<GearDraftState | null>>
+  ddInputFocused: boolean
+  setDdInputFocused: (focused: boolean) => void
+  savingGearSettings: boolean
+  hasUser: boolean
+  onSaveGear: () => void
+  onCancelGear: () => void
+  inputId?: string
+}) {
+  if (!gearDraft) {
+    return <p className="text-xs text-gray-400">Loading…</p>
+  }
+
+  return (
+    <>
+      <div className="mb-3 space-y-2 rounded-lg border border-white/10 bg-black/25 p-3">
+        <p className={DASHBOARD_GEAR_SECTION_TITLE}>Display</p>
+        <label className="flex cursor-pointer items-center justify-between gap-2 text-sm text-gray-200">
+          <span>Performance charts</span>
+          <input
+            type="checkbox"
+            className="accent-blue-500"
+            checked={gearDraft.showEquity && gearDraft.showDrawdown}
+            onChange={(e) => {
+              const on = e.target.checked
+              setGearDraft((d) =>
+                d ? { ...d, showEquity: on, showDrawdown: on } : d
+              )
+            }}
+          />
+        </label>
+        <label className="flex cursor-pointer items-center justify-between gap-2 text-sm text-gray-200">
+          <span>Insights overview</span>
+          <input
+            type="checkbox"
+            className="accent-blue-500"
+            checked={gearDraft.showInsights}
+            onChange={() =>
+              setGearDraft((d) =>
+                d ? { ...d, showInsights: !d.showInsights } : d
+              )
+            }
+          />
+        </label>
+        <label className="flex cursor-pointer items-center justify-between gap-2 text-sm text-gray-200">
+          <span>Session chart</span>
+          <input
+            type="checkbox"
+            className="accent-blue-500"
+            checked={gearDraft.showSessions}
+            onChange={() =>
+              setGearDraft((d) =>
+                d ? { ...d, showSessions: !d.showSessions } : d
+              )
+            }
+          />
+        </label>
+        <label className="flex cursor-pointer items-center justify-between gap-2 text-sm text-gray-200">
+          <span>Setups & behavior tips</span>
+          <input
+            type="checkbox"
+            className="accent-blue-500"
+            checked={
+              gearDraft.showBestSetup &&
+              gearDraft.showWorstSetup &&
+              gearDraft.showWarnings
+            }
+            onChange={(e) => {
+              const on = e.target.checked
+              setGearDraft((d) =>
+                d
+                  ? {
+                      ...d,
+                      showBestSetup: on,
+                      showWorstSetup: on,
+                      showWarnings: on,
+                    }
+                  : d
+              )
+            }}
+          />
+        </label>
+      </div>
+
+      <div className="mb-3 rounded-lg border border-white/10 bg-black/25 p-3">
+        <p className={DASHBOARD_GEAR_SECTION_TITLE}>Risk</p>
+        <p className="mt-1 text-[11px] leading-snug text-gray-400">
+          Max drawdown from equity peak. Leave blank for no limit.
+        </p>
+        <label htmlFor={inputId} className="sr-only">
+          Max drawdown limit
+        </label>
+        <input
+          id={inputId}
+          type="text"
+          inputMode="decimal"
+          autoComplete="off"
+          placeholder="$0"
+          disabled={!hasUser}
+          value={formatDrawdownLimitForDisplay(
+            gearDraft.drawdownLimit,
+            ddInputFocused
+          )}
+          onFocus={() => setDdInputFocused(true)}
+          onBlur={() => {
+            setDdInputFocused(false)
+            setGearDraft((d) =>
+              d
+                ? {
+                    ...d,
+                    drawdownLimit: finalizeDrawdownLimitInput(d.drawdownLimit),
+                  }
+                : d
+            )
+          }}
+          onChange={(e) => {
+            const next = sanitizeDrawdownLimitInput(e.target.value)
+            setGearDraft((d) => (d ? { ...d, drawdownLimit: next } : d))
+          }}
+          className="mt-2 w-full rounded-lg border border-white/10 bg-[#020617] px-3 py-2 text-sm text-white tabular-nums placeholder:text-gray-400 focus:border-blue-400/50 focus:outline-none focus:ring-1 focus:ring-blue-400/40 disabled:opacity-50"
+        />
+      </div>
+
+      <div className="mt-1 border-t border-white/10 pt-3">
+        <div className="flex gap-2">
+          <ActionButton
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onSaveGear()
+            }}
+            disabled={!hasUser}
+            syncing={savingGearSettings}
+            syncingLabel="Saving…"
+            className="flex-1 rounded-lg bg-blue-500 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-blue-500"
+          >
+            Save
+          </ActionButton>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onCancelGear()
+            }}
+            disabled={savingGearSettings}
+            className="flex-1 rounded-lg border border-white/15 bg-white/5 py-2.5 text-sm font-medium text-gray-200 transition hover:bg-white/10 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+        </div>
+        <p className="mt-2 text-center text-[10px] text-gray-400">
+          Save applies defaults, display options, and your drawdown limit.
+        </p>
+      </div>
+    </>
+  )
 }
 
 export default function DashboardGearSettings({
@@ -35,7 +210,29 @@ export default function DashboardGearSettings({
   hasUser,
   onSaveGear,
   onCancelGear,
+  embedded = false,
 }: DashboardGearSettingsProps) {
+  if (embedded) {
+    return (
+      <div className="dashboard-controls">
+        <p className="mb-3 border-b border-white/10 pb-2 text-sm font-semibold text-white">
+          Dashboard preferences
+        </p>
+        <PreferencesForm
+          gearDraft={gearDraft}
+          setGearDraft={setGearDraft}
+          ddInputFocused={ddInputFocused}
+          setDdInputFocused={setDdInputFocused}
+          savingGearSettings={savingGearSettings}
+          hasUser={hasUser}
+          onSaveGear={onSaveGear}
+          onCancelGear={onCancelGear}
+          inputId="dashboard-max-dd-native"
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="relative z-[100] shrink-0 dashboard-controls">
       <button
@@ -67,154 +264,16 @@ export default function DashboardGearSettings({
           <p className="mb-3 border-b border-white/10 pb-2 text-sm font-semibold text-white">
             Dashboard preferences
           </p>
-
-          {!gearDraft ? (
-            <p className="text-xs text-gray-400">Loading…</p>
-          ) : (
-            <>
-              <div className="mb-3 space-y-2 rounded-lg border border-white/10 bg-black/25 p-3">
-                <p className={DASHBOARD_GEAR_SECTION_TITLE}>Display</p>
-                <label className="flex cursor-pointer items-center justify-between gap-2 text-sm text-gray-200">
-                  <span>Performance charts</span>
-                  <input
-                    type="checkbox"
-                    className="accent-blue-500"
-                    checked={gearDraft.showEquity && gearDraft.showDrawdown}
-                    onChange={(e) => {
-                      const on = e.target.checked
-                      setGearDraft((d) =>
-                        d ? { ...d, showEquity: on, showDrawdown: on } : d
-                      )
-                    }}
-                  />
-                </label>
-                <label className="flex cursor-pointer items-center justify-between gap-2 text-sm text-gray-200">
-                  <span>Insights overview</span>
-                  <input
-                    type="checkbox"
-                    className="accent-blue-500"
-                    checked={gearDraft.showInsights}
-                    onChange={() =>
-                      setGearDraft((d) =>
-                        d ? { ...d, showInsights: !d.showInsights } : d
-                      )
-                    }
-                  />
-                </label>
-                <label className="flex cursor-pointer items-center justify-between gap-2 text-sm text-gray-200">
-                  <span>Session chart</span>
-                  <input
-                    type="checkbox"
-                    className="accent-blue-500"
-                    checked={gearDraft.showSessions}
-                    onChange={() =>
-                      setGearDraft((d) =>
-                        d ? { ...d, showSessions: !d.showSessions } : d
-                      )
-                    }
-                  />
-                </label>
-                <label className="flex cursor-pointer items-center justify-between gap-2 text-sm text-gray-200">
-                  <span>Setups & behavior tips</span>
-                  <input
-                    type="checkbox"
-                    className="accent-blue-500"
-                    checked={
-                      gearDraft.showBestSetup &&
-                      gearDraft.showWorstSetup &&
-                      gearDraft.showWarnings
-                    }
-                    onChange={(e) => {
-                      const on = e.target.checked
-                      setGearDraft((d) =>
-                        d
-                          ? {
-                              ...d,
-                              showBestSetup: on,
-                              showWorstSetup: on,
-                              showWarnings: on,
-                            }
-                          : d
-                      )
-                    }}
-                  />
-                </label>
-              </div>
-
-              <div className="mb-3 rounded-lg border border-white/10 bg-black/25 p-3">
-                <p className={DASHBOARD_GEAR_SECTION_TITLE}>Risk</p>
-                <p className="mt-1 text-[11px] leading-snug text-gray-400">
-                  Max drawdown from equity peak. Leave blank for no limit.
-                </p>
-                <label htmlFor="dashboard-max-dd" className="sr-only">
-                  Max drawdown limit
-                </label>
-                <input
-                  id="dashboard-max-dd"
-                  type="text"
-                  inputMode="decimal"
-                  autoComplete="off"
-                  placeholder="$0"
-                  disabled={!hasUser}
-                  value={formatDrawdownLimitForDisplay(
-                    gearDraft.drawdownLimit,
-                    ddInputFocused
-                  )}
-                  onFocus={() => setDdInputFocused(true)}
-                  onBlur={() => {
-                    setDdInputFocused(false)
-                    setGearDraft((d) =>
-                      d
-                        ? {
-                            ...d,
-                            drawdownLimit: finalizeDrawdownLimitInput(
-                              d.drawdownLimit
-                            ),
-                          }
-                        : d
-                    )
-                  }}
-                  onChange={(e) => {
-                    const next = sanitizeDrawdownLimitInput(e.target.value)
-                    setGearDraft((d) => (d ? { ...d, drawdownLimit: next } : d))
-                  }}
-                  className="mt-2 w-full rounded-lg border border-white/10 bg-[#020617] px-3 py-2 text-sm text-white tabular-nums placeholder:text-gray-400 focus:border-blue-400/50 focus:outline-none focus:ring-1 focus:ring-blue-400/40 disabled:opacity-50"
-                />
-              </div>
-
-              <div className="mt-1 border-t border-white/10 pt-3">
-                <div className="flex gap-2">
-                  <ActionButton
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      onSaveGear()
-                    }}
-                    disabled={!hasUser}
-                    syncing={savingGearSettings}
-                    syncingLabel="Saving…"
-                    className="flex-1 rounded-lg bg-blue-500 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-blue-500"
-                  >
-                    Save
-                  </ActionButton>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      onCancelGear()
-                    }}
-                    disabled={savingGearSettings}
-                    className="flex-1 rounded-lg border border-white/15 bg-white/5 py-2.5 text-sm font-medium text-gray-200 transition hover:bg-white/10 disabled:opacity-50"
-                  >
-                    Cancel
-                  </button>
-                </div>
-                <p className="mt-2 text-center text-[10px] text-gray-400">
-                  Save applies defaults, display options, and your drawdown limit.
-                </p>
-              </div>
-            </>
-          )}
+          <PreferencesForm
+            gearDraft={gearDraft}
+            setGearDraft={setGearDraft}
+            ddInputFocused={ddInputFocused}
+            setDdInputFocused={setDdInputFocused}
+            savingGearSettings={savingGearSettings}
+            hasUser={hasUser}
+            onSaveGear={onSaveGear}
+            onCancelGear={onCancelGear}
+          />
         </div>
       ) : null}
     </div>

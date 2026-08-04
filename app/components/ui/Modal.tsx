@@ -15,6 +15,8 @@ import {
   MODAL_PANEL_SHELL_CLASS,
   useModalScrollLock,
 } from "./modalLayout"
+import { usePlatformPresentation } from "@/app/components/platform/usePlatformPresentation"
+import NativeIosPlatformModal from "@/app/components/platform/native/NativeIosPlatformModal"
 
 export type ModalProps = {
   open: boolean
@@ -57,21 +59,46 @@ export default function Modal({
   backdropClassName,
   bodyClassName,
 }: ModalProps) {
+  const { isNativeIos } = usePlatformPresentation()
   const [mounted, setMounted] = useState(false)
-  useModalScrollLock(open)
+  useModalScrollLock(open && !(isNativeIos && belowNavbar))
 
   useEffect(() => {
     setMounted(true)
   }, [])
 
   useEffect(() => {
-    if (!open || closeDisabled || !showCloseButton) return
+    if (!open || closeDisabled || !showCloseButton || (isNativeIos && belowNavbar))
+      return
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") onClose()
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [open, onClose, closeDisabled, showCloseButton])
+  }, [open, onClose, closeDisabled, showCloseButton, isNativeIos, belowNavbar])
+
+  /** Content modals that sat under the web navbar become fullscreen on native iOS. */
+  if (isNativeIos && belowNavbar) {
+    return (
+      <NativeIosPlatformModal
+        open={open}
+        onClose={onClose}
+        ariaLabel={title || "Modal"}
+        title={title}
+        footer={footer ? <div className="px-5 py-4">{footer}</div> : undefined}
+        showCloseButton={showCloseButton}
+        closeDisabled={closeDisabled}
+        bodyClassName={cn(
+          MODAL_BODY_SCROLL_CLASS,
+          title ? "px-6 py-4" : "p-6 pt-4",
+          bodyClassName
+        )}
+        zIndexClass="z-[10050]"
+      >
+        {children}
+      </NativeIosPlatformModal>
+    )
+  }
 
   if (!open || !mounted) return null
 

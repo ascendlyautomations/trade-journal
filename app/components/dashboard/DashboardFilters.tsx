@@ -1,6 +1,6 @@
 "use client"
 
-import type { Dispatch, SetStateAction } from "react"
+import { useState, type Dispatch, type SetStateAction } from "react"
 import Link from "next/link"
 import TradeFilterBar, {
   type TradeFilterBarProps,
@@ -15,6 +15,11 @@ import {
 } from "./dashboardHeaderMobileUi"
 import { DASHBOARD_MOBILE_FILTER_MARGIN_CLASS } from "./dashboardMobileUi"
 import type { GearDraftState } from "./dashboardGearTypes"
+import PlatformDashboardCalendarButton from "@/app/components/platform/PlatformDashboardCalendarButton"
+import PlatformDashboardTradesButton from "@/app/components/platform/PlatformDashboardTradesButton"
+import { usePlatformPresentation } from "@/app/components/platform/usePlatformPresentation"
+import NativeIosDashboardActionBar from "@/app/components/platform/native/NativeIosDashboardActionBar"
+import NativeIosDashboardFilterSheet from "@/app/components/platform/native/NativeIosDashboardFilterSheet"
 
 export type DashboardFiltersProps = {
   isPro: boolean
@@ -90,6 +95,80 @@ export default function DashboardFilters({
   showPropFirmLink = false,
   copyGroups = [],
 }: DashboardFiltersProps) {
+  const { isNativeIos } = usePlatformPresentation()
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false)
+
+  if (isNativeIos) {
+    /** Dismiss sheet and discard unsaved preference draft (not used after Save). */
+    const dismissFilterSheet = () => {
+      if (showControls) onCancelGear()
+      setFilterSheetOpen(false)
+    }
+
+    return (
+      <div>
+        <div className="max-md:-mx-2 md:contents">
+          <NativeIosDashboardActionBar
+            accounts={accounts}
+            accountFilter={accountFilter}
+            onAccountChange={onAccountChange}
+            isPro={isPro}
+            copyGroups={copyGroups}
+            onOpenQuickInput={onOpenQuickInput}
+            onOpenFilters={() => setFilterSheetOpen(true)}
+          />
+        </div>
+        <div className={DASHBOARD_MOBILE_FILTER_MARGIN_CLASS}>
+          <NativeIosDashboardFilterSheet
+            open={filterSheetOpen}
+            onClose={dismissFilterSheet}
+            accountTypeFilter={accountTypeFilter}
+            onAccountTypeChange={onAccountTypeChange}
+            timeframe={timeframe}
+            onTimeframeChange={onTimeframeChange}
+            customRangeStart={customRangeStart}
+            customRangeEnd={customRangeEnd}
+            onCustomRangeApply={onCustomRangeApply}
+            selectedDate={selectedDate}
+            onSelectedDateChange={onSelectedDateChange}
+            showPublicOnly={showPublicOnly}
+            onTogglePublicOnly={onTogglePublicOnly}
+            onOpenPerformanceShare={onOpenPerformanceShare}
+            showShareControls={showShareControls}
+            showTradingReportButton={showTradingReportButton}
+            onOpenTradingReport={onOpenTradingReport}
+            showControls={showControls}
+            onToggleShowControls={onToggleShowControls}
+            gearDraft={gearDraft}
+            setGearDraft={setGearDraft}
+            ddInputFocused={ddInputFocused}
+            setDdInputFocused={setDdInputFocused}
+            savingGearSettings={savingGearSettings}
+            hasUser={hasUser}
+            onSaveGear={() => {
+              onSaveGear()
+              setFilterSheetOpen(false)
+            }}
+            onCancelGear={() => {
+              onCancelGear()
+              setFilterSheetOpen(false)
+            }}
+          />
+          {showPropFirmLink ? (
+            <div className="mt-2 mb-1 flex justify-end">
+              <Link
+                href="/analytics/propfirm"
+                className="text-xs text-blue-300 transition hover:text-blue-200"
+              >
+                View Prop Firm Dashboard →
+              </Link>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    )
+  }
+
   const gearSettings = (
     <DashboardGearSettings
       showControls={showControls}
@@ -151,20 +230,26 @@ export default function DashboardFilters({
         onSelectedDateChange={onSelectedDateChange}
         publicNextToModes={
           showShareControls ? (
-          <button
-            type="button"
-            onClick={onTogglePublicOnly}
-            className={`${DASHBOARD_MOBILE_PUBLIC_BTN_BASE} md:hidden ${
-              showPublicOnly
-                ? "border-blue-400 bg-blue-500 text-white hover:bg-blue-600"
-                : "border-white/10 bg-[#0f172a] text-white hover:bg-[#1e293b]"
-            }`}
-          >
-            Public
-          </button>
+            <button
+              type="button"
+              onClick={onTogglePublicOnly}
+              className={`${DASHBOARD_MOBILE_PUBLIC_BTN_BASE} md:hidden ${
+                showPublicOnly
+                  ? "border-blue-400 bg-blue-500 text-white hover:bg-blue-600"
+                  : "border-white/10 bg-[#0f172a] text-white hover:bg-[#1e293b]"
+              }`}
+            >
+              Public
+            </button>
           ) : null
         }
-        settingsNextToModes={<div className="md:hidden">{gearSettings}</div>}
+        settingsNextToModes={
+          <div className="flex items-stretch justify-center gap-2 md:hidden">
+            <PlatformDashboardCalendarButton />
+            {gearSettings}
+          </div>
+        }
+        beforeTimeframe={<PlatformDashboardTradesButton />}
         trailing={
           <>
             {showTradingReportButton && onOpenTradingReport ? (
@@ -183,17 +268,17 @@ export default function DashboardFilters({
               />
             ) : null}
             {showShareControls ? (
-            <button
-              type="button"
-              onClick={onTogglePublicOnly}
-              className={`hidden md:inline-flex h-[34px] items-center shrink-0 whitespace-nowrap rounded-md px-3 text-sm ${
-                showPublicOnly
-                  ? "bg-blue-500 text-white hover:bg-blue-600"
-                  : "bg-white/10 text-white hover:bg-white/20"
-              }`}
-            >
-              Public Trades
-            </button>
+              <button
+                type="button"
+                onClick={onTogglePublicOnly}
+                className={`hidden md:inline-flex h-[34px] items-center shrink-0 whitespace-nowrap rounded-md px-3 text-sm ${
+                  showPublicOnly
+                    ? "bg-blue-500 text-white hover:bg-blue-600"
+                    : "bg-white/10 text-white hover:bg-white/20"
+                }`}
+              >
+                Public Trades
+              </button>
             ) : null}
 
             <div className="hidden md:flex shrink-0 items-center justify-center">

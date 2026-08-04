@@ -76,17 +76,19 @@ html.tt-native-ios [data-tt-messages-inbox] {
   padding-top: 0;
 }
 
+html.tt-native-ios [data-tt-messages-inbox] [data-tt-messages-inbox-actions] {
+  margin-top: 0;
+  margin-bottom: 0.75rem;
+  padding-top: 0.5rem;
+  gap: 0.5rem;
+}
+
 html.tt-native-ios [data-tt-messages-inbox] [data-tt-messages-inbox-search] {
-  margin-top: 0.875rem;
+  margin-top: 0;
   margin-bottom: 0.75rem;
   border-radius: 0.75rem;
   border-color: var(--tt-surface-border);
   background-color: var(--tt-surface-elevated);
-}
-
-html.tt-native-ios [data-tt-messages-inbox] [data-tt-messages-inbox-actions] {
-  margin-bottom: 0.875rem;
-  gap: 0.5rem;
 }
 
 /* Dashboard — horizontal safe-area only. Vertical rhythm is gap-2 via page pt/pb. */
@@ -101,6 +103,16 @@ html.tt-native-ios [data-tt-native-surface="dashboard"] {
 html.tt-native-ios [data-tt-native-surface="feed"] [data-tt-feed-column] {
   padding-top: 1.25rem;
   padding-bottom: 1.5rem;
+}
+
+/* Calendar — header flush under safe area; keep page content padding below. */
+html.tt-native-ios [data-tt-native-surface="calendar"] {
+  padding-top: 0;
+}
+
+/* Add Trade — content flush under safe area (no page header). */
+html.tt-native-ios [data-tt-native-surface="add-trade"] {
+  padding-top: 0;
 }
 
 /*
@@ -157,6 +169,26 @@ html.tradetraxs-demo-banner-active {
   .tt-dashboard-tab-sticky {
     top: var(--app-header-offset);
   }
+}
+
+/* Native tab roots without website Navbar — pin sticky chrome under safe-area. */
+html.tt-native-ios [data-tt-native-no-web-navbar="1"] .tt-dashboard-tab-sticky,
+html.tt-native-ios [data-tt-native-no-web-navbar="1"] [data-tt-native-page-header],
+html.tt-native-ios [data-tt-native-no-web-navbar="1"] [data-tt-native-feed-header],
+html.tt-native-ios [data-tt-native-no-web-navbar="1"] [data-tt-native-calendar-header],
+html.tt-native-ios [data-tt-native-no-web-navbar="1"] [data-tt-native-trades-header] {
+  top: var(--safe-area-top);
+}
+
+/*
+ * Pages using h-[var(--app-viewport-height)] (e.g. Messages inbox) must not
+ * keep reserving website Navbar height after that chrome is hidden.
+ * Inherits to children of the native scrollport.
+ */
+html.tt-native-ios [data-tt-native-no-web-navbar="1"] {
+  --app-viewport-height: calc(
+    100dvh - var(--safe-area-top) - var(--app-tab-bar-offset)
+  );
 }
 
 /* Tailwind theme mapping */

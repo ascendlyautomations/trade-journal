@@ -30,6 +30,12 @@ import {
 } from "@/lib/tradeAccountSelection"
 import { tradeAnalysisHref } from "@/lib/tradeAnalysisNavigation"
 import ProUpgradeModal from "../../components/ProUpgradeModal"
+import PlatformTradesHeader from "@/app/components/platform/PlatformTradesHeader"
+import {
+  sortTradesForDisplay,
+  type TradesSortKey,
+} from "@/lib/tradesSort"
+import { useIsNativeIos } from "@/lib/useIsNativeIos"
 
 const QuickTradeModal = dynamic(
   () => import("../../components/QuickTradeModal"),
@@ -38,6 +44,7 @@ const QuickTradeModal = dynamic(
 
 export default function TradesPage() {
   const { user, profile: gateProfile, loading: profileLoading } = useUserProfile()
+  const nativeIos = useIsNativeIos()
   const { trades: cachedTrades, loading: tradesLoading, refresh: refreshTrades } =
     useCachedTrades(user?.id)
   const {
@@ -78,6 +85,7 @@ export default function TradesPage() {
   const [showExportUpgradeModal, setShowExportUpgradeModal] = useState(false)
   const [sendTradeId, setSendTradeId] = useState<string | null>(null)
   const [visibleCount, setVisibleCount] = useState(10)
+  const [sortBy, setSortBy] = useState<TradesSortKey>("newest")
   const [tradeReelsByTradeId, setTradeReelsByTradeId] = useState<
     Record<string, ReelRow>
   >({})
@@ -100,7 +108,7 @@ export default function TradesPage() {
 
   useEffect(() => {
     setVisibleCount(10)
-  }, [timeframe, accountFilter, accountTypeFilter, resultFilter])
+  }, [timeframe, accountFilter, accountTypeFilter, resultFilter, sortBy])
 
   useEffect(() => {
     if (trades.length === 0) {
@@ -353,9 +361,13 @@ export default function TradesPage() {
   }, [tradesForPerformanceSharePool, timeframe, customRangeStart, customRangeEnd])
 
   const visibleTrades = useMemo(() => {
-    if (!showPublicOnly) return filteredTrades
-    return filteredTrades.filter((t) => t.is_public === true)
-  }, [filteredTrades, showPublicOnly])
+    const filtered = !showPublicOnly
+      ? filteredTrades
+      : filteredTrades.filter((t) => t.is_public === true)
+    // Sort UI is native-only; keep prior list order on web.
+    if (!nativeIos) return filtered
+    return sortTradesForDisplay(filtered, sortBy)
+  }, [filteredTrades, showPublicOnly, sortBy, nativeIos])
 
   const displayedTrades = useMemo(
     () => visibleTrades.slice(0, visibleCount),
@@ -378,7 +390,35 @@ export default function TradesPage() {
           await Promise.all([refreshTrades(), refreshAccounts()])
         }}
       >
-      <div className="w-full text-white px-2 pb-3 pt-0 md:px-4 md:pb-10">
+      <div
+        data-tt-native-surface="trades"
+        className="w-full text-white px-2 pb-3 pt-0 md:px-4 md:pb-10"
+      >
+        <PlatformTradesHeader
+          accounts={accounts}
+          accountFilter={accountFilter}
+          onAccountChange={setAccountFilter}
+          isPro={isPro}
+          copyGroups={copyGroups}
+          accountTypeFilter={accountTypeFilter}
+          onAccountTypeChange={setAccountTypeFilter}
+          timeframe={timeframe}
+          onTimeframeChange={handleTimeframeChange}
+          customRangeStart={customRangeStart}
+          customRangeEnd={customRangeEnd}
+          onCustomRangeApply={handleCustomRangeApply}
+          selectedDate={selectedDate}
+          onSelectedDateChange={setSelectedDate}
+          resultFilter={resultFilter}
+          onResultFilterChange={setResultFilter}
+          showPublicOnly={showPublicOnly}
+          onTogglePublicOnly={handleTogglePublicOnly}
+          showAdvanced={showAdvanced}
+          onToggleAdvanced={handleToggleAdvanced}
+          onOpenPerformanceShare={handleOpenPerformanceShare}
+          sortBy={sortBy}
+          onSortByChange={setSortBy}
+        />
 
         <div className="w-full px-1 md:px-6 md:max-w-[1600px] md:mx-auto">
           <TradesPageMainContent

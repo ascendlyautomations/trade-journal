@@ -2,14 +2,16 @@
 
 import { useEffect, useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
-import ModalCloseButton from "@/app/components/ui/ModalCloseButton"
-import NativeDateInput from "@/app/components/ui/NativeDateInput"
 import { DASHBOARD_MOBILE_TIMEFRAME_BTN_CLASS } from "@/app/components/dashboard/dashboardHeaderMobileUi"
 import { DASHBOARD_MOBILE_FILTER_SHELL_CLASS } from "@/app/components/dashboard/dashboardMobileUi"
+import DashboardTimeframePicker, {
+  syncTimeframeDisplayLabel,
+} from "@/app/components/dashboard/DashboardTimeframePicker"
 import TradeAccountPicker from "@/app/components/TradeAccountPicker"
 import CustomSelect from "@/app/components/CustomSelect"
 import { SELECT_FILTER_TRIGGER_CLASS } from "@/lib/accountDropdownStyles"
 import type { CopyTradingGroup } from "@/lib/copyTradingGroups"
+import { DASHBOARD_ALL_TIMEFRAME_LABEL } from "@/lib/dashboardTimeframeLabels"
 
 /** Shared with account pickers — same destination as the filter bar action. */
 export const MANAGE_ACCOUNTS_SETTINGS_HREF = "/settings#trading-accounts" as const
@@ -26,33 +28,6 @@ export function navigateToManageAccounts(
   router: ReturnType<typeof useRouter>
 ) {
   router.push(MANAGE_ACCOUNTS_SETTINGS_HREF)
-}
-
-const ALL_TIMEFRAME_LABEL = "All Time"
-
-const TF_LABEL_FROM_VALUE: Record<string, string> = {
-  all: ALL_TIMEFRAME_LABEL,
-  daily: "Today",
-  weekly: "This Week",
-  monthly: "This Month",
-  yearly: "This Year",
-  custom: "Custom",
-}
-
-const PRESET_TIMEFRAME_LABELS = [
-  ALL_TIMEFRAME_LABEL,
-  "Today",
-  "This Week",
-  "This Month",
-  "This Year",
-] as const
-
-const PRESET_LABEL_TO_VALUE: Record<string, string> = {
-  [ALL_TIMEFRAME_LABEL]: "all",
-  Today: "daily",
-  "This Week": "weekly",
-  "This Month": "monthly",
-  "This Year": "yearly",
 }
 
 export type TradeFilterBarProps = {
@@ -93,6 +68,11 @@ export type TradeFilterBarProps = {
   settingsNextToModes?: ReactNode
   /** Optional compact control shown beside “All Modes” on mobile */
   publicNextToModes?: ReactNode
+  /**
+   * Optional control immediately left of the Timeframe button on mobile
+   * three-row layout (native Dashboard Trades shortcut). Hidden on md+.
+   */
+  beforeTimeframe?: ReactNode
   /** Outer wrapper, e.g. mb-5 w-full */
   className?: string
   /** Unused layout hint for pages that differentiate usage */
@@ -123,6 +103,7 @@ export default function TradeFilterBar({
   trailing,
   settingsNextToModes,
   publicNextToModes,
+  beforeTimeframe,
   className = "",
   variant: _variant,
   mobileThreeRowLayout = false,
@@ -132,36 +113,18 @@ export default function TradeFilterBar({
 }: TradeFilterBarProps) {
   const isTradesVariant = _variant === "trades"
   const [timeframeOpen, setTimeframeOpen] = useState(false)
-  const [selectedTimeframe, setSelectedTimeframe] = useState(ALL_TIMEFRAME_LABEL)
-  const [startDate, setStartDate] = useState("")
-  const [endDate, setEndDate] = useState("")
+  const [selectedTimeframe, setSelectedTimeframe] = useState(
+    DASHBOARD_ALL_TIMEFRAME_LABEL
+  )
 
   useEffect(() => {
-    if (timeframe === "custom") {
-      setSelectedTimeframe("Custom")
-    } else if (selectedDate?.trim()) {
-      setSelectedTimeframe("Specific Date")
-    } else {
-      setSelectedTimeframe(TF_LABEL_FROM_VALUE[timeframe] ?? ALL_TIMEFRAME_LABEL)
-    }
+    setSelectedTimeframe(syncTimeframeDisplayLabel(timeframe, selectedDate))
   }, [timeframe, selectedDate])
 
-  useEffect(() => {
-    if (!timeframeOpen) return
-    if (timeframe === "custom") {
-      setStartDate(customRangeStart)
-      setEndDate(customRangeEnd)
-    } else if (selectedDate?.trim()) {
-      setStartDate(selectedDate)
-      setEndDate(selectedDate)
-    } else {
-      setStartDate("")
-      setEndDate("")
-    }
-  }, [timeframeOpen, timeframe, selectedDate, customRangeStart, customRangeEnd])
-
   const timeframeButtonLabel =
-    selectedTimeframe === ALL_TIMEFRAME_LABEL ? "Timeframe" : selectedTimeframe
+    selectedTimeframe === DASHBOARD_ALL_TIMEFRAME_LABEL
+      ? "Timeframe"
+      : selectedTimeframe
 
   function renderAccountSelect(className = "") {
     return (
@@ -321,6 +284,11 @@ export default function TradeFilterBar({
 
             {mobileThreeRowLayout ? (
               <div className="flex w-full items-stretch gap-2 md:contents">
+                {beforeTimeframe ? (
+                  <div className="flex shrink-0 items-stretch md:hidden">
+                    {beforeTimeframe}
+                  </div>
+                ) : null}
                 <div className="min-w-0 flex-1 md:w-auto md:flex-none">
                   <button
                     type="button"
@@ -353,126 +321,18 @@ export default function TradeFilterBar({
         )}
       </div>
 
-      {timeframeOpen ? (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="relative w-full max-w-md bg-[#0b1f3a] rounded-2xl p-6 border border-white/10 shadow-xl">
-            <ModalCloseButton
-              onClick={() => setTimeframeOpen(false)}
-              className="absolute right-4 top-4 z-10"
-            />
-            <h2 className="text-lg font-semibold text-white mb-4 pr-12">
-              Select Timeframe
-            </h2>
-
-            <div className="grid grid-cols-2 gap-3 mb-4">
-              {PRESET_TIMEFRAME_LABELS.map(
-                (tf) => (
-                  <button
-                    key={tf}
-                    type="button"
-                    onClick={() => {
-                      const v = PRESET_LABEL_TO_VALUE[tf]
-                      setSelectedTimeframe(tf)
-                      onSelectedDateChange("")
-                      onTimeframeChange(v)
-                      setTimeframeOpen(false)
-                    }}
-                    className="px-3 py-2 rounded-lg bg-white/10 hover:bg-green-500/20 text-white text-sm"
-                  >
-                    {tf}
-                  </button>
-                )
-              )}
-            </div>
-
-            <div className="mt-5">
-              <p className="mb-2 text-sm text-gray-400">Specific Date</p>
-
-              <NativeDateInput
-                value={startDate}
-                onChange={(e) => {
-                  const v = e.target.value
-                  setStartDate(v)
-                  setEndDate(v)
-                }}
-                className="h-11 rounded-xl border border-blue-400/20 bg-[#0b2345] shadow-inner shadow-black/20 transition hover:border-blue-300/40 focus-within:border-emerald-400/60 focus-within:ring-2 focus-within:ring-emerald-500/30"
-                aria-label="Specific date"
-              />
-
-              <button
-                type="button"
-                onClick={() => {
-                  if (!startDate?.trim()) return
-                  onSelectedDateChange(startDate)
-                  setEndDate(startDate)
-                  onTimeframeChange("all")
-                  setSelectedTimeframe("Specific Date")
-                  setTimeframeOpen(false)
-                }}
-                className="w-full mt-2 py-2 rounded-lg bg-blue-500 text-white font-medium hover:bg-blue-600 disabled:hover:bg-blue-500"
-              >
-                Apply Specific Date
-              </button>
-            </div>
-
-            <div className="mt-5">
-              <p className="mb-2 text-sm text-gray-400">Custom Range</p>
-
-              <div className="flex items-center gap-2 overflow-visible">
-                <NativeDateInput
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="h-11 min-w-0 flex-1 rounded-xl border border-blue-400/20 bg-[#0b2345] shadow-inner shadow-black/20 transition hover:border-blue-300/40 focus-within:border-emerald-400/60 focus-within:ring-2 focus-within:ring-emerald-500/30"
-                  aria-label="Range start date"
-                />
-                <NativeDateInput
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="h-11 min-w-0 flex-1 rounded-xl border border-blue-400/20 bg-[#0b2345] shadow-inner shadow-black/20 transition hover:border-blue-300/40 focus-within:border-emerald-400/60 focus-within:ring-2 focus-within:ring-emerald-500/30"
-                  aria-label="Range end date"
-                />
-              </div>
-
-              <button
-                type="button"
-                onClick={() => {
-                  if (!startDate?.trim() || !endDate?.trim()) return
-                  onSelectedDateChange("")
-                  onCustomRangeApply?.(startDate, endDate)
-                  setSelectedTimeframe("Custom")
-                  setTimeframeOpen(false)
-                }}
-                className="w-full mt-2 py-2 rounded-lg bg-blue-500 text-white font-medium hover:bg-blue-600 disabled:hover:bg-blue-500"
-              >
-                Apply Range
-              </button>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                setStartDate("")
-                setEndDate("")
-                onSelectedDateChange("")
-                onTimeframeChange("all")
-                setSelectedTimeframe(ALL_TIMEFRAME_LABEL)
-                setTimeframeOpen(false)
-              }}
-              className="w-full mt-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm"
-            >
-              Clear Dates
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setTimeframeOpen(false)}
-              className="mt-4 text-sm text-gray-400 hover:text-white"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      ) : null}
+      <DashboardTimeframePicker
+        open={timeframeOpen}
+        onClose={() => setTimeframeOpen(false)}
+        presentation="modal"
+        timeframe={timeframe}
+        onTimeframeChange={onTimeframeChange}
+        selectedDate={selectedDate}
+        onSelectedDateChange={onSelectedDateChange}
+        customRangeStart={customRangeStart}
+        customRangeEnd={customRangeEnd}
+        onCustomRangeApply={onCustomRangeApply}
+      />
     </>
   )
 }

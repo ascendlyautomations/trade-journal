@@ -38,6 +38,9 @@ import {
 import { markConversationOpenFromInbox } from "@/lib/conversationOpenIntent"
 import { useRouter } from "next/navigation"
 import MessagesConversationList from "../../components/messages/MessagesConversationList"
+import PlatformMessagesHeader, {
+  PlatformMessagesWebInboxActions,
+} from "@/app/components/platform/PlatformMessagesHeader"
 import EmptyState from "../../components/ui/EmptyState"
 import {
   ConfirmModal,
@@ -922,12 +925,17 @@ export default function MessagesPage() {
   return (
     <>
       <div
-        data-tt-native-surface="messages"
-        data-tt-messages-inbox
-        className="flex h-[var(--app-viewport-height)] min-h-0 flex-col overflow-hidden bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white px-6 pb-6 pt-0"
+        className="flex h-[var(--app-viewport-height)] min-h-0 flex-col overflow-hidden bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white"
       >
-
-        <div className="mx-auto flex h-full min-h-0 w-full max-w-3xl flex-col">
+        <div
+          data-tt-native-surface="messages"
+          data-tt-messages-inbox
+          className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col overflow-hidden px-6 pb-6 pt-0"
+        >
+          <PlatformMessagesHeader
+            onPersonalChat={openDMModal}
+            onGroupChat={() => setShowGroupModal(true)}
+          />
 
           <input
             data-tt-messages-inbox-search
@@ -937,47 +945,49 @@ export default function MessagesPage() {
             className="mt-4 mb-3 w-full shrink-0 rounded border border-white/10 bg-black p-3 focus:border-emerald-400 focus:outline-none"
           />
 
-          <div
-            data-tt-messages-inbox-actions
-            className="mb-4 flex shrink-0 flex-wrap items-center justify-start gap-2"
-          >
-            <button
-              type="button"
-              onClick={openDMModal}
-              className="inline-flex min-h-10 items-center rounded-lg bg-blue-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-600 md:min-h-9 md:px-2.5 md:font-normal"
+          <PlatformMessagesWebInboxActions>
+            <div
+              data-tt-messages-inbox-actions
+              className="mb-4 flex shrink-0 flex-wrap items-center justify-start gap-2"
             >
-              New Chat
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowGroupModal(true)}
-              className="inline-flex min-h-10 items-center rounded-lg bg-blue-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-600 md:min-h-9 md:px-2.5 md:font-normal"
-            >
-              New Group
-            </button>
-            <Link
-              href="/community"
-              className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-blue-400/30 bg-blue-500/15 px-3 py-1.5 text-sm font-medium text-blue-200 transition hover:border-blue-400/45 hover:bg-blue-500/25 hover:text-blue-100 md:hidden"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.75"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="h-4 w-4 shrink-0"
-                aria-hidden
+              <button
+                type="button"
+                onClick={openDMModal}
+                className="inline-flex min-h-10 items-center rounded-lg bg-blue-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-600 md:min-h-9 md:px-2.5 md:font-normal"
               >
-                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-                <circle cx="9" cy="7" r="4" />
-                <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-              </svg>
-              Trade Rooms
-            </Link>
-          </div>
+                New Chat
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowGroupModal(true)}
+                className="inline-flex min-h-10 items-center rounded-lg bg-blue-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-600 md:min-h-9 md:px-2.5 md:font-normal"
+              >
+                New Group
+              </button>
+              <Link
+                href="/community"
+                className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-blue-400/30 bg-blue-500/15 px-3 py-1.5 text-sm font-medium text-blue-200 transition hover:border-blue-400/45 hover:bg-blue-500/25 hover:text-blue-100 md:hidden"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.75"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="h-4 w-4 shrink-0"
+                  aria-hidden
+                >
+                  <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                  <circle cx="9" cy="7" r="4" />
+                  <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                </svg>
+                Trade Rooms
+              </Link>
+            </div>
+          </PlatformMessagesWebInboxActions>
 
           <NativeIosPullToRefresh
             scrollRef={inboxScrollRef}

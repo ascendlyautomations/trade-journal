@@ -1,9 +1,13 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useRef, useState, type ReactNode } from "react"
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import EmptyState from "@/app/components/ui/EmptyState"
 import { SkeletonTradeCard } from "@/app/components/ui/skeletons"
+import PlatformProfileTradesToolbar, {
+  type ProfileTradesOutcomeFilter,
+} from "@/app/components/platform/PlatformProfileTradesToolbar"
+import { usePlatformPresentation } from "@/app/components/platform/usePlatformPresentation"
 import ProfilePrivateTabMessage from "./ProfilePrivateTabMessage"
 import ProfileTradeGridTile from "./ProfileTradeGridTile"
 import { PROFILE_TRADES_PAGE_SIZE_MOBILE } from "./profileTradesPagination"
@@ -36,11 +40,7 @@ function TradesViewToggle({
   onChange: (mode: ProfileTradesViewMode) => void
 }) {
   return (
-    <div
-      role="tablist"
-      aria-label="Trades view"
-      className="mb-2 flex justify-end"
-    >
+    <div role="tablist" aria-label="Trades view">
       <div className="inline-flex rounded-lg border border-white/10 bg-white/5 p-0.5">
         {(["grid", "list"] as const).map((mode) => {
           const selected = value === mode
@@ -99,6 +99,17 @@ function getAppScrollRoot(): Element | null {
   return el instanceof HTMLElement ? el : null
 }
 
+/** Match ProfileTradeGridTile win/loss presentation (pnl >= 0 → Win). */
+function tradeMatchesOutcomeFilter(
+  trade: ProfileTradeRow,
+  filter: ProfileTradesOutcomeFilter
+): boolean {
+  if (filter === "all") return true
+  const pnl = Number(trade.pnl)
+  if (filter === "wins") return pnl >= 0
+  return pnl < 0
+}
+
 export default function ProfileTradesTab({
   trades,
   loading,
@@ -109,13 +120,23 @@ export default function ProfileTradesTab({
   renderTrade,
   onOpenTrade,
 }: ProfileTradesTabProps) {
+  const { isNativeIos } = usePlatformPresentation()
   const { viewMode, setViewMode } = useProfileTradesViewMode()
   const isMobile = useIsMobileTradesLayout()
+  const [outcomeFilter, setOutcomeFilter] =
+    useState<ProfileTradesOutcomeFilter>("all")
   const sentinelRef = useRef<HTMLDivElement>(null)
   const loadingRef = useRef(loading)
   const hasMoreRef = useRef(hasMore)
   loadingRef.current = loading
   hasMoreRef.current = hasMore
+
+  const displayedTrades = useMemo(() => {
+    if (!isNativeIos || outcomeFilter === "all") return trades
+    return trades.filter((trade) =>
+      tradeMatchesOutcomeFilter(trade, outcomeFilter)
+    )
+  }, [trades, outcomeFilter, isNativeIos])
 
   // Mobile: infinite scroll via IntersectionObserver (no Load More button).
   useEffect(() => {
@@ -163,6 +184,13 @@ export default function ProfileTradesTab({
       <p className="text-center text-sm text-gray-400">No public trades yet.</p>
     )
 
+  const filteredEmptyMessage =
+    outcomeFilter === "wins"
+      ? "No winning trades."
+      : outcomeFilter === "losses"
+        ? "No losing trades."
+        : null
+
   const showMobileGrid = isMobile && viewMode === "grid"
   const skeletonCount =
     trades.length === 0 ? PROFILE_TRADES_PAGE_SIZE_MOBILE : 3
@@ -170,7 +198,12 @@ export default function ProfileTradesTab({
   return (
     <div className="mt-1 w-full pb-8 sm:mt-4">
       {isMobile && (trades.length > 0 || loading) ? (
-        <TradesViewToggle value={viewMode} onChange={setViewMode} />
+        <PlatformProfileTradesToolbar
+          outcomeFilter={outcomeFilter}
+          onOutcomeFilterChange={setOutcomeFilter}
+        >
+          <TradesViewToggle value={viewMode} onChange={setViewMode} />
+        </PlatformProfileTradesToolbar>
       ) : null}
 
       {loading && trades.length === 0 ? (
@@ -191,9 +224,13 @@ export default function ProfileTradesTab({
         )
       ) : trades.length === 0 ? (
         emptyState
+      ) : displayedTrades.length === 0 ? (
+        <p className="py-10 text-center text-sm text-gray-400">
+          {filteredEmptyMessage}
+        </p>
       ) : showMobileGrid ? (
         <div className="grid grid-cols-3 gap-1">
-          {trades.map((trade) => (
+          {displayedTrades.map((trade) => (
             <div key={trade.id} id={`trade-${trade.id}`}>
               <ProfileTradeGridTile
                 trade={trade}
@@ -215,7 +252,7 @@ export default function ProfileTradesTab({
               : "grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-2 md:gap-y-8"
           }
         >
-          {trades.map((trade) => (
+          {displayedTrades.map((trade) => (
             <div key={trade.id} id={`trade-${trade.id}`}>
               {renderTrade(trade)}
             </div>

@@ -52,6 +52,7 @@ import CreateAccountModal, {
   type Props as CreateAccountModalProps,
 } from "@/components/CreateAccountModal"
 import TradeAccountPicker from "@/app/components/TradeAccountPicker"
+import { usePlatformPresentation } from "@/app/components/platform/usePlatformPresentation"
 import CustomSelect from "@/app/components/CustomSelect"
 import { SELECT_TRIGGER_COMPACT_CLASS } from "@/lib/accountDropdownStyles"
 import NativeDateInput from "@/app/components/ui/NativeDateInput"
@@ -197,6 +198,7 @@ export default function InputTradeForm({
   onParsedTradesClear,
 }: InputTradeFormProps) {
   const router = useRouter()
+  const { isNativeIos } = usePlatformPresentation()
   const { user, profile: contextProfile } = useUserProfile()
   const userId = user?.id ?? null
   const isEditMode = Boolean(existingTrade?.id)
@@ -2031,6 +2033,21 @@ export default function InputTradeForm({
   const quickInputButtonClass =
     "shrink-0 rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-sm font-medium text-blue-100 transition hover:bg-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60 md:px-4"
 
+  /** Native iOS only — match heights in the existing two-row quick-action section. */
+  const nativeQuickActionControlClass =
+    "inline-flex h-10 items-center justify-center rounded-lg px-3 text-sm font-medium leading-none transition disabled:cursor-not-allowed disabled:opacity-60"
+  const nativeAccountTriggerClass =
+    "flex h-10 w-full min-w-0 cursor-pointer items-center justify-between rounded-lg border border-white/10 bg-[#0f172a] px-2.5 text-left text-sm font-medium leading-none text-white transition-colors hover:bg-[#1e293b] focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+  const mobileQuickTradeClass = isNativeIos
+    ? `${nativeQuickActionControlClass} shrink-0 border border-blue-500/30 bg-blue-500/10 text-blue-100 hover:bg-blue-500/20`
+    : quickInputButtonClass
+  const mobileCsvButtonClass = isNativeIos
+    ? `${nativeQuickActionControlClass} shrink-0 flex-1 bg-blue-500 text-white hover:bg-blue-600 disabled:hover:bg-blue-500`
+    : "shrink-0 flex-1 px-3 py-2 text-sm rounded-lg bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-60 disabled:hover:bg-blue-500"
+  const mobileSettingsButtonClass = isNativeIos
+    ? "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#1f2937]"
+    : "p-2 bg-[#1f2937] rounded-lg flex items-center justify-center"
+
   const formBody = (
     <>
       <div className={isEditMode ? "mb-2" : "mb-4"}>
@@ -2038,6 +2055,9 @@ export default function InputTradeForm({
           <div className="flex items-center gap-2">
             <TradeAccountPicker
               className="min-w-0 flex-1 md:flex-none"
+              triggerClassName={
+                isNativeIos ? nativeAccountTriggerClass : undefined
+              }
               accounts={pickerAccounts}
               isPro={isPro}
               copyGroups={copyGroups}
@@ -2053,7 +2073,7 @@ export default function InputTradeForm({
               <button
                 type="button"
                 onClick={onQuickInputClick}
-                className={quickInputButtonClass}
+                className={mobileQuickTradeClass}
               >
                 Quick Trade
               </button>
@@ -2061,7 +2081,7 @@ export default function InputTradeForm({
             <button
               type="button"
               onClick={() => setShowSettings(true)}
-              className="p-2 bg-[#1f2937] rounded-lg flex items-center justify-center"
+              className={mobileSettingsButtonClass}
               aria-label="Settings"
             >
               ⚙️
@@ -2073,7 +2093,11 @@ export default function InputTradeForm({
                 type="button"
                 onClick={handleUploadCsvGuardClick}
                 disabled={!onUploadCsvClick || csvLoading || csvImportBlocked}
-                className="shrink-0 flex-1 px-3 py-2 text-sm rounded-lg bg-blue-500 text-white disabled:opacity-60"
+                className={
+                  isNativeIos
+                    ? `${nativeQuickActionControlClass} shrink-0 flex-1 bg-blue-500 text-white`
+                    : "shrink-0 flex-1 px-3 py-2 text-sm rounded-lg bg-blue-500 text-white disabled:opacity-60"
+                }
               >
                 Upload CSV
               </button>
@@ -2081,7 +2105,11 @@ export default function InputTradeForm({
                 type="button"
                 onClick={onReviewCsvClick}
                 disabled={!onReviewCsvClick}
-                className="shrink-0 relative flex-1 px-3 py-2 text-sm rounded-lg bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-60 disabled:hover:bg-blue-500"
+                className={
+                  isNativeIos
+                    ? `${mobileCsvButtonClass} relative`
+                    : "shrink-0 relative flex-1 px-3 py-2 text-sm rounded-lg bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-60 disabled:hover:bg-blue-500"
+                }
               >
                 Review CSV
                 {reviewCount > 0 ? (

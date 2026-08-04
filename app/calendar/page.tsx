@@ -31,6 +31,9 @@ import CustomSelect from "@/app/components/CustomSelect"
 import CalendarMonthlyStats from "@/app/components/CalendarMonthlyStats"
 import { SELECT_TRIGGER_CLASS } from "@/lib/accountDropdownStyles"
 import { computePeriodTradeStats } from "@/lib/periodTradeStats"
+import PlatformCalendarHeader, {
+  PlatformCalendarFilters,
+} from "@/app/components/platform/PlatformCalendarHeader"
 export default function CalendarPage() {
   useScrollPageTopOnMount()
   const router = useRouter()
@@ -382,7 +385,25 @@ export default function CalendarPage() {
           await Promise.all([refreshTrades(), refreshAccounts()])
         }}
       >
-      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white pt-3 pb-6">
+      <div
+        data-tt-native-surface="calendar"
+        className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-white pt-3 pb-6"
+      >
+        <PlatformCalendarHeader
+          accountFilter={accountFilter}
+          onAccountFilterChange={(val) => {
+            setAccountFilter(val)
+            setSelectedDate(null)
+            setSelectedTrades([])
+          }}
+          accountOptions={accountFilterOptions}
+          selectedMode={selectedMode}
+          onModeChange={(val) => {
+            setSelectedMode(val)
+            setSelectedDate(null)
+            setSelectedTrades([])
+          }}
+        />
 
         <div className="max-w-7xl mx-auto w-full px-4">
 
@@ -418,42 +439,44 @@ export default function CalendarPage() {
               </button>
             </div>
 
-            <div className="flex items-center gap-3 flex-wrap w-full max-w-xl mx-auto mb-3 md:mb-4">
-              <CustomSelect
-                value={accountFilter}
-                onChange={(val) => {
-                  setAccountFilter(val)
-                  setSelectedDate(null)
-                  setSelectedTrades([])
-                }}
-                className="flex-1 min-w-[140px]"
-                triggerClassName={SELECT_TRIGGER_CLASS}
-                options={[
-                  { label: "All Accounts", value: "all" },
-                  ...accountFilterOptions.map(({ value, label }) => ({
-                    value,
-                    label,
-                  })),
-                ]}
-              />
-              <CustomSelect
-                value={selectedMode}
-                onChange={(val) => {
-                  setSelectedMode(val)
-                  setSelectedDate(null)
-                  setSelectedTrades([])
-                }}
-                className="flex-1 min-w-[140px]"
-                triggerClassName="flex w-full min-w-0 cursor-pointer items-center justify-between rounded-lg border border-white/10 bg-[#0b1f3a] px-3 py-2 text-left text-sm text-white"
-                options={[
-                  { label: "All Modes", value: "all" },
-                  { label: "Live", value: "live" },
-                  { label: "Funded", value: "funded" },
-                  { label: "Eval", value: "eval" },
-                  { label: "Backtest", value: "backtest" },
-                ]}
-              />
-            </div>
+            <PlatformCalendarFilters>
+              <div className="flex items-center gap-3 flex-wrap w-full max-w-xl mx-auto mb-3 md:mb-4">
+                <CustomSelect
+                  value={accountFilter}
+                  onChange={(val) => {
+                    setAccountFilter(val)
+                    setSelectedDate(null)
+                    setSelectedTrades([])
+                  }}
+                  className="flex-1 min-w-[140px]"
+                  triggerClassName={SELECT_TRIGGER_CLASS}
+                  options={[
+                    { label: "All Accounts", value: "all" },
+                    ...accountFilterOptions.map(({ value, label }) => ({
+                      value,
+                      label,
+                    })),
+                  ]}
+                />
+                <CustomSelect
+                  value={selectedMode}
+                  onChange={(val) => {
+                    setSelectedMode(val)
+                    setSelectedDate(null)
+                    setSelectedTrades([])
+                  }}
+                  className="flex-1 min-w-[140px]"
+                  triggerClassName="flex w-full min-w-0 cursor-pointer items-center justify-between rounded-lg border border-white/10 bg-[#0b1f3a] px-3 py-2 text-left text-sm text-white"
+                  options={[
+                    { label: "All Modes", value: "all" },
+                    { label: "Live", value: "live" },
+                    { label: "Funded", value: "funded" },
+                    { label: "Eval", value: "eval" },
+                    { label: "Backtest", value: "backtest" },
+                  ]}
+                />
+              </div>
+            </PlatformCalendarFilters>
 
             {/* WEEKDAY LABELS — Sun–Fri mobile, full week desktop */}
             <div className="grid min-w-0 grid-cols-6 gap-1 mb-2 text-center text-gray-400 text-xs md:hidden">

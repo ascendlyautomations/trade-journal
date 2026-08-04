@@ -12,6 +12,7 @@ import {
   SkeletonTradesPageTradeCard,
 } from "./ui/skeletons"
 import { formatMoneyUnknown, formatRR } from "@/lib/formatDisplay"
+import { usePlatformPresentation } from "@/app/components/platform/usePlatformPresentation"
 
 type TradeStats = {
   totalTrades: number
@@ -117,9 +118,12 @@ function TradesPageMainContent({
   tradeReelsByTradeId = {},
   onOpenTradeReplay,
 }: TradesPageMainContentProps) {
+  const { isNativeIos } = usePlatformPresentation()
+
   return (
     <>
-      <h1 className="sr-only">Trades</h1>
+      {isNativeIos ? null : <h1 className="sr-only">Trades</h1>}
+      {isNativeIos ? null : (
       <div className="w-full mt-2.5">
         <TradeFilterBar
           variant="trades"
@@ -259,9 +263,11 @@ function TradesPageMainContent({
           }
         />
       </div>
+      )}
 
       {loading ? (
         <>
+          {isNativeIos ? null : (
           <div
             aria-busy="true"
             aria-label="Loading trade statistics"
@@ -271,10 +277,13 @@ function TradesPageMainContent({
               <SkeletonStatsCard key={i} />
             ))}
           </div>
+          )}
           <div
             aria-busy="true"
             aria-label="Loading trades"
-            className="mt-2.5 w-full grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2.5"
+            className={`w-full grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2.5 ${
+              isNativeIos ? "mt-2" : "mt-2.5"
+            }`}
           >
             {Array.from({ length: 6 }).map((_, i) => (
               <SkeletonTradesPageTradeCard key={i} />
@@ -283,6 +292,7 @@ function TradesPageMainContent({
         </>
       ) : (
         <>
+          {isNativeIos ? null : (
           <div className="mt-2.5 w-full grid grid-cols-2 md:grid-cols-4 gap-2">
             <Stat
               title="Trades"
@@ -298,8 +308,13 @@ function TradesPageMainContent({
             />
             <Stat title="Avg RR" value={formatRR(tradeStats.avgRR)} />
           </div>
+          )}
 
-          <div className="mt-2.5 w-full grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2.5">
+          <div
+            className={`w-full grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2.5 ${
+              isNativeIos ? "mt-2" : "mt-2.5"
+            }`}
+          >
             {displayedTrades.length === 0 ? (
               <div className="md:col-span-2">
                 <EmptyState

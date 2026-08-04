@@ -19,6 +19,7 @@ import {
 import { buildCsvSupportNotes } from "@/lib/csvImportSupportNotes"
 import { submitCsvSupportRequest } from "@/lib/submitCsvSupportRequest"
 import { FeedbackModal, useFeedbackPopup } from "@/app/components/ui"
+import { usePlatformPresentation } from "@/app/components/platform/usePlatformPresentation"
 import { feedbackPresets, persistentSuccess } from "@/lib/feedbackPresets"
 import { handleSupabaseError } from "@/lib/handleSupabaseError"
 import { assertCsvImportAllowedForFreePlan } from "@/lib/csvImportGate"
@@ -36,6 +37,7 @@ import { isProActive } from "@/lib/subscription"
 const INPUT_TRADE_CSV_INPUT_ID = "input-trade-csv-upload"
 
 export default function Home() {
+  const { isNativeIos } = usePlatformPresentation()
   const { showPopup, feedbackModalProps } = useFeedbackPopup()
   const { user, profile } = useUserProfile()
   const userId = user?.id ?? null
@@ -307,8 +309,15 @@ export default function Home() {
         onCancel={handleFailureCancel}
       />
 
-      <div className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100">
-        <div className="pt-2 px-4 pb-4 md:px-6 md:pb-5 max-w-8xl mx-auto">
+      <div
+        data-tt-native-surface="add-trade"
+        className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e3a8a] to-[#065f46] text-gray-100"
+      >
+        <div
+          className={`px-4 pb-4 md:px-6 md:pb-5 max-w-8xl mx-auto ${
+            isNativeIos ? "pt-0" : "pt-2"
+          }`}
+        >
           <input
             id={INPUT_TRADE_CSV_INPUT_ID}
             ref={csvInputRef}

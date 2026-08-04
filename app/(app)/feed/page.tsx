@@ -42,7 +42,9 @@ import {
 import FeedLoadMoreFooter from "../../components/feed/FeedLoadMoreFooter"
 import NativeIosPullToRefresh from "@/app/components/NativeIosPullToRefresh"
 import FeedContentToggle from "../../components/feed/FeedContentToggle"
-import FeedModeToggle from "../../components/feed/FeedModeToggle"
+import PlatformFeedHeader, {
+  PlatformFeedModeToggle,
+} from "@/app/components/platform/PlatformFeedHeader"
 import FeedPostList from "../../components/feed/FeedPostList"
 import FeedStoriesBar from "../../components/feed/FeedStoriesBar"
 import {
@@ -2772,7 +2774,7 @@ function FeedPageContent() {
   return (
     <NativeIosPullToRefresh onRefresh={handleNativePullToRefresh}>
     <div data-tt-native-surface="feed" className="w-full text-white">
-      <h1 className="sr-only">Feed</h1>
+      <PlatformFeedHeader mode={mode} onModeChange={handleFeedModeChange} />
       {feedbackModalProps.isOpen ? (
         <FeedbackModal {...feedbackModalProps} />
       ) : null}
@@ -2784,7 +2786,10 @@ function FeedPageContent() {
         className="flex justify-center px-4 py-6 sm:py-8 pb-10"
       >
         <div className="w-full max-w-xl space-y-6">
-          <FeedModeToggle mode={mode} onModeChange={handleFeedModeChange} />
+          <PlatformFeedModeToggle
+            mode={mode}
+            onModeChange={handleFeedModeChange}
+          />
           <FeedContentToggle
             contentType={contentType}
             onContentTypeChange={setContentType}
